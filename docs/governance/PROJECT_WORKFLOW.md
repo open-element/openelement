@@ -93,6 +93,12 @@ Required sections:
 - AutoFlow must not decide minor, major, or v1 scope. Those require human ADR
   and approved version-plan evidence.
 - Do not merge `dev` to `main` until `dev` CI is green.
+- Release PRs into `main` must be integrated with a SHA-preserving
+  fast-forward (`git push origin <pr-head-sha>:main` after PR CI is green),
+  never with GitHub's "Rebase and merge"/"Squash and merge" buttons: the
+  release lane binds its `pr-full-ci-evidence-<sha>` artifact to the exact
+  `main` HEAD SHA, and button merges rewrite SHAs, which fails the release
+  closed. (Learned during the v0.44.0-beta.2.2 integration, PR #1348.)
 - Do not tag until `main` CI is green.
 
 ## Pull Request Workflow
