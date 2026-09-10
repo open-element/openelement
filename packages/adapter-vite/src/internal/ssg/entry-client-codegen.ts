@@ -342,7 +342,18 @@ var __enhance = createEnhanceClient({
   actionHeader: ${quoteGeneratedJavaScriptValue(ACTION_FETCH_HEADER)},
   win: window,
   doc: document,
-  observeVisible: __scheduler.observeVisible,
+  observeVisible: ${
+        lit
+          ? `function () {
+    // Module loading is one-shot; new SSR hosts arrive after every morph.
+    // Only admitted, already-loaded tags may resume Lit hydration here.
+    __tags.forEach(function (tag) {
+      if (customElements.get(tag)) __liftDeferHydration(document, tag);
+    });
+    __scheduler.observeVisible();
+  }`
+          : '__scheduler.observeVisible'
+      },
 });
 `
       : '// No data-open-enhance forms: the form enhancement layer is omitted (#569 complement),\n// keeping the client bundle free of morph and popstate code.'
