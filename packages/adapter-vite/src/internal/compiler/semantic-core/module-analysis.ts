@@ -442,6 +442,16 @@ export function analyzeModuleSemantics(source: string, fileName: string): Module
         if (/^on[A-Z]/.test(name)) interactionEvents.add(name.slice(2).toLowerCase());
       }
     }
+    // Lit templates carry the same attribute inside html`` template literals
+    // instead of JSX (#1339: the enhancement layer is renderer-shared, so the
+    // detection must be too). The attribute-shape lookahead ([\s=>/]) keeps
+    // prose mentions from pulling the layer in, matching the JSX rule.
+    if (ts.isNoSubstitutionTemplateLiteral(node) || ts.isTemplateExpression(node)) {
+      const parts = ts.isNoSubstitutionTemplateLiteral(node)
+        ? [node.text]
+        : [node.head.text, ...node.templateSpans.map((span) => span.literal.text)];
+      if (parts.some((text) => /data-open-enhance(?=[\s=>/])/.test(text))) enhancedForm = true;
+    }
     ts.forEachChild(node, visit);
   };
   visit(sourceFile);
