@@ -20,21 +20,21 @@
     "E.fixture-truth: corpus.json tags=[v044-fast-probe,v044-lit-probe,v044-native-probe,v044-stencil-probe] hand-written compiler-output.cem.json tags=[v044-fast-probe,v044-lit-probe,v044-native-probe,v044-stencil-probe] (4 probes incl. slots/parts upstream cannot see)"
   ],
   "phaseMs": {
-    "A.authored-parity": 38.6,
-    "D.compiled-parity": 72,
-    "E.foreign-corpus": 8.7,
+    "A.authored-parity": 38.5,
+    "D.compiled-parity": 66.1,
+    "E.foreign-corpus": 12.2,
     "B.policy-locality": 0.5,
-    "C.two-path-inventory": 5
+    "C.two-path-inventory": 2.9
   },
-  "totalMs": 125.7,
-  "memoryRssMb": 181,
-  "memoryRssDeltaMb": 49,
-  "heapUsedMb": 56,
+  "totalMs": 121.3,
+  "memoryRssMb": 189,
+  "memoryRssDeltaMb": 56,
+  "heapUsedMb": 50,
   "results": [
     {
       "id": "A.open-card.tagName",
       "passed": true,
-      "detail": "manifest=open-card upstream=open-card (3.3ms)"
+      "detail": "manifest=open-card upstream=open-card (3.4ms)"
     },
     {
       "id": "A.open-card.attributes",
@@ -84,7 +84,7 @@
     {
       "id": "A.open-button.tagName",
       "passed": true,
-      "detail": "manifest=open-button upstream=open-button (3.0ms)"
+      "detail": "manifest=open-button upstream=open-button (2.8ms)"
     },
     {
       "id": "A.open-button.attributes",
@@ -109,7 +109,7 @@
     {
       "id": "A.open-input.tagName",
       "passed": true,
-      "detail": "manifest=open-input upstream=open-input (2.9ms)"
+      "detail": "manifest=open-input upstream=open-input (3.1ms)"
     },
     {
       "id": "A.open-input.attributes",
@@ -184,7 +184,7 @@
     {
       "id": "A.open-badge.tagName",
       "passed": true,
-      "detail": "manifest=open-badge upstream=open-badge (0.6ms)"
+      "detail": "manifest=open-badge upstream=open-badge (0.5ms)"
     },
     {
       "id": "A.open-badge.attributes",

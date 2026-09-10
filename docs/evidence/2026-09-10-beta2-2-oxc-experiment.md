@@ -16,8 +16,9 @@ provenance facts, accepted-program skeleton identity); source-map consumer verif
 oracle matrix stable; negative control fails closed.
 
 TESTED_IMPLEMENTATION_SHA:
-f83398daeac7c3d25b88e6df2abbece493607db4
-("fix: close Beta.2.2 review findings (ADR-0153)") — the implementation commit whose
+ba6093bec5c50e6f69d3188c1a4aee0f2b9e2705
+("fix: close arch:check type-escape findings in experiment harnesses
+(ADR-0153)" — the Beta.2.2 implementation tip) — the implementation commit whose
 clean tree this harness ran against (git status at run time: clean apart from the
 untracked docs/evidence/ files being drafted). This evidence file is added by a LATER
 evidence-only commit that changes no code, harness, lockfile or generated file; the PR
@@ -124,10 +125,10 @@ does NOT fail — it is unobservable trivia for both frontends.)
 
 | Path                                                 | a-counter (1253B) | b1 (488B) | c1 (1336B) | c3 (1297B) |
 | ---------------------------------------------------- | ----------------- | --------- | ---------- | ---------- |
-| ts createSourceFile + transpileModule (current gate) | 1.66              | 0.59      | 1.06       | 0.96       |
-| ts createSourceFile only                             | 0.102             | 0.026     | 0.068      | 0.069      |
-| oxc parseSync                                        | 0.017             | 0.006     | 0.018      | 0.019      |
-| FULL compileElementProgram (real compiler)           | 1.61              | —         | —          | —          |
+| ts createSourceFile + transpileModule (current gate) | 1.61              | 0.59      | 1.07       | 0.97       |
+| ts createSourceFile only                             | 0.102             | 0.025     | 0.071      | 0.070      |
+| oxc parseSync                                        | 0.017             | 0.006     | 0.017      | 0.020      |
+| FULL compileElementProgram (real compiler)           | 1.65              | —         | —          | —          |
 | FULL oxcAnalyze (minimal analysis)                   | 0.104             | —         | —          | —          |
 
 Within THIS fixed sample, on THIS host, inside THIS bounded harness: oxc parse is ~6× faster
@@ -141,14 +142,14 @@ and no production-migration conclusion is drawn from them.
 
 | Path                                  | rss Δ    | heapUsed Δ             | external Δ |
 | ------------------------------------- | -------- | ---------------------- | ---------- |
-| oxc parseSync                         | +0.80 MB | +0.21 MB               | 0          |
-| ts createSourceFile only              | +0.13 MB | −3.8 MB (GC noise)     | 0          |
-| ts createSourceFile + transpileModule | +23.9 MB | +87.6 MB (unforced GC) | −0.05 MB   |
+| oxc parseSync                         | +0.78 MB | +0.20 MB               | 0          |
+| ts createSourceFile only              | 0        | −3.8 MB (GC noise)     | 0          |
+| ts createSourceFile + transpileModule | +24.7 MB | +83.0 MB (unforced GC) | −0.05 MB   |
 
 Reliability caveat: Deno exposes only process-level `Deno.memoryUsage()` (rss/heapTotal/
 heapUsed/external); there is no per-parse allocation counter, GC was not forced (no
 `--v8-flags=--expose-gc` in the harness contract), and oxc-parser's native (Rust) heap is
-visible only inside rss. The +23.9 MB rss / +87.6 MB heapUsed deltas for the TS gate over
+visible only inside rss. The +24.7 MB rss / +83.0 MB heapUsed deltas for the TS gate over
 200 iterations reflect transpileModule's allocation churn measured without GC; treat as
 "TS gate allocates orders of magnitude more per parse" rather than a precise figure.
 

@@ -3,8 +3,9 @@
 - Date: 2026-09-10
 - Issue: #1156 (Beta.2.2 slice: "CEM extraction evaluation" per docs/architecture/alpha-maturation.md;
   proceed/block/defer required, "experiment success is not alpha.1 admission")
-- Tested implementation: `f83398daeac7c3d25b88e6df2abbece493607db4`
-  ("fix: close Beta.2.2 review findings (ADR-0153)") — the implementation commit whose clean tree the
+- Tested implementation: `ba6093bec5c50e6f69d3188c1a4aee0f2b9e2705`
+  ("fix: close arch:check type-escape findings in experiment harnesses (ADR-0153)" — the
+  Beta.2.2 implementation tip) — the implementation commit whose clean tree the
   harness ran against (git status at run time: clean apart from the untracked docs/evidence/ files
   being drafted). This evidence file is added by a LATER evidence-only commit that changes no code,
   harness, lockfile or generated file; the PR final SHA is bound by the remote CI run on that final

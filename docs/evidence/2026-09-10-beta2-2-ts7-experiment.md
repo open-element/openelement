@@ -15,8 +15,9 @@ type/declaration pipeline only — NOT a deno check replacement, NOT a Compiler-
 replacement)
 
 TESTED_IMPLEMENTATION_SHA:
-f83398daeac7c3d25b88e6df2abbece493607db4
-("fix: close Beta.2.2 review findings (ADR-0153)") — the implementation commit
+ba6093bec5c50e6f69d3188c1a4aee0f2b9e2705
+("fix: close arch:check type-escape findings in experiment harnesses
+(ADR-0153)" — the Beta.2.2 implementation tip) — the implementation commit
 whose clean tree this harness ran against (git status at run time: clean apart
 from the untracked docs/evidence/ files being drafted; the harness itself writes
 only under tools/experiments/ts7/.work/, gitignored). This evidence file is
@@ -139,15 +140,15 @@ hard 20/20 pass, soft 7/7 recorded):
 TIME + MEMORY (3 runs each, warm caches, packages/app scope = 19-module sample,
 program pulls @openelement/element sources; wall ms via harness timer, peak RSS
 MB via /usr/bin/time -l — AVAILABLE on this host):
-  deno check src/ (app)   : 308/301/321 ms   217.0/217.8/220.4 MB
-  ts7 --noEmit (same)     : 108/107/105 ms   100.9/100.4/105.0 MB
-  tsc 5.9 --noEmit (same) : 662/665/651 ms   320.4/322.0/319.4 MB
-  ts7 declaration emit    : 112/113/111 ms   110.1/110.7/110.4 MB
-  tsc 5.9 same emit       : 728/720/724 ms   325.9/324.5/325.9 MB
-  deno pack app           : 384/369/378 ms   230.4/230.4/232.9 MB
+  deno check src/ (app)   : 305/300/311 ms   218.8/217.4/217.0 MB
+  ts7 --noEmit (same)     : 107/100/107 ms   99.2/103.5/105.1 MB
+  tsc 5.9 --noEmit (same) : 672/660/655 ms   319.7/319.0/316.8 MB
+  ts7 declaration emit    : 109/111/119 ms   110.3/114.7/112.5 MB
+  tsc 5.9 same emit       : 716/714/726 ms   325.0/323.8/324.9 MB
+  deno pack app           : 391/366/369 ms   229.2/230.8/229.9 MB
 On this fixed 19-module sample, on this machine, inside this bounded harness,
-the ts7 CLI run is ~2.9x faster and ~2.1x leaner than deno check and ~6.2x
-faster and ~3.2x leaner than tsc 5.9 on identical work. This is a fixed-sample,
+the ts7 CLI run is ~2.9x faster and ~2.1x leaner than deno check and ~6.3x
+faster and ~3.1x leaner than tsc 5.9 on identical work. This is a fixed-sample,
 single-host parser/type-pipeline micro-measurement — NOT an OpenElement
 production-build speedup claim. Cold-cache timing NOT measured.
 
@@ -192,7 +193,7 @@ COMMANDS_AND_EXIT_CODES:
   deno run --allow-read --allow-write --allow-run --allow-env --allow-net
   tools/experiments/ts7/run.ts) → exit 0, "hard: 20 pass, 0 fail; soft: 7 pass";
   structured output tools/experiments/ts7/.work/report.json (records
-  repoHead=f83398daeac7c3d25b88e6df2abbece493607db4)
+  repoHead=ba6093bec5c50e6f69d3188c1a4aee0f2b9e2705)
 - inside the harness: deno check src/ (packages/app) → 0; ts7 -p (app) → 0;
   tsc -p (app) → 2 (lib gap, expected); ts7 emit → 0; deno pack app/element →
   0 (tarballs, never published); staged deno pack ui → 0 with 16
