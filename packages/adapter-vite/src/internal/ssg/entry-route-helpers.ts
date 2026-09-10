@@ -62,11 +62,37 @@ export function renderMatchingRenderersFn(lines: string[], renderers: RendererDe
   lines.push('}');
 }
 
+/**
+ * Emit the per-render resolved-Document setup (#1326): the descriptor head
+ * (static object or resolver function) is resolved exactly once against the
+ * same context object the props projector consumes, before wrapInDocument
+ * serializes the page. `documentWrapOptionsLines` then reads only `__doc`.
+ */
+export function documentResolutionSetupLine(pageExpr: string, contextExpr: string): string {
+  return `const __doc = __resolvePageDocument(${pageExpr}.head, ${contextExpr});`;
+}
+
+/**
+ * Emit the request-time (Hono handler) page context + resolved-Document
+ * setup: ONE context object per render feeds both the props projector and the
+ * head resolver, so the Document never sees a divergent view of the render.
+ * Shared by the page/action handlers and the styled-404 handler.
+ */
+export function requestTimePageContextLines(
+  lines: string[],
+  options: { dataExpr: string; actionDataExpr: string; indent: string },
+): void {
+  lines.push(
+    `${options.indent}const __pageContext = { data: ${options.dataExpr}, actionData: ${options.actionDataExpr}, params: __params, request: c.req.raw, locale: __localeFromPath(c.req.path, __getDefaultLocale()), route: __routeContext, meta: __routeMetaValue };`,
+  );
+  lines.push(`${options.indent}${documentResolutionSetupLine('__page', '__pageContext')}`);
+}
+
 /** wrapInDocument() options object shared by page handlers and the SSG renderRoute. */
 export function documentWrapOptionsLines(options: {
-  /** Expression yielding the page definition (head source), e.g. `__page`. */
-  pageExpr: string;
+  /** Expression yielding the title, reading the resolved document, e.g. `title || __doc.title || "Default"`. */
   titleExpr: string;
+  /** Expression yielding the document language, reading the resolved document. */
   langExpr: string;
   headExtrasExpr: string;
   allowHeadExtrasScripts: boolean;
@@ -76,9 +102,10 @@ export function documentWrapOptionsLines(options: {
   const lines = [
     `title: ${options.titleExpr},`,
     `lang: ${options.langExpr},`,
-    `meta: { description: ${options.pageExpr}.head?.description, tags: ${options.pageExpr}.head?.meta },`,
+    `meta: { description: __doc.description, tags: __doc.meta },`,
+    `links: __doc.links,`,
     `headExtras: ${options.headExtrasExpr},`,
-    `dangerouslyHeadFragments: ${options.pageExpr}.head?.dangerouslyHeadFragments || [],`,
+    `dangerouslyHeadFragments: __doc.dangerouslyHeadFragments || [],`,
     `allowHeadExtrasScripts: ${JSON.stringify(options.allowHeadExtrasScripts)},`,
   ];
   if (options.cspNonce) lines.push(`cspNonce: c.get('cspNonce'),`);

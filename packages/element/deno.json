@@ -6,6 +6,9 @@
     "./jsx-runtime": "./src/jsx-runtime.ts",
     "./jsx-dev-runtime": "./src/jsx-dev-runtime.ts",
     "./sanitize": "./src/sanitize.ts",
+    "./authoring": "./src/authoring.ts",
+    "./html": "./src/html.ts",
+    "./logger": "./src/logger.ts",
     "./build-utils": "./src/build-utils.ts"
   },
   "publish": {
@@ -28,6 +31,12 @@
   ],
   "exclude": [
     "node_modules",
-    "dist"
-  ]
+    "dist",
+    "__wtr__"
+  ],
+  "fmt": {
+    "exclude": [
+      "__wtr__/generated/"
+    ]
+  }
 }

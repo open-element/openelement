@@ -1,5 +1,6 @@
 /** WWW supported API reference page. */
 import { definePage } from '@openelement/app';
+import { siteHead } from '@openelement/site-ui/head.ts';
 import { contentLocale } from '@openelement/site-ui/locale.ts';
 import { OPENELEMENT_VERSION } from '../data/version.ts';
 import { apiReference } from '../data/_generated-api-reference.ts';
@@ -242,6 +243,9 @@ function subpathChips(supportedSubpaths: readonly string[]): string[] {
 
 const content = {
   en: {
+    headTitle: 'API Reference',
+    headDescription:
+      'The supported openElement API surface: five consumer packages, every documented export and every custom element, generated from repository truth.',
     pageTitle: 'API Reference',
     lede: (v: string) =>
       `The ${v} current line documents only the five consumer packages. Retired alpha packages and internal subpaths are not authoring surfaces.`,
@@ -279,6 +283,9 @@ const content = {
     footnoteCheckPost: " and machine-checked against each package's exports map.",
   },
   zh: {
+    headTitle: 'API 参考',
+    headDescription:
+      'openElement 受支持的 API 面：五个产品包、全部记录在案的导出与 Custom Element，由仓库真值生成。',
     pageTitle: 'API 参考',
     lede: (v: string) =>
       `${v} 当前线只记录五个面向使用者的包。已退役的 alpha 包与内部子路径都不是创作面。`,
@@ -317,6 +324,16 @@ const content = {
 } as const;
 
 export default definePage(ApiCorePage, {
+  head({ locale }) {
+    const resolved = contentLocale(locale ?? 'en');
+    const copy = content[resolved];
+    return siteHead({
+      route: '/apilist',
+      locale: resolved,
+      title: copy.headTitle,
+      description: copy.headDescription,
+    });
+  },
   props({ locale }) {
     const resolved: Locale = contentLocale(locale ?? 'en');
     const t = content[resolved];

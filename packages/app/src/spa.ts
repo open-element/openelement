@@ -20,12 +20,8 @@ import {
 import type { OpenElementPageDescriptor, PagePropsContext } from './authoring.ts';
 import { SpaRequestCache } from './internal/spa-request-cache.ts';
 import { isDevMode } from './internal/dev-mode.ts';
-import {
-  assertValidTagName,
-  createLogger,
-  ERROR_PREFIX,
-  injectPropsSafe,
-} from '@openelement/element';
+import { assertValidTagName, ERROR_PREFIX, injectPropsSafe } from '@openelement/element/authoring';
+import { createLogger } from '@openelement/element/logger';
 
 const log = createLogger('spa');
 

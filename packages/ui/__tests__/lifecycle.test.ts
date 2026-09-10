@@ -447,7 +447,7 @@ Deno.test('open-dropdown: focus-return wiring attaches once across dispose/recon
   el.shadowRoot = { querySelector: (sel: string) => (sel === '.content' ? content : null) };
 
   el.onCsrRendered();
-  assertEquals(listenerCounts, { focusin: 1, toggle: 1 });
+  assertEquals(listenerCounts, { focusin: 1, beforetoggle: 1, toggle: 1 });
   const anchor = el.anchorName;
   assertNotEquals(anchor, '');
 
@@ -456,7 +456,7 @@ Deno.test('open-dropdown: focus-return wiring attaches once across dispose/recon
   // name the SSR/CSR activation paired).
   el.disconnectedCallback();
   el.onCsrRendered();
-  assertEquals(listenerCounts, { focusin: 1, toggle: 1 });
+  assertEquals(listenerCounts, { focusin: 1, beforetoggle: 1, toggle: 1 });
   assertEquals(el.anchorName, anchor);
 });
 

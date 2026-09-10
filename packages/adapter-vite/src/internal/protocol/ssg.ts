@@ -237,6 +237,13 @@ export interface AppShellPlan {
 
 export interface EntryDescriptor {
   isSSG: boolean;
+  /**
+   * Page renderer selection (Beta.2.2, #1339). Absent/'native' keeps the
+   * compiled renderDsd page path byte-identical; 'lit' forks page tag
+   * resolution, page SSR and the client entry onto @lit-labs/ssr.
+   * Loader/action/protocol codegen never forks.
+   */
+  renderer?: 'native' | 'lit';
   imports: ImportDecl[];
   middleware: MiddlewareDecl[];
   /**

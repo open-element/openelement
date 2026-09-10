@@ -35,6 +35,11 @@ www/.openElement/
 
 # npm (Deno project - no npm lockfiles)
 package-lock.json
+# Exceptions: the npm-local worlds whose lockfiles ARE the hermetic pin —
+# the WTR pilot (#1333; wtr:pilot:gate runs `npm ci`) and the TS7 experiment
+# toolchain (#1156 evidence reproducibility).
+!packages/element/__wtr__/package-lock.json
+!tools/experiments/ts7/toolchain/package-lock.json
 
 # npm pack tarballs
 packages/*/*.tgz

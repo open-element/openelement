@@ -1,4 +1,5 @@
 import { definePage } from '@openelement/app';
+import { siteHead } from '@openelement/site-ui/head.ts';
 import { contentLocale } from '@openelement/site-ui/locale.ts';
 import { localizePath } from '@openelement/site-ui/link.ts';
 import PageHome from '../../components/page-home.tsx';
@@ -6,6 +7,9 @@ import { PUBLISHED_PACKAGE_VERSION, PUBLISHED_STABLE_VERSION } from '../../data/
 
 const content = {
   en: {
+    headTitle: 'openElement — The Web, composed.',
+    headDescription:
+      'OpenElement is a Web Components-native, static-first application framework built on Custom Elements, Declarative Shadow DOM and selective islands.',
     lede:
       'A Web Components-native application framework — beautiful, static-first applications composed from real browser primitives.',
     startBuilding: 'Start building',
@@ -26,6 +30,9 @@ const content = {
       'Every scene is grounded in the public product surface, architecture and release truth — not a decorative fiction.',
   },
   zh: {
+    headTitle: 'openElement — 组合而生的 Web。',
+    headDescription:
+      'openElement 是一个 Web Components 原生、静态优先的应用框架，构建于 Custom Elements、Declarative Shadow DOM 与按需 islands 之上。',
     lede: 'Web Components 原生应用框架——用真实的浏览器原语，组合出美观的 static-first 应用。',
     startBuilding: '开始构建',
     watchUnfold: '看它展开',
@@ -127,10 +134,21 @@ const marquee =
   'CUSTOM ELEMENTS ✳ SHADOW DOM ✳ DECLARATIVE SHADOW DOM ✳ ES MODULES ✳ SIGNALS ✳ HTML FIRST ✳ ';
 
 export default definePage(PageHome, {
+  head({ locale }) {
+    const resolved = contentLocale(locale ?? 'en');
+    const copy = content[resolved];
+    return siteHead({
+      route: '/',
+      locale: resolved,
+      title: copy.headTitle,
+      description: copy.headDescription,
+    });
+  },
   props({ locale }) {
     const resolved = contentLocale(locale ?? 'en');
+    const { headTitle: _headTitle, headDescription: _headDescription, ...copy } = content[resolved];
     return {
-      ...content[resolved],
+      ...copy,
       stableVersion: PUBLISHED_STABLE_VERSION,
       packageVersion: PUBLISHED_PACKAGE_VERSION,
       marqueeText: marquee + marquee,

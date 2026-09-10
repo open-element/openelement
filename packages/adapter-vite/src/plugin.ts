@@ -206,6 +206,7 @@ export function createOpenPlugin(
       routesDir: resolvedOptions.routesDir,
       islandsDir: resolvedOptions.islandsDir,
       middleware: resolvedOptions.middleware,
+      renderer: resolvedOptions.renderer,
       islandTagNames,
       islandFiles,
       islandMeta: ctx.phase1.islandMeta,
@@ -324,6 +325,19 @@ export function createOpenPlugin(
 
       return {
         resolve: normalizedAliases ? { alias: normalizedAliases } : undefined,
+        // Chokidar's fs.watch backend drops consecutive change events within
+        // 50ms. A quick fix after a syntax error can otherwise leave Vite's
+        // SSR error cached forever (the packed Lit consumer on Linux).
+        // Use its native write-stability queue, which delivers the final
+        // write instead of throttling it away. Explicit watcher settings win.
+        ...(userConfig.server?.watch === null ||
+            userConfig.server?.watch?.awaitWriteFinish !== undefined
+          ? {}
+          : {
+            server: {
+              watch: { awaitWriteFinish: { stabilityThreshold: 50, pollInterval: 10 } },
+            },
+          }),
         build: {
           // The generated virtual entry intentionally contains the whole route graph.
           // Keep the budget explicit so Vite does not report it as an unexpected warning.
@@ -724,6 +738,13 @@ export function createOpenPlugin(
 
     load(id) {
       if (id === RESOLVED_POLYFILL_ID) {
+        if (resolvedOptions.renderer === 'lit') {
+          // #1339: the lit SSR path needs the @lit-labs/ssr global DOM shim —
+          // not the native Map-backed customElements stub — installed before
+          // any route module evaluates (ESM evaluates this first import
+          // before every other entry import).
+          return `import '@lit-labs/ssr/lib/install-global-dom-shim.js';\n`;
+        }
         return generateCustomElementsPolyfill();
       }
       if (id === RESOLVED_BUILD_TRIGGER_ID) {
