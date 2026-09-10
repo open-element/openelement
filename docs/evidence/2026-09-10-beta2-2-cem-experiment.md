@@ -205,12 +205,12 @@ upstream extraction cannot reach for these sources.
 
 | Measurement                                              | Value                                                                                                                |
 | -------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| Harness total (recorded run)                             | ~125 ms                                                                                                              |
-| Phase A (10 authored components, analyzer+lit+OE plugin) | ~40 ms (~4 ms/file)                                                                                                  |
-| Phase D (compile + 2 analyzer runs)                      | ~66 ms                                                                                                               |
-| Phase E (2 analyzer runs over foreign corpus)            | ~12 ms                                                                                                               |
+| Harness total (recorded run)                             | ~152 ms                                                                                                              |
+| Phase A (10 authored components, analyzer+lit+OE plugin) | ~44 ms (~4 ms/file)                                                                                                  |
+| Phase D (compile + 2 analyzer runs)                      | ~89 ms                                                                                                               |
+| Phase E (2 analyzer runs over foreign corpus)            | ~14 ms                                                                                                               |
 | Phase B / C                                              | sub-millisecond / few ms                                                                                             |
-| Process RSS (Deno.memoryUsage)                           | ~184 MB warm; ~440 MB on the first (cold-cache) run; heapUsed ~48 MB                                                 |
+| Process RSS (Deno.memoryUsage)                           | ~179 MB warm (recorded run); ~440 MB on the first (cold-cache) run; heapUsed ~49 MB                                  |
 | npm install footprint (Node-side measurement)            | 9.7 s warm npm cache (24.6 s cold, measured 2026-09-09); node_modules 47 MB, 82 lockfile packages, 45 top-level dirs |
 
 These are single-host, fixed-corpus harness measurements — not production build-time claims.

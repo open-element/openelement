@@ -16,7 +16,7 @@ replacement)
 
 TESTED_IMPLEMENTATION_SHA:
 2887a364ab74bd3e0f35158d6b9cae6537a2b017
-("fix: close arch:check type-escape findings in experiment harnesses
+("fix: close Beta.2.2 CodeQL findings
 (ADR-0153)" — the Beta.2.2 implementation tip) — the implementation commit
 whose clean tree this harness ran against (git status at run time: clean apart
 from the untracked docs/evidence/ files being drafted; the harness itself writes
