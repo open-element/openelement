@@ -111,7 +111,13 @@ interface FetchCall {
 }
 
 function makeHarness(
-  options: { responseStatus?: number; responseType?: string; responseHtml?: string } = {},
+  options: {
+    responseStatus?: number;
+    responseType?: string;
+    responseHtml?: string;
+    /** Take over fetch entirely (e.g. manually-resolved deferred responses). */
+    fetchFn?: (url: string, init: FetchCall['init']) => Promise<unknown>;
+  } = {},
 ) {
   const fetches: FetchCall[] = [];
   const navigations: string[] = [];
@@ -153,6 +159,7 @@ function makeHarness(
     },
     fetch: (url: string, init: FetchCall['init']) => {
       fetches.push({ url, init });
+      if (options.fetchFn) return options.fetchFn(url, init);
       return Promise.resolve({
         text: () => Promise.resolve(options.responseHtml ?? '<html></html>'),
         url,
@@ -309,7 +316,55 @@ Deno.test('#564: a second submit while one in flight is ignored', async () => {
   assertEquals(fetches.length, 2);
 });
 
-// ─── Effective submission tuple (Beta.2.2, #1339 §5) ───────────────────────
+Deno.test('#599: concurrent submits on different forms never drop a response (per-form sequence)', async () => {
+  // Deferred fetch: the test chooses the landing order. Form B's response
+  // lands FIRST; form A's must still be applied afterwards — a global
+  // last-wins sequence (the pre-#599 design) would silently drop it.
+  const deferred: Array<{ url: string; resolve: () => void }> = [];
+  const { fireSubmit, navigations } = makeHarness({
+    fetchFn: (url) =>
+      new Promise((resolve) => {
+        deferred.push({
+          url,
+          resolve: () =>
+            resolve({
+              text: () => Promise.resolve('<html></html>'),
+              url,
+              status: 500,
+              headers: { get: () => 'text/plain' },
+            }),
+        });
+      }),
+  });
+  const formA = new FakeFormElement();
+  formA.setAttribute('method', 'post');
+  formA.setAttribute('data-open-enhance', '');
+  formA.setAttribute('action', '/form-a');
+  const formB = new FakeFormElement();
+  formB.setAttribute('method', 'post');
+  formB.setAttribute('data-open-enhance', '');
+  formB.setAttribute('action', '/form-b');
+
+  fireSubmit(formA);
+  fireSubmit(formB);
+  assertEquals(deferred.map((d) => d.url), [
+    'https://fixture.local/form-a',
+    'https://fixture.local/form-b',
+  ]);
+
+  // B lands first, A second — the reverse of submission order.
+  deferred[1].resolve();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  deferred[0].resolve();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  // Both 500 responses take the navigation path; neither was dropped.
+  assertEquals(navigations, [
+    'https://fixture.local/form-b',
+    'https://fixture.local/form-a',
+  ]);
+});
+
 // The submit interceptor computes the platform's effective submission tuple
 // (submitter overrides win over form attributes) IN FULL before
 // preventDefault(); the wire method/body/Content-Type match the tuple's

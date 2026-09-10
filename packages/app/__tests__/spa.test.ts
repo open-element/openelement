@@ -967,6 +967,7 @@ for (const operation of ['loader', 'action'] as const) {
     let submit: ((event: Event) => void) | undefined;
     let release!: () => void;
     let signal: AbortSignal | undefined;
+    let newSignal: AbortSignal | undefined;
     const pending = new Promise<void>((resolve) => release = resolve);
     const root = {
       innerHTML: '',
@@ -990,7 +991,14 @@ for (const operation of ['loader', 'action'] as const) {
       routerMode: 'history',
       routes: [
         { path: '/', tagName: 'home-page', [operation]: delayed },
-        { path: '/new', tagName: 'new-page', loader: () => Promise.resolve({ page: 'new' }) },
+        {
+          path: '/new',
+          tagName: 'new-page',
+          loader: (context: { signal: AbortSignal }) => {
+            newSignal = context.signal;
+            return Promise.resolve({ page: 'new' });
+          },
+        },
         { path: '/stale', tagName: 'stale-page', loader: () => Promise.resolve({ page: 'stale' }) },
       ],
     });
@@ -1010,6 +1018,12 @@ for (const operation of ['loader', 'action'] as const) {
       assertEquals(env.pushed, ['/new']);
       assertEquals(app.router!.currentPath, '/new');
       assertEquals(hosts.at(-1)?.page, 'new');
+      // The superseding navigation's loader ran on its own live signal:
+      // distinct from the aborted one and never aborted by the stale
+      // operation's late settlement.
+      assertEquals(typeof newSignal, 'object');
+      assertEquals(newSignal === signal, false);
+      assertEquals(newSignal?.aborted, false);
     } finally {
       app.dispose();
       env.restore();

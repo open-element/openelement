@@ -15,6 +15,15 @@
  *
  *   install                hermetic npm install of the tarballs
  *   types                  consumer deno task check against the packed .d.ts
+ *   dev                    public dev command (`deno task dev` = vite dev over
+ *                          the packed adapter plugin): live SSR probes for
+ *                          /, /notes, detail, both 404 channels, form 422/303,
+ *                          browser continuation, source-edit feedback (page
+ *                          component AND route module edits must reach the
+ *                          served document; SSR re-render + full reload is the
+ *                          promised feedback path, no component HMR claimed),
+ *                          a broken edit must surface as a 500 (never as
+ *                          stale success), stop frees the port, restart works
  *   build                  packed cli/build emits dist/server/index.js + SSG
  *   start                  cli/start serves /, /notes, /notes/<seed>, 404
  *   serve.mjs              standalone dist/server/serve.mjs serves the same
@@ -119,21 +128,24 @@ function reservePort(): number {
 }
 
 /**
- * Boot one long-running server (cli/start or the standalone serve.mjs), wait
- * for it to answer HTTP, run the probe callback against it, then stop it.
- * A green exit alone is not lifecycle evidence: the packed artifacts must
- * actually serve the documented routes over the wire.
+ * Boot one long-running server (cli/start, the standalone serve.mjs or the
+ * vite dev server), wait for it to answer HTTP, run the probe callback against
+ * it, then stop it. A green exit alone is not lifecycle evidence: the packed
+ * artifacts must actually serve the documented routes over the wire.
+ * `argsFor` receives the reserved port so servers configured by CLI flag (the
+ * vite dev server) and by env (cli/start, serve.mjs) share this lifecycle.
+ * Resolves to the port so callers can assert the port is freed after stop.
  */
 async function withServer(
   label: string,
   command: string,
-  args: string[],
+  argsFor: (port: number) => string[],
   cwd: string,
   probe: (baseUrl: string) => Promise<void>,
-): Promise<void> {
+): Promise<number> {
   const port = reservePort();
   const server = new Deno.Command(command, {
-    args,
+    args: argsFor(port),
     cwd,
     env: { OPEN_ELEMENT_PORT: String(port), OPEN_ELEMENT_HOST: '127.0.0.1' },
     stdout: 'piped',
@@ -179,6 +191,7 @@ async function withServer(
     await status.catch(() => undefined);
     await Promise.all([stdout.catch(() => ''), stderr.catch(() => '')]);
   }
+  return port;
 }
 
 function assertIncludes(haystack: string, needle: string, label: string): void {
@@ -197,11 +210,88 @@ function stripLitMarkers(html: string): string {
   return html.replace(/<!--\/?lit-(part|node)[^>]*-->/g, '');
 }
 
+function delay(ms: number): Promise<void> {
+  return new Promise((resolveWait) => setTimeout(resolveWait, ms));
+}
+
+/**
+ * Poll one dev-server page until the expected state holds or the deadline
+ * passes. A timed-out poll throws — a source edit that never reaches the
+ * served document is a FAIL, never a silent PASS; an injected error that
+ * keeps answering 200 with stale content is a FAIL for the same reason.
+ */
+async function pollDevPage(
+  spec: LegSpec,
+  baseUrl: string,
+  path: string,
+  expect: { status?: number; present?: string[]; absent?: string[] },
+  label: string,
+  timeoutMs = 60_000,
+): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  let last = 'no response yet';
+  while (Date.now() < deadline) {
+    try {
+      const response = await fetch(`${baseUrl}${path}`);
+      const raw = await response.text();
+      const body = spec.stripMarkers ? stripLitMarkers(raw) : raw;
+      const statusOk = response.status === (expect.status ?? 200);
+      const missing = (expect.present ?? []).filter((marker) => !body.includes(marker));
+      const leaked = (expect.absent ?? []).filter((marker) => body.includes(marker));
+      if (statusOk && missing.length === 0 && leaked.length === 0) return;
+      last = `status=${response.status}, missing=[${missing.join(', ')}], leaked=[${
+        leaked.join(', ')
+      }]`;
+    } catch (error) {
+      last = formatError(error);
+    }
+    await delay(300);
+  }
+  throw new Error(`${label}: page state not reached within ${timeoutMs}ms (last: ${last})`);
+}
+
+/**
+ * Replace `from` with `to` in one materialized consumer source file. The edit
+ * target must be present and the replacement absent beforehand — otherwise
+ * the dev-feedback proof could pass against content that never changed.
+ */
+function editConsumerSource(tmp: string, path: string, from: string, to: string): string {
+  const file = join(tmp, path);
+  const text = Deno.readTextFileSync(file);
+  if (!text.includes(from)) {
+    throw new Error(`dev feedback edit: ${path} does not contain the expected source ${from}`);
+  }
+  if (text.includes(to)) {
+    throw new Error(
+      `dev feedback edit: ${path} already contains ${to} — the proof would be vacuous`,
+    );
+  }
+  Deno.writeTextFileSync(file, text.replace(from, to));
+  return text;
+}
+
+/** After a dev server stops, its port must refuse connections (no leftover). */
+async function assertPortClosed(port: number, label: string, timeoutMs = 30_000): Promise<void> {
+  const baseUrl = `http://127.0.0.1:${port}`;
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    try {
+      const response = await fetch(`${baseUrl}/`);
+      await response.text();
+      await delay(200);
+    } catch {
+      return;
+    }
+  }
+  throw new Error(`${label}: ${baseUrl} still answers after stop — server or port leaked`);
+}
+
 // ─── Cell framework ─────────────────────────────────────────────────────────
 
 const CELL_NAMES = [
   'install',
   'types',
+  'dev',
   'build',
   'start',
   'serve.mjs',
@@ -1241,6 +1331,60 @@ try {
 }
 `;
 
+const PW_DEV_WARMUP_SCRIPT = `import { chromium } from '@playwright/test';
+
+// Dev-mode warm-up (packed consumer dev cell): the first browser visit makes
+// vite discover and optimize the island client graph's bare dependencies and
+// forces exactly one full page reload ("optimized dependencies changed.
+// reloading"). That one-time cold-cache behavior must settle BEFORE the
+// continuation probe asserts zero reloads, or the probe would attribute a
+// vite cold-start reload to the island lifecycle. This script waits until the
+// island is active AND no reload has occurred for a stability window; the
+// subsequent probe then runs against steady-state dev serving.
+// Args: <baseUrl> <native|lit>.
+
+const [baseUrl, renderer] = Deno.args;
+if (!baseUrl || (renderer !== 'native' && renderer !== 'lit')) {
+  throw new Error('usage: pw-dev-warmup-probe.ts <baseUrl> <native|lit>');
+}
+
+const islandActive = renderer === 'native'
+  ? '(function(){var p=document.querySelector("notes-index");' +
+    'var i=p&&p.shadowRoot&&p.shadowRoot.querySelector("note-counter");' +
+    'var c=i&&i.shadowRoot&&i.shadowRoot.querySelector("#count");' +
+    'return !!(c&&c.textContent==="0");})()'
+  : '(function(){var h=document.querySelector("notes-list-page");' +
+    'var i=h&&h.shadowRoot&&h.shadowRoot.querySelector("note-counter");' +
+    'var b=i&&i.shadowRoot&&i.shadowRoot.querySelector("#counter");' +
+    'return !!(b&&b.textContent==="count: 0");})()';
+
+const STABILITY_MS = 3000;
+const deadline = Date.now() + 120000;
+const browser = await chromium.launch({ headless: true });
+try {
+  const page = await browser.newPage();
+  await page.goto(baseUrl + '/notes', { waitUntil: 'load' });
+  // A forced reload re-runs this loop: the marker set after activation only
+  // survives when no further reload arrives within the stability window.
+  // Playwright re-installs waitForFunction predicates across navigations.
+  for (;;) {
+    if (Date.now() > deadline) throw new Error('dev warm-up timed out');
+    await page.waitForFunction(islandActive, undefined, { timeout: 120000, polling: 500 });
+    await page.evaluate(() => {
+      (globalThis as { __devWarmup?: string }).__devWarmup = 'stable';
+    });
+    await page.waitForTimeout(STABILITY_MS);
+    const survived = await page.evaluate(() =>
+      (globalThis as { __devWarmup?: string }).__devWarmup === 'stable'
+    );
+    if (survived && await page.evaluate(islandActive)) break;
+  }
+  console.log('DEV-WARMUP-OK ' + renderer);
+} finally {
+  await browser.close();
+}
+`;
+
 // ─── Leg specifications ─────────────────────────────────────────────────────
 
 interface GetProbe {
@@ -1263,6 +1407,20 @@ interface LegSpec {
   /** `deno task check` entry list (quoted where the path has brackets). */
   checkEntries: string[];
   probes: GetProbe[];
+  /**
+   * Dev-feedback edits for the dev cell: one page-component edit and one
+   * route-module edit, each with the exact source strings and the probe path
+   * whose served document must reflect them.
+   */
+  devEdits: {
+    componentFile: string;
+    componentFrom: string;
+    componentTo: string;
+    routeFile: string;
+    routeFrom: string;
+    routeTo: string;
+    probePath: string;
+  };
   /** Extra prerendered artifacts asserted in the build cell. */
   prerenderedExtras: string[];
   /** Strip lit-ssr marker comments before matching probe markers. */
@@ -1338,6 +1496,15 @@ const NATIVE_LEG: LegSpec = {
   prerenderedExtras: [],
   stripMarkers: false,
   locationPattern: /^\/notes\/note-\d+\?created=1$/,
+  devEdits: {
+    componentFile: 'app/components/page-notes-index.tsx',
+    componentFrom: '<h1>packed-app-native notes</h1>',
+    componentTo: '<h1>packed-app-native notes (dev edit)</h1>',
+    routeFile: 'app/routes/notes/index.tsx',
+    routeFrom: 'note-count=',
+    routeTo: 'note-total=',
+    probePath: '/notes',
+  },
 };
 
 const LIT_LEG: LegSpec = {
@@ -1415,6 +1582,15 @@ const LIT_LEG: LegSpec = {
   prerenderedExtras: ['dist/404.html'],
   stripMarkers: true,
   locationPattern: /^\/notes\/n\d+\?created=1$/,
+  devEdits: {
+    componentFile: 'app/components/notes-list-page.ts',
+    componentFrom: '<h1>packed-app-lit notes</h1>',
+    componentTo: '<h1>packed-app-lit notes (dev edit)</h1>',
+    routeFile: 'app/routes/notes.ts',
+    routeFrom: 'note-count=',
+    routeTo: 'note-total=',
+    probePath: '/notes',
+  },
 };
 
 // ─── Probe implementations ──────────────────────────────────────────────────
@@ -1510,6 +1686,180 @@ async function postValid(spec: LegSpec, baseUrl: string): Promise<string> {
   return `303 -> ${location}, PRG target renders the created note`;
 }
 
+// ─── Browser continuation probe runner ──────────────────────────────────────
+
+/**
+ * Run the generated Playwright continuation probe against one already-serving
+ * base URL (production serve.mjs or the dev server). The probe itself asserts
+ * renderer-specific continuation: the native kernel claims the island DSD and
+ * lit hydrate-support adopts it, node identity survives interaction, and no
+ * full reload happens.
+ */
+async function runBrowserContinuationProbe(tmp: string, baseUrl: string, leg: Renderer) {
+  const probe = await run(
+    Deno.execPath(),
+    [
+      'run',
+      '--config',
+      join(repoRoot, 'deno.json'),
+      '-A',
+      join(tmp, 'pw-continuation-probe.ts'),
+      baseUrl,
+      leg,
+    ],
+    repoRoot,
+    BROWSER_TIMEOUT_MS,
+  );
+  if (!probe.success || !probe.output.includes(`BROWSER-CONTINUATION-OK ${leg}`)) {
+    throw new Error(`Browser continuation probe failed:\n${probe.output}`);
+  }
+}
+
+/**
+ * Settle the vite dev server's one-time cold-cache dependency optimization
+ * (and its forced full reload) before the dev-mode continuation probe runs.
+ * Failing to warm up would make the probe attribute a vite cold-start reload
+ * to the island lifecycle — a false product defect.
+ */
+async function runDevWarmupProbe(tmp: string, baseUrl: string, leg: Renderer) {
+  const probe = await run(
+    Deno.execPath(),
+    [
+      'run',
+      '--config',
+      join(repoRoot, 'deno.json'),
+      '-A',
+      join(tmp, 'pw-dev-warmup-probe.ts'),
+      baseUrl,
+      leg,
+    ],
+    repoRoot,
+    BROWSER_TIMEOUT_MS,
+  );
+  if (!probe.success || !probe.output.includes(`DEV-WARMUP-OK ${leg}`)) {
+    throw new Error(`Dev warm-up probe failed:\n${probe.output}`);
+  }
+}
+
+// ─── Dev server session ─────────────────────────────────────────────────────
+//
+// The packed consumer's public development command is the same one the create
+// template exposes: `deno task dev` (npm:vite dev over the packed adapter
+// plugin). Development feedback is SSR re-render on the next request plus a
+// full page reload — no component-level HMR is promised or asserted. The
+// session proves, per renderer leg:
+//   1. the dev server boots and serves the same routes/forms as the build
+//      (live SSR: /, /notes, detail, both 404 channels, form 422/303+PRG);
+//   2. the browser continuation contract holds in dev (island activates
+//      without a full reload);
+//   3. a page-component edit AND a route-module edit reach the served
+//      document (old marker gone, new marker present — a change that never
+//      lands is a FAIL, not a PASS);
+//   4. a broken edit surfaces as a 500 — never as stale success — and the
+//      server recovers after the revert;
+//   5. stop frees the port and a fresh boot on a new port serves again.
+// Form probes run before the feedback edits: the edits invalidate the dev SSR
+// module graph, which re-executes app/store.ts and resets the in-memory note
+// store — expected dev semantics, asserted nowhere after the edits.
+
+async function devSession(spec: LegSpec, tmp: string): Promise<string> {
+  const leg = spec.renderer;
+  const label = `packed-app-${leg} dev server`;
+  const devArgs = (port: number): string[] => [
+    'task',
+    'dev',
+    '--host',
+    '127.0.0.1',
+    '--port',
+    String(port),
+    '--strictPort',
+  ];
+  const firstPort = await withServer(label, Deno.execPath(), devArgs, tmp, async (baseUrl) => {
+    // 1. Live SSR over the wire: same probe set the production modes answer.
+    await runGetProbes(spec, baseUrl);
+    await postInvalid(spec, baseUrl);
+    await postValid(spec, baseUrl);
+
+    // 2. Browser continuation in dev (native claim / lit adoption). Warm up
+    //    first: vite's cold-cache dep optimization forces one full reload,
+    //    which must not be attributed to the island lifecycle.
+    await runDevWarmupProbe(tmp, baseUrl, leg);
+    await runBrowserContinuationProbe(tmp, baseUrl, leg);
+
+    // 3. Dev feedback: a component edit and a route-module edit must both
+    //    reach the served document; the previous content must be gone.
+    //    Whatever happens, both files are restored byte-identically so the
+    //    later build/start cells never read a mutated tree.
+    const edits = spec.devEdits;
+    const componentOriginal = Deno.readTextFileSync(join(tmp, edits.componentFile));
+    const routeOriginal = Deno.readTextFileSync(join(tmp, edits.routeFile));
+    try {
+      editConsumerSource(tmp, edits.componentFile, edits.componentFrom, edits.componentTo);
+      await pollDevPage(
+        spec,
+        baseUrl,
+        edits.probePath,
+        { present: [edits.componentTo], absent: [edits.componentFrom] },
+        'dev feedback: component edit',
+      );
+      editConsumerSource(tmp, edits.routeFile, edits.routeFrom, edits.routeTo);
+      await pollDevPage(
+        spec,
+        baseUrl,
+        edits.probePath,
+        { present: [edits.routeTo], absent: [edits.routeFrom] },
+        'dev feedback: route module edit',
+      );
+
+      // 4. A broken edit must surface as a server error — never disguised as
+      //    success or as stale last-good content.
+      Deno.writeTextFileSync(
+        join(tmp, edits.componentFile),
+        `${componentOriginal}\nexport const __devBroken = ;\n`,
+      );
+      await pollDevPage(
+        spec,
+        baseUrl,
+        edits.probePath,
+        { status: 500, absent: [edits.componentTo] },
+        'dev error visibility: broken component edit',
+      );
+      Deno.writeTextFileSync(join(tmp, edits.componentFile), componentOriginal);
+      await pollDevPage(
+        spec,
+        baseUrl,
+        edits.probePath,
+        { present: [edits.componentFrom] },
+        'dev recovery after revert',
+      );
+    } finally {
+      Deno.writeTextFileSync(join(tmp, edits.componentFile), componentOriginal);
+      Deno.writeTextFileSync(join(tmp, edits.routeFile), routeOriginal);
+    }
+  });
+
+  // 5. Stop lifecycle: the port must be freed, and a fresh boot must serve.
+  await assertPortClosed(firstPort, label);
+  const secondPort = await withServer(
+    `${label} (restart)`,
+    Deno.execPath(),
+    devArgs,
+    tmp,
+    async (baseUrl) => {
+      await pollDevPage(
+        spec,
+        baseUrl,
+        '/',
+        { present: [spec.probes[0].markers[0]] },
+        'dev restart',
+      );
+    },
+  );
+  await assertPortClosed(secondPort, `${label} (restart)`);
+
+  return 'dev server: routes/forms/404 live, continuation ok, component+route edits reflected, broken edit = 500 (no stale success), stop frees port, restart serves';
+}
+
 // ─── Server sessions ────────────────────────────────────────────────────────
 
 type ServeMode = 'start' | 'serve.mjs';
@@ -1527,7 +1877,9 @@ interface SessionOutcome {
  */
 async function serveSession(spec: LegSpec, tmp: string, mode: ServeMode): Promise<SessionOutcome> {
   const label = `packed-app-${spec.renderer} ${mode} server`;
-  const args = mode === 'start' ? ['task', 'start'] : ['run', '-A', 'dist/server/serve.mjs'];
+  const argsFor = mode === 'start'
+    ? () => ['task', 'start']
+    : () => ['run', '-A', 'dist/server/serve.mjs'];
   const pending = (phase: string): Outcome => ({ ok: false, detail: `${phase} not reached` });
   const result: SessionOutcome = {
     gets: pending('GET probes'),
@@ -1535,7 +1887,7 @@ async function serveSession(spec: LegSpec, tmp: string, mode: ServeMode): Promis
     form303: pending('form-303'),
   };
   try {
-    await withServer(label, Deno.execPath(), args, tmp, async (baseUrl) => {
+    await withServer(label, Deno.execPath(), argsFor, tmp, async (baseUrl) => {
       result.gets = await attempt(() => runGetProbes(spec, baseUrl));
       result.form422 = await attempt(() => postInvalid(spec, baseUrl));
       result.form303 = await attempt(() => postValid(spec, baseUrl));
@@ -1721,6 +2073,8 @@ function consumerDenoJson(spec: LegSpec): Record<string, unknown> {
     nodeModulesDir: 'manual',
     minimumDependencyAge: 0,
     tasks: {
+      // The public development command, same shape as the create template.
+      dev: `deno run --config deno.json -A npm:vite@8.0.16 dev`,
       build:
         `deno run --config deno.json -A npm:@openelement/adapter-vite@${PACKAGE_VERSION}/cli/build`,
       start:
@@ -1803,6 +2157,7 @@ async function runLeg(spec: LegSpec, tarballs: Tarball[]): Promise<void> {
         Deno.writeTextFileSync(target, content);
       }
       Deno.writeTextFileSync(join(tmp, 'pw-continuation-probe.ts'), PW_PROBE_SCRIPT);
+      Deno.writeTextFileSync(join(tmp, 'pw-dev-warmup-probe.ts'), PW_DEV_WARMUP_SCRIPT);
       return `${tarballs.length} tarballs + pinned externals installed hermetically`;
     });
 
@@ -1812,6 +2167,14 @@ async function runLeg(spec: LegSpec, tarballs: Tarball[]): Promise<void> {
         throw new Error(`Packed consumer typecheck failed:\n${check.output}`);
       }
       return 'deno task check green against the packed declarations';
+    });
+
+    // The dev cell mutates and restores consumer sources; it runs before the
+    // build cell so a developer workflow order (install → dev → build) is
+    // also the verified order, and so a failed restore fails the leg before
+    // any build-derived cell could read a mutated tree.
+    await cell(leg, 'dev', ['install'], async () => {
+      return await devSession(spec, tmp);
     });
 
     await cell(leg, 'build', ['install'], async () => {
@@ -1876,27 +2239,9 @@ async function runLeg(spec: LegSpec, tarballs: Tarball[]): Promise<void> {
       await withServer(
         `packed-app-${leg} browser host`,
         Deno.execPath(),
-        ['run', '-A', 'dist/server/serve.mjs'],
+        () => ['run', '-A', 'dist/server/serve.mjs'],
         tmp,
-        async (baseUrl) => {
-          const probe = await run(
-            Deno.execPath(),
-            [
-              'run',
-              '--config',
-              join(repoRoot, 'deno.json'),
-              '-A',
-              join(tmp, 'pw-continuation-probe.ts'),
-              baseUrl,
-              leg,
-            ],
-            repoRoot,
-            BROWSER_TIMEOUT_MS,
-          );
-          if (!probe.success || !probe.output.includes(`BROWSER-CONTINUATION-OK ${leg}`)) {
-            throw new Error(`Browser continuation probe failed:\n${probe.output}`);
-          }
-        },
+        (baseUrl) => runBrowserContinuationProbe(tmp, baseUrl, leg),
       );
       return 'chromium: island activates in place without a full reload';
     });
