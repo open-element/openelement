@@ -4,7 +4,7 @@
   "policyVersion": "autoflow3-v0",
   "currentVersion": "0.44.0-beta.2.1",
   "targetVersion": "0.44.0-beta.2.2",
-  "status": "failed",
+  "status": "completed",
   "startedAt": "2026-09-10T16:15:40.201Z",
   "steps": [
     {
@@ -69,10 +69,10 @@
         "--version",
         "0.44.0-beta.2.2"
       ],
-      "status": "failed",
-      "startedAt": "2026-09-10T16:17:05.037Z",
-      "completedAt": "2026-09-10T16:17:06.683Z",
-      "exitCode": 1
+      "status": "passed",
+      "startedAt": "2026-09-10T17:36:21.123Z",
+      "completedAt": "2026-09-10T17:36:38.630Z",
+      "exitCode": 0
     },
     {
       "name": "post-publish third-party Web Component smoke",
@@ -81,7 +81,10 @@
         "task",
         "third-party-wc:smoke"
       ],
-      "status": "pending"
+      "status": "passed",
+      "startedAt": "2026-09-10T17:36:38.630Z",
+      "completedAt": "2026-09-10T17:36:46.203Z",
+      "exitCode": 0
     },
     {
       "name": "stage release evidence",
@@ -91,15 +94,24 @@
         "docs/release/autoflow3/v0.44.0-beta.2.2.json",
         "docs/release/v0.44.0-beta.2.2.md"
       ],
-      "status": "pending"
+      "status": "passed",
+      "startedAt": "2026-09-10T17:36:46.204Z",
+      "completedAt": "2026-09-10T17:36:46.209Z",
+      "exitCode": 0
     },
     {
       "name": "commit release evidence",
-      "status": "pending"
+      "status": "passed",
+      "startedAt": "2026-09-10T17:36:46.214Z",
+      "completedAt": "2026-09-10T17:36:46.224Z",
+      "exitCode": 0
     },
     {
       "name": "tag release",
-      "status": "pending"
+      "status": "passed",
+      "startedAt": "2026-09-10T17:36:46.238Z",
+      "completedAt": "2026-09-10T17:36:46.242Z",
+      "exitCode": 0
     },
     {
       "name": "push tag",
@@ -109,13 +121,19 @@
         "origin",
         "v0.44.0-beta.2.2"
       ],
-      "status": "pending"
+      "status": "passed",
+      "startedAt": "2026-09-10T17:36:46.243Z",
+      "completedAt": "2026-09-10T17:36:47.521Z",
+      "exitCode": 0
     },
     {
       "name": "create GitHub release",
-      "status": "pending"
+      "status": "passed",
+      "startedAt": "2026-09-10T17:36:47.522Z",
+      "completedAt": "2026-09-10T17:36:48.922Z",
+      "exitCode": 0
     }
   ],
   "releaseRunUrl": "https://github.com/open-element/openelement/actions/runs/34498341312",
-  "completedAt": "2026-09-10T16:17:06.684Z"
+  "completedAt": "2026-09-10T17:36:48.923Z"
 }
