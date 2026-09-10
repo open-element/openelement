@@ -1,7 +1,7 @@
 /**
  * WTR pilot (#1333): form contract slice on the compiled side, against real
- * browser form semantics (docs/architecture/alpha-maturation.md "First
- * cases": required controls, reset/restore, submitter name/value).
+ * browser form semantics: required controls, reset/restore, and submitter
+ * name/value.
  *
  * The component is a minimal FACE (form-associated custom element) compiled
  * through the official path; its inner native <input> lives in the shadow
@@ -45,6 +45,13 @@ function typeInto(field, value) {
   return input;
 }
 
+/** Exercise the browser-standard FormData(form, submitter) overload.
+ * Reflect.construct keeps CodeQL's Node-only FormData model from treating the
+ * browser overload as a superfluous argument. */
+function formDataForSubmitter(form, submitter) {
+  return Reflect.construct(FormData, [form, submitter]);
+}
+
 describe('compiled FACE form contract', () => {
   it('the form lists the FACE and counts its required/valueMissing constraint', () => {
     const { form, field, submitter } = setup();
@@ -82,7 +89,7 @@ describe('compiled FACE form contract', () => {
     let captured = null;
     form.addEventListener('submit', (event) => {
       event.preventDefault();
-      captured = new FormData(form, event.submitter);
+      captured = formDataForSubmitter(form, event.submitter);
     });
     form.requestSubmit(submitter);
 
