@@ -8,9 +8,10 @@ authoring syntax; Declarative Shadow DOM is the default server representation;
 and interactive regions activate selectively.
 
 The published stable line remains the 0.43 series on npm `latest`.
-`v0.44.0-beta.2.1` is the current public v0.44 prerelease — Beta.2.1,
-Router foundation and independent Element (ADR-0152) — published under dist-tag
-`beta`. The accepted next work is Beta.2.2–Beta.2.3 convergence, followed by public
+`v0.44.0-beta.2.2` is the current public v0.44 prerelease — Beta.2.2,
+dual-renderer Native/Lit Framework Mode and the resolved Document seam
+(ADR-0152, ADR-0153) — published under dist-tag
+`beta`. The accepted next work is Beta.2.3 convergence, followed by public
 `v1.0.0-alpha.1` after admission ([roadmap](docs/roadmap/ROADMAP.md)).
 The `1.0.0` target remains unscheduled and requires separate evidence and approval.
 
