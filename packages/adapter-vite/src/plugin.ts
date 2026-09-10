@@ -325,6 +325,19 @@ export function createOpenPlugin(
 
       return {
         resolve: normalizedAliases ? { alias: normalizedAliases } : undefined,
+        // Chokidar's fs.watch backend drops consecutive change events within
+        // 50ms. A quick fix after a syntax error can otherwise leave Vite's
+        // SSR error cached forever (the packed Lit consumer on Linux).
+        // Use its native write-stability queue, which delivers the final
+        // write instead of throttling it away. Explicit watcher settings win.
+        ...(userConfig.server?.watch === null ||
+            userConfig.server?.watch?.awaitWriteFinish !== undefined
+          ? {}
+          : {
+            server: {
+              watch: { awaitWriteFinish: { stabilityThreshold: 50, pollInterval: 10 } },
+            },
+          }),
         build: {
           // The generated virtual entry intentionally contains the whole route graph.
           // Keep the budget explicit so Vite does not report it as an unexpected warning.

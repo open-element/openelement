@@ -158,6 +158,7 @@ async function withServer(
   });
   const stdout = new Response(server.stdout).text();
   const stderr = new Response(server.stderr).text();
+  let failure: unknown;
   try {
     const baseUrl = `http://127.0.0.1:${port}`;
     let ready = false;
@@ -174,10 +175,12 @@ async function withServer(
     }
     if (!ready) {
       throw new Error(
-        `${label} did not become ready within ${SERVER_READY_TIMEOUT_MS}ms:\n${await stdout}\n${await stderr}`,
+        `${label} did not become ready within ${SERVER_READY_TIMEOUT_MS}ms`,
       );
     }
     await probe(baseUrl);
+  } catch (error) {
+    failure = error;
   } finally {
     if (!exited) {
       try {
@@ -190,6 +193,17 @@ async function withServer(
     }
     await status.catch(() => undefined);
     await Promise.all([stdout.catch(() => ''), stderr.catch(() => '')]);
+  }
+  if (failure) {
+    // Preserve the server-side cause of a failed dev/build probe. Drain only
+    // after stopping the process; awaiting live pipes on a readiness timeout
+    // would itself hang qualification forever.
+    throw new Error(
+      `${label}: ${String(failure)}\n${(await stdout).slice(-12000)}\n${
+        (await stderr).slice(-12000)
+      }`,
+      { cause: failure },
+    );
   }
   return port;
 }
@@ -765,6 +779,8 @@ const NATIVE_VITE_CONFIG = `import { openElement } from '@openelement/adapter-vi
 import { defineConfig } from 'vite';
 
 export default defineConfig({
+  // Exercise Linux's fs.watch backend on every host, including macOS.
+  server: { watch: { useFsEvents: false, usePolling: false } },
   base: '/',
   esbuild: {
     jsx: 'automatic',
@@ -1212,6 +1228,8 @@ const LIT_VITE_CONFIG = `import { openElement } from '@openelement/adapter-vite'
 import { defineConfig } from 'vite';
 
 export default defineConfig({
+  // Exercise Linux's fs.watch backend on every host, including macOS.
+  server: { watch: { useFsEvents: false, usePolling: false } },
   base: '/',
   esbuild: {
     jsx: 'automatic',
