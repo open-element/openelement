@@ -113,15 +113,18 @@ all three engines. Engine notes recorded while landing them:
 - **Popover toggle events coalesce per spec**: state flips separated by less
   than a task dispatch no toggle event. Overlay tests settle each transition
   (state AND its toggle event) before the next action.
-- **open-dropdown focus-restore race (reported, NOT fixed — packages/ui is
-  outside this slice's scope)**: `watchFocusReturn`'s 'open' toggle handler
-  resets `popoverHadFocus`, but the 'open' toggle event is dispatched in a
-  queued task; focus entering the popover before that task runs has its
-  focusin record wiped and focus return silently never happens. The tests wait
-  for the 'open' toggle event before moving focus into the popover (the only
-  timing a real user can hit). Repro: remove that wait and focus the popover
-  content immediately after the opening click — focus stays on `<body>` after
-  Escape in all three engines.
+- **open-dropdown focus-restore race (FIXED in this round)**: the old
+  `watchFocusReturn` reset `popoverHadFocus` in the queued 'open' toggle
+  handler, so focus entering the popover before that task ran had its focusin
+  record wiped and focus return silently never happened (menu-button
+  composition: the opening click moves focus to the first item synchronously;
+  also any direct `showPopover()` open path). The capture/reset is now
+  anchored at the SYNCHRONOUS 'beforetoggle' point
+  (`packages/ui/src/open-dropdown.tsx`), which runs inside `togglePopover()`
+  before the open flip and before any same-task focus move. Two regression
+  tests in `tests/overlay-contract.test.js` pin both racy orderings; both
+  fail against the pre-fix implementation in all three engines (proven by
+  stashing the regenerated `generated/open-dropdown.ts`).
 - **Restore-reason path NOT RUN**: neither `packages/ui/src/open-input.tsx`
   nor the distilled `wtr-field` fixture implements `formStateRestoreCallback`
   (only `formResetCallback`); the inherited base-class callback is a safe

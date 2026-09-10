@@ -156,13 +156,14 @@ describe('overlay contract: open-dialog (production packages/ui component)', () 
 });
 
 describe('overlay contract: open-dropdown (production packages/ui component)', () => {
-  // NOTE (reported product race, not fixed here — packages/ui is outside this
-  // slice's scope): the popover 'open' toggle event is dispatched in a queued
-  // task, and watchFocusReturn's 'open' handler resets popoverHadFocus. Focus
-  // entering the popover BEFORE that task runs has its focusin record wiped,
-  // so focus return silently never happens. Real users cannot focus into a
-  // popover within the same task as the opening click; these tests model that
-  // by waiting for the 'open' toggle event before moving focus.
+  // Focus-return ordering contract: the popover 'open' toggle event is
+  // dispatched in a queued task. Focus entering the popover BEFORE that task
+  // runs (same-task programmatic focus from a composing menu widget, on either
+  // the trigger-click path or a direct showPopover() call) must still return
+  // on close — the component anchors its record at the synchronous
+  // 'beforetoggle' point, so the queued 'open' handler cannot wipe it. The
+  // first test models the plain user path (focus moves after the open toggle
+  // settles); the next two pin the racy orderings against regression.
   it('trigger opens the popover, Escape closes it, focus returns to the trigger', async () => {
     const { host, trigger, item, wrap } = setupDropdown();
     await waitFor(() => contentEl(host) !== null, 'dropdown shadow render');
@@ -186,6 +187,57 @@ describe('overlay contract: open-dropdown (production packages/ui component)', (
     await waitFor(
       () => deepActive() === trigger,
       'focus restored to the trigger after Escape',
+    );
+
+    wrap.remove();
+  });
+
+  it('same-task focus into the popover on open still returns focus on Escape (race regression)', async () => {
+    const { host, trigger, item, wrap } = setupDropdown();
+    await waitFor(() => contentEl(host) !== null, 'dropdown shadow render');
+    const content = contentEl(host);
+
+    trigger.focus();
+    // The menu-button composition pattern: the opening click moves focus to
+    // the first item synchronously — BEFORE the queued 'open' toggle task
+    // runs. A focusin record wiped by that task would silently disable focus
+    // return; the synchronous 'beforetoggle' anchor must not lose it.
+    trigger.click();
+    item.focus();
+    assert.strictEqual(deepActive(), item, 'focus moved into the popover in the opening task');
+    await waitFor(() => content.matches(':popover-open'), 'popover open');
+
+    await sendKeys({ press: 'Escape' });
+    await waitFor(() => !content.matches(':popover-open'), 'Escape light dismiss');
+    await waitFor(
+      () => deepActive() === trigger,
+      'focus restored to the trigger after the same-task race',
+    );
+
+    wrap.remove();
+  });
+
+  it('direct showPopover() open with same-task focus still returns focus on Escape (race regression)', async () => {
+    const { host, trigger, item, wrap } = setupDropdown();
+    await waitFor(() => contentEl(host) !== null, 'dropdown shadow render');
+    const content = contentEl(host);
+
+    trigger.focus();
+    // An open path that never passes through toggle(): the host component
+    // calls showPopover() itself, and a composing widget moves focus into the
+    // popover synchronously. The return-focus target can only come from the
+    // synchronous 'beforetoggle' capture, and the focusin record must survive
+    // the queued 'open' toggle task.
+    content.showPopover();
+    item.focus();
+    assert.strictEqual(deepActive(), item, 'focus moved into the popover in the opening task');
+    await waitFor(() => content.matches(':popover-open'), 'popover open');
+
+    await sendKeys({ press: 'Escape' });
+    await waitFor(() => !content.matches(':popover-open'), 'Escape light dismiss');
+    await waitFor(
+      () => deepActive() === trigger,
+      'focus restored to the trigger after the direct-showPopover race',
     );
 
     wrap.remove();

@@ -107,12 +107,22 @@ export class OpenDropdown extends OpenElement {
     content.addEventListener('focusin', () => {
       writeInstanceState(this, 'popoverHadFocus', true);
     });
+    // 'beforetoggle' fires synchronously before the open flip — therefore
+    // before showPopover()'s focusing steps (an autofocus descendant) and
+    // before any same-task programmatic .focus() into the popover (the
+    // menu-button composition pattern). Resetting the record here, instead of
+    // in the queued 'toggle' task, closes the race where focus entering the
+    // popover within the opening task had its focusin record wiped, silently
+    // disabling focus return. The same synchronous point also captures the
+    // return-focus target for every open path, including direct showPopover()
+    // calls that never pass through toggle().
+    content.addEventListener('beforetoggle', (event) => {
+      if ((event as ToggleEvent).newState !== 'open') return;
+      writeInstanceState(this, 'popoverHadFocus', false);
+      writeInstanceState(this, 'previouslyFocused', deepActiveElement());
+    });
     content.addEventListener('toggle', (event) => {
       const toggle = event as ToggleEvent;
-      if (toggle.newState === 'open') {
-        writeInstanceState(this, 'popoverHadFocus', false);
-        return;
-      }
       if (toggle.newState !== 'closed') return;
       const hadFocus = readInstanceState(this, 'popoverHadFocus', () => false);
       const previous = readInstanceState(
@@ -169,11 +179,10 @@ export class OpenDropdown extends OpenElement {
     if (wasOpen) return;
     const content = this.shadowRoot?.querySelector<HTMLElement>('.content');
     if (!content) return;
-    if (!content.matches(':popover-open')) {
-      // Capture the return-focus target now: by the queued toggle event the
-      // user may already have moved focus into the popover (#1226).
-      writeInstanceState(this, 'previouslyFocused', deepActiveElement());
-    }
+    // watchFocusReturn's synchronous 'beforetoggle' listener is the single
+    // owner of the return-focus capture (#1226); it runs inside
+    // togglePopover() before the open flip, so nothing can move focus between
+    // this call and the capture.
     content.togglePopover();
   }
 }
