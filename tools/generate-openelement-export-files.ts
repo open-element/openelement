@@ -20,17 +20,30 @@ interface PackageExports {
   [subpath: string]: string;
 }
 
+interface RootConfig {
+  workspace?: unknown;
+}
+
+interface PackageConfig {
+  exports?: unknown;
+}
+
 const REPO_ROOT = new URL('../', import.meta.url).pathname;
 const TARGET = `${REPO_ROOT}packages/adapter-vite/src/generated-export-files.ts`;
 
-// Packages that participate in the JSR SSG package resolver export map.
-const RESOLVER_PACKAGES = [
-  'adapter-vite',
-  'app',
-  'create',
-  'element',
-  'ui',
-];
+async function resolverPackages(): Promise<string[]> {
+  const rootConfig = await readJson<RootConfig>(`${REPO_ROOT}deno.json`);
+  if (!Array.isArray(rootConfig.workspace)) {
+    throw new Error('deno.json workspace must be an array of package paths');
+  }
+
+  return rootConfig.workspace.map((entry: unknown) => {
+    if (typeof entry !== 'string' || !/^\.\/packages\/[^/]+$/u.test(entry)) {
+      throw new Error(`unsupported workspace package path: ${String(entry)}`);
+    }
+    return entry.slice('./packages/'.length);
+  }).sort();
+}
 
 function stripLeadingSlash(value: string): string {
   return value.replace(/^\.\//, '');
@@ -38,7 +51,7 @@ function stripLeadingSlash(value: string): string {
 
 async function readPackageExports(pkg: string): Promise<PackageExports> {
   const path = `${REPO_ROOT}packages/${pkg}/deno.json`;
-  const raw = await readJson(path);
+  const raw = await readJson<PackageConfig>(path);
   const exportsField = raw.exports;
 
   const result: PackageExports = {};
@@ -56,7 +69,7 @@ async function readPackageExports(pkg: string): Promise<PackageExports> {
 
 async function buildExportFiles(): Promise<Record<string, PackageExports>> {
   const map: Record<string, PackageExports> = {};
-  for (const pkg of RESOLVER_PACKAGES) {
+  for (const pkg of await resolverPackages()) {
     map[pkg] = await readPackageExports(pkg);
   }
   return map;
