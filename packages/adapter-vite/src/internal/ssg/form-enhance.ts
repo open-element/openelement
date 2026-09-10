@@ -97,7 +97,10 @@ export function computeSubmissionTuple(
     : rawEnctype === 'text/plain'
     ? 'text/plain'
     : 'application/x-www-form-urlencoded';
-  const target = submitterOverride('target') ?? form.getAttribute('target') ?? '';
+  // HTML's get-an-element's-target algorithm: an absent target inherits
+  // the first document base target; an explicitly empty target stays empty.
+  const target = submitterOverride('target') ?? form.getAttribute('target') ??
+    form.ownerDocument?.querySelector('base[target]')?.getAttribute('target') ?? '';
   const noValidate = (submitter ? submitter.hasAttribute('formnovalidate') : false) ||
     form.hasAttribute('novalidate');
   return { submitter, action, method, enctype, target, noValidate };
@@ -204,6 +207,16 @@ export function createFormEnhance(deps: FormEnhanceDeps): FormEnhance {
     formState.__openElementBusy = true;
     formState.__openElementSeq = (formState.__openElementSeq || 0) + 1;
     const seq = formState.__openElementSeq;
+    const submittedPage = win.location.href.split('#')[0];
+    const submittedDocument = form.ownerDocument;
+    // A per-form sequence preserves concurrent independent forms, but does
+    // not establish that this form still belongs to the current page. Apply
+    // this same ownership check to successes AND failures, before any DOM,
+    // URL or fallback-reload side effect. Fragment navigation keeps ownership.
+    const isCurrent = (): boolean =>
+      seq === formState.__openElementSeq && form.isConnected !== false &&
+      form.ownerDocument === submittedDocument &&
+      win.location.href.split('#')[0] === submittedPage;
     // #544: the submitter's name/value is part of the body — the body never
     // differs between the two paths (ADR-0120 rule 2).
     const formData = submitter
@@ -248,7 +261,7 @@ export function createFormEnhance(deps: FormEnhanceDeps): FormEnhance {
       });
     }).then((result) => {
       formState.__openElementBusy = false;
-      if (seq !== formState.__openElementSeq) return;
+      if (!isCurrent()) return;
       const target = new URL(result.url, win.location.href);
       // #555: cross-origin targets are real navigations, never pushState.
       if (target.origin !== win.location.origin) {
@@ -290,6 +303,7 @@ export function createFormEnhance(deps: FormEnhanceDeps): FormEnhance {
       win.location.assign(target.href);
     }).catch((err: unknown) => {
       formState.__openElementBusy = false;
+      if (!isCurrent()) return;
       // #585: give the app a hook before the reload fallback — a transient
       // failure must not silently discard in-flight input elsewhere on the
       // page. preventDefault() suppresses the reload.

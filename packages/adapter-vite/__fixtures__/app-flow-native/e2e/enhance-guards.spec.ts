@@ -235,3 +235,19 @@ test.describe('12. enhanced GET form', () => {
     expect(requests.filter((r) => r.method === 'POST')).toEqual([]);
   });
 });
+
+test('base target applies to a native renderer enhanced form', async ({ page }) => {
+  await page.goto('/notes/new');
+  await page.fill('#title', 'base target native');
+  await page.evaluate(() => {
+    const base = document.createElement('base');
+    base.target = '_blank';
+    document.head.append(base);
+  });
+  const popup = page.waitForEvent('popup');
+  await page.click('#submit');
+  const opened = await popup;
+  await opened.waitForLoadState();
+  await expect(page).toHaveURL(/\/notes\/new$/);
+  await opened.close();
+});

@@ -599,3 +599,43 @@ Deno.test('computeSubmissionTuple: platform defaults and validation state', () =
   // back to urlencoded.
   assertEquals(submitterTuple.enctype, 'text/plain');
 });
+
+Deno.test('late form failures cannot navigate after the submitting page exits', async () => {
+  let finish!: (value: unknown) => void;
+  const { win, fireSubmit, navigations } = makeHarness({
+    fetchFn: () => new Promise((resolve) => finish = resolve),
+  });
+  const form = new FakeFormElement();
+  form.setAttribute('method', 'post');
+  form.setAttribute('data-open-enhance', '');
+  fireSubmit(form);
+  win.location.href = 'https://fixture.local/new-page';
+  finish({
+    text: () => Promise.resolve('old failure'),
+    url: 'https://fixture.local/form',
+    status: 500,
+    headers: { get: () => 'text/plain' },
+  });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assertEquals(navigations, []);
+});
+
+Deno.test('fragment changes retain the pending form result', async () => {
+  let finish!: (value: unknown) => void;
+  const { win, fireSubmit, navigations } = makeHarness({
+    fetchFn: () => new Promise((resolve) => finish = resolve),
+  });
+  const form = new FakeFormElement();
+  form.setAttribute('method', 'post');
+  form.setAttribute('data-open-enhance', '');
+  fireSubmit(form);
+  win.location.href += '#details';
+  finish({
+    text: () => Promise.resolve('failure'),
+    url: 'https://fixture.local/form',
+    status: 500,
+    headers: { get: () => 'text/plain' },
+  });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assertEquals(navigations, ['https://fixture.local/form']);
+});
