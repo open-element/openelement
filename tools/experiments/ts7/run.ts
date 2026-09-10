@@ -838,7 +838,7 @@ async function consumer(appTar: string, elementTar: string): Promise<void> {
     "import { OpenElement, createLogger, OpenElementError } from '@openelement/element';",
     '',
     'const table = new RouteTable([]);',
-    "const rec: RouteRecord = { pattern: '/x', page: 'x-page' } as unknown as RouteRecord;",
+    'const rec: RouteRecord = JSON.parse(\'{"pattern":"/x","page":"x-page"}\');',
     'console.log(table, rec, definePage, fail, notFound, redirect, OpenElementError, OpenElement, createLogger, createRequestContext);',
     'const f = (ctx: LoaderContext) => ctx;',
     'const g = (ctx: ActionContext) => ctx;',

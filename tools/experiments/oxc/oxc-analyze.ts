@@ -24,6 +24,16 @@ export interface OxcNode {
   [key: string]: any;
 }
 
+/**
+ * Structural entry point for the oxc-parser Program: OxcNode is assignable to
+ * the parameter type, so a single-direction `as` cast is sound here and no
+ * double cast through `unknown` is needed. Callers pass the parser's Program
+ * directly.
+ */
+function asOxcNode(node: { type: string; start: number; end: number }): OxcNode {
+  return node as OxcNode;
+}
+
 export interface MiniDiagnostic {
   code: string;
   message: string;
@@ -308,7 +318,7 @@ function buildIntrinsics(body: OxcNode[]) {
 /** Subset of analyzeModuleSemantics: @element admission facts only. */
 export function oxcModuleFacts(source: string, fileName: string): MiniModuleFacts {
   const result = parseSync(fileName, source, { sourceType: 'module' });
-  const program = result.program as unknown as OxcNode;
+  const program = asOxcNode(result.program);
   const body = program.body as OxcNode[];
   const { resolveIntrinsic } = buildIntrinsics(body);
   let compiledElementDecorator = false;
@@ -396,7 +406,7 @@ export function oxcAnalyze(source: string, fileName: string): MiniProgram {
     });
   }
 
-  const program = result.program as unknown as OxcNode;
+  const program = asOxcNode(result.program);
   const body = program.body as OxcNode[];
   const { resolveIntrinsic } = buildIntrinsics(body);
 
