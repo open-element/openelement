@@ -1,3 +1,6 @@
+import { quoteGeneratedJavaScriptValue } from './codegen-literals.ts';
+import type { RouteHandlerEmitContext } from './entry-codegen.ts';
+
 /** Emit the shared ADR-0120/ADR-0121 action protocol exactly once per entry. */
 export function renderActionRuntime(): string {
   return `async function __runActionProtocol(c, routeModule, loadContext, renderHtmlError, state) {
@@ -86,4 +89,34 @@ export function renderActionRuntime(): string {
   }
   return { actionResult: actionOutcome };
 }`;
+}
+
+/**
+ * Emit only the route-specific wiring of the action POST protocol block
+ * (ADR-0120/ADR-0121); the protocol implementation above is shared. Covers the
+ * status-page callback, the named-action dispatch result, and the 422
+ * re-render data refresh.
+ */
+export function renderActionProtocol(lines: string[], ctx: RouteHandlerEmitContext): void {
+  const { route, docConfig, headExtrasExpr } = ctx;
+  lines.push(`    const __actionExecution = await __runActionProtocol(`);
+  lines.push(`      c, ${route.varName}, __loadContext,`);
+  lines.push(
+    `      (title, message, status) => c.html(wrapInDocument(__statusHtml(title, message), {`,
+  );
+  lines.push(`        title, lang: ${quoteGeneratedJavaScriptValue(docConfig.lang)},`);
+  lines.push(`        headExtras: ${headExtrasExpr},`);
+  lines.push(
+    `        allowHeadExtrasScripts: ${JSON.stringify(docConfig.allowHeadExtrasScripts)},`,
+  );
+  lines.push(`        cspNonce: c.get('cspNonce')`);
+  lines.push(`      }), status), __actionState`);
+  lines.push(`    );`);
+  lines.push(`    if (__actionExecution.response) return __actionExecution.response;`);
+  lines.push(`    const __actionResult = __actionExecution.actionResult;`);
+  lines.push(
+    `    const __data = typeof ${route.varName}.loader === "function" ? await ${route.varName}.loader(__loadContext) : undefined;`,
+  );
+  lines.push(`    const __actionData = __actionResult.data;`);
+  lines.push(`    const __actionStatus = __actionResult.status;`);
 }

@@ -456,13 +456,13 @@ const GATES: readonly GateDefinition[] = [
     tiers: ['ci', 'release'],
     // #1159: the build task ends with the built-output internal
     // link/fragment + SEO gate (www:check-links), so checker edits rebuild.
-    // #1307: the build also applies the derived per-route SEO plan
-    // (www:apply-seo) and the link gate asserts the generated reference
-    // anchors against the built apilist pages.
+    // #1327 (Beta.2.2): page meaning is written once at SSG time through the
+    // descriptor head seam; the sitemap is enumerated from the route catalog
+    // (www:sitemap). The post-build SEO rewrite is gone.
     triggers: [
       /^(packages|www)\//,
       /^deno\.json$/,
-      /^tools\/(?:check-www-links|lib\/www-links|apply-www-seo|lib\/www-seo)/,
+      /^tools\/(?:check-www-links|lib\/www-links|lib\/www-sitemap|generate-www-sitemap)/,
     ],
   },
   {
@@ -512,6 +512,51 @@ const GATES: readonly GateDefinition[] = [
     command: ['deno', 'task', 'fixture:request-time:gate'],
     tiers: ['ci', 'release'],
     triggers: [/^packages\/adapter-vite\/(src|__fixtures__)\//, /^deno\.json$/],
+  },
+  {
+    // Beta.2.2 (#1339): the Native Framework Mode reference application —
+    // the full list/detail/form/validation/redirect/404 matrix plus the
+    // resolved-Document seam, on Chromium, Firefox and WebKit.
+    name: 'fixture:app-flow-native:gate',
+    command: ['deno', 'task', 'fixture:app-flow-native:gate'],
+    tiers: ['ci', 'release'],
+    triggers: [
+      /^packages\/app\//,
+      /^packages\/element\//,
+      /^packages\/adapter-vite\/(src|__fixtures__)\//,
+      /^deno\.json$/,
+    ],
+  },
+  {
+    // Beta.2.2 (#1339): the Lit Framework Mode reference application — the
+    // same acceptance matrix through the Lit SSR/hydration chain on all three
+    // engines.
+    name: 'fixture:app-flow-lit:gate',
+    command: ['deno', 'task', 'fixture:app-flow-lit:gate'],
+    tiers: ['ci', 'release'],
+    triggers: [
+      /^packages\/app\//,
+      /^packages\/element\//,
+      /^packages\/adapter-vite\/(src|__fixtures__)\//,
+      /^deno\.json$/,
+    ],
+  },
+  {
+    // Beta.2.2 (#1333 pilot): WTR browser-conformance suite over official
+    // compiled ESM on Chromium/Firefox/WebKit, including the negative exit
+    // contract (failing assertion, missing browser, broken transform,
+    // zero-tests guard and no-matching-files must each exit non-zero).
+    // npm ci provisions the npm-local __wtr__ world hermetically; the CI job
+    // installs the three Playwright browsers up front.
+    name: 'wtr:pilot:gate',
+    command: ['deno', 'task', 'wtr:pilot:gate'],
+    tiers: ['ci', 'release'],
+    triggers: [
+      /^packages\/element\//,
+      /^packages\/ui\//,
+      /^packages\/adapter-vite\/src\/internal\/compiler\//,
+      /^deno\.json$/,
+    ],
   },
   {
     // @openelement/ui dogfood qualification (#1226, B2.1): the ui primitives
@@ -624,6 +669,26 @@ const GATES: readonly GateDefinition[] = [
       /^packages\/element\//,
       /^packages\/adapter-vite\//,
       /^tools\/consumer-packaged-ui\.ts$/,
+      /^tools\/publish-npm\.ts$/,
+      /^tools\/lib\/compiled-pack-staging\.ts$/,
+      /^deno\.json$/,
+    ],
+  },
+  {
+    // #1339 §11 (Beta.2.2): qualify the PACKED artifacts through a full
+    // Framework Mode notes app on both renderers — hermetic install, packed-
+    // declaration typecheck, SSG build, cli/start + standalone serve.mjs, the
+    // ADR-0120 action protocol over the wire, chromium continuation, and the
+    // browser/declaration boundary walk. Ordered after package-artifacts:check,
+    // which produces the tarballs it installs.
+    name: 'consumer:packaged-app',
+    command: ['deno', 'task', 'consumer:packaged-app'],
+    tiers: ['ci', 'release'],
+    triggers: [
+      /^packages\/app\//,
+      /^packages\/element\//,
+      /^packages\/adapter-vite\//,
+      /^tools\/consumer-packaged-app\.ts$/,
       /^tools\/publish-npm\.ts$/,
       /^tools\/lib\/compiled-pack-staging\.ts$/,
       /^deno\.json$/,

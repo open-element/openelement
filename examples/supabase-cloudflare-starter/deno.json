@@ -12,6 +12,7 @@
     "@openelement/element": "../../packages/element/src/index.ts",
     "@openelement/element/jsx-runtime": "../../packages/element/src/jsx-runtime.ts",
     "@openelement/element/build-utils": "../../packages/element/src/build-utils.ts",
+    "@openelement/element/authoring": "../../packages/element/src/authoring.ts",
     "@openelement/element/": "../../packages/element/src/",
     "@openelement/app": "../../packages/app/src/index.ts",
     "@openelement/adapter-vite": "../../packages/adapter-vite/src/index.ts",

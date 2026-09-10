@@ -206,6 +206,7 @@ export function createOpenPlugin(
       routesDir: resolvedOptions.routesDir,
       islandsDir: resolvedOptions.islandsDir,
       middleware: resolvedOptions.middleware,
+      renderer: resolvedOptions.renderer,
       islandTagNames,
       islandFiles,
       islandMeta: ctx.phase1.islandMeta,
@@ -724,6 +725,13 @@ export function createOpenPlugin(
 
     load(id) {
       if (id === RESOLVED_POLYFILL_ID) {
+        if (resolvedOptions.renderer === 'lit') {
+          // #1339: the lit SSR path needs the @lit-labs/ssr global DOM shim —
+          // not the native Map-backed customElements stub — installed before
+          // any route module evaluates (ESM evaluates this first import
+          // before every other entry import).
+          return `import '@lit-labs/ssr/lib/install-global-dom-shim.js';\n`;
+        }
         return generateCustomElementsPolyfill();
       }
       if (id === RESOLVED_BUILD_TRIGGER_ID) {

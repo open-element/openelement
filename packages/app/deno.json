@@ -8,7 +8,10 @@
     "./model": "./src/model.ts",
     "./spa": "./src/spa.ts",
     "./i18n": "./src/i18n.ts",
-    "./preact": "./src/preact.ts"
+    "./document": "./src/document.ts",
+    "./preact": "./src/preact.ts",
+    "./lit": "./src/lit.ts",
+    "./lit-ssr": "./src/lit-ssr.ts"
   },
   "imports": {
     "@openelement/url-pattern-list": "npm:@openelement/url-pattern-list@0.6.0",
@@ -37,6 +40,9 @@
   },
   "peerDependencies": {
     "preact": "npm:preact@^10.28.0",
-    "preact-render-to-string": "npm:preact-render-to-string@^6.5.0"
+    "preact-render-to-string": "npm:preact-render-to-string@^6.5.0",
+    "lit": "npm:lit@^3.3.3",
+    "@lit-labs/ssr": "npm:@lit-labs/ssr@^4.1.0",
+    "@lit-labs/ssr-client": "npm:@lit-labs/ssr-client@^1.1.8"
   }
 }

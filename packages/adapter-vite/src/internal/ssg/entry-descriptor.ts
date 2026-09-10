@@ -78,6 +78,12 @@ export function buildEntryDescriptor(
     islandTagNames?: string[];
     /** Relative file paths for local islands (preserves subdirectory structure) */
     islandFiles?: string[];
+    /**
+     * Page renderer (Beta.2.2, #1339). 'native' (default) renders pages via
+     * renderDsd; 'lit' renders LitElement pages via @openelement/app/lit-ssr.
+     * Explicit config only — never inferred from route sources.
+     */
+    renderer?: 'native' | 'lit';
     /** Local island metadata indexed by tag name. */
     islandMeta?: Record<string, Partial<IslandDecl>>;
     /** Compiled non-island components reachable from local page imports. */
@@ -104,6 +110,15 @@ export function buildEntryDescriptor(
   const routesDir = options.routesDir || DEFAULT_ROUTES_DIR;
   const islandsDir = options.islandsDir || DEFAULT_ISLANDS_DIR;
   const isSSG = options.ssg === true;
+  const renderer = options.renderer ?? 'native';
+  if (renderer !== 'native' && renderer !== 'lit') {
+    throw new Error(
+      `[openElement] renderer must be 'native' or 'lit' (got ${
+        JSON.stringify(String(renderer))
+      }). ` +
+        'Renderer selection is explicit openElement({ renderer }) config and is never inferred.',
+    );
+  }
 
   // --- Imports ---
   const imports: ImportDecl[] = [];
@@ -112,9 +127,33 @@ export function buildEntryDescriptor(
   imports.push({ from: 'hono', names: ['Hono'] });
   // ADR-0121 (#568): default body limit on action POST routes.
   imports.push({ from: 'hono/body-limit', names: ['bodyLimit'], alias: '__bodyLimit' });
+  if (renderer === 'lit') {
+    // #1339: the lit path never imports the compiled serializer (renderDsd /
+    // Part Program kernel). Page SSR goes through renderLitPageToHtml from
+    // @openelement/app/lit-ssr; wrapInDocument/escapeHtml/trustedHtml stay —
+    // they are document/HTML utilities shared with the native entry, and
+    // trustedHtml is only reached by the (rejected for lit) app-shell path.
+    imports.push({
+      from: '@openelement/element',
+      names: ['trustedHtml', 'escapeHtml', 'wrapInDocument'],
+    });
+    imports.push({
+      from: '@openelement/app/lit-ssr',
+      names: ['renderLitPageToHtml'],
+      alias: '__renderLitPageToHtml',
+    });
+  } else {
+    imports.push({
+      from: '@openelement/element',
+      names: ['renderDsd', 'trustedHtml', 'escapeHtml', 'wrapInDocument'],
+    });
+  }
+  // #1326: both renderers resolve page meaning through the one Document seam
+  // before wrapInDocument serializes it.
   imports.push({
-    from: '@openelement/element',
-    names: ['renderDsd', 'trustedHtml', 'escapeHtml', 'wrapInDocument'],
+    from: '@openelement/app/document',
+    names: ['resolvePageDocument'],
+    alias: '__resolvePageDocument',
   });
 
   // Conditional middleware imports
@@ -342,6 +381,19 @@ export function buildEntryDescriptor(
     appShell: options.appShell,
     layouts: options.layouts,
   });
+  if (
+    renderer === 'lit' &&
+    (appShell.default !== false || Object.values(appShell.layouts).some((shell) => shell !== false))
+  ) {
+    // #1339 boundary: the lit renderer supports appShell: false only — the
+    // shell composition renders through the compiled serializer, which the
+    // lit path deliberately never imports. Fail the build loudly instead of
+    // silently emitting a shell-less page.
+    throw new Error(
+      `[openElement] renderer: 'lit' does not support a compiled appShell/layouts yet. ` +
+        `Set openElement({ renderer: 'lit', appShell: false }) and drop the layouts config.`,
+    );
+  }
   const reservedTags = new Set([
     ...pageRoutes.map((route) => route.tagName),
     ...islands.map((island) => island.tagName),
@@ -354,6 +406,9 @@ export function buildEntryDescriptor(
 
   return {
     isSSG,
+    // #1339: only non-default renderers land on the descriptor, keeping the
+    // native descriptor shape byte-identical for existing consumers/tests.
+    ...(renderer === 'native' ? {} : { renderer }),
     imports,
     middleware,
     ...(fetchMiddleware.length > 0 ? { fetchMiddleware } : {}),

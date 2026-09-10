@@ -312,11 +312,20 @@ export function analyzeModuleSemantics(source: string, fileName: string): Module
     if (
       ts.isExportAssignment(statement) && ts.isCallExpression(statement.expression) &&
       ts.isIdentifier(statement.expression.expression) &&
-      imports.isRuntimeNamedImport(
+      (imports.isRuntimeNamedImport(
         statement.expression.expression.text,
         '@openelement/app',
         'definePage',
-      )
+      ) ||
+        // #1339: the lit renderer's page definition factory lives on the
+        // @openelement/app/lit subpath; a route default-exporting it is a
+        // definePage-shaped route for scanning purposes (descriptor attached
+        // by the same internal path, host tag on openElementPageTag).
+        imports.isRuntimeNamedImport(
+          statement.expression.expression.text,
+          '@openelement/app/lit',
+          'defineLitPage',
+        ))
     ) definePage = true;
 
     if (!ts.isClassDeclaration(statement)) continue;

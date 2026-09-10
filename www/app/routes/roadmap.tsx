@@ -1,5 +1,6 @@
 import { definePage } from '@openelement/app';
 import { PUBLISHED_PACKAGE_VERSION, PUBLISHED_STABLE_VERSION } from '../data/version.ts';
+import { siteHead } from '@openelement/site-ui/head.ts';
 import { contentLocale } from '@openelement/site-ui/locale.ts';
 import RoadmapPage from '../components/page-roadmap.tsx';
 
@@ -140,6 +141,9 @@ const entries: Record<'en' | 'zh', TimelineEntry[]> = {
 
 const content = {
   en: {
+    headTitle: 'Roadmap',
+    headDescription:
+      'The openElement roadmap: the current v0.44 beta line, the stable 0.43 maintenance baseline and the gated path to v1.0.',
     pageTitle: 'Roadmap',
     heroLede:
       'OpenElement roadmap labels describe the public product surface, tied to package truth, docs truth and CI evidence rather than a wish list.',
@@ -218,6 +222,9 @@ const content = {
     deployment: 'Deployment',
   },
   zh: {
+    headTitle: '路线图',
+    headDescription:
+      'openElement 路线图：当前的 v0.44 beta 线、0.43 稳定维护基线，以及通往 v1.0 的门禁路径。',
     pageTitle: 'Roadmap',
     heroLede:
       'OpenElement 的 roadmap 标签描述的是公开产品面，锚定包真相、文档真相与 CI 证据，而不是愿望清单。',
@@ -292,6 +299,16 @@ const content = {
 };
 
 export default definePage(RoadmapPage, {
+  head({ locale }) {
+    const resolved = contentLocale(locale ?? 'en');
+    const copy = content[resolved];
+    return siteHead({
+      route: '/roadmap',
+      locale: resolved,
+      title: copy.headTitle,
+      description: copy.headDescription,
+    });
+  },
   props({ locale }) {
     const resolved = contentLocale(locale ?? 'en');
     const t = content[resolved];

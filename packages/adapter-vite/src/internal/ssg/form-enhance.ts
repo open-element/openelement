@@ -92,6 +92,28 @@ export function createFormEnhance(deps: FormEnhanceDeps): FormEnhance {
     if (!form.hasAttribute('data-open-enhance')) return;
     const method = (form.getAttribute('method') || 'get').toUpperCase();
     if (method === 'GET') return;
+    const submitter = (event as SubmitEvent).submitter as HTMLElement | null;
+    // #576: formAction IDL is the document URL when formaction is absent.
+    // #598: form.action IDL returns an <input name="action"> element when
+    // present — always resolve the action attribute (or current URL).
+    const submitterAction = submitter && submitter.hasAttribute('formaction')
+      ? (submitter as HTMLButtonElement).formAction
+      : '';
+    const actionUrl: string = submitterAction ||
+      (form.getAttribute('action')
+        ? new URL(form.getAttribute('action') as string, win.location.href).href
+        : win.location.href);
+    // Beta.2.2 (#1339): submissions the application does not explicitly own
+    // keep browser behavior — a non-default browsing-context target
+    // (target="_blank", a submitter's formtarget, a named target) or a
+    // cross-origin action is a real browser submission, never an enhanced
+    // fetch, so the interceptor must not preventDefault() either form.
+    const target =
+      (submitter && submitter.hasAttribute('formtarget')
+        ? submitter.getAttribute('formtarget')
+        : form.getAttribute('target')) || '';
+    if (target !== '' && target.toLowerCase() !== '_self') return;
+    if (new URL(actionUrl).origin !== win.location.origin) return;
     event.preventDefault();
     // #564: a second submit on the SAME form while one is in flight is ignored.
     // #599: sequence is per-form so a concurrent submit on another form cannot
@@ -104,17 +126,6 @@ export function createFormEnhance(deps: FormEnhanceDeps): FormEnhance {
     formState.__openElementBusy = true;
     formState.__openElementSeq = (formState.__openElementSeq || 0) + 1;
     const seq = formState.__openElementSeq;
-    const submitter = (event as SubmitEvent).submitter as HTMLElement | null;
-    // #576: formAction IDL is the document URL when formaction is absent.
-    // #598: form.action IDL returns an <input name="action"> element when
-    // present — always resolve the action attribute (or current URL).
-    const submitterAction = submitter && submitter.hasAttribute('formaction')
-      ? (submitter as HTMLButtonElement).formAction
-      : '';
-    const actionUrl: string = submitterAction ||
-      (form.getAttribute('action')
-        ? new URL(form.getAttribute('action') as string, win.location.href).href
-        : win.location.href);
     // #544: the submitter's name/value is part of the body — the body never
     // differs between the two paths (ADR-0120 rule 2).
     const body = submitter

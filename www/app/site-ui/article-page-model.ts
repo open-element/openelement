@@ -1,4 +1,6 @@
+import type { PageHead } from '@openelement/app';
 import { prepareArticle } from './article-body.ts';
+import { siteHead } from './head.ts';
 import { contentLocale } from './locale.ts';
 import { localizePath } from './link.ts';
 import { getPage as getGuidePage, pages as guidePages } from '../data/_generated-guide-data.ts';
@@ -45,6 +47,29 @@ export function emptyArticlePageModel(): ArticlePageModel {
     railItems: [],
     articleHtml: '',
   };
+}
+
+/**
+ * Content-route head (Beta.2.2, #1327): the route modules declare their head
+ * as a resolver reading the same generated collection truth the body model
+ * projects — title and lede come from the render-locale frontmatter, with the
+ * English original as the fallback, exactly like the article body.
+ */
+export function articlePageHead(
+  collection: ArticleCollection,
+  slug: string,
+  localeInput: string | undefined,
+): PageHead {
+  const locale = contentLocale(localeInput ?? 'en');
+  const shell = collectionShell[collection];
+  const data = collectionData[collection];
+  const page = data.getPage(slug, locale) ?? data.getPage(slug, 'en');
+  return siteHead({
+    route: `${shell.basePath}/${slug}`,
+    locale,
+    title: page?.frontmatter.title ?? slug,
+    description: page?.frontmatter.lede ?? '',
+  });
 }
 
 export function projectArticlePage(

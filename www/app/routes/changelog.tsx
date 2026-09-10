@@ -2,6 +2,7 @@
 import { definePage } from '@openelement/app';
 import { trustedHtml } from '@openelement/element';
 import { sanitizeHtml } from '@openelement/element/sanitize';
+import { siteHead } from '@openelement/site-ui/head.ts';
 import { contentLocale } from '@openelement/site-ui/locale.ts';
 import { localizePath } from '@openelement/site-ui/link.ts';
 import { marked } from 'marked';
@@ -12,6 +13,9 @@ export const meta = { section: '', label: 'Changelog', order: 20 };
 
 const content = {
   en: {
+    headTitle: 'Changelog',
+    headDescription:
+      'Published, candidate, withdrawn and historical release evidence for openElement — every line evidenced.',
     eyebrow: 'Changelog',
     pageTitle: 'Every line, evidenced.',
     lede: 'Published, candidate, withdrawn and historical release evidence for OpenElement.',
@@ -39,6 +43,8 @@ const content = {
     navGettingStarted: 'Getting Started',
   },
   zh: {
+    headTitle: '更新日志',
+    headDescription: 'openElement 已发布、候选、已撤回与历史版本的发布证据——每一行皆有证据。',
     eyebrow: 'Changelog',
     pageTitle: '每一行，皆有证据。',
     lede: 'openElement 已发布、候选、已撤回与历史版本的发布证据。',
@@ -96,6 +102,16 @@ function loadChangelogHtml(loadError: string): string {
 }
 
 export default definePage(PageChangelog, {
+  head({ locale }) {
+    const resolved = contentLocale(locale ?? 'en');
+    const copy = content[resolved];
+    return siteHead({
+      route: '/changelog',
+      locale: resolved,
+      title: copy.headTitle,
+      description: copy.headDescription,
+    });
+  },
   props({ locale }) {
     const resolved = contentLocale(locale ?? 'en');
     const text = content[resolved];

@@ -9,6 +9,7 @@
 import type { EntryDescriptor } from '../protocol/ssg.ts';
 import { quoteGeneratedJavaScriptValue } from './codegen-literals.ts';
 import {
+  documentResolutionSetupLine,
   documentWrapOptionsLines,
   pageRouteTagExpr,
   renderMatchingRenderersFn,
@@ -107,11 +108,21 @@ export function renderSsgSection(desc: EntryDescriptor): string {
   lines.push(
     '    const data = typeof info.module.loader === "function" ? await info.module.loader(loadContext) : undefined;',
   );
+  // #1326: one render-scoped context object feeds both the props projector
+  // and the resolved-Document seam — the head resolver never sees a second,
+  // divergent view of the render.
   lines.push(
-    '    const props = __pageProps(info.module, { data, actionData: undefined, params, request: options.request, locale, route: loadContext.route, meta: routeMeta });',
+    '    const __pageContext = { data, actionData: undefined, params, request: options.request, locale, route: loadContext.route, meta: routeMeta };',
   );
+  lines.push('    const props = __pageProps(info.module, __pageContext);');
+  lines.push(`    ${documentResolutionSetupLine('page', '__pageContext')}`);
   lines.push('    if (locale) props.locale = locale;');
   lines.push('    let content = __ssr(info.tagName, props, { route: routePath });');
+  if (desc.renderer === 'lit') {
+    // #1339: emit the page-data channel on build-time renders too, so static
+    // lit pages carry the same hydration data as request-time ones.
+    lines.push('    content += __litPageDataScript(props);');
+  }
   lines.push('    for (const renderer of __matchingRenderers(routePath)) {');
   lines.push(
     '      content = await renderer.wrap(content, __rendererContext(routePath, params));',
@@ -129,11 +140,8 @@ export function renderSsgSection(desc: EntryDescriptor): string {
   lines.push('    const fullHtml = wrapInDocument(content, {');
   for (
     const optionLine of documentWrapOptionsLines({
-      pageExpr: 'page',
-      titleExpr: `title || page.head?.title || ${
-        quoteGeneratedJavaScriptValue(desc.document.title)
-      }`,
-      langExpr: `lang || locale || ${quoteGeneratedJavaScriptValue(desc.document.lang)}`,
+      titleExpr: `title || __doc.title || ${quoteGeneratedJavaScriptValue(desc.document.title)}`,
+      langExpr: `lang || __doc.lang || ${quoteGeneratedJavaScriptValue(desc.document.lang)}`,
       headExtrasExpr: 'headExtrasValue',
       allowHeadExtrasScripts: desc.document.allowHeadExtrasScripts,
     })
@@ -202,19 +210,20 @@ export function renderSsgSection(desc: EntryDescriptor): string {
   lines.push('    if (typeof page.error === "function") {');
   lines.push('      try {');
   lines.push(
-    '        const errorContent = __renderAppShell(__ssr(info.tagName, __pageErrorProps(info.module, error, { data: undefined, actionData: undefined, params, request: options.request, locale, route: loadContext.route, meta: routeMeta }), { route: routePath }), routePath, { locale, routeMeta });',
+    '        const __errorPageContext = { data: undefined, actionData: undefined, params, request: options.request, locale, route: loadContext.route, meta: routeMeta };',
   );
+  lines.push(
+    '        const errorContent = __renderAppShell(__ssr(info.tagName, __pageErrorProps(info.module, error, __errorPageContext), { route: routePath }), routePath, { locale, routeMeta });',
+  );
+  lines.push(`        ${documentResolutionSetupLine('page', '__errorPageContext')}`);
   lines.push(
     '        const errorComponentCount = (errorContent.match(/<template shadowrootmode="open"/g) || []).length;',
   );
   lines.push('        const errorHtml = wrapInDocument(errorContent, {');
   for (
     const optionLine of documentWrapOptionsLines({
-      pageExpr: 'page',
-      titleExpr: `title || page.head?.title || ${
-        quoteGeneratedJavaScriptValue(desc.document.title)
-      }`,
-      langExpr: `lang || locale || ${quoteGeneratedJavaScriptValue(desc.document.lang)}`,
+      titleExpr: `title || __doc.title || ${quoteGeneratedJavaScriptValue(desc.document.title)}`,
+      langExpr: `lang || __doc.lang || ${quoteGeneratedJavaScriptValue(desc.document.lang)}`,
       headExtrasExpr: 'headExtrasValue',
       allowHeadExtrasScripts: desc.document.allowHeadExtrasScripts,
     })

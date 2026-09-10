@@ -44,8 +44,14 @@ export function findSeoFailures(html: string, file: string): LinkFailure[] {
     if (!/<link rel="canonical" href="https:\/\/openelement\.org[^"]*">/.test(html)) {
       failures.push({ file, message: 'missing canonical link' });
     }
+    // Attribute order is the serializer's own (rel/href/hreflang since #1326);
+    // the invariant is that the page declares an alternate carrying an href
+    // for each locale, not the byte order of its attributes.
     for (const locale of ['en', 'zh']) {
-      if (!new RegExp(`<link rel="alternate" hreflang="${locale}" href="`).test(html)) {
+      const alternate = html.match(
+        new RegExp(`<link rel="alternate"[^>]*hreflang="${locale}"[^>]*>`),
+      );
+      if (alternate === null || !/\bhref="/.test(alternate[0])) {
         failures.push({ file, message: `missing hreflang alternate for '${locale}'` });
       }
     }
@@ -74,15 +80,18 @@ export function pageSeo(html: string, file: string, locales: readonly string[]):
 
 /**
  * Cross-page SEO invariants (#1307): within one locale, two distinct routes
- * must not share a <title> (the boilerplate era made every title identical);
- * and a zh page must not carry the site-wide English boilerplate
- * description. Locale-mismatched blog pages legitimately keep the
- * original-language description — that is the disclosed single-language
- * presentation, not boilerplate.
+ * must not share a <title> (the boilerplate era made every title identical).
+ *
+ * #1327: the zh-vs-boilerplate-description reconciliation was removed with
+ * the boilerplate itself — page metadata is written exactly once now (the
+ * route descriptor head, serialized at SSG time), so there is no site-wide
+ * default description left in the output to reconcile against. Per-page
+ * description presence/length stays asserted by findSeoFailures; locale
+ * honesty of the copy is guarded by the route-locale gates in
+ * check-www-truth.ts and the i18n e2e suites.
  */
 export function findCrossPageSeoFailures(
   pages: readonly BuiltPageSeo[],
-  boilerplateDescription: string,
 ): LinkFailure[] {
   const failures: LinkFailure[] = [];
   const titleByLocale = new Map<string, Map<string, string>>();
@@ -100,14 +109,6 @@ export function findCrossPageSeoFailures(
       titles.set(page.title, page.file);
     }
     titleByLocale.set(page.locale, titles);
-    if (
-      page.locale !== 'en' && page.description !== '' && page.description === boilerplateDescription
-    ) {
-      failures.push({
-        file: page.file,
-        message: 'non-default-locale page carries the English boilerplate description',
-      });
-    }
   }
   return failures;
 }

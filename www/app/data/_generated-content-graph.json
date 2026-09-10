@@ -97,7 +97,7 @@
       },
       "alternates": [],
       "references": [],
-      "fingerprint": "c565e942a928801ba6bbe0edc22cf626fdbfbad675a99c29c830de00cb59a17b",
+      "fingerprint": "095dfb69ffd94d1fe52335f498d2afa1d2889668b2cb2e4ba38a1a83478ccbdd",
       "data": {
         "exportClasses": {
           ".": {
@@ -119,6 +119,8 @@
             "PROBLEM_JSON_MEDIA_TYPE": "stable-candidate",
             "PageComponentConstructor": "stable-candidate",
             "PageErrorProjector": "stable-candidate",
+            "PageHead": "stable-candidate",
+            "PageHeadResolver": "stable-candidate",
             "PagePropsContext": "stable-candidate",
             "PagePropsProjector": "stable-candidate",
             "ProblemDetails": "stable-candidate",
@@ -142,11 +144,25 @@
             "projectPageProps": "internal-importable",
             "redirect": "stable-candidate"
           },
+          "document": {
+            "PageHeadAlternate": "internal-importable",
+            "ResolvedDocument": "internal-importable",
+            "ResolvedDocumentLink": "internal-importable",
+            "resolvePageDocument": "internal-importable"
+          },
           "i18n": {
             "LocalePath": "internal-importable",
             "OpenElementI18nOptions": "internal-importable",
             "loadI18nData": "internal-importable",
             "normalizeLocalePath": "internal-importable"
+          },
+          "lit": {
+            "LitPageConstructor": "experimental",
+            "OpenElementPageDescriptor": "stable-candidate",
+            "defineLitPage": "experimental"
+          },
+          "lit-ssr": {
+            "renderLitPageToHtml": "internal-importable"
           },
           "model": {
             "CreateRequestContextOptions": "stable-candidate",
@@ -176,7 +192,9 @@
           }
         },
         "internal": [
-          "i18n"
+          "i18n",
+          "document",
+          "lit-ssr"
         ],
         "supported": [
           ".",
@@ -184,7 +202,8 @@
           "spa",
           "preact",
           "router",
-          "router/http"
+          "router/http",
+          "lit"
         ]
       }
     },
@@ -217,7 +236,7 @@
       },
       "alternates": [],
       "references": [],
-      "fingerprint": "a805de5e39acde8136edb01af5f726c7ef0e08bd09c76486bb3db7a7039528ca",
+      "fingerprint": "294a6d43fce520318b50d07e299dca5eec84de91d6bbc9a961cf6ee03305c814",
       "data": {
         "exportClasses": {
           ".": {
@@ -297,6 +316,16 @@
             "trustedHtml": "stable-candidate",
             "wrapInDocument": "internal-importable"
           },
+          "authoring": {
+            "DANGEROUS_KEYS": "internal-importable",
+            "ERROR_PREFIX": "internal-importable",
+            "HYDRATION_STRATEGIES": "internal-importable",
+            "HydrationStrategy": "internal-importable",
+            "OpenElementError": "internal-importable",
+            "assertValidTagName": "internal-importable",
+            "isDangerousKey": "internal-importable",
+            "isValidTagName": "internal-importable"
+          },
           "build-utils": {
             "OpenElementRequestHandler": "internal-importable",
             "RuntimeContext": "internal-importable",
@@ -326,7 +355,9 @@
             "sanitizeHtml": "stable-candidate"
           }
         },
-        "internal": [],
+        "internal": [
+          "authoring"
+        ],
         "supported": [
           ".",
           "jsx-runtime",
@@ -4339,7 +4370,7 @@
       "kind": "roadmap-entry",
       "locale": "en",
       "source": {
-        "line": 36,
+        "line": 37,
         "path": "www/app/routes/roadmap.tsx"
       },
       "alternates": [
@@ -4349,7 +4380,7 @@
         }
       ],
       "references": [],
-      "fingerprint": "a2bc953542390d9255cb3561999967ca79584fc8684888606334233dc3c193a9",
+      "fingerprint": "c17225fa3087c7a943c6b8861b33f8a631f5eb1095383b10518f61891ffde3b4",
       "data": {
         "copy": "The compiled prerelease baseline remains on npm beta; the stable 0.43 line retains latest. Future checkpoint plans are not publication evidence.",
         "stamp": "CURRENT",
@@ -4364,7 +4395,7 @@
       "kind": "roadmap-entry",
       "locale": "en",
       "source": {
-        "line": 45,
+        "line": 46,
         "path": "www/app/routes/roadmap.tsx"
       },
       "alternates": [
@@ -4374,7 +4405,7 @@
         }
       ],
       "references": [],
-      "fingerprint": "1339f13631421a7fea9f45a27304e9b03b5b8e1be001f65e8212effbaa064c76",
+      "fingerprint": "dae57f74f55cc26c21edd1839005fff32d4cc66b3a5e97fe183ef5c06eb0f296",
       "data": {
         "copy": "Maintain an upstream-traceable URLPatternList fork and prepare generic contributions; unify route resolution; repair SSG and browser navigation boundaries; qualify standalone Element and prerelease tooling.",
         "stamp": "NEXT",
@@ -4389,7 +4420,7 @@
       "kind": "roadmap-entry",
       "locale": "en",
       "source": {
-        "line": 54,
+        "line": 55,
         "path": "www/app/routes/roadmap.tsx"
       },
       "alternates": [
@@ -4399,7 +4430,7 @@
         }
       ],
       "references": [],
-      "fingerprint": "6aa0f247a7a11d8c598da3b53048165217587a721cbf7d7f478757ea57a5153f",
+      "fingerprint": "494d07b82fa09c31fc2a494ee0b2d95444c1c3faff5b7a4363661bcd83315d09",
       "data": {
         "copy": "Use WTR for upstream-aligned browser conformance; prove loader, SSR, client continuation, navigation and actions with Native and Lit; derive a minimal shared protocol and public Document/SEO/search/sitemap metadata; prepare bounded Oxc/TS7 migration experiments. Lit is a support target, not an already-shipped claim.",
         "state": "planned",
@@ -4413,7 +4444,7 @@
       "kind": "roadmap-entry",
       "locale": "en",
       "source": {
-        "line": 62,
+        "line": 63,
         "path": "www/app/routes/roadmap.tsx"
       },
       "alternates": [
@@ -4423,7 +4454,7 @@
         }
       ],
       "references": [],
-      "fingerprint": "004ef364eac18f6185abce520fbad8b801ad1405ae5e070a10a22486f1758a5a",
+      "fingerprint": "4ac955c467fc7fdebc20d67198f1546eb4be340293b69698ce9acffa34b9abde",
       "data": {
         "copy": "Qualify independent packed consumers, runtime/browser matrices, output and resource cleanup; remove qualified duplicate infrastructure, reconcile documentation and record Alpha migration decisions. No deadline waiver or automatic beta.2.4.",
         "state": "planned",
@@ -4437,7 +4468,7 @@
       "kind": "roadmap-entry",
       "locale": "en",
       "source": {
-        "line": 70,
+        "line": 71,
         "path": "www/app/routes/roadmap.tsx"
       },
       "alternates": [
@@ -4447,7 +4478,7 @@
         }
       ],
       "references": [],
-      "fingerprint": "6a97c5b4c1acf2dc3c8bf9ed251cf42ae9c837e3f24dee21f5a4445267e21e83",
+      "fingerprint": "daa1211c27cc388c13b06cc901f7fdd0bbb7ca39456706017761f7e3661c4dc9",
       "data": {
         "copy": "Start real application use with the public baseline: independently consumable Element and Router with Native/Lit application flows. Actively qualify Oxc/TS7 adoption and platform reductions through subsequent Alpha upgrades; APIs may evolve with migration guidance.",
         "state": "planned",
@@ -4461,7 +4492,7 @@
       "kind": "roadmap-entry",
       "locale": "en",
       "source": {
-        "line": 78,
+        "line": 79,
         "path": "www/app/routes/roadmap.tsx"
       },
       "alternates": [
@@ -4471,7 +4502,7 @@
         }
       ],
       "references": [],
-      "fingerprint": "3a45d9d2d8bc281465af3c3a13e0f5b44e57898087cfb7a2b4726f7bde51d485",
+      "fingerprint": "8cd924a5ad84ecb3f39cec3afdd2c26432a39b0a7f75a9d9bc7fc76c9775a496",
       "data": {
         "copy": "Freeze contracts and dependencies after Alpha evidence; require at least fourteen days of RC soak, install/upgrade/security qualification and human GO. Element and Router do not mandate a package count.",
         "state": "planned",
@@ -4485,7 +4516,7 @@
       "kind": "roadmap-entry",
       "locale": "zh",
       "source": {
-        "line": 88,
+        "line": 89,
         "path": "www/app/routes/roadmap.tsx"
       },
       "alternates": [
@@ -4495,7 +4526,7 @@
         }
       ],
       "references": [],
-      "fingerprint": "39ce5dd1aafe5c33cfa85798469b9022e9f36dc8583014b09f47260d1395905b",
+      "fingerprint": "2b89f493cef29107f2eed3051f8ab4ee8873fb0d7ff811f052561b042d858fb3",
       "data": {
         "copy": "编译型预发布基线保持 npm beta；稳定 0.43 线保持 latest。后续检查点规划不代表已经发布。",
         "stamp": "CURRENT",
@@ -4510,7 +4541,7 @@
       "kind": "roadmap-entry",
       "locale": "zh",
       "source": {
-        "line": 97,
+        "line": 98,
         "path": "www/app/routes/roadmap.tsx"
       },
       "alternates": [
@@ -4520,7 +4551,7 @@
         }
       ],
       "references": [],
-      "fingerprint": "6f61632b08e0615ff1019f9147cd159ed27a0b5c12275535b9c1ed15e2a3db34",
+      "fingerprint": "bdfe85ee8d16c664a1987a61d26ec4845fdbb60701d8cea17392d6e6b1c5a0f4",
       "data": {
         "copy": "维护可追溯上游的 URLPatternList fork，准备通用贡献；统一路由决议；修复 SSG 和浏览器导航边界；验证独立 Element 与预发布工具链。",
         "stamp": "NEXT",
@@ -4535,7 +4566,7 @@
       "kind": "roadmap-entry",
       "locale": "zh",
       "source": {
-        "line": 106,
+        "line": 107,
         "path": "www/app/routes/roadmap.tsx"
       },
       "alternates": [
@@ -4545,7 +4576,7 @@
         }
       ],
       "references": [],
-      "fingerprint": "0b7d4ef52e6a23f008f43f46e943ff52b85d1a92e75b2f5bc154d8966417bab0",
+      "fingerprint": "33fbd99c39b5bb6d378e8ed87c936638fc92985ea147bd66ae7b4994c3d2480d",
       "data": {
         "copy": "采用便于贡献上游的 WTR 浏览器测试，以 Native 和 Lit 跑通 loader、SSR、客户端接续、导航及 action，提炼最小共享协议和 Document/SEO/search/sitemap 元数据，并完成有界 Oxc/TS7 迁移试验。Lit 是正式支持目标，尚非已交付声明。",
         "state": "planned",
@@ -4559,7 +4590,7 @@
       "kind": "roadmap-entry",
       "locale": "zh",
       "source": {
-        "line": 114,
+        "line": 115,
         "path": "www/app/routes/roadmap.tsx"
       },
       "alternates": [
@@ -4569,7 +4600,7 @@
         }
       ],
       "references": [],
-      "fingerprint": "31c38225bc327d13a117ed7f740739e737dc98a7017c945e0f7dc5862cf813e0",
+      "fingerprint": "2da159c9292013477982fa3f4611780464885f962c7a193ff3711cb73a0dce8f",
       "data": {
         "copy": "验证独立打包消费者、运行时与浏览器矩阵、产物和资源清理，删除已验证的重复基础设施、同步文档并明确 Alpha 迁移决定。期限不豁免验收，不自动追加 beta.2.4。",
         "state": "planned",
@@ -4583,7 +4614,7 @@
       "kind": "roadmap-entry",
       "locale": "zh",
       "source": {
-        "line": 122,
+        "line": 123,
         "path": "www/app/routes/roadmap.tsx"
       },
       "alternates": [
@@ -4593,7 +4624,7 @@
         }
       ],
       "references": [],
-      "fingerprint": "69bfbdbd4df3a8964bfe12ddc215e37efbd6fac9a3ae48e52a5229d79ace0632",
+      "fingerprint": "da9dc9212a4d17d83a586b21589aee97dbd62d29b665ff2628a82c0185ed4619",
       "data": {
         "copy": "从公开基线开始在真实应用中使用可独立消费的 Element 与 Router，验证 Native/Lit 应用流程；后续 Alpha 积极验证 Oxc/TS7 采用和平台替代，接口调整提供迁移说明。",
         "state": "planned",
@@ -4607,7 +4638,7 @@
       "kind": "roadmap-entry",
       "locale": "zh",
       "source": {
-        "line": 130,
+        "line": 131,
         "path": "www/app/routes/roadmap.tsx"
       },
       "alternates": [
@@ -4617,7 +4648,7 @@
         }
       ],
       "references": [],
-      "fingerprint": "ad74d21ca5deab9014fc735de2e817e06260b2aa4c8a6c3631c7cf6f26a3e52c",
+      "fingerprint": "14f1e27c8f6a5f9898e313a1bfc32b038c1ad93bbaafdc875ad2a51fc6942ce3",
       "data": {
         "copy": "Alpha 证据充分后冻结接口与依赖，完成至少十四天 RC 持续运行及安装、升级、安全验证后取得人工 GO。两个产品不强制两个发布包。",
         "state": "planned",

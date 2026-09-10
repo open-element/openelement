@@ -20,6 +20,8 @@ export type {
   OpenElementPageDescriptor,
   PageComponentConstructor,
   PageErrorProjector,
+  PageHead,
+  PageHeadResolver,
   PagePropsContext,
   PagePropsProjector,
 } from './authoring.ts';

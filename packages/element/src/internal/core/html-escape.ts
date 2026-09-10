@@ -117,6 +117,13 @@ export function wrapInDocument(
     dangerouslyHeadFragments?: string[];
     /** Trust script tags that were produced by structured framework injection APIs. */
     allowHeadExtrasScripts?: boolean;
+    /**
+     * <link> tags emitted into <head> (Beta.2.2, #1326): the canonical link
+     * and hreflang alternates of the page. Attributes are escaped at this
+     * boundary; entries missing rel or href are skipped. Meaning-level
+     * resolution lives in @openelement/app/document.
+     */
+    links?: Array<{ rel: string; href: string; hreflang?: string }>;
     /** CSP nonce, if provided, added to all generated <script> tags. */
     cspNonce?: string;
   } = {},
@@ -134,6 +141,7 @@ export function wrapInDocument(
     headExtras = '',
     dangerouslyHeadFragments = [],
     allowHeadExtrasScripts = false,
+    links = [],
     cspNonce,
   } = options;
   // v0.14.5: CSP nonce format validation per CSP spec (base64 value)
@@ -146,6 +154,8 @@ export function wrapInDocument(
   validateHeadExtrasBalance(headExtras);
   const metaTags = buildMetaTags(meta);
   const metaBlock = metaTags.length > 0 ? '\n' + metaTags.join('\n') + '\n' : '';
+  const linkTags = buildLinkTags(links);
+  const linkBlock = linkTags.length > 0 ? '\n' + linkTags.join('\n') : '';
   const dangerousHeadBlock = dangerouslyHeadFragments.length > 0
     ? '\n  ' + dangerouslyHeadFragments.join('\n  ')
     : '';
@@ -158,7 +168,7 @@ export function wrapInDocument(
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${safeTitle}</title>${metaBlock}
+  <title>${safeTitle}</title>${metaBlock}${linkBlock}
   ${safeHeadExtras}${dangerousHeadBlock}
 </head>
 <body>
@@ -263,4 +273,22 @@ function buildMetaTags(
     }
   }
   return metaTags;
+}
+
+/**
+ * Serialize <link> tags (Beta.2.2, #1326). Attributes are escaped here; an
+ * entry without both rel and href is meaningless and skipped — meaning-level
+ * validation (which links a page declares) is resolvePageDocument's job.
+ */
+function buildLinkTags(
+  links: Array<{ rel: string; href: string; hreflang?: string }>,
+): string[] {
+  const linkTags: string[] = [];
+  for (const link of links) {
+    if (!link || !link.rel || !link.href) continue;
+    const attrs = [`rel="${escapeAttrValue(link.rel)}"`, `href="${escapeAttrValue(link.href)}"`];
+    if (link.hreflang) attrs.push(`hreflang="${escapeAttrValue(link.hreflang)}"`);
+    linkTags.push(`  <link ${attrs.join(' ')}>`);
+  }
+  return linkTags;
 }

@@ -49,6 +49,13 @@ export function renderEntry(desc: EntryDescriptor): string {
   const ssrAdmissionPlan = desc.ssrAdmissionPlan;
   for (const island of desc.islands) validateIslandModuleSpecifier(island.modulePath);
 
+  if (desc.renderer === 'lit') {
+    // #1339: the lit SSR DOM shim must be the FIRST import of the entry so it
+    // evaluates before @openelement/element, lit, and every route/island
+    // module (route module imports are emitted below). Covers the dev entry,
+    // the SSG bundle and the request-time server entry uniformly.
+    lines.push(`import '@lit-labs/ssr/lib/install-global-dom-shim.js';`);
+  }
   lines.push(
     "import { createRouteMiddleware as __createRouteMiddleware } from '@openelement/app/router/http';",
   );
@@ -291,7 +298,7 @@ export function renderEntry(desc: EntryDescriptor): string {
   lines.push(renderRuntimeHelpers(desc.appShell, [
     ...desc.ssrAdmissionPlan.renderableTags,
     ...desc.staticComponents.map((component) => component.tagName),
-  ]));
+  ], desc.renderer ?? 'native'));
   lines.push('');
   if (desc.pageRoutes.length > 0) {
     lines.push(renderActionRuntime());
@@ -335,12 +342,12 @@ export function renderEntry(desc: EntryDescriptor): string {
     allowHeadExtrasScripts: desc.document.allowHeadExtrasScripts,
   };
   for (const route of desc.pageRoutes) {
-    renderPageRoute(lines, route, desc.renderers, docConfig, desc.isSSG);
+    renderPageRoute(lines, route, desc.renderers, docConfig, desc.isSSG, desc.renderer);
   }
 
   // --- Action POST handlers ---
   for (const route of desc.pageRoutes) {
-    renderActionRoute(lines, route, desc.renderers, docConfig, desc.isSSG);
+    renderActionRoute(lines, route, desc.renderers, docConfig, desc.isSSG, desc.renderer);
   }
 
   lines.push(`app.all('*', __createRouteMiddleware([`);

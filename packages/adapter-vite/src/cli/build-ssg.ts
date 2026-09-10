@@ -68,6 +68,30 @@ import {
 const log = createLogger('build-ssg');
 
 /**
+ * #1339: @lit-labs/ssr's install-global-dom-shim feature-probes CSS module
+ * support with `await import('data:text/css;base64,...')` (register-css-hook.js).
+ * Rolldown refuses to bundle CSS data URLs, which would fail the lit SSG
+ * bundle. Resolve data: specifiers to an empty stub module instead: the probe
+ * then reports "supported" and skips its node:module hook registration —
+ * irrelevant here, since no lit fixture page imports CSS modules.
+ */
+function litSsrDataUrlStubPlugin(): import('vite').Plugin {
+  const STUB_ID = '\0open:lit-ssr-data-url-stub';
+  return {
+    name: 'open:lit-ssr-data-url-stub',
+    enforce: 'pre',
+    resolveId(id) {
+      if (id.startsWith('data:')) return STUB_ID;
+      return null;
+    },
+    load(id) {
+      if (id === STUB_ID) return 'export default undefined;';
+      return null;
+    },
+  };
+}
+
+/**
  * file:// URL for the dynamic import of the built SSR bundle (issue #1220,
  * M13). pathToFileURL percent-encodes spaces, `#`, `?`, and non-ASCII bytes
  * and handles Windows drive letters; string concatenation mis-resolved such
@@ -103,6 +127,8 @@ interface BuildSSGOptions {
   appShell?: FrameworkOptions['appShell'];
   layouts?: FrameworkOptions['layouts'];
   upgradeStrategy?: HydrationStrategy;
+  /** Page renderer (Beta.2.2, #1339). Defaults to ctx.options.renderer. */
+  renderer?: 'native' | 'lit';
   resolveAlias?: Record<string, string> | import('vite').Alias[];
   base?: string;
   /**
@@ -152,6 +178,8 @@ interface SsgEntryDescriptorInputs {
   upgradeStrategy: HydrationStrategy;
   appShell?: FrameworkOptions['appShell'];
   layouts?: FrameworkOptions['layouts'];
+  /** Page renderer (Beta.2.2, #1339) — threaded from FrameworkOptions. */
+  renderer?: 'native' | 'lit';
 }
 
 /**
@@ -190,6 +218,7 @@ export function buildSsgEntryDescriptor(
     upgradeStrategy: inputs.upgradeStrategy,
     appShell: inputs.appShell,
     layouts: inputs.layouts,
+    renderer: inputs.renderer,
   });
   ctx.phase1.ssrAdmissionPlan = descriptor.ssrAdmissionPlan;
   return descriptor;
@@ -224,6 +253,7 @@ async function buildSSG(
   const islandsDir = options.islandsDir || ctx.phase3.islandsDir || DEFAULT_ISLANDS_DIR;
   const appShell = options.appShell ?? ctx.phase3.appShell;
   const layouts = options.layouts ?? ctx.phase3.layouts;
+  const renderer = options.renderer ?? ctx.options.renderer ?? 'native';
 
   // Read island metadata from ctx (ADR 0010: no .openElement/ fallback)
   const islandTagNames = options.islandTagNames || ctx.phase1.islandTagNames || [];
@@ -288,9 +318,14 @@ async function buildSSG(
     upgradeStrategy: options.upgradeStrategy || 'idle',
     appShell,
     layouts,
+    renderer,
   }, ctx);
 
-  const ssgEntryCode = generateSsrPolyfillBanner() + '\n' + renderEntry(ssgDescriptor);
+  // #1339: the native banner imports StyleSheet from @openelement/element;
+  // the lit DOM shim (first entry import, entry-orchestrator.ts) provides
+  // CSSStyleSheet itself, so the lit entry needs no polyfill banner.
+  const ssgEntryCode = (renderer === 'lit' ? '' : generateSsrPolyfillBanner() + '\n') +
+    renderEntry(ssgDescriptor);
   // Deno import map resolution handles bare specifiers (e.g. @openelement/ui/open-callout)
   // via the createDenoImportMapPlugin added to the Phase 3 viteBuild plugins below.
 
@@ -361,7 +396,10 @@ async function buildSSG(
             // Uses Map-backed define()/get(); renderDsdByName() looks up
             // components via customElements.get(tagName) during SSG rendering.
             // SOP-016: HTMLElement stub is self-contained in @openelement/element/dsd-element.ts.
-            banner: generateCustomElementsPolyfill(),
+            // #1339: the lit renderer installs the @lit-labs/ssr DOM shim as
+            // the entry's first import instead; the Map stub must not exist
+            // (the shim's installWindowOnGlobal only fills missing globals).
+            banner: renderer === 'lit' ? '' : generateCustomElementsPolyfill(),
           },
         },
       },
@@ -395,6 +433,7 @@ async function buildSSG(
         // emits the compiled page module source, so it must run BEFORE the
         // compiler (both are enforce:'pre'; array order decides).
         mdxPlugin({ routesDir }),
+        ...(renderer === 'lit' ? [litSsrDataUrlStubPlugin()] : []),
         // Keep SSR lowering identical to the outer Vite and client builds;
         // this inline build has its own plugin list.
         compiledElementPlugin(),

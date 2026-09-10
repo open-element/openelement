@@ -16,8 +16,10 @@ import {
   pageDefinitionExpr,
   pageRouteTagExpr,
   rendererScopeMatches,
+  requestTimePageContextLines,
   routeMetaExpr,
 } from './entry-route-helpers.ts';
+import { renderActionProtocol } from './entry-action-runtime.ts';
 
 /**
  * #863 / ADR-0123 addendum item 13: the action error channel speaks RFC 9457
@@ -45,10 +47,12 @@ interface RenderRouteHandlerOptions {
   renderers: RendererDecl[];
   docConfig: RouteHandlerDocConfig;
   isSSG: boolean;
+  /** Page renderer fork (#1339); absent/'native' keeps compiled renderDsd emission. */
+  renderer?: 'native' | 'lit';
 }
 
 /** Shared codegen state threaded through the route-handler emit helpers (#847). */
-interface RouteHandlerEmitContext {
+export interface RouteHandlerEmitContext {
   isAction: boolean;
   route: PageRouteDecl;
   matchingRenderers: RendererDecl[];
@@ -59,6 +63,7 @@ interface RouteHandlerEmitContext {
   routeMeta: string;
   routeContext: string;
   headExtrasExpr: string;
+  renderer: 'native' | 'lit';
 }
 
 /**
@@ -123,36 +128,6 @@ function renderRouteHandlerPreamble(lines: string[], ctx: RouteHandlerEmitContex
   }
 }
 
-/**
- * Emit the action POST protocol block (ADR-0120/ADR-0121): same-origin CSRF
- * floor, named-action dispatch, form body parsing, the PRG/fetch response
- * channels, and the 422 re-render data.
- */
-/** Emit only route-specific wiring; the protocol implementation is shared. */
-function renderActionProtocol(lines: string[], ctx: RouteHandlerEmitContext): void {
-  const { route, docConfig, headExtrasExpr } = ctx;
-  lines.push(`    const __actionExecution = await __runActionProtocol(`);
-  lines.push(`      c, ${route.varName}, __loadContext,`);
-  lines.push(
-    `      (title, message, status) => c.html(wrapInDocument(__statusHtml(title, message), {`,
-  );
-  lines.push(`        title, lang: ${quoteGeneratedJavaScriptValue(docConfig.lang)},`);
-  lines.push(`        headExtras: ${headExtrasExpr},`);
-  lines.push(
-    `        allowHeadExtrasScripts: ${JSON.stringify(docConfig.allowHeadExtrasScripts)},`,
-  );
-  lines.push(`        cspNonce: c.get('cspNonce')`);
-  lines.push(`      }), status), __actionState`);
-  lines.push(`    );`);
-  lines.push(`    if (__actionExecution.response) return __actionExecution.response;`);
-  lines.push(`    const __actionResult = __actionExecution.actionResult;`);
-  lines.push(
-    `    const __data = typeof ${route.varName}.loader === "function" ? await ${route.varName}.loader(__loadContext) : undefined;`,
-  );
-  lines.push(`    const __actionData = __actionResult.data;`);
-  lines.push(`    const __actionStatus = __actionResult.status;`);
-}
-
 /** Emissions shared by the success path and the error-boundary channel. */
 function renderRouteContentLines(
   lines: string[],
@@ -164,7 +139,18 @@ function renderRouteContentLines(
   // The page renders as its own compiled host element via __ssr; the page
   // descriptor's props projector maps request-scoped data onto the compiled
   // properties. Renderer modules (_renderer.ts) wrap the rendered HTML string.
-  lines.push(`${indent}let __content = __ssr(__tag, ${propsExpr}, { route: ${pathLiteral} })`);
+  if (ctx.renderer === 'lit') {
+    // #1339 lit fork: capture the projected props so the page-data channel
+    // (embedded JSON, __litPageDataScript) carries exactly what the render
+    // consumed — a future client page-hydration pass re-applies them.
+    lines.push(`${indent}const __pageDataProps = ${propsExpr}`);
+    lines.push(
+      `${indent}let __content = __ssr(__tag, __pageDataProps, { route: ${pathLiteral} })`,
+    );
+    lines.push(`${indent}__content += __litPageDataScript(__pageDataProps)`);
+  } else {
+    lines.push(`${indent}let __content = __ssr(__tag, ${propsExpr}, { route: ${pathLiteral} })`);
+  }
   if (matchingRenderers.length > 0) {
     lines.push(`${indent}// Renderer tree wrapping (outer -> inner)`);
     for (const renderer of matchingRenderers) {
@@ -183,12 +169,18 @@ function renderRouteContentLines(
 function renderRouteResponseAndCatch(lines: string[], ctx: RouteHandlerEmitContext): void {
   const { isAction, matchingRenderers, docConfig, pathLiteral, headExtrasExpr } = ctx;
 
+  // #1326: one request-scoped context object feeds both the props projector
+  // and the resolved-Document seam.
+  requestTimePageContextLines(lines, {
+    dataExpr: '__data',
+    actionDataExpr: isAction ? '__actionData' : 'undefined',
+    indent: '    ',
+  });
+
   renderRouteContentLines(
     lines,
     ctx,
-    `__pageProps(${ctx.route.varName}, { data: __data, actionData: ${
-      isAction ? '__actionData' : 'undefined'
-    }, params: __params, request: c.req.raw, locale: __localeFromPath(c.req.path, __getDefaultLocale()), route: __routeContext, meta: __routeMetaValue })`,
+    `__pageProps(${ctx.route.varName}, __pageContext)`,
     '    ',
   );
   lines.push('');
@@ -207,9 +199,8 @@ function renderRouteResponseAndCatch(lines: string[], ctx: RouteHandlerEmitConte
   lines.push(`    return c.html(__withDevClientScript(wrapInDocument(content, {`);
   for (
     const optionLine of documentWrapOptionsLines({
-      pageExpr: '__page',
-      titleExpr: `__page.head?.title || ${quoteGeneratedJavaScriptValue(docConfig.title)}`,
-      langExpr: quoteGeneratedJavaScriptValue(docConfig.lang),
+      titleExpr: `__doc.title || ${quoteGeneratedJavaScriptValue(docConfig.title)}`,
+      langExpr: `__doc.lang || ${quoteGeneratedJavaScriptValue(docConfig.lang)}`,
       headExtrasExpr,
       allowHeadExtrasScripts: docConfig.allowHeadExtrasScripts,
       cspNonce: true,
@@ -274,8 +265,13 @@ function renderRouteResponseAndCatch(lines: string[], ctx: RouteHandlerEmitConte
   {
     lines.push(`    if (typeof __page.error === "function") {`);
     lines.push(`      try {`);
+    requestTimePageContextLines(lines, {
+      dataExpr: 'undefined',
+      actionDataExpr: 'undefined',
+      indent: '        ',
+    });
     lines.push(
-      `        let __errorHtml = __ssr(__tag, __pageErrorProps(${ctx.route.varName}, err, { data: undefined, actionData: undefined, params: __params, request: c.req.raw, locale: __localeFromPath(c.req.path, __getDefaultLocale()), route: __routeContext, meta: __routeMetaValue }), { route: ${pathLiteral} })`,
+      `        let __errorHtml = __ssr(__tag, __pageErrorProps(${ctx.route.varName}, err, __pageContext), { route: ${pathLiteral} })`,
     );
     if (matchingRenderers.length > 0) {
       for (const renderer of matchingRenderers) {
@@ -288,9 +284,8 @@ function renderRouteResponseAndCatch(lines: string[], ctx: RouteHandlerEmitConte
     lines.push(`        return c.html(__withDevClientScript(wrapInDocument(errorContent, {`);
     for (
       const optionLine of documentWrapOptionsLines({
-        pageExpr: '__page',
-        titleExpr: `__page.head?.title || ${quoteGeneratedJavaScriptValue(docConfig.title)}`,
-        langExpr: quoteGeneratedJavaScriptValue(docConfig.lang),
+        titleExpr: `__doc.title || ${quoteGeneratedJavaScriptValue(docConfig.title)}`,
+        langExpr: `__doc.lang || ${quoteGeneratedJavaScriptValue(docConfig.lang)}`,
         headExtrasExpr,
         allowHeadExtrasScripts: docConfig.allowHeadExtrasScripts,
         cspNonce: true,
@@ -328,7 +323,7 @@ function renderRouteResponseAndCatch(lines: string[], ctx: RouteHandlerEmitConte
 /** Generate a Hono route handler for a page route (GET) or its action (POST). */
 export function renderRouteHandler(
   lines: string[],
-  { method, route, renderers, docConfig, isSSG }: RenderRouteHandlerOptions,
+  { method, route, renderers, docConfig, isSSG, renderer }: RenderRouteHandlerOptions,
 ): void {
   const ctx: RouteHandlerEmitContext = {
     isAction: method === 'post',
@@ -343,6 +338,7 @@ export function renderRouteHandler(
       quoteGeneratedJavaScriptValue(route.filePath)
     } }`,
     headExtrasExpr: isSSG ? '__headExtras' : quoteGeneratedJavaScriptValue(docConfig.headExtras),
+    renderer: renderer ?? 'native',
   };
 
   renderRouteHandlerPreamble(lines, ctx);
@@ -359,8 +355,9 @@ export function renderPageRoute(
   renderers: RendererDecl[],
   docConfig: RouteHandlerDocConfig,
   isSSG: boolean,
+  renderer?: 'native' | 'lit',
 ): void {
-  renderRouteHandler(lines, { method: 'get', route, renderers, docConfig, isSSG });
+  renderRouteHandler(lines, { method: 'get', route, renderers, docConfig, isSSG, renderer });
 }
 
 export function renderActionRoute(
@@ -369,8 +366,9 @@ export function renderActionRoute(
   renderers: RendererDecl[],
   docConfig: RouteHandlerDocConfig,
   isSSG: boolean,
+  renderer?: 'native' | 'lit',
 ): void {
-  renderRouteHandler(lines, { method: 'post', route, renderers, docConfig, isSSG });
+  renderRouteHandler(lines, { method: 'post', route, renderers, docConfig, isSSG, renderer });
 }
 
 /**

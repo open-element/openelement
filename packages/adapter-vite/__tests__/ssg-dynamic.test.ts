@@ -90,8 +90,8 @@ Deno.test('expandDynamicRoutes - renderRoute receives no forced global title (#9
       },
       () => Promise.resolve([{ slug: 'a' }]),
       // A global html.title must NOT be forwarded as `title`: the generated
-      // renderRoute falls back `title || page.head?.title || document.title`,
-      // so a forced global would shadow the route's own head.title.
+      // renderRoute falls back `title || __doc.title || document.title`,
+      // so a forced global would shadow the route's own resolved head title.
       { root, outDir: 'dist', html: { title: 'Global Title' } },
       root,
       'dist',

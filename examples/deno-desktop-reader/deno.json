@@ -11,6 +11,7 @@
   "imports": {
     "@openelement/ui": "../../packages/ui/src/index.ts",
     "@openelement/element": "../../packages/element/src/index.ts",
+    "@openelement/element/authoring": "../../packages/element/src/authoring.ts",
     "@openelement/element/": "../../packages/element/src/",
     "@openelement/app": "../../packages/app/src/index.ts",
     "@openelement/app/spa": "../../packages/app/src/spa.ts",

@@ -1,0 +1,71 @@
+{
+  "version": "5",
+  "specifiers": {
+    "npm:@openelement/url-pattern-list@0.6.0": "0.6.0",
+    "npm:@playwright/test@1.59.1": "1.59.1",
+    "npm:@preact/signals-core@^1.12.1": "1.14.4",
+    "npm:urlpattern-polyfill@10.1.0": "10.1.0"
+  },
+  "npm": {
+    "@openelement/url-pattern-list@0.6.0": {
+      "integrity": "sha512-djz6c4tih8BL1lonjr41iuoWGGF5pOgldEE0wOB/hzLLB4rS1MQHRQ2X3zM2XxnB6SX5Fphxx7uwTN/+ZDH//g=="
+    },
+    "@playwright/test@1.59.1": {
+      "integrity": "sha512-PG6q63nQg5c9rIi4/Z5lR5IVF7yU5MqmKaPOe0HSc0O2cX1fPi96sUQu5j7eo4gKCkB2AnNGoWt7y4/Xx3Kcqg==",
+      "dependencies": [
+        "playwright"
+      ],
+      "bin": true
+    },
+    "@preact/signals-core@1.14.4": {
+      "integrity": "sha512-HNB6HYeYKhQbJ1aKl+YRjrS4+QWHLKX6qKoUsfS/m0vqzsVaEBiZiaKbG/e+NKk2ch5ALQr/ihWaMHxiCuuWHA=="
+    },
+    "fsevents@2.3.2": {
+      "integrity": "sha512-xiqMQR4xAeHTuB9uWm+fFRcIOgKBMiOBP+eXiyT7jsgVCq1bkVygt00oASowB7EdtpOHaaPgKt812P9ab+DDKA==",
+      "os": ["darwin"],
+      "scripts": true
+    },
+    "playwright-core@1.59.1": {
+      "integrity": "sha512-HBV/RJg81z5BiiZ9yPzIiClYV/QMsDCKUyogwH9p3MCP6IYjUFu/MActgYAvK0oWyV9NlwM3GLBjADyWgydVyg==",
+      "bin": true
+    },
+    "playwright@1.59.1": {
+      "integrity": "sha512-C8oWjPR3F81yljW9o5OxcWzfh6avkVwDD2VYdwIGqTkl+OGFISgypqzfu7dOe4QNLL2aqcWBmI3PMtLIK233lw==",
+      "dependencies": [
+        "playwright-core"
+      ],
+      "optionalDependencies": [
+        "fsevents"
+      ],
+      "bin": true
+    },
+    "urlpattern-polyfill@10.1.0": {
+      "integrity": "sha512-IGjKp/o0NL3Bso1PymYURCJxMPNAf/ILOpendP9f5B6e1rTJgdgiOvgfoT8VxCAdY+Wisb9uhGaJJf3yZ2V9nw=="
+    }
+  },
+  "workspace": {
+    "links": {
+      "jsr:@openelement/adapter-vite@0.44.0-beta.2": {
+        "dependencies": [
+          "npm:@hono/vite-dev-server@~0.25.3",
+          "npm:@mdx-js/rollup@^3.1.1",
+          "npm:gray-matter@^4.0.3",
+          "npm:hono@^4.12.0",
+          "npm:jsonc-parser@^3.3.1",
+          "npm:marked@15",
+          "npm:typescript@^5.9.0",
+          "npm:vite@8.0.16"
+        ]
+      },
+      "jsr:@openelement/app@0.44.0-beta.2": {
+        "dependencies": [
+          "npm:@openelement/url-pattern-list@0.6.0",
+          "npm:preact-render-to-string@^6.5.0"
+        ]
+      },
+      "jsr:@openelement/create@0.44.0-beta.2": {},
+      "jsr:@openelement/element@0.44.0-beta.2": {},
+      "jsr:@openelement/ui@0.44.0-beta.2": {}
+    }
+  }
+}

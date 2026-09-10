@@ -154,7 +154,7 @@
   },
   "workspace": {
     "links": {
-      "jsr:@openelement/adapter-vite@0.44.0-beta.1": {
+      "jsr:@openelement/adapter-vite@0.44.0-beta.2": {
         "dependencies": [
           "npm:@hono/vite-dev-server@~0.25.3",
           "npm:@mdx-js/rollup@^3.1.1",
@@ -166,14 +166,15 @@
           "npm:vite@8.0.16"
         ]
       },
-      "jsr:@openelement/app@0.44.0-beta.1": {
+      "jsr:@openelement/app@0.44.0-beta.2": {
         "dependencies": [
+          "npm:@openelement/url-pattern-list@0.6.0",
           "npm:preact-render-to-string@^6.5.0"
         ]
       },
-      "jsr:@openelement/create@0.44.0-beta.1": {},
-      "jsr:@openelement/element@0.44.0-beta.1": {},
-      "jsr:@openelement/ui@0.44.0-beta.1": {}
+      "jsr:@openelement/create@0.44.0-beta.2": {},
+      "jsr:@openelement/element@0.44.0-beta.2": {},
+      "jsr:@openelement/ui@0.44.0-beta.2": {}
     }
   }
 }

@@ -3,6 +3,7 @@ import { definePage } from '@openelement/app';
 import { trustedHtml } from '@openelement/element';
 import { getPostBySlug, posts } from '@openelement/generated/blog-data';
 import { prepareArticle } from '@openelement/site-ui/article-body.ts';
+import { siteHead } from '@openelement/site-ui/head.ts';
 import { contentLocale } from '@openelement/site-ui/locale.ts';
 import { localizePath } from '@openelement/site-ui/link.ts';
 import PageBlogPost from '../../components/page-blog-post.tsx';
@@ -12,6 +13,32 @@ export function getStaticPaths(): Array<Record<string, string>> {
 }
 
 export default definePage(PageBlogPost, {
+  // #1307/#1327: dispatches are single-language originals — the head always
+  // resolves from the post's own frontmatter (title/excerpt), whichever
+  // locale the page is rendered under; the on-page language notice discloses
+  // the mismatch. A post without an excerpt still gets a real, page-specific
+  // description.
+  head({ locale, params }) {
+    const slug = params.slug ?? '';
+    const post = getPostBySlug(slug);
+    if (!post) {
+      return siteHead({
+        route: `/blog/${slug}`,
+        locale,
+        title: 'Post not found',
+        description: 'The requested openElement dispatch does not exist.',
+        error: true,
+      });
+    }
+    const title = post.frontmatter.title;
+    const excerpt = post.frontmatter.excerpt ?? '';
+    return siteHead({
+      route: `/blog/${slug}`,
+      locale,
+      title,
+      description: excerpt !== '' ? excerpt : `${title} — openElement dispatch`,
+    });
+  },
   props({ locale, params }) {
     const resolved = contentLocale(locale ?? 'en');
     const slug = params.slug ?? '';
