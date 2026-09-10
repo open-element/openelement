@@ -3,8 +3,8 @@
 - Date: 2026-09-10
 - Issue: #1156 (Beta.2.2 slice: "CEM extraction evaluation" per docs/architecture/alpha-maturation.md;
   proceed/block/defer required, "experiment success is not alpha.1 admission")
-- Tested implementation: `ba6093bec5c50e6f69d3188c1a4aee0f2b9e2705`
-  ("fix: close arch:check type-escape findings in experiment harnesses (ADR-0153)" — the
+- Tested implementation: `2887a364ab74bd3e0f35158d6b9cae6537a2b017`
+  ("fix: close Beta.2.2 CodeQL findings (ADR-0153)" — the
   Beta.2.2 implementation tip) — the implementation commit whose clean tree the
   harness ran against (git status at run time: clean apart from the untracked docs/evidence/ files
   being drafted). This evidence file is added by a LATER evidence-only commit that changes no code,
@@ -42,6 +42,11 @@ gains only the `experiment:cem` task line):
 
 - `tools/experiments/cem/run.ts` — five checks, exit non-zero on any failure, `--out` JSON summary
 - `tools/experiments/cem/oe-plugin.ts` — OE provenance plugin PoC for the analyzer
+- `tools/experiments/cem/header-description.ts` — file-header description extraction as a
+  deterministic line scan (replaces the previous multi-line regex; CodeQL js/redos #4173),
+  kept npm-import-free so it is unit-testable under the root test task
+- `tools/experiments/cem/oe-plugin.test.ts` — regression tests for the header parser
+  (CRLF/CR/LF, empty comment runs, comment-end and code-crossing stops)
 - `tools/experiments/cem/README.md` — run instructions and flag rationale
 - `docs/evidence/2026-09-10-beta2-2-cem-experiment-results.json` — machine-readable results of the
   recorded run (90 checks, 0 failures)

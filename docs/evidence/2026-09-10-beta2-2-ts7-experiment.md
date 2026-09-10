@@ -15,7 +15,7 @@ type/declaration pipeline only — NOT a deno check replacement, NOT a Compiler-
 replacement)
 
 TESTED_IMPLEMENTATION_SHA:
-ba6093bec5c50e6f69d3188c1a4aee0f2b9e2705
+2887a364ab74bd3e0f35158d6b9cae6537a2b017
 ("fix: close arch:check type-escape findings in experiment harnesses
 (ADR-0153)" — the Beta.2.2 implementation tip) — the implementation commit
 whose clean tree this harness ran against (git status at run time: clean apart
@@ -193,7 +193,7 @@ COMMANDS_AND_EXIT_CODES:
   deno run --allow-read --allow-write --allow-run --allow-env --allow-net
   tools/experiments/ts7/run.ts) → exit 0, "hard: 20 pass, 0 fail; soft: 7 pass";
   structured output tools/experiments/ts7/.work/report.json (records
-  repoHead=ba6093bec5c50e6f69d3188c1a4aee0f2b9e2705)
+  repoHead=2887a364ab74bd3e0f35158d6b9cae6537a2b017)
 - inside the harness: deno check src/ (packages/app) → 0; ts7 -p (app) → 0;
   tsc -p (app) → 2 (lib gap, expected); ts7 emit → 0; deno pack app/element →
   0 (tarballs, never published); staged deno pack ui → 0 with 16

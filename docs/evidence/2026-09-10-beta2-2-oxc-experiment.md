@@ -16,7 +16,7 @@ provenance facts, accepted-program skeleton identity); source-map consumer verif
 oracle matrix stable; negative control fails closed.
 
 TESTED_IMPLEMENTATION_SHA:
-ba6093bec5c50e6f69d3188c1a4aee0f2b9e2705
+2887a364ab74bd3e0f35158d6b9cae6537a2b017
 ("fix: close arch:check type-escape findings in experiment harnesses
 (ADR-0153)" — the Beta.2.2 implementation tip) — the implementation commit whose
 clean tree this harness ran against (git status at run time: clean apart from the
@@ -65,7 +65,7 @@ would destroy the CRLF sample on checkout).
 | ------------------------------ | ----- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `a-counter.tsx`                | 1253  | verbatim copy of `packages/adapter-vite/__fixtures__/compiled-element-v1/counter.tsx` @ tested SHA (cmp-verified)                                                                                                                                                                        |
 | `b1-spread.tsx`                | 488   | verbatim copy of `__fixtures__/compiled-element-v1/unsupported-spread.tsx` (cmp-verified)                                                                                                                                                                                                |
-| `b2-type-only.tsx`             | 261   | inline type-only `element` import case from `__tests__/compiler-intrinsic-provenance.test.ts` (`import { type element, ... }` variant, line ~303); one leading `// deno-fmt-ignore-file` comment line added                                                                              |
+| `b2-type-only.txt`             | 261   | inline type-only `element` import case from `__tests__/compiler-intrinsic-provenance.test.ts` (`import { type element, ... }` variant, line ~303); one leading `// deno-fmt-ignore-file` comment line added. Stored as `.txt` because the sample is deliberately invalid (OEC9027) and must not be scanned as executable repo source (CodeQL #4175); the harness compiles it under the virtual name `b2-type-only.tsx` |
 | `b3-foreign-property.tsx`      | 304   | third-party `@property` decorator case from the same test file (line ~284); same leading comment                                                                                                                                                                                         |
 | `c1-counter-spread-crlf.tsx`   | 1336  | a-counter + injected spread attribute on `<h1>` (→ OEC9011 site), all CRLF, leading fmt-ignore comment                                                                                                                                                                                   |
 | `c2-counter-spread-bom.txt`    | 1295  | same component, LF + UTF-8 BOM at byte 0. Stored as `.txt` because `deno fmt` strips BOMs from `.tsx` sources unconditionally (empirically verified; `deno-fmt-ignore-file` does not suppress the BOM check). The harness compiles it under the virtual name `c2-counter-spread-bom.tsx` |
@@ -125,15 +125,15 @@ does NOT fail — it is unobservable trivia for both frontends.)
 
 | Path                                                 | a-counter (1253B) | b1 (488B) | c1 (1336B) | c3 (1297B) |
 | ---------------------------------------------------- | ----------------- | --------- | ---------- | ---------- |
-| ts createSourceFile + transpileModule (current gate) | 1.61              | 0.59      | 1.07       | 0.97       |
-| ts createSourceFile only                             | 0.102             | 0.025     | 0.071      | 0.070      |
-| oxc parseSync                                        | 0.017             | 0.006     | 0.017      | 0.020      |
+| ts createSourceFile + transpileModule (current gate) | 1.71              | 0.60      | 1.16       | 0.99       |
+| ts createSourceFile only                             | 0.105             | 0.028     | 0.073      | 0.069      |
+| oxc parseSync                                        | 0.019             | 0.008     | 0.019      | 0.021      |
 | FULL compileElementProgram (real compiler)           | 1.65              | —         | —          | —          |
 | FULL oxcAnalyze (minimal analysis)                   | 0.104             | —         | —          | —          |
 
-Within THIS fixed sample, on THIS host, inside THIS bounded harness: oxc parse is ~6× faster
-than `createSourceFile` alone and ~95× faster than the full TS syntax gate at these sizes; the
-minimal Oxc analysis of the whole grammar is ~15× faster than the full real compile (which also
+Within THIS fixed sample, on THIS host, inside THIS bounded harness: oxc parse is ~5.5× faster
+than `createSourceFile` alone and ~89× faster than the full TS syntax gate at these sizes; the
+minimal Oxc analysis of the whole grammar is ~16× faster than the full real compile (which also
 emits code and maps). These are parser/frontend microbenchmark figures over tiny
 single-component files — they say nothing about end-to-end OpenElement production build times,
 and no production-migration conclusion is drawn from them.
@@ -142,14 +142,14 @@ and no production-migration conclusion is drawn from them.
 
 | Path                                  | rss Δ    | heapUsed Δ             | external Δ |
 | ------------------------------------- | -------- | ---------------------- | ---------- |
-| oxc parseSync                         | +0.78 MB | +0.20 MB               | 0          |
-| ts createSourceFile only              | 0        | −3.8 MB (GC noise)     | 0          |
-| ts createSourceFile + transpileModule | +24.7 MB | +83.0 MB (unforced GC) | −0.05 MB   |
+| oxc parseSync                         | +0.77 MB | +0.20 MB               | 0          |
+| ts createSourceFile only              | +0.11 MB | −3.3 MB (GC noise)     | 0          |
+| ts createSourceFile + transpileModule | +25.9 MB | +86.3 MB (unforced GC) | −0.05 MB   |
 
 Reliability caveat: Deno exposes only process-level `Deno.memoryUsage()` (rss/heapTotal/
 heapUsed/external); there is no per-parse allocation counter, GC was not forced (no
 `--v8-flags=--expose-gc` in the harness contract), and oxc-parser's native (Rust) heap is
-visible only inside rss. The +24.7 MB rss / +83.0 MB heapUsed deltas for the TS gate over
+visible only inside rss. The +25.9 MB rss / +86.3 MB heapUsed deltas for the TS gate over
 200 iterations reflect transpileModule's allocation churn measured without GC; treat as
 "TS gate allocates orders of magnitude more per parse" rather than a precise figure.
 
@@ -218,9 +218,9 @@ deno test --no-check --config deno.json --allow-read --allow-write --allow-env -
   packages/adapter-vite/__tests__/module-analysis.test.ts
 
 deno task experiment:oxc                          # exit 0 (PASS line above)
-deno fmt --check tools/experiments/oxc/           # exit 0 (8 files)
-deno lint tools/experiments/oxc/                  # exit 0 (8 files)
-deno fmt --check  (repo-wide)                     # exit 0 (1724 files)
+deno fmt --check tools/experiments/oxc/           # exit 0 (7 files)
+deno lint tools/experiments/oxc/                  # exit 0 (7 files)
+deno fmt --check  (repo-wide)                     # exit 0 (1725 files)
 deno lint (repo-wide)                             # exit 0
 ```
 

@@ -20,21 +20,21 @@
     "E.fixture-truth: corpus.json tags=[v044-fast-probe,v044-lit-probe,v044-native-probe,v044-stencil-probe] hand-written compiler-output.cem.json tags=[v044-fast-probe,v044-lit-probe,v044-native-probe,v044-stencil-probe] (4 probes incl. slots/parts upstream cannot see)"
   ],
   "phaseMs": {
-    "A.authored-parity": 38.5,
-    "D.compiled-parity": 66.1,
-    "E.foreign-corpus": 12.2,
+    "A.authored-parity": 43.6,
+    "D.compiled-parity": 88.6,
+    "E.foreign-corpus": 14.4,
     "B.policy-locality": 0.5,
-    "C.two-path-inventory": 2.9
+    "C.two-path-inventory": 3.8
   },
-  "totalMs": 121.3,
-  "memoryRssMb": 189,
-  "memoryRssDeltaMb": 56,
-  "heapUsedMb": 50,
+  "totalMs": 152.3,
+  "memoryRssMb": 179,
+  "memoryRssDeltaMb": 48,
+  "heapUsedMb": 49,
   "results": [
     {
       "id": "A.open-card.tagName",
       "passed": true,
-      "detail": "manifest=open-card upstream=open-card (3.4ms)"
+      "detail": "manifest=open-card upstream=open-card (3.3ms)"
     },
     {
       "id": "A.open-card.attributes",
@@ -59,7 +59,7 @@
     {
       "id": "A.open-callout.tagName",
       "passed": true,
-      "detail": "manifest=open-callout upstream=open-callout (1.6ms)"
+      "detail": "manifest=open-callout upstream=open-callout (1.9ms)"
     },
     {
       "id": "A.open-callout.attributes",
@@ -84,7 +84,7 @@
     {
       "id": "A.open-button.tagName",
       "passed": true,
-      "detail": "manifest=open-button upstream=open-button (2.8ms)"
+      "detail": "manifest=open-button upstream=open-button (3.1ms)"
     },
     {
       "id": "A.open-button.attributes",
@@ -109,7 +109,7 @@
     {
       "id": "A.open-input.tagName",
       "passed": true,
-      "detail": "manifest=open-input upstream=open-input (3.1ms)"
+      "detail": "manifest=open-input upstream=open-input (3.3ms)"
     },
     {
       "id": "A.open-input.attributes",
@@ -134,7 +134,7 @@
     {
       "id": "A.open-theme-toggle.tagName",
       "passed": true,
-      "detail": "manifest=open-theme-toggle upstream=open-theme-toggle (1.8ms)"
+      "detail": "manifest=open-theme-toggle upstream=open-theme-toggle (2.9ms)"
     },
     {
       "id": "A.open-theme-toggle.attributes",
@@ -159,7 +159,7 @@
     {
       "id": "A.open-code-block.tagName",
       "passed": true,
-      "detail": "manifest=open-code-block upstream=open-code-block (1.9ms)"
+      "detail": "manifest=open-code-block upstream=open-code-block (2.3ms)"
     },
     {
       "id": "A.open-code-block.attributes",
@@ -209,7 +209,7 @@
     {
       "id": "A.open-dialog.tagName",
       "passed": true,
-      "detail": "manifest=open-dialog upstream=open-dialog (1.4ms)"
+      "detail": "manifest=open-dialog upstream=open-dialog (1.5ms)"
     },
     {
       "id": "A.open-dialog.attributes",
@@ -234,7 +234,7 @@
     {
       "id": "A.open-dropdown.tagName",
       "passed": true,
-      "detail": "manifest=open-dropdown upstream=open-dropdown (1.3ms)"
+      "detail": "manifest=open-dropdown upstream=open-dropdown (1.4ms)"
     },
     {
       "id": "A.open-dropdown.attributes",
@@ -259,7 +259,7 @@
     {
       "id": "A.open-tabs.tagName",
       "passed": true,
-      "detail": "manifest=open-tabs upstream=open-tabs (1.5ms)"
+      "detail": "manifest=open-tabs upstream=open-tabs (1.7ms)"
     },
     {
       "id": "A.open-tabs.attributes",
