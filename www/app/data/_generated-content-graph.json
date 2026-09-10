@@ -2471,7 +2471,7 @@
       },
       "alternates": [],
       "references": [],
-      "fingerprint": "2ecbb586483ed06d61a731d9f3817ad491950ccc9a784ce1cb76682628cf0710",
+      "fingerprint": "be6feefac75b6e27c148476371b7dc5a0e126890eca2f7ddae44fdc029bf7a8d",
       "data": {}
     },
     {
@@ -3004,12 +3004,12 @@
       },
       "alternates": [],
       "references": [],
-      "fingerprint": "d8a3f2640c7fec57c8799ab52ab2339c2c0ed5b47eea90d75f617846aa0f2202",
+      "fingerprint": "d374f2ec59826d57c6f1dde1b4a7ce7a39fbdd2f51d276230238522a33124b4a",
       "data": {
-        "activeTarget": "v0.44.0-beta.2.1",
+        "activeTarget": "v0.44.0-beta.2.2",
         "latestLandedTrain": "v0.44.0-beta.2.1",
         "maturity": "beta",
-        "nextPlannedTrain": "v0.44.0-beta.2.2",
+        "nextPlannedTrain": "v0.44.0-beta.2.3",
         "publishedVersion": "0.44.0-beta.2.1",
         "schemaVersion": 1,
         "sourceVersion": "0.44.0-beta.2.1"
@@ -4399,6 +4399,20 @@
       "fingerprint": "0811776ec2c8a306b3f363abadc93b676804311b3db46abb523a81f2d08a9d85",
       "data": {
         "title": "v0.44.0-beta.2.1"
+      }
+    },
+    {
+      "id": "release:v0.44.0-beta.2.2",
+      "kind": "release",
+      "locale": "en",
+      "source": {
+        "path": "docs/release/v0.44.0-beta.2.2.md"
+      },
+      "alternates": [],
+      "references": [],
+      "fingerprint": "58d248395b6e54775073368476fda44bc0b6beb286955a5895297eee31675512",
+      "data": {
+        "title": "v0.44.0-beta.2.2"
       }
     },
     {

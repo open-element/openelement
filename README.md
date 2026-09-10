@@ -19,8 +19,8 @@ OpenElement = Web Components-native fullstack application framework
 current proven scope = static-first applications with fullstack output paths
 ```
 
-Source package line: `0.44.0-beta.2.1` (`v0.44.0-beta.2.1`).
-npm registry line: `v0.44.0-beta.2.1` (prerelease, dist-tag `beta`); npm `latest` remains the stable `0.43.3` line.
+Source package line: `0.44.0-beta.2.2` (`v0.44.0-beta.2.2`).
+npm registry line: `v0.44.0-beta.2.2` (prerelease, dist-tag `beta`); npm `latest` remains the stable `0.43.3` line.
 
 The accepted core products are **Element / Router**, with Route Mode
 and Framework Mode sharing one Router core. UI is dogfood and a reference
