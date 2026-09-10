@@ -187,16 +187,26 @@ export function renderEntry(desc: EntryDescriptor): string {
     lines.push(
       '// edits only reach SSR output when define() overwrites the stale class.',
     );
+    // #1339 packed-consumer dev proof: the registry ALSO outlives this entry
+    // module, so a re-evaluation would capture the already-wrapped define as
+    // its "original" and every forced overwrite would silently early-return
+    // through the previous wrapper (observed: lit page edits never reached
+    // dev SSR output). Install the wrapper once and keep the TRUE original on
+    // the registry itself (SSR_REGISTRY_ORIGINAL_DEFINE).
+    lines.push('if (!customElements.__openElementOrigDefine) {');
     lines.push(
-      'const _origDefine = customElements.define.bind(customElements);',
+      '  customElements.__openElementOrigDefine = customElements.define.bind(customElements);',
     );
-    lines.push('customElements.define = (name, ctor, options) => {');
-    lines.push('  if (!customElements.__openElementSsrStub && customElements.get(name)) return;');
-    lines.push('  try { _origDefine(name, ctor, options); } catch (e) {');
-    lines.push('    if (e && e.name === "NotSupportedError") return;');
-    lines.push('    throw e;');
-    lines.push('  }');
-    lines.push('};');
+    lines.push('  customElements.define = (name, ctor, options) => {');
+    lines.push('    if (!customElements.__openElementSsrStub && customElements.get(name)) return;');
+    lines.push(
+      '    try { customElements.__openElementOrigDefine(name, ctor, options); } catch (e) {',
+    );
+    lines.push('      if (e && e.name === "NotSupportedError") return;');
+    lines.push('      throw e;');
+    lines.push('    }');
+    lines.push('  };');
+    lines.push('}');
     lines.push('');
     // #952: entry-side registration ownership tracking. Since #960
     // (registration decoupling) a definePage route's page class registration
@@ -210,9 +220,10 @@ export function renderEntry(desc: EntryDescriptor): string {
     // its compiled program emits the same tag. The entry therefore only
     // overwrites registrations it made itself.
     // #965: the marker/property names below are chartered constants —
-    // SSR_REGISTRY_STUB_MARKER / ENTRY_REGISTRATION_OWNERS in
-    // @openelement/element internal/protocol/ssr-registry-markers.ts; keep
-    // the generated literals in sync (generated code cannot import them).
+    // SSR_REGISTRY_STUB_MARKER / ENTRY_REGISTRATION_OWNERS /
+    // SSR_REGISTRY_ORIGINAL_DEFINE in @openelement/element
+    // internal/protocol/ssr-registry-markers.ts; keep the generated literals
+    // in sync (generated code cannot import them).
     lines.push('const __entryDefined = customElements.__openEntryDefined ||= new Map();');
     lines.push('function __registerSsrComponent(tag, ctor) {');
     lines.push('  const current = customElements.get(tag);');
@@ -222,7 +233,27 @@ export function renderEntry(desc: EntryDescriptor): string {
     lines.push('    __entryDefined.set(tag, ctor);');
     lines.push('    return;');
     lines.push('  }');
-    lines.push('  if (!current) customElements.define(tag, ctor);');
+    lines.push('  if (!current) {');
+    lines.push('    customElements.define(tag, ctor);');
+    lines.push('    __entryDefined.set(tag, ctor);');
+    lines.push('    return;');
+    lines.push('  }');
+    lines.push('  if (current === ctor) return;');
+    // #1339 packed-consumer dev proof: the lit SSR shim registry outlives
+    // vite dev SSR module re-evaluation, so a page/island edit re-registers
+    // the SAME tag with a FRESH class while the stale class is still
+    // registered. Without an overwrite the dev server keeps rendering the old
+    // class forever. When the entry re-registers its OWN tag (ownership
+    // tracked in __entryDefined), the new class must win — through the TRUE
+    // original define (the wrapper early-returns on existing registrations
+    // for non-stub registries); the lit shim overwrites on duplicate define
+    // in development mode (its console.warn is the upstream-designed
+    // live-reload notice). A registration the entry did NOT make is a
+    // genuine conflict and keeps the fail-closed no-op.
+    lines.push('  if (__entryDefined.get(tag) === current) {');
+    lines.push('    customElements.__openElementOrigDefine(tag, ctor);');
+    lines.push('    __entryDefined.set(tag, ctor);');
+    lines.push('  }');
     lines.push('}');
     lines.push('');
   }

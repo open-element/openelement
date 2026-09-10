@@ -32,3 +32,15 @@ export const SSR_REGISTRY_STUB_MARKER = '__openElementSsrStub';
  * generated-registry contract, even though element/app never read it.
  */
 export const ENTRY_REGISTRATION_OWNERS = '__openEntryDefined';
+
+/**
+ * Property on the SSR registry holding the TRUE original `define` method,
+ * captured before the generated entry installs its idempotent wrapper. The
+ * registry outlives vite dev SSR module re-evaluations, so without this the
+ * second evaluation would capture the already-wrapped `define` as its
+ * "original", and every forced re-registration would silently early-return
+ * through the previous wrapper (#1339 lit dev feedback: edited lit page
+ * classes never reached SSR output). Written and read only inside
+ * adapter-vite's generated entry code (entry-orchestrator.ts).
+ */
+export const SSR_REGISTRY_ORIGINAL_DEFINE = '__openElementOrigDefine';
