@@ -186,12 +186,13 @@
         "./model": "./src/model.ts",
         "./preact": "./src/preact.ts",
         "./router": "./src/router.ts",
+        "./router/client": "./src/router-client.ts",
         "./router/http": "./src/router-http.ts",
         "./spa": "./src/spa.ts"
       },
       "declarations": {
         ".": {
-          "publicShapeSha256": "3eb71d2a0efb83a2f5ee91022a65cd3d0a90361d44c0a6a72b8800324d9eb853",
+          "publicShapeSha256": "e1de6ee3ebffa4874c40cd7a17329140ee4d092cad48c9f41d5c285d66b7ffd8",
           "publicSymbols": [
             "ACTION_FETCH_HEADER=value:any",
             "Action=value:any",
@@ -220,12 +221,12 @@
             "ServerRouteMetadata=value:any",
             "SpaAction=value:any",
             "SpaActionContext=value:any",
-            "SpaAppInstance=type:{dispose:{call:()=>void};mount:{call:(selector:string)=>void};readonly router:union(null|{currentPath:string;currentRoute:union(null|{action?:union(undefined|{call:(ctx:any)=>Promise<unknown>});guard?:union(undefined|{call:()=>Promise<string | boolean>});id?:union(string|undefined);loader?:union(undefined|{call:(ctx:any)=>Promise<unknown>});methods?:union(array(string)|undefined);path:string;pattern?:union(RoutePatternComponents|undefined);tagName:string});dispose:{call:()=>void};navigate:{call:(path:string)=>Promise<void>};params:Record<string, string>;readonly searchParams:URLSearchParams;replace:{call:(path:string)=>Promise<void>}})}",
+            "SpaAppInstance=type:{dispose:{call:()=>void};mount:{call:(selector:string)=>void};readonly router:union(null|{currentPath:string;currentRoute:union(null|{action?:union(undefined|{call:(ctx:intersection({formData?:union(FormData|undefined);params:Record<string, string>}&{searchParams:URLSearchParams;signal:AbortSignal}))=>Promise<unknown>});guard?:union(undefined|{call:()=>Promise<string | boolean>});id?:union(string|undefined);loader?:union(undefined|{call:(ctx:intersection({params:Record<string, string>}&{searchParams:URLSearchParams;signal:AbortSignal}))=>Promise<unknown>});methods?:union(array(string)|undefined);path:string;pattern?:union(RoutePatternComponents|undefined);tagName:string});dispose:{call:()=>void};navigate:{call:(path:string)=>Promise<void>};params:Record<string, string>;readonly searchParams:URLSearchParams;replace:{call:(path:string)=>Promise<void>}})}",
             "SpaLoader=value:any",
             "SpaLoaderContext=value:any",
             "classifyActionResult=value:{call:<Data>(result:Data)=>union({data:Data;kind:\"success\"}|{data:unknown;kind:\"failure\";status:number})}",
             "createRequestContext=value:{call:<Env extends Record<string, unknown> =Record<string, unknown>>(options:{env?:union(Env|undefined);params?:union(Record<string, string>|undefined);platform?:unknown;request:Request})=>{env?:union(Env|undefined);method:string;params:Record<string, string>;path:string;platform?:unknown;request:Request;searchParams:URLSearchParams;url:URL}}",
-            "defineApp=value:{call:(options:{mode:\"spa\";routerMode?:union(\"auto\"|\"hash\"|\"history\"|undefined);routes?:union(array({action?:union(undefined|{call:(ctx:any)=>Promise<unknown>});guard?:union(undefined|{call:()=>Promise<string | boolean>});id?:union(string|undefined);loader?:union(undefined|{call:(ctx:any)=>Promise<unknown>});methods?:union(array(string)|undefined);path:string;pattern?:union(RoutePatternComponents|undefined);tagName:string})|undefined)})=>{dispose:{call:()=>void};mount:{call:(selector:string)=>void};readonly router:union(null|{currentPath:string;currentRoute:union(null|{action?:union(undefined|{call:(ctx:any)=>Promise<unknown>});guard?:union(undefined|{call:()=>Promise<string | boolean>});id?:union(string|undefined);loader?:union(undefined|{call:(ctx:any)=>Promise<unknown>});methods?:union(array(string)|undefined);path:string;pattern?:union(RoutePatternComponents|undefined);tagName:string});dispose:{call:()=>void};navigate:{call:(path:string)=>Promise<void>};params:Record<string, string>;readonly searchParams:URLSearchParams;replace:{call:(path:string)=>Promise<void>}})}}",
+            "defineApp=value:{call:(options:{mode:\"spa\";routerMode?:union(\"auto\"|\"hash\"|\"history\"|undefined);routes?:union(array({action?:union(undefined|{call:(ctx:intersection({formData?:union(FormData|undefined);params:Record<string, string>}&{searchParams:URLSearchParams;signal:AbortSignal}))=>Promise<unknown>});guard?:union(undefined|{call:()=>Promise<string | boolean>});id?:union(string|undefined);loader?:union(undefined|{call:(ctx:intersection({params:Record<string, string>}&{searchParams:URLSearchParams;signal:AbortSignal}))=>Promise<unknown>});methods?:union(array(string)|undefined);path:string;pattern?:union(RoutePatternComponents|undefined);tagName:string})|undefined)})=>{dispose:{call:()=>void};mount:{call:(selector:string)=>void};readonly router:union(null|{currentPath:string;currentRoute:union(null|{action?:union(undefined|{call:(ctx:intersection({formData?:union(FormData|undefined);params:Record<string, string>}&{searchParams:URLSearchParams;signal:AbortSignal}))=>Promise<unknown>});guard?:union(undefined|{call:()=>Promise<string | boolean>});id?:union(string|undefined);loader?:union(undefined|{call:(ctx:intersection({params:Record<string, string>}&{searchParams:URLSearchParams;signal:AbortSignal}))=>Promise<unknown>});methods?:union(array(string)|undefined);path:string;pattern?:union(RoutePatternComponents|undefined);tagName:string});dispose:{call:()=>void};navigate:{call:(path:string)=>Promise<void>};params:Record<string, string>;readonly searchParams:URLSearchParams;replace:{call:(path:string)=>Promise<void>}})}}",
             "defineIslandConfig=value:{call:(config:{dsd?:union(false|true|undefined);exportNames?:union(Readonly<Record<string, string>>|undefined);hydrate?:any;media?:union(string|undefined);ssr?:union(false|true|undefined);tagNames?:union(array(string)|undefined);tags?:union(array(string)|undefined)})=>{dsd?:union(false|true|undefined);exportNames?:union(Readonly<Record<string, string>>|undefined);hydrate?:any;media?:union(string|undefined);ssr?:union(false|true|undefined);tagNames?:union(array(string)|undefined);tags?:union(array(string)|undefined)}}",
             "definePage=value:{call:<Data =unknown,Params extends Record<string, string> =Record<string, string>>(componentClass:CustomElementConstructor,descriptor:union(undefined|{error?:union(undefined|{call:(error:unknown,context:{actionData:unknown;data:union(Data|undefined);locale?:union(string|undefined);meta:{index:string=>unknown};params:Params;request?:union(Request|undefined);route:{filePath?:union(string|undefined);path?:union(string|undefined)}})=>Record<string, unknown>});head?:union(undefined|{alternates?:union(array({href:string;hreflang?:union(string|undefined)})|undefined);canonical?:union(string|undefined);dangerouslyHeadFragments?:union(array(string)|undefined);description?:union(string|undefined);meta?:union(array(Record<string, string | number | boolean>)|undefined);title?:union(string|undefined)}|{call:(context:{actionData:unknown;data:union(Data|undefined);locale?:union(string|undefined);meta:{index:string=>unknown};params:Params;request?:union(Request|undefined);route:{filePath?:union(string|undefined);path?:union(string|undefined)}})=>{alternates?:union(array({href:string;hreflang?:union(string|undefined)})|undefined);canonical?:union(string|undefined);dangerouslyHeadFragments?:union(array(string)|undefined);description?:union(string|undefined);meta?:union(array(Record<string, string | number | boolean>)|undefined);title?:union(string|undefined)}});props?:union(undefined|{call:(context:{actionData:unknown;data:union(Data|undefined);locale?:union(string|undefined);meta:{index:string=>unknown};params:Params;request?:union(Request|undefined);route:{filePath?:union(string|undefined);path?:union(string|undefined)}})=>Record<string, unknown>});renderIntent?:union(undefined|{mode?:union(\"dynamic\"|\"static\"|undefined)});route?:union(undefined|{id?:union(string|undefined);params?:union(array(string)|undefined)})}))=>intersection(CustomElementConstructor&{openElementPage:{error?:union(undefined|{call:(error:unknown,context:{actionData:unknown;data:union(Data|undefined);locale?:union(string|undefined);meta:{index:string=>unknown};params:Params;request?:union(Request|undefined);route:{filePath?:union(string|undefined);path?:union(string|undefined)}})=>Record<string, unknown>});head?:union(undefined|{alternates?:union(array({href:string;hreflang?:union(string|undefined)})|undefined);canonical?:union(string|undefined);dangerouslyHeadFragments?:union(array(string)|undefined);description?:union(string|undefined);meta?:union(array(Record<string, string | number | boolean>)|undefined);title?:union(string|undefined)}|{call:(context:{actionData:unknown;data:union(Data|undefined);locale?:union(string|undefined);meta:{index:string=>unknown};params:Params;request?:union(Request|undefined);route:{filePath?:union(string|undefined);path?:union(string|undefined)}})=>{alternates?:union(array({href:string;hreflang?:union(string|undefined)})|undefined);canonical?:union(string|undefined);dangerouslyHeadFragments?:union(array(string)|undefined);description?:union(string|undefined);meta?:union(array(Record<string, string | number | boolean>)|undefined);title?:union(string|undefined)}});kind:\"page\";props?:union(undefined|{call:(context:{actionData:unknown;data:union(Data|undefined);locale?:union(string|undefined);meta:{index:string=>unknown};params:Params;request?:union(Request|undefined);route:{filePath?:union(string|undefined);path?:union(string|undefined)}})=>Record<string, unknown>});renderIntent:{mode:union(\"dynamic\"|\"static\")};route?:union(undefined|{id?:union(string|undefined);params?:union(array(string)|undefined)})}})}",
             "fail=value:{call:<Data>(status:number,data:Data)=>{readonly data:Data;readonly name:\"OpenElementActionFailure\";readonly status:number}}",
@@ -247,12 +248,12 @@
           ]
         },
         "./i18n": {
-          "publicShapeSha256": "eb1be2db44b1fc0c982c8a4ca409cff51d3344c52c27f7989e8def6f0f009263",
+          "publicShapeSha256": "5cd0a34b499f6c4faaf07a12b9ec70161929f058386738abd5442ce68a96f527",
           "publicSymbols": [
-            "LocalePath=value:any",
+            "LocalePath=type:{isDefaultLocalePath:union(false|true);locale:string;localizedPath:string;path:string}",
             "OpenElementI18nOptions=type:{defaultLocale:string;locales:array(string)}",
             "loadI18nData=value:{call:(options:{defaultLocale:string;locales:array(string)})=>{defaultLocale:string;locales:array(string)}}",
-            "normalizeLocalePath=value:{call:(pathname:string,options:{defaultLocale:string;locales:array(string)})=>LocalePath}"
+            "normalizeLocalePath=value:{call:(pathname:string,options:{defaultLocale:string;locales:array(string)})=>{isDefaultLocalePath:union(false|true);locale:string;localizedPath:string;path:string}}"
           ]
         },
         "./lit": {
@@ -296,6 +297,20 @@
             "normalizeRoutePatternForURLPattern=value:{call:(path:string)=>string}"
           ]
         },
+        "./router/client": {
+          "publicShapeSha256": "e913752f77fb5b232a62b81f963560c5a7b5cc13d1c55ebe8dc92a978ab8639d",
+          "publicSymbols": [
+            "CompiledRouteMatcher=type:{candidateCount:{call:(input:union(URL|string))=>number};match:{call:(input:union(URL|string),search:string)=>union(null|{id:string;params:Record<string, string>;patternResult:URLPatternResult;route:{action?:union(undefined|{call:(ctx:intersection({formData?:union(FormData|undefined);params:Record<string, string>}&{searchParams:URLSearchParams;signal:AbortSignal}))=>Promise<unknown>});guard?:union(undefined|{call:()=>Promise<string | boolean>});id?:union(string|undefined);loader?:union(undefined|{call:(ctx:intersection({params:Record<string, string>}&{searchParams:URLSearchParams;signal:AbortSignal}))=>Promise<unknown>});methods?:union(array(string)|undefined);path:string;pattern?:union(RoutePatternComponents|undefined);tagName:string};searchParams:URLSearchParams})};resolve:{call:(input:union(URL|string),search:string,method:string)=>union(intersection({id:string;params:Record<string, string>;patternResult:URLPatternResult;route:{action?:union(undefined|{call:(ctx:intersection({formData?:union(FormData|undefined);params:Record<string, string>}&{searchParams:URLSearchParams;signal:AbortSignal}))=>Promise<unknown>});guard?:union(undefined|{call:()=>Promise<string | boolean>});id?:union(string|undefined);loader?:union(undefined|{call:(ctx:intersection({params:Record<string, string>}&{searchParams:URLSearchParams;signal:AbortSignal}))=>Promise<unknown>});methods?:union(array(string)|undefined);path:string;pattern?:union(RoutePatternComponents|undefined);tagName:string};searchParams:URLSearchParams}&{kind:\"match\";method:string})|{allow:array(string);kind:\"method-not-allowed\"}|{kind:\"not-found\"})}}",
+            "RouteConfig=type:{action?:union(undefined|{call:(ctx:intersection({formData?:union(FormData|undefined);params:Record<string, string>}&{searchParams:URLSearchParams;signal:AbortSignal}))=>Promise<unknown>});guard?:union(undefined|{call:()=>Promise<string | boolean>});id?:union(string|undefined);loader?:union(undefined|{call:(ctx:intersection({params:Record<string, string>}&{searchParams:URLSearchParams;signal:AbortSignal}))=>Promise<unknown>});methods?:union(array(string)|undefined);path:string;pattern?:union(RoutePatternComponents|undefined);tagName:string}",
+            "RouterInstance=type:{currentPath:string;currentRoute:union(null|{action?:union(undefined|{call:(ctx:intersection({formData?:union(FormData|undefined);params:Record<string, string>}&{searchParams:URLSearchParams;signal:AbortSignal}))=>Promise<unknown>});guard?:union(undefined|{call:()=>Promise<string | boolean>});id?:union(string|undefined);loader?:union(undefined|{call:(ctx:intersection({params:Record<string, string>}&{searchParams:URLSearchParams;signal:AbortSignal}))=>Promise<unknown>});methods?:union(array(string)|undefined);path:string;pattern?:union(RoutePatternComponents|undefined);tagName:string});dispose:{call:()=>void};navigate:{call:(path:string)=>Promise<void>};params:Record<string, string>;readonly searchParams:URLSearchParams;replace:{call:(path:string)=>Promise<void>}}",
+            "RouterMode=type:union(\"auto\"|\"hash\"|\"history\")",
+            "SpaActionContext=type:{formData?:union(FormData|undefined);params:Record<string, string>}",
+            "SpaLoaderContext=type:{params:Record<string, string>}",
+            "compileRouteMatcher=value:{call:(routes:array({action?:union(undefined|{call:(ctx:intersection({formData?:union(FormData|undefined);params:Record<string, string>}&{searchParams:URLSearchParams;signal:AbortSignal}))=>Promise<unknown>});guard?:union(undefined|{call:()=>Promise<string | boolean>});id?:union(string|undefined);loader?:union(undefined|{call:(ctx:intersection({params:Record<string, string>}&{searchParams:URLSearchParams;signal:AbortSignal}))=>Promise<unknown>});methods?:union(array(string)|undefined);path:string;pattern?:union(RoutePatternComponents|undefined);tagName:string}))=>{candidateCount:{call:(input:union(URL|string))=>number};match:{call:(input:union(URL|string),search:string)=>union(null|{id:string;params:Record<string, string>;patternResult:URLPatternResult;route:{action?:union(undefined|{call:(ctx:intersection({formData?:union(FormData|undefined);params:Record<string, string>}&{searchParams:URLSearchParams;signal:AbortSignal}))=>Promise<unknown>});guard?:union(undefined|{call:()=>Promise<string | boolean>});id?:union(string|undefined);loader?:union(undefined|{call:(ctx:intersection({params:Record<string, string>}&{searchParams:URLSearchParams;signal:AbortSignal}))=>Promise<unknown>});methods?:union(array(string)|undefined);path:string;pattern?:union(RoutePatternComponents|undefined);tagName:string};searchParams:URLSearchParams})};resolve:{call:(input:union(URL|string),search:string,method:string)=>union(intersection({id:string;params:Record<string, string>;patternResult:URLPatternResult;route:{action?:union(undefined|{call:(ctx:intersection({formData?:union(FormData|undefined);params:Record<string, string>}&{searchParams:URLSearchParams;signal:AbortSignal}))=>Promise<unknown>});guard?:union(undefined|{call:()=>Promise<string | boolean>});id?:union(string|undefined);loader?:union(undefined|{call:(ctx:intersection({params:Record<string, string>}&{searchParams:URLSearchParams;signal:AbortSignal}))=>Promise<unknown>});methods?:union(array(string)|undefined);path:string;pattern?:union(RoutePatternComponents|undefined);tagName:string};searchParams:URLSearchParams}&{kind:\"match\";method:string})|{allow:array(string);kind:\"method-not-allowed\"}|{kind:\"not-found\"})}}}",
+            "createRouter=value:{call:(options:{mode:union(\"auto\"|\"hash\"|\"history\");onChange?:union(undefined|{call:()=>union(Promise<void>|void)});onPending?:union(undefined|{call:()=>void});routes:array({action?:union(undefined|{call:(ctx:intersection({formData?:union(FormData|undefined);params:Record<string, string>}&{searchParams:URLSearchParams;signal:AbortSignal}))=>Promise<unknown>});guard?:union(undefined|{call:()=>Promise<string | boolean>});id?:union(string|undefined);loader?:union(undefined|{call:(ctx:intersection({params:Record<string, string>}&{searchParams:URLSearchParams;signal:AbortSignal}))=>Promise<unknown>});methods?:union(array(string)|undefined);path:string;pattern?:union(RoutePatternComponents|undefined);tagName:string})})=>{currentPath:string;currentRoute:union(null|{action?:union(undefined|{call:(ctx:intersection({formData?:union(FormData|undefined);params:Record<string, string>}&{searchParams:URLSearchParams;signal:AbortSignal}))=>Promise<unknown>});guard?:union(undefined|{call:()=>Promise<string | boolean>});id?:union(string|undefined);loader?:union(undefined|{call:(ctx:intersection({params:Record<string, string>}&{searchParams:URLSearchParams;signal:AbortSignal}))=>Promise<unknown>});methods?:union(array(string)|undefined);path:string;pattern?:union(RoutePatternComponents|undefined);tagName:string});dispose:{call:()=>void};navigate:{call:(path:string)=>Promise<void>};params:Record<string, string>;readonly searchParams:URLSearchParams;replace:{call:(path:string)=>Promise<void>}}}",
+            "matchRoute=value:{call:(pathname:string,search:string,routes:array({action?:union(undefined|{call:(ctx:intersection({formData?:union(FormData|undefined);params:Record<string, string>}&{searchParams:URLSearchParams;signal:AbortSignal}))=>Promise<unknown>});guard?:union(undefined|{call:()=>Promise<string | boolean>});id?:union(string|undefined);loader?:union(undefined|{call:(ctx:intersection({params:Record<string, string>}&{searchParams:URLSearchParams;signal:AbortSignal}))=>Promise<unknown>});methods?:union(array(string)|undefined);path:string;pattern?:union(RoutePatternComponents|undefined);tagName:string}))=>union(null|{id:string;params:Record<string, string>;patternResult:URLPatternResult;route:{action?:union(undefined|{call:(ctx:intersection({formData?:union(FormData|undefined);params:Record<string, string>}&{searchParams:URLSearchParams;signal:AbortSignal}))=>Promise<unknown>});guard?:union(undefined|{call:()=>Promise<string | boolean>});id?:union(string|undefined);loader?:union(undefined|{call:(ctx:intersection({params:Record<string, string>}&{searchParams:URLSearchParams;signal:AbortSignal}))=>Promise<unknown>});methods?:union(array(string)|undefined);path:string;pattern?:union(RoutePatternComponents|undefined);tagName:string};searchParams:URLSearchParams})}"
+          ]
+        },
         "./router/http": {
           "publicShapeSha256": "4754fe4249319e94a9f83a779549f8597d3b4fe13e822b0052637e6632b70fb1",
           "publicSymbols": [
@@ -304,10 +319,10 @@
           ]
         },
         "./spa": {
-          "publicShapeSha256": "311f198471d867a8f21249679bda1062cef41fdb7fdfcef3d5378007d0d2ff2b",
+          "publicShapeSha256": "fea8a582261b4894f8f284e8d97dc142da6f96f98dec3892d488d72d6cad3365",
           "publicSymbols": [
-            "SpaAppInstance=type:{dispose:{call:()=>void};mount:{call:(selector:string)=>void};readonly router:union(null|{currentPath:string;currentRoute:union(null|{action?:union(undefined|{call:(ctx:any)=>Promise<unknown>});guard?:union(undefined|{call:()=>Promise<string | boolean>});id?:union(string|undefined);loader?:union(undefined|{call:(ctx:any)=>Promise<unknown>});methods?:union(array(string)|undefined);path:string;pattern?:union(RoutePatternComponents|undefined);tagName:string});dispose:{call:()=>void};navigate:{call:(path:string)=>Promise<void>};params:Record<string, string>;readonly searchParams:URLSearchParams;replace:{call:(path:string)=>Promise<void>}})}",
-            "defineApp=value:{call:(options:{mode:\"spa\";routerMode?:union(\"auto\"|\"hash\"|\"history\"|undefined);routes?:union(array({action?:union(undefined|{call:(ctx:any)=>Promise<unknown>});guard?:union(undefined|{call:()=>Promise<string | boolean>});id?:union(string|undefined);loader?:union(undefined|{call:(ctx:any)=>Promise<unknown>});methods?:union(array(string)|undefined);path:string;pattern?:union(RoutePatternComponents|undefined);tagName:string})|undefined)})=>{dispose:{call:()=>void};mount:{call:(selector:string)=>void};readonly router:union(null|{currentPath:string;currentRoute:union(null|{action?:union(undefined|{call:(ctx:any)=>Promise<unknown>});guard?:union(undefined|{call:()=>Promise<string | boolean>});id?:union(string|undefined);loader?:union(undefined|{call:(ctx:any)=>Promise<unknown>});methods?:union(array(string)|undefined);path:string;pattern?:union(RoutePatternComponents|undefined);tagName:string});dispose:{call:()=>void};navigate:{call:(path:string)=>Promise<void>};params:Record<string, string>;readonly searchParams:URLSearchParams;replace:{call:(path:string)=>Promise<void>}})}}"
+            "SpaAppInstance=type:{dispose:{call:()=>void};mount:{call:(selector:string)=>void};readonly router:union(null|{currentPath:string;currentRoute:union(null|{action?:union(undefined|{call:(ctx:intersection({formData?:union(FormData|undefined);params:Record<string, string>}&{searchParams:URLSearchParams;signal:AbortSignal}))=>Promise<unknown>});guard?:union(undefined|{call:()=>Promise<string | boolean>});id?:union(string|undefined);loader?:union(undefined|{call:(ctx:intersection({params:Record<string, string>}&{searchParams:URLSearchParams;signal:AbortSignal}))=>Promise<unknown>});methods?:union(array(string)|undefined);path:string;pattern?:union(RoutePatternComponents|undefined);tagName:string});dispose:{call:()=>void};navigate:{call:(path:string)=>Promise<void>};params:Record<string, string>;readonly searchParams:URLSearchParams;replace:{call:(path:string)=>Promise<void>}})}",
+            "defineApp=value:{call:(options:{mode:\"spa\";routerMode?:union(\"auto\"|\"hash\"|\"history\"|undefined);routes?:union(array({action?:union(undefined|{call:(ctx:intersection({formData?:union(FormData|undefined);params:Record<string, string>}&{searchParams:URLSearchParams;signal:AbortSignal}))=>Promise<unknown>});guard?:union(undefined|{call:()=>Promise<string | boolean>});id?:union(string|undefined);loader?:union(undefined|{call:(ctx:intersection({params:Record<string, string>}&{searchParams:URLSearchParams;signal:AbortSignal}))=>Promise<unknown>});methods?:union(array(string)|undefined);path:string;pattern?:union(RoutePatternComponents|undefined);tagName:string})|undefined)})=>{dispose:{call:()=>void};mount:{call:(selector:string)=>void};readonly router:union(null|{currentPath:string;currentRoute:union(null|{action?:union(undefined|{call:(ctx:intersection({formData?:union(FormData|undefined);params:Record<string, string>}&{searchParams:URLSearchParams;signal:AbortSignal}))=>Promise<unknown>});guard?:union(undefined|{call:()=>Promise<string | boolean>});id?:union(string|undefined);loader?:union(undefined|{call:(ctx:intersection({params:Record<string, string>}&{searchParams:URLSearchParams;signal:AbortSignal}))=>Promise<unknown>});methods?:union(array(string)|undefined);path:string;pattern?:union(RoutePatternComponents|undefined);tagName:string});dispose:{call:()=>void};navigate:{call:(path:string)=>Promise<void>};params:Record<string, string>;readonly searchParams:URLSearchParams;replace:{call:(path:string)=>Promise<void>}})}}"
           ]
         }
       }
@@ -401,119 +416,6 @@
           "publicSymbols": [
             "SitemapOptions=type:{changefreq?:union(\"always\"|\"daily\"|\"hourly\"|\"monthly\"|\"never\"|\"weekly\"|\"yearly\"|undefined);exclude?:union(array(string)|undefined);hostname:string;priority?:union(number|undefined);robotsTxt?:union(false|true|undefined)}",
             "generateSitemap=value:{call:(distDir:string,options:{changefreq?:union(\"always\"|\"daily\"|\"hourly\"|\"monthly\"|\"never\"|\"weekly\"|\"yearly\"|undefined);exclude?:union(array(string)|undefined);hostname:string;priority?:union(number|undefined);robotsTxt?:union(false|true|undefined)})=>array(string)}"
-          ]
-        }
-      }
-    },
-    {
-      "name": "@openelement/ui",
-      "exports": {
-        ".": "./src/index.ts",
-        "./open-badge": "./src/open-badge.tsx",
-        "./open-button": "./src/open-button.tsx",
-        "./open-callout": "./src/open-callout.tsx",
-        "./open-card": "./src/open-card.tsx",
-        "./open-code-block": "./src/open-code-block.tsx",
-        "./open-dialog": "./src/open-dialog.tsx",
-        "./open-dropdown": "./src/open-dropdown.tsx",
-        "./open-input": "./src/open-input.tsx",
-        "./open-props-tokens": "./src/open-props-tokens.ts",
-        "./open-props-tokens.js": "./src/open-props-tokens.ts",
-        "./open-tabs": "./src/open-tabs.tsx",
-        "./open-theme-toggle": "./src/open-theme-toggle.tsx"
-      },
-      "declarations": {
-        ".": {
-          "publicShapeSha256": "d47c8683a1623245c1235a719f3f34290e87372fdd8a09220702e4cc2a4cd7e0",
-          "publicSymbols": [
-            "OpenBadge=type:{render:{call:()=>any};size:string;tone:string}|value:{construct:()=>{render:{call:()=>any};size:string;tone:string};styles:array(StyleSheetLike)}",
-            "OpenButton=type:{attributeChangedCallback:{call:(name:string,old:union(null|string),val:union(null|string))=>void};buttonMode:any;disabled:union(false|true);href:string;linkAriaDisabled:any;linkHref:any;linkMode:any;linkRel:any;linkTarget:any;onCsrRendered:{call:()=>void};onDsdHydrated:{call:()=>void};render:{call:()=>any};size:string;target:string;type:string;variant:string}|value:{construct:()=>{attributeChangedCallback:{call:(name:string,old:union(null|string),val:union(null|string))=>void};buttonMode:any;disabled:union(false|true);href:string;linkAriaDisabled:any;linkHref:any;linkMode:any;linkRel:any;linkTarget:any;onCsrRendered:{call:()=>void};onDsdHydrated:{call:()=>void};render:{call:()=>any};size:string;target:string;type:string;variant:string};styles:array(any)}",
-            "OpenCallout=type:{headerHidden:any;icon:any;label:string;render:{call:()=>any};type:string}|value:{construct:()=>{headerHidden:any;icon:any;label:string;render:{call:()=>any};type:string};styles:array(StyleSheetLike)}",
-            "OpenCard=type:{render:{call:()=>any};variant:string}|value:{construct:()=>{render:{call:()=>any};variant:string};styles:array(any)}",
-            "OpenCodeBlock=type:{copyLabel:string;disconnectedCallback:{call:()=>void};onCsrRendered:{call:()=>void};onDsdHydrated:{call:()=>void};render:{call:()=>any}}|value:{construct:()=>{copyLabel:string;disconnectedCallback:{call:()=>void};onCsrRendered:{call:()=>void};onDsdHydrated:{call:()=>void};render:{call:()=>any}};styles:array(StyleSheetLike)}",
-            "OpenDialog=type:{close:{call:()=>void};disconnectedCallback:{call:()=>void};label:string;onCsrRendered:{call:()=>void};onDsdHydrated:{call:()=>void};open:union(false|true);render:{call:()=>any};show:{call:()=>void};toggle:{call:()=>void}}|value:{construct:()=>{close:{call:()=>void};disconnectedCallback:{call:()=>void};label:string;onCsrRendered:{call:()=>void};onDsdHydrated:{call:()=>void};open:union(false|true);render:{call:()=>any};show:{call:()=>void};toggle:{call:()=>void}};styles:array(any)}",
-            "OpenDropdown=type:{anchorName:string;anchorStyle:any;onCsrRendered:{call:()=>void};onDsdHydrated:{call:()=>void};render:{call:()=>any}}|value:{construct:()=>{anchorName:string;anchorStyle:any;onCsrRendered:{call:()=>void};onDsdHydrated:{call:()=>void};render:{call:()=>any}};styles:array(any)}",
-            "OpenInput=type:{ariaInvalidAttr:any;attributeChangedCallback:{call:(name:string,old:union(null|string),val:union(null|string))=>void};describedByAttr:any;disabled:union(false|true);error:string;errorIdAttr:any;formDisabledCallback:{call:(disabled:union(false|true))=>void};formResetCallback:{call:()=>void};idAttr:any;inputClass:any;inputId:string;label:string;name:string;noError:any;noLabel:any;onCsrRendered:{call:()=>void};onDsdHydrated:{call:()=>void};placeholder:string;render:{call:()=>any};required:union(false|true);requiredMark:any;type:string;value:string}|value:{construct:()=>{ariaInvalidAttr:any;attributeChangedCallback:{call:(name:string,old:union(null|string),val:union(null|string))=>void};describedByAttr:any;disabled:union(false|true);error:string;errorIdAttr:any;formDisabledCallback:{call:(disabled:union(false|true))=>void};formResetCallback:{call:()=>void};idAttr:any;inputClass:any;inputId:string;label:string;name:string;noError:any;noLabel:any;onCsrRendered:{call:()=>void};onDsdHydrated:{call:()=>void};placeholder:string;render:{call:()=>any};required:union(false|true);requiredMark:any;type:string;value:string};styles:array(any)}",
-            "OpenTabs=type:{active:number;disconnectedCallback:{call:()=>void};onCsrRendered:{call:()=>void};onDsdHydrated:{call:()=>void};render:{call:()=>any};select:{call:(idx:number)=>void};tabsId:string}|value:{construct:()=>{active:number;disconnectedCallback:{call:()=>void};onCsrRendered:{call:()=>void};onDsdHydrated:{call:()=>void};render:{call:()=>any};select:{call:(idx:number)=>void};tabsId:string};styles:array(StyleSheetLike)}",
-            "OpenThemeToggle=type:{attributeChangedCallback:{call:(name:string,old:union(null|string),val:union(null|string))=>void};connectedCallback:{call:()=>void};onDsdHydrated:{call:()=>void};render:{call:()=>any};theme:union(\"dark\"|\"light\")}|value:{construct:()=>{attributeChangedCallback:{call:(name:string,old:union(null|string),val:union(null|string))=>void};connectedCallback:{call:()=>void};onDsdHydrated:{call:()=>void};render:{call:()=>any};theme:union(\"dark\"|\"light\")};styles:array(StyleSheetLike)}",
-            "manifest=value:OpenElementPackageManifest",
-            "openPropsRootSheet=value:StyleSheetLike",
-            "openPropsTokenSheet=value:StyleSheetLike",
-            "registerOpenUi=value:{call:(registry:union(CustomElementRegistry|undefined))=>void}"
-          ]
-        },
-        "./open-badge": {
-          "publicShapeSha256": "9cdb49440d1addfd81f45027f2c506b92147d7934c4e8a4f9aae9c07755596cb",
-          "publicSymbols": [
-            "OpenBadge=type:{render:{call:()=>any};size:string;tone:string}|value:{construct:()=>{render:{call:()=>any};size:string;tone:string};styles:array(StyleSheetLike)}"
-          ]
-        },
-        "./open-button": {
-          "publicShapeSha256": "b07f075221206dd5683a467c4881f38e5981016e55c156329a7772d161b657c6",
-          "publicSymbols": [
-            "OpenButton=type:{attributeChangedCallback:{call:(name:string,old:union(null|string),val:union(null|string))=>void};buttonMode:any;disabled:union(false|true);href:string;linkAriaDisabled:any;linkHref:any;linkMode:any;linkRel:any;linkTarget:any;onCsrRendered:{call:()=>void};onDsdHydrated:{call:()=>void};render:{call:()=>any};size:string;target:string;type:string;variant:string}|value:{construct:()=>{attributeChangedCallback:{call:(name:string,old:union(null|string),val:union(null|string))=>void};buttonMode:any;disabled:union(false|true);href:string;linkAriaDisabled:any;linkHref:any;linkMode:any;linkRel:any;linkTarget:any;onCsrRendered:{call:()=>void};onDsdHydrated:{call:()=>void};render:{call:()=>any};size:string;target:string;type:string;variant:string};styles:array(any)}"
-          ]
-        },
-        "./open-callout": {
-          "publicShapeSha256": "06fa09626004a37a9a6a515979e31c52b3f0acd22f71b835dca79c7a3d3882ec",
-          "publicSymbols": [
-            "OpenCallout=type:{headerHidden:any;icon:any;label:string;render:{call:()=>any};type:string}|value:{construct:()=>{headerHidden:any;icon:any;label:string;render:{call:()=>any};type:string};styles:array(StyleSheetLike)}"
-          ]
-        },
-        "./open-card": {
-          "publicShapeSha256": "cc416814f808d7c8107102708dbda1f8e2e8c2e72b323e337d86dbbb8de2e166",
-          "publicSymbols": [
-            "OpenCard=type:{render:{call:()=>any};variant:string}|value:{construct:()=>{render:{call:()=>any};variant:string};styles:array(any)}"
-          ]
-        },
-        "./open-code-block": {
-          "publicShapeSha256": "03c1772b8a9aaf8b63a08a8e409c0668a099aa16c5b1946b2607db0d7740f3eb",
-          "publicSymbols": [
-            "OpenCodeBlock=type:{copyLabel:string;disconnectedCallback:{call:()=>void};onCsrRendered:{call:()=>void};onDsdHydrated:{call:()=>void};render:{call:()=>any}}|value:{construct:()=>{copyLabel:string;disconnectedCallback:{call:()=>void};onCsrRendered:{call:()=>void};onDsdHydrated:{call:()=>void};render:{call:()=>any}};styles:array(StyleSheetLike)}"
-          ]
-        },
-        "./open-dialog": {
-          "publicShapeSha256": "743bf7f3f477721aeb4c1902842345f4dc532053e5f8ef9b87cda87fc8558ed6",
-          "publicSymbols": [
-            "OpenDialog=type:{close:{call:()=>void};disconnectedCallback:{call:()=>void};label:string;onCsrRendered:{call:()=>void};onDsdHydrated:{call:()=>void};open:union(false|true);render:{call:()=>any};show:{call:()=>void};toggle:{call:()=>void}}|value:{construct:()=>{close:{call:()=>void};disconnectedCallback:{call:()=>void};label:string;onCsrRendered:{call:()=>void};onDsdHydrated:{call:()=>void};open:union(false|true);render:{call:()=>any};show:{call:()=>void};toggle:{call:()=>void}};styles:array(any)}"
-          ]
-        },
-        "./open-dropdown": {
-          "publicShapeSha256": "2c86f350ee0d30a573e7a56e8070ad67a61558f60c698f7420d3ecfe9c7e4347",
-          "publicSymbols": [
-            "OpenDropdown=type:{anchorName:string;anchorStyle:any;onCsrRendered:{call:()=>void};onDsdHydrated:{call:()=>void};render:{call:()=>any}}|value:{construct:()=>{anchorName:string;anchorStyle:any;onCsrRendered:{call:()=>void};onDsdHydrated:{call:()=>void};render:{call:()=>any}};styles:array(any)}"
-          ]
-        },
-        "./open-input": {
-          "publicShapeSha256": "bed50b591f2c1bdfc682124cdd43c3f9a1dbc0c659c240be35b8148feb27c124",
-          "publicSymbols": [
-            "OpenInput=type:{ariaInvalidAttr:any;attributeChangedCallback:{call:(name:string,old:union(null|string),val:union(null|string))=>void};describedByAttr:any;disabled:union(false|true);error:string;errorIdAttr:any;formDisabledCallback:{call:(disabled:union(false|true))=>void};formResetCallback:{call:()=>void};idAttr:any;inputClass:any;inputId:string;label:string;name:string;noError:any;noLabel:any;onCsrRendered:{call:()=>void};onDsdHydrated:{call:()=>void};placeholder:string;render:{call:()=>any};required:union(false|true);requiredMark:any;type:string;value:string}|value:{construct:()=>{ariaInvalidAttr:any;attributeChangedCallback:{call:(name:string,old:union(null|string),val:union(null|string))=>void};describedByAttr:any;disabled:union(false|true);error:string;errorIdAttr:any;formDisabledCallback:{call:(disabled:union(false|true))=>void};formResetCallback:{call:()=>void};idAttr:any;inputClass:any;inputId:string;label:string;name:string;noError:any;noLabel:any;onCsrRendered:{call:()=>void};onDsdHydrated:{call:()=>void};placeholder:string;render:{call:()=>any};required:union(false|true);requiredMark:any;type:string;value:string};styles:array(any)}"
-          ]
-        },
-        "./open-props-tokens": {
-          "publicShapeSha256": "0e1ae34ba6182ea82a5ece72df64c9d7f41dde70455d493d934da4de364dedb0",
-          "publicSymbols": [
-            "openPropsRootSheet=value:StyleSheetLike",
-            "openPropsTokenSheet=value:StyleSheetLike"
-          ]
-        },
-        "./open-props-tokens.js": {
-          "publicShapeSha256": "0e1ae34ba6182ea82a5ece72df64c9d7f41dde70455d493d934da4de364dedb0",
-          "publicSymbols": [
-            "openPropsRootSheet=value:StyleSheetLike",
-            "openPropsTokenSheet=value:StyleSheetLike"
-          ]
-        },
-        "./open-tabs": {
-          "publicShapeSha256": "5bf7e223c57d43745f1fcd2f49196839631ba3ef49e70f56780d9694ad370dfe",
-          "publicSymbols": [
-            "OpenTabs=type:{active:number;disconnectedCallback:{call:()=>void};onCsrRendered:{call:()=>void};onDsdHydrated:{call:()=>void};render:{call:()=>any};select:{call:(idx:number)=>void};tabsId:string}|value:{construct:()=>{active:number;disconnectedCallback:{call:()=>void};onCsrRendered:{call:()=>void};onDsdHydrated:{call:()=>void};render:{call:()=>any};select:{call:(idx:number)=>void};tabsId:string};styles:array(StyleSheetLike)}"
-          ]
-        },
-        "./open-theme-toggle": {
-          "publicShapeSha256": "e82efdb555dc8d7cd9e3fe7f6d24c011c4bd5ffdbef5ba1fad7b9849fa998d8a",
-          "publicSymbols": [
-            "OpenThemeToggle=type:{attributeChangedCallback:{call:(name:string,old:union(null|string),val:union(null|string))=>void};connectedCallback:{call:()=>void};onDsdHydrated:{call:()=>void};render:{call:()=>any};theme:union(\"dark\"|\"light\")}|value:{construct:()=>{attributeChangedCallback:{call:(name:string,old:union(null|string),val:union(null|string))=>void};connectedCallback:{call:()=>void};onDsdHydrated:{call:()=>void};render:{call:()=>any};theme:union(\"dark\"|\"light\")};styles:array(StyleSheetLike)}"
           ]
         }
       }

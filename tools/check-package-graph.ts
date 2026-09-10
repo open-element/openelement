@@ -12,7 +12,7 @@
  *   (publish-npm.ts materializes npm dependencies from the same source scan,
  *   so published artifacts still carry the dependency).
  * - dependency direction stays inside the explicit layering rules below
- *   (cycle detection alone cannot catch e.g. app -> ui or anything -> create)
+ *   (cycle detection alone cannot catch an invalid edge into create)
  * - no circular package dependencies exist
  * - release publish order lists every package after its dependencies
  */
@@ -42,9 +42,8 @@ import { formatError } from '@openelement/element';
  */
 export const ALLOWED_DEPENDENCY_DIRECTION: Readonly<Record<string, readonly string[]>> = {
   '@openelement/element': [],
-  '@openelement/ui': ['@openelement/element'],
   '@openelement/app': ['@openelement/element', '@openelement/url-pattern-list'],
-  '@openelement/adapter-vite': ['@openelement/element', '@openelement/app', '@openelement/ui'],
+  '@openelement/adapter-vite': ['@openelement/element', '@openelement/app'],
   '@openelement/create': [],
 };
 

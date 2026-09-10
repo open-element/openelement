@@ -29,7 +29,7 @@ export default defineConfig({
       routesDir: 'app/routes',
       islandsDir: 'app/islands',
       componentsDir: 'app/components',
-      packageIslands: ['@openelement/ui'],
+      packageIslands: ['@acme/components'],
     }),
   ],
 });

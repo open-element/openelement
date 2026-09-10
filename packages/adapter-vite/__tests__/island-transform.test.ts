@@ -102,7 +102,7 @@ Deno.test('entry-generators - generateClientEntry (v0.5.0 CE upgrade)', async (t
       },
       {
         tagName: 'theme-toggle',
-        modulePath: '@openelement/ui/open-theme-toggle',
+        modulePath: '@acme/components/open-theme-toggle',
         isPackage: true,
         strategy: 'idle' as const,
       },
@@ -110,7 +110,7 @@ Deno.test('entry-generators - generateClientEntry (v0.5.0 CE upgrade)', async (t
     const code = generateClientEntry(islands);
     // All islands (local + package) use dynamic import() - they self-register
     assertEquals(code.includes('import("/app/islands/my-counter.ts")'), true);
-    assertEquals(code.includes('import("@openelement/ui/open-theme-toggle")'), true);
+    assertEquals(code.includes('import("@acme/components/open-theme-toggle")'), true);
     // No explicit customElements.define() in generated entry
     assertEquals(code.includes("customElements.define('my-counter'"), false);
   });

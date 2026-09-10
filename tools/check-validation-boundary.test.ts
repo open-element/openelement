@@ -32,7 +32,7 @@ Deno.test('validation-boundary: schema-free source passes', () => {
 Deno.test('validation-boundary: real published package sources import no validation library (#1233)', () => {
   // The dual zod/valibot decision confines both libraries to the request-time
   // interop fixture; packages/*/src is the published surface and stays
-  // validation-agnostic (docs/governance/DEPENDENCY_POLICY.md).
+  // validation-agnostic (docs/architecture/packages-and-distribution.md).
   const failures = scanValidationBoundary();
   assert(
     failures.length === 0,

@@ -72,7 +72,7 @@ Sitemap: ${hostname}/sitemap.xml
 /**
  * Generate sitemap.xml and optionally robots.txt from dist/ output.
  *
- * @param distDir - Path to the SSG output directory (e.g., 'www/dist')
+ * @param distDir - Path to the SSG output directory (e.g., 'site/dist')
  * @param options - Sitemap configuration
  * @returns Array of generated file paths
  */

@@ -137,12 +137,10 @@ Deno.writeTextFileSync(denoJsonPath, JSON.stringify(denoJson, null, 2));
 
 // Step 3: Patch Vite only with workspace aliases needed to execute the local
 // implementation. The generated app itself remains limited to product imports.
-const aliases = [...allPackageAliases(repoRoot)]
-  .filter(([find]) => find !== '@openelement/ui/')
-  .map(([find, url]) => ({
-    find,
-    replacement: normalizeSlashes(fromFileUrl(url)),
-  }));
+const aliases = [...allPackageAliases(repoRoot)].map(([find, url]) => ({
+  find,
+  replacement: normalizeSlashes(fromFileUrl(url)),
+}));
 
 const viteConfigPath = join(appDir, 'vite.config.ts');
 let viteConfig = Deno.readTextFileSync(viteConfigPath);

@@ -1,22 +1,15 @@
 name: Feature
-description: Propose product work tied to the active version plan.
+description: Propose scoped Element or Router product work.
 title: '[Feature]: '
 body:
   - type: markdown
     attributes:
-      value: 'Read `docs/governance/PROJECT_WORKFLOW.md` and `docs/current/VERSION_PLAN.md` before filing.'
+      value: 'Read `CONTRIBUTING.md`, `docs/architecture/README.md`, and the active ADR index before filing.'
   - type: input
     id: version
     attributes:
       label: Target version
-      description: Example: vX.Y.Z — use the active line from docs/current/VERSION_PLAN.md
-    validations:
-      required: true
-  - type: input
-    id: plan
-    attributes:
-      label: Version plan
-      description: Example: docs/current/VERSION_PLAN.md
+      description: Example: 1.0 Alpha or a named maintenance line.
     validations:
       required: true
   - type: textarea

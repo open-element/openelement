@@ -88,7 +88,7 @@ Deno.test('createOpenPlugin() accepts options without error', () => {
     islandsDir: 'widgets',
     headExtras: '<link rel="stylesheet" />',
     html: { title: 'Test', lang: 'ja' },
-    packageIslands: ['@openelement/ui'],
+    packageIslands: ['@acme/components'],
     island: { upgradeStrategy: 'load' },
     middleware: { corsOrigin: '*' },
   });
@@ -264,7 +264,7 @@ Deno.test('createOpenPlugin() with all options branches covered', () => {
   const plugins = createOpenPlugin({
     routesDir: 'pages',
     islandsDir: 'islands',
-    packageIslands: ['@openelement/ui'],
+    packageIslands: ['@acme/components'],
     island: { upgradeStrategy: 'load' },
     middleware: { corsOrigin: ['http://localhost:3000'] },
     html: { title: 'Test', lang: 'ja' },

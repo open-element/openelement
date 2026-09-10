@@ -40,7 +40,6 @@ const PACKAGE_DESCRIPTIONS: Record<string, string> = {
   '@openelement/app': 'Application authoring APIs for the OpenElement Web Components framework.',
   '@openelement/create': 'Project generator for the OpenElement Web Components framework.',
   '@openelement/element': 'Custom element base class and authoring APIs for OpenElement.',
-  '@openelement/ui': 'Reference Web Components and UI primitives for OpenElement.',
 };
 
 const CREATE_BIN = {
@@ -248,24 +247,47 @@ export async function packPackage(
     const pkgJsonPath = `${tmp}/package/package.json`;
     const pkgJson = JSON.parse(Deno.readTextFileSync(pkgJsonPath));
     applyPackageJsonOverrides(pkg, pkgJson);
+    const sourceManifest = JSON.parse(Deno.readTextFileSync(`${pkg.dir}/deno.json`)) as {
+      peerDependencies?: Record<string, string>;
+      peerDependenciesMeta?: Record<string, { optional?: boolean }>;
+    };
+    for (const [name, value] of Object.entries(sourceManifest.peerDependencies ?? {})) {
+      const parsed = parseNpmSpec(value, `${pkg.name} peer dependency`);
+      if (!parsed) throw new Error(`Invalid npm peer dependency ${name}=${value}`);
+      pkgJson.peerDependencies = {
+        ...pkgJson.peerDependencies,
+        [name]: publishRange(parsed),
+      };
+    }
+    pkgJson.peerDependenciesMeta = {
+      ...pkgJson.peerDependenciesMeta,
+      ...sourceManifest.peerDependenciesMeta,
+    };
     pkgJson.dependencies = {
       ...dependencies,
       ...(pkgJson.dependencies ?? {}),
     };
-    // Standalone Element authors install tooling without Router/UI. Framework
-    // consumers supply these optional peers through their own app dependencies.
-    if (pkg.name === '@openelement/adapter-vite') {
-      for (const name of ['@openelement/app', '@openelement/ui']) {
-        const version = pkgJson.dependencies[name];
-        if (version) {
-          delete pkgJson.dependencies[name];
-          pkgJson.peerDependencies = { ...pkgJson.peerDependencies, [name]: version };
-          pkgJson.peerDependenciesMeta = {
-            ...pkgJson.peerDependenciesMeta,
-            [name]: { optional: true },
-          };
-        }
+    // Keep the two products independently installable. Route Mode does not
+    // install Element; framework consumers opt into Element explicitly.
+    // Standalone Element authors likewise install Vite tooling without Router.
+    const optionalWorkspacePeers = pkg.name === '@openelement/app'
+      ? ['@openelement/element']
+      : pkg.name === '@openelement/adapter-vite'
+      ? ['@openelement/app']
+      : [];
+    for (const name of optionalWorkspacePeers) {
+      const version = pkgJson.dependencies[name];
+      if (version) {
+        delete pkgJson.dependencies[name];
+        pkgJson.peerDependencies = { ...pkgJson.peerDependencies, [name]: version };
+        pkgJson.peerDependenciesMeta = {
+          ...pkgJson.peerDependenciesMeta,
+          [name]: { optional: true },
+        };
       }
+    }
+    for (const [name, metadata] of Object.entries(pkgJson.peerDependenciesMeta ?? {})) {
+      if ((metadata as { optional?: boolean }).optional) delete pkgJson.dependencies[name];
     }
     Deno.writeTextFileSync(pkgJsonPath, formatJson(pkgJson));
     await runCommand('tar', ['-czf', out, '-C', tmp, 'package'], { env: tarEnv });

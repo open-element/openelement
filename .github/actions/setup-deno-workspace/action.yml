@@ -19,6 +19,3 @@ runs:
       run: |
         deno install --frozen --node-modules-dir
         git diff --exit-code -- deno.lock
-    - name: Generate UI manifest
-      shell: bash
-      run: deno run --allow-read --allow-write --allow-env tools/generate-ui-manifest.ts

@@ -14,7 +14,7 @@
  * replaced by its compiler output in a staged copy, and `deno pack`
  * transpiles that (semantics-preserving TS->JS) into the tarball. The staged
  * copy lives in a minimal temporary workspace so the package's workspace
- * dependencies (e.g. @openelement/element for @openelement/ui) keep resolving
+ * dependencies (e.g. @openelement/element for @acme/components) keep resolving
  * to source during the pack-time module-graph build.
  *
  * The compiler emission predates strict pack-time typechecking: it drops the

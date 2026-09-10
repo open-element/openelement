@@ -17,7 +17,7 @@
  * - Machine state lives here (a WeakMap keyed by host), because compiled
  *   classes may only carry @property fields + methods.
  * - Visuals consume Open Props scale values through --oe-* semantic tokens
- *   (mirroring packages/ui/src/open-props-tokens.css conventions), injected
+ *   (mirroring third-party component package/src/open-props-tokens.css conventions), injected
  *   by the islands as a compiled static <style> node.
  *
  * Zag dependencies resolve through the ROOT deno.json import map — every
@@ -240,7 +240,7 @@ export function zagComboboxSnapshot(host: HTMLElement): ZagComboboxSnapshot | nu
 
 /**
  * Open Props scale subset + --oe-* semantic tokens (values mirror
- * packages/ui/src/open-props-tokens.css). Built here (a non-compiled module)
+ * third-party component package/src/open-props-tokens.css). Built here (a non-compiled module)
  * because compiled classes ban runtime top-level statements; the islands
  * reference the sheets through `static styles` — adoptedStyleSheets on the
  * shadow island, the document-head compiled-style sink on the light island

@@ -1,113 +1,63 @@
-import { PACKAGE_VERSION_TAG, PREVIOUS_PACKAGE_VERSION } from './project-constants.ts';
-import { runGit } from './lib/git.ts';
+import { RETAINED_PACKAGE_NAMES } from './project-constants.ts';
 
-// Replay the durable release state machine for a released tag from git
-// history: every recorded state of the autoflow3 evidence file plus the
-// degraded/recovered events documented in the release note (1.2, #855).
-// Fails when the final state is not completed or the note omits the event
-// chain that a degraded release documents.
-//
-// Usage: deno run -A tools/check-release-state-machine.ts [--to <version>]
-
-const toIndex = Deno.args.indexOf('--to');
-let version = (toIndex === -1 ? PACKAGE_VERSION_TAG : Deno.args[toIndex + 1])
-  .replace(/^v/u, '');
-if (toIndex === -1) {
-  // A release in flight has no completed evidence for the current line yet —
-  // the bump commit precedes the publish evidence, and every release-tier run
-  // (prepare, publish-existing) gates before the publish plan writes it.
-  // Replay the previous completed line instead; the in-flight line is
-  // verified separately by release:evidence:check once it exists.
-  //
-  // A non-completed attempt whose tag never shipped also counts as in flight:
-  // nothing was published, so retrying IS the recovery, not a degraded
-  // release. A non-completed state on a shipped line (tag exists) stays
-  // blocked — that is the degraded case this gate exists for.
-  const currentEvidence = `docs/release/autoflow3/v${version}.json`;
-  const history = (await runGit(['log', '--format=%H', '--', currentEvidence])).trim();
-  let inFlightReason: string | undefined;
-  if (!history) {
-    inFlightReason = `No evidence for v${version} yet`;
-  } else {
-    const newest = history.split('\n')[0];
-    const raw = await runGit(['show', `${newest}:${currentEvidence}`]);
-    const status = (JSON.parse(raw) as { status?: string }).status;
-    if (status !== 'completed') {
-      let tagMissing = false;
-      try {
-        await runGit(['rev-parse', '--verify', `v${version}`]);
-      } catch {
-        tagMissing = true;
-      }
-      if (tagMissing) {
-        inFlightReason = `v${version} ended a publish attempt as ${
-          status ?? 'unknown'
-        } and no tag shipped`;
-      }
-    }
-  }
-  if (inFlightReason) {
-    console.log(`${inFlightReason} (release in flight); replaying the previous line.`);
-    version = PREVIOUS_PACKAGE_VERSION;
-  }
-}
-const tag = `v${version}`;
-const evidencePath = `docs/release/autoflow3/${tag}.json`;
-const notePath = `docs/release/${tag}.md`;
-
-type EvidenceState = {
-  commit: string;
-  message: string;
-  kind: string;
-  status: string;
+export type ReleaseState = {
+  schemaVersion: number;
+  sourceVersion: string;
+  publishedVersion: string;
+  latestLandedTrain: string;
+  activeTarget: string;
+  nextPlannedTrain: string;
+  maturity: 'alpha' | 'beta' | 'stable';
 };
 
-const states: EvidenceState[] = [];
-for (
-  const line of (await runGit([
-    'log',
-    '--format=%H %s',
-    '--follow',
-    '--',
-    evidencePath,
-  ])).split('\n').filter(Boolean)
-) {
-  const [commit, ...rest] = line.split(' ');
-  const message = rest.join(' ');
-  if (!(await runGit(['ls-tree', '--name-only', commit, '--', evidencePath])).trim()) continue;
-  const raw = await runGit(['show', `${commit}:${evidencePath}`]);
-  const parsed = JSON.parse(raw) as { kind?: string; status?: string };
-  states.push({
-    commit,
-    message,
-    kind: parsed.kind ?? 'unknown',
-    status: parsed.status ?? 'unknown',
-  });
+export function validateReleaseState(
+  state: ReleaseState,
+  packageVersions: Map<string, string>,
+): string[] {
+  const failures: string[] = [];
+  if (state.schemaVersion !== 1) failures.push('unsupported release-state schema');
+  for (const name of RETAINED_PACKAGE_NAMES) {
+    const version = packageVersions.get(name);
+    if (!version) failures.push(`missing retained package: ${name}`);
+    else if (version !== state.sourceVersion) {
+      failures.push(`${name} version ${version} differs from sourceVersion ${state.sourceVersion}`);
+    }
+  }
+  if (state.latestLandedTrain !== `v${state.publishedVersion}`) {
+    failures.push('latestLandedTrain must identify publishedVersion');
+  }
+  if (state.activeTarget !== 'v1.0.0-alpha.1') {
+    failures.push('activeTarget must be the first public 1.0 prerelease baseline');
+  }
+  if (state.nextPlannedTrain !== 'not scheduled') {
+    failures.push('future trains must not be invented before admission');
+  }
+  return failures;
 }
 
-console.log(`Replayed ${states.length} recorded states of ${evidencePath}:`);
-for (const state of states) {
-  console.log(`- ${state.commit.slice(0, 8)} ${state.message}: ${state.kind}/${state.status}`);
-}
-
-if (states.length === 0) {
-  throw new Error(`No recorded evidence states for ${tag}.`);
-}
-const last = states[0];
-if (last.status !== 'completed') {
-  throw new Error(`Final recorded state of ${tag} is ${last.status}, not completed.`);
-}
-
-// Degraded events surface in the release note as immutable findings with a
-// tracking issue; a published-but-degraded version must document them and the
-// recovery that returned it to published (replayed as the final completion).
-const note = await Deno.readTextFile(notePath);
-const degradedEvents = note.matchAll(/tracked by #(\d+)/gu).map((match) => match[1]).toArray();
-if (degradedEvents.length > 0) {
+async function main(): Promise<void> {
+  const state = JSON.parse(
+    await Deno.readTextFile('docs/release/release-state.json'),
+  ) as ReleaseState;
+  const versions = new Map<string, string>();
+  for await (const entry of Deno.readDir('packages')) {
+    if (!entry.isDirectory) continue;
+    try {
+      const manifest = JSON.parse(await Deno.readTextFile(`packages/${entry.name}/deno.json`));
+      if (manifest.name && manifest.version) versions.set(manifest.name, manifest.version);
+    } catch (error) {
+      if (!(error instanceof Deno.errors.NotFound)) throw error;
+    }
+  }
+  const failures = validateReleaseState(state, versions);
+  if (failures.length > 0) {
+    console.error('Release state check failed:');
+    for (const failure of failures) console.error(`- ${failure}`);
+    Deno.exit(1);
+  }
   console.log(
-    `Release note documents degraded event(s) tracked by #${degradedEvents.join(', #')}.`,
+    `Release state check passed: source ${state.sourceVersion}; target ${state.activeTarget}.`,
   );
-} else {
-  console.log('Release note documents no degraded events.');
 }
-console.log('State machine replay: passed.');
+
+if (import.meta.main) await main();

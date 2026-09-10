@@ -100,8 +100,8 @@ Deno.test('embedded CLI version matches its package manifest', () => {
   assert(versionSource.includes(`'${manifest.version}'`));
 });
 
-Deno.test('Create and all five packages share one release version', () => {
-  const versions = ['adapter-vite', 'app', 'create', 'element', 'ui'].map((name) =>
+Deno.test('Create and all support-distribution packages share one release version', () => {
+  const versions = ['adapter-vite', 'app', 'create', 'element'].map((name) =>
     JSON.parse(Deno.readTextFileSync(join(packageDir, '..', name, 'deno.json'))).version as string
   );
   assertEquals([...new Set(versions)], [resolveVersions().app]);
@@ -272,15 +272,10 @@ Deno.test('starter blog is a pair of compiled page routes', () => {
   assertFalse(slugRouteExists, 'the legacy dynamic [slug] route must not ship');
 });
 
-Deno.test('starter --brand token stays aligned with the ui package --violet-6 (#804)', () => {
+Deno.test('starter owns a concrete --brand token without a UI package dependency', () => {
   const viteConfig = readTemplate('vite.config.ts');
   const brand = viteConfig.match(/--brand:(#[0-9a-fA-F]{3,8})/)?.[1];
-  const uiTokens = Deno.readTextFileSync(
-    join(packageDir, '..', 'ui', 'src', 'open-props-tokens.css'),
-  );
-  const violet6 = uiTokens.match(/--violet-6:\s*(#[0-9a-fA-F]{3,8})/)?.[1];
   assert(brand, 'starter vite.config.ts must define a --brand token');
-  assertEquals(brand, violet6);
 });
 
 Deno.test('source CLI generates a complete, token-free starter', async () => {

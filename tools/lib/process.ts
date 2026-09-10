@@ -77,8 +77,7 @@ export async function runWithOutput(
 /**
  * Run a command (git, gh, ...) capturing stdout; returns stdout on success.
  * Throws with the command line, exit code, and captured stdout+stderr on
- * failure. Kept distinct from lib/git.ts runGit, which throws stderr only —
- * the release flow's diagnostics rely on this exact error shape.
+ * failure. Release-flow diagnostics rely on this exact error shape.
  */
 export async function runCaptured(
   command: string[],

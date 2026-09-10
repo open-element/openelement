@@ -1,109 +1,26 @@
-# ADR-0108: npm Distribution via `deno pack` (Deno Development Toolchain)
+# ADR-0108: npm distribution via `deno pack`
 
-## Status
-
-Accepted.
+- Status: ACCEPTED
 
 ## Context
 
-ADR-0107 established npm as the only required release registry for openElement
-v0.41+. The original v0.41.0 plan also proposed pushing Vite+ to treat Deno as a
-first-class package manager, but that upstream contribution was declined in
-voidzero-dev/vite-plus#1888.
-
-At the same time, Deno 2.8 shipped `deno pack`, a built-in command that builds a
-Deno-first project into an npm-publishable tarball. This gives openElement a
-path to npm-primary distribution without migrating development to Node/npm and
-without depending on Vite+ upstream acceptance.
+OpenElement is developed as a Deno workspace, while its public packages must be
+ordinary npm artifacts usable by browser, Node, Bun, and edge toolchains.
 
 ## Decision
 
-openElement v0.41.0 distribution is **npm-primary distribution via `deno pack`**:
-
-- Development, build, test, and release tooling remain Deno-first. Deno is the
-  development toolchain; it is not the product identity or a runtime constraint
-  on published packages.
-- npm artifacts are produced with `deno pack`.
-- npm publishing uses `npm publish --provenance` from GitHub Actions.
-- JSR publish is no longer a required release exit gate; it remains available as
-  historical observation only.
-- Vite + Nitro remain the default engines behind the protocol boundary.
-- Runtime-free/browser-facing npm artifacts remain pure ESM, pure ECMAScript
-  where possible, and built on native W3C/WHATWG/Web Platform APIs before
-  host-specific APIs or custom wrappers.
-- Build/server glue may use Deno-first platform APIs when filesystem, process,
-  packaging, or publishing behavior requires a host environment, but those APIs
-  must not leak into runtime-free browser-facing package surfaces.
-- Release publishing must run the packed artifact gate before `npm publish`:
-  `pack:dry-run`, `publint --strict`, arethetypeswrong with an ESM-only profile,
-  and tarball extraction scans for CommonJS artifacts and runtime-free host API
-  leakage.
+- Deno remains the repository toolchain; it is not a runtime requirement of
+  browser-facing artifacts.
+- `deno pack` produces npm tarballs for all retained packages.
+- Packed artifacts are checked for export completeness, declarations, pure ESM,
+  dependency ranges, and runtime-boundary violations before publication.
+- npm publication uses GitHub Actions Trusted Publishing/OIDC and provenance.
+- Packages publish in dependency order.
+- JSR is not a release gate.
 
 ## Consequences
 
-### Positive
-
-- No dependency on Vite+ upstream for Deno package-manager support.
-- No Node/npm workspace migration required.
-- Deno 2.8 handles TypeScript transpilation, `.d.ts` generation, specifier
-  rewriting, and `package.json` synthesis in one command.
-- npm is the de-facto registry for the target audiences (browser tooling,
-  Node/Edge runtimes, design-system consumers).
-
-### Neutral
-
-- `deno pack` is new; the project becomes an early adopter and must verify
-  tarball output on every release.
-- Build/server glue packages (`ssg`, `content`, `adapter-vite`, `create`) retain
-  Deno/Node APIs; runtime-free packages must stay Web Standard.
-- The quality gate is layered: hard artifact checks enforce pure ESM and
-  host-API absence, while modern Web Standards preference is enforced through
-  documented exceptions, integration tests, and release review.
-
-### Negative
-
-- `deno pack` does not synthesize `bin`, `repository`, `keywords`, `scripts`, or
-  `peerDependencies`; these must be injected when needed.
-- `@openelement/create` needs an explicit `bin` configuration for `npx` usage.
-- Internal `@openelement/*` dependencies must be published in topological order
-  because `deno pack` leaves bare workspace specifiers as bare npm names.
-- Existing consumers using `jsr:@openelement/*` will need to switch to
-  `npm:@openelement/*`; already published JSR versions remain available but are
-  not the current line.
-
-## Implementation Summary
-
-1. **Toolchain**: require Deno 2.8+, convert internal imports to `npm:`, add
-   `deno task pack` / `deno task publish:npm`.
-2. **Boundaries**: keep `MemoryIsrCache` in `@openelement/core/isr` as the
-   reference ISR cache; `FileIsrCache` and `router/page-loader` were removed
-   during the architecture audit cleanup because no production code consumed
-   them. Add `deno-api:check` gate for runtime-free packages and extend release
-   gates to inspect packed npm artifacts for host-specific runtime leakage.
-3. **Adapter-vite**: default `ssg-package-resolver` to npm mode; JSR source
-   fetch remains opt-in.
-4. **Starter**: `@openelement/create` emits `npm:` imports and resolves versions
-   from the npm registry.
-5. **Release**: `tools/autoflow/release.ts` runs `package-artifacts:check`
-   before `publish:npm`; GitHub Actions uses `actions/setup-node` and
-   `secrets.NPM_TOKEN` for provenance publishing. _(Superseded by #1187 in
-   v0.44 Beta.2: publication now uses npm Trusted Publishing/OIDC — see
-   `docs/runbooks/npm-trusted-publishing.md`; the long-lived token path is
-   removed.)_
-6. **Smoke**: post-publish consumer smoke installs from npm and validates Node
-   ESM, Deno `npm:`, jsDelivr browser-safe exports, and Nitro Node/Workers.
-
-## Non-Goals
-
-- No Node runtime migration for openElement development.
-- No npm/pnpm/yarn workspace source of truth.
-- No further Vite+ Deno PM upstream advocacy in v0.41.0.
-- No removal of existing JSR published versions.
-
-## Related
-
-- ADR-0096: Protocol-First Vite + Nitro Runtime Architecture.
-- ADR-0098: EntryDescriptor Route Manifest Contract.
-- ADR-0107: npm-Only Distribution.
-- docs/roadmap/ROADMAP.md
-- docs/current/VERSION_PLAN.md
+The repository keeps Deno-native configuration and tests, while disposable
+consumer projects install the produced tarballs with npm and exercise the
+actual published shape. Publication remains an explicit maintainer action after
+the exact candidate SHA passes the release qualification workflow.

@@ -9,7 +9,7 @@
 import { runCommand } from './lib/process.ts';
 import { type PackageInfo, readPackages, sortPackages } from './lib/package-graph.ts';
 
-const COMMANDS = new Set(['typecheck']);
+const COMMANDS = new Set(['build', 'typecheck']);
 
 function exportEntries(pkg: PackageInfo): string[] {
   if (typeof pkg.exports === 'string') return [pkg.exports];
@@ -105,8 +105,6 @@ async function main(): Promise<void> {
   for (const pkg of packages) {
     await typecheckPackage(pkg);
   }
-
-  await runCommand('deno', ['check', 'www/vite.config.ts', 'www/e2e/playwright.config.ts']);
 }
 
 if (import.meta.main) await main();

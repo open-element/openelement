@@ -17,7 +17,7 @@
  *   6. action/method/enctype/target IDL vs attribute resolution, including
  *      submitter formaction/formmethod/formenctype/formtarget overrides
  *      (IDL reads the document URL when the attribute is absent — #576).
- *   7. Restore-reason path: the component (like packages/ui open-input.tsx)
+ *   7. Restore-reason path: the component (like third-party component package open-input.tsx)
  *      implements formResetCallback only; the inherited
  *      formStateRestoreCallback is a safe no-op because no restore hook is
  *      registered. Only what the component implements is asserted.

@@ -2,7 +2,7 @@
  * Assert the #1233 (B2.11) validation-library boundary: published package
  * source stays validation-agnostic. zod and valibot are confined to the
  * request-time interop fixture and its docs recipe — see
- * docs/governance/DEPENDENCY_POLICY.md.
+ * docs/architecture/packages-and-distribution.md.
  */
 
 import { walkSync } from '@std/fs/walk';
@@ -10,7 +10,6 @@ import { extractStaticModuleSpecifiers } from './lib/typescript-ast.ts';
 
 const SOURCE_ROOTS = [
   'packages/element/src',
-  'packages/ui/src',
   'packages/app/src',
   'packages/adapter-vite/src',
   'packages/create/src',
@@ -46,7 +45,7 @@ function main(): void {
     console.error('Validation-library boundary check failed:');
     for (const failure of failures) console.error(`- ${failure}`);
     console.error(
-      'Published packages are validation-agnostic; see docs/governance/DEPENDENCY_POLICY.md.',
+      'Published packages are validation-agnostic; see docs/architecture/packages-and-distribution.md.',
     );
     Deno.exit(1);
   }

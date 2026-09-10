@@ -1,9 +1,9 @@
 /**
  * /blog/welcome post page element — static prerendered. A post is a compiled
- * page route in 0.44: static markup in the render() below, page rules in the
+ * page route in the 1.0 Alpha baseline: static markup in the render() below, page rules in the
  * global baseline (vite.config.ts, scoped under the host tag). The path
  * derives the tag ('blog-welcome'); there is no dynamic [slug] route in
- * grammar v1 (no raw-HTML sink — see the v0.44 migration guide), so unknown
+ * grammar v1 (with no raw-HTML sink), so unknown
  * slugs fall through to the styled 404 (#922).
  */
 import { element, OpenElement } from '@openelement/element';
@@ -23,7 +23,7 @@ export default class BlogWelcomePage extends OpenElement {
         <article class='post-body'>
           <p>
             This starter keeps one post route present so the blog is wired up from the first build.
-            In 0.44 a post is a compiled page: edit{' '}
+            In the 1.0 Alpha baseline a post is a compiled page: edit{' '}
             <code>app/components/page-blog-welcome.tsx</code> and the route module{' '}
             <code>app/routes/blog/welcome.tsx</code> next to it.
           </p>

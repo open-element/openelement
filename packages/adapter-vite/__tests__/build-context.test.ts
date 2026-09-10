@@ -25,7 +25,7 @@ Deno.test('OpenElementBuildContext reset clears all mutable state', () => {
   // Mutate
   ctx.phase1.islandTagNames = ['a', 'b'];
   ctx.phase1.packageIslandDecls = [{ tagName: 'x', modulePath: './x', hydrate: 'idle' }];
-  ctx.phase1.userResolveAlias = { '@openelement/ui': './ui' };
+  ctx.phase1.userResolveAlias = { '@acme/components': './ui' };
 
   ctx.reset();
 
@@ -35,7 +35,7 @@ Deno.test('OpenElementBuildContext reset clears all mutable state', () => {
   // NOTE: userResolveAlias is intentionally NOT reset - it's user configuration,
   // not build state (see build-context.ts:138-140). It persists through reset()
   // so Phase 2/3 can still access resolve aliases after buildStart() calls reset().
-  assertEquals(ctx.phase1.userResolveAlias, { '@openelement/ui': './ui' });
+  assertEquals(ctx.phase1.userResolveAlias, { '@acme/components': './ui' });
 });
 
 Deno.test('OpenElementBuildContext populatePhase3 sets phase3 invariants', () => {

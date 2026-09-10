@@ -3,8 +3,8 @@
 Application authoring API for openElement: pages, routes, loaders, actions,
 islands and the SPA bootstrap.
 
-> Stable surface frozen under ADR-0122 (request-time application loop);
-> v0.44 re-compiles page authoring onto compiled element classes (ADR-0143).
+> The 1.0 baseline uses compiled element classes for page authoring
+> (ADR-0143) while Router remains independently consumable.
 
 Use the package root in route, island, and component modules. A route module
 default-exports the compiled page class wrapped in `definePage()`:
@@ -53,7 +53,7 @@ export default defineConfig({
     openElement({
       routesDir: 'app/routes',
       islandsDir: 'app/islands',
-      packageIslands: ['@openelement/ui'],
+      packageIslands: ['@acme/components'],
       content: { blog: { contentDir: 'content/blog' } },
       i18n: { locales: ['en', 'zh'], defaultLocale: 'en' },
     }),

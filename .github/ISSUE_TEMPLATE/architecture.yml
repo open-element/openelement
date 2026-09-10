@@ -4,7 +4,7 @@ title: '[ADR]: '
 body:
   - type: markdown
     attributes:
-      value: 'Architecture changes must follow `docs/governance/PROJECT_WORKFLOW.md`.'
+      value: 'Read `CONTRIBUTING.md` and the current architecture before proposing a hard-to-reverse decision.'
   - type: input
     id: adr
     attributes:

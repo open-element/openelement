@@ -664,11 +664,11 @@ export async function scanIslandMeta(
  *
  * Example package export:
  * ```ts
- * // @openelement/ui/index.ts
+ * // @acme/components/index.ts
  * export { manifest } from './manifest.ts';
  * ```
  *
- * @param packageNames - List of package names to scan (e.g., ['@openelement/ui'])
+ * @param packageNames - List of package names to scan (e.g., ['@acme/components'])
  * @returns Array of OpenElementPackageManifest
  */
 export async function scanPackageManifests(

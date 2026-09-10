@@ -171,7 +171,7 @@ Deno.test(
 );
 
 // Regression: Rolldown/Vite content hashes are base64url and may contain
-// `-`/`_` (real www/dist output: scroll-reveal-PciKqeu-.js,
+// `-`/`_` (real site/dist output: scroll-reveal-PciKqeu-.js,
 // open-tabs-CcG-LXBP.js, flexsearch.bundle.module.min-BKwbD_Kx.js).
 // The old filename regex ([A-Za-z0-9]+ hash, lazy tagName split) silently
 // dropped these chunks.
@@ -182,13 +182,13 @@ Deno.test('buildIslandChunkMap matches base64url hashes with trailing dash via m
     const viteDir = join(tmp, 'dist', 'client', '.vite');
     Deno.mkdirSync(viteDir, { recursive: true });
 
-    // Mirrors the real www/dist/client/.vite/manifest.json shape.
+    // Mirrors the real site/dist/client/.vite/manifest.json shape.
     const manifest = {
       'app/islands/scroll-reveal.tsx': {
         file: 'islands/scroll-reveal-PciKqeu-.js',
         name: 'scroll-reveal',
       },
-      '../packages/ui/src/open-tabs.tsx': {
+      '../third-party component package/src/open-tabs.tsx': {
         file: 'islands/open-tabs-CcG-LXBP.js',
         name: 'open-tabs',
       },

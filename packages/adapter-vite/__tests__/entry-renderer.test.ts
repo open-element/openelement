@@ -230,18 +230,18 @@ Deno.test('renderEntry: package islands are included in island upgrade entry', (
     packageManifests: [
       {
         schemaVersion: '1.0.0',
-        packageName: '@openelement/ui',
+        packageName: '@acme/components',
         version: '0.17.0',
         declarations: [
           {
             tagName: 'open-layout',
             className: 'OpenLayout',
-            openElement: { module: '@openelement/ui/open-layout', hydrate: 'load' },
+            openElement: { module: '@acme/components/open-layout', hydrate: 'load' },
           },
           {
             tagName: 'open-button',
             className: 'OpenButton',
-            openElement: { module: '@openelement/ui/open-button', hydrate: 'idle' },
+            openElement: { module: '@acme/components/open-button', hydrate: 'idle' },
           },
         ],
       },
@@ -251,7 +251,7 @@ Deno.test('renderEntry: package islands are included in island upgrade entry', (
 
   assertStringIncludes(code, 'open-layout');
   assertStringIncludes(code, 'open-button');
-  assertStringIncludes(code, '@openelement/ui');
+  assertStringIncludes(code, '@acme/components');
 });
 
 Deno.test('renderEntry: package islands are not imported by SSR entry', () => {
@@ -259,18 +259,18 @@ Deno.test('renderEntry: package islands are not imported by SSR entry', () => {
     packageManifests: [
       {
         schemaVersion: '1.0.0',
-        packageName: '@openelement/ui',
+        packageName: '@acme/components',
         version: '0.17.0',
         declarations: [
           {
             tagName: 'open-layout',
             className: 'OpenLayout',
-            openElement: { module: '@openelement/ui/open-layout', hydrate: 'load' },
+            openElement: { module: '@acme/components/open-layout', hydrate: 'load' },
           },
           {
             tagName: 'open-button',
             className: 'OpenButton',
-            openElement: { module: '@openelement/ui/open-button', hydrate: 'idle' },
+            openElement: { module: '@acme/components/open-button', hydrate: 'idle' },
           },
         ],
       },
@@ -278,8 +278,10 @@ Deno.test('renderEntry: package islands are not imported by SSR entry', () => {
   });
   const code = renderEntry(desc);
 
-  assertStringIncludes(code, '"open-layout": "@openelement/ui/open-layout"');
-  assertFalse(code.includes("import * as __island_kiss_layout from '@openelement/ui/open-layout'"));
+  assertStringIncludes(code, '"open-layout": "@acme/components/open-layout"');
+  assertFalse(
+    code.includes("import * as __island_kiss_layout from '@acme/components/open-layout'"),
+  );
   assertFalse(code.includes('__kiss_get_default_export'));
   assertFalse(code.includes("customElements.define('open-layout'"));
   assertFalse(code.includes('__island_kiss_layout.default'));
@@ -340,13 +342,13 @@ Deno.test('renderEntry: imports Hono and DSD renderer', () => {
 Deno.test('renderEntry: app shell composes the page host through the compiled serializer', () => {
   const desc = buildEntryDescriptor(basicRoutes, {
     ssg: true,
-    appShell: { tagName: 'open-layout', import: '@openelement/ui/open-layout', props: {} },
+    appShell: { tagName: 'open-layout', import: '@acme/components/open-layout', props: {} },
   });
   const code = renderEntry(desc);
 
   assertStringIncludes(code, 'function __renderAppShell(pageHtml, routePath');
   assertStringIncludes(code, '"tagName": "open-layout"');
-  assertStringIncludes(code, 'import * as __shell_0 from "@openelement/ui/open-layout";');
+  assertStringIncludes(code, 'import * as __shell_0 from "@acme/components/open-layout";');
   assertStringIncludes(
     code,
     '__ssr(shell.tagName, layoutProps, { route: routePath }, 0, new Map([["", trustedHtml(content)]]))',
@@ -358,7 +360,7 @@ Deno.test('renderEntry: unconfigured appShell defaults to false (no import)', ()
   const desc = buildEntryDescriptor(basicRoutes, { ssg: true });
   const code = renderEntry(desc);
 
-  assertFalse(code.includes('import "@openelement/ui/open-layout";'));
+  assertFalse(code.includes('import "@acme/components/open-layout";'));
   assertStringIncludes(code, '"default": false');
   assertStringIncludes(code, 'if (!shell) return content;');
 });
@@ -367,7 +369,7 @@ Deno.test('renderEntry: appShell false renders route content without default lay
   const desc = buildEntryDescriptor(basicRoutes, { ssg: true, appShell: false });
   const code = renderEntry(desc);
 
-  assertFalse(code.includes('import "@openelement/ui/open-layout";'));
+  assertFalse(code.includes('import "@acme/components/open-layout";'));
   assertStringIncludes(code, '"default": false');
   assertStringIncludes(code, 'if (!shell) return content;');
 });
@@ -566,13 +568,13 @@ Deno.test('renderEntry: complex scenario with all features', () => {
     packageManifests: [
       {
         schemaVersion: '1.0.0',
-        packageName: '@openelement/ui',
+        packageName: '@acme/components',
         version: '0.17.0',
         declarations: [
           {
             tagName: 'open-layout',
             className: 'OpenLayout',
-            openElement: { module: '@openelement/ui/open-layout', hydrate: 'load' },
+            openElement: { module: '@acme/components/open-layout', hydrate: 'load' },
           },
         ],
       },
@@ -783,18 +785,18 @@ Deno.test('renderEntry: package island with ssr===false excluded from SSR but in
     packageManifests: [
       {
         schemaVersion: '1.0.0',
-        packageName: '@openelement/ui',
+        packageName: '@acme/components',
         version: '0.17.0',
         declarations: [
           {
             tagName: 'open-layout',
             className: 'OpenLayout',
-            openElement: { module: '@openelement/ui/open-layout', hydrate: 'load', ssr: true },
+            openElement: { module: '@acme/components/open-layout', hydrate: 'load', ssr: true },
           },
           {
             tagName: 'open-widget',
             className: 'OpenWidget',
-            openElement: { module: '@openelement/ui/open-widget', hydrate: 'idle', ssr: false },
+            openElement: { module: '@acme/components/open-widget', hydrate: 'idle', ssr: false },
           },
         ],
       },
@@ -808,8 +810,8 @@ Deno.test('renderEntry: package island with ssr===false excluded from SSR but in
   // Package islands with ssr:false remain client-only
   assertFalse(code.includes('__registerSsrComponent("open-widget"'));
   // But both should be in the island map
-  assertStringIncludes(code, '"open-layout": "@openelement/ui/open-layout"');
-  assertStringIncludes(code, '"open-widget": "@openelement/ui/open-widget"');
+  assertStringIncludes(code, '"open-layout": "@acme/components/open-layout"');
+  assertStringIncludes(code, '"open-widget": "@acme/components/open-widget"');
 });
 
 Deno.test('buildEntryDescriptor: ssr field is extracted from manifest declarations', () => {
@@ -817,23 +819,23 @@ Deno.test('buildEntryDescriptor: ssr field is extracted from manifest declaratio
     packageManifests: [
       {
         schemaVersion: '1.0.0',
-        packageName: '@openelement/ui',
+        packageName: '@acme/components',
         version: '0.17.0',
         declarations: [
           {
             tagName: 'ssr-component',
             className: 'SsrComponent',
-            openElement: { module: '@openelement/ui/ssr-component', ssr: true },
+            openElement: { module: '@acme/components/ssr-component', ssr: true },
           },
           {
             tagName: 'client-only-component',
             className: 'ClientOnlyComponent',
-            openElement: { module: '@openelement/ui/client-only-component', ssr: false },
+            openElement: { module: '@acme/components/client-only-component', ssr: false },
           },
           {
             tagName: 'default-component',
             className: 'DefaultComponent',
-            openElement: { module: '@openelement/ui/default-component' },
+            openElement: { module: '@acme/components/default-component' },
           },
         ],
       },

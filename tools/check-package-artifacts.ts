@@ -16,7 +16,6 @@ const ATTW_VERSION = '0.18.4';
 
 const RUNTIME_FREE_PACKAGES = new Set([
   '@openelement/element',
-  '@openelement/ui',
   '@openelement/app',
 ]);
 

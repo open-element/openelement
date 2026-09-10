@@ -413,7 +413,7 @@ Deno.test('openPlugin: explicit SSG mode includes @hono/vite-dev-server', () => 
 // ─── packageIslands Option ────────────────────────────────────
 
 Deno.test('openPlugin: accepts packageIslands option', () => {
-  const plugins = createOpenPlugin({ packageIslands: ['@openelement/ui'] });
+  const plugins = createOpenPlugin({ packageIslands: ['@acme/components'] });
   assertExists(plugins);
   assertEquals(plugins.length, 9);
 });
@@ -426,7 +426,7 @@ Deno.test('openPlugin: accepts empty packageIslands', () => {
 
 Deno.test('openPlugin: accepts multiple packageIslands', () => {
   const plugins = createOpenPlugin({
-    packageIslands: ['@openelement/ui', '@openelement/element'],
+    packageIslands: ['@acme/components', '@openelement/element'],
   });
   assertExists(plugins);
 });

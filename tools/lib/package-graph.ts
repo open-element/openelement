@@ -283,7 +283,6 @@ export function releasePublishOrder(packages: PackageInfo[]): PackageInfo[] {
     '@openelement/element',
     '@openelement/app',
     '@openelement/adapter-vite',
-    '@openelement/ui',
     '@openelement/create',
   ];
   const topological = sortPackages(packages);

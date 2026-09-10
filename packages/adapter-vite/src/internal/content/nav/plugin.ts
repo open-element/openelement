@@ -3,7 +3,7 @@
  *
  * Build-time Vite plugin that scans route files for `meta` exports and writes
  * app/data/_generated-nav.ts. Site search is handled separately by Pagefind
- * (ADR-0123 item 17, #867) — see www/build-pagefind.ts.
+ * (ADR-0123 item 17, #867) — see site/build-pagefind.ts.
  */
 
 import type { Plugin, ViteDevServer } from 'vite';

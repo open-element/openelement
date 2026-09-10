@@ -1,7 +1,7 @@
 /**
  * WTR pilot fixture (#1333): minimal form-associated custom element (FACE).
  *
- * Distilled from packages/ui/src/open-input.tsx (the production FACE) down to
+ * Distilled from third-party component package/src/open-input.tsx (the production FACE) down to
  * the pilot form contract: required/valueMissing validity mirroring,
  * setFormValue sync, and formResetCallback restore. The inner native <input>
  * lives in the shadow root, so its constraints never reach the outer form;

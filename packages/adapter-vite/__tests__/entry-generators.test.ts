@@ -66,11 +66,11 @@ Deno.test('client:load island loads immediately', () => {
   const code = generateClientEntry([
     {
       tagName: 'open-theme-toggle',
-      modulePath: '@openelement/ui/open-theme-toggle',
+      modulePath: '@acme/components/open-theme-toggle',
       strategy: 'load',
     },
   ]);
-  assert(code.includes('import("@openelement/ui/open-theme-toggle")'));
+  assert(code.includes('import("@acme/components/open-theme-toggle")'));
   assert(code.includes('load: ["open-theme-toggle"]'));
   assertEntrySyntax(code);
 });
@@ -88,10 +88,10 @@ Deno.test('mixed load+idle', () => {
   const code = generateClientEntry([
     {
       tagName: 'open-theme-toggle',
-      modulePath: '@openelement/ui/open-theme-toggle',
+      modulePath: '@acme/components/open-theme-toggle',
       strategy: 'load',
     },
-    { tagName: 'open-hero-ping', modulePath: '@openelement/ui/open-hero-ping', strategy: 'idle' },
+    { tagName: 'open-hero-ping', modulePath: '@acme/components/open-hero-ping', strategy: 'idle' },
   ]);
   assert(code.includes('load: ["open-theme-toggle"]'));
   assert(code.includes('idle: ["open-hero-ping"]'));
@@ -151,13 +151,13 @@ Deno.test('package island strategy:load is preserved in client entry', () => {
   const code = generateClientEntry([
     {
       tagName: 'open-theme-toggle',
-      modulePath: '@openelement/ui/open-theme-toggle',
+      modulePath: '@acme/components/open-theme-toggle',
       strategy: 'load',
       isPackage: true,
     },
     {
       tagName: 'open-button',
-      modulePath: '@openelement/ui/open-button',
+      modulePath: '@acme/components/open-button',
       strategy: 'idle',
       isPackage: true,
     },
@@ -166,8 +166,8 @@ Deno.test('package island strategy:load is preserved in client entry', () => {
   // Load island must appear in the immediate-load array
   assert(code.includes('"open-theme-toggle"'));
   // Both must appear in the island map
-  assert(code.includes('import("@openelement/ui/open-theme-toggle")'));
-  assert(code.includes('import("@openelement/ui/open-button")'));
+  assert(code.includes('import("@acme/components/open-theme-toggle")'));
+  assert(code.includes('import("@acme/components/open-button")'));
 });
 
 Deno.test('client entry safely escapes tag names and module paths', () => {
@@ -186,11 +186,11 @@ Deno.test('client entry safely escapes tag names and module paths', () => {
 Deno.test('client entry admits only validated module specifiers before code generation', () => {
   const admitted = validateClientIslandEntry({
     tagName: 'x-safe',
-    modulePath: '@openelement/ui/open-button',
+    modulePath: '@acme/components/open-button',
     strategy: 'load',
   });
 
-  assertEquals(admitted.modulePath, '@openelement/ui/open-button');
+  assertEquals(admitted.modulePath, '@acme/components/open-button');
   assertEquals(admitted.tagName, 'x-safe');
 
   for (const modulePath of REJECTED_ISLAND_MODULE_PATHS) {

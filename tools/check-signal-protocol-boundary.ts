@@ -4,11 +4,10 @@ import { readJson } from './lib/fs.ts';
 
 type Failure = { file: string; message: string };
 
-const SOURCE_ROOTS = ['packages/element/src', 'packages/app/src', 'packages/ui/src'];
+const SOURCE_ROOTS = ['packages/element/src', 'packages/app/src'];
 const PROTECTED_PACKAGE_CONFIGS = [
   'packages/element/deno.json',
   'packages/app/deno.json',
-  'packages/ui/deno.json',
 ];
 const FORBIDDEN_REQUIRED_DEPS = ['@preact/signals-core', '@preact/signals'];
 

@@ -255,7 +255,7 @@ Deno.test('scanRoutes does not flag plain element routes embedding definePage sa
   try {
     const routesDir = join(dir, 'routes');
     await Deno.mkdir(routesDir, { recursive: true });
-    // Mirrors www/app/routes/guide/*.tsx: a plain element route (tagName +
+    // Mirrors site/app/routes/guide/*.tsx: a plain element route (tagName +
     // defineCustomElement) whose prose embeds a definePage( code sample in a
     // template literal. The sample must NOT flag the route as definePage.
     await Deno.writeTextFile(

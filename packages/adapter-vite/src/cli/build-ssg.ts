@@ -326,7 +326,7 @@ async function buildSSG(
   // CSSStyleSheet itself, so the lit entry needs no polyfill banner.
   const ssgEntryCode = (renderer === 'lit' ? '' : generateSsrPolyfillBanner() + '\n') +
     renderEntry(ssgDescriptor);
-  // Deno import map resolution handles bare specifiers (e.g. @openelement/ui/open-callout)
+  // Deno import map resolution handles bare specifiers (e.g. @acme/components/open-callout)
   // via the createDenoImportMapPlugin added to the Phase 3 viteBuild plugins below.
 
   try {

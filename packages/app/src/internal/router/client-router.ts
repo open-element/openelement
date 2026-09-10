@@ -12,12 +12,20 @@
 // LoaderContext/ActionContext: the client-side chain supplies only params
 // (+ formData for actions) and signals failure by throwing (#570, ADR-0119
 // frozen semantics — types clarified, runtime unchanged).
-import type { SpaActionContext, SpaLoaderContext } from '@openelement/element';
-import { createLogger } from '@openelement/element/logger';
-import { ERROR_PREFIX } from '@openelement/element/authoring';
 import { type RouteMatch, type RouteRecord, RouteTable } from './route-table.ts';
 
-const log = createLogger('router');
+const ERROR_PREFIX = '[openElement]';
+const log = {
+  error: (...args: unknown[]) => console.error('[router]', ...args),
+};
+
+export interface SpaLoaderContext {
+  params: Record<string, string>;
+}
+
+export interface SpaActionContext extends SpaLoaderContext {
+  formData?: FormData;
+}
 
 export type RouterMode = 'history' | 'hash' | 'auto';
 

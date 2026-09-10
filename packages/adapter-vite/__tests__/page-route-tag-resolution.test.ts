@@ -15,7 +15,7 @@
  * tag (e.g. routes/workspace-records.tsx -> @element('workspace-records-page'))
  * failed closed at REQUEST time: renderDsd tag "workspace-records" does not
  * match the compiled program tag "workspace-records-page" (OE_PROGRAM_MISSING)
- * → HTTP 500. Proven by `deno task fullstack:workspace-qualification`.
+ * → HTTP 500. Covered by the request-time and framework-mode fixtures.
  */
 import { assertEquals, assertStringIncludes } from '@std/assert';
 import { buildEntryDescriptor, renderEntry } from '../src/internal/ssg/index.ts';

@@ -6,9 +6,8 @@
  * verifies @openelement/element can be consumed from npm in Deno and Node.
  * Also checks the jsDelivr CDN browser-safe export and Nitro build output.
  *
- * This script is a RELEASE GATE (#1216, A10.8): it is wired into the
- * post-publish release plan (tools/autoflow/release.ts) and the published
- * consumer workflow (.github/workflows/published-consumers.yml), so its
+ * This script is a post-publish gate used by the published-consumer workflow,
+ * so its
  * availability probes use the canonical verdict contract
  * (tools/gate-verdict.ts) and fail closed. Only a CONFIRMED registry 200
  * whose payload confirms the exact version admits the release; a confirmed

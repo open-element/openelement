@@ -43,7 +43,7 @@ jobs:
           persist-credentials: false
       # #1156 (B2.6): mature OSS governance gates (ADR-0144) — fail fast,
       # before the heavy matrix. Binaries pinned by version + SHA-256;
-      # zizmor-action pinned in tools/check-action-pins.ts.
+      # Action revisions and downloaded binaries are pinned in this workflow.
       - name: actionlint (workflow lint)
         run: |
           curl -sSfL -o /tmp/actionlint.tar.gz \
@@ -77,7 +77,7 @@ jobs:
         # All three engines up front: the gate's fixture:request-time:gate
         # runs the request-time fixture suite on Chromium, Firefox and WebKit.
         run: ./node_modules/.bin/playwright install --with-deps chromium firefox webkit
-      - name: AutoFlow3 CI gate
+      - name: OpenElement CI gate
         run: deno task autoflow:ci
       # #1232 (B2.10): e2e failures must be inspectable — the 'github'
       # reporter annotates the run inline, and this step publishes the
@@ -89,11 +89,8 @@ jobs:
         with:
           name: playwright-failure-artifacts-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
-            www/e2e/test-results
-            www/e2e/playwright-report
             e2e/starter-smoke/test-results
             packages/adapter-vite/__fixtures__/request-time/e2e/test-results
-            packages/adapter-vite/__fixtures__/ui-dogfood/e2e/test-results
             packages/adapter-vite/__fixtures__/app-flow-native/e2e/test-results
             packages/adapter-vite/__fixtures__/app-flow-lit/e2e/test-results
           if-no-files-found: ignore
@@ -164,30 +161,6 @@ jobs:
             grep -q 'requires a runtime with WHATWG URLPattern' serve-error.log
           fi
 
-  # #1276 (B1.3-F1): the definePage route SSR tag-mismatch defect shipped
-  # because the workspace runtime qualification was not CI-gated. Run the full
-  # qualification leg (starter build -> Node 24 standalone + Wrangler workerd,
-  # byte-identical HTML across both) as a required CI job so this defect class
-  # cannot regress silently. Needs real Node 24 (the serve.mjs runtime floor,
-  # #969) — the autoflow-ci job itself has no Node setup.
-  workspace-qualification:
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      # v7.0.1
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          # #1156 R11: same exact-SHA expression as every required job.
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
-          persist-credentials: false
-      - uses: ./.github/actions/setup-deno-workspace
-      # v7.0.0
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
-        with:
-          node-version: '24'
-      - name: Workspace runtime qualification (Node 24 + workerd)
-        run: deno task fullstack:workspace-qualification
-
   # #1228 (B2.5): the deployment guide and PACKAGE_SURFACE.md claim the
   # generated dist/server artifacts run on Bun. A claim that survives only on
   # local evidence is an overclaim, so the same fixture the Node legs serve is
@@ -226,51 +199,3 @@ jobs:
           done
           curl -sf http://127.0.0.1:4893/ | grep -q 'request-time fixture home'
           curl -sf http://127.0.0.1:4893/live | grep -q 'request-time live'
-
-  # #1156 (ADR-0146): one deterministic exact-SHA PR full-CI evidence artifact.
-  # This job runs only for pull requests and only after every required
-  # full-matrix job succeeded (default needs gating — no `if: always()`), so a
-  # failed, skipped or cancelled matrix leg produces no artifact at all. The
-  # record is derived from trusted workflow context (github.* / needs.*),
-  # never from user-controlled inputs; the release lane independently resolves
-  # the run through the GitHub API before trusting any field.
-  pr-full-ci-evidence:
-    name: pr-full-ci-evidence
-    if: github.event_name == 'pull_request'
-    needs: [
-      dependency-review,
-      autoflow-ci,
-      node-serve-smoke,
-      bun-serve-smoke,
-      workspace-qualification,
-    ]
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    permissions:
-      contents: read
-    steps:
-      # v7.0.1
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          # #1156 R11: the aggregation job checks out the exact SHA it attests.
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
-          persist-credentials: false
-      - uses: ./.github/actions/setup-deno-workspace
-      - name: Write exact-SHA PR CI evidence record
-        env:
-          # R11: one trusted expression for checkout, attestation and naming.
-          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-          RUN_ID: ${{ github.run_id }}
-          RUN_ATTEMPT: ${{ github.run_attempt }}
-          REPOSITORY: ${{ github.repository }}
-          EVENT_NAME: ${{ github.event_name }}
-          NEEDS_JSON: ${{ toJSON(needs) }}
-          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        run: deno run --allow-env --allow-write tools/autoflow/write-pr-ci-evidence.ts
-      # v7.0.1
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-        with:
-          name: pr-full-ci-evidence-${{ github.event.pull_request.head.sha || github.sha }}
-          path: pr-full-ci-evidence.json
-          if-no-files-found: error
-          retention-days: 90

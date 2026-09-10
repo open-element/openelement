@@ -5,8 +5,12 @@
  * and @openelement/app/i18n helpers.
  */
 
-import type { LocalePath } from '@openelement/element';
-export type { LocalePath } from '@openelement/element';
+export interface LocalePath {
+  locale: string;
+  path: string;
+  localizedPath: string;
+  isDefaultLocalePath: boolean;
+}
 
 export function normalizeLocalePath(
   pathname: string,

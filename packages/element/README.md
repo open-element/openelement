@@ -1,6 +1,6 @@
 # @openelement/element
 
-Canonical component-authoring facade for openElement (0.44).
+Canonical component-authoring facade for the OpenElement 1.0 baseline.
 
 This package exposes `OpenElement`, the product-facing base class for native
 Web Components, running on the compiled Part Program kernel: one mandatory
@@ -52,15 +52,14 @@ the compiler wires them to the signal engine so server output, fresh DOM, and
 claimed DOM share one identity model. Styles ship via `static styles` (a scoped
 `StyleSheet`); raw-text `<style>`/`<script>` tags are rejected from templates.
 
-The earlier functional authoring helper and the runtime JSX factories were
-removed in v0.44; see `docs/current/v0.44.0-MIGRATION.md` for the
-before/after mapping.
+The 1.0 baseline intentionally starts at the compiled class model. Historic
+0.x authoring behavior remains available in Git history.
 
 ## Boundary
 
 `@openelement/element` does not own routing, Vite, Nitro, UI components,
-database, auth, cache, or the default signal engine. Those remain Framework,
-UI, Protocols, or adapter concerns.
+database, auth, cache, or the default signal engine. Those remain Router,
+application, or adapter concerns.
 
 ## License
 

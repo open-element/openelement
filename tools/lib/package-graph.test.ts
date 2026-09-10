@@ -26,7 +26,7 @@ Deno.test('extractOpenImports finds static, type and dynamic imports', () => {
   const source = `
     import { foo } from '@openelement/element';
     import type { Bar } from '@openelement/app';
-    export { Baz } from '@openelement/ui';
+    export { Baz } from '@openelement/create';
     const x = await import('@openelement/adapter-vite');
     // not an open import:
     import { y } from 'npm:react';
@@ -35,8 +35,8 @@ Deno.test('extractOpenImports finds static, type and dynamic imports', () => {
   assertEquals(imports, [
     '@openelement/adapter-vite',
     '@openelement/app',
+    '@openelement/create',
     '@openelement/element',
-    '@openelement/ui',
   ]);
 });
 
@@ -44,9 +44,9 @@ Deno.test('extractOpenImports ignores comments and nested template text', () => 
   const source = `
     // import '@openelement/comment';
     const sample = \`text \${\`import('@openelement/string')\`}\`;
-    const actual = import(\`@openelement/ui/theme\`);
+    const actual = import(\`@openelement/app/router\`);
   `;
-  assertEquals(extractOpenImports(source), ['@openelement/ui/theme']);
+  assertEquals(extractOpenImports(source), ['@openelement/app/router']);
 });
 
 Deno.test('detectCycles reports a cycle in the dependency graph', () => {
@@ -74,15 +74,13 @@ Deno.test('detectCycles returns nothing for a DAG', () => {
 
 Deno.test('topologicalSort orders dependencies before dependents', () => {
   const graph = new Map<string, string[]>([
-    ['app', ['element', 'ui']],
-    ['ui', ['element']],
+    ['app', ['element']],
     ['element', []],
     ['adapter-vite', ['element']],
   ]);
   const order = topologicalSort(graph);
   const pos = (n: string) => order.indexOf(n);
-  assert(pos('element') < pos('ui'));
-  assert(pos('ui') < pos('app'));
+  assert(pos('element') < pos('app'));
   assert(pos('element') < pos('adapter-vite'));
   assertEquals(order.length, graph.size);
 });
@@ -98,7 +96,6 @@ Deno.test('topologicalSort throws on a cycle', () => {
 Deno.test('releasePublishOrder respects dependency and priority constraints', () => {
   const packages = [
     pkg('@openelement/element', '1.0.0'),
-    pkg('@openelement/ui', '1.0.0', ['@openelement/element']),
     pkg('@openelement/app', '1.0.0', ['@openelement/element']),
     pkg('@openelement/adapter-vite', '1.0.0', ['@openelement/element']),
     pkg('@openelement/create', '1.0.0', ['@openelement/app']),
@@ -107,18 +104,16 @@ Deno.test('releasePublishOrder respects dependency and priority constraints', ()
   const pos = (n: string) => order.indexOf(n);
   // dependencies before dependents
   assert(pos('@openelement/element') < pos('@openelement/app'));
-  assert(pos('@openelement/element') < pos('@openelement/ui'));
   assert(pos('@openelement/app') < pos('@openelement/create'));
-  // release priority: app before adapter-vite before ui
+  // release priority: app before adapter-vite
   assert(pos('@openelement/app') < pos('@openelement/adapter-vite'));
-  assert(pos('@openelement/adapter-vite') < pos('@openelement/ui'));
   assertEquals(order.length, packages.length);
 });
 
 Deno.test('normalizeInternalDep rejects non-internal specifiers', () => {
   assertEquals(
-    normalizeInternalDep('@openelement/ui/theme', '@openelement/app'),
-    '@openelement/ui',
+    normalizeInternalDep('@openelement/element/jsx-runtime', '@openelement/app'),
+    '@openelement/element',
   );
   assertEquals(normalizeInternalDep('@openelement/app', '@openelement/app'), null);
   assertEquals(normalizeInternalDep('npm:react', '@openelement/app'), null);
@@ -126,7 +121,10 @@ Deno.test('normalizeInternalDep rejects non-internal specifiers', () => {
 });
 
 Deno.test('normalizeDep passes non-internal specifiers through unchanged', () => {
-  assertEquals(normalizeDep('@openelement/ui/theme', '@openelement/app'), '@openelement/ui');
+  assertEquals(
+    normalizeDep('@openelement/element/jsx-runtime', '@openelement/app'),
+    '@openelement/element',
+  );
   assertEquals(normalizeDep('@openelement/app', '@openelement/app'), null);
   assertEquals(normalizeDep('npm:react', '@openelement/app'), 'npm:react');
   assertEquals(normalizeDep('react', '@openelement/app'), 'react');

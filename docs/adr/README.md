@@ -1,33 +1,19 @@
 # Active decisions
 
-Current product facts live in [docs/architecture](../architecture/README.md).
-This directory is being reduced to decisions that remain active and cannot yet
-graduate into current architecture.
+Only decisions that still govern hard-to-reverse Element or Router contracts remain here. Retired decisions are indexed in [the historical decision index](../history/decision-index.md) and preserved in Git history.
 
-ADR history is identified by original path plus Git blob SHA. Number collisions
-are not renumbered. The deterministic migration manifest records whether each ADR
-graduated, remains active, became historical/superseded, or was withdrawn, and its
-canonical destination when applicable.
-
-## When to write an ADR
-
-Use an ADR only for a public API or package boundary, architecture topology,
-security or trust boundary, compatibility or migration promise, or another
-hard-to-reverse decision. Normal fixes, refactors, tests, documentation updates,
-and tool configuration do not require an ADR.
-
-## Current 0.44 decisions
-
-- `ADR-0143-0-44-compiled-element-model-reentry.md`
-- `ADR-0144-governance-offload.md`
-- `ADR-0145-unified-content-graph.md` (scheduled for Alpha.7)
-- `ADR-0146-three-role-agent-execution-control-plane.md`
-- `ADR-0147-internal-alpha-workspace-train.md`
-- `ADR-0148-compiler-semantic-core-vite-integration-boundary.md`
-- `ADR-0149-v044-prerelease-qualification-ladder.md`
-- `ADR-0150-internal-alpha9-semantic-convergence.md`
-- `ADR-0151-v044-release-train-retopology.md`
-
-The Alpha.0 ADR migration packet will replace this transitional list with the
-final active-decision set and manifest. No new ADR is required for that governance
-cleanup.
+- [ADR-0108-deno-native-npm-distribution.md](./ADR-0108-deno-native-npm-distribution.md)
+- [ADR-0110-two-product-doctrine-and-package-truth.md](./ADR-0110-two-product-doctrine-and-package-truth.md)
+- [ADR-0111-openelement-app-ownership-boundary.md](./ADR-0111-openelement-app-ownership-boundary.md)
+- [ADR-0112-protocol-types-and-tiny-runtime.md](./ADR-0112-protocol-types-and-tiny-runtime.md)
+- [ADR-0125-hydration-instance-purity.md](./ADR-0125-hydration-instance-purity.md)
+- [ADR-0128-decouple-page-registration-from-tagname-export.md](./ADR-0128-decouple-page-registration-from-tagname-export.md)
+- [ADR-0129-response-header-channel.md](./ADR-0129-response-header-channel.md)
+- [ADR-0133-client-router-guard-concurrency-fixes.md](./ADR-0133-client-router-guard-concurrency-fixes.md)
+- [ADR-0137-public-package-ownership-boundaries.md](./ADR-0137-public-package-ownership-boundaries.md)
+- [ADR-0141-node-bridge-disconnect-propagation.md](./ADR-0141-node-bridge-disconnect-propagation.md)
+- [ADR-0142-light-mode-in-place-activation.md](./ADR-0142-light-mode-in-place-activation.md)
+- [ADR-0143-0-44-compiled-element-model-reentry.md](./ADR-0143-0-44-compiled-element-model-reentry.md)
+- [ADR-0148-compiler-semantic-core-vite-integration-boundary.md](./ADR-0148-compiler-semantic-core-vite-integration-boundary.md)
+- [ADR-0152-product-router-and-alpha-convergence.md](./ADR-0152-product-router-and-alpha-convergence.md)
+- [ADR-0153-beta2-2-document-seam-and-submission-tuple.md](./ADR-0153-beta2-2-document-seam-and-submission-tuple.md)

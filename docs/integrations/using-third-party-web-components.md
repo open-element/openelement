@@ -143,6 +143,5 @@ deno task third-party-wc:smoke
 
 The fixture source lives under `tools/third-party-wc-smoke/` and is copied into a
 fresh generated OpenElement app during the smoke run.
-The same run writes the deterministic, diff-reviewable matrix at
-`docs/evidence/third-party-wc-ssr-corpus.json`; there is no second build-only
-corpus gate.
+The same run prints the deterministic capability matrix to standard output so
+CI can retain it as ordinary job output without committing generated evidence.

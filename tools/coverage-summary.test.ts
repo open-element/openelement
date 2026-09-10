@@ -52,7 +52,10 @@ Deno.test('isCoverageTreeExcluded drops tests, fixtures, generated, and declarat
   assertEquals(isCoverageTreeExcluded('/repo/tools/lib/package-graph.test.ts'), true);
   assertEquals(isCoverageTreeExcluded('/repo/tools/lib/foo.spec.ts'), true);
   assertEquals(isCoverageTreeExcluded('/repo/packages/adapter-vite/__fixtures__/app.ts'), true);
-  assertEquals(isCoverageTreeExcluded('/repo/packages/ui/src/generated-manifest.ts'), true);
+  assertEquals(
+    isCoverageTreeExcluded('/repo/third-party component package/src/generated-manifest.ts'),
+    true,
+  );
   assertEquals(isCoverageTreeExcluded('/repo/packages/element/src/jsx-types.d.ts'), true);
 });
 
@@ -108,8 +111,8 @@ Deno.test('enumerateCoverageFiles finds in-scope sources and skips excluded tree
       'packages/element/src/__tests__/foo.test.ts',
       'packages/element/src/generated-x.ts',
       'packages/element/src/types.d.ts',
-      'packages/ui/src/bar.test.ts',
-      'packages/ui/src/bar.ts',
+      'packages/app/src/bar.test.ts',
+      'packages/app/src/bar.ts',
       'packages/adapter-vite/__fixtures__/app/main.ts',
       'node_modules/pkg/src/dep.ts',
     ];
@@ -121,7 +124,7 @@ Deno.test('enumerateCoverageFiles finds in-scope sources and skips excluded tree
     const found = await enumerateCoverageFiles(root, isPackageSource);
     assertEquals(
       found.map((path) => path.slice(root.length + 1)),
-      ['packages/element/src/foo.ts', 'packages/ui/src/bar.ts'],
+      ['packages/app/src/bar.ts', 'packages/element/src/foo.ts'],
     );
   } finally {
     await Deno.remove(root, { recursive: true });

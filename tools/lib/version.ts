@@ -3,12 +3,10 @@
  *
  * This module is the ONE implementation of the release line-version contract
  * `x.y.z` with optional SemVer prerelease identifiers (without build metadata
- * or `v` prefixes; core numbers must be safe integers). Every consumer — bump-version, the release
- * autoflow, the npm release verifier and the docs/version gates — imports from
- * here instead of re-rolling its own parse/compare regex.
+ * or `v` prefixes; core numbers must be safe integers). Publication and npm
+ * verification import from here instead of re-rolling parse/compare regexes.
  *
- * Import-free on purpose: tools/project-constants.ts imports this module and
- * is itself loaded by Nitro/jiti under Node
+ * Import-free on purpose because related release constants are loaded by Nitro/jiti under Node
  * (packages/adapter-vite/__fixtures__/nitro-proof/nitro.config.ts), so nothing
  * here may pull jsr:/npm: specifiers (no @std/semver). The hand-rolled grammar
  * below is exactly the strict domain every consumer already enforced on top of
@@ -16,9 +14,7 @@
  */
 
 /**
- * First release line covered by the immutable-tag policy (2.4, #855): every
- * release from 0.41.0-alpha.14 must carry its tag. Single copy — previously
- * hard-coded in both tools/autoflow/release.ts and tools/check-docs-truth.ts.
+ * First historical release line covered by the immutable-tag policy.
  */
 export const FIRST_TAGGED_VERSION = '0.41.0-alpha.14';
 

@@ -1,7 +1,7 @@
 # Validation recipe (zod / valibot)
 
 > Status: **verified by the `fixture:request-time:e2e:browsers` gate in
-> AutoFlow3 CI (three engines)** — both shapes are exercised end-to-end by
+> the CI release gate (three engines)** — both shapes are exercised end-to-end by
 > the request-time fixture
 > (`packages/adapter-vite/__fixtures__/request-time/`: `/register` with
 > zod, `/subscribe` with valibot, 422/303 asserted in three engines).
@@ -37,8 +37,8 @@ export function action(ctx: { formData: FormData }) {
 
 valibot is interchangeable (`v.safeParse(schema, input)`); see the fixture
 for both. The dual-library presence is the interop proof, and published
-packages stay validation-library-free by policy — see
-`docs/governance/DEPENDENCY_POLICY.md` §3 for the decision and boundary rule.
+packages stay validation-library-free by policy; the package boundary is
+recorded in [packages and distribution](../architecture/packages-and-distribution.md).
 The page reads the failure through its descriptor's `props`
 projector (`actionData` on the projector context, mapped onto the compiled
 page properties); mark the form

@@ -1,8 +1,8 @@
 #!/bin/sh
 #
 # openElement pre-push hook. Format/lint/type-graph/Markdown are owned by the
-# pinned OSS tools directly (ADR-0144, #1229); AutoFlow3 owns only the
-# OE-specific push-tier gate selection.
+# pinned OSS tools directly; the repository task graph owns only the
+# OpenElement-specific push-tier gate selection.
 #
 # Install: deno task hooks:install
 

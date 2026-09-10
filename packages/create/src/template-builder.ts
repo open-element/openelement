@@ -37,7 +37,7 @@ interface ProductVersions {
 }
 
 /**
- * The published starter relies on the five-package same-version release
+ * The published starter relies on the support-package same-version release
  * invariant. Package-graph and release-prepare gates verify that invariant;
  * Create deliberately has no runtime registry fallback or mixed-version mode.
  * Caller-supplied versions are validated by `buildTemplates` below.
@@ -54,7 +54,7 @@ export function assertUnifiedProductVersions(versions: ProductVersions): Product
   const observed = [...new Set(Object.values(versions))];
   if (observed.length !== 1) {
     throw new Error(
-      `Create requires the five-package same-version release invariant; observed ${
+      `Create requires the support-package same-version release invariant; observed ${
         observed.join(', ')
       }`,
     );

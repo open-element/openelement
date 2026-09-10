@@ -16,7 +16,6 @@
  *   - 'lit' and 'chai' resolve from this directory's own node_modules through
  *     nodeResolve (lit@3.3.3 pinned in package.json).
  */
-import { readFile } from 'node:fs/promises';
 import { defaultReporter } from '@web/test-runner';
 import { playwrightLauncher } from '@web/test-runner-playwright';
 import { esbuildPlugin } from '@web/dev-server-esbuild';
@@ -26,29 +25,6 @@ const openElementRuntimeAlias = {
   resolveImport({ source }) {
     if (source === '@openelement/element') return '/src/index.ts';
     return undefined;
-  },
-};
-
-/**
- * The packages/ui production overlay fixtures (generated/open-dialog.ts,
- * generated/open-dropdown.ts, #1339 case 8) import './component-recipes.ts'
- * and './instance-state.ts' relative to their served URL. Serve those two
- * modules straight from packages/ui/src — no committed copies, so the tests
- * cannot drift from the production sources. Everything else is untouched.
- */
-const uiSourceModules = new Map([
-  ['/__wtr__/generated/component-recipes.ts', '../../ui/src/component-recipes.ts'],
-  ['/__wtr__/generated/instance-state.ts', '../../ui/src/instance-state.ts'],
-]);
-const uiSourcePlugin = {
-  name: 'ui-source',
-  async serve(context) {
-    const rel = uiSourceModules.get(context.path);
-    if (!rel) return undefined;
-    return {
-      body: await readFile(new URL(rel, import.meta.url), 'utf8'),
-      type: 'text/javascript',
-    };
   },
 };
 
@@ -94,7 +70,7 @@ export default {
     playwrightLauncher({ product: 'firefox' }),
     playwrightLauncher({ product: 'webkit' }),
   ],
-  plugins: [openElementRuntimeAlias, uiSourcePlugin, esbuildPlugin({ ts: true, target: 'es2022' })],
+  plugins: [openElementRuntimeAlias, esbuildPlugin({ ts: true, target: 'es2022' })],
   reporters: [defaultReporter(), zeroTestsGuard],
   // The dev build of lit (resolved by default) logs a one-line dev-mode
   // notice per page; filter exactly that notice, keep every other log.

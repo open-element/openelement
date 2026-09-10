@@ -1,16 +1,16 @@
-name: AutoFlow Publish Existing
+name: Release
 
 on:
   workflow_dispatch:
     inputs:
+      candidate_sha:
+        description: 'Full commit SHA to qualify and publish'
+        required: true
       version:
-        description: 'Target version (e.g., 0.41.0-alpha.1)'
+        description: 'Exact package version, for example 1.0.0-alpha.1'
         required: true
-      pr_ci_run_id:
-        description: 'Run id of the AutoFlow CI pull_request run whose exact-SHA evidence artifact authorizes this release'
-        required: true
-      dry_run:
-        description: 'Validate the release plan without publishing, pushing, tagging, or writing evidence'
+      publish:
+        description: 'Publish to npm after every qualification gate passes'
         required: false
         default: false
         type: boolean
@@ -21,96 +21,47 @@ concurrency:
 
 jobs:
   release:
-    name: Execute release
     runs-on: ubuntu-latest
     timeout-minutes: 120
     permissions:
-      contents: write
-      # npm Trusted Publishing/OIDC (#1187): id-token is the ONLY npm
-      # credential. Requires per-package trusted-publisher registration on
-      # npmjs.com first — see docs/runbooks/npm-trusted-publishing.md.
+      contents: read
       id-token: write
-      # #997 / ADR-0134: the release-tier fullstack:evidence-freshness gate
-      # reads the run history (scheduled and workflow_dispatch) of the
-      # tier-2/tier-3 smoke workflows through the Actions API; GITHUB_TOKEN
-      # needs actions:read for that.
-      actions: read
     steps:
       # v7.0.1
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # zizmor: ignore[artipacked] the release lane pushes the immutable release tag with this credential (tools/autoflow/release.ts); every other workflow sets persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          ref: main
+          ref: ${{ inputs.candidate_sha }}
           fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
+          persist-credentials: false
       - uses: ./.github/actions/setup-deno-workspace
       # v7.0.0
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
-          node-version: '22'
-          # Registry config only (provenance + publish target); auth comes
-          # exclusively from npm Trusted Publishing/OIDC (#1187).
+          node-version: '24'
           registry-url: 'https://registry.npmjs.org'
-      - name: Upgrade npm CLI for Trusted Publishing
-        # #1187 (Beta.2 slice, B2.12): publication authenticates via npm
-        # Trusted Publishing. The npm CLI performs the GitHub Actions OIDC
-        # exchange natively only from 11.5.1; Node 22's bundled npm is older,
-        # and switching the whole release lane to Node 24 would still leave
-        # the floor to whatever npm that image bundles, so the floor is
-        # pinned explicitly here and verified before publish runs.
-        run: | # zizmor: ignore[adhoc-packages] the npm floor is pinned and asserted immediately below; trusted publishing requires it
-          npm install -g "npm@^11.5.1"
-          actual="$(npm --version)"
-          minimum="11.5.1"
-          if [ "$(printf '%s\n%s\n' "$minimum" "$actual" | sort -V | head -n1)" != "$minimum" ]; then
-            echo "npm CLI $actual is below the Trusted Publishing floor $minimum"
-            exit 1
-          fi
-          echo "npm CLI $actual satisfies the Trusted Publishing floor ($minimum)"
-      - name: Install Playwright browsers
-        # All three engines: the release tier includes fixture:request-time:gate,
-        # which runs the request-time fixture suite on Chromium, Firefox and
-        # WebKit (release evidence requirement).
-        run: ./node_modules/.bin/playwright install --with-deps chromium firefox webkit
-      - name: Configure Git
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-      - name: Download the exact named PR CI evidence artifact
-        # #1156 (ADR-0146): publication fails closed unless the exact-SHA PR
-        # full-CI record, produced by the named source run for the exact HEAD
-        # this job checked out, is present. The artifact name is derived from
-        # HEAD, never from free-form input, and the release CLI independently
-        # resolves the run through the GitHub API before publishing.
+      - name: Verify exact candidate and version
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PR_CI_RUN_ID: ${{ inputs.pr_ci_run_id }}
-        run: |
-          set -eu
-          PR_CI_ARTIFACT="pr-full-ci-evidence-$(git rev-parse HEAD)"
-          echo "evidence artifact: ${PR_CI_ARTIFACT} from run ${PR_CI_RUN_ID}"
-          rm -rf .artifacts/pr-ci
-          gh run download "$PR_CI_RUN_ID" --name "$PR_CI_ARTIFACT" --dir .artifacts/pr-ci
-          test -f .artifacts/pr-ci/pr-full-ci-evidence.json
-          count="$(find .artifacts/pr-ci -type f | wc -l | tr -d ' ')"
-          if [ "$count" -ne 1 ]; then
-            echo "ambiguous evidence artifact contents: expected exactly one file, got $count"
-            exit 1
-          fi
-      - name: Publish version already merged to main
-        # PRECONDITION (#1187, maintainer web action, cannot be done in-repo):
-        # each of the five @openelement packages (element, app, adapter-vite,
-        # create, ui) must have this repo's GitHub Actions trusted publisher
-        # registered on npmjs.com — repo open-element/openelement, workflow
-        # filename autoflow-release.yml, no environment. See
-        # docs/runbooks/npm-trusted-publishing.md. Until that registration
-        # exists, this step fails at npm with an auth error; there is NO
-        # token fallback by design (the long-lived npm token path is removed).
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CANDIDATE_SHA: ${{ inputs.candidate_sha }}
           RELEASE_VERSION: ${{ inputs.version }}
-          RELEASE_DRY_RUN: ${{ inputs.dry_run && '--dry-run' || '' }}
-          PR_CI_EVIDENCE: .artifacts/pr-ci/pr-full-ci-evidence.json
         run: |
-          # shellcheck disable=SC2086 # RELEASE_DRY_RUN is intentionally
-          # word-split: it is either empty or the single flag --dry-run.
-          deno task autoflow:publish-existing --to "$RELEASE_VERSION" --pr-ci "$PR_CI_EVIDENCE" $RELEASE_DRY_RUN
+          test "$(git rev-parse HEAD)" = "$CANDIDATE_SHA"
+          test "$(deno eval "console.log(JSON.parse(Deno.readTextFileSync('packages/element/deno.json')).version)")" = "$RELEASE_VERSION"
+          test "$(deno eval "console.log(JSON.parse(Deno.readTextFileSync('packages/app/deno.json')).version)")" = "$RELEASE_VERSION"
+      - name: Verify npm CLI supports Trusted Publishing
+        if: inputs.publish
+        run: |
+          npm_version="$(npm --version)"
+          node -e '
+            const [major, minor] = process.argv[1].split(".").map(Number);
+            if (major < 11 || (major === 11 && minor < 5)) {
+              console.error(`npm ${process.argv[1]} is too old; Trusted Publishing requires npm >= 11.5.1`);
+              process.exit(1);
+            }
+          ' "$npm_version"
+      - name: Install browser engines
+        run: ./node_modules/.bin/playwright install --with-deps chromium firefox webkit
+      - name: Qualify candidate
+        run: deno task autoflow:release
+      - name: Publish retained packages
+        if: inputs.publish
+        run: deno task publish:npm

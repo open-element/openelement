@@ -85,8 +85,8 @@ async function patchViteConfig(appDir: string): Promise<void> {
     `export default defineConfig({\n  resolve: {\n    alias: [\n        ${aliasText}\n    ],\n  },`,
   );
   text = text.replace(
-    "packageIslands: ['@openelement/ui'],",
-    "packageIslands: ['@openelement/ui'],\n    island: { upgradeStrategy: 'load' },",
+    "packageIslands: ['@acme/components'],",
+    "packageIslands: ['@acme/components'],\n    island: { upgradeStrategy: 'load' },",
   );
   await Deno.writeTextFile(viteConfigPath, text);
 }

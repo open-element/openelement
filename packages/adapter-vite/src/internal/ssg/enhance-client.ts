@@ -24,7 +24,7 @@
  * Without JavaScript the same form is a native POST (303/422 HTML), so
  * behavior degrades to the browser by construction.
  *
- * The wire/attribute surface is documented in docs/current/MORPH_CONTRACT.md.
+ * The wire/attribute surface is enforced by the adjacent browser and unit tests.
  *
  * The implementation is split by concern (#908): tree alignment and morph
  * orchestration live in morph-align.ts, the WebKit/DSD workarounds in

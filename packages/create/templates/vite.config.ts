@@ -4,7 +4,7 @@ import deno from '@deno/vite-plugin';
 
 // Design tokens (from Open Props) plus the global baseline. `--brand` must
 // stay aligned with the ui package tokens (`--violet-6` in
-// packages/ui/src/open-props-tokens.css).
+// a consumer-owned design-system stylesheet).
 //
 // v0.44 styling model: the compiled serializer never inlines styles into SSR
 // output; `static styles` sheets apply when an element activates client-side.

@@ -1,10 +1,12 @@
 {
   "name": "@openelement/app",
-  "version": "0.44.0-beta.2.2",
+  "version": "1.0.0-alpha.1",
+  "description": "Router Route Mode and Framework Mode for OpenElement applications.",
   "exports": {
     ".": "./src/index.ts",
     "./router/http": "./src/router-http.ts",
     "./router": "./src/router.ts",
+    "./router/client": "./src/router-client.ts",
     "./model": "./src/model.ts",
     "./spa": "./src/spa.ts",
     "./i18n": "./src/i18n.ts",
@@ -44,5 +46,12 @@
     "lit": "npm:lit@^3.3.3",
     "@lit-labs/ssr": "npm:@lit-labs/ssr@^4.1.0",
     "@lit-labs/ssr-client": "npm:@lit-labs/ssr-client@^1.1.8"
+  },
+  "peerDependenciesMeta": {
+    "preact": { "optional": true },
+    "preact-render-to-string": { "optional": true },
+    "lit": { "optional": true },
+    "@lit-labs/ssr": { "optional": true },
+    "@lit-labs/ssr-client": { "optional": true }
   }
 }

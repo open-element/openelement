@@ -1,9 +1,8 @@
 /**
  * Hostile decision-logic tests for consumer-smoke (#1216, A10.8 / H6).
  *
- * The npm availability probe is a release gate: it is wired into the
- * post-publish release plan (tools/autoflow/release.ts) and the published
- * consumer workflow (.github/workflows/published-consumers.yml). Only a
+ * The npm availability probe is a release gate in the published-consumer
+ * workflow. Only a
  * CONFIRMED registry 200 whose body confirms the exact version may admit the
  * release. Confirmed absence (404) is FAIL; every infra uncertainty —
  * timeout, DNS/network exception, 5xx, redirect, malformed or inconsistent
@@ -21,7 +20,7 @@ import {
 } from './consumer-smoke.ts';
 
 const NAME = '@openelement/element';
-const VERSION = '0.44.0-alpha.1';
+const VERSION = '1.0.0-alpha.1';
 
 function fetcherReturning(status: number, body: unknown): RegistryFetcher {
   return () => Promise.resolve({ status, body: String(body) });

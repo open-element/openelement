@@ -1,6 +1,6 @@
 #!/usr/bin/env -S deno run --allow-read --allow-write --allow-run --allow-env --allow-net
 /**
- * Exercise the currently published five-package line from a clean temporary
+ * Exercise the currently published support distribution from a clean temporary
  * directory. The JSON report is deliberately portable: CI uploads it even if
  * a platform-specific command fails, so adopters get the environment and the
  * exact failed command rather than a truncated Actions log alone.

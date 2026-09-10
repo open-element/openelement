@@ -248,7 +248,7 @@ Deno.test('SSR Admission: CEM client-only -> clientOnlyTags', () => {
     {
       tagName: 'cem-client-only',
       tier: 'client-only',
-      reason: 'CEM-only package @openelement/ui (no openElement SSR declaration)',
+      reason: 'CEM-only package @acme/components (no openElement SSR declaration)',
       source: 'package',
       modulePath: '/node_modules/browser-package/button.ts',
       ssr: false,
