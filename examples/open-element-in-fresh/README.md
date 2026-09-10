@@ -2,7 +2,7 @@
 
 A minimal [Fresh 2.3+](https://fresh.deno.dev) project that demonstrates openElement custom elements
 (`<open-button>`, `<open-card>`) running inside a Fresh app with Preact islands. Maintained against
-the current framework source line (`0.44.0-beta.2`).
+the current framework source line (`0.44.0-beta.2.1`).
 
 ## What It Proves
 

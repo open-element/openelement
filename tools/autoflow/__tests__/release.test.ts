@@ -27,6 +27,7 @@ import {
   renderReleaseNote,
   resolvePatchTargetVersion,
   resumeEvidenceFromPrior,
+  starterLockfileRegenCommand,
   verifyMainCiSuccessForHead,
   verifyPrepareRecord,
   writeReleaseEvidence,
@@ -62,8 +63,10 @@ Deno.test('buildVersionAnchorReplacements: covers all live versioned files', () 
   // anchors appear twice: once for the current-tag form and once for the
   // lag-state previous-tag form (#754). The interop example anchor likewise
   // covers the source-line and lagging npm-published forms. Stable targets add
-  // the equivalent two forms for PUBLISHED_STABLE_VERSION.
-  assertEquals(reps.length, 43);
+  // the equivalent two forms for PUBLISHED_STABLE_VERSION. The roadmap rule is
+  // the single quoted-key `'version': …` form (#1343: the unquoted and
+  // `phase.version` forms no longer exist in the file).
+  assertEquals(reps.length, 42);
 
   const seen = new Set<string>();
   for (const [path, from, to] of reps) {
@@ -237,11 +240,11 @@ Deno.test('buildVersionAnchorReplacements: prerelease bumps rewrite the registry
   );
 
   // Stable targets never touch the dist-tag annotation: a stable cut IS the
-  // latest line, and the rule surface stays at the exact 43 entries.
+  // latest line, and the rule surface stays at the exact 42 entries.
   assertFalse(
     buildVersionAnchorReplacements('9.9.9').some(([, f]) => f.includes('dist-tag')),
   );
-  assertEquals(buildVersionAnchorReplacements('9.9.9').length, 43);
+  assertEquals(buildVersionAnchorReplacements('9.9.9').length, 42);
 });
 
 Deno.test('buildVersionAnchorReplacements: every target carries the previous or current line', () => {
@@ -1541,6 +1544,24 @@ Deno.test('foldStarterLockfileIntoBumpCommit: a clean lockfile is a no-op (#1083
       assertEquals(await git('.', ['rev-parse', 'HEAD']), head);
     },
   );
+});
+
+Deno.test('starterLockfileRegenCommand loads the full starter graph with the age guard off (#1343)', async () => {
+  assertEquals(
+    starterLockfileRegenCommand('deno check app/routes/index.tsx lib/auth.ts'),
+    ['deno', 'check', '--minimum-dependency-age', '0', 'app/routes/index.tsx', 'lib/auth.ts'],
+  );
+  assertThrows(
+    () => starterLockfileRegenCommand('deno eval "console.log(1)"'),
+    Error,
+    "'deno check <files…>' command",
+  );
+  // The live starter task must keep the shape the fold derives from.
+  const config = JSON.parse(
+    await Deno.readTextFile('examples/supabase-cloudflare-starter/deno.json'),
+  ) as { tasks: Record<string, string> };
+  const command = starterLockfileRegenCommand(config.tasks.check);
+  assert(command.length > 10, 'the starter check task must enumerate its entry surface');
 });
 
 Deno.test('Beta checkpoint prepare, public-stage planning and retry preserve the source/published window', () => {

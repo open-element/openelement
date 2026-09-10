@@ -1,10 +1,10 @@
 # OpenElement status
 
-Repository package line: `v0.44.0-beta.2`
-npm registry line: `v0.44.0-beta.2` (prerelease, dist-tag `beta`)
+Repository package line: `v0.44.0-beta.2.1`
+npm registry line: `v0.44.0-beta.2.1` (prerelease, dist-tag `beta`)
 Active release target: `v0.44.0-beta.2.1`
-Latest landed train: `v0.44.0-beta.2`
-Next planned train: `v0.44.0-beta.2.1`
+Latest landed train: `v0.44.0-beta.2.1`
+Next planned train: `v0.44.0-beta.2.2`
 The npm `latest` dist-tag stays stable at `0.43.3`; Stable `1.0.0` is unscheduled.
 
 Execution follows [PROJECT_WORKFLOW.md](../governance/PROJECT_WORKFLOW.md).

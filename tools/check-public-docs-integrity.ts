@@ -58,9 +58,13 @@ export const staleCurrentClaims: RegExp[] = [
   // 0.41-era leftover guard; must not collide with a real 0.42.0-alpha.6.
   /npm registry (?:line|baseline).*0\.41\.0-alpha\.6/i,
   // Bound to the superseded line's prerelease tag (see top of file) so a
-  // future current anchor never trips this guard (#727).
+  // future current anchor never trips this guard (#727). The tag must end the
+  // version token (#1343): with the previous line at beta.2 and the current
+  // line at the nested checkpoint beta.2.1, the current anchor "active
+  // release target: v0.44.0-beta.2.1" contains beta.2 as a prefix — without
+  // the boundary the guard flags the current line it exists to protect.
   ...(previousPrereleaseTag
-    ? [new RegExp(`active release target.*${escapeRegExp(previousPrereleaseTag)}`, 'i')]
+    ? [new RegExp(`active release target.*${escapeRegExp(previousPrereleaseTag)}(?!\\.\\d)`, 'i')]
     : []),
   /alpha\.13 was\s+the prior recovery train/i,
   // Currency claims ("published as X", "completed implementation anchor X")

@@ -35,22 +35,13 @@ interface RoadmapListItem {
 const entries: Record<'en' | 'zh', TimelineEntry[]> = {
   'en': [
     {
-      'version': 'v0.44.0-beta.2',
-      'theme': 'Published baseline',
-      'copy':
-        'The compiled prerelease baseline remains on npm beta; the stable 0.43 line retains latest. Future checkpoint plans are not publication evidence.',
-      'state': 'next',
-      'stamp': 'CURRENT',
-      'status': 'prerelease',
-    },
-    {
       'version': 'v0.44.0-beta.2.1',
       'theme': 'Router foundation and independent Element',
       'copy':
         'Maintain an upstream-traceable URLPatternList fork and prepare generic contributions; unify route resolution; repair SSG and browser navigation boundaries; qualify standalone Element and prerelease tooling.',
       'state': 'next',
-      'stamp': 'NEXT',
-      'status': 'planned acceptance checkpoint',
+      'stamp': 'CURRENT',
+      'status': 'prerelease',
     },
     {
       'version': 'v0.44.0-beta.2.2',
@@ -58,6 +49,7 @@ const entries: Record<'en' | 'zh', TimelineEntry[]> = {
       'copy':
         'Use WTR for upstream-aligned browser conformance; prove loader, SSR, client continuation, navigation and actions with Native and Lit; derive a minimal shared protocol and public Document/SEO/search/sitemap metadata; prepare bounded Oxc/TS7 migration experiments. Lit is a support target, not an already-shipped claim.',
       'state': 'planned',
+      'stamp': 'NEXT',
       'status': 'planned',
     },
     {
@@ -87,22 +79,13 @@ const entries: Record<'en' | 'zh', TimelineEntry[]> = {
   ],
   'zh': [
     {
-      'version': 'v0.44.0-beta.2',
-      'theme': '已发布基线',
-      'copy':
-        '编译型预发布基线保持 npm beta；稳定 0.43 线保持 latest。后续检查点规划不代表已经发布。',
-      'state': 'next',
-      'stamp': 'CURRENT',
-      'status': '预发布',
-    },
-    {
       'version': 'v0.44.0-beta.2.1',
       'theme': 'Router 地基与独立 Element',
       'copy':
         '维护可追溯上游的 URLPatternList fork，准备通用贡献；统一路由决议；修复 SSG 和浏览器导航边界；验证独立 Element 与预发布工具链。',
       'state': 'next',
-      'stamp': 'NEXT',
-      'status': '计划验收检查点',
+      'stamp': 'CURRENT',
+      'status': '预发布',
     },
     {
       'version': 'v0.44.0-beta.2.2',
@@ -110,6 +93,7 @@ const entries: Record<'en' | 'zh', TimelineEntry[]> = {
       'copy':
         '采用便于贡献上游的 WTR 浏览器测试，以 Native 和 Lit 跑通 loader、SSR、客户端接续、导航及 action，提炼最小共享协议和 Document/SEO/search/sitemap 元数据，并完成有界 Oxc/TS7 迁移试验。Lit 是正式支持目标，尚非已交付声明。',
       'state': 'planned',
+      'stamp': 'NEXT',
       'status': '规划中',
     },
     {

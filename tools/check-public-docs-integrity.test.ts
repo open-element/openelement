@@ -122,4 +122,8 @@ Deno.test('stale "active release target" guard binds the previous prerelease tag
   assert(guard.test(`the active release target is v0.44.0-${previousTag}`));
   // A `.` in the tag must be matched literally, never as a regex wildcard.
   assert(!guard.test(`the active release target is v0x44x0-${previousTag.replace('.', 'X')}`));
+  // Nested checkpoints (#1343): the previous tag is a strict prefix of the
+  // nested current line (beta.2 of beta.2.1); the current line's own anchor
+  // is not a stale claim.
+  assert(!guard.test(`the active release target is v0.44.0-${previousTag}.1`));
 });

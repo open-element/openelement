@@ -447,13 +447,8 @@ export function buildVersionAnchorReplacements(
     ],
     [
       'www/app/routes/roadmap.tsx',
-      "version: '$PVT'",
-      "version: '$TAG'",
-    ],
-    [
-      'www/app/routes/roadmap.tsx',
-      "phase.version === '$PVT'",
-      "phase.version === '$TAG'",
+      "'version': '$PVT'",
+      "'version': '$TAG'",
     ],
   ];
   // A stable release advances both the generic registry line and the stable
@@ -553,7 +548,18 @@ export async function updateCurrentVersionAnchors(version: string): Promise<void
       // Replace the first occurrence only: it is the head-zone declaration the
       // gates enforce. Later occurrences are historical quotes (release notes,
       // roadmap tables) that must keep the old version string.
-      if (path === 'www/app/routes/roadmap.tsx' && from.startsWith('version: ')) {
+      if (path === 'www/app/routes/roadmap.tsx' && from.startsWith(`'version': `)) {
+        // Roadmap checkpoint entries are pre-authored (#1342 planning): when
+        // the target version's entry already exists, rewriting the CURRENT
+        // entry's version would duplicate it. The CURRENT stamp moves by hand
+        // and www:check-truth fails closed until it does (#1343).
+        if (text.includes(to)) {
+          console.warn(
+            'updateCurrentVersionAnchors: roadmap.tsx already carries a pre-authored entry for ' +
+              `${to}; move the CURRENT stamp to it by hand (www:check-truth enforces).`,
+          );
+          continue;
+        }
         // The bump rewrites the current-line entry's version but cannot
         // invent the new release's theme. Record the superseded theme so
         // check-www-current-truth fails until a human writes the new one
@@ -566,7 +572,7 @@ export async function updateCurrentVersionAnchors(version: string): Promise<void
           if (bumped !== undefined) await Deno.writeTextFile(constantsPath, bumped);
         }
         // Both CURRENT-stamped timeline entries (en + zh) name the package
-        // line; historical entries never use the `version: 'v…'` form, so
+        // line; historical entries never use the 'version': 'v…' form, so
         // every occurrence is a head declaration (#1288: the beta.2 bump
         // replaced only the en entry and left the zh entry stale for
         // www:check-truth).

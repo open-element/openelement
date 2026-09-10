@@ -2,12 +2,12 @@
 
 OpenElement = Web Components-native fullstack application framework.
 
-Current source package line: `v0.44.0-beta.2`
-Current npm registry line: `v0.44.0-beta.2` (prerelease, dist-tag `beta`; npm `latest` remains the stable 0.43 line)
-Latest landed train: `v0.44.0-beta.2`
+Current source package line: `v0.44.0-beta.2.1`
+Current npm registry line: `v0.44.0-beta.2.1` (prerelease, dist-tag `beta`; npm `latest` remains the stable 0.43 line)
+Latest landed train: `v0.44.0-beta.2.1`
 Active release target: `v0.44.0-beta.2.1`
 Active internal target: none — internal Alpha checkpoints closed at Alpha.10 (verifier PASS, #1150); the active line is Beta.2.x convergence before public 1.0 Alpha (ADR-0152)
-Next planned public train: `v0.44.0-beta.2.1`
+Next planned public train: `v0.44.0-beta.2.2`
 
 The existing five-package distribution follows [PACKAGE_SURFACE.md](./PACKAGE_SURFACE.md)
 and ADR-0114; the shipped `nitro-mount` integration remains until its replacement

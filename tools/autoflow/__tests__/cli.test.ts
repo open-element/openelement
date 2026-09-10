@@ -138,7 +138,6 @@ Deno.test('R3: matching successful full-matrix evidence selects only complementa
     for (
       const preserved of [
         'release:state-machine:check',
-        'fullstack:evidence-freshness',
         'nitro:proof:node',
         'nitro:proof:workers',
         'publish:npm:dry-run',

@@ -1,0 +1,147 @@
+{
+  "id": "release-prepare-v0.44.0-beta.2.1-2026-09-09T11-18-11-687Z",
+  "kind": "release-prepare",
+  "policyVersion": "autoflow3-v0",
+  "currentVersion": "0.44.0-beta.2",
+  "targetVersion": "0.44.0-beta.2.1",
+  "status": "completed",
+  "startedAt": "2026-09-09T11:18:11.687Z",
+  "approvalId": "ADR-0152",
+  "steps": [
+    {
+      "name": "bump patch version",
+      "command": [
+        "deno",
+        "run",
+        "--allow-read",
+        "--allow-write",
+        "tools/bump-version.ts",
+        "--to",
+        "0.44.0-beta.2.1"
+      ],
+      "status": "passed",
+      "startedAt": "2026-09-09T11:18:11.789Z",
+      "completedAt": "2026-09-09T11:18:11.823Z",
+      "exitCode": 0
+    },
+    {
+      "name": "update project constants",
+      "status": "passed",
+      "startedAt": "2026-09-09T11:18:11.823Z",
+      "completedAt": "2026-09-09T11:18:11.824Z",
+      "exitCode": 0
+    },
+    {
+      "name": "update current version anchors",
+      "status": "passed",
+      "startedAt": "2026-09-09T11:18:11.824Z",
+      "completedAt": "2026-09-09T11:18:11.836Z",
+      "exitCode": 0
+    },
+    {
+      "name": "update release-state planning anchors",
+      "status": "passed",
+      "startedAt": "2026-09-09T11:18:11.836Z",
+      "completedAt": "2026-09-09T11:18:11.836Z",
+      "exitCode": 0
+    },
+    {
+      "name": "regenerate versioned artifacts",
+      "command": [
+        "deno",
+        "task",
+        "generate:ui-manifest"
+      ],
+      "status": "passed",
+      "startedAt": "2026-09-09T11:18:11.836Z",
+      "completedAt": "2026-09-09T11:18:12.696Z",
+      "exitCode": 0
+    },
+    {
+      "name": "regenerate content graph",
+      "command": [
+        "deno",
+        "task",
+        "generate:content-graph"
+      ],
+      "status": "passed",
+      "startedAt": "2026-09-09T11:18:12.696Z",
+      "completedAt": "2026-09-09T11:18:13.171Z",
+      "exitCode": 0
+    },
+    {
+      "name": "format release bump",
+      "command": [
+        "deno",
+        "task",
+        "fmt"
+      ],
+      "status": "passed",
+      "startedAt": "2026-09-09T11:18:13.171Z",
+      "completedAt": "2026-09-09T11:18:13.695Z",
+      "exitCode": 0
+    },
+    {
+      "name": "stage release bump",
+      "command": [
+        "git",
+        "add",
+        "deno.json",
+        "packages/*/deno.json",
+        "packages/create/src/version.ts",
+        "packages/ui/src/generated-manifest.json",
+        "examples/supabase-cloudflare-starter/deno.json",
+        "tools/project-constants.ts",
+        "README.md",
+        "README.zh.md",
+        "examples/open-element-in-fresh/README.md",
+        "docs/current/VERSION_PLAN.md",
+        "docs/governance/PROJECT_WORKFLOW.md",
+        "docs/release/release-state.json",
+        "docs/roadmap/ROADMAP.md",
+        "docs/status/STATUS.md",
+        "www/app/data/_generated-content-graph.json",
+        "www/app/data/version.ts",
+        "www/app/routes/index/index.tsx",
+        "www/app/routes/guide/getting-started.tsx",
+        "www/app/routes/roadmap.tsx"
+      ],
+      "status": "passed",
+      "startedAt": "2026-09-09T11:18:13.695Z",
+      "completedAt": "2026-09-09T11:18:13.734Z",
+      "exitCode": 0
+    },
+    {
+      "name": "commit release bump",
+      "status": "passed",
+      "startedAt": "2026-09-09T11:18:13.734Z",
+      "completedAt": "2026-09-09T11:18:13.810Z",
+      "exitCode": 0
+    },
+    {
+      "name": "run fast preparation gates after bump",
+      "command": [
+        "deno",
+        "task",
+        "autoflow:push"
+      ],
+      "status": "passed",
+      "startedAt": "2026-09-09T11:18:13.810Z",
+      "completedAt": "2026-09-09T11:18:20.250Z",
+      "exitCode": 0
+    },
+    {
+      "name": "fold starter lockfile into bump commit",
+      "status": "passed",
+      "startedAt": "2026-09-09T11:18:20.250Z",
+      "completedAt": "2026-09-09T11:18:21.832Z",
+      "exitCode": 0
+    },
+    {
+      "name": "record prepare evidence",
+      "status": "passed",
+      "startedAt": "2026-09-09T11:18:21.832Z"
+    }
+  ],
+  "completedAt": "2026-09-09T11:18:21.850Z"
+}

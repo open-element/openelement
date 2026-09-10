@@ -453,14 +453,47 @@ export const STARTER_LOCKFILE = 'examples/supabase-cloudflare-starter/deno.lock'
 /**
  * Re-resolve the starter's lockfile against the bumped workspace versions.
  * The lock's workspace.links keys carry the package line, so the bump stale-
- * mates them and the next deno invocation in the starter rewrites the lock;
- * a bare `deno eval` is the cheapest such trigger (no graph fetch needed).
+ * mates them and the next deno invocation in the starter rewrites the lock.
+ *
+ * The trigger must load the starter's FULL graph: a bare `deno eval` resolves
+ * no modules, so Deno re-resolves the mismatched workspace links and prunes
+ * every registry entry no loaded module imports — the beta.2.1 prepare folded
+ * exactly that broken lock (links pointed at @openelement/app while the
+ * url-pattern-list entry app actually consumes was gone, #1343). The starter's
+ * own `check` task enumerates the entry surface; reuse it instead of
+ * duplicating the file list here.
+ *
+ * `--minimum-dependency-age 0`: @openelement/url-pattern-list is an exact,
+ * integrity-locked pin proven by the url-pattern-list:provenance gate; Deno's
+ * default minimum-age policy would refuse it inside the first ~24h after
+ * publish and drop it from the re-resolved lock.
  */
+export const STARTER_CHECK_TASK = 'check';
+
+/** Derive the lock-regeneration command from the starter's own check task. */
+export function starterLockfileRegenCommand(checkTask: string): string[] {
+  const words = checkTask.trim().split(/\s+/);
+  if (words[0] !== 'deno' || words[1] !== 'check' || words.length < 3) {
+    throw new Error(
+      `starter '${STARTER_CHECK_TASK}' task must be a 'deno check <files…>' command; ` +
+        `got: ${checkTask}`,
+    );
+  }
+  return [words[0], words[1], '--minimum-dependency-age', '0', ...words.slice(2)];
+}
+
 async function regenerateStarterLockfile(): Promise<void> {
-  await runCaptured(
-    ['deno', 'eval', "console.log('re-resolved starter lockfile')"],
-    { cwd: 'examples/supabase-cloudflare-starter' },
-  );
+  const configPath = 'examples/supabase-cloudflare-starter/deno.json';
+  const config = JSON.parse(await Deno.readTextFile(configPath)) as {
+    tasks?: Record<string, string>;
+  };
+  const checkTask = config.tasks?.[STARTER_CHECK_TASK];
+  if (!checkTask) {
+    throw new Error(`starter deno.json lacks a '${STARTER_CHECK_TASK}' task`);
+  }
+  await runCaptured(starterLockfileRegenCommand(checkTask), {
+    cwd: 'examples/supabase-cloudflare-starter',
+  });
 }
 
 /**

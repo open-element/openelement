@@ -1,7 +1,7 @@
 # openElement AutoWorkflow
 
-Current source package line `v0.44.0-beta.2`;
-npm registry line `v0.44.0-beta.2` (prerelease, dist-tag `beta`).
+Current source package line `v0.44.0-beta.2.1`;
+npm registry line `v0.44.0-beta.2.1` (prerelease, dist-tag `beta`).
 
 > Status: Mandatory project workflow. Every human maintainer and AI assistant
 > must read this document before planning, implementing, reviewing, or releasing
