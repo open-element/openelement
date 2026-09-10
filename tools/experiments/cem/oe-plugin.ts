@@ -22,6 +22,7 @@
  */
 
 import type * as Ts from 'typescript';
+import { headerDescription } from './header-description.ts';
 
 export interface AttributeDoc {
   name: string;
@@ -222,8 +223,8 @@ export function oePlugin(): AnalyzerPlugin {
         if (cssParts.length) classDoc.cssParts = cssParts;
 
         // File-header description convention: prose after the `@openelement/ui` line.
-        const header = text.match(/^\s*\*\s*@openelement\/ui[^\n]*\n(?:\s*\*\s*\n)*\s*\*\s*(.+)$/m);
-        if (header) classDoc.description = header[1].trim();
+        const description = headerDescription(text);
+        if (description !== undefined) classDoc.description = description;
 
         // OE attribute-name kebab convention: the upstream lit plugin keeps the
         // field name verbatim; OE kebab-cases (generate-ui-manifest.ts:108).

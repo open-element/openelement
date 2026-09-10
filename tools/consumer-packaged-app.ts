@@ -219,7 +219,9 @@ interface Outcome {
 }
 
 const outcomes = new Map<string, Outcome>();
-const cellKey = (leg: Renderer, cell: CellName): string => `${leg}|${cell}`;
+// Human-readable key from fixed literal sets (Renderer × CellName), so failure
+// reporting prints it verbatim — no join-then-sanitize round trip.
+const cellKey = (leg: Renderer, cell: CellName): string => `${leg} ${cell}`;
 
 function record(leg: Renderer, cell: CellName, outcome: Outcome): void {
   outcomes.set(cellKey(leg, cell), outcome);
@@ -1981,7 +1983,7 @@ const failures = [...outcomes.entries()].filter(([, outcome]) => !outcome.ok);
 if (failures.length > 0) {
   throw new Error(
     `Packed app consumer qualification FAILED (${failures.length} cells): ` +
-      failures.map(([key]) => key.replace('|', ' ')).join(', '),
+      failures.map(([key]) => key).join(', '),
   );
 }
 console.log(

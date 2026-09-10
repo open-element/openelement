@@ -179,11 +179,14 @@ const EXPECTED: Record<string, { verdict: string; code?: string; line?: number; 
 
 // diskName vs virtual compile name: c2 is stored as .txt because deno fmt
 // unconditionally strips a UTF-8 BOM from .tsx sources, and the BOM is the
-// variable under test. The compiler still sees a .tsx file name.
+// variable under test; b2 is stored as .txt because it is a deliberately
+// invalid sample (OEC9027: type-only `element` import used as a decorator)
+// and must not be scanned as executable repo source (CodeQL #4175). The
+// compiler still sees a .tsx file name in both cases.
 const SAMPLES: Array<{ disk: string; virtual: string }> = [
   { disk: 'a-counter.tsx', virtual: 'a-counter.tsx' },
   { disk: 'b1-spread.tsx', virtual: 'b1-spread.tsx' },
-  { disk: 'b2-type-only.tsx', virtual: 'b2-type-only.tsx' },
+  { disk: 'b2-type-only.txt', virtual: 'b2-type-only.tsx' },
   { disk: 'b3-foreign-property.tsx', virtual: 'b3-foreign-property.tsx' },
   { disk: 'c1-counter-spread-crlf.tsx', virtual: 'c1-counter-spread-crlf.tsx' },
   { disk: 'c2-counter-spread-bom.txt', virtual: 'c2-counter-spread-bom.tsx' },
