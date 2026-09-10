@@ -193,6 +193,35 @@ const semanticCases: SemanticCase[] = [
     expected: { enhancedForm: true },
   },
   {
+    name: 'detects data-open-enhance inside a lit html template literal (#1339)',
+    source: `
+      import { html } from 'lit';
+      export class FormPage {
+        render() {
+          return html\`<form method="post" data-open-enhance><button>go</button></form>\`;
+        }
+      }
+    `,
+    expected: { enhancedForm: true },
+  },
+  {
+    name: 'detects data-open-enhance in template expression parts (#1339)',
+    source: `
+      import { html } from 'lit';
+      const method = 'post';
+      export const view = html\`<form method=\${method} data-open-enhance>\${'go'}</form>\`;
+    `,
+    expected: { enhancedForm: true },
+  },
+  {
+    name: 'ignores data-open-enhance template prose without attribute shape',
+    source: `
+      import { html } from 'lit';
+      export const view = html\`<p>Use data-open-enhance<em>sparingly</em></p>\`;
+    `,
+    expected: {},
+  },
+  {
     name: 'ignores data-open-enhance in prose, strings, and comments',
     source: `
       const prose = 'data-open-enhance';

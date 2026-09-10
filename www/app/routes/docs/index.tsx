@@ -1,4 +1,5 @@
 import { definePage } from '@openelement/app';
+import { siteHead } from '@openelement/site-ui/head.ts';
 import { contentLocale } from '@openelement/site-ui/locale.ts';
 import { localizePath } from '@openelement/site-ui/link.ts';
 import PageDocs from '../../components/page-docs.tsx';
@@ -8,6 +9,9 @@ export const meta = { section: 'Quick Start', label: 'Docs', order: 0 };
 
 const content = {
   en: {
+    headTitle: 'Documentation',
+    headDescription:
+      'openElement documentation: guides, architecture notes and the supported public surface of the five consumer packages.',
     sidenote: 'Spec-042 · Docs index',
     eyebrow: 'Docs — The manual',
     serifLine: 'Read the',
@@ -16,6 +20,8 @@ const content = {
     navLabel: 'Documentation entrances',
   },
   zh: {
+    headTitle: '文档',
+    headDescription: 'openElement 文档：指南、架构说明，以及五个面向使用者包的受支持公开面。',
     sidenote: 'Spec-042 · 文档索引',
     eyebrow: 'Docs — 手册',
     serifLine: '通读',
@@ -41,9 +47,19 @@ const entrances = {
 } as const;
 
 export default definePage(PageDocs, {
+  head({ locale }) {
+    const resolved = contentLocale(locale ?? 'en');
+    const copy = content[resolved];
+    return siteHead({
+      route: '/docs',
+      locale: resolved,
+      title: copy.headTitle,
+      description: copy.headDescription,
+    });
+  },
   props({ locale }) {
     const resolved = contentLocale(locale ?? 'en');
-    const text = content[resolved];
+    const { headTitle: _headTitle, headDescription: _headDescription, ...text } = content[resolved];
     const items = entrances[resolved];
     return {
       ...text,

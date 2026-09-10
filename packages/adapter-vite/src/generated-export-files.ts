@@ -12,7 +12,10 @@ export const OPENELEMENT_EXPORT_FILES: Record<string, Record<string, string>> = 
   },
   'app': {
     '.': 'src/index.ts',
+    'document': 'src/document.ts',
     'i18n': 'src/i18n.ts',
+    'lit': 'src/lit.ts',
+    'lit-ssr': 'src/lit-ssr.ts',
     'model': 'src/model.ts',
     'preact': 'src/preact.ts',
     'router': 'src/router.ts',
@@ -24,9 +27,12 @@ export const OPENELEMENT_EXPORT_FILES: Record<string, Record<string, string>> = 
   },
   'element': {
     '.': 'src/index.ts',
+    'authoring': 'src/authoring.ts',
     'build-utils': 'src/build-utils.ts',
+    'html': 'src/html.ts',
     'jsx-dev-runtime': 'src/jsx-dev-runtime.ts',
     'jsx-runtime': 'src/jsx-runtime.ts',
+    'logger': 'src/logger.ts',
     'sanitize': 'src/sanitize.ts',
   },
   'ui': {

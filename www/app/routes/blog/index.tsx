@@ -7,6 +7,7 @@
  */
 import { definePage } from '@openelement/app';
 import { posts } from '@openelement/generated/blog-data';
+import { siteHead } from '@openelement/site-ui/head.ts';
 import { contentLocale } from '@openelement/site-ui/locale.ts';
 import { localizePath } from '@openelement/site-ui/link.ts';
 import BlogIndexPage from '../../components/page-blog-index.tsx';
@@ -31,6 +32,9 @@ interface BlogIndexRow {
  */
 const content = {
   en: {
+    headTitle: 'Blog — Dispatches',
+    headDescription:
+      'The openElement public audit trail: releases, architecture decisions and standards notes, published in their original language.',
     mastheadEyebrow: 'Blog — Dispatches from the lab',
     mastheadTitle: 'Dispatches.',
     mastheadLede:
@@ -43,6 +47,8 @@ const content = {
     featuredPrefix: 'Featured',
   },
   zh: {
+    headTitle: '博客 — 通讯',
+    headDescription: 'openElement 的公开审计轨迹：发布记录、架构决策与标准说明，以原始语言发布。',
     mastheadEyebrow: '博客 — 来自实验室的通讯',
     mastheadTitle: '通讯集。',
     mastheadLede: '公开的审计轨迹：改了什么、包图为何变动、下一条标准边界在哪里。',
@@ -69,6 +75,16 @@ function padIndex(index: number): string {
 }
 
 export default definePage(BlogIndexPage, {
+  head({ locale }) {
+    const resolved = contentLocale(locale ?? 'en');
+    const copy = content[resolved];
+    return siteHead({
+      route: '/blog',
+      locale: resolved,
+      title: copy.headTitle,
+      description: copy.headDescription,
+    });
+  },
   props({ locale }) {
     const resolved = contentLocale(locale ?? 'en');
     const t = content[resolved];

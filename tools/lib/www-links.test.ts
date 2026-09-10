@@ -62,12 +62,15 @@ Deno.test('anchorsFragment: id and name anchor the fragment', () => {
 });
 
 Deno.test('findSeoFailures: title/description/og:title/canonical/hreflang invariants (#1307)', () => {
+  // Link attribute order matches the framework serializer (#1326): rel, href,
+  // then hreflang. The checker is order-tolerant; the fixture tracks the
+  // single writer's real output.
   const good = '<head><title>Home — openElement</title>' +
     '<meta name="description" content="A sufficiently long description."/>' +
     '<meta property="og:title" content="Home — openElement"/>' +
     '<link rel="canonical" href="https://openelement.org/">' +
-    '<link rel="alternate" hreflang="en" href="https://openelement.org/">' +
-    '<link rel="alternate" hreflang="zh" href="https://openelement.org/zh">' +
+    '<link rel="alternate" href="https://openelement.org/" hreflang="en">' +
+    '<link rel="alternate" href="https://openelement.org/zh" hreflang="zh">' +
     '</head>';
   assertEquals(findSeoFailures(good, 'index.html'), []);
   // 404 documents carry no canonical/hreflang by design.
@@ -99,10 +102,9 @@ Deno.test('findSeoFailures: title/description/og:title/canonical/hreflang invari
   assertEquals(findSeoFailures(noLinks, 'apilist/index.html').length, 3);
 });
 
-Deno.test('findCrossPageSeoFailures: per-locale title uniqueness + boilerplate zh description', () => {
-  const boilerplate = 'OpenElement is a Web Components-native, static-first application framework.';
+Deno.test('findCrossPageSeoFailures: per-locale title uniqueness', () => {
   const pages = [
-    { file: 'index.html', title: 'Home — openElement', description: boilerplate, locale: 'en' },
+    { file: 'index.html', title: 'Home — openElement', description: 'x'.repeat(24), locale: 'en' },
     { file: 'zh/index.html', title: '首页 — openElement', description: '中文描述。', locale: 'zh' },
     {
       file: 'apilist/index.html',
@@ -111,14 +113,14 @@ Deno.test('findCrossPageSeoFailures: per-locale title uniqueness + boilerplate z
       locale: 'en',
     },
   ];
-  assertEquals(findCrossPageSeoFailures(pages, boilerplate), []);
+  assertEquals(findCrossPageSeoFailures(pages), []);
   const duplicated = [...pages, {
     file: 'other/index.html',
     title: 'Home — openElement',
     description: 'y'.repeat(24),
     locale: 'en',
   }];
-  assertEquals(findCrossPageSeoFailures(duplicated, boilerplate).length, 1);
+  assertEquals(findCrossPageSeoFailures(duplicated).length, 1);
   // The same title across DIFFERENT locales is fine (original-language posts).
   const crossLocale = [...pages, {
     file: 'zh/blog/post/index.html',
@@ -126,15 +128,7 @@ Deno.test('findCrossPageSeoFailures: per-locale title uniqueness + boilerplate z
     description: 'Original-language excerpt.',
     locale: 'zh',
   }];
-  assertEquals(findCrossPageSeoFailures(crossLocale, boilerplate), []);
-  // A zh page carrying the English boilerplate description fails.
-  const masquerade = [...pages, {
-    file: 'zh/contributing/index.html',
-    title: '贡献 — openElement',
-    description: boilerplate,
-    locale: 'zh',
-  }];
-  assertEquals(findCrossPageSeoFailures(masquerade, boilerplate).length, 1);
+  assertEquals(findCrossPageSeoFailures(crossLocale), []);
 });
 
 Deno.test('pageSeo extracts title/description and resolves locale from path', () => {

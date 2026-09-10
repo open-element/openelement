@@ -31,12 +31,6 @@ import { apiReference } from '../www/app/data/_generated-api-reference.ts';
 export const WWW_DIST = 'www/dist';
 const SITE_LOCALES = ['en', 'zh'] as const;
 
-/** The site-wide boilerplate description, read from the vite config inject. */
-async function boilerplateDescription(): Promise<string> {
-  const config = await Deno.readTextFile('www/vite.config.ts');
-  return config.match(/<meta name="description" content="([^"]+)">/)?.[1] ?? '';
-}
-
 export async function checkBuiltLinks(dist = WWW_DIST): Promise<LinkFailure[]> {
   const failures: LinkFailure[] = [];
   const files = new Set<string>();
@@ -103,9 +97,10 @@ export async function checkBuiltLinks(dist = WWW_DIST): Promise<LinkFailure[]> {
     }
   }
 
-  // Cross-page SEO invariants (#1307): per-locale title uniqueness and no
-  // boilerplate English description on non-default-locale pages.
-  failures.push(...findCrossPageSeoFailures(pages, await boilerplateDescription()));
+  // Cross-page SEO invariants (#1307): per-locale title uniqueness. The
+  // single write path (#1327) removed the site-wide boilerplate description,
+  // so there is nothing left to reconcile page output against.
+  failures.push(...findCrossPageSeoFailures(pages));
 
   // Generated reference anchors (#1307): every generated searchRecord anchor
   // must exist in the built apilist documents, in every built locale — the

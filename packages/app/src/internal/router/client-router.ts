@@ -13,7 +13,8 @@
 // (+ formData for actions) and signals failure by throwing (#570, ADR-0119
 // frozen semantics — types clarified, runtime unchanged).
 import type { SpaActionContext, SpaLoaderContext } from '@openelement/element';
-import { createLogger, ERROR_PREFIX } from '@openelement/element';
+import { createLogger } from '@openelement/element/logger';
+import { ERROR_PREFIX } from '@openelement/element/authoring';
 import { type RouteMatch, type RouteRecord, RouteTable } from './route-table.ts';
 
 const log = createLogger('router');

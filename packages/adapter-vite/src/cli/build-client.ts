@@ -163,6 +163,14 @@ export function findReachableIslandTags(
     }
     const semantics = analyzeModuleSemantics(source, normalizedPath);
     recordSource(source, normalizedPath);
+    if (ctx.options.renderer === 'lit') {
+      // #1339: lit pages reference islands inside html`` template literals,
+      // which the JSX-oriented semantic scan never sees. The raw-text
+      // extractor (the same one used for rendered HTML) observes them.
+      for (const tag of extractCustomElementTags(source)) {
+        if (candidateSet.has(tag)) reachable.add(tag);
+      }
+    }
     // Importing a local island module is an explicit registration-capability
     // edge even when its tag is created later by opaque third-party code.
     // The declaration itself is therefore observable reachability evidence.
@@ -431,7 +439,10 @@ async function buildClient(ctx: OpenElementBuildContext): Promise<void> {
     upgradeStrategy: ctx.phase3.upgradeStrategy,
   });
 
-  const clientEntryCode = generateClientEntry(islandEntries, { enhancedForms });
+  const clientEntryCode = generateClientEntry(islandEntries, {
+    enhancedForms,
+    renderer: ctx.options.renderer,
+  });
 
   // Restore RegExp from serialized noExternal patterns
   const noExternalPatterns = (ctx.phase3.ssrNoExternal || []).map((item) => {
@@ -469,28 +480,73 @@ async function buildClient(ctx: OpenElementBuildContext): Promise<void> {
       manifest: true,
       rollupOptions: {
         input: { client: VIRTUAL_CLIENT_ENTRY_ID },
-        output: {
-          format: 'esm',
-          entryFileNames: 'islands/[name].js',
-          chunkFileNames: 'islands/[name]-[hash].js',
-          manualChunks(id: string) {
-            // Force preact + preact/hooks into a single chunk so the shared
-            // options object is not duplicated across chunks (which breaks hooks).
-            if (id.includes('node_modules/preact') || id.includes('/preact/')) {
-              return 'preact';
-            }
-            if (id.includes(`/${islandsDir}/`)) {
-              // Extensions mirror resolve.extensions below and scanIslands
-              // (ts/tsx/js/jsx). Previously missing tsx/jsx meant .tsx
-              // islands skipped manualChunks and lost the `island-` prefix.
-              const match = id.match(/\/([^/]+)\.(ts|tsx|js|jsx)$/);
-              if (match) return `island-${match[1]}`;
-            }
-            for (const island of selectedPackageDecls) {
-              if (id.includes(island.modulePath)) return `island-${island.tagName}`;
-            }
+        output: ctx.options.renderer === 'lit'
+          ? {
+            format: 'esm',
+            entryFileNames: 'islands/[name].js',
+            chunkFileNames: 'islands/[name]-[hash].js',
+            // #1339: lit hydration is order-sensitive —
+            // lit-element-hydrate-support must set
+            // globalThis.litElementHydrateSupport BEFORE any lit-element
+            // module body reads it. Rolldown's default chunking can home
+            // shared lit-html/lit-element modules in a lazy island chunk,
+            // which then evaluates (via the entry's static import of the
+            // shared chunk) BEFORE the entry's hydrate-support module — the
+            // patch never applies and islands re-render instead of adopting
+            // DSD (observed as duplicated island content). The manualChunks
+            // compat shim did not hold here; use rolldown's native
+            // codeSplitting with an explicit high-priority lit-runtime group:
+            // it evaluates first (the entry imports hydrate-support first),
+            // and island chunks keep only the island module, staying lazy.
+            codeSplitting: {
+              groups: [
+                {
+                  name: 'lit-runtime',
+                  test: /\/(lit|lit-html|lit-element)\/|\/@lit\/|\/@lit-labs\/ssr-client\//,
+                  priority: 20,
+                },
+                {
+                  name: 'preact',
+                  test: /node_modules\/preact|\/preact\//,
+                  priority: 10,
+                },
+                {
+                  name(id: string) {
+                    if (id.includes(`/${islandsDir}/`)) {
+                      const match = id.match(/\/([^/]+)\.(ts|tsx|js|jsx)$/);
+                      if (match) return `island-${match[1]}`;
+                    }
+                    for (const island of selectedPackageDecls) {
+                      if (id.includes(island.modulePath)) return `island-${island.tagName}`;
+                    }
+                    return undefined;
+                  },
+                },
+              ],
+            },
+          }
+          : {
+            format: 'esm',
+            entryFileNames: 'islands/[name].js',
+            chunkFileNames: 'islands/[name]-[hash].js',
+            manualChunks(id: string) {
+              // Force preact + preact/hooks into a single chunk so the shared
+              // options object is not duplicated across chunks (which breaks hooks).
+              if (id.includes('node_modules/preact') || id.includes('/preact/')) {
+                return 'preact';
+              }
+              if (id.includes(`/${islandsDir}/`)) {
+                // Extensions mirror resolve.extensions below and scanIslands
+                // (ts/tsx/js/jsx). Previously missing tsx/jsx meant .tsx
+                // islands skipped manualChunks and lost the `island-` prefix.
+                const match = id.match(/\/([^/]+)\.(ts|tsx|js|jsx)$/);
+                if (match) return `island-${match[1]}`;
+              }
+              for (const island of selectedPackageDecls) {
+                if (id.includes(island.modulePath)) return `island-${island.tagName}`;
+              }
+            },
           },
-        },
       },
     },
     resolve: {

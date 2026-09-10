@@ -6,6 +6,7 @@ import {
   pageDefinitionExpr,
   pageRouteTagExpr,
   rendererScopeMatches,
+  requestTimePageContextLines,
   routeMetaExpr,
 } from './entry-route-helpers.ts';
 
@@ -54,8 +55,15 @@ export function renderNotFoundRoute(
   lines.push(
     `    const __data = typeof ${route.varName}.loader === "function" ? await ${route.varName}.loader(__loadContext) : undefined`,
   );
+  // #1326: the styled-404 page's head resolves through the same Document seam
+  // as any other page (its loader data included).
+  requestTimePageContextLines(lines, {
+    dataExpr: '__data',
+    actionDataExpr: 'undefined',
+    indent: '    ',
+  });
   lines.push(
-    `    let __content = __ssr(__tag, __pageProps(${route.varName}, { data: __data, actionData: undefined, params: __params, request: c.req.raw, locale: __localeFromPath(c.req.path, __getDefaultLocale()), route: __routeContext, meta: __routeMetaValue }), { route: ${
+    `    let __content = __ssr(__tag, __pageProps(${route.varName}, __pageContext), { route: ${
       quoteGeneratedJavaScriptValue(route.path)
     } })`,
   );
@@ -71,9 +79,8 @@ export function renderNotFoundRoute(
   lines.push(`    return c.html(__withDevClientScript(wrapInDocument(content, {`);
   for (
     const optionLine of documentWrapOptionsLines({
-      pageExpr: '__page',
-      titleExpr: `__page.head?.title || ${quoteGeneratedJavaScriptValue(docConfig.title)}`,
-      langExpr: quoteGeneratedJavaScriptValue(docConfig.lang),
+      titleExpr: `__doc.title || ${quoteGeneratedJavaScriptValue(docConfig.title)}`,
+      langExpr: `__doc.lang || ${quoteGeneratedJavaScriptValue(docConfig.lang)}`,
       headExtrasExpr,
       allowHeadExtrasScripts: docConfig.allowHeadExtrasScripts,
       cspNonce: true,
