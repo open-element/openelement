@@ -51,13 +51,13 @@ jobs:
         if: inputs.publish
         run: |
           npm_version="$(npm --version)"
-          node -e '
-            const [major, minor] = process.argv[1].split(".").map(Number);
+          node -e "
+            const [major, minor] = process.argv[1].split('.').map(Number);
             if (major < 11 || (major === 11 && minor < 5)) {
-              console.error(`npm ${process.argv[1]} is too old; Trusted Publishing requires npm >= 11.5.1`);
+              console.error('npm ' + process.argv[1] + ' is too old; Trusted Publishing requires npm >= 11.5.1');
               process.exit(1);
             }
-          ' "$npm_version"
+          " "$npm_version"
       - name: Install browser engines
         run: ./node_modules/.bin/playwright install --with-deps chromium firefox webkit
       - name: Qualify candidate

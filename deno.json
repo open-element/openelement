@@ -25,6 +25,8 @@
     "lit": "npm:lit@3.3.3",
     "@lit-labs/ssr": "npm:@lit-labs/ssr@4.1.0",
     "@lit-labs/ssr-client": "npm:@lit-labs/ssr-client@1.1.8",
+    "@zag-js/combobox": "npm:@zag-js/combobox@1.43.3",
+    "@zag-js/vanilla": "npm:@zag-js/vanilla@1.43.3",
     "urlpattern-polyfill": "npm:urlpattern-polyfill@10.1.0",
     "nitro": "npm:nitro@3.0.0",
     "@rollup/plugin-terser": "npm:@rollup/plugin-terser@1.0.0",
