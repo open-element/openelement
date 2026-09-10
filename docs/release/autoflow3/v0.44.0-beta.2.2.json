@@ -4,7 +4,7 @@
   "policyVersion": "autoflow3-v0",
   "currentVersion": "0.44.0-beta.2.1",
   "targetVersion": "0.44.0-beta.2.2",
-  "status": "running",
+  "status": "completed",
   "startedAt": "2026-09-10T16:15:40.201Z",
   "steps": [
     {
@@ -108,7 +108,10 @@
     },
     {
       "name": "tag release",
-      "status": "pending"
+      "status": "passed",
+      "startedAt": "2026-09-10T17:36:46.238Z",
+      "completedAt": "2026-09-10T17:36:46.242Z",
+      "exitCode": 0
     },
     {
       "name": "push tag",
@@ -118,12 +121,19 @@
         "origin",
         "v0.44.0-beta.2.2"
       ],
-      "status": "pending"
+      "status": "passed",
+      "startedAt": "2026-09-10T17:36:46.243Z",
+      "completedAt": "2026-09-10T17:36:47.521Z",
+      "exitCode": 0
     },
     {
       "name": "create GitHub release",
-      "status": "pending"
+      "status": "passed",
+      "startedAt": "2026-09-10T17:36:47.522Z",
+      "completedAt": "2026-09-10T17:36:48.922Z",
+      "exitCode": 0
     }
   ],
-  "releaseRunUrl": "https://github.com/open-element/openelement/actions/runs/34498341312"
+  "releaseRunUrl": "https://github.com/open-element/openelement/actions/runs/34498341312",
+  "completedAt": "2026-09-10T17:36:48.923Z"
 }

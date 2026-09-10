@@ -1,0 +1,6 @@
+{
+  "tagCommit": "a1a2bb8eb95dfc9b47da85dadb1f2a72d409993d",
+  "finalEvidenceCommit": "HEAD",
+  "successfulReleaseRun": "https://github.com/open-element/openelement/actions/runs/34509083335",
+  "releaseUrl": "https://github.com/open-element/openelement/releases/tag/v0.44.0-beta.2.2"
+}
