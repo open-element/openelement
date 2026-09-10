@@ -35,6 +35,88 @@ interface FormEnhance {
   scanSubmitRoots: (root: Document | ShadowRoot) => void;
 }
 
+/**
+ * The effective submission tuple of one form submission — the HTML "submit
+ * button" algorithm (Beta.2.2, #1339 §5). Submitter overrides
+ * (formaction/formmethod/formenctype/formtarget/formnovalidate) win over form
+ * attributes; missing or invalid method/enctype values fall back to the
+ * platform defaults (GET / application/x-www-form-urlencoded). The submit
+ * interceptor computes this tuple IN FULL before preventDefault() and reads
+ * only it for every interception decision.
+ */
+export type SubmissionMethod = 'GET' | 'POST' | 'DIALOG';
+export type SubmissionEnctype =
+  | 'application/x-www-form-urlencoded'
+  | 'multipart/form-data'
+  | 'text/plain';
+
+export interface SubmissionTuple {
+  readonly submitter: HTMLElement | null;
+  /** Absolute action URL, resolved against the document base URL. */
+  readonly action: string;
+  readonly method: SubmissionMethod;
+  readonly enctype: SubmissionEnctype;
+  /** Effective browsing-context target; '' is the platform default. */
+  readonly target: string;
+  /** formnovalidate/novalidate state (informational: native constraint
+   * validation has already run, or been skipped, before the submit event). */
+  readonly noValidate: boolean;
+}
+
+export function computeSubmissionTuple(
+  form: HTMLFormElement,
+  submitter: HTMLElement | null,
+  baseUrl: string,
+  documentUrl: string,
+): SubmissionTuple {
+  const submitterOverride = (name: string): string | null =>
+    submitter && submitter.hasAttribute(`form${name}`)
+      ? submitter.getAttribute(`form${name}`)
+      : null;
+  // #576: formAction IDL is the document URL when formaction is absent — only
+  // consult it when the attribute is actually present.
+  // #598: form.action IDL returns an <input name="action"> element when
+  // present — always resolve the action ATTRIBUTE (or the document URL).
+  const actionOverride = submitterOverride('action');
+  const action = actionOverride !== null
+    ? (submitter as HTMLButtonElement).formAction
+    : (form.getAttribute('action')
+      ? new URL(form.getAttribute('action') as string, baseUrl).href
+      : documentUrl);
+  const rawMethod = submitterOverride('method') ?? form.getAttribute('method') ?? '';
+  const methodUpper = rawMethod.toUpperCase();
+  const method: SubmissionMethod = methodUpper === 'POST'
+    ? 'POST'
+    : methodUpper === 'DIALOG'
+    ? 'DIALOG'
+    : 'GET';
+  const rawEnctype = (submitterOverride('enctype') ?? form.getAttribute('enctype') ?? '')
+    .toLowerCase();
+  const enctype: SubmissionEnctype = rawEnctype === 'multipart/form-data'
+    ? 'multipart/form-data'
+    : rawEnctype === 'text/plain'
+    ? 'text/plain'
+    : 'application/x-www-form-urlencoded';
+  const target = submitterOverride('target') ?? form.getAttribute('target') ?? '';
+  const noValidate = (submitter ? submitter.hasAttribute('formnovalidate') : false) ||
+    form.hasAttribute('novalidate');
+  return { submitter, action, method, enctype, target, noValidate };
+}
+
+/**
+ * The HTML urlencoded newline rule ("constructing the entry list" +
+ * application/x-www-form-urlencoded serialization): the platform converts a
+ * lone CR or a lone LF to CRLF and keeps CRLF as-is, for EVERY field name and
+ * value, BEFORE percent-encoding. FormData hands the interceptor the raw
+ * string (a textarea's value, or an entry a formdata listener appended), so
+ * without this step the enhanced body would carry %0A where the native body
+ * carries %0D%0A — breaking the ADR-0120 rule-2 promise that the two wire
+ * bodies never differ.
+ */
+export function normalizeNewlinesForUrlencoded(value: string): string {
+  return value.replace(/\r\n|\r|\n/g, '\r\n');
+}
+
 export function createFormEnhance(deps: FormEnhanceDeps): FormEnhance {
   const log = deps.log;
   const win = deps.win;
@@ -90,30 +172,26 @@ export function createFormEnhance(deps: FormEnhanceDeps): FormEnhance {
     const form = event.target as HTMLFormElement;
     if (!(form instanceof win.HTMLFormElement)) return;
     if (!form.hasAttribute('data-open-enhance')) return;
-    const method = (form.getAttribute('method') || 'get').toUpperCase();
-    if (method === 'GET') return;
     const submitter = (event as SubmitEvent).submitter as HTMLElement | null;
-    // #576: formAction IDL is the document URL when formaction is absent.
-    // #598: form.action IDL returns an <input name="action"> element when
-    // present — always resolve the action attribute (or current URL).
-    const submitterAction = submitter && submitter.hasAttribute('formaction')
-      ? (submitter as HTMLButtonElement).formAction
-      : '';
-    const actionUrl: string = submitterAction ||
-      (form.getAttribute('action')
-        ? new URL(form.getAttribute('action') as string, win.location.href).href
-        : win.location.href);
-    // Beta.2.2 (#1339): submissions the application does not explicitly own
-    // keep browser behavior — a non-default browsing-context target
-    // (target="_blank", a submitter's formtarget, a named target) or a
-    // cross-origin action is a real browser submission, never an enhanced
-    // fetch, so the interceptor must not preventDefault() either form.
-    const target =
-      (submitter && submitter.hasAttribute('formtarget')
-        ? submitter.getAttribute('formtarget')
-        : form.getAttribute('target')) || '';
-    if (target !== '' && target.toLowerCase() !== '_self') return;
-    if (new URL(actionUrl).origin !== win.location.origin) return;
+    // Beta.2.2 (#1339): the effective submission tuple (the HTML "submit
+    // button" algorithm — submitter overrides win over form attributes) is
+    // computed in full BEFORE preventDefault(), and every interception
+    // decision reads only it. A submission the application does not
+    // explicitly own keeps native browser behavior: a non-default
+    // browsing-context target (target="_blank", formtarget, named targets), a
+    // cross-origin action, a non-POST effective method (GET navigates, DIALOG
+    // closes its dialog, invalid methods default to GET), and a text/plain
+    // body (not safely reproducible from FormData) are never fetch()ed.
+    const tuple = computeSubmissionTuple(
+      form,
+      submitter,
+      doc.baseURI || win.location.href,
+      win.location.href,
+    );
+    if (tuple.target !== '' && tuple.target.toLowerCase() !== '_self') return;
+    if (new URL(tuple.action).origin !== win.location.origin) return;
+    if (tuple.method !== 'POST') return;
+    if (tuple.enctype === 'text/plain') return;
     event.preventDefault();
     // #564: a second submit on the SAME form while one is in flight is ignored.
     // #599: sequence is per-form so a concurrent submit on another form cannot
@@ -128,15 +206,35 @@ export function createFormEnhance(deps: FormEnhanceDeps): FormEnhance {
     const seq = formState.__openElementSeq;
     // #544: the submitter's name/value is part of the body — the body never
     // differs between the two paths (ADR-0120 rule 2).
-    const body = submitter
+    const formData = submitter
       ? new win.FormData(form, submitter as HTMLButtonElement)
       : new win.FormData(form);
-    const regionName = (submitter && submitter.getAttribute('data-open-region-target')) ||
-      form.getAttribute('data-open-region-target');
+    // The wire body matches the effective enctype exactly (native parity):
+    // multipart passes FormData through untouched (the fetch stack sets the
+    // boundary — never hand-set it); urlencoded serializes the entries in
+    // tree order (file controls contribute their filename, per HTML) and
+    // carries the exact native Content-Type.
+    let body: BodyInit;
     const headers: Record<string, string> = {};
     headers[actionHeader] = 'enhance';
-    win.fetch(actionUrl, {
-      method: method,
+    if (tuple.enctype === 'multipart/form-data') {
+      body = formData;
+    } else {
+      const params = new URLSearchParams();
+      formData.forEach((value, key) => {
+        // Names, string values and file-control filenames all take the
+        // platform's newline normalization before URLSearchParams encodes;
+        // entry order is untouched (repeated fields keep tree order).
+        const raw = typeof value === 'string' ? value : value.name;
+        params.append(normalizeNewlinesForUrlencoded(key), normalizeNewlinesForUrlencoded(raw));
+      });
+      body = params.toString();
+      headers['content-type'] = 'application/x-www-form-urlencoded';
+    }
+    const regionName = (submitter && submitter.getAttribute('data-open-region-target')) ||
+      form.getAttribute('data-open-region-target');
+    win.fetch(tuple.action, {
+      method: 'POST',
       body: body,
       headers: headers,
     }).then((response) => {

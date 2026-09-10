@@ -13,6 +13,8 @@
     "@openelement/element/jsx-runtime": "../../packages/element/src/jsx-runtime.ts",
     "@openelement/element/build-utils": "../../packages/element/src/build-utils.ts",
     "@openelement/element/authoring": "../../packages/element/src/authoring.ts",
+    "@openelement/element/html": "../../packages/element/src/html.ts",
+    "@openelement/element/logger": "../../packages/element/src/logger.ts",
     "@openelement/element/": "../../packages/element/src/",
     "@openelement/app": "../../packages/app/src/index.ts",
     "@openelement/adapter-vite": "../../packages/adapter-vite/src/index.ts",
@@ -25,7 +27,12 @@
   "compilerOptions": {
     "jsx": "react-jsx",
     "jsxImportSource": "@openelement/element",
-    "lib": ["dom", "dom.asynciterable", "dom.iterable", "deno.ns"]
+    "lib": [
+      "dom",
+      "dom.asynciterable",
+      "dom.iterable",
+      "deno.ns"
+    ]
   },
   "fmt": {
     "useTabs": false,
@@ -37,8 +44,12 @@
   },
   "lint": {
     "rules": {
-      "tags": ["recommended"],
-      "exclude": ["no-sloppy-imports"]
+      "tags": [
+        "recommended"
+      ],
+      "exclude": [
+        "no-sloppy-imports"
+      ]
     }
   },
   "nodeModulesDir": "auto",

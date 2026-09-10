@@ -3,7 +3,6 @@
   "specifiers": {
     "npm:@lit-labs/ssr-client@1.1.8": "1.1.8",
     "npm:@lit-labs/ssr@4.1.0": "4.1.0",
-    "npm:@openelement/url-pattern-list@0.6.0": "0.6.0",
     "npm:@playwright/test@1.59.1": "1.59.1",
     "npm:@preact/signals-core@^1.12.1": "1.14.4",
     "npm:lit@3.3.3": "3.3.3",
@@ -41,9 +40,6 @@
       "dependencies": [
         "@lit-labs/ssr-dom-shim"
       ]
-    },
-    "@openelement/url-pattern-list@0.6.0": {
-      "integrity": "sha512-djz6c4tih8BL1lonjr41iuoWGGF5pOgldEE0wOB/hzLLB4rS1MQHRQ2X3zM2XxnB6SX5Fphxx7uwTN/+ZDH//g=="
     },
     "@parse5/tools@0.3.0": {
       "integrity": "sha512-zxRyTHkqb7WQMV8kTNBKWb1BeOFUKXBXTBWuxg9H9hfvQB3IwP6Iw2U75Ia5eyRxPNltmY7E8YAlz6zWwUnjKg==",
@@ -169,7 +165,7 @@
       "npm:lit@3.3.3"
     ],
     "links": {
-      "jsr:@openelement/adapter-vite@0.44.0-beta.2": {
+      "jsr:@openelement/adapter-vite@0.44.0-beta.2.1": {
         "dependencies": [
           "npm:@hono/vite-dev-server@~0.25.3",
           "npm:@mdx-js/rollup@^3.1.1",
@@ -181,15 +177,15 @@
           "npm:vite@8.0.16"
         ]
       },
-      "jsr:@openelement/app@0.44.0-beta.2": {
+      "jsr:@openelement/app@0.44.0-beta.2.1": {
         "dependencies": [
           "npm:@openelement/url-pattern-list@0.6.0",
           "npm:preact-render-to-string@^6.5.0"
         ]
       },
-      "jsr:@openelement/create@0.44.0-beta.2": {},
-      "jsr:@openelement/element@0.44.0-beta.2": {},
-      "jsr:@openelement/ui@0.44.0-beta.2": {}
+      "jsr:@openelement/create@0.44.0-beta.2.1": {},
+      "jsr:@openelement/element@0.44.0-beta.2.1": {},
+      "jsr:@openelement/ui@0.44.0-beta.2.1": {}
     }
   }
 }

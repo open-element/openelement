@@ -501,7 +501,7 @@ export const apiReference = {
               "summary": "Define a client-side SPA application: route table, router mode and mount/dispose lifecycle.",
               "source": {
                 "path": "packages/app/src/spa.ts",
-                "line": 100
+                "line": 96
               },
               "stability": "stable-candidate",
               "anchor": "api-app-root-defineApp"
@@ -831,7 +831,7 @@ export const apiReference = {
               "summary": "A mounted SPA: idempotent mount/dispose plus the client-side router instance.",
               "source": {
                 "path": "packages/app/src/spa.ts",
-                "line": 88
+                "line": 84
               },
               "stability": "stable-candidate",
               "anchor": "api-app-root-SpaAppInstance"
@@ -1076,7 +1076,7 @@ export const apiReference = {
               "summary": "Define a client-side SPA application: route table, router mode and mount/dispose lifecycle.",
               "source": {
                 "path": "packages/app/src/spa.ts",
-                "line": 100
+                "line": 96
               },
               "stability": "stable-candidate",
               "anchor": "api-app-spa-defineApp"
@@ -1087,7 +1087,7 @@ export const apiReference = {
               "summary": "A mounted SPA: idempotent mount/dispose plus the client-side router instance.",
               "source": {
                 "path": "packages/app/src/spa.ts",
-                "line": 88
+                "line": 84
               },
               "stability": "stable-candidate",
               "anchor": "api-app-spa-SpaAppInstance"
@@ -1124,7 +1124,9 @@ export const apiReference = {
         "sanitize"
       ],
       "internalSubpaths": [
-        "authoring"
+        "authoring",
+        "html",
+        "logger"
       ],
       "subpaths": [
         {

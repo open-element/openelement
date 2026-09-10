@@ -63,24 +63,6 @@ export function renderRuntimeHelpers(
     lines.push('  return __renderLitPageToHtml({ tag, props }).html');
     lines.push('}');
     lines.push('');
-    // #1339: page-data channel. The projected props are embedded as JSON so a
-    // future client page-hydration pass can re-apply them (spike: non-reflected
-    // property bindings are NOT restored from SSR DOM — attribute-reflected
-    // values only). Mirrors the native action channel's fail-closed
-    // serialization (entry-action-runtime.ts): unserializable props degrade
-    // to null rather than failing the render.
-    lines.push('// #1339: page-data channel — projected props for future client page hydration.');
-    lines.push('function __litPageDataScript(props) {');
-    lines.push('  let json');
-    lines.push('  try { json = JSON.stringify(props ?? {})');
-    lines.push('    if (json === undefined) json = "null"');
-    lines.push('  } catch { json = "null" }');
-    lines.push('  // Escape against </script> breakout (JSON-safe unicode escape).');
-    lines.push(
-      '  return \'<script type="application/json" data-open-element-page-data>\' + json.replace(/</g, "\\\\u003c") + \'</script>\'',
-    );
-    lines.push('}');
-    lines.push('');
   } else {
     lines.push('// SSR helper: render a registered compiled element class to HTML.');
     lines.push('// renderDsd is the sync compiled serializer; it fails closed');

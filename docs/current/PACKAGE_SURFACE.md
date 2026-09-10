@@ -69,7 +69,9 @@ promise and are not application-authoring surface.
       "sanitize"
     ],
     "internal": [
-      "authoring"
+      "authoring",
+      "html",
+      "logger"
     ]
   },
   "@openelement/app": {
@@ -318,13 +320,33 @@ classified name missing from the prose fails the gate.
     },
     "authoring": {
       "assertValidTagName": "internal-importable",
+      "ACTION_FETCH_HEADER": "internal-importable",
       "DANGEROUS_KEYS": "internal-importable",
       "ERROR_PREFIX": "internal-importable",
       "HydrationStrategy": "internal-importable",
       "HYDRATION_STRATEGIES": "internal-importable",
+      "injectPropsSafe": "internal-importable",
       "isDangerousKey": "internal-importable",
       "isValidTagName": "internal-importable",
-      "OpenElementError": "internal-importable"
+      "OpenElementError": "internal-importable",
+      "PROBLEM_JSON_MEDIA_TYPE": "internal-importable"
+    },
+    "html": {
+      "escapeAttr": "internal-importable",
+      "escapeAttrValue": "internal-importable",
+      "escapeHtml": "internal-importable",
+      "SafeHtml": "internal-importable",
+      "trustedHtml": "internal-importable",
+      "TrustedHtml": "internal-importable",
+      "UnsafeHtml": "internal-importable",
+      "wrapInDocument": "internal-importable"
+    },
+    "logger": {
+      "createLogger": "internal-importable",
+      "createWarnScope": "internal-importable",
+      "Logger": "internal-importable",
+      "warnOnce": "internal-importable",
+      "WarnScope": "internal-importable"
     }
   },
   "@openelement/app": {
@@ -558,6 +580,10 @@ classified name missing from the prose fails the gate.
 | `sanitize`        | stable-candidate    | `isSafeUrl`, `sanitizeHtml`, `SanitizeOptions`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 | `build-utils`     | internal-importable | `composeFetchMiddleware`, `createRuntimeAdapter`, `formatJson`, `insertBeforeBodyClose`, `normalizeSeparators`, `OpenElementRequestHandler`, `pathToTagName`, `RuntimeContext`, `SsrRenderError`, `transformIslandSource`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 | `authoring`       | internal-importable | `assertValidTagName`, `DANGEROUS_KEYS`, `ERROR_PREFIX`, `HydrationStrategy`, `HYDRATION_STRATEGIES`, `isDangerousKey`, `isValidTagName`, `OpenElementError`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+
+| `authoring` (Beta.2.2 additions) | internal-importable | `ACTION_FETCH_HEADER`, `injectPropsSafe`, `PROBLEM_JSON_MEDIA_TYPE` |
+| `html` | internal-importable | `escapeAttr`, `escapeAttrValue`, `escapeHtml`, `SafeHtml`, `trustedHtml`, `TrustedHtml`, `UnsafeHtml`, `wrapInDocument` |
+| `logger` | internal-importable | `createLogger`, `createWarnScope`, `Logger`, `warnOnce`, `WarnScope` |
 
 ### `@openelement/app`
 

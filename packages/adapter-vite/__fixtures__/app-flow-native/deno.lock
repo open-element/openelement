@@ -1,15 +1,11 @@
 {
   "version": "5",
   "specifiers": {
-    "npm:@openelement/url-pattern-list@0.6.0": "0.6.0",
     "npm:@playwright/test@1.59.1": "1.59.1",
     "npm:@preact/signals-core@^1.12.1": "1.14.4",
     "npm:urlpattern-polyfill@10.1.0": "10.1.0"
   },
   "npm": {
-    "@openelement/url-pattern-list@0.6.0": {
-      "integrity": "sha512-djz6c4tih8BL1lonjr41iuoWGGF5pOgldEE0wOB/hzLLB4rS1MQHRQ2X3zM2XxnB6SX5Fphxx7uwTN/+ZDH//g=="
-    },
     "@playwright/test@1.59.1": {
       "integrity": "sha512-PG6q63nQg5c9rIi4/Z5lR5IVF7yU5MqmKaPOe0HSc0O2cX1fPi96sUQu5j7eo4gKCkB2AnNGoWt7y4/Xx3Kcqg==",
       "dependencies": [
@@ -45,7 +41,7 @@
   },
   "workspace": {
     "links": {
-      "jsr:@openelement/adapter-vite@0.44.0-beta.2": {
+      "jsr:@openelement/adapter-vite@0.44.0-beta.2.1": {
         "dependencies": [
           "npm:@hono/vite-dev-server@~0.25.3",
           "npm:@mdx-js/rollup@^3.1.1",
@@ -57,15 +53,15 @@
           "npm:vite@8.0.16"
         ]
       },
-      "jsr:@openelement/app@0.44.0-beta.2": {
+      "jsr:@openelement/app@0.44.0-beta.2.1": {
         "dependencies": [
           "npm:@openelement/url-pattern-list@0.6.0",
           "npm:preact-render-to-string@^6.5.0"
         ]
       },
-      "jsr:@openelement/create@0.44.0-beta.2": {},
-      "jsr:@openelement/element@0.44.0-beta.2": {},
-      "jsr:@openelement/ui@0.44.0-beta.2": {}
+      "jsr:@openelement/create@0.44.0-beta.2.1": {},
+      "jsr:@openelement/element@0.44.0-beta.2.1": {},
+      "jsr:@openelement/ui@0.44.0-beta.2.1": {}
     }
   }
 }

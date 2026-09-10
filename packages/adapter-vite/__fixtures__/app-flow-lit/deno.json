@@ -41,6 +41,8 @@
     "@openelement/element/build-utils": "../../../element/src/build-utils.ts",
     "@openelement/element/sanitize": "../../../element/src/sanitize.ts",
     "@openelement/element/authoring": "../../../element/src/authoring.ts",
+    "@openelement/element/html": "../../../element/src/html.ts",
+    "@openelement/element/logger": "../../../element/src/logger.ts",
     "@openelement/element/": "../../../element/src/",
     "lit": "npm:lit@3.3.3",
     "@lit-labs/ssr": "npm:@lit-labs/ssr@4.1.0",

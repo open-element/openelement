@@ -54,9 +54,9 @@ function litPageTemplate(tag: string, props: Record<string, unknown>) {
   // static-html templates accept a TemplateStringsArray-shaped value; the
   // binding names are static chunks, only the tag and values are dynamic.
   const strings = ['<', ...keys.map((key) => ` .${key}=`), '></', '>'];
-  const templateStrings = Object.assign([...strings], {
+  const templateStrings: TemplateStringsArray = Object.assign([...strings], {
     raw: strings,
-  }) as unknown as TemplateStringsArray;
+  }) as TemplateStringsArray;
   return html(templateStrings, staticTag, ...keys.map((key) => props[key]), staticTag);
 }
 

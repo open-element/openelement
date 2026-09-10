@@ -139,18 +139,10 @@ function renderRouteContentLines(
   // The page renders as its own compiled host element via __ssr; the page
   // descriptor's props projector maps request-scoped data onto the compiled
   // properties. Renderer modules (_renderer.ts) wrap the rendered HTML string.
-  if (ctx.renderer === 'lit') {
-    // #1339 lit fork: capture the projected props so the page-data channel
-    // (embedded JSON, __litPageDataScript) carries exactly what the render
-    // consumed — a future client page-hydration pass re-applies them.
-    lines.push(`${indent}const __pageDataProps = ${propsExpr}`);
-    lines.push(
-      `${indent}let __content = __ssr(__tag, __pageDataProps, { route: ${pathLiteral} })`,
-    );
-    lines.push(`${indent}__content += __litPageDataScript(__pageDataProps)`);
-  } else {
-    lines.push(`${indent}let __content = __ssr(__tag, ${propsExpr}, { route: ${pathLiteral} })`);
-  }
+  // (Beta.2.2 review: the lit page-data side channel — embedded JSON no
+  // client consumed — was removed; page-state restoration needs a real
+  // consumer contract first.)
+  lines.push(`${indent}let __content = __ssr(__tag, ${propsExpr}, { route: ${pathLiteral} })`);
   if (matchingRenderers.length > 0) {
     lines.push(`${indent}// Renderer tree wrapping (outer -> inner)`);
     for (const renderer of matchingRenderers) {

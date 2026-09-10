@@ -129,12 +129,13 @@ export function buildEntryDescriptor(
   imports.push({ from: 'hono/body-limit', names: ['bodyLimit'], alias: '__bodyLimit' });
   if (renderer === 'lit') {
     // #1339: the lit path never imports the compiled serializer (renderDsd /
-    // Part Program kernel). Page SSR goes through renderLitPageToHtml from
-    // @openelement/app/lit-ssr; wrapInDocument/escapeHtml/trustedHtml stay —
-    // they are document/HTML utilities shared with the native entry, and
+    // Part Program kernel) NOR the package root barrel that re-exports it —
+    // the pure HTML utilities come from the @openelement/element/html leaf
+    // (single implementation source, no runtime kernel in its module graph).
+    // Page SSR goes through renderLitPageToHtml from @openelement/app/lit-ssr;
     // trustedHtml is only reached by the (rejected for lit) app-shell path.
     imports.push({
-      from: '@openelement/element',
+      from: '@openelement/element/html',
       names: ['trustedHtml', 'escapeHtml', 'wrapInDocument'],
     });
     imports.push({

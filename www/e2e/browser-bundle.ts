@@ -85,6 +85,18 @@ export function bundleModuleForBrowser(entry: URL): Promise<string> {
               replacement: resolve(ELEMENT_DIR, 'authoring.ts'),
             },
             {
+              // The Lit server path imports the pure HTML utilities leaf
+              // (Beta.2.2 #1339 boundary); mirror it here.
+              find: '@openelement/element/html',
+              replacement: resolve(ELEMENT_DIR, 'html.ts'),
+            },
+            {
+              // app SPA/router sources log through the kernel-free logger
+              // leaf (Beta.2.2 #1339 boundary); mirror it here.
+              find: '@openelement/element/logger',
+              replacement: resolve(ELEMENT_DIR, 'logger.ts'),
+            },
+            {
               find: '@openelement/element/jsx-runtime',
               replacement: resolve(ELEMENT_DIR, 'jsx-runtime.ts'),
             },

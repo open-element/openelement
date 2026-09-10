@@ -41,7 +41,7 @@ export type {
   SpaLoader,
   SpaLoaderContext,
 } from '@openelement/element';
-export { ACTION_FETCH_HEADER, PROBLEM_JSON_MEDIA_TYPE } from '@openelement/element';
+export { ACTION_FETCH_HEADER, PROBLEM_JSON_MEDIA_TYPE } from '@openelement/element/authoring';
 
 // SPA bootstrap
 export { defineApp } from './spa.ts';

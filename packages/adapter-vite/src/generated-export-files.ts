@@ -29,8 +29,10 @@ export const OPENELEMENT_EXPORT_FILES: Record<string, Record<string, string>> = 
     '.': 'src/index.ts',
     'authoring': 'src/authoring.ts',
     'build-utils': 'src/build-utils.ts',
+    'html': 'src/html.ts',
     'jsx-dev-runtime': 'src/jsx-dev-runtime.ts',
     'jsx-runtime': 'src/jsx-runtime.ts',
+    'logger': 'src/logger.ts',
     'sanitize': 'src/sanitize.ts',
   },
   'ui': {

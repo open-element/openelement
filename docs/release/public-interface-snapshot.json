@@ -7,8 +7,10 @@
         ".": "./src/index.ts",
         "./authoring": "./src/authoring.ts",
         "./build-utils": "./src/build-utils.ts",
+        "./html": "./src/html.ts",
         "./jsx-dev-runtime": "./src/jsx-dev-runtime.ts",
         "./jsx-runtime": "./src/jsx-runtime.ts",
+        "./logger": "./src/logger.ts",
         "./sanitize": "./src/sanitize.ts"
       },
       "declarations": {
@@ -93,14 +95,17 @@
           ]
         },
         "./authoring": {
-          "publicShapeSha256": "8119077c7b8efed339abf41c7457ffd7458ab8e08879739c305e78434d44da07",
+          "publicShapeSha256": "d69c35c0248226a3e855c51ca1bf8673efcbab12dd3a1d42092a22ea72c09ea5",
           "publicSymbols": [
+            "ACTION_FETCH_HEADER=value:\"x-openelement-action\"",
             "DANGEROUS_KEYS=value:ReadonlySet<string>",
             "ERROR_PREFIX=value:\"[openElement]\"",
             "HYDRATION_STRATEGIES=value:tuple(\"load\",\"idle\",\"visible\",\"only\")",
             "HydrationStrategy=type:union(\"idle\"|\"load\"|\"only\"|\"visible\")",
             "OpenElementError=type:{readonly code:string;readonly phase:union(\"build\"|\"csr\"|\"navigation\"|\"render\"|\"ssr\"|\"unknown\"|\"validation\");readonly recoverable:union(false|true);readonly severity:union(\"error\"|\"warning\");readonly statusCode?:union(number|undefined);toJSON:{call:()=>Record<string, unknown>}}|value:{construct:(message:string,options:{cause?:union(Error|undefined);code?:union(string|undefined);phase?:union(\"build\"|\"csr\"|\"navigation\"|\"render\"|\"ssr\"|\"unknown\"|\"validation\"|undefined);recoverable?:union(false|true|undefined);severity?:union(\"error\"|\"warning\"|undefined);statusCode?:union(number|undefined)})=>{readonly code:string;readonly phase:union(\"build\"|\"csr\"|\"navigation\"|\"render\"|\"ssr\"|\"unknown\"|\"validation\");readonly recoverable:union(false|true);readonly severity:union(\"error\"|\"warning\");readonly statusCode?:union(number|undefined);toJSON:{call:()=>Record<string, unknown>}}}",
+            "PROBLEM_JSON_MEDIA_TYPE=value:\"application/problem+json\"",
             "assertValidTagName=value:{call:(tagName:string)=>void}",
+            "injectPropsSafe=value:{call:(target:Record<string, unknown>,props:Record<string, unknown>,tagName:string,log:{debug:{call:(message:string)=>void};warn:{call:(message:string)=>void}})=>void}",
             "isDangerousKey=value:{call:(key:string)=>union(false|true)}",
             "isValidTagName=value:{call:(tagName:string)=>union(false|true)}"
           ]
@@ -120,6 +125,19 @@
             "transformIslandSource=value:{call:(source:string,options:{filePath:string;islandsDir:string})=>{code:string;islands:array({filePath:string;tagName:string});map?:union(string|undefined)}}"
           ]
         },
+        "./html": {
+          "publicShapeSha256": "d695c93e2fe20d3089bbadc352b223e7ca78960e548a036b71e3449cf7d3cb57",
+          "publicSymbols": [
+            "SafeHtml=type:intersection(string&{readonly __safeHtml:typeof __safeHtml})",
+            "TrustedHtml=type:{readonly html:string}",
+            "UnsafeHtml=type:intersection(string&{readonly __unsafeHtml:typeof __unsafeHtml})",
+            "escapeAttr=value:{call:(value:string)=>string}",
+            "escapeAttrValue=value:{call:(value:unknown)=>string}",
+            "escapeHtml=value:{call:(str:string)=>string}",
+            "trustedHtml=value:{call:(html:string)=>{readonly html:string}}",
+            "wrapInDocument=value:{call:(html:string,options:{allowHeadExtrasScripts?:union(false|true|undefined);clientScript?:union(string|undefined);cspNonce?:union(string|undefined);dangerouslyHeadFragments?:union(array(string)|undefined);devScripts?:union(string|undefined);headExtras?:union(string|undefined);lang?:union(string|undefined);links?:union(array({href:string;hreflang?:union(string|undefined);rel:string})|undefined);meta?:union(undefined|{description?:union(string|undefined);tags?:union(array(Record<string, string | number | boolean>)|undefined)});title?:union(string|undefined)})=>string}"
+          ]
+        },
         "./jsx-dev-runtime": {
           "publicShapeSha256": "bd0316bb5cfef1f64bcbb0ce9e5bb48a6df6ad0f7e5c4f5eb1f3d51f3de11473",
           "publicSymbols": [
@@ -135,6 +153,16 @@
             "JSX=namespace:Element,ElementAttributesProperty,ElementChildrenAttribute,ElementClass,IntrinsicAttributes,IntrinsicElements",
             "jsx=value:{call:(_type:unknown,_props:unknown)=>{readonly __compiledJsxElement:typeof __compiledJsxElement}}",
             "jsxs=value:{call:(_type:unknown,_props:unknown)=>{readonly __compiledJsxElement:typeof __compiledJsxElement}}"
+          ]
+        },
+        "./logger": {
+          "publicShapeSha256": "7c2e7baad32b7dafb09eb7678a86318d3e987a2ec8b322b9479dca9f8f0e97ea",
+          "publicSymbols": [
+            "Logger=type:{debug:{call:(msg:string,...args:array(unknown))=>void};error:{call:(msg:string,...args:array(unknown))=>void};info:{call:(msg:string,...args:array(unknown))=>void};warn:{call:(msg:string,...args:array(unknown))=>void}}",
+            "WarnScope=type:{warned:Set<string>}",
+            "createLogger=value:{call:(tag:string)=>{debug:{call:(msg:string,...args:array(unknown))=>void};error:{call:(msg:string,...args:array(unknown))=>void};info:{call:(msg:string,...args:array(unknown))=>void};warn:{call:(msg:string,...args:array(unknown))=>void}}}",
+            "createWarnScope=value:{call:()=>{warned:Set<string>}}",
+            "warnOnce=value:{call:(key:string,logger:{debug:{call:(msg:string,...args:array(unknown))=>void};error:{call:(msg:string,...args:array(unknown))=>void};info:{call:(msg:string,...args:array(unknown))=>void};warn:{call:(msg:string,...args:array(unknown))=>void}},msg:string,scope:union(undefined|{warned:Set<string>}))=>void}"
           ]
         },
         "./sanitize": {

@@ -97,12 +97,15 @@
     "url-pattern-list:provenance": "deno run --allow-read --allow-net=registry.npmjs.org tools/check-url-pattern-list-release.ts",
     "consumer:packaged-ui": "deno run --allow-read --allow-write --allow-run --allow-env --allow-net tools/consumer-packaged-ui.ts",
     "consumer:packaged-app": "deno run --allow-read --allow-write --allow-run --allow-env --allow-net tools/consumer-packaged-app.ts",
+    "experiment:oxc": "deno run -A tools/experiments/oxc/run.ts",
+    "experiment:ts7": "deno run --allow-read --allow-write --allow-run --allow-env --allow-net tools/experiments/ts7/run.ts",
+    "experiment:cem": "deno run --no-lock --node-modules-dir=none --allow-read --allow-write --allow-env tools/experiments/cem/run.ts",
     "consumer:packaged-element": "deno run -A tools/consumer-packaged-element.ts",
     "pack": "deno task generate:ui-manifest && deno run --allow-read --allow-write --allow-run --allow-env tools/publish-npm.ts pack",
     "pack:dry-run": "deno task generate:ui-manifest && deno run --allow-read --allow-write --allow-run --allow-env tools/publish-npm.ts pack:dry-run",
     "publish:npm": "deno task generate:ui-manifest && deno run --allow-read --allow-write --allow-run --allow-env --allow-net tools/publish-npm.ts publish:npm",
     "publish:npm:dry-run": "deno task generate:ui-manifest && deno run --allow-read --allow-write --allow-run --allow-env --allow-net tools/publish-npm.ts publish:npm:dry-run",
-    "test": "deno task generate:ui-manifest && deno task generate:www-content-data && deno test --ignore=examples/supabase-cloudflare-starter,packages/element/__wtr__ --allow-read --allow-write --allow-env --allow-net --allow-run --allow-ffi --allow-sys && deno task --cwd examples/supabase-cloudflare-starter test",
+    "test": "deno task generate:ui-manifest && deno task generate:www-content-data && deno test --ignore=examples/supabase-cloudflare-starter,packages/element/__wtr__,tools/experiments/ts7/.work --allow-read --allow-write --allow-env --allow-net --allow-run --allow-ffi --allow-sys && deno task --cwd examples/supabase-cloudflare-starter test",
     "generate:ui-tokens": "deno run --allow-read --allow-write tools/generate-ui-token-module.ts",
     "generate:ui-tokens:check": "deno run --allow-read tools/generate-ui-token-module.ts --check",
     "generate:ui-manifest": "deno task generate:ui-tokens && deno run --allow-read --allow-write --allow-env tools/generate-ui-manifest.ts",
@@ -233,6 +236,7 @@
     "dist-test-ssg-render",
     "vendor",
     "**/.nitro",
+    "**/.work",
     "packages/element/__wtr__"
   ]
 }

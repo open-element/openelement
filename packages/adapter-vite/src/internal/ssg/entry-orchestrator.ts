@@ -116,7 +116,9 @@ export function renderEntry(desc: EntryDescriptor): string {
   }
 
   // Element owns document and compiled-render semantics; this entry wires them.
-  lines.push(`import { createLogger } from '@openelement/element';`);
+  // createLogger comes from the kernel-free logger leaf so the LIT server
+  // entry never loads the Native runtime barrel (#1339 boundary).
+  lines.push(`import { createLogger } from '@openelement/element/logger';`);
   lines.push(
     `import { createRuntimeAdapter, insertBeforeBodyClose as __insertBeforeBodyClose } from '@openelement/element/build-utils';`,
   );

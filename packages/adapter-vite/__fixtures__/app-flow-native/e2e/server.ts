@@ -30,15 +30,46 @@ const ROOT = resolve(Deno.cwd(), args.dir ?? '../dist');
 
 const serverEntry = await importRequestTimeServer(join(ROOT, 'server/index.js'));
 
+// Wire-level observation for the effective-tuple matrix (#1339 §5): record
+// exactly what the server receives (method, URL, Content-Type, raw body, the
+// enhancement header) BEFORE the framework parses anything, so the e2e can
+// prove enhanced and native submissions are byte-identical on the wire.
+let lastSubmission: {
+  method: string;
+  url: string;
+  contentType: string;
+  actionHeader: string | null;
+  rawBody: string;
+} | null = null;
+
 Deno.serve(
   { port: PORT, hostname: '127.0.0.1' },
-  (request) =>
-    dispatchRequest(request, {
+  async (request) => {
+    const url = new URL(request.url);
+    if (url.pathname === '/__wire/last') {
+      return Response.json({ last: lastSubmission });
+    }
+    if (url.pathname === '/__wire/reset') {
+      lastSubmission = null;
+      return new Response('ok');
+    }
+    if (request.method === 'POST' && url.pathname.startsWith('/tuple-probes')) {
+      const rawBody = await request.clone().text();
+      lastSubmission = {
+        method: request.method,
+        url: request.url,
+        contentType: request.headers.get('content-type') ?? '',
+        actionHeader: request.headers.get('x-openelement-action'),
+        rawBody,
+      };
+    }
+    return dispatchRequest(request, {
       distDir: ROOT,
       serverMod: serverEntry,
       env: Deno.env.toObject(),
       onHandlerError: (error) => console.error('[fixture server] handler error:', error),
-    }),
+    });
+  },
 );
 
 console.log(`app-flow-native fixture server -> http://127.0.0.1:${PORT} (root: ${ROOT})`);

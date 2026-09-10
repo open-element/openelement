@@ -1644,6 +1644,58 @@ function walkAppDeclarations(tmp: string): string {
   return `${seen.size} declaration modules resolved clean from index/lit/lit-ssr/document`;
 }
 
+// ─── Packed element-leaf module graph (boundary cell) ───────────────────────
+//
+// #1339 review: the kernel-free claim for the element leaves must hold on the
+// PACKED artifact, not only the workspace source graph (which
+// packages/adapter-vite/__tests__/lit-graph-boundary.test.ts proves). Walk the
+// installed @openelement/element/src/{html,logger,authoring}.js graphs inside
+// the consumer's node_modules and require the Native runtime kernel (the root
+// barrel, the compiled-runtime facade, the compiled serializer, the signal
+// engine) to be unreachable. This is a real module-graph walk over the
+// installed artifact, not a string search.
+
+const PACKED_KERNEL_PATTERNS = [
+  /\/src\/index\.js$/, // the runtime barrel
+  /\/src\/public-runtime\.js$/, // the compiled-runtime facade
+  /\/src\/internal\/compiled\//, // the Part Program kernel/serializer
+  /\/src\/internal\/signal\//, // the signal engine
+];
+
+function assertPackedElementLeavesKernelFree(tmp: string): string {
+  const elementDir = join(tmp, 'node_modules', '@openelement', 'element');
+  const pkgJson = JSON.parse(Deno.readTextFileSync(join(elementDir, 'package.json')));
+  const seen = new Set<string>();
+  const stack: string[] = [];
+  for (const subpath of ['./html', './logger', './authoring']) {
+    const entry = pkgJson.exports?.[subpath];
+    const entryFile = typeof entry === 'string' ? entry : entry?.import;
+    if (typeof entryFile !== 'string') {
+      throw new Error(`packed @openelement/element lacks the ${subpath} export`);
+    }
+    stack.push(join(elementDir, entryFile));
+  }
+  while (stack.length > 0) {
+    const file = stack.pop()!;
+    if (seen.has(file)) continue;
+    seen.add(file);
+    const text = Deno.readTextFileSync(file);
+    for (const { fileName } of ts.preProcessFile(text).importedFiles) {
+      if (!fileName.startsWith('.')) continue;
+      const target = join(dirname(file), fileName);
+      for (const pattern of PACKED_KERNEL_PATTERNS) {
+        if (pattern.test(target)) {
+          throw new Error(
+            `packed element leaf graph reaches the Native runtime kernel: ${file} -> ${fileName}`,
+          );
+        }
+      }
+      stack.push(target);
+    }
+  }
+  return `${seen.size} packed leaf modules kernel-free (html/logger/authoring)`;
+}
+
 // ─── Leg runner ─────────────────────────────────────────────────────────────
 
 interface Tarball {
@@ -1849,6 +1901,7 @@ async function runLeg(spec: LegSpec, tarballs: Tarball[]): Promise<void> {
 
     await cell(leg, 'boundary', ['install'], () => {
       const declarationSummary = walkAppDeclarations(tmp);
+      const packedLeafSummary = assertPackedElementLeavesKernelFree(tmp);
       const clientDir = join(tmp, 'dist', 'client');
       if (!existsSync(clientDir)) {
         throw new Error(
@@ -1874,7 +1927,9 @@ async function runLeg(spec: LegSpec, tarballs: Tarball[]): Promise<void> {
           }
         }
       }
-      return Promise.resolve(`${declarationSummary}; ${assets.length} dist/client assets clean`);
+      return Promise.resolve(
+        `${declarationSummary}; ${packedLeafSummary}; ${assets.length} dist/client assets clean`,
+      );
     });
   } finally {
     await Deno.remove(tmp, { recursive: true }).catch(() => undefined);

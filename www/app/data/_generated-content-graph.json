@@ -236,7 +236,7 @@
       },
       "alternates": [],
       "references": [],
-      "fingerprint": "294a6d43fce520318b50d07e299dca5eec84de91d6bbc9a961cf6ee03305c814",
+      "fingerprint": "e1e2c001a40858737961b248138056eaa462f54c3309372b92ad0c66b5a643d7",
       "data": {
         "exportClasses": {
           ".": {
@@ -317,12 +317,15 @@
             "wrapInDocument": "internal-importable"
           },
           "authoring": {
+            "ACTION_FETCH_HEADER": "internal-importable",
             "DANGEROUS_KEYS": "internal-importable",
             "ERROR_PREFIX": "internal-importable",
             "HYDRATION_STRATEGIES": "internal-importable",
             "HydrationStrategy": "internal-importable",
             "OpenElementError": "internal-importable",
+            "PROBLEM_JSON_MEDIA_TYPE": "internal-importable",
             "assertValidTagName": "internal-importable",
+            "injectPropsSafe": "internal-importable",
             "isDangerousKey": "internal-importable",
             "isValidTagName": "internal-importable"
           },
@@ -338,6 +341,16 @@
             "pathToTagName": "internal-importable",
             "transformIslandSource": "internal-importable"
           },
+          "html": {
+            "SafeHtml": "internal-importable",
+            "TrustedHtml": "internal-importable",
+            "UnsafeHtml": "internal-importable",
+            "escapeAttr": "internal-importable",
+            "escapeAttrValue": "internal-importable",
+            "escapeHtml": "internal-importable",
+            "trustedHtml": "internal-importable",
+            "wrapInDocument": "internal-importable"
+          },
           "jsx-dev-runtime": {
             "Fragment": "stable-candidate",
             "JSX": "stable-candidate",
@@ -349,6 +362,13 @@
             "jsx": "stable-candidate",
             "jsxs": "stable-candidate"
           },
+          "logger": {
+            "Logger": "internal-importable",
+            "WarnScope": "internal-importable",
+            "createLogger": "internal-importable",
+            "createWarnScope": "internal-importable",
+            "warnOnce": "internal-importable"
+          },
           "sanitize": {
             "SanitizeOptions": "stable-candidate",
             "isSafeUrl": "stable-candidate",
@@ -356,7 +376,9 @@
           }
         },
         "internal": [
-          "authoring"
+          "authoring",
+          "html",
+          "logger"
         ],
         "supported": [
           ".",
@@ -2982,15 +3004,15 @@
       },
       "alternates": [],
       "references": [],
-      "fingerprint": "7da3f43cc8ab998a51686b86548f7efa1f0a3f78d74c5b9e89654040233b1ae1",
+      "fingerprint": "d8a3f2640c7fec57c8799ab52ab2339c2c0ed5b47eea90d75f617846aa0f2202",
       "data": {
         "activeTarget": "v0.44.0-beta.2.1",
-        "latestLandedTrain": "v0.44.0-beta.2",
+        "latestLandedTrain": "v0.44.0-beta.2.1",
         "maturity": "beta",
         "nextPlannedTrain": "v0.44.0-beta.2.2",
-        "publishedVersion": "0.44.0-beta.2",
+        "publishedVersion": "0.44.0-beta.2.1",
         "schemaVersion": 1,
-        "sourceVersion": "0.44.0-beta.2"
+        "sourceVersion": "0.44.0-beta.2.1"
       }
     },
     {
@@ -4363,6 +4385,20 @@
       "fingerprint": "51ea47e0ac1297039f2cfa6ebba153d95dc29af48c992b699c85dc7c445a6e6c",
       "data": {
         "title": "v0.44.0-beta.2"
+      }
+    },
+    {
+      "id": "release:v0.44.0-beta.2.1",
+      "kind": "release",
+      "locale": "en",
+      "source": {
+        "path": "docs/release/v0.44.0-beta.2.1.md"
+      },
+      "alternates": [],
+      "references": [],
+      "fingerprint": "0811776ec2c8a306b3f363abadc93b676804311b3db46abb523a81f2d08a9d85",
+      "data": {
+        "title": "v0.44.0-beta.2.1"
       }
     },
     {

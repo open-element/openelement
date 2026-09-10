@@ -2,9 +2,10 @@
  * @openelement/adapter-vite - Lit renderer codegen fork tests (Beta.2.2, #1339)
  *
  * The renderer option is explicit config, never inferred: 'lit' forks page tag
- * resolution (openElementPageTag), page SSR (renderLitPageToHtml), the
- * page-data channel and the client entry, while loader/action/protocol code
- * and the native default stay byte-identical.
+ * resolution (openElementPageTag), page SSR (renderLitPageToHtml) and the
+ * client entry, while loader/action/protocol code and the native default stay
+ * byte-identical. (Beta.2.2 review: the unconsumed page-data JSON channel was
+ * removed; its absence is pinned below.)
  */
 
 import { assertEquals, assertStringIncludes, assertThrows } from '@std/assert';
@@ -20,8 +21,13 @@ const litRoutes: RouteEntry[] = [
 Deno.test('lit renderer: descriptor forks imports and rejects a compiled appShell', () => {
   const desc = buildEntryDescriptor(litRoutes, { renderer: 'lit', appShell: false });
   assertEquals(desc.renderer, 'lit');
-  const elementImport = desc.imports.find((imp) => imp.from === '@openelement/element');
-  assertEquals(elementImport?.names.includes('renderDsd'), false);
+  // The lit server entry never imports the runtime barrel at all; the pure
+  // HTML utilities arrive through the kernel-free @openelement/element/html
+  // leaf (proven at module-graph level in lit-graph-boundary.test.ts).
+  const barrelImport = desc.imports.find((imp) => imp.from === '@openelement/element');
+  assertEquals(barrelImport, undefined);
+  const htmlImport = desc.imports.find((imp) => imp.from === '@openelement/element/html');
+  assertEquals(htmlImport?.names, ['trustedHtml', 'escapeHtml', 'wrapInDocument']);
   const litImport = desc.imports.find((imp) => imp.from === '@openelement/app/lit-ssr');
   assertEquals(litImport?.names, ['renderLitPageToHtml']);
 
@@ -43,7 +49,7 @@ Deno.test('lit renderer: native descriptor shape is unchanged (renderer absent)'
   assertEquals(elementImport?.names.includes('renderDsd'), true);
 });
 
-Deno.test('lit renderer: entry forks tag resolution, page render and the data channel', () => {
+Deno.test('lit renderer: entry forks tag resolution and page render (no page-data side channel)', () => {
   const litEntry = renderEntry(
     buildEntryDescriptor(litRoutes, { renderer: 'lit', appShell: false, ssg: true }),
   );
@@ -54,8 +60,10 @@ Deno.test('lit renderer: entry forks tag resolution, page render and the data ch
   );
   assertStringIncludes(litEntry, 'routeModule.default.openElementPageTag');
   assertStringIncludes(litEntry, '__renderLitPageToHtml({ tag, props })');
-  assertStringIncludes(litEntry, '__litPageDataScript(__pageDataProps)');
-  assertStringIncludes(litEntry, 'data-open-element-page-data');
+  // Beta.2.2 review: the embedded page-data JSON channel had no consumer —
+  // it is removed and its absence is pinned on both renderers.
+  assertEquals(litEntry.includes('__litPageDataScript'), false);
+  assertEquals(litEntry.includes('data-open-element-page-data'), false);
   // The compiled serializer / Part Program kernel is never referenced.
   assertEquals(litEntry.includes('renderDsd'), false);
   assertEquals(litEntry.includes('__partProgram'), false);

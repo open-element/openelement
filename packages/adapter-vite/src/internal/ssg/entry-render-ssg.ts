@@ -118,11 +118,6 @@ export function renderSsgSection(desc: EntryDescriptor): string {
   lines.push(`    ${documentResolutionSetupLine('page', '__pageContext')}`);
   lines.push('    if (locale) props.locale = locale;');
   lines.push('    let content = __ssr(info.tagName, props, { route: routePath });');
-  if (desc.renderer === 'lit') {
-    // #1339: emit the page-data channel on build-time renders too, so static
-    // lit pages carry the same hydration data as request-time ones.
-    lines.push('    content += __litPageDataScript(props);');
-  }
   lines.push('    for (const renderer of __matchingRenderers(routePath)) {');
   lines.push(
     '      content = await renderer.wrap(content, __rendererContext(routePath, params));',
