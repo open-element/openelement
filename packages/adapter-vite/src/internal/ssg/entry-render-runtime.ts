@@ -44,39 +44,57 @@ import { DANGEROUS_KEYS } from '@openelement/element';
 export function renderRuntimeHelpers(
   appShell: AppShellPlan,
   ssrRenderableTags: readonly string[] = [],
+  renderer: 'native' | 'lit' = 'native',
 ): string {
   const lines: string[] = [];
 
-  lines.push('// SSR helper: render a registered compiled element class to HTML.');
-  lines.push('// renderDsd is the sync compiled serializer; it fails closed');
-  lines.push('// (OE_PROGRAM_MISSING) for unregistered or uncompiled classes.');
-  lines.push(
-    'function __ssr(tag, props = {}, sourceInfo = {}, __depth = 0, projectedChildren) {',
-  );
-  lines.push(
-    '  // Validate tag name - must be a valid Custom Element (contains hyphen)',
-  );
-  lines.push('  if (!tag || !tag.includes("-")) {');
-  lines.push(
-    '    throw new Error("[openElement] Invalid custom element tag: " + String(tag) + ". Must contain a hyphen.")',
-  );
-  lines.push('  }');
-  lines.push('  if (__depth > 8) {');
-  lines.push(
-    '    throw new Error("[openElement] Nested element expansion exceeded the depth bound at <" + tag + ">; cyclic island nesting is not renderable.")',
-  );
-  lines.push('  }');
-  lines.push('  const Cls = customElements.get(tag)');
-  lines.push('  if (!Cls) {');
-  lines.push(
-    '    throw new Error("[openElement] <" + tag + "> is not registered in the SSR registry. Generated entries register every admitted route/island class explicitly; an unknown OpenElement host cannot be server-rendered (client-only and foreign tags pass through per the admission plan).")',
-  );
-  lines.push('  }');
-  lines.push(
-    '  return renderDsd(tag, { componentClass: Cls, props, sourceInfo, ssrRenderableTags: __ssrRenderableTags, projectedChildren }).html',
-  );
-  lines.push('}');
-  lines.push('');
+  if (renderer === 'lit') {
+    // #1339: lit page SSR — the registered LitElement class renders through
+    // @lit-labs/ssr (renderLitPageToHtml from @openelement/app/lit-ssr, DSD
+    // output). Nested admitted islands inside the page template compose
+    // through the same SSR registry — lit-ssr's job, no adapter code.
+    lines.push(
+      '// SSR helper (lit renderer): render a registered LitElement page host to DSD HTML.',
+    );
+    lines.push('// Fails closed for invalid tags and unregistered hosts.');
+    lines.push(
+      'function __ssr(tag, props = {}, sourceInfo = {}, __depth = 0, projectedChildren) {',
+    );
+    lines.push('  return __renderLitPageToHtml({ tag, props }).html');
+    lines.push('}');
+    lines.push('');
+  } else {
+    lines.push('// SSR helper: render a registered compiled element class to HTML.');
+    lines.push('// renderDsd is the sync compiled serializer; it fails closed');
+    lines.push('// (OE_PROGRAM_MISSING) for unregistered or uncompiled classes.');
+    lines.push(
+      'function __ssr(tag, props = {}, sourceInfo = {}, __depth = 0, projectedChildren) {',
+    );
+    lines.push(
+      '  // Validate tag name - must be a valid Custom Element (contains hyphen)',
+    );
+    lines.push('  if (!tag || !tag.includes("-")) {');
+    lines.push(
+      '    throw new Error("[openElement] Invalid custom element tag: " + String(tag) + ". Must contain a hyphen.")',
+    );
+    lines.push('  }');
+    lines.push('  if (__depth > 8) {');
+    lines.push(
+      '    throw new Error("[openElement] Nested element expansion exceeded the depth bound at <" + tag + ">; cyclic island nesting is not renderable.")',
+    );
+    lines.push('  }');
+    lines.push('  const Cls = customElements.get(tag)');
+    lines.push('  if (!Cls) {');
+    lines.push(
+      '    throw new Error("[openElement] <" + tag + "> is not registered in the SSR registry. Generated entries register every admitted route/island class explicitly; an unknown OpenElement host cannot be server-rendered (client-only and foreign tags pass through per the admission plan).")',
+    );
+    lines.push('  }');
+    lines.push(
+      '  return renderDsd(tag, { componentClass: Cls, props, sourceInfo, ssrRenderableTags: __ssrRenderableTags, projectedChildren }).html',
+    );
+    lines.push('}');
+    lines.push('');
+  }
 
   // #1276 (B1.3-F1): the compiled program is the one canonical source for the
   // route→program tag binding. A definePage route module default-exports the
@@ -89,16 +107,32 @@ export function renderRuntimeHelpers(
   // renderDsd fails closed on those exactly as before. Called at module
   // evaluation (route registration, routeInfo), so this must stay a hoisted
   // function declaration.
-  lines.push('function __resolvePageTag(routeModule, fallbackTag) {');
-  lines.push(
-    '  const program = routeModule && routeModule.default && routeModule.default.__partProgram;',
-  );
-  lines.push(
-    '  if (program && typeof program.tag === "string" && program.tag.includes("-")) return program.tag;',
-  );
-  lines.push('  return fallbackTag;');
-  lines.push('}');
-  lines.push('');
+  if (renderer === 'lit') {
+    // #1339 lit fork: a defineLitPage route records its host tag on the
+    // class's openElementPageTag static (there is no compiled Part Program in
+    // the lit path); the path-derived tag stays the fallback.
+    lines.push('function __resolvePageTag(routeModule, fallbackTag) {');
+    lines.push(
+      '  const tag = routeModule && routeModule.default && routeModule.default.openElementPageTag;',
+    );
+    lines.push(
+      '  if (typeof tag === "string" && tag.includes("-")) return tag;',
+    );
+    lines.push('  return fallbackTag;');
+    lines.push('}');
+    lines.push('');
+  } else {
+    lines.push('function __resolvePageTag(routeModule, fallbackTag) {');
+    lines.push(
+      '  const program = routeModule && routeModule.default && routeModule.default.__partProgram;',
+    );
+    lines.push(
+      '  if (program && typeof program.tag === "string" && program.tag.includes("-")) return program.tag;',
+    );
+    lines.push('  return fallbackTag;');
+    lines.push('}');
+    lines.push('');
+  }
 
   lines.push('function __localizeShellHref(href, locale, defaultLocale) {');
   lines.push(

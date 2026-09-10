@@ -131,6 +131,16 @@ export interface RouteEntry {
 export type Middleware = (request: Request, next: () => Promise<Response>) => Promise<Response>;
 
 export interface FrameworkOptions {
+  /**
+   * Page renderer selection (Beta.2.2, #1339). EXPLICIT, never inferred:
+   * 'native' (default) renders pages through the compiled Part Program
+   * serializer (renderDsd); 'lit' renders LitElement pages through
+   * @lit-labs/ssr and hydrates them with @lit-labs/ssr-client. Routing,
+   * loaders, actions, form enhancement and morphing are shared; only page
+   * rendering and the client claim layer fork. 'lit' currently requires
+   * `appShell: false` (no compiled shell); the build fails closed otherwise.
+   */
+  renderer?: 'native' | 'lit';
   routesDir?: string;
   islandsDir?: string;
   componentsDir?: string;

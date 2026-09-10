@@ -3,6 +3,7 @@
  * PR checklist, numbered help rows, and a questions-first callout.
  */
 import { definePage } from '@openelement/app';
+import { siteHead } from '@openelement/site-ui/head.ts';
 import { contentLocale } from '@openelement/site-ui/locale.ts';
 import { localizePath } from '@openelement/site-ui/link.ts';
 import PageContributing from '../components/page-contributing.tsx';
@@ -11,6 +12,9 @@ export const meta = { section: '', label: 'Contributing', order: 30 };
 
 const content = {
   en: {
+    headTitle: 'Contributing',
+    headDescription:
+      'A precise, Deno-first contributor workflow for the openElement Web Standards Lab: setup, PR checklist and where to help.',
     eyebrow: 'Contributing — Join the lab',
     monoLine: 'BUILD IT',
     serifLine: 'with us.',
@@ -140,6 +144,9 @@ const content = {
     roadmapLabel: 'Roadmap',
   },
   zh: {
+    headTitle: '贡献指南',
+    headDescription:
+      '面向 openElement Web Standards Lab 的精确、Deno 优先的贡献者工作流：环境设置、PR 清单与入手方向。',
     eyebrow: '贡献 — 加入实验室',
     monoLine: 'BUILD IT',
     serifLine: '与我们一起。',
@@ -269,6 +276,16 @@ const content = {
 } as const;
 
 export default definePage(PageContributing, {
+  head({ locale }) {
+    const resolved = contentLocale(locale ?? 'en');
+    const copy = content[resolved];
+    return siteHead({
+      route: '/contributing',
+      locale: resolved,
+      title: copy.headTitle,
+      description: copy.headDescription,
+    });
+  },
   props({ locale }) {
     const resolved = contentLocale(locale ?? 'en');
     const text = content[resolved];

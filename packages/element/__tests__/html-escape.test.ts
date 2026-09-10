@@ -97,3 +97,53 @@ Deno.test('wrapInDocument: --!> counts as a comment close in the balance check (
   const unbalanced = warnings.filter((w) => w.includes('unbalanced HTML comments'));
   assertEquals(unbalanced.length, 1);
 });
+
+Deno.test('wrapInDocument: emits link tags (canonical, hreflang alternates) after meta (#1326)', () => {
+  const out = wrapInDocument('x', {
+    title: 'Notes',
+    meta: { description: 'All notes' },
+    links: [
+      { rel: 'canonical', href: 'https://example.com/notes' },
+      { rel: 'alternate', href: 'https://example.com/notes', hreflang: 'en' },
+      { rel: 'alternate', href: 'https://example.com/zh/notes', hreflang: 'zh' },
+    ],
+  });
+  const canonical = '  <link rel="canonical" href="https://example.com/notes">';
+  const alternateEn = '  <link rel="alternate" href="https://example.com/notes" hreflang="en">';
+  const alternateZh = '  <link rel="alternate" href="https://example.com/zh/notes" hreflang="zh">';
+  const metaDescription = '  <meta name="description" content="All notes">';
+  for (const fragment of [metaDescription, canonical, alternateEn, alternateZh]) {
+    if (!out.includes(fragment)) {
+      throw new Error(`missing fragment: ${fragment}\n${out}`);
+    }
+  }
+  // Deterministic order: meta description first, then links in author order.
+  if (
+    !(out.indexOf(metaDescription) < out.indexOf(canonical) &&
+      out.indexOf(canonical) < out.indexOf(alternateEn) &&
+      out.indexOf(alternateEn) < out.indexOf(alternateZh))
+  ) {
+    throw new Error(`link/meta order is not deterministic:\n${out}`);
+  }
+});
+
+Deno.test('wrapInDocument: escapes link attributes and skips entries without rel or href', () => {
+  const out = wrapInDocument('x', {
+    links: [
+      { rel: 'canonical', href: 'https://example.com/?a=1&b=<x>"' },
+      { rel: '', href: 'https://example.com/skipped' },
+      { rel: 'alternate', href: '' },
+    ] as Array<{ rel: string; href: string; hreflang?: string }>,
+  });
+  if (!out.includes('href="https://example.com/?a=1&amp;b=&lt;x&gt;&quot;"')) {
+    throw new Error(`link href was not attribute-escaped:\n${out}`);
+  }
+  if (out.includes('skipped')) {
+    throw new Error(`entry without rel must be skipped:\n${out}`);
+  }
+  // No links at all must keep the document byte-identical to before.
+  assertEquals(
+    wrapInDocument('x', { title: 'T' }).includes('<link'),
+    false,
+  );
+});

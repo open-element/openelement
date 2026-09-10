@@ -1,4 +1,4 @@
-import { ERROR_PREFIX } from '@openelement/element';
+import { ERROR_PREFIX } from '@openelement/element/authoring';
 /**
  * @openelement/app - application authoring API for the compiled architecture.
  *
@@ -16,9 +16,9 @@ import { ERROR_PREFIX } from '@openelement/element';
  * render function. There is no runtime JSX render path.
  */
 
-import { isDangerousKey, isValidTagName, OpenElementError } from '@openelement/element';
-import { HYDRATION_STRATEGIES } from '@openelement/element';
-import type { HydrationStrategy } from '@openelement/element';
+import { isDangerousKey, isValidTagName, OpenElementError } from '@openelement/element/authoring';
+import { HYDRATION_STRATEGIES } from '@openelement/element/authoring';
+import type { HydrationStrategy } from '@openelement/element/authoring';
 
 /**
  * Where a page renders (#609, ADR-0123):
@@ -201,10 +201,27 @@ export function classifyActionResult<Data>(result: Data): ActionOutcome<Data> {
   return { kind: 'success', data: result };
 }
 
-interface PageHead {
+/**
+ * Page <head> meaning declared by a route descriptor (v0.44, ADR-0143;
+ * canonical/alternates added in Beta.2.2, #1326). Either a static object or —
+ * via PageHeadResolver — resolved per render from the request-scoped context
+ * by resolvePageDocument (@openelement/app/document) before either serializer
+ * runs.
+ */
+export interface PageHead {
   title?: string;
   description?: string;
   meta?: Array<Record<string, string | number | boolean>>;
+  /**
+   * Canonical URL of this page (Beta.2.2, #1326), resolved into
+   * <link rel="canonical"> by the shared Document seam.
+   */
+  canonical?: string;
+  /**
+   * Locale alternates of this page (Beta.2.2, #1326), resolved into
+   * <link rel="alternate" hreflang="..."> entries in author order.
+   */
+  alternates?: Array<{ href: string; hreflang?: string }>;
   dangerouslyHeadFragments?: string[];
 }
 
@@ -255,12 +272,23 @@ export type PageErrorProjector<
   context: PagePropsContext<Data, Params>,
 ) => Record<string, unknown>;
 
+/**
+ * Resolves a page's head from the request-scoped context (Beta.2.2, #1326).
+ * The resolver receives the same context object the props projector gets and
+ * must stay a pure function of it — the Document seam (@openelement/app/
+ * document) never fetches, caches, or schedules loaders on its own.
+ */
+export type PageHeadResolver<
+  Data = unknown,
+  Params extends Record<string, string> = Record<string, string>,
+> = (context: PagePropsContext<Data, Params>) => PageHead;
+
 interface PageDescriptorInput<
   Data = unknown,
   Params extends Record<string, string> = Record<string, string>,
 > {
   route?: PageRouteIntent;
-  head?: PageHead;
+  head?: PageHead | PageHeadResolver<Data, Params>;
   renderIntent?: PageRenderIntent;
   props?: PagePropsProjector<Data, Params>;
   error?: PageErrorProjector<Data, Params>;
@@ -277,7 +305,7 @@ export interface OpenElementPageDescriptor<
 > {
   kind: 'page';
   route?: PageRouteIntent;
-  head?: PageHead;
+  head?: PageHead | PageHeadResolver<Data, Params>;
   renderIntent: NormalizedPageRenderIntent;
   props?: PagePropsProjector<Data, Params>;
   error?: PageErrorProjector<Data, Params>;

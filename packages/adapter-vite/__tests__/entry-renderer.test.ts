@@ -423,21 +423,33 @@ Deno.test('renderEntry: definePage descriptor feeds load and metadata wiring', (
   // through the descriptor's props projector — the compiled serializer maps
   // declared compiled properties onto the host; the legacy __openElement*
   // host-prop channel is gone (the #1129/#1130 guarantee is structural).
+  // #1326: the request-scoped context is built once and feeds both the props
+  // projector and the resolved-Document seam.
   assertStringIncludes(
     code,
-    '__ssr(__tag, __pageProps($pageIndex, { data: __data, actionData: undefined, params: __params, request: c.req.raw, locale: __localeFromPath(c.req.path, __getDefaultLocale()), route: __routeContext, meta: __routeMetaValue })',
+    'const __pageContext = { data: __data, actionData: undefined, params: __params, request: c.req.raw, locale: __localeFromPath(c.req.path, __getDefaultLocale()), route: __routeContext, meta: __routeMetaValue };',
+  );
+  assertStringIncludes(code, 'const __doc = __resolvePageDocument(__page.head, __pageContext);');
+  assertStringIncludes(
+    code,
+    "import { resolvePageDocument as __resolvePageDocument } from '@openelement/app/document'",
+  );
+  assertStringIncludes(
+    code,
+    '__ssr(__tag, __pageProps($pageIndex, __pageContext)',
   );
   assertFalse(code.includes('__openElementData'));
   assertEquals(code.includes('module?.meta'), false);
   assertEquals(code.includes('page.layout'), false);
-  assertStringIncludes(code, 'title: __page.head?.title || "openElement"');
+  assertStringIncludes(code, 'title: __doc.title || "openElement"');
   assertStringIncludes(
     code,
-    'meta: { description: __page.head?.description, tags: __page.head?.meta }',
+    'meta: { description: __doc.description, tags: __doc.meta },',
   );
+  assertStringIncludes(code, 'links: __doc.links,');
   assertStringIncludes(
     code,
-    'dangerouslyHeadFragments: __page.head?.dangerouslyHeadFragments || []',
+    'dangerouslyHeadFragments: __doc.dangerouslyHeadFragments || [],',
   );
   assertStringIncludes(code, 'function __pageDefinition(module) {');
   assertStringIncludes(
@@ -450,16 +462,14 @@ Deno.test('renderEntry: definePage descriptor feeds load and metadata wiring', (
     code,
     'data = typeof info.module.loader === "function" ? await info.module.loader(loadContext) : undefined;',
   );
-  assertStringIncludes(
-    code,
-    '__pageProps(info.module, { data, actionData: undefined, params, request: options.request, locale, route: loadContext.route, meta: routeMeta })',
-  );
+  assertStringIncludes(code, '__pageProps(info.module, __pageContext)');
+  assertStringIncludes(code, 'const __doc = __resolvePageDocument(page.head, __pageContext);');
   assertStringIncludes(code, 'filePath: "index.ts"');
   assertStringIncludes(
     code,
     'rendering: (__pageDefinition($pageIndex).renderIntent?.mode || "static")',
   );
-  assertStringIncludes(code, 'title: title || page.head?.title || "openElement"');
+  assertStringIncludes(code, 'title: title || __doc.title || "openElement"');
   // #1217: ISR semantics were removed in v0.44 — generated route metadata
   // must not carry a revalidate field.
   assertFalse(code.includes('revalidate'));

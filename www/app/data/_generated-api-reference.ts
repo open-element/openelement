@@ -412,6 +412,7 @@ export const apiReference = {
       "importPath": "@openelement/app",
       "supportedSubpaths": [
         ".",
+        "lit",
         "model",
         "preact",
         "router",
@@ -419,7 +420,9 @@ export const apiReference = {
         "spa"
       ],
       "internalSubpaths": [
-        "i18n"
+        "document",
+        "i18n",
+        "lit-ssr"
       ],
       "subpaths": [
         {
@@ -498,7 +501,7 @@ export const apiReference = {
               "summary": "Define a client-side SPA application: route table, router mode and mount/dispose lifecycle.",
               "source": {
                 "path": "packages/app/src/spa.ts",
-                "line": 100
+                "line": 96
               },
               "stability": "stable-candidate",
               "anchor": "api-app-root-defineApp"
@@ -509,7 +512,7 @@ export const apiReference = {
               "summary": "Validate and register an island delivery descriptor; returns the normalized config.",
               "source": {
                 "path": "packages/app/src/authoring.ts",
-                "line": 497
+                "line": 525
               },
               "stability": "stable-candidate",
               "anchor": "api-app-root-defineIslandConfig"
@@ -520,7 +523,7 @@ export const apiReference = {
               "summary": "Attach a page descriptor to a compiled page element class.",
               "source": {
                 "path": "packages/app/src/authoring.ts",
-                "line": 319
+                "line": 347
               },
               "stability": "stable-candidate",
               "anchor": "api-app-root-definePage"
@@ -553,7 +556,7 @@ export const apiReference = {
               "summary": "Per-island delivery configuration (SSR/DSD participation and hydration strategy).",
               "source": {
                 "path": "packages/app/src/authoring.ts",
-                "line": 426
+                "line": 454
               },
               "stability": "stable-candidate",
               "anchor": "api-app-root-IslandConfig"
@@ -564,7 +567,7 @@ export const apiReference = {
               "summary": "Delivery strategy for an island: a hydration trigger or media-gated loading.",
               "source": {
                 "path": "packages/app/src/authoring.ts",
-                "line": 423
+                "line": 451
               },
               "stability": "stable-candidate",
               "anchor": "api-app-root-IslandDeliveryStrategy"
@@ -652,7 +655,7 @@ export const apiReference = {
               "summary": "The page descriptor the pipeline reads (`module.default.openElementPage`). Attached to the compiled page class by definePage(); the class owns the render program, so the descriptor carries metadata and projectors only.",
               "source": {
                 "path": "packages/app/src/authoring.ts",
-                "line": 274
+                "line": 302
               },
               "stability": "stable-candidate",
               "anchor": "api-app-root-OpenElementPageDescriptor"
@@ -685,7 +688,7 @@ export const apiReference = {
               "summary": "A compiled element class carrying the page descriptor static.",
               "source": {
                 "path": "packages/app/src/authoring.ts",
-                "line": 287
+                "line": 315
               },
               "stability": "stable-candidate",
               "anchor": "api-app-root-PageComponentConstructor"
@@ -696,10 +699,32 @@ export const apiReference = {
               "summary": "Maps a caught render/loader/action failure onto the error variant of the page's compiled properties. Its presence declares that the page's compiled markup carries an error variant (the generated entry renders the page with these props and status 500 — the POST/GET error-boundary channel of ADR-0121 §7); without it the generic status page answers.",
               "source": {
                 "path": "packages/app/src/authoring.ts",
-                "line": 250
+                "line": 267
               },
               "stability": "stable-candidate",
               "anchor": "api-app-root-PageErrorProjector"
+            },
+            {
+              "name": "PageHead",
+              "kind": "interface",
+              "summary": "Page <head> meaning declared by a route descriptor (v0.44, ADR-0143; canonical/alternates added in Beta.2.2, #1326). Either a static object or — via PageHeadResolver — resolved per render from the request-scoped context by resolvePageDocument (@openelement/app/document) before either serializer runs.",
+              "source": {
+                "path": "packages/app/src/authoring.ts",
+                "line": 211
+              },
+              "stability": "stable-candidate",
+              "anchor": "api-app-root-PageHead"
+            },
+            {
+              "name": "PageHeadResolver",
+              "kind": "type",
+              "summary": "Resolves a page's head from the request-scoped context (Beta.2.2, #1326). The resolver receives the same context object the props projector gets and must stay a pure function of it — the Document seam (@openelement/app/ document) never fetches, caches, or schedules loaders on its own.",
+              "source": {
+                "path": "packages/app/src/authoring.ts",
+                "line": 281
+              },
+              "stability": "stable-candidate",
+              "anchor": "api-app-root-PageHeadResolver"
             },
             {
               "name": "PagePropsContext",
@@ -707,7 +732,7 @@ export const apiReference = {
               "summary": "The request-scoped context handed to a page's props projector. Everything a compiled page can render must pass through here: the compiled render() only reads `this.<property>`, so the projector is the single deterministic seam that maps loader data, action data, params and request onto the page's compiled properties (v0.44, ADR-0143).",
               "source": {
                 "path": "packages/app/src/authoring.ts",
-                "line": 218
+                "line": 235
               },
               "stability": "stable-candidate",
               "anchor": "api-app-root-PagePropsContext"
@@ -718,7 +743,7 @@ export const apiReference = {
               "summary": "Maps the request-scoped context onto the page's compiled properties. Declared as part of the page descriptor; the generated server entry and the SPA bootstrap call it per render and feed the result to renderDsd() props (server) or pre-connect property sets (SPA).",
               "source": {
                 "path": "packages/app/src/authoring.ts",
-                "line": 238
+                "line": 255
               },
               "stability": "stable-candidate",
               "anchor": "api-app-root-PagePropsProjector"
@@ -806,7 +831,7 @@ export const apiReference = {
               "summary": "A mounted SPA: idempotent mount/dispose plus the client-side router instance.",
               "source": {
                 "path": "packages/app/src/spa.ts",
-                "line": 88
+                "line": 84
               },
               "stability": "stable-candidate",
               "anchor": "api-app-root-SpaAppInstance"
@@ -832,6 +857,45 @@ export const apiReference = {
               },
               "stability": "stable-candidate",
               "anchor": "api-app-root-SpaLoaderContext"
+            }
+          ]
+        },
+        {
+          "subpath": "lit",
+          "label": "lit",
+          "exports": [
+            {
+              "name": "defineLitPage",
+              "kind": "function",
+              "summary": "Attach a page descriptor and host tag to a LitElement page class.",
+              "source": {
+                "path": "packages/app/src/lit.ts",
+                "line": 63
+              },
+              "stability": "experimental",
+              "anchor": "api-app-lit-defineLitPage"
+            },
+            {
+              "name": "LitPageConstructor",
+              "kind": "type",
+              "summary": "A LitElement page class carrying the page descriptor and its host tag.",
+              "source": {
+                "path": "packages/app/src/lit.ts",
+                "line": 39
+              },
+              "stability": "experimental",
+              "anchor": "api-app-lit-LitPageConstructor"
+            },
+            {
+              "name": "OpenElementPageDescriptor",
+              "kind": "interface",
+              "summary": "The page descriptor the pipeline reads (`module.default.openElementPage`). Attached to the compiled page class by definePage(); the class owns the render program, so the descriptor carries metadata and projectors only.",
+              "source": {
+                "path": "packages/app/src/authoring.ts",
+                "line": 302
+              },
+              "stability": "stable-candidate",
+              "anchor": "api-app-lit-OpenElementPageDescriptor"
             }
           ]
         },
@@ -1012,7 +1076,7 @@ export const apiReference = {
               "summary": "Define a client-side SPA application: route table, router mode and mount/dispose lifecycle.",
               "source": {
                 "path": "packages/app/src/spa.ts",
-                "line": 100
+                "line": 96
               },
               "stability": "stable-candidate",
               "anchor": "api-app-spa-defineApp"
@@ -1023,7 +1087,7 @@ export const apiReference = {
               "summary": "A mounted SPA: idempotent mount/dispose plus the client-side router instance.",
               "source": {
                 "path": "packages/app/src/spa.ts",
-                "line": 88
+                "line": 84
               },
               "stability": "stable-candidate",
               "anchor": "api-app-spa-SpaAppInstance"
@@ -1059,7 +1123,11 @@ export const apiReference = {
         "jsx-runtime",
         "sanitize"
       ],
-      "internalSubpaths": [],
+      "internalSubpaths": [
+        "authoring",
+        "html",
+        "logger"
+      ],
       "subpaths": [
         {
           "subpath": ".",
@@ -2838,6 +2906,24 @@ export const apiReference = {
     },
     {
       "route": "/apilist",
+      "anchor": "api-app-lit-defineLitPage",
+      "title": "defineLitPage (@openelement/app/lit)",
+      "kind": "api"
+    },
+    {
+      "route": "/apilist",
+      "anchor": "api-app-lit-LitPageConstructor",
+      "title": "LitPageConstructor (@openelement/app/lit)",
+      "kind": "api"
+    },
+    {
+      "route": "/apilist",
+      "anchor": "api-app-lit-OpenElementPageDescriptor",
+      "title": "OpenElementPageDescriptor (@openelement/app/lit)",
+      "kind": "api"
+    },
+    {
+      "route": "/apilist",
       "anchor": "api-app-model-createRequestContext",
       "title": "createRequestContext (@openelement/app/model)",
       "kind": "api"
@@ -3020,6 +3106,18 @@ export const apiReference = {
       "route": "/apilist",
       "anchor": "api-app-root-PageErrorProjector",
       "title": "PageErrorProjector (@openelement/app/root)",
+      "kind": "api"
+    },
+    {
+      "route": "/apilist",
+      "anchor": "api-app-root-PageHead",
+      "title": "PageHead (@openelement/app/root)",
+      "kind": "api"
+    },
+    {
+      "route": "/apilist",
+      "anchor": "api-app-root-PageHeadResolver",
+      "title": "PageHeadResolver (@openelement/app/root)",
       "kind": "api"
     },
     {

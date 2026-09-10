@@ -94,6 +94,8 @@ jobs:
             e2e/starter-smoke/test-results
             packages/adapter-vite/__fixtures__/request-time/e2e/test-results
             packages/adapter-vite/__fixtures__/ui-dogfood/e2e/test-results
+            packages/adapter-vite/__fixtures__/app-flow-native/e2e/test-results
+            packages/adapter-vite/__fixtures__/app-flow-lit/e2e/test-results
           if-no-files-found: ignore
           retention-days: 14
 

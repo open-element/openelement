@@ -13,15 +13,21 @@ function islandImportFactory(
   modulePath: AdmittedIslandModuleSpecifier,
   tagName: string,
   exportName?: string,
+  renderer: 'native' | 'lit' = 'native',
 ): string {
   const nameLiteral = exportName ? quoteGeneratedJavaScriptValue(exportName) : 'undefined';
   const tagLiteral = quoteGeneratedJavaScriptValue(tagName);
   const errorLiteral = quoteGeneratedJavaScriptValue(
     `[openElement] Capability module ${modulePath} did not export a constructor for ${tagName}`,
   );
+  // #1339 lit: after definition the island is a hydration ROOT — its page
+  // host is never client-registered, so no parent hydrate() will remove the
+  // SSR defer-hydration marker. Lifting it here runs lit-element-hydrate-
+  // support's deferred connectedCallback and the island adopts its DSD root.
+  const lift = renderer === 'lit' ? ` __liftDeferHydration(document, ${tagLiteral});` : '';
   return `() => import(${
     quoteGeneratedJavaScriptValue(modulePath)
-  }).then(function(mod) { var _name = ${nameLiteral}; var Ctor = _name ? mod[_name] : mod.default; if (typeof Ctor !== 'function') throw new Error(${errorLiteral}); if (!customElements.get(${tagLiteral})) customElements.define(${tagLiteral}, Ctor); return mod; })`;
+  }).then(function(mod) { var _name = ${nameLiteral}; var Ctor = _name ? mod[_name] : mod.default; if (typeof Ctor !== 'function') throw new Error(${errorLiteral}); if (!customElements.get(${tagLiteral})) customElements.define(${tagLiteral}, Ctor);${lift} return mod; })`;
 }
 
 interface NormalizedClientIsland extends AdmittedClientIslandEntry {
@@ -89,7 +95,11 @@ function activationGroupKey(entry: NormalizedClientIsland): string {
   return `${entry.modulePath}\u0000${entry.strategy}\u0000${entry.media ?? ''}`;
 }
 
-function sharedActivationFactory(group: ActivationGroup, index: number): string {
+function sharedActivationFactory(
+  group: ActivationGroup,
+  index: number,
+  renderer: 'native' | 'lit' = 'native',
+): string {
   const promise = `__activation${index}Promise`;
   const factory = `__activation${index}`;
   const lines = [
@@ -116,6 +126,12 @@ function sharedActivationFactory(group: ActivationGroup, index: number): string 
         quoteGeneratedJavaScriptValue(entry.tagName)
       })) customElements.define(${quoteGeneratedJavaScriptValue(entry.tagName)}, ${ctor});`,
     );
+    if (renderer === 'lit') {
+      // #1339: see islandImportFactory — lift defer-hydration on hydration roots.
+      lines.push(
+        `    __liftDeferHydration(document, ${quoteGeneratedJavaScriptValue(entry.tagName)});`,
+      );
+    }
   });
   lines.push('    return mod;');
   lines.push('  });');
@@ -131,6 +147,17 @@ interface GenerateClientEntryOptions {
    * silently left as plain no-JS posts.
    */
   enhancedForms?: boolean;
+  /**
+   * Page renderer fork (Beta.2.2, #1339). 'lit' installs the lit hydration
+   * support module FIRST (it must evaluate before any LitElement definition
+   * so DSD roots are adopted, not re-rendered) and drops the
+   * @openelement/element imports: createLogger is replaced by a tiny inline
+   * logger, and ensurePreHydrationClickCapture/ensureDeepFragmentNavigation
+   * are Native-claim helpers bound to the compiled kernel's DSD upgrade —
+   * lit DSD adoption is owned by lit-element-hydrate-support instead. The
+   * island scheduler and enhance client are import-free and stay unchanged.
+   */
+  renderer?: 'native' | 'lit';
 }
 
 export function generateClientEntry(
@@ -143,6 +170,7 @@ export function generateClientEntry(
     return '// openElement Client Entry - No islands detected, zero client JS needed\n';
   }
 
+  const lit = options.renderer === 'lit';
   const groupsByKey = new Map<string, ActivationGroup>();
   for (const entry of admittedIslands) {
     const key = activationGroupKey(entry);
@@ -155,7 +183,7 @@ export function generateClientEntry(
   const groupFactories = new Map<ActivationGroup, string>();
   groups.forEach((group, index) => {
     if (group.entries.length > 1) {
-      activationLines.push(sharedActivationFactory(group, index));
+      activationLines.push(sharedActivationFactory(group, index, lit ? 'lit' : 'native'));
       groupFactories.set(group, `__activation${index}`);
     }
   });
@@ -163,7 +191,8 @@ export function generateClientEntry(
     const group = groups.find((candidate) => candidate.entries.includes(entry));
     const factory = group && groupFactories.get(group);
     return `  ${quoteGeneratedJavaScriptValue(entry.tagName)}: ${
-      factory || islandImportFactory(entry.modulePath, entry.tagName, entry.exportName)
+      factory ||
+      islandImportFactory(entry.modulePath, entry.tagName, entry.exportName, lit ? 'lit' : 'native')
     }`;
   }).join(',\n');
 
@@ -194,7 +223,17 @@ export function generateClientEntry(
     }: typeof window.matchMedia === 'function' ? window.matchMedia(${quoteSingle(i.media!)}) : null`
   ).join(',\n');
 
-  return `// openElement Client Entry (v0.44 - load/idle/visible/media/only)
+  const headerComment = lit
+    ? `// openElement Client Entry (v0.44 - load/idle/visible/media/only) — LIT renderer (#1339)
+// lit-element-hydrate-support is the FIRST import: it patches LitElement so
+// server-rendered DSD shadow roots are ADOPTED on definition instead of being
+// re-rendered. This module never imports @openelement/element: the native
+// claim helpers (ensurePreHydrationClickCapture, ensureDeepFragmentNavigation)
+// belong to the compiled kernel's DSD upgrade and do not apply to lit
+// hydration; the logger is inlined to keep the bundle element-free.
+// Island scheduling and form enhancement are import-free runtimes shared
+// unchanged with the native renderer.`
+    : `// openElement Client Entry (v0.44 - load/idle/visible/media/only)
 // load islands import immediately.
 // idle islands import during browser idle time.
 // visible islands import when their host enters the viewport.
@@ -205,22 +244,61 @@ export function generateClientEntry(
 // #606: island-scheduler.ts is the single owner of strategy scheduling
 // (defineIsland() registers on module evaluation). #868: both runtimes are
 // real modules bundled via the virtual:open-client-runtime specifiers — the
-// entry only wires them, there is no inline string copy.
+// entry only wires them, there is no inline string copy.`;
 
-import { createLogger, ensureDeepFragmentNavigation, ensurePreHydrationClickCapture } from '@openelement/element';
+  const importsBlock = lit
+    ? `import '@lit-labs/ssr-client/lit-element-hydrate-support.js';
 import { createIslandScheduler as __schedule } from '${VIRTUAL_RUNTIME_SPECIFIERS.scheduler}';
 ${
-    options.enhancedForms === true
-      ? `import { createEnhanceClient } from '${VIRTUAL_RUNTIME_SPECIFIERS.enhance}';
+      options.enhancedForms === true
+        ? `import { createEnhanceClient } from '${VIRTUAL_RUNTIME_SPECIFIERS.enhance}';
 `
-      : ''
-  }
+        : ''
+    }
+var log = {
+  info: function () { if (typeof console !== 'undefined') console.info.apply(console, ['[openElement]'].concat([].slice.call(arguments))); },
+  warn: function () { if (typeof console !== 'undefined') console.warn.apply(console, ['[openElement]'].concat([].slice.call(arguments))); },
+  error: function () { if (typeof console !== 'undefined') console.error.apply(console, ['[openElement]'].concat([].slice.call(arguments))); },
+  debug: function () {},
+};
+
+// #1339: lit islands are hydration ROOTS. lit-ssr marks custom elements
+// nested in a parent template with defer-hydration, which lit-html's
+// hydrate() lifts while hydrating the parent — but page hosts are never
+// client-registered (mirroring the native renderer), so no parent hydration
+// exists for islands. Lifting the marker immediately after definition runs
+// lit-element-hydrate-support's deferred connectedCallback, and the island's
+// first update adopts its DSD shadow root (hydrate, never re-render).
+// Deep, shadow-root-aware: islands live inside page DSD roots (#562).
+var __liftDeferHydration = function (root, tag) {
+  var visit = function (scope) {
+    scope.querySelectorAll(tag).forEach(function (el) {
+      if (el.hasAttribute('defer-hydration')) el.removeAttribute('defer-hydration');
+    });
+    scope.querySelectorAll('*').forEach(function (el) {
+      if (el.shadowRoot) visit(el.shadowRoot);
+    });
+  };
+  visit(root);
+};`
+    : `import { createLogger, ensureDeepFragmentNavigation, ensurePreHydrationClickCapture } from '@openelement/element';
+import { createIslandScheduler as __schedule } from '${VIRTUAL_RUNTIME_SPECIFIERS.scheduler}';
+${
+      options.enhancedForms === true
+        ? `import { createEnhanceClient } from '${VIRTUAL_RUNTIME_SPECIFIERS.enhance}';
+`
+        : ''
+    }
 var log = createLogger('openElement');
 
 // #942: install the pre-hydration click capture before any island module
 // loads — clicks landing in the hydration window are replayed after hydration.
 ensurePreHydrationClickCapture();
-ensureDeepFragmentNavigation();
+ensureDeepFragmentNavigation();`;
+
+  return `${headerComment}
+
+${importsBlock}
 
 var __map = {
 ${islandMap}
@@ -264,7 +342,18 @@ var __enhance = createEnhanceClient({
   actionHeader: ${quoteGeneratedJavaScriptValue(ACTION_FETCH_HEADER)},
   win: window,
   doc: document,
-  observeVisible: __scheduler.observeVisible,
+  observeVisible: ${
+        lit
+          ? `function () {
+    // Module loading is one-shot; new SSR hosts arrive after every morph.
+    // Only admitted, already-loaded tags may resume Lit hydration here.
+    __tags.forEach(function (tag) {
+      if (customElements.get(tag)) __liftDeferHydration(document, tag);
+    });
+    __scheduler.observeVisible();
+  }`
+          : '__scheduler.observeVisible'
+      },
 });
 `
       : '// No data-open-enhance forms: the form enhancement layer is omitted (#569 complement),\n// keeping the client bundle free of morph and popstate code.'

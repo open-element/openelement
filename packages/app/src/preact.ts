@@ -17,7 +17,7 @@
  * @module @openelement/app/preact
  */
 
-import { assertValidTagName } from '@openelement/element';
+import { assertValidTagName } from '@openelement/element/authoring';
 import { h, hydrate as preactHydrate, render as preactRender } from 'preact';
 import type { ComponentChild } from 'preact';
 import { renderToString } from 'preact-render-to-string';

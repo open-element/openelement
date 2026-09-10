@@ -96,7 +96,7 @@ export function devIslandClientPlugin(
         ),
         upgradeStrategy: options.island?.upgradeStrategy,
       });
-      return generateClientEntry(islandEntries, { enhancedForms });
+      return generateClientEntry(islandEntries, { enhancedForms, renderer: options.renderer });
     },
   };
 }

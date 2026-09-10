@@ -312,11 +312,20 @@ export function analyzeModuleSemantics(source: string, fileName: string): Module
     if (
       ts.isExportAssignment(statement) && ts.isCallExpression(statement.expression) &&
       ts.isIdentifier(statement.expression.expression) &&
-      imports.isRuntimeNamedImport(
+      (imports.isRuntimeNamedImport(
         statement.expression.expression.text,
         '@openelement/app',
         'definePage',
-      )
+      ) ||
+        // #1339: the lit renderer's page definition factory lives on the
+        // @openelement/app/lit subpath; a route default-exporting it is a
+        // definePage-shaped route for scanning purposes (descriptor attached
+        // by the same internal path, host tag on openElementPageTag).
+        imports.isRuntimeNamedImport(
+          statement.expression.expression.text,
+          '@openelement/app/lit',
+          'defineLitPage',
+        ))
     ) definePage = true;
 
     if (!ts.isClassDeclaration(statement)) continue;
@@ -432,6 +441,16 @@ export function analyzeModuleSemantics(source: string, fileName: string): Module
         if (name === 'data-open-enhance') enhancedForm = true;
         if (/^on[A-Z]/.test(name)) interactionEvents.add(name.slice(2).toLowerCase());
       }
+    }
+    // Lit templates carry the same attribute inside html`` template literals
+    // instead of JSX (#1339: the enhancement layer is renderer-shared, so the
+    // detection must be too). The attribute-shape lookahead ([\s=>/]) keeps
+    // prose mentions from pulling the layer in, matching the JSX rule.
+    if (ts.isNoSubstitutionTemplateLiteral(node) || ts.isTemplateExpression(node)) {
+      const parts = ts.isNoSubstitutionTemplateLiteral(node)
+        ? [node.text]
+        : [node.head.text, ...node.templateSpans.map((span) => span.literal.text)];
+      if (parts.some((text) => /data-open-enhance(?=[\s=>/])/.test(text))) enhancedForm = true;
     }
     ts.forEachChild(node, visit);
   };
