@@ -35,22 +35,13 @@ interface RoadmapListItem {
 const entries: Record<'en' | 'zh', TimelineEntry[]> = {
   'en': [
     {
-      'version': 'v0.44.0-beta.2.1',
-      'theme': 'Router foundation and independent Element',
-      'copy':
-        'Maintain an upstream-traceable URLPatternList fork and prepare generic contributions; unify route resolution; repair SSG and browser navigation boundaries; qualify standalone Element and prerelease tooling.',
-      'state': 'next',
-      'stamp': 'CURRENT',
-      'status': 'prerelease',
-    },
-    {
       'version': 'v0.44.0-beta.2.2',
       'theme': 'Native and Lit Framework Mode',
       'copy':
-        'Use WTR for upstream-aligned browser conformance; prove loader, SSR, client continuation, navigation and actions with Native and Lit; derive a minimal shared protocol and public Document/SEO/search/sitemap metadata; prepare bounded Oxc/TS7 migration experiments. Lit is a support target, not an already-shipped claim.',
-      'state': 'planned',
-      'stamp': 'NEXT',
-      'status': 'planned',
+        'Use WTR for upstream-aligned browser conformance; prove loader, SSR, client continuation, navigation and actions with Native and Lit; derive a minimal shared protocol and public Document/SEO/search/sitemap metadata; prepare bounded Oxc/TS7 migration experiments. Lit ships as a qualified renderer alongside Native.',
+      'state': 'next',
+      'stamp': 'CURRENT',
+      'status': 'prerelease',
     },
     {
       'version': 'v0.44.0-beta.2.3',
@@ -58,6 +49,7 @@ const entries: Record<'en' | 'zh', TimelineEntry[]> = {
       'copy':
         'Qualify independent packed consumers, runtime/browser matrices, output and resource cleanup; remove qualified duplicate infrastructure, reconcile documentation and record Alpha migration decisions. No deadline waiver or automatic beta.2.4.',
       'state': 'planned',
+      'stamp': 'NEXT',
       'status': 'evidence-gated',
     },
     {
@@ -79,22 +71,13 @@ const entries: Record<'en' | 'zh', TimelineEntry[]> = {
   ],
   'zh': [
     {
-      'version': 'v0.44.0-beta.2.1',
-      'theme': 'Router 地基与独立 Element',
-      'copy':
-        '维护可追溯上游的 URLPatternList fork，准备通用贡献；统一路由决议；修复 SSG 和浏览器导航边界；验证独立 Element 与预发布工具链。',
-      'state': 'next',
-      'stamp': 'CURRENT',
-      'status': '预发布',
-    },
-    {
       'version': 'v0.44.0-beta.2.2',
       'theme': 'Native 与 Lit Framework Mode',
       'copy':
-        '采用便于贡献上游的 WTR 浏览器测试，以 Native 和 Lit 跑通 loader、SSR、客户端接续、导航及 action，提炼最小共享协议和 Document/SEO/search/sitemap 元数据，并完成有界 Oxc/TS7 迁移试验。Lit 是正式支持目标，尚非已交付声明。',
-      'state': 'planned',
-      'stamp': 'NEXT',
-      'status': '规划中',
+        '采用便于贡献上游的 WTR 浏览器测试，以 Native 和 Lit 跑通 loader、SSR、客户端接续、导航及 action，提炼最小共享协议和 Document/SEO/search/sitemap 元数据，并完成有界 Oxc/TS7 迁移试验。Lit 作为已验证的渲染器与 Native 一同交付。',
+      'state': 'next',
+      'stamp': 'CURRENT',
+      'status': '预发布',
     },
     {
       'version': 'v0.44.0-beta.2.3',
@@ -102,6 +85,7 @@ const entries: Record<'en' | 'zh', TimelineEntry[]> = {
       'copy':
         '验证独立打包消费者、运行时与浏览器矩阵、产物和资源清理，删除已验证的重复基础设施、同步文档并明确 Alpha 迁移决定。期限不豁免验收，不自动追加 beta.2.4。',
       'state': 'planned',
+      'stamp': 'NEXT',
       'status': '按证据准入',
     },
     {
