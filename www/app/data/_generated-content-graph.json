@@ -2471,7 +2471,7 @@
       },
       "alternates": [],
       "references": [],
-      "fingerprint": "2ecbb586483ed06d61a731d9f3817ad491950ccc9a784ce1cb76682628cf0710",
+      "fingerprint": "be6feefac75b6e27c148476371b7dc5a0e126890eca2f7ddae44fdc029bf7a8d",
       "data": {}
     },
     {
@@ -3004,12 +3004,12 @@
       },
       "alternates": [],
       "references": [],
-      "fingerprint": "d8a3f2640c7fec57c8799ab52ab2339c2c0ed5b47eea90d75f617846aa0f2202",
+      "fingerprint": "d374f2ec59826d57c6f1dde1b4a7ce7a39fbdd2f51d276230238522a33124b4a",
       "data": {
-        "activeTarget": "v0.44.0-beta.2.1",
+        "activeTarget": "v0.44.0-beta.2.2",
         "latestLandedTrain": "v0.44.0-beta.2.1",
         "maturity": "beta",
-        "nextPlannedTrain": "v0.44.0-beta.2.2",
+        "nextPlannedTrain": "v0.44.0-beta.2.3",
         "publishedVersion": "0.44.0-beta.2.1",
         "schemaVersion": 1,
         "sourceVersion": "0.44.0-beta.2.1"
@@ -4402,6 +4402,20 @@
       }
     },
     {
+      "id": "release:v0.44.0-beta.2.2",
+      "kind": "release",
+      "locale": "en",
+      "source": {
+        "path": "docs/release/v0.44.0-beta.2.2.md"
+      },
+      "alternates": [],
+      "references": [],
+      "fingerprint": "26616c9fd0a5b9f48c8dbefa2e5277d70429e815dd2c012f7cb4ff34b445b5fa",
+      "data": {
+        "title": "v0.44.0-beta.2.2"
+      }
+    },
+    {
       "id": "roadmap:en:0",
       "kind": "roadmap-entry",
       "locale": "en",
@@ -4416,14 +4430,14 @@
         }
       ],
       "references": [],
-      "fingerprint": "3dad2f776c187bb72f9961cee305565e9d86603b66d20059149d410445424d19",
+      "fingerprint": "6572bdfd2bfa9a4491ca781df047760a6a01d972ec9435de5794e67402cb454e",
       "data": {
-        "copy": "Maintain an upstream-traceable URLPatternList fork and prepare generic contributions; unify route resolution; repair SSG and browser navigation boundaries; qualify standalone Element and prerelease tooling.",
+        "copy": "Use WTR for upstream-aligned browser conformance; prove loader, SSR, client continuation, navigation and actions with Native and Lit; derive a minimal shared protocol and public Document/SEO/search/sitemap metadata; prepare bounded Oxc/TS7 migration experiments. Lit ships as a qualified renderer alongside Native.",
         "stamp": "CURRENT",
         "state": "next",
         "status": "prerelease",
-        "theme": "Router foundation and independent Element",
-        "version": "v0.44.0-beta.2.1"
+        "theme": "Native and Lit Framework Mode",
+        "version": "v0.44.0-beta.2.2"
       }
     },
     {
@@ -4441,14 +4455,14 @@
         }
       ],
       "references": [],
-      "fingerprint": "4d0bcd65e8e3fd1589c183a24ec85fa532996759d4c7d3dc7f64fe5b73789bcd",
+      "fingerprint": "04f0b99cbfb94dc1e05a3b75e7f0c5d464429d10383ac876b10944b06b99c09d",
       "data": {
-        "copy": "Use WTR for upstream-aligned browser conformance; prove loader, SSR, client continuation, navigation and actions with Native and Lit; derive a minimal shared protocol and public Document/SEO/search/sitemap metadata; prepare bounded Oxc/TS7 migration experiments. Lit is a support target, not an already-shipped claim.",
+        "copy": "Qualify independent packed consumers, runtime/browser matrices, output and resource cleanup; remove qualified duplicate infrastructure, reconcile documentation and record Alpha migration decisions. No deadline waiver or automatic beta.2.4.",
         "stamp": "NEXT",
         "state": "planned",
-        "status": "planned",
-        "theme": "Native and Lit Framework Mode",
-        "version": "v0.44.0-beta.2.2"
+        "status": "evidence-gated",
+        "theme": "Dual-mode qualification",
+        "version": "v0.44.0-beta.2.3"
       }
     },
     {
@@ -4466,13 +4480,13 @@
         }
       ],
       "references": [],
-      "fingerprint": "e1ff75df8c1894bc2d91adf5bbd5d00db14306084618fbcf95286404b98076ae",
+      "fingerprint": "4da4bee4f6f1e124f3274434024e21f1a615c4a94dbfd3b286cc0c4781c21b1e",
       "data": {
-        "copy": "Qualify independent packed consumers, runtime/browser matrices, output and resource cleanup; remove qualified duplicate infrastructure, reconcile documentation and record Alpha migration decisions. No deadline waiver or automatic beta.2.4.",
+        "copy": "Start real application use with the public baseline: independently consumable Element and Router with Native/Lit application flows. Actively qualify Oxc/TS7 adoption and platform reductions through subsequent Alpha upgrades; APIs may evolve with migration guidance.",
         "state": "planned",
-        "status": "evidence-gated",
-        "theme": "Dual-mode qualification",
-        "version": "v0.44.0-beta.2.3"
+        "status": "planned",
+        "theme": "Public Alpha admission",
+        "version": "v1.0.0-alpha.1"
       }
     },
     {
@@ -4490,31 +4504,7 @@
         }
       ],
       "references": [],
-      "fingerprint": "cb5fa7389c68cfc77ec9848a89abafb0b3f568274e2fccd8840733a9007ed2a2",
-      "data": {
-        "copy": "Start real application use with the public baseline: independently consumable Element and Router with Native/Lit application flows. Actively qualify Oxc/TS7 adoption and platform reductions through subsequent Alpha upgrades; APIs may evolve with migration guidance.",
-        "state": "planned",
-        "status": "planned",
-        "theme": "Public Alpha admission",
-        "version": "v1.0.0-alpha.1"
-      }
-    },
-    {
-      "id": "roadmap:en:4",
-      "kind": "roadmap-entry",
-      "locale": "en",
-      "source": {
-        "line": 71,
-        "path": "www/app/routes/roadmap.tsx"
-      },
-      "alternates": [
-        {
-          "locale": "zh",
-          "id": "roadmap:zh:4"
-        }
-      ],
-      "references": [],
-      "fingerprint": "aee70f328c7fb7e507e8c4d71122688398a0bbf3e185f2540c7599af10a2ebf6",
+      "fingerprint": "d10ce6dea23af69fd465483c5552dc3ec2f4b0509f9392c7c82f12a76e8a64ae",
       "data": {
         "copy": "Freeze contracts and dependencies after Alpha evidence; require at least fourteen days of RC soak, install/upgrade/security qualification and human GO. Element and Router do not mandate a package count.",
         "state": "planned",
@@ -4528,7 +4518,7 @@
       "kind": "roadmap-entry",
       "locale": "zh",
       "source": {
-        "line": 81,
+        "line": 73,
         "path": "www/app/routes/roadmap.tsx"
       },
       "alternates": [
@@ -4538,14 +4528,14 @@
         }
       ],
       "references": [],
-      "fingerprint": "6d9855789ba60ad9e83a158bd5b388762857d29d894363fbba50cc09fde658fd",
+      "fingerprint": "bd24b808cd8b84dbb26b105024d0b18b35a85e3c86345ab6ae31ce19a0cafab5",
       "data": {
-        "copy": "维护可追溯上游的 URLPatternList fork，准备通用贡献；统一路由决议；修复 SSG 和浏览器导航边界；验证独立 Element 与预发布工具链。",
+        "copy": "采用便于贡献上游的 WTR 浏览器测试，以 Native 和 Lit 跑通 loader、SSR、客户端接续、导航及 action，提炼最小共享协议和 Document/SEO/search/sitemap 元数据，并完成有界 Oxc/TS7 迁移试验。Lit 作为已验证的渲染器与 Native 一同交付。",
         "stamp": "CURRENT",
         "state": "next",
         "status": "预发布",
-        "theme": "Router 地基与独立 Element",
-        "version": "v0.44.0-beta.2.1"
+        "theme": "Native 与 Lit Framework Mode",
+        "version": "v0.44.0-beta.2.2"
       }
     },
     {
@@ -4553,7 +4543,7 @@
       "kind": "roadmap-entry",
       "locale": "zh",
       "source": {
-        "line": 90,
+        "line": 82,
         "path": "www/app/routes/roadmap.tsx"
       },
       "alternates": [
@@ -4563,14 +4553,14 @@
         }
       ],
       "references": [],
-      "fingerprint": "3a956fec712a260c57cbacfdbc0230f5ddcc0de474ceebb30a188cd84f308b27",
+      "fingerprint": "0321af9780e56722350813fc3d221e85330842c488873c6164ede6ee828149bc",
       "data": {
-        "copy": "采用便于贡献上游的 WTR 浏览器测试，以 Native 和 Lit 跑通 loader、SSR、客户端接续、导航及 action，提炼最小共享协议和 Document/SEO/search/sitemap 元数据，并完成有界 Oxc/TS7 迁移试验。Lit 是正式支持目标，尚非已交付声明。",
+        "copy": "验证独立打包消费者、运行时与浏览器矩阵、产物和资源清理，删除已验证的重复基础设施、同步文档并明确 Alpha 迁移决定。期限不豁免验收，不自动追加 beta.2.4。",
         "stamp": "NEXT",
         "state": "planned",
-        "status": "规划中",
-        "theme": "Native 与 Lit Framework Mode",
-        "version": "v0.44.0-beta.2.2"
+        "status": "按证据准入",
+        "theme": "双模式资格验证",
+        "version": "v0.44.0-beta.2.3"
       }
     },
     {
@@ -4578,7 +4568,7 @@
       "kind": "roadmap-entry",
       "locale": "zh",
       "source": {
-        "line": 99,
+        "line": 91,
         "path": "www/app/routes/roadmap.tsx"
       },
       "alternates": [
@@ -4588,31 +4578,7 @@
         }
       ],
       "references": [],
-      "fingerprint": "8f178d561603a1c175303daa1e6c6db9012a43c3464a2f10e7a1fbafac326dcb",
-      "data": {
-        "copy": "验证独立打包消费者、运行时与浏览器矩阵、产物和资源清理，删除已验证的重复基础设施、同步文档并明确 Alpha 迁移决定。期限不豁免验收，不自动追加 beta.2.4。",
-        "state": "planned",
-        "status": "按证据准入",
-        "theme": "双模式资格验证",
-        "version": "v0.44.0-beta.2.3"
-      }
-    },
-    {
-      "id": "roadmap:zh:3",
-      "kind": "roadmap-entry",
-      "locale": "zh",
-      "source": {
-        "line": 107,
-        "path": "www/app/routes/roadmap.tsx"
-      },
-      "alternates": [
-        {
-          "locale": "en",
-          "id": "roadmap:en:3"
-        }
-      ],
-      "references": [],
-      "fingerprint": "713e4d81152dacc6abf9f70f53bf4e45ded56645d9048891741e715f7aad3862",
+      "fingerprint": "c3b67b3faf8bd58b95a6c890b679e0fd9c5f2ad70113ea868dd6c4a7b526557a",
       "data": {
         "copy": "从公开基线开始在真实应用中使用可独立消费的 Element 与 Router，验证 Native/Lit 应用流程；后续 Alpha 积极验证 Oxc/TS7 采用和平台替代，接口调整提供迁移说明。",
         "state": "planned",
@@ -4622,21 +4588,21 @@
       }
     },
     {
-      "id": "roadmap:zh:4",
+      "id": "roadmap:zh:3",
       "kind": "roadmap-entry",
       "locale": "zh",
       "source": {
-        "line": 115,
+        "line": 99,
         "path": "www/app/routes/roadmap.tsx"
       },
       "alternates": [
         {
           "locale": "en",
-          "id": "roadmap:en:4"
+          "id": "roadmap:en:3"
         }
       ],
       "references": [],
-      "fingerprint": "9a147c6637a250ba372a0dc889a11e38314b6aabb2568d4ed8327fddeca5d58d",
+      "fingerprint": "556e3512428ff2cd346edb403c1c4a96804e06414a031bace2e6b2787e422983",
       "data": {
         "copy": "Alpha 证据充分后冻结接口与依赖，完成至少十四天 RC 持续运行及安装、升级、安全验证后取得人工 GO。两个产品不强制两个发布包。",
         "state": "planned",
