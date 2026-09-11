@@ -50,7 +50,7 @@ application flows. Two findings required changes inside ADR-0122 frozen paths:
 - Frozen-path accounting (ADR-0122): `packages/router/src/authoring.ts` (§1) gains
   the head-resolver descriptor channel — the loop contract algebra
   (fail/redirect/notFound/action outcomes) is unchanged.
-  `packages/adapter-vite/src/internal/ssg/entry-codegen.ts` (§2/§3) emits the
+  `packages/router/src/vite/internal/ssg/entry-codegen.ts` (§2/§3) emits the
   document-seam call — the CSRF fail-closed default and the action response
   channels are unchanged. `form-enhance.ts` (§2) implements the tuple —
   interception remains fail-closed toward native behavior. This ADR is the

@@ -87,8 +87,9 @@ names the content element.
 - `packages/element`: `RouteEntry` gains the optional `definePage` flag
   (additive; the public interface snapshot tracks export statements, not
   interface members).
-- `packages/adapter-vite`: scanner flag + masking + migration note,
-  descriptor registration-tag resolution, orchestrator comment.
+- Router's Framework Mode tooling: scanner flag + masking + migration note,
+  descriptor registration-tag resolution, orchestrator comment. (The original implementation was
+  in the now-removed Adapter Vite package.)
 - `packages/create` templates: comments narrowed at the `tagName` export;
   template markup unchanged (the sanctioned shape keeps working).
 - `www`: no route changes — the site uses plain element routes, whose

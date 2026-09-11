@@ -11,7 +11,8 @@ Element 将 JSX 编写的 Custom Element 编译为 Part Program，并统一用�
 
 - `packages/element`：Element 产品。
 - `packages/router`：Router 的 Route Mode 与 Framework Mode 实现。
-- `packages/adapter-vite`：从属于 Element/Router 的编译、Vite 与服务器输出集成。
+- `packages/element` 的 `/compiler` 与 `/vite` 子路径：Element 编译与 Vite 工具集成；
+  `packages/router` 的 `/vite`、`/cli/*` 与 `/nitro-mount` 子路径：Router 的应用生命周期与服务器输出。
 - `packages/create`：面向这两个产品的轻量脚手架。
 
 UI 组件、Reader/Mastodon、参考 SaaS、示例及文档站点属于独立消费者，不再是核心仓库产品。历史快照继续由 Git 标签保存。

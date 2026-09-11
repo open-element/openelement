@@ -79,6 +79,18 @@ jobs:
         run: ./node_modules/.bin/playwright install --with-deps chromium firefox webkit
       - name: OpenElement CI gate
         run: deno task gate:ci
+      - name: Bind candidate evidence to this exact SHA
+        env:
+          CANDIDATE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: deno task candidate:evidence
+      - name: Upload candidate evidence
+        # v7.0.1
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: candidate-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+          path: .artifacts/candidate-evidence.json
+          if-no-files-found: error
+          retention-days: 14
       # #1232 (B2.10): e2e failures must be inspectable — the 'github'
       # reporter annotates the run inline, and this step publishes the
       # Playwright HTML report + per-test traces/screenshots on failure.

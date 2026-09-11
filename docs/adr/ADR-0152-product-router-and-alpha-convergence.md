@@ -11,8 +11,8 @@
 ### Public boundary
 
 Element and Router are the public core. `@openelement/router` distributes Router;
-`@openelement/adapter-vite` is a temporary convergence package and `@openelement/create` is the
-independent bootstrap package. The first release on this boundary is `1.0.0-alpha.1`, a new public
+the former Adapter Vite surface is now split between Element and Router tooling subpaths, and
+`@openelement/create` is the independent bootstrap package. The first release on this boundary is `1.0.0-alpha.1`, a new public
 baseline rather than a 0.x compatibility migration. The npm `alpha` tag is used for Alpha; `latest`
 remains independently governed.
 

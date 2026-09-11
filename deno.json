@@ -14,7 +14,7 @@
     "@std/assert": "jsr:@std/assert@^1.0.0",
     "hono": "npm:hono@^4.12",
     "vite": "npm:vite@8.0.16",
-    "typescript": "npm:@typescript/typescript6@^6.0.2",
+    "typescript": "npm:typescript@6.0.3",
     "@types/node": "npm:@types/node@26.5.0",
     "yaml": "npm:yaml@^2.8.1",
     "@playwright/test": "npm:@playwright/test@1.59.1",
@@ -59,6 +59,11 @@
     "publish:npm": "deno run --allow-read --allow-write --allow-run --allow-env --allow-net tools/publish-npm.ts publish:npm",
     "publish:npm:dry-run": "deno run --allow-read --allow-write --allow-run --allow-env --allow-net tools/publish-npm.ts publish:npm:dry-run",
     "gate:ts7:shadow": "deno run --allow-read --allow-write --allow-run --allow-env --allow-net tools/ts7-shadow-gate.ts",
+    "candidate:evidence": "deno run --allow-read --allow-write --allow-run --allow-env tools/candidate-evidence.ts",
+    "candidate:check": "deno task gate:release && deno task candidate:evidence",
+    "census": "deno run --allow-read --allow-write --allow-run --allow-env tools/tracked-census.ts",
+    "perf:baseline": "deno run --allow-read --allow-run --allow-env benchmarks/micro/micro.ts",
+    "perf:record": "deno run --allow-read --allow-write --allow-run --allow-env tools/perf-record.ts",
     "test": "deno test --ignore=packages/element/__wtr__ --allow-read --allow-write --allow-env --allow-net --allow-run --allow-ffi --allow-sys",
     "test:coverage": "deno test --coverage=.coverage --allow-read --allow-write --allow-env --allow-net --allow-run --allow-ffi --allow-sys && deno coverage .coverage --html && deno coverage .coverage --lcov > .coverage/lcov.info",
     "test:watch": "deno test --allow-read --allow-write --allow-env --allow-net --allow-run --watch",
@@ -97,8 +102,10 @@
     "clean": "rm -rf packages/*/dist packages/*/*.tgz dist custom-dist dist-test-* playwright-report test-results .openElement",
     "hooks:install": "git config core.hooksPath .githooks && chmod +x .githooks/pre-commit .githooks/pre-push",
     "hooks:uninstall": "git config --unset core.hooksPath",
-    "gate:ci": "deno task graph:check && deno task interface:snapshot && deno task export-files:check && deno task url-pattern-list:provenance && deno task release:state-machine:check && deno task signals:check-protocol-boundary && deno task deno-api:check && deno task validation:boundary-check && deno task build && deno task test:coverage:check && deno task fixture:router-request-time:gate && deno task fixture:router-native-framework:gate && deno task fixture:router-lit-framework:gate && deno task test:element:browser:gate && deno task test:starter-smoke && deno task package-artifacts:check && deno task consumer:packaged && deno task consumer:packaged-app && deno task consumer:packaged-router && deno task consumer:packaged-element && deno task third-party-wc:smoke",
-    "gate:release": "deno task gate:ci && deno task nitro:proof:node && deno task nitro:proof:workers && deno task publish:npm:dry-run"
+    "gate:source": "deno task graph:check && deno task interface:snapshot && deno task export-files:check && deno task url-pattern-list:provenance && deno task release:state-machine:check && deno task signals:check-protocol-boundary && deno task deno-api:check && deno task validation:boundary-check && deno task build && deno task test:coverage:check && deno task fixture:router-request-time:gate && deno task fixture:router-native-framework:gate && deno task fixture:router-lit-framework:gate && deno task test:element:browser:gate && deno task test:starter-smoke && deno task nitro:proof:node && deno task nitro:proof:workers",
+    "gate:packed": "deno task pack:dry-run && deno task package-artifacts:check && deno task consumer:packaged && deno task consumer:packaged-app && deno task consumer:packaged-router && deno task consumer:packaged-element && deno task third-party-wc:smoke",
+    "gate:ci": "deno task gate:source && deno task gate:packed",
+    "gate:release": "deno task gate:packed && deno task publish:npm:dry-run"
   },
   "fmt": {
     "useTabs": false,
@@ -129,6 +136,8 @@
     "exclude": [
       "custom-dist/",
       "dist-test-ssg-render/",
+      "examples/",
+      "www/",
       "**/.nitro/"
     ]
   },

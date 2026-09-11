@@ -44,6 +44,7 @@ const repoRoot = resolve(import.meta.dirname!, '..');
 // Generous ceiling for the starter's real SSG build (vite + nitro); a hung
 // packed adapter must fail the tool instead of stalling CI forever.
 const BUILD_TIMEOUT_MS = 10 * 60_000;
+const NPM_INSTALL_TIMEOUT_MS = 5 * 60_000;
 // Cold-cache vite dev under Deno can take well over a minute before the
 // first SSR response; dev/start/deploy legs share this readiness ceiling.
 const SERVER_READY_TIMEOUT_MS = 3 * 60_000;
@@ -53,6 +54,7 @@ async function run(
   args: string[],
   cwd: string,
   timeoutMs?: number,
+  env?: Record<string, string>,
 ): Promise<{ success: boolean; output: string }> {
   // Deno.Command resolves (not rejects) when the signal kills the subprocess,
   // so track the timeout explicitly to report it instead of an empty failure.
@@ -68,6 +70,7 @@ async function run(
       cwd,
       stdout: 'piped',
       stderr: 'piped',
+      env,
       ...(timeoutMs === undefined ? {} : { signal: controller.signal }),
     }).output();
     const decoder = new TextDecoder();
@@ -81,6 +84,28 @@ async function run(
     return { success: result.success, output };
   } finally {
     clearTimeout(timeoutId);
+  }
+}
+
+async function assertConsumerDoesNotResolveIntoRepository(tmp: string): Promise<void> {
+  const nodeModules = join(tmp, 'node_modules');
+  const candidates: string[] = [];
+  for (const entry of Deno.readDirSync(nodeModules)) {
+    if (entry.name.startsWith('.')) continue;
+    const path = join(nodeModules, entry.name);
+    if (entry.name.startsWith('@') && entry.isDirectory) {
+      for (const nested of Deno.readDirSync(path)) candidates.push(join(path, nested.name));
+    } else {
+      candidates.push(path);
+    }
+  }
+  for (const path of candidates) {
+    const resolved = await Deno.realPath(path).catch(() => path);
+    if (resolved === repoRoot || resolved.startsWith(`${repoRoot}/`)) {
+      throw new Error(
+        `Packed consumer resolved a dependency into the repository: ${path} -> ${resolved}`,
+      );
+    }
   }
 }
 
@@ -207,6 +232,7 @@ async function exerciseServer(
 
 const tmp = await Deno.makeTempDir({ prefix: 'openelement-packaged-starter-' });
 try {
+  const npmEnv = { NPM_CONFIG_CACHE: join(tmp, '.npm-cache') };
   // Cover the canonical retained package line (#828) with the shared tarball
   // naming helper (#793) so a new package cannot escape the smoke.
   const workspacePackages = await readPackages();
@@ -234,8 +260,17 @@ try {
   );
   const install = await run(
     'npm',
-    ['install', '--ignore-scripts', '--no-audit', '--no-fund', ...tarballs],
+    [
+      'install',
+      '--ignore-scripts',
+      '--no-audit',
+      '--no-fund',
+      '--fetch-timeout=30000',
+      ...tarballs,
+    ],
     tmp,
+    NPM_INSTALL_TIMEOUT_MS,
+    npmEnv,
   );
   if (!install.success) throw new Error(`Packed package installation failed:\n${install.output}`);
 
@@ -303,31 +338,27 @@ try {
   if (missingExternals.length > 0) {
     const provision = await run(
       'npm',
-      ['install', '--ignore-scripts', '--no-audit', '--no-fund', ...missingExternals],
+      [
+        'install',
+        '--ignore-scripts',
+        '--no-audit',
+        '--no-fund',
+        '--fetch-timeout=30000',
+        ...missingExternals,
+      ],
       tmp,
+      NPM_INSTALL_TIMEOUT_MS,
+      npmEnv,
     );
     if (!provision.success) {
       throw new Error(`Starter external dependency install failed:\n${provision.output}`);
     }
   }
 
-  // The starter's external deps (vite, @deno/vite-plugin, hono) are NOT inside
-  // the local @openelement/* tarballs; npm resolves them via the repo-reachable
-  // registries (npmjs.org + @jsr → npm.jsr.io from the .npmrc above). Reuse the
-  // repo's already-resolved dependency tree (populated by setup-deno-workspace)
-  // by linking any top-level entry the
-  // freshly-installed tarballs did not already provide. Symlinks keep the
-  // nested .deno structure intact so @deno/vite-plugin can resolve @deno/loader.
-  const repoNodeModules = join(repoRoot, 'node_modules');
-  if (existsSync(repoNodeModules)) {
-    for (const entry of Deno.readDirSync(repoNodeModules)) {
-      const dest = join(tmp, 'node_modules', entry.name);
-      if (existsSync(dest)) continue; // local tarballs win
-      const src = join(repoNodeModules, entry.name);
-      await Deno.symlink(src, dest, { type: entry.isDirectory ? 'dir' : 'file' })
-        .catch(() => undefined);
-    }
-  }
+  // A packed consumer is a closed world. Its only node_modules tree is built
+  // above from tarballs and explicit external imports; it must never borrow
+  // missing modules from this repository.
+  await assertConsumerDoesNotResolveIntoRepository(tmp);
 
   config.nodeModulesDir = 'manual';
   await Deno.writeTextFile(configPath, formatJson(config));

@@ -9,10 +9,8 @@
  * - Deno source keeps using Deno's supported checker (deno task typecheck).
  * - The Element compiler and every other AST consumer keep using the classic
  *   TypeScript compiler API, resolved through the import-map name
- *   "typescript" -> npm:@typescript/typescript6@^6 — the indirection is what
- *   prevents `import 'typescript'` from ever resolving to the API-less
- *   TypeScript 7 CLI package. The names @typescript/native-preview and tsgo
- *   are not used anywhere.
+ *   "typescript" -> npm:typescript@6.0.3. The packed Element dependency owns
+ *   that classic compiler API; the disposable consumer root owns TS7 only.
  * - The TS7 tsc CLI is exercised here, and only here, against the Node/npm
  *   consumer contract: the pack:dry-run tarballs installed into a disposable
  *   consumer OUTSIDE the workspace (same observational rule as
@@ -23,13 +21,10 @@
  * a shadow gate that always passes is not evidence):
  *
  *   pack                fresh pack:dry-run tarballs for all three packages
- *   manifest            packed @openelement/element package.json aliases
- *                       "typescript" to npm:@typescript/typescript6@^6, so the
- *                       emitted bare specifier resolves to the classic API and
- *                       never to the API-less TS7 CLI package
- *   install             hermetic npm install of the tarballs + pinned
- *                       typescript@7 (shadow) and @typescript/typescript6@6
- *                       (baseline) into the temp consumer
+ *   manifest            packed @openelement/element package.json pins its own
+ *                       classic TypeScript 6 dependency
+ *   install             hermetic npm install of the tarballs plus pinned
+ *                       typescript@7 in the temp-consumer root
  *   typecheck           TS7 tsc --noEmit over a consumer program importing
  *                       the documented public entry points of element and
  *                       the router Route Mode set
@@ -56,7 +51,7 @@ const repoRoot = resolve(import.meta.dirname!, '..');
 // Exact pins: the shadow checker and the classic-API baseline. Bump
 // deliberately; a floating shadow gate is not reproducible evidence.
 const TS7_VERSION = '7.0.2';
-const TS6_VERSION = '6.0.2';
+const TS6_VERSION = '6.0.3';
 
 const PACK_TIMEOUT_MS = 15 * 60_000;
 const INSTALL_TIMEOUT_MS = 10 * 60_000;
@@ -99,6 +94,7 @@ async function run(
   args: string[],
   cwd: string,
   timeoutMs: number,
+  env?: Record<string, string>,
 ): Promise<{ success: boolean; output: string }> {
   const controller = new AbortController();
   let timedOut = false;
@@ -113,6 +109,7 @@ async function run(
       stdout: 'piped',
       stderr: 'piped',
       signal: controller.signal,
+      env,
     }).output();
     const output = new TextDecoder().decode(result.stdout) +
       new TextDecoder().decode(result.stderr);
@@ -221,34 +218,19 @@ try {
       peerDependencies?: Record<string, string>;
     };
     const deps = { ...pkgJson.peerDependencies, ...pkgJson.dependencies };
-    const aliasMatch = typeof deps['typescript'] === 'string'
-      ? /^npm:@typescript\/typescript6@(.+)$/.exec(deps['typescript'])
-      : null;
-    if (!aliasMatch) {
+    if (deps['typescript'] !== TS6_VERSION) {
       throw new Error(
-        'packed @openelement/element must alias "typescript" to ' +
-          `npm:@typescript/typescript6@^${TS6_VERSION} — the emitted source keeps the bare ` +
-          `specifier, so only the npm alias resolves it to the classic API; ` +
+        'packed @openelement/element must pin its classic TypeScript dependency to ' +
+          `${TS6_VERSION}; ` +
           `dependencies: ${JSON.stringify(deps)}`,
-      );
-    }
-    if (!aliasMatch[1].startsWith('^6')) {
-      throw new Error(
-        `packed @openelement/element typescript alias must stay on the ^6 line, got ${
-          aliasMatch[1]
-        }`,
       );
     }
     if (deps['@typescript/typescript6'] !== undefined) {
       throw new Error(
-        'packed @openelement/element must not depend on @typescript/typescript6 by its real ' +
-          'name — the bare specifier in the packed source is "typescript", so only the npm ' +
-          'alias keeps it resolvable for consumers',
+        'packed @openelement/element must not retain the deprecated @typescript/typescript6 wrapper',
       );
     }
-    return `@openelement/element tarball dependency: typescript@npm:@typescript/typescript6@${
-      aliasMatch[1]
-    }`;
+    return `@openelement/element tarball dependency: typescript@${TS6_VERSION}`;
   });
 
   await cell('install', ['manifest'], async () => {
@@ -264,7 +246,6 @@ try {
           dependencies,
           devDependencies: {
             typescript: TS7_VERSION,
-            '@typescript/typescript6': TS6_VERSION,
           },
         },
         null,
@@ -300,20 +281,18 @@ try {
     );
     const installed = await run(
       'npm',
-      ['install', '--ignore-scripts', '--no-audit', '--no-fund'],
+      ['install', '--ignore-scripts', '--no-audit', '--no-fund', '--fetch-timeout=30000'],
       tmp,
       INSTALL_TIMEOUT_MS,
+      { NPM_CONFIG_CACHE: join(tmp, '.npm-cache') },
     );
     if (!installed.success) throw new Error(`npm install failed:\n${installed.output}`);
     // Invoke the launchers by explicit package path, never node_modules/.bin:
-    // @typescript/typescript6 transitively installs an ALIASED typescript@6
-    // (@typescript/old@npm:typescript@6) whose "tsc" bin collides with the
-    // TS7 package's "tsc" in .bin — npm picks one arbitrarily. The explicit
-    // paths are the only unambiguous tsc/tsc6 handles.
+    // the consumer root owns TS7 while Element owns its pinned TS6 dependency.
     for (
       const required of [
         'node_modules/typescript/bin/tsc',
-        'node_modules/@typescript/typescript6/bin/tsc6',
+        'node_modules/@openelement/element/node_modules/typescript/bin/tsc',
         'node_modules/@openelement/element',
         'node_modules/@openelement/router',
         'node_modules/@openelement/create',
@@ -334,7 +313,7 @@ try {
         `TS7 tsc did not report Version ${TS7_VERSION}:\n${version.output}`,
       );
     }
-    return `consumer installed; tsc reports TS ${TS7_VERSION}, baseline tsc6 ${TS6_VERSION}`;
+    return `consumer installed; tsc reports TS ${TS7_VERSION}, Element-owned baseline TS ${TS6_VERSION}`;
   });
 
   interface TscRun {
@@ -344,7 +323,16 @@ try {
 
   const TSC_LAUNCHERS = {
     tsc: join(tmp, 'node_modules', 'typescript', 'bin', 'tsc'),
-    tsc6: join(tmp, 'node_modules', '@typescript', 'typescript6', 'bin', 'tsc6'),
+    tsc6: join(
+      tmp,
+      'node_modules',
+      '@openelement',
+      'element',
+      'node_modules',
+      'typescript',
+      'bin',
+      'tsc',
+    ),
   } as const;
   const tsc = (bin: keyof typeof TSC_LAUNCHERS, args: string[]): Promise<TscRun> =>
     run('node', [TSC_LAUNCHERS[bin], ...args], tmp, TSC_TIMEOUT_MS);
@@ -422,7 +410,7 @@ try {
   for (const note of notes) console.log(`  note: ${note}`);
   console.log(
     failed.length === 0
-      ? `TS7 shadow gate PASS — typescript@${TS7_VERSION} CLI vs @typescript/typescript6@${TS6_VERSION} baseline (shadow only; not a required gate).`
+      ? `TS7 shadow gate PASS — typescript@${TS7_VERSION} CLI vs Element-owned typescript@${TS6_VERSION} baseline (shadow only; not a required gate).`
       : `TS7 shadow gate FAIL — ${failed.map(([name]) => name).join(', ')}`,
   );
   await Deno.remove(tmp, { recursive: true }).catch(() => undefined);
