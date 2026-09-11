@@ -148,3 +148,30 @@ Deno.test('readPackage fails loud on unparseable deno.json (#753)', async () => 
     await Deno.remove(dir, { recursive: true });
   }
 });
+
+Deno.test('readPackage does not report source self-imports as dependencies', async () => {
+  const dir = await Deno.makeTempDir({ prefix: 'package-graph-self-import-' });
+  try {
+    await Deno.mkdir(`${dir}/src`);
+    await Deno.writeTextFile(
+      `${dir}/deno.json`,
+      JSON.stringify({
+        name: '@openelement/router',
+        version: '1.0.0-alpha.1',
+        exports: './src/index.ts',
+      }),
+    );
+    await Deno.writeTextFile(
+      `${dir}/src/index.ts`,
+      [
+        "export * from '@openelement/router/model';",
+        "export * from '@openelement/element';",
+      ].join('\n'),
+    );
+
+    const info = await readPackage(dir);
+    assertEquals(info?.deps, ['@openelement/element']);
+  } finally {
+    await Deno.remove(dir, { recursive: true });
+  }
+});
