@@ -90,7 +90,7 @@
     "nitro:proof:node": "deno run --allow-read --allow-write --allow-run --allow-env --allow-net tools/nitro-proof.ts node",
     "nitro:proof:workers": "deno run --allow-read --allow-write --allow-run --allow-env --allow-net tools/nitro-proof.ts workers",
     "test:coverage:check": "deno run --allow-read --allow-run --allow-write --allow-env --allow-net --allow-ffi --allow-sys tools/check-coverage.ts --threshold 80 --branch-threshold 84 --function-threshold 86",
-    "consumer:element-smoke": "deno run -A tools/consumer-smoke.ts --local",
+    "consumer:element-smoke": "deno run -A tools/published-consumer-qualification.ts --smoke --local",
     "typecheck": "deno task --filter @openelement/element typecheck && deno task --filter @openelement/router typecheck && deno task --filter @openelement/create typecheck && deno task --filter @openelement/adapter-vite typecheck",
     "lint": "deno lint",
     "fmt": "deno fmt",
