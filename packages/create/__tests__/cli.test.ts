@@ -11,7 +11,11 @@ import {
 const packageDir = join(import.meta.dirname!, '..');
 
 function readTemplate(path: string): string {
-  return Deno.readTextFileSync(join(packageDir, 'templates', path));
+  const logicalPath = join(packageDir, 'templates', path);
+  // Pack-safe source payloads add .tmpl, while callers intentionally keep the
+  // generated project's logical .ts/.tsx names.
+  const payloadPath = `${logicalPath}.tmpl`;
+  return Deno.readTextFileSync(existsSync(payloadPath) ? payloadPath : logicalPath);
 }
 
 async function runCreate(executable: string, cwd: string, name: string) {
@@ -268,6 +272,21 @@ Deno.test('starter owns a concrete --brand token without a UI package dependency
   const viteConfig = readTemplate('vite.config.ts');
   const brand = viteConfig.match(/--brand:(#[0-9a-fA-F]{3,8})/)?.[1];
   assert(brand, 'starter vite.config.ts must define a --brand token');
+});
+
+Deno.test('TypeScript starter sources are pack-safe template payloads', () => {
+  for (
+    const path of [
+      'vite.config.ts',
+      'app/islands/app-shell.tsx',
+      'app/components/page-home.tsx',
+      'app/routes/api/health.ts',
+    ]
+  ) {
+    const logicalPath = join(packageDir, 'templates', path);
+    assertFalse(existsSync(logicalPath), `raw TypeScript source must not be packed: ${path}`);
+    assert(existsSync(`${logicalPath}.tmpl`), `missing template payload: ${path}.tmpl`);
+  }
 });
 
 Deno.test('source CLI generates a complete, token-free starter', async () => {

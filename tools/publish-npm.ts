@@ -62,6 +62,35 @@ function cleanStaleTarballs(packages: PackageInfo[]): void {
   }
 }
 
+/**
+ * `deno pack` may retain source modules that do not participate in the
+ * declaration graph. npm consumers must receive emitted JavaScript and
+ * declarations only; raw TypeScript is source-repository implementation
+ * detail. Create templates use the `.tmpl` suffix so they remain payload data.
+ */
+export function removeRawTypeScriptPayload(packageRoot: string): string[] {
+  const removed: string[] = [];
+  const visit = (dir: string): void => {
+    for (const entry of Deno.readDirSync(dir)) {
+      const path = `${dir}/${entry.name}`;
+      if (entry.isDirectory) {
+        visit(path);
+        continue;
+      }
+      if (
+        entry.isFile &&
+        (entry.name.endsWith('.ts') || entry.name.endsWith('.tsx')) &&
+        !entry.name.endsWith('.d.ts')
+      ) {
+        Deno.removeSync(path);
+        removed.push(path.slice(packageRoot.length + 1));
+      }
+    }
+  };
+  visit(packageRoot);
+  return removed.sort();
+}
+
 export interface DeriveDepsIo {
   readPkgJson: (dir: string) => { imports?: Record<string, string> };
   readRootJson: () => { imports?: Record<string, string> };
@@ -111,7 +140,9 @@ function parseNpmSpec(value: string, label: string): { name: string; version: st
  * external dep keeps the caret policy.
  */
 function publishRange(spec: { name: string; version: string }): string {
-  return spec.name === '@openelement/url-pattern-list' ? spec.version : `^${spec.version}`;
+  return spec.name === '@openelement/url-pattern-list' || spec.name === 'typescript'
+    ? spec.version
+    : `^${spec.version}`;
 }
 
 export function deriveDependencies(
@@ -165,10 +196,9 @@ export function deriveDependencies(
   return deps;
 }
 
-// Import-map aliases (e.g. "typescript" -> npm:@typescript/typescript6) keep
-// the bare specifier in the emitted source, so the packed artifact must
-// install the target under the alias name. Only bare keys alias; protocol
-// keys like "npm:react@^18.2.0" already name their target.
+// Import-map aliases keep their bare key in emitted source, so packed
+// artifacts retain that key. Direct package names (such as TypeScript) need
+// no alias and are installed under their published name.
 function dependencyKey(
   key: string,
   spec: { name: string },
@@ -271,6 +301,12 @@ export async function packPackage(
     await runCommand('tar', ['-xzf', out, '-C', tmp], { env: tarEnv });
     const pkgJsonPath = `${tmp}/package/package.json`;
     const pkgJson = JSON.parse(Deno.readTextFileSync(pkgJsonPath));
+    const removedPayload = removeRawTypeScriptPayload(`${tmp}/package`);
+    if (removedPayload.length > 0) {
+      console.log(
+        `[npm] ${pkg.name}: removed ${removedPayload.length} raw TypeScript payload file(s).`,
+      );
+    }
     applyPackageJsonOverrides(pkg, pkgJson);
     const sourceManifest = JSON.parse(Deno.readTextFileSync(`${pkg.dir}/deno.json`)) as {
       peerDependencies?: Record<string, string>;

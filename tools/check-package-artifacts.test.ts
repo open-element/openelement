@@ -188,6 +188,50 @@ Deno.test('package artifacts: rejects router tests and fixtures', async () => {
   );
 });
 
+Deno.test('package artifacts: rejects raw TypeScript but permits declarations', async () => {
+  await withPackage(
+    '@openelement/element',
+    {
+      'index.js': 'export {};',
+      'source.ts': 'export const source = true;',
+      'types.d.ts': 'export declare const typed: true;',
+    },
+    (root) => {
+      const violations = scanExtractedPackage('@openelement/element', root).violations;
+      assert(violations.some((violation) => violation.path.endsWith('/source.ts')));
+      assertEquals(violations.some((violation) => violation.path.endsWith('/types.d.ts')), false);
+    },
+  );
+});
+
+Deno.test('package artifacts: rejects undeclared static and dynamic package imports', async () => {
+  await withPackage(
+    '@openelement/element',
+    {
+      'index.js': "import 'declared';\nawait import('missing-dynamic');\nexport {};",
+      'index.d.ts': "export type T = import('missing-types').T;",
+    },
+    (root) => {
+      const pkg = JSON.parse(Deno.readTextFileSync(`${root}/package.json`));
+      pkg.dependencies = { declared: '1.0.0' };
+      Deno.writeTextFileSync(`${root}/package.json`, JSON.stringify(pkg));
+      const messages = scanExtractedPackage('@openelement/element', root).violations.map((v) =>
+        v.message
+      );
+      assert(
+        messages.includes(
+          "external import 'missing-dynamic' is absent from package dependencies or peers",
+        ),
+      );
+      assert(
+        messages.includes(
+          "external import 'missing-types' is absent from package dependencies or peers",
+        ),
+      );
+    },
+  );
+});
+
 Deno.test('package artifacts: rejects dead v0.43 residue paths (#1273/B2.13)', async () => {
   await withPackage(
     '@openelement/element',
@@ -240,7 +284,7 @@ Deno.test('package artifacts: marker scan ignores comments and other packages', 
     '@openelement/element',
     {
       'index.js': 'export {};',
-      'src/migration-note.ts': `
+      'src/migration-note.js': `
         // The removed channel was documented as data-ssr-props; do not re-add.
         export const DATA_OE_LIGHT = 'data-oe-light';
       `,
@@ -255,7 +299,7 @@ Deno.test('package artifacts: marker scan ignores comments and other packages', 
       'README.md': 'router',
       'LICENSE': 'MIT',
       'index.js': 'export {};',
-      'src/notes.ts': `export const marker = 'data-signal';`,
+      'src/notes.js': `export const marker = 'data-signal';`,
     },
     (root) => {
       assertEquals(scanExtractedPackage('@openelement/router', root).violations, []);

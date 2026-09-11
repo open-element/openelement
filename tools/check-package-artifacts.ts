@@ -10,6 +10,7 @@ import { stripComments } from './lib/text.ts';
 import { runCommand } from './lib/process.ts';
 import { type PackageInfo, readPackages, releasePublishOrder } from './lib/package-graph.ts';
 import { tarballPath } from './lib/npm-tarball.ts';
+import { extractStaticModuleSpecifiers } from './lib/typescript-ast.ts';
 
 const PUBLINT_VERSION = '0.3.21';
 const ATTW_VERSION = '0.18.4';
@@ -83,6 +84,11 @@ const FORBIDDEN_LEGACY_SOURCE_PATTERNS: Record<string, ReadonlyArray<[RegExp, st
 };
 
 const SOURCE_SCAN_EXTENSIONS = new Set(['.ts', '.tsx', '.js', '.mjs', '.cjs']);
+const MODULE_SCAN_EXTENSIONS = new Set(['.js', '.mjs', '.cjs', '.d.ts']);
+
+function isRawTypeScript(relative: string): boolean {
+  return (relative.endsWith('.ts') || relative.endsWith('.tsx')) && !relative.endsWith('.d.ts');
+}
 
 export interface ArtifactViolation {
   path: string;
@@ -100,12 +106,58 @@ function extension(path: string): string {
   return idx === -1 ? '' : path.slice(idx);
 }
 
+function isModuleScanPath(path: string): boolean {
+  return MODULE_SCAN_EXTENSIONS.has(extension(path)) || path.endsWith('.d.ts');
+}
+
+function dependencyName(specifier: string): string | null {
+  if (
+    specifier.startsWith('.') || specifier.startsWith('/') || specifier.startsWith('node:') ||
+    specifier.startsWith('data:') || specifier.startsWith('file:') ||
+    specifier.startsWith('http:') ||
+    specifier.startsWith('https:')
+  ) return null;
+  const bare = specifier.startsWith('npm:') ? specifier.slice('npm:'.length) : specifier;
+  if (bare.startsWith('@')) return bare.split('/').slice(0, 2).join('/').replace(/@[^/]*$/u, '');
+  return bare.split('/')[0].split('@')[0];
+}
+
+function manifestImportViolations(
+  packageName: string,
+  packageRoot: string,
+  packageJson: Record<string, unknown>,
+): ArtifactViolation[] {
+  const declared = new Set<string>([
+    packageName,
+    ...Object.keys(packageJson.dependencies as Record<string, string> ?? {}),
+    ...Object.keys(packageJson.peerDependencies as Record<string, string> ?? {}),
+    ...Object.keys(packageJson.optionalDependencies as Record<string, string> ?? {}),
+  ]);
+  const violations: ArtifactViolation[] = [];
+  for (const entry of walkSync(packageRoot, { includeDirs: false, skip: [/^node_modules$/] })) {
+    const relative = entry.path.slice(packageRoot.length + 1);
+    if (!isModuleScanPath(relative)) continue;
+    const source = Deno.readTextFileSync(entry.path);
+    for (const { value, line } of extractStaticModuleSpecifiers(source, relative)) {
+      const name = dependencyName(value);
+      if (name && !declared.has(name)) {
+        violations.push({
+          path: `${packageName}/${relative}`,
+          line,
+          message: `external import '${value}' is absent from package dependencies or peers`,
+        });
+      }
+    }
+  }
+  return violations;
+}
+
 function pushPackageJsonViolations(
   packageName: string,
   packageJsonPath: string,
   violations: ArtifactViolation[],
-): void {
-  const packageJson = JSON.parse(Deno.readTextFileSync(packageJsonPath));
+): Record<string, unknown> {
+  const packageJson = JSON.parse(Deno.readTextFileSync(packageJsonPath)) as Record<string, unknown>;
   if (packageJson.type !== 'module') {
     violations.push({
       path: `${packageName}/package.json`,
@@ -126,6 +178,7 @@ function pushPackageJsonViolations(
       message: 'package.json must expose an exports map',
     });
   }
+  return packageJson;
 }
 
 function scanRuntimeFile(
@@ -180,7 +233,12 @@ function scanRuntimeFile(
 
 export function scanExtractedPackage(packageName: string, packageRoot: string): PackageScanResult {
   const violations: ArtifactViolation[] = [];
-  pushPackageJsonViolations(packageName, `${packageRoot}/package.json`, violations);
+  const packageJson = pushPackageJsonViolations(
+    packageName,
+    `${packageRoot}/package.json`,
+    violations,
+  );
+  violations.push(...manifestImportViolations(packageName, packageRoot, packageJson));
 
   const runtimeFreePackage = RUNTIME_FREE_PACKAGES.has(packageName);
   const forbiddenPaths = FORBIDDEN_LEGACY_PATHS[packageName] ?? [];
@@ -194,6 +252,13 @@ export function scanExtractedPackage(packageName: string, packageRoot: string): 
   ) {
     const relative = entry.path.slice(packageRoot.length + 1);
     files.add(relative);
+    if (isRawTypeScript(relative)) {
+      violations.push({
+        path: `${packageName}/${relative}`,
+        message:
+          'raw TypeScript source must not be published; emit JavaScript and declarations only',
+      });
+    }
     if (forbiddenPaths.includes(relative)) {
       violations.push({
         path: `${packageName}/${relative}`,

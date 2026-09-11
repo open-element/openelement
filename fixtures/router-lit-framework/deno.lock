@@ -28,9 +28,10 @@
     "npm:nitro@3.0.0": "3.0.0_vite@8.0.16__@types+node@26.5.0__esbuild@0.25.12__jiti@2.7.0__yaml@2.9.0_@types+node@26.5.0_yaml@2.9.0",
     "npm:preact-render-to-string@^6.5.0": "6.7.0_preact@10.29.8",
     "npm:preact@^10.28.0": "10.29.8_preact-render-to-string@6.7.0",
+    "npm:typescript@6.0.3": "6.0.3",
     "npm:typescript@^5.9.0": "5.9.3",
     "npm:urlpattern-polyfill@10.1.0": "10.1.0",
-    "npm:valibot@^1.1.0": "1.5.0_typescript@5.9.3",
+    "npm:valibot@^1.1.0": "1.5.0_typescript@6.0.3",
     "npm:vite@8.0.16": "8.0.16_@types+node@26.5.0_esbuild@0.25.12_jiti@2.7.0_yaml@2.9.0",
     "npm:yaml@^2.8.1": "2.9.0",
     "npm:zod@^3.25.0": "3.25.76"
@@ -2005,6 +2006,10 @@
       "integrity": "sha512-jl1vZzPDinLr9eUt3J/t7V6FgNEw9QjvBPdysz9KfQDD41fQrC2Y4vKQdiaUpFT4bXlb1RHhLpp8wtm6M5TgSw==",
       "bin": true
     },
+    "typescript@6.0.3": {
+      "integrity": "sha512-y2TvuxSZPDyQakkFRPZHKFm+KKVqIisdg9/CZwm9ftvKXLP8NRWj38/ODjNbr43SsoXqNuAisEf1GdCxqWcdBw==",
+      "bin": true
+    },
     "ufo@1.6.4": {
       "integrity": "sha512-JFNbkD1Svwe0KvGi8GOeLcP4kAWQ609twvCdcHxq1oSL8svv39ZuSvajcD8B+5D0eL4+s1Is2D/O6KN3qcTeRA=="
     },
@@ -2089,13 +2094,13 @@
     "urlpattern-polyfill@10.1.0": {
       "integrity": "sha512-IGjKp/o0NL3Bso1PymYURCJxMPNAf/ILOpendP9f5B6e1rTJgdgiOvgfoT8VxCAdY+Wisb9uhGaJJf3yZ2V9nw=="
     },
-    "valibot@1.5.0_typescript@5.9.3": {
+    "valibot@1.5.0_typescript@6.0.3": {
       "integrity": "sha512-nil6AkP2TChWL43Z5uJ6GTxX01CUA+g8LWUM+N/rB9NBbkUMaUsi9PUNzlUPgoKASgmx9f7eGOYpJ04/fSa6FQ==",
       "dependencies": [
-        "typescript"
+        "typescript@6.0.3"
       ],
       "optionalPeers": [
-        "typescript"
+        "typescript@6.0.3"
       ]
     },
     "vfile-message@4.0.3": {
@@ -2160,7 +2165,7 @@
       "jsr:@openelement/create@1.0.0-alpha.1": {},
       "jsr:@openelement/element@1.0.0-alpha.1": {
         "dependencies": [
-          "npm:@typescript/typescript6@^6.0.2"
+          "npm:typescript@6.0.3"
         ]
       },
       "jsr:@openelement/router@1.0.0-alpha.1": {

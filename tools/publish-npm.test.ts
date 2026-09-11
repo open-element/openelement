@@ -9,6 +9,7 @@ import {
   previousPrerelease,
   publishPackage,
   type PublishPackageIo,
+  removeRawTypeScriptPayload,
   verifyNpmRelease,
 } from './publish-npm.ts';
 import type { PackageInfo } from './lib/package-graph.ts';
@@ -92,25 +93,25 @@ Deno.test('deriveDependencies materializes a root-mapped npm dependency used by 
   assertEquals(deps, { react: '^18.2.0' });
 });
 
-Deno.test('deriveDependencies emits an npm alias for a renamed import-map dependency', () => {
+Deno.test('deriveDependencies keeps direct TypeScript 6 exact in the package manifest', () => {
   const localIo: DeriveDepsIo = {
     ...io,
     readPkgJson: () => ({
-      imports: { 'typescript': 'npm:@typescript/typescript6@^6.0.2' },
+      imports: { 'typescript': 'npm:typescript@6.0.3' },
     }),
   };
   const deps = deriveDependencies(pkg('@openelement/element', '1.0.0'), [], localIo);
-  assertEquals(deps, { typescript: 'npm:@typescript/typescript6@^6.0.2' });
+  assertEquals(deps, { typescript: '6.0.3' });
 });
 
-Deno.test('deriveDependencies emits an npm alias for a renamed root-mapped dependency', () => {
+Deno.test('deriveDependencies keeps direct root-mapped TypeScript 6 exact', () => {
   const localIo: DeriveDepsIo = {
     ...io,
-    readRootJson: () => ({ imports: { 'typescript': 'npm:@typescript/typescript6@^6.0.2' } }),
+    readRootJson: () => ({ imports: { 'typescript': 'npm:typescript@6.0.3' } }),
     readSrcFiles: () => [`import ts from 'typescript';`],
   };
   const deps = deriveDependencies(pkg('@openelement/element', '1.0.0'), [], localIo);
-  assertEquals(deps, { typescript: 'npm:@typescript/typescript6@^6.0.2' });
+  assertEquals(deps, { typescript: '6.0.3' });
 });
 
 Deno.test('deriveDependencies throws when a root-mapped npm dependency has no version', () => {
@@ -144,6 +145,25 @@ Deno.test('deriveAllDependencies reads root imports once for the full package gr
   assertEquals(rootReads, 1);
   assertEquals(dependencies.get('@openelement/element'), { react: '^18.2.0' });
   assertEquals(dependencies.get('@openelement/router'), { react: '^18.2.0' });
+});
+
+Deno.test('removeRawTypeScriptPayload keeps declarations and template payloads', async () => {
+  const root = await Deno.makeTempDir({ prefix: 'pack-raw-typescript-' });
+  try {
+    await Deno.mkdir(`${root}/nested`);
+    await Deno.writeTextFile(`${root}/entry.js`, 'export {};');
+    await Deno.writeTextFile(`${root}/entry.d.ts`, 'export declare const entry: true;');
+    await Deno.writeTextFile(`${root}/nested/source.ts`, 'export const source = true;');
+    await Deno.writeTextFile(`${root}/nested/view.tsx`, 'export const view = <div />;');
+    await Deno.writeTextFile(`${root}/nested/template.tsx.tmpl`, '<div />');
+
+    assertEquals(removeRawTypeScriptPayload(root), ['nested/source.ts', 'nested/view.tsx']);
+    for (const retained of ['entry.js', 'entry.d.ts', 'nested/template.tsx.tmpl']) {
+      await Deno.stat(`${root}/${retained}`);
+    }
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
 });
 
 Deno.test('publishPackage skips an immutable version that already exists', async () => {
