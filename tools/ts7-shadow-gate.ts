@@ -23,9 +23,10 @@
  * a shadow gate that always passes is not evidence):
  *
  *   pack                fresh pack:dry-run tarballs for all three packages
- *   manifest            packed @openelement/element package.json depends on
- *                       @typescript/typescript6 (^6) and NOT on the TS7 CLI
- *                       package name "typescript"
+ *   manifest            packed @openelement/element package.json aliases
+ *                       "typescript" to npm:@typescript/typescript6@^6, so the
+ *                       emitted bare specifier resolves to the classic API and
+ *                       never to the API-less TS7 CLI package
  *   install             hermetic npm install of the tarballs + pinned
  *                       typescript@7 (shadow) and @typescript/typescript6@6
  *                       (baseline) into the temp consumer
@@ -220,20 +221,34 @@ try {
       peerDependencies?: Record<string, string>;
     };
     const deps = { ...pkgJson.peerDependencies, ...pkgJson.dependencies };
-    const ts6Range = deps['@typescript/typescript6'];
-    if (!ts6Range) {
+    const aliasMatch = typeof deps['typescript'] === 'string'
+      ? /^npm:@typescript\/typescript6@(.+)$/.exec(deps['typescript'])
+      : null;
+    if (!aliasMatch) {
       throw new Error(
-        'packed @openelement/element does not materialize @typescript/typescript6; ' +
+        'packed @openelement/element must alias "typescript" to ' +
+          `npm:@typescript/typescript6@^${TS6_VERSION} — the emitted source keeps the bare ` +
+          `specifier, so only the npm alias resolves it to the classic API; ` +
           `dependencies: ${JSON.stringify(deps)}`,
       );
     }
-    if (deps['typescript'] !== undefined) {
+    if (!aliasMatch[1].startsWith('^6')) {
       throw new Error(
-        'packed @openelement/element still depends on the TS7 CLI package name "typescript" ' +
-          `(${deps['typescript']}) — the classic API must come from @typescript/typescript6`,
+        `packed @openelement/element typescript alias must stay on the ^6 line, got ${
+          aliasMatch[1]
+        }`,
       );
     }
-    return `@openelement/element tarball dependency: @typescript/typescript6@${ts6Range}`;
+    if (deps['@typescript/typescript6'] !== undefined) {
+      throw new Error(
+        'packed @openelement/element must not depend on @typescript/typescript6 by its real ' +
+          'name — the bare specifier in the packed source is "typescript", so only the npm ' +
+          'alias keeps it resolvable for consumers',
+      );
+    }
+    return `@openelement/element tarball dependency: typescript@npm:@typescript/typescript6@${
+      aliasMatch[1]
+    }`;
   });
 
   await cell('install', ['manifest'], async () => {
