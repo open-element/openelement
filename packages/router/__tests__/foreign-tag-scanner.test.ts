@@ -55,7 +55,7 @@ export default definePage({
     return (
       <main>
         <my-island></my-island>
-        <alpha3-native-badge>Badge</alpha3-native-badge>
+        <demo-native-badge>Badge</demo-native-badge>
       </main>
     );
   },
@@ -97,11 +97,11 @@ Deno.test('foreign-tag scan: discovers foreign tags in island and page JSX', () 
     [ISLAND_SOURCE, PAGE_SOURCE],
     new Set(['my-island']),
   );
-  assertEquals(foreign, ['alpha3-native-badge', 'md-switch', 'sl-button']);
+  assertEquals(foreign, ['demo-native-badge', 'md-switch', 'sl-button']);
 });
 
 Deno.test('foreign-tag scan: local island tags are excluded', () => {
-  const foreign = discoverForeignTags([PAGE_SOURCE], new Set(['my-island', 'alpha3-native-badge']));
+  const foreign = discoverForeignTags([PAGE_SOURCE], new Set(['my-island', 'demo-native-badge']));
   assertEquals(foreign, []);
 });
 
@@ -132,7 +132,7 @@ Deno.test('foreign-tag scan: scanForeignTags reads route + island files from dis
       islandFiles: ['my-island.tsx'],
       knownTags: new Set(['my-island', 'index-page']),
     });
-    assertEquals(foreign, ['alpha3-native-badge', 'md-switch', 'sl-button']);
+    assertEquals(foreign, ['demo-native-badge', 'md-switch', 'sl-button']);
   } finally {
     await Deno.remove(root, { recursive: true });
   }

@@ -1,4 +1,4 @@
-import { createOpenElementNitroHandler } from '../../../packages/router/src/nitro-mount.ts';
+import { createOpenElementNitroHandler } from '../../../../packages/router/src/nitro-mount.ts';
 
 const openElementHandler = createOpenElementNitroHandler({
   env: { OPEN_ELEMENT_PROOF: 'nitro' },

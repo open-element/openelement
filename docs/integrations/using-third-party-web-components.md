@@ -141,7 +141,7 @@ Run the fixture with:
 deno task third-party-wc:smoke
 ```
 
-The fixture source lives under `tools/third-party-wc-smoke/` and is copied into a
-fresh generated OpenElement app during the smoke run.
+The fixture source lives under `fixtures/third-party-web-components/` and is copied
+into a fresh generated OpenElement app during the smoke run.
 The same run prints the deterministic capability matrix to standard output so
 CI can retain it as ordinary job output without committing generated evidence.

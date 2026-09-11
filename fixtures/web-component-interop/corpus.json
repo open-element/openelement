@@ -1,0 +1,109 @@
+{
+  "schemaVersion": 1,
+  "cem": "compiler-output.cem.json",
+  "application": {
+    "route": "/",
+    "fixtureTag": "interop-fixture",
+    "childHostTag": "interop-child-host",
+    "childHostId": "children",
+    "dependencyRootId": "application-dependencies"
+  },
+  "components": [
+    {
+      "framework": "native",
+      "tag": "interop-native-probe",
+      "className": "InteropNativeProbe",
+      "property": "value",
+      "attribute": "value",
+      "event": "interop-probe-event",
+      "slotText": "Native",
+      "cssPart": "control",
+      "ids": {
+        "child": "native-child",
+        "application-dependency": "native-dependency"
+      },
+      "placements": ["child", "application-dependency"],
+      "probes": [
+        "property",
+        "attribute",
+        "event",
+        "slot",
+        "css-part",
+        "root",
+        "upgrade-order"
+      ]
+    },
+    {
+      "framework": "lit",
+      "tag": "interop-lit-probe",
+      "className": "InteropLitProbe",
+      "property": "value",
+      "attribute": "value",
+      "event": "interop-probe-event",
+      "slotText": "Lit",
+      "cssPart": "control",
+      "ids": {
+        "child": "lit-child",
+        "application-dependency": "lit-dependency"
+      },
+      "placements": ["child", "application-dependency"],
+      "probes": [
+        "property",
+        "attribute",
+        "event",
+        "slot",
+        "css-part",
+        "root",
+        "upgrade-order"
+      ]
+    },
+    {
+      "framework": "fast",
+      "tag": "interop-fast-probe",
+      "className": "InteropFastProbe",
+      "property": "value",
+      "attribute": "value",
+      "event": "interop-probe-event",
+      "slotText": "FAST",
+      "cssPart": "control",
+      "ids": {
+        "child": "fast-child",
+        "application-dependency": "fast-dependency"
+      },
+      "placements": ["child", "application-dependency"],
+      "probes": [
+        "property",
+        "attribute",
+        "event",
+        "slot",
+        "css-part",
+        "root",
+        "upgrade-order"
+      ]
+    },
+    {
+      "framework": "stencil",
+      "tag": "interop-stencil-probe",
+      "className": "InteropStencilProbe",
+      "property": "disabled",
+      "attribute": "disabled",
+      "event": "click",
+      "slotText": "Stencil",
+      "cssPart": "native",
+      "ids": {
+        "child": "stencil-child",
+        "application-dependency": "stencil-dependency"
+      },
+      "placements": ["child", "application-dependency"],
+      "probes": [
+        "property",
+        "attribute",
+        "event",
+        "slot",
+        "css-part",
+        "root",
+        "upgrade-order"
+      ]
+    }
+  ]
+}

@@ -4,7 +4,7 @@ import { trustedHtml } from '../../src/internal/core/security.ts';
 import { testProgram } from '../compiled-runtime/test-program.ts';
 
 const PROGRAM = testProgram({
-  tag: 'oe-alpha3-card',
+  tag: 'oe-demo-card',
   template: [{
     k: 'el',
     tag: 'input',
@@ -105,22 +105,22 @@ Deno.test('alpha.3 server serialization is one deterministic program across root
 
   assertEquals(
     serializeCompiledProgram(PROGRAM, HOST, { mode: 'light' }),
-    '<oe-alpha3-card data-oe-light><input class="card" value="server &amp; safe"></oe-alpha3-card>',
+    '<oe-demo-card data-oe-light><input class="card" value="server &amp; safe"></oe-demo-card>',
   );
   assertEquals(
     serializeCompiledProgram(PROGRAM, HOST, {
       mode: 'light',
       styleCss: '.card { color: rebeccapurple; }',
     }),
-    '<oe-alpha3-card data-oe-light><style data-oe-static-styles>.card { color: rebeccapurple; }</style><input class="card" value="server &amp; safe"></oe-alpha3-card>',
+    '<oe-demo-card data-oe-light><style data-oe-static-styles>.card { color: rebeccapurple; }</style><input class="card" value="server &amp; safe"></oe-demo-card>',
   );
   assertEquals(
     serializeCompiledProgram(PROGRAM, HOST, { mode: 'open' }),
-    '<oe-alpha3-card><template shadowrootmode="open"><input class="card" value="server &amp; safe"></template></oe-alpha3-card>',
+    '<oe-demo-card><template shadowrootmode="open"><input class="card" value="server &amp; safe"></template></oe-demo-card>',
   );
   assertEquals(
     serializeCompiledProgram(PROGRAM, HOST, { mode: 'closed' }),
-    '<oe-alpha3-card><template shadowrootmode="closed"><input class="card" value="server &amp; safe"></template></oe-alpha3-card>',
+    '<oe-demo-card><template shadowrootmode="closed"><input class="card" value="server &amp; safe"></template></oe-demo-card>',
   );
 });
 
@@ -243,7 +243,7 @@ Deno.test('alpha.3 server output escapes values, supports native DSD flags, and 
     template: [{
       k: 'el',
       tag: 'oe-child',
-      attrs: [['data-owner', 'alpha3']],
+      attrs: [['data-owner', 'demo']],
       children: [{
         k: 'el',
         tag: 'x-third-party',
@@ -255,7 +255,7 @@ Deno.test('alpha.3 server output escapes values, supports native DSD flags, and 
   });
   assertEquals(
     serializeCompiledProgram(nestedProgram, {}, { mode: 'open' }),
-    '<oe-nested><template shadowrootmode="open"><oe-child data-owner="alpha3"><x-third-party>foreign</x-third-party></oe-child></template></oe-nested>',
+    '<oe-nested><template shadowrootmode="open"><oe-child data-owner="demo"><x-third-party>foreign</x-third-party></oe-child></template></oe-nested>',
   );
 });
 

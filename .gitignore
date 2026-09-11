@@ -3,18 +3,14 @@ node_modules/
 
 # Deno
 .deno/
-vendor/*
-# Keep vendored dependency attribution tracked for license compliance
-!vendor/jsr.io/
-!vendor/jsr.io/@std/
-# Deno materializes JSR sources during a frozen install. Keep only license
-# attribution under each module; generated source/version metadata is cache.
-vendor/jsr.io/@std/*
-!vendor/jsr.io/@std/*/
-vendor/jsr.io/@std/*/*
-!vendor/jsr.io/@std/*/LICENSE
-!vendor/jsr.io/@std/LICENSE
-!vendor/jsr.io/@std/ATTRIBUTION.md
+# Deno materializes vendor/ during a frozen install; it is pure cache. License
+# attribution for vendored JSR dependencies lives in licenses/jsr/.
+vendor/
+
+# Generated Web Components interop qualification evidence. corpus.json is the
+# canonical corpus; the qualifier regenerates both artifacts on every run.
+fixtures/web-component-interop/compiler-output.cem.json
+fixtures/web-component-interop/interop-evidence.json
 
 # Build output
 dist/

@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "tag": "oe-alpha3-card",
+  "tag": "oe-demo-card",
   "root": {
     "id": "root",
     "kind": "light",
@@ -16,7 +16,7 @@
       "attrs": [
         [
           "class",
-          "alpha3"
+          "demo"
         ]
       ],
       "children": [
@@ -393,13 +393,13 @@
   ],
   "sourceMap": {
     "version": 1,
-    "file": "/project/app/islands/alpha3-card.tsx",
+    "file": "/project/app/islands/demo-card.tsx",
     "records": [
       {
         "id": "root",
         "kind": "root",
         "source": {
-          "file": "/project/app/islands/alpha3-card.tsx",
+          "file": "/project/app/islands/demo-card.tsx",
           "start": {
             "offset": 0,
             "line": 1,
@@ -416,7 +416,7 @@
         "id": "e0",
         "kind": "element",
         "source": {
-          "file": "/project/app/islands/alpha3-card.tsx",
+          "file": "/project/app/islands/demo-card.tsx",
           "start": {
             "offset": 16,
             "line": 2,
@@ -433,7 +433,7 @@
         "id": "e1",
         "kind": "element",
         "source": {
-          "file": "/project/app/islands/alpha3-card.tsx",
+          "file": "/project/app/islands/demo-card.tsx",
           "start": {
             "offset": 32,
             "line": 3,
@@ -450,7 +450,7 @@
         "id": "e2",
         "kind": "element",
         "source": {
-          "file": "/project/app/islands/alpha3-card.tsx",
+          "file": "/project/app/islands/demo-card.tsx",
           "start": {
             "offset": 48,
             "line": 4,
@@ -467,7 +467,7 @@
         "id": "e3",
         "kind": "element",
         "source": {
-          "file": "/project/app/islands/alpha3-card.tsx",
+          "file": "/project/app/islands/demo-card.tsx",
           "start": {
             "offset": 64,
             "line": 5,
@@ -484,7 +484,7 @@
         "id": "e4",
         "kind": "element",
         "source": {
-          "file": "/project/app/islands/alpha3-card.tsx",
+          "file": "/project/app/islands/demo-card.tsx",
           "start": {
             "offset": 80,
             "line": 6,
@@ -501,7 +501,7 @@
         "id": "e5",
         "kind": "element",
         "source": {
-          "file": "/project/app/islands/alpha3-card.tsx",
+          "file": "/project/app/islands/demo-card.tsx",
           "start": {
             "offset": 96,
             "line": 7,
@@ -518,7 +518,7 @@
         "id": "e6",
         "kind": "element",
         "source": {
-          "file": "/project/app/islands/alpha3-card.tsx",
+          "file": "/project/app/islands/demo-card.tsx",
           "start": {
             "offset": 112,
             "line": 8,
@@ -535,7 +535,7 @@
         "id": "e7",
         "kind": "element",
         "source": {
-          "file": "/project/app/islands/alpha3-card.tsx",
+          "file": "/project/app/islands/demo-card.tsx",
           "start": {
             "offset": 128,
             "line": 9,
@@ -552,7 +552,7 @@
         "id": "p0",
         "kind": "part",
         "source": {
-          "file": "/project/app/islands/alpha3-card.tsx",
+          "file": "/project/app/islands/demo-card.tsx",
           "start": {
             "offset": 144,
             "line": 10,
@@ -569,7 +569,7 @@
         "id": "p1",
         "kind": "part",
         "source": {
-          "file": "/project/app/islands/alpha3-card.tsx",
+          "file": "/project/app/islands/demo-card.tsx",
           "start": {
             "offset": 160,
             "line": 11,
@@ -586,7 +586,7 @@
         "id": "p2",
         "kind": "part",
         "source": {
-          "file": "/project/app/islands/alpha3-card.tsx",
+          "file": "/project/app/islands/demo-card.tsx",
           "start": {
             "offset": 176,
             "line": 12,
@@ -603,7 +603,7 @@
         "id": "p3",
         "kind": "region",
         "source": {
-          "file": "/project/app/islands/alpha3-card.tsx",
+          "file": "/project/app/islands/demo-card.tsx",
           "start": {
             "offset": 192,
             "line": 13,
@@ -620,7 +620,7 @@
         "id": "p4",
         "kind": "region",
         "source": {
-          "file": "/project/app/islands/alpha3-card.tsx",
+          "file": "/project/app/islands/demo-card.tsx",
           "start": {
             "offset": 208,
             "line": 14,
@@ -637,7 +637,7 @@
         "id": "r3",
         "kind": "region",
         "source": {
-          "file": "/project/app/islands/alpha3-card.tsx",
+          "file": "/project/app/islands/demo-card.tsx",
           "start": {
             "offset": 224,
             "line": 15,
@@ -654,7 +654,7 @@
         "id": "r4",
         "kind": "region",
         "source": {
-          "file": "/project/app/islands/alpha3-card.tsx",
+          "file": "/project/app/islands/demo-card.tsx",
           "start": {
             "offset": 240,
             "line": 16,
@@ -670,17 +670,17 @@
     ]
   },
   "metadata": {
-    "tag": "oe-alpha3-card",
+    "tag": "oe-demo-card",
     "className": "Alpha3Card",
-    "sourceFile": "/project/app/islands/alpha3-card.tsx",
+    "sourceFile": "/project/app/islands/demo-card.tsx",
     "properties": [],
     "observedAttributes": [],
     "cem": {
-      "tagName": "oe-alpha3-card",
+      "tagName": "oe-demo-card",
       "className": "Alpha3Card",
       "declaration": {
         "name": "Alpha3Card",
-        "module": "/project/app/islands/alpha3-card.tsx"
+        "module": "/project/app/islands/demo-card.tsx"
       },
       "attributes": [],
       "members": []
