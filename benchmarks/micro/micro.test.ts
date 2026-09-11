@@ -1,12 +1,12 @@
 /**
  * Deterministic self-checks for the OE microbenchmark suite (issue #1219).
  * These assert DOM-op counts and structural invariants — never durations.
- * Measured timings are evidence only (benchmarks/v044/micro-evidence.json).
+ * Measured timings are evidence only (benchmarks/micro/micro-evidence.json).
  */
 import { assert, assertEquals } from '@std/assert';
 import { runMicroSuite } from './micro.ts';
 
-Deno.test('v044 micro suite: partial update and single-part paths are surgical', () => {
+Deno.test('micro suite: partial update and single-part paths are surgical', () => {
   const { facts } = runMicroSuite({
     partWriteReps: 200,
     churnCycles: 3,
@@ -40,14 +40,14 @@ Deno.test('v044 micro suite: partial update and single-part paths are surgical',
   assertEquals(facts.retainedListeners, 0);
 });
 
-Deno.test('v044 micro suite: report schema carries evidence fields', () => {
+Deno.test('micro suite: report schema carries evidence fields', () => {
   const { report } = runMicroSuite({
     partWriteReps: 10,
     churnCycles: 1,
     compilerSamples: 1,
     openElementSha: 'test',
   });
-  assertEquals(report.kind, 'v044-micro-baseline');
+  assertEquals(report.kind, 'micro-baseline');
   assertEquals(report.issue, 1219);
   assert(report.table1k.serialize.htmlBytes > 0);
   assert(report.table1k.claim.claimToFreshRatio > 0);

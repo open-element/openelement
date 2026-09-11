@@ -1,9 +1,9 @@
 /**
- * OE-specific microbenchmarks for the v0.44 baseline (issue #1219).
+ * OE-specific microbenchmarks (issue #1219).
  *
  * These measure the canonical compiled path (one Part Program through the
  * real runtime and the real @preact/signals-core engine) against the
- * counting fake DOM exported from tools/benchmark-v044.ts. The fake DOM
+ * counting fake DOM in ./counting-dom.ts. The fake DOM
  * contributes no layout/paint cost, so these numbers isolate kernel/region
  * algorithmic behavior — the browser JFB harness owns layout-inclusive
  * numbers. SSR serialization uses the CANONICAL server serializer
@@ -27,13 +27,7 @@ import {
 import { serializeCompiledProgram } from '../../packages/element/src/internal/compiled/server/index.ts';
 import { signal, type WritableSignal } from '../../packages/element/src/internal/signal/index.ts';
 import { buildData } from '../jfb/src/oe/data.ts';
-import {
-  allocationCount,
-  FDocument,
-  type FElement,
-  parseHtml,
-  toHtml,
-} from '../../tools/benchmark-v044.ts';
+import { allocationCount, FDocument, type FElement, parseHtml, toHtml } from './counting-dom.ts';
 
 const GRANULARITY_SOURCE = `
 import { element, OpenElement, property } from '@openelement/element';
@@ -83,7 +77,7 @@ export interface TimedOp {
 
 export interface MicroReport {
   schemaVersion: 1;
-  kind: 'v044-micro-baseline';
+  kind: 'micro-baseline';
   issue: 1219;
   recordedAt: string;
   provenance: {
@@ -317,7 +311,7 @@ export function runMicroSuite(options: MicroOptions = {}): MicroSuiteResult {
     .replace(/^<jfb-oe-table data-oe-light>/, '')
     .replace(/<\/jfb-oe-table>$/, '');
   if (serializedHtml === serializedHostHtml) {
-    throw new Error('[v044-micro] canonical serializer output shape changed');
+    throw new Error('[micro] canonical serializer output shape changed');
   }
 
   const freshDoc = new FDocument();
@@ -335,7 +329,7 @@ export function runMicroSuite(options: MicroOptions = {}): MicroSuiteResult {
   if (
     normalizeEmptyClass(freshHtml) !== `<host>${normalizeEmptyClass(serializedHtml)}</host>`
   ) {
-    throw new Error('[v044-micro] fresh DOM diverges from SSR output');
+    throw new Error('[micro] fresh DOM diverges from SSR output');
   }
 
   // Claim: parse cost belongs to the harness, not the claim op.
@@ -387,7 +381,7 @@ export function runMicroSuite(options: MicroOptions = {}): MicroSuiteResult {
   const domOrder = rowIdsInDomOrder();
   const modelOrder = currentRows().map((row) => String(row.id));
   if (domOrder.join('|') !== modelOrder.join('|')) {
-    throw new Error('[v044-micro] keyed Region DOM order diverges from model after swap');
+    throw new Error('[micro] keyed Region DOM order diverges from model after swap');
   }
   const swapOrderProbe: [string, string, string] = [domOrder[0], domOrder[1], domOrder[2]];
 
@@ -434,7 +428,7 @@ export function runMicroSuite(options: MicroOptions = {}): MicroSuiteResult {
 
   const report: MicroReport = {
     schemaVersion: 1,
-    kind: 'v044-micro-baseline',
+    kind: 'micro-baseline',
     issue: 1219,
     recordedAt: new Date().toISOString(),
     provenance: {
