@@ -53,7 +53,7 @@
     "consumer:packaged": "deno run --allow-read --allow-write --allow-run --allow-env --allow-net tools/consumer-packaged-starter.ts && deno run --allow-read --allow-write --allow-run --allow-env --allow-net tools/consumer-local.ts --packaged-import-map-check",
     "third-party-wc:smoke": "deno run --allow-read --allow-write --allow-run --allow-env --allow-net --allow-sys tools/third-party-wc-corpus.ts",
     "package-artifacts:check": "deno run --allow-read --allow-write --allow-run --allow-net --allow-env tools/check-package-artifacts.ts",
-    "url-pattern-list:provenance": "deno run --allow-read --allow-net=registry.npmjs.org tools/check-url-pattern-list-release.ts",
+    "url-pattern-list:provenance": "npm ci --prefix tools/fixtures/url-pattern-list-audit --ignore-scripts --no-audit --no-fund && npm audit signatures --prefix tools/fixtures/url-pattern-list-audit --ignore-scripts",
     "consumer:packaged-app": "deno run --allow-read --allow-write --allow-run --allow-env --allow-net tools/consumer-packaged-app.ts",
     "consumer:packaged-router": "deno run --allow-read --allow-write --allow-run --allow-env --allow-net tools/consumer-packaged-router.ts",
     "consumer:packaged-element": "deno run -A tools/consumer-packaged-element.ts",

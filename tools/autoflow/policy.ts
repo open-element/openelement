@@ -48,7 +48,11 @@ const GATES: readonly GateDefinition[] = [
     name: 'url-pattern-list:provenance',
     command: ['deno', 'task', 'url-pattern-list:provenance'],
     tiers: ['ci', 'release'],
-    triggers: [/^packages\/app\//, /^deno\.(json|lock)$/],
+    triggers: [
+      /^packages\/router\//,
+      /^tools\/fixtures\/url-pattern-list-audit\/(?:package|package-lock)\.json$/,
+      /^deno\.(json|lock)$/,
+    ],
   },
   {
     name: 'release:state-machine:check',

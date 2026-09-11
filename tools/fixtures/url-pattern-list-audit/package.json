@@ -1,0 +1,9 @@
+{
+  "name": "openelement-url-pattern-list-audit",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Lockfile fixture for npm registry signature and provenance verification.",
+  "dependencies": {
+    "@openelement/url-pattern-list": "0.6.0"
+  }
+}
