@@ -1,5 +1,5 @@
 /**
- * @openelement/adapter-vite — Source Map v3 segment emission (#1210, A10.2).
+ * @openelement/element — Source Map v3 segment emission (#1210, A10.2).
  *
  * The compiler semantic core owns original source spans AND generated emission
  * provenance (ADR-0148): while it emits the compiled module it records one

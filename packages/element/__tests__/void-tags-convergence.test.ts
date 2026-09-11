@@ -6,7 +6,7 @@
  * import it by design and therefore carry a documented mechanical mirror:
  *   - packages/element/src/sanitize.ts (dependency-free by contract, ADR-0126)
  *   - packages/element/src/internal/compiled/program.ts (import-free exchange artifact)
- *   - packages/adapter-vite/src/internal/compiler/semantic-core/program.ts (same mirror)
+ *   - packages/element/src/internal/compiler/semantic-core/program.ts (same mirror)
  * This guard asserts every mirror's tag list is identical to the canonical
  * list and that no other production module re-introduces a local VOID_TAGS
  * definition. Test-harness DOM facades under __tests__ are independent
@@ -21,12 +21,12 @@ const CANONICAL = 'packages/element/src/internal/core/html-escape.ts';
 const MIRRORS = [
   'packages/element/src/sanitize.ts',
   'packages/element/src/internal/compiled/program.ts',
-  'packages/adapter-vite/src/internal/compiler/semantic-core/program.ts',
+  'packages/element/src/internal/compiler/semantic-core/program.ts',
 ];
 const IMPORTERS = [
   'packages/element/src/internal/compiled/runtime.ts',
   'packages/element/src/internal/compiled/server/shared.ts',
-  'packages/adapter-vite/src/internal/compiler/semantic-core/compile.ts',
+  'packages/element/src/internal/compiler/semantic-core/compile.ts',
 ];
 
 function voidTagsBlock(source: string, path: string): string {

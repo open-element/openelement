@@ -1,7 +1,7 @@
 import { assertEquals, assertStringIncludes, assertThrows } from '@std/assert';
 import { join } from 'node:path';
 import { buildCriticalHeadExtras } from '../../src/internal/ssg/critical-assets.ts';
-import { compiledElementPlugin, compileElementModule } from '../../src/internal/compiler/plugin.ts';
+import { compiledElementPlugin, compileElementModule } from '@openelement/element/compiler';
 import { generateClientEntry } from '../../src/internal/ssg/entry-client-codegen.ts';
 import { createIslandScheduler } from '../../src/internal/ssg/island-scheduler.ts';
 import { readIslandConfig } from '../../src/internal/ssg/island-scanner.ts';

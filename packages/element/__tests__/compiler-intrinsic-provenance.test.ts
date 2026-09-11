@@ -1,5 +1,5 @@
 /**
- * @openelement/adapter-vite — #1209 (A10.1): compiler intrinsics are binding
+ * @openelement/element — #1209 (A10.1): compiler intrinsics are binding
  * identities, not identifier spellings.
  *
  * Hostile provenance matrix. One canonical intrinsic-binding model (owned by

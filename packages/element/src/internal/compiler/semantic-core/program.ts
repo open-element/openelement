@@ -1,5 +1,5 @@
 /**
- * @openelement/adapter-vite — serializable Part Program v1.
+ * @openelement/element — serializable Part Program v1.
  *
  * This is the compiler-side copy of the exchange artifact. It intentionally
  * has no import edge to the element runtime: the generated JSON is the seam

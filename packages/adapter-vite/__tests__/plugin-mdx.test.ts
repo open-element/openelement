@@ -10,7 +10,7 @@
 import { assert, assertEquals, assertStringIncludes, assertThrows } from '@std/assert';
 import { join } from '@std/path';
 import { mdxPlugin, mdxToCompiledPageSource } from '../src/plugin-mdx.ts';
-import { compiledElementPlugin } from '../src/internal/compiler/plugin.ts';
+import { compiledElementPlugin } from '@openelement/element/compiler';
 
 const WORKSPACE_ELEMENT = new URL('../../element/src/index.ts', import.meta.url).pathname;
 

@@ -19,7 +19,7 @@
  * Timings are recorded as evidence only; CI asserts deterministic DOM-op
  * counts, never durations (see micro.test.ts).
  */
-import { compileElementProgram } from '../../packages/adapter-vite/src/internal/compiler/semantic-core/compile.ts';
+import { compileElementProgram } from '../../packages/element/src/internal/compiler/semantic-core/compile.ts';
 import {
   claimExistingDom,
   createFreshDom,

@@ -2190,6 +2190,11 @@
           "npm:vite@8.0.16"
         ]
       },
+      "packages/element": {
+        "dependencies": [
+          "npm:typescript@^5.9.0"
+        ]
+      },
       "packages/router": {
         "dependencies": [
           "npm:@openelement/url-pattern-list@0.6.0",

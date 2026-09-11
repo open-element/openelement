@@ -27,10 +27,7 @@
 
 import { walkSync } from '@std/fs/walk';
 import { basename, join, relative } from '@std/path';
-import {
-  compileElementModule,
-  stripInlineSourceMapComment,
-} from '../../packages/adapter-vite/src/internal/compiler/plugin.ts';
+import { compileElementModule, stripInlineSourceMapComment } from '@openelement/element/compiler';
 import { formatJson } from '@openelement/element/build-utils';
 import type { PackageInfo } from './package-graph.ts';
 

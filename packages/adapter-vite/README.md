@@ -153,10 +153,10 @@ MIT
 
 ### Standalone Element authoring
 
-Install Element, Vite and this adapter; import `element` from
-`@openelement/adapter-vite/element` and put `element()` in Vite's `plugins`.
-This entry does not load Router, SSG or deployment tooling. Router is an optional
-peer; Framework applications install `@openelement/router` explicitly.
+Install Element and Vite; import `element` from `@openelement/element/vite` and
+put `element()` in Vite's `plugins`. This entry does not load Router, SSG or
+deployment tooling. Router is an optional peer; Framework applications install
+`@openelement/router` explicitly.
 
 Keep the decorated component in a `.tsx` module and register its exported class
 from a separate JS entry. Use a Vite library build to bundle that entry, then

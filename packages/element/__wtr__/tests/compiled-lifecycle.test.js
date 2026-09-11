@@ -12,7 +12,7 @@
  *     once'
  * Node identity and observable behavior are asserted (not HTML snapshots);
  * the component is the byte-for-byte compiled output of the repo's canonical
- * compiler fixture packages/adapter-vite/__fixtures__/compiled-element-v1/
+ * compiler fixture packages/element/__fixtures__/compiled-element-v1/
  * counter.tsx.
  */
 import { assert } from 'chai';

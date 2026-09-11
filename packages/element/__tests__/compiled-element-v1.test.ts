@@ -1,9 +1,9 @@
 /**
- * @openelement/adapter-vite — #1160 TSX-to-Part Program vertical compiler v1.
+ * @openelement/element — #1160 TSX-to-Part Program vertical compiler v1.
  *
  * Behavior-first coverage for the open:compiled-element v1 transform:
- *   - the one-component fixture is transformed through the actual Vite plugin
- *     transform hook registered by createOpenPlugin()
+ *   - the one-component fixture is transformed through the actual
+ *     compiledElementPlugin() Vite transform hook
  *   - the emitted module embeds one deterministic, serializable Part Program
  *     (static structure + typed Part/Region instructions) that deep-equals the
  *     frozen expected-program.json fixture consumed by the element runtime test
@@ -17,7 +17,6 @@
  */
 
 import { assert, assertEquals, assertStringIncludes, assertThrows } from '@std/assert';
-import { createOpenPlugin } from '../src/plugin.ts';
 import type { Plugin } from 'vite';
 
 const FIXTURE_DIR = new URL('../__fixtures__/compiled-element-v1/', import.meta.url);
@@ -67,10 +66,10 @@ Deno.test('compiled-element v1 - harness sanity (fixtures load)', async () => {
   assertEquals(JSON.parse(expected).tag, 'oe-program-counter');
 });
 
-Deno.test('compiled-element v1 - default pipeline has one canonical compiler hook', async () => {
-  const plugins = createOpenPlugin();
-  assertEquals(plugins.filter((p) => p.name === 'open:core').length, 1);
-  assertEquals(plugins.some((p) => p.name === 'open:compiled-element'), false);
+Deno.test('compiled-element v1 - the standalone compiler hook has its canonical name', async () => {
+  // The default Router pipeline (open:core) embeds the compiler instead of
+  // registering this standalone plugin; that composition is pinned by the
+  // adapter-side openPlugin ordering tests.
   const { compiledElementPlugin } = await loadPluginModule();
   assertEquals(compiledElementPlugin().name, 'open:compiled-element');
 });

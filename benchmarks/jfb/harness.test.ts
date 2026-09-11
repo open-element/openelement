@@ -15,11 +15,11 @@
  *   contains only finite measured numbers
  */
 import { assert, assertEquals, assertMatch, assertStringIncludes } from '@std/assert';
-import { compileElementProgram } from '../../packages/adapter-vite/src/internal/compiler/semantic-core/compile.ts';
+import { compileElementProgram } from '../../packages/element/src/internal/compiler/semantic-core/compile.ts';
 import type {
   ProgramElementNode,
   ProgramTreeNode,
-} from '../../packages/adapter-vite/src/internal/compiler/semantic-core/program.ts';
+} from '../../packages/element/src/internal/compiler/semantic-core/program.ts';
 import { executeIteration, JfbModel, verifyAllSpecsAgainstModel } from './harness/model.ts';
 import {
   CPU_BENCHMARKS,

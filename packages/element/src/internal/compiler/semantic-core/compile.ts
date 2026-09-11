@@ -1,5 +1,5 @@
 /**
- * @openelement/adapter-vite — TSX-to-Part Program v1 compiler (#1161–#1163).
+ * @openelement/element — TSX-to-Part Program v1 compiler (#1161–#1163).
  *
  * The compiler accepts one deliberately bounded authoring grammar. It lowers
  * every accepted dynamic expression to a typed fixed Part or Region with a

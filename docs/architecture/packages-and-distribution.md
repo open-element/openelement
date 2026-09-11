@@ -4,7 +4,8 @@ The repository currently publishes four physical support-distribution packages f
 
 - `@openelement/element` — Element.
 - `@openelement/router` — Router Route Mode and Framework Mode.
-- `@openelement/adapter-vite` — thin Element/Router compiler and build integration.
+- `@openelement/adapter-vite` — thin Router build integration (the Element compiler and Vite
+  transform live in `@openelement/element` under the `./compiler` and `./vite` tooling subpaths).
 - `@openelement/create` — thin consumer scaffolding.
 
 The source repository is Deno-native and has no root npm workspace authority. Published npm tarballs must install in disposable projects outside the monorepo, resolve standard exports and declarations, and remain free of workspace aliases, private source paths, and unintended server/browser dependency leakage.

@@ -1,5 +1,5 @@
 /**
- * @openelement/adapter-vite — open:compiled-element v1 plugin (#1160).
+ * @openelement/element — open:compiled-element v1 plugin (#1160).
  *
  * Vite integration boundary for the alpha.0 TSX-to-Part Program compiler.
  * The hook activates only for .tsx modules that opt into the compiled model

@@ -1,5 +1,5 @@
 /**
- * @openelement/adapter-vite — real Source Map v3 emission for compiled
+ * @openelement/element — real Source Map v3 emission for compiled
  * elements (#1210, A10.2).
  *
  * These tests consume the compiler's source map through a STANDARD source-map
@@ -11,13 +11,11 @@
 
 import { assert, assertEquals, assertNotEquals } from '@std/assert';
 import { eachMapping, originalPositionFor, TraceMap } from 'npm:@jridgewell/trace-mapping@0.3.31';
-import type { Plugin } from 'vite';
 import {
   CompiledElementError,
   compileElementProgram,
 } from '../src/internal/compiler/semantic-core/compile.ts';
 import { compileElementModule } from '../src/internal/compiler/plugin.ts';
-import { createOpenPlugin } from '../src/plugin.ts';
 
 const FILE = '/project/app/components/map-fixture.tsx';
 
@@ -386,7 +384,7 @@ export class NestedRegion extends OpenElement {
   assertEquals(diagnostic.character, expected.column + 1);
 });
 
-Deno.test('A10.2 Vite boundary: open:core hands the real map to Vite without a double map story', () => {
+Deno.test('A10.2 Vite boundary: compileElementModule hands the real map to the host', () => {
   // compileElementModule (the Vite-bound entrypoint) returns the real map.
   const result = compileElementModule(SOURCE, FILE);
   assert(result, 'fixture must be admitted by the compiler gate');
@@ -400,39 +398,7 @@ Deno.test('A10.2 Vite boundary: open:core hands the real map to Vite without a d
     line: secondArrow.line,
     column: secondArrow.column,
   });
-
-  // The open:core transform returns the real map object as its `map` output
-  // (Vite composes downstream) and strips the inline comment from the served
-  // code so there is exactly one map story at the plugin boundary.
-  const core = createOpenPlugin().find((plugin: Plugin) => plugin.name === 'open:core');
-  assert(core, 'open:core plugin must be registered');
-  const transform = core.transform as unknown as (
-    this: { error(message: string): never },
-    code: string,
-    id: string,
-  ) => { code: string; map?: { mappings: string } } | string | null;
-  const transformed = transform.call(
-    {
-      error(message: string): never {
-        throw new Error(message);
-      },
-    },
-    SOURCE,
-    FILE,
-  );
-  assert(transformed !== null && typeof transformed === 'object', 'open:core must return code+map');
-  assertEquals(
-    transformed.code.includes('sourceMappingURL'),
-    false,
-    'no inline map comment may survive the boundary',
-  );
-  assert(transformed.map, 'open:core must return the real map object');
-  assertNotEquals(transformed.map!.mappings, '');
-  const boundaryTrace = traceOf(transformed.map);
-  const viaPlugin = resolve(boundaryTrace, transformed.code, '  count = 0;', 1);
-  assertEquals({ source: viaPlugin.source, line: viaPlugin.line, column: viaPlugin.column }, {
-    source: FILE,
-    line: positionOf(SOURCE, 'count = 0;').line,
-    column: positionOf(SOURCE, 'count = 0;').column,
-  });
+  // The Router-side open:core hook's map composition (inline comment stripped,
+  // map object returned to Vite) is pinned adapter-side in
+  // packages/adapter-vite/__tests__/compiler-open-core-boundary.test.ts.
 });

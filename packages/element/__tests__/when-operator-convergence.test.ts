@@ -14,8 +14,8 @@
 
 import { assert, assertEquals, assertThrows } from '@std/assert';
 import { validatePartProgram as validateCompilerProgram } from '../src/internal/compiler/semantic-core/program.ts';
-import { validatePartProgram as validateRuntimeProgram } from '../../element/src/internal/compiled/program.ts';
-import { testProgram } from '../../element/__tests__/compiled-runtime/test-program.ts';
+import { validatePartProgram as validateRuntimeProgram } from '../src/internal/compiled/program.ts';
+import { testProgram } from './compiled-runtime/test-program.ts';
 
 const REPO_ROOT = new URL('../../../', import.meta.url);
 
@@ -65,7 +65,7 @@ Deno.test('when operator: both ConditionOperator declarations are closed to grea
   for (
     const path of [
       'packages/element/src/internal/compiled/program.ts',
-      'packages/adapter-vite/src/internal/compiler/semantic-core/program.ts',
+      'packages/element/src/internal/compiler/semantic-core/program.ts',
     ]
   ) {
     const source = await Deno.readTextFile(new URL(path, REPO_ROOT));

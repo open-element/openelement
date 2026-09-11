@@ -47,7 +47,7 @@ import { createLogger } from '@openelement/element';
 import { normalizeSeparators, pathToTagName } from '@openelement/element/build-utils';
 import { dirname, join, posix, resolve, sep } from 'node:path';
 import { safeReadDir, safeReadFile, safeStat } from './route-scanner-fs.ts';
-import { analyzeModuleSemantics } from '../compiler/semantic-core/module-analysis.ts';
+import { analyzeModuleSemantics } from '@openelement/element/compiler';
 
 const IMPORT_EXTENSIONS = ['.tsx', '.ts', '.jsx', '.js'];
 

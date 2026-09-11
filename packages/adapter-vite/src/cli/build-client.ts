@@ -30,8 +30,7 @@ import { VIRTUAL_RUNTIME_SPECIFIERS } from '../internal/ssg/entry-generators.ts'
 import type { OpenElementBuildContext } from '../build-context.ts';
 import type { IslandDecl } from '../internal/protocol/ssg.ts';
 import { createNpmSpecifierPlugin } from '../npm-specifier-plugin.ts';
-import { compiledElementPlugin } from '../internal/compiler/plugin.ts';
-import { analyzeModuleSemantics } from '../internal/compiler/semantic-core/module-analysis.ts';
+import { analyzeModuleSemantics, compiledElementPlugin } from '@openelement/element/compiler';
 import { compilerBehaviorDeclarations } from '../internal/ssg/client-admission.ts';
 import { parseJsonc } from '../internal/jsonc.ts';
 import { sortAliasEntries } from '../alias-utils.ts';

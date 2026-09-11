@@ -6,6 +6,18 @@ import { extractDenoAccesses, extractStaticModuleSpecifiers } from './lib/typesc
 const RESTRICTED_ROOTS = ['packages/element/src', 'packages/router/src'];
 const EXTENSIONS = new Set(['.ts', '.tsx']);
 
+/**
+ * Host-side build tooling rooted inside a runtime-free package: the Element
+ * compiler tooling (TSX-to-Part Program semantic core + Vite plugin boundary)
+ * and its two public subpath entries. These modules are chartered to use the
+ * TypeScript compiler API and (type-only) Vite; they are reachable only
+ * through the @openelement/element/compiler and @openelement/element/vite
+ * subpaths, never from the browser/runtime entry points. Every other module
+ * under the restricted roots stays fail-closed.
+ */
+const HOST_TOOLING_ALLOWLIST =
+  /^packages\/element\/src\/(?:internal\/compiler\/|compiler\.ts$|vite\.ts$)/;
+
 // @preact/signals-core is element's chartered engine dependency (#322-era
 // decision); every other npm: specifier is barred from runtime-free packages.
 const ALLOWED_NPM_SPECIFIER = /^npm:@preact\/signals-core(?:@|\/|$)/;
@@ -35,6 +47,7 @@ function scan(root: string): string[] {
     const dot = entry.name.lastIndexOf('.');
     if (dot === -1 || !EXTENSIONS.has(entry.name.slice(dot))) continue;
     const text = Deno.readTextFileSync(entry.path);
+    if (HOST_TOOLING_ALLOWLIST.test(entry.path)) continue;
     const firstCodeLine = text.split('\n').find((line) => line.trim() !== '') ?? '';
     if (firstCodeLine.trim().startsWith('// deno-api-free:ignore')) continue;
     violations.push(...scanDenoApiSource(entry.path, text));

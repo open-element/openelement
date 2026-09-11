@@ -56,7 +56,7 @@ import {
   generateSsrPolyfillBanner,
 } from '../internal/ssg/index.ts';
 import { optionalPackageStubsPlugin } from '../plugin.ts';
-import { compiledElementPlugin } from '../internal/compiler/plugin.ts';
+import { compiledElementPlugin } from '@openelement/element/compiler';
 import { normalizeViteAliases } from '../alias-utils.ts';
 import {
   CHUNK_SIZE_WARNING_LIMIT_KB,

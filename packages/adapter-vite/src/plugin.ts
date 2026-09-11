@@ -41,7 +41,7 @@ import {
   minifyCriticalStyleBlocks,
 } from './internal/ssg/critical-assets.ts';
 import { islandTransformPlugin } from './island-transform.ts';
-import { compileElementModule, stripInlineSourceMapComment } from './internal/compiler/plugin.ts';
+import { compileElementModule, stripInlineSourceMapComment } from '@openelement/element/compiler';
 import { devIslandClientPlugin, RESOLVED_CLIENT_ENTRY_ID } from './dev-island-client.ts';
 import { createGeneratedDataResolverPlugin } from './generated-data-resolver.ts';
 import {
@@ -303,7 +303,7 @@ export function createOpenPlugin(
     name: 'open:core',
     // The transform hook compiles @element modules and must see the authored
     // TSX source: enforce 'pre' so it runs before Vite's builtin TS/JSX
-    // lowering (see internal/compiler/plugin.ts).
+    // lowering (see @openelement/element/compiler).
     enforce: 'pre',
 
     config(userConfig) {

@@ -1,27 +1,27 @@
 /**
- * @openelement/adapter-vite — v0.44 compiler admission gate hardening (#1160,
+ * @openelement/element — v0.44 compiler admission gate hardening (#1160,
  * ADR-0143).
  *
  * The compiled-element transform is mandatory in the default 0.44 pipeline
- * (the open:core transform hook). Admission is two-staged: a cheap `@element(`
- * substring prefilter, then an AST check for a real `@element(...)` decorator
- * application on a class declaration. These tests pin the gate contract:
+ * (the Router-side open:core transform hook drives this same gate). Admission
+ * is two-staged: a cheap `@element(` substring prefilter, then an AST check
+ * for a real `@element(...)` decorator application on a class declaration.
+ * These tests pin the gate contract:
  *   - a .tsx module that only mentions `@element(` inside a string literal or
  *     a comment passes through untouched (hook returns null)
  *   - a module with a real but invalid @element decorator still fails closed
  *     with the source-located OEC9xx diagnostic
- *   - a genuinely decorated module still compiles in the default pipeline
+ *   - a genuinely decorated module still compiles through the Vite hook
  *
  * The transform-once/double-compile guard (compiled output carries no marker,
  * so the standalone open:compiled-element plugin never recompiles) is covered
  * by 'v0.44 compiler hook transforms once and classifies HMR shape changes'
- * in island-delivery.test.ts and must keep passing.
+ * in adapter-vite's island-delivery.test.ts and must keep passing.
  */
 
 import { assert, assertEquals, assertStringIncludes } from '@std/assert';
 import type { Plugin } from 'vite';
 import { compiledElementPlugin, compileElementModule } from '../../src/internal/compiler/plugin.ts';
-import { createOpenPlugin } from '../../src/plugin.ts';
 
 interface TransformContext {
   error(message: string): never;
@@ -49,10 +49,8 @@ function transformOf(plugin: Plugin): TransformHook {
   return plugin.transform as unknown as TransformHook;
 }
 
-function coreTransformHook(plugins: Plugin[]): TransformHook {
-  const core = plugins.find((plugin) => plugin.name === 'open:core');
-  assert(core, 'open:core plugin must be registered');
-  return transformOf(core);
+function compilerTransformHook(): TransformHook {
+  return transformOf(compiledElementPlugin());
 }
 
 // '@element(' appears only inside a string literal and line/block comments —
@@ -72,20 +70,17 @@ Deno.test('v0.44 compiler gate - marker mentions pass through untransformed', ()
   // Second stage, unbound from Vite.
   assertEquals(compileElementModule(MENTION_ONLY_SOURCE, MENTION_ONLY_ID), null);
 
-  // The default pipeline (open:core, ADR-0143 mandatory compiler) passes the
-  // module through instead of failing the build on a false positive.
-  const core = coreTransformHook(createOpenPlugin());
-  assertEquals(core.call(failingContext(), MENTION_ONLY_SOURCE, MENTION_ONLY_ID), null);
-
-  // The standalone plugin applies the same gate.
-  const standalone = transformOf(compiledElementPlugin());
+  // The standalone Vite plugin applies the same gate instead of failing the
+  // build on a false positive. The default Router pipeline (open:core)
+  // pass-through is pinned adapter-side in compiler-open-core-boundary.test.ts.
+  const standalone = compilerTransformHook();
   assertEquals(standalone.call(failingContext(), MENTION_ONLY_SOURCE, MENTION_ONLY_ID), null);
 });
 
 Deno.test('v0.44 compiler gate - real @element modules still compile or fail closed', async (t) => {
-  const core = coreTransformHook(createOpenPlugin());
+  const compile = compilerTransformHook();
 
-  await t.step('a genuinely decorated module compiles in the default pipeline', () => {
+  await t.step('a genuinely decorated module compiles through the Vite hook', () => {
     const source = [
       "import { element, OpenElement, property } from '@openelement/element';",
       "@element('oe-gate-counter')",
@@ -94,9 +89,9 @@ Deno.test('v0.44 compiler gate - real @element modules still compile or fail clo
       '  render() { return <div>{this.count}</div>; }',
       '}',
     ].join('\n');
-    const result = core.call(failingContext(), source, '/project/app/islands/gate-counter.tsx');
-    assert(result !== null && typeof result === 'object', 'core hook must emit compiled code');
-    assertStringIncludes(result.code, '__partProgram');
+    const result = compile.call(failingContext(), source, '/project/app/islands/gate-counter.tsx');
+    assert(typeof result === 'string', 'compiler hook must emit compiled code');
+    assertStringIncludes(result, '__partProgram');
   });
 
   await t.step('a real but invalid @element module fails closed with located diagnostics', () => {
@@ -110,7 +105,7 @@ Deno.test('v0.44 compiler gate - real @element modules still compile or fail clo
     const ctx = failingContext();
     let thrown: Error | null = null;
     try {
-      core.call(ctx, source, '/project/app/islands/gate-invalid.tsx');
+      compile.call(ctx, source, '/project/app/islands/gate-invalid.tsx');
     } catch (error) {
       thrown = error as Error;
     }

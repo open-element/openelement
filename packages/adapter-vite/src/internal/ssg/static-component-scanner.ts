@@ -3,7 +3,7 @@ import { dirname, extname, isAbsolute, join, relative, resolve } from 'node:path
 import type { RouteEntry } from '../protocol/framework.ts';
 import type { StaticComponentDecl } from '../protocol/ssg.ts';
 import { normalizeSeparators } from '@openelement/element/build-utils';
-import { analyzeModuleSemantics } from '../compiler/semantic-core/module-analysis.ts';
+import { analyzeModuleSemantics } from '@openelement/element/compiler';
 
 const SOURCE_EXTENSIONS = ['.tsx', '.ts', '.jsx', '.js'] as const;
 

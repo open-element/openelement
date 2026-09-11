@@ -20,7 +20,7 @@
 import { createLogger } from '@openelement/element';
 import { join } from 'node:path';
 import { safeReadFile } from './route-scanner-fs.ts';
-import { analyzeModuleSemantics } from '../compiler/semantic-core/module-analysis.ts';
+import { analyzeModuleSemantics } from '@openelement/element/compiler';
 
 const log = createLogger('foreign-tag-scan');
 

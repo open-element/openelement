@@ -1,8 +1,8 @@
 import { assertEquals, assertNotStrictEquals, assertThrows } from '@std/assert';
 import { compileElementProgram } from '../src/internal/compiler/semantic-core/compile.ts';
 import { validatePartProgram as validateCompilerProgram } from '../src/internal/compiler/semantic-core/program.ts';
-import { validatePartProgram as validateRuntimeProgram } from '../../element/src/internal/compiled/program.ts';
-import { normalizePartProgram } from '../../element/src/internal/compiled/runtime-program.ts';
+import { validatePartProgram as validateRuntimeProgram } from '../src/internal/compiled/program.ts';
+import { normalizePartProgram } from '../src/internal/compiled/runtime-program.ts';
 
 const FIXTURE = new URL('../__fixtures__/compiled-element-v1/counter.tsx', import.meta.url);
 const GOLDEN = new URL(

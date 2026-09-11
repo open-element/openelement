@@ -34,8 +34,6 @@ try {
           `file:${root}/packages/element/openelement-element-${PACKAGE_VERSION}.tgz`,
       },
       devDependencies: {
-        '@openelement/adapter-vite':
-          `file:${root}/packages/adapter-vite/openelement-adapter-vite-${PACKAGE_VERSION}.tgz`,
         vite: '8.0.16',
       },
     }),
@@ -57,7 +55,7 @@ export class Counter extends OpenElement {
   );
   await Deno.writeTextFile(
     join(author, 'vite.config.js'),
-    `import {element} from '@openelement/adapter-vite/element';
+    `import {element} from '@openelement/element/vite';
 export default {plugins:[element(), {name:'proof-module-boundary',generateBundle(){for(const id of this.getModuleIds()){if(/compiler|adapter-vite|node:/.test(id))this.error('Browser tooling leak: '+id)}}}],build:{sourcemap:true,lib:{entry:'register.js',formats:['es'],fileName:'counter'}}};`,
   );
   await run([

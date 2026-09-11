@@ -11,7 +11,7 @@
 import { assertEquals, assertStringIncludes, assertThrows } from '@std/assert';
 import { buildEntryDescriptor, renderEntry } from '../src/internal/ssg/index.ts';
 import { generateClientEntry } from '../src/internal/ssg/entry-client-codegen.ts';
-import { analyzeModuleSemantics } from '../src/internal/compiler/semantic-core/module-analysis.ts';
+import { analyzeModuleSemantics } from '@openelement/element/compiler';
 import type { RouteEntry } from '../src/internal/protocol/framework.ts';
 
 const litRoutes: RouteEntry[] = [
