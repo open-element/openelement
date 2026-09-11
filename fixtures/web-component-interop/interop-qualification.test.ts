@@ -30,7 +30,7 @@ Deno.test('interop qualification validates the regenerated CEM output and reject
   const corpus = await loadInteropCorpus(fixtureRoot);
   assertEquals(validateCemManifest(corpus.cem), []);
 
-  const malformed = structuredClone(corpus.cem) as Record<string, unknown>;
+  const malformed = structuredClone(corpus.cem) as unknown as Record<string, unknown>;
   malformed.modules = [];
   const diagnostics = validateCemManifest(malformed);
   assertEquals(diagnostics.length > 0, true);
@@ -40,14 +40,14 @@ Deno.test('interop qualification validates the regenerated CEM output and reject
 Deno.test('CEM validation fails closed for empty module paths and declaration names', async () => {
   const corpus = await loadInteropCorpus(fixtureRoot);
 
-  const emptyPath = structuredClone(corpus.cem) as {
+  const emptyPath = structuredClone(corpus.cem) as unknown as {
     modules: Array<{ path: string; declarations: Array<Record<string, unknown>> }>;
   };
   emptyPath.modules[0].path = '';
   const pathDiagnostics = validateCemManifest(emptyPath);
   assertEquals(pathDiagnostics.some((diagnostic) => diagnostic.includes('.path')), true);
 
-  const emptyName = structuredClone(corpus.cem) as {
+  const emptyName = structuredClone(corpus.cem) as unknown as {
     modules: Array<{ declarations: Array<Record<string, unknown>> }>;
   };
   emptyName.modules[0].declarations[0].name = '';

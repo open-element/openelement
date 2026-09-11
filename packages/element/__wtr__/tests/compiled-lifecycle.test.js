@@ -1,5 +1,5 @@
 /**
- * WTR pilot (#1333): compiled element lifecycle against the REAL browser
+ * Element browser conformance (#1333): compiled element lifecycle against the REAL browser
  * platform.
  *
  * Migrated from the simulated-DOM suite packages/element/__tests__/

@@ -29,7 +29,11 @@ dependencies (Lit, FAST, Ionic) are consumed as pinned npm packages.
 ## What it pins
 
 - CEM manifest validation (`validateCemManifest`, fail-closed on malformed
-  input) and corpus/CEM tag parity;
+  input) and corpus/CEM tag parity. The regenerated manifest is typed by the
+  upstream CEM schema package (`npm:custom-elements-manifest@2.1.0`), the
+  generic metadata authority; runtime schema validation and analyzer-based
+  generation stay deferred (see
+  `docs/architecture/1.0-alpha-final-convergence-audit.md`, CEM section);
 - fail-closed SSR capability classification (`classifySsrCapability` — unknown
   capability is an explicit client-only decision, never a fallback);
 - SSR form: foreign probe tags present with authored light-DOM children, no

@@ -1,5 +1,5 @@
 /**
- * Regenerate the WTR pilot compiled fixtures (#1333).
+ * Regenerate the browser-conformance compiled fixtures (#1333).
  *
  * Uses compileElementModule — the exact function the open:compiled-element
  * Vite plugin's transform hook calls (packages/element/src/internal/
@@ -19,8 +19,8 @@
 import { compileElementModule } from '../../src/internal/compiler/plugin.ts';
 
 const here = import.meta.dirname!; // packages/element/__wtr__/tools
-const pilot = join(here, '..');
-const elementPkg = join(pilot, '..');
+const suite = join(here, '..');
+const elementPkg = join(suite, '..');
 
 function join(...segments: string[]): string {
   return segments.join('/').replace(/\/+/g, '/').replace(/\/$/, '');
@@ -43,18 +43,18 @@ const fixtures: FixtureSpec[] = [
     out: 'oe-program-counter.ts',
   },
   {
-    source: join(pilot, 'fixtures/wtr-shadow-button.tsx'),
+    source: join(suite, 'fixtures/wtr-shadow-button.tsx'),
     id: 'wtr-shadow-button.tsx',
     out: 'wtr-shadow-button.ts',
   },
   {
-    source: join(pilot, 'fixtures/wtr-field.tsx'),
+    source: join(suite, 'fixtures/wtr-field.tsx'),
     id: 'wtr-field.tsx',
     out: 'wtr-field.ts',
   },
 ];
 
-const outDir = join(pilot, 'generated');
+const outDir = join(suite, 'generated');
 await Deno.mkdir(outDir, { recursive: true });
 
 for (const fixture of fixtures) {

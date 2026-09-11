@@ -1,5 +1,5 @@
 /**
- * WTR pilot (#1333): minimal Lit host/lifecycle case with Lit's own runtime
+ * Element browser conformance (#1333): minimal Lit host/lifecycle case with Lit's own runtime
  * (lit@3.3.3 from this directory's node_modules), plus a same-page
  * coexistence check with the compiled OE element. This is interoperability
  * evidence only — not Lit Framework Mode.

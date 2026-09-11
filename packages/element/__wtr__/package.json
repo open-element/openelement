@@ -1,9 +1,9 @@
 {
-  "name": "@openelement/element-wtr-pilot",
+  "name": "@openelement/element-browser-tests",
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "WTR browser-conformance pilot (#1333 slice, Beta.2.2). npm-local only; not a workspace member, not wired into CI.",
+  "description": "Web Test Runner browser-conformance suite for compiled OpenElement elements. npm-local only; not a workspace member.",
   "scripts": {
     "test": "web-test-runner"
   },

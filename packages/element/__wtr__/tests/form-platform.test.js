@@ -1,6 +1,6 @@
 /**
- * WTR platform matrix: the real-browser form/platform
- * contract rows that the pilot (form-contract.test.js) does not already
+ * Element browser platform matrix: the real-browser form/platform
+ * contract rows that the contract suite (form-contract.test.js) does not already
  * cover. Every case runs the compiled FACE (generated/wtr-field.ts) inside a
  * real form in Chromium, Firefox and WebKit:
  *

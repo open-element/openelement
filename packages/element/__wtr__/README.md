@@ -5,12 +5,12 @@ the resulting browser modules with Web Test Runner on Chromium, Firefox, and
 WebKit.
 
 ```sh
-deno task wtr:pilot:gate
+deno task test:element:browser:gate
 ```
 
 The positive suite covers compiled rendering, events, forms, shadow DOM,
-hydration/claim behavior, and instance isolation. The negative harness also
-proves that a failing assertion, missing browser, broken transform, zero-test
-run, or unmatched test glob exits non-zero.
+hydration/claim behavior, and instance isolation. A fail-closed configuration
+smoke proves the suite's own wiring fails correctly: a run that executes zero
+tests is flipped to failed by the zero-tests-guard reporter and exits non-zero.
 
 `package-lock.json` is committed because `npm ci` is part of the hermetic gate.

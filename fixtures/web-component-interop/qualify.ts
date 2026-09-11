@@ -21,6 +21,20 @@
 
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import type {
+  CustomElementDeclaration,
+  CustomElementField,
+  JavaScriptModule,
+  Package as CemPackage,
+} from 'custom-elements-manifest';
+
+/**
+ * The regenerated CEM artifact, typed by the upstream Custom Elements
+ * Manifest schema package — the generic metadata authority for tags,
+ * attributes, members, events, slots, and CSS parts. `$schema` is the one
+ * customary field the upstream `Package` interface does not declare.
+ */
+export type InteropCemManifest = CemPackage & { $schema?: string };
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const defaultFixtureRoot = new URL('./', import.meta.url);
@@ -73,7 +87,7 @@ interface CorpusConfig {
 }
 
 export interface InteropCorpus extends Omit<CorpusConfig, 'cem'> {
-  cem: unknown;
+  cem: InteropCemManifest;
 }
 
 export interface SsrCapabilityDecision {
@@ -200,9 +214,18 @@ function validCustomElementTag(value: unknown): value is string {
 }
 
 /**
- * Validate the deliberately small CEM surface regenerated from the interop corpus.
+ * Validate the deliberately small CEM surface regenerated from the interop
+ * corpus, fail-closed. The upstream CEM schema (npm:custom-elements-manifest)
+ * owns the interchange TYPES (see InteropCemManifest), but its draft-07 JSON
+ * schema cannot express this contract: it accepts empty `modules`, empty
+ * module paths, empty declaration names, duplicate or non-hyphenated tag
+ * names, and any `schemaVersion` string (verified against
+ * custom-elements-manifest@2.1.0 schema.json with ajv@8.17.1). Swapping this
+ * validator for schema validation would break the fail-closed corpus
+ * contract, and layering both would duplicate validation — so runtime
+ * validation stays here until the upstream schema expresses these invariants.
  * The shape follows CEM 1.0.0: javascript modules, class declarations,
- * custom-element tags, members, events, slots and CSS parts.
+ * custom-element tags, members, attributes, events, slots and CSS parts.
  */
 export function validateCemManifest(raw: unknown): string[] {
   const errors: string[] = [];
@@ -298,14 +321,14 @@ export function validateCemManifest(raw: unknown): string[] {
             );
           }
           if (
-            'reflect' in memberValue && typeof memberValue.reflect !== 'boolean'
+            'reflects' in memberValue && typeof memberValue.reflects !== 'boolean'
           ) {
-            errors.push(`${memberPath}.reflect must be boolean when present`);
+            errors.push(`${memberPath}.reflects must be boolean when present`);
           }
         }
       }
 
-      for (const field of ['events', 'slots', 'cssParts'] as const) {
+      for (const field of ['attributes', 'events', 'slots', 'cssParts'] as const) {
         const entries = declarationValue[field];
         if (!Array.isArray(entries)) {
           errors.push(`${declarationPath}.${field} must be an array`);
@@ -486,45 +509,57 @@ const SUPERCLASS_BY_FRAMEWORK: Record<InteropFramework, string> = {
 };
 
 /**
- * Regenerate the compiler-facing CEM artifact from the canonical corpus.
- * corpus.json is the single source of truth; the CEM (named by the corpus
- * `cem` field, e.g. compiler-output.cem.json) is derived evidence and is
- * never committed.
+ * Regenerate the compiler-facing CEM artifact from the canonical corpus,
+ * typed and shaped by the upstream CEM schema (npm:custom-elements-manifest):
+ * members use the upstream `reflects` field and every member `attribute` is
+ * cross-listed in the declaration's `attributes` array, as the upstream
+ * schema requires. corpus.json is the single source of truth; the CEM (named
+ * by the corpus `cem` field, e.g. compiler-output.cem.json) is derived
+ * evidence and is never committed.
+ *
+ * The upstream analyzer (@custom-elements-manifest/analyzer) is deliberately
+ * NOT used for this generation: the corpus is synthetic, the analyzer expects
+ * real per-framework source files (plus framework plugins for FAST/Stencil
+ * and JSDoc annotations for slots/cssParts/events), and its output is not
+ * byte-deterministic across versions — all incompatible with a canonical
+ * corpus whose derived artifact must be reproducible on every run.
  */
 export function generateCemManifest(
   components: readonly InteropComponent[],
-): unknown {
+): InteropCemManifest {
+  const modules: JavaScriptModule[] = components.map((component) => {
+    const member: CustomElementField = {
+      kind: 'field',
+      name: component.property,
+      type: {
+        text: component.property === 'disabled' ? 'boolean' : 'string',
+      },
+      attribute: component.attribute,
+      reflects: true,
+    };
+    const declaration: CustomElementDeclaration = {
+      kind: 'class',
+      name: component.className,
+      customElement: true,
+      tagName: component.tag,
+      superclass: { name: SUPERCLASS_BY_FRAMEWORK[component.framework] },
+      members: [member],
+      attributes: [{ name: component.attribute, fieldName: component.property }],
+      events: [{ name: component.event, type: { text: 'CustomEvent' } }],
+      slots: [{ name: '', description: 'Default content slot' }],
+      cssParts: [{ name: component.cssPart }],
+    };
+    return {
+      kind: 'javascript-module',
+      path: `./${component.framework}.ts`,
+      declarations: [declaration],
+    };
+  });
   return {
     $schema:
       'https://raw.githubusercontent.com/webcomponents/custom-elements-manifest/main/schema.json',
     schemaVersion: '1.0.0',
-    modules: components.map((component) => ({
-      kind: 'javascript-module',
-      path: `./${component.framework}.ts`,
-      declarations: [
-        {
-          kind: 'class',
-          name: component.className,
-          customElement: true,
-          tagName: component.tag,
-          superclass: { name: SUPERCLASS_BY_FRAMEWORK[component.framework] },
-          members: [
-            {
-              kind: 'field',
-              name: component.property,
-              type: {
-                text: component.property === 'disabled' ? 'boolean' : 'string',
-              },
-              attribute: component.attribute,
-              reflect: true,
-            },
-          ],
-          events: [{ name: component.event }],
-          slots: [{ name: '', description: 'Default content slot' }],
-          cssParts: [{ name: component.cssPart }],
-        },
-      ],
-    })),
+    modules,
   };
 }
 
@@ -1408,9 +1443,7 @@ async function qualify(
         placements: [...requiredPlacements],
       },
       cem: {
-        schemaVersion: String(
-          (corpus.cem as Record<string, unknown>).schemaVersion,
-        ),
+        schemaVersion: corpus.cem.schemaVersion,
         tags: customElementTags(corpus.cem),
       },
       ssr,

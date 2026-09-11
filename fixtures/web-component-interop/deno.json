@@ -2,7 +2,8 @@
   "$schema": "https://deno.land/x/deno/cli/schemas/config-file.v1.json",
   "imports": {
     "@std/assert": "jsr:@std/assert@^1.0.0",
-    "@playwright/test": "npm:@playwright/test@1.59.1"
+    "@playwright/test": "npm:@playwright/test@1.59.1",
+    "custom-elements-manifest": "npm:custom-elements-manifest@2.1.0"
   },
   "nodeModulesDir": "auto",
   "tasks": {

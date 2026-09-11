@@ -1,5 +1,5 @@
 /**
- * WTR pilot (#1333): form contract slice on the compiled side, against real
+ * Element browser conformance (#1333): form contract slice on the compiled side, against real
  * browser form semantics: required controls, reset/restore, and submitter
  * name/value.
  *
@@ -14,7 +14,7 @@
  * listing, form.checkValidity(), :invalid/:valid matching, the invalid event,
  * and the FormData entry list. (The validity/checkValidity members of a FACE
  * live on its ElementInternals, not on the host element — probed in Chromium
- * during this pilot; see README.)
+ * during this suite; see README.)
  */
 import { assert } from 'chai';
 import { WtrField } from '../generated/wtr-field.ts';
