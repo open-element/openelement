@@ -18,7 +18,6 @@ deno task typecheck
 echo "=== pre-push gates for '$BRANCH' ==="
 
 deno task graph:check
-deno task package-surface:check
 deno task export-files:check
 
 echo ""

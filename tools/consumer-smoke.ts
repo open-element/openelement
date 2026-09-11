@@ -25,8 +25,14 @@
 import { formatError } from '@openelement/element';
 import { admitsRelease, fail, type GateDecision, pass, unknown } from './gate-verdict.ts';
 import { getArg, runWithOutput } from './lib/process.ts';
-import { readJson } from './lib/fs.ts';
-import { normalizeSlashes } from './lib/path.ts';
+
+async function readJson<T = unknown>(path: string | URL): Promise<T> {
+  return JSON.parse(await Deno.readTextFile(path)) as T;
+}
+
+function normalizeSlashes(path: string): string {
+  return path.replace(/\\/g, '/');
+}
 
 function getArgFlag(flag: string): boolean {
   return Deno.args.includes(flag);

@@ -25,9 +25,12 @@ import { existsSync } from '@std/fs';
 import { join, resolve } from '@std/path';
 import { formatJson } from '@openelement/element/build-utils';
 import { PACKAGE_VERSION, RETAINED_PACKAGE_NAMES } from './project-constants.ts';
-import { readJson } from './lib/fs.ts';
 import { readPackages } from './lib/package-graph.ts';
 import { tarballPath } from './lib/npm-tarball.ts';
+
+async function readJson<T = unknown>(path: string | URL): Promise<T> {
+  return JSON.parse(await Deno.readTextFile(path)) as T;
+}
 
 const repoRoot = resolve(import.meta.dirname!, '..');
 // Generous ceiling for the starter's real SSG build (vite + nitro); a hung

@@ -20,9 +20,9 @@
     ]
   },
   "tasks": {
-    "build": "deno check src/index.ts",
+    "build": "deno check src/index.ts src/jsx-runtime.ts src/jsx-dev-runtime.ts src/sanitize.ts src/authoring.ts src/html.ts src/logger.ts src/build-utils.ts",
     "lint": "deno lint src/ __tests__/",
-    "typecheck": "deno check src/index.ts",
+    "typecheck": "deno check src/index.ts src/jsx-runtime.ts src/jsx-dev-runtime.ts src/sanitize.ts src/authoring.ts src/html.ts src/logger.ts src/build-utils.ts",
     "test": "deno test --allow-read --allow-write --allow-env --allow-net --allow-run __tests__/",
     "test:ci": "deno test --allow-read --allow-write --allow-env --allow-net --allow-run --coverage --junit-path=test-results.xml __tests__/"
   },

@@ -15,10 +15,13 @@ import { existsSync } from '@std/fs';
 
 import { allPackageAliases } from './lib/package-graph.ts';
 import { assertCompatibilityDate } from './lib/compatibility-date.ts';
-import { normalizeSlashes } from './lib/path.ts';
 import { runWithOutput } from './lib/process.ts';
 import { extractStaticModuleSpecifiers } from './lib/typescript-ast.ts';
 import { NITRO_COMPATIBILITY_DATE } from './nitro-compatibility.ts';
+
+function normalizeSlashes(path: string): string {
+  return path.replace(/\\/g, '/');
+}
 
 function findMissingGeneratedImports(
   source: string,

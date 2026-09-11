@@ -9,9 +9,15 @@ import { dirname, fromFileUrl, join } from '@std/path';
 import type { Page } from 'npm:playwright@1.59.1';
 import { formatJson } from '@openelement/element/build-utils';
 import { allPackageAliases } from './lib/package-graph.ts';
-import { readJson } from './lib/fs.ts';
-import { normalizeSlashes } from './lib/path.ts';
 import { serveStatic } from './lib/static-server.ts';
+
+async function readJson<T = unknown>(path: string | URL): Promise<T> {
+  return JSON.parse(await Deno.readTextFile(path)) as T;
+}
+
+function normalizeSlashes(path: string): string {
+  return path.replace(/\\/g, '/');
+}
 
 const repoRoot = dirname(dirname(fromFileUrl(import.meta.url)));
 const PROJECT_NAME = 'third-party-wc-smoke-app';

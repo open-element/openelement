@@ -15,9 +15,19 @@
  *   (cycle detection alone cannot catch an invalid edge into create)
  * - no circular package dependencies exist
  * - release publish order lists every package after its dependencies
+ * - the workspace package roster matches the retained release set, every
+ *   declared export target exists, product-boundary imports stay forbidden
+ *   (Element must not import Router; the Router core must not import
+ *   Element), and no source reaches into another package via a private
+ *   workspace path (merged from the former standalone package-surface check)
+ * - release-critical package configuration: every package is on
+ *   PACKAGE_VERSION, declares exports and publish.include (with
+ *   deno.json/README.md/LICENSE present on disk), uses the @openelement
+ *   scope, and the create CLI's embedded CREATE_VERSION tracks the release
+ *   line (merged from the former standalone package-config verification)
  */
 
-import { PACKAGE_COUNT, PACKAGE_VERSION } from './project-constants.ts';
+import { PACKAGE_COUNT, PACKAGE_VERSION, RETAINED_PACKAGE_NAMES } from './project-constants.ts';
 import {
   buildDependencyGraph,
   detectCycles,
@@ -29,9 +39,13 @@ import {
   releasePublishOrder,
   topologicalSort,
 } from './lib/package-graph.ts';
-import { walk } from '@std/fs/walk';
-import { readJson } from './lib/fs.ts';
+import { walk, walkSync } from '@std/fs/walk';
+import { basename, dirname, join } from '@std/path';
 import { formatError } from '@openelement/element';
+
+async function readJson(path: string): Promise<unknown> {
+  return JSON.parse(await Deno.readTextFile(path));
+}
 
 /**
  * Explicit dependency-direction rules: each package may only depend on the
@@ -167,6 +181,167 @@ function validateInternalRanges(
   }
 }
 
+/**
+ * Retained-package roster rule (merged from the former surface check): the
+ * workspace must contain exactly the release-state package set.
+ */
+export function packageSetFailures(actual: string[], expected: readonly string[]): string[] {
+  const actualSet = new Set(actual);
+  const expectedSet = new Set(expected);
+  return [
+    ...expected.filter((name) => !actualSet.has(name)).map((name) =>
+      `missing retained package: ${name}`
+    ),
+    ...actual.filter((name) => !expectedSet.has(name)).map((name) =>
+      `unowned workspace package: ${name}`
+    ),
+  ];
+}
+
+function exportTargets(exports: unknown): string[] {
+  if (typeof exports === 'string') return [exports];
+  if (!exports || typeof exports !== 'object') return [];
+  return Object.values(exports as Record<string, unknown>).filter(
+    (value): value is string => typeof value === 'string',
+  );
+}
+
+function surfaceSourceFiles(root: string): string[] {
+  try {
+    return [...walkSync(root, { includeDirs: false, exts: ['.ts', '.tsx'] })].map((e) => e.path);
+  } catch (error) {
+    if (error instanceof Deno.errors.NotFound) return [];
+    throw error;
+  }
+}
+
+function forbiddenImportFailures(file: string, source: string, forbidden: string[]): string[] {
+  const imports = extractOpenImports(source);
+  return forbidden.flatMap((packageName) =>
+    imports.some((specifier) =>
+        specifier === packageName || specifier.startsWith(`${packageName}/`)
+      )
+      ? [`${file}: forbidden product-boundary import ${packageName}`]
+      : []
+  );
+}
+
+async function validatePackageSurface(
+  packages: PackageInfo[],
+  failures: string[],
+): Promise<void> {
+  failures.push(
+    ...packageSetFailures(
+      packages.map((pkg) => pkg.name),
+      RETAINED_PACKAGE_NAMES,
+    ),
+  );
+
+  for (const pkg of packages) {
+    for (const target of exportTargets(pkg.exports)) {
+      const path = `${pkg.dir}/${target.replace(/^\.\//, '')}`;
+      try {
+        const stat = await Deno.stat(path);
+        if (!stat.isFile) failures.push(`${pkg.name}: export target is not a file: ${target}`);
+      } catch {
+        failures.push(`${pkg.name}: missing export target: ${target}`);
+      }
+    }
+  }
+
+  for (const file of surfaceSourceFiles('packages/element/src')) {
+    const source = await Deno.readTextFile(file);
+    failures.push(...forbiddenImportFailures(file, source, ['@openelement/router']));
+  }
+
+  for (const file of ['packages/router/src/router.ts', 'packages/router/src/router-http.ts']) {
+    const source = await Deno.readTextFile(file);
+    failures.push(...forbiddenImportFailures(file, source, ['@openelement/element']));
+  }
+
+  for (const pkg of packages) {
+    for (const file of surfaceSourceFiles(`${pkg.dir}/src`)) {
+      const source = await Deno.readTextFile(file);
+      if (/from\s+['"][^'"]*packages\//.test(source)) {
+        failures.push(`${file}: private workspace path import`);
+      }
+    }
+  }
+}
+
+const REQUIRED_PUBLISHED_FILES = ['deno.json', 'README.md', 'LICENSE'];
+
+/**
+ * Cross-assert the embedded create CLI version against the workspace package
+ * line (#713). packages/create/src/version.ts is rewritten by the version bump
+ * but lives outside the package deno.json files the graph check covers, so a
+ * missed bump would otherwise ship a CLI advertising a stale version.
+ */
+export function createVersionFailures(createVersionSource: string): string[] {
+  const match = createVersionSource.match(/CREATE_VERSION = '([^']+)'/u);
+  if (!match) {
+    return ['packages/create/src/version.ts: CREATE_VERSION anchor missing'];
+  }
+  if (match[1] !== PACKAGE_VERSION) {
+    return [
+      `packages/create/src/version.ts: CREATE_VERSION ${match[1]} does not match ` +
+      `docs/release/release-state.json sourceVersion ${PACKAGE_VERSION}`,
+    ];
+  }
+  return [];
+}
+
+async function validatePackageConfigs(
+  packages: PackageInfo[],
+  failures: string[],
+): Promise<void> {
+  failures.push(
+    ...createVersionFailures(await Deno.readTextFile('packages/create/src/version.ts')),
+  );
+
+  for (const pkg of packages) {
+    const configPath = join(pkg.dir, 'deno.json');
+    const config = await readJson(configPath) as {
+      name?: unknown;
+      version?: unknown;
+      exports?: unknown;
+      publish?: { include?: unknown };
+    };
+
+    if (config.version !== PACKAGE_VERSION) {
+      failures.push(
+        `${configPath}: version ${
+          typeof config.version === 'string' ? config.version : '<missing>'
+        } does not match PACKAGE_VERSION ${PACKAGE_VERSION}`,
+      );
+    }
+    if (!config.exports) failures.push(`${configPath}: missing public exports`);
+
+    const include = config.publish?.include;
+    if (!Array.isArray(include)) {
+      failures.push(`${configPath}: publish.include must be an array`);
+    } else {
+      for (const required of REQUIRED_PUBLISHED_FILES) {
+        if (!include.includes(required)) {
+          failures.push(`${configPath}: publish.include omits ${required}`);
+        }
+      }
+    }
+
+    for (const required of REQUIRED_PUBLISHED_FILES) {
+      try {
+        await Deno.stat(join(dirname(configPath), required));
+      } catch {
+        failures.push(`${pkg.name}: missing ${required}`);
+      }
+    }
+
+    if (!pkg.name.startsWith('@openelement/')) {
+      failures.push(`${basename(pkg.dir)}: package name must use @openelement scope`);
+    }
+  }
+}
+
 async function main(): Promise<void> {
   const failures: string[] = [];
 
@@ -270,6 +445,26 @@ async function main(): Promise<void> {
     const msg = `Topological sort failed: ${formatError(err)}`;
     console.error(`  FAIL: ${msg}`);
     failures.push(msg);
+  }
+
+  console.log('\n--- Package Surface Validation ---');
+  const surfaceFailuresBefore = failures.length;
+  await validatePackageSurface(packages, failures);
+  if (failures.length === surfaceFailuresBefore) {
+    console.log(
+      '  PASS: Workspace roster matches the retained release set, all export targets exist, ' +
+        'product-boundary imports are absent, and no private workspace path imports were found.',
+    );
+  }
+
+  console.log('\n--- Package Configuration Validation ---');
+  const configFailuresBefore = failures.length;
+  await validatePackageConfigs(packages, failures);
+  if (failures.length === configFailuresBefore) {
+    console.log(
+      `  PASS: All ${packages.length} packages carry release-critical configuration ` +
+        `(version ${PACKAGE_VERSION}, exports, publish.include, required files, @openelement scope).`,
+    );
   }
 
   console.log('\n--- Package Versions ---');

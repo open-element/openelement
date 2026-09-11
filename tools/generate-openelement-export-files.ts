@@ -1,5 +1,3 @@
-import { readJson } from './lib/fs.ts';
-
 /**
  * Generates packages/adapter-vite/src/generated-export-files.ts from the
  * "exports" maps declared in each package deno.json.
@@ -15,6 +13,10 @@ import { readJson } from './lib/fs.ts';
  *   deno run --allow-read --allow-write --allow-run tools/generate-openelement-export-files.ts --check
  *     -> regenerate, format, and fail (exit 1) if the committed file is stale.
  */
+
+async function readJson<T = unknown>(path: string | URL): Promise<T> {
+  return JSON.parse(await Deno.readTextFile(path)) as T;
+}
 
 interface PackageExports {
   [subpath: string]: string;

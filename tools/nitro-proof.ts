@@ -1,8 +1,12 @@
 import { walkSync } from '@std/fs/walk';
+import { exists } from '@std/fs';
 import { assertCompatibilityDate } from './lib/compatibility-date.ts';
-import { exists, readJson } from './lib/fs.ts';
 import { runWithOutput } from './lib/process.ts';
 import { NITRO_COMPATIBILITY_DATE } from './nitro-compatibility.ts';
+
+async function readJson<T = unknown>(path: string | URL): Promise<T> {
+  return JSON.parse(await Deno.readTextFile(path)) as T;
+}
 
 const preset = Deno.args[0];
 

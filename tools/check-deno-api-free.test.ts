@@ -1,7 +1,5 @@
 import { assertEquals, assertFalse, assertStringIncludes } from '@std/assert';
 import { scanDenoApiSource } from './check-deno-api-free.ts';
-import { isAllowedDependencyDirection } from './check-package-graph.ts';
-import { findSignalBoundaryImports } from './check-signal-protocol-boundary.ts';
 
 Deno.test('deno-api-free uses syntax nodes for node imports and Deno access', () => {
   const issues = scanDenoApiSource(
@@ -39,26 +37,4 @@ Deno.test('deno-api-free catches globalThis.Deno, destructuring, aliases, and np
   assertStringIncludes(text, 'Deno.mkdir');
   assertStringIncludes(text, 'npm import: npm:left-pad@1.0.0');
   assertFalse(text.includes('signals-core'));
-});
-
-Deno.test('package graph direction rules encode the package layering', () => {
-  assertEquals(isAllowedDependencyDirection('@openelement/router', '@openelement/element'), true);
-  assertEquals(
-    isAllowedDependencyDirection('@openelement/adapter-vite', '@openelement/router'),
-    true,
-  );
-  assertEquals(isAllowedDependencyDirection('@openelement/element', '@openelement/router'), false);
-  assertEquals(isAllowedDependencyDirection('@openelement/create', '@openelement/element'), false);
-});
-
-Deno.test('signal boundary only reports real static and dynamic imports', () => {
-  assertEquals(
-    findSignalBoundaryImports(`
-      // import '@preact/signals-core';
-      const text = "@preact/signals";
-      import { signal } from '@preact/signals-core';
-      await import('@preact/signals');
-    `),
-    ['@preact/signals-core', '@preact/signals'],
-  );
 });

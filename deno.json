@@ -37,9 +37,8 @@
   "nodeModulesDir": "manual",
   "tasks": {
     "dev": "deno task test:watch",
-    "build": "deno run --allow-read --allow-run --allow-env tools/run-package-graph-task.ts build",
+    "build": "deno task --filter @openelement/element build && deno task --filter @openelement/router build && deno task --filter @openelement/create build && deno task --filter @openelement/adapter-vite build",
     "release:state-machine:check": "deno run --allow-read --allow-run=git tools/check-release-state-machine.ts",
-    "package-surface:check": "deno run --allow-read --allow-env tools/check-package-surface.ts",
     "interface:snapshot": "deno run --allow-read --allow-env tools/check-public-interface-snapshot.ts",
     "interface:snapshot:write": "deno run --allow-read --allow-write --allow-env tools/check-public-interface-snapshot.ts --write",
     "export-files:generate": "deno run --allow-read --allow-write --allow-run tools/generate-openelement-export-files.ts",
@@ -92,16 +91,15 @@
     "nitro:proof:workers": "deno run --allow-read --allow-write --allow-run --allow-env --allow-net tools/nitro-proof.ts workers",
     "test:coverage:check": "deno run --allow-read --allow-run --allow-write --allow-env --allow-net --allow-ffi --allow-sys tools/check-coverage.ts --threshold 80 --branch-threshold 84 --function-threshold 86",
     "consumer:element-smoke": "deno run -A tools/consumer-smoke.ts --local",
-    "typecheck": "deno run --allow-read --allow-run --allow-env tools/run-package-graph-task.ts typecheck",
+    "typecheck": "deno task --filter @openelement/element typecheck && deno task --filter @openelement/router typecheck && deno task --filter @openelement/create typecheck && deno task --filter @openelement/adapter-vite typecheck",
     "lint": "deno lint",
     "fmt": "deno fmt",
     "fmt:check": "deno fmt --check",
     "clean": "rm -rf packages/*/dist packages/*/*.tgz dist custom-dist dist-test-* playwright-report test-results .openElement",
     "hooks:install": "git config core.hooksPath .githooks && chmod +x .githooks/pre-commit .githooks/pre-push",
     "hooks:uninstall": "git config --unset core.hooksPath",
-    "gate:ci": "deno task graph:check && deno task package-surface:check && deno task interface:snapshot && deno task export-files:check && deno task verify:configs && deno task url-pattern-list:provenance && deno task release:state-machine:check && deno task signals:check-protocol-boundary && deno task deno-api:check && deno task validation:boundary-check && deno task build && deno task test:coverage:check && deno task fixture:request-time:gate && deno task fixture:app-flow-native:gate && deno task fixture:app-flow-lit:gate && deno task wtr:pilot:gate && deno task test:starter-smoke && deno task consumer:local && deno task package-artifacts:check && deno task consumer:packaged && deno task consumer:packaged-app && deno task consumer:packaged-router && deno task consumer:packaged-element && deno task third-party-wc:smoke",
-    "gate:release": "deno task gate:ci && deno task nitro:proof:node && deno task nitro:proof:workers && deno task publish:npm:dry-run",
-    "verify:configs": "deno run --allow-read --allow-env tools/verify-package-configs.ts"
+    "gate:ci": "deno task graph:check && deno task interface:snapshot && deno task export-files:check && deno task url-pattern-list:provenance && deno task release:state-machine:check && deno task signals:check-protocol-boundary && deno task deno-api:check && deno task validation:boundary-check && deno task build && deno task test:coverage:check && deno task fixture:request-time:gate && deno task fixture:app-flow-native:gate && deno task fixture:app-flow-lit:gate && deno task wtr:pilot:gate && deno task test:starter-smoke && deno task consumer:local && deno task package-artifacts:check && deno task consumer:packaged && deno task consumer:packaged-app && deno task consumer:packaged-router && deno task consumer:packaged-element && deno task third-party-wc:smoke",
+    "gate:release": "deno task gate:ci && deno task nitro:proof:node && deno task nitro:proof:workers && deno task publish:npm:dry-run"
   },
   "fmt": {
     "useTabs": false,

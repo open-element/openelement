@@ -1,6 +1,9 @@
 import { walkSync } from '@std/fs/walk';
 import { extractStaticModuleSpecifiers } from './lib/typescript-ast.ts';
-import { readJson } from './lib/fs.ts';
+
+async function readJson<T = unknown>(path: string | URL): Promise<T> {
+  return JSON.parse(await Deno.readTextFile(path)) as T;
+}
 
 type Failure = { file: string; message: string };
 
