@@ -2157,24 +2157,20 @@
       "npm:lit@3.3.3"
     ],
     "links": {
+      "jsr:@openelement/create@1.0.0-alpha.1": {},
+      "jsr:@openelement/element@1.0.0-alpha.1": {
+        "dependencies": [
+          "npm:@typescript/typescript6@^6.0.2"
+        ]
+      },
       "jsr:@openelement/router@1.0.0-alpha.1": {
         "dependencies": [
           "npm:@hono/vite-dev-server@~0.25.3",
-          "npm:@mdx-js/rollup@^3.1.1",
-          "npm:gray-matter@^4.0.3",
-          "npm:hono@^4.12.0",
+          "npm:@openelement/url-pattern-list@0.6.0",
           "npm:jsonc-parser@^3.3.1",
           "npm:marked@15",
-          "npm:typescript@^5.9.0",
+          "npm:preact-render-to-string@^6.5.0",
           "npm:vite@8.0.16"
-        ]
-      },
-      "jsr:@openelement/create@1.0.0-alpha.1": {},
-      "jsr:@openelement/element@1.0.0-alpha.1": {},
-      "jsr:@openelement/router@1.0.0-alpha.1": {
-        "dependencies": [
-          "npm:@openelement/url-pattern-list@0.6.0",
-          "npm:preact-render-to-string@^6.5.0"
         ]
       }
     }
