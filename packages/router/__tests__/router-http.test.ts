@@ -1,6 +1,6 @@
 import { assertEquals, assertRejects, assertThrows } from '@std/assert';
 import { Hono } from 'hono';
-import { createRouteMiddleware } from '../src/router-http.ts';
+import { createRouteMiddleware } from '../src/http.ts';
 
 Deno.test('Request chooses one URL before methods; Hono retains context, middleware and response', async () => {
   const events: string[] = [];

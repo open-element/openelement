@@ -1,5 +1,5 @@
 import { assertEquals } from '@std/assert';
-import { createRequestContext } from '@openelement/router/model';
+import { createRequestContext } from '@openelement/router';
 import { createOpenElementNitroHandler } from '../src/nitro-mount.ts';
 
 Deno.test('nitro mount: passes the event req through to the handler and returns its Response', async () => {

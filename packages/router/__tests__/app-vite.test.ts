@@ -46,9 +46,9 @@ Deno.test('openElement() minimal includes dev server', () => {
   assertArrayIncludes(names, ['@hono/vite-dev-server']);
 });
 
-Deno.test('openElement() returns at least 8 plugins', () => {
+Deno.test('openElement() returns at least 7 plugins', () => {
   const plugins = openElement();
-  assertEquals(plugins.length >= 8, true);
+  assertEquals(plugins.length >= 7, true);
 });
 
 // ─── Options propagation ─────────────────────────────────────

@@ -21,7 +21,7 @@
 import { assert, assertEquals, assertStringIncludes } from '@std/assert';
 import { join } from '@std/path';
 import { Hono } from 'hono';
-import { createRouteMiddleware } from '../../router/src/router-http.ts';
+import { createRouteMiddleware } from '../../router/src/http.ts';
 import { RouteTable } from '../../router/src/internal/router/route-table.ts';
 import { normalizeRoutePatternForURLPattern } from '@openelement/router/router';
 import { renderRequestTimeServerModule } from '../src/vite/internal/ssg/ssg-helpers.ts';

@@ -53,7 +53,6 @@ import {
   generateCustomElementsPolyfill,
   generateSsrPolyfillBanner,
 } from '../vite/internal/ssg/index.ts';
-import { optionalPackageStubsPlugin } from '../vite/plugin.ts';
 import { compiledElementPlugin } from '@openelement/element/compiler';
 import { normalizeViteAliases } from '../vite/alias-utils.ts';
 import {
@@ -422,11 +421,6 @@ async function buildSSG(
             if (id === RESOLVED_SSG_ENTRY_ID) return ssgEntryCode;
           },
         },
-        // ADR 0008 Phase C: Provide stubs for retained optional packages.
-        // Generated optional application modules may not be installed.
-        // This plugin resolves them to empty stubs when missing, so the
-        // viteBuild() succeeds regardless of which packages are available.
-        optionalPackageStubsPlugin(),
         createNpmSpecifierPlugin(),
         {
           name: 'open:ssg-client-only-island-stubs',

@@ -89,30 +89,6 @@ function mergeAliasOptions(
   return merged;
 }
 
-const OPTIONAL_PACKAGE_STUBS: Record<string, string> = {
-  '@openelement/router/i18n':
-    'console.warn("[openElement] Optional i18n package is unavailable; install and configure @openelement/router/i18n to enable locale expansion.");\n' +
-    'export function loadI18nData() { return { locales: [], defaultLocale: "en" }; }',
-};
-
-export function optionalPackageStubsPlugin(): Plugin {
-  return {
-    name: 'open:optional-package-stubs',
-    enforce: 'pre',
-    async resolveId(id) {
-      if (!(id in OPTIONAL_PACKAGE_STUBS)) return;
-      const resolved = await this.resolve(id, undefined, { skipSelf: true });
-      if (resolved) return null;
-      return `\0open:optional-stub:${id}`;
-    },
-    load(id) {
-      const prefix = '\0open:optional-stub:';
-      if (!id.startsWith(prefix)) return;
-      return OPTIONAL_PACKAGE_STUBS[id.slice(prefix.length)];
-    },
-  };
-}
-
 /**
  * This is the core build plugin implementation. It is NOT part of the
  * public API. Use `openPipeline()` from @openelement/router instead.
@@ -774,7 +750,6 @@ export function createOpenPlugin(
   const plugins: Plugin[] = [
     mdxPlugin({ routesDir: resolvedOptions.routesDir }),
     corePlugin,
-    optionalPackageStubsPlugin(),
     virtualEntryPlugin,
   ];
 

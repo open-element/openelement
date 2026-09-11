@@ -152,8 +152,7 @@ Deno.test('package artifacts: router runtime paths still fail closed on host API
     {
       'README.md': 'router',
       'LICENSE': 'MIT',
-      'src/router-http.js':
-        `import process from 'node:process';\nexport const cwd = process.cwd();`,
+      'src/http.js': `import process from 'node:process';\nexport const cwd = process.cwd();`,
     },
     (root) => {
       const messages = scanExtractedPackage('@openelement/router', root).violations.map((v) =>

@@ -126,7 +126,7 @@ import { defineIslandConfig, definePage } from '@openelement/router';
   for adapter scanning; the island itself is a single-module compiled
   `@element` class.
 - `defineApp({ mode: 'spa', routes })` bootstraps the client-only SPA chain
-  (`@openelement/router/spa`); each route is `{ path, tagName, loader?, action?, guard? }`.
+  (exported from the package root); each route is `{ path, tagName, loader?, action?, guard? }`.
 - `fail(status, data)` / `redirect(location)` / `notFound(message)` implement
   the ADR-0120 action protocol; `isActionFailure()` is the duck-typed guard.
 

@@ -74,7 +74,7 @@ Deno.test('normalizeViteAliases expands Router subpaths from the generated expor
     '@openelement/router': './packages/router/src/index.ts',
   }, '/repo') ?? [];
 
-  for (const subpath of ['spa', 'model', 'i18n', 'preact']) {
+  for (const subpath of ['http', 'document', 'lit', 'lit-ssr']) {
     assertEquals(
       aliases.find((alias) => alias.find === `@openelement/router/${subpath}`)?.replacement,
       `/repo/packages/router/src/${subpath}.ts`,

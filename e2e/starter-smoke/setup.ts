@@ -65,10 +65,6 @@ function main(): void {
 
   const sourceMap: Record<string, string> = {
     '@openelement/router': 'packages/router/src/index.ts',
-    '@openelement/router/model': 'packages/router/src/model.ts',
-    '@openelement/router/spa': 'packages/router/src/spa.ts',
-    '@openelement/router/i18n': 'packages/router/src/i18n.ts',
-    '@openelement/router/preact': 'packages/router/src/preact.ts',
     '@openelement/router/vite': 'packages/router/src/vite/index.ts',
     '@openelement/router/nitro-mount': 'packages/router/src/nitro-mount.ts',
     '@openelement/element': 'packages/element/src/index.ts',

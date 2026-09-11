@@ -57,7 +57,7 @@ export function renderEntry(desc: EntryDescriptor): string {
     lines.push(`import '@lit-labs/ssr/lib/install-global-dom-shim.js';`);
   }
   lines.push(
-    "import { createRouteMiddleware as __createRouteMiddleware } from '@openelement/router/router/http';",
+    "import { createRouteMiddleware as __createRouteMiddleware } from '@openelement/router/http';",
   );
 
   // --- Imports ---

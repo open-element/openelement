@@ -63,7 +63,7 @@ try {
   await Deno.writeTextFile(
     join(tmp, 'route-mode.ts'),
     `import { RouteTable, type RouteRecord } from '@openelement/router/router';
-import { createRouteMiddleware } from '@openelement/router/router/http';
+import { createRouteMiddleware } from '@openelement/router/http';
 import { createRouter, type RouterInstance } from '@openelement/router/router/client';
 const records: RouteRecord[] = [{ path: '/items/:id', methods: ['GET'] }];
 const table = new RouteTable(records);
@@ -76,7 +76,7 @@ void createRouter; void typedOnly;
   await Deno.writeTextFile(
     join(tmp, 'route-mode.mjs'),
     `import { RouteTable } from '@openelement/router/router';
-import { createRouteMiddleware } from '@openelement/router/router/http';
+import { createRouteMiddleware } from '@openelement/router/http';
 import { Hono } from 'hono';
 const table = new RouteTable([{ id: 'item', path: '/items/:id', methods: ['GET'] }]);
 const match = table.resolve(new URL('https://example.test/items/42?view=full'), '', 'GET');

@@ -253,7 +253,7 @@ async function validatePackageSurface(
     failures.push(...forbiddenImportFailures(file, source, ['@openelement/router']));
   }
 
-  for (const file of ['packages/router/src/router.ts', 'packages/router/src/router-http.ts']) {
+  for (const file of ['packages/router/src/router.ts', 'packages/router/src/http.ts']) {
     const source = await Deno.readTextFile(file);
     failures.push(...forbiddenImportFailures(file, source, ['@openelement/element']));
   }

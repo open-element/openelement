@@ -1,5 +1,6 @@
 /**
- * @openelement/router/i18n - Runtime-safe i18n helpers (no node:* modules)
+ * Runtime-safe i18n helpers (no node:* modules) — internal module, not a
+ * public subpath.
  *
  * Thin re-export barrel from i18n-runtime.ts (options/data helpers) and
  * internal/router/i18n.ts (locale path helpers). Host-only i18n wiring must
