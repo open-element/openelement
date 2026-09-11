@@ -8,7 +8,7 @@
  * - The PRG flashes (?created=1 / ?updated=1) are projected onto compiled
  *   properties, replacing the legacy render-scope hooks.
  */
-import { definePage, notFound, type PagePropsContext } from '@openelement/app';
+import { definePage, notFound, type PagePropsContext } from '@openelement/router';
 import NoteDetailPage from '../../components/page-note-detail.tsx';
 import { exposeActionCount, type Note, noteStore } from '../../store.ts';
 

@@ -28,7 +28,7 @@ Deno.test('lit renderer: descriptor forks imports and rejects a compiled appShel
   assertEquals(barrelImport, undefined);
   const htmlImport = desc.imports.find((imp) => imp.from === '@openelement/element/html');
   assertEquals(htmlImport?.names, ['trustedHtml', 'escapeHtml', 'wrapInDocument']);
-  const litImport = desc.imports.find((imp) => imp.from === '@openelement/app/lit-ssr');
+  const litImport = desc.imports.find((imp) => imp.from === '@openelement/router/lit-ssr');
   assertEquals(litImport?.names, ['renderLitPageToHtml']);
 
   assertThrows(
@@ -99,9 +99,9 @@ Deno.test('lit renderer: client entry installs hydrate-support first and stays e
   assertEquals(nativeClient.includes('lit-element-hydrate-support'), false);
 });
 
-Deno.test('lit renderer: route scanner semantics accept defineLitPage from @openelement/app/lit', () => {
+Deno.test('lit renderer: route scanner semantics accept defineLitPage from @openelement/router/lit', () => {
   const source = [
-    "import { defineLitPage } from '@openelement/app/lit';",
+    "import { defineLitPage } from '@openelement/router/lit';",
     "import { NotesPage } from '../components/notes-page.ts';",
     "export default defineLitPage('notes-list-page', NotesPage, {});",
   ].join('\n');

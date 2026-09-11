@@ -1,5 +1,5 @@
 /**
- * @openelement/app/document — resolved Document seam tests (Beta.2.2, #1326).
+ * @openelement/router/document — resolved Document seam tests (Beta.2.2, #1326).
  *
  * The seam is the single place page meaning (title/description/meta/
  * canonical/alternates/locale) is resolved before either serializer runs.

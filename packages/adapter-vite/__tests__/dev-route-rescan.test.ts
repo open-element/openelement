@@ -14,21 +14,21 @@ import { createOpenPlugin } from '../src/plugin.ts';
 
 const RESOLVED_ENTRY_ID = '\0virtual:open-hono-entry';
 
-const INDEX_ROUTE = `import { definePage } from '@openelement/app';
+const INDEX_ROUTE = `import { definePage } from '@openelement/router';
 export const tagName = 'test-index-page';
 export default definePage({
   render() { return null; },
 });
 `;
 
-const ABOUT_ROUTE = `import { definePage } from '@openelement/app';
+const ABOUT_ROUTE = `import { definePage } from '@openelement/router';
 export const tagName = 'test-about-page';
 export default definePage({
   render() { return null; },
 });
 `;
 
-const ENHANCED_INDEX_ROUTE = `import { definePage } from '@openelement/app';
+const ENHANCED_INDEX_ROUTE = `import { definePage } from '@openelement/router';
 export const tagName = 'test-index-page';
 export default definePage({
   renderIntent: { mode: 'dynamic' },

@@ -14,7 +14,7 @@
  * What it proves (all against live registry data, never inferred from source
  * package.json files):
  *   1. the workspace declares the dependency as an EXACT npm pin in both the
- *      root import map and packages/app/deno.json (no ^, ~, tag, workspace:,
+ *      root import map and packages/router/deno.json (no ^, ~, tag, workspace:,
  *      git:, file:, or unversioned specifier), and both declarations agree;
  *   2. the lockfile records the same exact specifier, resolves it to the same
  *      exact version, and carries an integrity hash;
@@ -105,7 +105,7 @@ interface ImportMapConfig {
   imports?: Record<string, string>;
 }
 
-/** Both the root and packages/app import maps must carry the same exact pin. */
+/** Both the root and packages/router import maps must carry the same exact pin. */
 export function expectationFromConfigs(
   rootDenoJson: string,
   appDenoJson: string,
@@ -125,7 +125,7 @@ export function expectationFromConfigs(
     return specifier;
   };
   const rootPin = parseNpmPin(read('root deno.json', rootDenoJson));
-  const appPin = parseNpmPin(read('packages/app/deno.json', appDenoJson));
+  const appPin = parseNpmPin(read('packages/router/deno.json', appDenoJson));
   if (rootPin.name !== packageName || appPin.name !== packageName) {
     throw new ProvenanceError(
       `Declared package must be ${packageName}: root=${rootPin.name} app=${appPin.name}`,
@@ -133,7 +133,7 @@ export function expectationFromConfigs(
   }
   if (rootPin.version !== appPin.version) {
     throw new ProvenanceError(
-      `root and packages/app pins diverge: ${rootPin.version} vs ${appPin.version}`,
+      `root and packages/router pins diverge: ${rootPin.version} vs ${appPin.version}`,
     );
   }
   return rootPin;
@@ -610,14 +610,16 @@ export async function verifyUrlPatternListRelease(
 
   const [rootConfig, appConfig, lockText] = await Promise.all([
     Deno.readTextFile(`${options.root}/deno.json`),
-    Deno.readTextFile(`${options.root}/packages/app/deno.json`),
+    Deno.readTextFile(`${options.root}/packages/router/deno.json`),
     Deno.readTextFile(`${options.root}/deno.lock`),
   ]);
   const expectation = expectationFromConfigs(rootConfig, appConfig, packageName);
   checks.push(
     `declared exact pin ${expectation.name}@${expectation.version} in root and app configs`,
   );
-  log(`✓ declaration: exact pin ${expectation.name}@${expectation.version} (root + packages/app)`);
+  log(
+    `✓ declaration: exact pin ${expectation.name}@${expectation.version} (root + packages/router)`,
+  );
 
   const lock = lockConsistency(lockText, expectation);
   checks.push(`lockfile resolves ${lock.specifier} to ${lock.resolvedVersion} with integrity`);

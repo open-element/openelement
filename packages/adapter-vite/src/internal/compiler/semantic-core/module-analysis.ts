@@ -29,7 +29,7 @@ export interface ModuleSemanticFacts {
  * The canonical intrinsic-binding model (#1209, A10.1): compiler intrinsics
  * are binding identities (module specifier + imported name, aliases
  * followed), never identifier spellings. A bare/global spelling NEVER admits
- * an intrinsic. `@openelement/app` re-exports neither `OpenElement` nor the
+ * an intrinsic. `@openelement/router` re-exports neither `OpenElement` nor the
  * compile-time-only decorator intrinsics, so the canonical specifier for
  * those is `@openelement/element` only.
  */
@@ -47,7 +47,7 @@ const INTRINSIC_MODULES: Readonly<Record<IntrinsicName, readonly string[]>> = {
   OpenElement: ['@openelement/element'],
   computed: ['@openelement/element'],
   trustedHtml: ['@openelement/element'],
-  defineIslandConfig: ['@openelement/app'],
+  defineIslandConfig: ['@openelement/router'],
 };
 
 /**
@@ -314,16 +314,16 @@ export function analyzeModuleSemantics(source: string, fileName: string): Module
       ts.isIdentifier(statement.expression.expression) &&
       (imports.isRuntimeNamedImport(
         statement.expression.expression.text,
-        '@openelement/app',
+        '@openelement/router',
         'definePage',
       ) ||
         // #1339: the lit renderer's page definition factory lives on the
-        // @openelement/app/lit subpath; a route default-exporting it is a
+        // @openelement/router/lit subpath; a route default-exporting it is a
         // definePage-shaped route for scanning purposes (descriptor attached
         // by the same internal path, host tag on openElementPageTag).
         imports.isRuntimeNamedImport(
           statement.expression.expression.text,
-          '@openelement/app/lit',
+          '@openelement/router/lit',
           'defineLitPage',
         ))
     ) definePage = true;
@@ -379,12 +379,12 @@ export function analyzeModuleSemantics(source: string, fileName: string): Module
         if (
           imports.isRuntimeNamedImport(
             expression.text,
-            ['@openelement/element', '@openelement/app'],
+            ['@openelement/element', '@openelement/router'],
             'defineElement',
           ) ||
           imports.isRuntimeNamedImport(
             expression.text,
-            ['@openelement/element', '@openelement/app'],
+            ['@openelement/element', '@openelement/router'],
             'defineIsland',
           )
         ) {

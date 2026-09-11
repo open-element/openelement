@@ -15,7 +15,7 @@ import {
   type OpenElementActionFailure,
   type PagePropsContext,
   redirect,
-} from '@openelement/app';
+} from '@openelement/router';
 import PingPage from '../components/page-ping.tsx';
 
 interface PingActionData {

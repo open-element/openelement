@@ -11,7 +11,7 @@
  * // Generated to `${outDir}/route-manifest.ts`; import from that generated
  * // module or alias it from your client entry.
  * import { routeRecords } from './route-manifest.ts';
- * import { defineApp } from '@openelement/app';
+ * import { defineApp } from '@openelement/router';
  *
  * const app = defineApp({
  *   mode: 'spa',

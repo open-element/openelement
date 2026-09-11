@@ -5,7 +5,7 @@
  * event Parts and the count renders through the compiled text Part. The
  * shadow root keeps the island a DSD citizen.
  */
-import { defineIslandConfig } from '@openelement/app';
+import { defineIslandConfig } from '@openelement/router';
 import { element, OpenElement, property } from '@openelement/element';
 import { counterStyles } from '../components/page-styles.ts';
 

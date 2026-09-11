@@ -1,5 +1,5 @@
 /**
- * @openelement/app - Shared development-mode detection (#743).
+ * @openelement/router - Shared development-mode detection (#743).
  *
  * Recognizes both build signals so browser bundles (Vite) and server
  * runtimes (Deno) agree on what "development" means:

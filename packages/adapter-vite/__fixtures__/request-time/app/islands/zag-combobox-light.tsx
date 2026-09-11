@@ -14,7 +14,7 @@
  * SSR'd as a compiled static <style> node scoped to the component root class.
  */
 import { element, OpenElement, property } from '@openelement/element';
-import { defineIslandConfig } from '@openelement/app';
+import { defineIslandConfig } from '@openelement/router';
 import {
   resetZagComboboxDom,
   startZagCombobox,

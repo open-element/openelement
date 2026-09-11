@@ -9,7 +9,7 @@ import {
   type OpenElementActionFailure,
   type PagePropsContext,
   redirect,
-} from '@openelement/app';
+} from '@openelement/router';
 import { z } from 'zod';
 import RegisterPage from '../components/page-register.tsx';
 

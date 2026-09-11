@@ -10,10 +10,11 @@
 
 ### Public boundary
 
-Element and Router are the public core. `@openelement/app` distributes Router;
-`@openelement/adapter-vite` and `@openelement/create` are retained support packages. The first
-release on this boundary is `1.0.0-alpha.1`, a new public baseline rather than a 0.x compatibility
-migration. The npm `alpha` tag is used for Alpha; `latest` remains independently governed.
+Element and Router are the public core. `@openelement/router` distributes Router;
+`@openelement/adapter-vite` is a temporary convergence package and `@openelement/create` is the
+independent bootstrap package. The first release on this boundary is `1.0.0-alpha.1`, a new public
+baseline rather than a 0.x compatibility migration. The npm `alpha` tag is used for Alpha; `latest`
+remains independently governed.
 
 UI, showcase/site code, Reader/Mastodon, SaaS/reference applications, and agent/control-plane
 infrastructure are outside this repository. Their history remains in Git. Future reference apps
@@ -69,9 +70,8 @@ Missing evidence is not a pass. A new candidate SHA invalidates prior candidate-
 availability, provider wrappers, historical evidence files, and self-review cannot substitute for a
 required reviewer or check.
 
-## Release-object reset
+## Release-object hold
 
-Before the first 1.0 Alpha release, enumerate all Git tags and GitHub Release objects. Delete every
-pre-1.0 GitHub Release object while preserving all Git tags and their target SHAs. Release tooling
-must work when no historical Release object exists. Publication, tag creation, and the first new
-Release object require explicit maintainer authority; this decision grants none.
+Pre-1.0 GitHub Release objects and Git tags are retained until a later explicit maintainer decision.
+This convergence work must not delete or edit them. Publication, tag creation, Release-object
+mutation, and dist-tag changes require explicit maintainer authority; this decision grants none.

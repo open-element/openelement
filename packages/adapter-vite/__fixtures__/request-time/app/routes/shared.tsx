@@ -4,7 +4,7 @@
  * only ships because the scanner follows the import into the compiled page
  * element module (components/page-shared.tsx).
  */
-import { definePage } from '@openelement/app';
+import { definePage } from '@openelement/router';
 import SharedPage from '../components/page-shared.tsx';
 
 export default definePage(SharedPage, {

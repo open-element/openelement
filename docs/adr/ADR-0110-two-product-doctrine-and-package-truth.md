@@ -12,9 +12,9 @@ OpenElement has exactly two public core products:
 - **Router** owns explicit Route Mode and file-based Framework Mode, including request/data/form,
   document, navigation, SSR/SSG, and Native or Lit rendering integration.
 
-Products are not package counts. `@openelement/app` currently distributes Router, while
-`@openelement/adapter-vite` and `@openelement/create` support the two products. They do not create
-additional product identities.
+`@openelement/router` is the public Router package. `@openelement/adapter-vite` remains a temporary
+support package while its Element compiler and Router application responsibilities move to their
+owners. `@openelement/create` remains the independent bootstrap package.
 
 UI systems, showcase applications, hosted sites, Reader/Mastodon applications, SaaS reference
 applications, deployment control planes, and repository automation are not public core products.

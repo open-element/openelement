@@ -5,7 +5,7 @@ export const PACKAGE_VERSION_TAG = `v${PACKAGE_VERSION}`;
 
 export const RETAINED_PACKAGE_NAMES = Object.freeze([
   '@openelement/adapter-vite',
-  '@openelement/app',
+  '@openelement/router',
   '@openelement/create',
   '@openelement/element',
 ]);

@@ -10,7 +10,7 @@ import { assertEquals, assertStringIncludes } from '@std/assert';
 import { dirname, join } from '@std/path';
 import { scanRoutes } from '../src/internal/ssg/index.ts';
 
-const ROUTE_SOURCE = `import { definePage } from '@openelement/app';
+const ROUTE_SOURCE = `import { definePage } from '@openelement/router';
 export default definePage({
   render() { return null; },
 });

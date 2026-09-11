@@ -8,7 +8,7 @@
  * upgrades in place inside the Lit shadow root, creating its own shadow
  * content fresh from the compiled Part Program.
  */
-import { defineIslandConfig } from '@openelement/app';
+import { defineIslandConfig } from '@openelement/router';
 import { element, OpenElement } from '@openelement/element';
 
 export const openElement = defineIslandConfig({ hydrate: 'load', ssr: false, dsd: false });

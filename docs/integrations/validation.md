@@ -18,7 +18,7 @@ the ADR-0120 protocol, not the library:
    after validation passes.
 
 ```ts
-import { fail, redirect } from '@openelement/app';
+import { fail, redirect } from '@openelement/router';
 import { z } from 'zod';
 
 const schema = z.object({ email: z.string().email('a valid email is required') });

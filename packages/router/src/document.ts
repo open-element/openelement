@@ -1,5 +1,5 @@
 /**
- * @openelement/app/document - resolved Document seam (Beta.2.2, #1326).
+ * @openelement/router/document - resolved Document seam (Beta.2.2, #1326).
  *
  * Page meaning is resolved exactly once per render, before either serializer
  * runs: the page descriptor's head — a static object or a resolver function —

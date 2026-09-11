@@ -6,7 +6,7 @@ adapt, scaffold, build, and distribute those products.
 - [Product model](./product-model.md)
 - [Compiler and element runtime](./compiler-and-element-runtime.md)
 - [Rendering and claim](./rendering-and-claim.md)
-- [App and server runtime](./app-and-server-runtime.md)
+- [Router and server runtime](./router-and-server-runtime.md)
 - [Packages and distribution](./packages-and-distribution.md)
 - [Security and release engineering](./security-and-release-engineering.md)
 - [1.0 Alpha final convergence audit](./1.0-alpha-final-convergence-audit.md)

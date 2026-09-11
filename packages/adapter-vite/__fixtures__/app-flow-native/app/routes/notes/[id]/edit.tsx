@@ -10,7 +10,7 @@ import {
   type OpenElementActionFailure,
   type PagePropsContext,
   redirect,
-} from '@openelement/app';
+} from '@openelement/router';
 import NoteEditPage from '../../../components/page-note-edit.tsx';
 import { exposeActionCount, type Note, noteStore } from '../../../store.ts';
 import { MIN_TITLE_LENGTH } from '../new.tsx';

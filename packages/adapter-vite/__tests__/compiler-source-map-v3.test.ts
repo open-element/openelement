@@ -34,7 +34,7 @@ const FILE = '/project/app/components/map-fixture.tsx';
  *   - a conditional (when) region and a keyed each region at nested tree paths
  */
 const SOURCE = `import { computed, element, OpenElement, property } from '@openelement/element';
-import { defineIslandConfig as island } from '@openelement/app';
+import { defineIslandConfig as island } from '@openelement/router';
 export const openElement = island({ hydrate: 'load', ssr: true, dsd: false });
 
 @element('oe-map-fixture')
@@ -222,7 +222,7 @@ Deno.test('A10.2 module scaffolding resolves to authored constructs', () => {
   assertResolves(
     trace,
     code,
-    `import { defineIslandConfig as island } from '@openelement/app';`,
+    `import { defineIslandConfig as island } from '@openelement/router';`,
     1,
     {
       source: FILE,

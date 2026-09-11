@@ -674,7 +674,7 @@ export default app;
 });
 
 Deno.test('SSG discovers static pages from route records behind the unified HTTP middleware', async () => {
-  const { createRouteMiddleware } = await import('@openelement/app/router/http');
+  const { createRouteMiddleware } = await import('@openelement/router/router/http');
   const root = await Deno.makeTempDir({ prefix: 'oe-record-ssg-' });
   const app = new Hono();
   let dynamicCalls = 0;
@@ -724,7 +724,7 @@ Deno.test('SSG discovers static pages from route records behind the unified HTTP
 // so they must not suppress the canonical GET discovery entry for the same
 // path — otherwise the page silently vanishes from a successful build.
 Deno.test('SSG keeps canonical pages discoverable behind exact-path host middleware (#1343)', async () => {
-  const { createRouteMiddleware } = await import('@openelement/app/router/http');
+  const { createRouteMiddleware } = await import('@openelement/router/router/http');
   const root = await Deno.makeTempDir({ prefix: 'oe-mw-ssg-' });
   const app = new Hono();
   let middlewareCalls = 0;
@@ -768,7 +768,7 @@ Deno.test('SSG keeps canonical pages discoverable behind exact-path host middlew
 });
 
 Deno.test('SSG keeps canonical pages discoverable behind method-only host routes (#1343)', async () => {
-  const { createRouteMiddleware } = await import('@openelement/app/router/http');
+  const { createRouteMiddleware } = await import('@openelement/router/router/http');
   const root = await Deno.makeTempDir({ prefix: 'oe-postonly-ssg-' });
   const app = new Hono();
   // A POST-only host route on the canonical path is not a GET page entry.

@@ -28,7 +28,7 @@ import type { CompatibilityClassification } from '../src/internal/protocol/frame
 // ─── Discovery (pure, source-level) ─────────────────────────────
 
 const ISLAND_SOURCE = `
-import { defineElement, defineIsland, defineIslandConfig } from '@openelement/app';
+import { defineElement, defineIsland, defineIslandConfig } from '@openelement/router';
 
 defineElement('local-child', {
   render() { return <span>local child</span>; },
@@ -48,7 +48,7 @@ export default defineIsland('my-island', {
 `;
 
 const PAGE_SOURCE = `
-import { definePage } from '@openelement/app';
+import { definePage } from '@openelement/router';
 
 export default definePage({
   render() {

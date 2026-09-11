@@ -12,7 +12,7 @@
  * header nav is static authoring here — edit the links below directly
  * (the vite.config content.nav headerNav indirection of 0.43 is gone).
  */
-import { defineIslandConfig } from '@openelement/app';
+import { defineIslandConfig } from '@openelement/router';
 import { element, OpenElement, property } from '@openelement/element';
 import { shellStyles } from '../components/page-styles.ts';
 

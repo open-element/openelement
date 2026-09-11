@@ -51,7 +51,7 @@ Deno.test('deriveDependencies pins the maintained matching fork exactly (#1324)'
       },
     }),
   };
-  const deps = deriveDependencies(pkg('@openelement/app', '0.44.0'), [], localIo);
+  const deps = deriveDependencies(pkg('@openelement/router', '0.44.0'), [], localIo);
   // Exact, never a caret range: consumers must not float past the qualified artifact.
   assertEquals(deps, { '@openelement/url-pattern-list': '0.6.0' });
 });
@@ -71,11 +71,11 @@ Deno.test('deriveDependencies throws when an npm dependency has no version', () 
 Deno.test('deriveDependencies resolves an internal workspace dependency from source', () => {
   const localIo: DeriveDepsIo = {
     ...io,
-    readSrcFiles: () => [`import { x } from '@openelement/app';`],
+    readSrcFiles: () => [`import { x } from '@openelement/router';`],
   };
-  const all = [pkg('@openelement/element', '1.0.0'), pkg('@openelement/app', '1.2.3')];
+  const all = [pkg('@openelement/element', '1.0.0'), pkg('@openelement/router', '1.2.3')];
   const deps = deriveDependencies(pkg('@openelement/element', '1.0.0'), all, localIo);
-  assertEquals(deps, { '@openelement/app': '1.2.3' });
+  assertEquals(deps, { '@openelement/router': '1.2.3' });
 });
 
 Deno.test('deriveDependencies materializes a root-mapped npm dependency used by source', () => {
@@ -113,12 +113,12 @@ Deno.test('deriveAllDependencies reads root imports once for the full package gr
   };
   const packages = [
     pkg('@openelement/element', '1.0.0'),
-    pkg('@openelement/app', '1.0.0'),
+    pkg('@openelement/router', '1.0.0'),
   ];
   const dependencies = deriveAllDependencies(packages, localIo);
   assertEquals(rootReads, 1);
   assertEquals(dependencies.get('@openelement/element'), { react: '^18.2.0' });
-  assertEquals(dependencies.get('@openelement/app'), { react: '^18.2.0' });
+  assertEquals(dependencies.get('@openelement/router'), { react: '^18.2.0' });
 });
 
 Deno.test('publishPackage skips an immutable version that already exists', async () => {

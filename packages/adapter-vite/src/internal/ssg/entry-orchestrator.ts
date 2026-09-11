@@ -57,7 +57,7 @@ export function renderEntry(desc: EntryDescriptor): string {
     lines.push(`import '@lit-labs/ssr/lib/install-global-dom-shim.js';`);
   }
   lines.push(
-    "import { createRouteMiddleware as __createRouteMiddleware } from '@openelement/app/router/http';",
+    "import { createRouteMiddleware as __createRouteMiddleware } from '@openelement/router/router/http';",
   );
 
   // --- Imports ---
@@ -126,7 +126,7 @@ export function renderEntry(desc: EntryDescriptor): string {
     lines.push(`import { composeFetchMiddleware } from '@openelement/element/build-utils';`);
   }
   lines.push(
-    `import { isOpenElementRedirect as __isOpenElementRedirect, isOpenElementNotFound as __isOpenElementNotFound, classifyActionResult as __classifyActionResult, ACTION_FETCH_HEADER as __actionFetchHeader, PROBLEM_JSON_MEDIA_TYPE as __problemJsonMediaType } from '@openelement/app';`,
+    `import { isOpenElementRedirect as __isOpenElementRedirect, isOpenElementNotFound as __isOpenElementNotFound, classifyActionResult as __classifyActionResult, ACTION_FETCH_HEADER as __actionFetchHeader, PROBLEM_JSON_MEDIA_TYPE as __problemJsonMediaType } from '@openelement/router';`,
   );
   lines.push(
     `import { headerNav as __headerNav, navSections as __navSections } from '@openelement/generated/nav';`,

@@ -74,7 +74,7 @@ Deno.test('no ISR surface remains in element public entry points', async () => {
 Deno.test('no ISR/revalidate semantics remain in app authoring or adapter SSG', async () => {
   for (
     const path of [
-      'packages/app/src/authoring.ts',
+      'packages/router/src/authoring.ts',
       'packages/adapter-vite/src/internal/ssg/ssg-helpers.ts',
       'packages/adapter-vite/src/internal/ssg/ssg-render.ts',
       'packages/adapter-vite/src/internal/ssg/entry-route-helpers.ts',

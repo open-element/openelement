@@ -73,9 +73,9 @@ Deno.test('openPlugin: returns retained plugins in correct order', () => {
 Deno.test('optional i18n fallback emits an explicit configuration warning', () => {
   const plugin = createOpenPlugin().find((entry) => entry.name === 'open:optional-package-stubs');
   assertExists(plugin);
-  const source = callLoad(plugin, '\0open:optional-stub:@openelement/app/i18n');
+  const source = callLoad(plugin, '\0open:optional-stub:@openelement/router/i18n');
   assertStringIncludes(String(source), 'console.warn');
-  assertStringIncludes(String(source), '@openelement/app/i18n');
+  assertStringIncludes(String(source), '@openelement/router/i18n');
 });
 
 // ─── Option Defaults ──────────────────────────────────────────

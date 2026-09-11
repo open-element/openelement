@@ -1,5 +1,5 @@
 /**
- * @openelement/app/internal/router/client-router - URLPattern/RouteTable client router.
+ * @openelement/router/internal/router/client-router - URLPattern/RouteTable client router.
  *
  * Supports history (pushState), hash, and auto-detection modes.
  * Alpha.9 authority: URLPattern owns pathname grammar and RouteTable owns

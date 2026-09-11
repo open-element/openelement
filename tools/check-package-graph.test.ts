@@ -16,9 +16,9 @@ function fixture(name: string, exports: unknown): PackageInfo {
 
 Deno.test('package graph: subpath export keys join the package name without a stray dot', () => {
   const specifiers = collectWorkspaceSpecifiers([
-    fixture('@openelement/app', { '.': './src/index.ts', './model': './src/model.ts' }),
+    fixture('@openelement/router', { '.': './src/index.ts', './model': './src/model.ts' }),
   ]);
-  assertEquals(specifiers.has('@openelement/app'), true);
-  assertEquals(specifiers.has('@openelement/app/model'), true);
-  assertEquals(specifiers.has('@openelement/app./model'), false);
+  assertEquals(specifiers.has('@openelement/router'), true);
+  assertEquals(specifiers.has('@openelement/router/model'), true);
+  assertEquals(specifiers.has('@openelement/router./model'), false);
 });

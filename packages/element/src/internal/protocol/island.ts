@@ -13,7 +13,7 @@ export interface IslandOptions {
    *   - 'only': client-only render, no DSD/SSR output
    *
    * Named `hydrate` to match `defineIslandConfig()` in the app package
-   * (`packages/app/src/authoring.ts`) — one option name across both
+   * (`packages/router/src/authoring.ts`) — one option name across both
    * packages (ADR-0127).
    */
   hydrate?: HydrationStrategy;

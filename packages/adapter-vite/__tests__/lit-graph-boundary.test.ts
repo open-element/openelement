@@ -56,7 +56,7 @@ function resolveSpecifier(spec: string, fromFile: string): string | null {
       return null;
     }
   }
-  const pkgMatch = spec.match(/^@openelement\/(element|app|adapter-vite)(\/.*)?$/);
+  const pkgMatch = spec.match(/^@openelement\/(element|router|adapter-vite)(\/.*)?$/);
   if (!pkgMatch) return null;
   const [, pkg, suffix] = pkgMatch;
   // The generated export map keys are bare ('document', 'router/http', '.').
@@ -140,9 +140,9 @@ Deno.test('lit server entry: module graph never reaches the Native runtime kerne
   const graph = walkModuleGraph(graphRootsFromGenerated(litEntry));
   assertKernelFree(graph, 'lit server entry graph');
   // Sanity presence: the graph really contains the lit seam and the leaves.
-  assert(graph.seen.has(resolve(REPO_ROOT, 'packages/app/src/lit-ssr.ts')), 'lit-ssr missing');
+  assert(graph.seen.has(resolve(REPO_ROOT, 'packages/router/src/lit-ssr.ts')), 'lit-ssr missing');
   assert(
-    graph.seen.has(resolve(REPO_ROOT, 'packages/app/src/document.ts')),
+    graph.seen.has(resolve(REPO_ROOT, 'packages/router/src/document.ts')),
     'document seam missing',
   );
   assert(graph.seen.has(resolve(REPO_ROOT, 'packages/element/src/html.ts')), 'html leaf missing');

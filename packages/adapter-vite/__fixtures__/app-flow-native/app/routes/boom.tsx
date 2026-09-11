@@ -4,7 +4,7 @@
  * §7 error-boundary channel). The counter channel header is set before the
  * throw, so even the 500 response carries x-action-count.
  */
-import { definePage } from '@openelement/app';
+import { definePage } from '@openelement/router';
 import BoomPage from '../components/page-boom.tsx';
 import { exposeActionCount } from '../store.ts';
 

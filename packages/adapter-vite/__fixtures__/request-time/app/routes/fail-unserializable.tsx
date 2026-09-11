@@ -12,7 +12,7 @@
  *
  * v0.44: markup compiled in components/page-fail-unserializable.tsx.
  */
-import { definePage, fail, type OpenElementActionFailure } from '@openelement/app';
+import { definePage, fail, type OpenElementActionFailure } from '@openelement/router';
 import FailUnserializablePage from '../components/page-fail-unserializable.tsx';
 
 /** 64-deep serializable payload with a 64 KiB leaf (#1146 area 4b threshold). */

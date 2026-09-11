@@ -4,7 +4,7 @@
  * href slots (compiled each-Region iattr grammar, alpha.8) linking to the
  * detail pages; a note-counter island proves activation on dynamic pages.
  */
-import { definePage, type PagePropsContext } from '@openelement/app';
+import { definePage, type PagePropsContext } from '@openelement/router';
 import NotesPage from '../../components/page-notes-index.tsx';
 import { exposeActionCount, noteStore } from '../../store.ts';
 

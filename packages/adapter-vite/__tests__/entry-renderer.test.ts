@@ -434,7 +434,7 @@ Deno.test('renderEntry: definePage descriptor feeds load and metadata wiring', (
   assertStringIncludes(code, 'const __doc = __resolvePageDocument(__page.head, __pageContext);');
   assertStringIncludes(
     code,
-    "import { resolvePageDocument as __resolvePageDocument } from '@openelement/app/document'",
+    "import { resolvePageDocument as __resolvePageDocument } from '@openelement/router/document'",
   );
   assertStringIncludes(
     code,
@@ -456,7 +456,7 @@ Deno.test('renderEntry: definePage descriptor feeds load and metadata wiring', (
   assertStringIncludes(code, 'function __pageDefinition(module) {');
   assertStringIncludes(
     code,
-    "import { isOpenElementRedirect as __isOpenElementRedirect, isOpenElementNotFound as __isOpenElementNotFound, classifyActionResult as __classifyActionResult, ACTION_FETCH_HEADER as __actionFetchHeader, PROBLEM_JSON_MEDIA_TYPE as __problemJsonMediaType } from '@openelement/app';",
+    "import { isOpenElementRedirect as __isOpenElementRedirect, isOpenElementNotFound as __isOpenElementNotFound, classifyActionResult as __classifyActionResult, ACTION_FETCH_HEADER as __actionFetchHeader, PROBLEM_JSON_MEDIA_TYPE as __problemJsonMediaType } from '@openelement/router';",
   );
   assertFalse(code.includes('function __isOpenElementRedirect(error) {'));
   assertFalse(code.includes('function __isOpenElementNotFound(error) {'));

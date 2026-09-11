@@ -6,7 +6,7 @@
  *
  * These helpers provide SSR rendering (the compiled Part Program serializer
  * via renderDsd), locale resolution, lifecycle
- * control (redirect/not-found detection is imported from @openelement/app),
+ * control (redirect/not-found detection is imported from @openelement/router),
  * status page HTML, app shell wiring, and canonical
  * page-definition extraction shared by the Hono handlers and the SSG render
  * pipeline.
@@ -50,7 +50,7 @@ export function renderRuntimeHelpers(
 
   if (renderer === 'lit') {
     // #1339: lit page SSR — the registered LitElement class renders through
-    // @lit-labs/ssr (renderLitPageToHtml from @openelement/app/lit-ssr, DSD
+    // @lit-labs/ssr (renderLitPageToHtml from @openelement/router/lit-ssr, DSD
     // output). Nested admitted islands inside the page template compose
     // through the same SSR registry — lit-ssr's job, no adapter code.
     lines.push(

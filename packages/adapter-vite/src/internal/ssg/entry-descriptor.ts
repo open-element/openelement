@@ -80,7 +80,7 @@ export function buildEntryDescriptor(
     islandFiles?: string[];
     /**
      * Page renderer (Beta.2.2, #1339). 'native' (default) renders pages via
-     * renderDsd; 'lit' renders LitElement pages via @openelement/app/lit-ssr.
+     * renderDsd; 'lit' renders LitElement pages via @openelement/router/lit-ssr.
      * Explicit config only — never inferred from route sources.
      */
     renderer?: 'native' | 'lit';
@@ -132,14 +132,14 @@ export function buildEntryDescriptor(
     // Part Program kernel) NOR the package root barrel that re-exports it —
     // the pure HTML utilities come from the @openelement/element/html leaf
     // (single implementation source, no runtime kernel in its module graph).
-    // Page SSR goes through renderLitPageToHtml from @openelement/app/lit-ssr;
+    // Page SSR goes through renderLitPageToHtml from @openelement/router/lit-ssr;
     // trustedHtml is only reached by the (rejected for lit) app-shell path.
     imports.push({
       from: '@openelement/element/html',
       names: ['trustedHtml', 'escapeHtml', 'wrapInDocument'],
     });
     imports.push({
-      from: '@openelement/app/lit-ssr',
+      from: '@openelement/router/lit-ssr',
       names: ['renderLitPageToHtml'],
       alias: '__renderLitPageToHtml',
     });
@@ -152,7 +152,7 @@ export function buildEntryDescriptor(
   // #1326: both renderers resolve page meaning through the one Document seam
   // before wrapInDocument serializes it.
   imports.push({
-    from: '@openelement/app/document',
+    from: '@openelement/router/document',
     names: ['resolvePageDocument'],
     alias: '__resolvePageDocument',
   });

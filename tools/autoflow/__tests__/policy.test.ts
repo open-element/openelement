@@ -15,7 +15,7 @@ Deno.test('push tier is small and package-aware', () => {
 });
 
 Deno.test('release tier qualifies artifacts and runtimes without publishing', () => {
-  const names = selectGates('release', ['packages/app/src/index.ts']).map((gate) => gate.name);
+  const names = selectGates('release', ['packages/router/src/index.ts']).map((gate) => gate.name);
   for (
     const required of [
       'package-artifacts:check',

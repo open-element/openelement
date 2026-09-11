@@ -4,7 +4,7 @@
     "./packages/element",
     "./packages/adapter-vite",
     "./packages/create",
-    "./packages/app"
+    "./packages/router"
   ],
   "imports": {
     "@openelement/url-pattern-list": "npm:@openelement/url-pattern-list@0.6.0",

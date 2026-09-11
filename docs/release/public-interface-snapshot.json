@@ -176,7 +176,7 @@
       }
     },
     {
-      "name": "@openelement/app",
+      "name": "@openelement/router",
       "exports": {
         ".": "./src/index.ts",
         "./document": "./src/document.ts",

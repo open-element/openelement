@@ -1541,7 +1541,7 @@ function isDeclareStatement(statement: ts.Statement): boolean {
  * The one extra runtime statement a compiled module may carry: the island
  * delivery policy colocated with the class
  * (`export const openElement = defineIslandConfig({ ... })`). The callee must
- * bind the canonical `defineIslandConfig` import from '@openelement/app'
+ * bind the canonical `defineIslandConfig` import from '@openelement/router'
  * (#1209); a same-name spelling bound to anything else is not the policy
  * statement and falls through to the OEC9008 runtime-statement rejection.
  * The statement is validated here and copied verbatim into the generated

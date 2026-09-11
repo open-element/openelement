@@ -9,7 +9,7 @@
  * Consumers: props-utils.ts (host prop collection / SSR serialization via
  * collectPublicProps and normalizePublicProps), the guarded assigner
  * injectPropsSafe below (employed by the SPA bootstrap page-projection write
- * boundary in @openelement/app), and the page projectors in @openelement/app
+ * boundary in @openelement/router), and the page projectors in @openelement/router
  * (authoring.ts projectPageProps) and the adapter-vite generated server
  * runtime (which serializes DANGEROUS_KEYS into generated code at build
  * time — generated modules cannot import this internal module, so the
@@ -43,7 +43,7 @@ export const DANGEROUS_KEYS: ReadonlySet<string> = new Set([
  * never be injected from untrusted props on ANY path: host prop collection
  * (collectPublicProps / normalizePublicProps in props-utils.ts), guarded
  * assignment (injectPropsSafe below — the SPA bootstrap page-projection
- * write boundary in @openelement/app), and page projection (authoring.ts
+ * write boundary in @openelement/router), and page projection (authoring.ts
  * projectPageProps; the adapter-vite generated server runtime via the
  * serialized DANGEROUS_KEYS list) all filter through this single source so a
  * new dangerous pattern cannot be missed on one path.
@@ -114,7 +114,7 @@ export function trustRenderHtml(html: string): TrustedHtml {
  * could enable prototype pollution and tolerating read-only properties.
  *
  * The canonical guarded assigner for the canonical dangerous-key rule (#903,
- * #1214): the @openelement/app SPA bootstrap employs it at the page-property
+ * #1214): the @openelement/router SPA bootstrap employs it at the page-property
  * projection write boundary so descriptor projector output, default
  * projection, and error projection can never re-prototype the live page host.
  * Callers pass their own logger so existing log channels are preserved; a

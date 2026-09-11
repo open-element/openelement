@@ -1,5 +1,5 @@
 /**
- * @openelement/app/i18n - Unit Tests
+ * @openelement/router/i18n - Unit Tests
  * ADR 0018: Tests updated for pure function pattern (loadI18nData)
  */
 import { assertEquals, assertStrictEquals } from '@std/assert';

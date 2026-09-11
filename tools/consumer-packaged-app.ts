@@ -32,7 +32,7 @@
  *   browser-continuation   chromium: island activates without a full reload
  *                          (native: kernel claims the DSD; lit: hydrate-support
  *                          lifts defer-hydration adopting the DSD)
- *   boundary               dist/client asset scan + @openelement/app .d.ts
+ *   boundary               dist/client asset scan + @openelement/router .d.ts
  *                          declaration-graph walk (no compiler/adapter-vite/
  *                          node:/workspace: edges, every edge resolves)
  *
@@ -369,7 +369,7 @@ async function attempt(fn: () => Promise<string | undefined>): Promise<Outcome> 
 // ─── Consumer app sources (native renderer leg) ─────────────────────────────
 //
 // Shapes copied from packages/adapter-vite/__fixtures__/app-flow-native/,
-// importing only published specifiers (@openelement/app, @openelement/element
+// importing only published specifiers (@openelement/router, @openelement/element
 // + the jsx-runtime via jsxImportSource). Marker strings are renamed so the
 // tool log is attributable to the packed consumer, not the fixtures.
 
@@ -423,7 +423,7 @@ export function exposeActionCount(responseHeaders: Headers): void {
 }
 `;
 
-const NATIVE_ROUTE_INDEX = `import { definePage, type PagePropsContext } from '@openelement/app';
+const NATIVE_ROUTE_INDEX = `import { definePage, type PagePropsContext } from '@openelement/router';
 import HomePage from '../components/page-home.tsx';
 import { noteStore } from '../store.ts';
 
@@ -448,7 +448,7 @@ export default definePage<HomeData>(HomePage, {
 });
 `;
 
-const NATIVE_ROUTE_NOTES = `import { definePage, type PagePropsContext } from '@openelement/app';
+const NATIVE_ROUTE_NOTES = `import { definePage, type PagePropsContext } from '@openelement/router';
 import NotesPage from '../../components/page-notes-index.tsx';
 import { exposeActionCount, noteStore } from '../../store.ts';
 
@@ -484,7 +484,7 @@ export default definePage<NotesData>(NotesPage, {
 `;
 
 const NATIVE_ROUTE_NOTE_DETAIL =
-  `import { definePage, notFound, type PagePropsContext } from '@openelement/app';
+  `import { definePage, notFound, type PagePropsContext } from '@openelement/router';
 import NoteDetailPage from '../../components/page-note-detail.tsx';
 import { exposeActionCount, type Note, noteStore } from '../../store.ts';
 
@@ -543,7 +543,7 @@ const NATIVE_ROUTE_NOTE_NEW = `import {
   type OpenElementActionFailure,
   type PagePropsContext,
   redirect,
-} from '@openelement/app';
+} from '@openelement/router';
 import NoteNewPage from '../../components/page-note-new.tsx';
 import { exposeActionCount, noteStore } from '../../store.ts';
 
@@ -599,7 +599,7 @@ export default definePage(NoteNewPage, {
 });
 `;
 
-const NATIVE_ROUTE_404 = `import { definePage } from '@openelement/app';
+const NATIVE_ROUTE_404 = `import { definePage } from '@openelement/router';
 import NotFoundPage from '../components/page-404.tsx';
 import { exposeActionCount } from '../store.ts';
 
@@ -751,7 +751,7 @@ export default class NotFoundPage extends OpenElement {
 
 const NATIVE_ISLAND_COUNTER =
   `import { element, OpenElement, property } from '@openelement/element';
-import { defineIslandConfig } from '@openelement/app';
+import { defineIslandConfig } from '@openelement/router';
 
 export const openElement = defineIslandConfig({ hydrate: 'load', ssr: true, dsd: true });
 
@@ -806,7 +806,7 @@ export default defineConfig({
 // Same application shape on the explicitly-configured lit renderer, modeled
 // on packages/adapter-vite/__fixtures__/app-flow-lit/: pages are LitElement
 // classes default-exported via defineLitPage() from the published
-// @openelement/app/lit subpath, rendered server-side by @lit-labs/ssr (DSD)
+// @openelement/router/lit subpath, rendered server-side by @lit-labs/ssr (DSD)
 // and hydrated by @lit-labs/ssr-client.
 
 const LIT_STORE = `export interface Note {
@@ -862,7 +862,7 @@ export function exposeActionCount(responseHeaders: Headers): void {
 }
 `;
 
-const LIT_ROUTE_INDEX = `import { defineLitPage } from '@openelement/app/lit';
+const LIT_ROUTE_INDEX = `import { defineLitPage } from '@openelement/router/lit';
 import { HomePage } from '../components/home-page.ts';
 import { notesStore } from '../store.ts';
 
@@ -887,7 +887,7 @@ export default defineLitPage<HomeData>('home-page', HomePage, {
 });
 `;
 
-const LIT_ROUTE_NOTES = `import { defineLitPage } from '@openelement/app/lit';
+const LIT_ROUTE_NOTES = `import { defineLitPage } from '@openelement/router/lit';
 import { NotesListPage } from '../components/notes-list-page.ts';
 import { exposeActionCount, type Note, notesStore } from '../store.ts';
 
@@ -910,8 +910,8 @@ export default defineLitPage<NotesData>('notes-list-page', NotesListPage, {
 });
 `;
 
-const LIT_ROUTE_NOTE_DETAIL = `import { defineLitPage } from '@openelement/app/lit';
-import { notFound, type PagePropsContext } from '@openelement/app';
+const LIT_ROUTE_NOTE_DETAIL = `import { defineLitPage } from '@openelement/router/lit';
+import { notFound, type PagePropsContext } from '@openelement/router';
 import { NoteDetailPage } from '../../components/note-detail-page.ts';
 import { exposeActionCount, lastActionIntent, type Note, notesStore } from '../../store.ts';
 
@@ -963,13 +963,13 @@ export default defineLitPage<NoteData>('note-detail-page', NoteDetailPage, {
 });
 `;
 
-const LIT_ROUTE_NOTE_NEW = `import { defineLitPage } from '@openelement/app/lit';
+const LIT_ROUTE_NOTE_NEW = `import { defineLitPage } from '@openelement/router/lit';
 import {
   fail,
   type OpenElementActionFailure,
   type PagePropsContext,
   redirect,
-} from '@openelement/app';
+} from '@openelement/router';
 import { NoteNewPage } from '../../components/note-new-page.ts';
 import {
   exposeActionCount,
@@ -1028,7 +1028,7 @@ export default defineLitPage('note-new-page', NoteNewPage, {
 });
 `;
 
-const LIT_ROUTE_404 = `import { defineLitPage } from '@openelement/app/lit';
+const LIT_ROUTE_404 = `import { defineLitPage } from '@openelement/router/lit';
 import { NotFoundPage } from '../components/not-found-page.ts';
 
 export default defineLitPage('not-found-page', NotFoundPage, {
@@ -1198,7 +1198,7 @@ export class NotFoundPage extends LitElement {
 `;
 
 const LIT_ISLAND_COUNTER = `import { html, LitElement } from 'lit';
-import { defineIslandConfig } from '@openelement/app';
+import { defineIslandConfig } from '@openelement/router';
 
 export const openElement = defineIslandConfig({ hydrate: 'load', ssr: true });
 
@@ -1533,8 +1533,8 @@ const LIT_LEG: LegSpec = {
     '@lit-labs/ssr-client': '1.1.8',
   },
   importMapExtras: {
-    '@openelement/app/lit': `npm:@openelement/app@${PACKAGE_VERSION}/lit`,
-    '@openelement/app/lit-ssr': `npm:@openelement/app@${PACKAGE_VERSION}/lit-ssr`,
+    '@openelement/router/lit': `npm:@openelement/router@${PACKAGE_VERSION}/lit`,
+    '@openelement/router/lit-ssr': `npm:@openelement/router@${PACKAGE_VERSION}/lit-ssr`,
     'lit': 'npm:lit@3.3.3',
     '@lit-labs/ssr': 'npm:@lit-labs/ssr@4.1.0',
     '@lit-labs/ssr-client': 'npm:@lit-labs/ssr-client@1.1.8',
@@ -1937,7 +1937,7 @@ function combineFormOutcomes(
 
 // ─── Declaration graph walker (boundary cell) ───────────────────────────────
 //
-// Follows .d.ts import edges from the published @openelement/app entries
+// Follows .d.ts import edges from the published @openelement/router entries
 // (index/lit/lit-ssr/document) exactly like consumer-packaged-element.ts walks
 // @openelement/element. Every edge must resolve to a declaration file, and no
 // edge may name the compiler, the adapter, vite, a host builtin or a
@@ -1945,13 +1945,13 @@ function combineFormOutcomes(
 // pack silently drops some modules' types) are reported module-by-module and
 // FAIL the cell — never silently weakened.
 
-function walkAppDeclarations(tmp: string): string {
-  const appSrc = join(tmp, 'node_modules', '@openelement', 'app', 'src');
+function walkRouterDeclarations(tmp: string): string {
+  const routerSrc = join(tmp, 'node_modules', '@openelement', 'router', 'src');
   const entries = ['index.d.ts', 'lit.d.ts', 'lit-ssr.d.ts', 'document.d.ts'];
-  const missingEntries = entries.filter((entry) => !existsSync(join(appSrc, entry)));
+  const missingEntries = entries.filter((entry) => !existsSync(join(routerSrc, entry)));
   if (missingEntries.length > 0) {
     throw new Error(
-      'Packed @openelement/app tarball lacks declaration entries ' +
+      'Packed @openelement/router tarball lacks declaration entries ' +
         `(deno pack dropped them): ${missingEntries.join(', ')}`,
     );
   }
@@ -1999,7 +1999,7 @@ function walkAppDeclarations(tmp: string): string {
       walk(resolved.resolvedFileName);
     }
   };
-  for (const entry of entries) walk(join(appSrc, entry));
+  for (const entry of entries) walk(join(routerSrc, entry));
   const problems: string[] = [];
   if (leaks.length > 0) problems.push(`leaky declaration edges:\n${leaks.join('\n')}`);
   if (unresolved.length > 0) {
@@ -2010,7 +2010,7 @@ function walkAppDeclarations(tmp: string): string {
   }
   if (problems.length > 0) {
     throw new Error(
-      `Packed @openelement/app declaration graph violations:\n${problems.join('\n')}`,
+      `Packed @openelement/router declaration graph violations:\n${problems.join('\n')}`,
     );
   }
   return `${seen.size} declaration modules resolved clean from index/lit/lit-ssr/document`;
@@ -2078,7 +2078,7 @@ interface Tarball {
 function consumerDenoJson(spec: LegSpec): Record<string, unknown> {
   return {
     imports: {
-      '@openelement/app': `npm:@openelement/app@${PACKAGE_VERSION}`,
+      '@openelement/router': `npm:@openelement/router@${PACKAGE_VERSION}`,
       '@openelement/adapter-vite': `npm:@openelement/adapter-vite@${PACKAGE_VERSION}`,
       '@openelement/element': `npm:@openelement/element@${PACKAGE_VERSION}`,
       '@openelement/element/jsx-runtime': `npm:@openelement/element@${PACKAGE_VERSION}/jsx-runtime`,
@@ -2153,7 +2153,7 @@ async function runLeg(spec: LegSpec, tarballs: Tarball[]): Promise<void> {
           throw new Error(`npm install did not lay out ${tarball.name} into node_modules`);
         }
       }
-      for (const host of ['@openelement/adapter-vite', '@openelement/app']) {
+      for (const host of ['@openelement/adapter-vite', '@openelement/router']) {
         const nested = join(
           tmp,
           'node_modules',
@@ -2265,7 +2265,7 @@ async function runLeg(spec: LegSpec, tarballs: Tarball[]): Promise<void> {
     });
 
     await cell(leg, 'boundary', ['install'], () => {
-      const declarationSummary = walkAppDeclarations(tmp);
+      const declarationSummary = walkRouterDeclarations(tmp);
       const packedLeafSummary = assertPackedElementLeavesKernelFree(tmp);
       const clientDir = join(tmp, 'dist', 'client');
       if (!existsSync(clientDir)) {

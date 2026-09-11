@@ -1,4 +1,4 @@
-import { definePage } from '@openelement/app';
+import { definePage } from '@openelement/router';
 import HomePage from '../components/page-home.tsx';
 
 export default definePage(HomePage, {

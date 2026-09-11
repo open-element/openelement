@@ -1,5 +1,5 @@
 /**
- * @openelement/app — authoring API tests for the compiled contract (v0.44,
+ * @openelement/router — authoring API tests for the compiled contract (v0.44,
  * ADR-0143).
  *
  * definePage() no longer creates page classes around a render function: it
@@ -95,7 +95,7 @@ function makeCompiledPageClass(tag: string, text: string): CustomElementConstruc
   return TestPage as unknown as CustomElementConstructor;
 }
 
-Deno.test('@openelement/app root export includes defineApp', () => {
+Deno.test('@openelement/router root export includes defineApp', () => {
   assertEquals(typeof defineApp, 'function');
 });
 
@@ -317,7 +317,7 @@ Deno.test('redirect() validates the 3xx whitelist at construction (ADR-0121 §3)
   );
 });
 
-Deno.test('@openelement/app root exports the compiled authoring helpers', () => {
+Deno.test('@openelement/router root exports the compiled authoring helpers', () => {
   assertExists(definePage);
   assertExists(defineIslandConfig);
   assertExists(projectPageProps);

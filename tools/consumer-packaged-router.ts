@@ -6,9 +6,9 @@ import { readPackages } from './lib/package-graph.ts';
 import { tarballPath } from './lib/npm-tarball.ts';
 
 const repoRoot = resolve(import.meta.dirname!, '..');
-const app = (await readPackages()).find((pkg) => pkg.name === '@openelement/app');
-if (!app) throw new Error('@openelement/app is missing from the package graph');
-const tarball = join(repoRoot, tarballPath(app));
+const router = (await readPackages()).find((pkg) => pkg.name === '@openelement/router');
+if (!router) throw new Error('@openelement/router is missing from the package graph');
+const tarball = join(repoRoot, tarballPath(router));
 if (!existsSync(tarball)) throw new Error(`Missing ${tarball}; run deno task pack:dry-run first`);
 
 async function run(command: string, args: string[], cwd: string): Promise<string> {
@@ -33,7 +33,7 @@ try {
         private: true,
         type: 'module',
         dependencies: {
-          '@openelement/app': `file:${tarball}`,
+          '@openelement/router': `file:${tarball}`,
           hono: '4.13.7',
         },
         devDependencies: { typescript: '5.9.3' },
@@ -62,9 +62,9 @@ try {
   );
   await Deno.writeTextFile(
     join(tmp, 'route-mode.ts'),
-    `import { RouteTable, type RouteRecord } from '@openelement/app/router';
-import { createRouteMiddleware } from '@openelement/app/router/http';
-import { createRouter, type RouterInstance } from '@openelement/app/router/client';
+    `import { RouteTable, type RouteRecord } from '@openelement/router/router';
+import { createRouteMiddleware } from '@openelement/router/router/http';
+import { createRouter, type RouterInstance } from '@openelement/router/router/client';
 const records: RouteRecord[] = [{ path: '/items/:id', methods: ['GET'] }];
 const table = new RouteTable(records);
 void table.resolve(new URL('https://example.test/items/42'), '', 'GET');
@@ -75,8 +75,8 @@ void createRouter; void typedOnly;
   );
   await Deno.writeTextFile(
     join(tmp, 'route-mode.mjs'),
-    `import { RouteTable } from '@openelement/app/router';
-import { createRouteMiddleware } from '@openelement/app/router/http';
+    `import { RouteTable } from '@openelement/router/router';
+import { createRouteMiddleware } from '@openelement/router/router/http';
 import { Hono } from 'hono';
 const table = new RouteTable([{ id: 'item', path: '/items/:id', methods: ['GET'] }]);
 const match = table.resolve(new URL('https://example.test/items/42?view=full'), '', 'GET');

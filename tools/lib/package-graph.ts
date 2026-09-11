@@ -281,7 +281,7 @@ export function releasePublishOrder(packages: PackageInfo[]): PackageInfo[] {
   // its dependency (#828).
   const releasePriority = [
     '@openelement/element',
-    '@openelement/app',
+    '@openelement/router',
     '@openelement/adapter-vite',
     '@openelement/create',
   ];

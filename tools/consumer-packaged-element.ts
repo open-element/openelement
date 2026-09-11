@@ -70,7 +70,10 @@ export default {plugins:[element(), {name:'proof-module-boundary',generateBundle
     '--fetch-timeout=30000',
   ]);
   assert(
-    !await Deno.stat(join(author, 'node_modules/@openelement/app')).then(() => true, () => false),
+    !await Deno.stat(join(author, 'node_modules/@openelement/router')).then(
+      () => true,
+      () => false,
+    ),
     'Router must not be installed',
   );
   await run(['node', 'node_modules/vite/bin/vite.js', 'build']);

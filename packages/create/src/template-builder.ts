@@ -31,7 +31,7 @@ export function validateProjectName(name: string): string | null {
 }
 
 interface ProductVersions {
-  app: string;
+  router: string;
   adapterVite: string;
   element: string;
 }
@@ -44,7 +44,7 @@ interface ProductVersions {
  */
 export function resolveVersions(): ProductVersions {
   return {
-    app: CREATE_VERSION,
+    router: CREATE_VERSION,
     adapterVite: CREATE_VERSION,
     element: CREATE_VERSION,
   };
@@ -95,7 +95,7 @@ const TEMPLATE_FILES: readonly (readonly [string, string])[] = [
 
 function versionTokens(v: ProductVersions): Record<string, string> {
   return {
-    ['$' + '{v.app}']: v.app,
+    ['$' + '{v.router}']: v.router,
     ['$' + '{v.adapterVite}']: v.adapterVite,
     ['$' + '{v.element}']: v.element,
   };

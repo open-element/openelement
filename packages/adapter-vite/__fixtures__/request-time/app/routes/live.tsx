@@ -8,7 +8,7 @@
  * components/page-live.tsx; the descriptor's props projector maps loader
  * data onto the page's compiled properties.
  */
-import { definePage } from '@openelement/app';
+import { definePage } from '@openelement/router';
 import LivePage from '../components/page-live.tsx';
 
 interface LiveData {

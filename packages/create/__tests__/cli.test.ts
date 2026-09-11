@@ -48,12 +48,12 @@ Deno.test('starter exposes only product imports and the standard lifecycle', () 
     '@deno/vite-plugin',
     '@openelement/adapter-vite',
     '@openelement/adapter-vite/nitro-mount',
-    '@openelement/app',
     '@openelement/element',
     '@openelement/element/build-utils',
     '@openelement/element/jsx-dev-runtime',
     '@openelement/element/jsx-runtime',
     '@openelement/generated/blog-data',
+    '@openelement/router',
     'hono',
     'vite',
   ]);
@@ -90,7 +90,7 @@ Deno.test('starter exposes only product imports and the standard lifecycle', () 
   assertEquals(denoJson.imports.hono, 'npm:hono@^4.12');
   assertEquals(denoJson.compilerOptions.jsxImportSource, '@openelement/element');
   assertFalse(JSON.stringify(denoJson).includes('@openelement/core'));
-  assertFalse(JSON.stringify(denoJson).includes('@openelement/router'));
+  assertFalse(JSON.stringify(denoJson).includes('@openelement/app'));
   assertFalse(JSON.stringify(denoJson).includes('@openelement/signal'));
 });
 
@@ -101,17 +101,17 @@ Deno.test('embedded CLI version matches its package manifest', () => {
 });
 
 Deno.test('Create and all support-distribution packages share one release version', () => {
-  const versions = ['adapter-vite', 'app', 'create', 'element'].map((name) =>
+  const versions = ['adapter-vite', 'router', 'create', 'element'].map((name) =>
     JSON.parse(Deno.readTextFileSync(join(packageDir, '..', name, 'deno.json'))).version as string
   );
-  assertEquals([...new Set(versions)], [resolveVersions().app]);
+  assertEquals([...new Set(versions)], [resolveVersions().router]);
 });
 
 Deno.test('Create rejects mixed product versions instead of silently generating', () => {
   assertThrows(
     () =>
       assertUnifiedProductVersions({
-        app: '0.41.0-alpha.13',
+        router: '0.41.0-alpha.13',
         adapterVite: '0.41.0-alpha.12',
         element: '0.41.0-alpha.13',
       }),
@@ -129,7 +129,7 @@ Deno.test('async template build returns deterministic path order', async () => {
 Deno.test('generated starter pins every OpenElement import to the exact release', async () => {
   const versions = resolveVersions();
   const config = JSON.parse((await buildTemplates(versions))['deno.json']);
-  assertEquals(config.imports['@openelement/app'], `npm:@openelement/app@${versions.app}`);
+  assertEquals(config.imports['@openelement/router'], `npm:@openelement/router@${versions.router}`);
   assertEquals(
     config.imports['@openelement/adapter-vite'],
     `npm:@openelement/adapter-vite@${versions.adapterVite}`,

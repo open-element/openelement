@@ -3,7 +3,7 @@
 The repository currently publishes four physical support-distribution packages for two products:
 
 - `@openelement/element` — Element.
-- `@openelement/app` — Router Route Mode and Framework Mode.
+- `@openelement/router` — Router Route Mode and Framework Mode.
 - `@openelement/adapter-vite` — thin Element/Router compiler and build integration.
 - `@openelement/create` — thin consumer scaffolding.
 

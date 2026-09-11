@@ -5,7 +5,7 @@
  * This module sits at the bottom of the dependency graph.
  */
 
-import { normalizeRoutePatternForURLPattern } from '@openelement/app/router';
+import { normalizeRoutePatternForURLPattern } from '@openelement/router/router';
 import { walkHtmlFileEntries } from '../html-files.ts';
 import { NODE_BRIDGE_EMBEDDED_FUNCTIONS } from '../node-bridge.ts';
 

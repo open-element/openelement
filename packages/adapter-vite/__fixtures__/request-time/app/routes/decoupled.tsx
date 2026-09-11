@@ -10,7 +10,7 @@
  * compiled `marker` property. Before #960 the self-registered content
  * element shadowed the page class and the request context never arrived.
  */
-import { definePage, type PagePropsContext } from '@openelement/app';
+import { definePage, type PagePropsContext } from '@openelement/router';
 import DecoupledPage from '../components/page-decoupled.tsx';
 
 export default definePage(DecoupledPage, {

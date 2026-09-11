@@ -1,5 +1,5 @@
 /**
- * @openelement/app — SPA bootstrap tests (v0.44 compiled contract).
+ * @openelement/router — SPA bootstrap tests (v0.44 compiled contract).
  *
  * Page hosts are compiled elements: defineApp projects loader/action state
  * onto the page's compiled properties through the descriptor's props/error

@@ -50,7 +50,7 @@ Deno.test('scanRoutes fails the build when a content element tag collides with t
     // same-tag self-registered content element would shadow the page class.
     await Deno.writeTextFile(
       join(routesDir, 'contact.tsx'),
-      `import { defineElement, definePage } from '@openelement/app';
+      `import { defineElement, definePage } from '@openelement/router';
 export const tagName = 'contact-page';
 defineElement(tagName, { render() { return <main>view</main>; } });
 export default definePage({
@@ -79,7 +79,7 @@ Deno.test('scanRoutes stays silent for definePage routes without tagName', async
     // Mirrors the create-template contact.tsx: definePage, no tagName export.
     await Deno.writeTextFile(
       join(routesDir, 'contact.tsx'),
-      `import { definePage } from '@openelement/app';
+      `import { definePage } from '@openelement/router';
 export default definePage({
   render() {
     return <main>contact</main>;
@@ -158,7 +158,7 @@ Deno.test('scanRoutes flags shape-1 definePage routes and stays silent (sanction
     // content element, which the module self-registers AND renders.
     await Deno.writeTextFile(
       join(routesDir, 'index.tsx'),
-      `import { defineElement, definePage } from '@openelement/app';
+      `import { defineElement, definePage } from '@openelement/router';
 
 export const tagName = 'home-page';
 
@@ -198,7 +198,7 @@ Deno.test('scanRoutes treats customElements.define(tagName) as usage (no orphan 
     // instead of defineElement — that is still a use of the export.
     await Deno.writeTextFile(
       join(routesDir, 'home.tsx'),
-      `import { definePage } from '@openelement/app';
+      `import { definePage } from '@openelement/router';
 export const tagName = 'page-home';
 class HomePage extends HTMLElement {}
 customElements.define(tagName, HomePage);
@@ -224,7 +224,7 @@ Deno.test('scanRoutes notes an orphaned tagName export on a definePage route onc
     // The export is never used: no defineElement call, no JSX usage.
     await Deno.writeTextFile(
       join(routesDir, 'orphan.tsx'),
-      `import { definePage } from '@openelement/app';
+      `import { definePage } from '@openelement/router';
 
 export const tagName = 'orphan-page';
 
@@ -264,7 +264,7 @@ Deno.test('scanRoutes does not flag plain element routes embedding definePage sa
         '\n' +
         'class GuidePage extends HTMLElement {}\n' +
         '\n' +
-        "const sample = `import { definePage } from '@openelement/app';\n" +
+        "const sample = `import { definePage } from '@openelement/router';\n" +
         'export default definePage({\n' +
         '  render() { return <main>sample</main>; },\n' +
         '});`;\n' +

@@ -2164,14 +2164,14 @@
           "npm:vite@8.0.16"
         ]
       },
-      "jsr:@openelement/app@1.0.0-alpha.1": {
+      "jsr:@openelement/create@1.0.0-alpha.1": {},
+      "jsr:@openelement/element@1.0.0-alpha.1": {},
+      "jsr:@openelement/router@1.0.0-alpha.1": {
         "dependencies": [
           "npm:@openelement/url-pattern-list@0.6.0",
           "npm:preact-render-to-string@^6.5.0"
         ]
-      },
-      "jsr:@openelement/create@1.0.0-alpha.1": {},
-      "jsr:@openelement/element@1.0.0-alpha.1": {}
+      }
     }
   }
 }

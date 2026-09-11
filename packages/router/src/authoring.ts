@@ -1,9 +1,9 @@
 import { ERROR_PREFIX } from '@openelement/element/authoring';
 /**
- * @openelement/app - application authoring API for the compiled architecture.
+ * @openelement/router - application authoring API for the compiled architecture.
  *
  * This file is intentionally free of Vite/build imports. Route modules can
- * import from @openelement/app without pulling adapter-vite into the runtime
+ * import from @openelement/router without pulling adapter-vite into the runtime
  * graph.
  *
  * v0.44 (ADR-0143): a route module's default export is the COMPILED page
@@ -205,7 +205,7 @@ export function classifyActionResult<Data>(result: Data): ActionOutcome<Data> {
  * Page <head> meaning declared by a route descriptor (v0.44, ADR-0143;
  * canonical/alternates added in Beta.2.2, #1326). Either a static object or —
  * via PageHeadResolver — resolved per render from the request-scoped context
- * by resolvePageDocument (@openelement/app/document) before either serializer
+ * by resolvePageDocument (@openelement/router/document) before either serializer
  * runs.
  */
 export interface PageHead {
@@ -275,7 +275,7 @@ export type PageErrorProjector<
 /**
  * Resolves a page's head from the request-scoped context (Beta.2.2, #1326).
  * The resolver receives the same context object the props projector gets and
- * must stay a pure function of it — the Document seam (@openelement/app/
+ * must stay a pure function of it — the Document seam (@openelement/router/
  * document) never fetches, caches, or schedules loaders on its own.
  */
 export type PageHeadResolver<
@@ -336,7 +336,7 @@ const PAGE_DESCRIPTOR_FIELDS = new Set([
  * the optional props/error projectors; it must NOT create classes or hold a
  * render function — the compiled class's Part Program is the render.
  *
- *   import { definePage } from '@openelement/app';
+ *   import { definePage } from '@openelement/router';
  *   import { HomePage } from '../components/page-home.tsx';
  *   export const loader = async (ctx) => ({ ... });   // module named exports
  *   export default definePage(HomePage, {

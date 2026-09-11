@@ -10,7 +10,7 @@ Element 将 JSX 编写的 Custom Element 编译为 Part Program，并统一用�
 ## 仓库结构
 
 - `packages/element`：Element 产品。
-- `packages/app`：Router 的 Route Mode 与 Framework Mode 实现。
+- `packages/router`：Router 的 Route Mode 与 Framework Mode 实现。
 - `packages/adapter-vite`：从属于 Element/Router 的编译、Vite 与服务器输出集成。
 - `packages/create`：面向这两个产品的轻量脚手架。
 

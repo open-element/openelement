@@ -68,7 +68,7 @@ Deno.test('package artifacts: rejects CJS and host APIs in runtime-free packages
 
 Deno.test('package artifacts: allows documented host API escape hatches', async () => {
   await withPackage(
-    '@openelement/app',
+    '@openelement/router',
     {
       'i18n-plugin.js': `
         // deno-api-free:ignore build-time plugin
@@ -77,7 +77,7 @@ Deno.test('package artifacts: allows documented host API escape hatches', async 
       `,
     },
     (root) => {
-      const result = scanExtractedPackage('@openelement/app', root);
+      const result = scanExtractedPackage('@openelement/router', root);
       assertEquals(result.violations, []);
     },
   );
@@ -85,7 +85,7 @@ Deno.test('package artifacts: allows documented host API escape hatches', async 
 
 Deno.test('package artifacts: rejects a non-leading host API escape directive', async () => {
   await withPackage(
-    '@openelement/app',
+    '@openelement/router',
     {
       'i18n-plugin.js': `
         import process from 'node:process';
@@ -94,7 +94,7 @@ Deno.test('package artifacts: rejects a non-leading host API escape directive', 
       `,
     },
     (root) => {
-      const messages = scanExtractedPackage('@openelement/app', root).violations.map((v) =>
+      const messages = scanExtractedPackage('@openelement/router', root).violations.map((v) =>
         v.message
       );
       assert(messages.includes('node:* import'));
@@ -211,13 +211,13 @@ Deno.test('package artifacts: marker scan ignores comments and other packages', 
     },
   );
   await withPackage(
-    '@openelement/app',
+    '@openelement/router',
     {
       'index.js': 'export {};',
       'src/notes.ts': `export const marker = 'data-signal';`,
     },
     (root) => {
-      assertEquals(scanExtractedPackage('@openelement/app', root).violations, []);
+      assertEquals(scanExtractedPackage('@openelement/router', root).violations, []);
     },
   );
 });

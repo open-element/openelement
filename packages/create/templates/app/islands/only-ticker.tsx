@@ -6,7 +6,7 @@
  * tick event Part. Each hydrated island gets its own compiled property state,
  * so multiple tickers on one page never share state.
  */
-import { defineIslandConfig } from '@openelement/app';
+import { defineIslandConfig } from '@openelement/router';
 import { element, OpenElement, property } from '@openelement/element';
 import { tickerStyles } from '../components/page-styles.ts';
 

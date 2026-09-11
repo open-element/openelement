@@ -115,7 +115,7 @@ A minimal custom entry is your own `index.html` plus a bootstrap module:
 
 ```ts
 // app/main.ts — see the SPA bootstrap recipe in the www configuration guide
-import { defineApp } from '@openelement/app';
+import { defineApp } from '@openelement/router';
 
 const app = defineApp({
   mode: 'spa',
@@ -156,7 +156,7 @@ MIT
 Install Element, Vite and this adapter; import `element` from
 `@openelement/adapter-vite/element` and put `element()` in Vite's `plugins`.
 This entry does not load Router, SSG or deployment tooling. Router is an optional
-peer; Framework applications install `@openelement/app` explicitly.
+peer; Framework applications install `@openelement/router` explicitly.
 
 Keep the decorated component in a `.tsx` module and register its exported class
 from a separate JS entry. Use a Vite library build to bundle that entry, then

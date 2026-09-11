@@ -3,7 +3,7 @@
  *
  * Same application shape as the native notes flow, with page rendering swapped
  * onto the explicitly-configured lit renderer: pages are LitElement classes
- * default-exported via defineLitPage() from @openelement/app/lit, rendered
+ * default-exported via defineLitPage() from @openelement/router/lit, rendered
  * server-side by @lit-labs/ssr (DSD) and hydrated by @lit-labs/ssr-client.
  * Routing, loaders, actions (ADR-0120), form enhancement and morphing are the
  * shared framework machinery — only the page renderer forks.

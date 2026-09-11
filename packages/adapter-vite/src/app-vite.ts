@@ -2,14 +2,14 @@
  * @openelement/adapter-vite - Unified openElement Vite plugin entry.
  *
  * Kept separate from the route authoring API so application routes can import
- * @openelement/app without loading Vite/build orchestration.
+ * @openelement/router without loading Vite/build orchestration.
  */
 
 import type { Plugin } from 'vite';
 import type { FrameworkOptions } from './internal/protocol/framework.ts';
 import type { SsgBehaviorOptions } from './internal/protocol/ssg.ts';
 import type { OpenElementContentOptions } from './internal/content/types.ts';
-import type { OpenElementI18nOptions } from '@openelement/app/i18n';
+import type { OpenElementI18nOptions } from '@openelement/router/i18n';
 
 import { OpenElementBuildContext } from './build-context.ts';
 import { createOpenPlugin } from './plugin.ts';

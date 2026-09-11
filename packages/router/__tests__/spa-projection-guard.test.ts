@@ -1,5 +1,5 @@
 /**
- * @openelement/app — page-projection prototype-pollution guard tests (#1214).
+ * @openelement/router — page-projection prototype-pollution guard tests (#1214).
  *
  * Every page-property projection path must fail closed for dangerous keys:
  * the default projector (projectPageProps), the descriptor props/error

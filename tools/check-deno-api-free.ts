@@ -3,7 +3,7 @@
 import { walkSync } from '@std/fs/walk';
 import { extractDenoAccesses, extractStaticModuleSpecifiers } from './lib/typescript-ast.ts';
 
-const RESTRICTED_ROOTS = ['packages/element/src', 'packages/app/src'];
+const RESTRICTED_ROOTS = ['packages/element/src', 'packages/router/src'];
 const EXTENSIONS = new Set(['.ts', '.tsx']);
 
 // @preact/signals-core is element's chartered engine dependency (#322-era

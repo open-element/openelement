@@ -12,14 +12,14 @@ Deno.test('readIslandConfig: returns null without openElement export', () => {
 });
 
 Deno.test('readIslandConfig: parses static literal metadata', () => {
-  const source = `import { defineIslandConfig } from '@openelement/app';
+  const source = `import { defineIslandConfig } from '@openelement/router';
 export const openElement = defineIslandConfig({ ssr: false, dsd: false, hydrate: 'only' });
 `;
   assertEquals(readIslandConfig(source), { ssr: false, dsd: false, hydrate: 'only' });
 });
 
 Deno.test('readIslandConfig: throws on dynamic ssr value (#771)', () => {
-  const source = `import { defineIslandConfig } from '@openelement/app';
+  const source = `import { defineIslandConfig } from '@openelement/router';
 const isProd = true;
 export const openElement = defineIslandConfig({ ssr: isProd });
 `;
@@ -31,7 +31,7 @@ export const openElement = defineIslandConfig({ ssr: isProd });
 });
 
 Deno.test('readIslandConfig: throws on dynamic hydrate value (#771)', () => {
-  const source = `import { defineIslandConfig } from '@openelement/app';
+  const source = `import { defineIslandConfig } from '@openelement/router';
 const strategy = 'idle';
 export const openElement = defineIslandConfig({ hydrate: strategy });
 `;
@@ -43,7 +43,7 @@ export const openElement = defineIslandConfig({ hydrate: strategy });
 });
 
 Deno.test('readIslandConfig: throws on computed dsd value (#771)', () => {
-  const source = `import { defineIslandConfig } from '@openelement/app';
+  const source = `import { defineIslandConfig } from '@openelement/router';
 export const openElement = defineIslandConfig({ dsd: !import.meta.env?.DEV });
 `;
   assertThrows(
@@ -54,7 +54,7 @@ export const openElement = defineIslandConfig({ dsd: !import.meta.env?.DEV });
 });
 
 Deno.test('readIslandConfig: throws on unsupported hydrate literal', () => {
-  const source = `import { defineIslandConfig } from '@openelement/app';
+  const source = `import { defineIslandConfig } from '@openelement/router';
 export const openElement = defineIslandConfig({ hydrate: 'hover' });
 `;
   assertThrows(() => readIslandConfig(source), Error, 'unsupported value');

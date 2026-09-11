@@ -4,7 +4,7 @@
  * channel). The counter channel header is set before the throw, so even the
  * 500 response carries x-action-count.
  */
-import { defineLitPage } from '@openelement/app/lit';
+import { defineLitPage } from '@openelement/router/lit';
 import { BoomPage } from '../components/boom-page.ts';
 import { exposeActionCount } from '../store.ts';
 

@@ -26,7 +26,7 @@ application flows. Two findings required changes inside ADR-0122 frozen paths:
 
 ## Decision
 
-1. **`resolvePageDocument` (`@openelement/app/document`) is the single page-
+1. **`resolvePageDocument` (`@openelement/router/document`) is the single page-
    meaning seam.** A descriptor `head` is a static object or a resolver
    receiving the same request-scoped context object the props projector gets;
    resolution is pure (no fetch, no cache, no global request, no nested
@@ -47,7 +47,7 @@ application flows. Two findings required changes inside ADR-0122 frozen paths:
 
 ## Consequences
 
-- Frozen-path accounting (ADR-0122): `packages/app/src/authoring.ts` (§1) gains
+- Frozen-path accounting (ADR-0122): `packages/router/src/authoring.ts` (§1) gains
   the head-resolver descriptor channel — the loop contract algebra
   (fail/redirect/notFound/action outcomes) is unchanged.
   `packages/adapter-vite/src/internal/ssg/entry-codegen.ts` (§2/§3) emits the

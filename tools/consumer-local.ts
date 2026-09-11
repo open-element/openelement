@@ -101,7 +101,7 @@ const productImports = [
   '@deno/vite-plugin',
   '@openelement/adapter-vite',
   '@openelement/adapter-vite/nitro-mount',
-  '@openelement/app',
+  '@openelement/router',
   '@openelement/element',
   '@openelement/element/build-utils',
   '@openelement/element/jsx-dev-runtime',

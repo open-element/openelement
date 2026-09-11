@@ -21,9 +21,9 @@
 import { assert, assertEquals, assertStringIncludes } from '@std/assert';
 import { join } from '@std/path';
 import { Hono } from 'hono';
-import { createRouteMiddleware } from '../../app/src/router-http.ts';
-import { RouteTable } from '../../app/src/internal/router/route-table.ts';
-import { normalizeRoutePatternForURLPattern } from '@openelement/app/router';
+import { createRouteMiddleware } from '../../router/src/router-http.ts';
+import { RouteTable } from '../../router/src/internal/router/route-table.ts';
+import { normalizeRoutePatternForURLPattern } from '@openelement/router/router';
 import { renderRequestTimeServerModule } from '../src/internal/ssg/ssg-helpers.ts';
 
 interface CorpusRoute {

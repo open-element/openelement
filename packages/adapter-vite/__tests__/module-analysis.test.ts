@@ -52,7 +52,7 @@ const semanticCases: SemanticCase[] = [
   {
     name: 'recognizes directly imported definePage',
     source: `
-      import { definePage } from '@openelement/app';
+      import { definePage } from '@openelement/router';
       export default definePage({ render() { return <main />; } });
     `,
     expected: { definePage: true },
@@ -60,7 +60,7 @@ const semanticCases: SemanticCase[] = [
   {
     name: 'recognizes aliased definePage from the app package',
     source: `
-      import { definePage as makePage } from '@openelement/app';
+      import { definePage as makePage } from '@openelement/router';
       export default makePage({ render() { return <main />; } });
     `,
     expected: { definePage: true },
@@ -117,7 +117,7 @@ const semanticCases: SemanticCase[] = [
       import {
         defineElement as appElement,
         defineIsland as appIsland,
-      } from '@openelement/app';
+      } from '@openelement/router';
       import {
         defineElement as elementElement,
         defineIsland as elementIsland,
@@ -147,7 +147,7 @@ const semanticCases: SemanticCase[] = [
   {
     name: 'recognizes exported tagName use by identifier',
     source: `
-      import { defineElement } from '@openelement/app';
+      import { defineElement } from '@openelement/router';
       export const tagName = 'oe-identifier-use';
       defineElement(tagName, {});
     `,
@@ -159,7 +159,7 @@ const semanticCases: SemanticCase[] = [
   {
     name: 'recognizes exported tagName use by matching literal definition',
     source: `
-      import { defineElement } from '@openelement/app';
+      import { defineElement } from '@openelement/router';
       export const tagName = 'oe-literal-use';
       defineElement('oe-literal-use', {});
     `,
@@ -236,7 +236,7 @@ const semanticCases: SemanticCase[] = [
   {
     name: 'collects custom tags while excluding intrinsic HTML tags',
     source: `
-      import { defineElement } from '@openelement/app';
+      import { defineElement } from '@openelement/router';
       defineElement('oe-defined', {});
       defineElement('div', {});
       customElements.define('oe-platform', HTMLElement);
@@ -300,7 +300,7 @@ for (const testCase of semanticCases) {
 
 Deno.test('analyzeModuleSemantics is deterministic across repeated analysis', () => {
   const source = `
-    import { defineElement } from '@openelement/app';
+    import { defineElement } from '@openelement/router';
     export const tagName = 'oe-repeatable';
     defineElement('oe-repeatable', {});
     export default function Page() {

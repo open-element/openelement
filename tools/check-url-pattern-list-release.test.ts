@@ -144,8 +144,11 @@ async function writeFixtureRoot(lockIntegrity: string): Promise<string> {
   const root = await Deno.makeTempDir({ prefix: 'oe-provenance-test-' });
   const pin = `"@openelement/url-pattern-list": "npm:@openelement/url-pattern-list@0.6.0"`;
   await Deno.writeTextFile(join(root, 'deno.json'), `{ "imports": { ${pin} } }`);
-  await Deno.mkdir(join(root, 'packages', 'app'), { recursive: true });
-  await Deno.writeTextFile(join(root, 'packages', 'app', 'deno.json'), `{ "imports": { ${pin} } }`);
+  await Deno.mkdir(join(root, 'packages', 'router'), { recursive: true });
+  await Deno.writeTextFile(
+    join(root, 'packages', 'router', 'deno.json'),
+    `{ "imports": { ${pin} } }`,
+  );
   await Deno.writeTextFile(
     join(root, 'deno.lock'),
     JSON.stringify({
@@ -383,7 +386,7 @@ Deno.test('registryVersionFacts rejects a published fork carrying @openelement d
   const tarball = await gzip(buildTar(tarballFiles()));
   const doc = JSON.parse(await registryDocument(tarball)) as Record<string, unknown>;
   const version = (doc.versions as Record<string, Record<string, unknown>>)[EXPECTATION.version];
-  version.dependencies = { '@openelement/app': '^0.44.0' };
+  version.dependencies = { '@openelement/router': '^0.44.0' };
   assertThrows(
     () => registryVersionFacts(JSON.stringify(doc), EXPECTATION),
     ProvenanceError,
@@ -450,7 +453,7 @@ Deno.test('verifyTarballContents fails closed on content anomalies', () => {
       'OE router semantics absorbed',
       [
         { name: 'package/package.json', text: JSON.stringify(manifest()) },
-        { name: 'package/index.js', text: 'import { RouteTable } from "@openelement/app";\n' },
+        { name: 'package/index.js', text: 'import { RouteTable } from "@openelement/router";\n' },
         { name: 'package/index.d.ts', text: 'export declare class URLPatternList {}\n' },
         { name: 'package/LICENSE', text: 'MIT License\n' },
         { name: 'package/README.md', text: '# url-pattern-list\n' },

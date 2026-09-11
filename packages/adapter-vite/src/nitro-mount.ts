@@ -1,5 +1,5 @@
 import type { OpenElementRequestHandler, RuntimeContext } from '@openelement/element/build-utils';
-import type { OpenElementRequestContext } from '@openelement/app/model';
+import type { OpenElementRequestContext } from '@openelement/router/model';
 
 /**
  * Minimal Nitro v3 route event shape (#857). Nitro v3 is fetch-native: its h3
@@ -37,7 +37,7 @@ function createNitroRequestContext<Env extends Record<string, unknown>>(
   context: RuntimeContext<Env>,
 ): OpenElementRequestContext<Env> {
   // Keep this runtime-local. Nitro node output imports this module directly, so
-  // a value import from @openelement/app/model would leave an unresolved bare
+  // a value import from @openelement/router/model would leave an unresolved bare
   // package in generated server output. The type-only import above still pins
   // this shape to the app model contract.
   const url = new URL(request.url);

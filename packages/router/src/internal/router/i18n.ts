@@ -1,8 +1,8 @@
 /**
- * @openelement/app/internal/router/i18n - Locale-aware path types and utilities.
+ * @openelement/router/internal/router/i18n - Locale-aware path types and utilities.
  *
- * Zero-dependency pure TypeScript — shared by @openelement/app/internal/router
- * and @openelement/app/i18n helpers.
+ * Zero-dependency pure TypeScript — shared by @openelement/router/internal/router
+ * and @openelement/router/i18n helpers.
  */
 
 export interface LocalePath {

@@ -10,7 +10,7 @@ Deno.test({
   async fn() {
     const root = new URL('../../../', import.meta.url).pathname.replace(/\/$/, '');
     const source =
-      `import {createRouter} from '/@fs/${root}/packages/app/src/internal/router/client-router.ts';
+      `import {createRouter} from '/@fs/${root}/packages/router/src/internal/router/client-router.ts';
       window.changes=[];
       window.router=createRouter({mode:'history', routes:[
         {path:'/',tagName:'home-page'}, {path:'/a',tagName:'a-page'}, {path:'/b',tagName:'b-page'},
@@ -143,7 +143,7 @@ Deno.test({
   async fn() {
     const root = new URL('../../../', import.meta.url).pathname.replace(/\/$/, '');
     const source =
-      `import {createRouter} from '/@fs/${root}/packages/app/src/internal/router/client-router.ts';
+      `import {createRouter} from '/@fs/${root}/packages/router/src/internal/router/client-router.ts';
       window.pending=0; window.guards=0; window.changes=[];
       window.router=createRouter({mode:'history', routes:[
         {path:'/',tagName:'home-page'}, {path:'/a',tagName:'a-page'}, {path:'/submit',tagName:'submit-page'}

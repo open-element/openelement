@@ -67,10 +67,10 @@ async function main(): Promise<void> {
 
   for (const file of sourceFiles('packages/element/src')) {
     const source = await Deno.readTextFile(file);
-    failures.push(...forbiddenImportFailures(file, source, ['@openelement/app']));
+    failures.push(...forbiddenImportFailures(file, source, ['@openelement/router']));
   }
 
-  for (const file of ['packages/app/src/router.ts', 'packages/app/src/router-http.ts']) {
+  for (const file of ['packages/router/src/router.ts', 'packages/router/src/router-http.ts']) {
     const source = await Deno.readTextFile(file);
     failures.push(...forbiddenImportFailures(file, source, ['@openelement/element']));
   }

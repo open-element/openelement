@@ -5,7 +5,7 @@
  * elements. The public OpenElement base class runs on the compiled Part
  * Program kernel; the legacy VNode renderer and runtime JSX factories were
  * removed — components are compiled by @openelement/adapter-vite. Build
- * orchestration remains in @openelement/app and @openelement/adapter-vite;
+ * orchestration remains in @openelement/router and @openelement/adapter-vite;
  * build adapters import build-time helpers from `@openelement/element/build-utils`.
  */
 

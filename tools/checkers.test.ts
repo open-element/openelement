@@ -42,9 +42,12 @@ Deno.test('deno-api-free catches globalThis.Deno, destructuring, aliases, and np
 });
 
 Deno.test('package graph direction rules encode the package layering', () => {
-  assertEquals(isAllowedDependencyDirection('@openelement/app', '@openelement/element'), true);
-  assertEquals(isAllowedDependencyDirection('@openelement/adapter-vite', '@openelement/app'), true);
-  assertEquals(isAllowedDependencyDirection('@openelement/element', '@openelement/app'), false);
+  assertEquals(isAllowedDependencyDirection('@openelement/router', '@openelement/element'), true);
+  assertEquals(
+    isAllowedDependencyDirection('@openelement/adapter-vite', '@openelement/router'),
+    true,
+  );
+  assertEquals(isAllowedDependencyDirection('@openelement/element', '@openelement/router'), false);
   assertEquals(isAllowedDependencyDirection('@openelement/create', '@openelement/element'), false);
 });
 

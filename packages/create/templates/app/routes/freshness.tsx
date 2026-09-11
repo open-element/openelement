@@ -3,7 +3,7 @@
  * build time like any other static route; v0.44 ships no route-level cache
  * revalidation semantics (ISR was removed, see issue #1217).
  */
-import { definePage } from '@openelement/app';
+import { definePage } from '@openelement/router';
 import FreshnessPage from '../components/page-freshness.tsx';
 
 export default definePage(FreshnessPage, {

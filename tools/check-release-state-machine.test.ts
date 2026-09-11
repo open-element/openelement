@@ -14,7 +14,7 @@ const state: ReleaseState = {
 Deno.test('release state accepts an empty historical GitHub Release dependency model', () => {
   const versions = new Map([
     ['@openelement/element', state.sourceVersion],
-    ['@openelement/app', state.sourceVersion],
+    ['@openelement/router', state.sourceVersion],
     ['@openelement/adapter-vite', state.sourceVersion],
     ['@openelement/create', state.sourceVersion],
   ]);
@@ -24,7 +24,7 @@ Deno.test('release state accepts an empty historical GitHub Release dependency m
 Deno.test('release state rejects a pre-1.0 active target', () => {
   const versions = new Map([
     ['@openelement/element', state.sourceVersion],
-    ['@openelement/app', state.sourceVersion],
+    ['@openelement/router', state.sourceVersion],
     ['@openelement/adapter-vite', state.sourceVersion],
     ['@openelement/create', state.sourceVersion],
   ]);

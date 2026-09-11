@@ -1,4 +1,4 @@
-# @openelement/app
+# @openelement/router
 
 Application authoring API for openElement: pages, routes, loaders, actions,
 islands and the SPA bootstrap.
@@ -30,7 +30,7 @@ export default class HomePage extends OpenElement {
 
 ```ts
 // app/routes/index.tsx — the route module the scanner discovers
-import { definePage } from '@openelement/app';
+import { definePage } from '@openelement/router';
 import HomePage from '../components/page-home.tsx';
 
 export async function loader() {
@@ -64,7 +64,7 @@ export default defineConfig({
 ## Authoring API
 
 ```tsx
-import { defineIslandConfig, definePage } from '@openelement/app';
+import { defineIslandConfig, definePage } from '@openelement/router';
 ```
 
 - `definePage(CompiledPageClass, { route?, head?, renderIntent?, props?, error? })`
@@ -76,7 +76,7 @@ import { defineIslandConfig, definePage } from '@openelement/app';
   for adapter scanning; the island itself is a single-module compiled
   `@element` class.
 - `defineApp({ mode: 'spa', routes })` bootstraps the client-only SPA chain
-  (`@openelement/app/spa`); each route is `{ path, tagName, loader?, action?, guard? }`.
+  (`@openelement/router/spa`); each route is `{ path, tagName, loader?, action?, guard? }`.
 - `fail(status, data)` / `redirect(location)` / `notFound(message)` implement
   the ADR-0120 action protocol; `isActionFailure()` is the duck-typed guard.
 
@@ -111,7 +111,7 @@ app-package Vite subpath.
 ## Install
 
 ```bash
-npm install @openelement/app
+npm install @openelement/router
 ```
 
 ## License

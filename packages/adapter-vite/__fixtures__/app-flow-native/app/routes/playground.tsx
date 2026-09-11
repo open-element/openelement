@@ -5,7 +5,7 @@
  * navigation — exactly the fallback the target='_blank' probe observes when
  * interception (incorrectly) happens.
  */
-import { definePage } from '@openelement/app';
+import { definePage } from '@openelement/router';
 import PlaygroundPage from '../components/page-playground.tsx';
 import { exposeActionCount } from '../store.ts';
 

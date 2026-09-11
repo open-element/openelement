@@ -476,7 +476,7 @@ async function buildSSG(
             // SSR outputs <tag-name data-client-only="true"></tag-name>
             // Client runtime imports the real module and upgrades the element.
             return [
-              `import { defineIslandConfig } from '@openelement/app';`,
+              `import { defineIslandConfig } from '@openelement/router';`,
               `export const tagName = ${quoteGeneratedJavaScriptValue(tagName)};`,
               'export const openElement = defineIslandConfig({ ssr: false });',
               `export default class OpenClientOnlyStub extends HTMLElement {

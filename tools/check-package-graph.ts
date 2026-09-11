@@ -42,8 +42,8 @@ import { formatError } from '@openelement/element';
  */
 export const ALLOWED_DEPENDENCY_DIRECTION: Readonly<Record<string, readonly string[]>> = {
   '@openelement/element': [],
-  '@openelement/app': ['@openelement/element', '@openelement/url-pattern-list'],
-  '@openelement/adapter-vite': ['@openelement/element', '@openelement/app'],
+  '@openelement/router': ['@openelement/element', '@openelement/url-pattern-list'],
+  '@openelement/adapter-vite': ['@openelement/element', '@openelement/router'],
   '@openelement/create': [],
 };
 

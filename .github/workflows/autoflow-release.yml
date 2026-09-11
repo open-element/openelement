@@ -46,7 +46,7 @@ jobs:
         run: |
           test "$(git rev-parse HEAD)" = "$CANDIDATE_SHA"
           test "$(deno eval "console.log(JSON.parse(Deno.readTextFileSync('packages/element/deno.json')).version)")" = "$RELEASE_VERSION"
-          test "$(deno eval "console.log(JSON.parse(Deno.readTextFileSync('packages/app/deno.json')).version)")" = "$RELEASE_VERSION"
+          test "$(deno eval "console.log(JSON.parse(Deno.readTextFileSync('packages/router/deno.json')).version)")" = "$RELEASE_VERSION"
       - name: Verify npm CLI supports Trusted Publishing
         if: inputs.publish
         run: |

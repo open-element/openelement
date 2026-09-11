@@ -5,7 +5,7 @@
  * what the server received on the enhanced and the native path, byte for
  * byte.
  */
-import { definePage, redirect } from '@openelement/app';
+import { definePage, redirect } from '@openelement/router';
 import TupleProbesPage from '../components/page-tuple-probes.tsx';
 import { exposeActionCount, noteStore } from '../store.ts';
 

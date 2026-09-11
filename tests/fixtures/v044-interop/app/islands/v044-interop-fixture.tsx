@@ -1,5 +1,5 @@
 /** @jsxImportSource @openelement/element */
-import { defineIsland, defineIslandConfig } from '@openelement/app';
+import { defineIsland, defineIslandConfig } from '@openelement/router';
 
 export const tagName = 'v044-interop-fixture';
 export const openElement = defineIslandConfig({ hydrate: 'load', ssr: true, dsd: true });

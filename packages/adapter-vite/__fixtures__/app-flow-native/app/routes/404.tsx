@@ -4,7 +4,7 @@
  * The loader proves the ADR-0129 channel is merged even on the notFound
  * fallback response.
  */
-import { definePage } from '@openelement/app';
+import { definePage } from '@openelement/router';
 import NotFoundPage from '../components/page-404.tsx';
 import { exposeActionCount } from '../store.ts';
 

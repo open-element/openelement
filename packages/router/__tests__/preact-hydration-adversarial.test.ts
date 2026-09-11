@@ -1,5 +1,5 @@
 /**
- * @openelement/app — adversarial Preact hydration lifecycle tests (#1146,
+ * @openelement/router — adversarial Preact hydration lifecycle tests (#1146,
  * area 2), rebased onto the v0.44 foreign-element bridge (ADR-0143).
  *
  * The v0.44 island hydrates its host's LIGHT-DOM children (there is no DSD

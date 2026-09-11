@@ -2,7 +2,7 @@
  * / — static home route (default renderIntent 'static'): prerendered at build
  * time, the note count is build-time data.
  */
-import { defineLitPage } from '@openelement/app/lit';
+import { defineLitPage } from '@openelement/router/lit';
 import { HomePage } from '../components/home-page.ts';
 import { notesStore } from '../store.ts';
 

@@ -11,7 +11,7 @@ import {
   type OpenElementActionFailure,
   type PagePropsContext,
   redirect,
-} from '@openelement/app';
+} from '@openelement/router';
 import SetHeaderPage from '../components/page-set-header.tsx';
 
 interface ChannelActionData {

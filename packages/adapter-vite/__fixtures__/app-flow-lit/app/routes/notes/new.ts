@@ -8,13 +8,13 @@
  * The named submitter (intent=create) is recorded into the store; the
  * x-action-count channel header proves exactly one action ran per submission.
  */
-import { defineLitPage } from '@openelement/app/lit';
+import { defineLitPage } from '@openelement/router/lit';
 import {
   fail,
   type OpenElementActionFailure,
   type PagePropsContext,
   redirect,
-} from '@openelement/app';
+} from '@openelement/router';
 import { NoteNewPage } from '../../components/note-new-page.ts';
 import {
   exposeActionCount,

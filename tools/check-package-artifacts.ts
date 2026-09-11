@@ -16,7 +16,7 @@ const ATTW_VERSION = '0.18.4';
 
 const RUNTIME_FREE_PACKAGES = new Set([
   '@openelement/element',
-  '@openelement/app',
+  '@openelement/router',
 ]);
 
 const RUNTIME_EXTENSIONS = new Set(['.js', '.mjs', '.cjs']);

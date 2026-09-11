@@ -5,8 +5,8 @@
  * invocation and answers 303 -> /guards?sent=1, so the enhanced fetch path
  * morphs the redirect target while the native path navigates to it.
  */
-import { defineLitPage } from '@openelement/app/lit';
-import { redirect } from '@openelement/app';
+import { defineLitPage } from '@openelement/router/lit';
+import { redirect } from '@openelement/router';
 import { GuardsPage } from '../components/guards-page.ts';
 import { exposeActionCount, recordActionInvocation } from '../store.ts';
 

@@ -37,7 +37,7 @@ const HOMEPAGE = 'https://openelement.org';
 const BUGS = 'https://github.com/open-element/openelement/issues';
 const PACKAGE_DESCRIPTIONS: Record<string, string> = {
   '@openelement/adapter-vite': 'Vite build adapter for the OpenElement Web Components framework.',
-  '@openelement/app': 'Application authoring APIs for the OpenElement Web Components framework.',
+  '@openelement/router': 'Routing and application runtime for the OpenElement framework.',
   '@openelement/create': 'Project generator for the OpenElement Web Components framework.',
   '@openelement/element': 'Custom element base class and authoring APIs for OpenElement.',
 };
@@ -270,10 +270,10 @@ export async function packPackage(
     // Keep the two products independently installable. Route Mode does not
     // install Element; framework consumers opt into Element explicitly.
     // Standalone Element authors likewise install Vite tooling without Router.
-    const optionalWorkspacePeers = pkg.name === '@openelement/app'
+    const optionalWorkspacePeers = pkg.name === '@openelement/router'
       ? ['@openelement/element']
       : pkg.name === '@openelement/adapter-vite'
-      ? ['@openelement/app']
+      ? ['@openelement/router']
       : [];
     for (const name of optionalWorkspacePeers) {
       const version = pkgJson.dependencies[name];

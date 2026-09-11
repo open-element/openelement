@@ -8,7 +8,7 @@
  * 404/3xx/500 response. `?kind=` selects the failure channel: `404`
  * (default) throws notFound(), `redirect` throws redirect('/live').
  */
-import { definePage, notFound, redirect } from '@openelement/app';
+import { definePage, notFound, redirect } from '@openelement/router';
 import UnstablePage from '../components/page-unstable.tsx';
 
 export function loader(ctx: { request: Request }): never {

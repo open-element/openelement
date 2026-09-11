@@ -6,12 +6,12 @@ import {
 
 Deno.test('validation-boundary: zod and valibot imports are flagged with line numbers', () => {
   const failures = findValidationLibraryImports(
-    `import { z } from 'zod';\nimport * as v from 'valibot';\nimport { fail } from '@openelement/app';\n`,
-    'packages/app/src/routes.ts',
+    `import { z } from 'zod';\nimport * as v from 'valibot';\nimport { fail } from '@openelement/router';\n`,
+    'packages/router/src/routes.ts',
   );
   assertEquals(failures, [
-    'packages/app/src/routes.ts:1: schema-validation library import: zod',
-    'packages/app/src/routes.ts:2: schema-validation library import: valibot',
+    'packages/router/src/routes.ts:1: schema-validation library import: zod',
+    'packages/router/src/routes.ts:2: schema-validation library import: valibot',
   ]);
 });
 

@@ -6,7 +6,7 @@
  * File-system access (cwd / mkdirSync / writeFileSync) goes through the
  * injected FileSystemAdapter (default: nodeFsAdapter); path joining still
  * uses node:path directly. This module MUST NOT be imported from the main
- * @openelement/app entry to avoid pulling Node built-ins into client island
+ * @openelement/router entry to avoid pulling Node built-ins into client island
  * bundles.
  *
  * Standalone usage requires explicit ctx parameter:
@@ -21,8 +21,8 @@ import { createLogger } from '@openelement/element';
 import { join } from 'node:path';
 import { type FileSystemAdapter, nodeFsAdapter } from './internal/content/fs-adapter.ts';
 import { DEFAULT_DATA_DIR } from './internal/paths.ts';
-import { loadI18nData } from '@openelement/app/i18n';
-import type { OpenElementI18nOptions } from '@openelement/app/i18n';
+import { loadI18nData } from '@openelement/router/i18n';
+import type { OpenElementI18nOptions } from '@openelement/router/i18n';
 
 const log = createLogger('i18n');
 
@@ -93,6 +93,6 @@ export function openI18n(
   };
 }
 
-// Use @openelement/app/i18n for runtime helpers: loadI18nData, normalizeLocalePath
+// Use @openelement/router/i18n for runtime helpers: loadI18nData, normalizeLocalePath
 
 export default openI18n;

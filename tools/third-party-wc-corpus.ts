@@ -70,7 +70,7 @@ const CORPUS: CorpusEntry[] = [
   // the admission plan should classify at all.
   {
     tag: 'alpha3-wc-fixture',
-    library: '@openelement/app',
+    library: '@openelement/router',
     metadata: 'openelement-config',
     expect: {
       lightDomChildren: [],

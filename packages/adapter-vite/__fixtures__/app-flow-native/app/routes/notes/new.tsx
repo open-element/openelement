@@ -14,7 +14,7 @@ import {
   type OpenElementActionFailure,
   type PagePropsContext,
   redirect,
-} from '@openelement/app';
+} from '@openelement/router';
 import NoteNewPage from '../../components/page-note-new.tsx';
 import { exposeActionCount, noteStore } from '../../store.ts';
 

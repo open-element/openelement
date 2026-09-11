@@ -10,7 +10,7 @@ The source tree is `1.0.0-alpha.1`, a new public baseline for Element and Router
 ## Repository shape
 
 - `packages/element` — the Element product.
-- `packages/app` — Router Route Mode and Framework Mode implementation.
+- `packages/router` — Router Route Mode and Framework Mode implementation.
 - `packages/adapter-vite` — thin Element/Router compiler, Vite, and server-output integration.
 - `packages/create` — thin consumer scaffolding for the two products.
 

@@ -1,5 +1,5 @@
 /** @jsxImportSource @openelement/element */
-import { definePage } from '@openelement/app';
+import { definePage } from '@openelement/router';
 
 export default definePage({
   route: { path: '/' },

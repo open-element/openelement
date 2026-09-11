@@ -32,9 +32,9 @@
     }
   },
   "imports": {
-    "@openelement/app": "../../../app/src/index.ts",
-    "@openelement/app/lit": "../../../app/src/lit.ts",
-    "@openelement/app/lit-ssr": "../../../app/src/lit-ssr.ts",
+    "@openelement/router": "../../../router/src/index.ts",
+    "@openelement/router/lit": "../../../router/src/lit.ts",
+    "@openelement/router/lit-ssr": "../../../router/src/lit-ssr.ts",
     "@openelement/element": "../../../element/src/index.ts",
     "@openelement/element/jsx-runtime": "../../../element/src/jsx-runtime.ts",
     "@openelement/element/jsx-dev-runtime": "../../../element/src/jsx-dev-runtime.ts",

@@ -11,7 +11,7 @@
  * attribute→property reflection, composed events) is asserted at the browser
  * level by tools/third-party-wc-smoke.ts.
  */
-import { defineIslandConfig } from '@openelement/app';
+import { defineIslandConfig } from '@openelement/router';
 import { element, OpenElement, property } from '@openelement/element';
 import { alpha3WcFixtureStyles } from './alpha3-wc-styles.ts';
 

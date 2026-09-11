@@ -9,7 +9,7 @@ import { URLPatternList } from '@openelement/url-pattern-list';
 async function main(): Promise<void> {
   const base = '0d826954cb96b3a9306119830defd6000a798c95';
   const source = await new Deno.Command('git', {
-    args: ['show', `${base}:packages/app/src/internal/router/route-table.ts`],
+    args: ['show', `${base}:packages/router/src/internal/router/route-table.ts`],
     stdout: 'piped',
   }).output();
   if (!source.success) throw new Error('Baseline source unavailable');

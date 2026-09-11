@@ -1,5 +1,5 @@
 /**
- * @openelement/app - SPA (Single Page Application) bootstrap.
+ * @openelement/router - SPA (Single Page Application) bootstrap.
  *
  * Creates a client-side SPA with history-based routing, loader/action
  * data flow, and form action interception.

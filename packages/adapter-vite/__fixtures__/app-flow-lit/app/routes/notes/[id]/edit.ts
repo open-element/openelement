@@ -2,8 +2,8 @@
  * /notes/:id/edit — pre-filled edit form; success updates the store and PRGs
  * back to the detail page.
  */
-import { defineLitPage } from '@openelement/app/lit';
-import { notFound, type PagePropsContext, redirect } from '@openelement/app';
+import { defineLitPage } from '@openelement/router/lit';
+import { notFound, type PagePropsContext, redirect } from '@openelement/router';
 import { NoteEditPage } from '../../../components/note-edit-page.ts';
 import { type Note, notesStore, recordActionInvocation } from '../../../store.ts';
 

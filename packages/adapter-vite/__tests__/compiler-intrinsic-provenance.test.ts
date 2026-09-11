@@ -6,7 +6,7 @@
  * the semantic core, module-analysis.ts) decides whether a decorator,
  * heritage clause or factory call is an OpenElement intrinsic: the identifier
  * must be a runtime named import of the intrinsic from its canonical module
- * ('@openelement/element', '@openelement/app'), aliases followed. A bare or
+ * ('@openelement/element', '@openelement/router'), aliases followed. A bare or
  * global spelling NEVER admits an intrinsic; unrelated same-name bindings
  * (third-party imports, local declarations, ambient declares) never enter the
  * grammar; unsupported or ambiguous provenance (type-only imports, namespace
@@ -113,7 +113,7 @@ Deno.test('provenance: aliased computed, trustedHtml and defineIslandConfig stay
     '  trustedHtml as html,',
     '  type TrustedHtml,',
     "} from '@openelement/element';",
-    "import { defineIslandConfig as island } from '@openelement/app';",
+    "import { defineIslandConfig as island } from '@openelement/router';",
     "export const openElement = island({ hydrate: 'load', ssr: true, dsd: true });",
     "@element('oe-provenance-alias-factories', { root: 'shadow-open' })",
     'export default class AliasFactories extends OpenElement {',
@@ -407,7 +407,7 @@ Deno.test('provenance: module analysis drops bare-spelling defineElement but kee
 
   const bound = analyzeModuleSemantics(
     [
-      "import { defineElement } from '@openelement/app';",
+      "import { defineElement } from '@openelement/router';",
       "export const tagName = 'oe-bound-defined';",
       'defineElement(tagName, {});',
     ].join('\n'),

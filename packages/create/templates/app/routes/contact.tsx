@@ -5,7 +5,7 @@
  * is the single deterministic seam mapping request scope onto the compiled
  * page properties.
  */
-import { definePage, fail, type OpenElementActionFailure, redirect } from '@openelement/app';
+import { definePage, fail, type OpenElementActionFailure, redirect } from '@openelement/router';
 import ContactPage from '../components/page-contact.tsx';
 
 interface ContactActionData {

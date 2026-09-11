@@ -34,7 +34,7 @@
     }
   },
   "imports": {
-    "@openelement/app": "../../../app/src/index.ts",
+    "@openelement/router": "../../../router/src/index.ts",
     "@openelement/element": "../../../element/src/index.ts",
     "@openelement/element/jsx-runtime": "../../../element/src/jsx-runtime.ts",
     "@openelement/element/jsx-dev-runtime": "../../../element/src/jsx-dev-runtime.ts",

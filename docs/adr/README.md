@@ -4,7 +4,7 @@ Only decisions that still govern hard-to-reverse Element or Router contracts rem
 
 - [ADR-0108-deno-native-npm-distribution.md](./ADR-0108-deno-native-npm-distribution.md)
 - [ADR-0110-two-product-doctrine-and-package-truth.md](./ADR-0110-two-product-doctrine-and-package-truth.md)
-- [ADR-0111-openelement-app-ownership-boundary.md](./ADR-0111-openelement-app-ownership-boundary.md)
+- [ADR-0111-router-package-ownership-boundary.md](./ADR-0111-router-package-ownership-boundary.md)
 - [ADR-0112-protocol-types-and-tiny-runtime.md](./ADR-0112-protocol-types-and-tiny-runtime.md)
 - [ADR-0125-hydration-instance-purity.md](./ADR-0125-hydration-instance-purity.md)
 - [ADR-0128-decouple-page-registration-from-tagname-export.md](./ADR-0128-decouple-page-registration-from-tagname-export.md)

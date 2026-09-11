@@ -1,5 +1,5 @@
 /**
- * @openelement/app/lit - Lit page authoring entry (Beta.2.2, #1339).
+ * @openelement/router/lit - Lit page authoring entry (Beta.2.2, #1339).
  *
  * The Lit renderer counterpart to definePage(): a route module default-exports
  * defineLitPage(tag, PageClass, descriptor) where PageClass is a plain
@@ -47,7 +47,7 @@ export type LitPageConstructor<
 /**
  * Attach a page descriptor and host tag to a LitElement page class.
  *
- *   import { defineLitPage } from '@openelement/app/lit';
+ *   import { defineLitPage } from '@openelement/router/lit';
  *   import { NotesListPage } from '../components/notes-list-page.ts';
  *   export const loader = async (ctx) => ({ ... });
  *   export default defineLitPage('notes-list-page', NotesListPage, {

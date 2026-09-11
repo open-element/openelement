@@ -2,7 +2,7 @@
  * /notes — dynamic list route: loader runs per request and exposes the
  * action-invocation counter through the ADR-0129 x-action-count channel.
  */
-import { defineLitPage } from '@openelement/app/lit';
+import { defineLitPage } from '@openelement/router/lit';
 import { NotesListPage } from '../components/notes-list-page.ts';
 import { exposeActionCount, type Note, notesStore } from '../store.ts';
 

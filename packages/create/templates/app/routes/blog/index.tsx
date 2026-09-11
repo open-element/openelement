@@ -1,5 +1,5 @@
 /** Static blog index (default renderIntent mode 'static'). */
-import { definePage } from '@openelement/app';
+import { definePage } from '@openelement/router';
 import BlogIndexPage from '../../components/page-blog-index.tsx';
 
 export default definePage(BlogIndexPage, {

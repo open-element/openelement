@@ -7,7 +7,7 @@
  * restored from SSR DOM — @lit-labs/ssr semantics).
  */
 import { html, LitElement } from 'lit';
-import { defineIslandConfig } from '@openelement/app';
+import { defineIslandConfig } from '@openelement/router';
 
 export const openElement = defineIslandConfig({ hydrate: 'load', ssr: true });
 

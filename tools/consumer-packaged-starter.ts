@@ -200,7 +200,7 @@ try {
     nodeModulesDir?: string;
   };
   const expectedImports: Record<string, string> = {
-    '@openelement/app': `npm:@openelement/app@${PACKAGE_VERSION}`,
+    '@openelement/router': `npm:@openelement/router@${PACKAGE_VERSION}`,
     '@openelement/adapter-vite': `npm:@openelement/adapter-vite@${PACKAGE_VERSION}`,
     '@openelement/element': `npm:@openelement/element@${PACKAGE_VERSION}`,
     '@openelement/element/jsx-runtime': `npm:@openelement/element@${PACKAGE_VERSION}/jsx-runtime`,

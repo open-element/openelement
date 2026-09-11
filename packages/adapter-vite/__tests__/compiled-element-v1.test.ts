@@ -564,7 +564,7 @@ Deno.test('compiled-element alpha.8 - canonical page/island authoring grammar', 
 
   const prelude = [
     "import { element, OpenElement, property } from '@openelement/element';",
-    "import { defineIslandConfig } from '@openelement/app';",
+    "import { defineIslandConfig } from '@openelement/router';",
   ].join('\n');
 
   await t.step('default-exported class with a shadow root and the island policy statement', () => {

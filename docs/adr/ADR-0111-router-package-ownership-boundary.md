@@ -1,11 +1,11 @@
-# ADR-0111: Router and app-package ownership boundary
+# ADR-0111: Router package ownership boundary
 
 - Status: ACCEPTED (reconciled for `1.0.0-alpha.1` on 2026-09-11)
 - Depends on: ADR-0110, ADR-0152
 
 ## Decision
 
-`@openelement/app` is the current distribution owner for Router:
+`@openelement/router` is the distribution owner for Router:
 
 - Route Mode exposes explicit records, deterministic matching, HTTP method policy, and optional
   Hono integration. Its pure matching and browser projections do not require Element or a renderer.

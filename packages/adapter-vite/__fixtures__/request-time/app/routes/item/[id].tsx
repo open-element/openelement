@@ -14,7 +14,7 @@ import {
   type OpenElementActionFailure,
   type PagePropsContext,
   redirect,
-} from '@openelement/app';
+} from '@openelement/router';
 import ItemPage from '../../components/page-item.tsx';
 
 interface ItemData {

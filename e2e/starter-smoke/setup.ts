@@ -64,11 +64,11 @@ function main(): void {
   const imports = denoJson.imports as Record<string, string>;
 
   const sourceMap: Record<string, string> = {
-    '@openelement/app': 'packages/app/src/index.ts',
-    '@openelement/app/model': 'packages/app/src/model.ts',
-    '@openelement/app/spa': 'packages/app/src/spa.ts',
-    '@openelement/app/i18n': 'packages/app/src/i18n.ts',
-    '@openelement/app/preact': 'packages/app/src/preact.ts',
+    '@openelement/router': 'packages/router/src/index.ts',
+    '@openelement/router/model': 'packages/router/src/model.ts',
+    '@openelement/router/spa': 'packages/router/src/spa.ts',
+    '@openelement/router/i18n': 'packages/router/src/i18n.ts',
+    '@openelement/router/preact': 'packages/router/src/preact.ts',
     '@openelement/adapter-vite': 'packages/adapter-vite/src/index.ts',
     '@openelement/adapter-vite/nitro-mount': 'packages/adapter-vite/src/nitro-mount.ts',
     '@openelement/element': 'packages/element/src/index.ts',

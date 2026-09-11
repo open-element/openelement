@@ -13,7 +13,7 @@ import {
   type OpenElementActionFailure,
   type PagePropsContext,
   redirect,
-} from '@openelement/app';
+} from '@openelement/router';
 import FormPage from '../components/page-form.tsx';
 
 interface FormActionData {

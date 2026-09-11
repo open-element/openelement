@@ -6,7 +6,7 @@
  * of the store never reach this page — the e2e asserts build-count=2 even
  * after requests have created more notes.
  */
-import { definePage, type PagePropsContext } from '@openelement/app';
+import { definePage, type PagePropsContext } from '@openelement/router';
 import HomePage from '../components/page-home.tsx';
 import { noteStore } from '../store.ts';
 

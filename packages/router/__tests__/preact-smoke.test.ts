@@ -1,5 +1,5 @@
 /**
- * @openelement/app — Preact island smoke test (v0.44 foreign-element
+ * @openelement/router — Preact island smoke test (v0.44 foreign-element
  * contract).
  *
  * Proves the Preact island bridge works end-to-end:

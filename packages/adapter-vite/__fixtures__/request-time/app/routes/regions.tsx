@@ -12,7 +12,7 @@ import {
   type OpenElementActionFailure,
   type PagePropsContext,
   redirect,
-} from '@openelement/app';
+} from '@openelement/router';
 import RegionsPage from '../components/page-regions.tsx';
 
 interface RegionActionData {

@@ -22,7 +22,7 @@ import { OpenElementBuildContext } from '../src/build-context.ts';
 const RESOLVED_ENTRY_ID = '\0virtual:open-hono-entry';
 const RESOLVED_CLIENT_ENTRY_ID = '\0virtual:open-client-entry';
 
-const INDEX_ROUTE = `import { definePage } from '@openelement/app';
+const INDEX_ROUTE = `import { definePage } from '@openelement/router';
 export const tagName = 'test-index-page';
 export default definePage({
   render() { return null; },

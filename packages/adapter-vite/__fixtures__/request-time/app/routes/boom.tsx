@@ -5,7 +5,7 @@
  * (POST parity is the alpha.5 fix). v0.44: the boundary markup is a static
  * Region branch of the compiled page program (components/page-boom.tsx).
  */
-import { definePage, fail, type OpenElementActionFailure } from '@openelement/app';
+import { definePage, fail, type OpenElementActionFailure } from '@openelement/router';
 import BoomPage from '../components/page-boom.tsx';
 
 export function loader(): never {

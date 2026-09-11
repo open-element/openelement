@@ -4,7 +4,7 @@
  * v0.44: markup compiled in components/page-404.tsx (path-derived tag
  * 'el-404').
  */
-import { definePage } from '@openelement/app';
+import { definePage } from '@openelement/router';
 import NotFoundPage from '../components/page-404.tsx';
 
 export default definePage(NotFoundPage, {

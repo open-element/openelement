@@ -65,10 +65,10 @@ function wrapInDocument(content, opts) {
 function __ssr(tag, props) { return tag + (props.context.locale ? ":" + props.context.locale : ""); }
 function __pageProps(routeModule, context) { return { context: context }; }
 function __pageErrorProps(routeModule, error, context) { return { error: error, context: context }; }
-// Faithful miniature of @openelement/app/document resolvePageDocument (#1326):
+// Faithful miniature of @openelement/router/document resolvePageDocument (#1326):
 // resolver heads receive the same context object; lang carries the locale;
 // links default to []. Resolution policy itself is unit-tested in
-// packages/app/__tests__/document.test.ts and end-to-end in the app-flow
+// packages/router/__tests__/document.test.ts and end-to-end in the app-flow
 // fixtures; here we only pin the renderRoute wiring.
 function __resolvePageDocument(head, context) {
   const resolved = typeof head === "function" ? head(context) : head;

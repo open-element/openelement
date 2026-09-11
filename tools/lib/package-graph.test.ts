@@ -25,7 +25,7 @@ function pkg(name: string, version: string, deps: string[] = []): PackageInfo {
 Deno.test('extractOpenImports finds static, type and dynamic imports', () => {
   const source = `
     import { foo } from '@openelement/element';
-    import type { Bar } from '@openelement/app';
+    import type { Bar } from '@openelement/router';
     export { Baz } from '@openelement/create';
     const x = await import('@openelement/adapter-vite');
     // not an open import:
@@ -34,9 +34,9 @@ Deno.test('extractOpenImports finds static, type and dynamic imports', () => {
   const imports = extractOpenImports(source).sort();
   assertEquals(imports, [
     '@openelement/adapter-vite',
-    '@openelement/app',
     '@openelement/create',
     '@openelement/element',
+    '@openelement/router',
   ]);
 });
 
@@ -44,9 +44,9 @@ Deno.test('extractOpenImports ignores comments and nested template text', () => 
   const source = `
     // import '@openelement/comment';
     const sample = \`text \${\`import('@openelement/string')\`}\`;
-    const actual = import(\`@openelement/app/router\`);
+    const actual = import(\`@openelement/router/router\`);
   `;
-  assertEquals(extractOpenImports(source), ['@openelement/app/router']);
+  assertEquals(extractOpenImports(source), ['@openelement/router/router']);
 });
 
 Deno.test('detectCycles reports a cycle in the dependency graph', () => {
@@ -96,38 +96,38 @@ Deno.test('topologicalSort throws on a cycle', () => {
 Deno.test('releasePublishOrder respects dependency and priority constraints', () => {
   const packages = [
     pkg('@openelement/element', '1.0.0'),
-    pkg('@openelement/app', '1.0.0', ['@openelement/element']),
+    pkg('@openelement/router', '1.0.0', ['@openelement/element']),
     pkg('@openelement/adapter-vite', '1.0.0', ['@openelement/element']),
-    pkg('@openelement/create', '1.0.0', ['@openelement/app']),
+    pkg('@openelement/create', '1.0.0', ['@openelement/router']),
   ];
   const order = releasePublishOrder(packages).map((p) => p.name);
   const pos = (n: string) => order.indexOf(n);
   // dependencies before dependents
-  assert(pos('@openelement/element') < pos('@openelement/app'));
-  assert(pos('@openelement/app') < pos('@openelement/create'));
+  assert(pos('@openelement/element') < pos('@openelement/router'));
+  assert(pos('@openelement/router') < pos('@openelement/create'));
   // release priority: app before adapter-vite
-  assert(pos('@openelement/app') < pos('@openelement/adapter-vite'));
+  assert(pos('@openelement/router') < pos('@openelement/adapter-vite'));
   assertEquals(order.length, packages.length);
 });
 
 Deno.test('normalizeInternalDep rejects non-internal specifiers', () => {
   assertEquals(
-    normalizeInternalDep('@openelement/element/jsx-runtime', '@openelement/app'),
+    normalizeInternalDep('@openelement/element/jsx-runtime', '@openelement/router'),
     '@openelement/element',
   );
-  assertEquals(normalizeInternalDep('@openelement/app', '@openelement/app'), null);
-  assertEquals(normalizeInternalDep('npm:react', '@openelement/app'), null);
-  assertEquals(normalizeInternalDep('react', '@openelement/app'), null);
+  assertEquals(normalizeInternalDep('@openelement/router', '@openelement/router'), null);
+  assertEquals(normalizeInternalDep('npm:react', '@openelement/router'), null);
+  assertEquals(normalizeInternalDep('react', '@openelement/router'), null);
 });
 
 Deno.test('normalizeDep passes non-internal specifiers through unchanged', () => {
   assertEquals(
-    normalizeDep('@openelement/element/jsx-runtime', '@openelement/app'),
+    normalizeDep('@openelement/element/jsx-runtime', '@openelement/router'),
     '@openelement/element',
   );
-  assertEquals(normalizeDep('@openelement/app', '@openelement/app'), null);
-  assertEquals(normalizeDep('npm:react', '@openelement/app'), 'npm:react');
-  assertEquals(normalizeDep('react', '@openelement/app'), 'react');
+  assertEquals(normalizeDep('@openelement/router', '@openelement/router'), null);
+  assertEquals(normalizeDep('npm:react', '@openelement/router'), 'npm:react');
+  assertEquals(normalizeDep('react', '@openelement/router'), 'react');
 });
 
 Deno.test('readPackage returns null when deno.json does not exist', async () => {

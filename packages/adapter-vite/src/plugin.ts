@@ -4,7 +4,7 @@
  * This is the core build plugin implementation. It is NOT part of the
  * public API. Use `openPipeline()` from the main entry instead.
  *
- * Internal only: called by openPipeline() and the @openelement/app umbrella.
+ * Internal only: called by openPipeline() and the @openelement/router umbrella.
  */
 
 import type { Alias, Plugin, ViteDevServer } from 'vite';
@@ -91,8 +91,8 @@ function mergeAliasOptions(
 }
 
 const OPTIONAL_PACKAGE_STUBS: Record<string, string> = {
-  '@openelement/app/i18n':
-    'console.warn("[openElement] Optional i18n package is unavailable; install and configure @openelement/app/i18n to enable locale expansion.");\n' +
+  '@openelement/router/i18n':
+    'console.warn("[openElement] Optional i18n package is unavailable; install and configure @openelement/router/i18n to enable locale expansion.");\n' +
     'export function loadI18nData() { return { locales: [], defaultLocale: "en" }; }',
 };
 
@@ -118,7 +118,7 @@ export function optionalPackageStubsPlugin(): Plugin {
  * This is the core build plugin implementation. It is NOT part of the
  * public API. Use `openPipeline()` from @openelement/adapter-vite instead.
  *
- * Internal only: called by openPipeline() and the @openelement/app umbrella.
+ * Internal only: called by openPipeline() and the @openelement/router umbrella.
  * Jamstack: M=SSG+DSD, A=API Routes, J=Islands.
  *
  * @param options - Framework options

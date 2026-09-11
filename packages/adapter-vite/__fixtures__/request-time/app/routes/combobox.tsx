@@ -10,7 +10,7 @@
  * markup compiled in components/page-combobox.tsx; the islands are nested as
  * custom-element hosts and expanded server-side by the generated entry.
  */
-import { definePage, type PagePropsContext, redirect } from '@openelement/app';
+import { definePage, type PagePropsContext, redirect } from '@openelement/router';
 import ComboboxPage from '../components/page-combobox.tsx';
 
 export function action(ctx: { formData: FormData }): never {

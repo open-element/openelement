@@ -1,5 +1,5 @@
 import { assertEquals } from '@std/assert';
-import { createRequestContext } from '@openelement/app/model';
+import { createRequestContext } from '@openelement/router/model';
 import { createOpenElementNitroHandler } from '../src/nitro-mount.ts';
 
 Deno.test('nitro mount: passes the event req through to the handler and returns its Response', async () => {
@@ -148,7 +148,7 @@ Deno.test('nitro mount: runtime cloudflare env wins over event.env and mount opt
 // createRequestContext as a value import. Generated Nitro server output bundles
 // nitro-mount.ts directly (see createNitroRequestContext's comment), and the
 // bundling hosts resolve bare imports Node-style — the nitro-proof fixture has
-// no node_modules entry for @openelement/app, so a value import would fail at
+// no node_modules entry for @openelement/router, so a value import would fail at
 // bundle time. The type-only import there pins the shape; this test is the
 // behavioral backstop. If it fails, one side of the contract drifted — fix the
 // drift, do not relax this test.

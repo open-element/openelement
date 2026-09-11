@@ -4,7 +4,7 @@
  * request-time entry. Documents the framework's actual behavior on the
  * generated entry. v0.44: markup compiled in components/page-set-cookie.tsx.
  */
-import { definePage } from '@openelement/app';
+import { definePage } from '@openelement/router';
 import SetCookiePage from '../components/page-set-cookie.tsx';
 
 export function action(): Response {

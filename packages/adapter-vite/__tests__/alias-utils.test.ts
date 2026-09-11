@@ -57,27 +57,27 @@ Deno.test('normalizeViteAliases keeps explicit retained subpath aliases authorit
 // entries must not reappear here.
 Deno.test('normalizeViteAliases drops subpaths removed from deno.json exports', () => {
   const aliases = normalizeViteAliases({
-    '@openelement/app': './packages/app/src/index.ts',
+    '@openelement/router': './packages/router/src/index.ts',
     '@openelement/element': './packages/element/src/index.ts',
   }, '/repo') ?? [];
   const finds = aliases.map((alias) => String(alias.find));
 
-  // packages/app/src/hono.ts was deleted; the export entry is gone too.
-  assertEquals(finds.includes('@openelement/app/hono'), false);
+  // packages/router/src/hono.ts was deleted; the export entry is gone too.
+  assertEquals(finds.includes('@openelement/router/hono'), false);
   // open-element-render/open-element-hydration are no longer exported.
   assertEquals(finds.includes('@openelement/element/open-element-render'), false);
   assertEquals(finds.includes('@openelement/element/open-element-hydration'), false);
 });
 
-Deno.test('normalizeViteAliases expands App subpaths from the generated export map', () => {
+Deno.test('normalizeViteAliases expands Router subpaths from the generated export map', () => {
   const aliases = normalizeViteAliases({
-    '@openelement/app': './packages/app/src/index.ts',
+    '@openelement/router': './packages/router/src/index.ts',
   }, '/repo') ?? [];
 
   for (const subpath of ['spa', 'model', 'i18n', 'preact']) {
     assertEquals(
-      aliases.find((alias) => alias.find === `@openelement/app/${subpath}`)?.replacement,
-      `/repo/packages/app/src/${subpath}.ts`,
+      aliases.find((alias) => alias.find === `@openelement/router/${subpath}`)?.replacement,
+      `/repo/packages/router/src/${subpath}.ts`,
     );
   }
 });

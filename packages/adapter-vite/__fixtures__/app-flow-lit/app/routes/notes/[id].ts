@@ -2,8 +2,8 @@
  * /notes/:id — dynamic detail route. Unknown ids signal notFound(); the
  * loader proves the ADR-0129 response-header channel with x-note-count.
  */
-import { defineLitPage } from '@openelement/app/lit';
-import { notFound, type PagePropsContext } from '@openelement/app';
+import { defineLitPage } from '@openelement/router/lit';
+import { notFound, type PagePropsContext } from '@openelement/router';
 import { NoteDetailPage } from '../../components/note-detail-page.ts';
 import { exposeActionCount, lastActionIntent, type Note, notesStore } from '../../store.ts';
 

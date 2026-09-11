@@ -1,5 +1,5 @@
 /**
- * @openelement/app/preact — Preact island support (v0.44).
+ * @openelement/router/preact — Preact island support (v0.44).
  *
  * The island is a plain autonomous custom element — it does NOT extend
  * OpenElement and carries no compiled Part Program (foreign-element
@@ -14,7 +14,7 @@
  * getSsrProps/DATA_SSR_PROPS channel is gone: islands that need structured
  * server data read it from attributes or module scope.
  *
- * @module @openelement/app/preact
+ * @module @openelement/router/preact
  */
 
 import { assertValidTagName } from '@openelement/element/authoring';
