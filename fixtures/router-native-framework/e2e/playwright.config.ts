@@ -6,9 +6,9 @@
  * renderIntent 'dynamic' routes delegated to dist/server/index.js.
  *
  * Prerequisites:
- *   deno task fixture:app-flow-native:build
+ *   deno task fixture:router-native-framework:build
  *
- * Run: deno task fixture:app-flow-native:e2e
+ * Run: deno task fixture:router-native-framework:e2e
  */
 import { defineConfig } from '@playwright/test';
 import process from 'node:process';

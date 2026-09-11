@@ -6,9 +6,9 @@
  * renderIntent 'dynamic' routes delegated to dist/server/index.js.
  *
  * Prerequisites:
- *   deno task fixture:request-time:build
+ *   deno task fixture:router-request-time:build
  *
- * Run: deno task fixture:request-time:e2e
+ * Run: deno task fixture:router-request-time:e2e
  */
 import { defineConfig } from '@playwright/test';
 import process from 'node:process';

@@ -13,9 +13,9 @@
  * POST allowed, and the env opt-out allowing cross-site POSTs.
  *
  * Prerequisites:
- *   deno task fixture:request-time:build
+ *   deno task fixture:router-request-time:build
  *
- * Run: deno task fixture:request-time:e2e
+ * Run: deno task fixture:router-request-time:e2e
  */
 import { expect, test } from '@playwright/test';
 import { type ChildProcess, spawn } from 'node:child_process';
@@ -25,7 +25,7 @@ import { fileURLToPath } from 'node:url';
 import process from 'node:process';
 
 const E2E_DIR = dirname(fileURLToPath(import.meta.url));
-const ROOT_DENO_JSON = join(E2E_DIR, '..', '..', '..', '..', '..', 'deno.json');
+const ROOT_DENO_JSON = join(E2E_DIR, '..', '..', '..', 'deno.json');
 const SERVER_ENTRY = join(E2E_DIR, '..', 'dist', 'server', 'index.js');
 
 const CSRF_ON_PORT = 4191;
@@ -79,7 +79,7 @@ test.describe('CSRF same-origin floor (#811)', () => {
   test.beforeAll(async () => {
     test.skip(
       !existsSync(SERVER_ENTRY),
-      'fixture dist missing — run deno task fixture:request-time:build first',
+      'fixture dist missing — run deno task fixture:router-request-time:build first',
     );
     startFixtureServer(CSRF_ON_PORT, false);
     startFixtureServer(CSRF_OFF_PORT, true);
