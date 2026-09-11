@@ -61,7 +61,7 @@ jobs:
       - name: Install browser engines
         run: ./node_modules/.bin/playwright install --with-deps chromium firefox webkit
       - name: Qualify candidate
-        run: deno task autoflow:release
+        run: deno task gate:release
       - name: Publish retained packages
         if: inputs.publish
         run: deno task publish:npm

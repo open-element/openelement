@@ -1,7 +1,7 @@
 #!/bin/sh
 #
 # openElement pre-commit hook. Format/lint are owned by the Deno toolchain
-# directly; the repository task graph keeps only OpenElement-specific dev gates.
+# directly; heavier gates run pre-push and in CI.
 #
 # Install: deno task hooks:install
 
@@ -9,13 +9,3 @@ set -e
 
 deno fmt --check
 deno lint
-
-echo "[autoflow:dev] pre-commit"
-deno task autoflow:dev || {
-  echo ""
-  echo "autoflow:dev FAILED. Fix the issues above and retry."
-  exit 1
-}
-
-echo ""
-echo "autoflow:dev PASSED; commit allowed."

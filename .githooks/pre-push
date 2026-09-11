@@ -1,8 +1,8 @@
 #!/bin/sh
 #
 # openElement pre-push hook. Format/lint/type-graph/Markdown are owned by the
-# pinned OSS tools directly; the repository task graph owns only the
-# OpenElement-specific push-tier gate selection.
+# pinned OSS tools directly; the repository task graph owns the
+# OpenElement-specific push gates.
 #
 # Install: deno task hooks:install
 
@@ -15,13 +15,11 @@ deno lint
 deno task lint:markdown
 deno task typecheck
 
-echo "=== pre-push: autoflow:push for '$BRANCH' ==="
+echo "=== pre-push gates for '$BRANCH' ==="
 
-deno task autoflow:push || {
-  echo ""
-  echo "autoflow:push FAILED."
-  exit 1
-}
+deno task graph:check
+deno task package-surface:check
+deno task export-files:check
 
 echo ""
 echo "All gates passed."

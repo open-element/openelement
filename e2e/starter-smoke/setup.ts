@@ -23,7 +23,7 @@ const workDir = join(suiteDir, 'work');
 const appDir = join(workDir, 'my-blog');
 const depsDir = join(workDir, 'deps');
 
-const PACKAGES = ['element', 'app', 'adapter-vite', 'create'] as const;
+const PACKAGES = ['element', 'router', 'adapter-vite', 'create'] as const;
 
 function run(cmd: string, args: string[], cwd: string): void {
   const result = new Deno.Command(cmd, { args, cwd, stdout: 'piped', stderr: 'piped' })

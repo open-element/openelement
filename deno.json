@@ -99,10 +99,8 @@
     "clean": "rm -rf packages/*/dist packages/*/*.tgz dist custom-dist dist-test-* playwright-report test-results .openElement",
     "hooks:install": "git config core.hooksPath .githooks && chmod +x .githooks/pre-commit .githooks/pre-push",
     "hooks:uninstall": "git config --unset core.hooksPath",
-    "autoflow:dev": "deno run --allow-read --allow-run --allow-env tools/autoflow/cli.ts dev",
-    "autoflow:push": "deno run --allow-read --allow-run --allow-env tools/autoflow/cli.ts push",
-    "autoflow:ci": "deno run --allow-read --allow-run --allow-env tools/autoflow/cli.ts ci",
-    "autoflow:release": "deno run --allow-read --allow-run --allow-env tools/autoflow/cli.ts release",
+    "gate:ci": "deno task graph:check && deno task package-surface:check && deno task interface:snapshot && deno task export-files:check && deno task verify:configs && deno task url-pattern-list:provenance && deno task release:state-machine:check && deno task signals:check-protocol-boundary && deno task deno-api:check && deno task validation:boundary-check && deno task build && deno task test:coverage:check && deno task fixture:request-time:gate && deno task fixture:app-flow-native:gate && deno task fixture:app-flow-lit:gate && deno task wtr:pilot:gate && deno task test:starter-smoke && deno task consumer:local && deno task package-artifacts:check && deno task consumer:packaged && deno task consumer:packaged-app && deno task consumer:packaged-router && deno task consumer:packaged-element && deno task third-party-wc:smoke",
+    "gate:release": "deno task gate:ci && deno task nitro:proof:node && deno task nitro:proof:workers && deno task publish:npm:dry-run",
     "verify:configs": "deno run --allow-read --allow-env tools/verify-package-configs.ts"
   },
   "fmt": {
