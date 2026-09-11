@@ -312,8 +312,8 @@ export function releasePublishOrder(packages: PackageInfo[]): PackageInfo[] {
 
 /**
  * Returns a Map of specifier → file URL for all local package entries
- * derived from each package's deno.json exports. Used by smoke tests and
- * consumer-local builds to resolve @openelement/* imports to local source.
+ * derived from each package's deno.json exports. Used by smoke tests to
+ * resolve @openelement/* imports to local source.
  *
  * Entries are ordered by key length descending so that Vite alias resolution
  * matches the most specific specifier first.

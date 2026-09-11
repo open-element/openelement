@@ -12,7 +12,14 @@
  *   dev      vite dev server boots and SSR-renders / over HTTP
  *   check    the starter's own typecheck task
  *   test     the starter's own test task
- *   build    real SSG build; must emit dist/server/index.js (request-time)
+ *   build    real SSG build; must emit dist/server/index.js (request-time),
+ *            the structured build manifest (6 pages + 1 API route, no page
+ *            errors), the prerendered index/freshness pages with the app
+ *            shell marker, and the public asset copy
+ *   boundary the generated SSR bundle (dist/server/entry.js) imports only the
+ *            starter's product import surface — no @openelement/* specifier
+ *            outside the generated import map may survive into the bundle
+ *            (a packed starter must never need workspace aliases)
  *   start    cli/start serves static + request-time + API routes over HTTP
  *   deploy   the standalone dist/server/serve.mjs serves the same probes
  *   preview  fails closed with start guidance (the starter is dynamic, #601)
@@ -27,6 +34,7 @@ import { formatJson } from '@openelement/element/build-utils';
 import { PACKAGE_VERSION, RETAINED_PACKAGE_NAMES } from './project-constants.ts';
 import { readPackages } from './lib/package-graph.ts';
 import { tarballPath } from './lib/npm-tarball.ts';
+import { extractStaticModuleSpecifiers } from './lib/typescript-ast.ts';
 
 async function readJson<T = unknown>(path: string | URL): Promise<T> {
   return JSON.parse(await Deno.readTextFile(path)) as T;
@@ -76,13 +84,52 @@ async function run(
   }
 }
 
-// Let the OS choose from its ephemeral range (same rationale as
-// consumer-local.ts: fixed ranges collide with parallel CI jobs).
+// Let the OS choose from its ephemeral range (fixed ranges collide with
+// parallel CI jobs).
 function reservePort(): number {
   const probe = Deno.listen({ hostname: '127.0.0.1', port: 0 });
   const port = (probe.addr as Deno.NetAddr).port;
   probe.close();
   return port;
+}
+
+// ─── Import-map boundary helpers ────────────────────────────────────────────
+//
+// The packed starter must resolve exclusively through its generated import
+// map: any @openelement/* bare specifier surviving in the built SSR bundle
+// outside that surface would only resolve through workspace aliases a real
+// consumer does not have. Ported from the retired local-source consumer's
+// --packaged-import-map-check leg.
+
+function isBareSpecifier(specifier: string): boolean {
+  return !specifier.startsWith('.') &&
+    !specifier.startsWith('/') &&
+    !specifier.startsWith('file:') &&
+    !specifier.startsWith('http:') &&
+    !specifier.startsWith('https:') &&
+    !specifier.startsWith('data:') &&
+    !specifier.startsWith('node:') &&
+    !specifier.startsWith('npm:') &&
+    !specifier.startsWith('jsr:');
+}
+
+function isMappedSpecifier(
+  specifier: string,
+  importMap: Record<string, string>,
+): boolean {
+  if (Object.hasOwn(importMap, specifier)) return true;
+  return Object.keys(importMap).some((key) => key.endsWith('/') && specifier.startsWith(key));
+}
+
+function findMissingGeneratedImports(
+  source: string,
+  importMap: Record<string, string>,
+): string[] {
+  const specifiers = new Set<string>();
+  for (const { value } of extractStaticModuleSpecifiers(source)) {
+    if (isBareSpecifier(value)) specifiers.add(value);
+  }
+  return [...specifiers].filter((specifier) => !isMappedSpecifier(specifier, importMap)).sort();
 }
 
 /**
@@ -202,6 +249,28 @@ try {
     imports: Record<string, string>;
     nodeModulesDir?: string;
   };
+  // The generated starter must expose exactly the supported product import
+  // surface — no more, no less (a missing pin breaks the consumer; an extra
+  // one would leak an internal alias into the public contract).
+  const productImports = [
+    '@deno/vite-plugin',
+    '@openelement/element',
+    '@openelement/element/build-utils',
+    '@openelement/element/jsx-dev-runtime',
+    '@openelement/element/jsx-runtime',
+    '@openelement/router',
+    '@openelement/router/nitro-mount',
+    '@openelement/router/vite',
+    'hono',
+    'vite',
+  ];
+  if (Object.keys(config.imports).sort().join('\n') !== productImports.join('\n')) {
+    throw new Error(
+      'Packed starter exposes an unsupported import surface:\n' +
+        Object.keys(config.imports).sort().join('\n'),
+    );
+  }
+  const generatedImportMap = { ...config.imports };
   const expectedImports: Record<string, string> = {
     '@openelement/router': `npm:@openelement/router@${PACKAGE_VERSION}`,
     '@openelement/router/vite': `npm:@openelement/router@${PACKAGE_VERSION}/vite`,
@@ -244,8 +313,8 @@ try {
   // The starter's external deps (vite, @deno/vite-plugin, hono) are NOT inside
   // the local @openelement/* tarballs; npm resolves them via the repo-reachable
   // registries (npmjs.org + @jsr → npm.jsr.io from the .npmrc above). Reuse the
-  // repo's already-resolved dependency tree (populated by setup-deno-workspace
-  // and consistent with consumer-local.ts) by linking any top-level entry the
+  // repo's already-resolved dependency tree (populated by setup-deno-workspace)
+  // by linking any top-level entry the
   // freshly-installed tarballs did not already provide. Symlinks keep the
   // nested .deno structure intact so @deno/vite-plugin can resolve @deno/loader.
   const repoNodeModules = join(repoRoot, 'node_modules');
@@ -298,6 +367,83 @@ try {
   if (!existsSync(serverEntry)) {
     throw new Error(
       `Packed starter SSG build emitted no request-time server entry: ${serverEntry}`,
+    );
+  }
+
+  // Structured build manifest: the packed build must report the starter's
+  // full route surface — index, freshness, blog index + post, the contact
+  // action page, and the styled 404 (#923) as pages; /api/health as the one
+  // API route — with no per-page errors.
+  const buildEvidencePath = join(starter, '.openElement', 'build-artifacts.json');
+  if (!existsSync(buildEvidencePath)) {
+    throw new Error('Packed starter build emitted no structured build manifest.');
+  }
+  const buildEvidence = JSON.parse(await Deno.readTextFile(buildEvidencePath)) as {
+    success?: boolean;
+    manifest?: { routes?: Array<{ kind?: string; path?: string }> };
+    pages?: Array<{ path?: string; errors?: string[] }>;
+  };
+  const manifestRoutes = buildEvidence.manifest?.routes ?? [];
+  const pageRoutes = manifestRoutes.filter((route) => route.kind === 'page');
+  const apiRoutes = manifestRoutes.filter((route) => route.kind === 'api');
+  if (
+    buildEvidence.success !== true || pageRoutes.length !== 6 || apiRoutes.length !== 1 ||
+    (buildEvidence.pages ?? []).some((page) => (page.errors?.length ?? 0) > 0)
+  ) {
+    throw new Error(
+      'Packed starter structured build manifest did not contain the expected page/API surface:\n' +
+        JSON.stringify(buildEvidence, null, 2),
+    );
+  }
+
+  // Prerendered output: the static home and the freshness proof route must be
+  // prerendered through the app shell, and the public asset must be copied.
+  const indexHtmlPath = join(starter, 'dist', 'index.html');
+  if (!existsSync(indexHtmlPath)) {
+    throw new Error('Packed starter build emitted no prerendered dist/index.html');
+  }
+  const indexHtml = await Deno.readTextFile(indexHtmlPath);
+  for (const marker of ['Static pages, alive where it counts', 'data-open-layout="app-shell"']) {
+    if (!indexHtml.includes(marker)) {
+      throw new Error(`Packed starter dist/index.html missing marker: ${marker}`);
+    }
+  }
+  const freshnessHtmlPath = join(starter, 'dist', 'freshness', 'index.html');
+  if (!existsSync(freshnessHtmlPath)) {
+    throw new Error('Packed starter build did not prerender the freshness proof route');
+  }
+  const freshnessHtml = await Deno.readTextFile(freshnessHtmlPath);
+  if (!freshnessHtml.includes('Freshness proof')) {
+    throw new Error('Packed starter dist/freshness/index.html missing the freshness proof content');
+  }
+  if (!existsSync(join(starter, 'dist', 'openelement-mark.svg'))) {
+    throw new Error('Packed starter build did not copy the public asset dist/openelement-mark.svg');
+  }
+
+  // Import-map boundary: the generated SSR bundle must import only the
+  // starter's product import surface. A surviving @openelement/* bare
+  // specifier outside the generated import map would resolve only through
+  // workspace aliases — the packed starter must never need them.
+  const ssrBundlePath = join(starter, 'dist', 'server', 'entry.js');
+  if (!existsSync(ssrBundlePath)) {
+    throw new Error(`Packed starter build emitted no SSR bundle: ${ssrBundlePath}`);
+  }
+  const ssrBundle = await Deno.readTextFile(ssrBundlePath);
+  const missingGeneratedImports = findMissingGeneratedImports(ssrBundle, generatedImportMap);
+  const missingProductImports = missingGeneratedImports.filter((specifier) =>
+    specifier.startsWith('@openelement/')
+  );
+  if (missingProductImports.length > 0) {
+    throw new Error(
+      'Packed starter SSR bundle leaks non-product OpenElement imports. ' +
+        'A consumer must not need internal package aliases.\n' +
+        missingProductImports.map((specifier) => `- ${specifier}`).join('\n'),
+    );
+  }
+  if (missingGeneratedImports.length > 0) {
+    console.log(
+      'Packed starter bundle references third-party runtime dependencies; their published ' +
+        'dependency metadata is validated by the install legs.',
     );
   }
   console.log(`Packed starter SSG build passed for ${PACKAGE_VERSION}.`);

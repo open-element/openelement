@@ -47,12 +47,11 @@
     "deno-api:check": "deno run --allow-read --allow-env tools/check-deno-api-free.ts",
     "validation:boundary-check": "deno run --allow-read --allow-env tools/check-validation-boundary.ts",
     "graph:check": "deno run --allow-read --allow-env tools/check-package-graph.ts",
-    "consumer:local": "deno run --allow-read --allow-write --allow-run --allow-env --allow-net tools/consumer-local.ts",
-    "consumer:packaged": "deno run --allow-read --allow-write --allow-run --allow-env --allow-net tools/consumer-packaged-starter.ts && deno run --allow-read --allow-write --allow-run --allow-env --allow-net tools/consumer-local.ts --packaged-import-map-check",
+    "consumer:packaged": "deno run --allow-read --allow-write --allow-run --allow-env --allow-net tools/consumer-packaged-starter.ts",
     "third-party-wc:smoke": "deno run --allow-read --allow-write --allow-run --allow-env --allow-net --allow-sys tools/third-party-wc-corpus.ts",
     "package-artifacts:check": "deno run --allow-read --allow-write --allow-run --allow-net --allow-env tools/check-package-artifacts.ts",
     "url-pattern-list:provenance": "npm ci --prefix tools/fixtures/url-pattern-list-audit --ignore-scripts --no-audit --no-fund && npm audit signatures --prefix tools/fixtures/url-pattern-list-audit --ignore-scripts",
-    "consumer:packaged-app": "deno run --allow-read --allow-write --allow-run --allow-env --allow-net tools/consumer-packaged-app.ts",
+    "consumer:packaged-app": "deno run --allow-read --allow-write --allow-run --allow-env --allow-net tools/consumer-packaged-native.ts && deno run --allow-read --allow-write --allow-run --allow-env --allow-net tools/consumer-packaged-lit.ts",
     "consumer:packaged-router": "deno run --allow-read --allow-write --allow-run --allow-env --allow-net tools/consumer-packaged-router.ts",
     "consumer:packaged-element": "deno run -A tools/consumer-packaged-element.ts",
     "pack": "deno run --allow-read --allow-write --allow-run --allow-env tools/publish-npm.ts pack",
@@ -97,7 +96,7 @@
     "clean": "rm -rf packages/*/dist packages/*/*.tgz dist custom-dist dist-test-* playwright-report test-results .openElement",
     "hooks:install": "git config core.hooksPath .githooks && chmod +x .githooks/pre-commit .githooks/pre-push",
     "hooks:uninstall": "git config --unset core.hooksPath",
-    "gate:ci": "deno task graph:check && deno task interface:snapshot && deno task export-files:check && deno task url-pattern-list:provenance && deno task release:state-machine:check && deno task signals:check-protocol-boundary && deno task deno-api:check && deno task validation:boundary-check && deno task build && deno task test:coverage:check && deno task fixture:router-request-time:gate && deno task fixture:router-native-framework:gate && deno task fixture:router-lit-framework:gate && deno task wtr:pilot:gate && deno task test:starter-smoke && deno task consumer:local && deno task package-artifacts:check && deno task consumer:packaged && deno task consumer:packaged-app && deno task consumer:packaged-router && deno task consumer:packaged-element && deno task third-party-wc:smoke",
+    "gate:ci": "deno task graph:check && deno task interface:snapshot && deno task export-files:check && deno task url-pattern-list:provenance && deno task release:state-machine:check && deno task signals:check-protocol-boundary && deno task deno-api:check && deno task validation:boundary-check && deno task build && deno task test:coverage:check && deno task fixture:router-request-time:gate && deno task fixture:router-native-framework:gate && deno task fixture:router-lit-framework:gate && deno task wtr:pilot:gate && deno task test:starter-smoke && deno task package-artifacts:check && deno task consumer:packaged && deno task consumer:packaged-app && deno task consumer:packaged-router && deno task consumer:packaged-element && deno task third-party-wc:smoke",
     "gate:release": "deno task gate:ci && deno task nitro:proof:node && deno task nitro:proof:workers && deno task publish:npm:dry-run"
   },
   "fmt": {

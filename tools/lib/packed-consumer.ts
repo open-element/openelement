@@ -1,22 +1,26 @@
 /**
- * Packed-artifact consumer qualification for Framework Mode applications
- * (Beta.2.2, #1339 §11): prove that the five pack:dry-run tarballs — not the
- * workspace source — support the complete notes-app flow on BOTH renderers
- * (native compiled elements and the lit renderer).
+ * Shared harness for packed-artifact consumer qualification of Framework Mode
+ * applications (Beta.2.2, #1339 §11): prove that the pack:dry-run tarballs —
+ * not the workspace source — support the complete notes-app flow on one
+ * renderer. The two renderer harnesses (tools/consumer-packaged-native.ts and
+ * tools/consumer-packaged-lit.ts) each supply a PackedAppLegSpec (app sources,
+ * probes, dev-feedback edits); this module owns everything both worlds share:
+ * process/server/temp-project lifecycle, the cell framework, the HTTP and
+ * form probes, the dev-feedback session, the Playwright continuation probes,
+ * and the boundary walks.
  *
  * The observational rule for packaging defects: qualify the PACKED artifact,
- * never the workspace source. Per renderer leg this tool stages a scratch
- * consumer OUTSIDE the repository (so the adapter's workspace auto-alias in
- * workspace-alias.ts cannot substitute workspace source), installs the
- * tarballs hermetically through an explicit package.json (file: deps + pinned
- * externals), materializes a minimal notes app modeled on
- * fixtures/router-{native,lit}-framework/ using only
- * published specifiers, and then runs the verification cells:
+ * never the workspace source. The harness stages a scratch consumer OUTSIDE
+ * the repository (so the workspace auto-alias in workspace-alias.ts cannot
+ * substitute workspace source), installs the tarballs hermetically through an
+ * explicit package.json (file: deps + pinned externals), materializes a
+ * minimal notes app modeled on fixtures/router-{native,lit}-framework/ using
+ * only published specifiers, and then runs the verification cells:
  *
  *   install                hermetic npm install of the tarballs
  *   types                  consumer deno task check against the packed .d.ts
  *   dev                    public dev command (`deno task dev` = vite dev over
- *                          the packed adapter plugin): live SSR probes for
+ *                          the packed router plugin): live SSR probes for
  *                          /, /notes, detail, both 404 channels, form 422/303,
  *                          browser continuation, source-edit feedback (page
  *                          component AND route module edits must reach the
@@ -27,8 +31,8 @@
  *   build                  packed cli/build emits dist/server/index.js + SSG
  *   start                  cli/start serves /, /notes, /notes/<seed>, 404
  *   serve.mjs              standalone dist/server/serve.mjs serves the same
- *   form-422               POST /notes/new missing title -> 422 (both modes)
- *   form-303               POST /notes/new valid -> 303 + Location (both modes)
+ *   form-422               POST /notes/new missing title -> 422
+ *   form-303               POST /notes/new valid -> 303 + Location
  *   browser-continuation   chromium: island activates without a full reload
  *                          (native: kernel claims the DSD; lit: hydrate-support
  *                          lifts defer-hydration adopting the DSD)
@@ -45,17 +49,17 @@
  * asset path or surviving import specifier may match the boundary pattern.
  * (A content substring scan would false-positive: the bundled compiled
  * kernel legitimately carries diagnostic strings naming the compiler, and
- * the client entry bundles the adapter's browser runtimes by design.)
+ * the client entry bundles the router's browser runtimes by design.)
  *
  * Playwright note: playwright-core requires --allow-sys at import time
- * (osRelease), which this tool's documented 5-flag permission set does not
+ * (osRelease), which the harness's documented 5-flag permission set does not
  * grant. The browser cell therefore runs as a child process
  * (`deno run -A` on a generated probe script, matching the -A invocation of
- * consumer-packaged-element and the fixture e2e tasks); the parent tool
+ * consumer-packaged-element and the fixture e2e tasks); the parent harness
  * itself stays on --allow-read/write/run/env/net.
  *
- * Every cell prints a PASS/FAIL line per renderer so the #1339 §11 support
- * matrix can be filled from the log; any FAIL fails the tool run.
+ * Every cell prints a PASS/FAIL line so the #1339 §11 support matrix can be
+ * filled from the log; any FAIL fails the harness run.
  */
 
 import { existsSync } from '@std/fs';
@@ -64,20 +68,20 @@ import { dirname, join, resolve } from '@std/path';
 import { formatJson } from '@openelement/element/build-utils';
 import { formatError } from '@openelement/element';
 import ts from 'typescript';
-import { PACKAGE_VERSION, RETAINED_PACKAGE_NAMES } from './project-constants.ts';
-import { readPackages } from './lib/package-graph.ts';
-import { tarballPath } from './lib/npm-tarball.ts';
+import { PACKAGE_VERSION, RETAINED_PACKAGE_NAMES } from '../project-constants.ts';
+import { readPackages } from './package-graph.ts';
+import { tarballPath } from './npm-tarball.ts';
 
-const repoRoot = resolve(import.meta.dirname!, '..');
+const repoRoot = resolve(import.meta.dirname!, '..', '..');
 // Generous ceilings for the real SSG build and cold-cache vite/dev server
-// boots; a hung packed adapter must fail the tool instead of stalling CI
+// boots; a hung packed router must fail the harness instead of stalling CI
 // forever (same contract as consumer-packaged-starter.ts).
 const BUILD_TIMEOUT_MS = 10 * 60_000;
 const TYPES_TIMEOUT_MS = 5 * 60_000;
 const SERVER_READY_TIMEOUT_MS = 3 * 60_000;
 const BROWSER_TIMEOUT_MS = 5 * 60_000;
 
-/** Boundary pattern: no compiler, adapter, host or workspace leakage. */
+/** Boundary pattern: no compiler, router-internal tooling, host or workspace leakage. */
 const BOUNDARY_ID_PATTERN = /compiler|router(?:\/src)?\/vite|router\/cli|node:/;
 const BOUNDARY_SPECIFIER_PATTERN = /compiler|router(?:\/src)?\/vite|router\/cli|^node:|workspace:/;
 const DECLARATION_LEAK_PATTERN =
@@ -188,7 +192,7 @@ async function withServer(
         server.kill('SIGTERM');
       } catch (error) {
         if (!(error instanceof TypeError)) {
-          console.error(`[consumer-packaged-app] failed to stop ${label} server:`, error);
+          console.error(`[packed-consumer] failed to stop ${label} server:`, error);
         }
       }
     }
@@ -236,7 +240,7 @@ function delay(ms: number): Promise<void> {
  * keeps answering 200 with stale content is a FAIL for the same reason.
  */
 async function pollDevPage(
-  spec: LegSpec,
+  spec: PackedAppLegSpec,
   baseUrl: string,
   path: string,
   expect: { status?: number; present?: string[]; absent?: string[] },
@@ -303,7 +307,7 @@ async function assertPortClosed(port: number, label: string, timeoutMs = 30_000)
 
 // ─── Cell framework ─────────────────────────────────────────────────────────
 
-const CELL_NAMES = [
+export const PACKED_APP_CELL_NAMES = [
   'install',
   'types',
   'dev',
@@ -315,20 +319,21 @@ const CELL_NAMES = [
   'browser-continuation',
   'boundary',
 ] as const;
-type CellName = (typeof CELL_NAMES)[number];
-type Renderer = 'native' | 'lit';
+export type PackedAppCellName = (typeof PACKED_APP_CELL_NAMES)[number];
+export type PackedAppRenderer = 'native' | 'lit';
 
-interface Outcome {
+export interface PackedAppOutcome {
   ok: boolean;
   detail: string;
 }
 
-const outcomes = new Map<string, Outcome>();
-// Human-readable key from fixed literal sets (Renderer × CellName), so failure
-// reporting prints it verbatim — no join-then-sanitize round trip.
-const cellKey = (leg: Renderer, cell: CellName): string => `${leg} ${cell}`;
+const outcomes = new Map<string, PackedAppOutcome>();
+// Human-readable key from fixed literal sets (PackedAppRenderer ×
+// PackedAppCellName), so failure reporting prints it verbatim — no
+// join-then-sanitize round trip.
+const cellKey = (leg: PackedAppRenderer, cell: PackedAppCellName): string => `${leg} ${cell}`;
 
-function record(leg: Renderer, cell: CellName, outcome: Outcome): void {
+function record(leg: PackedAppRenderer, cell: PackedAppCellName, outcome: PackedAppOutcome): void {
   outcomes.set(cellKey(leg, cell), outcome);
   const short = outcome.detail.split('\n')[0].slice(0, 240);
   console.log(
@@ -341,9 +346,9 @@ function record(leg: Renderer, cell: CellName, outcome: Outcome): void {
 
 /** Run one verification cell, honoring prerequisites (a failed prereq blocks). */
 async function cell(
-  leg: Renderer,
-  name: CellName,
-  prerequisites: CellName[],
+  leg: PackedAppRenderer,
+  name: PackedAppCellName,
+  prerequisites: PackedAppCellName[],
   fn: () => Promise<string | undefined>,
 ): Promise<void> {
   const blocker = prerequisites.find((p) => !outcomes.get(cellKey(leg, p))?.ok);
@@ -359,7 +364,7 @@ async function cell(
 }
 
 /** Attempt a probe without aborting the surrounding server session. */
-async function attempt(fn: () => Promise<string | undefined>): Promise<Outcome> {
+async function attempt(fn: () => Promise<string | undefined>): Promise<PackedAppOutcome> {
   try {
     return { ok: true, detail: (await fn()) ?? '' };
   } catch (error) {
@@ -367,897 +372,11 @@ async function attempt(fn: () => Promise<string | undefined>): Promise<Outcome> 
   }
 }
 
-// ─── Consumer app sources (native renderer leg) ─────────────────────────────
-//
-// Shapes copied from fixtures/router-native-framework/,
-// importing only published specifiers (@openelement/router, @openelement/element
-// + the jsx-runtime via jsxImportSource). Marker strings are renamed so the
-// tool log is attributable to the packed consumer, not the fixtures.
-
-const NATIVE_STORE = `export interface Note {
-  id: string;
-  title: string;
-  body: string;
-}
-
-const notes: Note[] = [
-  { id: 'seed-1', title: 'Seed note one', body: 'The first seeded note body.' },
-  { id: 'seed-2', title: 'Seed note two', body: 'The second seeded note body.' },
-];
-
-/** One increment per executed action — the form cells prove exactly-once. */
-let actionCount = 0;
-
-/** Last received submitter name/value (\`intent\`) — proves the submitter travels. */
-let lastIntent = '';
-
-export const noteStore = {
-  list(): Note[] {
-    return [...notes];
-  },
-  count(): number {
-    return notes.length;
-  },
-  get(id: string): Note | undefined {
-    return notes.find((note) => note.id === id);
-  },
-  add(title: string, body: string): Note {
-    const note: Note = { id: \`note-\${notes.length + 1}\`, title, body };
-    notes.push(note);
-    return note;
-  },
-  recordAction(intent: string): void {
-    actionCount += 1;
-    lastIntent = intent;
-  },
-  actionCount(): number {
-    return actionCount;
-  },
-  lastIntent(): string {
-    return lastIntent;
-  },
-};
-
-/** ADR-0129 channel helper: dynamic loaders expose the counter on every response. */
-export function exposeActionCount(responseHeaders: Headers): void {
-  responseHeaders.set('x-action-count', String(noteStore.actionCount()));
-}
-`;
-
-const NATIVE_ROUTE_INDEX = `import { definePage, type PagePropsContext } from '@openelement/router';
-import HomePage from '../components/page-home.tsx';
-import { noteStore } from '../store.ts';
-
-interface HomeData {
-  noteCount: number;
-}
-
-export function loader(): HomeData {
-  return { noteCount: noteStore.count() };
-}
-
-export default definePage<HomeData>(HomePage, {
-  // Static home: prerendered at build time; the canonical is emitted at SSG
-  // time into the prerendered HTML (#1326).
-  head: {
-    title: 'packed-app-native — home',
-    canonical: 'https://packed-consumer.example.test/',
-  },
-  props({ data }: PagePropsContext<HomeData>) {
-    return { buildCountText: \`build-count=\${data?.noteCount ?? 0}\` };
-  },
-});
-`;
-
-const NATIVE_ROUTE_NOTES = `import { definePage, type PagePropsContext } from '@openelement/router';
-import NotesPage from '../../components/page-notes-index.tsx';
-import { exposeActionCount, noteStore } from '../../store.ts';
-
-interface NotesData {
-  rows: Array<{ id: string; title: string; href: string }>;
-  count: number;
-}
-
-export function loader(ctx: { responseHeaders: Headers }): NotesData {
-  exposeActionCount(ctx.responseHeaders);
-  const notes = noteStore.list();
-  return {
-    rows: notes.map((note) => ({
-      id: note.id,
-      title: note.title,
-      href: \`/notes/\${note.id}\`,
-    })),
-    count: notes.length,
-  };
-}
-
-export default definePage<NotesData>(NotesPage, {
-  renderIntent: { mode: 'dynamic' },
-  head: { title: 'packed-app-native — notes' },
-  props({ data }: PagePropsContext<NotesData>) {
-    return {
-      rows: data?.rows ?? [],
-      countText: \`note-count=\${data?.count ?? 0}\`,
-      intentText: \`intent=\${noteStore.lastIntent()}\`,
-    };
-  },
-});
-`;
-
-const NATIVE_ROUTE_NOTE_DETAIL =
-  `import { definePage, notFound, type PagePropsContext } from '@openelement/router';
-import NoteDetailPage from '../../components/page-note-detail.tsx';
-import { exposeActionCount, type Note, noteStore } from '../../store.ts';
-
-interface DetailData {
-  note: Note;
-}
-
-export function loader(ctx: {
-  params: Record<string, string>;
-  responseHeaders: Headers;
-}): DetailData {
-  exposeActionCount(ctx.responseHeaders);
-  const note = noteStore.get(ctx.params.id ?? '');
-  if (!note) notFound(\`note not found: \${ctx.params.id ?? ''}\`);
-  ctx.responseHeaders.set('x-note-count', String(noteStore.count()));
-  return { note };
-}
-
-export default definePage<DetailData>(NoteDetailPage, {
-  renderIntent: { mode: 'dynamic' },
-  // #1326: page meaning resolves per render from the request-scoped context —
-  // the title comes from loader data; canonical/alternates come from params.
-  head: (context: PagePropsContext<DetailData>) => ({
-    title: \`packed-app-native — \${context.data?.note.title ?? 'note'}\`,
-    canonical: \`https://packed-consumer.example.test/notes/\${context.params.id ?? ''}\`,
-    alternates: [
-      {
-        href: \`https://packed-consumer.example.test/notes/\${context.params.id ?? ''}\`,
-        hreflang: 'en',
-      },
-      {
-        href: \`https://packed-consumer.example.test/zh/notes/\${context.params.id ?? ''}\`,
-        hreflang: 'zh',
-      },
-    ],
-  }),
-  props(context: PagePropsContext<DetailData>) {
-    const created = context.request
-      ? new URL(context.request.url).searchParams.get('created')
-      : undefined;
-    const note = context.data?.note;
-    return {
-      idText: \`id=\${note?.id ?? ''}\`,
-      titleText: note?.title ?? '',
-      bodyText: note?.body ?? '',
-      createdText: \`created=\${created ?? ''}\`,
-      intentText: \`intent=\${noteStore.lastIntent()}\`,
-    };
-  },
-});
-`;
-
-const NATIVE_ROUTE_NOTE_NEW = `import {
-  definePage,
-  fail,
-  type OpenElementActionFailure,
-  type PagePropsContext,
-  redirect,
-} from '@openelement/router';
-import NoteNewPage from '../../components/page-note-new.tsx';
-import { exposeActionCount, noteStore } from '../../store.ts';
-
-export const MIN_TITLE_LENGTH = 3;
-
-interface NewActionData {
-  error?: string;
-  title?: string;
-}
-
-export function action(ctx: {
-  formData: FormData;
-  responseHeaders: Headers;
-}): OpenElementActionFailure<NewActionData> {
-  const intent = String(ctx.formData.get('intent') ?? '');
-  noteStore.recordAction(intent);
-  const title = String(ctx.formData.get('title') ?? '').trim();
-  const body = String(ctx.formData.get('body') ?? '').trim();
-  if (title.length < MIN_TITLE_LENGTH) {
-    // The 422 re-render re-runs the loader, which re-exposes the counter.
-    return fail(
-      422,
-      {
-        error: \`title must be at least \${MIN_TITLE_LENGTH} characters\`,
-        title,
-      } satisfies NewActionData,
-    );
-  }
-  // The redirect exit never re-runs the loader: the action itself exposes the
-  // incremented counter on the 303 response.
-  exposeActionCount(ctx.responseHeaders);
-  const note = noteStore.add(title, body);
-  throw redirect(\`/notes/\${note.id}?created=1\`);
-}
-
-export function loader(ctx: { responseHeaders: Headers }): void {
-  exposeActionCount(ctx.responseHeaders);
-}
-
-export default definePage(NoteNewPage, {
-  renderIntent: { mode: 'dynamic' },
-  head: { title: 'packed-app-native — new note' },
-  props(context: PagePropsContext) {
-    const actionData = context.actionData as NewActionData | undefined;
-    return {
-      // Named titleText (not title): a field named 'title' would shadow
-      // HTMLElement.title and trip Deno's default noImplicitOverride.
-      titleText: actionData?.title ?? '',
-      hasError: actionData?.error ? 1 : 0,
-      intentText: \`intent=\${noteStore.lastIntent()}\`,
-    };
-  },
-});
-`;
-
-const NATIVE_ROUTE_404 = `import { definePage } from '@openelement/router';
-import NotFoundPage from '../components/page-404.tsx';
-import { exposeActionCount } from '../store.ts';
-
-export function loader(ctx: { responseHeaders: Headers }): void {
-  exposeActionCount(ctx.responseHeaders);
-}
-
-export default definePage(NotFoundPage, {
-  renderIntent: { mode: 'dynamic' },
-  head: { title: 'packed-app-native — not found' },
-});
-`;
-
-const NATIVE_PAGE_HOME = `import { element, OpenElement, property } from '@openelement/element';
-
-@element('index-page', { root: 'shadow-open' })
-export default class HomePage extends OpenElement {
-  @property({ reflect: false, attribute: false })
-  buildCountText = 'build-count=0';
-
-  render() {
-    return (
-      <main>
-        <h1 id='home-marker'>packed-app-native home</h1>
-        <p id='build-count'>{this.buildCountText}</p>
-        <p>This page is prerendered; /notes is rendered at request time.</p>
-        <a id='notes-link' href='/notes'>Notes</a>
-      </main>
-    );
-  }
-}
-`;
-
-const NATIVE_PAGE_NOTES = `import { element, OpenElement, property } from '@openelement/element';
-
-@element('notes-index', { root: 'shadow-open' })
-export default class NotesPage extends OpenElement {
-  @property({ reflect: false, attribute: false })
-  rows: Array<{ id: string; title: string; href: string }> = [];
-
-  @property({ reflect: false, attribute: false })
-  countText = 'note-count=0';
-
-  @property({ reflect: false, attribute: false })
-  intentText = 'intent=';
-
-  render() {
-    return (
-      <main>
-        <h1>packed-app-native notes</h1>
-        <p id='note-count'>{this.countText}</p>
-        <p id='last-intent'>{this.intentText}</p>
-        <a id='new-note' href='/notes/new'>New note</a>
-        <ul>
-          {this.rows.map((note) => (
-            <li key={note.id}>
-              <a href={note.href}>{note.title}</a>
-            </li>
-          ))}
-        </ul>
-        <note-counter></note-counter>
-      </main>
-    );
-  }
-}
-`;
-
-const NATIVE_PAGE_DETAIL = `import { element, OpenElement, property } from '@openelement/element';
-
-@element('notes-id', { root: 'shadow-open' })
-export default class NoteDetailPage extends OpenElement {
-  @property({ reflect: false, attribute: false })
-  idText = 'id=';
-
-  @property({ reflect: false, attribute: false })
-  titleText = '';
-
-  @property({ reflect: false, attribute: false })
-  bodyText = '';
-
-  @property({ reflect: false, attribute: false })
-  createdText = 'created=';
-
-  @property({ reflect: false, attribute: false })
-  intentText = 'intent=';
-
-  render() {
-    return (
-      <main>
-        <h1 id='note-title'>{this.titleText}</h1>
-        <p id='note-id'>{this.idText}</p>
-        <p id='note-body'>{this.bodyText}</p>
-        <a id='back-to-notes' href='/notes'>All notes</a>
-        <p id='flash-created'>{this.createdText}</p>
-        <p id='last-intent'>{this.intentText}</p>
-      </main>
-    );
-  }
-}
-`;
-
-const NATIVE_PAGE_NEW = `import { element, OpenElement, property } from '@openelement/element';
-
-@element('notes-new', { root: 'shadow-open' })
-export default class NoteNewPage extends OpenElement {
-  @property({ reflect: false, attribute: false })
-  titleText = '';
-
-  @property({ reflect: false, attribute: false })
-  hasError = 0;
-
-  @property({ reflect: false, attribute: false })
-  intentText = 'intent=';
-
-  render() {
-    return (
-      <main>
-        <h1>new note</h1>
-        <form method='post' data-open-enhance>
-          <input id='title' name='title' type='text' required value={this.titleText} />
-          <textarea id='body' name='body'></textarea>
-          <button id='submit' type='submit' name='intent' value='create'>Create</button>
-        </form>
-        {this.hasError > 0
-          ? <p id='error'>title must be at least 3 characters</p>
-          : <span data-error='none'></span>}
-        <p id='last-intent'>{this.intentText}</p>
-      </main>
-    );
-  }
-}
-`;
-
-const NATIVE_PAGE_404 = `import { element, OpenElement } from '@openelement/element';
-
-@element('el-404', { root: 'shadow-open' })
-export default class NotFoundPage extends OpenElement {
-  render() {
-    return (
-      <main>
-        <h1 id='styled-404'>packed-app-native styled not found</h1>
-        <p>The requested note or page does not exist.</p>
-        <a id='back-home' href='/'>Home</a>
-      </main>
-    );
-  }
-}
-`;
-
-const NATIVE_ISLAND_COUNTER =
-  `import { element, OpenElement, property } from '@openelement/element';
-import { defineIslandConfig } from '@openelement/router';
-
-export const openElement = defineIslandConfig({ hydrate: 'load', ssr: true, dsd: true });
-
-@element('note-counter', { root: 'shadow-open' })
-export default class NoteCounter extends OpenElement {
-  @property({ reflect: false, attribute: false })
-  count = 0;
-
-  increment(): void {
-    this.count++;
-  }
-
-  render() {
-    return (
-      <div class='counter-row'>
-        <button id='increment' type='button' onClick={this.increment}>+</button>
-        <span id='count'>{this.count}</span>
-      </div>
-    );
-  }
-}
-`;
-
-const NATIVE_VITE_CONFIG = `import { openElement } from '@openelement/router/vite';
-import { defineConfig } from 'vite';
-
-export default defineConfig({
-  // Exercise Linux's fs.watch backend on every host, including macOS.
-  server: { watch: { useFsEvents: false, usePolling: false } },
-  base: '/',
-  esbuild: {
-    jsx: 'automatic',
-    jsxImportSource: '@openelement/element',
-  },
-  plugins: [
-    ...openElement({
-      routesDir: 'app/routes',
-      islandsDir: 'app/islands',
-      componentsDir: 'app/components',
-      // No app shell: the packed consumer stays minimal and does not pull @acme/components.
-      appShell: false,
-      html: {
-        title: 'packed-app-native',
-      },
-    }),
-  ],
-});
-`;
-
-// ─── Consumer app sources (lit renderer leg) ────────────────────────────────
-//
-// Same application shape on the explicitly-configured lit renderer, modeled
-// on fixtures/router-lit-framework/: pages are LitElement
-// classes default-exported via defineLitPage() from the published
-// @openelement/router/lit subpath, rendered server-side by @lit-labs/ssr (DSD)
-// and hydrated by @lit-labs/ssr-client.
-
-const LIT_STORE = `export interface Note {
-  id: string;
-  title: string;
-  body: string;
-}
-
-const notes: Note[] = [
-  { id: 'n1', title: 'First note', body: 'Seed body one' },
-  { id: 'n2', title: 'Second note', body: 'Seed body two' },
-];
-
-let nextId = 3;
-let actionInvocations = 0;
-
-/** Last received submitter name/value (\`intent\`) — proves the submitter travels. */
-let lastIntent = '';
-
-export const notesStore = {
-  list(): Note[] {
-    return [...notes];
-  },
-  get(id: string): Note | undefined {
-    return notes.find((note) => note.id === id);
-  },
-  count(): number {
-    return notes.length;
-  },
-  add(input: { title: string; body: string }): Note {
-    const note: Note = { id: \`n\${nextId++}\`, title: input.title, body: input.body };
-    notes.push(note);
-    return note;
-  },
-};
-
-export function recordActionInvocation(intent = ''): number {
-  lastIntent = intent;
-  return ++actionInvocations;
-}
-
-export function actionInvocationCount(): number {
-  return actionInvocations;
-}
-
-export function lastActionIntent(): string {
-  return lastIntent;
-}
-
-/** ADR-0129 channel helper: dynamic handlers expose the counter on every response. */
-export function exposeActionCount(responseHeaders: Headers): void {
-  responseHeaders.set('x-action-count', String(actionInvocations));
-}
-`;
-
-const LIT_ROUTE_INDEX = `import { defineLitPage } from '@openelement/router/lit';
-import { HomePage } from '../components/home-page.ts';
-import { notesStore } from '../store.ts';
-
-interface HomeData {
-  noteCount: number;
-}
-
-export function loader(): HomeData {
-  return { noteCount: notesStore.count() };
-}
-
-export default defineLitPage<HomeData>('home-page', HomePage, {
-  // Static home: prerendered at build time; the canonical is emitted at SSG
-  // time into the prerendered HTML (#1326).
-  head: {
-    title: 'packed-app-lit — home',
-    canonical: 'https://packed-consumer.example.test/',
-  },
-  props({ data }) {
-    return { noteCount: data?.noteCount ?? 0 };
-  },
-});
-`;
-
-const LIT_ROUTE_NOTES = `import { defineLitPage } from '@openelement/router/lit';
-import { NotesListPage } from '../components/notes-list-page.ts';
-import { exposeActionCount, type Note, notesStore } from '../store.ts';
-
-interface NotesData {
-  notes: Note[];
-}
-
-export function loader(ctx: { responseHeaders: Headers }): NotesData {
-  exposeActionCount(ctx.responseHeaders);
-  return { notes: notesStore.list() };
-}
-
-export default defineLitPage<NotesData>('notes-list-page', NotesListPage, {
-  renderIntent: { mode: 'dynamic' },
-  head: { title: 'packed-app-lit — notes' },
-  props({ data }) {
-    const notes = data?.notes ?? [];
-    return { notes, countText: \`note-count=\${notes.length}\` };
-  },
-});
-`;
-
-const LIT_ROUTE_NOTE_DETAIL = `import { defineLitPage } from '@openelement/router/lit';
-import { notFound, type PagePropsContext } from '@openelement/router';
-import { NoteDetailPage } from '../../components/note-detail-page.ts';
-import { exposeActionCount, lastActionIntent, type Note, notesStore } from '../../store.ts';
-
-interface NoteData {
-  note: Note;
-}
-
-export function loader(ctx: {
-  params: Record<string, string>;
-  responseHeaders: Headers;
-}): NoteData {
-  exposeActionCount(ctx.responseHeaders);
-  const note = notesStore.get(ctx.params.id ?? '');
-  if (!note) notFound(\`no note with id \${ctx.params.id ?? ''}\`);
-  ctx.responseHeaders.set('x-note-count', String(notesStore.count()));
-  return { note };
-}
-
-export default defineLitPage<NoteData>('note-detail-page', NoteDetailPage, {
-  renderIntent: { mode: 'dynamic' },
-  // #1326: page meaning resolves per render from the request-scoped context —
-  // the title comes from loader data; canonical/alternates come from params.
-  head: (context: PagePropsContext<NoteData>) => ({
-    title: \`packed-app-lit — \${context.data?.note.title ?? 'note'}\`,
-    canonical: \`https://packed-consumer.example.test/notes/\${context.params.id ?? ''}\`,
-    alternates: [
-      {
-        href: \`https://packed-consumer.example.test/notes/\${context.params.id ?? ''}\`,
-        hreflang: 'en',
-      },
-      {
-        href: \`https://packed-consumer.example.test/zh/notes/\${context.params.id ?? ''}\`,
-        hreflang: 'zh',
-      },
-    ],
-  }),
-  props(context: PagePropsContext<NoteData>) {
-    const created = context.request
-      ? new URL(context.request.url).searchParams.get('created') === '1'
-      : false;
-    return {
-      noteId: context.data?.note.id ?? '',
-      noteTitle: context.data?.note.title ?? '',
-      noteBody: context.data?.note.body ?? '',
-      created,
-      intentText: \`intent=\${lastActionIntent()}\`,
-    };
-  },
-});
-`;
-
-const LIT_ROUTE_NOTE_NEW = `import { defineLitPage } from '@openelement/router/lit';
-import {
-  fail,
-  type OpenElementActionFailure,
-  type PagePropsContext,
-  redirect,
-} from '@openelement/router';
-import { NoteNewPage } from '../../components/note-new-page.ts';
-import {
-  exposeActionCount,
-  lastActionIntent,
-  notesStore,
-  recordActionInvocation,
-} from '../../store.ts';
-
-export const MIN_TITLE_LENGTH = 3;
-
-interface NewActionData {
-  error?: string;
-  title?: string;
-}
-
-export function action(ctx: {
-  formData: FormData;
-  responseHeaders: Headers;
-}): OpenElementActionFailure<NewActionData> {
-  const intent = String(ctx.formData.get('intent') ?? '');
-  recordActionInvocation(intent);
-  const title = String(ctx.formData.get('title') ?? '').trim();
-  const body = String(ctx.formData.get('body') ?? '').trim();
-  if (title.length < MIN_TITLE_LENGTH) {
-    // The 422 re-render re-runs the loader, which re-exposes the counter.
-    return fail(
-      422,
-      {
-        error: \`title must be at least \${MIN_TITLE_LENGTH} characters\`,
-        title,
-      } satisfies NewActionData,
-    );
-  }
-  // The redirect exit never re-runs the loader: the action itself exposes the
-  // incremented counter on the 303 response.
-  exposeActionCount(ctx.responseHeaders);
-  const note = notesStore.add({ title, body });
-  throw redirect(\`/notes/\${note.id}?created=1\`);
-}
-
-export function loader(ctx: { responseHeaders: Headers }): void {
-  exposeActionCount(ctx.responseHeaders);
-}
-
-export default defineLitPage('note-new-page', NoteNewPage, {
-  renderIntent: { mode: 'dynamic' },
-  head: { title: 'packed-app-lit — new note' },
-  props(context: PagePropsContext) {
-    const actionData = context.actionData as NewActionData | undefined;
-    return {
-      error: actionData?.error ?? '',
-      title: actionData?.title ?? '',
-      intentText: \`intent=\${lastActionIntent()}\`,
-    };
-  },
-});
-`;
-
-const LIT_ROUTE_404 = `import { defineLitPage } from '@openelement/router/lit';
-import { NotFoundPage } from '../components/not-found-page.ts';
-
-export default defineLitPage('not-found-page', NotFoundPage, {
-  head: { title: 'packed-app-lit — not found' },
-});
-`;
-
-const LIT_PAGE_HOME = `import { html, LitElement } from 'lit';
-
-export class HomePage extends LitElement {
-  static override properties = {
-    noteCount: { type: Number },
-  };
-
-  declare noteCount: number;
-
-  constructor() {
-    super();
-    this.noteCount = 0;
-  }
-
-  override render() {
-    return html\`
-      <main>
-        <h1>packed-app-lit</h1>
-        <p id="build-count">build-count=\${this.noteCount}</p>
-        <nav><a href="/notes">notes</a></nav>
-      </main>
-    \`;
-  }
-}
-`;
-
-const LIT_PAGE_NOTES = `import { html, LitElement } from 'lit';
-import type { Note } from '../store.ts';
-
-export class NotesListPage extends LitElement {
-  static override properties = {
-    notes: { type: Array },
-    countText: { type: String },
-  };
-
-  declare notes: Note[];
-  declare countText: string;
-
-  constructor() {
-    super();
-    this.notes = [];
-    this.countText = 'note-count=0';
-  }
-
-  override render() {
-    return html\`
-      <main>
-        <h1>packed-app-lit notes</h1>
-        <p id="note-count">\${this.countText}</p>
-        <note-counter count="0"></note-counter>
-        <ul id="notes-list">
-          \${this.notes.map((note) =>
-            html\`
-              <li class="note" data-note-id=\${note.id}>
-                <a href="/notes/\${note.id}">\${note.title}</a>
-              </li>
-            \`
-          )}
-        </ul>
-        <a id="new-note" href="/notes/new">new note</a>
-      </main>
-    \`;
-  }
-}
-`;
-
-const LIT_PAGE_DETAIL = `import { html, LitElement } from 'lit';
-
-export class NoteDetailPage extends LitElement {
-  static override properties = {
-    noteId: { type: String, attribute: 'note-id' },
-    noteTitle: { type: String, attribute: 'note-title' },
-    noteBody: { type: String, attribute: 'note-body' },
-    created: { type: Boolean },
-    intentText: { type: String },
-  };
-
-  declare noteId: string;
-  declare noteTitle: string;
-  declare noteBody: string;
-  declare created: boolean;
-  declare intentText: string;
-
-  constructor() {
-    super();
-    this.noteId = '';
-    this.noteTitle = '';
-    this.noteBody = '';
-    this.created = false;
-    this.intentText = 'intent=';
-  }
-
-  override render() {
-    return html\`
-      <main>
-        \${this.created ? html\`<p id="created-flash">note created</p>\` : ''}
-        <h1 id="note-title">\${this.noteTitle}</h1>
-        <p id="note-body">\${this.noteBody}</p>
-        <p id="note-id">\${this.noteId}</p>
-        <p id="last-intent">\${this.intentText}</p>
-        <a href="/notes">all notes</a>
-      </main>
-    \`;
-  }
-}
-`;
-
-const LIT_PAGE_NEW = `import { html, LitElement } from 'lit';
-
-export class NoteNewPage extends LitElement {
-  static override properties = {
-    error: { type: String },
-    title: { type: String },
-    intentText: { type: String },
-  };
-
-  declare error: string;
-  declare title: string;
-  declare intentText: string;
-
-  constructor() {
-    super();
-    this.error = '';
-    this.title = '';
-    this.intentText = 'intent=';
-  }
-
-  override render() {
-    return html\`
-      <main>
-        <h1>new note</h1>
-        \${this.error ? html\`<p id="error" role="alert">\${this.error}</p>\` : ''}
-        <form method="post" data-open-enhance>
-          <label for="title">title</label>
-          <input id="title" name="title" type="text" required .value=\${this.title} />
-          <label for="body">body</label>
-          <textarea id="body" name="body"></textarea>
-          <button id="submit" type="submit" name="intent" value="create">create</button>
-        </form>
-        <p id="last-intent">\${this.intentText}</p>
-      </main>
-    \`;
-  }
-}
-`;
-
-const LIT_PAGE_404 = `import { html, LitElement } from 'lit';
-
-export class NotFoundPage extends LitElement {
-  override render() {
-    return html\`
-      <main>
-        <h1>packed-app-lit 404</h1>
-        <p id="not-found-message">nothing notes-like lives here</p>
-        <a href="/notes">all notes</a>
-      </main>
-    \`;
-  }
-}
-`;
-
-const LIT_ISLAND_COUNTER = `import { html, LitElement } from 'lit';
-import { defineIslandConfig } from '@openelement/router';
-
-export const openElement = defineIslandConfig({ hydrate: 'load', ssr: true });
-
-export default class NoteCounter extends LitElement {
-  static override properties = {
-    count: { type: Number, reflect: true },
-  };
-
-  declare count: number;
-
-  constructor() {
-    super();
-    this.count = 0;
-  }
-
-  override render() {
-    return html\`
-      <button id="counter" type="button" @click=\${() => {
-        this.count += 1;
-      }}>count: \${this.count}</button>
-    \`;
-  }
-}
-`;
-
-const LIT_VITE_CONFIG = `import { openElement } from '@openelement/router/vite';
-import { defineConfig } from 'vite';
-
-export default defineConfig({
-  // Exercise Linux's fs.watch backend on every host, including macOS.
-  server: { watch: { useFsEvents: false, usePolling: false } },
-  base: '/',
-  esbuild: {
-    jsx: 'automatic',
-    jsxImportSource: '@openelement/element',
-  },
-  plugins: [
-    ...openElement({
-      renderer: 'lit',
-      routesDir: 'app/routes',
-      islandsDir: 'app/islands',
-      componentsDir: 'app/components',
-      // renderer: 'lit' supports appShell: false only; the packed consumer
-      // stays minimal and shell-free.
-      appShell: false,
-      html: {
-        title: 'packed-app-lit',
-      },
-    }),
-  ],
-});
-`;
-
 // ─── Browser continuation probe (Playwright child process) ──────────────────
 //
 // playwright-core calls os.release() at import time, which needs --allow-sys —
-// outside this tool's documented permission set. The probe therefore runs as a
-// `deno run -A` child against the repo config (which maps @playwright/test),
+// outside the harness's documented permission set. The probe therefore runs as
+// a `deno run -A` child against the repo config (which maps @playwright/test),
 // exactly how consumer-packaged-element.ts and the fixture e2e tasks invoke
 // Playwright. The script is generated into the temp consumer and removed with
 // it. Args: <baseUrl> <native|lit>.
@@ -1404,17 +523,17 @@ try {
 }
 `;
 
-// ─── Leg specifications ─────────────────────────────────────────────────────
+// ─── Leg specification ──────────────────────────────────────────────────────
 
-interface GetProbe {
+export interface PackedAppProbe {
   path: string;
   status: number;
   markers: string[];
   absentMarkers?: string[];
 }
 
-interface LegSpec {
-  renderer: Renderer;
+export interface PackedAppLegSpec {
+  renderer: PackedAppRenderer;
   /** npm externals pinned in the consumer package.json beyond vite/hono. */
   externals: Record<string, string>;
   /** Import-map additions beyond the shared @openelement/* pins. */
@@ -1425,7 +544,7 @@ interface LegSpec {
   viteConfig: string;
   /** `deno task check` entry list (quoted where the path has brackets). */
   checkEntries: string[];
-  probes: GetProbe[];
+  probes: PackedAppProbe[];
   /**
    * Dev-feedback edits for the dev cell: one page-component edit and one
    * route-module edit, each with the exact source strings and the probe path
@@ -1447,174 +566,9 @@ interface LegSpec {
   locationPattern: RegExp;
 }
 
-const NATIVE_LEG: LegSpec = {
-  renderer: 'native',
-  externals: {},
-  importMapExtras: {},
-  compilerOptions: {
-    lib: ['ES2022', 'DOM', 'DOM.Iterable'],
-    jsx: 'react-jsx',
-    jsxImportSource: '@openelement/element',
-  },
-  files: {
-    'app/store.ts': NATIVE_STORE,
-    'app/routes/index.tsx': NATIVE_ROUTE_INDEX,
-    'app/routes/notes/index.tsx': NATIVE_ROUTE_NOTES,
-    'app/routes/notes/[id].tsx': NATIVE_ROUTE_NOTE_DETAIL,
-    'app/routes/notes/new.tsx': NATIVE_ROUTE_NOTE_NEW,
-    'app/routes/404.tsx': NATIVE_ROUTE_404,
-    'app/components/page-home.tsx': NATIVE_PAGE_HOME,
-    'app/components/page-notes-index.tsx': NATIVE_PAGE_NOTES,
-    'app/components/page-note-detail.tsx': NATIVE_PAGE_DETAIL,
-    'app/components/page-note-new.tsx': NATIVE_PAGE_NEW,
-    'app/components/page-404.tsx': NATIVE_PAGE_404,
-    'app/islands/note-counter.tsx': NATIVE_ISLAND_COUNTER,
-  },
-  viteConfig: NATIVE_VITE_CONFIG,
-  checkEntries: [
-    'app/routes/index.tsx',
-    'app/routes/notes/index.tsx',
-    `app/routes/notes/[id].tsx`,
-    'app/routes/notes/new.tsx',
-    'app/routes/404.tsx',
-    'app/islands/note-counter.tsx',
-    'app/store.ts',
-  ],
-  probes: [
-    { path: '/', status: 200, markers: ['packed-app-native home', 'build-count=2'] },
-    {
-      path: '/notes',
-      status: 200,
-      markers: ['packed-app-native notes', 'note-count=2', 'Seed note one', 'Seed note two'],
-    },
-    {
-      path: '/notes/seed-1',
-      status: 200,
-      markers: [
-        '<title>packed-app-native — Seed note one</title>',
-        '<link rel="canonical" href="https://packed-consumer.example.test/notes/seed-1">',
-        '<link rel="alternate" href="https://packed-consumer.example.test/notes/seed-1" hreflang="en">',
-      ],
-    },
-    // #922 channel: a loader notFound() answers 404 with the author's message
-    // on the framework status page — no canonical.
-    {
-      path: '/notes/does-not-exist',
-      status: 404,
-      markers: ['note not found'],
-      absentMarkers: ['rel="canonical"'],
-    },
-    // #923 channel: unmatched paths render the custom styled 404 route.
-    {
-      path: '/definitely-not-a-route',
-      status: 404,
-      markers: ['packed-app-native styled not found'],
-      absentMarkers: ['rel="canonical"'],
-    },
-  ],
-  prerenderedExtras: [],
-  stripMarkers: false,
-  locationPattern: /^\/notes\/note-\d+\?created=1$/,
-  devEdits: {
-    componentFile: 'app/components/page-notes-index.tsx',
-    componentFrom: '<h1>packed-app-native notes</h1>',
-    componentTo: '<h1>packed-app-native notes (dev edit)</h1>',
-    routeFile: 'app/routes/notes/index.tsx',
-    routeFrom: 'note-count=',
-    routeTo: 'note-total=',
-    probePath: '/notes',
-  },
-};
-
-const LIT_LEG: LegSpec = {
-  renderer: 'lit',
-  externals: {
-    'lit': '3.3.3',
-    '@lit-labs/ssr': '4.1.0',
-    '@lit-labs/ssr-client': '1.1.8',
-  },
-  importMapExtras: {
-    '@openelement/router/lit': `npm:@openelement/router@${PACKAGE_VERSION}/lit`,
-    '@openelement/router/lit-ssr': `npm:@openelement/router@${PACKAGE_VERSION}/lit-ssr`,
-    'lit': 'npm:lit@3.3.3',
-    '@lit-labs/ssr': 'npm:@lit-labs/ssr@4.1.0',
-    '@lit-labs/ssr-client': 'npm:@lit-labs/ssr-client@1.1.8',
-  },
-  compilerOptions: {
-    lib: ['ES2022', 'DOM', 'DOM.Iterable'],
-  },
-  files: {
-    'app/store.ts': LIT_STORE,
-    'app/routes/index.ts': LIT_ROUTE_INDEX,
-    'app/routes/notes.ts': LIT_ROUTE_NOTES,
-    'app/routes/notes/[id].ts': LIT_ROUTE_NOTE_DETAIL,
-    'app/routes/notes/new.ts': LIT_ROUTE_NOTE_NEW,
-    'app/routes/404.ts': LIT_ROUTE_404,
-    'app/components/home-page.ts': LIT_PAGE_HOME,
-    'app/components/notes-list-page.ts': LIT_PAGE_NOTES,
-    'app/components/note-detail-page.ts': LIT_PAGE_DETAIL,
-    'app/components/note-new-page.ts': LIT_PAGE_NEW,
-    'app/components/not-found-page.ts': LIT_PAGE_404,
-    'app/islands/note-counter.ts': LIT_ISLAND_COUNTER,
-  },
-  viteConfig: LIT_VITE_CONFIG,
-  checkEntries: [
-    'app/routes/index.ts',
-    'app/routes/notes.ts',
-    `app/routes/notes/[id].ts`,
-    'app/routes/notes/new.ts',
-    'app/routes/404.ts',
-    'app/islands/note-counter.ts',
-    'app/store.ts',
-  ],
-  probes: [
-    { path: '/', status: 200, markers: ['packed-app-lit', 'build-count=2'] },
-    {
-      path: '/notes',
-      status: 200,
-      markers: ['packed-app-lit notes', 'note-count=2', 'First note', 'Second note'],
-    },
-    {
-      path: '/notes/n1',
-      status: 200,
-      markers: [
-        '<title>packed-app-lit — First note</title>',
-        '<link rel="canonical" href="https://packed-consumer.example.test/notes/n1">',
-        '<link rel="alternate" href="https://packed-consumer.example.test/notes/n1" hreflang="en">',
-      ],
-    },
-    {
-      path: '/notes/does-not-exist',
-      status: 404,
-      markers: ['no note with id'],
-      absentMarkers: ['rel="canonical"'],
-    },
-    {
-      path: '/definitely-not-a-route',
-      status: 404,
-      markers: ['packed-app-lit 404'],
-      absentMarkers: ['rel="canonical"'],
-    },
-  ],
-  // The lit 404 route keeps the default (static) renderIntent, so it is
-  // prerendered to dist/404.html at build time.
-  prerenderedExtras: ['dist/404.html'],
-  stripMarkers: true,
-  locationPattern: /^\/notes\/n\d+\?created=1$/,
-  devEdits: {
-    componentFile: 'app/components/notes-list-page.ts',
-    componentFrom: '<h1>packed-app-lit notes</h1>',
-    componentTo: '<h1>packed-app-lit notes (dev edit)</h1>',
-    routeFile: 'app/routes/notes.ts',
-    routeFrom: 'note-count=',
-    routeTo: 'note-total=',
-    probePath: '/notes',
-  },
-};
-
 // ─── Probe implementations ──────────────────────────────────────────────────
 
-async function runGetProbes(spec: LegSpec, baseUrl: string): Promise<string> {
+async function runGetProbes(spec: PackedAppLegSpec, baseUrl: string): Promise<string> {
   for (const probe of spec.probes) {
     const response = await fetch(`${baseUrl}${probe.path}`);
     const raw = await response.text();
@@ -1646,7 +600,7 @@ async function actionCount(baseUrl: string): Promise<number> {
 }
 
 /** POST /notes/new with a missing title: the action must answer 422. */
-async function postInvalid(spec: LegSpec, baseUrl: string): Promise<string> {
+async function postInvalid(spec: PackedAppLegSpec, baseUrl: string): Promise<string> {
   const before = await actionCount(baseUrl);
   const response = await fetch(`${baseUrl}/notes/new`, {
     method: 'POST',
@@ -1669,7 +623,7 @@ async function postInvalid(spec: LegSpec, baseUrl: string): Promise<string> {
 }
 
 /** POST /notes/new with a valid body: 303 PRG to the detail page. */
-async function postValid(spec: LegSpec, baseUrl: string): Promise<string> {
+async function postValid(spec: PackedAppLegSpec, baseUrl: string): Promise<string> {
   const before = await actionCount(baseUrl);
   const response = await fetch(`${baseUrl}/notes/new`, {
     method: 'POST',
@@ -1705,7 +659,7 @@ async function postValid(spec: LegSpec, baseUrl: string): Promise<string> {
   return `303 -> ${location}, PRG target renders the created note`;
 }
 
-// ─── Browser continuation probe runner ──────────────────────────────────────
+// ─── Browser continuation probe runners ─────────────────────────────────────
 
 /**
  * Run the generated Playwright continuation probe against one already-serving
@@ -1714,7 +668,11 @@ async function postValid(spec: LegSpec, baseUrl: string): Promise<string> {
  * lit hydrate-support adopts it, node identity survives interaction, and no
  * full reload happens.
  */
-async function runBrowserContinuationProbe(tmp: string, baseUrl: string, leg: Renderer) {
+async function runBrowserContinuationProbe(
+  tmp: string,
+  baseUrl: string,
+  leg: PackedAppRenderer,
+) {
   const probe = await run(
     Deno.execPath(),
     [
@@ -1740,7 +698,7 @@ async function runBrowserContinuationProbe(tmp: string, baseUrl: string, leg: Re
  * Failing to warm up would make the probe attribute a vite cold-start reload
  * to the island lifecycle — a false product defect.
  */
-async function runDevWarmupProbe(tmp: string, baseUrl: string, leg: Renderer) {
+async function runDevWarmupProbe(tmp: string, baseUrl: string, leg: PackedAppRenderer) {
   const probe = await run(
     Deno.execPath(),
     [
@@ -1763,10 +721,10 @@ async function runDevWarmupProbe(tmp: string, baseUrl: string, leg: Renderer) {
 // ─── Dev server session ─────────────────────────────────────────────────────
 //
 // The packed consumer's public development command is the same one the create
-// template exposes: `deno task dev` (npm:vite dev over the packed adapter
+// template exposes: `deno task dev` (npm:vite dev over the packed router
 // plugin). Development feedback is SSR re-render on the next request plus a
 // full page reload — no component-level HMR is promised or asserted. The
-// session proves, per renderer leg:
+// session proves:
 //   1. the dev server boots and serves the same routes/forms as the build
 //      (live SSR: /, /notes, detail, both 404 channels, form 422/303+PRG);
 //   2. the browser continuation contract holds in dev (island activates
@@ -1781,7 +739,7 @@ async function runDevWarmupProbe(tmp: string, baseUrl: string, leg: Renderer) {
 // module graph, which re-executes app/store.ts and resets the in-memory note
 // store — expected dev semantics, asserted nowhere after the edits.
 
-async function devSession(spec: LegSpec, tmp: string): Promise<string> {
+async function devSession(spec: PackedAppLegSpec, tmp: string): Promise<string> {
   const leg = spec.renderer;
   const label = `packed-app-${leg} dev server`;
   const devArgs = (port: number): string[] => [
@@ -1884,9 +842,9 @@ async function devSession(spec: LegSpec, tmp: string): Promise<string> {
 type ServeMode = 'start' | 'serve.mjs';
 
 interface SessionOutcome {
-  gets: Outcome;
-  form422: Outcome;
-  form303: Outcome;
+  gets: PackedAppOutcome;
+  form422: PackedAppOutcome;
+  form303: PackedAppOutcome;
 }
 
 /**
@@ -1894,12 +852,19 @@ interface SessionOutcome {
  * failures are captured per phase (the session keeps going so a GET failure
  * does not hide the form results); a readiness failure fails all three.
  */
-async function serveSession(spec: LegSpec, tmp: string, mode: ServeMode): Promise<SessionOutcome> {
+async function serveSession(
+  spec: PackedAppLegSpec,
+  tmp: string,
+  mode: ServeMode,
+): Promise<SessionOutcome> {
   const label = `packed-app-${spec.renderer} ${mode} server`;
   const argsFor = mode === 'start'
     ? () => ['task', 'start']
     : () => ['run', '-A', 'dist/server/serve.mjs'];
-  const pending = (phase: string): Outcome => ({ ok: false, detail: `${phase} not reached` });
+  const pending = (phase: string): PackedAppOutcome => ({
+    ok: false,
+    detail: `${phase} not reached`,
+  });
   const result: SessionOutcome = {
     gets: pending('GET probes'),
     form422: pending('form-422'),
@@ -1922,7 +887,7 @@ async function serveSession(spec: LegSpec, tmp: string, mode: ServeMode): Promis
 
 function combineFormOutcomes(
   label: string,
-  results: Partial<Record<ServeMode, Outcome>>,
+  results: Partial<Record<ServeMode, PackedAppOutcome>>,
 ): string {
   const modes: ServeMode[] = ['start', 'serve.mjs'];
   const parts = modes.map((mode) => {
@@ -1941,8 +906,8 @@ function combineFormOutcomes(
 // Follows .d.ts import edges from the published @openelement/router entries
 // (index/lit/lit-ssr/document) exactly like consumer-packaged-element.ts walks
 // @openelement/element. Every edge must resolve to a declaration file, and no
-// edge may name the compiler, the adapter, vite, a host builtin or a
-// workspace specifier. Missing declarations (the suspected deno pack defect:
+// edge may name the compiler, router-internal tooling, vite, a host builtin or
+// a workspace specifier. Missing declarations (the suspected deno pack defect:
 // pack silently drops some modules' types) are reported module-by-module and
 // FAIL the cell — never silently weakened.
 
@@ -2071,12 +1036,34 @@ function assertPackedElementLeavesKernelFree(tmp: string): string {
 
 // ─── Leg runner ─────────────────────────────────────────────────────────────
 
-interface Tarball {
+interface PackedAppTarball {
   name: string;
   path: string;
 }
 
-function consumerDenoJson(spec: LegSpec): Record<string, unknown> {
+/**
+ * Resolve the pack:dry-run tarballs for the canonical retained package line
+ * (#828) through the shared tarball naming helper (#793) so a new package
+ * cannot escape the proof. Fails fast when pack:dry-run has not run.
+ */
+async function resolvePackedAppTarballs(): Promise<PackedAppTarball[]> {
+  const workspacePackages = await readPackages();
+  const tarballs: PackedAppTarball[] = RETAINED_PACKAGE_NAMES.map((name) => {
+    const pkg = workspacePackages.find((candidate) => candidate.name === name);
+    if (!pkg) throw new Error(`Retained package missing from workspace graph: ${name}`);
+    return { name, path: join(repoRoot, tarballPath(pkg)) };
+  });
+  for (const tarball of tarballs) {
+    if (!existsSync(tarball.path)) {
+      throw new Error(
+        `Missing packed release artifact: ${tarball.path} (run \`deno task pack:dry-run\` first)`,
+      );
+    }
+  }
+  return tarballs;
+}
+
+function consumerDenoJson(spec: PackedAppLegSpec): Record<string, unknown> {
   return {
     imports: {
       '@openelement/router': `npm:@openelement/router@${PACKAGE_VERSION}`,
@@ -2104,11 +1091,24 @@ function consumerDenoJson(spec: LegSpec): Record<string, unknown> {
   };
 }
 
-async function runLeg(spec: LegSpec, tarballs: Tarball[]): Promise<void> {
+/**
+ * Run the complete packed-consumer qualification for one renderer leg:
+ * resolve the tarballs, stage the scratch consumer outside the repository,
+ * execute every verification cell, print the per-cell support matrix, and
+ * throw when any cell failed. The temp consumer is always removed.
+ */
+export async function qualifyPackedAppLeg(spec: PackedAppLegSpec): Promise<void> {
+  const startedAt = Date.now();
   const leg = spec.renderer;
+  const tarballs = await resolvePackedAppTarballs();
+  console.log(
+    `Packed app consumer qualification (${leg} renderer) for ${PACKAGE_VERSION} (#1339 §11), tarballs:`,
+  );
+  for (const tarball of tarballs) console.log(`  ${tarball.path}`);
+
   const tmp = await Deno.makeTempDir({ prefix: `openelement-packaged-app-${leg}-` });
-  const form422: Partial<Record<ServeMode, Outcome>> = {};
-  const form303: Partial<Record<ServeMode, Outcome>> = {};
+  const form422: Partial<Record<ServeMode, PackedAppOutcome>> = {};
+  const form303: Partial<Record<ServeMode, PackedAppOutcome>> = {};
   try {
     await cell(leg, 'install', [], async () => {
       // @jsr/* packages are served by JSR's npm compatibility layer (see
@@ -2165,7 +1165,7 @@ async function runLeg(spec: LegSpec, tarballs: Tarball[]): Promise<void> {
         }
       }
 
-      // Materialize the consumer app from the string constants above.
+      // Materialize the consumer app from the harness's source constants.
       Deno.writeTextFileSync(join(tmp, 'deno.json'), formatJson(consumerDenoJson(spec)));
       Deno.writeTextFileSync(join(tmp, 'vite.config.ts'), spec.viteConfig);
       for (const [path, content] of Object.entries(spec.files)) {
@@ -2298,56 +1298,24 @@ async function runLeg(spec: LegSpec, tarballs: Tarball[]): Promise<void> {
   } finally {
     await Deno.remove(tmp, { recursive: true }).catch(() => undefined);
   }
-}
 
-// ─── Entrypoint ─────────────────────────────────────────────────────────────
-
-const startedAt = Date.now();
-
-// Cover the canonical retained package line (#828) with the shared tarball
-// naming helper (#793) so a new package cannot escape the proof.
-const workspacePackages = await readPackages();
-const tarballs: Tarball[] = RETAINED_PACKAGE_NAMES.map((name) => {
-  const pkg = workspacePackages.find((candidate) => candidate.name === name);
-  if (!pkg) throw new Error(`Retained package missing from workspace graph: ${name}`);
-  return { name, path: join(repoRoot, tarballPath(pkg)) };
-});
-for (const tarball of tarballs) {
-  if (!existsSync(tarball.path)) {
-    throw new Error(
-      `Missing packed release artifact: ${tarball.path} (run \`deno task pack:dry-run\` first)`,
-    );
-  }
-}
-console.log(`Packed app consumer qualification for ${PACKAGE_VERSION} (#1339 §11), tarballs:`);
-for (const tarball of tarballs) console.log(`  ${tarball.path}`);
-
-for (const spec of [NATIVE_LEG, LIT_LEG]) {
-  const legStartedAt = Date.now();
-  await runLeg(spec, tarballs);
-  console.log(
-    `[${spec.renderer}] leg wall time: ${((Date.now() - legStartedAt) / 1000).toFixed(1)}s`,
-  );
-}
-
-console.log('\nSupport matrix (#1339 §11 packed-consumer proof):');
-for (const leg of ['native', 'lit'] as const) {
-  for (const name of CELL_NAMES) {
+  console.log(`\nSupport matrix (#1339 §11 packed-consumer proof, ${leg} renderer):`);
+  for (const name of PACKED_APP_CELL_NAMES) {
     const outcome = outcomes.get(cellKey(leg, name));
     const status = outcome?.ok ? 'PASS' : 'FAIL';
     const detail = outcome && !outcome.ok ? ` — ${outcome.detail.split('\n')[0]}` : '';
     console.log(`  ${status} ${leg} ${name}${detail}`);
   }
-}
-console.log(`Total wall time: ${((Date.now() - startedAt) / 1000).toFixed(1)}s`);
+  console.log(`Total wall time: ${((Date.now() - startedAt) / 1000).toFixed(1)}s`);
 
-const failures = [...outcomes.entries()].filter(([, outcome]) => !outcome.ok);
-if (failures.length > 0) {
-  throw new Error(
-    `Packed app consumer qualification FAILED (${failures.length} cells): ` +
-      failures.map(([key]) => key).join(', '),
+  const failures = [...outcomes.entries()].filter(([, outcome]) => !outcome.ok);
+  if (failures.length > 0) {
+    throw new Error(
+      `Packed app consumer qualification FAILED (${failures.length} cells): ` +
+        failures.map(([key]) => key).join(', '),
+    );
+  }
+  console.log(
+    `\nPacked app consumer qualification passed for ${PACKAGE_VERSION}: ${leg} renderer green on all ${PACKED_APP_CELL_NAMES.length} cells.`,
   );
 }
-console.log(
-  `\nPacked app consumer qualification passed for ${PACKAGE_VERSION}: both renderers green on all ${CELL_NAMES.length} cells.`,
-);
