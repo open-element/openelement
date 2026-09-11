@@ -69,9 +69,8 @@ const FORBIDDEN_LEGACY_PATHS: Record<string, ReadonlyArray<string>> = {
 };
 
 // Marker strings of the removed v0.43 marker-hydration channel, scanned in
-// comment-stripped packed sources. The same literals are forbidden in built
-// artifacts by tools/check-v044-legacy-absence.ts; this rule extends that
-// absence contract to the published src/** payload.
+// comment-stripped packed sources. This rule extends the historical built-
+// artifact absence contract to the published src/** payload.
 const FORBIDDEN_LEGACY_SOURCE_PATTERNS: Record<string, ReadonlyArray<[RegExp, string]>> = {
   '@openelement/element': [
     [/\bDATA_SSR_PROPS\b/u, 'dead data-ssr-props channel export (#836, removed in 0.44)'],

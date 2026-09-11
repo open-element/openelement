@@ -8,7 +8,7 @@
  * @openelement/element + the jsx-runtime via jsxImportSource). Marker strings
  * are renamed so the harness log is attributable to the packed consumer, not
  * the fixtures. All process/server/temp-project lifecycle, the cell
- * framework, and the probes live in tools/lib/packed-consumer.ts; the
+ * framework, and the probes live in tools/consumer-packaged-shared.ts; the
  * renderer-specific continuation claim (the compiled kernel claims the island
  * DSD, node identity survives interaction, no full reload) is asserted by the
  * generated Playwright probe that module runs with `native`.
@@ -16,7 +16,7 @@
  * Run via the root `consumer:packaged-app` task (chained with the lit leg).
  */
 
-import { type PackedAppLegSpec, qualifyPackedAppLeg } from './lib/packed-consumer.ts';
+import { type PackedAppLegSpec, qualifyPackedAppLeg } from './consumer-packaged-shared.ts';
 
 // ─── Consumer app sources (native renderer leg) ─────────────────────────────
 

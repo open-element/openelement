@@ -1,5 +1,5 @@
 import { assert, assertFalse } from '@std/assert';
-import { DECLARATION_LEAK_PATTERN } from './packed-consumer.ts';
+import { DECLARATION_LEAK_PATTERN } from './consumer-packaged-shared.ts';
 
 Deno.test('declaration leak pattern catches real router/cli tooling edges', () => {
   for (

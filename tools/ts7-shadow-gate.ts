@@ -16,7 +16,7 @@
  * - The TS7 tsc CLI is exercised here, and only here, against the Node/npm
  *   consumer contract: the pack:dry-run tarballs installed into a disposable
  *   consumer OUTSIDE the workspace (same observational rule as
- *   tools/lib/packed-consumer.ts — qualify the packed artifact, never the
+ *   tools/consumer-packaged-shared.ts — qualify the packed artifact, never the
  *   workspace source).
  *
  * Cells (every cell prints PASS/FAIL; any TS7 checker error fails the run —

@@ -8,7 +8,7 @@
  * published @openelement/router/lit subpath, rendered server-side by
  * @lit-labs/ssr (DSD) and hydrated by @lit-labs/ssr-client. All
  * process/server/temp-project lifecycle, the cell framework, and the probes
- * live in tools/lib/packed-consumer.ts; the renderer-specific continuation
+ * live in tools/consumer-packaged-shared.ts; the renderer-specific continuation
  * claim (hydrate-support lifts defer-hydration adopting the island DSD, node
  * identity survives interaction, no full reload) is asserted by the generated
  * Playwright probe that module runs with `lit`.
@@ -17,7 +17,7 @@
  */
 
 import { PACKAGE_VERSION } from './project-constants.ts';
-import { type PackedAppLegSpec, qualifyPackedAppLeg } from './lib/packed-consumer.ts';
+import { type PackedAppLegSpec, qualifyPackedAppLeg } from './consumer-packaged-shared.ts';
 
 // ─── Consumer app sources (lit renderer leg) ────────────────────────────────
 
