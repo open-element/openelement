@@ -221,3 +221,58 @@ Deno.test('package artifacts: marker scan ignores comments and other packages', 
     },
   );
 });
+
+Deno.test('package artifacts: rejects a forbidden legacy src/types.ts path', async () => {
+  await withPackage(
+    '@openelement/element',
+    {
+      'index.js': 'export {};\n',
+      'src/types.ts': 'export type VNode = { fake: true };\n',
+    },
+    (root) => {
+      const result = scanExtractedPackage('@openelement/element', root);
+      assert(
+        result.violations.some((violation) => violation.path.endsWith('src/types.ts')),
+        `expected a src/types.ts violation, got: ${JSON.stringify(result.violations)}`,
+      );
+    },
+  );
+});
+
+Deno.test('package artifacts: rejects the dead data-ssr-props channel export', async () => {
+  await withPackage(
+    '@openelement/element',
+    { 'index.js': 'export const DATA_SSR_PROPS = "data-ssr-props";\n' },
+    (root) => {
+      const result = scanExtractedPackage('@openelement/element', root);
+      assert(
+        result.violations.some((violation) => violation.message.includes('data-ssr-props')),
+        `expected a data-ssr-props violation, got: ${JSON.stringify(result.violations)}`,
+      );
+    },
+  );
+});
+
+Deno.test('package artifacts: rejects a legacy marker-hydration attribute literal', async () => {
+  await withPackage(
+    '@openelement/element',
+    { 'index.js': 'el.setAttribute("data-signal-x", "1");\n' },
+    (root) => {
+      const result = scanExtractedPackage('@openelement/element', root);
+      assert(
+        result.violations.some((violation) => violation.message.includes('marker-based hydration')),
+        `expected a marker-hydration violation, got: ${JSON.stringify(result.violations)}`,
+      );
+    },
+  );
+});
+
+Deno.test('package artifacts: accepts a clean compiled package tree', async () => {
+  await withPackage(
+    '@openelement/element',
+    { 'index.js': 'export const version = 1;\n' },
+    (root) => {
+      assertEquals(scanExtractedPackage('@openelement/element', root).violations, []);
+    },
+  );
+});
