@@ -1,4 +1,4 @@
-import { NITRO_COMPATIBILITY_DATE } from '../../../../tools/project-constants.ts';
+import { NITRO_COMPATIBILITY_DATE } from '../../../../tools/nitro-compatibility.ts';
 
 const preset = process.env.OPEN_ELEMENT_NITRO_PRESET || 'node';
 const outputDir = preset === 'cloudflare_module' ? '.output-workers' : '.output-node';

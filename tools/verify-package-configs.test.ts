@@ -22,7 +22,7 @@ Deno.test('create version: missing CREATE_VERSION anchor is rejected', () => {
   assert(failures[0].includes('CREATE_VERSION anchor missing'));
 });
 
-Deno.test('create version: real repo source is in sync with project constants', () => {
+Deno.test('create version: real repo source is in sync with release state', () => {
   // main() runs this against disk; asserting it here keeps the embedded CLI
   // version honest when a bump forgets packages/create/src/version.ts (#713).
   assertEquals(createVersionFailures(Deno.readTextFileSync('packages/create/src/version.ts')), []);

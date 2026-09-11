@@ -18,7 +18,7 @@ import { assertCompatibilityDate } from './lib/compatibility-date.ts';
 import { normalizeSlashes } from './lib/path.ts';
 import { runWithOutput } from './lib/process.ts';
 import { extractStaticModuleSpecifiers } from './lib/typescript-ast.ts';
-import { NITRO_COMPATIBILITY_DATE } from './project-constants.ts';
+import { NITRO_COMPATIBILITY_DATE } from './nitro-compatibility.ts';
 
 function findMissingGeneratedImports(
   source: string,

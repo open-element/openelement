@@ -42,7 +42,12 @@ const GATES: readonly GateDefinition[] = [
     name: 'verify:configs',
     command: ['deno', 'task', 'verify:configs'],
     tiers: ['ci', 'release'],
-    triggers: [/^packages\//, /^deno\.json$/, /^tools\/project-constants\.ts$/],
+    triggers: [
+      /^packages\//,
+      /^deno\.json$/,
+      /^docs\/release\/release-state\.json$/,
+      /^tools\/project-constants\.ts$/,
+    ],
   },
   {
     name: 'url-pattern-list:provenance',

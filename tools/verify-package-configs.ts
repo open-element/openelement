@@ -21,7 +21,7 @@ export function createVersionFailures(createVersionSource: string): string[] {
   if (match[1] !== PACKAGE_VERSION) {
     return [
       `packages/create/src/version.ts: CREATE_VERSION ${match[1]} does not match ` +
-      `tools/project-constants.ts PACKAGE_VERSION ${PACKAGE_VERSION}`,
+      `docs/release/release-state.json sourceVersion ${PACKAGE_VERSION}`,
     ];
   }
   return [];

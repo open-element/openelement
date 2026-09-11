@@ -1,8 +1,7 @@
-import { RETAINED_PACKAGE_NAMES } from './project-constants.ts';
-
 export type ReleaseState = {
   schemaVersion: number;
   sourceVersion: string;
+  packages: string[];
   publishedVersion: string;
   latestLandedTrain: string;
   activeTarget: string;
@@ -16,7 +15,7 @@ export function validateReleaseState(
 ): string[] {
   const failures: string[] = [];
   if (state.schemaVersion !== 1) failures.push('unsupported release-state schema');
-  for (const name of RETAINED_PACKAGE_NAMES) {
+  for (const name of state.packages) {
     const version = packageVersions.get(name);
     if (!version) failures.push(`missing retained package: ${name}`);
     else if (version !== state.sourceVersion) {

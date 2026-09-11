@@ -2,7 +2,7 @@ import { walkSync } from '@std/fs/walk';
 import { assertCompatibilityDate } from './lib/compatibility-date.ts';
 import { exists, readJson } from './lib/fs.ts';
 import { runWithOutput } from './lib/process.ts';
-import { NITRO_COMPATIBILITY_DATE } from './project-constants.ts';
+import { NITRO_COMPATIBILITY_DATE } from './nitro-compatibility.ts';
 
 const preset = Deno.args[0];
 

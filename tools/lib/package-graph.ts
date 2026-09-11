@@ -273,7 +273,7 @@ export function packagesByVersion(packages: PackageInfo[]): Map<string, string[]
 
 export function releasePublishOrder(packages: PackageInfo[]): PackageInfo[] {
   // Publish-priority ranking of the canonical retained package line
-  // (RETAINED_PACKAGE_NAMES in tools/project-constants.ts), dependency-lean
+  // (the package roster in docs/release/release-state.json), dependency-lean
   // packages first. The order is a deliberate permutation, not derivable
   // from the canonical list's ordering; a new retained package must be
   // inserted here by rank — unranked packages publish last, and the

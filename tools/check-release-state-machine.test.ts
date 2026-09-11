@@ -4,6 +4,12 @@ import { type ReleaseState, validateReleaseState } from './check-release-state-m
 const state: ReleaseState = {
   schemaVersion: 1,
   sourceVersion: '1.0.0-alpha.1',
+  packages: [
+    '@openelement/adapter-vite',
+    '@openelement/router',
+    '@openelement/create',
+    '@openelement/element',
+  ],
   publishedVersion: '0.44.0-beta.2.2',
   latestLandedTrain: 'v0.44.0-beta.2.2',
   activeTarget: 'v1.0.0-alpha.1',
