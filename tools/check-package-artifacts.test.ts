@@ -70,7 +70,9 @@ Deno.test('package artifacts: allows documented host API escape hatches', async 
   await withPackage(
     '@openelement/router',
     {
-      'i18n-plugin.js': `
+      'README.md': 'router',
+      'LICENSE': 'MIT',
+      'build-tool.js': `
         // deno-api-free:ignore build-time plugin
         import process from 'node:process';
         export const cwd = process.cwd();
@@ -87,7 +89,9 @@ Deno.test('package artifacts: rejects a non-leading host API escape directive', 
   await withPackage(
     '@openelement/router',
     {
-      'i18n-plugin.js': `
+      'README.md': 'router',
+      'LICENSE': 'MIT',
+      'build-tool.js': `
         import process from 'node:process';
         // deno-api-free:ignore build-time plugin
         export const cwd = process.cwd();
@@ -125,9 +129,45 @@ Deno.test('package artifacts: rejects missing module type and CJS entry', async 
   }
 });
 
-Deno.test('package artifacts: rejects adapter tests and fixtures', async () => {
+Deno.test('package artifacts: router host tooling paths bypass the host API scan', async () => {
   await withPackage(
-    '@openelement/adapter-vite',
+    '@openelement/router',
+    {
+      'README.md': 'router',
+      'LICENSE': 'MIT',
+      'index.js': 'export {};',
+      'src/cli/build.js': `import process from 'node:process';\nexport const cwd = process.cwd();`,
+      'src/vite/plugin.js': `import { createServer } from 'node:http';\nexport { createServer };`,
+      'src/nitro-mount.js': `import process from 'node:process';\nexport const env = process.env;`,
+    },
+    (root) => {
+      assertEquals(scanExtractedPackage('@openelement/router', root).violations, []);
+    },
+  );
+});
+
+Deno.test('package artifacts: router runtime paths still fail closed on host APIs', async () => {
+  await withPackage(
+    '@openelement/router',
+    {
+      'README.md': 'router',
+      'LICENSE': 'MIT',
+      'src/router-http.js':
+        `import process from 'node:process';\nexport const cwd = process.cwd();`,
+    },
+    (root) => {
+      const messages = scanExtractedPackage('@openelement/router', root).violations.map((v) =>
+        v.message
+      );
+      assert(messages.includes('node:* import'));
+      assert(messages.includes('Node process global'));
+    },
+  );
+});
+
+Deno.test('package artifacts: rejects router tests and fixtures', async () => {
+  await withPackage(
+    '@openelement/router',
     {
       'README.md': 'adapter',
       'LICENSE': 'MIT',
@@ -136,7 +176,7 @@ Deno.test('package artifacts: rejects adapter tests and fixtures', async () => {
       'fixtures/project.ts': 'export {};',
     },
     (root) => {
-      const messages = scanExtractedPackage('@openelement/adapter-vite', root).violations.map((v) =>
+      const messages = scanExtractedPackage('@openelement/router', root).violations.map((v) =>
         v.message
       );
       assertEquals(
@@ -213,6 +253,8 @@ Deno.test('package artifacts: marker scan ignores comments and other packages', 
   await withPackage(
     '@openelement/router',
     {
+      'README.md': 'router',
+      'LICENSE': 'MIT',
       'index.js': 'export {};',
       'src/notes.ts': `export const marker = 'data-signal';`,
     },

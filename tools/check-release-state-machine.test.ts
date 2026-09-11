@@ -5,7 +5,6 @@ const state: ReleaseState = {
   schemaVersion: 1,
   sourceVersion: '1.0.0-alpha.1',
   packages: [
-    '@openelement/adapter-vite',
     '@openelement/router',
     '@openelement/create',
     '@openelement/element',
@@ -21,7 +20,7 @@ Deno.test('release state accepts an empty historical GitHub Release dependency m
   const versions = new Map([
     ['@openelement/element', state.sourceVersion],
     ['@openelement/router', state.sourceVersion],
-    ['@openelement/adapter-vite', state.sourceVersion],
+
     ['@openelement/create', state.sourceVersion],
   ]);
   assertEquals(validateReleaseState(state, versions), []);
@@ -31,7 +30,7 @@ Deno.test('release state rejects a pre-1.0 active target', () => {
   const versions = new Map([
     ['@openelement/element', state.sourceVersion],
     ['@openelement/router', state.sourceVersion],
-    ['@openelement/adapter-vite', state.sourceVersion],
+
     ['@openelement/create', state.sourceVersion],
   ]);
   assertEquals(validateReleaseState({ ...state, activeTarget: 'v0.44.0-beta.2.3' }, versions), [

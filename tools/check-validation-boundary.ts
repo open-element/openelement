@@ -11,7 +11,6 @@ import { extractStaticModuleSpecifiers } from './lib/typescript-ast.ts';
 const SOURCE_ROOTS = [
   'packages/element/src',
   'packages/router/src',
-  'packages/adapter-vite/src',
   'packages/create/src',
 ];
 

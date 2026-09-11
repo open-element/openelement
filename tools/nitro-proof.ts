@@ -16,7 +16,7 @@ if (preset !== 'node' && preset !== 'workers') {
 }
 
 const root = new URL('../', import.meta.url);
-const fixture = new URL('packages/adapter-vite/__fixtures__/nitro-proof/', root);
+const fixture = new URL('fixtures/router-nitro/', root);
 const outputName = preset === 'workers' ? '.output-workers' : '.output-node';
 const output = new URL(`${outputName}/`, fixture);
 const nitroPreset = preset === 'workers' ? 'cloudflare_module' : 'node-server';

@@ -1,7 +1,7 @@
 import { assertEquals } from '@std/assert';
 import { chromium, firefox, webkit } from '@playwright/test';
 import { createServer } from 'vite';
-import { generateWorkspaceAliases } from '../../adapter-vite/src/workspace-alias.ts';
+import { generateWorkspaceAliases } from '../src/vite/workspace-alias.ts';
 
 Deno.test({
   name: 'Navigation API: three-browser push/replace/traversal and stale guard regression',

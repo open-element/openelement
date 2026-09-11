@@ -20,12 +20,12 @@ vendor/jsr.io/@std/*/*
 dist/
 custom-dist/
 dist-test-*/
-packages/adapter-vite/__fixtures__/nitro-proof/.output-*/
-packages/adapter-vite/__fixtures__/nitro-proof/.wrangler/
-packages/adapter-vite/__fixtures__/nitro-proof/.nitro/
-packages/adapter-vite/__fixtures__/nitro-proof/node_modules/
-packages/adapter-vite/__fixtures__/request-time/.output-*/
-packages/adapter-vite/__fixtures__/request-time/.nitro/
+fixtures/router-nitro/.output-*/
+fixtures/router-nitro/.wrangler/
+fixtures/router-nitro/.nitro/
+fixtures/router-nitro/node_modules/
+fixtures/router-request-time/.output-*/
+fixtures/router-request-time/.nitro/
 .openElement/
 
 # npm (Deno project - no npm lockfiles)

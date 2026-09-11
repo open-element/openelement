@@ -7,7 +7,7 @@
  * verification import from here instead of re-rolling parse/compare regexes.
  *
  * Import-free on purpose because related release constants are loaded by Nitro/jiti under Node
- * (packages/adapter-vite/__fixtures__/nitro-proof/nitro.config.ts), so nothing
+ * (fixtures/router-nitro/nitro.config.ts), so nothing
  * here may pull jsr:/npm: specifiers (no @std/semver). The hand-rolled grammar
  * below is exactly the strict domain every consumer already enforced on top of
  * @std/semver.

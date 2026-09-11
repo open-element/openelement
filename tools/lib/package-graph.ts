@@ -282,7 +282,6 @@ export function releasePublishOrder(packages: PackageInfo[]): PackageInfo[] {
   const releasePriority = [
     '@openelement/element',
     '@openelement/router',
-    '@openelement/adapter-vite',
     '@openelement/create',
   ];
   const topological = sortPackages(packages);

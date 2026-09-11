@@ -1,5 +1,5 @@
 /**
- * Generates packages/adapter-vite/src/generated-export-files.ts from the
+ * Generates packages/router/src/vite/generated-export-files.ts from the
  * "exports" maps declared in each package deno.json.
  *
  * OPENELEMENT_EXPORT_FILES used to be a
@@ -31,7 +31,7 @@ interface PackageConfig {
 }
 
 const REPO_ROOT = new URL('../', import.meta.url).pathname;
-const TARGET = `${REPO_ROOT}packages/adapter-vite/src/generated-export-files.ts`;
+const TARGET = `${REPO_ROOT}packages/router/src/vite/generated-export-files.ts`;
 
 async function resolverPackages(): Promise<string[]> {
   const rootConfig = await readJson<RootConfig>(`${REPO_ROOT}deno.json`);

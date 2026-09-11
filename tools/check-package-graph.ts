@@ -57,7 +57,6 @@ async function readJson(path: string): Promise<unknown> {
 export const ALLOWED_DEPENDENCY_DIRECTION: Readonly<Record<string, readonly string[]>> = {
   '@openelement/element': [],
   '@openelement/router': ['@openelement/element', '@openelement/url-pattern-list'],
-  '@openelement/adapter-vite': ['@openelement/element', '@openelement/router'],
   '@openelement/create': [],
 };
 

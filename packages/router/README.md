@@ -1,7 +1,17 @@
 # @openelement/router
 
-Application authoring API for openElement: pages, routes, loaders, actions,
-islands and the SPA bootstrap.
+Application authoring API and lifecycle tooling for openElement: pages,
+routes, loaders, actions, islands, the SPA bootstrap, and the Vite/SSG build
+pipeline (dev/build/start/preview) that ships Framework Mode applications.
+
+The package root and runtime subpaths stay host-free: installing
+`@openelement/router` for Route Mode pulls no Vite, Nitro, Element, or Node
+host dependencies. Host tooling lives behind explicit subpath exports
+(`./vite`, `./cli/build`, `./cli/start`) whose dependencies are optional
+peers. The `./nitro-mount` deployment subpath instead expects the deploying
+application to install `nitro` itself: declaring it as a peer would make npm
+auto-place `nitro@3.0.0`, whose own `vite@^7` peer conflicts with the
+tooling's `vite@^8` requirement and breaks a bare `npm install`.
 
 > The 1.0 baseline uses compiled element classes for page authoring
 > (ADR-0143) while Router remains independently consumable.
@@ -42,10 +52,10 @@ export default definePage(HomePage, {
 });
 ```
 
-Use the Vite facade from `@openelement/adapter-vite` in `vite.config.ts`:
+Use the Vite facade from `@openelement/router/vite` in `vite.config.ts`:
 
 ```ts
-import { openElement } from '@openelement/adapter-vite';
+import { openElement } from '@openelement/router/vite';
 import { defineConfig } from 'vite';
 
 export default defineConfig({
@@ -54,11 +64,41 @@ export default defineConfig({
       routesDir: 'app/routes',
       islandsDir: 'app/islands',
       packageIslands: ['@acme/components'],
-      content: { blog: { contentDir: 'content/blog' } },
-      i18n: { locales: ['en', 'zh'], defaultLocale: 'en' },
     }),
   ],
 });
+```
+
+`openElement()` scans routes and islands, generates virtual entries, builds
+client island chunks, runs SSG, and writes post-processed HTML. For a leaner
+setup, use `openPipeline()` from the same subpath.
+
+## Lifecycle CLI
+
+Generated applications build and serve through the Router CLI subpaths:
+
+```bash
+deno run -A npm:@openelement/router/cli/build   # production build (SSG + client)
+deno run -A npm:@openelement/router/cli/start   # serve built output
+```
+
+The build executes in ADR-0023 order — SSG (Phase 3) runs before the client
+bundle (Phase 2), because client chunk hashes do not affect HTML content and
+script injection is a post-processing step:
+
+```text
+Phase 1: route, API, middleware, and island scan
+Phase 3: SSR bundle, Hono toSSG(), HTML post-processing
+Phase 2: client island entry and browser chunks
+```
+
+## Nitro deploy mount
+
+Nitro is the first-party production deployment target proven by the Node and
+Workers fixtures. Import the mount from the explicit subpath:
+
+```ts
+import { createOpenElementNitroHandler } from '@openelement/router/nitro-mount';
 ```
 
 ## Authoring API
@@ -104,9 +144,10 @@ response-header, or route-metadata capabilities.
 `OpenElement` remains the runtime primitive in `@openelement/element`, but application
 authors should start from this package.
 
-Build configuration is owned by `@openelement/adapter-vite`; generated projects
-and docs import its `openElement()` facade from the package root rather than an
-app-package Vite subpath.
+Build configuration is owned by this package's tooling subpaths; generated
+projects import the `openElement()` facade from `@openelement/router/vite` and
+run builds through `@openelement/router/cli/build`, so the runtime import
+surface stays free of host dependencies.
 
 ## Install
 

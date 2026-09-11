@@ -19,6 +19,18 @@ const RUNTIME_FREE_PACKAGES = new Set([
   '@openelement/router',
 ]);
 
+/**
+ * Host-side tooling trees inside runtime-free packages: the packed artifacts
+ * ship src/** transpiled, so the Router lifecycle tooling (Vite orchestration,
+ * build/start CLI, Nitro mount) would otherwise trip the host-API scan. These
+ * paths mirror HOST_TOOLING_ALLOWLIST in tools/check-deno-api-free.ts and are
+ * reachable only through the @openelement/router/vite, /cli/* and
+ * /nitro-mount subpaths; every other packed file stays fail-closed.
+ */
+const HOST_TOOLING_PATH_ALLOWLIST: Record<string, RegExp> = {
+  '@openelement/router': /^src\/(?:vite\/|cli\/|nitro-mount\.)/,
+};
+
 const RUNTIME_EXTENSIONS = new Set(['.js', '.mjs', '.cjs']);
 const CJS_PATTERNS: Array<[RegExp, string]> = [
   [/\brequire\s*\(/, 'CommonJS require()'],
@@ -171,7 +183,7 @@ export function scanExtractedPackage(packageName: string, packageRoot: string): 
   const violations: ArtifactViolation[] = [];
   pushPackageJsonViolations(packageName, `${packageRoot}/package.json`, violations);
 
-  const runtimeFree = RUNTIME_FREE_PACKAGES.has(packageName);
+  const runtimeFreePackage = RUNTIME_FREE_PACKAGES.has(packageName);
   const forbiddenPaths = FORBIDDEN_LEGACY_PATHS[packageName] ?? [];
   const forbiddenSourcePatterns = FORBIDDEN_LEGACY_SOURCE_PATTERNS[packageName] ?? [];
   const files = new Set<string>();
@@ -200,7 +212,7 @@ export function scanExtractedPackage(packageName: string, packageRoot: string): 
       }
     }
     if (
-      packageName === '@openelement/adapter-vite' &&
+      packageName === '@openelement/router' &&
       relative.split('/').some((segment) =>
         segment === '__tests__' || segment === '__fixtures__' || segment === 'fixtures'
       )
@@ -211,10 +223,12 @@ export function scanExtractedPackage(packageName: string, packageRoot: string): 
       });
     }
     if (!RUNTIME_EXTENSIONS.has(extension(entry.path))) continue;
+    const runtimeFree = runtimeFreePackage &&
+      !HOST_TOOLING_PATH_ALLOWLIST[packageName]?.test(relative);
     violations.push(...scanRuntimeFile(packageRoot, entry.path, packageName, runtimeFree));
   }
 
-  if (packageName === '@openelement/adapter-vite') {
+  if (packageName === '@openelement/router') {
     for (const required of ['package.json', 'README.md', 'LICENSE']) {
       if (!files.has(required)) {
         violations.push({

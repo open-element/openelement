@@ -115,7 +115,7 @@ function failUncompiled(ctor: object, tag: string): never {
   throw new OpenElementError(
     `[openElement] <${tag}> (${classNameOf(ctor)}) has no compiled Part Program. ` +
       'renderDsd only serializes classes produced by the 0.44 compiler ' +
-      '(@openelement/adapter-vite open:compiled-element transform).',
+      '(@openelement/element/compiler open:compiled-element transform).',
     { code: 'OE_PROGRAM_MISSING', phase: 'ssr' },
   );
 }

@@ -10,7 +10,7 @@
  * workspace-alias.ts cannot substitute workspace source), installs the
  * tarballs hermetically through an explicit package.json (file: deps + pinned
  * externals), materializes a minimal notes app modeled on
- * packages/adapter-vite/__fixtures__/app-flow-{native,lit}/ using only
+ * fixtures/router-{native,lit}-framework/ using only
  * published specifiers, and then runs the verification cells:
  *
  *   install                hermetic npm install of the tarballs
@@ -33,13 +33,13 @@
  *                          (native: kernel claims the DSD; lit: hydrate-support
  *                          lifts defer-hydration adopting the DSD)
  *   boundary               dist/client asset scan + @openelement/router .d.ts
- *                          declaration-graph walk (no compiler/adapter-vite/
+ *                          declaration-graph walk (no compiler/router-vite/
  *                          node:/workspace: edges, every edge resolves)
  *
  * Boundary notes: a rollup generateBundle module-id check (as in
  * consumer-packaged-element.ts) cannot be injected here — the packed
  * cli/build owns the island client build with configFile:false
- * (packages/adapter-vite/src/cli/build-client.ts), so the consumer
+ * (packages/router/src/cli/build-client.ts), so the consumer
  * vite.config plugin list never applies to the browser bundle. The
  * sanctioned alternative is a scan of the emitted dist/client assets: no
  * asset path or surviving import specifier may match the boundary pattern.
@@ -78,9 +78,10 @@ const SERVER_READY_TIMEOUT_MS = 3 * 60_000;
 const BROWSER_TIMEOUT_MS = 5 * 60_000;
 
 /** Boundary pattern: no compiler, adapter, host or workspace leakage. */
-const BOUNDARY_ID_PATTERN = /compiler|adapter-vite|node:/;
-const BOUNDARY_SPECIFIER_PATTERN = /compiler|adapter-vite|^node:|workspace:/;
-const DECLARATION_LEAK_PATTERN = /compiler|adapter-vite|\bvite\b|^node:|workspace:/;
+const BOUNDARY_ID_PATTERN = /compiler|router(?:\/src)?\/vite|router\/cli|node:/;
+const BOUNDARY_SPECIFIER_PATTERN = /compiler|router(?:\/src)?\/vite|router\/cli|^node:|workspace:/;
+const DECLARATION_LEAK_PATTERN =
+  /compiler|router(?:\/src)?\/vite|router\/cli|\bvite\b|^node:|workspace:/;
 
 async function run(
   command: string,
@@ -368,7 +369,7 @@ async function attempt(fn: () => Promise<string | undefined>): Promise<Outcome> 
 
 // ─── Consumer app sources (native renderer leg) ─────────────────────────────
 //
-// Shapes copied from packages/adapter-vite/__fixtures__/app-flow-native/,
+// Shapes copied from fixtures/router-native-framework/,
 // importing only published specifiers (@openelement/router, @openelement/element
 // + the jsx-runtime via jsxImportSource). Marker strings are renamed so the
 // tool log is attributable to the packed consumer, not the fixtures.
@@ -775,7 +776,7 @@ export default class NoteCounter extends OpenElement {
 }
 `;
 
-const NATIVE_VITE_CONFIG = `import { openElement } from '@openelement/adapter-vite';
+const NATIVE_VITE_CONFIG = `import { openElement } from '@openelement/router/vite';
 import { defineConfig } from 'vite';
 
 export default defineConfig({
@@ -804,7 +805,7 @@ export default defineConfig({
 // ─── Consumer app sources (lit renderer leg) ────────────────────────────────
 //
 // Same application shape on the explicitly-configured lit renderer, modeled
-// on packages/adapter-vite/__fixtures__/app-flow-lit/: pages are LitElement
+// on fixtures/router-lit-framework/: pages are LitElement
 // classes default-exported via defineLitPage() from the published
 // @openelement/router/lit subpath, rendered server-side by @lit-labs/ssr (DSD)
 // and hydrated by @lit-labs/ssr-client.
@@ -1224,7 +1225,7 @@ export default class NoteCounter extends LitElement {
 }
 `;
 
-const LIT_VITE_CONFIG = `import { openElement } from '@openelement/adapter-vite';
+const LIT_VITE_CONFIG = `import { openElement } from '@openelement/router/vite';
 import { defineConfig } from 'vite';
 
 export default defineConfig({
@@ -2020,7 +2021,7 @@ function walkRouterDeclarations(tmp: string): string {
 //
 // #1339 review: the kernel-free claim for the element leaves must hold on the
 // PACKED artifact, not only the workspace source graph (which
-// packages/adapter-vite/__tests__/lit-graph-boundary.test.ts proves). Walk the
+// packages/router/__tests__/lit-graph-boundary.test.ts proves). Walk the
 // installed @openelement/element/src/{html,logger,authoring}.js graphs inside
 // the consumer's node_modules and require the Native runtime kernel (the root
 // barrel, the compiled-runtime facade, the compiled serializer, the signal
@@ -2079,7 +2080,7 @@ function consumerDenoJson(spec: LegSpec): Record<string, unknown> {
   return {
     imports: {
       '@openelement/router': `npm:@openelement/router@${PACKAGE_VERSION}`,
-      '@openelement/adapter-vite': `npm:@openelement/adapter-vite@${PACKAGE_VERSION}`,
+      '@openelement/router/vite': `npm:@openelement/router@${PACKAGE_VERSION}/vite`,
       '@openelement/element': `npm:@openelement/element@${PACKAGE_VERSION}`,
       '@openelement/element/jsx-runtime': `npm:@openelement/element@${PACKAGE_VERSION}/jsx-runtime`,
       '@openelement/element/jsx-dev-runtime':
@@ -2093,10 +2094,8 @@ function consumerDenoJson(spec: LegSpec): Record<string, unknown> {
     tasks: {
       // The public development command, same shape as the create template.
       dev: `deno run --config deno.json -A npm:vite@8.0.16 dev`,
-      build:
-        `deno run --config deno.json -A npm:@openelement/adapter-vite@${PACKAGE_VERSION}/cli/build`,
-      start:
-        `deno run --config deno.json -A npm:@openelement/adapter-vite@${PACKAGE_VERSION}/cli/start`,
+      build: `deno run --config deno.json -A npm:@openelement/router@${PACKAGE_VERSION}/cli/build`,
+      start: `deno run --config deno.json -A npm:@openelement/router@${PACKAGE_VERSION}/cli/start`,
       check: `deno check --config deno.json ${
         spec.checkEntries.map((entry) => `'${entry}'`).join(' ')
       }`,
@@ -2153,7 +2152,7 @@ async function runLeg(spec: LegSpec, tarballs: Tarball[]): Promise<void> {
           throw new Error(`npm install did not lay out ${tarball.name} into node_modules`);
         }
       }
-      for (const host of ['@openelement/adapter-vite', '@openelement/router']) {
+      for (const host of ['@openelement/router']) {
         const nested = join(
           tmp,
           'node_modules',

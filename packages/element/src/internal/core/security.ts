@@ -10,7 +10,7 @@
  * collectPublicProps and normalizePublicProps), the guarded assigner
  * injectPropsSafe below (employed by the SPA bootstrap page-projection write
  * boundary in @openelement/router), and the page projectors in @openelement/router
- * (authoring.ts projectPageProps) and the adapter-vite generated server
+ * (authoring.ts projectPageProps) and the Router tooling generated server
  * runtime (which serializes DANGEROUS_KEYS into generated code at build
  * time — generated modules cannot import this internal module, so the
  * canonical list is the single source they copy from).
@@ -44,7 +44,7 @@ export const DANGEROUS_KEYS: ReadonlySet<string> = new Set([
  * (collectPublicProps / normalizePublicProps in props-utils.ts), guarded
  * assignment (injectPropsSafe below — the SPA bootstrap page-projection
  * write boundary in @openelement/router), and page projection (authoring.ts
- * projectPageProps; the adapter-vite generated server runtime via the
+ * projectPageProps; the Router tooling generated server runtime via the
  * serialized DANGEROUS_KEYS list) all filter through this single source so a
  * new dangerous pattern cannot be missed on one path.
  */
@@ -56,7 +56,7 @@ export function isDangerousKey(key: string): boolean {
  * Shared safe-attribute-name predicate (#1033). Attribute *names* are not
  * escaped on any render path, so a name must be a valid HTML attribute name
  * (blocks quote/space injection, #602) and must not be an event handler
- * (`on*`, case-insensitive). render-ir.ts (silent skip) and adapter-vite
+ * (`on*`, case-insensitive). render-ir.ts (silent skip) and Router tooling
  * head-injection.ts (throw) enforce the same rule with different failure
  * strategies; both delegate here so the boundary cannot diverge.
  */

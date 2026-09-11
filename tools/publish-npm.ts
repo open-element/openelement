@@ -41,8 +41,8 @@ const KEYWORDS = ['openelement', 'web-components', 'ssg', 'framework', 'deno'];
 const HOMEPAGE = 'https://openelement.org';
 const BUGS = 'https://github.com/open-element/openelement/issues';
 const PACKAGE_DESCRIPTIONS: Record<string, string> = {
-  '@openelement/adapter-vite': 'Vite build adapter for the OpenElement Web Components framework.',
-  '@openelement/router': 'Routing and application runtime for the OpenElement framework.',
+  '@openelement/router':
+    'Routing, application runtime, and lifecycle tooling for the OpenElement framework.',
   '@openelement/create': 'Project generator for the OpenElement Web Components framework.',
   '@openelement/element': 'Custom element base class and authoring APIs for OpenElement.',
 };
@@ -277,8 +277,6 @@ export async function packPackage(
     // Standalone Element authors likewise install Vite tooling without Router.
     const optionalWorkspacePeers = pkg.name === '@openelement/router'
       ? ['@openelement/element']
-      : pkg.name === '@openelement/adapter-vite'
-      ? ['@openelement/router']
       : [];
     for (const name of optionalWorkspacePeers) {
       const version = pkgJson.dependencies[name];

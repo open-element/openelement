@@ -2,7 +2,6 @@
   "schemaVersion": 1,
   "sourceVersion": "1.0.0-alpha.1",
   "packages": [
-    "@openelement/adapter-vite",
     "@openelement/router",
     "@openelement/create",
     "@openelement/element"

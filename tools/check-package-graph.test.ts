@@ -31,10 +31,6 @@ Deno.test('package graph: subpath export keys join the package name without a st
 
 Deno.test('package graph: direction rules encode the package layering', () => {
   assertEquals(isAllowedDependencyDirection('@openelement/router', '@openelement/element'), true);
-  assertEquals(
-    isAllowedDependencyDirection('@openelement/adapter-vite', '@openelement/router'),
-    true,
-  );
   assertEquals(isAllowedDependencyDirection('@openelement/element', '@openelement/router'), false);
   assertEquals(isAllowedDependencyDirection('@openelement/create', '@openelement/element'), false);
 });

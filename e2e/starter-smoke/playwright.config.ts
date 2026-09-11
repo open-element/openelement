@@ -41,8 +41,7 @@ export default defineConfig({
   },
 
   webServer: {
-    command:
-      `exec deno run --config deno.json -A ../../../../packages/adapter-vite/src/cli/start.ts`,
+    command: `exec deno run --config deno.json -A ../../../../packages/router/src/cli/start.ts`,
     cwd: new URL('./work/my-blog', import.meta.url).pathname,
     url: baseURL,
     reuseExistingServer: false,

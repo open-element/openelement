@@ -4,7 +4,7 @@
  * The public OpenElement base class is a thin facade over the compiled Part
  * Program kernel (internal/compiled/runtime/kernel.ts). A 0.44 component is
  * authored in TSX and passed through the OpenElement compiler (the
- * @openelement/adapter-vite `open:compiled-element` transform), which emits a
+ * @openelement/element/compiler `open:compiled-element` transform), which emits a
  * decorator-free class carrying the compiled statics this facade consumes:
  *
  *   - `static __partProgram`        — the validated Part Program v1 artifact
@@ -119,7 +119,7 @@ function failMissingProgram(ctor: object): never {
   throw new OpenElementError(
     `[openElement] <${classNameOf(ctor)}> has no compiled Part Program. ` +
       'In 0.44 every OpenElement component must pass through the OpenElement ' +
-      'compiler (the @openelement/adapter-vite open:compiled-element transform); ' +
+      'compiler (the @openelement/element/compiler open:compiled-element transform); ' +
       'the runtime JSX render path was removed.',
     { code: 'OE_PROGRAM_MISSING', phase: 'csr' },
   );

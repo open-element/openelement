@@ -539,7 +539,7 @@ async function patchApp(appDir: string): Promise<void> {
   for (const [specifier, target] of localPackageAliases(repoRoot)) imports[specifier] = target;
   const tasks = denoJson.tasks ??= {};
   tasks.build = `deno run --unstable-sloppy-imports --config deno.json -A ${
-    join(repoRoot, 'packages', 'adapter-vite', 'src', 'cli', 'build.ts')
+    join(repoRoot, 'packages', 'router', 'src', 'cli', 'build.ts')
   }`;
   await Deno.writeTextFile(denoPath, json(denoJson));
 

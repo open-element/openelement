@@ -102,15 +102,13 @@ const denoJson = JSON.parse(Deno.readTextFileSync(denoJsonPath));
 const generatedImportMap = { ...denoJson.imports } as Record<string, string>;
 const productImports = [
   '@deno/vite-plugin',
-  '@openelement/adapter-vite',
-  '@openelement/adapter-vite/nitro-mount',
-  '@openelement/router',
   '@openelement/element',
   '@openelement/element/build-utils',
   '@openelement/element/jsx-dev-runtime',
   '@openelement/element/jsx-runtime',
-  // The starter maps the app's virtual blog-data module to a local type stub.
-  '@openelement/generated/blog-data',
+  '@openelement/router',
+  '@openelement/router/nitro-mount',
+  '@openelement/router/vite',
   // Hono is the explicit public runtime dependency of the generated SSG entry.
   'hono',
   'vite',
@@ -133,7 +131,7 @@ denoJson.imports['@hono/vite-dev-server'] = 'npm:@hono/vite-dev-server@^0.25.3';
 
 // Override build task to use local source
 denoJson.tasks.build = `deno run -A ${
-  join(repoRoot, 'packages', 'adapter-vite', 'src', 'cli', 'build.ts')
+  join(repoRoot, 'packages', 'router', 'src', 'cli', 'build.ts')
 }`;
 
 Deno.writeTextFileSync(denoJsonPath, JSON.stringify(denoJson, null, 2));
@@ -320,7 +318,7 @@ await Deno.mkdir(nitroRouteDir, { recursive: true });
 Deno.writeTextFileSync(
   join(nitroRouteDir, '[...path].ts'),
   `import { createOpenElementNitroHandler } from '${
-    toFileUrl(join(repoRoot, 'packages', 'adapter-vite', 'src', 'nitro-mount.ts')).href
+    toFileUrl(join(repoRoot, 'packages', 'router', 'src', 'nitro-mount.ts')).href
   }';
 import { eventHandler } from 'h3';
 import { openElementHandler } from '../../dist/server/entry.js';

@@ -32,7 +32,6 @@ export function validateProjectName(name: string): string | null {
 
 interface ProductVersions {
   router: string;
-  adapterVite: string;
   element: string;
 }
 
@@ -45,7 +44,6 @@ interface ProductVersions {
 export function resolveVersions(): ProductVersions {
   return {
     router: CREATE_VERSION,
-    adapterVite: CREATE_VERSION,
     element: CREATE_VERSION,
   };
 }
@@ -81,7 +79,6 @@ const TEMPLATE_FILES: readonly (readonly [string, string])[] = [
   ['app/components/page-contact.tsx', 'app/components/page-contact.tsx'],
   ['app/components/page-blog-index.tsx', 'app/components/page-blog-index.tsx'],
   ['app/components/page-blog-welcome.tsx', 'app/components/page-blog-welcome.tsx'],
-  ['app/data/_generated-blog-data.d.ts', 'app/data/_generated-blog-data.d.ts'],
   ['app/routes/404.tsx', 'app/routes/404.tsx'],
   ['app/routes/index.tsx', 'app/routes/index.tsx'],
   ['app/routes/freshness.tsx', 'app/routes/freshness.tsx'],
@@ -96,7 +93,6 @@ const TEMPLATE_FILES: readonly (readonly [string, string])[] = [
 function versionTokens(v: ProductVersions): Record<string, string> {
   return {
     ['$' + '{v.router}']: v.router,
-    ['$' + '{v.adapterVite}']: v.adapterVite,
     ['$' + '{v.element}']: v.element,
   };
 }

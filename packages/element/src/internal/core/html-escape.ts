@@ -69,7 +69,7 @@ export function escapeAttrValue(value: unknown): string {
  * The mirrored Part Program exchange artifacts (`internal/compiled/program.ts`
  * and its semantic-core copy) intentionally have no import edge, so each
  * carries a mechanical mirror of this list that must stay byte-identical to
- * the tags here; the convergence guard test (adapter-vite
+ * the tags here; the convergence guard test (Router tooling
  * __tests__/void-tags-convergence.test.ts) enforces that. Every other
  * consumer imports this definition.
  */

@@ -10,8 +10,8 @@ The source tree is `1.0.0-alpha.1`, a new public baseline for Element and Router
 ## Repository shape
 
 - `packages/element` — the Element product.
-- `packages/router` — Router Route Mode and Framework Mode implementation.
-- `packages/adapter-vite` — thin Element/Router compiler, Vite, and server-output integration.
+- `packages/router` — Router Route Mode and Framework Mode implementation plus the application
+  lifecycle tooling (`@openelement/router/vite`, `/nitro-mount`, `/cli/*`).
 - `packages/create` — thin consumer scaffolding for the two products.
 
 UI components, Reader/Mastodon applications, reference SaaS projects, examples, and the documentation site are separate consumers rather than core-repository products. Historical snapshots remain available through Git tags.

@@ -1,7 +1,7 @@
 {
   "name": "@openelement/router",
   "version": "1.0.0-alpha.1",
-  "description": "Router Route Mode and Framework Mode for OpenElement applications.",
+  "description": "Router Route Mode, Framework Mode, and application lifecycle tooling (Vite plugin, dev/build/start/preview CLI, Nitro mount) for OpenElement applications.",
   "exports": {
     ".": "./src/index.ts",
     "./router/http": "./src/router-http.ts",
@@ -13,11 +13,19 @@
     "./document": "./src/document.ts",
     "./preact": "./src/preact.ts",
     "./lit": "./src/lit.ts",
-    "./lit-ssr": "./src/lit-ssr.ts"
+    "./lit-ssr": "./src/lit-ssr.ts",
+    "./vite": "./src/vite/index.ts",
+    "./nitro-mount": "./src/nitro-mount.ts",
+    "./cli/build": "./src/cli/build.ts",
+    "./cli/start": "./src/cli/start.ts"
   },
   "imports": {
     "@openelement/url-pattern-list": "npm:@openelement/url-pattern-list@0.6.0",
-    "preact-render-to-string": "npm:preact-render-to-string@^6.5.0"
+    "preact-render-to-string": "npm:preact-render-to-string@^6.5.0",
+    "@hono/vite-dev-server": "npm:@hono/vite-dev-server@^0.25.3",
+    "jsonc-parser": "npm:jsonc-parser@^3.3.1",
+    "marked": "npm:marked@^15.0.0",
+    "vite": "npm:vite@8.0.16"
   },
   "publish": {
     "include": [
@@ -25,6 +33,11 @@
       "deno.json",
       "README.md",
       "LICENSE"
+    ],
+    "exclude": [
+      "src/**/__tests__/**",
+      "__tests__/**",
+      "__fixtures__/**"
     ]
   },
   "include": [
@@ -45,13 +58,21 @@
     "preact-render-to-string": "npm:preact-render-to-string@^6.5.0",
     "lit": "npm:lit@^3.3.3",
     "@lit-labs/ssr": "npm:@lit-labs/ssr@^4.1.0",
-    "@lit-labs/ssr-client": "npm:@lit-labs/ssr-client@^1.1.8"
+    "@lit-labs/ssr-client": "npm:@lit-labs/ssr-client@^1.1.8",
+    "vite": "npm:vite@8.0.16",
+    "@hono/vite-dev-server": "npm:@hono/vite-dev-server@^0.25.3",
+    "marked": "npm:marked@^15.0.0",
+    "jsonc-parser": "npm:jsonc-parser@^3.3.1"
   },
   "peerDependenciesMeta": {
     "preact": { "optional": true },
     "preact-render-to-string": { "optional": true },
     "lit": { "optional": true },
     "@lit-labs/ssr": { "optional": true },
-    "@lit-labs/ssr-client": { "optional": true }
+    "@lit-labs/ssr-client": { "optional": true },
+    "vite": { "optional": true },
+    "@hono/vite-dev-server": { "optional": true },
+    "marked": { "optional": true },
+    "jsonc-parser": { "optional": true }
   }
 }

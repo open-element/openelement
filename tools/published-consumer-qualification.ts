@@ -245,11 +245,14 @@ async function qualificationMain(): Promise<void> {
         join(denoConsumer, 'deno.json'),
         JSON.stringify(
           {
-            imports: Object.fromEntries(
-              ['element', 'app', 'adapter-vite'].map((
-                pkg,
-              ) => [`@openelement/${pkg}`, `npm:@openelement/${pkg}@${options.version}`]),
-            ),
+            imports: {
+              ...Object.fromEntries(
+                ['element', 'router'].map((
+                  pkg,
+                ) => [`@openelement/${pkg}`, `npm:@openelement/${pkg}@${options.version}`]),
+              ),
+              '@openelement/router/vite': `npm:@openelement/router@${options.version}/vite`,
+            },
             minimumDependencyAge: 0,
           },
           null,
@@ -259,7 +262,7 @@ async function qualificationMain(): Promise<void> {
       const publicSurfaceSource = [
         "import { HYDRATION_STRATEGIES, OpenElement, renderDsd, signal } from '@openelement/element';",
         "import { defineApp, defineIslandConfig, definePage } from '@openelement/router';",
-        "import { openPipeline } from '@openelement/adapter-vite';",
+        "import { openPipeline } from '@openelement/router/vite';",
         'for (const value of [OpenElement, renderDsd, signal, defineApp, defineIslandConfig, definePage, openPipeline]) {',
         "  if (typeof value !== 'function') throw new Error('expected published public function');",
         '}',
@@ -296,7 +299,7 @@ async function qualificationMain(): Promise<void> {
         JSON.stringify(
           {
             dependencies: Object.fromEntries(
-              ['element', 'app', 'adapter-vite'].map((
+              ['element', 'router'].map((
                 pkg,
               ) => [`@openelement/${pkg}`, options.version]),
             ),
@@ -574,7 +577,7 @@ async function exactVersionStarterSmoke(version: string): Promise<void> {
     const config = await readJson(`${tmpDir}/starter/deno.json`) as {
       imports: Record<string, string>;
     };
-    for (const pkg of ['app', 'adapter-vite', 'element']) {
+    for (const pkg of ['router', 'element']) {
       const expected = `npm:@openelement/${pkg}@${version}`;
       if (config.imports[`@openelement/${pkg}`] !== expected) {
         throw new Error(

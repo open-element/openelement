@@ -400,5 +400,5 @@ Deno.test('A10.2 Vite boundary: compileElementModule hands the real map to the h
   });
   // The Router-side open:core hook's map composition (inline comment stripped,
   // map object returned to Vite) is pinned adapter-side in
-  // packages/adapter-vite/__tests__/compiler-open-core-boundary.test.ts.
+  // packages/router/__tests__/compiler-open-core-boundary.test.ts.
 });

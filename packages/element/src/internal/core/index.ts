@@ -12,8 +12,8 @@
  * Rendering is owned by generated Part Programs. This module contains only
  * reusable platform helpers and contracts; it is not a renderer barrel.
  *
- * Build orchestration (Vite plugins) lives in @openelement/adapter-vite.
- * For the unified openElement() entry, use @openelement/adapter-vite.
+ * Build orchestration (Vite plugins) lives in @openelement/router/vite.
+ * For the unified openElement() entry, use @openelement/router/vite.
  */
 
 // --- Public API re-exports -----------------------------------------

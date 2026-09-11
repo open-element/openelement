@@ -1,0 +1,48 @@
+{
+  "nodeModulesDir": "auto",
+  "exclude": [
+    "e2e"
+  ],
+  "compilerOptions": {
+    "lib": [
+      "ES2022",
+      "DOM",
+      "DOM.Iterable",
+      "deno.ns"
+    ],
+    "strict": true,
+    "skipLibCheck": true,
+    "jsx": "react-jsx",
+    "jsxImportSource": "@openelement/element"
+  },
+  "fmt": {
+    "useTabs": false,
+    "lineWidth": 100,
+    "indentWidth": 2,
+    "semiColons": true,
+    "singleQuote": true,
+    "proseWrap": "preserve"
+  },
+  "lint": {
+    "rules": {
+      "tags": [
+        "recommended"
+      ],
+      "exclude": [
+        "no-sloppy-imports"
+      ]
+    }
+  },
+  "imports": {
+    "@openelement/router": "../../packages/router/src/index.ts",
+    "@openelement/element": "../../packages/element/src/index.ts",
+    "@openelement/element/jsx-runtime": "../../packages/element/src/jsx-runtime.ts",
+    "@openelement/element/jsx-dev-runtime": "../../packages/element/src/jsx-dev-runtime.ts",
+    "@openelement/element/build-utils": "../../packages/element/src/build-utils.ts",
+    "@openelement/element/sanitize": "../../packages/element/src/sanitize.ts",
+    "@openelement/element/authoring": "../../packages/element/src/authoring.ts",
+    "@openelement/element/html": "../../packages/element/src/html.ts",
+    "@openelement/element/logger": "../../packages/element/src/logger.ts",
+    "@openelement/element/": "../../packages/element/src/"
+  }
+}

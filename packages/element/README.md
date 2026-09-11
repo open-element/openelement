@@ -4,7 +4,7 @@ Canonical component-authoring facade for the OpenElement 1.0 baseline.
 
 This package exposes `OpenElement`, the product-facing base class for native
 Web Components, running on the compiled Part Program kernel: one mandatory
-compiler (`@openelement/adapter-vite`) lowers each component's `render()` into
+compiler (`@openelement/element/compiler`) lowers each component's `render()` into
 a serializable program consumed by server serialization, fresh DOM creation,
 and existing-DOM claim alike. Shadow/DSD is the default render mode; light DOM
 remains explicit opt-in.
@@ -26,7 +26,7 @@ npm install @openelement/element
 ## Usage
 
 Components are classes decorated with `@element` and compiled by the
-`@openelement/adapter-vite` build — there is no runtime registration call in
+`@openelement/router` build — there is no runtime registration call in
 authoring source:
 
 ```tsx

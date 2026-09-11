@@ -75,13 +75,13 @@ Deno.test('no ISR/revalidate semantics remain in app authoring or adapter SSG', 
   for (
     const path of [
       'packages/router/src/authoring.ts',
-      'packages/adapter-vite/src/internal/ssg/ssg-helpers.ts',
-      'packages/adapter-vite/src/internal/ssg/ssg-render.ts',
-      'packages/adapter-vite/src/internal/ssg/entry-route-helpers.ts',
-      'packages/adapter-vite/src/internal/ssg/entry-render-ssg.ts',
-      'packages/adapter-vite/src/internal/protocol/framework.ts',
-      'packages/adapter-vite/src/internal/protocol/ssg.ts',
-      'packages/adapter-vite/src/framework.ts',
+      'packages/router/src/vite/internal/ssg/ssg-helpers.ts',
+      'packages/router/src/vite/internal/ssg/ssg-render.ts',
+      'packages/router/src/vite/internal/ssg/entry-route-helpers.ts',
+      'packages/router/src/vite/internal/ssg/entry-render-ssg.ts',
+      'packages/router/src/vite/internal/protocol/framework.ts',
+      'packages/router/src/vite/internal/protocol/ssg.ts',
+      'packages/router/src/vite/framework.ts',
     ]
   ) {
     const source = await readRepoFile(path);

@@ -204,7 +204,7 @@ try {
   };
   const expectedImports: Record<string, string> = {
     '@openelement/router': `npm:@openelement/router@${PACKAGE_VERSION}`,
-    '@openelement/adapter-vite': `npm:@openelement/adapter-vite@${PACKAGE_VERSION}`,
+    '@openelement/router/vite': `npm:@openelement/router@${PACKAGE_VERSION}/vite`,
     '@openelement/element': `npm:@openelement/element@${PACKAGE_VERSION}`,
     '@openelement/element/jsx-runtime': `npm:@openelement/element@${PACKAGE_VERSION}/jsx-runtime`,
     '@openelement/element/jsx-dev-runtime':

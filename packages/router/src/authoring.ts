@@ -3,7 +3,7 @@ import { ERROR_PREFIX } from '@openelement/element/authoring';
  * @openelement/router - application authoring API for the compiled architecture.
  *
  * This file is intentionally free of Vite/build imports. Route modules can
- * import from @openelement/router without pulling adapter-vite into the runtime
+ * import from @openelement/router without pulling Vite tooling into the runtime
  * graph.
  *
  * v0.44 (ADR-0143): a route module's default export is the COMPILED page

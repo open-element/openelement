@@ -1,9 +1,9 @@
 # Validation recipe (zod / valibot)
 
-> Status: **verified by the `fixture:request-time:e2e:browsers` gate in
+> Status: **verified by the `fixture:router-request-time:e2e:browsers` gate in
 > the CI release gate (three engines)** — both shapes are exercised end-to-end by
 > the request-time fixture
-> (`packages/adapter-vite/__fixtures__/request-time/`: `/register` with
+> (`fixtures/router-request-time/`: `/register` with
 > zod, `/subscribe` with valibot, 422/303 asserted in three engines).
 
 The framework is deliberately validation-agnostic: an action receives the

@@ -4,7 +4,7 @@
  * Compiled modules may not carry runtime top-level statements, so the sheets
  * live in this plain module and the compiled classes reference them through
  * `static styles` (adoptedStyleSheets on shadow roots — see the zag-combobox
- * fixture pattern in packages/adapter-vite). Page elements use light roots;
+ * fixture pattern in fixtures/router-native-framework). Page elements use light roots;
  * their rules live in the global baseline in vite.config.ts (scoped under
  * each page's host tag) because the compiled serializer never inlines styles
  * into SSR output and page classes are not registered client-side.

@@ -90,9 +90,9 @@ jobs:
           name: playwright-failure-artifacts-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
             e2e/starter-smoke/test-results
-            packages/adapter-vite/__fixtures__/request-time/e2e/test-results
-            packages/adapter-vite/__fixtures__/app-flow-native/e2e/test-results
-            packages/adapter-vite/__fixtures__/app-flow-lit/e2e/test-results
+            fixtures/router-request-time/e2e/test-results
+            fixtures/router-native-framework/e2e/test-results
+            fixtures/router-lit-framework/e2e/test-results
           if-no-files-found: ignore
           retention-days: 14
 
@@ -122,7 +122,7 @@ jobs:
           node-version: ${{ matrix.node }}
       - name: Build the request-time fixture
         run: deno task fixture:request-time:build
-      - name: Shim @openelement/adapter-vite/nitro-mount for Node resolution
+      - name: Shim @openelement/router/nitro-mount for Node resolution
         # The workspace publishes to JSR, so plain Node cannot resolve the
         # bare specifier the generated index.js imports. Materialize the
         # exact nitro-mount an npm consumer would get, transpiled from the
@@ -131,14 +131,14 @@ jobs:
         # dist/server/index.js, but invisible to the fixture's own Vite
         # config resolution (which walks up from the fixture root).
         run: |
-          shim=packages/adapter-vite/__fixtures__/request-time/dist/node_modules/@openelement/adapter-vite
+          shim=fixtures/router-request-time/dist/node_modules/@openelement/router
           mkdir -p "$shim"
-          ./node_modules/.bin/esbuild packages/adapter-vite/src/nitro-mount.ts \
+          ./node_modules/.bin/esbuild packages/router/src/nitro-mount.ts \
             --format=esm --outfile="$shim/nitro-mount.js"
-          printf '{ "name": "@openelement/adapter-vite", "version": "0.0.0-smoke", "type": "module", "exports": { "./nitro-mount": "./nitro-mount.js" } }\n' \
+          printf '{ "name": "@openelement/router", "version": "0.0.0-smoke", "type": "module", "exports": { "./nitro-mount": "./nitro-mount.js" } }\n' \
             > "$shim/package.json"
       - name: Boot dist/server/serve.mjs under Node ${{ matrix.node }}
-        working-directory: packages/adapter-vite/__fixtures__/request-time
+        working-directory: fixtures/router-request-time
         run: |
           set -u
           if [ "${{ matrix.node }}" = "24" ]; then
@@ -187,7 +187,7 @@ jobs:
       - name: Build the request-time fixture
         run: deno task fixture:request-time:build
       - name: Boot dist/server/serve.mjs under Bun
-        working-directory: packages/adapter-vite/__fixtures__/request-time
+        working-directory: fixtures/router-request-time
         run: |
           set -u
           OPEN_ELEMENT_PORT=4893 OPEN_ELEMENT_HOST=127.0.0.1 bun dist/server/serve.mjs &

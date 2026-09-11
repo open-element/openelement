@@ -9,14 +9,18 @@ const EXTENSIONS = new Set(['.ts', '.tsx']);
 /**
  * Host-side build tooling rooted inside a runtime-free package: the Element
  * compiler tooling (TSX-to-Part Program semantic core + Vite plugin boundary)
- * and its two public subpath entries. These modules are chartered to use the
- * TypeScript compiler API and (type-only) Vite; they are reachable only
- * through the @openelement/element/compiler and @openelement/element/vite
- * subpaths, never from the browser/runtime entry points. Every other module
- * under the restricted roots stays fail-closed.
+ * and its two public subpath entries, plus the Router application-lifecycle
+ * tooling (Vite orchestration under src/vite/, the build/start CLI under
+ * src/cli/, and the Nitro mount). These modules are chartered to use the
+ * TypeScript compiler API, Vite, and node:* host APIs; they are reachable
+ * only through the @openelement/element/compiler, @openelement/element/vite,
+ * @openelement/router/vite, @openelement/router/cli/* and
+ * @openelement/router/nitro-mount subpaths, never from the browser/runtime
+ * entry points. Every other module under the restricted roots stays
+ * fail-closed.
  */
 const HOST_TOOLING_ALLOWLIST =
-  /^packages\/element\/src\/(?:internal\/compiler\/|compiler\.ts$|vite\.ts$)/;
+  /^packages\/(?:element\/src\/(?:internal\/compiler\/|compiler\.ts$|vite\.ts$)|router\/src\/(?:vite\/|cli\/|nitro-mount\.ts$))/;
 
 // @preact/signals-core is element's chartered engine dependency (#322-era
 // decision); every other npm: specifier is barred from runtime-free packages.

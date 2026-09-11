@@ -308,7 +308,7 @@ Deno.test('verifyNpmRelease rejects a release whose predecessor is unpublished (
     () =>
       verifyNpmRelease({
         version: '0.41.0-alpha.13',
-        packages: ['adapter-vite'],
+        packages: ['router'],
         delaysMs: [0, 1, 2],
         sleep: () => Promise.resolve(),
         query: (_specifier, field) =>
@@ -326,7 +326,7 @@ Deno.test('verifyNpmRelease reports the final observed state after exhausting re
     () =>
       verifyNpmRelease({
         version: '0.41.0-alpha.13',
-        packages: ['adapter-vite'],
+        packages: ['router'],
         delaysMs: [0, 1, 2],
         sleep: () => Promise.resolve(),
         query: () => {

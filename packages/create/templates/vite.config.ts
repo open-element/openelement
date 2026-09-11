@@ -1,4 +1,4 @@
-import { openElement } from '@openelement/adapter-vite';
+import { openElement } from '@openelement/router/vite';
 import { defineConfig } from 'vite';
 import deno from '@deno/vite-plugin';
 

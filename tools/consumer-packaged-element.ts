@@ -56,7 +56,7 @@ export class Counter extends OpenElement {
   await Deno.writeTextFile(
     join(author, 'vite.config.js'),
     `import {element} from '@openelement/element/vite';
-export default {plugins:[element(), {name:'proof-module-boundary',generateBundle(){for(const id of this.getModuleIds()){if(/compiler|adapter-vite|node:/.test(id))this.error('Browser tooling leak: '+id)}}}],build:{sourcemap:true,lib:{entry:'register.js',formats:['es'],fileName:'counter'}}};`,
+export default {plugins:[element(), {name:'proof-module-boundary',generateBundle(){for(const id of this.getModuleIds()){if(/compiler|router\/src\/(?:vite|cli)|node:/.test(id))this.error('Browser tooling leak: '+id)}}}],build:{sourcemap:true,lib:{entry:'register.js',formats:['es'],fileName:'counter'}}};`,
   );
   await run([
     'npm',
@@ -84,7 +84,7 @@ export default {plugins:[element(), {name:'proof-module-boundary',generateBundle
     const text = await Deno.readTextFile(path);
     for (const { fileName } of ts.preProcessFile(text).importedFiles) {
       assert(
-        !/compiler|adapter-vite|\bvite\b|^node:|workspace:/.test(fileName),
+        !/compiler|router\/src\/(?:vite|cli)|\bvite\b|^node:|workspace:/.test(fileName),
         `Browser declaration leak: ${path} -> ${fileName}`,
       );
       const resolved = ts.resolveModuleName(fileName, path, {
@@ -119,7 +119,7 @@ export default {plugins:[element(), {name:'proof-module-boundary',generateBundle
   const js = await Deno.readTextFile(join(author, 'dist/counter.js'));
   assert(
     ts.preProcessFile(js).importedFiles.every(({ fileName }) =>
-      !/workspace:|@openelement\/adapter-vite|^node:/.test(fileName)
+      !/workspace:|@openelement\/router\/(?:vite|cli)|^node:/.test(fileName)
     ),
     'compiled browser artifact boundary',
   );

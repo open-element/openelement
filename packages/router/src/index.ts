@@ -50,7 +50,7 @@ export type { SpaAppInstance } from './spa.ts';
 // OpenElement-owned request context contract and convenience constructor.
 // This is the single canonical RequestContext authority. Adapters build it
 // from their own request event:
-//   - adapter-vite's Nitro integration (nitro-mount.ts) re-implements the
+//   - the Nitro integration (nitro-mount.ts) re-implements the
 //     shape inline (createNitroRequestContext) because generated Nitro server
 //     output must stay free of unresolved bare package imports; the type-only
 //     import in nitro-mount pins it to this contract.

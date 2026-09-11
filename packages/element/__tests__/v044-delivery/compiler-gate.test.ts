@@ -16,7 +16,7 @@
  * The transform-once/double-compile guard (compiled output carries no marker,
  * so the standalone open:compiled-element plugin never recompiles) is covered
  * by 'v0.44 compiler hook transforms once and classifies HMR shape changes'
- * in adapter-vite's island-delivery.test.ts and must keep passing.
+ * in the Router tooling island-delivery.test.ts and must keep passing.
  */
 
 import { assert, assertEquals, assertStringIncludes } from '@std/assert';

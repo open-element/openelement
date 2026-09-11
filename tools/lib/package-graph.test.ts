@@ -27,13 +27,12 @@ Deno.test('extractOpenImports finds static, type and dynamic imports', () => {
     import { foo } from '@openelement/element';
     import type { Bar } from '@openelement/router';
     export { Baz } from '@openelement/create';
-    const x = await import('@openelement/adapter-vite');
+    const x = await import('@openelement/create');
     // not an open import:
     import { y } from 'npm:react';
   `;
   const imports = extractOpenImports(source).sort();
   assertEquals(imports, [
-    '@openelement/adapter-vite',
     '@openelement/create',
     '@openelement/element',
     '@openelement/router',
@@ -76,12 +75,12 @@ Deno.test('topologicalSort orders dependencies before dependents', () => {
   const graph = new Map<string, string[]>([
     ['app', ['element']],
     ['element', []],
-    ['adapter-vite', ['element']],
+    ['router', ['element']],
   ]);
   const order = topologicalSort(graph);
   const pos = (n: string) => order.indexOf(n);
   assert(pos('element') < pos('app'));
-  assert(pos('element') < pos('adapter-vite'));
+  assert(pos('element') < pos('router'));
   assertEquals(order.length, graph.size);
 });
 
@@ -97,7 +96,6 @@ Deno.test('releasePublishOrder respects dependency and priority constraints', ()
   const packages = [
     pkg('@openelement/element', '1.0.0'),
     pkg('@openelement/router', '1.0.0', ['@openelement/element']),
-    pkg('@openelement/adapter-vite', '1.0.0', ['@openelement/element']),
     pkg('@openelement/create', '1.0.0', ['@openelement/router']),
   ];
   const order = releasePublishOrder(packages).map((p) => p.name);
@@ -105,8 +103,6 @@ Deno.test('releasePublishOrder respects dependency and priority constraints', ()
   // dependencies before dependents
   assert(pos('@openelement/element') < pos('@openelement/router'));
   assert(pos('@openelement/router') < pos('@openelement/create'));
-  // release priority: app before adapter-vite
-  assert(pos('@openelement/router') < pos('@openelement/adapter-vite'));
   assertEquals(order.length, packages.length);
 });
 

@@ -70,7 +70,7 @@ async function patchDenoJson(appDir: string): Promise<void> {
   }
 
   denoJson.tasks.build = `deno run --unstable-sloppy-imports --config deno.json -A ${
-    join(repoRoot, 'packages', 'adapter-vite', 'src', 'cli', 'build.ts')
+    join(repoRoot, 'packages', 'router', 'src', 'cli', 'build.ts')
   }`;
 
   await Deno.writeTextFile(denoJsonPath, formatJson(denoJson));

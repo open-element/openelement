@@ -2,13 +2,12 @@
   "imports": {
     "@deno/vite-plugin": "npm:@deno/vite-plugin@2.0.3",
     "@openelement/router": "npm:@openelement/router@${v.router}",
-    "@openelement/adapter-vite": "npm:@openelement/adapter-vite@${v.adapterVite}",
-    "@openelement/adapter-vite/nitro-mount": "npm:@openelement/adapter-vite@${v.adapterVite}/nitro-mount",
+    "@openelement/router/vite": "npm:@openelement/router@${v.router}/vite",
+    "@openelement/router/nitro-mount": "npm:@openelement/router@${v.router}/nitro-mount",
     "@openelement/element": "npm:@openelement/element@${v.element}",
     "@openelement/element/build-utils": "npm:@openelement/element@${v.element}/build-utils",
     "@openelement/element/jsx-dev-runtime": "npm:@openelement/element@${v.element}/jsx-dev-runtime",
     "@openelement/element/jsx-runtime": "npm:@openelement/element@${v.element}/jsx-runtime",
-    "@openelement/generated/blog-data": "./app/data/_generated-blog-data.d.ts",
     "hono": "npm:hono@^4.12",
     "vite": "npm:vite@8.0.16"
   },
@@ -18,9 +17,9 @@
     "dev": "deno run --config deno.json -A npm:vite@8.0.16",
     "check": "deno check --config deno.json app/routes/404.tsx app/routes/index.tsx app/routes/freshness.tsx app/routes/contact.tsx app/routes/blog/index.tsx app/routes/blog/welcome.tsx app/routes/api/health.ts app/islands/my-counter.tsx app/islands/only-ticker.tsx app/islands/app-shell.tsx app/components/page-home.tsx app/components/page-freshness.tsx app/components/page-404.tsx app/components/page-contact.tsx app/components/page-blog-index.tsx app/components/page-blog-welcome.tsx app/components/page-styles.ts vite.config.ts",
     "test": "deno test --config deno.json --permit-no-files",
-    "build": "deno run --config deno.json -A npm:@openelement/adapter-vite@${v.adapterVite}/cli/build",
-    "start": "deno run --config deno.json -A npm:@openelement/adapter-vite@${v.adapterVite}/cli/start",
-    "preview": "deno run --config deno.json -A npm:@openelement/adapter-vite@${v.adapterVite}/cli/start --mode=preview"
+    "build": "deno run --config deno.json -A npm:@openelement/router@${v.router}/cli/build",
+    "start": "deno run --config deno.json -A npm:@openelement/router@${v.router}/cli/start",
+    "preview": "deno run --config deno.json -A npm:@openelement/router@${v.router}/cli/start --mode=preview"
   },
   "compilerOptions": { "lib": ["ES2022", "DOM", "DOM.Iterable"], "jsx": "react-jsx", "jsxImportSource": "@openelement/element" }
 }

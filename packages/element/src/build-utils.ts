@@ -2,7 +2,7 @@
  * Build-time utilities for OpenElement build adapters.
  *
  * These helpers exist for build orchestration (SSG, island transforms,
- * deployment adapters) and are consumed by @openelement/adapter-vite.
+ * deployment adapters) and are consumed by @openelement/router tooling.
  * They are NOT part of the component-authoring runtime surface: application
  * code should import from `@openelement/element` instead.
  *

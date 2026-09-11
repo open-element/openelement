@@ -205,16 +205,20 @@
       "name": "@openelement/router",
       "exports": {
         ".": "./src/index.ts",
+        "./cli/build": "./src/cli/build.ts",
+        "./cli/start": "./src/cli/start.ts",
         "./document": "./src/document.ts",
         "./i18n": "./src/i18n.ts",
         "./lit": "./src/lit.ts",
         "./lit-ssr": "./src/lit-ssr.ts",
         "./model": "./src/model.ts",
+        "./nitro-mount": "./src/nitro-mount.ts",
         "./preact": "./src/preact.ts",
         "./router": "./src/router.ts",
         "./router/client": "./src/router-client.ts",
         "./router/http": "./src/router-http.ts",
-        "./spa": "./src/spa.ts"
+        "./spa": "./src/spa.ts",
+        "./vite": "./src/vite/index.ts"
       },
       "declarations": {
         ".": {
@@ -264,6 +268,16 @@
             "redirect=value:{call:(location:union(URL|string),status:number)=>never}"
           ]
         },
+        "./cli/build": {
+          "publicShapeSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "publicSymbols": []
+        },
+        "./cli/start": {
+          "publicShapeSha256": "be65526ef3450e24b33ff6bd4f68c648496c1e66b69de3c7e2de74501b4ddfa4",
+          "publicSymbols": [
+            "extractServeMode=value:{call:(argv:array(string))=>{mode:union(\"preview\"|\"start\");rest:array(string)}}"
+          ]
+        },
         "./document": {
           "publicShapeSha256": "3b7457328ae3fbb6b473c5270252425a07faaa540c7e7eca2e2e358956482060",
           "publicSymbols": [
@@ -302,6 +316,14 @@
             "CreateRequestContextOptions=type:{env?:union(Env|undefined);params?:union(Record<string, string>|undefined);platform?:unknown;request:Request}",
             "OpenElementRequestContext=type:{env?:union(Env|undefined);method:string;params:Record<string, string>;path:string;platform?:unknown;request:Request;searchParams:URLSearchParams;url:URL}",
             "createRequestContext=value:{call:<Env extends Record<string, unknown> =Record<string, unknown>>(options:{env?:union(Env|undefined);params?:union(Record<string, string>|undefined);platform?:unknown;request:Request})=>{env?:union(Env|undefined);method:string;params:Record<string, string>;path:string;platform?:unknown;request:Request;searchParams:URLSearchParams;url:URL}}"
+          ]
+        },
+        "./nitro-mount": {
+          "publicShapeSha256": "7b4a0b7d3228db51275a8c198bffb84291345f126243e02a97a1c9ef8f5d4523",
+          "publicSymbols": [
+            "NitroRequestEvent=type:{context?:union(undefined|{params?:union(Record<string, string>|undefined)});env?:union(Env|undefined);platform?:unknown;req:Request}",
+            "OpenElementNitroMountOptions=type:{env?:union(Env|undefined);handler:OpenElementRequestHandler<Env>;onBeforeRequestContext?:union(undefined|{call:(context:OpenElementRequestContext<Env>)=>union(Promise<void>|void)});platform?:unknown}",
+            "createOpenElementNitroHandler=value:{call:<Env extends Record<string, unknown> =Record<string, unknown>>(options:{env?:union(Env|undefined);handler:OpenElementRequestHandler<Env>;onBeforeRequestContext?:union(undefined|{call:(context:OpenElementRequestContext<Env>)=>union(Promise<void>|void)});platform?:unknown})=>{call:(event:{context?:union(undefined|{params?:union(Record<string, string>|undefined)});env?:union(Env|undefined);platform?:unknown;req:Request})=>Promise<Response>}}"
           ]
         },
         "./preact": {
@@ -350,31 +372,12 @@
             "SpaAppInstance=type:{dispose:{call:()=>void};mount:{call:(selector:string)=>void};readonly router:union(null|{currentPath:string;currentRoute:union(null|{action?:union(undefined|{call:(ctx:intersection({formData?:union(FormData|undefined);params:Record<string, string>}&{searchParams:URLSearchParams;signal:AbortSignal}))=>Promise<unknown>});guard?:union(undefined|{call:()=>Promise<string | boolean>});id?:union(string|undefined);loader?:union(undefined|{call:(ctx:intersection({params:Record<string, string>}&{searchParams:URLSearchParams;signal:AbortSignal}))=>Promise<unknown>});methods?:union(array(string)|undefined);path:string;pattern?:union(RoutePatternComponents|undefined);tagName:string});dispose:{call:()=>void};navigate:{call:(path:string)=>Promise<void>};params:Record<string, string>;readonly searchParams:URLSearchParams;replace:{call:(path:string)=>Promise<void>}})}",
             "defineApp=value:{call:(options:{mode:\"spa\";routerMode?:union(\"auto\"|\"hash\"|\"history\"|undefined);routes?:union(array({action?:union(undefined|{call:(ctx:intersection({formData?:union(FormData|undefined);params:Record<string, string>}&{searchParams:URLSearchParams;signal:AbortSignal}))=>Promise<unknown>});guard?:union(undefined|{call:()=>Promise<string | boolean>});id?:union(string|undefined);loader?:union(undefined|{call:(ctx:intersection({params:Record<string, string>}&{searchParams:URLSearchParams;signal:AbortSignal}))=>Promise<unknown>});methods?:union(array(string)|undefined);path:string;pattern?:union(RoutePatternComponents|undefined);tagName:string})|undefined)})=>{dispose:{call:()=>void};mount:{call:(selector:string)=>void};readonly router:union(null|{currentPath:string;currentRoute:union(null|{action?:union(undefined|{call:(ctx:intersection({formData?:union(FormData|undefined);params:Record<string, string>}&{searchParams:URLSearchParams;signal:AbortSignal}))=>Promise<unknown>});guard?:union(undefined|{call:()=>Promise<string | boolean>});id?:union(string|undefined);loader?:union(undefined|{call:(ctx:intersection({params:Record<string, string>}&{searchParams:URLSearchParams;signal:AbortSignal}))=>Promise<unknown>});methods?:union(array(string)|undefined);path:string;pattern?:union(RoutePatternComponents|undefined);tagName:string});dispose:{call:()=>void};navigate:{call:(path:string)=>Promise<void>};params:Record<string, string>;readonly searchParams:URLSearchParams;replace:{call:(path:string)=>Promise<void>}})}}"
           ]
-        }
-      }
-    },
-    {
-      "name": "@openelement/adapter-vite",
-      "exports": {
-        ".": "./src/index.ts",
-        "./cli/build": "./src/cli/build.ts",
-        "./cli/start": "./src/cli/start.ts",
-        "./nitro-mount": "./src/nitro-mount.ts",
-        "./sitemap": "./src/sitemap.ts"
-      },
-      "declarations": {
-        ".": {
-          "publicShapeSha256": "e9504da24f063c1b88fea68f2f8add47454efb163556a3c70fbeb8c3e7cbf072",
+        },
+        "./vite": {
+          "publicShapeSha256": "5b989f4f16e060e8c8dc1a6fe972e6e7b72f373ea12877121e0cfbfd0f5a8168",
           "publicSymbols": [
             "ArtifactInfo=type:{name:string;path:string;sizeBytes:number;sizeKB:string}",
             "BuildManifest=type:{clientEntry:union(null|{name:string;path:string;sizeBytes:number;sizeKB:string});headExtrasSize:number;htmlPages:array({name:string;path:string;sizeBytes:number;sizeKB:string});islands:array({name:string;path:string;sizeBytes:number;sizeKB:string});phase:union(1|2|3);timestamp:string;totalHtmlBytes:number;totalJsBytes:number;warnings:array(string)}",
-            "CollectionEntry=type:{content:string;frontmatter:Record<string, unknown>;html:string;locale?:union(string|undefined);slug:string}",
-            "CollectionFieldDefinition=type:{default?:unknown;required?:union(false|true|undefined);type:union(\"boolean\"|\"number\"|\"string\"|\"string[]\")}",
-            "CollectionFieldType=type:union(\"boolean\"|\"number\"|\"string\"|\"string[]\")",
-            "CollectionOptions=type:{basePath?:union(string|undefined);contentDir:string;markdown?:union(undefined|{call:(content:string)=>union(Promise<string>|string)});schema?:union(undefined|{fields:Record<string, CollectionFieldType | CollectionFieldDefinition>;transform?:union(undefined|{call:(frontmatter:Record<string, unknown>,context:{collection:string;fileName:string;filePath:string;slug:string})=>{frontmatter:Record<string, unknown>;slug?:union(string|undefined)}})})}",
-            "CollectionSchema=type:{fields:Record<string, CollectionFieldType | CollectionFieldDefinition>;transform?:union(undefined|{call:(frontmatter:Record<string, unknown>,context:{collection:string;fileName:string;filePath:string;slug:string})=>{frontmatter:Record<string, unknown>;slug?:union(string|undefined)}})}",
-            "CollectionSchemaContext=type:{collection:string;fileName:string;filePath:string;slug:string}",
-            "CollectionSchemaResult=type:{frontmatter:Record<string, unknown>;slug?:union(string|undefined)}",
             "FrameworkOptions=type:any",
             "HeadExtrasResult=type:{allowHeadExtrasScripts:union(false|true);headExtras:union(string|undefined)}",
             "OpenElementBlogOptions=type:{basePath?:union(string|undefined);contentDir?:union(string|undefined)}",
@@ -383,58 +386,29 @@
             "OpenElementHeaderNavLink=type:{href:string;label:string}",
             "OpenElementI18nContextOptions=type:{defaultLocale:string;index:string=>unknown;locales:array(string)}",
             "OpenElementNavSection=type:{items:array({label:string;order?:union(number|undefined);path:string});section:string}",
-            "OpenElementOptions=type:{content?:union(undefined|{blog?:union(false|undefined|{basePath?:union(string|undefined);contentDir?:union(string|undefined);markdown?:union(undefined|{call:(content:string)=>union(Promise<string>|string)})});collections?:union(Record<string, CollectionOptions>|undefined);nav?:union(undefined|{exclude?:union(array(string)|undefined);headerNav?:union(array({href:string;label:string})|undefined);routesDir?:union(string|undefined)});sitemap?:union(undefined|{changefreq?:union(\"always\"|\"daily\"|\"hourly\"|\"monthly\"|\"never\"|\"weekly\"|\"yearly\"|undefined);exclude?:union(array(string)|undefined);hostname:string;priority?:union(number|undefined);robotsTxt?:union(false|true|undefined)})});i18n?:any;ssg?:union(undefined|{dynamicRouteFailure?:union(\"fail\"|\"warn\"|undefined);sitemapFailure?:union(\"fail\"|\"warn\"|undefined)})}",
+            "OpenElementOptions=type:{ssg?:union(undefined|{dynamicRouteFailure?:union(\"fail\"|\"warn\"|undefined)})}",
             "OpenMdxPluginOptions=type:{routesDir?:union(string|undefined)}",
             "OpenPipelineConfig=type:{headExtras?:union(string|undefined);island?:union(undefined|{dir?:union(string|undefined);upgradeStrategy?:union(string|undefined)});mode?:union(\"spa\"|\"ssg\"|undefined);output?:union(undefined|{outDir?:union(string|undefined)});routes?:union(undefined|{dir?:union(string|undefined)});viewTransition?:union(false|true|undefined)}",
             "SpeculationRulesOptions=type:{eagerness?:union(\"conservative\"|\"immediate\"|\"moderate\"|undefined);exclude?:union(array(string)|undefined);prefetch?:union(array(string)|undefined);prerender?:union(array(string)|undefined)}",
-            "SsgBehaviorOptions=type:{dynamicRouteFailure?:union(\"fail\"|\"warn\"|undefined);sitemapFailure?:union(\"fail\"|\"warn\"|undefined)}",
+            "SsgBehaviorOptions=type:{dynamicRouteFailure?:union(\"fail\"|\"warn\"|undefined)}",
             "buildApp=value:{call:(config:InlineConfig)=>Promise<unknown>}",
             "buildHeadExtras=value:{call:(options:any)=>{allowHeadExtrasScripts:union(false|true);headExtras:union(string|undefined)}}",
             "buildIslandChunkMap=value:{call:(root:string,outDir:string,islands:array(string),basePath:string,islandChunkAliases:Record<string, readonly string[]>)=>Promise<Record<string, string>>}",
             "buildSpeculationRulesJson=value:{call:(options:{eagerness?:union(\"conservative\"|\"immediate\"|\"moderate\"|undefined);exclude?:union(array(string)|undefined);prefetch?:union(array(string)|undefined);prerender?:union(array(string)|undefined)},routes:union(array({path:string;type:string})|undefined))=>string}",
-            "createCollectionPlugin=value:{call:(name:string,options:{basePath?:union(string|undefined);contentDir:string;markdown?:union(undefined|{call:(content:string)=>union(Promise<string>|string)});schema?:union(undefined|{fields:Record<string, CollectionFieldType | CollectionFieldDefinition>;transform?:union(undefined|{call:(frontmatter:Record<string, unknown>,context:{collection:string;fileName:string;filePath:string;slug:string})=>{frontmatter:Record<string, unknown>;slug?:union(string|undefined)}})})},ctx:union(undefined|{plugins:{blogOptions:union(null|{basePath?:union(string|undefined);contentDir?:union(string|undefined)});headerNav:array({href:string;label:string});i18nOptions:union(null|{defaultLocale:string;index:string=>unknown;locales:array(string)});index:string=>unknown;navSections:array({items:array({label:string;order?:union(number|undefined);path:string});section:string});sitemapOptions:union(Record<string, unknown>|null)};registerPlugin:{call:(name:string,instance:unknown)=>void}}),fs:{cwd:{call:()=>string};mkdirSync:{call:(path:string,options:union(undefined|{recursive?:union(false|true|undefined)}))=>void};writeFileSync:{call:(path:string,data:string,encoding:union(string|undefined))=>void}},compatibility:{contextKey?:union(string|undefined);dataModule?:union(undefined|{call:(entries:array({content:string;frontmatter:Record<string, unknown>;html:string;locale?:union(string|undefined);slug:string}))=>string});itemLabel?:union(string|undefined);outputName?:union(string|undefined);prepareEntries?:union(undefined|{call:(entries:array({content:string;frontmatter:Record<string, unknown>;html:string;locale?:union(string|undefined);slug:string}))=>array({content:string;frontmatter:Record<string, unknown>;html:string;locale?:union(string|undefined);slug:string})})})=>Plugin<any>}",
             "default=value:{call:(config:{headExtras?:union(string|undefined);island?:union(undefined|{dir?:union(string|undefined);upgradeStrategy?:union(string|undefined)});mode?:union(\"spa\"|\"ssg\"|undefined);output?:union(undefined|{outDir?:union(string|undefined)});routes?:union(undefined|{dir?:union(string|undefined)});viewTransition?:union(false|true|undefined)})=>array(Plugin<any>)}",
             "extractCustomElementTags=value:{call:(html:string)=>array(string)}",
             "generateIslandManifests=value:{call:(htmlDir:string,islandChunkMap:Record<string, string>,strategyMap:{index:string=>any},layerMap:{index:string=>ComponentLayer})=>array({builtAt:string;islands:array({chunkUrl:string;layer:ComponentLayer;strategy:any;tagName:string});route:string})}",
-            "generateSitemap=value:{call:(distDir:string,options:{changefreq?:union(\"always\"|\"daily\"|\"hourly\"|\"monthly\"|\"never\"|\"weekly\"|\"yearly\"|undefined);exclude?:union(array(string)|undefined);hostname:string;priority?:union(number|undefined);robotsTxt?:union(false|true|undefined)})=>array(string)}",
             "injectClientScript=value:{call:(dir:string,scriptSrc:string)=>void}",
             "injectCspMeta=value:{call:(dir:string,cspPolicy:string,reportOnly:union(false|true),nonce:union(false|true))=>void}",
             "injectSpeculationRules=value:{call:(dir:string,rulesJson:string)=>void}",
             "injectViewTransitionMeta=value:{call:(dir:string)=>void}",
-            "loadCollectionData=value:{call:(name:string,options:{basePath?:union(string|undefined);contentDir:string;markdown?:union(undefined|{call:(content:string)=>union(Promise<string>|string)});schema?:union(undefined|{fields:Record<string, CollectionFieldType | CollectionFieldDefinition>;transform?:union(undefined|{call:(frontmatter:Record<string, unknown>,context:{collection:string;fileName:string;filePath:string;slug:string})=>{frontmatter:Record<string, unknown>;slug?:union(string|undefined)}})})})=>Promise<CollectionEntry[]>}",
             "mdxPlugin=value:{call:(options:{routesDir?:union(string|undefined)})=>Plugin<any>}",
-            "openElement=value:{call:(options:{content?:union(undefined|{blog?:union(false|undefined|{basePath?:union(string|undefined);contentDir?:union(string|undefined);markdown?:union(undefined|{call:(content:string)=>union(Promise<string>|string)})});collections?:union(Record<string, CollectionOptions>|undefined);nav?:union(undefined|{exclude?:union(array(string)|undefined);headerNav?:union(array({href:string;label:string})|undefined);routesDir?:union(string|undefined)});sitemap?:union(undefined|{changefreq?:union(\"always\"|\"daily\"|\"hourly\"|\"monthly\"|\"never\"|\"weekly\"|\"yearly\"|undefined);exclude?:union(array(string)|undefined);hostname:string;priority?:union(number|undefined);robotsTxt?:union(false|true|undefined)})});i18n?:any;ssg?:union(undefined|{dynamicRouteFailure?:union(\"fail\"|\"warn\"|undefined);sitemapFailure?:union(\"fail\"|\"warn\"|undefined)})})=>array(Plugin<any>)}",
+            "openElement=value:{call:(options:{ssg?:union(undefined|{dynamicRouteFailure?:union(\"fail\"|\"warn\"|undefined)})})=>array(Plugin<any>)}",
             "openPipeline=value:{call:(config:{headExtras?:union(string|undefined);island?:union(undefined|{dir?:union(string|undefined);upgradeStrategy?:union(string|undefined)});mode?:union(\"spa\"|\"ssg\"|undefined);output?:union(undefined|{outDir?:union(string|undefined)});routes?:union(undefined|{dir?:union(string|undefined)});viewTransition?:union(false|true|undefined)})=>array(Plugin<any>)}",
             "printBuildManifest=value:{call:(options:{budget?:union(undefined|{islandKB?:union(number|undefined);pageKB?:union(number|undefined);totalJsKB?:union(number|undefined)});headExtras?:union(string|undefined);outDir?:union(string|undefined);phase:union(2|3);root:string})=>{clientEntry:union(null|{name:string;path:string;sizeBytes:number;sizeKB:string});headExtrasSize:number;htmlPages:array({name:string;path:string;sizeBytes:number;sizeKB:string});islands:array({name:string;path:string;sizeBytes:number;sizeKB:string});phase:union(1|2|3);timestamp:string;totalHtmlBytes:number;totalJsBytes:number;warnings:array(string)}}",
             "scanClientBuild=value:{call:(root:string,outDir:string)=>{clientEntry:union(null|{name:string;path:string;sizeBytes:number;sizeKB:string});islands:array({name:string;path:string;sizeBytes:number;sizeKB:string});totalJsBytes:number}}",
             "scanSSGOutput=value:{call:(root:string,outDir:string)=>array({name:string;path:string;sizeBytes:number;sizeKB:string})}",
-            "writeCollectionDataModule=value:{call:(name:string,entries:array({content:string;frontmatter:Record<string, unknown>;html:string;locale?:union(string|undefined);slug:string}),options:{basePath?:union(string|undefined);contentDir:string;markdown?:union(undefined|{call:(content:string)=>union(Promise<string>|string)});schema?:union(undefined|{fields:Record<string, CollectionFieldType | CollectionFieldDefinition>;transform?:union(undefined|{call:(frontmatter:Record<string, unknown>,context:{collection:string;fileName:string;filePath:string;slug:string})=>{frontmatter:Record<string, unknown>;slug?:union(string|undefined)}})})})=>string}",
             "writeIslandManifests=value:{call:(outputDir:string,manifests:array({builtAt:string;islands:array({chunkUrl:string;layer:ComponentLayer;strategy:any;tagName:string});route:string}))=>Promise<void>}"
-          ]
-        },
-        "./cli/build": {
-          "publicShapeSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-          "publicSymbols": []
-        },
-        "./cli/start": {
-          "publicShapeSha256": "be65526ef3450e24b33ff6bd4f68c648496c1e66b69de3c7e2de74501b4ddfa4",
-          "publicSymbols": [
-            "extractServeMode=value:{call:(argv:array(string))=>{mode:union(\"preview\"|\"start\");rest:array(string)}}"
-          ]
-        },
-        "./nitro-mount": {
-          "publicShapeSha256": "7b4a0b7d3228db51275a8c198bffb84291345f126243e02a97a1c9ef8f5d4523",
-          "publicSymbols": [
-            "NitroRequestEvent=type:{context?:union(undefined|{params?:union(Record<string, string>|undefined)});env?:union(Env|undefined);platform?:unknown;req:Request}",
-            "OpenElementNitroMountOptions=type:{env?:union(Env|undefined);handler:OpenElementRequestHandler<Env>;onBeforeRequestContext?:union(undefined|{call:(context:OpenElementRequestContext<Env>)=>union(Promise<void>|void)});platform?:unknown}",
-            "createOpenElementNitroHandler=value:{call:<Env extends Record<string, unknown> =Record<string, unknown>>(options:{env?:union(Env|undefined);handler:OpenElementRequestHandler<Env>;onBeforeRequestContext?:union(undefined|{call:(context:OpenElementRequestContext<Env>)=>union(Promise<void>|void)});platform?:unknown})=>{call:(event:{context?:union(undefined|{params?:union(Record<string, string>|undefined)});env?:union(Env|undefined);platform?:unknown;req:Request})=>Promise<Response>}}"
-          ]
-        },
-        "./sitemap": {
-          "publicShapeSha256": "7ae73a7251ac2a293422cd7917759c41123b27f0303ec25cdfc302318ea6b5a2",
-          "publicSymbols": [
-            "SitemapOptions=type:{changefreq?:union(\"always\"|\"daily\"|\"hourly\"|\"monthly\"|\"never\"|\"weekly\"|\"yearly\"|undefined);exclude?:union(array(string)|undefined);hostname:string;priority?:union(number|undefined);robotsTxt?:union(false|true|undefined)}",
-            "generateSitemap=value:{call:(distDir:string,options:{changefreq?:union(\"always\"|\"daily\"|\"hourly\"|\"monthly\"|\"never\"|\"weekly\"|\"yearly\"|undefined);exclude?:union(array(string)|undefined);hostname:string;priority?:union(number|undefined);robotsTxt?:union(false|true|undefined)})=>array(string)}"
           ]
         }
       }
