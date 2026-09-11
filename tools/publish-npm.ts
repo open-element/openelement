@@ -130,11 +130,11 @@ export function deriveDependencies(
   // resolved internally (source-import loop below), never as external npm
   // deps; the maintained url-pattern-list fork shares the @openelement scope
   // but is published outside the workspace, so it lands here exactly (#1324).
-  for (const value of Object.values(imports)) {
+  for (const [key, value] of Object.entries(imports)) {
     if (typeof value !== 'string') continue;
     const spec = parseNpmSpec(value, `${pkg.name} deno.json`);
     if (!spec || byName.has(spec.name)) continue;
-    if (spec) deps[spec.name] = publishRange(spec);
+    deps[dependencyKey(key, spec)] = dependencyRange(key, spec);
   }
 
   // Internal workspace dependencies from source imports.
@@ -159,10 +159,30 @@ export function deriveDependencies(
     const value = rootImports[specifier];
     if (typeof value !== 'string') continue;
     const spec = parseNpmSpec(value, `${pkg.name} root import`);
-    if (spec) deps[spec.name] = publishRange(spec);
+    if (spec) deps[dependencyKey(specifier, spec)] = dependencyRange(specifier, spec);
   }
 
   return deps;
+}
+
+// Import-map aliases (e.g. "typescript" -> npm:@typescript/typescript6) keep
+// the bare specifier in the emitted source, so the packed artifact must
+// install the target under the alias name. Only bare keys alias; protocol
+// keys like "npm:react@^18.2.0" already name their target.
+function dependencyKey(
+  key: string,
+  spec: { name: string },
+): string {
+  return !key.includes(':') && key !== spec.name ? key : spec.name;
+}
+
+function dependencyRange(
+  key: string,
+  spec: { name: string; version: string },
+): string {
+  return !key.includes(':') && key !== spec.name
+    ? `npm:${spec.name}@${publishRange(spec)}`
+    : publishRange(spec);
 }
 
 export function deriveAllDependencies(

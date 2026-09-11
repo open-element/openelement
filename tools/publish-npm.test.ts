@@ -92,6 +92,27 @@ Deno.test('deriveDependencies materializes a root-mapped npm dependency used by 
   assertEquals(deps, { react: '^18.2.0' });
 });
 
+Deno.test('deriveDependencies emits an npm alias for a renamed import-map dependency', () => {
+  const localIo: DeriveDepsIo = {
+    ...io,
+    readPkgJson: () => ({
+      imports: { 'typescript': 'npm:@typescript/typescript6@^6.0.2' },
+    }),
+  };
+  const deps = deriveDependencies(pkg('@openelement/element', '1.0.0'), [], localIo);
+  assertEquals(deps, { typescript: 'npm:@typescript/typescript6@^6.0.2' });
+});
+
+Deno.test('deriveDependencies emits an npm alias for a renamed root-mapped dependency', () => {
+  const localIo: DeriveDepsIo = {
+    ...io,
+    readRootJson: () => ({ imports: { 'typescript': 'npm:@typescript/typescript6@^6.0.2' } }),
+    readSrcFiles: () => [`import ts from 'typescript';`],
+  };
+  const deps = deriveDependencies(pkg('@openelement/element', '1.0.0'), [], localIo);
+  assertEquals(deps, { typescript: 'npm:@typescript/typescript6@^6.0.2' });
+});
+
 Deno.test('deriveDependencies throws when a root-mapped npm dependency has no version', () => {
   const localIo: DeriveDepsIo = {
     ...io,
