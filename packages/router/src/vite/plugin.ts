@@ -24,7 +24,7 @@ import { createLogger } from '@openelement/element';
 
 const log = createLogger('router-vite');
 
-import honoDevServer, { defaultOptions as honoDevServerDefaults } from '@hono/vite-dev-server';
+import { lazyHonoDevServer } from './dev-server.ts';
 import { OpenElementBuildContext } from './build-context.ts';
 import { findWorkspaceRoot, generateWorkspaceAliases } from './workspace-alias.ts';
 import { normalizeViteAliases } from './alias-utils.ts';
@@ -780,7 +780,7 @@ export function createOpenPlugin(
 
   if (resolvedOptions.mode !== 'spa') {
     plugins.push(
-      honoDevServer({
+      lazyHonoDevServer((honoDevServer) => ({
         entry: VIRTUAL_ENTRY_ID,
         // ADR-0123 item 2 (#858): with middleware.use configured, the entry
         // exposes openElementDevFetch — the dev-server-shaped adapter over the
@@ -794,8 +794,8 @@ export function createOpenPlugin(
         // the optimized-dependency form of every bare import in the dev island
         // client graph) fell through to the Hono app and 404'd. Extend the
         // defaults to let versioned module requests reach Vite.
-        exclude: [...honoDevServerDefaults.exclude, /\?v=[A-Za-z0-9]+$/],
-      }) as Plugin,
+        exclude: [...honoDevServer.defaultOptions.exclude, /\?v=[A-Za-z0-9]+$/],
+      })),
     );
   }
 

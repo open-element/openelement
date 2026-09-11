@@ -82,10 +82,14 @@ const SERVER_READY_TIMEOUT_MS = 3 * 60_000;
 const BROWSER_TIMEOUT_MS = 5 * 60_000;
 
 /** Boundary pattern: no compiler, router-internal tooling, host or workspace leakage. */
-const BOUNDARY_ID_PATTERN = /compiler|router(?:\/src)?\/vite|router\/cli|node:/;
-const BOUNDARY_SPECIFIER_PATTERN = /compiler|router(?:\/src)?\/vite|router\/cli|^node:|workspace:/;
-const DECLARATION_LEAK_PATTERN =
-  /compiler|router(?:\/src)?\/vite|router\/cli|\bvite\b|^node:|workspace:/;
+const BOUNDARY_ID_PATTERN = /compiler|router(?:\/src)?\/vite|router\/cli(?:[/.]|$)|node:/;
+const BOUNDARY_SPECIFIER_PATTERN =
+  /compiler|router(?:\/src)?\/vite|router\/cli(?:[/.]|$)|^node:|workspace:/;
+// The router\/cli alternative is anchored ((?:[/.]|$)) so a legitimate module
+// name like ./internal/router/client-router.js — whose path carries the
+// substring "router/cli" — is not flagged as a router/cli tooling edge.
+export const DECLARATION_LEAK_PATTERN =
+  /compiler|router(?:\/src)?\/vite|router\/cli(?:[/.]|$)|\bvite\b|^node:|workspace:/;
 
 async function run(
   command: string,
@@ -1117,9 +1121,14 @@ export async function qualifyPackedAppLeg(spec: PackedAppLegSpec): Promise<void>
 
       // An explicit package.json with file: deps keeps npm from walking
       // ancestor directories and from pruning the externals on re-install.
+      // @hono/vite-dev-server is an optional peer of @openelement/router that
+      // only the dev cell needs; npm does not auto-install optional peers, so
+      // the dev-exercising consumer pins it explicitly (same contract the
+      // create starter template declares).
       const dependencies: Record<string, string> = {
         'vite': '8.0.16',
         'hono': '4.12.0',
+        '@hono/vite-dev-server': '^0.25.3',
         ...spec.externals,
       };
       for (const tarball of tarballs) dependencies[tarball.name] = `file:${tarball.path}`;

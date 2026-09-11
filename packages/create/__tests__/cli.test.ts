@@ -46,6 +46,7 @@ Deno.test('starter exposes only product imports and the standard lifecycle', () 
   const denoJson = JSON.parse(readTemplate('deno.json.tmpl'));
   assertEquals(Object.keys(denoJson.imports).sort(), [
     '@deno/vite-plugin',
+    '@hono/vite-dev-server',
     '@openelement/element',
     '@openelement/element/build-utils',
     '@openelement/element/jsx-dev-runtime',

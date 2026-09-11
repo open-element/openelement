@@ -254,6 +254,7 @@ try {
   // one would leak an internal alias into the public contract).
   const productImports = [
     '@deno/vite-plugin',
+    '@hono/vite-dev-server',
     '@openelement/element',
     '@openelement/element/build-utils',
     '@openelement/element/jsx-dev-runtime',

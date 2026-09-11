@@ -73,6 +73,16 @@ export default defineConfig({
 client island chunks, runs SSG, and writes post-processed HTML. For a leaner
 setup, use `openPipeline()` from the same subpath.
 
+A Vite-mode consumer installs the host packages the tooling peers on:
+
+- `vite` (required by the facade and both CLI subpaths), and
+- `@hono/vite-dev-server` (optional peer; required only by the dev server —
+  it is loaded lazily, so `build`/`start` never resolve it, and dev mode
+  fails closed with an install hint when it is missing).
+
+Deno consumers declare both as `npm:` imports (the generated starter does
+this); npm consumers install them as dev dependencies.
+
 ## Lifecycle CLI
 
 Generated applications build and serve through the Router CLI subpaths:

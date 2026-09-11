@@ -61,8 +61,7 @@
     "@lit-labs/ssr-client": "npm:@lit-labs/ssr-client@^1.1.8",
     "vite": "npm:vite@8.0.16",
     "@hono/vite-dev-server": "npm:@hono/vite-dev-server@^0.25.3",
-    "marked": "npm:marked@^15.0.0",
-    "jsonc-parser": "npm:jsonc-parser@^3.3.1"
+    "marked": "npm:marked@^15.0.0"
   },
   "peerDependenciesMeta": {
     "preact": { "optional": true },
@@ -72,7 +71,6 @@
     "@lit-labs/ssr-client": { "optional": true },
     "vite": { "optional": true },
     "@hono/vite-dev-server": { "optional": true },
-    "marked": { "optional": true },
-    "jsonc-parser": { "optional": true }
+    "marked": { "optional": true }
   }
 }
