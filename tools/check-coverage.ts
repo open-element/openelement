@@ -100,10 +100,13 @@ async function runCoverage(crashRetries: number): Promise<string> {
             '--no-lock',
             `--coverage=${coverageDir}`,
             // element's WTR browser suite is gated separately
-            // (test:element:browser:gate); examples/legacy is a frozen T2
-            // archive whose imports target retired surfaces — neither
-            // contributes to the coverage denominator.
-            '--ignore=packages/element/__wtr__,examples/legacy',
+            // (test:element:browser:gate). examples/ and fixtures/ are
+            // independent projects with their own deno.json boundaries —
+            // the root sweep must not resolve them under the root import
+            // map. Each runs under its own config via its own gate
+            // (examples:check, fixture:*:gate); none contributes to the
+            // root coverage denominator.
+            '--ignore=packages/element/__wtr__,examples,fixtures',
             '--allow-read',
             '--allow-write',
             '--allow-env',
