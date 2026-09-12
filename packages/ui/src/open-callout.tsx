@@ -21,7 +21,13 @@
  * </open-callout>
  * ```
  */
-import { computed, element, OpenElement, property, type ReadonlySignal } from '@openelement/element';
+import {
+  computed,
+  element,
+  OpenElement,
+  property,
+  type ReadonlySignal,
+} from '@openelement/element';
 import { CALLOUT_TYPE_ICONS, recipe } from './component-recipes.ts';
 
 @element('open-callout', { root: 'shadow-open' })
@@ -63,7 +69,9 @@ export class OpenCallout extends OpenElement {
 
   /** Type icon text — derived from the `type` attribute via the shared map. */
   @property({ reflect: false, attribute: false, type: String })
-  icon: ReadonlySignal<string> = computed(() => CALLOUT_TYPE_ICONS[this.type] ?? CALLOUT_TYPE_ICONS.info);
+  icon: ReadonlySignal<string> = computed(() =>
+    CALLOUT_TYPE_ICONS[this.type] ?? CALLOUT_TYPE_ICONS.info
+  );
 
   /** True when no label is set: the header row collapses out of the layout. */
   @property({ reflect: false, attribute: false, type: Boolean })

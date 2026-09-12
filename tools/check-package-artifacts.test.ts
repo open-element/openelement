@@ -18,7 +18,9 @@ async function withPackage(
     );
     for (const [path, content] of Object.entries(files)) {
       const fullPath = `${root}/${path}`;
-      await Deno.mkdir(fullPath.slice(0, fullPath.lastIndexOf('/')), { recursive: true });
+      await Deno.mkdir(fullPath.slice(0, fullPath.lastIndexOf('/')), {
+        recursive: true,
+      });
       await Deno.writeTextFile(fullPath, content);
     }
     await fn(root);
@@ -56,9 +58,8 @@ Deno.test('package artifacts: rejects CJS and host APIs in runtime-free packages
       `,
     },
     (root) => {
-      const messages = scanExtractedPackage('@openelement/element', root).violations.map((v) =>
-        v.message
-      );
+      const messages = scanExtractedPackage('@openelement/element', root)
+        .violations.map((v) => v.message);
       assert(messages.includes('node:* import'));
       assert(messages.includes('CommonJS require()'));
       assert(messages.includes('Node process global'));
@@ -98,9 +99,8 @@ Deno.test('package artifacts: rejects a non-leading host API escape directive', 
       `,
     },
     (root) => {
-      const messages = scanExtractedPackage('@openelement/router', root).violations.map((v) =>
-        v.message
-      );
+      const messages = scanExtractedPackage('@openelement/router', root)
+        .violations.map((v) => v.message);
       assert(messages.includes('node:* import'));
       assert(messages.includes('Node process global'));
     },
@@ -112,15 +112,20 @@ Deno.test('package artifacts: rejects missing module type and CJS entry', async 
   try {
     await Deno.writeTextFile(
       `${root}/package.json`,
-      JSON.stringify({ name: '@openelement/element', main: './index.cjs' }, null, 2),
+      JSON.stringify(
+        { name: '@openelement/element', main: './index.cjs' },
+        null,
+        2,
+      ),
     );
     await Deno.writeTextFile(`${root}/index.cjs`, 'module.exports = {};');
 
-    const messages = scanExtractedPackage('@openelement/element', root).violations.map((v) =>
-      v.message
-    );
+    const messages = scanExtractedPackage('@openelement/element', root)
+      .violations.map((v) => v.message);
     assert(messages.includes('package.json must declare "type": "module"'));
-    assert(messages.includes('package.json main must not point at a CommonJS entry'));
+    assert(
+      messages.includes('package.json main must not point at a CommonJS entry'),
+    );
     assert(messages.includes('package.json must expose an exports map'));
     assert(messages.includes('CommonJS .cjs artifact is not allowed'));
     assert(messages.includes('CommonJS module.exports'));
@@ -141,7 +146,10 @@ Deno.test('package artifacts: router host tooling paths bypass the host API scan
       'src/nitro-mount.js': `import process from 'node:process';\nexport const env = process.env;`,
     },
     (root) => {
-      assertEquals(scanExtractedPackage('@openelement/router', root).violations, []);
+      assertEquals(
+        scanExtractedPackage('@openelement/router', root).violations,
+        [],
+      );
     },
   );
 });
@@ -155,9 +163,8 @@ Deno.test('package artifacts: router runtime paths still fail closed on host API
       'src/http.js': `import process from 'node:process';\nexport const cwd = process.cwd();`,
     },
     (root) => {
-      const messages = scanExtractedPackage('@openelement/router', root).violations.map((v) =>
-        v.message
-      );
+      const messages = scanExtractedPackage('@openelement/router', root)
+        .violations.map((v) => v.message);
       assert(messages.includes('node:* import'));
       assert(messages.includes('Node process global'));
     },
@@ -175,9 +182,8 @@ Deno.test('package artifacts: rejects router tests and fixtures', async () => {
       'fixtures/project.ts': 'export {};',
     },
     (root) => {
-      const messages = scanExtractedPackage('@openelement/router', root).violations.map((v) =>
-        v.message
-      );
+      const messages = scanExtractedPackage('@openelement/router', root)
+        .violations.map((v) => v.message);
       assertEquals(
         messages.filter((message) =>
           message === 'internal test and fixture files must not be published'
@@ -198,8 +204,13 @@ Deno.test('package artifacts: rejects raw TypeScript but permits declarations', 
     },
     (root) => {
       const violations = scanExtractedPackage('@openelement/element', root).violations;
-      assert(violations.some((violation) => violation.path.endsWith('/source.ts')));
-      assertEquals(violations.some((violation) => violation.path.endsWith('/types.d.ts')), false);
+      assert(
+        violations.some((violation) => violation.path.endsWith('/source.ts')),
+      );
+      assertEquals(
+        violations.some((violation) => violation.path.endsWith('/types.d.ts')),
+        false,
+      );
     },
   );
 });
@@ -215,9 +226,8 @@ Deno.test('package artifacts: rejects undeclared static and dynamic package impo
       const pkg = JSON.parse(Deno.readTextFileSync(`${root}/package.json`));
       pkg.dependencies = { declared: '1.0.0' };
       Deno.writeTextFileSync(`${root}/package.json`, JSON.stringify(pkg));
-      const messages = scanExtractedPackage('@openelement/element', root).violations.map((v) =>
-        v.message
-      );
+      const messages = scanExtractedPackage('@openelement/element', root)
+        .violations.map((v) => v.message);
       assert(
         messages.includes(
           "external import 'missing-dynamic' is absent from package dependencies or peers",
@@ -244,9 +254,8 @@ Deno.test('package artifacts: rejects dead v0.43 residue paths (#1273/B2.13)', a
       'src/internal/core/dsd-shadow-root.ts': 'export function hasPopulatedShadowRoot() {}',
     },
     (root) => {
-      const messages = scanExtractedPackage('@openelement/element', root).violations.map((v) =>
-        v.message
-      );
+      const messages = scanExtractedPackage('@openelement/element', root)
+        .violations.map((v) => v.message);
       assertEquals(
         messages.filter((message) =>
           message === 'dead v0.43 residue must not be published (#1273/B2.13)'
@@ -269,10 +278,13 @@ Deno.test('package artifacts: rejects legacy hydration markers in packed sources
       `,
     },
     (root) => {
-      const messages = scanExtractedPackage('@openelement/element', root).violations.map((v) =>
-        v.message
+      const messages = scanExtractedPackage('@openelement/element', root)
+        .violations.map((v) => v.message);
+      assert(
+        messages.includes(
+          'dead data-ssr-props channel export (#836, removed in 0.44)',
+        ),
       );
-      assert(messages.includes('dead data-ssr-props channel export (#836, removed in 0.44)'));
       assert(messages.includes('legacy marker-based hydration attribute'));
       assert(messages.includes('legacy branch/list hydration comment marker'));
     },
@@ -290,7 +302,10 @@ Deno.test('package artifacts: marker scan ignores comments and other packages', 
       `,
     },
     (root) => {
-      assertEquals(scanExtractedPackage('@openelement/element', root).violations, []);
+      assertEquals(
+        scanExtractedPackage('@openelement/element', root).violations,
+        [],
+      );
     },
   );
   await withPackage(
@@ -302,7 +317,10 @@ Deno.test('package artifacts: marker scan ignores comments and other packages', 
       'src/notes.js': `export const marker = 'data-signal';`,
     },
     (root) => {
-      assertEquals(scanExtractedPackage('@openelement/router', root).violations, []);
+      assertEquals(
+        scanExtractedPackage('@openelement/router', root).violations,
+        [],
+      );
     },
   );
 });
@@ -357,7 +375,10 @@ Deno.test('package artifacts: accepts a clean compiled package tree', async () =
     '@openelement/element',
     { 'index.js': 'export const version = 1;\n' },
     (root) => {
-      assertEquals(scanExtractedPackage('@openelement/element', root).violations, []);
+      assertEquals(
+        scanExtractedPackage('@openelement/element', root).violations,
+        [],
+      );
     },
   );
 });
@@ -376,7 +397,9 @@ async function withExportsPackage(
     );
     for (const [path, content] of Object.entries(files)) {
       const fullPath = `${root}/${path}`;
-      await Deno.mkdir(fullPath.slice(0, fullPath.lastIndexOf('/')), { recursive: true });
+      await Deno.mkdir(fullPath.slice(0, fullPath.lastIndexOf('/')), {
+        recursive: true,
+      });
       await Deno.writeTextFile(fullPath, content);
     }
     await fn(root);
@@ -410,7 +433,9 @@ Deno.test('package artifacts: rejects a types target missing from the tarball', 
     (root) => {
       const result = scanExtractedPackage('@openelement/ui', root);
       assert(
-        result.violations.some((violation) => violation.message.includes('is missing from the tarball')),
+        result.violations.some((violation) =>
+          violation.message.includes('is missing from the tarball')
+        ),
         `expected a missing-declaration violation, got: ${JSON.stringify(result.violations)}`,
       );
     },
@@ -426,7 +451,10 @@ Deno.test('package artifacts: accepts an export with a matching declaration', as
       'src/index.d.ts': 'export declare const version: number;\n',
     },
     (root) => {
-      assertEquals(scanExtractedPackage('@openelement/ui', root).violations, []);
+      assertEquals(
+        scanExtractedPackage('@openelement/ui', root).violations,
+        [],
+      );
     },
   );
 });

@@ -24,10 +24,20 @@
  * <open-button href="/guide">Navigate</open-button>
  * ```
  */
-import { computed, element, OpenElement, property, type ReadonlySignal } from '@openelement/element';
+import {
+  computed,
+  element,
+  OpenElement,
+  property,
+  type ReadonlySignal,
+} from '@openelement/element';
 import { closestFormOf, controlRecipe, recipe, syncDisabledState } from './component-recipes.ts';
 
-@element('open-button', { root: 'shadow-open', delegatesFocus: true, formAssociated: true })
+@element('open-button', {
+  root: 'shadow-open',
+  delegatesFocus: true,
+  formAssociated: true,
+})
 export class OpenButton extends OpenElement {
   static override styles = [
     controlRecipe,
@@ -174,13 +184,19 @@ export class OpenButton extends OpenElement {
 
   /** Disabled anchors lose their href entirely (#757/#1061). */
   @property({ reflect: false, attribute: false, type: String })
-  linkHref: ReadonlySignal<string | null> = computed(() => this.disabled || this.href === '' ? null : this.href);
+  linkHref: ReadonlySignal<string | null> = computed(() =>
+    this.disabled || this.href === '' ? null : this.href
+  );
 
   @property({ reflect: false, attribute: false, type: String })
-  linkTarget: ReadonlySignal<string | null> = computed(() => this.target === '' ? null : this.target);
+  linkTarget: ReadonlySignal<string | null> = computed(() =>
+    this.target === '' ? null : this.target
+  );
 
   @property({ reflect: false, attribute: false, type: String })
-  linkRel: ReadonlySignal<string | null> = computed(() => this.target === '_blank' ? 'noopener noreferrer' : null);
+  linkRel: ReadonlySignal<string | null> = computed(() =>
+    this.target === '_blank' ? 'noopener noreferrer' : null
+  );
 
   @property({ reflect: false, attribute: false, type: String })
   linkAriaDisabled: ReadonlySignal<string | null> = computed(() => this.disabled ? 'true' : null);
@@ -222,7 +238,11 @@ export class OpenButton extends OpenElement {
     this.syncInternals();
   }
 
-  override attributeChangedCallback(name: string, old: string | null, val: string | null): void {
+  override attributeChangedCallback(
+    name: string,
+    old: string | null,
+    val: string | null,
+  ): void {
     super.attributeChangedCallback(name, old, val);
     if (old === val) return;
     if (name === 'disabled') this.syncInternals();
@@ -242,7 +262,9 @@ export class OpenButton extends OpenElement {
       return;
     }
 
-    this.dispatchEvent(new CustomEvent('open-click', { bubbles: true, composed: true }));
+    this.dispatchEvent(
+      new CustomEvent('open-click', { bubbles: true, composed: true }),
+    );
 
     // The anchor branch is a navigation control, not a form control — it must
     // never submit/reset a form (异味③, #637). Only the <button> branch may
@@ -283,7 +305,11 @@ export class OpenButton extends OpenElement {
         cancelable: true,
         composed: true,
       })
-      : new Event('submit', { bubbles: true, cancelable: true, composed: true });
+      : new Event('submit', {
+        bubbles: true,
+        cancelable: true,
+        composed: true,
+      });
     form.dispatchEvent(submitEvent);
     // If the SPA prevented default, the action was handled — do NOT call
     // requestSubmit() (which would cause native form GET navigation).

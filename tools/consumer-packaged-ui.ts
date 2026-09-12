@@ -55,7 +55,9 @@ const elementTarball = join(
 );
 for (const tarball of [uiTarball, elementTarball]) {
   if (!existsSync(tarball)) {
-    throw new Error(`Missing packed release artifact: ${tarball} (run \`deno task pack:dry-run\` first)`);
+    throw new Error(
+      `Missing packed release artifact: ${tarball} (run \`deno task pack:dry-run\` first)`,
+    );
   }
 }
 
@@ -82,7 +84,9 @@ try {
     INSTALL_TIMEOUT_MS,
   );
   if (!install.success) throw new Error(`Packed UI installation failed:\n${install.output}`);
-  console.log('PASS packaged-ui install — UI + element tarballs installed under an empty npm cache');
+  console.log(
+    'PASS packaged-ui install — UI + element tarballs installed under an empty npm cache',
+  );
 
   for (const name of ['@openelement/ui', '@openelement/element']) {
     const resolved = await Deno.realPath(join(tmp, 'node_modules', ...name.split('/')));
@@ -141,7 +145,9 @@ if (manifest.packageName !== '@openelement/ui') throw new Error('unexpected UI m
     TYPES_TIMEOUT_MS,
   );
   if (!types.success) throw new Error(`Packed UI consumer typecheck failed:\n${types.output}`);
-  console.log('PASS packaged-ui types — fresh TypeScript consumer typechecks against the packed UI declarations');
+  console.log(
+    'PASS packaged-ui types — fresh TypeScript consumer typechecks against the packed UI declarations',
+  );
 
   const uiDir = join(tmp, 'node_modules', '@openelement', 'ui');
   const pkgJson = JSON.parse(Deno.readTextFileSync(join(uiDir, 'package.json')));

@@ -30,7 +30,12 @@ import {
   tryParseLineVersion,
 } from './lib/version.ts';
 
-const COMMANDS = new Set(['pack', 'pack:dry-run', 'publish:npm', 'publish:npm:dry-run']);
+const COMMANDS = new Set([
+  'pack',
+  'pack:dry-run',
+  'publish:npm',
+  'publish:npm:dry-run',
+]);
 
 const REPOSITORY = {
   type: 'git',
@@ -109,7 +114,10 @@ const defaultDeriveDepsIo: DeriveDepsIo = {
         if (entry.isDirectory) {
           if (entry.name === 'node_modules' || entry.name === 'dist') continue;
           scan(path);
-        } else if (entry.isFile && (entry.name.endsWith('.ts') || entry.name.endsWith('.tsx'))) {
+        } else if (
+          entry.isFile &&
+          (entry.name.endsWith('.ts') || entry.name.endsWith('.tsx'))
+        ) {
           files.push(Deno.readTextFileSync(path));
         }
       }
@@ -123,13 +131,20 @@ const defaultDeriveDepsIo: DeriveDepsIo = {
   },
 };
 
-function parseNpmSpec(value: string, label: string): { name: string; version: string } | null {
-  const match = value.match(/^npm:(@[^/]+\/[^@/]+|[^@/]+)(?:@(\^?[\d.]+(?:-[\w.]+)?))?/);
+function parseNpmSpec(
+  value: string,
+  label: string,
+): { name: string; version: string } | null {
+  const match = value.match(
+    /^npm:(@[^/]+\/[^@/]+|[^@/]+)(?:@(\^?[\d.]+(?:-[\w.]+)?))?/,
+  );
   if (!match) return null;
   const name = match[1];
   const version = match[2]?.replace(/^\^/, '');
   if (!version) {
-    throw new Error(`npm dependency '${name}' (${label}) has no version; add an explicit version.`);
+    throw new Error(
+      `npm dependency '${name}' (${label}) has no version; add an explicit version.`,
+    );
   }
   return { name, version };
 }
@@ -141,7 +156,8 @@ function parseNpmSpec(value: string, label: string): { name: string; version: st
  * external dep keeps the caret policy.
  */
 function publishRange(spec: { name: string; version: string }): string {
-  return spec.name === '@openelement/url-pattern-list' || spec.name === 'typescript'
+  return spec.name === '@openelement/url-pattern-list' ||
+      spec.name === 'typescript'
     ? spec.version
     : `^${spec.version}`;
 }
@@ -171,7 +187,9 @@ export function deriveDependencies(
 
   // Internal workspace dependencies from source imports.
   for (const text of io.readSrcFiles(pkg.dir)) {
-    for (const { value } of extractStaticModuleSpecifiers(text)) sourceSpecifiers.add(value);
+    for (const { value } of extractStaticModuleSpecifiers(text)) {
+      sourceSpecifiers.add(value);
+    }
     for (const specifier of extractOpenImports(text)) {
       const prefix = '@openelement/';
       if (!specifier.startsWith(prefix)) continue;
@@ -191,7 +209,9 @@ export function deriveDependencies(
     const value = rootImports[specifier];
     if (typeof value !== 'string') continue;
     const spec = parseNpmSpec(value, `${pkg.name} root import`);
-    if (spec) deps[dependencyKey(specifier, spec)] = dependencyRange(specifier, spec);
+    if (spec) {
+      deps[dependencyKey(specifier, spec)] = dependencyRange(specifier, spec);
+    }
   }
 
   return deps;
@@ -222,7 +242,9 @@ export function deriveAllDependencies(
 ): Map<string, Record<string, string>> {
   const rootImports = io.readRootJson().imports ?? {};
   return new Map(
-    packages.map((pkg) => [pkg.name, deriveDependencies(pkg, packages, io, rootImports)]),
+    packages.map((
+      pkg,
+    ) => [pkg.name, deriveDependencies(pkg, packages, io, rootImports)]),
   );
 }
 
@@ -230,7 +252,10 @@ function isPrerelease(version: string): boolean {
   return version.includes('-');
 }
 
-function applyPackageJsonOverrides(pkg: PackageInfo, pkgJson: Record<string, unknown>): void {
+function applyPackageJsonOverrides(
+  pkg: PackageInfo,
+  pkgJson: Record<string, unknown>,
+): void {
   pkgJson.type = 'module';
   pkgJson.repository = REPOSITORY;
   pkgJson.homepage = HOMEPAGE;
@@ -269,7 +294,10 @@ async function runWithTimeout(
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const result = await runWithOutput(command, args, { ...options, signal: controller.signal });
+    const result = await runWithOutput(command, args, {
+      ...options,
+      signal: controller.signal,
+    });
     if (controller.signal.aborted) {
       throw new Error(`${label} timed out after ${timeoutMs}ms`);
     }
@@ -305,7 +333,9 @@ export async function emitUiDeclarations(
   rootDenoJson: { imports?: Record<string, string> },
 ): Promise<void> {
   const elementPkg = allPackages.find((candidate) => candidate.name === '@openelement/element');
-  if (!elementPkg) throw new Error('@openelement/ui declarations need @openelement/element');
+  if (!elementPkg) {
+    throw new Error('@openelement/ui declarations need @openelement/element');
+  }
   const elementTarball = tarballPath(elementPkg);
   try {
     await Deno.stat(elementTarball);
@@ -316,7 +346,9 @@ export async function emitUiDeclarations(
     );
   }
   const tscPin = rootDenoJson.imports?.['typescript'];
-  const tscMatch = typeof tscPin === 'string' ? tscPin.match(/^npm:typescript@(\d+\.\d+\.\d+)$/) : null;
+  const tscMatch = typeof tscPin === 'string'
+    ? tscPin.match(/^npm:typescript@(\d+\.\d+\.\d+)$/)
+    : null;
   if (!tscMatch) {
     throw new Error(
       `@openelement/ui declarations need an exact pinned TypeScript compiler; ` +
@@ -333,12 +365,19 @@ export async function emitUiDeclarations(
     await Deno.rename(`${stage}/package`, `${scopeDir}/element`);
     await Deno.writeTextFileSync(
       `${stage}/package.json`,
-      formatJson({ name: 'ui-declarations-stage', private: true, type: 'module' }),
+      formatJson({
+        name: 'ui-declarations-stage',
+        private: true,
+        type: 'module',
+      }),
     );
     await Deno.mkdir(`${stage}/src`, { recursive: true });
     for (const entry of Deno.readDirSync(`${pkg.dir}/src`)) {
       if (!entry.isFile) continue;
-      await Deno.copyFile(`${pkg.dir}/src/${entry.name}`, `${stage}/src/${entry.name}`);
+      await Deno.copyFile(
+        `${pkg.dir}/src/${entry.name}`,
+        `${stage}/src/${entry.name}`,
+      );
     }
     await Deno.writeTextFileSync(
       `${stage}/tsconfig.json`,
@@ -378,7 +417,9 @@ export async function emitUiDeclarations(
       '@openelement/ui declaration emit',
     );
     if (tsc.code !== 0) {
-      throw new Error(`@openelement/ui declaration emit failed:\n${tsc.stdout}\n${tsc.stderr}`);
+      throw new Error(
+        `@openelement/ui declaration emit failed:\n${tsc.stdout}\n${tsc.stderr}`,
+      );
     }
     const emitted: string[] = [];
     for (const entry of Deno.readDirSync(`${stage}/dts`)) {
@@ -398,7 +439,9 @@ export async function emitUiDeclarations(
       );
       emitted.push(entry.name);
     }
-    if (emitted.length === 0) throw new Error('@openelement/ui declaration emit produced no files.');
+    if (emitted.length === 0) {
+      throw new Error('@openelement/ui declaration emit produced no files.');
+    }
     const exports = pkgJson.exports as Record<string, Record<string, string>>;
     for (const [subpath, conditions] of Object.entries(exports)) {
       const jsTarget = conditions?.import ?? conditions?.default;
@@ -414,7 +457,9 @@ export async function emitUiDeclarations(
       }
       exports[subpath] = { types: dtsTarget, ...conditions };
     }
-    console.log(`[npm] @openelement/ui: emitted ${emitted.length} declaration file(s).`);
+    console.log(
+      `[npm] @openelement/ui: emitted ${emitted.length} declaration file(s).`,
+    );
   } finally {
     await Deno.remove(stage, { recursive: true });
   }
@@ -424,7 +469,10 @@ export async function packPackage(
   pkg: PackageInfo,
   dependencies: Record<string, string>,
   allPackages: PackageInfo[],
-  rootDenoJson: { imports?: Record<string, string>; compilerOptions?: Record<string, unknown> },
+  rootDenoJson: {
+    imports?: Record<string, string>;
+    compilerOptions?: Record<string, unknown>;
+  },
 ): Promise<string> {
   const filename = npmTarballName(pkg);
   const out = tarballPath(pkg);
@@ -445,18 +493,29 @@ export async function packPackage(
   let staged: Awaited<ReturnType<typeof stageCompiledPackWorkspace>> | null = null;
   const compiledModules = compilePackageElementModules(pkg.dir);
   if (compiledModules.length > 0) {
-    const byName = new Map(allPackages.map((candidate) => [candidate.name, candidate]));
+    const byName = new Map(
+      allPackages.map((candidate) => [candidate.name, candidate]),
+    );
     const members = [
       pkg,
       ...Object.keys(dependencies)
         .filter((name) => name.startsWith('@openelement/'))
         .map((name) => {
           const member = byName.get(name);
-          if (!member) throw new Error(`Workspace dependency not found for staging: ${name}`);
+          if (!member) {
+            throw new Error(
+              `Workspace dependency not found for staging: ${name}`,
+            );
+          }
           return member;
         }),
     ];
-    staged = await stageCompiledPackWorkspace(pkg, members, rootDenoJson, compiledModules);
+    staged = await stageCompiledPackWorkspace(
+      pkg,
+      members,
+      rootDenoJson,
+      compiledModules,
+    );
     console.log(
       `[npm] ${pkg.name}: packing staged compiler output for ${compiledModules.length} ` +
         'compiled element module(s) (#1301).',
@@ -486,13 +545,21 @@ export async function packPackage(
       );
     }
     applyPackageJsonOverrides(pkg, pkgJson);
-    const sourceManifest = JSON.parse(Deno.readTextFileSync(`${pkg.dir}/deno.json`)) as {
+    const sourceManifest = JSON.parse(
+      Deno.readTextFileSync(`${pkg.dir}/deno.json`),
+    ) as {
       peerDependencies?: Record<string, string>;
       peerDependenciesMeta?: Record<string, { optional?: boolean }>;
     };
-    for (const [name, value] of Object.entries(sourceManifest.peerDependencies ?? {})) {
+    for (
+      const [name, value] of Object.entries(
+        sourceManifest.peerDependencies ?? {},
+      )
+    ) {
       const parsed = parseNpmSpec(value, `${pkg.name} peer dependency`);
-      if (!parsed) throw new Error(`Invalid npm peer dependency ${name}=${value}`);
+      if (!parsed) {
+        throw new Error(`Invalid npm peer dependency ${name}=${value}`);
+      }
       pkgJson.peerDependencies = {
         ...pkgJson.peerDependencies,
         [name]: publishRange(parsed),
@@ -516,21 +583,38 @@ export async function packPackage(
       const version = pkgJson.dependencies[name];
       if (version) {
         delete pkgJson.dependencies[name];
-        pkgJson.peerDependencies = { ...pkgJson.peerDependencies, [name]: version };
+        pkgJson.peerDependencies = {
+          ...pkgJson.peerDependencies,
+          [name]: version,
+        };
         pkgJson.peerDependenciesMeta = {
           ...pkgJson.peerDependenciesMeta,
           [name]: { optional: true },
         };
       }
     }
-    for (const [name, metadata] of Object.entries(pkgJson.peerDependenciesMeta ?? {})) {
-      if ((metadata as { optional?: boolean }).optional) delete pkgJson.dependencies[name];
+    for (
+      const [name, metadata] of Object.entries(
+        pkgJson.peerDependenciesMeta ?? {},
+      )
+    ) {
+      if ((metadata as { optional?: boolean }).optional) {
+        delete pkgJson.dependencies[name];
+      }
     }
     if (pkg.name === '@openelement/ui') {
-      await emitUiDeclarations(pkg, allPackages, `${tmp}/package`, pkgJson, rootDenoJson);
+      await emitUiDeclarations(
+        pkg,
+        allPackages,
+        `${tmp}/package`,
+        pkgJson,
+        rootDenoJson,
+      );
     }
     Deno.writeTextFileSync(pkgJsonPath, formatJson(pkgJson));
-    await runCommand('tar', ['-czf', out, '-C', tmp, 'package'], { env: tarEnv });
+    await runCommand('tar', ['-czf', out, '-C', tmp, 'package'], {
+      env: tarEnv,
+    });
   } finally {
     await Deno.remove(tmp, { recursive: true });
   }
@@ -538,7 +622,10 @@ export async function packPackage(
   return out;
 }
 
-async function npmPackageVersionExists(name: string, version: string): Promise<boolean> {
+async function npmPackageVersionExists(
+  name: string,
+  version: string,
+): Promise<boolean> {
   try {
     return await npmView(`${name}@${version}`, 'version') === version;
   } catch {
@@ -623,7 +710,14 @@ export function npmPublishTag(version: string): string {
 // (#869-2.5) so a release can never skip a number.
 // ---------------------------------------------------------------------------
 
-const DEFAULT_REGISTRY_DELAYS_MS = [0, 1_000, 2_000, 4_000, 8_000, 15_000] as const;
+const DEFAULT_REGISTRY_DELAYS_MS = [
+  0,
+  1_000,
+  2_000,
+  4_000,
+  8_000,
+  15_000,
+] as const;
 
 export class NpmViewError extends Error {
   constructor(message: string, readonly retryable: boolean) {
@@ -635,7 +729,10 @@ export class NpmViewError extends Error {
 type NpmReleaseQuery = (specifier: string, field: string) => Promise<string>;
 
 /** Run `npm view <specifier> <field> --json` and parse the JSON string value. */
-export async function npmView(specifier: string, field: string): Promise<string> {
+export async function npmView(
+  specifier: string,
+  field: string,
+): Promise<string> {
   const output = await new Deno.Command('npm', {
     args: ['view', specifier, field, '--json'],
     stdout: 'piped',
@@ -644,19 +741,28 @@ export async function npmView(specifier: string, field: string): Promise<string>
   const stderr = new TextDecoder().decode(output.stderr);
   if (!output.success) {
     const retryable = !/\b(?:E401|E403)\b/u.test(stderr);
-    throw new NpmViewError(`npm view ${specifier} ${field} failed: ${stderr.trim()}`, retryable);
+    throw new NpmViewError(
+      `npm view ${specifier} ${field} failed: ${stderr.trim()}`,
+      retryable,
+    );
   }
   let value: unknown;
   try {
     value = JSON.parse(new TextDecoder().decode(output.stdout)) as unknown;
   } catch (error) {
-    throw new NpmViewError(`Invalid npm JSON for ${specifier} ${field}: ${error}`, false);
+    throw new NpmViewError(
+      `Invalid npm JSON for ${specifier} ${field}: ${error}`,
+      false,
+    );
   }
   if (typeof value !== 'string') {
     // Array-valued fields (e.g. `versions`) keep their JSON encoding so the
     // string contract holds; callers JSON.parse it back (predecessor check).
     if (Array.isArray(value)) return JSON.stringify(value);
-    throw new NpmViewError(`Unexpected npm value for ${specifier} ${field}`, false);
+    throw new NpmViewError(
+      `Unexpected npm value for ${specifier} ${field}`,
+      false,
+    );
   }
   return value;
 }
@@ -679,7 +785,9 @@ export function prereleaseTag(version: string): PrereleaseChannel | null {
   if (parsed && parsed.prerelease === undefined) return null;
   const channel = prereleaseChannel(version);
   if (channel) return channel;
-  throw new Error(`Expected version x.y.z or x.y.z-alpha|beta|rc.n, got: ${version}`);
+  throw new Error(
+    `Expected version x.y.z or x.y.z-alpha|beta|rc.n, got: ${version}`,
+  );
 }
 
 // #869-2.5: the version immediately before the target on the same line, so a
@@ -693,7 +801,9 @@ async function verifyField(
   specifier: string,
   field: string,
   expected: string,
-  options: Required<Pick<VerifyNpmReleaseOptions, 'query' | 'sleep' | 'delaysMs'>>,
+  options: Required<
+    Pick<VerifyNpmReleaseOptions, 'query' | 'sleep' | 'delaysMs'>
+  >,
 ): Promise<void> {
   let lastObserved = '<not queried>';
   let lastDiagnostic = '';
@@ -720,7 +830,9 @@ async function verifyField(
   );
 }
 
-export async function verifyNpmRelease(options: VerifyNpmReleaseOptions): Promise<void> {
+export async function verifyNpmRelease(
+  options: VerifyNpmReleaseOptions,
+): Promise<void> {
   const tag = prereleaseTag(options.version);
   const runtime = {
     query: options.query,
@@ -729,7 +841,9 @@ export async function verifyNpmRelease(options: VerifyNpmReleaseOptions): Promis
     delaysMs: options.delaysMs ?? DEFAULT_REGISTRY_DELAYS_MS,
   };
   if (runtime.delaysMs.length === 0 || runtime.delaysMs[0] !== 0) {
-    throw new Error('Registry retry schedule must start with an immediate attempt.');
+    throw new Error(
+      'Registry retry schedule must start with an immediate attempt.',
+    );
   }
 
   // #869-2.5: no version skips — the predecessor on the same line must already
@@ -758,7 +872,9 @@ export async function verifyNpmRelease(options: VerifyNpmReleaseOptions): Promis
           `is not among published versions of ${packageName}.`,
       );
     }
-    options.log?.(`Continuity verified: ${predecessor} precedes ${options.version}.`);
+    options.log?.(
+      `Continuity verified: ${predecessor} precedes ${options.version}.`,
+    );
   }
 
   for (const name of options.packages) {
@@ -807,7 +923,11 @@ function assertVersionConsistency(packages: PackageInfo[]): void {
   throw new Error(`Package versions are not consistent:\n${lines.join('\n')}`);
 }
 
-function parseCommand(): { command: string; dryRun: boolean; publish: boolean } {
+function parseCommand(): {
+  command: string;
+  dryRun: boolean;
+  publish: boolean;
+} {
   const command = Deno.args[0];
   if (!COMMANDS.has(command)) {
     throw new Error(
@@ -828,7 +948,9 @@ async function main(): Promise<void> {
     imports?: Record<string, string>;
     compilerOptions?: Record<string, unknown>;
   };
-  if (packages.length === 0) throw new Error('No packages found under packages/.');
+  if (packages.length === 0) {
+    throw new Error('No packages found under packages/.');
+  }
 
   assertVersionConsistency(packages);
 
