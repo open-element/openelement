@@ -338,7 +338,7 @@
           ]
         },
         "./vite": {
-          "publicShapeSha256": "5b989f4f16e060e8c8dc1a6fe972e6e7b72f373ea12877121e0cfbfd0f5a8168",
+          "publicShapeSha256": "b856190acedb180660770c75ead662b27c3944bc165a56545e177806e78d7086",
           "publicSymbols": [
             "ArtifactInfo=type:{name:string;path:string;sizeBytes:number;sizeKB:string}",
             "BuildManifest=type:{clientEntry:union(null|{name:string;path:string;sizeBytes:number;sizeKB:string});headExtrasSize:number;htmlPages:array({name:string;path:string;sizeBytes:number;sizeKB:string});islands:array({name:string;path:string;sizeBytes:number;sizeKB:string});phase:union(1|2|3);timestamp:string;totalHtmlBytes:number;totalJsBytes:number;warnings:array(string)}",
@@ -349,6 +349,7 @@
             "OpenElementBuildContextLike=type:{plugins:{blogOptions:union(null|{basePath?:union(string|undefined);contentDir?:union(string|undefined)});headerNav:array({href:string;label:string});i18nOptions:union(null|{defaultLocale:string;index:string=>unknown;locales:array(string)});index:string=>unknown;navSections:array({items:array({label:string;order?:union(number|undefined);path:string});section:string});sitemapOptions:union(Record<string, unknown>|null)};registerPlugin:{call:(name:string,instance:unknown)=>void}}",
             "OpenElementHeaderNavLink=type:{href:string;label:string}",
             "OpenElementI18nContextOptions=type:{defaultLocale:string;index:string=>unknown;locales:array(string)}",
+            "OpenElementI18nOptions=type:{defaultLocale?:union(string|undefined);locales:array(string)}",
             "OpenElementNavSection=type:{items:array({label:string;order?:union(number|undefined);path:string});section:string}",
             "OpenElementOptions=type:{ssg?:union(undefined|{dynamicRouteFailure?:union(\"fail\"|\"warn\"|undefined)})}",
             "OpenMdxPluginOptions=type:{routesDir?:union(string|undefined)}",
