@@ -99,6 +99,11 @@ async function runCoverage(crashRetries: number): Promise<string> {
             'test',
             '--no-lock',
             `--coverage=${coverageDir}`,
+            // element's WTR browser suite is gated separately
+            // (test:element:browser:gate); examples/legacy is a frozen T2
+            // archive whose imports target retired surfaces — neither
+            // contributes to the coverage denominator.
+            '--ignore=packages/element/__wtr__,examples/legacy',
             '--allow-read',
             '--allow-write',
             '--allow-env',
