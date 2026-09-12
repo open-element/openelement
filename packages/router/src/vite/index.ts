@@ -28,6 +28,12 @@ import type { FrameworkOptions } from './framework.ts';
 import { createOpenPlugin } from './plugin.ts';
 import { DEFAULT_COMPONENTS_DIR, DEFAULT_ISLANDS_DIR, DEFAULT_ROUTES_DIR } from './paths.ts';
 
+// Keep the virtual-client runtime graph reachable to `deno pack`. These
+// modules have no import-time browser effects; build-client resolves them by
+// file path only when it generates the consumer's client entry.
+import './internal/ssg/island-scheduler.ts';
+import './internal/ssg/enhance-client.ts';
+
 /** Options for the low-level {@linkcode openPipeline} Vite plugin pipeline. */
 export interface OpenPipelineConfig {
   /** Build/dev mode. 'ssg' (default) enables SSR dev server + static generation. 'spa' produces a client-only app (no SSR). */

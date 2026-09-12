@@ -216,13 +216,14 @@ async function removeClientDeliveryArtifacts(root: string, outDir: string): Prom
   await rm(resolve(root, outDir, 'island-manifests'), { recursive: true, force: true });
 }
 
-// #868: the browser runtimes (island-scheduler.ts, enhance-client.ts) are real
-// modules bundled through these virtual specifiers — the generated entry
-// imports them, so there is no toString() serialization, no import-free
-// constraint, and no string copy to drift. Resolution maps each specifier to
-// the module's own source file inside this package.
-function runtimeModulePath(relative: string): string {
-  return fileURLToPath(new URL(relative, import.meta.url));
+// #868: the browser runtimes are real modules bundled through virtual
+// specifiers. Development resolves the TypeScript source; `deno pack` removes
+// raw TypeScript payloads, so an installed tarball must instead resolve the
+// staged JavaScript counterpart.
+function runtimeModulePath(relativeSource: string): string {
+  const sourcePath = fileURLToPath(new URL(relativeSource, import.meta.url));
+  if (existsSync(sourcePath)) return sourcePath;
+  return sourcePath.replace(/\.(?:[cm]?ts|tsx)$/, '.js');
 }
 
 type ViteBuildOptionsWithManifest = NonNullable<InlineConfig['build']> & {
