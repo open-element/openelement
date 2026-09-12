@@ -15,7 +15,7 @@
     "npm:@openelement/url-pattern-list@0.6.0": "0.6.0",
     "npm:@playwright/test@1.59.1": "1.59.1",
     "npm:@preact/signals-core@^1.12.1": "1.14.4",
-    "npm:@rollup/plugin-terser@1.0.0": "1.0.0_rollup@4.63.1",
+    "npm:@rollup/plugin-terser@1.0.0": "1.0.0",
     "npm:@types/node@26.5.0": "26.5.0",
     "npm:@zag-js/combobox@1.43.3": "1.43.3",
     "npm:@zag-js/vanilla@1.43.3": "1.43.3",
@@ -427,16 +427,12 @@
     "@rolldown/pluginutils@1.0.1": {
       "integrity": "sha512-2j9bGt5Jh8hj+vPtgzPtl72j0yRxHAyumoo6TNfAjsLB04UtpSvPbPcDcBMxz7n+9CYB0c1GxQFxYRg2jimqGw=="
     },
-    "@rollup/plugin-terser@1.0.0_rollup@4.63.1": {
+    "@rollup/plugin-terser@1.0.0": {
       "integrity": "sha512-FnCxhTBx6bMOYQrar6C8h3scPt8/JwIzw3+AJ2K++6guogH5fYaIFia+zZuhqv0eo1RN7W1Pz630SyvLbDjhtQ==",
       "dependencies": [
-        "rollup",
         "serialize-javascript",
         "smob",
         "terser"
-      ],
-      "optionalPeers": [
-        "rollup"
       ]
     },
     "@rollup/rollup-android-arm-eabi@4.63.1": {
@@ -1190,8 +1186,8 @@
         "source-map"
       ]
     },
-    "source-map@0.7.6": {
-      "integrity": "sha512-i5uvt8C3ikiWeNZSVZNWcfZPItFQOsYTUAOkcUPGd8DqDy1uOUikjt5dG+uRlwyvR108Fb9DOd4GvXfT0N2/uQ=="
+    "source-map@0.6.1": {
+      "integrity": "sha512-UjgapumWlbMhkBgzT7Ykc5YXUT46F0iKu8SGXq0bcwP5dz/h0Plj6enJqjz1Zbq2l5WaqYnrVbwWOWMyF3F47g=="
     },
     "sprintf-js@1.0.3": {
       "integrity": "sha512-D9cPgkvLlV3t3IzL0D0YLvGA9Ahk4PcvVwUbN0dSGr1aP0Nrt4AEnTUbuGvquEC0mA64Gqt1fzirlRs5ibXx8g=="

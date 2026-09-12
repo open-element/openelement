@@ -52,6 +52,20 @@ const fixtures: FixtureSpec[] = [
     id: 'wtr-field.tsx',
     out: 'wtr-field.ts',
   },
+  {
+    // packages/ui production overlay components (#1339 slice): compiled through
+    // the same official path; their './component-recipes.ts' /
+    // './instance-state.ts' imports are served from packages/ui/src by the
+    // ui-source plugin in web-test-runner.config.mjs (no copies committed).
+    source: join(elementPkg, '../ui/src/open-dialog.tsx'),
+    id: 'open-dialog.tsx',
+    out: 'open-dialog.ts',
+  },
+  {
+    source: join(elementPkg, '../ui/src/open-dropdown.tsx'),
+    id: 'open-dropdown.tsx',
+    out: 'open-dropdown.ts',
+  },
 ];
 
 const outDir = join(suite, 'generated');

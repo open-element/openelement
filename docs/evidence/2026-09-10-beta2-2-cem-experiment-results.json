@@ -1,0 +1,485 @@
+{
+  "analyzer": "@custom-elements-manifest/analyzer@0.11.0",
+  "analyzerBundledTypescript": "5.4.5",
+  "deno": "2.9.0",
+  "checks": 90,
+  "failures": 0,
+  "notes": [
+    "A.open-callout.type default: manifest=(none) upstream=info",
+    "A.open-button.variant default: manifest=(none) upstream=default",
+    "A.open-button.size default: manifest=(none) upstream=md",
+    "A.open-button.type default: manifest=(none) upstream=button",
+    "A.open-input.type default: manifest=(none) upstream=text",
+    "A.open-input.open-input detail type: manifest=CustomEvent<{ value: unknown }> upstream=CustomEvent",
+    "A.open-input.open-change detail type: manifest=CustomEvent<{ value: unknown }> upstream=CustomEvent",
+    "A.open-theme-toggle.theme type: manifest=string upstream='dark' | 'light'",
+    "A.open-theme-toggle.theme default: manifest=(none) upstream=dark",
+    "A.open-theme-toggle.open:theme-change detail type: manifest=CustomEvent<{ theme: unknown }> upstream=CustomEvent",
+    "A.open-badge.tone default: manifest=(none) upstream=neutral",
+    "A.open-badge.size default: manifest=(none) upstream=md",
+    "E.fixture-truth: corpus.json tags=[v044-fast-probe,v044-lit-probe,v044-native-probe,v044-stencil-probe] hand-written compiler-output.cem.json tags=[v044-fast-probe,v044-lit-probe,v044-native-probe,v044-stencil-probe] (4 probes incl. slots/parts upstream cannot see)"
+  ],
+  "phaseMs": {
+    "A.authored-parity": 43.6,
+    "D.compiled-parity": 88.6,
+    "E.foreign-corpus": 14.4,
+    "B.policy-locality": 0.5,
+    "C.two-path-inventory": 3.8
+  },
+  "totalMs": 152.3,
+  "memoryRssMb": 179,
+  "memoryRssDeltaMb": 48,
+  "heapUsedMb": 49,
+  "results": [
+    {
+      "id": "A.open-card.tagName",
+      "passed": true,
+      "detail": "manifest=open-card upstream=open-card (3.3ms)"
+    },
+    {
+      "id": "A.open-card.attributes",
+      "passed": true,
+      "detail": "manifest=[variant] upstream=[variant]"
+    },
+    {
+      "id": "A.open-card.slots",
+      "passed": true,
+      "detail": "manifest=[,footer,header] upstream=[,footer,header]"
+    },
+    {
+      "id": "A.open-card.cssParts",
+      "passed": true,
+      "detail": "manifest=[body,container] upstream=[body,container]"
+    },
+    {
+      "id": "A.open-card.events",
+      "passed": true,
+      "detail": "manifest=[] upstream=[]"
+    },
+    {
+      "id": "A.open-callout.tagName",
+      "passed": true,
+      "detail": "manifest=open-callout upstream=open-callout (1.9ms)"
+    },
+    {
+      "id": "A.open-callout.attributes",
+      "passed": true,
+      "detail": "manifest=[label,type] upstream=[label,type]"
+    },
+    {
+      "id": "A.open-callout.slots",
+      "passed": true,
+      "detail": "manifest=[] upstream=[]"
+    },
+    {
+      "id": "A.open-callout.cssParts",
+      "passed": true,
+      "detail": "manifest=[container,content,icon] upstream=[container,content,icon]"
+    },
+    {
+      "id": "A.open-callout.events",
+      "passed": true,
+      "detail": "manifest=[] upstream=[]"
+    },
+    {
+      "id": "A.open-button.tagName",
+      "passed": true,
+      "detail": "manifest=open-button upstream=open-button (3.1ms)"
+    },
+    {
+      "id": "A.open-button.attributes",
+      "passed": true,
+      "detail": "manifest=[disabled,href,size,target,type,variant] upstream=[disabled,href,size,target,type,variant]"
+    },
+    {
+      "id": "A.open-button.slots",
+      "passed": true,
+      "detail": "manifest=[] upstream=[]"
+    },
+    {
+      "id": "A.open-button.cssParts",
+      "passed": true,
+      "detail": "manifest=[control] upstream=[control]"
+    },
+    {
+      "id": "A.open-button.events",
+      "passed": true,
+      "detail": "manifest=[open-click] upstream=[open-click]"
+    },
+    {
+      "id": "A.open-input.tagName",
+      "passed": true,
+      "detail": "manifest=open-input upstream=open-input (3.3ms)"
+    },
+    {
+      "id": "A.open-input.attributes",
+      "passed": true,
+      "detail": "manifest=[disabled,error,label,name,placeholder,required,type,value] upstream=[disabled,error,label,name,placeholder,required,type,value]"
+    },
+    {
+      "id": "A.open-input.slots",
+      "passed": true,
+      "detail": "manifest=[] upstream=[]"
+    },
+    {
+      "id": "A.open-input.cssParts",
+      "passed": true,
+      "detail": "manifest=[control,error,label,wrapper] upstream=[control,error,label,wrapper]"
+    },
+    {
+      "id": "A.open-input.events",
+      "passed": true,
+      "detail": "manifest=[open-blur,open-change,open-focus,open-input] upstream=[open-blur,open-change,open-focus,open-input]"
+    },
+    {
+      "id": "A.open-theme-toggle.tagName",
+      "passed": true,
+      "detail": "manifest=open-theme-toggle upstream=open-theme-toggle (2.9ms)"
+    },
+    {
+      "id": "A.open-theme-toggle.attributes",
+      "passed": true,
+      "detail": "manifest=[theme] upstream=[theme]"
+    },
+    {
+      "id": "A.open-theme-toggle.slots",
+      "passed": true,
+      "detail": "manifest=[] upstream=[]"
+    },
+    {
+      "id": "A.open-theme-toggle.cssParts",
+      "passed": true,
+      "detail": "manifest=[icon-moon,icon-sun,toggle] upstream=[icon-moon,icon-sun,toggle]"
+    },
+    {
+      "id": "A.open-theme-toggle.events",
+      "passed": true,
+      "detail": "manifest=[open:theme-change] upstream=[] missing=[open:theme-change] (pinned gap: [open:theme-change])"
+    },
+    {
+      "id": "A.open-code-block.tagName",
+      "passed": true,
+      "detail": "manifest=open-code-block upstream=open-code-block (2.3ms)"
+    },
+    {
+      "id": "A.open-code-block.attributes",
+      "passed": true,
+      "detail": "manifest=[] upstream=[]"
+    },
+    {
+      "id": "A.open-code-block.slots",
+      "passed": true,
+      "detail": "manifest=[] upstream=[]"
+    },
+    {
+      "id": "A.open-code-block.cssParts",
+      "passed": true,
+      "detail": "manifest=[copy] upstream=[copy]"
+    },
+    {
+      "id": "A.open-code-block.events",
+      "passed": true,
+      "detail": "manifest=[] upstream=[]"
+    },
+    {
+      "id": "A.open-badge.tagName",
+      "passed": true,
+      "detail": "manifest=open-badge upstream=open-badge (0.5ms)"
+    },
+    {
+      "id": "A.open-badge.attributes",
+      "passed": true,
+      "detail": "manifest=[size,tone] upstream=[size,tone]"
+    },
+    {
+      "id": "A.open-badge.slots",
+      "passed": true,
+      "detail": "manifest=[] upstream=[]"
+    },
+    {
+      "id": "A.open-badge.cssParts",
+      "passed": true,
+      "detail": "manifest=[badge] upstream=[badge]"
+    },
+    {
+      "id": "A.open-badge.events",
+      "passed": true,
+      "detail": "manifest=[] upstream=[]"
+    },
+    {
+      "id": "A.open-dialog.tagName",
+      "passed": true,
+      "detail": "manifest=open-dialog upstream=open-dialog (1.5ms)"
+    },
+    {
+      "id": "A.open-dialog.attributes",
+      "passed": true,
+      "detail": "manifest=[label,open] upstream=[label,open]"
+    },
+    {
+      "id": "A.open-dialog.slots",
+      "passed": true,
+      "detail": "manifest=[,footer,trigger] upstream=[,footer,trigger]"
+    },
+    {
+      "id": "A.open-dialog.cssParts",
+      "passed": true,
+      "detail": "manifest=[body,close,footer,header,overlay] upstream=[body,close,footer,header,overlay]"
+    },
+    {
+      "id": "A.open-dialog.events",
+      "passed": true,
+      "detail": "manifest=[open-dialog-close] upstream=[open-dialog-close]"
+    },
+    {
+      "id": "A.open-dropdown.tagName",
+      "passed": true,
+      "detail": "manifest=open-dropdown upstream=open-dropdown (1.4ms)"
+    },
+    {
+      "id": "A.open-dropdown.attributes",
+      "passed": true,
+      "detail": "manifest=[] upstream=[]"
+    },
+    {
+      "id": "A.open-dropdown.slots",
+      "passed": true,
+      "detail": "manifest=[,trigger] upstream=[,trigger]"
+    },
+    {
+      "id": "A.open-dropdown.cssParts",
+      "passed": true,
+      "detail": "manifest=[content,trigger] upstream=[content,trigger]"
+    },
+    {
+      "id": "A.open-dropdown.events",
+      "passed": true,
+      "detail": "manifest=[] upstream=[]"
+    },
+    {
+      "id": "A.open-tabs.tagName",
+      "passed": true,
+      "detail": "manifest=open-tabs upstream=open-tabs (1.7ms)"
+    },
+    {
+      "id": "A.open-tabs.attributes",
+      "passed": true,
+      "detail": "manifest=[] upstream=[]"
+    },
+    {
+      "id": "A.open-tabs.slots",
+      "passed": true,
+      "detail": "manifest=[panel,tab] upstream=[panel,tab]"
+    },
+    {
+      "id": "A.open-tabs.cssParts",
+      "passed": true,
+      "detail": "manifest=[] upstream=[]"
+    },
+    {
+      "id": "A.open-tabs.events",
+      "passed": true,
+      "detail": "manifest=[] upstream=[]"
+    },
+    {
+      "id": "D.compiles",
+      "passed": true,
+      "detail": "compileElementModule bytes=64654"
+    },
+    {
+      "id": "D.bare-upstream-gap",
+      "passed": true,
+      "detail": "bare upstream: attributes=0 tagName=undefined"
+    },
+    {
+      "id": "D.plugin-restores-tag-and-attributes",
+      "passed": true,
+      "detail": "tag=open-button attrs=[variant:string:\"default\":reflect=true,size:string:\"md\":reflect=true,disabled:boolean:false:reflect=true,href:string:\"\":reflect=true,target:string:\"\":reflect=true,type:string:\"button\":reflect=true]"
+    },
+    {
+      "id": "D.plugin-restores-defaults",
+      "passed": true,
+      "detail": "variant.default=\"default\""
+    },
+    {
+      "id": "D.plugin-restores-slots-and-parts",
+      "passed": true,
+      "detail": "slots=[] parts=[control]"
+    },
+    {
+      "id": "D.events-survive-compilation",
+      "passed": true,
+      "detail": "events=[open-click]"
+    },
+    {
+      "id": "E.default.tags",
+      "passed": true,
+      "detail": "tags=[v044-interop-child-host,v044-lit-probe,v044-native-probe,v044-stencil-probe] (FAST probe blind spot: .define({name}) form unseen)"
+    },
+    {
+      "id": "E.default.no-events",
+      "passed": true,
+      "detail": "parameterized emit() dispatch defeats literal-name extraction (OE parseEvents has the same limit)"
+    },
+    {
+      "id": "E.default.no-slots-or-parts",
+      "passed": true,
+      "detail": "no template/innerHTML scanning upstream (slots/parts come from JSDoc conventions only)"
+    },
+    {
+      "id": "E.all-frameworks.tags",
+      "passed": true,
+      "detail": "tags=[v044-interop-child-host,v044-lit-probe,v044-native-probe,v044-stencil-probe] (FAST probe blind spot: .define({name}) form unseen)"
+    },
+    {
+      "id": "E.all-frameworks.no-events",
+      "passed": true,
+      "detail": "parameterized emit() dispatch defeats literal-name extraction (OE parseEvents has the same limit)"
+    },
+    {
+      "id": "E.all-frameworks.no-slots-or-parts",
+      "passed": true,
+      "detail": "no template/innerHTML scanning upstream (slots/parts come from JSDoc conventions only)"
+    },
+    {
+      "id": "E.native-attribute-default-plugins",
+      "passed": true,
+      "detail": "native probe attrs=[value] without framework plugins"
+    },
+    {
+      "id": "E.lit-attribute-needs-lit-plugin",
+      "passed": true,
+      "detail": "lit probe attrs: default=[] with litPlugin=[value]"
+    },
+    {
+      "id": "B.open-card.policy-registry",
+      "passed": true,
+      "detail": "layer=dsd-static hydrate=idle (POLICY_BY_CLASS join)"
+    },
+    {
+      "id": "B.open-card.delivery-block",
+      "passed": true,
+      "detail": "ssr=true dsd=true module=@openelement/ui/open-card"
+    },
+    {
+      "id": "B.open-callout.policy-registry",
+      "passed": true,
+      "detail": "layer=dsd-static hydrate=idle (POLICY_BY_CLASS join)"
+    },
+    {
+      "id": "B.open-callout.delivery-block",
+      "passed": true,
+      "detail": "ssr=true dsd=true module=@openelement/ui/open-callout"
+    },
+    {
+      "id": "B.open-button.policy-registry",
+      "passed": true,
+      "detail": "layer=dsd-interactive hydrate=load (POLICY_BY_CLASS join)"
+    },
+    {
+      "id": "B.open-button.delivery-block",
+      "passed": true,
+      "detail": "ssr=true dsd=true module=@openelement/ui/open-button"
+    },
+    {
+      "id": "B.open-input.policy-registry",
+      "passed": true,
+      "detail": "layer=dsd-interactive hydrate=load (POLICY_BY_CLASS join)"
+    },
+    {
+      "id": "B.open-input.delivery-block",
+      "passed": true,
+      "detail": "ssr=true dsd=true module=@openelement/ui/open-input"
+    },
+    {
+      "id": "B.open-theme-toggle.policy-registry",
+      "passed": true,
+      "detail": "layer=dsd-interactive hydrate=load (POLICY_BY_CLASS join)"
+    },
+    {
+      "id": "B.open-theme-toggle.delivery-block",
+      "passed": true,
+      "detail": "ssr=true dsd=true module=@openelement/ui/open-theme-toggle"
+    },
+    {
+      "id": "B.open-code-block.policy-registry",
+      "passed": true,
+      "detail": "layer=dsd-static hydrate=idle (POLICY_BY_CLASS join)"
+    },
+    {
+      "id": "B.open-code-block.delivery-block",
+      "passed": true,
+      "detail": "ssr=true dsd=true module=@openelement/ui/open-code-block"
+    },
+    {
+      "id": "B.open-badge.policy-registry",
+      "passed": true,
+      "detail": "layer=dsd-static hydrate=idle (POLICY_BY_CLASS join)"
+    },
+    {
+      "id": "B.open-badge.delivery-block",
+      "passed": true,
+      "detail": "ssr=true dsd=true module=@openelement/ui/open-badge"
+    },
+    {
+      "id": "B.open-dialog.policy-registry",
+      "passed": true,
+      "detail": "layer=dsd-interactive hydrate=idle (POLICY_BY_CLASS join)"
+    },
+    {
+      "id": "B.open-dialog.delivery-block",
+      "passed": true,
+      "detail": "ssr=true dsd=true module=@openelement/ui/open-dialog"
+    },
+    {
+      "id": "B.open-dropdown.policy-registry",
+      "passed": true,
+      "detail": "layer=dsd-interactive hydrate=load (POLICY_BY_CLASS join)"
+    },
+    {
+      "id": "B.open-dropdown.delivery-block",
+      "passed": true,
+      "detail": "ssr=true dsd=true module=@openelement/ui/open-dropdown"
+    },
+    {
+      "id": "B.open-tabs.policy-registry",
+      "passed": true,
+      "detail": "layer=dsd-interactive hydrate=load (POLICY_BY_CLASS join)"
+    },
+    {
+      "id": "B.open-tabs.delivery-block",
+      "passed": true,
+      "detail": "ssr=true dsd=true module=@openelement/ui/open-tabs"
+    },
+    {
+      "id": "B.analyzer-output-policy-free",
+      "passed": true,
+      "detail": "no ssr/dsd/hydrate/layer/openElement keys in 13 analyzer outputs"
+    },
+    {
+      "id": "C.producer-manifest-not-consumer-format",
+      "passed": true,
+      "detail": "parseCem(generated-manifest.json) errors=[CEM_NO_MODULES]"
+    },
+    {
+      "id": "C.consumer-path-scans-published-cem",
+      "passed": true,
+      "detail": "scanCemManifests found [@probe/components]"
+    },
+    {
+      "id": "C.consumer-classification-openElement-only",
+      "passed": true,
+      "detail": "probe-ssr=ssr-capable probe-plain=client-only"
+    },
+    {
+      "id": "C.upstream-cem-invisible-without-mapping",
+      "passed": true,
+      "detail": "parse=true classified=0 (kind 'class' != 'custom-element')"
+    },
+    {
+      "id": "C.upstream-cem-never-self-selects-ssr",
+      "passed": true,
+      "detail": "shape-mapped classifications=[open-card:client-only] (all client-only, fail-closed default)"
+    }
+  ]
+}

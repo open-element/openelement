@@ -1,5 +1,5 @@
 /**
- * Fail-closed configuration smoke for the element browser suite: the config
+ * Fail-closed configuration smoke for the element browser suite: the configs
  * below must make the runner exit NON-ZERO. It proves the suite's own wiring
  * — the zero-tests-guard reporter in web-test-runner.config.mjs, which encodes
  * the OpenElement exit contract that a run executing zero tests is a failure,
@@ -11,7 +11,12 @@
  */
 const WTR_DIR = new URL('..', import.meta.url).pathname;
 const CONFIGS = [
+  'failing-assertion',
+  'missing-browser',
+  'broken-transform',
   'zero-tests',
+  'no-matching-files',
+];
 ];
 
 let failed = 0;

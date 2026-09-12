@@ -30,6 +30,8 @@ package-lock.json
 !packages/element/__wtr__/package-lock.json
 # Exception: npm audit signatures requires a committed exact dependency graph.
 !tools/fixtures/url-pattern-list-audit/package-lock.json
+# Exception: the TS7 experiment toolchain lockfile is the hermetic pin.
+!tools/experiments/ts7/toolchain/package-lock.json
 
 # npm pack tarballs
 packages/*/*.tgz

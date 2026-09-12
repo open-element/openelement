@@ -105,6 +105,7 @@ jobs:
             fixtures/router-request-time/e2e/test-results
             fixtures/router-native-framework/e2e/test-results
             fixtures/router-lit-framework/e2e/test-results
+            fixtures/router-ui-dogfood/e2e/test-results
           if-no-files-found: ignore
           retention-days: 14
 

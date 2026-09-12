@@ -1,0 +1,10 @@
+{
+  "name": "oe-ts7-experiment-toolchain",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Pinned toolchain for the TS7 evaluation harness (issue #1156, Beta.2.2 slice). Not published.",
+  "dependencies": {
+    "typescript-5": "npm:typescript@5.9.3",
+    "typescript-7": "npm:typescript@7.0.2"
+  }
+}
