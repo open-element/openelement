@@ -111,8 +111,10 @@ jobs:
 
   # Issue #628 (first slice): the generated dist/server artifact must boot
   # under plain Node, not just under the Deno CLI (#969). The runtime floor
-  # is Node.js >= 24 (WHATWG URLPattern global), so the matrix asserts real
-  # serving on 24 and the clean early error on 20.
+  # is Node.js >= 24 (WHATWG URLPattern global): the matrix serves on 24
+  # (lowest supported, required) and 26 (Current, required). The below-floor
+  # clean-error behavior stays pinned by unit test
+  # (packages/router/__tests__/ssg-helpers.test.ts), not by an EOL Node job.
   node-serve-smoke:
     name: dist/server Node smoke (Node ${{ matrix.node }})
     runs-on: ubuntu-latest
@@ -120,7 +122,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        node: ['20', '24']
+        node: ['24', '26']
     steps:
       # v7.0.1
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -134,7 +136,7 @@ jobs:
         with:
           node-version: ${{ matrix.node }}
       - name: Build the request-time fixture
-        run: deno task fixture:request-time:build
+        run: deno task fixture:router-request-time:build
       - name: Shim @openelement/router/nitro-mount for Node resolution
         # The workspace publishes to JSR, so plain Node cannot resolve the
         # bare specifier the generated index.js imports. Materialize the
@@ -154,25 +156,15 @@ jobs:
         working-directory: fixtures/router-request-time
         run: |
           set -u
-          if [ "${{ matrix.node }}" = "24" ]; then
-            OPEN_ELEMENT_PORT=4891 OPEN_ELEMENT_HOST=127.0.0.1 node dist/server/serve.mjs &
-            server_pid=$!
-            trap 'kill $server_pid 2>/dev/null || true' EXIT
-            for _ in $(seq 1 50); do
-              curl -sf -o /dev/null http://127.0.0.1:4891/ && break
-              sleep 0.2
-            done
-            curl -sf http://127.0.0.1:4891/ | grep -q 'request-time fixture home'
-            curl -sf http://127.0.0.1:4891/live | grep -q 'request-time live'
-          else
-            # Below the URLPattern floor (#969): serve.mjs must fail fast
-            # with guidance, not a SyntaxError/ReferenceError.
-            if node dist/server/serve.mjs > serve-error.log 2>&1; then
-              echo 'expected a clean early exit below the runtime floor'
-              exit 1
-            fi
-            grep -q 'requires a runtime with WHATWG URLPattern' serve-error.log
-          fi
+          OPEN_ELEMENT_PORT=4891 OPEN_ELEMENT_HOST=127.0.0.1 node dist/server/serve.mjs &
+          server_pid=$!
+          trap 'kill $server_pid 2>/dev/null || true' EXIT
+          for _ in $(seq 1 50); do
+            curl -sf -o /dev/null http://127.0.0.1:4891/ && break
+            sleep 0.2
+          done
+          curl -sf http://127.0.0.1:4891/ | grep -q 'request-time fixture home'
+          curl -sf http://127.0.0.1:4891/live | grep -q 'request-time live'
 
   # #1228 (B2.5): the deployment guide and PACKAGE_SURFACE.md claim the
   # generated dist/server artifacts run on Bun. A claim that survives only on
@@ -198,7 +190,7 @@ jobs:
           unzip -q /tmp/bun.zip -d /tmp/bun
           echo "/tmp/bun/bun-linux-x64" >> "$GITHUB_PATH"
       - name: Build the request-time fixture
-        run: deno task fixture:request-time:build
+        run: deno task fixture:router-request-time:build
       - name: Boot dist/server/serve.mjs under Bun
         working-directory: fixtures/router-request-time
         run: |
