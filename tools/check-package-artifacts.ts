@@ -303,6 +303,31 @@ export function scanExtractedPackage(packageName: string, packageRoot: string): 
     }
   }
 
+  // Every object-form export that serves JavaScript must serve a matching
+  // declaration file: publint/attw catch most of this, but an explicit
+  // violation names the subpath instead of burying it in tool output.
+  const exports = (packageJson.exports ?? {}) as Record<string, unknown>;
+  for (const [subpath, conditions] of Object.entries(exports)) {
+    if (!conditions || typeof conditions !== 'object') continue;
+    const cond = conditions as Record<string, unknown>;
+    const jsTarget = cond.import ?? cond.default;
+    if (typeof jsTarget !== 'string') continue;
+    const typesTarget = cond.types;
+    if (typeof typesTarget !== 'string' || !typesTarget.endsWith('.d.ts')) {
+      violations.push({
+        path: `${packageName}/package.json`,
+        message: `export '${subpath}' must expose a types condition`,
+      });
+      continue;
+    }
+    if (!files.has(typesTarget.replace(/^\.\//, ''))) {
+      violations.push({
+        path: `${packageName}/package.json`,
+        message: `export '${subpath}' types target '${typesTarget}' is missing from the tarball`,
+      });
+    }
+  }
+
   return { packageName, violations };
 }
 

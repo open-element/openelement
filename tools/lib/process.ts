@@ -15,6 +15,7 @@ export interface RunCommandOptions {
   stdin?: 'inherit' | 'piped' | 'null';
   stdout?: 'inherit' | 'piped' | 'null';
   stderr?: 'inherit' | 'piped' | 'null';
+  signal?: AbortSignal;
 }
 
 export interface RunWithOutputResult {
@@ -30,7 +31,7 @@ export async function runCommand(
   args: string[],
   options: RunCommandOptions = {},
 ): Promise<void> {
-  const { cwd, env, stdin = 'inherit', stdout = 'inherit', stderr = 'inherit' } = options;
+  const { cwd, env, stdin = 'inherit', stdout = 'inherit', stderr = 'inherit', signal } = options;
   console.log(`$ ${[command, ...args].join(' ')}${cwd ? `  # cwd=${cwd}` : ''}`);
   const proc = new Deno.Command(command, {
     args,
@@ -39,6 +40,7 @@ export async function runCommand(
     stdin,
     stdout,
     stderr,
+    signal,
   });
   const status = await proc.spawn().status;
   if (!status.success) {
@@ -49,6 +51,7 @@ export async function runCommand(
 export interface RunWithOutputOptions {
   cwd?: string | URL;
   env?: Record<string, string>;
+  signal?: AbortSignal;
 }
 
 /** Run a command capturing stdout/stderr and return the result without throwing. */
@@ -57,13 +60,14 @@ export async function runWithOutput(
   args: string[],
   options: RunWithOutputOptions = {},
 ): Promise<RunWithOutputResult> {
-  const { cwd, env } = options;
+  const { cwd, env, signal } = options;
   const result = await new Deno.Command(command, {
     args,
     cwd,
     env,
     stdout: 'piped',
     stderr: 'piped',
+    signal,
   }).output();
   const decoder = new TextDecoder();
   return {

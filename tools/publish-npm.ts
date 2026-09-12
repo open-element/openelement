@@ -12,7 +12,7 @@ import {
   readPackages,
   releasePublishOrder,
 } from './lib/package-graph.ts';
-import { runCommand } from './lib/process.ts';
+import { runCommand, runWithOutput } from './lib/process.ts';
 import { assertCleanWorktree } from './lib/git-cleanliness.ts';
 import { formatError } from '@openelement/element';
 import { formatJson } from '@openelement/element/build-utils';
@@ -243,6 +243,183 @@ function applyPackageJsonOverrides(pkg: PackageInfo, pkgJson: Record<string, unk
   }
 }
 
+const UI_DECLARATION_TSC_TIMEOUT_MS = 120_000;
+
+/**
+ * Rewrite Deno-style relative TypeScript specifiers (`./x.ts`, `./x.tsx`)
+ * to the `.js` paths npm consumers resolve. TypeScript 6.0.3 ignores
+ * `rewriteRelativeImportExtensions`, so the pack step normalizes the
+ * emitted declarations explicitly. Only relative specifiers are touched;
+ * bare, node:, and self-name imports pass through unchanged.
+ */
+export function rewriteDtsRelativeExtensions(source: string): string {
+  return source.replace(
+    /((?:\bfrom\s+|\bexport\s+[^'"]*?\bfrom\s+|import\s*\())(['"])(\.[^'"]*?)\.tsx?\2/g,
+    '$1$2$3.js$2',
+  );
+}
+
+async function runWithTimeout(
+  command: string,
+  args: string[],
+  options: { cwd?: string | URL; env?: Record<string, string> },
+  timeoutMs: number,
+  label: string,
+): Promise<{ code: number; stdout: string; stderr: string }> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const result = await runWithOutput(command, args, { ...options, signal: controller.signal });
+    if (controller.signal.aborted) {
+      throw new Error(`${label} timed out after ${timeoutMs}ms`);
+    }
+    return result;
+  } catch (error) {
+    if (controller.signal.aborted) {
+      throw new Error(`${label} timed out after ${timeoutMs}ms`);
+    }
+    throw error;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * Emit `@openelement/ui` declarations with the exact pinned TypeScript
+ * compiler against the PACKED element tarball — never workspace source.
+ *
+ * `deno pack` cannot name UI's public types (every UI module infers types
+ * through element internals), so it drops ALL UI declarations with
+ * "Could not generate types". UI sources are annotated with element's
+ * public Logger/ReadonlySignal types, and this step compiles declarations
+ * from those sources with tsc, copies each `.d.ts` next to its packed
+ * `.js` sibling, and returns the exports subpaths that gained a `types`
+ * condition. Fails closed on any compiler error, missing sibling, or
+ * unexported emission — there is no silent no-types fallback.
+ */
+export async function emitUiDeclarations(
+  pkg: PackageInfo,
+  allPackages: PackageInfo[],
+  packedPackageDir: string,
+  pkgJson: Record<string, unknown>,
+  rootDenoJson: { imports?: Record<string, string> },
+): Promise<void> {
+  const elementPkg = allPackages.find((candidate) => candidate.name === '@openelement/element');
+  if (!elementPkg) throw new Error('@openelement/ui declarations need @openelement/element');
+  const elementTarball = tarballPath(elementPkg);
+  try {
+    await Deno.stat(elementTarball);
+  } catch {
+    throw new Error(
+      `@openelement/ui declarations need the packed element tarball at ${elementTarball}; ` +
+        'pack @openelement/element first.',
+    );
+  }
+  const tscPin = rootDenoJson.imports?.['typescript'];
+  const tscMatch = typeof tscPin === 'string' ? tscPin.match(/^npm:typescript@(\d+\.\d+\.\d+)$/) : null;
+  if (!tscMatch) {
+    throw new Error(
+      `@openelement/ui declarations need an exact pinned TypeScript compiler; ` +
+        `root deno.json declares typescript as '${tscPin}'.`,
+    );
+  }
+  const tscSpec = `npm:typescript@${tscMatch[1]}/tsc`;
+
+  const stage = await Deno.makeTempDir({ prefix: 'ui-declarations-' });
+  try {
+    const scopeDir = `${stage}/node_modules/@openelement`;
+    await Deno.mkdir(scopeDir, { recursive: true });
+    await runCommand('tar', ['-xzf', elementTarball, '-C', stage]);
+    await Deno.rename(`${stage}/package`, `${scopeDir}/element`);
+    await Deno.writeTextFileSync(
+      `${stage}/package.json`,
+      formatJson({ name: 'ui-declarations-stage', private: true, type: 'module' }),
+    );
+    await Deno.mkdir(`${stage}/src`, { recursive: true });
+    for (const entry of Deno.readDirSync(`${pkg.dir}/src`)) {
+      if (!entry.isFile) continue;
+      await Deno.copyFile(`${pkg.dir}/src/${entry.name}`, `${stage}/src/${entry.name}`);
+    }
+    await Deno.writeTextFileSync(
+      `${stage}/tsconfig.json`,
+      formatJson({
+        compilerOptions: {
+          allowImportingTsExtensions: true,
+          declaration: true,
+          emitDeclarationOnly: true,
+          jsx: 'react-jsx',
+          jsxImportSource: '@openelement/element',
+          lib: ['ES2022', 'DOM', 'DOM.Iterable'],
+          module: 'NodeNext',
+          moduleResolution: 'NodeNext',
+          outDir: './dts',
+          rootDir: './src',
+          skipLibCheck: true,
+          strict: true,
+          types: [],
+        },
+        include: ['./src/**/*.ts', './src/**/*.tsx'],
+      }),
+    );
+    const tsc = await runWithTimeout(
+      Deno.execPath(),
+      [
+        'run',
+        '--allow-read',
+        '--allow-write',
+        '--allow-env',
+        '--allow-net',
+        tscSpec,
+        '-p',
+        'tsconfig.json',
+      ],
+      { cwd: stage },
+      UI_DECLARATION_TSC_TIMEOUT_MS,
+      '@openelement/ui declaration emit',
+    );
+    if (tsc.code !== 0) {
+      throw new Error(`@openelement/ui declaration emit failed:\n${tsc.stdout}\n${tsc.stderr}`);
+    }
+    const emitted: string[] = [];
+    for (const entry of Deno.readDirSync(`${stage}/dts`)) {
+      if (!entry.isFile || !entry.name.endsWith('.d.ts')) continue;
+      const siblingJs = `${packedPackageDir}/src/${entry.name.slice(0, -'.d.ts'.length)}.js`;
+      try {
+        await Deno.stat(siblingJs);
+      } catch {
+        throw new Error(
+          `@openelement/ui emitted ${entry.name} with no packed sibling ${siblingJs}.`,
+        );
+      }
+      const raw = Deno.readTextFileSync(`${stage}/dts/${entry.name}`);
+      Deno.writeTextFileSync(
+        `${packedPackageDir}/src/${entry.name}`,
+        rewriteDtsRelativeExtensions(raw),
+      );
+      emitted.push(entry.name);
+    }
+    if (emitted.length === 0) throw new Error('@openelement/ui declaration emit produced no files.');
+    const exports = pkgJson.exports as Record<string, Record<string, string>>;
+    for (const [subpath, conditions] of Object.entries(exports)) {
+      const jsTarget = conditions?.import ?? conditions?.default;
+      const match = typeof jsTarget === 'string' ? jsTarget.match(/^\.\/src\/(.+)\.js$/) : null;
+      if (!match) continue;
+      const dtsTarget = `./src/${match[1]}.d.ts`;
+      try {
+        await Deno.stat(`${packedPackageDir}/${dtsTarget.slice(2)}`);
+      } catch {
+        throw new Error(
+          `@openelement/ui export '${subpath}' has no emitted declaration at ${dtsTarget}.`,
+        );
+      }
+      exports[subpath] = { types: dtsTarget, ...conditions };
+    }
+    console.log(`[npm] @openelement/ui: emitted ${emitted.length} declaration file(s).`);
+  } finally {
+    await Deno.remove(stage, { recursive: true });
+  }
+}
+
 export async function packPackage(
   pkg: PackageInfo,
   dependencies: Record<string, string>,
@@ -348,6 +525,9 @@ export async function packPackage(
     }
     for (const [name, metadata] of Object.entries(pkgJson.peerDependenciesMeta ?? {})) {
       if ((metadata as { optional?: boolean }).optional) delete pkgJson.dependencies[name];
+    }
+    if (pkg.name === '@openelement/ui') {
+      await emitUiDeclarations(pkg, allPackages, `${tmp}/package`, pkgJson, rootDenoJson);
     }
     Deno.writeTextFileSync(pkgJsonPath, formatJson(pkgJson));
     await runCommand('tar', ['-czf', out, '-C', tmp, 'package'], { env: tarEnv });

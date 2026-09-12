@@ -361,3 +361,72 @@ Deno.test('package artifacts: accepts a clean compiled package tree', async () =
     },
   );
 });
+
+async function withExportsPackage(
+  packageName: string,
+  exports: Record<string, unknown>,
+  files: Record<string, string>,
+  fn: (root: string) => void | Promise<void>,
+): Promise<void> {
+  const root = await Deno.makeTempDir({ prefix: 'openelement-artifact-test-' });
+  try {
+    await Deno.writeTextFile(
+      `${root}/package.json`,
+      JSON.stringify({ name: packageName, type: 'module', exports }, null, 2),
+    );
+    for (const [path, content] of Object.entries(files)) {
+      const fullPath = `${root}/${path}`;
+      await Deno.mkdir(fullPath.slice(0, fullPath.lastIndexOf('/')), { recursive: true });
+      await Deno.writeTextFile(fullPath, content);
+    }
+    await fn(root);
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+}
+
+Deno.test('package artifacts: rejects an export without a types condition', async () => {
+  await withExportsPackage(
+    '@openelement/ui',
+    { '.': { import: './src/index.js', default: './src/index.js' } },
+    { 'src/index.js': 'export const version = 1;\n' },
+    (root) => {
+      const result = scanExtractedPackage('@openelement/ui', root);
+      assert(
+        result.violations.some((violation) =>
+          violation.message.includes("export '.' must expose a types condition")
+        ),
+        `expected a missing-types violation, got: ${JSON.stringify(result.violations)}`,
+      );
+    },
+  );
+});
+
+Deno.test('package artifacts: rejects a types target missing from the tarball', async () => {
+  await withExportsPackage(
+    '@openelement/ui',
+    { '.': { types: './src/index.d.ts', import: './src/index.js' } },
+    { 'src/index.js': 'export const version = 1;\n' },
+    (root) => {
+      const result = scanExtractedPackage('@openelement/ui', root);
+      assert(
+        result.violations.some((violation) => violation.message.includes('is missing from the tarball')),
+        `expected a missing-declaration violation, got: ${JSON.stringify(result.violations)}`,
+      );
+    },
+  );
+});
+
+Deno.test('package artifacts: accepts an export with a matching declaration', async () => {
+  await withExportsPackage(
+    '@openelement/ui',
+    { '.': { types: './src/index.d.ts', import: './src/index.js' } },
+    {
+      'src/index.js': 'export const version = 1;\n',
+      'src/index.d.ts': 'export declare const version: number;\n',
+    },
+    (root) => {
+      assertEquals(scanExtractedPackage('@openelement/ui', root).violations, []);
+    },
+  );
+});

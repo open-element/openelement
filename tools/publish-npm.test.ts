@@ -10,6 +10,7 @@ import {
   publishPackage,
   type PublishPackageIo,
   removeRawTypeScriptPayload,
+  rewriteDtsRelativeExtensions,
   verifyNpmRelease,
 } from './publish-npm.ts';
 import type { PackageInfo } from './lib/package-graph.ts';
@@ -433,4 +434,19 @@ Deno.test('previousPrerelease returns the predecessor on the same line', () => {
   assertEquals(previousPrerelease('0.41.0-rc.2'), '0.41.0-rc.1');
   assertEquals(previousPrerelease('0.41.0-alpha.1'), null);
   assertEquals(previousPrerelease('0.41.0'), null);
+});
+
+Deno.test('rewriteDtsRelativeExtensions maps Deno specifiers to npm paths', () => {
+  assertEquals(
+    rewriteDtsRelativeExtensions(
+      "import { x } from './a.ts';\nimport type { Y } from './b.tsx';\nexport { z } from './c.ts';\n",
+    ),
+    "import { x } from './a.js';\nimport type { Y } from './b.js';\nexport { z } from './c.js';\n",
+  );
+});
+
+Deno.test('rewriteDtsRelativeExtensions leaves bare and node specifiers alone', () => {
+  const source =
+    "import { x } from '@openelement/element';\nimport { y } from '@openelement/ui/open-button';\nimport { z } from 'node:fs';\n";
+  assertEquals(rewriteDtsRelativeExtensions(source), source);
 });
