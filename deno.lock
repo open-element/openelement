@@ -25,7 +25,6 @@
     "npm:lit@3.3.3": "3.3.3",
     "npm:marked@15": "15.0.12",
     "npm:nitro@3.0.0": "3.0.0_vite@8.0.16__@types+node@26.5.0__esbuild@0.25.12__jiti@2.7.0__yaml@2.9.0_@types+node@26.5.0_yaml@2.9.0",
-    "npm:preact-render-to-string@^6.5.0": "6.7.0_preact@10.29.8",
     "npm:preact@^10.28.0": "10.29.8_preact-render-to-string@6.7.0",
     "npm:typescript@6.0.3": "6.0.3",
     "npm:urlpattern-polyfill@10.1.0": "10.1.0",
@@ -1344,7 +1343,6 @@
           "npm:@openelement/url-pattern-list@0.6.0",
           "npm:jsonc-parser@^3.3.1",
           "npm:marked@15",
-          "npm:preact-render-to-string@^6.5.0",
           "npm:vite@8.0.16"
         ]
       }
