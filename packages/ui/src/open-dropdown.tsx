@@ -14,7 +14,7 @@
  * @csspart trigger - Trigger wrapper
  * @csspart content - Popover content
  */
-import { computed, element, OpenElement, property } from '@openelement/element';
+import { computed, element, OpenElement, property, type ReadonlySignal } from '@openelement/element';
 import { deepActiveElement, nextInstanceId, overlayRecipe, recipe } from './component-recipes.ts';
 import { readInstanceState, writeInstanceState } from './instance-state.ts';
 
@@ -55,7 +55,7 @@ export class OpenDropdown extends OpenElement {
 
   /** The content half of the anchor pair, applied via the style sink. */
   @property({ reflect: false, attribute: false, type: String })
-  anchorStyle = computed(() => this.anchorName === '' ? '' : `position-anchor: ${this.anchorName}`);
+  anchorStyle: ReadonlySignal<string> = computed(() => this.anchorName === '' ? '' : `position-anchor: ${this.anchorName}`);
 
   render() {
     return (

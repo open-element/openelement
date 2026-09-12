@@ -35,7 +35,7 @@ export {
 } from './internal/core/errors.ts';
 export type { ErrorTelemetryHook } from './internal/protocol/errors.ts';
 export { computed, effect, signal } from './internal/signal/index.ts';
-export type { Signal } from './internal/protocol/signal.ts';
+export type { ReadonlySignal, Signal } from './internal/protocol/signal.ts';
 export { element, property } from './internal/core/compile-decorators.ts';
 export {
   DANGEROUS_KEYS,
@@ -49,6 +49,7 @@ export { escapeAttr, escapeHtml, wrapInDocument } from './internal/core/html-esc
 export type { IslandOptions } from './internal/protocol/island.ts';
 export { StyleSheet } from './internal/core/style-sheet.ts';
 export { createLogger } from './internal/core/logger.ts';
+export type { Logger } from './internal/core/logger.ts';
 export type { StyleSheetLike } from './internal/protocol/style-sheet.ts';
 export { deepGetElementById, ensureDeepFragmentNavigation } from './internal/core/deep-fragment.ts';
 export { ensurePreHydrationClickCapture } from './open-element-implementation.ts';

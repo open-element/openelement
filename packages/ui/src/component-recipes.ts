@@ -1,11 +1,11 @@
 /** Shared helpers and visual recipes for the public UI primitives. */
-import { createLogger, StyleSheet, type StyleSheetLike } from '@openelement/element';
+import { createLogger, type Logger, StyleSheet, type StyleSheetLike } from '@openelement/element';
 
 /**
  * Shared component logger. Compiled modules may not carry runtime top-level
  * statements (OEC9008), so the logger instance lives in this plain module.
  */
-export const log = createLogger('ui');
+export const log: Logger = createLogger('ui');
 
 /** open-code-block tuning constants (compiled modules carry no top-level consts). */
 export const CODE_BLOCK_CONSTANTS = {

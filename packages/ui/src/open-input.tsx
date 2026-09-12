@@ -35,7 +35,7 @@
  * </form>
  * ```
  */
-import { computed, element, OpenElement, property } from '@openelement/element';
+import { computed, element, OpenElement, property, type ReadonlySignal } from '@openelement/element';
 import { controlRecipe, nextInstanceId, recipe, syncDisabledState } from './component-recipes.ts';
 
 @element('open-input', { root: 'shadow-open', delegatesFocus: true, formAssociated: true })
@@ -150,29 +150,29 @@ export class OpenInput extends OpenElement {
   inputId = '';
 
   @property({ reflect: false, attribute: false, type: Boolean })
-  noLabel = computed(() => this.label === '');
+  noLabel: ReadonlySignal<boolean> = computed(() => this.label === '');
 
   @property({ reflect: false, attribute: false, type: Boolean })
-  noError = computed(() => this.error === '');
+  noError: ReadonlySignal<boolean> = computed(() => this.error === '');
 
   @property({ reflect: false, attribute: false, type: String })
-  inputClass = computed(() => this.error === '' ? 'control input' : 'control input input--error');
+  inputClass: ReadonlySignal<string> = computed(() => this.error === '' ? 'control input' : 'control input input--error');
 
   @property({ reflect: false, attribute: false, type: String })
-  idAttr = computed(() => this.inputId === '' ? null : this.inputId);
+  idAttr: ReadonlySignal<string | null> = computed(() => this.inputId === '' ? null : this.inputId);
 
   @property({ reflect: false, attribute: false, type: String })
-  errorIdAttr = computed(() => this.inputId === '' ? null : `${this.inputId}-error`);
+  errorIdAttr: ReadonlySignal<string | null> = computed(() => this.inputId === '' ? null : `${this.inputId}-error`);
 
   @property({ reflect: false, attribute: false, type: String })
-  ariaInvalidAttr = computed(() => this.error === '' ? null : 'true');
+  ariaInvalidAttr: ReadonlySignal<string | null> = computed(() => this.error === '' ? null : 'true');
 
   /** The required-marker text (' *' when required) — a computed string sink. */
   @property({ reflect: false, attribute: false, type: String })
-  requiredMark = computed(() => this.required ? ' *' : '');
+  requiredMark: ReadonlySignal<string> = computed(() => this.required ? ' *' : '');
 
   @property({ reflect: false, attribute: false, type: String })
-  describedByAttr = computed(() =>
+  describedByAttr: ReadonlySignal<string | null> = computed(() =>
     this.error === '' || this.inputId === '' ? null : `${this.inputId}-error`
   );
 

@@ -24,7 +24,7 @@
  * <open-button href="/guide">Navigate</open-button>
  * ```
  */
-import { computed, element, OpenElement, property } from '@openelement/element';
+import { computed, element, OpenElement, property, type ReadonlySignal } from '@openelement/element';
 import { closestFormOf, controlRecipe, recipe, syncDisabledState } from './component-recipes.ts';
 
 @element('open-button', { root: 'shadow-open', delegatesFocus: true, formAssociated: true })
@@ -166,24 +166,24 @@ export class OpenButton extends OpenElement {
 
   /** True when the anchor branch is the visible control. */
   @property({ reflect: false, attribute: false, type: Boolean })
-  linkMode = computed(() => this.href !== '');
+  linkMode: ReadonlySignal<boolean> = computed(() => this.href !== '');
 
   /** True when the button branch is the visible control. */
   @property({ reflect: false, attribute: false, type: Boolean })
-  buttonMode = computed(() => this.href === '');
+  buttonMode: ReadonlySignal<boolean> = computed(() => this.href === '');
 
   /** Disabled anchors lose their href entirely (#757/#1061). */
   @property({ reflect: false, attribute: false, type: String })
-  linkHref = computed(() => this.disabled || this.href === '' ? null : this.href);
+  linkHref: ReadonlySignal<string | null> = computed(() => this.disabled || this.href === '' ? null : this.href);
 
   @property({ reflect: false, attribute: false, type: String })
-  linkTarget = computed(() => this.target === '' ? null : this.target);
+  linkTarget: ReadonlySignal<string | null> = computed(() => this.target === '' ? null : this.target);
 
   @property({ reflect: false, attribute: false, type: String })
-  linkRel = computed(() => this.target === '_blank' ? 'noopener noreferrer' : null);
+  linkRel: ReadonlySignal<string | null> = computed(() => this.target === '_blank' ? 'noopener noreferrer' : null);
 
   @property({ reflect: false, attribute: false, type: String })
-  linkAriaDisabled = computed(() => this.disabled ? 'true' : null);
+  linkAriaDisabled: ReadonlySignal<string | null> = computed(() => this.disabled ? 'true' : null);
 
   render() {
     return (
