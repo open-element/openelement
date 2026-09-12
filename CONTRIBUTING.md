@@ -17,7 +17,13 @@ Use an ADR only for a hard-to-reverse public API, package topology, architecture
 
 ## Development
 
-Use the Deno version pinned in `.dvmrc`.
+Use the Deno version pinned in `.dvmrc`. After cloning, materialize
+`node_modules` first — the workspace sets `nodeModulesDir: "manual"`, so
+npm: specifiers resolve only from a local install:
+
+```sh
+deno install
+```
 
 ```sh
 deno task fmt:check
