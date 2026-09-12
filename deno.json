@@ -47,6 +47,8 @@
     "release:state-machine:check": "deno run --allow-read --allow-run=git tools/check-release-state-machine.ts",
     "interface:snapshot": "deno run --allow-read --allow-env tools/check-public-interface-snapshot.ts",
     "interface:snapshot:write": "deno run --allow-read --allow-write --allow-env tools/check-public-interface-snapshot.ts --write",
+    "generate:api-reference": "deno run --allow-read --allow-write --allow-env tools/generate-api-reference.ts",
+    "api-reference:check": "deno run --allow-read --allow-write --allow-env tools/generate-api-reference.ts --check",
     "export-files:generate": "deno run --allow-read --allow-write --allow-run tools/generate-openelement-export-files.ts",
     "export-files:check": "deno run --allow-read --allow-write --allow-run tools/generate-openelement-export-files.ts --check",
     "signals:check-protocol-boundary": "deno run --allow-read --allow-env tools/check-signal-protocol-boundary.ts",
@@ -123,7 +125,7 @@
     "clean": "rm -rf packages/*/dist packages/*/*.tgz dist custom-dist dist-test-* playwright-report test-results .openElement",
     "hooks:install": "git config core.hooksPath .githooks && chmod +x .githooks/pre-commit .githooks/pre-push",
     "hooks:uninstall": "git config --unset core.hooksPath",
-    "gate:source": "deno task graph:check && deno task interface:snapshot && deno task export-files:check && deno task url-pattern-list:provenance && deno task release:state-machine:check && deno task signals:check-protocol-boundary && deno task deno-api:check && deno task validation:boundary-check && deno task build && deno task test:coverage:check && deno task examples:check && deno task fixture:router-request-time:gate && deno task fixture:router-native-framework:gate && deno task fixture:router-lit-framework:gate && deno task fixture:router-ui-dogfood:gate && deno task fixture:web-component-interop:test && deno task test:element:browser:gate && deno task test:starter-smoke && deno task nitro:proof:node && deno task nitro:proof:workers && deno task www:build && deno task www:check-links && deno task www:check-theme-tokens",
+    "gate:source": "deno task graph:check && deno task interface:snapshot && deno task api-reference:check && deno task export-files:check && deno task url-pattern-list:provenance && deno task release:state-machine:check && deno task signals:check-protocol-boundary && deno task deno-api:check && deno task validation:boundary-check && deno task build && deno task test:coverage:check && deno task examples:check && deno task fixture:router-request-time:gate && deno task fixture:router-native-framework:gate && deno task fixture:router-lit-framework:gate && deno task fixture:router-ui-dogfood:gate && deno task fixture:web-component-interop:test && deno task test:element:browser:gate && deno task test:starter-smoke && deno task nitro:proof:node && deno task nitro:proof:workers && deno task www:build && deno task www:check-links && deno task www:check-theme-tokens",
     "gate:packed": "deno task pack:dry-run && deno task package-artifacts:check && deno task consumer:packaged && deno task consumer:packaged-app && deno task consumer:packaged-router && deno task consumer:packaged-element && deno task consumer:packaged-ui && deno task consumer:packaged-serve:node && deno task third-party-wc:smoke",
     "gate:ci": "deno task gate:source && deno task gate:packed",
     "gate:release": "deno task gate:packed && deno task publish:npm:dry-run"

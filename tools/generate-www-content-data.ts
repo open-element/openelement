@@ -7,10 +7,10 @@
  *   www/app/data/_generated-architecture-data.ts
  *   www/app/data/_generated-blog-data.ts
  *
- * The remaining modules under www/app/data/ (_generated-nav.ts,
- * _generated-i18n-data.ts, _generated-api-reference.ts,
- * _generated-content-graph.json, version.ts) have no generator on this line yet
- * and are consumed as ordinary checked-in modules.
+ * The remaining modules under www/app/data/ (_generated-api-reference.ts,
+ * _generated-content-graph.json, version.ts) have no generator on this line
+ * yet and are consumed as ordinary checked-in modules; the API reference has
+ * its own `deno task generate:api-reference` gate.
  */
 import {
   loadCollectionData,
