@@ -215,9 +215,35 @@ export default class PackedLive extends OpenElement {
     stderr: 'piped',
   }).spawn();
   let exited = false;
-  server.status.then(() => {
+  let exitCode: number | null = null;
+  let exitSignal: string | null = null;
+  server.status.then((status) => {
     exited = true;
+    exitCode = status.code;
+    exitSignal = status.signal;
   });
+  const serverOutput: Uint8Array[] = [];
+  void (async () => {
+    try {
+      for await (const chunk of server.stdout) serverOutput.push(chunk);
+    } catch { /* pipe closed on kill */ }
+  })();
+  void (async () => {
+    try {
+      for await (const chunk of server.stderr) serverOutput.push(chunk);
+    } catch { /* pipe closed on kill */ }
+  })();
+  const serverLog = () => {
+    const text = new TextDecoder().decode(
+      serverOutput.reduce((acc, c) => {
+        const merged = new Uint8Array(acc.length + c.length);
+        merged.set(acc);
+        merged.set(c, acc.length);
+        return merged;
+      }, new Uint8Array(0)),
+    );
+    return text.slice(-4000);
+  };
   const baseUrl = `http://127.0.0.1:${port}`;
   const deadline = Date.now() + SERVER_READY_TIMEOUT_MS;
   let ready = false;
@@ -232,7 +258,11 @@ export default class PackedLive extends OpenElement {
     }
   }
   if (!ready) {
-    throw new Error(`packed serve did not become ready within ${SERVER_READY_TIMEOUT_MS}ms`);
+    throw new Error(
+      `packed serve did not become ready within ${SERVER_READY_TIMEOUT_MS}ms` +
+        ` (runtime=${runtime}, exited=${exited}, code=${exitCode}, signal=${exitSignal}, url=${baseUrl}/)\n` +
+        `--- server output (tail) ---\n${serverLog()}`,
+    );
   }
   const home = await (await fetch(`${baseUrl}/`)).text();
   if (!home.includes('packed-node-serve home')) {
