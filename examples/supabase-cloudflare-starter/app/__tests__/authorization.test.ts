@@ -1,5 +1,5 @@
 import { assert, assertEquals, assertThrows } from '@std/assert';
-import { isOpenElementNotFound } from '@openelement/app';
+import { isOpenElementNotFound } from '@openelement/router';
 import { hasAdminRole, requireAdmin } from '../../lib/authorization.ts';
 
 Deno.test('admin authorization trusts app_metadata.role only', () => {

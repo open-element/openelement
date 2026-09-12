@@ -4,7 +4,7 @@
  * app/components/page-login.tsx, the loader/action logic in
  * app/route-logic/login.ts.
  */
-import { definePage } from '@openelement/app';
+import { definePage } from '@openelement/router';
 import LoginPage from '../components/page-login.tsx';
 import {
   createLoginAction,

@@ -3,7 +3,7 @@
  * deployed through the Nitro cloudflare_module output. The notes route
  * renders at request time (session-aware); the home page is prerendered.
  */
-import { openElement } from '@openelement/adapter-vite';
+import { openElement } from '@openelement/router/vite';
 import { defineConfig } from 'vite';
 
 export default defineConfig({

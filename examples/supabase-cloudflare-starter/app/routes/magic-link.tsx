@@ -3,7 +3,7 @@
  * page element lives in app/components/page-magic-link.tsx, the
  * loader/action logic in app/route-logic/magic-link.ts.
  */
-import { definePage } from '@openelement/app';
+import { definePage } from '@openelement/router';
 import MagicLinkPage from '../components/page-magic-link.tsx';
 import {
   createMagicLinkAction,

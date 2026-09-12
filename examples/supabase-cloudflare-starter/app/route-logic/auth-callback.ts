@@ -3,7 +3,7 @@
  * evaluate the compiled page class. The route module
  * (app/routes/auth/callback.tsx) is the thin wrapper.
  */
-import { type PagePropsContext, redirect } from '@openelement/app';
+import { type PagePropsContext, redirect } from '@openelement/router';
 import { publicAuthError, safeInternalNext } from '../../lib/auth-security.ts';
 import { createServerSupabase } from '../../lib/supabase-server.ts';
 

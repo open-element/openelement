@@ -7,7 +7,7 @@ import {
   type OpenElementActionFailure,
   type PagePropsContext,
   redirect,
-} from '@openelement/app';
+} from '@openelement/router';
 import { publicAuthError } from '../../lib/auth-security.ts';
 import { createServerSupabase } from '../../lib/supabase-server.ts';
 

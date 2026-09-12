@@ -4,7 +4,7 @@
  * loader/action logic in app/route-logic/notes.ts. The notes-live island is
  * registered by the generated entries (no side-effect import here).
  */
-import { definePage } from '@openelement/app';
+import { definePage } from '@openelement/router';
 import NotesPage from '../components/page-notes.tsx';
 import {
   createNoteAction,

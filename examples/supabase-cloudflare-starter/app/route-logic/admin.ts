@@ -11,7 +11,7 @@ import {
   type OpenElementActionFailure,
   type PagePropsContext,
   redirect,
-} from '@openelement/app';
+} from '@openelement/router';
 import { type AuthenticatedIdentity, requireAdmin } from '../../lib/authorization.ts';
 import { UUID_PATTERN } from '../../lib/service-role.ts';
 import { createServerSupabase } from '../../lib/supabase-server.ts';

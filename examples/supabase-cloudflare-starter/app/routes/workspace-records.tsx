@@ -4,7 +4,7 @@
  * app/components/page-workspace-records.tsx, the loader logic in
  * app/route-logic/workspace-records.ts.
  */
-import { definePage } from '@openelement/app';
+import { definePage } from '@openelement/router';
 import WorkspaceRecordsPage from '../components/page-workspace-records.tsx';
 import {
   createWorkspaceRecordsLoader,

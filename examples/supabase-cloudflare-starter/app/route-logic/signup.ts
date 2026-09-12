@@ -8,7 +8,7 @@ import {
   type OpenElementActionFailure,
   type PagePropsContext,
   redirect,
-} from '@openelement/app';
+} from '@openelement/router';
 import { publicAuthError, safeInternalNext } from '../../lib/auth-security.ts';
 import { createServerSupabase } from '../../lib/supabase-server.ts';
 import { authRequestAllowed, type RateLimitEnv } from '../../lib/rate-limit.ts';

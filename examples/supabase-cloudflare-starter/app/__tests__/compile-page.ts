@@ -6,10 +6,10 @@
  * directly — the ambient @element/@property decorators are compile-time-only
  * input and throw at module evaluation outside the adapter transform.
  */
-import { compileElementProgram } from '../../../../packages/adapter-vite/src/internal/compiler/semantic-core/compile.ts';
+import { compileElementProgram } from '../../../../packages/element/src/internal/compiler/semantic-core/compile.ts';
 
 const ELEMENT_URL = new URL('../../../../packages/element/src/index.ts', import.meta.url).href;
-const APP_URL = new URL('../../../../packages/app/src/index.ts', import.meta.url).href;
+const APP_URL = new URL('../../../../packages/router/src/index.ts', import.meta.url).href;
 
 /** Compile + import the default-exported compiled class of one component module. */
 export async function compileComponentClass(
@@ -24,7 +24,7 @@ export async function compileComponentClass(
   // through a data: URL so the test sandbox needs no write permission.
   const rewritten = code
     .replaceAll("from '@openelement/element'", `from '${ELEMENT_URL}'`)
-    .replaceAll("from '@openelement/app'", `from '${APP_URL}'`)
+    .replaceAll("from '@openelement/router'", `from '${APP_URL}'`)
     .replaceAll(
       /from '(\.[^']*)'/g,
       (_match, specifier: string) => `from '${new URL(specifier, absoluteSource).href}'`,

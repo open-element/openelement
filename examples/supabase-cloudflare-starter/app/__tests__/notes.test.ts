@@ -1,5 +1,5 @@
 import { assert, assertEquals, assertRejects } from '@std/assert';
-import { isActionFailure, isOpenElementRedirect } from '@openelement/app';
+import { isActionFailure, isOpenElementRedirect } from '@openelement/router';
 import { renderDsd } from '@openelement/element';
 import { NOTES_HTML_BUDGET_BYTES, NOTES_PAGE_SIZE } from '../../lib/notes-pagination.ts';
 

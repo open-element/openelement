@@ -1,4 +1,4 @@
-import { notFound } from '@openelement/app';
+import { notFound } from '@openelement/router';
 
 export interface AuthenticatedIdentity {
   id: string;

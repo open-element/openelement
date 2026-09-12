@@ -19,7 +19,7 @@ import {
   type OpenElementActionFailure,
   type PagePropsContext,
   redirect,
-} from '@openelement/app';
+} from '@openelement/router';
 import { createServerSupabase } from '../../lib/supabase-server.ts';
 import {
   decodeNotesCursor,

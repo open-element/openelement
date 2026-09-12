@@ -1,5 +1,5 @@
 import { assert, assertEquals, assertRejects } from '@std/assert';
-import { isActionFailure, isOpenElementRedirect } from '@openelement/app';
+import { isActionFailure, isOpenElementRedirect } from '@openelement/router';
 import { renderDsd } from '@openelement/element';
 
 // v0.44: route logic lives in app/route-logic/ so tests never evaluate the

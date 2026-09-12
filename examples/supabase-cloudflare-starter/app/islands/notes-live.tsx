@@ -21,7 +21,7 @@
  * emits the compiled program's initial DOM), so all browser work stays in
  * connectedCallback.
  */
-import { defineIslandConfig } from '@openelement/app';
+import { defineIslandConfig } from '@openelement/router';
 import { element, OpenElement, property } from '@openelement/element';
 import {
   connectNotesLive,

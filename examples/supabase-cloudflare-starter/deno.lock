@@ -22,8 +22,9 @@
     "npm:pdf-parse@^1.1.1": "1.1.4",
     "npm:pdfjs-dist@4.8.69": "4.8.69",
     "npm:preact@^10.28.0": "10.29.8_preact-render-to-string@6.7.0",
+    "npm:typescript@6.0.3": "6.0.3",
     "npm:urlpattern-polyfill@10.1.0": "10.1.0",
-    "npm:valibot@^1.1.0": "1.4.2_typescript@5.9.3",
+    "npm:valibot@^1.1.0": "1.4.2_typescript@6.0.3",
     "npm:vite@8.0.16": "8.0.16_esbuild@0.25.12_jiti@2.7.0_yaml@2.9.0",
     "npm:wrangler@latest": "4.123.0",
     "npm:yaml@^2.8.1": "2.9.0",
@@ -1771,8 +1772,8 @@
         "safe-buffer"
       ]
     },
-    "typescript@5.9.3": {
-      "integrity": "sha512-jl1vZzPDinLr9eUt3J/t7V6FgNEw9QjvBPdysz9KfQDD41fQrC2Y4vKQdiaUpFT4bXlb1RHhLpp8wtm6M5TgSw==",
+    "typescript@6.0.3": {
+      "integrity": "sha512-y2TvuxSZPDyQakkFRPZHKFm+KKVqIisdg9/CZwm9ftvKXLP8NRWj38/ODjNbr43SsoXqNuAisEf1GdCxqWcdBw==",
       "bin": true
     },
     "ufo@1.6.4": {
@@ -1814,7 +1815,7 @@
     "util-deprecate@1.0.2": {
       "integrity": "sha512-EPD5q1uXyFxJpCrLnCc1nHnq3gOa6DZBocAIiI2TaSCA7VCJ1UJDMagCzIkXNsUYfD1daK//LTEQ8xiIbrHtcw=="
     },
-    "valibot@1.4.2_typescript@5.9.3": {
+    "valibot@1.4.2_typescript@6.0.3": {
       "integrity": "sha512-gjdCvJ6d3RyHAneqxMYMW9QMCwYMb3jpOO0IyHZV1bnRHFBHrX3VkIILt5XYR0WhwHiH7Mty8ovuPZ/O3gamrg==",
       "dependencies": [
         "typescript"
@@ -1914,27 +1915,23 @@
       "npm:vite@8.0.16"
     ],
     "links": {
-      "jsr:@openelement/adapter-vite@0.44.0-beta.2.2": {
+      "jsr:@openelement/create@1.0.0-alpha.1": {},
+      "jsr:@openelement/element@1.0.0-alpha.1": {
+        "dependencies": [
+          "npm:typescript@6.0.3"
+        ]
+      },
+      "jsr:@openelement/router@1.0.0-alpha.1": {
         "dependencies": [
           "npm:@hono/vite-dev-server@~0.25.3",
-          "npm:@mdx-js/rollup@^3.1.1",
-          "npm:gray-matter@^4.0.3",
-          "npm:hono@^4.12.0",
+          "npm:@openelement/url-pattern-list@0.6.0",
           "npm:jsonc-parser@^3.3.1",
           "npm:marked@15",
-          "npm:typescript@^5.9.0",
+          "npm:preact-render-to-string@^6.5.0",
           "npm:vite@8.0.16"
         ]
       },
-      "jsr:@openelement/app@0.44.0-beta.2.2": {
-        "dependencies": [
-          "npm:@openelement/url-pattern-list@0.6.0",
-          "npm:preact-render-to-string@^6.5.0"
-        ]
-      },
-      "jsr:@openelement/create@0.44.0-beta.2.2": {},
-      "jsr:@openelement/element@0.44.0-beta.2.2": {},
-      "jsr:@openelement/ui@0.44.0-beta.2.2": {}
+      "jsr:@openelement/ui@1.0.0-alpha.1": {}
     }
   }
 }
