@@ -7,7 +7,7 @@ import {
   encodeWorkspaceCursor,
   parseWorkspaceListInput,
   WORKSPACE_PAGE_SIZE,
-} from '../../../../lib/workspace-pagination.ts';
+} from '../../lib/workspace-pagination.ts';
 import { createServerSupabase } from '../../lib/supabase-server.ts';
 
 export interface WorkspaceRecord {

@@ -4,7 +4,7 @@ import {
   encodeWorkspaceCursor,
   parseWorkspaceListInput,
   WORKSPACE_PAGE_SIZE,
-} from '../../../../lib/workspace-pagination.ts';
+} from '../../lib/workspace-pagination.ts';
 
 // v0.44: route logic lives in app/route-logic/ so tests never evaluate the
 // compiled page class (decorators are compile-time-only input).
