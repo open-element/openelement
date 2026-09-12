@@ -6,7 +6,7 @@ order: 20
 
 ## Layers
 
-The consumer graph is five packages: `element` (one authoring surface), `app` (pages, routes, islands), `adapter-vite` (the only host side), `create` (the starter), and optional `ui`. Deep modules hide implementation complexity.
+The consumer graph is four packages: `element` (one authoring surface), `router` (pages, routes, islands, Vite build and Nitro output), `create` (the starter), and optional `ui`. Deep modules hide implementation complexity.
 
 ## Strategic direction
 

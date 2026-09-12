@@ -2,8 +2,9 @@
  * Site-local locale path helper.
  *
  * The site's chrome needs the router's locale-prefix normalization, but the
- * router deliberately does not expose an `/i18n` entry point (the retired
- * `@openelement/app/i18n` subpath). The site owns two locale conventions
+ * router deliberately does not expose an `/i18n` entry point (the
+ * `@openelement/app` `/i18n` subpath, retired in the 1.0 line). The site owns
+ * two locale conventions
  * (`en` / `zh` route prefixes), so the normalization lives here rather than
  * widening the framework's public surface.
  *

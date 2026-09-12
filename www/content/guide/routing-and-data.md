@@ -70,7 +70,7 @@ import {
   fail,
   type OpenElementActionFailure,
   redirect,
-} from '@openelement/app';
+} from '@openelement/router';
 import GuestbookPage from '../components/page-guestbook.tsx';
 
 interface GuestbookData {
@@ -123,7 +123,7 @@ export default definePage(GuestbookPage, {
 
 ## Action fetch negotiation
 
-Fetch-based action posts are recognized by the `x-openelement-action` header (exported as `ACTION_FETCH_HEADER` from `@openelement/app`): the built-in morph enhancement sends `enhance` and receives the same full-HTML responses as the no-JS path; a programmatic caller sends `true` and receives the serialized `ActionResult` union — `success` / `failure` / `redirect` with `status` and `data` — while error outcomes answer RFC 9457 `problem+json` (`type`/`title`/`status`/`detail`, #863). No header means a plain browser form post.
+Fetch-based action posts are recognized by the `x-openelement-action` header (exported as `ACTION_FETCH_HEADER` from `@openelement/router`): the built-in morph enhancement sends `enhance` and receives the same full-HTML responses as the no-JS path; a programmatic caller sends `true` and receives the serialized `ActionResult` union — `success` / `failure` / `redirect` with `status` and `data` — while error outcomes answer RFC 9457 `problem+json` (`type`/`title`/`status`/`detail`, #863). No header means a plain browser form post.
 
 ## Two loader/action chains
 

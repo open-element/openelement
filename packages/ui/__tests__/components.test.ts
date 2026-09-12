@@ -433,7 +433,7 @@ Deno.test('open-code-block: failed clipboard write shows Failed', async () => {
 });
 
 // ─── package manifest: the consumer-facing attribute/event contract ──────────
-// adapter-vite derives island metadata from manifest.declarations (WC Package
+// the router build derives island metadata from manifest.declarations (WC Package
 // Protocol); a drifted declaration silently miscompiles consumer pages.
 
 Deno.test("manifest: every declaration carries the component's published attributes and events", async () => {

@@ -47,39 +47,25 @@ const authoredCopy: Record<string, AuthoredPackageCopy> = {
     },
     kind: 'core',
   },
-  app: {
+  router: {
     copy: {
-      en: 'The application surface for pages, routes, islands and request/render semantics.',
-      zh: '面向页面、路由、island 与请求/渲染语义的应用创作面。',
+      en:
+        'The application and build surface: pages, routes, islands, request/render semantics, Vite integration, static generation and Nitro output.',
+      zh: '应用与构建面：页面、路由、island、请求/渲染语义、Vite 集成、静态生成与 Nitro 输出。',
     },
     notes: {
       en: [
         'Use `definePage`, `defineIslandConfig` and `defineApp` for application authoring.',
-        'The router and request-driver implementation are internal product knowledge.',
+        'Use `openPipeline()`/`openElement()` from `@openelement/router/vite` or the generated build task for builds.',
+        'Plugin ordering, manifests and content scans are router implementation details.',
       ],
       zh: [
         '用 `definePage`、`defineIslandConfig` 与 `defineApp` 进行应用创作。',
-        'router 与请求驱动的实现属于产品内部知识。',
+        '构建使用 `@openelement/router/vite` 的 `openPipeline()`/`openElement()` 或生成的构建任务。',
+        '插件顺序、manifest 与内容扫描属于 router 的实现细节。',
       ],
     },
     kind: 'core',
-  },
-  'adapter-vite': {
-    copy: {
-      en: 'The official Vite, content, static-build and Nitro output adapter.',
-      zh: '官方的 Vite、内容、静态构建与 Nitro 输出 adapter。',
-    },
-    notes: {
-      en: [
-        'Use `buildApp()` or the generated build task.',
-        'Plugin ordering, manifests and content scans are adapter implementation details.',
-      ],
-      zh: [
-        '使用 `buildApp()` 或生成的构建任务。',
-        '插件顺序、manifest 与内容扫描属于 adapter 的实现细节。',
-      ],
-    },
-    kind: 'build',
   },
   create: {
     copy: {
@@ -278,7 +264,7 @@ const content = {
     slotsLabel: 'Slots',
     partsLabel: 'CSS parts',
     footnote: (v: string) =>
-      `※ Internal subpaths (app/i18n, adapter-vite build pipeline, element hydration modules) stay importable for tooling but carry no compatibility promise. The public type surface is explicit — no export-star seams on the ${v} line.`,
+      `※ Internal subpaths (router request pipeline, element hydration modules) stay importable for tooling but carry no compatibility promise. The public type surface is explicit — no export-star seams on the ${v} line.`,
     footnoteCheckPre: 'Generated from repository truth by ',
     footnoteCheckPost: " and machine-checked against each package's exports map.",
   },
@@ -317,7 +303,7 @@ const content = {
     slotsLabel: '插槽',
     partsLabel: 'CSS parts',
     footnote: (v: string) =>
-      `※ 内部子路径（app/i18n、adapter-vite 构建管线、element hydration 模块）仍可被工具导入，但不携带兼容性承诺。公开类型面是显式的——${v} 线上没有 export-star 缝隙。`,
+      `※ 内部子路径（router 请求管线、element hydration 模块）仍可被工具导入，但不携带兼容性承诺。公开类型面是显式的——${v} 线上没有 export-star 缝隙。`,
     footnoteCheckPre: '由 ',
     footnoteCheckPost: ' 从仓库真值生成，并对照每个包的 exports map 做机器校验。',
   },

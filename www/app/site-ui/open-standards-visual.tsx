@@ -138,7 +138,7 @@ export default class OpenStandardsVisual extends OpenElement {
               <div className='package package--warning'>
                 <span className='package__name'>Framework</span>
                 <span className='package__desc'>
-                  routes, layouts, content, islands, i18n, and adapter-vite
+                  routes, layouts, content, islands, i18n, and router build
                 </span>
               </div>
               <div className='package'>

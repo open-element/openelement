@@ -45,6 +45,6 @@ export { OpenDropdown } from './open-dropdown.tsx';
 export { OpenTabs } from './open-tabs.tsx';
 
 // Package manifest (WC Package Protocol)
-// Consumers (adapter-vite) read manifest.declarations to derive island metadata.
+// Consumers (the router build) read manifest.declarations to derive island metadata.
 export { manifest } from './manifest.ts';
 export { registerOpenUi } from './register.ts';

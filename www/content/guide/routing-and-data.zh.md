@@ -70,7 +70,7 @@ import {
   fail,
   type OpenElementActionFailure,
   redirect,
-} from '@openelement/app';
+} from '@openelement/router';
 import GuestbookPage from '../components/page-guestbook.tsx';
 
 interface GuestbookData {
@@ -122,7 +122,7 @@ export default definePage(GuestbookPage, {
 
 ## Action fetch 协商
 
-基于 fetch 的 action 提交通过 `x-openelement-action` 头识别（从 `@openelement/app` 导出为 `ACTION_FETCH_HEADER`）：内置 morph 增强发送 `enhance`，收到与无 JS 路径相同的完整 HTML 响应；编程调用方发送 `true`，收到序列化的 `ActionResult` 联合类型——`success` / `failure` / `redirect`，带 `status` 与 `data`；错误结果则以 RFC 9457 `problem+json` 应答（`type`/`title`/`status`/`detail`，#863）。没有该头即视为普通浏览器表单提交。
+基于 fetch 的 action 提交通过 `x-openelement-action` 头识别（从 `@openelement/router` 导出为 `ACTION_FETCH_HEADER`）：内置 morph 增强发送 `enhance`，收到与无 JS 路径相同的完整 HTML 响应；编程调用方发送 `true`，收到序列化的 `ActionResult` 联合类型——`success` / `failure` / `redirect`，带 `status` 与 `data`；错误结果则以 RFC 9457 `problem+json` 应答（`type`/`title`/`status`/`detail`，#863）。没有该头即视为普通浏览器表单提交。
 
 ## 两条 loader/action 链
 

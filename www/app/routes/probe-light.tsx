@@ -2,9 +2,8 @@
 //
 // Deliberate deviations from content routes like roadmap.tsx:
 //
-// - No `meta` export: the nav scanner (packages/adapter-vite
-//   .../content/nav/scanner.ts) only admits routes with a static
-//   section+label meta, and the header nav is hand-configured, so this page
+// - No `meta` export: the generated navigation only admits routes with a
+//   static section+label meta, and the header nav is hand-configured, so this page
 //   enters neither. It is also excluded from sitemap.xml via the explicit
 //   exclude list in tools/lib/www-sitemap.ts (#1327: the sitemap enumerates
 //   the route catalog, so exclusion is a public-eligibility decision, not a
