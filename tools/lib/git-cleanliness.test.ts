@@ -10,7 +10,7 @@ Deno.test('git cleanliness uses one normalized evidence allowlist', () => {
   assertEquals(
     filterNonEvidenceDirty([
       ' M docs/release/evidence.md',
-      ' M site/app/data/_generated-release.ts',
+      ' M www/app/data/_generated-release.ts',
       ' M deno.lock',
       ' M tools/real-change.ts',
     ].join('\n')),

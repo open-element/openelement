@@ -1,7 +1,7 @@
 import { normalize } from '@std/path';
 
 const RELEASE_EVIDENCE_PATHS = Object.freeze({
-  prefixes: ['docs/release/', 'vendor/', 'site/app/data/_generated-'],
+  prefixes: ['docs/release/', 'vendor/', 'www/app/data/_generated-'],
   exact: [
     'deno.lock',
   ],
