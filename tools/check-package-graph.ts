@@ -57,6 +57,9 @@ async function readJson(path: string): Promise<unknown> {
 export const ALLOWED_DEPENDENCY_DIRECTION: Readonly<Record<string, readonly string[]>> = {
   '@openelement/element': [],
   '@openelement/router': ['@openelement/element', '@openelement/url-pattern-list'],
+  // ui consumes element's StyleSheet/logger/manifest contracts (1.0 baseline —
+  // the rule predated ui's re-entry onto the publish surface).
+  '@openelement/ui': ['@openelement/element'],
   '@openelement/create': [],
 };
 
