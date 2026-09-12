@@ -74,8 +74,8 @@ jobs:
       - run: deno task lint:markdown
       - run: deno task typecheck
       - name: Install Playwright browsers
-        # All three engines up front: the gate's fixture:request-time:gate
-        # runs the request-time fixture suite on Chromium, Firefox and WebKit.
+        # All three engines up front: the gate's fixture gates run their
+        # suites on Chromium, Firefox and WebKit.
         run: ./node_modules/.bin/playwright install --with-deps chromium firefox webkit
       - name: OpenElement CI gate
         run: deno task gate:ci
@@ -115,6 +115,11 @@ jobs:
   # (lowest supported, required) and 26 (Current, required). The below-floor
   # clean-error behavior stays pinned by unit test
   # (packages/router/__tests__/ssg-helpers.test.ts), not by an EOL Node job.
+  # Admission proof is packed-world: the harness installs the real
+  # pack:dry-run tarballs into an isolated consumer (empty npm cache, no
+  # workspace source on the resolution path), builds with the packed CLI,
+  # and boots dist/server/serve.mjs under plain Node — never a workspace
+  # build plus a hand-made shim.
   node-serve-smoke:
     name: dist/server Node smoke (Node ${{ matrix.node }})
     runs-on: ubuntu-latest
@@ -135,41 +140,19 @@ jobs:
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
           node-version: ${{ matrix.node }}
-      - name: Build the request-time fixture
-        run: deno task fixture:router-request-time:build
-      - name: Shim @openelement/router/nitro-mount for Node resolution
-        # The workspace publishes to JSR, so plain Node cannot resolve the
-        # bare specifier the generated index.js imports. Materialize the
-        # exact nitro-mount an npm consumer would get, transpiled from the
-        # real source (type-only imports drop out). The shim lives under
-        # dist/node_modules: on Node's resolution path from
-        # dist/server/index.js, but invisible to the fixture's own Vite
-        # config resolution (which walks up from the fixture root).
-        run: |
-          shim=fixtures/router-request-time/dist/node_modules/@openelement/router
-          mkdir -p "$shim"
-          ./node_modules/.bin/esbuild packages/router/src/nitro-mount.ts \
-            --format=esm --outfile="$shim/nitro-mount.js"
-          printf '{ "name": "@openelement/router", "version": "0.0.0-smoke", "type": "module", "exports": { "./nitro-mount": "./nitro-mount.js" } }\n' \
-            > "$shim/package.json"
-      - name: Boot dist/server/serve.mjs under Node ${{ matrix.node }}
-        working-directory: fixtures/router-request-time
-        run: |
-          set -u
-          OPEN_ELEMENT_PORT=4891 OPEN_ELEMENT_HOST=127.0.0.1 node dist/server/serve.mjs &
-          server_pid=$!
-          trap 'kill $server_pid 2>/dev/null || true' EXIT
-          for _ in $(seq 1 50); do
-            curl -sf -o /dev/null http://127.0.0.1:4891/ && break
-            sleep 0.2
-          done
-          curl -sf http://127.0.0.1:4891/ | grep -q 'request-time fixture home'
-          curl -sf http://127.0.0.1:4891/live | grep -q 'request-time live'
+      - name: Pack the release tarballs
+        run: deno task pack:dry-run
+      - name: Packed serve proof under Node ${{ matrix.node }}
+        run: deno run --allow-read --allow-write --allow-run --allow-env --allow-net tools/consumer-packaged-node-serve.ts node
 
   # #1228 (B2.5): the deployment guide and PACKAGE_SURFACE.md claim the
   # generated dist/server artifacts run on Bun. A claim that survives only on
-  # local evidence is an overclaim, so the same fixture the Node legs serve is
-  # booted under a pinned Bun here: real server, real HTTP probes.
+  # local evidence is an overclaim, so the packed serve harness — same
+  # tarballs, same isolated consumer as the Node legs — boots under a pinned
+  # Bun here: real server, real HTTP probes. The harness builds the consumer
+  # app with plain node (a build tool, not the serving runtime), so this job
+  # sets up Node 24 for the build while Bun remains the serving runtime
+  # under test.
   bun-serve-smoke:
     name: dist/server Bun smoke
     runs-on: ubuntu-latest
@@ -189,21 +172,14 @@ jobs:
           echo "74c1c3bee7cd998500c8f969cd8972355ac6a07207e94a39eece1999b56ffabf  /tmp/bun.zip" | sha256sum -c -
           unzip -q /tmp/bun.zip -d /tmp/bun
           echo "/tmp/bun/bun-linux-x64" >> "$GITHUB_PATH"
-      - name: Build the request-time fixture
-        run: deno task fixture:router-request-time:build
-      - name: Boot dist/server/serve.mjs under Bun
-        working-directory: fixtures/router-request-time
-        run: |
-          set -u
-          OPEN_ELEMENT_PORT=4893 OPEN_ELEMENT_HOST=127.0.0.1 bun dist/server/serve.mjs &
-          server_pid=$!
-          trap 'kill $server_pid 2>/dev/null || true' EXIT
-          for _ in $(seq 1 50); do
-            curl -sf -o /dev/null http://127.0.0.1:4893/ && break
-            sleep 0.2
-          done
-          curl -sf http://127.0.0.1:4893/ | grep -q 'request-time fixture home'
-          curl -sf http://127.0.0.1:4893/live | grep -q 'request-time live'
+      # v7.0.0 — Node 24 is the harness's build tool only; Bun serves.
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: '24'
+      - name: Pack the release tarballs
+        run: deno task pack:dry-run
+      - name: Packed serve proof under Bun
+        run: deno run --allow-read --allow-write --allow-run --allow-env --allow-net tools/consumer-packaged-node-serve.ts bun
 
   # TypeScript 7 SHADOW gate (1.0 Alpha convergence, "TypeScript 7: split
   # decision"). Non-blocking by design: continue-on-error keeps the run
