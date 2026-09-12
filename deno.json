@@ -61,6 +61,7 @@
     "consumer:packaged-app": "deno run --allow-read --allow-write --allow-run --allow-env --allow-net tools/consumer-packaged-native.ts && deno run --allow-read --allow-write --allow-run --allow-env --allow-net tools/consumer-packaged-lit.ts",
     "consumer:packaged-router": "deno run --allow-read --allow-write --allow-run --allow-env --allow-net tools/consumer-packaged-router.ts",
     "consumer:packaged-element": "deno run -A tools/consumer-packaged-element.ts",
+    "consumer:packaged-ui": "deno run --allow-read --allow-write --allow-run --allow-env --allow-net tools/consumer-packaged-ui.ts",
     "pack": "deno run --allow-read --allow-write --allow-run --allow-env tools/publish-npm.ts pack",
     "pack:dry-run": "deno run --allow-read --allow-write --allow-run --allow-env tools/publish-npm.ts pack:dry-run",
     "publish:npm": "deno run --allow-read --allow-write --allow-run --allow-env --allow-net tools/publish-npm.ts publish:npm",
@@ -121,7 +122,7 @@
     "hooks:install": "git config core.hooksPath .githooks && chmod +x .githooks/pre-commit .githooks/pre-push",
     "hooks:uninstall": "git config --unset core.hooksPath",
     "gate:source": "deno task graph:check && deno task interface:snapshot && deno task export-files:check && deno task url-pattern-list:provenance && deno task release:state-machine:check && deno task signals:check-protocol-boundary && deno task deno-api:check && deno task validation:boundary-check && deno task build && deno task test:coverage:check && deno task examples:check && deno task fixture:router-request-time:gate && deno task fixture:router-native-framework:gate && deno task fixture:router-lit-framework:gate && deno task fixture:router-ui-dogfood:gate && deno task fixture:web-component-interop:test && deno task test:element:browser:gate && deno task test:starter-smoke && deno task nitro:proof:node && deno task nitro:proof:workers && deno task www:build && deno task www:check-links && deno task www:check-theme-tokens",
-    "gate:packed": "deno task pack:dry-run && deno task package-artifacts:check && deno task consumer:packaged && deno task consumer:packaged-app && deno task consumer:packaged-router && deno task consumer:packaged-element && deno task third-party-wc:smoke",
+    "gate:packed": "deno task pack:dry-run && deno task package-artifacts:check && deno task consumer:packaged && deno task consumer:packaged-app && deno task consumer:packaged-router && deno task consumer:packaged-element && deno task consumer:packaged-ui && deno task third-party-wc:smoke",
     "gate:ci": "deno task gate:source && deno task gate:packed",
     "gate:release": "deno task gate:packed && deno task publish:npm:dry-run"
   },
