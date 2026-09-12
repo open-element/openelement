@@ -29,6 +29,7 @@ import type {
   OpenElementPackageManifest,
   RouteEntry,
 } from './internal/protocol/framework.ts';
+import type { OpenElementI18nOptions } from './framework.ts';
 import type {
   BuildArtifacts,
   BuildPlan,
@@ -144,6 +145,24 @@ class Phase3Meta {
   componentsDir: string = DEFAULT_COMPONENTS_DIR;
 }
 
+/**
+ * Normalize a project's locale declaration for the build context, or null when
+ * no locales are declared. The default locale must be one of the declared
+ * locales; it falls back to the first entry otherwise.
+ */
+function normalizeI18nOptions(
+  options: OpenElementI18nOptions | undefined,
+): OpenElementI18nContextOptions | null {
+  const locales = (options?.locales ?? []).filter((locale): locale is string => Boolean(locale));
+  if (locales.length === 0) return null;
+  const requested = options?.defaultLocale;
+  const unique = [...new Set(locales)];
+  return {
+    locales: unique,
+    defaultLocale: requested && unique.includes(requested) ? requested : unique[0],
+  };
+}
+
 export class OpenElementBuildContext {
   /** Canonical production plan computed once after Phase 1 discovery. */
   buildPlan: BuildPlan | null = null;
@@ -179,6 +198,9 @@ export class OpenElementBuildContext {
 
   constructor(options: FrameworkOptions) {
     this.options = options;
+    // Locale declaration is user configuration, not build state: it is
+    // resolved once here so reset() (watch mode) cannot drop it.
+    this.plugins.i18nOptions = normalizeI18nOptions(options.i18n);
   }
 
   /** Register plugin data by name. */
@@ -242,6 +264,7 @@ export class OpenElementBuildContext {
     this.buildArtifacts = null;
 
     const userResolveAlias = this.phase1.userResolveAlias;
+    const i18nOptions = this.plugins.i18nOptions;
     // NOTE: userResolveAlias is NOT reset - it's user configuration, not
     // build state. It's set in config()/configResolved() and must persist
     // through buildStart() for Phase 2 and 3 to use.
@@ -252,7 +275,8 @@ export class OpenElementBuildContext {
       navSections: [],
       headerNav: [],
       sitemapOptions: null,
-      i18nOptions: null,
+      // Declared locales come from the user's options and survive reset.
+      i18nOptions,
     });
   }
 }

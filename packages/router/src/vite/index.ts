@@ -79,6 +79,7 @@ export type {
   OpenElementBuildContextLike,
   OpenElementHeaderNavLink,
   OpenElementI18nContextOptions,
+  OpenElementI18nOptions,
   OpenElementNavSection,
 } from './framework.ts';
 

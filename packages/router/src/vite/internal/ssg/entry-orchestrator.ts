@@ -128,13 +128,17 @@ export function renderEntry(desc: EntryDescriptor): string {
   lines.push(
     `import { isOpenElementRedirect as __isOpenElementRedirect, isOpenElementNotFound as __isOpenElementNotFound, classifyActionResult as __classifyActionResult, ACTION_FETCH_HEADER as __actionFetchHeader, PROBLEM_JSON_MEDIA_TYPE as __problemJsonMediaType } from '@openelement/router';`,
   );
-  // The generated nav/i18n data modules (@openelement/generated/*) were
-  // removed with the content capability; the app-shell layout props keep
-  // their contract with empty defaults.
+  // Nav data is not part of the 1.0 surface: the app-shell layout props keep
+  // their contract with empty defaults. Locales, by contrast, are a project
+  // declaration (`openElement({ i18n })`) — the generated entry must carry them
+  // so path-derived locale resolution and shell href localization agree with
+  // the pages the build emits (see expandI18nLocales).
   lines.push('const __headerNav = [];');
   lines.push('const __navSections = [];');
-  lines.push('const __locales = [];');
-  lines.push('function __getDefaultLocale() { return "en"; }');
+  lines.push(`const __locales = ${JSON.stringify(desc.i18n?.locales ?? [])};`);
+  lines.push(
+    `function __getDefaultLocale() { return ${JSON.stringify(desc.i18n?.defaultLocale ?? 'en')}; }`,
+  );
   const appShellModuleList = [...appShellModules].map(([importPath, tagName], index) => ({
     importPath,
     tagName,

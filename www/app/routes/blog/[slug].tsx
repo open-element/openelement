@@ -1,5 +1,5 @@
 /** Dynamic blog route; all request data is projected into a compiled page. */
-import { definePage } from '@openelement/app';
+import { definePage } from '@openelement/router';
 import { trustedHtml } from '@openelement/element';
 import { getPostBySlug, posts } from '@openelement/generated/blog-data';
 import { prepareArticle } from '@openelement/site-ui/article-body.ts';

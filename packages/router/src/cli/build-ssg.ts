@@ -47,6 +47,7 @@ import { SsrRenderError } from '@openelement/element/build-utils';
 import { createLogger, formatError } from '@openelement/element';
 import { createSsgRenderEvidence } from './ssg-render.ts';
 import { createNpmSpecifierPlugin } from '../vite/npm-specifier-plugin.ts';
+import { createDenoImportMapResolvePlugin } from '../vite/deno-import-map.ts';
 import { mdxPlugin } from '../vite/plugin-mdx.ts';
 import { quoteGeneratedJavaScriptValue } from '../vite/internal/ssg/codegen-literals.ts';
 import {
@@ -172,6 +173,8 @@ interface SsgEntryDescriptorInputs {
   layouts?: FrameworkOptions['layouts'];
   /** Page renderer (Beta.2.2, #1339) — threaded from FrameworkOptions. */
   renderer?: 'native' | 'lit';
+  /** Declared project locales — threaded from the build context. */
+  i18n?: { locales: string[]; defaultLocale: string };
 }
 
 /**
@@ -211,6 +214,7 @@ export function buildSsgEntryDescriptor(
     appShell: inputs.appShell,
     layouts: inputs.layouts,
     renderer: inputs.renderer,
+    i18n: inputs.i18n,
   });
   ctx.phase1.ssrAdmissionPlan = descriptor.ssrAdmissionPlan;
   return descriptor;
@@ -292,6 +296,7 @@ async function buildSSG(
     appShell,
     layouts,
     renderer,
+    i18n: ctx.plugins.i18nOptions ?? undefined,
   }, ctx);
 
   // #1339: the native banner imports StyleSheet from @openelement/element;
@@ -300,7 +305,7 @@ async function buildSSG(
   const ssgEntryCode = (renderer === 'lit' ? '' : generateSsrPolyfillBanner() + '\n') +
     renderEntry(ssgDescriptor);
   // Deno import map resolution handles bare specifiers (e.g. @acme/components/open-callout)
-  // via the createDenoImportMapPlugin added to the Phase 3 viteBuild plugins below.
+  // via createDenoImportMapResolvePlugin() in the Phase 3 viteBuild plugins below.
 
   try {
     const { build: viteBuild } = await import('vite');
@@ -422,6 +427,12 @@ async function buildSSG(
           },
         },
         createNpmSpecifierPlugin(),
+        // The project's import map is part of its build contract: specifiers
+        // Deno resolves at dev time must resolve here too. Without this, an app
+        // whose routes import a mapped alias (www's `@openelement/generated/*`,
+        // or a consumer's own alias) built its client bundle and then failed
+        // static generation with "Rolldown failed to resolve import".
+        createDenoImportMapResolvePlugin(root),
         {
           name: 'open:ssg-client-only-island-stubs',
           enforce: 'pre',

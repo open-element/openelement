@@ -15,12 +15,28 @@ export type {
 } from '@openelement/element';
 
 /**
+ * Project locale declaration.
+ *
+ * The build expands every static and dynamic route under each additional
+ * locale prefix (`/zh/docs`), passes the resolved locale to page `head`/`props`
+ * hooks and localizes app-shell navigation. Absent means a single-locale site
+ * with no locale prefixing — the pre-i18n output, byte for byte.
+ */
+export interface OpenElementI18nOptions {
+  /** Locale prefixes the build expands, e.g. `['en', 'zh']`. */
+  locales: string[];
+  /** Locale served without a prefix. Defaults to the first entry. */
+  defaultLocale?: string;
+}
+
+/**
  * Adapter options extend Element options with build-only delivery
  * declarations. The element package remains unaware of Vite/SSG policy.
  */
 export type FrameworkOptions = ElementFrameworkOptions & {
   criticalAssets?: CriticalAssetsOptions;
   critical?: CriticalAssetsOptions;
+  i18n?: OpenElementI18nOptions;
 };
 
 /** Blog options stored in the adapter build context. */

@@ -2,7 +2,7 @@
   "imports": {
     "@openelement/site-ui/": "./app/site-ui/",
     "@openelement/generated/nav": "./app/data/_generated-nav.ts",
-    "@openelement/generated/blog-data": "./app/data/_generated-blog-data.d.ts",
+    "@openelement/generated/blog-data": "./app/data/_generated-blog-data.ts",
     "@openelement/generated/i18n": "./app/data/_generated-i18n-data.ts",
     "marked": "npm:marked@^15.0.0",
     "gray-matter": "npm:gray-matter@^4.0.3"

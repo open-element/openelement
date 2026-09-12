@@ -30,13 +30,12 @@ import { VIRTUAL_RUNTIME_SPECIFIERS } from '../vite/internal/ssg/entry-generator
 import type { OpenElementBuildContext } from '../vite/build-context.ts';
 import type { IslandDecl } from '../vite/internal/protocol/ssg.ts';
 import { createNpmSpecifierPlugin } from '../vite/npm-specifier-plugin.ts';
+import { createDenoImportMapResolvePlugin } from '../vite/deno-import-map.ts';
 import { analyzeModuleSemantics, compiledElementPlugin } from '@openelement/element/compiler';
 import { compilerBehaviorDeclarations } from '../vite/internal/ssg/client-admission.ts';
-import { parseJsonc } from '../vite/internal/jsonc.ts';
 import { sortAliasEntries } from '../vite/alias-utils.ts';
 import { formatError } from '@openelement/element';
 import { createLogger } from '@openelement/element';
-import { normalizeSeparators } from '@openelement/element/build-utils';
 import {
   CHUNK_SIZE_WARNING_LIMIT_KB,
   DEFAULT_ISLANDS_DIR,
@@ -233,102 +232,6 @@ type ViteBuildOptionsWithManifest = NonNullable<InlineConfig['build']> & {
 type ViteInlineConfigWithManifest = Omit<InlineConfig, 'build'> & {
   build?: ViteBuildOptionsWithManifest;
 };
-
-/** Workspace root derived from this module's location (packages/router/src/cli/).
- * Only valid in the local monorepo layout. In npm/JSR consumers, returns null. */
-const WORKSPACE_ROOT: string | null = (() => {
-  if (!import.meta.url.startsWith('file:')) return null;
-  try {
-    const root = normalizeSeparators(fileURLToPath(new URL('../../../..', import.meta.url)));
-    if (!existsSync(join(root, 'packages', 'element', 'deno.json'))) return null;
-    return root;
-  } catch (e) {
-    log.warn('Unable to resolve workspace root, falling back to null', e);
-    return null;
-  }
-})();
-
-/**
- * Look up a bare specifier in a deno.json import map.
- * Walks up directory tree to find workspace-level deno.json as fallback.
- * Returns { target, denoJsonDir } so relative paths can be resolved correctly.
- */
-function lookupInDenoJson(
-  id: string,
-  root: string,
-): { target: string; denoJsonDir: string } | null {
-  const denoJsonDirs = new Set<string>();
-  let dir = resolve(root);
-
-  // Walk up from consumer root
-  while (!denoJsonDirs.has(dir)) {
-    denoJsonDirs.add(dir);
-    const found = tryDenoJsonDir(id, dir);
-    if (found) return found;
-    const parent = resolve(dir, '..');
-    if (parent === dir) break;
-    dir = parent;
-  }
-
-  // Also try workspace root (module-relative, for monorepo dev / testing)
-  if (WORKSPACE_ROOT && !denoJsonDirs.has(WORKSPACE_ROOT)) {
-    const found = tryDenoJsonDir(id, WORKSPACE_ROOT);
-    if (found) return found;
-  }
-
-  return null;
-}
-
-/** Check a single directory for a deno.json with the given import. */
-function tryDenoJsonDir(
-  id: string,
-  dir: string,
-): { target: string; denoJsonDir: string } | null {
-  const denoJsonPath = join(dir, 'deno.json');
-  if (!existsSync(denoJsonPath)) return null;
-  const raw = readFileSync(denoJsonPath, 'utf-8');
-  // #708: shared JSONC parser (single implementation with workspace-alias.ts).
-  // Handles mid-line // comments, /* */ blocks, string literals, and trailing commas.
-  const denoJson = parseJsonc(raw);
-  if (!denoJson) {
-    log.warn('Invalid deno.json JSON, skipping');
-    return null; // Invalid JSON — skip this deno.json
-  }
-  const imports = denoJson.imports as Record<string, string> | undefined;
-  if (!imports) return null;
-  // Exact match
-  if (imports[id]) return { target: imports[id], denoJsonDir: dir };
-  // Prefix/subpath matching (trailing slash)
-  for (const [key, value] of Object.entries(imports)) {
-    if (key.endsWith('/') && id.startsWith(key)) {
-      return { target: value + id.slice(key.length), denoJsonDir: dir };
-    }
-  }
-  return null;
-}
-
-/**
- * Convert a Deno import map target to a resolvable Vite path.
- * - file:// URLs → absolute filesystem path
- * - Relative paths (./) → resolved relative to denoJsonDir
- * - npm:, jsr: → null (handled by node_modules)
- */
-function convertImportMapTarget(target: string, denoJsonDir: string): string | null {
-  if (target.startsWith('file://')) {
-    try {
-      return normalizeSeparators(fileURLToPath(target));
-    } catch (e) {
-      log.warn('Unable to convert file:// import-map target, skipping', e);
-      return null;
-    }
-  }
-  // Relative path — resolve relative to the deno.json directory
-  if (target.startsWith('./') || target.startsWith('../')) {
-    return normalizeSeparators(resolve(denoJsonDir, target));
-  }
-  // npm:, jsr: — let Vite/Rolldown handle these normally
-  return null;
-}
 
 async function buildClient(ctx: OpenElementBuildContext): Promise<void> {
   const root = ctx.phase3.root || process.cwd();
@@ -598,28 +501,7 @@ async function buildClient(ctx: OpenElementBuildContext): Promise<void> {
           if (id === RESOLVED_CLIENT_ENTRY_ID) return clientEntryCode;
         },
       },
-      {
-        name: 'open:deno-import-map-resolve',
-        enforce: 'pre',
-        async resolveId(id, importer) {
-          // Only handle bare specifiers (no relative imports, no absolute paths)
-          if (id.startsWith('.') || id.startsWith('/') || id.startsWith('file:')) {
-            return null;
-          }
-
-          // Try deno.json import map — walks up from root to find
-          // workspace-level deno.json as fallback for monorepo dev.
-          const result = lookupInDenoJson(id, root);
-          if (!result) return null;
-
-          // Only handle file:// and relative targets (workspace-local dev mappings).
-          // npm:, jsr: → return null, let node_modules handle them.
-          const resolved = convertImportMapTarget(result.target, result.denoJsonDir);
-          if (!resolved) return null;
-
-          return await this.resolve(resolved, importer, { skipSelf: true });
-        },
-      },
+      createDenoImportMapResolvePlugin(root),
     ],
   };
 

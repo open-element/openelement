@@ -1,4 +1,4 @@
-import type { CollectionOptions, CollectionSchema } from '@openelement/adapter-vite';
+import type { CollectionOptions, CollectionSchema } from './lib/content.ts';
 
 export const articleCollectionSchema: CollectionSchema = {
   fields: {

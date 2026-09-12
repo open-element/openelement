@@ -1,4 +1,4 @@
-import { definePage } from '@openelement/app';
+import { definePage } from '@openelement/router';
 import GuideComparisonPage from '../../components/article-routes/guide-comparison.tsx';
 import { articlePageHead, projectArticlePage } from '../../site-ui/article-page-model.ts';
 

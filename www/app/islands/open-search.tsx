@@ -1,6 +1,6 @@
 /** Compiler-owned search view; browser behavior lives in open-search-controller.ts. */
 
-import { defineIslandConfig } from '@openelement/app';
+import { defineIslandConfig } from '@openelement/router';
 import { element, OpenElement } from '@openelement/element';
 import {
   closeSearchOnBackdrop,

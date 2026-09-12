@@ -1,4 +1,4 @@
-import { definePage } from '@openelement/app';
+import { definePage } from '@openelement/router';
 import DsdGuidePage from '../../components/article-routes/architecture-dsd.tsx';
 import { articlePageHead, projectArticlePage } from '../../site-ui/article-page-model.ts';
 

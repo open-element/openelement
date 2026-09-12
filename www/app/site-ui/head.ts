@@ -12,10 +12,10 @@
  *   - error documents (404) keep og fields but omit canonical/hreflang —
  *     they are not indexable and stay out of the sitemap.
  *
- * Resolved once per render by resolvePageDocument (@openelement/app/document)
+ * Resolved once per render by resolvePageDocument (@openelement/router/document)
  * before either serializer runs; there is no post-build head rewrite anymore.
  */
-import type { PageHead } from '@openelement/app';
+import type { PageHead } from '@openelement/router';
 import { contentLocale } from './locale.ts';
 import { localizePath, SITE_LOCALES } from './link.ts';
 

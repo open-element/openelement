@@ -195,6 +195,9 @@ export function createOpenPlugin(
       upgradeStrategy: resolvedOptions.island?.upgradeStrategy || 'idle',
       appShell: resolvedOptions.appShell,
       layouts: resolvedOptions.layouts,
+      // Same source as the SSG descriptor: the dev/SSR entry must resolve
+      // locales identically or dev and build disagree about `/zh/...` paths.
+      i18n: ctx.plugins.i18nOptions ?? undefined,
     });
   }
 

@@ -1,6 +1,6 @@
 /** @jsxImportSource @openelement/element */
 /** Compiler-owned WWW app shell (v0.44, ADR-0143). */
-import { defineIslandConfig } from '@openelement/app';
+import { defineIslandConfig } from '@openelement/router';
 import { computed, element, OpenElement, property } from '@openelement/element';
 import '@openelement/ui/open-theme-toggle';
 import { compiledStyle } from '../site-ui/compiled-style.ts';

@@ -13,7 +13,7 @@
 //   ../components/page-probe-light.tsx for why); the route module only
 //   declares the descriptor.
 
-import { definePage } from '@openelement/app';
+import { definePage } from '@openelement/router';
 import { siteHead } from '@openelement/site-ui/head.ts';
 import { contentLocale } from '@openelement/site-ui/locale.ts';
 import ProbeLightPage from '../components/page-probe-light.tsx';

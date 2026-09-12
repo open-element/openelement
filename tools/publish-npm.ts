@@ -45,8 +45,7 @@ const PACKAGE_DESCRIPTIONS: Record<string, string> = {
     'Routing, application runtime, and lifecycle tooling for the OpenElement framework.',
   '@openelement/create': 'Project generator for the OpenElement Web Components framework.',
   '@openelement/element': 'Custom element base class and authoring APIs for OpenElement.',
-  '@openelement/ui':
-    'Reference Web Components and UI primitives built on the OpenElement runtime.',
+  '@openelement/ui': 'Reference Web Components and UI primitives built on the OpenElement runtime.',
 };
 
 const CREATE_BIN = {

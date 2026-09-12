@@ -79,7 +79,7 @@ export function bundleModuleForBrowser(entry: URL): Promise<string> {
               replacement: resolve(ELEMENT_DIR, 'build-utils.ts'),
             },
             {
-              // @openelement/app authoring sources import this subpath
+              // @openelement/router authoring sources import this subpath
               // (Beta.2.2); mirror it like the other element subpaths.
               find: '@openelement/element/authoring',
               replacement: resolve(ELEMENT_DIR, 'authoring.ts'),

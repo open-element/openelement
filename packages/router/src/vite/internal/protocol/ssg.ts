@@ -253,6 +253,12 @@ export interface EntryDescriptor {
   document: DocumentConfig;
   appShell: AppShellPlan;
   upgradeStrategy?: HydrationStrategy;
+  /**
+   * Declared project locales. Absent for a single-locale site: the generated
+   * entry then emits no locale prefixes and the default-locale fallback, which
+   * is byte-identical to pre-i18n output.
+   */
+  i18n?: { locales: string[]; defaultLocale: string };
 }
 
 // ─── SSG render pipeline types (from ssg-render.ts) ──────────────

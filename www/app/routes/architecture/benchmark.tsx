@@ -1,4 +1,4 @@
-import { definePage } from '@openelement/app';
+import { definePage } from '@openelement/router';
 import Benchmark from '../../components/article-routes/architecture-benchmark.tsx';
 import { articlePageHead, projectArticlePage } from '../../site-ui/article-page-model.ts';
 

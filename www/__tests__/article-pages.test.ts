@@ -1,5 +1,5 @@
 import { assert, assertEquals, assertExists, assertStringIncludes } from '@std/assert';
-import { loadCollectionData } from '@openelement/adapter-vite';
+import { loadCollectionData } from '../lib/content.ts';
 import { fileURLToPath } from 'node:url';
 import { articleCollections } from '../content-collections.ts';
 import { projectArticlePage } from '../app/site-ui/article-page-model.ts';

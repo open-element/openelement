@@ -1,5 +1,5 @@
 /** Client activation entry for the private WWW page rail. */
-import { defineIslandConfig } from '@openelement/app';
+import { defineIslandConfig } from '@openelement/router';
 export { default } from '../site-ui/open-page-rail.tsx';
 
 export const tagName = 'open-page-rail';

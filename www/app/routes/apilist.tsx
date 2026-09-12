@@ -1,5 +1,5 @@
 /** WWW supported API reference page. */
-import { definePage } from '@openelement/app';
+import { definePage } from '@openelement/router';
 import { siteHead } from '@openelement/site-ui/head.ts';
 import { contentLocale } from '@openelement/site-ui/locale.ts';
 import { OPENELEMENT_VERSION } from '../data/version.ts';

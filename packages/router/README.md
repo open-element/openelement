@@ -92,7 +92,7 @@ deno run -A npm:@openelement/router/cli/build   # production build (SSG + client
 deno run -A npm:@openelement/router/cli/start   # serve built output
 ```
 
-The build executes in ADR-0023 order — SSG (Phase 3) runs before the client
+The build executes in a fixed phase order — SSG (Phase 3) runs before the client
 bundle (Phase 2), because client chunk hashes do not affect HTML content and
 script injection is a post-processing step:
 

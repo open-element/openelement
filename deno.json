@@ -31,7 +31,13 @@
     "nitro": "npm:nitro@3.0.0",
     "@rollup/plugin-terser": "npm:@rollup/plugin-terser@1.0.0",
     "zod": "npm:zod@^3.25",
-    "valibot": "npm:valibot@^1.1"
+    "valibot": "npm:valibot@^1.1",
+    "marked": "npm:marked@^15.0.0",
+    "gray-matter": "npm:gray-matter@^4.0.3",
+    "@openelement/site-ui/": "./www/app/site-ui/",
+    "@openelement/generated/nav": "./www/app/data/_generated-nav.ts",
+    "@openelement/generated/blog-data": "./www/app/data/_generated-blog-data.ts",
+    "@openelement/generated/i18n": "./www/app/data/_generated-i18n-data.ts"
   },
   "vendor": true,
   "nodeModulesDir": "manual",
@@ -99,6 +105,12 @@
     "nitro:proof:node": "deno run --allow-read --allow-write --allow-run --allow-env --allow-net fixtures/router-nitro/proof.ts node",
     "nitro:proof:workers": "deno run --allow-read --allow-write --allow-run --allow-env --allow-net fixtures/router-nitro/proof.ts workers",
     "test:coverage:check": "deno run --allow-read --allow-run --allow-write --allow-env --allow-net --allow-ffi --allow-sys tools/check-coverage.ts --threshold 80 --branch-threshold 84 --function-threshold 86",
+    "generate:www-content-data": "deno run --allow-read --allow-write tools/generate-www-content-data.ts",
+    "www:build": "deno task generate:www-content-data && cd www && deno run --config ../deno.json --allow-read --allow-write --allow-net --allow-env --allow-ffi --allow-sys --allow-run ../packages/router/src/cli/build.ts",
+    "www:sitemap": "deno run --allow-read --allow-write --allow-env tools/generate-www-sitemap.ts",
+    "www:check-links": "deno run --allow-read tools/check-www-links.ts",
+    "www:check-theme-tokens": "deno run --allow-read tools/check-www-theme-tokens.ts",
+    "examples:check": "cd examples/supabase-cloudflare-starter && deno task check && deno task test && cd ../open-element-in-fresh && deno task check",
     "consumer:element-smoke": "deno run -A tools/published-consumer-qualification.ts --smoke --local",
     "typecheck": "deno task --filter @openelement/element typecheck && deno task --filter @openelement/router typecheck && deno task --filter @openelement/create typecheck",
     "lint": "deno lint",
@@ -107,7 +119,7 @@
     "clean": "rm -rf packages/*/dist packages/*/*.tgz dist custom-dist dist-test-* playwright-report test-results .openElement",
     "hooks:install": "git config core.hooksPath .githooks && chmod +x .githooks/pre-commit .githooks/pre-push",
     "hooks:uninstall": "git config --unset core.hooksPath",
-    "gate:source": "deno task graph:check && deno task interface:snapshot && deno task export-files:check && deno task url-pattern-list:provenance && deno task release:state-machine:check && deno task signals:check-protocol-boundary && deno task deno-api:check && deno task validation:boundary-check && deno task build && deno task test:coverage:check && deno task fixture:router-request-time:gate && deno task fixture:router-native-framework:gate && deno task fixture:router-lit-framework:gate && deno task fixture:router-ui-dogfood:gate && deno task test:element:browser:gate && deno task test:starter-smoke && deno task nitro:proof:node && deno task nitro:proof:workers",
+    "gate:source": "deno task graph:check && deno task interface:snapshot && deno task export-files:check && deno task url-pattern-list:provenance && deno task release:state-machine:check && deno task signals:check-protocol-boundary && deno task deno-api:check && deno task validation:boundary-check && deno task build && deno task test:coverage:check && deno task examples:check && deno task fixture:router-request-time:gate && deno task fixture:router-native-framework:gate && deno task fixture:router-lit-framework:gate && deno task fixture:router-ui-dogfood:gate && deno task test:element:browser:gate && deno task test:starter-smoke && deno task nitro:proof:node && deno task nitro:proof:workers && deno task www:build && deno task www:check-links && deno task www:check-theme-tokens",
     "gate:packed": "deno task pack:dry-run && deno task package-artifacts:check && deno task consumer:packaged && deno task consumer:packaged-app && deno task consumer:packaged-router && deno task consumer:packaged-element && deno task third-party-wc:smoke",
     "gate:ci": "deno task gate:source && deno task gate:packed",
     "gate:release": "deno task gate:packed && deno task publish:npm:dry-run"
@@ -120,6 +132,11 @@
     "singleQuote": true,
     "proseWrap": "preserve",
     "exclude": [
+      "examples/legacy/",
+      "www/content/blog/",
+      "www/content/guide/",
+      "www/app/data/",
+      "www/public/assets/",
       "custom-dist/",
       "dist-test-ssg-render/",
       ".tmp*",
@@ -139,10 +156,13 @@
       ]
     },
     "exclude": [
+      "examples/legacy/",
+      "www/content/blog/",
+      "www/content/guide/",
+      "www/app/data/",
+      "www/public/assets/vendor/",
       "custom-dist/",
       "dist-test-ssg-render/",
-      "examples/",
-      "www/",
       "**/.nitro/"
     ]
   },

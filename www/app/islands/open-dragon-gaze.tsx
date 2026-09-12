@@ -1,6 +1,6 @@
 /** @jsxImportSource @openelement/element */
 /** Native-media mascot admitted through the v0.44 compiled island contract. */
-import { defineIslandConfig } from '@openelement/app';
+import { defineIslandConfig } from '@openelement/router';
 import { element, OpenElement } from '@openelement/element';
 import { compiledStyle } from '../site-ui/compiled-style.ts';
 

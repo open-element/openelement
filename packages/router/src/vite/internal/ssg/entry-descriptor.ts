@@ -105,6 +105,8 @@ export function buildEntryDescriptor(
     upgradeStrategy?: HydrationStrategy;
     appShell?: FrameworkOptions['appShell'];
     layouts?: FrameworkOptions['layouts'];
+    /** Declared project locales; absent keeps the single-locale descriptor shape. */
+    i18n?: { locales: string[]; defaultLocale: string };
   } = {},
 ): EntryDescriptor {
   const routesDir = options.routesDir || DEFAULT_ROUTES_DIR;
@@ -429,6 +431,9 @@ export function buildEntryDescriptor(
     document,
     appShell,
     upgradeStrategy: options.upgradeStrategy || 'idle',
+    // Single-locale sites carry no i18n on the descriptor, so their generated
+    // entry stays byte-identical to pre-i18n output.
+    ...(options.i18n ? { i18n: options.i18n } : {}),
   };
 }
 

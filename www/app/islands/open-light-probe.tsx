@@ -20,7 +20,7 @@
 
 import '@openelement/element';
 import { element, OpenElement, property } from '@openelement/element';
-import { defineIslandConfig } from '@openelement/app';
+import { defineIslandConfig } from '@openelement/router';
 
 export const openElement = defineIslandConfig({ hydrate: 'load', ssr: true });
 

@@ -2,10 +2,10 @@ import { assert, assertEquals, assertExists, assertFalse, assertStringIncludes }
 import { fromFileUrl, join } from 'jsr:@std/path@^1.0.0';
 import {
   fileToTagName,
-  generateClientEntry,
   scanIslandMeta,
   scanIslands,
-} from '../../packages/adapter-vite/src/internal/ssg/index.ts';
+} from '../../packages/router/src/vite/internal/ssg/route-scanner.ts';
+import { generateClientEntry } from '../../packages/router/src/vite/internal/ssg/entry-client-codegen.ts';
 
 const REPO_ROOT = fromFileUrl(new URL('../..', import.meta.url));
 const WWW_ISLANDS_DIR = join(REPO_ROOT, 'www', 'app', 'islands');

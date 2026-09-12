@@ -1,4 +1,4 @@
-import { definePage } from '@openelement/app';
+import { definePage } from '@openelement/router';
 import GuideCoreConceptsPage from '../../components/article-routes/guide-core-concepts.tsx';
 import { articlePageHead, projectArticlePage } from '../../site-ui/article-page-model.ts';
 

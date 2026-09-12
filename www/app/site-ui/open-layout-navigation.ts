@@ -1,4 +1,4 @@
-import { normalizeLocalePath } from '@openelement/app/i18n';
+import { normalizeLocalePath } from './i18n.ts';
 
 const SAFE_URL_SCHEMES = new Set(['http:', 'https:', 'mailto:', 'tel:', 'sms:']);
 const LOCALE_LABELS: Record<string, string> = { en: '中文', zh: 'English' };

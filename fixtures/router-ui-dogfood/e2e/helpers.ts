@@ -6,10 +6,7 @@
  * page.evaluate. The walker functions come from tools/lib/shadow-walker.ts
  * (single-sourced with the www e2e suite) and serialize into page context.
  */
-import {
-  deepQueryAllInPage,
-  deepQueryFirstInPage,
-} from '../../../tools/lib/shadow-walker.ts';
+import { deepQueryAllInPage, deepQueryFirstInPage } from '../../../tools/lib/shadow-walker.ts';
 
 /** Raw source of the shadow-piercing first-match walker, for embedding. */
 export const deepQueryFirstFn = deepQueryFirstInPage.toString();

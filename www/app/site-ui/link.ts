@@ -5,9 +5,9 @@
  * default locale keeps canonical unprefixed paths, every other locale gets a
  * `/<locale>` prefix. All in-content internal links must go through
  * localizePath so a zh page never drops the reader back into the English
- * tree (#1031). Locale math delegates to @openelement/app/i18n.
+ * tree (#1031). Locale math delegates to ./i18n.ts.
  */
-import { normalizeLocalePath } from '@openelement/app/i18n';
+import { normalizeLocalePath } from './i18n.ts';
 
 /** Locales emitted by the www build (www/vite.config.ts `locales`). */
 export const SITE_LOCALES: readonly string[] = ['en', 'zh'];

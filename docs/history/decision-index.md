@@ -2,6 +2,28 @@
 
 Current architectural decisions live in [docs/adr](../adr/README.md). This compact index makes retired decisions discoverable without keeping their full text in current HEAD. The original documents remain available through Git history and representative tags.
 
+## Retrieving a retired decision
+
+The repository is the operational-history archive: every indexed decision's full
+text exists in Git even though the file no longer tracks in HEAD. To recover it:
+
+```bash
+# 1. Find the last commit that still tracked the file (works from any tag/sha):
+git log --all --oneline --diff-filter=D -- "docs/adr/ADR-0126*.md"
+
+# 2. Show the file content from its parent commit:
+git show <delete-sha>^:docs/adr/ADR-0126-built-in-allow-list-html-sanitizer.md
+
+# 3. Or search every ref at once:
+git log --all -S "ADR-0126" --oneline
+```
+
+Why full texts were removed: the 1.0 convergence (`5a039423`, ADR-0152) treats
+Git as the single history archive — keeping retired decision prose in HEAD
+duplicated truth and forced every checker to special-case historical documents.
+The index above preserves discoverability (title, era, owner) at near-zero
+maintenance cost.
+
 | Decision                                                                                            | Status     | Approximate era | Current owner                                      |
 | --------------------------------------------------------------------------------------------------- | ---------- | --------------- | -------------------------------------------------- |
 | ADR-0025: Renderer Protocol                                                                         | Historical | pre-v0.22       | current architecture docs                          |
