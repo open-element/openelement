@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img">
+  <title>&lt;open/&gt; favicon</title>
+  <desc>Compact favicon using the current &lt;open/&gt; brand mark.</desc>
+  <rect x="4" y="4" width="56" height="56" rx="14" fill="#0d0d10" />
+  <text
+    x="32"
+    y="38"
+    text-anchor="middle"
+    font-family="'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace"
+    font-size="12"
+    font-weight="800"
+    letter-spacing="-0.6"
+    fill="#ffffff"
+  >
+    <tspan>&lt;</tspan>
+    <tspan>open</tspan>
+    <tspan fill="#b59cff">/</tspan>
+    <tspan>&gt;</tspan>
+  </text>
+</svg>

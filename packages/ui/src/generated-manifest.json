@@ -1,0 +1,501 @@
+{
+  "schemaVersion": "1.0.0",
+  "packageName": "@openelement/ui",
+  "version": "0.44.0-beta.2.2",
+  "description": "Open Props Web Component library for openElement",
+  "author": "openElement",
+  "license": "MIT",
+  "homepage": "https://openelement.org",
+  "repository": "https://github.com/open-element/openelement",
+  "declarations": [
+    {
+      "tagName": "open-card",
+      "className": "OpenCard",
+      "superclassName": "OpenElement",
+      "description": "Minimal card container with optional header and footer.",
+      "attributes": [
+        {
+          "name": "variant",
+          "type": "string",
+          "description": "variant attribute"
+        }
+      ],
+      "slots": [
+        {
+          "name": "",
+          "description": "Default slot"
+        },
+        {
+          "name": "header",
+          "description": "The 'header' slot"
+        },
+        {
+          "name": "footer",
+          "description": "The 'footer' slot"
+        }
+      ],
+      "cssParts": [
+        {
+          "name": "container",
+          "description": "The article wrapper"
+        },
+        {
+          "name": "body",
+          "description": "The card body content area"
+        }
+      ],
+      "openElement": {
+        "ssr": true,
+        "dsd": true,
+        "layer": "dsd-static",
+        "hydrate": "idle",
+        "module": "@openelement/ui/open-card",
+        "export": "OpenCard"
+      }
+    },
+    {
+      "tagName": "open-callout",
+      "className": "OpenCallout",
+      "superclassName": "OpenElement",
+      "description": "Callout/notice box for inline documentation alerts.",
+      "attributes": [
+        {
+          "name": "type",
+          "type": "string",
+          "description": "type attribute"
+        },
+        {
+          "name": "label",
+          "type": "string",
+          "description": "label attribute"
+        }
+      ],
+      "slots": [
+        {
+          "name": "",
+          "description": "Default slot"
+        }
+      ],
+      "cssParts": [
+        {
+          "name": "container",
+          "description": "The callout wrapper"
+        },
+        {
+          "name": "icon",
+          "description": "The type icon span"
+        },
+        {
+          "name": "content",
+          "description": "The content area"
+        }
+      ],
+      "openElement": {
+        "ssr": true,
+        "dsd": true,
+        "layer": "dsd-static",
+        "hydrate": "idle",
+        "module": "@openelement/ui/open-callout",
+        "export": "OpenCallout"
+      }
+    },
+    {
+      "tagName": "open-button",
+      "className": "OpenButton",
+      "superclassName": "OpenElement",
+      "description": "Minimal button component following Swiss International Style.",
+      "attributes": [
+        {
+          "name": "variant",
+          "type": "string",
+          "description": "variant attribute"
+        },
+        {
+          "name": "size",
+          "type": "string",
+          "description": "size attribute"
+        },
+        {
+          "name": "disabled",
+          "type": "boolean",
+          "description": "disabled attribute",
+          "default": "false"
+        },
+        {
+          "name": "href",
+          "type": "string",
+          "description": "href attribute"
+        },
+        {
+          "name": "target",
+          "type": "string",
+          "description": "target attribute"
+        },
+        {
+          "name": "type",
+          "type": "string",
+          "description": "type attribute"
+        }
+      ],
+      "events": [
+        {
+          "name": "open-click",
+          "type": "CustomEvent",
+          "description": "Fired on open-click"
+        }
+      ],
+      "slots": [
+        {
+          "name": "",
+          "description": "Default slot"
+        }
+      ],
+      "cssParts": [
+        {
+          "name": "control",
+          "description": "The visible button or anchor element"
+        }
+      ],
+      "openElement": {
+        "ssr": true,
+        "dsd": true,
+        "layer": "dsd-interactive",
+        "hydrate": "load",
+        "module": "@openelement/ui/open-button",
+        "export": "OpenButton"
+      }
+    },
+    {
+      "tagName": "open-input",
+      "className": "OpenInput",
+      "superclassName": "OpenElement",
+      "description": "Minimal input field following Swiss International Style.",
+      "attributes": [
+        {
+          "name": "type",
+          "type": "string",
+          "description": "type attribute"
+        },
+        {
+          "name": "placeholder",
+          "type": "string",
+          "description": "placeholder attribute"
+        },
+        {
+          "name": "label",
+          "type": "string",
+          "description": "label attribute"
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "description": "name attribute"
+        },
+        {
+          "name": "value",
+          "type": "string",
+          "description": "value attribute"
+        },
+        {
+          "name": "disabled",
+          "type": "boolean",
+          "description": "disabled attribute",
+          "default": "false"
+        },
+        {
+          "name": "required",
+          "type": "boolean",
+          "description": "required attribute",
+          "default": "false"
+        },
+        {
+          "name": "error",
+          "type": "string",
+          "description": "error attribute"
+        }
+      ],
+      "events": [
+        {
+          "name": "open-input",
+          "type": "CustomEvent<{ value: unknown }>",
+          "description": "Fired on open-input"
+        },
+        {
+          "name": "open-change",
+          "type": "CustomEvent<{ value: unknown }>",
+          "description": "Fired on open-change"
+        },
+        {
+          "name": "open-focus",
+          "type": "CustomEvent",
+          "description": "Fired on open-focus"
+        },
+        {
+          "name": "open-blur",
+          "type": "CustomEvent",
+          "description": "Fired on open-blur"
+        }
+      ],
+      "cssParts": [
+        {
+          "name": "wrapper",
+          "description": "The outer input-wrapper div"
+        },
+        {
+          "name": "label",
+          "description": "The label element"
+        },
+        {
+          "name": "control",
+          "description": "The input element"
+        },
+        {
+          "name": "error",
+          "description": "The error message small element"
+        }
+      ],
+      "openElement": {
+        "ssr": true,
+        "dsd": true,
+        "layer": "dsd-interactive",
+        "hydrate": "load",
+        "module": "@openelement/ui/open-input",
+        "export": "OpenInput"
+      }
+    },
+    {
+      "tagName": "open-theme-toggle",
+      "className": "OpenThemeToggle",
+      "superclassName": "OpenElement",
+      "description": "Theme toggle Reactive DSD component for Dark/Light mode switching.",
+      "attributes": [
+        {
+          "name": "theme",
+          "type": "string",
+          "description": "theme attribute"
+        }
+      ],
+      "events": [
+        {
+          "name": "open:theme-change",
+          "type": "CustomEvent<{ theme: unknown }>",
+          "description": "Fired on open:theme-change"
+        }
+      ],
+      "cssParts": [
+        {
+          "name": "toggle",
+          "description": "The button element"
+        },
+        {
+          "name": "icon-sun",
+          "description": "The sun SVG icon"
+        },
+        {
+          "name": "icon-moon",
+          "description": "The moon SVG icon"
+        }
+      ],
+      "openElement": {
+        "ssr": true,
+        "dsd": true,
+        "layer": "dsd-interactive",
+        "hydrate": "load",
+        "module": "@openelement/ui/open-theme-toggle",
+        "export": "OpenThemeToggle"
+      }
+    },
+    {
+      "tagName": "open-code-block",
+      "className": "OpenCodeBlock",
+      "superclassName": "OpenElement",
+      "description": "Code block with copy button AND syntax highlighting via Prism.",
+      "slots": [
+        {
+          "name": "",
+          "description": "Default slot"
+        }
+      ],
+      "cssParts": [
+        {
+          "name": "copy",
+          "description": "The copy button"
+        }
+      ],
+      "openElement": {
+        "ssr": true,
+        "dsd": true,
+        "layer": "dsd-static",
+        "hydrate": "idle",
+        "module": "@openelement/ui/open-code-block",
+        "export": "OpenCodeBlock"
+      }
+    },
+    {
+      "tagName": "open-badge",
+      "className": "OpenBadge",
+      "superclassName": "OpenElement",
+      "description": "Compact status badge backed by Open Props semantic tokens.",
+      "attributes": [
+        {
+          "name": "tone",
+          "type": "string",
+          "description": "tone attribute"
+        },
+        {
+          "name": "size",
+          "type": "string",
+          "description": "size attribute"
+        }
+      ],
+      "slots": [
+        {
+          "name": "",
+          "description": "Default slot"
+        }
+      ],
+      "cssParts": [
+        {
+          "name": "badge",
+          "description": "The badge span"
+        }
+      ],
+      "openElement": {
+        "ssr": true,
+        "dsd": true,
+        "layer": "dsd-static",
+        "hydrate": "idle",
+        "module": "@openelement/ui/open-badge",
+        "export": "OpenBadge"
+      }
+    },
+    {
+      "tagName": "open-dialog",
+      "className": "OpenDialog",
+      "superclassName": "OpenElement",
+      "description": "Dialog component using native <dialog> element + popover API.",
+      "attributes": [
+        {
+          "name": "open",
+          "type": "boolean",
+          "description": "open attribute",
+          "default": "false"
+        },
+        {
+          "name": "label",
+          "type": "string",
+          "description": "label attribute"
+        }
+      ],
+      "events": [
+        {
+          "name": "open-dialog-close",
+          "type": "CustomEvent",
+          "description": "Fired on open-dialog-close"
+        }
+      ],
+      "slots": [
+        {
+          "name": "",
+          "description": "Default slot"
+        },
+        {
+          "name": "trigger",
+          "description": "The 'trigger' slot"
+        },
+        {
+          "name": "footer",
+          "description": "The 'footer' slot"
+        }
+      ],
+      "cssParts": [
+        {
+          "name": "overlay",
+          "description": "The dialog backdrop/element"
+        },
+        {
+          "name": "header",
+          "description": "The header bar"
+        },
+        {
+          "name": "close",
+          "description": "The close button"
+        },
+        {
+          "name": "body",
+          "description": "The content area (<slot>)"
+        },
+        {
+          "name": "footer",
+          "description": "The optional footer slot"
+        }
+      ],
+      "openElement": {
+        "ssr": true,
+        "dsd": true,
+        "layer": "dsd-interactive",
+        "hydrate": "idle",
+        "module": "@openelement/ui/open-dialog",
+        "export": "OpenDialog"
+      }
+    },
+    {
+      "tagName": "open-dropdown",
+      "className": "OpenDropdown",
+      "superclassName": "OpenElement",
+      "description": "Popover-API dropdown with CSS Anchor Positioning placement.",
+      "slots": [
+        {
+          "name": "trigger",
+          "description": "Control used to toggle the dropdown"
+        },
+        {
+          "name": "",
+          "description": "Dropdown content"
+        }
+      ],
+      "cssParts": [
+        {
+          "name": "trigger",
+          "description": "Trigger wrapper"
+        },
+        {
+          "name": "content",
+          "description": "Popover content"
+        }
+      ],
+      "openElement": {
+        "ssr": true,
+        "dsd": true,
+        "layer": "dsd-interactive",
+        "hydrate": "load",
+        "module": "@openelement/ui/open-dropdown",
+        "export": "OpenDropdown"
+      }
+    },
+    {
+      "tagName": "open-tabs",
+      "className": "OpenTabs",
+      "superclassName": "OpenElement",
+      "description": "WAI-ARIA tabs pattern. The slotted [slot=\"tab\"] and [slot=\"panel\"] elements",
+      "slots": [
+        {
+          "name": "tab",
+          "description": "Tab label element (one per panel)"
+        },
+        {
+          "name": "panel",
+          "description": "Panel shown while its tab is active"
+        }
+      ],
+      "openElement": {
+        "ssr": true,
+        "dsd": true,
+        "layer": "dsd-interactive",
+        "hydrate": "load",
+        "module": "@openelement/ui/open-tabs",
+        "export": "OpenTabs"
+      }
+    }
+  ]
+}

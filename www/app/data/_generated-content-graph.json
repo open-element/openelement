@@ -1,0 +1,4615 @@
+{
+  "version": 1,
+  "generated": "deterministic",
+  "entries": [
+    {
+      "id": "api:@openelement/adapter-vite",
+      "kind": "api-package",
+      "locale": "en",
+      "source": {
+        "path": "docs/current/PACKAGE_SURFACE.md"
+      },
+      "alternates": [],
+      "references": [],
+      "fingerprint": "db8c9f9571d837dd83ec5b3f586f319d27c8a7ef37a76c3b5f41dad50fc6cd99",
+      "data": {
+        "exportClasses": {
+          ".": {
+            "ArtifactInfo": "internal-importable",
+            "BuildManifest": "internal-importable",
+            "CollectionEntry": "stable-candidate",
+            "CollectionFieldDefinition": "stable-candidate",
+            "CollectionFieldType": "stable-candidate",
+            "CollectionOptions": "stable-candidate",
+            "CollectionSchema": "stable-candidate",
+            "CollectionSchemaContext": "stable-candidate",
+            "CollectionSchemaResult": "stable-candidate",
+            "FrameworkOptions": "internal-importable",
+            "HeadExtrasResult": "stable-candidate",
+            "OpenElementBlogOptions": "stable-candidate",
+            "OpenElementBuildContext": "internal-importable",
+            "OpenElementBuildContextLike": "stable-candidate",
+            "OpenElementHeaderNavLink": "stable-candidate",
+            "OpenElementI18nContextOptions": "stable-candidate",
+            "OpenElementNavSection": "stable-candidate",
+            "OpenElementOptions": "stable-candidate",
+            "OpenMdxPluginOptions": "stable-candidate",
+            "OpenPipelineConfig": "stable-candidate",
+            "SpeculationRulesOptions": "internal-importable",
+            "SsgBehaviorOptions": "internal-importable",
+            "buildApp": "stable-candidate",
+            "buildHeadExtras": "stable-candidate",
+            "buildIslandChunkMap": "internal-importable",
+            "buildSpeculationRulesJson": "internal-importable",
+            "createCollectionPlugin": "stable-candidate",
+            "default": "stable-candidate",
+            "extractCustomElementTags": "internal-importable",
+            "generateIslandManifests": "internal-importable",
+            "generateSitemap": "stable-candidate",
+            "injectClientScript": "internal-importable",
+            "injectCspMeta": "internal-importable",
+            "injectSpeculationRules": "internal-importable",
+            "injectViewTransitionMeta": "internal-importable",
+            "loadCollectionData": "stable-candidate",
+            "mdxPlugin": "stable-candidate",
+            "openElement": "stable-candidate",
+            "openPipeline": "stable-candidate",
+            "printBuildManifest": "internal-importable",
+            "scanClientBuild": "internal-importable",
+            "scanSSGOutput": "internal-importable",
+            "writeCollectionDataModule": "stable-candidate",
+            "writeIslandManifests": "internal-importable"
+          },
+          "cli/build": {},
+          "cli/start": {
+            "extractServeMode": "internal-importable"
+          },
+          "element": {
+            "element": "experimental"
+          },
+          "nitro-mount": {
+            "NitroRequestEvent": "stable-candidate",
+            "OpenElementNitroMountOptions": "stable-candidate",
+            "createOpenElementNitroHandler": "stable-candidate"
+          },
+          "sitemap": {
+            "SitemapOptions": "stable-candidate",
+            "generateSitemap": "stable-candidate"
+          }
+        },
+        "internal": [],
+        "supported": [
+          ".",
+          "nitro-mount",
+          "cli/build",
+          "cli/start",
+          "sitemap",
+          "element"
+        ]
+      }
+    },
+    {
+      "id": "api:@openelement/app",
+      "kind": "api-package",
+      "locale": "en",
+      "source": {
+        "path": "docs/current/PACKAGE_SURFACE.md"
+      },
+      "alternates": [],
+      "references": [],
+      "fingerprint": "095dfb69ffd94d1fe52335f498d2afa1d2889668b2cb2e4ba38a1a83478ccbdd",
+      "data": {
+        "exportClasses": {
+          ".": {
+            "ACTION_FETCH_HEADER": "stable-candidate",
+            "Action": "stable-candidate",
+            "ActionContext": "stable-candidate",
+            "ActionOutcome": "internal-importable",
+            "ActionResult": "stable-candidate",
+            "CreateRequestContextOptions": "stable-candidate",
+            "IslandConfig": "stable-candidate",
+            "IslandDeliveryStrategy": "stable-candidate",
+            "Loader": "stable-candidate",
+            "LoaderContext": "stable-candidate",
+            "OpenElementActionFailure": "stable-candidate",
+            "OpenElementNotFound": "stable-candidate",
+            "OpenElementPageDescriptor": "stable-candidate",
+            "OpenElementRedirect": "stable-candidate",
+            "OpenElementRequestContext": "stable-candidate",
+            "PROBLEM_JSON_MEDIA_TYPE": "stable-candidate",
+            "PageComponentConstructor": "stable-candidate",
+            "PageErrorProjector": "stable-candidate",
+            "PageHead": "stable-candidate",
+            "PageHeadResolver": "stable-candidate",
+            "PagePropsContext": "stable-candidate",
+            "PagePropsProjector": "stable-candidate",
+            "ProblemDetails": "stable-candidate",
+            "ServerRouteContext": "stable-candidate",
+            "ServerRouteMetadata": "stable-candidate",
+            "SpaAction": "stable-candidate",
+            "SpaActionContext": "stable-candidate",
+            "SpaAppInstance": "stable-candidate",
+            "SpaLoader": "stable-candidate",
+            "SpaLoaderContext": "stable-candidate",
+            "classifyActionResult": "internal-importable",
+            "createRequestContext": "stable-candidate",
+            "defineApp": "stable-candidate",
+            "defineIslandConfig": "stable-candidate",
+            "definePage": "stable-candidate",
+            "fail": "stable-candidate",
+            "isActionFailure": "stable-candidate",
+            "isOpenElementNotFound": "stable-candidate",
+            "isOpenElementRedirect": "stable-candidate",
+            "notFound": "stable-candidate",
+            "projectPageProps": "internal-importable",
+            "redirect": "stable-candidate"
+          },
+          "document": {
+            "PageHeadAlternate": "internal-importable",
+            "ResolvedDocument": "internal-importable",
+            "ResolvedDocumentLink": "internal-importable",
+            "resolvePageDocument": "internal-importable"
+          },
+          "i18n": {
+            "LocalePath": "internal-importable",
+            "OpenElementI18nOptions": "internal-importable",
+            "loadI18nData": "internal-importable",
+            "normalizeLocalePath": "internal-importable"
+          },
+          "lit": {
+            "LitPageConstructor": "experimental",
+            "OpenElementPageDescriptor": "stable-candidate",
+            "defineLitPage": "experimental"
+          },
+          "lit-ssr": {
+            "renderLitPageToHtml": "internal-importable"
+          },
+          "model": {
+            "CreateRequestContextOptions": "stable-candidate",
+            "OpenElementRequestContext": "stable-candidate",
+            "createRequestContext": "stable-candidate"
+          },
+          "preact": {
+            "PreactIslandConstructor": "stable-candidate",
+            "PreactIslandOptions": "stable-candidate",
+            "definePreactIsland": "stable-candidate"
+          },
+          "router": {
+            "RouteMatch": "experimental",
+            "RouteRecord": "experimental",
+            "RouteResolution": "experimental",
+            "RouteTable": "experimental",
+            "RouteTableOptions": "experimental",
+            "normalizeRoutePatternForURLPattern": "internal-importable"
+          },
+          "router/http": {
+            "HttpRouteRecord": "experimental",
+            "createRouteMiddleware": "experimental"
+          },
+          "spa": {
+            "SpaAppInstance": "stable-candidate",
+            "defineApp": "stable-candidate"
+          }
+        },
+        "internal": [
+          "i18n",
+          "document",
+          "lit-ssr"
+        ],
+        "supported": [
+          ".",
+          "model",
+          "spa",
+          "preact",
+          "router",
+          "router/http",
+          "lit"
+        ]
+      }
+    },
+    {
+      "id": "api:@openelement/create",
+      "kind": "api-package",
+      "locale": "en",
+      "source": {
+        "path": "docs/current/PACKAGE_SURFACE.md"
+      },
+      "alternates": [],
+      "references": [],
+      "fingerprint": "e84dde9be9768ce717115f149951d7db0e349740f9a5bc0afa17491b05c20fb4",
+      "data": {
+        "exportClasses": {
+          ".": {}
+        },
+        "internal": [],
+        "supported": [
+          "."
+        ]
+      }
+    },
+    {
+      "id": "api:@openelement/element",
+      "kind": "api-package",
+      "locale": "en",
+      "source": {
+        "path": "docs/current/PACKAGE_SURFACE.md"
+      },
+      "alternates": [],
+      "references": [],
+      "fingerprint": "e1e2c001a40858737961b248138056eaa462f54c3309372b92ad0c66b5a643d7",
+      "data": {
+        "exportClasses": {
+          ".": {
+            "ACTION_FETCH_HEADER": "stable-candidate",
+            "Action": "stable-candidate",
+            "ActionContext": "stable-candidate",
+            "ActionResult": "stable-candidate",
+            "AppShellConfig": "internal-importable",
+            "CompatibilityClassification": "internal-importable",
+            "CompatibilityTier": "internal-importable",
+            "ComponentLayer": "internal-importable",
+            "Context": "stable-candidate",
+            "DANGEROUS_KEYS": "experimental",
+            "ERROR_PREFIX": "stable-candidate",
+            "ErrorBoundary": "stable-candidate",
+            "ErrorTelemetryHook": "stable-candidate",
+            "FrameworkOptions": "internal-importable",
+            "HYDRATION_STRATEGIES": "stable-candidate",
+            "HydrationStrategy": "stable-candidate",
+            "IslandOptions": "stable-candidate",
+            "Loader": "stable-candidate",
+            "LoaderContext": "stable-candidate",
+            "LocalePath": "stable-candidate",
+            "Middleware": "stable-candidate",
+            "OpenElement": "stable-candidate",
+            "OpenElementAttribute": "stable-candidate",
+            "OpenElementCssPart": "stable-candidate",
+            "OpenElementDeclaration": "stable-candidate",
+            "OpenElementError": "stable-candidate",
+            "OpenElementEvent": "stable-candidate",
+            "OpenElementPackageManifest": "stable-candidate",
+            "OpenElementRouteKind": "compatibility-only",
+            "OpenElementRouteNode": "compatibility-only",
+            "OpenElementSlot": "stable-candidate",
+            "PROBLEM_JSON_MEDIA_TYPE": "stable-candidate",
+            "ProblemDetails": "stable-candidate",
+            "RenderDsdOptions": "internal-importable",
+            "RenderError": "stable-candidate",
+            "RenderOutput": "internal-importable",
+            "RouteEntry": "internal-importable",
+            "ServerRouteContext": "stable-candidate",
+            "ServerRouteMetadata": "stable-candidate",
+            "Signal": "stable-candidate",
+            "SpaAction": "stable-candidate",
+            "SpaActionContext": "stable-candidate",
+            "SpaLoader": "stable-candidate",
+            "SpaLoaderContext": "stable-candidate",
+            "SpecialFileType": "internal-importable",
+            "SsrAdmissionDecision": "internal-importable",
+            "StyleSheet": "stable-candidate",
+            "StyleSheetLike": "stable-candidate",
+            "TrustedHtml": "stable-candidate",
+            "assertValidTagName": "internal-importable",
+            "collectPublicProps": "internal-importable",
+            "computed": "stable-candidate",
+            "consumeContext": "stable-candidate",
+            "createContext": "stable-candidate",
+            "createLogger": "internal-importable",
+            "deepGetElementById": "internal-importable",
+            "effect": "stable-candidate",
+            "element": "experimental",
+            "ensureDeepFragmentNavigation": "internal-importable",
+            "ensurePreHydrationClickCapture": "internal-importable",
+            "escapeAttr": "stable-candidate",
+            "escapeHtml": "stable-candidate",
+            "formatError": "internal-importable",
+            "injectPropsSafe": "experimental",
+            "isDangerousKey": "experimental",
+            "isSafeAttributeName": "stable-candidate",
+            "isValidTagName": "internal-importable",
+            "property": "experimental",
+            "provideContext": "stable-candidate",
+            "renderDsd": "internal-importable",
+            "reportError": "stable-candidate",
+            "setErrorTelemetryHook": "stable-candidate",
+            "signal": "stable-candidate",
+            "trustedHtml": "stable-candidate",
+            "wrapInDocument": "internal-importable"
+          },
+          "authoring": {
+            "ACTION_FETCH_HEADER": "internal-importable",
+            "DANGEROUS_KEYS": "internal-importable",
+            "ERROR_PREFIX": "internal-importable",
+            "HYDRATION_STRATEGIES": "internal-importable",
+            "HydrationStrategy": "internal-importable",
+            "OpenElementError": "internal-importable",
+            "PROBLEM_JSON_MEDIA_TYPE": "internal-importable",
+            "assertValidTagName": "internal-importable",
+            "injectPropsSafe": "internal-importable",
+            "isDangerousKey": "internal-importable",
+            "isValidTagName": "internal-importable"
+          },
+          "build-utils": {
+            "OpenElementRequestHandler": "internal-importable",
+            "RuntimeContext": "internal-importable",
+            "SsrRenderError": "internal-importable",
+            "composeFetchMiddleware": "internal-importable",
+            "createRuntimeAdapter": "internal-importable",
+            "formatJson": "internal-importable",
+            "insertBeforeBodyClose": "internal-importable",
+            "normalizeSeparators": "internal-importable",
+            "pathToTagName": "internal-importable",
+            "transformIslandSource": "internal-importable"
+          },
+          "html": {
+            "SafeHtml": "internal-importable",
+            "TrustedHtml": "internal-importable",
+            "UnsafeHtml": "internal-importable",
+            "escapeAttr": "internal-importable",
+            "escapeAttrValue": "internal-importable",
+            "escapeHtml": "internal-importable",
+            "trustedHtml": "internal-importable",
+            "wrapInDocument": "internal-importable"
+          },
+          "jsx-dev-runtime": {
+            "Fragment": "stable-candidate",
+            "JSX": "stable-candidate",
+            "jsxDEV": "stable-candidate"
+          },
+          "jsx-runtime": {
+            "Fragment": "stable-candidate",
+            "JSX": "stable-candidate",
+            "jsx": "stable-candidate",
+            "jsxs": "stable-candidate"
+          },
+          "logger": {
+            "Logger": "internal-importable",
+            "WarnScope": "internal-importable",
+            "createLogger": "internal-importable",
+            "createWarnScope": "internal-importable",
+            "warnOnce": "internal-importable"
+          },
+          "sanitize": {
+            "SanitizeOptions": "stable-candidate",
+            "isSafeUrl": "stable-candidate",
+            "sanitizeHtml": "stable-candidate"
+          }
+        },
+        "internal": [
+          "authoring",
+          "html",
+          "logger"
+        ],
+        "supported": [
+          ".",
+          "jsx-runtime",
+          "jsx-dev-runtime",
+          "build-utils",
+          "sanitize"
+        ]
+      }
+    },
+    {
+      "id": "api:@openelement/ui",
+      "kind": "api-package",
+      "locale": "en",
+      "source": {
+        "path": "docs/current/PACKAGE_SURFACE.md"
+      },
+      "alternates": [],
+      "references": [],
+      "fingerprint": "8c9ce30f3f98f7262d51aa45554d9cb8c0591123be1a6178a4be8cef8e186f9b",
+      "data": {
+        "exportClasses": {
+          ".": {
+            "OpenBadge": "stable-candidate",
+            "OpenButton": "stable-candidate",
+            "OpenCallout": "stable-candidate",
+            "OpenCard": "stable-candidate",
+            "OpenCodeBlock": "stable-candidate",
+            "OpenDialog": "stable-candidate",
+            "OpenDropdown": "stable-candidate",
+            "OpenInput": "stable-candidate",
+            "OpenTabs": "stable-candidate",
+            "OpenThemeToggle": "stable-candidate",
+            "manifest": "stable-candidate",
+            "openPropsRootSheet": "stable-candidate",
+            "openPropsTokenSheet": "stable-candidate",
+            "registerOpenUi": "stable-candidate"
+          },
+          "open-badge": {
+            "OpenBadge": "stable-candidate"
+          },
+          "open-button": {
+            "OpenButton": "stable-candidate"
+          },
+          "open-callout": {
+            "OpenCallout": "stable-candidate"
+          },
+          "open-card": {
+            "OpenCard": "stable-candidate"
+          },
+          "open-code-block": {
+            "OpenCodeBlock": "stable-candidate"
+          },
+          "open-dialog": {
+            "OpenDialog": "stable-candidate"
+          },
+          "open-dropdown": {
+            "OpenDropdown": "stable-candidate"
+          },
+          "open-input": {
+            "OpenInput": "stable-candidate"
+          },
+          "open-props-tokens": {
+            "openPropsRootSheet": "stable-candidate",
+            "openPropsTokenSheet": "stable-candidate"
+          },
+          "open-props-tokens.js": {
+            "openPropsRootSheet": "compatibility-only",
+            "openPropsTokenSheet": "compatibility-only"
+          },
+          "open-tabs": {
+            "OpenTabs": "stable-candidate"
+          },
+          "open-theme-toggle": {
+            "OpenThemeToggle": "stable-candidate"
+          }
+        },
+        "internal": [
+          "open-props-tokens.js"
+        ],
+        "supported": [
+          ".",
+          "open-badge",
+          "open-button",
+          "open-callout",
+          "open-card",
+          "open-code-block",
+          "open-dialog",
+          "open-dropdown",
+          "open-input",
+          "open-props-tokens",
+          "open-tabs",
+          "open-theme-toggle"
+        ]
+      }
+    },
+    {
+      "id": "article:architecture/architecture:en",
+      "kind": "article",
+      "locale": "en",
+      "source": {
+        "path": "www/content/architecture/architecture.md"
+      },
+      "alternates": [
+        {
+          "locale": "zh",
+          "id": "article:architecture/architecture:zh"
+        }
+      ],
+      "references": [],
+      "route": "/architecture/architecture",
+      "fingerprint": "08e7b95597259bfc547c415302809033fb20fbdac2ac60bcdaf11051dd6351e3",
+      "data": {
+        "lede": "OpenElement is a Web Components-native, static-first application framework. Custom Elements are the durable component contract; JSX and Basic Element are authoring modes; Vite and Nitro are the official build and output path.",
+        "order": 10,
+        "title": "Current Architecture"
+      }
+    },
+    {
+      "id": "article:architecture/architecture:zh",
+      "kind": "article",
+      "locale": "zh",
+      "source": {
+        "path": "www/content/architecture/architecture.zh.md"
+      },
+      "alternates": [
+        {
+          "locale": "en",
+          "id": "article:architecture/architecture:en"
+        }
+      ],
+      "references": [],
+      "route": "/architecture/architecture",
+      "fingerprint": "449ec63cb941877aace344a97f22cca9d89bd85b27fbb0e0baf8c3ffd7ad7db7",
+      "data": {
+        "lede": "openElement 是一个 Web Components 原生、static-first 的应用框架。Custom Elements 是持久的组件契约；JSX 与 Basic Element 是创作模式；Vite 与 Nitro 是官方构建与输出路径。",
+        "order": 10,
+        "title": "当前架构"
+      }
+    },
+    {
+      "id": "article:architecture/benchmark:en",
+      "kind": "article",
+      "locale": "en",
+      "source": {
+        "path": "www/content/architecture/benchmark.md"
+      },
+      "alternates": [
+        {
+          "locale": "zh",
+          "id": "article:architecture/benchmark:zh"
+        }
+      ],
+      "references": [],
+      "route": "/architecture/benchmark",
+      "fingerprint": "555781ad7d04da2911672494c5abb5d7ee9d9433e5c823c31b60c844c7090b17",
+      "data": {
+        "lede": "Zero-noise. What we actually measure.",
+        "order": 100,
+        "title": "Performance & Benchmarks"
+      }
+    },
+    {
+      "id": "article:architecture/benchmark:zh",
+      "kind": "article",
+      "locale": "zh",
+      "source": {
+        "path": "www/content/architecture/benchmark.zh.md"
+      },
+      "alternates": [
+        {
+          "locale": "en",
+          "id": "article:architecture/benchmark:en"
+        }
+      ],
+      "references": [],
+      "route": "/architecture/benchmark",
+      "fingerprint": "6f8716c3b767eb33d4aec079785fb87edcc6f1549dad0af9b3907f994418bcde",
+      "data": {
+        "lede": "零噪音。只列我们实际测量的数据。",
+        "order": 100,
+        "title": "性能与基准测试"
+      }
+    },
+    {
+      "id": "article:architecture/comparison:en",
+      "kind": "article",
+      "locale": "en",
+      "source": {
+        "path": "www/content/architecture/comparison.md"
+      },
+      "alternates": [
+        {
+          "locale": "zh",
+          "id": "article:architecture/comparison:zh"
+        }
+      ],
+      "references": [],
+      "route": "/architecture/comparison",
+      "fingerprint": "70a4b9fcfe60b1e7985064be1f95ad011e4c118462d0a677d032039525a65971",
+      "data": {
+        "lede": "A conservative comparison of product direction. This page describes what each framework optimizes for; it does not invent benchmark claims. Use it to understand fit, not to rank speed.",
+        "order": 20,
+        "title": "openElement vs Alternatives"
+      }
+    },
+    {
+      "id": "article:architecture/comparison:zh",
+      "kind": "article",
+      "locale": "zh",
+      "source": {
+        "path": "www/content/architecture/comparison.zh.md"
+      },
+      "alternates": [
+        {
+          "locale": "en",
+          "id": "article:architecture/comparison:en"
+        }
+      ],
+      "references": [],
+      "route": "/architecture/comparison",
+      "fingerprint": "292068d5e2e9f77432d1a7a229e5ff9c3c9e1e2fcf9168cfb05b1e677e6488d3",
+      "data": {
+        "lede": "一份保守的产品方向对比。本页描述每个框架的优化目标，不编造 benchmark 数据。用它判断适配度，而不是给速度排名。",
+        "order": 20,
+        "title": "openElement 对比主流框架"
+      }
+    },
+    {
+      "id": "article:architecture/design-system:en",
+      "kind": "article",
+      "locale": "en",
+      "source": {
+        "path": "www/content/architecture/design-system.md"
+      },
+      "alternates": [
+        {
+          "locale": "zh",
+          "id": "article:architecture/design-system:zh"
+        }
+      ],
+      "references": [],
+      "route": "/architecture/design-system",
+      "fingerprint": "b1770fe99c42b6873a234b091d4d16794dc2e40b667c1579454d8a526cddd32d",
+      "data": {
+        "lede": "The active www dogfood contract: audited Open Props tokens, retained UI primitives, product-art diagrams and full dark-mode parity. It is not a framework requirement.",
+        "order": 15,
+        "title": "Design System"
+      }
+    },
+    {
+      "id": "article:architecture/design-system:zh",
+      "kind": "article",
+      "locale": "zh",
+      "source": {
+        "path": "www/content/architecture/design-system.zh.md"
+      },
+      "alternates": [
+        {
+          "locale": "en",
+          "id": "article:architecture/design-system:en"
+        }
+      ],
+      "references": [],
+      "route": "/architecture/design-system",
+      "fingerprint": "85b6b70e31140c4d74b62d434af28105d557db705eea0ae3cc14fafb8c84a257",
+      "data": {
+        "lede": "www 站点当前生效的 dogfood 契约：经过审计的 Open Props token、沿用的 UI 原语、产品化图示，以及完整的暗色模式对等。它不是框架的强制要求。",
+        "order": 15,
+        "title": "设计体系"
+      }
+    },
+    {
+      "id": "article:architecture/dsd:en",
+      "kind": "article",
+      "locale": "en",
+      "source": {
+        "path": "www/content/architecture/dsd.md"
+      },
+      "alternates": [
+        {
+          "locale": "zh",
+          "id": "article:architecture/dsd:zh"
+        }
+      ],
+      "references": [],
+      "route": "/architecture/dsd",
+      "fingerprint": "160813091efa700098a01890b966ae54453fae6fa711ab5665904f9e3032973d",
+      "data": {
+        "lede": "openElement treats Declarative Shadow DOM as the server-rendered boundary for Web Components, then upgrades only the behavior that must run in the browser.",
+        "order": 30,
+        "title": "Declarative Shadow DOM Rendering"
+      }
+    },
+    {
+      "id": "article:architecture/dsd:zh",
+      "kind": "article",
+      "locale": "zh",
+      "source": {
+        "path": "www/content/architecture/dsd.zh.md"
+      },
+      "alternates": [
+        {
+          "locale": "en",
+          "id": "article:architecture/dsd:en"
+        }
+      ],
+      "references": [],
+      "route": "/architecture/dsd",
+      "fingerprint": "3389dd74a9f67773e654570c7bcbdd56e8624bfa659aacc375dbcbe26ec1c8f2",
+      "data": {
+        "lede": "openElement 把 Declarative Shadow DOM 作为 Web Components 的服务端渲染边界，然后只升级那些必须在浏览器中运行的行为。",
+        "order": 30,
+        "title": "Declarative Shadow DOM 渲染"
+      }
+    },
+    {
+      "id": "article:architecture/islands-deep:en",
+      "kind": "article",
+      "locale": "en",
+      "source": {
+        "path": "www/content/architecture/islands-deep.md"
+      },
+      "alternates": [
+        {
+          "locale": "zh",
+          "id": "article:architecture/islands-deep:zh"
+        }
+      ],
+      "references": [],
+      "route": "/architecture/islands-deep",
+      "fingerprint": "9b7351fd5739817071c1e96d620f6cdc8b05fb53cc4ad3c115246e4302a58b98",
+      "data": {
+        "lede": "Islands are the only client JavaScript units in openElement. The public model is the compiled element class: server serialization, fresh DOM and existing-DOM claim share one Part Program.",
+        "order": 50,
+        "title": "Island Deep Dive"
+      }
+    },
+    {
+      "id": "article:architecture/islands-deep:zh",
+      "kind": "article",
+      "locale": "zh",
+      "source": {
+        "path": "www/content/architecture/islands-deep.zh.md"
+      },
+      "alternates": [
+        {
+          "locale": "en",
+          "id": "article:architecture/islands-deep:en"
+        }
+      ],
+      "references": [],
+      "route": "/architecture/islands-deep",
+      "fingerprint": "1762c1fbbea15bc3e92f25d591c3d48da75b95c7c89793599a3ba580c7fff86d",
+      "data": {
+        "lede": "island 是 openElement 中唯一的客户端 JavaScript 单元。公开模型是编译后的元素类：服务端序列化、新建 DOM 与已有 DOM 的 claim 共享同一份 Part Program。",
+        "order": 50,
+        "title": "Island 深入解析"
+      }
+    },
+    {
+      "id": "article:architecture/islands:en",
+      "kind": "article",
+      "locale": "en",
+      "source": {
+        "path": "www/content/architecture/islands.md"
+      },
+      "alternates": [
+        {
+          "locale": "zh",
+          "id": "article:architecture/islands:zh"
+        }
+      ],
+      "references": [],
+      "route": "/architecture/islands",
+      "fingerprint": "1148c1e7c0c39e49ff63821e8c40b0e9ba58c15d4346c1e3ea78db2aae3e3881",
+      "data": {
+        "lede": "openElement keeps documents and Web Components server-rendered by default. Islands are reserved for client components that need runtime state or framework interop.",
+        "order": 40,
+        "title": "Island Hydration"
+      }
+    },
+    {
+      "id": "article:architecture/islands:zh",
+      "kind": "article",
+      "locale": "zh",
+      "source": {
+        "path": "www/content/architecture/islands.zh.md"
+      },
+      "alternates": [
+        {
+          "locale": "en",
+          "id": "article:architecture/islands:en"
+        }
+      ],
+      "references": [],
+      "route": "/architecture/islands",
+      "fingerprint": "1f1116bd8f8c6a62b24747be6fc014c0cad86b9708cf9645bc01b3ae2b96e267",
+      "data": {
+        "lede": "openElement 默认让文档与 Web Components 保持服务端渲染。island 只为需要运行时状态或框架互操作的客户端组件保留。",
+        "order": 40,
+        "title": "Island Hydration"
+      }
+    },
+    {
+      "id": "article:architecture/package-compatibility:en",
+      "kind": "article",
+      "locale": "en",
+      "source": {
+        "path": "www/content/architecture/package-compatibility.md"
+      },
+      "alternates": [
+        {
+          "locale": "zh",
+          "id": "article:architecture/package-compatibility:zh"
+        }
+      ],
+      "references": [],
+      "route": "/architecture/package-compatibility",
+      "fingerprint": "e493cc099ae389034c6b9e458f06dcad2d281b0b87bc677d58a644d3af635727",
+      "data": {
+        "lede": "OpenElement treats third-party Custom Elements as standards-based dependencies. Current builds use explicit package-island configuration and available Custom Elements Manifest metadata for SSR admission.",
+        "order": 90,
+        "title": "Package Compatibility"
+      }
+    },
+    {
+      "id": "article:architecture/package-compatibility:zh",
+      "kind": "article",
+      "locale": "zh",
+      "source": {
+        "path": "www/content/architecture/package-compatibility.zh.md"
+      },
+      "alternates": [
+        {
+          "locale": "en",
+          "id": "article:architecture/package-compatibility:en"
+        }
+      ],
+      "references": [],
+      "route": "/architecture/package-compatibility",
+      "fingerprint": "5e9546c79317cfba4a7cf0fbce6ba6cd18f84224424b876bb3eb2608946a2ce0",
+      "data": {
+        "lede": "openElement 把第三方 Custom Elements 视为基于标准的依赖。当前构建通过显式的 package island 配置与可用的 Custom Elements Manifest metadata 完成 SSR 准入。",
+        "order": 90,
+        "title": "Package 兼容性"
+      }
+    },
+    {
+      "id": "article:architecture/standards-registry:en",
+      "kind": "article",
+      "locale": "en",
+      "source": {
+        "path": "www/content/architecture/standards-registry.md"
+      },
+      "alternates": [
+        {
+          "locale": "zh",
+          "id": "article:architecture/standards-registry:zh"
+        }
+      ],
+      "references": [],
+      "route": "/architecture/standards-registry",
+      "fingerprint": "802f60919e9f1d90aefac17d15893687391aa5d4625ffd1f1667bf727b9f0bac",
+      "data": {
+        "lede": "OpenElement relies on web-platform contracts rather than a proprietary registry product. Custom Elements, DSD, CEM, Request/Response and FormData define the direction of the public application model.",
+        "order": 80,
+        "title": "WC Standards Contract"
+      }
+    },
+    {
+      "id": "article:architecture/standards-registry:zh",
+      "kind": "article",
+      "locale": "zh",
+      "source": {
+        "path": "www/content/architecture/standards-registry.zh.md"
+      },
+      "alternates": [
+        {
+          "locale": "en",
+          "id": "article:architecture/standards-registry:en"
+        }
+      ],
+      "references": [],
+      "route": "/architecture/standards-registry",
+      "fingerprint": "4a672f36b2cf2a5b76f327dea8eae9e17f8ad4186b56fc74497630ce4442657a",
+      "data": {
+        "lede": "OpenElement 依赖 Web 平台契约，而非自研的注册表产品。Custom Elements、DSD、CEM、Request/Response 与 FormData 定义了公开应用模型的方向。",
+        "order": 80,
+        "title": "WC 标准契约"
+      }
+    },
+    {
+      "id": "article:blog/0001-keep-hono-vite-dev-server:en",
+      "kind": "blog-post",
+      "locale": "en",
+      "source": {
+        "path": "www/content/blog/0001-keep-hono-vite-dev-server.md"
+      },
+      "alternates": [],
+      "references": [],
+      "route": "/blog/0001-keep-hono-vite-dev-server",
+      "fingerprint": "24996325b7a161c7190e71fed813e63020393b46785db447e8d35c9320c44264",
+      "data": {
+        "lang": "en",
+        "title": "@hono/vite-dev-server Evaluation"
+      }
+    },
+    {
+      "id": "article:blog/0002-less-compiler-eliminate-lit:en",
+      "kind": "blog-post",
+      "locale": "en",
+      "source": {
+        "path": "www/content/blog/0002-less-compiler-eliminate-lit.md"
+      },
+      "alternates": [],
+      "references": [],
+      "route": "/blog/0002-less-compiler-eliminate-lit",
+      "fingerprint": "fb7c7cdc808c66044508745602e0bf993601e263c9a9f7ba22fdf0755fcad30d",
+      "data": {
+        "lang": "en",
+        "title": ".less Compiler — Optional Zero-Framework Component Authoring"
+      }
+    },
+    {
+      "id": "article:blog/0003-pwa-support:en",
+      "kind": "blog-post",
+      "locale": "en",
+      "source": {
+        "path": "www/content/blog/0003-pwa-support.md"
+      },
+      "alternates": [],
+      "references": [],
+      "route": "/blog/0003-pwa-support",
+      "fingerprint": "65f0edf4723a0a2787b4455117ad49f66b90bcdf6e0121f6e2c87b55b37d70a7",
+      "data": {
+        "lang": "en",
+        "title": "PWA Support for LessJS SSG"
+      }
+    },
+    {
+      "id": "article:blog/0004-blog-system:en",
+      "kind": "blog-post",
+      "locale": "en",
+      "source": {
+        "path": "www/content/blog/0004-blog-system.md"
+      },
+      "alternates": [],
+      "references": [],
+      "route": "/blog/0004-blog-system",
+      "fingerprint": "d23388805c0b1ff1647d1d64d1f99ec744e079f63a57eddd2e448e7732cb5087",
+      "data": {
+        "lang": "en",
+        "title": "@openelement/blog - Standalone Blog Package"
+      }
+    },
+    {
+      "id": "article:blog/0005-with-dsd-hydration-mixin:en",
+      "kind": "blog-post",
+      "locale": "en",
+      "source": {
+        "path": "www/content/blog/0005-with-dsd-hydration-mixin.md"
+      },
+      "alternates": [],
+      "references": [
+        {
+          "kind": "route",
+          "target": "/blog/0002-less-compiler-eliminate-lit",
+          "line": 108
+        }
+      ],
+      "route": "/blog/0005-with-dsd-hydration-mixin",
+      "fingerprint": "0fa931bd59335954d90fd3e76912ac5086dda2509812fedb976d91d2780a1da3",
+      "data": {
+        "lang": "zh",
+        "title": "WithDsdHydration Mixin + 自建 SSR 决策"
+      }
+    },
+    {
+      "id": "article:blog/0006-version-strategy:en",
+      "kind": "blog-post",
+      "locale": "en",
+      "source": {
+        "path": "www/content/blog/0006-version-strategy.md"
+      },
+      "alternates": [],
+      "references": [
+        {
+          "kind": "route",
+          "target": "/blog/0002-less-compiler-eliminate-lit",
+          "line": 241
+        },
+        {
+          "kind": "route",
+          "target": "/blog/0005-with-dsd-hydration-mixin",
+          "line": 242
+        }
+      ],
+      "route": "/blog/0006-version-strategy",
+      "fingerprint": "ad7028a04bad3bdbcab7650d90ef0ea55852fb518bc306c041b703b36cf4c098",
+      "data": {
+        "lang": "zh",
+        "title": "ADR 0006: 版本号策略 — 从 0.6 到 2.0 的递进路线"
+      }
+    },
+    {
+      "id": "article:blog/0007-view-transitions-speculation-rules:en",
+      "kind": "blog-post",
+      "locale": "en",
+      "source": {
+        "path": "www/content/blog/0007-view-transitions-speculation-rules.md"
+      },
+      "alternates": [],
+      "references": [
+        {
+          "kind": "route",
+          "target": "/blog/0005-with-dsd-hydration-mixin",
+          "line": 84
+        },
+        {
+          "kind": "route",
+          "target": "/blog/0006-version-strategy",
+          "line": 85
+        }
+      ],
+      "route": "/blog/0007-view-transitions-speculation-rules",
+      "fingerprint": "1533b1c560bcadee58f1bd622de2a4fcdd48cb238cb5e418004f540c4078fd97",
+      "data": {
+        "lang": "zh",
+        "title": "ADR 0007: View Transitions + Speculation Rules"
+      }
+    },
+    {
+      "id": "article:blog/0008-eliminate-createserver-globalthis-bridges:en",
+      "kind": "blog-post",
+      "locale": "en",
+      "source": {
+        "path": "www/content/blog/0008-eliminate-createserver-globalthis-bridges.md"
+      },
+      "alternates": [],
+      "references": [
+        {
+          "kind": "route",
+          "target": "/blog/0005-with-dsd-hydration-mixin",
+          "line": 315
+        },
+        {
+          "kind": "route",
+          "target": "/blog/0006-version-strategy",
+          "line": 316
+        }
+      ],
+      "route": "/blog/0008-eliminate-createserver-globalthis-bridges",
+      "fingerprint": "faaae34b9c3dbe9171dd05a8dd99440945ac0245e3c9b2390c0a5954b63eb10d",
+      "data": {
+        "lang": "zh",
+        "title": "ADR 0008: 消除 createServer()、.less/ 临时文件与 globalThis 桥接"
+      }
+    },
+    {
+      "id": "article:blog/0009-repo-simplification-issue:en",
+      "kind": "blog-post",
+      "locale": "en",
+      "source": {
+        "path": "www/content/blog/0009-repo-simplification-issue.md"
+      },
+      "alternates": [],
+      "references": [
+        {
+          "kind": "route",
+          "target": "/blog/0008-eliminate-createserver-globalthis-bridges",
+          "line": 79
+        }
+      ],
+      "route": "/blog/0009-repo-simplification-issue",
+      "fingerprint": "05e4aadf6fb4843bc711cdba77a58c92847bf5a40c9cf22a1420a823a855e12c",
+      "data": {
+        "lang": "en",
+        "title": "Repo-wide Simplification Roadmap: ADR 0008 + ADR 0009"
+      }
+    },
+    {
+      "id": "article:blog/0010-eliminate-all-dot-less-temp-files:en",
+      "kind": "blog-post",
+      "locale": "en",
+      "source": {
+        "path": "www/content/blog/0010-eliminate-all-dot-less-temp-files.md"
+      },
+      "alternates": [],
+      "references": [],
+      "route": "/blog/0010-eliminate-all-dot-less-temp-files",
+      "fingerprint": "ffac6a1ecf54fcfb15d7a3d76c6b139b8e436b1308bb19192ca9b9534c908230",
+      "data": {
+        "lang": "zh",
+        "title": "ADR 0010: 消除所有 .less/ 临时文件，统一单进程构建"
+      }
+    },
+    {
+      "id": "article:blog/0011-eliminate-last-globalthis-via-closebundle:en",
+      "kind": "blog-post",
+      "locale": "en",
+      "source": {
+        "path": "www/content/blog/0011-eliminate-last-globalthis-via-closebundle.md"
+      },
+      "alternates": [],
+      "references": [
+        {
+          "kind": "route",
+          "target": "/blog/0008-eliminate-createserver-globalthis-bridges",
+          "line": 150
+        },
+        {
+          "kind": "route",
+          "target": "/blog/0010-eliminate-all-dot-less-temp-files",
+          "line": 151
+        }
+      ],
+      "route": "/blog/0011-eliminate-last-globalthis-via-closebundle",
+      "fingerprint": "d61d3db6da877d76e712e777058241ad3f11d47197b33860d1e06c81c3f0ea97",
+      "data": {
+        "lang": "zh",
+        "title": "ADR 0011: 消除最后一个 globalThis 桥接 — closeBundle 内联 Phase 2/3"
+      }
+    },
+    {
+      "id": "article:blog/0012-extract-lessjs-umbrella-to-app-package:en",
+      "kind": "blog-post",
+      "locale": "en",
+      "source": {
+        "path": "www/content/blog/0012-extract-lessjs-umbrella-to-app-package.md"
+      },
+      "alternates": [],
+      "references": [
+        {
+          "kind": "route",
+          "target": "/blog/0008-eliminate-createserver-globalthis-bridges",
+          "line": 196
+        },
+        {
+          "kind": "route",
+          "target": "/blog/0011-eliminate-last-globalthis-via-closebundle",
+          "line": 197
+        }
+      ],
+      "route": "/blog/0012-extract-lessjs-umbrella-to-app-package",
+      "fingerprint": "f5cb62bbc1b80d4ba1a51bcb068c75995a23c810cd2449a21a11fd5047001838",
+      "data": {
+        "lang": "zh",
+        "title": "ADR 0012: 将 lessjs() 统一入口从 @openelement/core 拆到 @openelement/app"
+      }
+    },
+    {
+      "id": "article:blog/0013-eliminate-less-runtime-barrel-inline-shim:en",
+      "kind": "blog-post",
+      "locale": "en",
+      "source": {
+        "path": "www/content/blog/0013-eliminate-less-runtime-barrel-inline-shim.md"
+      },
+      "alternates": [],
+      "references": [
+        {
+          "kind": "route",
+          "target": "/blog/0008-eliminate-createserver-globalthis-bridges",
+          "line": 121
+        },
+        {
+          "kind": "route",
+          "target": "/blog/0010-eliminate-all-dot-less-temp-files",
+          "line": 122
+        }
+      ],
+      "route": "/blog/0013-eliminate-less-runtime-barrel-inline-shim",
+      "fingerprint": "4330421014038543535480a6be790e07bcdf3c03d12c075518d7bb05defa229c",
+      "data": {
+        "lang": "zh",
+        "title": "ADR 0013: 消除 less-runtime barrel、删除 virtual:less-runtime、移除 .less/ 残留"
+      }
+    },
+    {
+      "id": "article:blog/0014-ssr-bundle-export-renderroute:en",
+      "kind": "blog-post",
+      "locale": "en",
+      "source": {
+        "path": "www/content/blog/0014-ssr-bundle-export-renderroute.md"
+      },
+      "alternates": [],
+      "references": [
+        {
+          "kind": "route",
+          "target": "/blog/0008-eliminate-createserver-globalthis-bridges",
+          "line": 394
+        },
+        {
+          "kind": "route",
+          "target": "/blog/0010-eliminate-all-dot-less-temp-files",
+          "line": 395
+        },
+        {
+          "kind": "route",
+          "target": "/blog/0011-eliminate-last-globalthis-via-closebundle",
+          "line": 396
+        }
+      ],
+      "route": "/blog/0014-ssr-bundle-export-renderroute",
+      "fingerprint": "624669b9d75962113cd70f4844cea256d43769a7044e26cf89ccee2a4ec340e4",
+      "data": {
+        "lang": "zh",
+        "title": "ADR 0014: SSR Bundle 导出 renderRoute() — 消除 build-ssg.ts 的越权访问"
+      }
+    },
+    {
+      "id": "article:blog/0016-dual-mode-subpath-resolution:en",
+      "kind": "blog-post",
+      "locale": "en",
+      "source": {
+        "path": "www/content/blog/0016-dual-mode-subpath-resolution.md"
+      },
+      "alternates": [],
+      "references": [],
+      "route": "/blog/0016-dual-mode-subpath-resolution",
+      "fingerprint": "c668a67f7074d7c40720f843c4ca2d6ea64bada2fccb1294ce411e4eb638f956",
+      "data": {
+        "lang": "zh",
+        "title": "ADR 0016: 双模式子路径解析 — resolve.alias 本地 + resolveId/load 虚拟模块远程"
+      }
+    },
+    {
+      "id": "article:blog/0017-separate-runtime-from-build-orchestration:en",
+      "kind": "blog-post",
+      "locale": "en",
+      "source": {
+        "path": "www/content/blog/0017-separate-runtime-from-build-orchestration.md"
+      },
+      "alternates": [],
+      "references": [
+        {
+          "kind": "route",
+          "target": "/blog/0012-extract-lessjs-umbrella-to-app-package",
+          "line": 215
+        },
+        {
+          "kind": "route",
+          "target": "/blog/0016-dual-mode-subpath-resolution",
+          "line": 214
+        }
+      ],
+      "route": "/blog/0017-separate-runtime-from-build-orchestration",
+      "fingerprint": "5a91fc3459469eadd67832f86f4d3bd8709eb24fe3e2808f8910336358788a0e",
+      "data": {
+        "lang": "zh",
+        "title": "ADR 0017: 框架运行时与构建编排解耦 — 拆分 @openelement/adapter-vite"
+      }
+    },
+    {
+      "id": "article:blog/0018-dev-build-data-consistency-plugin-data-bridge:en",
+      "kind": "blog-post",
+      "locale": "en",
+      "source": {
+        "path": "www/content/blog/0018-dev-build-data-consistency-plugin-data-bridge.md"
+      },
+      "alternates": [],
+      "references": [
+        {
+          "kind": "route",
+          "target": "/blog/0011-eliminate-last-globalthis-via-closebundle",
+          "line": 784
+        },
+        {
+          "kind": "route",
+          "target": "/blog/0016-dual-mode-subpath-resolution",
+          "line": 785
+        },
+        {
+          "kind": "route",
+          "target": "/blog/0017-separate-runtime-from-build-orchestration",
+          "line": 786
+        }
+      ],
+      "route": "/blog/0018-dev-build-data-consistency-plugin-data-bridge",
+      "fingerprint": "f067fb5dd598b2d4a5c73891c8c3b001db7d7012c26f04f22af1cb21bdf2923d",
+      "data": {
+        "lang": "zh",
+        "title": "ADR 0018: Eliminate Plugin Module State — Virtual Data Modules + @deno/vite-plugin"
+      }
+    },
+    {
+      "id": "article:blog/0019-post-review-improvement-plan:en",
+      "kind": "blog-post",
+      "locale": "en",
+      "source": {
+        "path": "www/content/blog/0019-post-review-improvement-plan.md"
+      },
+      "alternates": [],
+      "references": [
+        {
+          "kind": "route",
+          "target": "/blog/0011-eliminate-last-globalthis-via-closebundle",
+          "line": 129
+        },
+        {
+          "kind": "route",
+          "target": "/blog/0018-dev-build-data-consistency-plugin-data-bridge",
+          "line": 130
+        },
+        {
+          "kind": "route",
+          "target": "/blog/0020-dsd-engine-islands-enhancement",
+          "line": 104
+        },
+        {
+          "kind": "route",
+          "target": "/blog/0020-dsd-engine-islands-enhancement",
+          "line": 128
+        }
+      ],
+      "route": "/blog/0019-post-review-improvement-plan",
+      "fingerprint": "913560d726a1f5f7b27a847569104f9170ce1f57d5da7c5c58a8610e601318b3",
+      "data": {
+        "lang": "zh",
+        "title": "ADR 0019: Post-Review Comprehensive Improvement Plan"
+      }
+    },
+    {
+      "id": "article:blog/0020-dsd-engine-islands-enhancement:en",
+      "kind": "blog-post",
+      "locale": "en",
+      "source": {
+        "path": "www/content/blog/0020-dsd-engine-islands-enhancement.md"
+      },
+      "alternates": [],
+      "references": [
+        {
+          "kind": "route",
+          "target": "/blog/0018-dev-build-data-consistency-plugin-data-bridge",
+          "line": 439
+        },
+        {
+          "kind": "route",
+          "target": "/blog/0019-post-review-improvement-plan",
+          "line": 434
+        }
+      ],
+      "route": "/blog/0020-dsd-engine-islands-enhancement",
+      "fingerprint": "8ae0f276a04fcb8fc0fea66fbd52dc44448349182dbd75ba655524dea09f4755",
+      "data": {
+        "lang": "zh",
+        "title": "ADR 0020: DSD 渲染引擎与 Islands 策略增强 — 核心护城河建设"
+      }
+    },
+    {
+      "id": "article:blog/0021-api-surface-pipeline-phase-check:en",
+      "kind": "blog-post",
+      "locale": "en",
+      "source": {
+        "path": "www/content/blog/0021-api-surface-pipeline-phase-check.md"
+      },
+      "alternates": [],
+      "references": [],
+      "route": "/blog/0021-api-surface-pipeline-phase-check",
+      "fingerprint": "a4c7f75b4b6e5ff73783ac1675afbb8f0800055d22b313ff326bcd9e9befccb6",
+      "data": {
+        "lang": "zh",
+        "title": "ADR 0021: A+ 架构冲刺 — API 表面收敛 + 管道化 + 参数校验"
+      }
+    },
+    {
+      "id": "article:blog/0022-esm-self-sustaining-ssg-pipeline:en",
+      "kind": "blog-post",
+      "locale": "en",
+      "source": {
+        "path": "www/content/blog/0022-esm-self-sustaining-ssg-pipeline.md"
+      },
+      "alternates": [],
+      "references": [],
+      "route": "/blog/0022-esm-self-sustaining-ssg-pipeline",
+      "fingerprint": "0e5c0829f4c92f458e8cb8d3a4c6c71721684827d86de5ba301a8d114c5561a9",
+      "data": {
+        "lang": "en",
+        "title": "ADR 0022: ESM-Native LessJS — Pure ESM Imports Across Browser/Deno/Bun/CF Workers"
+      }
+    },
+    {
+      "id": "article:blog/0023-phase-reordering-bundler-agnostic:en",
+      "kind": "blog-post",
+      "locale": "en",
+      "source": {
+        "path": "www/content/blog/0023-phase-reordering-bundler-agnostic.md"
+      },
+      "alternates": [],
+      "references": [],
+      "route": "/blog/0023-phase-reordering-bundler-agnostic",
+      "fingerprint": "cb3b680fa647d1eb3b4c0b5e8a228816f1f194c07137ac4c7ebcd8c76e320f7d",
+      "data": {
+        "lang": "en",
+        "title": "ADR 0023: Phase Reordering — Client Bundle as Final Layer"
+      }
+    },
+    {
+      "id": "article:blog/0024-standards-first-wc-renderer-roadmap:en",
+      "kind": "blog-post",
+      "locale": "en",
+      "source": {
+        "path": "www/content/blog/0024-standards-first-wc-renderer-roadmap.md"
+      },
+      "alternates": [],
+      "references": [],
+      "route": "/blog/0024-standards-first-wc-renderer-roadmap",
+      "fingerprint": "f7b7c7e5539bb375b65cc3e8e3eb1201aedead86280494f599528189958c08a7",
+      "data": {
+        "lang": "en",
+        "title": "ADR 0024: Standards-first Web Components Renderer Roadmap"
+      }
+    },
+    {
+      "id": "article:blog/0100-three-audits-later-the-stable-line:en",
+      "kind": "blog-post",
+      "locale": "en",
+      "source": {
+        "path": "www/content/blog/0100-three-audits-later-the-stable-line.md"
+      },
+      "alternates": [],
+      "references": [],
+      "route": "/blog/0100-three-audits-later-the-stable-line",
+      "fingerprint": "141417918ac6b2ea028ee18f06f2586227375a973df3bbf2ae453e4e1cd12e99",
+      "data": {
+        "lang": "en",
+        "title": "Three audits later, the stable line"
+      }
+    },
+    {
+      "id": "article:blog/adr-0008-0009-implementation-status:en",
+      "kind": "blog-post",
+      "locale": "en",
+      "source": {
+        "path": "www/content/blog/adr-0008-0009-implementation-status.md"
+      },
+      "alternates": [],
+      "references": [],
+      "route": "/blog/adr-0008-0009-implementation-status",
+      "fingerprint": "0b7151c7894f6e9b85c391f339d40bbebfff3e7e7c160100141977ec167b7319",
+      "data": {
+        "lang": "en",
+        "title": "ADR 0008/0009/0010/0011/0012 — Implementation Status"
+      }
+    },
+    {
+      "id": "article:blog/adr-0008-0009-unification-sop:en",
+      "kind": "blog-post",
+      "locale": "en",
+      "source": {
+        "path": "www/content/blog/adr-0008-0009-unification-sop.md"
+      },
+      "alternates": [],
+      "references": [],
+      "route": "/blog/adr-0008-0009-unification-sop",
+      "fingerprint": "f0b851b3c6c8049c258949cbe49a2b9afb9171589cd12648fdb517ed641d0d0b",
+      "data": {
+        "lang": "en",
+        "title": "SOP: ADR 0008 Completion + Single-Plugin Unification"
+      }
+    },
+    {
+      "id": "article:blog/adr-0009-full-repo-simplification:en",
+      "kind": "blog-post",
+      "locale": "en",
+      "source": {
+        "path": "www/content/blog/adr-0009-full-repo-simplification.md"
+      },
+      "alternates": [],
+      "references": [],
+      "route": "/blog/adr-0009-full-repo-simplification",
+      "fingerprint": "cec8807e7ab0ca736bd7d09e55fc0d94960c2e4b788fa85c7446d39ac6d613e8",
+      "data": {
+        "lang": "zh",
+        "title": "LessJS 全仓库简化方案 — ADR 0009"
+      }
+    },
+    {
+      "id": "article:blog/architecture-analysis:en",
+      "kind": "blog-post",
+      "locale": "en",
+      "source": {
+        "path": "www/content/blog/2026-05-13-architecture-analysis.md"
+      },
+      "alternates": [],
+      "references": [],
+      "route": "/blog/architecture-analysis",
+      "fingerprint": "cc3e68ce8e4f2171d9fe03e3cabf73fce55d095a7d0ae3b0529771af726dd357",
+      "data": {
+        "lang": "zh",
+        "title": "LessJS 架构分析报告"
+      }
+    },
+    {
+      "id": "article:blog/core-architecture-simplification-report:en",
+      "kind": "blog-post",
+      "locale": "en",
+      "source": {
+        "path": "www/content/blog/core-architecture-simplification-report.md"
+      },
+      "alternates": [],
+      "references": [],
+      "route": "/blog/core-architecture-simplification-report",
+      "fingerprint": "691b66e6d0e255fae374d4b194553cea816373678e671bf5d96b008b571e4bb6",
+      "data": {
+        "lang": "zh",
+        "title": "@openelement/core 架构简化审查报告"
+      }
+    },
+    {
+      "id": "article:blog/less-compiler:en",
+      "kind": "blog-post",
+      "locale": "en",
+      "source": {
+        "path": "www/content/blog/2026-04-30-less-compiler.md"
+      },
+      "alternates": [],
+      "references": [
+        {
+          "kind": "route",
+          "target": "/blog/0002-less-compiler-eliminate-lit",
+          "line": 66
+        },
+        {
+          "kind": "route",
+          "target": "/blog/0006-version-strategy",
+          "line": 64
+        }
+      ],
+      "route": "/blog/less-compiler",
+      "fingerprint": "5107f8863d927337fb220ea0758a1ab2ae56992fd8fb9d203ba834a0b71851c7",
+      "data": {
+        "lang": "zh",
+        "lede": "一个可选编译器将声明式 .less 文件编译为原生 Custom Elements，让 Lit 从必选路线变成 adapter。",
+        "title": ".less Compiler — 可选零框架运行时组件"
+      }
+    },
+    {
+      "id": "article:blog/the-0-42-architecture:en",
+      "kind": "blog-post",
+      "locale": "en",
+      "source": {
+        "path": "www/content/blog/2026-08-02-the-0-42-architecture.md"
+      },
+      "alternates": [],
+      "references": [],
+      "route": "/blog/the-0-42-architecture",
+      "fingerprint": "0a5e84f93ab3d465f58f87cae40b8eca2558b88b8b883e15e91f9af99a35d4c8",
+      "data": {
+        "lang": "zh",
+        "title": "为什么是 0.42 这个样子：一个 WC 全栈框架的目标、参照与取舍"
+      }
+    },
+    {
+      "id": "article:blog/v0-12-0:en",
+      "kind": "blog-post",
+      "locale": "en",
+      "source": {
+        "path": "www/content/blog/2026-05-12-v0-12-0.md"
+      },
+      "alternates": [],
+      "references": [
+        {
+          "kind": "route",
+          "target": "/blog/0018-dev-build-data-consistency-plugin-data-bridge",
+          "line": 4
+        }
+      ],
+      "route": "/blog/v0-12-0",
+      "fingerprint": "951c02e4ab0bf65a9aa0a2b6a7b3c210fd37da373ace673bc4e78e695333fc10",
+      "data": {
+        "lang": "en",
+        "lede": "Eliminated all module-level state from @openelement/content and @openelement/i18n. Pure functions replace stateful init/getter patterns. Virtual modules become the only data bridge for SSR routes.",
+        "title": "v0.12.0 — Virtual Data Modules + Zero Module State"
+      }
+    },
+    {
+      "id": "article:blog/v0-13-0:en",
+      "kind": "blog-post",
+      "locale": "en",
+      "source": {
+        "path": "www/content/blog/2026-05-12-v0-13-0.md"
+      },
+      "alternates": [],
+      "references": [],
+      "route": "/blog/v0-13-0",
+      "fingerprint": "8a794f49164d3201939e744b8c89e852ce70f936685cc63c1e9081cf7f196eb8",
+      "data": {
+        "lang": "en",
+        "lede": "Core API surface reduced from 18 to 6 exports, compile-time phase ordering via branded types, virtual module IDs migrated from core to adapter-vite, and CI coverage collection.",
+        "title": "v0.13.0 — API Surface Convergence + Phase Branded Types"
+      }
+    },
+    {
+      "id": "article:blog/v0-14-1:en",
+      "kind": "blog-post",
+      "locale": "en",
+      "source": {
+        "path": "www/content/blog/2026-05-14-v0-14-1.md"
+      },
+      "alternates": [],
+      "references": [],
+      "route": "/blog/v0-14-1",
+      "fingerprint": "f83b34f9ffbea9795137bc11d5a20910d424c374734b774e317be9ab42094f46",
+      "data": {
+        "lang": "en",
+        "title": "v0.14.1 — Release Hardening"
+      }
+    },
+    {
+      "id": "article:blog/v0-14-2:en",
+      "kind": "blog-post",
+      "locale": "en",
+      "source": {
+        "path": "www/content/blog/2026-05-14-v0-14-2.md"
+      },
+      "alternates": [],
+      "references": [],
+      "route": "/blog/v0-14-2",
+      "fingerprint": "755a124baa01548308cbca8472b5419722c4327d6a5de387595710d0bdd25d80",
+      "data": {
+        "lang": "en",
+        "title": "v0.14.2 - Standards & Safety Patch"
+      }
+    },
+    {
+      "id": "article:blog/v0-4-0:en",
+      "kind": "blog-post",
+      "locale": "en",
+      "source": {
+        "path": "www/content/blog/2026-04-30-v0-4-0.md"
+      },
+      "alternates": [],
+      "references": [],
+      "route": "/blog/v0-4-0",
+      "fingerprint": "23696ccf740ccc90b7cd899930ba6c3957816a3e17039dfdcfe00147bb540cda",
+      "data": {
+        "lang": "zh",
+        "lede": "Serverless API 部署成功、全站统一 0.5px 视觉风格、零 lint 零 type errors。从\"能跑起来\"到\"真正能用\"的里程碑。",
+        "title": "LessJS v0.4.0 — Serverless Integration Milestone"
+      }
+    },
+    {
+      "id": "article:blog/v0-5-0:en",
+      "kind": "blog-post",
+      "locale": "en",
+      "source": {
+        "path": "www/content/blog/2026-05-02-v0-5-0.md"
+      },
+      "alternates": [],
+      "references": [],
+      "route": "/blog/v0-5-0",
+      "fingerprint": "fa81f41dba39658890e76709a87d33203670e52be9563e4d66df383987e4fc67",
+      "data": {
+        "lang": "zh",
+        "lede": "零框架运行时 Core · 原生 RPC · OpenProps + Lit · 单 deno.json",
+        "title": "LessJS v0.5-alpha-0 — 架构精简"
+      }
+    },
+    {
+      "id": "article:blog/v0-5-alpha1:en",
+      "kind": "blog-post",
+      "locale": "en",
+      "source": {
+        "path": "www/content/blog/2026-05-03-v0-5-alpha1.md"
+      },
+      "alternates": [],
+      "references": [],
+      "route": "/blog/v0-5-alpha1",
+      "fingerprint": "fb21a27c122554fe0c3b66b6a43e71683d471d34f3b2974d29cc729d320d57a6",
+      "data": {
+        "lang": "zh",
+        "lede": "3 agent 扫描 13k 行源码 · CSS 注入修复 · Island 升级修复 · 6 条新设计原则 · 配置精简",
+        "title": "v0.5-alpha1 — 全量架构审计与精准修复"
+      }
+    },
+    {
+      "id": "article:blog/v0-6-x:en",
+      "kind": "blog-post",
+      "locale": "en",
+      "source": {
+        "path": "www/content/blog/2026-05-05-v0-6-x.md"
+      },
+      "alternates": [],
+      "references": [],
+      "route": "/blog/v0-6-x",
+      "fingerprint": "73b70ec528eaceed82c060e5a4a7d7aef2703608f8637c5869186e5b5c6bf1d7",
+      "data": {
+        "lang": "zh",
+        "lede": "v0.6.0 确立 DSD 为核心渲染模型，引入 island() Mixin 替代 monkey-patch，定义三层组件模型（dsd-static / dsd-interactive / pure-island）。v0.6.1 移除 npm 发布，全面转向 JSR。v0.6.2 统一 WithDsdHydration Mixin，消除 DsdLitElement 继承。",
+        "title": "LessJS v0.6.x — DSD 渲染模型 + Island 架构 + 三层组件模型"
+      }
+    },
+    {
+      "id": "article:blog/v0-7-0:en",
+      "kind": "blog-post",
+      "locale": "en",
+      "source": {
+        "path": "www/content/blog/2026-05-07-v0-7-0.md"
+      },
+      "alternates": [],
+      "references": [],
+      "route": "/blog/v0-7-0",
+      "fingerprint": "350a6642af4738482101b1fcabd924f3dc3e3df8ff84c9414de4fca511560486",
+      "data": {
+        "lang": "zh",
+        "lede": "P0 审计修复：runtime-shim 一致性、XSS 警告、静默 catch 消除。73 个新测试覆盖 render-dsd.ts 和 island.ts。部署从 GitHub Pages 迁移到 Cloudflare Pages。",
+        "title": "LessJS v0.7.0 — 审计修复 + 测试补全 + 部署迁移"
+      }
+    },
+    {
+      "id": "article:blog/v0-8-0:en",
+      "kind": "blog-post",
+      "locale": "en",
+      "source": {
+        "path": "www/content/blog/2026-05-08-v0-8-0.md"
+      },
+      "alternates": [],
+      "references": [],
+      "route": "/blog/v0-8-0",
+      "fingerprint": "4e98b0a981461612224a7dda132928a8dad630400881a0dc709d852c856bae3c",
+      "data": {
+        "lang": "en",
+        "lede": "Five audit items resolved: structured logging, runtime-shim auto-generation, parse5 nested DSD optimization, advanced feature docs, and Playwright E2E tests. @openelement/blog ships and dogfoods.",
+        "title": "v0.8.0 — Audit Resolution + Structured Logging + Blog Plugin"
+      }
+    },
+    {
+      "id": "article:blog/v0.14-audit-report:en",
+      "kind": "blog-post",
+      "locale": "en",
+      "source": {
+        "path": "www/content/blog/2026-05-13-v0.14-audit-report.md"
+      },
+      "alternates": [],
+      "references": [],
+      "route": "/blog/v0.14-audit-report",
+      "fingerprint": "2a9d4bc4200026b01b7daa02df1e30ee371c22c0ee462e50226d8cd8bf3f12d7",
+      "data": {
+        "lang": "zh",
+        "title": "v0.14.0 — Release Readiness Audit Report"
+      }
+    },
+    {
+      "id": "article:guide/api:en",
+      "kind": "article",
+      "locale": "en",
+      "source": {
+        "path": "www/content/guide/api.md"
+      },
+      "alternates": [
+        {
+          "locale": "zh",
+          "id": "article:guide/api:zh"
+        }
+      ],
+      "references": [],
+      "route": "/guide/api",
+      "fingerprint": "897c0a8b204e396792cf13be1b34d402b7d0a0982086a10ce0673f8346ae907f",
+      "data": {
+        "lede": "API routes use platform request and response primitives. Keep route handlers explicit, typed, and close to the app boundary.",
+        "order": 60,
+        "title": "API Routes"
+      }
+    },
+    {
+      "id": "article:guide/api:zh",
+      "kind": "article",
+      "locale": "zh",
+      "source": {
+        "path": "www/content/guide/api.zh.md"
+      },
+      "alternates": [
+        {
+          "locale": "en",
+          "id": "article:guide/api:en"
+        }
+      ],
+      "references": [],
+      "route": "/guide/api",
+      "fingerprint": "8f2292e32c9670818f52ee9caa09b4dcac7f85282737f68aefb10fbd6c622cef",
+      "data": {
+        "lede": "API routes 使用平台 request 与 response 原语。Route handlers 保持显式、有类型，并贴近应用边界。",
+        "order": 60,
+        "title": "API 路由"
+      }
+    },
+    {
+      "id": "article:guide/architecture:en",
+      "kind": "article",
+      "locale": "en",
+      "source": {
+        "path": "www/content/guide/architecture.md"
+      },
+      "alternates": [
+        {
+          "locale": "zh",
+          "id": "article:guide/architecture:zh"
+        }
+      ],
+      "references": [
+        {
+          "kind": "route",
+          "target": "/architecture/architecture",
+          "line": 14
+        }
+      ],
+      "route": "/guide/architecture",
+      "fingerprint": "889595417d782a66881744ab383b59a3b73c7294f64e178b0e02399d0ee4d209",
+      "data": {
+        "lede": "The short orientation: how OpenElement is organized, and where the full architecture page lives.",
+        "order": 20,
+        "title": "Architecture Guide"
+      }
+    },
+    {
+      "id": "article:guide/architecture:zh",
+      "kind": "article",
+      "locale": "zh",
+      "source": {
+        "path": "www/content/guide/architecture.zh.md"
+      },
+      "alternates": [
+        {
+          "locale": "en",
+          "id": "article:guide/architecture:en"
+        }
+      ],
+      "references": [
+        {
+          "kind": "route",
+          "target": "/architecture/architecture",
+          "line": 14
+        }
+      ],
+      "route": "/guide/architecture",
+      "fingerprint": "a0f9225a89562bd6adea22c9a7e6bfb1e548b0a946e2ebcf3f8acc016f108187",
+      "data": {
+        "lede": "导读：OpenElement 的组织方式，以及完整架构页的位置。",
+        "order": 20,
+        "title": "架构指南"
+      }
+    },
+    {
+      "id": "article:guide/comparison:en",
+      "kind": "article",
+      "locale": "en",
+      "source": {
+        "path": "www/content/guide/comparison.md"
+      },
+      "alternates": [
+        {
+          "locale": "zh",
+          "id": "article:guide/comparison:zh"
+        }
+      ],
+      "references": [
+        {
+          "kind": "route",
+          "target": "/architecture/comparison",
+          "line": 14
+        }
+      ],
+      "route": "/guide/comparison",
+      "fingerprint": "b4c4f254aae676175ac66209cdce17adec866c5ebe04bdba568ab0b9295bf371",
+      "data": {
+        "lede": "The short orientation: what openElement optimizes for, and where the full reviewed comparison lives.",
+        "order": 25,
+        "title": "How OpenElement compares"
+      }
+    },
+    {
+      "id": "article:guide/comparison:zh",
+      "kind": "article",
+      "locale": "zh",
+      "source": {
+        "path": "www/content/guide/comparison.zh.md"
+      },
+      "alternates": [
+        {
+          "locale": "en",
+          "id": "article:guide/comparison:en"
+        }
+      ],
+      "references": [
+        {
+          "kind": "route",
+          "target": "/architecture/comparison",
+          "line": 14
+        }
+      ],
+      "route": "/guide/comparison",
+      "fingerprint": "b15237898a7261938a49b1e4ecb81e29d3a921fe8e96c085bbda16f436c461fb",
+      "data": {
+        "lede": "导读：openElement 优化的方向，以及完整对比页的位置。",
+        "order": 25,
+        "title": "OpenElement 与其他工具的对比"
+      }
+    },
+    {
+      "id": "article:guide/configuration:en",
+      "kind": "article",
+      "locale": "en",
+      "source": {
+        "path": "www/content/guide/configuration.md"
+      },
+      "alternates": [
+        {
+          "locale": "zh",
+          "id": "article:guide/configuration:zh"
+        }
+      ],
+      "references": [],
+      "route": "/guide/configuration",
+      "fingerprint": "2d5246cf8c40166ea39559ab2b25e6fddf4d9cb06af734b0cdb7a8d7c0b7c006",
+      "data": {
+        "lede": "Configuration stays close to the route, build or package surface it affects.",
+        "order": 70,
+        "title": "Configuration"
+      }
+    },
+    {
+      "id": "article:guide/configuration:zh",
+      "kind": "article",
+      "locale": "zh",
+      "source": {
+        "path": "www/content/guide/configuration.zh.md"
+      },
+      "alternates": [
+        {
+          "locale": "en",
+          "id": "article:guide/configuration:en"
+        }
+      ],
+      "references": [],
+      "route": "/guide/configuration",
+      "fingerprint": "83c29aff2f2e5b7619d302fe61bff1ed4554aa307db948d62eb95d8beea6588a",
+      "data": {
+        "lede": "配置贴近它所影响的 route、build 或 package 表面。",
+        "order": 70,
+        "title": "配置"
+      }
+    },
+    {
+      "id": "article:guide/core-concepts:en",
+      "kind": "article",
+      "locale": "en",
+      "source": {
+        "path": "www/content/guide/core-concepts.md"
+      },
+      "alternates": [
+        {
+          "locale": "zh",
+          "id": "article:guide/core-concepts:zh"
+        }
+      ],
+      "references": [],
+      "route": "/guide/core-concepts",
+      "fingerprint": "ded69a7d3fc68be17c79582fb7bd434dddc952c9d304b39a23393f43ab097c8b",
+      "data": {
+        "lede": "The core model is standards-first: authored elements, declarative rendering, file routes and optional islands.",
+        "order": 10,
+        "title": "Core Concepts"
+      }
+    },
+    {
+      "id": "article:guide/core-concepts:zh",
+      "kind": "article",
+      "locale": "zh",
+      "source": {
+        "path": "www/content/guide/core-concepts.zh.md"
+      },
+      "alternates": [
+        {
+          "locale": "en",
+          "id": "article:guide/core-concepts:en"
+        }
+      ],
+      "references": [],
+      "route": "/guide/core-concepts",
+      "fingerprint": "f035e9ba572c3dde18ef5ed7fd92b6e4ce90ec040240a9c1bf42181441715b24",
+      "data": {
+        "lede": "核心模型是 standards-first：authored elements、declarative rendering、file routes 与可选 islands。",
+        "order": 10,
+        "title": "核心概念"
+      }
+    },
+    {
+      "id": "article:guide/deployment:en",
+      "kind": "article",
+      "locale": "en",
+      "source": {
+        "path": "www/content/guide/deployment.md"
+      },
+      "alternates": [
+        {
+          "locale": "zh",
+          "id": "article:guide/deployment:zh"
+        }
+      ],
+      "references": [],
+      "route": "/guide/deployment",
+      "fingerprint": "9849a307759d18bd045513ad3925d4b178d3b3b4799bc2769e3c2b79557b1a73",
+      "data": {
+        "lede": "Deployment is built around generated static output and adapter-specific runtime boundaries.",
+        "order": 100,
+        "title": "Deployment"
+      }
+    },
+    {
+      "id": "article:guide/deployment:zh",
+      "kind": "article",
+      "locale": "zh",
+      "source": {
+        "path": "www/content/guide/deployment.zh.md"
+      },
+      "alternates": [
+        {
+          "locale": "en",
+          "id": "article:guide/deployment:en"
+        }
+      ],
+      "references": [],
+      "route": "/guide/deployment",
+      "fingerprint": "9f0eba1fd2e2ea8b0c1d39e9397bf39797811baeba8d5acb76776010e1f66a90",
+      "data": {
+        "lede": "部署围绕生成的静态输出与 adapter 各自的运行时边界展开。",
+        "order": 100,
+        "title": "部署"
+      }
+    },
+    {
+      "id": "article:guide/error-handling:en",
+      "kind": "article",
+      "locale": "en",
+      "source": {
+        "path": "www/content/guide/error-handling.md"
+      },
+      "alternates": [
+        {
+          "locale": "zh",
+          "id": "article:guide/error-handling:zh"
+        }
+      ],
+      "references": [],
+      "route": "/guide/error-handling",
+      "fingerprint": "57e43933d1d6ca2b1ae7aa6852dacae303df3cdb3625bc494189dd1e512353c7",
+      "data": {
+        "lede": "Error handling preserves platform semantics and keeps route failures visible.",
+        "order": 80,
+        "title": "Error Handling"
+      }
+    },
+    {
+      "id": "article:guide/error-handling:zh",
+      "kind": "article",
+      "locale": "zh",
+      "source": {
+        "path": "www/content/guide/error-handling.zh.md"
+      },
+      "alternates": [
+        {
+          "locale": "en",
+          "id": "article:guide/error-handling:en"
+        }
+      ],
+      "references": [],
+      "route": "/guide/error-handling",
+      "fingerprint": "f2e8a89e7686812698ef87091965a951fd2b055055c2383bc588a5461764c2c7",
+      "data": {
+        "lede": "错误处理保留平台语义，并让 route 失败保持可见。",
+        "order": 80,
+        "title": "错误处理"
+      }
+    },
+    {
+      "id": "article:guide/getting-started:en",
+      "kind": "article",
+      "locale": "en",
+      "source": {
+        "path": "www/content/guide/getting-started.md"
+      },
+      "alternates": [
+        {
+          "locale": "zh",
+          "id": "article:guide/getting-started:zh"
+        }
+      ],
+      "references": [
+        {
+          "kind": "route",
+          "target": "/apilist",
+          "line": 20
+        },
+        {
+          "kind": "route",
+          "target": "/docs",
+          "line": 20
+        },
+        {
+          "kind": "route",
+          "target": "/roadmap",
+          "line": 20
+        }
+      ],
+      "route": "/guide/getting-started",
+      "fingerprint": "c9a4f811f17dbb1d668c898bf5f8434c162d6ee463d203bfac0b52f6ac045ad7",
+      "data": {
+        "lede": "OpenElement is a Web Components-native, static-first application framework. Start with standard Custom Elements, pages, routes, selective upgrades and deployable Vite/Nitro output.",
+        "order": 1,
+        "title": "Getting Started"
+      }
+    },
+    {
+      "id": "article:guide/getting-started:zh",
+      "kind": "article",
+      "locale": "zh",
+      "source": {
+        "path": "www/content/guide/getting-started.zh.md"
+      },
+      "alternates": [
+        {
+          "locale": "en",
+          "id": "article:guide/getting-started:en"
+        }
+      ],
+      "references": [
+        {
+          "kind": "route",
+          "target": "/apilist",
+          "line": 20
+        },
+        {
+          "kind": "route",
+          "target": "/docs",
+          "line": 20
+        },
+        {
+          "kind": "route",
+          "target": "/roadmap",
+          "line": 20
+        }
+      ],
+      "route": "/guide/getting-started",
+      "fingerprint": "ff4ed1f5de215930a7f11b8d2a69782081fedf097a13d9729ab1ef6fd23eaa8c",
+      "data": {
+        "lede": "OpenElement 是以 Web Components 为原生契约、static-first 的应用框架。从标准 Custom Elements、pages、routes 与按需升级开始，产出可部署的 Vite/Nitro 输出。",
+        "order": 1,
+        "title": "快速开始"
+      }
+    },
+    {
+      "id": "article:guide/islands-and-ssr:en",
+      "kind": "article",
+      "locale": "en",
+      "source": {
+        "path": "www/content/guide/islands-and-ssr.md"
+      },
+      "alternates": [
+        {
+          "locale": "zh",
+          "id": "article:guide/islands-and-ssr:zh"
+        }
+      ],
+      "references": [],
+      "route": "/guide/islands-and-ssr",
+      "fingerprint": "4a3a38af353fe4f8e800fabe51095a004223d2197545e61493c93456666294f2",
+      "data": {
+        "lede": "SSR and DSD provide the document baseline. Islands add client behavior at declared boundaries.",
+        "order": 90,
+        "title": "Islands and SSR"
+      }
+    },
+    {
+      "id": "article:guide/islands-and-ssr:zh",
+      "kind": "article",
+      "locale": "zh",
+      "source": {
+        "path": "www/content/guide/islands-and-ssr.zh.md"
+      },
+      "alternates": [
+        {
+          "locale": "en",
+          "id": "article:guide/islands-and-ssr:en"
+        }
+      ],
+      "references": [],
+      "route": "/guide/islands-and-ssr",
+      "fingerprint": "42b7612a1a99f70930dcf26efa7a39a567ebcfb056cad2d41af3e0cb83e78e4b",
+      "data": {
+        "lede": "SSR 与 DSD 提供文档基线。Islands 在声明的边界上添加客户端行为。",
+        "order": 90,
+        "title": "Islands 与 SSR"
+      }
+    },
+    {
+      "id": "article:guide/mdx:en",
+      "kind": "article",
+      "locale": "en",
+      "source": {
+        "path": "www/content/guide/mdx.md"
+      },
+      "alternates": [
+        {
+          "locale": "zh",
+          "id": "article:guide/mdx:zh"
+        }
+      ],
+      "references": [],
+      "route": "/guide/mdx",
+      "fingerprint": "cbd322952ee8798939d78cb48647de7a55e05a272ff62d040c218b52df312e66",
+      "data": {
+        "lede": "Documentation content compiles into the same route and component system as authored pages.",
+        "order": 50,
+        "title": "MDX"
+      }
+    },
+    {
+      "id": "article:guide/mdx:zh",
+      "kind": "article",
+      "locale": "zh",
+      "source": {
+        "path": "www/content/guide/mdx.zh.md"
+      },
+      "alternates": [
+        {
+          "locale": "en",
+          "id": "article:guide/mdx:en"
+        }
+      ],
+      "references": [],
+      "route": "/guide/mdx",
+      "fingerprint": "39862759fd9b9fb11fa6c76015ad930b8d95bc70e5e87a65f4941940264675b6",
+      "data": {
+        "lede": "文档内容编译进与手写页面相同的 route 与 component 体系。",
+        "order": 50,
+        "title": "MDX"
+      }
+    },
+    {
+      "id": "article:guide/migration:en",
+      "kind": "article",
+      "locale": "en",
+      "source": {
+        "path": "www/content/guide/migration.md"
+      },
+      "alternates": [
+        {
+          "locale": "zh",
+          "id": "article:guide/migration:zh"
+        }
+      ],
+      "references": [
+        {
+          "kind": "route",
+          "target": "/guide/getting-started",
+          "line": 2
+        }
+      ],
+      "route": "/guide/migration",
+      "fingerprint": "43c6833808b4d90b7dc697d7f3019f17565e1410a752a8062fb444804bd0ab73",
+      "data": {
+        "lede": "Every breaking change since 0.40.x, grouped by the version that shipped it.",
+        "order": 75,
+        "title": "Migrating to 0.41.0"
+      }
+    },
+    {
+      "id": "article:guide/migration:zh",
+      "kind": "article",
+      "locale": "zh",
+      "source": {
+        "path": "www/content/guide/migration.zh.md"
+      },
+      "alternates": [
+        {
+          "locale": "en",
+          "id": "article:guide/migration:en"
+        }
+      ],
+      "references": [
+        {
+          "kind": "route",
+          "target": "/guide/getting-started",
+          "line": 2
+        }
+      ],
+      "route": "/guide/migration",
+      "fingerprint": "5536f52a06a9101130a135b002615ef5a2f7acaf651fe61ce2a364ddbfd14233",
+      "data": {
+        "lede": "自 0.40.x 以来的全部 breaking change，按发布版本分组。",
+        "order": 75,
+        "title": "迁移到 0.41.0"
+      }
+    },
+    {
+      "id": "article:guide/routing-and-data:en",
+      "kind": "article",
+      "locale": "en",
+      "source": {
+        "path": "www/content/guide/routing-and-data.md"
+      },
+      "alternates": [
+        {
+          "locale": "zh",
+          "id": "article:guide/routing-and-data:zh"
+        }
+      ],
+      "references": [],
+      "route": "/guide/routing-and-data",
+      "fingerprint": "bde967928ffa36ae3c2494dc3d7a90351c29341a6f0f5a757aae1cdd44aa8e78",
+      "data": {
+        "lede": "Routes are file-based surfaces with explicit metadata and data boundaries.",
+        "order": 40,
+        "title": "Routing and Data"
+      }
+    },
+    {
+      "id": "article:guide/routing-and-data:zh",
+      "kind": "article",
+      "locale": "zh",
+      "source": {
+        "path": "www/content/guide/routing-and-data.zh.md"
+      },
+      "alternates": [
+        {
+          "locale": "en",
+          "id": "article:guide/routing-and-data:en"
+        }
+      ],
+      "references": [],
+      "route": "/guide/routing-and-data",
+      "fingerprint": "b750c231acb4f62d5a9d7493d324ae4493dc354c157f0e2d2c53b24ce03cd892",
+      "data": {
+        "lede": "Routes 是基于文件的页面表面，带有显式 metadata 与数据边界。",
+        "order": 40,
+        "title": "路由与数据"
+      }
+    },
+    {
+      "id": "article:guide/security:en",
+      "kind": "article",
+      "locale": "en",
+      "source": {
+        "path": "www/content/guide/security.md"
+      },
+      "alternates": [
+        {
+          "locale": "zh",
+          "id": "article:guide/security:zh"
+        }
+      ],
+      "references": [
+        {
+          "kind": "route",
+          "target": "/guide/configuration",
+          "line": 50
+        }
+      ],
+      "route": "/guide/security",
+      "fingerprint": "90ba6593cd06b0b707ab5abadda6af89f83b93ed8910b7f807c6323a3739e0f6",
+      "data": {
+        "lede": "The built-in CSRF same-origin floor for actions, plus the middleware recipe for API routes and ambient-auth apps.",
+        "order": 95,
+        "title": "Security"
+      }
+    },
+    {
+      "id": "article:guide/security:zh",
+      "kind": "article",
+      "locale": "zh",
+      "source": {
+        "path": "www/content/guide/security.zh.md"
+      },
+      "alternates": [
+        {
+          "locale": "en",
+          "id": "article:guide/security:en"
+        }
+      ],
+      "references": [
+        {
+          "kind": "route",
+          "target": "/guide/configuration",
+          "line": 50
+        }
+      ],
+      "route": "/guide/security",
+      "fingerprint": "8d2e9280eb956e3ab4b4a97d0f40767d4d002e117de68e866c4d907277212fe6",
+      "data": {
+        "lede": "action 内置的 CSRF 同源地板，以及面向 API 路由与隐式凭据应用的 middleware 配方。",
+        "order": 95,
+        "title": "安全"
+      }
+    },
+    {
+      "id": "article:guide/styling:en",
+      "kind": "article",
+      "locale": "en",
+      "source": {
+        "path": "www/content/guide/styling.md"
+      },
+      "alternates": [
+        {
+          "locale": "zh",
+          "id": "article:guide/styling:zh"
+        }
+      ],
+      "references": [],
+      "route": "/guide/styling",
+      "fingerprint": "9ead7d9568a39ee18b8a9d28bcf51bc8fd6bbecc7cb9333e30c2b534fcd34b23",
+      "data": {
+        "lede": "Every page renders inside a custom element with declarative shadow DOM — a global stylesheet alone will not reach it.",
+        "order": 5,
+        "title": "Styling"
+      }
+    },
+    {
+      "id": "article:guide/styling:zh",
+      "kind": "article",
+      "locale": "zh",
+      "source": {
+        "path": "www/content/guide/styling.zh.md"
+      },
+      "alternates": [
+        {
+          "locale": "en",
+          "id": "article:guide/styling:en"
+        }
+      ],
+      "references": [],
+      "route": "/guide/styling",
+      "fingerprint": "c41b8f610ca512d9b312883cbb6e7862f10adb5a8032f64897b737157c71c058",
+      "data": {
+        "lede": "每个页面都渲染在带 declarative shadow DOM 的 custom element 内部——单靠全局样式表无法触及页面内容。",
+        "order": 5,
+        "title": "样式"
+      }
+    },
+    {
+      "id": "article:guide/testing:en",
+      "kind": "article",
+      "locale": "en",
+      "source": {
+        "path": "www/content/guide/testing.md"
+      },
+      "alternates": [
+        {
+          "locale": "zh",
+          "id": "article:guide/testing:zh"
+        }
+      ],
+      "references": [],
+      "route": "/guide/testing",
+      "fingerprint": "6557ced4947337580296b9b73baa0f13b3fb9777cda9196c7b28854214467d70",
+      "data": {
+        "lede": "Use checks that match the changed surface: type checks for routes, build checks for generated output and visual checks for design changes.",
+        "order": 110,
+        "title": "Testing"
+      }
+    },
+    {
+      "id": "article:guide/testing:zh",
+      "kind": "article",
+      "locale": "zh",
+      "source": {
+        "path": "www/content/guide/testing.zh.md"
+      },
+      "alternates": [
+        {
+          "locale": "en",
+          "id": "article:guide/testing:en"
+        }
+      ],
+      "references": [],
+      "route": "/guide/testing",
+      "fingerprint": "0a9091c1985bd5b42bdd691bfb2bf195313a2069231b674a63d8e79eb83ff909",
+      "data": {
+        "lede": "使用与变更表面匹配的检查：routes 用 type checks，生成产物用 build checks，设计变更用 visual checks。",
+        "order": 110,
+        "title": "测试"
+      }
+    },
+    {
+      "id": "doc:docs/roadmap/ROADMAP.md",
+      "kind": "doc",
+      "locale": "en",
+      "source": {
+        "path": "docs/roadmap/ROADMAP.md"
+      },
+      "alternates": [],
+      "references": [],
+      "fingerprint": "be6feefac75b6e27c148476371b7dc5a0e126890eca2f7ddae44fdc029bf7a8d",
+      "data": {}
+    },
+    {
+      "id": "element:open-badge",
+      "kind": "custom-element",
+      "locale": "en",
+      "source": {
+        "path": "packages/ui/src/generated-manifest.json"
+      },
+      "alternates": [],
+      "references": [],
+      "fingerprint": "38cb96b39730d128da9184946e3adc762d250de630db6b5d3f5b58c51404e146",
+      "data": {
+        "attributes": [
+          {
+            "description": "tone attribute",
+            "name": "tone",
+            "type": "string"
+          },
+          {
+            "description": "size attribute",
+            "name": "size",
+            "type": "string"
+          }
+        ],
+        "cssParts": [
+          {
+            "description": "The badge span",
+            "name": "badge"
+          }
+        ],
+        "events": [],
+        "hydrate": null,
+        "layer": null,
+        "slots": [
+          {
+            "description": "Default slot",
+            "name": ""
+          }
+        ],
+        "tagName": "open-badge"
+      }
+    },
+    {
+      "id": "element:open-button",
+      "kind": "custom-element",
+      "locale": "en",
+      "source": {
+        "path": "packages/ui/src/generated-manifest.json"
+      },
+      "alternates": [],
+      "references": [],
+      "fingerprint": "a111aee6a1a445f8adfc254685a3c691f5c768b9a85dbd46d5eb45e229da4354",
+      "data": {
+        "attributes": [
+          {
+            "description": "variant attribute",
+            "name": "variant",
+            "type": "string"
+          },
+          {
+            "description": "size attribute",
+            "name": "size",
+            "type": "string"
+          },
+          {
+            "default": "false",
+            "description": "disabled attribute",
+            "name": "disabled",
+            "type": "boolean"
+          },
+          {
+            "description": "href attribute",
+            "name": "href",
+            "type": "string"
+          },
+          {
+            "description": "target attribute",
+            "name": "target",
+            "type": "string"
+          },
+          {
+            "description": "type attribute",
+            "name": "type",
+            "type": "string"
+          }
+        ],
+        "cssParts": [
+          {
+            "description": "The visible button or anchor element",
+            "name": "control"
+          }
+        ],
+        "events": [
+          {
+            "description": "Fired on open-click",
+            "name": "open-click",
+            "type": "CustomEvent"
+          }
+        ],
+        "hydrate": null,
+        "layer": null,
+        "slots": [
+          {
+            "description": "Default slot",
+            "name": ""
+          }
+        ],
+        "tagName": "open-button"
+      }
+    },
+    {
+      "id": "element:open-callout",
+      "kind": "custom-element",
+      "locale": "en",
+      "source": {
+        "path": "packages/ui/src/generated-manifest.json"
+      },
+      "alternates": [],
+      "references": [],
+      "fingerprint": "deed7df8f92c2f6377e590d8483fdd47d7792104a76fd94e199e76fdac5434e4",
+      "data": {
+        "attributes": [
+          {
+            "description": "type attribute",
+            "name": "type",
+            "type": "string"
+          },
+          {
+            "description": "label attribute",
+            "name": "label",
+            "type": "string"
+          }
+        ],
+        "cssParts": [
+          {
+            "description": "The callout wrapper",
+            "name": "container"
+          },
+          {
+            "description": "The type icon span",
+            "name": "icon"
+          },
+          {
+            "description": "The content area",
+            "name": "content"
+          }
+        ],
+        "events": [],
+        "hydrate": null,
+        "layer": null,
+        "slots": [
+          {
+            "description": "Default slot",
+            "name": ""
+          }
+        ],
+        "tagName": "open-callout"
+      }
+    },
+    {
+      "id": "element:open-card",
+      "kind": "custom-element",
+      "locale": "en",
+      "source": {
+        "path": "packages/ui/src/generated-manifest.json"
+      },
+      "alternates": [],
+      "references": [],
+      "fingerprint": "ae0360347019824f840b51578f30cf0721accd6ad60810288dbe6ece9544d002",
+      "data": {
+        "attributes": [
+          {
+            "description": "variant attribute",
+            "name": "variant",
+            "type": "string"
+          }
+        ],
+        "cssParts": [
+          {
+            "description": "The article wrapper",
+            "name": "container"
+          },
+          {
+            "description": "The card body content area",
+            "name": "body"
+          }
+        ],
+        "events": [],
+        "hydrate": null,
+        "layer": null,
+        "slots": [
+          {
+            "description": "Default slot",
+            "name": ""
+          },
+          {
+            "description": "The 'header' slot",
+            "name": "header"
+          },
+          {
+            "description": "The 'footer' slot",
+            "name": "footer"
+          }
+        ],
+        "tagName": "open-card"
+      }
+    },
+    {
+      "id": "element:open-code-block",
+      "kind": "custom-element",
+      "locale": "en",
+      "source": {
+        "path": "packages/ui/src/generated-manifest.json"
+      },
+      "alternates": [],
+      "references": [],
+      "fingerprint": "b9e0ffd09e87a8be84e48fe2f8e060d105f332cb8b218c5ebbaa309a7f324491",
+      "data": {
+        "attributes": [],
+        "cssParts": [
+          {
+            "description": "The copy button",
+            "name": "copy"
+          }
+        ],
+        "events": [],
+        "hydrate": null,
+        "layer": null,
+        "slots": [
+          {
+            "description": "Default slot",
+            "name": ""
+          }
+        ],
+        "tagName": "open-code-block"
+      }
+    },
+    {
+      "id": "element:open-dialog",
+      "kind": "custom-element",
+      "locale": "en",
+      "source": {
+        "path": "packages/ui/src/generated-manifest.json"
+      },
+      "alternates": [],
+      "references": [],
+      "fingerprint": "4ea5d87396a9189884336e6c3112840ad292bb97a3bbe729bab47b868e25f209",
+      "data": {
+        "attributes": [
+          {
+            "default": "false",
+            "description": "open attribute",
+            "name": "open",
+            "type": "boolean"
+          },
+          {
+            "description": "label attribute",
+            "name": "label",
+            "type": "string"
+          }
+        ],
+        "cssParts": [
+          {
+            "description": "The dialog backdrop/element",
+            "name": "overlay"
+          },
+          {
+            "description": "The header bar",
+            "name": "header"
+          },
+          {
+            "description": "The close button",
+            "name": "close"
+          },
+          {
+            "description": "The content area (<slot>)",
+            "name": "body"
+          },
+          {
+            "description": "The optional footer slot",
+            "name": "footer"
+          }
+        ],
+        "events": [
+          {
+            "description": "Fired on open-dialog-close",
+            "name": "open-dialog-close",
+            "type": "CustomEvent"
+          }
+        ],
+        "hydrate": null,
+        "layer": null,
+        "slots": [
+          {
+            "description": "Default slot",
+            "name": ""
+          },
+          {
+            "description": "The 'trigger' slot",
+            "name": "trigger"
+          },
+          {
+            "description": "The 'footer' slot",
+            "name": "footer"
+          }
+        ],
+        "tagName": "open-dialog"
+      }
+    },
+    {
+      "id": "element:open-dropdown",
+      "kind": "custom-element",
+      "locale": "en",
+      "source": {
+        "path": "packages/ui/src/generated-manifest.json"
+      },
+      "alternates": [],
+      "references": [],
+      "fingerprint": "d2b37cf7ceb3060cc132e78438f61702a77af28690e9c3e5bee09f5c1a9ec9ed",
+      "data": {
+        "attributes": [],
+        "cssParts": [
+          {
+            "description": "Trigger wrapper",
+            "name": "trigger"
+          },
+          {
+            "description": "Popover content",
+            "name": "content"
+          }
+        ],
+        "events": [],
+        "hydrate": null,
+        "layer": null,
+        "slots": [
+          {
+            "description": "Control used to toggle the dropdown",
+            "name": "trigger"
+          },
+          {
+            "description": "Dropdown content",
+            "name": ""
+          }
+        ],
+        "tagName": "open-dropdown"
+      }
+    },
+    {
+      "id": "element:open-input",
+      "kind": "custom-element",
+      "locale": "en",
+      "source": {
+        "path": "packages/ui/src/generated-manifest.json"
+      },
+      "alternates": [],
+      "references": [],
+      "fingerprint": "c99304a22acb276221bd18d0bb636850a48d0e5ad6d5dc04586a64d4d217c260",
+      "data": {
+        "attributes": [
+          {
+            "description": "type attribute",
+            "name": "type",
+            "type": "string"
+          },
+          {
+            "description": "placeholder attribute",
+            "name": "placeholder",
+            "type": "string"
+          },
+          {
+            "description": "label attribute",
+            "name": "label",
+            "type": "string"
+          },
+          {
+            "description": "name attribute",
+            "name": "name",
+            "type": "string"
+          },
+          {
+            "description": "value attribute",
+            "name": "value",
+            "type": "string"
+          },
+          {
+            "default": "false",
+            "description": "disabled attribute",
+            "name": "disabled",
+            "type": "boolean"
+          },
+          {
+            "default": "false",
+            "description": "required attribute",
+            "name": "required",
+            "type": "boolean"
+          },
+          {
+            "description": "error attribute",
+            "name": "error",
+            "type": "string"
+          }
+        ],
+        "cssParts": [
+          {
+            "description": "The outer input-wrapper div",
+            "name": "wrapper"
+          },
+          {
+            "description": "The label element",
+            "name": "label"
+          },
+          {
+            "description": "The input element",
+            "name": "control"
+          },
+          {
+            "description": "The error message small element",
+            "name": "error"
+          }
+        ],
+        "events": [
+          {
+            "description": "Fired on open-input",
+            "name": "open-input",
+            "type": "CustomEvent<{ value: unknown }>"
+          },
+          {
+            "description": "Fired on open-change",
+            "name": "open-change",
+            "type": "CustomEvent<{ value: unknown }>"
+          },
+          {
+            "description": "Fired on open-focus",
+            "name": "open-focus",
+            "type": "CustomEvent"
+          },
+          {
+            "description": "Fired on open-blur",
+            "name": "open-blur",
+            "type": "CustomEvent"
+          }
+        ],
+        "hydrate": null,
+        "layer": null,
+        "slots": [],
+        "tagName": "open-input"
+      }
+    },
+    {
+      "id": "element:open-tabs",
+      "kind": "custom-element",
+      "locale": "en",
+      "source": {
+        "path": "packages/ui/src/generated-manifest.json"
+      },
+      "alternates": [],
+      "references": [],
+      "fingerprint": "c1736b1a499e352a7b74ed013a3e685b4f6581e8899280783f006fc51d3b2d0d",
+      "data": {
+        "attributes": [],
+        "cssParts": [],
+        "events": [],
+        "hydrate": null,
+        "layer": null,
+        "slots": [
+          {
+            "description": "Tab label element (one per panel)",
+            "name": "tab"
+          },
+          {
+            "description": "Panel shown while its tab is active",
+            "name": "panel"
+          }
+        ],
+        "tagName": "open-tabs"
+      }
+    },
+    {
+      "id": "element:open-theme-toggle",
+      "kind": "custom-element",
+      "locale": "en",
+      "source": {
+        "path": "packages/ui/src/generated-manifest.json"
+      },
+      "alternates": [],
+      "references": [],
+      "fingerprint": "1dff73d66650d970c90c6f979a234452a0a62e6c7dbd6c4f39eb1e6dc0eaa6e8",
+      "data": {
+        "attributes": [
+          {
+            "description": "theme attribute",
+            "name": "theme",
+            "type": "string"
+          }
+        ],
+        "cssParts": [
+          {
+            "description": "The button element",
+            "name": "toggle"
+          },
+          {
+            "description": "The sun SVG icon",
+            "name": "icon-sun"
+          },
+          {
+            "description": "The moon SVG icon",
+            "name": "icon-moon"
+          }
+        ],
+        "events": [
+          {
+            "description": "Fired on open:theme-change",
+            "name": "open:theme-change",
+            "type": "CustomEvent<{ theme: unknown }>"
+          }
+        ],
+        "hydrate": null,
+        "layer": null,
+        "slots": [],
+        "tagName": "open-theme-toggle"
+      }
+    },
+    {
+      "id": "release:state",
+      "kind": "release",
+      "locale": "en",
+      "source": {
+        "path": "docs/release/release-state.json"
+      },
+      "alternates": [],
+      "references": [],
+      "fingerprint": "d374f2ec59826d57c6f1dde1b4a7ce7a39fbdd2f51d276230238522a33124b4a",
+      "data": {
+        "activeTarget": "v0.44.0-beta.2.2",
+        "latestLandedTrain": "v0.44.0-beta.2.1",
+        "maturity": "beta",
+        "nextPlannedTrain": "v0.44.0-beta.2.3",
+        "publishedVersion": "0.44.0-beta.2.1",
+        "schemaVersion": 1,
+        "sourceVersion": "0.44.0-beta.2.1"
+      }
+    },
+    {
+      "id": "release:v0.21.5",
+      "kind": "release",
+      "locale": "en",
+      "source": {
+        "path": "docs/release/v0.21.5.md"
+      },
+      "alternates": [],
+      "references": [],
+      "fingerprint": "e24c4db2d2fa16b0d8d1c0ff26726435510b7ee8dafb98dd09ae1e66385a8733",
+      "data": {
+        "title": "LessJS v0.21.5 — Hardening Line Complete"
+      }
+    },
+    {
+      "id": "release:v0.26.1",
+      "kind": "release",
+      "locale": "en",
+      "source": {
+        "path": "docs/release/v0.26.1.md"
+      },
+      "alternates": [],
+      "references": [],
+      "fingerprint": "c0a618769acac97aecd6505942b94e210799dacfe60b108666aa0a71b7120f42",
+      "data": {
+        "title": "v0.26.1 — DSD-First Real DOM Signal Architecture"
+      }
+    },
+    {
+      "id": "release:v0.27.0",
+      "kind": "release",
+      "locale": "en",
+      "source": {
+        "path": "docs/release/v0.27.0.md"
+      },
+      "alternates": [],
+      "references": [],
+      "fingerprint": "6326a6c79fe421693916bf36a73a87a607022884201062e246dfa0cb725538d5",
+      "data": {
+        "title": "v0.27.0 鈥?\"One Tree, One Pass\""
+      }
+    },
+    {
+      "id": "release:v0.28.0",
+      "kind": "release",
+      "locale": "en",
+      "source": {
+        "path": "docs/release/v0.28.0.md"
+      },
+      "alternates": [],
+      "references": [],
+      "fingerprint": "815c057c8a108176515f62ffcf0fa60e8747ca9126ac7296927018c66bafb066",
+      "data": {
+        "title": "v0.28.0 — \"Contracts & Tokens\""
+      }
+    },
+    {
+      "id": "release:v0.28.2",
+      "kind": "release",
+      "locale": "en",
+      "source": {
+        "path": "docs/release/v0.28.2.md"
+      },
+      "alternates": [],
+      "references": [],
+      "fingerprint": "1b1bd27e3cb17031618ccfccaaf7cde91c971b62a0226f4791fe3b40eb352740",
+      "data": {
+        "title": "v0.28.2 - Deprecated Purge + Hardening"
+      }
+    },
+    {
+      "id": "release:v0.28.3",
+      "kind": "release",
+      "locale": "en",
+      "source": {
+        "path": "docs/release/v0.28.3.md"
+      },
+      "alternates": [],
+      "references": [],
+      "fingerprint": "73eff701b3f0eb0900cb68b858af8082c615e812beb47d94ee3223a5a1c71c8a",
+      "data": {
+        "title": "v0.28.3 — The Cleanup Arc (v0.28.1 → v0.28.3)"
+      }
+    },
+    {
+      "id": "release:v0.28.4",
+      "kind": "release",
+      "locale": "en",
+      "source": {
+        "path": "docs/release/v0.28.4.md"
+      },
+      "alternates": [],
+      "references": [],
+      "fingerprint": "1cfa9b753953d64b1ee5ca506f0e43bcadbde5ea801ae647d33f576e712749d4",
+      "data": {
+        "title": "v0.28.4 - AppShell Protocol + Cleanup"
+      }
+    },
+    {
+      "id": "release:v0.28.5",
+      "kind": "release",
+      "locale": "en",
+      "source": {
+        "path": "docs/release/v0.28.5.md"
+      },
+      "alternates": [],
+      "references": [],
+      "fingerprint": "101810b0599dfb2f0059872d1e9c01eba04e5f51a4a8ebc249127c8f39b486e9",
+      "data": {
+        "title": "v0.28.5 - Consumer Resolver Patch"
+      }
+    },
+    {
+      "id": "release:v0.28.6",
+      "kind": "release",
+      "locale": "en",
+      "source": {
+        "path": "docs/release/v0.28.6.md"
+      },
+      "alternates": [],
+      "references": [],
+      "fingerprint": "cb8935a88b65c8693f60d7b03d53c58b0547f42c4ed4fc366971e5a8e73b6e2c",
+      "data": {
+        "title": "v0.28.6 - Build and Trust Boundary Cleanup"
+      }
+    },
+    {
+      "id": "release:v0.29.0",
+      "kind": "release",
+      "locale": "en",
+      "source": {
+        "path": "docs/release/v0.29.0.md"
+      },
+      "alternates": [],
+      "references": [],
+      "fingerprint": "fd2795f8524bd569f1e9ff0b5aacefa67b3bf8452d0e97c134e7a9067ae1a493",
+      "data": {
+        "title": "v0.29.0 - Structured Renderer IR"
+      }
+    },
+    {
+      "id": "release:v0.29.1",
+      "kind": "release",
+      "locale": "en",
+      "source": {
+        "path": "docs/release/v0.29.1.md"
+      },
+      "alternates": [],
+      "references": [],
+      "fingerprint": "601ce76e4e1f977524ef2d7643724cb3f2913ab018db258610e31d8d4aee31a3",
+      "data": {
+        "title": "v0.29.1 - Core Simplification"
+      }
+    },
+    {
+      "id": "release:v0.29.2",
+      "kind": "release",
+      "locale": "en",
+      "source": {
+        "path": "docs/release/v0.29.2.md"
+      },
+      "alternates": [],
+      "references": [],
+      "fingerprint": "5aeff170a65ee1fbf1ceb583fdcde55b5bc5c0b52a687af60c956ad0c0c3b7ef",
+      "data": {
+        "title": "v0.29.2 - Post-Simplification Hygiene"
+      }
+    },
+    {
+      "id": "release:v0.29.3",
+      "kind": "release",
+      "locale": "en",
+      "source": {
+        "path": "docs/release/v0.29.3.md"
+      },
+      "alternates": [],
+      "references": [],
+      "fingerprint": "2a1451396680ed0edb117819314aaad14c9ab53fcf63bda9be24da35b17ee964",
+      "data": {
+        "title": "v0.29.3 - CodeQL Alert Resolution"
+      }
+    },
+    {
+      "id": "release:v0.29.4",
+      "kind": "release",
+      "locale": "en",
+      "source": {
+        "path": "docs/release/v0.29.4.md"
+      },
+      "alternates": [],
+      "references": [],
+      "fingerprint": "98791d59004c7785965cca189c7c26e0094fa1b58d678bcb672076bcb3987766",
+      "data": {
+        "title": "v0.29.4 - Architecture Debt Closure"
+      }
+    },
+    {
+      "id": "release:v0.29.5",
+      "kind": "release",
+      "locale": "en",
+      "source": {
+        "path": "docs/release/v0.29.5.md"
+      },
+      "alternates": [],
+      "references": [],
+      "fingerprint": "c0d09504c9b8340d4b74f1330e96d648c9c8e5c653baf770ce0d8eb1ebac2f7c",
+      "data": {
+        "title": "v0.29.5 - Type Safety & SSR Cleanup"
+      }
+    },
+    {
+      "id": "release:v0.29.6",
+      "kind": "release",
+      "locale": "en",
+      "source": {
+        "path": "docs/release/v0.29.6.md"
+      },
+      "alternates": [],
+      "references": [],
+      "fingerprint": "351c04ea4f3a6b00c3aaef3ed5dac7297be4433920848b67a96336e60c3815ef",
+      "data": {
+        "title": "v0.29.6 - Architecture Debt Closure"
+      }
+    },
+    {
+      "id": "release:v0.30.0",
+      "kind": "release",
+      "locale": "en",
+      "source": {
+        "path": "docs/release/v0.30.0.md"
+      },
+      "alternates": [],
+      "references": [],
+      "fingerprint": "d42bf2f0ae6549aafc5e6eb3175f7a1811ac4130875b76835a3da6aa04dba006",
+      "data": {
+        "title": "v0.30.0 - Architecture Contract Freeze"
+      }
+    },
+    {
+      "id": "release:v0.30.1",
+      "kind": "release",
+      "locale": "en",
+      "source": {
+        "path": "docs/release/v0.30.1.md"
+      },
+      "alternates": [],
+      "references": [],
+      "fingerprint": "fc08302b28878e8443d4de36636f6b775c7c9f385bbdaa3a48ded0be6ac91f63",
+      "data": {
+        "title": "v0.30.1 - Clean Architecture Sweep"
+      }
+    },
+    {
+      "id": "release:v0.31.0",
+      "kind": "release",
+      "locale": "en",
+      "source": {
+        "path": "docs/release/v0.31.0.md"
+      },
+      "alternates": [],
+      "references": [],
+      "fingerprint": "5306d82c1a8b503ce1bab59374623762fc2bb4f52525393980e9210b370cb589",
+      "data": {
+        "title": "v0.31.0 - JSX-first Application API"
+      }
+    },
+    {
+      "id": "release:v0.32.0",
+      "kind": "release",
+      "locale": "en",
+      "source": {
+        "path": "docs/release/v0.32.0.md"
+      },
+      "alternates": [],
+      "references": [],
+      "fingerprint": "1b209d9d80a26362e261df974b22bef73a6037d32958206f44cfe200380e67ce",
+      "data": {
+        "title": "v0.32.0 Release Note: App Lifecycle Contract"
+      }
+    },
+    {
+      "id": "release:v0.33.0",
+      "kind": "release",
+      "locale": "en",
+      "source": {
+        "path": "docs/release/v0.33.0.md"
+      },
+      "alternates": [],
+      "references": [],
+      "fingerprint": "7dd7047d8d300ff70b906634bd627d8ef371c69c1810ea4354f0ca16838970eb",
+      "data": {
+        "title": "v0.33.0 Release Note: AI-Readable API Foundation"
+      }
+    },
+    {
+      "id": "release:v0.34.0",
+      "kind": "release",
+      "locale": "en",
+      "source": {
+        "path": "docs/release/v0.34.0.md"
+      },
+      "alternates": [],
+      "references": [],
+      "fingerprint": "c0b977708e6e03399aea9a1c14b60c962bbbf105274c4c9196fb8b129e76497a",
+      "data": {
+        "title": "v0.34.0 Release Note: AutoFlow2 Sidecar Kernel"
+      }
+    },
+    {
+      "id": "release:v0.35.0",
+      "kind": "release",
+      "locale": "en",
+      "source": {
+        "path": "docs/release/v0.35.0.md"
+      },
+      "alternates": [],
+      "references": [],
+      "fingerprint": "de46efce4c9a0b1f1bbade8166e9bfa8ad4d59e1b8aa2e573d3c3d4b65eba937",
+      "data": {
+        "title": "v0.35.0 Release Note: AutoFlow2 Mechanical Autonomy"
+      }
+    },
+    {
+      "id": "release:v0.35.1",
+      "kind": "release",
+      "locale": "en",
+      "source": {
+        "path": "docs/release/v0.35.1.md"
+      },
+      "alternates": [],
+      "references": [],
+      "fingerprint": "f16843207096325acc3cefb235a757d265f0c65f56b1ec5f4394e1d9896cf00c",
+      "data": {
+        "title": "v0.35.1 Release Note: Deduplication & ADR-0079 Debt Closure"
+      }
+    },
+    {
+      "id": "release:v0.35.2",
+      "kind": "release",
+      "locale": "en",
+      "source": {
+        "path": "docs/release/v0.35.2.md"
+      },
+      "alternates": [],
+      "references": [],
+      "fingerprint": "7facca870ab9de1847905a4e2136cbfbe14b736e26da9f35e236f39719f28b06",
+      "data": {
+        "title": "v0.35.2 Release Note: Issue #47 Complete Closure"
+      }
+    },
+    {
+      "id": "release:v0.35.3",
+      "kind": "release",
+      "locale": "en",
+      "source": {
+        "path": "docs/release/v0.35.3.md"
+      },
+      "alternates": [],
+      "references": [],
+      "fingerprint": "acc74df84b3f36fab6b565960ead6ba1d00a5f74d553f569ae277e848fdfdbfb",
+      "data": {
+        "title": "v0.35.3 Release Note: Issue #47 Final Closure"
+      }
+    },
+    {
+      "id": "release:v0.35.4",
+      "kind": "release",
+      "locale": "en",
+      "source": {
+        "path": "docs/release/v0.35.4.md"
+      },
+      "alternates": [],
+      "references": [],
+      "fingerprint": "837a9181a8b7bbbb398841c6871008ce1a7380011b5521d0af89bf2757c12e18",
+      "data": {
+        "title": "v0.35.4 Release Note: Issue #47 Final Closure"
+      }
+    },
+    {
+      "id": "release:v0.35.5",
+      "kind": "release",
+      "locale": "en",
+      "source": {
+        "path": "docs/release/v0.35.5.md"
+      },
+      "alternates": [],
+      "references": [],
+      "fingerprint": "f38e7ec404e2cb50d60dacaee6c989dd673e41cfb6a1928467649fa71a98fe74",
+      "data": {
+        "title": "v0.35.5 Release Note: Complete Configuration Deduplication & Standardization"
+      }
+    },
+    {
+      "id": "release:v0.36.1",
+      "kind": "release",
+      "locale": "en",
+      "source": {
+        "path": "docs/release/v0.36.1.md"
+      },
+      "alternates": [],
+      "references": [],
+      "fingerprint": "20689871587114c1900a52d255cbe7bafab085097dd6fe68d8dfcc6a0ea04aa9",
+      "data": {
+        "title": "v0.36.1 Release Note"
+      }
+    },
+    {
+      "id": "release:v0.36.2",
+      "kind": "release",
+      "locale": "en",
+      "source": {
+        "path": "docs/release/v0.36.2.md"
+      },
+      "alternates": [],
+      "references": [],
+      "fingerprint": "d35cc165d144013c91d66fbdea0bf22f90bfb19ef5c933387f8612f0eba6b5bf",
+      "data": {
+        "title": "v0.36.2 Release Note"
+      }
+    },
+    {
+      "id": "release:v0.36.3",
+      "kind": "release",
+      "locale": "en",
+      "source": {
+        "path": "docs/release/v0.36.3.md"
+      },
+      "alternates": [],
+      "references": [],
+      "fingerprint": "e7b699ce2583e2c71b73cfe996a4b5b077b9156dd9d2acb18f953f90470f8eb1",
+      "data": {
+        "title": "v0.36.3 Release Note - Complete SSG File Ownership Migration"
+      }
+    },
+    {
+      "id": "release:v0.36.4",
+      "kind": "release",
+      "locale": "en",
+      "source": {
+        "path": "docs/release/v0.36.4.md"
+      },
+      "alternates": [],
+      "references": [],
+      "fingerprint": "04c61476ed74e11698d07a52a5508904cca61d996eeac0057e9c9a0b3fcbe235",
+      "data": {
+        "title": "v0.36.4 Release Note - Firefox/WebKit Cross-Browser Proof"
+      }
+    },
+    {
+      "id": "release:v0.36.5",
+      "kind": "release",
+      "locale": "en",
+      "source": {
+        "path": "docs/release/v0.36.5.md"
+      },
+      "alternates": [],
+      "references": [],
+      "fingerprint": "74feb865be1c2282fc8d35eb424bb0b15e8d89988e6546b59958a64213e99150",
+      "data": {
+        "title": "v0.36.5 Release Note - Release Truth and AutoFlow Closure"
+      }
+    },
+    {
+      "id": "release:v0.37.4",
+      "kind": "release",
+      "locale": "en",
+      "source": {
+        "path": "docs/release/v0.37.4.md"
+      },
+      "alternates": [],
+      "references": [],
+      "fingerprint": "64a56a7e0afcf415554a92655f3547ec3f3a1e9ad659906d1d191f6798414100",
+      "data": {
+        "title": "v0.37.4 Release Note"
+      }
+    },
+    {
+      "id": "release:v0.37.5",
+      "kind": "release",
+      "locale": "en",
+      "source": {
+        "path": "docs/release/v0.37.5.md"
+      },
+      "alternates": [],
+      "references": [],
+      "fingerprint": "f8576cf632542322ba218d389f11ca71879059180e678e1d11ceccbe517a0d72",
+      "data": {
+        "title": "v0.37.5 Release Note"
+      }
+    },
+    {
+      "id": "release:v0.37.6",
+      "kind": "release",
+      "locale": "en",
+      "source": {
+        "path": "docs/release/v0.37.6.md"
+      },
+      "alternates": [],
+      "references": [],
+      "fingerprint": "f2e931a76ca7dfd9717866060b946b5eb8f765d644bd7933fd99d9148b2d1099",
+      "data": {
+        "title": "v0.37.6 Release Note"
+      }
+    },
+    {
+      "id": "release:v0.38.0",
+      "kind": "release",
+      "locale": "en",
+      "source": {
+        "path": "docs/release/v0.38.0.md"
+      },
+      "alternates": [],
+      "references": [],
+      "fingerprint": "4ee341054b410b115438dfb05786b1b65410b4bf817640593357b0bf2867ffe4",
+      "data": {
+        "title": "v0.38.0 Release Note"
+      }
+    },
+    {
+      "id": "release:v0.40.1",
+      "kind": "release",
+      "locale": "en",
+      "source": {
+        "path": "docs/release/v0.40.1.md"
+      },
+      "alternates": [],
+      "references": [],
+      "fingerprint": "0fcf7df3c9bfba32942262c53286b77846ab1f795af63b8a33f85fce7cf2d3aa",
+      "data": {
+        "title": "v0.40.1 Release Evidence"
+      }
+    },
+    {
+      "id": "release:v0.40.2",
+      "kind": "release",
+      "locale": "en",
+      "source": {
+        "path": "docs/release/v0.40.2.md"
+      },
+      "alternates": [],
+      "references": [],
+      "fingerprint": "9f6f033690871261fd6fd338f3606e0dc17af120c032ee137062dfdc5b6175ea",
+      "data": {
+        "title": "v0.40.2 Release Evidence"
+      }
+    },
+    {
+      "id": "release:v0.40.3",
+      "kind": "release",
+      "locale": "en",
+      "source": {
+        "path": "docs/release/v0.40.3.md"
+      },
+      "alternates": [],
+      "references": [],
+      "fingerprint": "d53ba8f3450635f4ac218a97638718b54e141188c808bcba416da91f5c910fda",
+      "data": {
+        "title": "v0.40.3 Release Plan"
+      }
+    },
+    {
+      "id": "release:v0.40.4",
+      "kind": "release",
+      "locale": "en",
+      "source": {
+        "path": "docs/release/v0.40.4.md"
+      },
+      "alternates": [],
+      "references": [],
+      "fingerprint": "a55d202429784370dc5898046894ee2819bd077f724f485f2638ef109fb7440d",
+      "data": {
+        "title": "v0.40.4 Release Plan"
+      }
+    },
+    {
+      "id": "release:v0.40.4-plan",
+      "kind": "release",
+      "locale": "en",
+      "source": {
+        "path": "docs/release/v0.40.4-plan.md"
+      },
+      "alternates": [],
+      "references": [],
+      "fingerprint": "436812b79d4ab4977e69230ac3716cddbe815f0ebc8a769d045d3bcb1a57c3a4",
+      "data": {
+        "title": "v0.40.4 Version Plan - Product-Line Cleanup"
+      }
+    },
+    {
+      "id": "release:v0.40.5",
+      "kind": "release",
+      "locale": "en",
+      "source": {
+        "path": "docs/release/v0.40.5.md"
+      },
+      "alternates": [],
+      "references": [],
+      "fingerprint": "1647532e224a505643ca26f05226fe6ae0ded3ff6c2a14d93f1bf57ca70f3915",
+      "data": {
+        "title": "v0.40.5 Release Plan"
+      }
+    },
+    {
+      "id": "release:v0.40.6",
+      "kind": "release",
+      "locale": "en",
+      "source": {
+        "path": "docs/release/v0.40.6.md"
+      },
+      "alternates": [],
+      "references": [],
+      "fingerprint": "d586d1f6b52b63db2f856152db9c244265d90b278f151e3530999436b9181ac9",
+      "data": {
+        "title": "v0.40.6 Release Plan"
+      }
+    },
+    {
+      "id": "release:v0.40.7",
+      "kind": "release",
+      "locale": "en",
+      "source": {
+        "path": "docs/release/v0.40.7.md"
+      },
+      "alternates": [],
+      "references": [],
+      "fingerprint": "21cc39f74ce2fd14d4fc606a99218268f1024e0ffa6687a43e58a40cb115aa11",
+      "data": {
+        "title": "v0.40.7 Release Readiness & CI Hardening"
+      }
+    },
+    {
+      "id": "release:v0.40.8",
+      "kind": "release",
+      "locale": "en",
+      "source": {
+        "path": "docs/release/v0.40.8.md"
+      },
+      "alternates": [],
+      "references": [],
+      "fingerprint": "f7cead98d6d2611d47f1d12a6ac17de8d8c0db66b27becb989c02e51131891eb",
+      "data": {
+        "title": "v0.40.8 Cleanup-Train Patch"
+      }
+    },
+    {
+      "id": "release:v0.41.0",
+      "kind": "release",
+      "locale": "en",
+      "source": {
+        "path": "docs/release/v0.41.0.md"
+      },
+      "alternates": [],
+      "references": [],
+      "fingerprint": "1ee52c452fc689f2fc5bdc7a626ef811d3ab3d96e189007392fcb5270a6fb880",
+      "data": {
+        "title": "v0.41.0"
+      }
+    },
+    {
+      "id": "release:v0.41.0-alpha.1",
+      "kind": "release",
+      "locale": "en",
+      "source": {
+        "path": "docs/release/v0.41.0-alpha.1.md"
+      },
+      "alternates": [],
+      "references": [],
+      "fingerprint": "3befabcab37577bce73443866cdd343b4a0fcfda5ad5d487d3bc92aefd45c51a",
+      "data": {
+        "title": "v0.41.0-alpha.1"
+      }
+    },
+    {
+      "id": "release:v0.41.0-alpha.10",
+      "kind": "release",
+      "locale": "en",
+      "source": {
+        "path": "docs/release/v0.41.0-alpha.10.md"
+      },
+      "alternates": [],
+      "references": [],
+      "fingerprint": "7eb9c108e6058ff4299979e04bd1fde2629221bbc373781d3e44cfde51b3079d",
+      "data": {
+        "title": "v0.41.0-alpha.10"
+      }
+    },
+    {
+      "id": "release:v0.41.0-alpha.11",
+      "kind": "release",
+      "locale": "en",
+      "source": {
+        "path": "docs/release/v0.41.0-alpha.11.md"
+      },
+      "alternates": [],
+      "references": [],
+      "fingerprint": "0e69f77c1824a8056bb8550b7eb0fe1df6f9d58f03ff570f6a2df9333438d394",
+      "data": {
+        "title": "v0.41.0-alpha.11"
+      }
+    },
+    {
+      "id": "release:v0.41.0-alpha.12",
+      "kind": "release",
+      "locale": "en",
+      "source": {
+        "path": "docs/release/v0.41.0-alpha.12.md"
+      },
+      "alternates": [],
+      "references": [],
+      "fingerprint": "52a76c2292010f13608c04e12c1b73f949346dca7dbf2d0f4e50107eac8f54ef",
+      "data": {
+        "title": "v0.41.0-alpha.12"
+      }
+    },
+    {
+      "id": "release:v0.41.0-alpha.14",
+      "kind": "release",
+      "locale": "en",
+      "source": {
+        "path": "docs/release/v0.41.0-alpha.14.md"
+      },
+      "alternates": [],
+      "references": [],
+      "fingerprint": "8e339ac82d97976cabd6be5deed96ddf11c61d63f3bc485405fdca4fa3f63432",
+      "data": {
+        "title": "v0.41.0-alpha.14"
+      }
+    },
+    {
+      "id": "release:v0.41.0-alpha.15",
+      "kind": "release",
+      "locale": "en",
+      "source": {
+        "path": "docs/release/v0.41.0-alpha.15.md"
+      },
+      "alternates": [],
+      "references": [],
+      "fingerprint": "93ffa4b54fc7580d39363dc16d9315cdcc1d53741d71dd4a6127c4b6e11e6058",
+      "data": {
+        "title": "v0.41.0-alpha.15"
+      }
+    },
+    {
+      "id": "release:v0.41.0-alpha.16",
+      "kind": "release",
+      "locale": "en",
+      "source": {
+        "path": "docs/release/v0.41.0-alpha.16.md"
+      },
+      "alternates": [],
+      "references": [],
+      "fingerprint": "ed21b6862f54c4f4bab44d7df23dd7a370f629ef92a0030a46b66d5a3d5d0e7e",
+      "data": {
+        "title": "v0.41.0-alpha.16"
+      }
+    },
+    {
+      "id": "release:v0.41.0-alpha.17",
+      "kind": "release",
+      "locale": "en",
+      "source": {
+        "path": "docs/release/v0.41.0-alpha.17.md"
+      },
+      "alternates": [],
+      "references": [],
+      "fingerprint": "af5f2407b31c091e48eda68046ef0b28bb404c0397c8d87ca463049bdd95ff7f",
+      "data": {
+        "title": "v0.41.0-alpha.17"
+      }
+    },
+    {
+      "id": "release:v0.41.0-alpha.18",
+      "kind": "release",
+      "locale": "en",
+      "source": {
+        "path": "docs/release/v0.41.0-alpha.18.md"
+      },
+      "alternates": [],
+      "references": [],
+      "fingerprint": "c35d7eaab39fd3ef56017bff7c95eef6b9d70b8b02998d949f4202ee1aecbc5b",
+      "data": {
+        "title": "v0.41.0-alpha.18"
+      }
+    },
+    {
+      "id": "release:v0.41.0-alpha.19",
+      "kind": "release",
+      "locale": "en",
+      "source": {
+        "path": "docs/release/v0.41.0-alpha.19.md"
+      },
+      "alternates": [],
+      "references": [],
+      "fingerprint": "ddd165be5a879bc6845d1bcf5e1a469ed496c86302a1b415b9e2859510e06276",
+      "data": {
+        "title": "v0.41.0-alpha.19"
+      }
+    },
+    {
+      "id": "release:v0.41.0-alpha.2",
+      "kind": "release",
+      "locale": "en",
+      "source": {
+        "path": "docs/release/v0.41.0-alpha.2.md"
+      },
+      "alternates": [],
+      "references": [],
+      "fingerprint": "36a9e091fba262b0ecb4bf960bf3478f5c2458e47f8d834d383b20a0782d61ab",
+      "data": {
+        "title": "v0.41.0-alpha.2"
+      }
+    },
+    {
+      "id": "release:v0.41.0-alpha.3",
+      "kind": "release",
+      "locale": "en",
+      "source": {
+        "path": "docs/release/v0.41.0-alpha.3.md"
+      },
+      "alternates": [],
+      "references": [],
+      "fingerprint": "4d842d8aa57bd647d708591799e5a138c61238875453ebe1ff72c3df90a92c26",
+      "data": {
+        "title": "v0.41.0-alpha.3"
+      }
+    },
+    {
+      "id": "release:v0.41.0-alpha.4",
+      "kind": "release",
+      "locale": "en",
+      "source": {
+        "path": "docs/release/v0.41.0-alpha.4.md"
+      },
+      "alternates": [],
+      "references": [],
+      "fingerprint": "2ee2a635dcb4b12ff485f0199570fb2dad20a15058ef51f009c06758e663ed5a",
+      "data": {
+        "title": "v0.41.0-alpha.4 — Cross-Framework Web Components Integration"
+      }
+    },
+    {
+      "id": "release:v0.41.0-alpha.5",
+      "kind": "release",
+      "locale": "en",
+      "source": {
+        "path": "docs/release/v0.41.0-alpha.5.md"
+      },
+      "alternates": [],
+      "references": [],
+      "fingerprint": "a55037cde4063879eec630747a14c98fe1e8e4a9193c4f5d812b287b15dd6f2a",
+      "data": {
+        "title": "v0.41.0-alpha.5"
+      }
+    },
+    {
+      "id": "release:v0.41.0-alpha.6",
+      "kind": "release",
+      "locale": "en",
+      "source": {
+        "path": "docs/release/v0.41.0-alpha.6.md"
+      },
+      "alternates": [],
+      "references": [],
+      "fingerprint": "be9c619a53a6b5d057b81eaa4a3f5b68a66f8a912f881b7015e807f6b40fae2d",
+      "data": {
+        "title": "v0.41.0-alpha.6"
+      }
+    },
+    {
+      "id": "release:v0.41.0-alpha.7",
+      "kind": "release",
+      "locale": "en",
+      "source": {
+        "path": "docs/release/v0.41.0-alpha.7.md"
+      },
+      "alternates": [],
+      "references": [],
+      "fingerprint": "ad0fa8847ab2de37d9e719999f1b3302a7fa1212a7c1f1d55060fd6eb3d06d5c",
+      "data": {
+        "title": "v0.41.0-alpha.7"
+      }
+    },
+    {
+      "id": "release:v0.41.0-alpha.8",
+      "kind": "release",
+      "locale": "en",
+      "source": {
+        "path": "docs/release/v0.41.0-alpha.8.md"
+      },
+      "alternates": [],
+      "references": [],
+      "fingerprint": "d5ae411830bdf5184dcf74c0644ae30c435a974f2c200cc0fec5a7ee5c3e8d5e",
+      "data": {
+        "title": "v0.41.0-alpha.8"
+      }
+    },
+    {
+      "id": "release:v0.41.0-alpha.9",
+      "kind": "release",
+      "locale": "en",
+      "source": {
+        "path": "docs/release/v0.41.0-alpha.9.md"
+      },
+      "alternates": [],
+      "references": [],
+      "fingerprint": "851eff675b260312171fc483cf8a25d78d666eb91219e18963179d52ae3abfa6",
+      "data": {
+        "title": "v0.41.0-alpha.9"
+      }
+    },
+    {
+      "id": "release:v0.41.0-migration",
+      "kind": "release",
+      "locale": "en",
+      "source": {
+        "path": "docs/release/v0.41.0-migration.md"
+      },
+      "alternates": [],
+      "references": [],
+      "fingerprint": "009a99a1de98b954705dfd62c6369d59564a75a9c80a30e474eb36bb205c6166",
+      "data": {
+        "title": "Migrating to 0.41.0 from the 0.41 alpha line (and 0.40.x)"
+      }
+    },
+    {
+      "id": "release:v0.41.0-plan",
+      "kind": "release",
+      "locale": "en",
+      "source": {
+        "path": "docs/release/v0.41.0-plan.md"
+      },
+      "alternates": [],
+      "references": [],
+      "fingerprint": "ac551c2d421c8b20cef3d859716f5249edfa70a1deb3d607ca8c037f6bc5b7c3",
+      "data": {
+        "title": "> Archived 2026-07-27: the 0.41.x line shipped (stable `0.41.0`, patch"
+      }
+    },
+    {
+      "id": "release:v0.41.1",
+      "kind": "release",
+      "locale": "en",
+      "source": {
+        "path": "docs/release/v0.41.1.md"
+      },
+      "alternates": [],
+      "references": [],
+      "fingerprint": "0ef416d5822bb92cce1106a9729c2eed4afc8c36a6ed6d5e1a1ec2f2a92b17b3",
+      "data": {
+        "title": "v0.41.1"
+      }
+    },
+    {
+      "id": "release:v0.41.2",
+      "kind": "release",
+      "locale": "en",
+      "source": {
+        "path": "docs/release/v0.41.2.md"
+      },
+      "alternates": [],
+      "references": [],
+      "fingerprint": "5a2f470d395408e5cb97f587fa8e097878d8aded41de04f91e1928c8d3e41ff0",
+      "data": {
+        "title": "v0.41.2"
+      }
+    },
+    {
+      "id": "release:v0.42.0",
+      "kind": "release",
+      "locale": "en",
+      "source": {
+        "path": "docs/release/v0.42.0.md"
+      },
+      "alternates": [],
+      "references": [],
+      "fingerprint": "6297dd8bc7bcc36df4b0e21c5043d8d745983e0a572158151f11d1ae3eb8563d",
+      "data": {
+        "title": "v0.42.0"
+      }
+    },
+    {
+      "id": "release:v0.42.0-alpha.1",
+      "kind": "release",
+      "locale": "en",
+      "source": {
+        "path": "docs/release/v0.42.0-alpha.1.md"
+      },
+      "alternates": [],
+      "references": [],
+      "fingerprint": "e017c0ed273844c3928b158a5b8bbc6913514f77caae5f73a950793f2fe653b7",
+      "data": {
+        "title": "v0.42.0-alpha.1"
+      }
+    },
+    {
+      "id": "release:v0.42.0-alpha.10",
+      "kind": "release",
+      "locale": "en",
+      "source": {
+        "path": "docs/release/v0.42.0-alpha.10.md"
+      },
+      "alternates": [],
+      "references": [],
+      "fingerprint": "0bdd04d1244c2b43cf00fa9a030b878d5dbf4b959af3d43bf1c177ca3e65d41b",
+      "data": {
+        "title": "v0.42.0-alpha.10"
+      }
+    },
+    {
+      "id": "release:v0.42.0-alpha.11",
+      "kind": "release",
+      "locale": "en",
+      "source": {
+        "path": "docs/release/v0.42.0-alpha.11.md"
+      },
+      "alternates": [],
+      "references": [],
+      "fingerprint": "6bbdfc6fffbcb82b741064a0d6d677b484f621763689c1960b584201881fd615",
+      "data": {
+        "title": "v0.42.0-alpha.11"
+      }
+    },
+    {
+      "id": "release:v0.42.0-alpha.12",
+      "kind": "release",
+      "locale": "en",
+      "source": {
+        "path": "docs/release/v0.42.0-alpha.12.md"
+      },
+      "alternates": [],
+      "references": [],
+      "fingerprint": "467bf871436b4424096295ca8d1e23f517d98d272a77a1ec1055e84c68d02d3f",
+      "data": {
+        "title": "v0.42.0-alpha.12"
+      }
+    },
+    {
+      "id": "release:v0.42.0-alpha.13",
+      "kind": "release",
+      "locale": "en",
+      "source": {
+        "path": "docs/release/v0.42.0-alpha.13.md"
+      },
+      "alternates": [],
+      "references": [],
+      "fingerprint": "cac55d4674ded234a03096279f363b44aefcfe03831f87a3880e6f79d52f8839",
+      "data": {
+        "title": "v0.42.0-alpha.13"
+      }
+    },
+    {
+      "id": "release:v0.42.0-alpha.14",
+      "kind": "release",
+      "locale": "en",
+      "source": {
+        "path": "docs/release/v0.42.0-alpha.14.md"
+      },
+      "alternates": [],
+      "references": [],
+      "fingerprint": "6bf34f6a95c88bd71993dcbb72c5b55872dd6bb04dc648cf6a47973439fd0638",
+      "data": {
+        "title": "v0.42.0-alpha.14"
+      }
+    },
+    {
+      "id": "release:v0.42.0-alpha.15",
+      "kind": "release",
+      "locale": "en",
+      "source": {
+        "path": "docs/release/v0.42.0-alpha.15.md"
+      },
+      "alternates": [],
+      "references": [],
+      "fingerprint": "8090756b7857aef768c984dbb6ee18bb68f812f2425bf71ee6495442ea533348",
+      "data": {
+        "title": "v0.42.0-alpha.15"
+      }
+    },
+    {
+      "id": "release:v0.42.0-alpha.16",
+      "kind": "release",
+      "locale": "en",
+      "source": {
+        "path": "docs/release/v0.42.0-alpha.16.md"
+      },
+      "alternates": [],
+      "references": [],
+      "fingerprint": "889f9d72d4ea4d4b5f6e8cde7f80af5b12dfa01fa781b0ad9d62aa29231d729d",
+      "data": {
+        "title": "v0.42.0-alpha.16"
+      }
+    },
+    {
+      "id": "release:v0.42.0-alpha.17",
+      "kind": "release",
+      "locale": "en",
+      "source": {
+        "path": "docs/release/v0.42.0-alpha.17.md"
+      },
+      "alternates": [],
+      "references": [],
+      "fingerprint": "d857a8b6e780a355fe7573c234c34fdb5392de72f3099040d0cfc6cd6a6b956c",
+      "data": {
+        "title": "v0.42.0-alpha.17"
+      }
+    },
+    {
+      "id": "release:v0.42.0-alpha.2",
+      "kind": "release",
+      "locale": "en",
+      "source": {
+        "path": "docs/release/v0.42.0-alpha.2.md"
+      },
+      "alternates": [],
+      "references": [],
+      "fingerprint": "fc8a0f85223b8974d04f339eb13516bc5f65be8a03b0886068963d8140d41dda",
+      "data": {
+        "title": "v0.42.0-alpha.2"
+      }
+    },
+    {
+      "id": "release:v0.42.0-alpha.3",
+      "kind": "release",
+      "locale": "en",
+      "source": {
+        "path": "docs/release/v0.42.0-alpha.3.md"
+      },
+      "alternates": [],
+      "references": [],
+      "fingerprint": "d3f10dbbadfab29cd02c0669608c32335043e0ef2e82378b58bc90a35af4aa11",
+      "data": {
+        "title": "v0.42.0-alpha.3"
+      }
+    },
+    {
+      "id": "release:v0.42.0-alpha.4",
+      "kind": "release",
+      "locale": "en",
+      "source": {
+        "path": "docs/release/v0.42.0-alpha.4.md"
+      },
+      "alternates": [],
+      "references": [],
+      "fingerprint": "cc462494649548ee6e3a6f0bddfbbd6fd8b04f13b4a9bf5487098d0c18c11294",
+      "data": {
+        "title": "v0.42.0-alpha.4"
+      }
+    },
+    {
+      "id": "release:v0.42.0-alpha.5",
+      "kind": "release",
+      "locale": "en",
+      "source": {
+        "path": "docs/release/v0.42.0-alpha.5.md"
+      },
+      "alternates": [],
+      "references": [],
+      "fingerprint": "e351dff4ba70441f609d09e625d287a72dcfd805652f98f2a898d408d4231e56",
+      "data": {
+        "title": "v0.42.0-alpha.5"
+      }
+    },
+    {
+      "id": "release:v0.42.0-alpha.6",
+      "kind": "release",
+      "locale": "en",
+      "source": {
+        "path": "docs/release/v0.42.0-alpha.6.md"
+      },
+      "alternates": [],
+      "references": [],
+      "fingerprint": "b83583c8725a4d5de9948c34a50618557ff071a8baa307c9298b1dddd1e204a7",
+      "data": {
+        "title": "v0.42.0-alpha.6"
+      }
+    },
+    {
+      "id": "release:v0.42.0-alpha.7",
+      "kind": "release",
+      "locale": "en",
+      "source": {
+        "path": "docs/release/v0.42.0-alpha.7.md"
+      },
+      "alternates": [],
+      "references": [],
+      "fingerprint": "6ed2fe30604b01396655f2f0f95fc61770f758d626029119e2d7787a79eb485f",
+      "data": {
+        "title": "v0.42.0-alpha.7"
+      }
+    },
+    {
+      "id": "release:v0.42.0-alpha.8",
+      "kind": "release",
+      "locale": "en",
+      "source": {
+        "path": "docs/release/v0.42.0-alpha.8.md"
+      },
+      "alternates": [],
+      "references": [],
+      "fingerprint": "ccd53e2345137ec4652f5e18589d6fcaed85b1027e9deecb22ca69bd6a38ef74",
+      "data": {
+        "title": "v0.42.0-alpha.8"
+      }
+    },
+    {
+      "id": "release:v0.42.0-alpha.9",
+      "kind": "release",
+      "locale": "en",
+      "source": {
+        "path": "docs/release/v0.42.0-alpha.9.md"
+      },
+      "alternates": [],
+      "references": [],
+      "fingerprint": "b3f901b95800d91a7cdd296aa52797cd49fabb66955769022e124a768c4ad0c2",
+      "data": {
+        "title": "v0.42.0-alpha.9"
+      }
+    },
+    {
+      "id": "release:v0.42.0-migration",
+      "kind": "release",
+      "locale": "en",
+      "source": {
+        "path": "docs/release/v0.42.0-migration.md"
+      },
+      "alternates": [],
+      "references": [],
+      "fingerprint": "056abd9fcd23f177c2b997470cd0f8b9fb705220703a6efd26dc7419c4ef448a",
+      "data": {
+        "title": "Migrating to 0.42.0 (WC light fullstack)"
+      }
+    },
+    {
+      "id": "release:v0.42.0-plan",
+      "kind": "release",
+      "locale": "en",
+      "source": {
+        "path": "docs/release/v0.42.0-plan.md"
+      },
+      "alternates": [],
+      "references": [],
+      "fingerprint": "8bbc0a38b2ba1a58b06e563225ed97fdc24af62415e1d0bec2207bfe66fee6b7",
+      "data": {
+        "title": "v0.42.0 Stable Release Plan"
+      }
+    },
+    {
+      "id": "release:v0.43.0",
+      "kind": "release",
+      "locale": "en",
+      "source": {
+        "path": "docs/release/v0.43.0.md"
+      },
+      "alternates": [],
+      "references": [],
+      "fingerprint": "901b33e70bc0591c3c1cc6c8e368da211432994e9ae10f7b6e67ff38d177ae96",
+      "data": {
+        "title": "v0.43.0"
+      }
+    },
+    {
+      "id": "release:v0.43.0-alpha.1",
+      "kind": "release",
+      "locale": "en",
+      "source": {
+        "path": "docs/release/v0.43.0-alpha.1.md"
+      },
+      "alternates": [],
+      "references": [],
+      "fingerprint": "ce7f6d22c3df465c332cf0199d1b20f1b1aaca6c2f479c7ee4eb8b3ec96630fa",
+      "data": {
+        "title": "v0.43.0-alpha.1"
+      }
+    },
+    {
+      "id": "release:v0.43.0-alpha.2",
+      "kind": "release",
+      "locale": "en",
+      "source": {
+        "path": "docs/release/v0.43.0-alpha.2.md"
+      },
+      "alternates": [],
+      "references": [],
+      "fingerprint": "21c100a2a729601e2fa4f5196fa8accb9ae87c84e4ff01029553d64678da17a4",
+      "data": {
+        "title": "v0.43.0-alpha.2"
+      }
+    },
+    {
+      "id": "release:v0.43.0-plan",
+      "kind": "release",
+      "locale": "en",
+      "source": {
+        "path": "docs/release/v0.43.0-plan.md"
+      },
+      "alternates": [],
+      "references": [],
+      "fingerprint": "07097c0fde6658c5124e7d561b7eae6e3cf8bfd4384d7debc3d5a20543bfdd71",
+      "data": {
+        "title": "v0.43.0 Release Plan"
+      }
+    },
+    {
+      "id": "release:v0.43.1",
+      "kind": "release",
+      "locale": "en",
+      "source": {
+        "path": "docs/release/v0.43.1.md"
+      },
+      "alternates": [],
+      "references": [],
+      "fingerprint": "534620566b83e1a8fafe016c9bbb9a023065e937669f6c86e87f53124ea30b16",
+      "data": {
+        "title": "v0.43.1"
+      }
+    },
+    {
+      "id": "release:v0.43.2",
+      "kind": "release",
+      "locale": "en",
+      "source": {
+        "path": "docs/release/v0.43.2.md"
+      },
+      "alternates": [],
+      "references": [],
+      "fingerprint": "2183628edbd5e0a95fe2bd79e734a1d33bb2045cbb9004a1f345ff40ba3c864c",
+      "data": {
+        "title": "v0.43.2"
+      }
+    },
+    {
+      "id": "release:v0.43.3",
+      "kind": "release",
+      "locale": "en",
+      "source": {
+        "path": "docs/release/v0.43.3.md"
+      },
+      "alternates": [],
+      "references": [],
+      "fingerprint": "46324e277af3e617d993227548ca54c1d24d1a9982dcac0c01cd1ed8945785a7",
+      "data": {
+        "title": "v0.43.3"
+      }
+    },
+    {
+      "id": "release:v0.44.0-beta.1",
+      "kind": "release",
+      "locale": "en",
+      "source": {
+        "path": "docs/release/v0.44.0-beta.1.md"
+      },
+      "alternates": [],
+      "references": [],
+      "fingerprint": "16df25fa3a4249b10c8872e64ab8ca78a8bcf3cb05d4194bd0d5ac0e37198f3f",
+      "data": {
+        "title": "v0.44.0-beta.1"
+      }
+    },
+    {
+      "id": "release:v0.44.0-beta.2",
+      "kind": "release",
+      "locale": "en",
+      "source": {
+        "path": "docs/release/v0.44.0-beta.2.md"
+      },
+      "alternates": [],
+      "references": [],
+      "fingerprint": "51ea47e0ac1297039f2cfa6ebba153d95dc29af48c992b699c85dc7c445a6e6c",
+      "data": {
+        "title": "v0.44.0-beta.2"
+      }
+    },
+    {
+      "id": "release:v0.44.0-beta.2.1",
+      "kind": "release",
+      "locale": "en",
+      "source": {
+        "path": "docs/release/v0.44.0-beta.2.1.md"
+      },
+      "alternates": [],
+      "references": [],
+      "fingerprint": "0811776ec2c8a306b3f363abadc93b676804311b3db46abb523a81f2d08a9d85",
+      "data": {
+        "title": "v0.44.0-beta.2.1"
+      }
+    },
+    {
+      "id": "release:v0.44.0-beta.2.2",
+      "kind": "release",
+      "locale": "en",
+      "source": {
+        "path": "docs/release/v0.44.0-beta.2.2.md"
+      },
+      "alternates": [],
+      "references": [],
+      "fingerprint": "26616c9fd0a5b9f48c8dbefa2e5277d70429e815dd2c012f7cb4ff34b445b5fa",
+      "data": {
+        "title": "v0.44.0-beta.2.2"
+      }
+    },
+    {
+      "id": "roadmap:en:0",
+      "kind": "roadmap-entry",
+      "locale": "en",
+      "source": {
+        "line": 37,
+        "path": "www/app/routes/roadmap.tsx"
+      },
+      "alternates": [
+        {
+          "locale": "zh",
+          "id": "roadmap:zh:0"
+        }
+      ],
+      "references": [],
+      "fingerprint": "6572bdfd2bfa9a4491ca781df047760a6a01d972ec9435de5794e67402cb454e",
+      "data": {
+        "copy": "Use WTR for upstream-aligned browser conformance; prove loader, SSR, client continuation, navigation and actions with Native and Lit; derive a minimal shared protocol and public Document/SEO/search/sitemap metadata; prepare bounded Oxc/TS7 migration experiments. Lit ships as a qualified renderer alongside Native.",
+        "stamp": "CURRENT",
+        "state": "next",
+        "status": "prerelease",
+        "theme": "Native and Lit Framework Mode",
+        "version": "v0.44.0-beta.2.2"
+      }
+    },
+    {
+      "id": "roadmap:en:1",
+      "kind": "roadmap-entry",
+      "locale": "en",
+      "source": {
+        "line": 46,
+        "path": "www/app/routes/roadmap.tsx"
+      },
+      "alternates": [
+        {
+          "locale": "zh",
+          "id": "roadmap:zh:1"
+        }
+      ],
+      "references": [],
+      "fingerprint": "04f0b99cbfb94dc1e05a3b75e7f0c5d464429d10383ac876b10944b06b99c09d",
+      "data": {
+        "copy": "Qualify independent packed consumers, runtime/browser matrices, output and resource cleanup; remove qualified duplicate infrastructure, reconcile documentation and record Alpha migration decisions. No deadline waiver or automatic beta.2.4.",
+        "stamp": "NEXT",
+        "state": "planned",
+        "status": "evidence-gated",
+        "theme": "Dual-mode qualification",
+        "version": "v0.44.0-beta.2.3"
+      }
+    },
+    {
+      "id": "roadmap:en:2",
+      "kind": "roadmap-entry",
+      "locale": "en",
+      "source": {
+        "line": 55,
+        "path": "www/app/routes/roadmap.tsx"
+      },
+      "alternates": [
+        {
+          "locale": "zh",
+          "id": "roadmap:zh:2"
+        }
+      ],
+      "references": [],
+      "fingerprint": "4da4bee4f6f1e124f3274434024e21f1a615c4a94dbfd3b286cc0c4781c21b1e",
+      "data": {
+        "copy": "Start real application use with the public baseline: independently consumable Element and Router with Native/Lit application flows. Actively qualify Oxc/TS7 adoption and platform reductions through subsequent Alpha upgrades; APIs may evolve with migration guidance.",
+        "state": "planned",
+        "status": "planned",
+        "theme": "Public Alpha admission",
+        "version": "v1.0.0-alpha.1"
+      }
+    },
+    {
+      "id": "roadmap:en:3",
+      "kind": "roadmap-entry",
+      "locale": "en",
+      "source": {
+        "line": 63,
+        "path": "www/app/routes/roadmap.tsx"
+      },
+      "alternates": [
+        {
+          "locale": "zh",
+          "id": "roadmap:zh:3"
+        }
+      ],
+      "references": [],
+      "fingerprint": "d10ce6dea23af69fd465483c5552dc3ec2f4b0509f9392c7c82f12a76e8a64ae",
+      "data": {
+        "copy": "Freeze contracts and dependencies after Alpha evidence; require at least fourteen days of RC soak, install/upgrade/security qualification and human GO. Element and Router do not mandate a package count.",
+        "state": "planned",
+        "status": "unscheduled",
+        "theme": "Separately admitted releases",
+        "version": "v1.0 RC / Stable"
+      }
+    },
+    {
+      "id": "roadmap:zh:0",
+      "kind": "roadmap-entry",
+      "locale": "zh",
+      "source": {
+        "line": 73,
+        "path": "www/app/routes/roadmap.tsx"
+      },
+      "alternates": [
+        {
+          "locale": "en",
+          "id": "roadmap:en:0"
+        }
+      ],
+      "references": [],
+      "fingerprint": "bd24b808cd8b84dbb26b105024d0b18b35a85e3c86345ab6ae31ce19a0cafab5",
+      "data": {
+        "copy": "采用便于贡献上游的 WTR 浏览器测试，以 Native 和 Lit 跑通 loader、SSR、客户端接续、导航及 action，提炼最小共享协议和 Document/SEO/search/sitemap 元数据，并完成有界 Oxc/TS7 迁移试验。Lit 作为已验证的渲染器与 Native 一同交付。",
+        "stamp": "CURRENT",
+        "state": "next",
+        "status": "预发布",
+        "theme": "Native 与 Lit Framework Mode",
+        "version": "v0.44.0-beta.2.2"
+      }
+    },
+    {
+      "id": "roadmap:zh:1",
+      "kind": "roadmap-entry",
+      "locale": "zh",
+      "source": {
+        "line": 82,
+        "path": "www/app/routes/roadmap.tsx"
+      },
+      "alternates": [
+        {
+          "locale": "en",
+          "id": "roadmap:en:1"
+        }
+      ],
+      "references": [],
+      "fingerprint": "0321af9780e56722350813fc3d221e85330842c488873c6164ede6ee828149bc",
+      "data": {
+        "copy": "验证独立打包消费者、运行时与浏览器矩阵、产物和资源清理，删除已验证的重复基础设施、同步文档并明确 Alpha 迁移决定。期限不豁免验收，不自动追加 beta.2.4。",
+        "stamp": "NEXT",
+        "state": "planned",
+        "status": "按证据准入",
+        "theme": "双模式资格验证",
+        "version": "v0.44.0-beta.2.3"
+      }
+    },
+    {
+      "id": "roadmap:zh:2",
+      "kind": "roadmap-entry",
+      "locale": "zh",
+      "source": {
+        "line": 91,
+        "path": "www/app/routes/roadmap.tsx"
+      },
+      "alternates": [
+        {
+          "locale": "en",
+          "id": "roadmap:en:2"
+        }
+      ],
+      "references": [],
+      "fingerprint": "c3b67b3faf8bd58b95a6c890b679e0fd9c5f2ad70113ea868dd6c4a7b526557a",
+      "data": {
+        "copy": "从公开基线开始在真实应用中使用可独立消费的 Element 与 Router，验证 Native/Lit 应用流程；后续 Alpha 积极验证 Oxc/TS7 采用和平台替代，接口调整提供迁移说明。",
+        "state": "planned",
+        "status": "规划中",
+        "theme": "公开 Alpha 准入",
+        "version": "v1.0.0-alpha.1"
+      }
+    },
+    {
+      "id": "roadmap:zh:3",
+      "kind": "roadmap-entry",
+      "locale": "zh",
+      "source": {
+        "line": 99,
+        "path": "www/app/routes/roadmap.tsx"
+      },
+      "alternates": [
+        {
+          "locale": "en",
+          "id": "roadmap:en:3"
+        }
+      ],
+      "references": [],
+      "fingerprint": "556e3512428ff2cd346edb403c1c4a96804e06414a031bace2e6b2787e422983",
+      "data": {
+        "copy": "Alpha 证据充分后冻结接口与依赖，完成至少十四天 RC 持续运行及安装、升级、安全验证后取得人工 GO。两个产品不强制两个发布包。",
+        "state": "planned",
+        "status": "未定日期",
+        "theme": "分别准入",
+        "version": "v1.0 RC / Stable"
+      }
+    }
+  ]
+}

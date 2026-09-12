@@ -1,0 +1,386 @@
+/**
+ * @openelement/ui - Open Props Token Sheet
+ *
+ * Shared design tokens (spacing, gray palette, border radius, typography,
+ * semantic brand/text/bg/border tokens) that all openElement components
+ * can adopt via `static styles`.
+ *
+ * Cleaned dead tokens; only used tokens survive.
+ */
+
+:host {
+  display: block;
+  min-height: 1px;
+  contain: layout style;
+
+  /* ═══════════════════════════════════════════════
+     Spacing scale
+     ═══════════════════════════════════════════════ */
+  --size-1: 4px;
+  --size-2: 8px;
+  --size-3: 12px;
+  --size-4: 16px;
+  --size-5: 20px;
+  --size-6: 24px;
+  --size-7: 28px;
+  --size-8: 32px;
+  --size-9: 36px;
+  --size-10: 40px;
+  --size-12: 48px;
+  --size-16: 64px;
+
+  /* ═══════════════════════════════════════════════
+     Gray palette (light mode base)
+     ═══════════════════════════════════════════════ */
+  --gray-0: #f8f9fa;
+  --gray-1: #f1f3f5;
+  --gray-2: #e9ecef;
+  --gray-3: #dee2e6;
+  --gray-4: #ced4da;
+  --gray-5: #adb5bd;
+  --gray-6: #868e96;
+  --gray-7: #495057;
+  --gray-8: #343a40;
+  --gray-9: #212529;
+  --gray-10: #16191d;
+  --gray-11: #0d0f12;
+  --gray-12: #030507;
+
+  /* ═══════════════════════════════════════════════
+     Border radius
+     ═══════════════════════════════════════════════ */
+  --radius-1: 6px;
+  --radius-2: 8px;
+  --radius-3: 12px;
+  --radius-4: 20px;
+  --radius-round: 9999px;
+
+  /* ═══════════════════════════════════════════════
+     Border size
+     ═══════════════════════════════════════════════ */
+  --border-size-1: 1px;
+  --border-size-2: 2px;
+
+  /* ═══════════════════════════════════════════════
+     Shadows
+     ═══════════════════════════════════════════════ */
+  --shadow-1: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
+
+  /* ═══════════════════════════════════════════════
+     Typography
+     ═══════════════════════════════════════════════ */
+  --font-sans: 'JetBrains Mono', monospace;
+  --font-mono: 'JetBrains Mono', monospace;
+  --font-serif: 'Instrument Serif', serif;
+  --font-size-00: 0.75rem;
+  --font-size-0: 0.875rem;
+  --font-size-1: 1rem;
+  --font-size-2: 1.25rem;
+  --font-size-3: 1.5rem;
+  --font-size-4: 2rem;
+  --font-size-5: 2.5rem;
+  --font-size-6: 3.125rem;
+  --font-size-7: 4rem;
+  --font-size-8: 5.5rem;
+  --font-weight-4: 400;
+  --font-weight-5: 500;
+  --font-weight-6: 600;
+  --font-weight-7: 700;
+  --font-weight-8: 800;
+  --font-weight-9: 900;
+  --font-letterspacing-0: 0;
+  --font-letterspacing-1: 0;
+  --font-letterspacing-2: 0;
+  --font-letterspacing-3: 0;
+  --font-letterspacing-4: 0.04em;
+  --font-letterspacing-5: 0.08em;
+  --font-lineheight-1: 0.95;
+  --font-lineheight-3: 1.5;
+  --font-lineheight-4: 1.75;
+
+  /* ═══════════════════════════════════════════════
+     Animation easing
+     ═══════════════════════════════════════════════ */
+  --ease-1: cubic-bezier(0.25, 0, 0.5, 1);
+  --ease-2: cubic-bezier(0.45, 0, 0.25, 1);
+  --ease-3: cubic-bezier(0.5, 0, 0, 1);
+  --duration-2: 200ms;
+  --motion-fast: 160ms;
+  --motion-medium: 320ms;
+  --motion-standard: cubic-bezier(.2,.8,.2,1);
+  --focus-size: 2px;
+  --focus-offset: 3px;
+
+  /* ═══════════════════════════════════════════════
+     Brand tokens
+     ═══════════════════════════════════════════════ */
+  --brand: var(--violet-6);
+  --brand-hover: var(--violet-7);
+  --brand-light: var(--violet-4);
+  --brand-pale: var(--violet-1);
+  --brand-deep: var(--violet-11);
+  --brand-subtle: color-mix(in srgb, var(--brand) 12%, transparent);
+  --brand-glow: color-mix(in srgb, var(--brand) 24%, transparent);
+  --on-brand: var(--gray-0);
+  --site-container: 1120px;
+  --site-container-wide: 1240px;
+  --site-container-reading: 760px;
+  --site-section-block: var(--size-16);
+  --site-section-gap: var(--size-8);
+
+  /* ═══════════════════════════════════════════════
+     Component semantic defaults
+     ═══════════════════════════════════════════════ */
+  --btn-padding-x: var(--size-4);
+  --btn-padding-y: var(--size-2);
+  --btn-radius: var(--radius-1);
+  --btn-font-size: var(--font-size-0);
+  --btn-font-weight: var(--font-weight-7);
+  --btn-text-case: none;
+  --card-padding: var(--size-6);
+  --card-radius: var(--radius-1);
+  --badge-padding-x: var(--size-2);
+  --badge-padding-y: 2px;
+  --badge-radius: var(--radius-1);
+  --badge-font-size: var(--font-size-00);
+  --alert-padding: var(--size-4);
+  --alert-radius: var(--radius-2);
+  --input-padding-x: var(--size-3);
+  --input-padding-y: var(--size-2);
+  --input-radius: var(--radius-1);
+  --input-font-size: var(--font-size-0);
+  --input-border-color: var(--border);
+  --divider-margin: var(--size-4) 0;
+  --divider-color: var(--border);
+  --tooltip-bg: var(--gray-9);
+  --tooltip-color: var(--gray-0);
+  --tooltip-radius: var(--radius-1);
+  --tooltip-padding: var(--size-1) var(--size-2);
+  --modal-bg: var(--bg-elevated);
+  --modal-radius: var(--radius-3);
+  --modal-padding: var(--size-6);
+  --menu-padding: var(--size-2);
+  --menu-radius: var(--radius-2);
+  --menu-item-padding: var(--size-2) var(--size-4);
+  --dropdown-bg: var(--bg-elevated);
+  --dropdown-radius: var(--radius-2);
+  --tab-padding: var(--size-2) var(--size-4);
+  --tab-radius: var(--radius-1);
+
+  /* Shared component recipes: primitives consume these semantic roles only. */
+  --focus-ring: color-mix(in srgb, var(--brand-light) 84%, white);
+  --ui-control-text: var(--text-primary);
+  --ui-control-bg: color-mix(in srgb, var(--bg-elevated) 78%, transparent);
+  --ui-control-border: color-mix(in srgb, var(--border) 72%, var(--brand));
+  --ui-control-border-hover: color-mix(in srgb, var(--brand-light) 74%, var(--border));
+  --ui-control-radius: var(--radius-1);
+  --ui-control-highlight: inset 0 1px 0 color-mix(in srgb, white 12%, transparent);
+  --surface-glass: linear-gradient(145deg, color-mix(in srgb, var(--brand) 9%, var(--bg-card)), color-mix(in srgb, var(--bg-card) 90%, transparent));
+  --surface-overlay: color-mix(in srgb, var(--bg-elevated) 92%, transparent);
+  --surface-border: color-mix(in srgb, var(--border) 78%, var(--brand));
+  --surface-border-strong: color-mix(in srgb, var(--border-hover) 62%, var(--brand));
+  --surface-radius: var(--radius-2);
+  --overlay-radius: var(--radius-3);
+  --surface-highlight: inset 0 1px 0 color-mix(in srgb, white 8%, transparent);
+  --surface-shadow: 0 20px 60px color-mix(in srgb, var(--gray-12) 20%, transparent);
+  --overlay-shadow: 0 28px 90px color-mix(in srgb, var(--gray-12) 48%, transparent);
+
+  /* ═══════════════════════════════════════════════
+     UI Semantic Tokens (light defaults)
+     Dark mode overrides via :root[data-theme="dark"] in SSG
+     ═══════════════════════════════════════════════ */
+  --text-primary: var(--gray-9);
+  --text-secondary: var(--gray-8);
+  --text-muted: var(--gray-5);
+  --bg-base: color-mix(in srgb, var(--violet-0) 42%, var(--gray-0));
+  --bg-surface: color-mix(in srgb, var(--violet-0) 32%, var(--gray-1));
+  --bg-card: color-mix(in srgb, var(--violet-0) 18%, var(--gray-0));
+  --bg-elevated: #ffffff;
+  --bg-hover: var(--gray-2);
+  --bg-muted: var(--gray-1);
+  --bg-code: var(--gray-11);
+  --code-border: var(--gray-8);
+  --code-text: var(--gray-2);
+  --border: var(--gray-3);
+  --border-hover: var(--gray-4);
+  --error: #dc3545;
+  --error-subtle: rgba(220, 53, 69, 0.1);
+  --success: #16a34a;
+  --success-subtle: rgba(22, 163, 74, 0.1);
+  --warning: #d97706;
+  --warning-subtle: rgba(217, 119, 6, 0.1);
+  --info: #2563eb;
+  --info-subtle: rgba(37, 99, 235, 0.1);
+  --overlay: rgba(0, 0, 0, 0.4);
+  --nav-bg: color-mix(in srgb, var(--bg-base) 86%, transparent);
+  --nav-height: 72px;
+  --nav-link-color: var(--text-primary);
+  --nav-link-hover: var(--brand);
+  --nav-link-size: var(--font-size-0);
+
+  /* ═══════════════════════════════════════════════
+     Open Props Color Scales (light mode)
+     https://open-props.style
+     ═══════════════════════════════════════════════ */
+  --indigo-6: #4c6ef5;
+  --green-0: #ebfbee;
+  --green-1: #d3f9d8;
+  --green-2: #b2f2bb;
+  --green-3: #8ce99a;
+  --green-4: #69db7c;
+  --green-5: #51cf66;
+  --green-6: #40c057;
+  --green-7: #37b24d;
+  --green-8: #2f9e44;
+  --green-9: #2b8a3e;
+  --green-10: #226231;
+  --green-11: #1a4725;
+  --green-12: #0f2d18;
+  --red-0: #fff5f5;
+  --red-1: #ffe3e3;
+  --red-2: #ffc9c9;
+  --red-3: #ffa8a8;
+  --red-4: #ff8787;
+  --red-5: #ff6b6b;
+  --red-6: #fa5252;
+  --red-7: #f03e3e;
+  --red-8: #e03131;
+  --red-9: #c92a2a;
+  --red-10: #a61e1e;
+  --red-11: #821515;
+  --red-12: #540d0d;
+  --orange-0: #fff4e6;
+  --orange-1: #ffe8cc;
+  --orange-2: #ffd8a8;
+  --orange-3: #ffc078;
+  --orange-4: #ffa94d;
+  --orange-5: #ff922b;
+  --orange-6: #fd7e14;
+  --orange-7: #f76707;
+  --orange-8: #e8590c;
+  --orange-9: #d9480f;
+  --orange-10: #b03a00;
+  --orange-11: #872a00;
+  --orange-12: #5c1a00;
+  --violet-0: #fbf7ff;
+  --violet-1: #f3eaff;
+  --violet-2: #e6d8ff;
+  --violet-3: #d0bdff;
+  --violet-4: #b59cff;
+  --violet-5: #9c7df2;
+  --violet-6: #8262db;
+  --violet-7: #6d4cc4;
+  --violet-8: #58399e;
+  --violet-9: #422774;
+  --violet-10: #2f1c52;
+  --violet-11: #21143b;
+  --violet-12: #130a22;
+}
+
+/* ═══════════════════════════════════════════════
+   Dark Mode — matches hosts with data-theme="dark".
+   Document-level overrides live in openPropsRootSheet
+   (:root[data-theme="dark"]) so all shadow DOMs inherit.
+   ═══════════════════════════════════════════════ */
+:host([data-theme='dark']) {
+  --gray-0: #030507;
+  --gray-1: #0d0f12;
+  --gray-2: #16191d;
+  --gray-3: #212529;
+  --gray-4: #343a40;
+  --gray-5: #495057;
+  --gray-6: #868e96;
+  --gray-7: #adb5bd;
+  --gray-8: #ced4da;
+  --gray-9: #dee2e6;
+  --gray-10: #e9ecef;
+  --gray-11: #f1f3f5;
+  --gray-12: #f8f9fa;
+  --brand: var(--violet-6);
+  --brand-hover: var(--violet-7);
+  --brand-light: var(--violet-4);
+  --brand-deep: var(--violet-12);
+  --brand-subtle: color-mix(in srgb, var(--brand) 16%, transparent);
+  --brand-glow: color-mix(in srgb, var(--brand) 22%, transparent);
+  --on-brand: var(--gray-12);
+  --text-primary: var(--gray-10);
+  --text-secondary: var(--gray-8);
+  --text-muted: var(--gray-6);
+  --bg-base: color-mix(in srgb, var(--violet-0) 18%, var(--gray-0));
+  --bg-surface: color-mix(in srgb, var(--violet-1) 14%, var(--gray-1));
+  --bg-card: color-mix(in srgb, var(--violet-2) 10%, var(--gray-2));
+  --bg-elevated: var(--gray-1);
+  --bg-hover: var(--gray-3);
+  --bg-code: var(--gray-1);
+  --code-border: var(--gray-4);
+  --code-text: var(--gray-10);
+  --border: var(--gray-3);
+  --border-hover: var(--gray-4);
+  --error: #f87171;
+  --error-subtle: rgba(248, 113, 113, 0.15);
+  --success: #4ade80;
+  --success-subtle: rgba(74, 222, 128, 0.1);
+  --warning: #fbbf24;
+  --warning-subtle: rgba(251, 191, 36, 0.1);
+  --info: #60a5fa;
+  --info-subtle: rgba(96, 165, 250, 0.1);
+  --overlay: rgba(0, 0, 0, 0.6);
+  --nav-bg: color-mix(in srgb, var(--bg-base) 86%, transparent);
+  --nav-link-color: var(--text-primary);
+  --nav-link-hover: var(--brand-light);
+
+  /* Open Props Color Scales (dark mode inversion) */
+  --indigo-6: #4c6ef5;
+  --green-0: #0f2d18;
+  --green-1: #1a4725;
+  --green-2: #226231;
+  --green-3: #2b8a3e;
+  --green-4: #2f9e44;
+  --green-5: #37b24d;
+  --green-6: #40c057;
+  --green-7: #51cf66;
+  --green-8: #69db7c;
+  --green-9: #8ce99a;
+  --green-10: #b2f2bb;
+  --green-11: #d3f9d8;
+  --green-12: #ebfbee;
+  --red-0: #540d0d;
+  --red-1: #821515;
+  --red-2: #a61e1e;
+  --red-3: #c92a2a;
+  --red-4: #e03131;
+  --red-5: #f03e3e;
+  --red-6: #fa5252;
+  --red-7: #ff6b6b;
+  --red-8: #ff8787;
+  --red-9: #ffa8a8;
+  --red-10: #ffc9c9;
+  --red-11: #ffe3e3;
+  --red-12: #fff5f5;
+  --orange-0: #5c1a00;
+  --orange-1: #872a00;
+  --orange-2: #b03a00;
+  --orange-3: #d9480f;
+  --orange-4: #e8590c;
+  --orange-5: #f76707;
+  --orange-6: #fd7e14;
+  --orange-7: #ff922b;
+  --orange-8: #ffa94d;
+  --orange-9: #ffc078;
+  --orange-10: #ffd8a8;
+  --orange-11: #ffe8cc;
+  --orange-12: #fff4e6;
+  --violet-0: #130a22;
+  --violet-1: #21143b;
+  --violet-2: #2f1c52;
+  --violet-3: #422774;
+  --violet-4: #58399e;
+  --violet-5: #6d4cc4;
+  --violet-6: #8262db;
+  --violet-7: #9c7df2;
+  --violet-8: #b59cff;
+  --violet-9: #d0bdff;
+  --violet-10: #e6d8ff;
+  --violet-11: #f3eaff;
+  --violet-12: #fbf7ff;
+}

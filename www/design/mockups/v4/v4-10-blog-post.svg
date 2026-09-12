@@ -1,0 +1,117 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="1640" viewBox="0 0 1440 1640">
+  <defs>
+    <style>
+    @import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&amp;family=JetBrains+Mono:wght@400;500;700;800&amp;display=swap');
+    .mono {
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .serif {
+      font-family: 'Instrument Serif', serif;
+    }
+    </style>
+    <pattern id="bpGrid" width="72" height="72" patternUnits="userSpaceOnUse">
+      <path d="M 72 0 L 0 0 0 72" fill="none" stroke="#ffffff" stroke-opacity="0.035"
+        stroke-width="1" />
+    </pattern>
+  </defs>
+  <rect width="1440" height="1640" fill="#0a0714" />
+  <rect width="1440" height="1640" fill="url(#bpGrid)" />
+
+  <text x="72" y="62" class="mono" font-size="20" font-weight="800"
+    fill="#f3eaff">&lt;open/&gt;</text>
+  <g class="mono" font-size="13" font-weight="500" fill="#adb5bd">
+    <text x="640" y="58">Docs</text>
+    <text x="716" y="58">API</text>
+    <text x="784" y="58">Roadmap</text>
+    <text x="890" y="58">Blog</text>
+    <text x="956" y="58">GitHub</text>
+  </g>
+  <rect x="1262" y="34" width="122" height="34" rx="6" fill="#8262db" />
+  <text x="1284" y="56" class="mono" font-size="12" font-weight="700"
+    fill="#fbf7ff">Get started</text>
+  <line x1="0" y1="84.5" x2="1440" y2="84.5" stroke="#ffffff" stroke-opacity="0.08" />
+
+  <text x="72" y="150" class="mono" font-size="12"
+    fill="#868e96">BLOG / <tspan fill="#b59cff">RELEASE TRUTH</tspan></text>
+  <text x="1368" y="150" class="mono" font-size="11" fill="#868e96"
+    text-anchor="end">2026-07-25 · 8 MIN</text>
+
+  <!-- article header -->
+  <text x="64" y="290" class="serif" font-size="86" font-style="italic"
+    fill="#f3eaff">Three audits later,</text>
+  <text x="64" y="390" class="serif" font-size="86" font-style="italic"
+    fill="#b59cff">the stable line.</text>
+  <g class="mono" font-size="12" fill="#868e96">
+    <text x="72" y="450">BY THE MAINTAINERS</text>
+    <text x="320" y="450">·</text>
+    <text x="350" y="450">ADR-0116 / 0117 / 0118 / 0119</text>
+    <text x="760" y="450">·</text>
+    <text x="790" y="450">RELEASE TRUTH</text>
+  </g>
+  <line x1="72" y1="490.5" x2="1368" y2="490.5" stroke="#ffffff" stroke-opacity="0.08" />
+
+  <!-- body -->
+  <g class="mono" font-size="14.5" fill="#adb5bd">
+    <text x="72" y="560">In July we audited the whole repository three times. Not a</text>
+    <text x="72" y="588">vendor, not a checklist — a line-by-line adversarial read of</text>
+    <text x="72" y="616">the renderer, the router, the release tooling, and every</text>
+    <text x="72" y="644">document that claims something about them.</text>
+  </g>
+
+  <!-- pull quote -->
+  <g>
+    <line x1="400" y1="720" x2="1040" y2="720" stroke="#58399e" stroke-width="1.5" />
+    <text x="280" y="800" class="serif" font-size="48" font-style="italic"
+      fill="#b59cff">"The markup is the application —</text>
+    <text x="330" y="860" class="serif" font-size="48" font-style="italic"
+      fill="#b59cff">so the markup gets audited."</text>
+    <line x1="400" y1="910" x2="1040" y2="910" stroke="#58399e" stroke-width="1.5" />
+  </g>
+
+  <g class="mono" font-size="14.5" fill="#adb5bd">
+    <text x="72" y="990">The first round found correctness bugs that no qualification</text>
+    <text x="72" y="1018">gate had caught: observedAttributes registered too late for</text>
+    <text x="72" y="1046">real browsers, event markers misaligned between server and</text>
+    <text x="72" y="1074">client, island chunks dropped by a regex that forgot base64url.</text>
+  </g>
+
+  <!-- code block -->
+  <g>
+    <rect x="72" y="1120" width="820" height="150" rx="12" fill="#100a1c" stroke="#ffffff"
+      stroke-opacity="0.09" />
+    <line x1="72" y1="1121" x2="892" y2="1121" stroke="#b59cff" stroke-opacity="0.55" />
+    <text x="96" y="1156" class="mono" font-size="12.5"
+      fill="#868e96">// the fix, one line of discipline</text>
+    <text x="96" y="1192" class="mono" font-size="12.5" fill="#c084fc">if</text>
+    <text x="116" y="1192" class="mono" font-size="12.5" fill="#e9ecef"> (newValue === </text>
+    <text x="296" y="1192" class="mono" font-size="12.5" fill="#60a5fa">null</text>
+    <text x="340" y="1192" class="mono" font-size="12.5"
+      fill="#e9ecef"> || !Object.is(sig.value, next)) {</text>
+    <text x="96" y="1228" class="mono" font-size="12.5" fill="#e9ecef">  sig.value = next; </text>
+    <text x="330" y="1228" class="mono" font-size="12.5"
+      fill="#868e96">// removal always re-mirrors</text>
+  </g>
+
+  <!-- sidenote -->
+  <g class="mono" font-size="11" fill="#868e96">
+    <text x="960" y="1160">SIDENOTE —</text>
+    <text x="960" y="1184">THE EQUALITY SHORT-</text>
+    <text x="960" y="1206">CIRCUIT FIXES THE LOOP;</text>
+    <text x="960" y="1228">THE REMOVAL CLAUSE</text>
+    <text x="960" y="1250">FIXES WHAT THE LOOP</text>
+    <text x="960" y="1272">HID. BOTH SHIP IN 19.</text>
+  </g>
+
+  <g class="mono" font-size="14.5" fill="#adb5bd">
+    <text x="72" y="1340">The third round found no correctness bugs at all — only the</text>
+    <text x="72" y="1368">edges where our own gates could not see. That is what a</text>
+    <text x="72" y="1396">framework ready to freeze looks like.</text>
+  </g>
+
+  <!-- next article -->
+  <line x1="72" y1="1470.5" x2="1368" y2="1470.5" stroke="#ffffff" stroke-opacity="0.08" />
+  <text x="72" y="1518" class="mono" font-size="11" font-weight="700" fill="#868e96"
+    letter-spacing="2">NEXT DISPATCH</text>
+  <text x="72" y="1568" class="serif" font-size="40"
+    fill="#f3eaff">Star seams considered harmful →</text>
+</svg>

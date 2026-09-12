@@ -1,0 +1,97 @@
+{
+  "version": 1,
+  "migrations": [
+    {
+      "file": "20260816000000_notes.sql",
+      "sha256": "91fa553610b7e8dfbe6737a7db5726d8c0b582bfeb2b0f87267c1b4f0ee0fdbb"
+    },
+    {
+      "file": "20260816000001_notes_attachments_storage.sql",
+      "sha256": "311f791e51d13f5f584539701cc3c3226b2fa4f2876e993ae88d8495e3f0c706"
+    },
+    {
+      "file": "20260816000002_notes_realtime.sql",
+      "sha256": "45f1cc65896942347f313af9ea6e3b7e1a74444596a72d26c8ea5059d1904e82"
+    },
+    {
+      "file": "20260817000000_admin_audit.sql",
+      "sha256": "ced3d14b1d6ea406acff11bcfecfaebd7be0a0c577ce7d72ea2e91f1bd57e065"
+    },
+    {
+      "file": "20260817000001_attachment_quota.sql",
+      "sha256": "195e47e9c9d4fca14a953bf143f41e4402a6ed5368b34e43a0de6d10ea6faf39"
+    },
+    {
+      "file": "20260817000002_attachment_scanning.sql",
+      "sha256": "453ca62cca30f9e8085f90e6a9a91889f0aefcc38f36665597b6fb2cf7790e4c"
+    },
+    {
+      "file": "20260817000003_attachment_scan_replay.sql",
+      "sha256": "942a3a56b47a50daa9f0291de594fce584c8d51e75f8d2e6817304d5affb93d3"
+    },
+    {
+      "file": "20260817000004_stripe_webhooks.sql",
+      "sha256": "adec9029d1edd8007d22a37233a7885cdcf4fe65a4ac56dcfb64aaba6e1146df"
+    },
+    {
+      "file": "20260817000005_stripe_checkout.sql",
+      "sha256": "076c0129de202bd07cee58d69428e606198195b5bcc1b422c090f8b49654bc56"
+    },
+    {
+      "file": "20260817000006_payment_queue.sql",
+      "sha256": "62a565bd62ec0299d6b1ee145039de92409a94240ecf229d22d9577af2a024fd"
+    },
+    {
+      "file": "20260817000007_attachment_scan_authorization.sql",
+      "sha256": "2e622479d9923cb47a4f6333acf4fccc237618c204a63154ae0bb480ad19e703"
+    },
+    {
+      "file": "20260817000008_admin_audit_writes.sql",
+      "sha256": "aa16b16c8beb2d8be361399fa95cfea979e0f35a231ceb450f1e119786aa0b2f"
+    },
+    {
+      "file": "20260819000000_attachments_insert_only.sql",
+      "sha256": "d5603692e97001a81f70233be70b153c55f73d32b8a726c6037948c0c3fed7a5"
+    },
+    {
+      "file": "20260823030729_postgres_index_rls_performance_floor.sql",
+      "sha256": "f52ad75a6ff9a2daf9ed6a476eb042bb6dfea1223c99881c1f78ebe656a8c375"
+    },
+    {
+      "file": "20260823031500_workspace_rls_qualification.sql",
+      "sha256": "ba20a485ff5ac644722d44fc8e8d9853bb33da48f91fbea9f97b68b49e04fa59"
+    },
+    {
+      "file": "20260823094231_replay_audit_atomicity.sql",
+      "sha256": "415364415aa45d9bbef65a1fad5e33b72b39e940c11137fa7d134deb926781f1"
+    },
+    {
+      "file": "20260823094232_stripe_reconciliation_index.sql",
+      "sha256": "b0ec3d93eaaae702d98235ab2878dd153e81f39ea620fabd1dadda788a8e57d3"
+    },
+    {
+      "file": "20260823110000_explicit_data_api_privileges.sql",
+      "sha256": "6ca40cae2d9d714c22b058b4c3afe8455d2366dc8406f8ad1f14ea689eda15f9"
+    },
+    {
+      "file": "20260823110100_replay_request_audit_atomicity.sql",
+      "sha256": "418d9ffd13ee28cf266aa7690bcff5c893feccf0649a80967f165ab42ceb268c"
+    },
+    {
+      "file": "20260823110200_attachment_delete_reconciliation.sql",
+      "sha256": "916683b39f8cb6784d9fc18fde4cf86e70ef5e164beec348192f1249327b5905"
+    },
+    {
+      "file": "20260823110300_notes_bounds.sql",
+      "sha256": "89f21e4c40f5ccfc93cfacf250a3c696655d8a7d387fb6ddee54362e58189c4a"
+    },
+    {
+      "file": "20260823110400_replay_current_admin_authorization.sql",
+      "sha256": "8d9afd62433671f3fe4758ba5ded8f34e3ba70fe9b2ddc46bf3046a01c9ed6cd"
+    },
+    {
+      "file": "20260823160507_harden_reject_audit_mutation_search_path.sql",
+      "sha256": "367904db7607c59c02e3a32611e4ccc7241601b822f336d1953a86fc6417c0b8"
+    }
+  ]
+}

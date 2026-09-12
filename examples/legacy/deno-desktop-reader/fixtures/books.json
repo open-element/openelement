@@ -1,0 +1,29 @@
+[
+  {
+    "id": "metamorphosis",
+    "title": "The Metamorphosis",
+    "author": "Franz Kafka",
+    "fileName": "metamorphosis.pdf",
+    "pageCount": 77,
+    "summary": "A traveling salesman wakes to find himself transformed into a monstrous insect.",
+    "coverColor": "#2d5a27"
+  },
+  {
+    "id": "heart-of-darkness",
+    "title": "Heart of Darkness",
+    "author": "Joseph Conrad",
+    "fileName": "heart-of-darkness.pdf",
+    "pageCount": 131,
+    "summary": "A journey up the Congo River becomes a descent into moral darkness.",
+    "coverColor": "#8b0000"
+  },
+  {
+    "id": "frankenstein",
+    "title": "Frankenstein",
+    "author": "Mary Shelley",
+    "fileName": "frankenstein.pdf",
+    "pageCount": 277,
+    "summary": "Victor Frankenstein creates life — and horror.",
+    "coverColor": "#4a3728"
+  }
+]

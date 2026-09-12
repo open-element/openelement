@@ -1,0 +1,94 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="1420" viewBox="0 0 1440 1420">
+  <defs>
+    <style>
+    @import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&amp;family=JetBrains+Mono:wght@400;500;700;800&amp;display=swap');
+    .mono {
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .serif {
+      font-family: 'Instrument Serif', serif;
+    }
+    </style>
+    <pattern id="blGrid" width="72" height="72" patternUnits="userSpaceOnUse">
+      <path d="M 72 0 L 0 0 0 72" fill="none" stroke="#ffffff" stroke-opacity="0.035"
+        stroke-width="1" />
+    </pattern>
+  </defs>
+  <rect width="1440" height="1420" fill="#0a0714" />
+  <rect width="1440" height="1420" fill="url(#blGrid)" />
+
+  <text x="72" y="62" class="mono" font-size="20" font-weight="800"
+    fill="#f3eaff">&lt;open/&gt;</text>
+  <g class="mono" font-size="13" font-weight="500" fill="#adb5bd">
+    <text x="640" y="58">Docs</text>
+    <text x="716" y="58">API</text>
+    <text x="784" y="58">Roadmap</text>
+    <text x="890" y="58">Blog</text>
+    <text x="956" y="58">GitHub</text>
+  </g>
+  <rect x="1262" y="34" width="122" height="34" rx="6" fill="#8262db" />
+  <text x="1284" y="56" class="mono" font-size="12" font-weight="700"
+    fill="#fbf7ff">Get started</text>
+  <line x1="0" y1="84.5" x2="1440" y2="84.5" stroke="#ffffff" stroke-opacity="0.08" />
+
+  <text x="72" y="150" class="mono" font-size="12" font-weight="500" fill="#b59cff"
+    letter-spacing="3.5">BLOG — DISPATCHES FROM THE LAB</text>
+
+  <text x="64" y="330" class="serif" font-size="150" font-style="italic" fill="#b59cff"
+    letter-spacing="-2">Dispatches.</text>
+
+  <!-- featured -->
+  <g>
+    <rect x="0" y="420" width="1440" height="330" fill="#0d0918" />
+    <line x1="0" y1="420.5" x2="1440" y2="420.5" stroke="#ffffff" stroke-opacity="0.08" />
+    <line x1="0" y1="749.5" x2="1440" y2="749.5" stroke="#ffffff" stroke-opacity="0.08" />
+    <text x="72" y="478" class="mono" font-size="11" font-weight="700" fill="#8262db"
+      letter-spacing="2">FEATURED — 2026-07-25 · RELEASE TRUTH</text>
+    <text x="64" y="570" class="serif" font-size="72" font-style="italic"
+      fill="#f3eaff">Three audits later, the stable line.</text>
+    <text x="72" y="640" class="mono" font-size="14.5"
+      fill="#adb5bd">What three full-repository audits found in our own framework — and why</text>
+    <text x="72" y="668" class="mono" font-size="14.5"
+      fill="#adb5bd">0.41.0 freezes only what the evidence proves.</text>
+    <text x="72" y="716" class="mono" font-size="13" font-weight="700"
+      fill="#b59cff">Read the dispatch →</text>
+    <text x="1150" y="478" class="mono" font-size="11" fill="#868e96">8 MIN READ</text>
+  </g>
+
+  <!-- article rows -->
+  <g>
+    <line x1="0" y1="810.5" x2="1440" y2="810.5" stroke="#ffffff" stroke-opacity="0.08" />
+    <text x="72" y="890" class="mono" font-size="56" font-weight="800" fill="none" stroke="#58399e"
+      stroke-width="1.2">01</text>
+    <text x="240" y="878" class="serif" font-size="36"
+      fill="#f3eaff">The Web, composed: a design apology</text>
+    <text x="240" y="914" class="mono" font-size="12.5"
+      fill="#adb5bd">Why the framework's face finally tells the DSD story.</text>
+    <text x="1150" y="878" class="mono" font-size="12" fill="#868e96">2026-07-24</text>
+    <line x1="0" y1="950.5" x2="1440" y2="950.5" stroke="#ffffff" stroke-opacity="0.08" />
+    <text x="72" y="1030" class="mono" font-size="56" font-weight="800" fill="none" stroke="#58399e"
+      stroke-width="1.2">02</text>
+    <text x="240" y="1018" class="serif" font-size="36"
+      fill="#f3eaff">Star seams considered harmful</text>
+    <text x="240" y="1054" class="mono" font-size="12.5"
+      fill="#adb5bd">Export type * and the fifty types that leaked through it.</text>
+    <text x="1150" y="1018" class="mono" font-size="12" fill="#868e96">2026-07-20</text>
+    <line x1="0" y1="1090.5" x2="1440" y2="1090.5" stroke="#ffffff" stroke-opacity="0.08" />
+    <text x="72" y="1170" class="mono" font-size="56" font-weight="800" fill="none" stroke="#58399e"
+      stroke-width="1.2">03</text>
+    <text x="240" y="1158" class="serif" font-size="36"
+      fill="#f3eaff">reflect: true, and the loop it wrote</text>
+    <text x="240" y="1194" class="mono" font-size="12.5"
+      fill="#adb5bd">A write-loop storm in three browser engines, and the short-circuit that ends it.</text>
+    <text x="1150" y="1158" class="mono" font-size="12" fill="#868e96">2026-07-15</text>
+    <line x1="0" y1="1230.5" x2="1440" y2="1230.5" stroke="#ffffff" stroke-opacity="0.08" />
+    <text x="72" y="1310" class="mono" font-size="56" font-weight="800" fill="none" stroke="#58399e"
+      stroke-width="1.2">04</text>
+    <text x="240" y="1298" class="serif" font-size="36"
+      fill="#f3eaff">Eleven packages walk into five</text>
+    <text x="240" y="1334" class="mono" font-size="12.5"
+      fill="#adb5bd">ADR-0113 and the collapse that made the product legible.</text>
+    <text x="1150" y="1298" class="mono" font-size="12" fill="#868e96">2026-07-10</text>
+    <line x1="0" y1="1370.5" x2="1440" y2="1370.5" stroke="#ffffff" stroke-opacity="0.08" />
+  </g>
+</svg>

@@ -120,3 +120,6 @@ hub-submission.json
 /.tmp-*
 # Release workflow (autoflow-release.yml) PR-CI evidence download dir: CI scratch, never a release input
 /.artifacts/
+
+# Nitro build output in www/examples (generated, never a release input)
+**/.nitro/

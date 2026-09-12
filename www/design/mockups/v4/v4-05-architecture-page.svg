@@ -1,0 +1,117 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="1340" viewBox="0 0 1440 1340">
+  <defs>
+    <style>
+    @import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&amp;family=JetBrains+Mono:wght@400;500;700;800&amp;display=swap');
+    .mono {
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .serif {
+      font-family: 'Instrument Serif', serif;
+    }
+    </style>
+    <pattern id="aGrid" width="72" height="72" patternUnits="userSpaceOnUse">
+      <path d="M 72 0 L 0 0 0 72" fill="none" stroke="#ffffff" stroke-opacity="0.035"
+        stroke-width="1" />
+    </pattern>
+  </defs>
+  <rect width="1440" height="1340" fill="#0a0714" />
+  <rect width="1440" height="1340" fill="url(#aGrid)" />
+
+  <text x="72" y="62" class="mono" font-size="20" font-weight="800"
+    fill="#f3eaff">&lt;open/&gt;</text>
+  <g class="mono" font-size="13" font-weight="500" fill="#adb5bd">
+    <text x="640" y="58">Docs</text>
+    <text x="716" y="58">API</text>
+    <text x="784" y="58">Roadmap</text>
+    <text x="890" y="58">Blog</text>
+    <text x="956" y="58">GitHub</text>
+  </g>
+  <rect x="1262" y="34" width="122" height="34" rx="6" fill="#8262db" />
+  <text x="1284" y="56" class="mono" font-size="12" font-weight="700"
+    fill="#fbf7ff">Get started</text>
+  <line x1="0" y1="84.5" x2="1440" y2="84.5" stroke="#ffffff" stroke-opacity="0.08" />
+
+  <text x="72" y="150" class="mono" font-size="12" fill="#868e96"
+    letter-spacing="1">ADR-0113 / PACKAGE GRAPH</text>
+  <text x="1368" y="150" class="mono" font-size="11" fill="#4ade80"
+    text-anchor="end">V0.41.0 PUBLISHED</text>
+  <text x="64" y="270" class="mono" font-size="82" font-weight="800" fill="#f3eaff"
+    letter-spacing="-4">CURRENT</text>
+  <text x="64" y="360" class="serif" font-size="92" font-style="italic"
+    fill="#b59cff">Architecture</text>
+
+  <!-- package graph diagram: real nodes + edges -->
+  <g>
+    <rect x="72" y="420" width="1296" height="430" rx="12" fill="#0d0918" stroke="#ffffff"
+      stroke-opacity="0.09" />
+    <line x1="72" y1="421" x2="1368" y2="421" stroke="#b59cff" stroke-opacity="0.55" />
+    <text x="100" y="456" class="mono" font-size="11" font-weight="700" fill="#868e96"
+      letter-spacing="1.5">DEPENDENCY DIRECTION — CONSUMERS POINT AT WHAT THEY USE</text>
+    <!-- edges -->
+    <line x1="470" y1="560" x2="640" y2="560" stroke="#8262db" stroke-width="1.5" />
+    <text x="500" y="548" class="mono" font-size="10.5" fill="#868e96">uses</text>
+    <line x1="830" y1="560" x2="1000" y2="560" stroke="#8262db" stroke-width="1.5" />
+    <text x="860" y="548" class="mono" font-size="10.5" fill="#868e96">builds on</text>
+    <line x1="360" y1="610" x2="330" y2="700" stroke="#58399e" stroke-width="1.5"
+      stroke-dasharray="4 4" />
+    <text x="250" y="666" class="mono" font-size="10.5" fill="#868e96">optional</text>
+    <!-- nodes -->
+    <rect x="150" y="510" width="320" height="100" rx="12" fill="#21143b" stroke="#b59cff"
+      stroke-width="1.5" />
+    <text x="180" y="552" class="mono" font-size="17" font-weight="800"
+      fill="#f3eaff">element</text>
+    <text x="180" y="584" class="mono" font-size="11.5"
+      fill="#adb5bd">runtime · zero framework deps</text>
+    <rect x="640" y="510" width="190" height="100" rx="12" fill="#100a1c" stroke="#58399e" />
+    <text x="670" y="552" class="mono" font-size="17" font-weight="800" fill="#f3eaff">app</text>
+    <text x="670" y="584" class="mono" font-size="11.5" fill="#adb5bd">pages · routing</text>
+    <rect x="1000" y="510" width="250" height="100" rx="12" fill="#100a1c" stroke="#58399e" />
+    <text x="1030" y="552" class="mono" font-size="17" font-weight="800"
+      fill="#f3eaff">adapter-vite</text>
+    <text x="1030" y="584" class="mono" font-size="11.5" fill="#adb5bd">the only host side</text>
+    <rect x="180" y="700" width="220" height="90" rx="12" fill="#100a1c" stroke="#58399e"
+      stroke-dasharray="5 4" />
+    <text x="210" y="740" class="mono" font-size="15" font-weight="800" fill="#adb5bd">ui</text>
+    <text x="210" y="768" class="mono" font-size="11" fill="#868e96">optional primitives</text>
+    <rect x="640" y="700" width="220" height="90" rx="12" fill="#100a1c" stroke="#58399e" />
+    <text x="670" y="740" class="mono" font-size="15" font-weight="800" fill="#f3eaff">create</text>
+    <text x="670" y="768" class="mono" font-size="11" fill="#adb5bd">starter · build time</text>
+    <line x1="750" y1="700" x2="750" y2="610" stroke="#58399e" stroke-width="1.5"
+      stroke-dasharray="4 4" />
+    <text x="890" y="740" class="mono" font-size="10.5"
+      fill="#868e96">retired: core · signal · router · protocol · content · ssg</text>
+  </g>
+
+  <!-- ownership clauses -->
+  <g>
+    <text x="72" y="950" class="mono" font-size="13" font-weight="700" fill="#8262db"
+      letter-spacing="3">OWNERSHIP CLAUSES</text>
+    <line x1="0" y1="980.5" x2="1440" y2="980.5" stroke="#ffffff" stroke-opacity="0.08" />
+    <text x="72" y="1040" class="mono" font-size="56" font-weight="800" fill="none" stroke="#58399e"
+      stroke-width="1.2">§1</text>
+    <text x="220" y="1032" class="mono" font-size="22" font-weight="800"
+      fill="#f3eaff">Element owns the runtime</text>
+    <text x="820" y="1020" class="mono" font-size="12.5"
+      fill="#adb5bd">Browser runtime + runtime contracts. The only</text>
+    <text x="820" y="1044" class="mono" font-size="12.5"
+      fill="#adb5bd">engine is @preact/signals-core, internal.</text>
+    <line x1="0" y1="1080.5" x2="1440" y2="1080.5" stroke="#ffffff" stroke-opacity="0.08" />
+    <text x="72" y="1140" class="mono" font-size="56" font-weight="800" fill="none" stroke="#58399e"
+      stroke-width="1.2">§2</text>
+    <text x="220" y="1132" class="mono" font-size="22" font-weight="800"
+      fill="#f3eaff">App owns the semantics</text>
+    <text x="820" y="1120" class="mono" font-size="12.5"
+      fill="#adb5bd">Pages, routing, islands, request/render. The</text>
+    <text x="820" y="1144" class="mono" font-size="12.5"
+      fill="#adb5bd">router itself is internal.</text>
+    <line x1="0" y1="1180.5" x2="1440" y2="1180.5" stroke="#ffffff" stroke-opacity="0.08" />
+    <text x="72" y="1240" class="mono" font-size="56" font-weight="800" fill="none" stroke="#58399e"
+      stroke-width="1.2">§3</text>
+    <text x="220" y="1232" class="mono" font-size="22" font-weight="800"
+      fill="#f3eaff">Adapter Vite owns the build</text>
+    <text x="820" y="1220" class="mono" font-size="12.5"
+      fill="#adb5bd">Vite, content, SSG and Nitro behind public</text>
+    <text x="820" y="1244" class="mono" font-size="12.5" fill="#adb5bd">build interfaces.</text>
+    <line x1="0" y1="1280.5" x2="1440" y2="1280.5" stroke="#ffffff" stroke-opacity="0.08" />
+  </g>
+</svg>

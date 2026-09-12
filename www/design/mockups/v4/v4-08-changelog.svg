@@ -1,0 +1,90 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="1440" viewBox="0 0 1440 1440">
+  <defs>
+    <style>
+    @import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&amp;family=JetBrains+Mono:wght@400;500;700;800&amp;display=swap');
+    .mono {
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .serif {
+      font-family: 'Instrument Serif', serif;
+    }
+    </style>
+    <pattern id="clGrid" width="72" height="72" patternUnits="userSpaceOnUse">
+      <path d="M 72 0 L 0 0 0 72" fill="none" stroke="#ffffff" stroke-opacity="0.035"
+        stroke-width="1" />
+    </pattern>
+  </defs>
+  <rect width="1440" height="1440" fill="#0a0714" />
+  <rect width="1440" height="1440" fill="url(#clGrid)" />
+
+  <text x="72" y="62" class="mono" font-size="20" font-weight="800"
+    fill="#f3eaff">&lt;open/&gt;</text>
+  <g class="mono" font-size="13" font-weight="500" fill="#adb5bd">
+    <text x="640" y="58">Docs</text>
+    <text x="716" y="58">API</text>
+    <text x="784" y="58">Roadmap</text>
+    <text x="890" y="58">Blog</text>
+    <text x="956" y="58">GitHub</text>
+  </g>
+  <rect x="1262" y="34" width="122" height="34" rx="6" fill="#8262db" />
+  <text x="1284" y="56" class="mono" font-size="12" font-weight="700"
+    fill="#fbf7ff">Get started</text>
+  <line x1="0" y1="84.5" x2="1440" y2="84.5" stroke="#ffffff" stroke-opacity="0.08" />
+
+  <text x="72" y="150" class="mono" font-size="12" font-weight="500" fill="#b59cff"
+    letter-spacing="3.5">CHANGELOG — RELEASE REGISTRY</text>
+  <text x="1368" y="150" class="mono" font-size="11" fill="#868e96"
+    text-anchor="end">EVIDENCE-BACKED ENTRIES ONLY</text>
+
+  <text x="64" y="300" class="serif" font-size="130" font-style="italic"
+    fill="#b59cff">Every line,</text>
+  <text x="64" y="424" class="mono" font-size="100" font-weight="800" fill="#f3eaff"
+    letter-spacing="-5">EVIDENCED.</text>
+
+  <!-- current release, violet bar -->
+  <g>
+    <rect x="0" y="480" width="1440" height="170" fill="#8262db" fill-opacity="0.12" />
+    <rect x="0" y="480" width="6" height="170" fill="#8262db" />
+    <text x="72" y="570" class="mono" font-size="56" font-weight="800" fill="#f3eaff"
+      letter-spacing="-2">0.41.0</text>
+    <rect x="420" y="514" width="110" height="30" rx="6" fill="#8262db" />
+    <text x="436" y="534" class="mono" font-size="11" font-weight="700"
+      fill="#fbf7ff">CURRENT</text>
+    <text x="72" y="618" class="mono" font-size="13"
+      fill="#adb5bd">Stable five-package release — scoped interface freeze (ADR-0119).</text>
+    <text x="1050" y="534" class="mono" font-size="12" fill="#868e96">2026-07 · evidence</text>
+    <text x="1050" y="618" class="mono" font-size="12" fill="#b59cff">release note →</text>
+    <line x1="0" y1="650.5" x2="1440" y2="650.5" stroke="#ffffff" stroke-opacity="0.08" />
+  </g>
+
+  <!-- rows -->
+  <g>
+    <text x="72" y="740" class="mono" font-size="40" font-weight="800" fill="#adb5bd"
+      letter-spacing="-1">0.41.0-alpha.19</text>
+    <text x="72" y="778" class="mono" font-size="12.5"
+      fill="#adb5bd">Third audit cleanup sweep — 26 findings closed, star seams sealed.</text>
+    <text x="1050" y="740" class="mono" font-size="12" fill="#868e96">2026-07-25</text>
+    <line x1="0" y1="810.5" x2="1440" y2="810.5" stroke="#ffffff" stroke-opacity="0.08" />
+    <text x="72" y="900" class="mono" font-size="40" font-weight="800" fill="#adb5bd"
+      letter-spacing="-1">0.41.0-alpha.18</text>
+    <text x="72" y="938" class="mono" font-size="12.5"
+      fill="#adb5bd">Second audit sweep — reflect, CEM single plan, 500 contract, guards.</text>
+    <text x="1050" y="900" class="mono" font-size="12" fill="#868e96">2026-07-24</text>
+    <line x1="0" y1="970.5" x2="1440" y2="970.5" stroke="#ffffff" stroke-opacity="0.08" />
+    <text x="72" y="1060" class="mono" font-size="40" font-weight="800" fill="#adb5bd"
+      letter-spacing="-1">0.41.0-alpha.17</text>
+    <text x="72" y="1098" class="mono" font-size="12.5"
+      fill="#adb5bd">Remediation completion — real-browser credibility, convergence hygiene.</text>
+    <text x="1050" y="1060" class="mono" font-size="12" fill="#868e96">2026-07-23</text>
+    <line x1="0" y1="1130.5" x2="1440" y2="1130.5" stroke="#ffffff" stroke-opacity="0.08" />
+    <text x="72" y="1220" class="mono" font-size="40" font-weight="800" fill="none" stroke="#58399e"
+      stroke-width="1" letter-spacing="-1">0.40.x</text>
+    <text x="72" y="1258" class="mono" font-size="12.5"
+      fill="#868e96">The eleven-package era — JSR-only, before the collapse. Historical record.</text>
+    <text x="1050" y="1220" class="mono" font-size="12" fill="#868e96">archive →</text>
+    <line x1="0" y1="1290.5" x2="1440" y2="1290.5" stroke="#ffffff" stroke-opacity="0.08" />
+  </g>
+
+  <text x="72" y="1370" class="mono" font-size="12"
+    fill="#868e96">※ Withdrawn partial artifacts (beta.1–beta.3) stay withdrawn from the active release story. History is kept, not rewritten.</text>
+</svg>

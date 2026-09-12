@@ -1,0 +1,21 @@
+# Local identifier only; the hosted project is selected explicitly with
+# SUPABASE_PROJECT_ID by the migration workflow.
+project_id = "openelement-supabase-cloudflare-starter"
+
+[db]
+major_version = 17
+
+[db.migrations]
+enabled = true
+schema_paths = []
+
+[db.seed]
+enabled = false
+sql_paths = []
+
+[auth]
+site_url = "http://127.0.0.1:4173"
+additional_redirect_urls = ["http://localhost:4173/auth/callback"]
+
+[realtime]
+enabled = true

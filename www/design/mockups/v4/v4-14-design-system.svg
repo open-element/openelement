@@ -1,0 +1,147 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="1820" viewBox="0 0 1440 1820">
+  <defs>
+    <style>
+    @import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&amp;family=JetBrains+Mono:wght@400;500;700;800&amp;display=swap');
+    .mono {
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .serif {
+      font-family: 'Instrument Serif', serif;
+    }
+    </style>
+    <linearGradient id="v4Flood" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#8262db" />
+      <stop offset="100%" stop-color="#6d4cc4" />
+    </linearGradient>
+  </defs>
+  <rect width="1440" height="1820" fill="#0a0714" />
+
+  <line x1="72" y1="96" x2="104" y2="96" stroke="#8262db" stroke-width="2" />
+  <text x="116" y="101" class="mono" font-size="12" font-weight="500" fill="#b59cff"
+    letter-spacing="3.5">OPENELEMENT — DESIGN LANGUAGE V4 · VIEW-SOURCE EDITORIAL, SQUARED</text>
+  <text x="64" y="190" class="mono" font-size="52" font-weight="800" fill="#f3eaff"
+    letter-spacing="-2.5">Same voice,</text>
+  <text x="64" y="252" class="serif" font-size="62" font-style="italic"
+    fill="#b59cff">sharper edges.</text>
+  <text x="72" y="300" class="mono" font-size="13"
+    fill="#adb5bd">V4 changes the geometry, not the philosophy: every control is squared, every element maps</text>
+  <text x="72" y="326" class="mono" font-size="13"
+    fill="#adb5bd">to a real @openelement/ui component and an open-props token. Nothing here is hand-drawn.</text>
+
+  <!-- 01 kinetic type (unchanged) -->
+  <text x="72" y="416" class="mono" font-size="12" font-weight="700" fill="#8262db"
+    letter-spacing="3">01 / KINETIC TYPE — UNCHANGED FROM V3</text>
+  <line x1="0" y1="440.5" x2="1440" y2="440.5" stroke="#ffffff" stroke-opacity="0.08" />
+  <text x="64" y="546" class="mono" font-size="84" font-weight="800" fill="#f3eaff"
+    letter-spacing="-4">MONO CAPS 800</text>
+  <text x="64" y="642" class="serif" font-size="96" font-style="italic"
+    fill="#b59cff">serif italic, oversized.</text>
+  <g class="mono" font-size="11.5" fill="#868e96">
+    <text x="72"
+      y="700">STRUCTURE — JetBrains Mono 800 caps, −0.05em, 84–150px, hugs the left margin, may crop edges.</text>
+    <text x="72"
+      y="726">MOMENT — Instrument Serif italic, 0.9–1.4× the mono size, violet, one accent per composition.</text>
+    <text x="72"
+      y="752">EVERYTHING ELSE — Mono 400/500/700 at 11–17px. No third family. Body stays mono: the constraint is the brand.</text>
+  </g>
+
+  <!-- 02 squared geometry -->
+  <text x="72" y="840" class="mono" font-size="12" font-weight="700" fill="#8262db"
+    letter-spacing="3">02 / SQUARED GEOMETRY — THE TOKEN DECISION</text>
+  <line x1="0" y1="864.5" x2="1440" y2="864.5" stroke="#ffffff" stroke-opacity="0.08" />
+  <g>
+    <rect x="72" y="896" width="200" height="52" rx="6" fill="#8262db" />
+    <text x="110" y="929" class="mono" font-size="14" font-weight="700"
+      fill="#fbf7ff">Start building</text>
+    <rect x="296" y="896" width="214" height="52" rx="6" fill="none" stroke="#58399e"
+      stroke-width="1.5" />
+    <text x="330" y="929" class="mono" font-size="14" font-weight="500"
+      fill="#e9ecef">Watch it unfold</text>
+    <rect x="550" y="902" width="118" height="34" rx="6" fill="#21143b" stroke="#58399e" />
+    <text x="568" y="924" class="mono" font-size="11.5" font-weight="700"
+      fill="#b59cff">DEFAULT</text>
+    <rect x="690" y="902" width="96" height="34" rx="6" fill="#8262db" />
+    <text x="712" y="924" class="mono" font-size="11.5" font-weight="700" fill="#fbf7ff">CORE</text>
+    <rect x="810" y="902" width="96" height="34" rx="6" fill="none" stroke="#58399e"
+      stroke-dasharray="4 4" />
+    <text x="824" y="924" class="mono" font-size="11.5" font-weight="700"
+      fill="#adb5bd">OPTIONAL</text>
+    <g class="mono" font-size="12" fill="#adb5bd">
+      <text x="72" y="1004">open-button · --btn-radius: var(--radius-1)</text>
+      <text x="72" y="1030">open-badge · --badge-radius: var(--radius-1)</text>
+      <text x="72" y="1056">open-card · --card-radius: var(--radius-1)</text>
+      <text x="72" y="1082">terminals &amp; callouts · --radius-2 / left-bar</text>
+    </g>
+    <g>
+      <rect x="960" y="890" width="408" height="220" rx="8" fill="#100a1c" stroke="#ffffff"
+        stroke-opacity="0.09" />
+      <line x1="960" y1="891" x2="1368" y2="891" stroke="#b59cff" stroke-opacity="0.55" />
+      <text x="988" y="926" class="mono" font-size="11" font-weight="700" fill="#868e96"
+        letter-spacing="1.5">RECORDED IN TOKENS</text>
+      <text x="988" y="962" class="mono" font-size="12.5"
+        fill="#adb5bd">open-props-tokens.css:</text>
+      <text x="988" y="990" class="mono" font-size="12.5"
+        fill="#4ade80">--btn-radius: round → radius-1</text>
+      <text x="988" y="1018" class="mono" font-size="12.5"
+        fill="#4ade80">--badge-radius: round → radius-1</text>
+      <text x="988" y="1058" class="mono" font-size="11.5"
+        fill="#868e96">One token edit; every button and badge</text>
+      <text x="988" y="1082" class="mono" font-size="11.5"
+        fill="#868e96">in every consumer squares up at once.</text>
+    </g>
+  </g>
+
+  <!-- 03 dogfood discipline -->
+  <text x="72" y="1180" class="mono" font-size="12" font-weight="700" fill="#8262db"
+    letter-spacing="3">03 / DOGFOOD DISCIPLINE — NOTHING HAND-WRITTEN</text>
+  <line x1="0" y1="1204.5" x2="1440" y2="1204.5" stroke="#ffffff" stroke-opacity="0.08" />
+  <g class="mono">
+    <text x="72" y="1246" font-size="10.5" fill="#868e96" letter-spacing="2">MOCKUP ELEMENT</text>
+    <text x="560" y="1246" font-size="10.5" fill="#868e96" letter-spacing="2">SHIPPED AS</text>
+    <text x="1020" y="1246" font-size="10.5" fill="#868e96" letter-spacing="2">TOKENS</text>
+    <line x1="72" y1="1264.5" x2="1368" y2="1264.5" stroke="#ffffff" stroke-opacity="0.08" />
+    <text x="72" y="1304" font-size="13" fill="#f3eaff">primary / ghost actions</text>
+    <text x="560" y="1304" font-size="13" fill="#b59cff">open-button</text>
+    <text x="1020" y="1304" font-size="12" fill="#adb5bd">--btn-* · --brand</text>
+    <line x1="72" y1="1324.5" x2="1368" y2="1324.5" stroke="#ffffff" stroke-opacity="0.06" />
+    <text x="72" y="1364" font-size="13" fill="#f3eaff">kind stamps · DEFAULT tag</text>
+    <text x="560" y="1364" font-size="13" fill="#b59cff">open-badge</text>
+    <text x="1020" y="1364" font-size="12" fill="#adb5bd">--badge-* · violet ramp</text>
+    <line x1="72" y1="1384.5" x2="1368" y2="1384.5" stroke="#ffffff" stroke-opacity="0.06" />
+    <text x="72" y="1424" font-size="13" fill="#f3eaff">code + terminal frames</text>
+    <text x="560" y="1424" font-size="13" fill="#b59cff">open-code-block</text>
+    <text x="1020" y="1424" font-size="12" fill="#adb5bd">--bg-code · syntax ramp</text>
+    <line x1="72" y1="1444.5" x2="1368" y2="1444.5" stroke="#ffffff" stroke-opacity="0.06" />
+    <text x="72" y="1484" font-size="13" fill="#f3eaff">NOTE / QUESTIONS strips</text>
+    <text x="560" y="1484" font-size="13" fill="#b59cff">open-callout</text>
+    <text x="1020" y="1484" font-size="12" fill="#adb5bd">--alert-* · --brand-subtle</text>
+    <line x1="72" y1="1504.5" x2="1368" y2="1504.5" stroke="#ffffff" stroke-opacity="0.06" />
+    <text x="72" y="1544" font-size="13" fill="#f3eaff">panels · registry rows</text>
+    <text x="560" y="1544" font-size="13" fill="#b59cff">open-card + hairlines</text>
+    <text x="1020" y="1544" font-size="12" fill="#adb5bd">--card-* · --border</text>
+    <line x1="72" y1="1564.5" x2="1368" y2="1564.5" stroke="#ffffff" stroke-opacity="0.08" />
+  </g>
+
+  <!-- 04 do / don't -->
+  <text x="72" y="1650" class="mono" font-size="12" font-weight="700" fill="#8262db"
+    letter-spacing="3">04 / DO / DON'T</text>
+  <line x1="0" y1="1674.5" x2="1440" y2="1674.5" stroke="#ffffff" stroke-opacity="0.08" />
+  <g class="mono" font-size="12.5">
+    <text x="72" y="1716"
+      fill="#4ade80">✓ real markup as the hero artifact — the product is the picture</text>
+    <text x="72" y="1746" fill="#4ade80">✓ squared controls from the token layer</text>
+    <text x="72" y="1776"
+      fill="#f87171">✗ elliptical pills — --radius-round is retired from controls</text>
+    <text x="72" y="1806"
+      fill="#f87171">✗ hand-drawn mascots, orbit circles, decorative diagrams</text>
+  </g>
+  <g class="mono" font-size="12.5">
+    <text x="760" y="1716"
+      fill="#4ade80">✓ giant type, outlined indices, one violet flood, marquee spine</text>
+    <text x="760" y="1746"
+      fill="#4ade80">✓ annotations (sidenotes, stamps, footnotes) as the only decoration</text>
+    <text x="760" y="1776" fill="#f87171">✗ a third typeface, gradient text, glassmorphism</text>
+    <text x="760" y="1806"
+      fill="#f87171">✗ any style that cannot ship through ui + open-props</text>
+  </g>
+</svg>

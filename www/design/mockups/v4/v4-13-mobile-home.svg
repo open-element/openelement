@@ -1,0 +1,80 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="960" viewBox="0 0 900 960">
+  <defs>
+    <style>
+    @import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&amp;family=JetBrains+Mono:wght@400;500;700;800&amp;display=swap');
+    .mono {
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .serif {
+      font-family: 'Instrument Serif', serif;
+    }
+    </style>
+    <radialGradient id="m3Glow" cx="50%" cy="35%" r="60%">
+      <stop offset="0%" stop-color="#8262db" stop-opacity="0.22" />
+      <stop offset="100%" stop-color="#0a0714" stop-opacity="0" />
+    </radialGradient>
+  </defs>
+  <rect width="900" height="960" fill="#1c1030" />
+  <text x="290" y="50" class="mono" font-size="14" font-weight="700" fill="#b59cff"
+    letter-spacing="3">MOBILE — 390 × 844, V3 LANGUAGE</text>
+
+  <rect x="255" y="80" width="390" height="800" rx="36" fill="#0a0714" stroke="#ffffff"
+    stroke-opacity="0.15" />
+  <rect x="395" y="94" width="110" height="8" rx="4" fill="#ffffff" fill-opacity="0.12" />
+  <rect x="255" y="80" width="390" height="800" rx="36" fill="url(#m3Glow)" />
+
+  <!-- mini nav -->
+  <text x="285" y="146" class="mono" font-size="15" font-weight="800"
+    fill="#f3eaff">&lt;open/&gt;</text>
+  <rect x="520" y="128" width="80" height="28" rx="6" fill="#8262db" />
+  <text x="534" y="146" class="mono" font-size="10" font-weight="700" fill="#fbf7ff">v0.41.0</text>
+  <line x1="271" y1="166" x2="629" y2="166" stroke="#ffffff" stroke-opacity="0.08" />
+
+  <!-- headline -->
+  <text x="281" y="226" class="mono" font-size="10" font-weight="500" fill="#b59cff"
+    letter-spacing="2.5">OPENELEMENT — WEB STANDARDS LAB</text>
+  <text x="277" y="322" class="mono" font-size="56" font-weight="800" fill="#f3eaff"
+    letter-spacing="-3">THE WEB,</text>
+  <text x="277" y="412" class="serif" font-size="66" font-style="italic"
+    fill="#b59cff">composed.</text>
+
+  <text x="285" y="472" class="mono" font-size="12"
+    fill="#adb5bd">A Web Components-native framework for</text>
+  <text x="285" y="496" class="mono" font-size="12"
+    fill="#adb5bd">beautiful, static-first applications.</text>
+
+  <rect x="285" y="534" width="330" height="46" rx="6" fill="#8262db" />
+  <text x="395" y="563" class="mono" font-size="13.5" font-weight="700"
+    fill="#fbf7ff">Start building</text>
+  <rect x="285" y="592" width="330" height="46" rx="6" fill="none" stroke="#58399e"
+    stroke-width="1.5" />
+  <text x="386" y="621" class="mono" font-size="13.5" font-weight="500"
+    fill="#e9ecef">Watch it unfold</text>
+
+  <!-- spec strip stacked 2×2 -->
+  <line x1="271" y1="664" x2="629" y2="664" stroke="#ffffff" stroke-opacity="0.08" />
+  <text x="285" y="692" class="mono" font-size="9" fill="#868e96"
+    letter-spacing="1.5">VERSION</text>
+  <text x="285" y="716" class="mono" font-size="14" font-weight="800"
+    fill="#f3eaff">v0.41.0 — stable</text>
+  <text x="465" y="692" class="mono" font-size="9" fill="#868e96" letter-spacing="1.5">GRAPH</text>
+  <text x="465" y="716" class="mono" font-size="14" font-weight="800"
+    fill="#f3eaff">five packages</text>
+  <text x="285" y="756" class="mono" font-size="9" fill="#868e96"
+    letter-spacing="1.5">ENGINES</text>
+  <text x="285" y="780" class="mono" font-size="14" font-weight="800" fill="#f3eaff">3 in CI</text>
+  <text x="465" y="756" class="mono" font-size="9" fill="#868e96"
+    letter-spacing="1.5">FRAMEWORK DEPS</text>
+  <text x="465" y="780" class="mono" font-size="14" font-weight="800" fill="#b59cff">zero</text>
+
+  <!-- marquee -->
+  <rect x="255" y="816" width="390" height="34" fill="#0d0918" />
+  <line x1="255" y1="816.5" x2="645" y2="816.5" stroke="#ffffff" stroke-opacity="0.08" />
+  <text x="271" y="838" class="mono" font-size="10.5" font-weight="500" fill="#8262db"
+    letter-spacing="1.5">CUSTOM ELEMENTS ✳ SHADOW DOM ✳ DSD ✳ SIGNALS ✳</text>
+
+  <text x="262" y="916" class="mono" font-size="11"
+    fill="#868e96">Giant type scales down, never wraps mid-word; spec strip</text>
+  <text x="262" y="938" class="mono" font-size="11"
+    fill="#868e96">goes 2×2; marquee persists as the standards spine.</text>
+</svg>

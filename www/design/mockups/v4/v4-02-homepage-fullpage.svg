@@ -1,0 +1,312 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="3560" viewBox="0 0 1440 3560">
+  <defs>
+    <style>
+    @import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&amp;family=JetBrains+Mono:wght@400;500;700;800&amp;display=swap');
+    .mono {
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .serif {
+      font-family: 'Instrument Serif', serif;
+    }
+    </style>
+    <radialGradient id="fpGlow" cx="70%" cy="30%" r="60%">
+      <stop offset="0%" stop-color="#8262db" stop-opacity="0.18" />
+      <stop offset="100%" stop-color="#0a0714" stop-opacity="0" />
+    </radialGradient>
+    <linearGradient id="flood" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#8262db" />
+      <stop offset="100%" stop-color="#6d4cc4" />
+    </linearGradient>
+    <pattern id="fpGrid" width="72" height="72" patternUnits="userSpaceOnUse">
+      <path d="M 72 0 L 0 0 0 72" fill="none" stroke="#ffffff" stroke-opacity="0.035"
+        stroke-width="1" />
+    </pattern>
+    <filter id="grain2">
+      <feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" stitchTiles="stitch" />
+      <feColorMatrix type="saturate" values="0" />
+    </filter>
+  </defs>
+
+  <rect width="1440" height="3560" fill="#0a0714" />
+  <rect width="1440" height="3560" fill="url(#fpGrid)" />
+  <rect width="1440" height="3560" filter="url(#grain2)" opacity="0.035" />
+
+  <!-- ═══ nav + compact hero ═══ -->
+  <rect width="1440" height="660" fill="url(#fpGlow)" />
+  <text x="72" y="62" class="mono" font-size="20" font-weight="800"
+    fill="#f3eaff">&lt;open/&gt;</text>
+  <g class="mono" font-size="13" font-weight="500" fill="#adb5bd">
+    <text x="640" y="58">Docs</text>
+    <text x="716" y="58">API</text>
+    <text x="784" y="58">Roadmap</text>
+    <text x="890" y="58">Blog</text>
+    <text x="956" y="58">GitHub</text>
+  </g>
+  <rect x="1262" y="34" width="122" height="34" rx="6" fill="#8262db" />
+  <text x="1284" y="56" class="mono" font-size="12" font-weight="700"
+    fill="#fbf7ff">Get started</text>
+  <line x1="0" y1="84.5" x2="1440" y2="84.5" stroke="#ffffff" stroke-opacity="0.08" />
+
+  <line x1="72" y1="140" x2="104" y2="140" stroke="#8262db" stroke-width="2" />
+  <text x="116" y="145" class="mono" font-size="12" font-weight="500" fill="#b59cff"
+    letter-spacing="3.5">OPENELEMENT — WEB STANDARDS LAB</text>
+  <text x="1368" y="145" class="mono" font-size="11" fill="#868e96"
+    text-anchor="end">EST. 2026 / SPEC-042</text>
+  <text x="64" y="300" class="mono" font-size="108" font-weight="800" fill="#f3eaff"
+    letter-spacing="-5">THE WEB,</text>
+  <text x="436" y="470" class="serif" font-size="152" font-style="italic" fill="#b59cff"
+    letter-spacing="-3">composed.</text>
+  <rect x="72" y="530" width="160" height="46" rx="6" fill="#8262db" />
+  <text x="102" y="559" class="mono" font-size="13" font-weight="700"
+    fill="#fbf7ff">Start building</text>
+  <rect x="248" y="530" width="180" height="46" rx="6" fill="none" stroke="#58399e"
+    stroke-width="1.5" />
+  <text x="276" y="559" class="mono" font-size="13" font-weight="500"
+    fill="#e9ecef">Watch it unfold</text>
+  <text x="1100" y="559" class="mono" font-size="12" fill="#868e96"
+    text-anchor="end">v0.41.0 — the stable five-package line</text>
+
+  <!-- marquee -->
+  <rect x="0" y="616" width="1440" height="44" fill="#0d0918" />
+  <line x1="0" y1="616.5" x2="1440" y2="616.5" stroke="#ffffff" stroke-opacity="0.08" />
+  <line x1="0" y1="659.5" x2="1440" y2="659.5" stroke="#ffffff" stroke-opacity="0.08" />
+  <text x="36" y="644" class="mono" font-size="14" font-weight="500" fill="#8262db"
+    letter-spacing="2">CUSTOM ELEMENTS ✳ SHADOW DOM ✳ DECLARATIVE SHADOW DOM ✳ ES MODULES ✳ SIGNALS ✳ HTML FIRST ✳ CUSTOM ELEMENTS ✳ SHADOW DOM ✳ DSD ✳</text>
+
+  <!-- ═══ §01 ELEMENT ═══ -->
+  <g>
+    <text x="60" y="980" class="mono" font-size="260" font-weight="800" fill="none" stroke="#58399e"
+      stroke-opacity="0.7" stroke-width="1.5">01</text>
+    <text x="330" y="790" class="mono" font-size="13" font-weight="700" fill="#8262db"
+      letter-spacing="3">§1 — ELEMENT</text>
+    <text x="330" y="862" class="mono" font-size="46" font-weight="800" fill="#f3eaff"
+      letter-spacing="-2">One durable</text>
+    <text x="330" y="922" class="serif" font-size="56" font-style="italic"
+      fill="#b59cff">contract.</text>
+    <text x="330" y="984" class="mono" font-size="14.5"
+      fill="#adb5bd">Custom Elements are the application component contract —</text>
+    <text x="330" y="1010" class="mono" font-size="14.5"
+      fill="#adb5bd">not a renderer integration, not a leaf-widget format.</text>
+    <text x="330" y="1036" class="mono" font-size="14.5"
+      fill="#adb5bd">Write the element once; it renders on the server and</text>
+    <text x="330" y="1062" class="mono" font-size="14.5"
+      fill="#adb5bd">upgrades in the browser.</text>
+    <g>
+      <rect x="330" y="1100" width="140" height="30" rx="6" fill="#21143b" stroke="#58399e" />
+      <text x="348" y="1120" class="mono" font-size="11.5" font-weight="700"
+        fill="#b59cff">ZERO RUNTIME</text>
+      <rect x="486" y="1100" width="120" height="30" rx="6" fill="#21143b" stroke="#58399e" />
+      <text x="504" y="1120" class="mono" font-size="11.5" font-weight="700"
+        fill="#b59cff">JSX + BASIC</text>
+    </g>
+    <text x="330" y="1190" class="mono" font-size="11"
+      fill="#868e96">※ The same class powers SSR strings and browser upgrades —</text>
+    <text x="330" y="1212" class="mono" font-size="11"
+      fill="#868e96">no parallel implementations, no adapter shims.</text>
+    <!-- code terminal -->
+    <g>
+      <rect x="820" y="740" width="548" height="440" rx="12" fill="#100a1c" stroke="#ffffff"
+        stroke-opacity="0.09" />
+      <line x1="820" y1="741" x2="1368" y2="741" stroke="#b59cff" stroke-opacity="0.55" />
+      <circle cx="848" cy="768" r="5" fill="#ff5f57" />
+      <circle cx="868" cy="768" r="5" fill="#febc2e" />
+      <circle cx="888" cy="768" r="5" fill="#28c840" />
+      <text x="912" y="772" class="mono" font-size="11" fill="#868e96">counter.element.tsx</text>
+      <text x="848" y="816" class="mono" font-size="13" fill="#c084fc">import</text>
+      <text x="912" y="816" class="mono" font-size="13"
+        fill="#e9ecef"> { defineElement, signal } </text>
+      <text x="1160" y="816" class="mono" font-size="13" fill="#c084fc">from</text>
+      <text x="1208" y="816" class="mono" font-size="13"
+        fill="#4ade80"> '@openelement/element'</text>
+      <text x="848" y="856" class="mono" font-size="13" fill="#c084fc">export const</text>
+      <text x="962" y="856" class="mono" font-size="13" fill="#60a5fa"> Counter</text>
+      <text x="1034" y="856" class="mono" font-size="13" fill="#e9ecef"> = defineElement(</text>
+      <text x="1182" y="856" class="mono" font-size="13" fill="#fbbf24">props</text>
+      <text x="1224" y="856" class="mono" font-size="13" fill="#e9ecef"> ({</text>
+      <text x="848" y="896" class="mono" font-size="13" fill="#e9ecef">  count: { type: Number, default: 0, reflect: true },</text>
+      <text x="848" y="936" class="mono" font-size="13" fill="#e9ecef">  render() {</text>
+      <text x="848" y="976" class="mono" font-size="13" fill="#c084fc">    return</text>
+      <text x="930" y="976" class="mono" font-size="13" fill="#e9ecef"> &lt;button onClick={</text>
+      <text x="1110" y="976" class="mono" font-size="13" fill="#fbbf24">() =></text>
+      <text x="1150" y="976" class="mono" font-size="13" fill="#e9ecef"> this.count++}&gt;</text>
+      <text x="848" y="1016" class="mono" font-size="13" fill="#e9ecef">      {this.count}&lt;/button&gt;</text>
+      <text x="848" y="1056" class="mono" font-size="13" fill="#e9ecef">  }</text>
+      <text x="848" y="1096" class="mono" font-size="13" fill="#e9ecef">}))</text>
+      <text x="848" y="1148" class="mono" font-size="11.5"
+        fill="#868e96">// SSR: &lt;open-counter count="0"&gt; + DSD shadow root.</text>
+      <text x="848" y="1170" class="mono" font-size="11.5"
+        fill="#868e96">// No JavaScript required for first paint.</text>
+    </g>
+  </g>
+
+  <!-- ═══ §02 DSD — violet flood inversion ═══ -->
+  <g>
+    <rect x="0" y="1300" width="1440" height="620" fill="url(#flood)" />
+    <rect x="0" y="1300" width="1440" height="620" filter="url(#grain2)" opacity="0.06" />
+    <text x="72" y="1378" class="mono" font-size="13" font-weight="700" fill="#2f1c52"
+      letter-spacing="3">§2 — DECLARATIVE SHADOW DOM</text>
+    <text x="64" y="1480" class="mono" font-size="64" font-weight="800" fill="#130a22"
+      letter-spacing="-3">The server writes HTML.</text>
+    <text x="64" y="1576" class="serif" font-size="76" font-style="italic"
+      fill="#fbf7ff">The browser upgrades it.</text>
+    <text x="72" y="1640" class="mono" font-size="15"
+      fill="#2f1c52">DSD is the default server output. No client re-render, no double</text>
+    <text x="72" y="1668" class="mono" font-size="15"
+      fill="#2f1c52">payload — the markup is the application.</text>
+    <!-- ink-on-violet diagram -->
+    <g>
+      <rect x="72" y="1710" width="560" height="170" rx="12" fill="#130a22" fill-opacity="0.08"
+        stroke="#130a22" stroke-opacity="0.7" />
+      <text x="96" y="1742" class="mono" font-size="11" font-weight="700" fill="#2f1c52"
+        letter-spacing="1.5">SERVER · text/html</text>
+      <text x="96" y="1778" class="mono" font-size="13"
+        fill="#130a22">&lt;open-counter count="0"&gt;</text>
+      <text x="96" y="1810" class="mono" font-size="13"
+        fill="#130a22">  &lt;template shadowrootmode="open"&gt;</text>
+      <text x="96" y="1842" class="mono" font-size="13"
+        fill="#130a22">    &lt;button&gt;0&lt;/button&gt; &lt;/template&gt;</text>
+      <text x="700" y="1800" class="mono" font-size="26" fill="#130a22">⟶</text>
+      <rect x="780" y="1710" width="560" height="170" rx="12" fill="#130a22" stroke="#130a22"
+        stroke-opacity="0.85" />
+      <text x="804" y="1742" class="mono" font-size="11" font-weight="700" fill="#b59cff"
+        letter-spacing="1.5">BROWSER · upgrades in place</text>
+      <rect x="804" y="1762" width="240" height="40" rx="8" fill="none" stroke="#b59cff"
+        stroke-dasharray="5 4" />
+      <text x="818" y="1787" class="mono" font-size="12.5" fill="#b59cff">#shadow-root (open)</text>
+      <text x="804" y="1840" class="mono" font-size="12.5"
+        fill="#e6d8ff">└─ &lt;button&gt; → signal bound · first paint = interactive</text>
+    </g>
+  </g>
+
+  <!-- ═══ §03 ISLANDS ═══ -->
+  <g>
+    <text x="72" y="2024" class="mono" font-size="13" font-weight="700" fill="#8262db"
+      letter-spacing="3">§3 — ISLANDS</text>
+    <text x="64" y="2104" class="mono" font-size="52" font-weight="800" fill="#f3eaff"
+      letter-spacing="-2">Upgrade</text>
+    <text x="368" y="2104" class="serif" font-size="62" font-style="italic"
+      fill="#b59cff"> selectively.</text>
+    <text x="72" y="2156" class="mono" font-size="14"
+      fill="#adb5bd">Interactive regions hydrate on your schedule. The rest of the page never ships JavaScript.</text>
+    <!-- four strategy columns -->
+    <g>
+      <rect x="0" y="2210" width="1440" height="270" fill="#0d0918" />
+      <line x1="0" y1="2210.5" x2="1440" y2="2210.5" stroke="#ffffff" stroke-opacity="0.08" />
+      <line x1="0" y1="2479.5" x2="1440" y2="2479.5" stroke="#ffffff" stroke-opacity="0.08" />
+      <!-- load -->
+      <text x="72" y="2330" class="mono" font-size="100" font-weight="800" fill="none"
+        stroke="#58399e" stroke-width="1.5">L</text>
+      <text x="72" y="2378" class="mono" font-size="16" font-weight="800" fill="#f3eaff">load</text>
+      <text x="72" y="2410" class="mono" font-size="11.5"
+        fill="#adb5bd">Critical interactivity, hydrated</text>
+      <text x="72" y="2432" class="mono" font-size="11.5"
+        fill="#adb5bd">immediately after parse.</text>
+      <text x="72" y="2464" class="mono" font-size="10.5" fill="#868e96">nav · search · theme</text>
+      <line x1="360" y1="2230" x2="360" y2="2460" stroke="#ffffff" stroke-opacity="0.08" />
+      <!-- idle (default, violet fill) -->
+      <rect x="360" y="2210" width="360" height="270" fill="#8262db" fill-opacity="0.16" />
+      <text x="432" y="2330" class="mono" font-size="100" font-weight="800" fill="none"
+        stroke="#b59cff" stroke-width="1.5">I</text>
+      <text x="432" y="2378" class="mono" font-size="16" font-weight="800"
+        fill="#f3eaff">idle</text>
+      <rect x="492" y="2356" width="106" height="24" rx="6" fill="#8262db" />
+      <text x="512" y="2372" class="mono" font-size="10.5" font-weight="700"
+        fill="#fbf7ff">DEFAULT</text>
+      <text x="432" y="2410" class="mono" font-size="11.5"
+        fill="#adb5bd">Upgrades when the browser is</text>
+      <text x="432" y="2432" class="mono" font-size="11.5"
+        fill="#adb5bd">idle — never blocks paint.</text>
+      <text x="432" y="2464" class="mono" font-size="10.5" fill="#868e96">counters · forms</text>
+      <line x1="720" y1="2230" x2="720" y2="2460" stroke="#ffffff" stroke-opacity="0.08" />
+      <!-- visible -->
+      <text x="792" y="2330" class="mono" font-size="100" font-weight="800" fill="none"
+        stroke="#58399e" stroke-width="1.5">V</text>
+      <text x="792" y="2378" class="mono" font-size="16" font-weight="800"
+        fill="#f3eaff">visible</text>
+      <text x="792" y="2410" class="mono" font-size="11.5"
+        fill="#adb5bd">IntersectionObserver gates</text>
+      <text x="792" y="2432" class="mono" font-size="11.5"
+        fill="#adb5bd">hydration until scroll-in.</text>
+      <text x="792" y="2464" class="mono" font-size="10.5" fill="#868e96">comments · charts</text>
+      <line x1="1080" y1="2230" x2="1080" y2="2460" stroke="#ffffff" stroke-opacity="0.08" />
+      <!-- only -->
+      <text x="1152" y="2330" class="mono" font-size="100" font-weight="800" fill="none"
+        stroke="#58399e" stroke-width="1.5">O</text>
+      <text x="1152" y="2378" class="mono" font-size="16" font-weight="800"
+        fill="#f3eaff">only</text>
+      <text x="1152" y="2410" class="mono" font-size="11.5"
+        fill="#adb5bd">Client-only, for what the</text>
+      <text x="1152" y="2432" class="mono" font-size="11.5"
+        fill="#adb5bd">server cannot know.</text>
+      <text x="1152" y="2464" class="mono" font-size="10.5" fill="#868e96">webgl · media</text>
+    </g>
+  </g>
+
+  <!-- ═══ §04 OUTPUT — typographic rows ═══ -->
+  <g>
+    <text x="72" y="2584" class="mono" font-size="13" font-weight="700" fill="#8262db"
+      letter-spacing="3">§4 — OUTPUT</text>
+    <text x="64" y="2660" class="mono" font-size="52" font-weight="800" fill="#f3eaff"
+      letter-spacing="-2">Static first.</text>
+    <text x="480" y="2660" class="serif" font-size="62" font-style="italic"
+      fill="#b59cff">Deployable anywhere.</text>
+    <g class="mono">
+      <line x1="0" y1="2710.5" x2="1440" y2="2710.5" stroke="#ffffff" stroke-opacity="0.08" />
+      <text x="72" y="2790" font-size="56" font-weight="800" fill="#f3eaff"
+        letter-spacing="-2">BROWSER</text>
+      <text x="700" y="2762" font-size="12" fill="#adb5bd">Pure static HTML + DSD.</text>
+      <text x="700" y="2786" font-size="12" fill="#adb5bd">CDN-ready, no runtime.</text>
+      <text x="1290" y="2790" font-size="32" fill="#58399e">→</text>
+      <rect x="0" y="2816" width="1440" height="104" fill="#8262db" />
+      <text x="72" y="2884" font-size="56" font-weight="800" fill="#130a22"
+        letter-spacing="-2">NODE</text>
+      <text x="700" y="2856" font-size="12" fill="#e6d8ff">Nitro server output with</text>
+      <text x="700" y="2880" font-size="12" fill="#e6d8ff">ISR manifests baked in.</text>
+      <text x="1290" y="2884" font-size="32" fill="#130a22">→</text>
+      <line x1="0" y1="2920.5" x2="1440" y2="2920.5" stroke="#ffffff" stroke-opacity="0.08" />
+      <text x="72" y="2998" font-size="56" font-weight="800" fill="#f3eaff"
+        letter-spacing="-2">WORKERS</text>
+      <text x="700" y="2970" font-size="12" fill="#adb5bd">Edge deploys from the same</text>
+      <text x="700" y="2994" font-size="12"
+        fill="#adb5bd">page model. Proof gate per release.</text>
+      <text x="1290" y="2998" font-size="32" fill="#58399e">→</text>
+      <line x1="0" y1="3024.5" x2="1440" y2="3024.5" stroke="#ffffff" stroke-opacity="0.08" />
+    </g>
+  </g>
+
+  <!-- ═══ §05 BEGIN ═══ -->
+  <g>
+    <text x="72" y="3130" class="mono" font-size="13" font-weight="700" fill="#8262db"
+      letter-spacing="3">§5 — BEGIN</text>
+    <text x="600" y="3230" class="serif" font-size="110" font-style="italic"
+      fill="#b59cff">Begin.</text>
+    <rect x="420" y="3290" width="600" height="64" rx="12" fill="#100a1c" stroke="#ffffff"
+      stroke-opacity="0.09" />
+    <line x1="420" y1="3291" x2="1020" y2="3291" stroke="#b59cff" stroke-opacity="0.55" />
+    <circle cx="446" cy="3322" r="5" fill="#ff5f57" />
+    <circle cx="466" cy="3322" r="5" fill="#febc2e" />
+    <circle cx="486" cy="3322" r="5" fill="#28c840" />
+    <text x="516" y="3328" class="mono" font-size="13.5" fill="#4ade80">$ </text>
+    <text x="536" y="3328" class="mono" font-size="13.5"
+      fill="#e9ecef">deno run -A npm:@openelement/create my-app</text>
+    <rect x="560" y="3400" width="150" height="46" rx="6" fill="#8262db" />
+    <text x="590" y="3429" class="mono" font-size="13" font-weight="700"
+      fill="#fbf7ff">Get started</text>
+    <rect x="730" y="3400" width="170" height="46" rx="6" fill="none" stroke="#58399e"
+      stroke-width="1.5" />
+    <text x="758" y="3429" class="mono" font-size="13" font-weight="500"
+      fill="#e9ecef">Read the guide</text>
+  </g>
+
+  <!-- ═══ footer with giant cropped mark ═══ -->
+  <g>
+    <line x1="0" y1="3490.5" x2="1440" y2="3490.5" stroke="#ffffff" stroke-opacity="0.08" />
+    <text x="-30" y="3690" class="mono" font-size="300" font-weight="800" fill="none"
+      stroke="#b59cff" stroke-opacity="0.14" stroke-width="1.5"
+      letter-spacing="-12">&lt;open/&gt;</text>
+    <text x="72" y="3538" class="mono" font-size="12"
+      fill="#868e96">Docs — API — Roadmap — Blog — GitHub</text>
+    <text x="1100" y="3538" class="mono" font-size="12"
+      fill="#868e96">MIT · v0.41.0 · composed from real browser primitives</text>
+  </g>
+</svg>

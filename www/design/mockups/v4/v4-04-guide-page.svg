@@ -1,0 +1,172 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="1620" viewBox="0 0 1440 1620">
+  <defs>
+    <style>
+    @import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&amp;family=JetBrains+Mono:wght@400;500;700;800&amp;display=swap');
+    .mono {
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .serif {
+      font-family: 'Instrument Serif', serif;
+    }
+    </style>
+    <pattern id="gGrid" width="72" height="72" patternUnits="userSpaceOnUse">
+      <path d="M 72 0 L 0 0 0 72" fill="none" stroke="#ffffff" stroke-opacity="0.035"
+        stroke-width="1" />
+    </pattern>
+  </defs>
+  <rect width="1440" height="1620" fill="#0a0714" />
+  <rect width="1440" height="1620" fill="url(#gGrid)" />
+
+  <text x="72" y="62" class="mono" font-size="20" font-weight="800"
+    fill="#f3eaff">&lt;open/&gt;</text>
+  <g class="mono" font-size="13" font-weight="500" fill="#adb5bd">
+    <text x="640" y="58">Docs</text>
+    <text x="716" y="58">API</text>
+    <text x="784" y="58">Roadmap</text>
+    <text x="890" y="58">Blog</text>
+    <text x="956" y="58">GitHub</text>
+  </g>
+  <rect x="1262" y="34" width="122" height="34" rx="6" fill="#8262db" />
+  <text x="1284" y="56" class="mono" font-size="12" font-weight="700"
+    fill="#fbf7ff">Get started</text>
+  <line x1="0" y1="84.5" x2="1440" y2="84.5" stroke="#ffffff" stroke-opacity="0.08" />
+
+  <!-- compact editorial header -->
+  <text x="200" y="150" class="mono" font-size="12"
+    fill="#868e96">GUIDE / <tspan fill="#b59cff">GETTING STARTED</tspan></text>
+  <text x="1368" y="150" class="mono" font-size="11" fill="#868e96"
+    text-anchor="end">§1–§5 · 4 MIN</text>
+  <text x="192" y="252" class="serif" font-size="96" font-style="italic"
+    fill="#b59cff">Getting started.</text>
+  <text x="200" y="316" class="mono" font-size="15"
+    fill="#adb5bd">From zero to a running openElement application in three commands —</text>
+  <text x="200" y="344" class="mono" font-size="15"
+    fill="#adb5bd">then a tour of the five packages you just installed.</text>
+  <line x1="200" y1="384.5" x2="1368" y2="384.5" stroke="#ffffff" stroke-opacity="0.08" />
+
+  <!-- left sidenote margin -->
+  <g class="mono" font-size="11" fill="#868e96">
+    <text x="72" y="470">§1</text>
+    <text x="72" y="494">PREREQ:</text>
+    <text x="72" y="516">DENO 2.x</text>
+    <text x="72" y="780">§2</text>
+    <text x="72" y="804">DEV AND</text>
+    <text x="72" y="826">BUILD SHARE</text>
+    <text x="72" y="848">ONE PLAN</text>
+    <text x="72" y="1120">§3</text>
+    <text x="72" y="1144">THE FIVE-</text>
+    <text x="72" y="1166">PACKAGE</text>
+    <text x="72" y="1188">GRAPH</text>
+  </g>
+
+  <!-- TOC rail -->
+  <g>
+    <text x="1180" y="440" class="mono" font-size="10.5" font-weight="700" fill="#868e96"
+      letter-spacing="2">ON THIS PAGE</text>
+    <rect x="1172" y="458" width="3" height="16" fill="#8262db" />
+    <text x="1184" y="471" class="mono" font-size="11.5" font-weight="700"
+      fill="#f3eaff">§1 Install</text>
+    <text x="1184" y="500" class="mono" font-size="11.5" fill="#adb5bd">§2 Run the dev server</text>
+    <text x="1184" y="529" class="mono" font-size="11.5" fill="#adb5bd">§3 What you installed</text>
+    <text x="1184" y="558" class="mono" font-size="11.5" fill="#adb5bd">§4 Your first element</text>
+    <text x="1184" y="587" class="mono" font-size="11.5"
+      fill="#adb5bd">§5 Build for production</text>
+  </g>
+
+  <!-- §1 -->
+  <g>
+    <text x="200" y="470" class="mono" font-size="26" font-weight="800"
+      fill="#f3eaff">§1 — Install</text>
+    <text x="200" y="512" class="mono" font-size="13.5"
+      fill="#adb5bd">The only prerequisite is the Deno runtime. The installer scaffolds a</text>
+    <text x="200" y="538" class="mono" font-size="13.5"
+      fill="#adb5bd">project pinned to the exact published line — no caret ranges.</text>
+    <rect x="200" y="570" width="820" height="56" rx="12" fill="#100a1c" stroke="#ffffff"
+      stroke-opacity="0.09" />
+    <line x1="200" y1="571" x2="1020" y2="571" stroke="#b59cff" stroke-opacity="0.55" />
+    <text x="224" y="606" class="mono" font-size="13.5" fill="#4ade80">$ </text>
+    <text x="244" y="606" class="mono" font-size="13.5"
+      fill="#e9ecef">deno run -A npm:@openelement/create my-app</text>
+    <rect x="200" y="660" width="820" height="78" rx="12" fill="#130a22" stroke="#58399e" />
+    <rect x="200" y="660" width="4" height="78" fill="#8262db" />
+    <text x="228" y="690" class="mono" font-size="11.5" font-weight="700" fill="#b59cff">NOTE</text>
+    <text x="228" y="716" class="mono" font-size="12.5"
+      fill="#adb5bd">The same command works offline against the vendored cache — CI</text>
+    <text x="228" y="736" class="mono" font-size="12.5"
+      fill="#adb5bd">verifies the packaged starter on every release.</text>
+  </g>
+
+  <!-- §2 -->
+  <g>
+    <text x="200" y="816" class="mono" font-size="26" font-weight="800"
+      fill="#f3eaff">§2 — Run the dev server</text>
+    <text x="200" y="858" class="mono" font-size="13.5"
+      fill="#adb5bd">Vite dev with full HMR. The dev server and the static build share one</text>
+    <text x="200" y="884" class="mono" font-size="13.5"
+      fill="#adb5bd">admission plan, so what you see is what ships.</text>
+    <rect x="200" y="916" width="820" height="56" rx="12" fill="#100a1c" stroke="#ffffff"
+      stroke-opacity="0.09" />
+    <line x1="200" y1="917" x2="1020" y2="917" stroke="#b59cff" stroke-opacity="0.55" />
+    <text x="224" y="952" class="mono" font-size="13.5" fill="#4ade80">$ </text>
+    <text x="244" y="952" class="mono" font-size="13.5"
+      fill="#e9ecef">cd my-app &amp;&amp; deno task dev</text>
+  </g>
+
+  <!-- §3 card grid -->
+  <g>
+    <text x="200" y="1048" class="mono" font-size="26" font-weight="800"
+      fill="#f3eaff">§3 — What you just installed</text>
+    <rect x="200" y="1082" width="258" height="150" rx="12" fill="#100a1c" stroke="#ffffff"
+      stroke-opacity="0.09" />
+    <line x1="200" y1="1083" x2="458" y2="1083" stroke="#8262db" stroke-opacity="0.5" />
+    <text x="222" y="1120" class="mono" font-size="13" font-weight="800"
+      fill="#f3eaff">element</text>
+    <text x="222" y="1152" class="mono" font-size="11.5" fill="#adb5bd">Custom Elements, JSX,</text>
+    <text x="222" y="1174" class="mono" font-size="11.5" fill="#adb5bd">DSD, signals</text>
+    <text x="222" y="1210" class="mono" font-size="10" fill="#868e96">@openelement/element</text>
+    <rect x="482" y="1082" width="258" height="150" rx="12" fill="#100a1c" stroke="#ffffff"
+      stroke-opacity="0.09" />
+    <line x1="482" y1="1083" x2="740" y2="1083" stroke="#8262db" stroke-opacity="0.5" />
+    <text x="504" y="1120" class="mono" font-size="13" font-weight="800" fill="#f3eaff">app</text>
+    <text x="504" y="1152" class="mono" font-size="11.5"
+      fill="#adb5bd">Pages, routing, islands,</text>
+    <text x="504" y="1174" class="mono" font-size="11.5" fill="#adb5bd">SPA chain</text>
+    <text x="504" y="1210" class="mono" font-size="10" fill="#868e96">@openelement/app</text>
+    <rect x="764" y="1082" width="258" height="150" rx="12" fill="#100a1c" stroke="#ffffff"
+      stroke-opacity="0.09" />
+    <line x1="764" y1="1083" x2="1022" y2="1083" stroke="#8262db" stroke-opacity="0.5" />
+    <text x="786" y="1120" class="mono" font-size="13" font-weight="800"
+      fill="#f3eaff">adapter-vite</text>
+    <text x="786" y="1152" class="mono" font-size="11.5" fill="#adb5bd">Vite, SSG, Nitro</text>
+    <text x="786" y="1174" class="mono" font-size="11.5" fill="#adb5bd">output paths</text>
+    <text x="786" y="1210" class="mono" font-size="10"
+      fill="#868e96">@openelement/adapter-vite</text>
+  </g>
+
+  <!-- §4 code -->
+  <g>
+    <text x="200" y="1310" class="mono" font-size="26" font-weight="800"
+      fill="#f3eaff">§4 — Your first element</text>
+    <rect x="200" y="1344" width="820" height="180" rx="12" fill="#100a1c" stroke="#ffffff"
+      stroke-opacity="0.09" />
+    <line x1="200" y1="1345" x2="1020" y2="1345" stroke="#b59cff" stroke-opacity="0.55" />
+    <text x="224" y="1380" class="mono" font-size="12.5" fill="#c084fc">export const</text>
+    <text x="338" y="1380" class="mono" font-size="12.5" fill="#60a5fa"> Hello</text>
+    <text x="390" y="1380" class="mono" font-size="12.5" fill="#e9ecef"> = defineElement(</text>
+    <text x="540" y="1380" class="mono" font-size="12.5" fill="#fbbf24">props</text>
+    <text x="582" y="1380" class="mono" font-size="12.5" fill="#e9ecef"> ({</text>
+    <text x="224" y="1416" class="mono" font-size="12.5" fill="#e9ecef">  name: { type: String, default: </text>
+    <text x="580" y="1416" class="mono" font-size="12.5" fill="#4ade80">'Web'</text>
+    <text x="628" y="1416" class="mono" font-size="12.5" fill="#e9ecef"> },</text>
+    <text x="224" y="1452" class="mono" font-size="12.5" fill="#e9ecef">  render() { </text>
+    <text x="350" y="1452" class="mono" font-size="12.5" fill="#c084fc">return</text>
+    <text x="420" y="1452" class="mono" font-size="12.5" fill="#e9ecef"> &lt;p&gt;Hello, {this.name}!&lt;/p&gt; }</text>
+    <text x="224" y="1488" class="mono" font-size="12.5" fill="#e9ecef">}))</text>
+  </g>
+
+  <!-- pager -->
+  <line x1="200" y1="1556.5" x2="1368" y2="1556.5" stroke="#ffffff" stroke-opacity="0.08" />
+  <text x="200" y="1598" class="mono" font-size="13" fill="#868e96">← Guide index</text>
+  <text x="1180" y="1598" class="mono" font-size="13" font-weight="700"
+    fill="#b59cff">§ Core concepts →</text>
+</svg>

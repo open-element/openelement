@@ -1,0 +1,43 @@
+{
+  "ancestors": [],
+  "descendants": [
+    {
+      "id": "222222222222222222",
+      "uri": "https://mastodon.social/users/admin/statuses/222222222222222222",
+      "url": "https://mastodon.social/@admin/222222222222222222",
+      "account": {
+        "id": "2",
+        "username": "user",
+        "acct": "user@mastodon.social",
+        "displayName": "Example User",
+        "avatar": "https://files.mastodon.social/accounts/avatars/000/000/002/original/user.png",
+        "avatarStatic": "https://files.mastodon.social/accounts/avatars/000/000/002/static/user.png",
+        "header": "https://files.mastodon.social/accounts/headers/000/000/002/original/user.png",
+        "headerStatic": "https://files.mastodon.social/accounts/headers/000/000/002/static/user.png",
+        "note": "<p>An example user.</p>",
+        "createdAt": "2022-06-01T00:00:00.000Z",
+        "followersCount": 10,
+        "followingCount": 20,
+        "statusesCount": 5,
+        "locked": false,
+        "bot": false
+      },
+      "content": "<p>A fixture reply to the root status.</p>",
+      "createdAt": "2026-07-06T11:00:00.000Z",
+      "replyCount": 0,
+      "reblogsCount": 0,
+      "favouritesCount": 1,
+      "bookmarked": false,
+      "favourited": false,
+      "reblogged": false,
+      "muted": false,
+      "sensitive": false,
+      "spoilerText": "",
+      "visibility": "public",
+      "mediaAttachments": [],
+      "mentions": [],
+      "tags": [],
+      "emojis": []
+    }
+  ]
+}

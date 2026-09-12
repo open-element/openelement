@@ -1,0 +1,63 @@
+{
+  "version": "0.44.0-beta.2.2",
+  "tasks": {
+    "build": "deno run --config ../../deno.json --allow-read --allow-write --allow-net --allow-env --allow-ffi --allow-sys --allow-run ../../packages/adapter-vite/src/cli/build.ts",
+    "nitro:build": "OPEN_ELEMENT_NITRO_PRESET=cloudflare_module deno run --config ../../deno.json --node-modules-dir=auto -A npm:nitro@3.0.0 build && rm -rf .output-workers/public/server",
+    "start": "deno run -A ../../packages/adapter-vite/src/cli/start.ts",
+    "check": "deno check app/routes/index.tsx app/routes/admin.tsx app/routes/checkout.tsx app/routes/notes.tsx app/routes/workspace-records.tsx app/routes/login.tsx app/routes/signup.tsx app/routes/magic-link.tsx app/routes/recover.tsx app/routes/reset-password.tsx app/routes/auth/callback.tsx app/routes/upload.tsx app/routes/api/session-token.ts app/routes/api/stripe-webhook.ts app/islands/notes-live.tsx app/shell.tsx app/components/page-home.tsx app/components/page-login.tsx app/components/page-signup.tsx app/components/page-magic-link.tsx app/components/page-recover.tsx app/components/page-reset-password.tsx app/components/page-auth-callback.tsx app/components/page-notes.tsx app/components/page-upload.tsx app/components/page-admin.tsx app/components/page-checkout.tsx app/components/page-workspace-records.tsx app/components/notes-live-shared.ts app/route-logic/login.ts app/route-logic/signup.ts app/route-logic/magic-link.ts app/route-logic/recover.ts app/route-logic/reset-password.ts app/route-logic/auth-callback.ts app/route-logic/notes.ts app/route-logic/upload.ts app/route-logic/admin.ts app/route-logic/checkout.ts app/route-logic/workspace-records.ts lib/supabase-server.ts lib/auth-security.ts lib/authorization.ts lib/rate-limit.ts lib/cloudflare-queues.ts lib/cloudflare-lifecycle.ts lib/cloudflare-handlers.ts lib/malware-scanner.ts lib/stripe-checkout.ts lib/stripe-webhook.ts lib/service-role.ts cloudflare-entry.ts scanner-worker.ts",
+    "test": "deno test --allow-env --allow-read app/__tests__/"
+  },
+  "imports": {
+    "@openelement/ui": "../../packages/ui/src/index.ts",
+    "@openelement/element": "../../packages/element/src/index.ts",
+    "@openelement/element/jsx-runtime": "../../packages/element/src/jsx-runtime.ts",
+    "@openelement/element/build-utils": "../../packages/element/src/build-utils.ts",
+    "@openelement/element/authoring": "../../packages/element/src/authoring.ts",
+    "@openelement/element/html": "../../packages/element/src/html.ts",
+    "@openelement/element/logger": "../../packages/element/src/logger.ts",
+    "@openelement/element/": "../../packages/element/src/",
+    "@openelement/app": "../../packages/app/src/index.ts",
+    "@openelement/adapter-vite": "../../packages/adapter-vite/src/index.ts",
+    "vite": "npm:vite@8.0.16",
+    "@supabase/ssr": "npm:@supabase/ssr@^0.8.0",
+    "@supabase/realtime-js": "npm:@supabase/realtime-js@^2.84.0",
+    "@supabase/supabase-js": "npm:@supabase/supabase-js@^2.84.0",
+    "@std/assert": "jsr:@std/assert@1"
+  },
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    "jsxImportSource": "@openelement/element",
+    "lib": [
+      "dom",
+      "dom.asynciterable",
+      "dom.iterable",
+      "deno.ns"
+    ]
+  },
+  "fmt": {
+    "useTabs": false,
+    "lineWidth": 100,
+    "indentWidth": 2,
+    "semiColons": true,
+    "singleQuote": true,
+    "proseWrap": "preserve"
+  },
+  "lint": {
+    "rules": {
+      "tags": [
+        "recommended"
+      ],
+      "exclude": [
+        "no-sloppy-imports"
+      ]
+    }
+  },
+  "nodeModulesDir": "auto",
+  "exclude": [
+    "node_modules",
+    "dist",
+    ".output-node",
+    ".output-workers",
+    ".nitro"
+  ]
+}

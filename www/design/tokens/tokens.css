@@ -1,0 +1,19 @@
+/**
+ * Token reference for www.
+ * Runtime tokens live in packages/ui/src/open-props-tokens.ts.
+ */
+
+:root {
+  --www-canvas: var(--bg-base);
+  --www-surface: var(--bg-card);
+  --www-elevated: var(--bg-elevated);
+  --www-muted-surface: var(--bg-surface);
+  --www-code: var(--bg-code);
+  --www-text: var(--text-primary);
+  --www-text-secondary: var(--text-secondary);
+  --www-border: var(--border);
+  --www-action: var(--brand);
+  --www-standards: var(--success);
+  --www-planned: var(--warning);
+  --www-reference: var(--info);
+}

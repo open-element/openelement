@@ -1,0 +1,6 @@
+dist/
+.cache/
+node_modules/
+*.log
+.deno-dir/
+deno-desktop-reader.app/

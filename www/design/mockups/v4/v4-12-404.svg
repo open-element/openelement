@@ -1,0 +1,62 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="900" viewBox="0 0 1440 900">
+  <defs>
+    <style>
+    @import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&amp;family=JetBrains+Mono:wght@400;500;700;800&amp;display=swap');
+    .mono {
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .serif {
+      font-family: 'Instrument Serif', serif;
+    }
+    </style>
+    <radialGradient id="nfGlow" cx="50%" cy="45%" r="55%">
+      <stop offset="0%" stop-color="#8262db" stop-opacity="0.18" />
+      <stop offset="100%" stop-color="#0a0714" stop-opacity="0" />
+    </radialGradient>
+    <pattern id="nfGrid" width="72" height="72" patternUnits="userSpaceOnUse">
+      <path d="M 72 0 L 0 0 0 72" fill="none" stroke="#ffffff" stroke-opacity="0.035"
+        stroke-width="1" />
+    </pattern>
+  </defs>
+  <rect width="1440" height="900" fill="#0a0714" />
+  <rect width="1440" height="900" fill="url(#nfGrid)" />
+  <rect width="1440" height="900" fill="url(#nfGlow)" />
+
+  <text x="72" y="62" class="mono" font-size="20" font-weight="800"
+    fill="#f3eaff">&lt;open/&gt;</text>
+  <g class="mono" font-size="13" font-weight="500" fill="#adb5bd">
+    <text x="640" y="58">Docs</text>
+    <text x="716" y="58">API</text>
+    <text x="784" y="58">Roadmap</text>
+    <text x="890" y="58">Blog</text>
+    <text x="956" y="58">GitHub</text>
+  </g>
+  <line x1="0" y1="84.5" x2="1440" y2="84.5" stroke="#ffffff" stroke-opacity="0.08" />
+
+  <!-- giant outlined 404 -->
+  <text x="260" y="520" class="mono" font-size="380" font-weight="800" fill="none" stroke="#58399e"
+    stroke-width="2" letter-spacing="-10">404</text>
+  <text x="345" y="510" class="mono" font-size="380" font-weight="800" fill="#f3eaff"
+    letter-spacing="-10">4</text>
+
+  <text x="430" y="640" class="serif" font-size="64" font-style="italic"
+    fill="#b59cff">Lost in the shadow DOM.</text>
+  <text x="500" y="700" class="mono" font-size="14.5"
+    fill="#adb5bd">This route never mounted. The page you want is probably</text>
+  <text x="560" y="728" class="mono" font-size="14.5"
+    fill="#adb5bd">one declarative template away.</text>
+
+  <rect x="560" y="780" width="180" height="52" rx="6" fill="#8262db" />
+  <text x="600" y="813" class="mono" font-size="14" font-weight="700"
+    fill="#fbf7ff">Back home</text>
+  <rect x="760" y="780" width="180" height="52" rx="6" fill="none" stroke="#58399e"
+    stroke-width="1.5" />
+  <text x="792" y="813" class="mono" font-size="14" font-weight="500"
+    fill="#e9ecef">Read the docs</text>
+
+  <!-- marquee -->
+  <rect x="0" y="856" width="1440" height="44" fill="#0d0918" />
+  <line x1="0" y1="856.5" x2="1440" y2="856.5" stroke="#ffffff" stroke-opacity="0.08" />
+  <text x="36" y="884" class="mono" font-size="14" font-weight="500" fill="#8262db"
+    letter-spacing="2">CUSTOM ELEMENTS ✳ SHADOW DOM ✳ DECLARATIVE SHADOW DOM ✳ ES MODULES ✳ SIGNALS ✳ HTML FIRST ✳ CUSTOM ELEMENTS ✳ 404 ✳</text>
+</svg>

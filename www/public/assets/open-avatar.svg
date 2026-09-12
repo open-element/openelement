@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024" role="img">
+  <title>&lt;open/&gt; avatar</title>
+  <desc>Dark rounded avatar using the current &lt;open/&gt; brand mark.</desc>
+  <rect x="0" y="0" width="1024" height="1024" rx="220" fill="#0d0d10" />
+  <text
+    x="512"
+    y="590"
+    text-anchor="middle"
+    font-family="'Hack','Geist Mono','SF Mono','JetBrains Mono',ui-monospace,Menlo,monospace"
+    font-size="190"
+    font-weight="700"
+    letter-spacing="-6"
+    fill="#ffffff"
+  ><tspan>&lt;</tspan><tspan>open</tspan><tspan fill="#b59cff">/</tspan><tspan>&gt;</tspan></text>
+</svg>

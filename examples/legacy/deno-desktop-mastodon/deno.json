@@ -1,0 +1,43 @@
+{
+  "version": "0.41.0-alpha.6",
+  "tasks": {
+    "dev": "deno run -A main.ts & deno run -A npm:vite",
+    "dev:api": "deno run -A main.ts",
+    "dev:web": "deno run -A npm:vite",
+    "build": "deno run -A --config ../../deno.json npm:vite build && deno desktop --allow-env --allow-read --allow-net --include dist --include fixtures main.ts",
+    "start": "deno task build && open deno-desktop-mastodon.app",
+    "check": "deno check main.ts mastodon.tsx",
+    "smoke": "deno test -A app/__tests__/",
+    "stress": "deno run -A tools/stress.ts"
+  },
+  "imports": {
+    "@openelement/ui": "../../packages/ui/src/index.ts",
+    "@openelement/element": "../../packages/element/src/index.ts",
+    "@openelement/element/authoring": "../../packages/element/src/authoring.ts",
+    "@openelement/element/html": "../../packages/element/src/html.ts",
+    "@openelement/element/logger": "../../packages/element/src/logger.ts",
+    "@openelement/element/": "../../packages/element/src/",
+    "@openelement/app": "../../packages/app/src/index.ts",
+    "@openelement/app/spa": "../../packages/app/src/spa.ts",
+    "@openelement/app/preact": "../../packages/app/src/preact.ts",
+    "@openelement/adapter-vite": "../../packages/adapter-vite/src/index.ts",
+    "preact": "npm:preact@^10.28.0",
+    "preact/": "npm:preact@^10.28.0/",
+    "@preact/signals": "npm:@preact/signals@^2.9.0",
+    "vite": "npm:vite@8.0.16",
+    "@std/assert": "jsr:@std/assert@1"
+  },
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    "jsxImportSource": "@openelement/element",
+    "lib": [
+      "dom",
+      "dom.asynciterable",
+      "dom.iterable",
+      "deno.ns"
+    ]
+  },
+  "desktop": {
+    "backend": "webview"
+  }
+}
