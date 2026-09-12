@@ -19,6 +19,7 @@
 import type { Plugin } from 'vite';
 
 import { fileURLToPath } from 'node:url';
+import { existsSync } from 'node:fs';
 import process from 'node:process';
 
 import type { FrameworkOptions } from './internal/protocol/framework.ts';
@@ -35,6 +36,16 @@ const VIRTUAL_CLIENT_ENTRY_ID = 'virtual:open-client-entry';
 // island set changes so the client entry re-renders from the rescan (#1062).
 export const RESOLVED_CLIENT_ENTRY_ID = '\0' + VIRTUAL_CLIENT_ENTRY_ID;
 const CLIENT_ENTRY_PUBLIC_PATH = 'client/islands/client.js';
+
+// Same packed-world rule as runtimeModulePath in cli/build-client.ts:
+// workspace dev resolves the TypeScript source; `deno pack` removes raw
+// TypeScript payloads, so an installed tarball resolves the staged
+// JavaScript counterpart instead.
+function devRuntimeModulePath(relativeSource: string): string {
+  const sourcePath = fileURLToPath(new URL(relativeSource, import.meta.url));
+  if (existsSync(sourcePath)) return sourcePath;
+  return sourcePath.replace(/\.(?:[cm]?ts|tsx)$/, '.js');
+}
 
 export function devIslandClientPlugin(
   options: FrameworkOptions,
@@ -66,10 +77,10 @@ export function devIslandClientPlugin(
       // #868: the client runtimes resolve to their real source modules (same
       // mapping as build-client.ts) so they transform like any other module.
       if (id === VIRTUAL_RUNTIME_SPECIFIERS.scheduler) {
-        return fileURLToPath(new URL('./internal/ssg/island-scheduler.ts', import.meta.url));
+        return devRuntimeModulePath('./internal/ssg/island-scheduler.ts');
       }
       if (id === VIRTUAL_RUNTIME_SPECIFIERS.enhance) {
-        return fileURLToPath(new URL('./internal/ssg/enhance-client.ts', import.meta.url));
+        return devRuntimeModulePath('./internal/ssg/enhance-client.ts');
       }
       return null;
     },
