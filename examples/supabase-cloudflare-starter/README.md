@@ -1,5 +1,9 @@
 # Supabase × Cloudflare reference starter
 
+> Experimental, advanced reference — not a minimal starter. It shows one
+> opinionated fullstack composition; new projects should start from
+> `@openelement/create`.
+
 Maintained reference application for the OpenElement × Supabase × Cloudflare
 fullstack delivery path (epic #981, issue #983). Composition only: no
 framework-owned auth/database abstractions — Supabase owns data/Auth/RLS,
