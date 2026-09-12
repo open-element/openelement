@@ -1,6 +1,6 @@
 /**
  * Generate www sitemap.xml + robots.txt from the route catalog (Beta.2.2,
- * #1327). Runs in `deno task build` after the adapter build: the public
+ * #1327). Runs in `deno task www:build` after the router build: the public
  * index is enumerated from the route catalog and the drift-gated content
  * graph — never by scanning built output or request-time Documents.
  * Fails closed: an unenumerable dynamic route or a duplicate fails the build.
