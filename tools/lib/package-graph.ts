@@ -283,6 +283,7 @@ export function releasePublishOrder(packages: PackageInfo[]): PackageInfo[] {
     '@openelement/element',
     '@openelement/router',
     '@openelement/create',
+    '@openelement/ui',
   ];
   const topological = sortPackages(packages);
   const rank = new Map(releasePriority.map((name, index) => [name, index]));
