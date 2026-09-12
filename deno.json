@@ -110,7 +110,7 @@
     "nitro:proof:workers": "deno run --allow-read --allow-write --allow-run --allow-env --allow-net fixtures/router-nitro/proof.ts workers",
     "test:coverage:check": "deno run --allow-read --allow-run --allow-write --allow-env --allow-net --allow-ffi --allow-sys tools/check-coverage.ts --threshold 80 --branch-threshold 84 --function-threshold 86",
     "generate:www-content-data": "deno run --allow-read --allow-write tools/generate-www-content-data.ts",
-    "www:build": "deno task generate:www-content-data && cd www && deno run --config ../deno.json --allow-read --allow-write --allow-net --allow-env --allow-ffi --allow-sys --allow-run ../packages/router/src/cli/build.ts",
+    "www:build": "deno task generate:www-content-data && cd www && deno run --config ../deno.json --allow-read --allow-write --allow-net --allow-env --allow-ffi --allow-sys --allow-run ../packages/router/src/cli/build.ts && cd .. && deno task www:sitemap",
     "www:sitemap": "deno run --allow-read --allow-write --allow-env tools/generate-www-sitemap.ts",
     "www:check-links": "deno run --allow-read tools/check-www-links.ts",
     "www:check-theme-tokens": "deno run --allow-read tools/check-www-theme-tokens.ts",
