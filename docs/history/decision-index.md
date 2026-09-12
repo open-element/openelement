@@ -16,6 +16,10 @@ git show <delete-sha>^:docs/adr/ADR-0126-built-in-allow-list-html-sanitizer.md
 
 # 3. Or search every ref at once:
 git log --all -S "ADR-0126" --oneline
+
+# Concrete example — ADR-0123 (standards-as-seams evolution plan, alpha.13),
+# added in 458805e6 and removed in the 1.0 convergence 5a039423:
+git show 458805e6:docs/adr/ADR-0123-standards-as-seams-evolution.md
 ```
 
 Why full texts were removed: the 1.0 convergence (`5a039423`, ADR-0152) treats
@@ -124,6 +128,7 @@ maintenance cost.
 | ADR-0120: 0.42.0 WC Application Loop Scope and Action Protocol                                      | Historical | v0.41-v0.42     | current architecture docs                          |
 | ADR-0121: 0.42 Action Protocol Hardening Amendment (Audit Round 1)                                  | Historical | v0.41-v0.42     | current architecture docs                          |
 | ADR-0122: 0.42.0 Stable Scope Freeze — WC Light Fullstack                                           | Historical | v0.41-v0.42     | current architecture docs                          |
+| ADR-0123: Standards-as-Seams Evolution Plan (alpha.13)                                              | Historical | v0.42-v0.43     | current architecture docs                          |
 | ADR-0124: Keyed List Reconciliation for `<For>`                                                     | Historical | v0.42-v0.43     | current architecture docs                          |
 | ADR-0126: Built-in Allow-List HTML Sanitizer (`sanitizeHtml`)                                       | Historical | v0.42-v0.43     | current architecture docs                          |
 | ADR-0127: Unify Island Hydration Option Name (`strategy` → `hydrate`)                               | Historical | v0.42-v0.43     | current architecture docs                          |
