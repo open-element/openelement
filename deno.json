@@ -35,9 +35,7 @@
     "marked": "npm:marked@^15.0.0",
     "gray-matter": "npm:gray-matter@^4.0.3",
     "@openelement/site-ui/": "./www/app/site-ui/",
-    "@openelement/generated/nav": "./www/app/data/_generated-nav.ts",
-    "@openelement/generated/blog-data": "./www/app/data/_generated-blog-data.ts",
-    "@openelement/generated/i18n": "./www/app/data/_generated-i18n-data.ts"
+    "@openelement/generated/blog-data": "./www/app/data/_generated-blog-data.ts"
   },
   "vendor": true,
   "nodeModulesDir": "manual",
