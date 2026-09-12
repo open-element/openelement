@@ -17,7 +17,6 @@ const CONFIGS = [
   'zero-tests',
   'no-matching-files',
 ];
-];
 
 let failed = 0;
 for (const name of CONFIGS) {
