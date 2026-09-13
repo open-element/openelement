@@ -12,11 +12,14 @@ const EXTENSIONS = new Set(['.ts', '.tsx']);
  * and its two public subpath entries, plus the Router application-lifecycle
  * tooling (Vite orchestration under src/vite/, the build/start CLI under
  * src/cli/, and the Nitro mount). These modules are chartered to use the
- * TypeScript compiler API, Vite, and node:* host APIs; they are reachable
+ * TypeScript compiler API, Vite, and Deno host APIs where the Web platform
+ * offers no filesystem/process capability; they are reachable
  * only through the @openelement/element/compiler, @openelement/element/vite,
  * @openelement/router/vite, @openelement/router/cli/* and
  * @openelement/router/nitro-mount subpaths, never from the browser/runtime
- * entry points. Every other module under the restricted roots stays
+ * entry points. Node-exclusive APIs are barred everywhere: host tooling uses
+ * Web Standards first, then Deno/Deno std — never node:* imports, process,
+ * Buffer, or require. Every other module under the restricted roots stays
  * fail-closed.
  */
 const HOST_TOOLING_ALLOWLIST =
@@ -26,17 +29,28 @@ const HOST_TOOLING_ALLOWLIST =
 // decision); every other npm: specifier is barred from runtime-free packages.
 const ALLOWED_NPM_SPECIFIER = /^npm:@preact\/signals-core(?:@|\/|$)/;
 
-export function scanDenoApiSource(path: string, source: string): string[] {
+export function scanDenoApiSource(
+  path: string,
+  source: string,
+  options: { hostTooling?: boolean } = {},
+): string[] {
   const violations: string[] = [];
   for (const specifier of extractStaticModuleSpecifiers(source, path)) {
     if (specifier.value.startsWith('node:')) {
+      // Barred in host tooling too: Web Standards, then Deno/Deno std.
       violations.push(`${path}:${specifier.line}: node import: ${specifier.value}`);
-    } else if (specifier.value.startsWith('npm:') && !ALLOWED_NPM_SPECIFIER.test(specifier.value)) {
+    } else if (
+      !options.hostTooling &&
+      specifier.value.startsWith('npm:') &&
+      !ALLOWED_NPM_SPECIFIER.test(specifier.value)
+    ) {
       violations.push(`${path}:${specifier.line}: npm import: ${specifier.value}`);
     }
   }
-  for (const access of extractDenoAccesses(source, path)) {
-    violations.push(`${path}:${access.line}: Deno API: Deno.${access.member}`);
+  if (!options.hostTooling) {
+    for (const access of extractDenoAccesses(source, path)) {
+      violations.push(`${path}:${access.line}: Deno API: Deno.${access.member}`);
+    }
   }
   return violations;
 }
@@ -51,7 +65,10 @@ function scan(root: string): string[] {
     const dot = entry.name.lastIndexOf('.');
     if (dot === -1 || !EXTENSIONS.has(entry.name.slice(dot))) continue;
     const text = Deno.readTextFileSync(entry.path);
-    if (HOST_TOOLING_ALLOWLIST.test(entry.path)) continue;
+    if (HOST_TOOLING_ALLOWLIST.test(entry.path)) {
+      violations.push(...scanDenoApiSource(entry.path, text, { hostTooling: true }));
+      continue;
+    }
     const firstCodeLine = text.split('\n').find((line) => line.trim() !== '') ?? '';
     if (firstCodeLine.trim().startsWith('// deno-api-free:ignore')) continue;
     violations.push(...scanDenoApiSource(entry.path, text));

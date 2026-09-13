@@ -38,3 +38,15 @@ Deno.test('deno-api-free catches globalThis.Deno, destructuring, aliases, and np
   assertStringIncludes(text, 'npm import: npm:left-pad@1.0.0');
   assertFalse(text.includes('signals-core'));
 });
+
+Deno.test('deno-api-free bars node imports even in chartered host tooling', () => {
+  const hostSource =
+    `import { join } from 'node:path';\nimport { contentType } from '@std/media-types';\nDeno.cwd();\n`;
+  const hostIssues = scanDenoApiSource('packages/router/src/cli/build.ts', hostSource, {
+    hostTooling: true,
+  });
+  assertEquals(hostIssues.length, 1);
+  assertStringIncludes(hostIssues.join('\n'), 'node import');
+  const runtimeIssues = scanDenoApiSource('packages/router/src/router.ts', hostSource);
+  assertEquals(runtimeIssues.length, 2);
+});

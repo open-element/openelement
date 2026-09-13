@@ -1,3 +1,4 @@
+// esm-boundary:scanner — this file scans for CJS constructs, so it names them.
 import { assert, assertEquals } from '@std/assert';
 import { scanExtractedPackage } from './check-package-artifacts.ts';
 

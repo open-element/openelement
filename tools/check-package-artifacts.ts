@@ -1,4 +1,5 @@
 #!/usr/bin/env -S deno run --allow-read --allow-write --allow-run --allow-net --allow-env
+// esm-boundary:scanner — this file scans for CJS constructs, so it names them.
 /**
  * Release gate: verify packed npm artifacts stay ESM-only and keep host APIs out
  * of runtime-free/browser-facing package surfaces.
