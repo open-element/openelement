@@ -115,10 +115,20 @@ export async function typeCheckExamples(examples: ContentExample[]): Promise<Exa
   await Deno.mkdir('.tmp', { recursive: true });
   const dir = await Deno.makeTempDir({ dir: '.tmp', prefix: 'content-examples-' });
   try {
+    // Project-shape side-effect imports (`import './components/x.tsx'`) name
+    // files of the reader's project, not the docs tree: retarget them at an
+    // empty stub so teaching examples check the framework usage, not the
+    // reader's filesystem. Value imports (`from './x'`) are left alone and
+    // still fail closed when unresolvable.
+    await Deno.writeTextFile(`${dir}/__project_shape_stub.ts`, 'export {};\n');
     const files: string[] = [];
     for (const [index, example] of examples.entries()) {
       const name = `example-${index}.${example.lang}`;
-      await Deno.writeTextFile(`${dir}/${name}`, example.code);
+      const code = example.code.replaceAll(
+        /(^|\n)\s*import\s*(['"])\.[^'"]*\2\s*;?/g,
+        (_, prefix, quote) => `${prefix}import ${quote}./__project_shape_stub.ts${quote};`,
+      );
+      await Deno.writeTextFile(`${dir}/${name}`, code);
       files.push(`${dir}/${name}`);
     }
     const paths = await workspacePaths();
