@@ -1,7 +1,7 @@
 /** Ensure browser-facing product packages do not use Deno APIs, node imports, or npm specifiers. */
 
 import { walkSync } from '@std/fs/walk';
-import { extractDenoAccesses, extractStaticModuleSpecifiers } from './lib/typescript-ast.ts';
+import { extractDenoAccesses, extractStaticModuleSpecifiers } from '../lib/typescript-ast.ts';
 
 const RESTRICTED_ROOTS = ['packages/element/src', 'packages/router/src'];
 const EXTENSIONS = new Set(['.ts', '.tsx']);

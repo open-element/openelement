@@ -13,7 +13,7 @@
  *   `rolldown-vite` imports in first-party build sources; the WTR browser
  *   test host is exempt — it serves tests, it does not build products)
  *
- * Usage: deno run --allow-read tools/deps-vite-check.ts
+ * Usage: deno run --allow-read tools/repo/deps-vite-check.ts
  */
 
 export const VITE_DEV_PIN = '8.0.16';

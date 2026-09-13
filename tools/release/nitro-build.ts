@@ -9,14 +9,17 @@
  * subdirectory (the SaaS build maps `dist/` as public assets for client
  * chunks, so the server bundle subdirectory must not stay publicly served).
  *
+ * `--root` is resolved against the caller's working directory: member tasks
+ * invoked through `deno task --cwd <app>` pass `--root .`.
+ *
  * Usage:
  *   deno run --allow-read --allow-write --allow-run --allow-env --allow-net \
- *     tools/nitro-build.ts --root apps/saas --preset cloudflare_module \
+ *     tools/release/nitro-build.ts --root . --preset cloudflare_module \
  *     --out .output-workers --prune-public server
  */
 import { parseArgs } from '@std/cli/parse-args';
 import { exists } from '@std/fs';
-import { NITRO_VERSION } from './nitro-compatibility.ts';
+import { NITRO_VERSION } from '../nitro-compatibility.ts';
 
 const args = parseArgs(Deno.args, {
   string: ['root', 'preset', 'out', 'prune-public'],
@@ -28,7 +31,7 @@ const out = args.out ?? '.output';
 const prunePublic = args['prune-public'];
 
 if (!preset) {
-  console.error('tools/nitro-build.ts requires --preset (e.g. node-server, cloudflare_module)');
+  console.error('tools/release/nitro-build.ts requires --preset (e.g. node-server, cloudflare_module)');
   Deno.exit(2);
 }
 
@@ -51,6 +54,8 @@ async function runNitro(): Promise<void> {
       '--allow-env',
       '--allow-net',
       '--allow-sys',
+      // Rolldown loads its native binding through FFI under Deno.
+      '--allow-ffi',
       `npm:nitro@${NITRO_VERSION}`,
       'build',
       '--dir',

@@ -23,7 +23,7 @@
  * - `vendor/`, `node_modules/`, build output (`dist/`, Nitro `.output`
  *   trees, `.nitro/`), and dependency lockfiles: third-party territory
  *
- * Usage: deno run --allow-read --allow-run tools/check-esm-boundary.ts
+ * Usage: deno run --allow-read --allow-run tools/repo/check-esm-boundary.ts
  */
 
 const SOURCE_ROOTS = [
