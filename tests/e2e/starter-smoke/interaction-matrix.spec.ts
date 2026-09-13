@@ -106,6 +106,51 @@ test.describe('hydration timing', () => {
       timeout: 10_000,
     });
   });
+  // Declared-island scoping: 64 undeclared third-party custom-element hosts
+  // interacted before hydration must not exhaust the bounded pre-upgrade
+  // queue — the real idle island click still replays exactly once. Uses only
+  // public DOM APIs (no test-only internals).
+  test('third-party pressure does not block idle replay (declared-island scoping)', async ({ page }) => {
+    await page.addInitScript(() => {
+      const original = globalThis.requestIdleCallback;
+      globalThis.requestIdleCallback = ((fn: unknown) =>
+        globalThis.setTimeout(() =>
+          (fn as () => void)(), 2500)) as typeof original;
+    });
+    await page.goto('/');
+    const counter = page.locator('my-counter');
+    await expect(counter).toBeVisible();
+    await page.evaluate(() => {
+      const prefixes = ['sl', 'md-filled', 'ion', 'vaadin', 'lion', 'fast', 'mui', 't'];
+      for (let i = 0; i < 64; i++) {
+        const host = document.createElement(`${prefixes[i % prefixes.length]}-foreign-${i}`);
+        const button = document.createElement('button');
+        button.textContent = `foreign-${i}`;
+        host.appendChild(button);
+        document.body.appendChild(host);
+        button.click();
+      }
+    });
+    await page.evaluate(() => {
+      const deep = (root: Document | ShadowRoot): Element | null => {
+        const direct = root.querySelector('my-counter');
+        if (direct) return direct;
+        for (const el of root.querySelectorAll('*')) {
+          const shadow = (el as HTMLElement).shadowRoot;
+          if (shadow) {
+            const found = deep(shadow);
+            if (found) return found;
+          }
+        }
+        return null;
+      };
+      const el = deep(document);
+      el!.shadowRoot!.querySelectorAll('button')[1].click();
+    });
+    await expect(counter.locator('#count')).toHaveText('1', {
+      timeout: 10_000,
+    });
+  });
 });
 
 test.describe('navigation', () => {

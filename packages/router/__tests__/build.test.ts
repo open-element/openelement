@@ -135,6 +135,31 @@ Deno.test('build - generateClientEntry', async (t) => {
     assertStringIncludes(code, 'idle: ["my-counter"]');
     assertStringIncludes(code, 'virtual:open-client-runtime/scheduler');
   });
+
+  await t.step(
+    'capture installs after __tags with the declared list, before island imports',
+    () => {
+      const islands = [
+        {
+          tagName: 'my-counter',
+          modulePath: '/app/islands/my-counter.ts',
+          strategy: 'idle' as const,
+        },
+      ];
+      const code = generateClientEntry(islands);
+      const captureCall = 'ensurePreHydrationClickCapture(document, __tags);';
+      assertStringIncludes(code, captureCall);
+      assertEquals(code.includes('ensurePreHydrationClickCapture();'), false);
+      const tagsIndex = code.indexOf('var __tags =');
+      const captureIndex = code.indexOf(captureCall);
+      // The island import() strings live inside __map factories defined
+      // above; they only EXECUTE when the scheduler below invokes them, so
+      // execution order is capture-before-scheduler, not string order.
+      const schedulerIndex = code.indexOf('__schedule({');
+      assertEquals(tagsIndex >= 0 && captureIndex > tagsIndex, true);
+      assertEquals(schedulerIndex > captureIndex, true);
+    },
+  );
 });
 
 // --- buildPlugin tests --------------------------------------------------------

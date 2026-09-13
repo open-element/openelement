@@ -1792,6 +1792,18 @@ function isIslandHostTag(node: unknown): boolean {
   }
 }
 
+function tagNameOf(node: unknown): string {
+  try {
+    const element = node as { localName?: unknown; tagName?: unknown };
+    if (!element || typeof element !== 'object') return '';
+    if (typeof element.localName === 'string') return element.localName.toLowerCase();
+    if (typeof element.tagName === 'string') return element.tagName.toLowerCase();
+    return '';
+  } catch {
+    return '';
+  }
+}
+
 function eventPathNodes(event: Event, target: EventTarget): readonly unknown[] {
   try {
     const withPath = event as Event & { composedPath?: () => unknown };
@@ -1820,20 +1832,49 @@ function eventPathNodes(event: Event, target: EventTarget): readonly unknown[] {
 
 /**
  * Facade document-capture filter: only interactions that could belong to a
- * still-pending island enter the queue.
+ * still-pending DECLARED OpenElement island enter the queue.
  *
- *   - no island host on the path (plain page background) → skip;
- *   - every island host on the path already settled → skip (live traffic);
- *   - otherwise (a pending host anywhere on the path: delayed / idle /
- *     visible / nested-late / morph-added island) → capture.
+ * The entry's `__tags` (the generated client entry's island list) is the
+ * owner: a path node counts only when its tag is in the root's declared set
+ * and its host is not settled. Undeclared third-party custom elements
+ * (sl-*, md-*, ion-*, ...) never enter the queue no matter how many distinct
+ * targets they produce — otherwise 64 foreign targets exhaust the bounded
+ * queue and a real delayed island loses its replay. Nested pending declared
+ * islands still capture through a settled outer (any pending declared host
+ * on the path keeps the record).
  *
- * Over-capture is safe (replay dedups via consumed sets, per-root cutoffs,
- * and inside-root ownership); under-capture would lose replays, so
- * uncertainty captures and the capacity cap still bounds retention.
+ * Legacy: with no declared set (empty/omitted — direct kernel callers and
+ * older ensure() calls without tags), falls back to the dash heuristic so
+ * existing call sites keep working.
  */
-export function acceptPendingIslandEvent(event: Event, target: EventTarget): boolean {
+function declaredTagCount(declaredTags: ReadonlySet<string> | readonly string[]): number {
+  // Array.isArray does not narrow readonly arrays under strict settings;
+  // branch on the runtime shape explicitly instead.
+  if (typeof (declaredTags as ReadonlySet<string>).size === 'number') {
+    return (declaredTags as ReadonlySet<string>).size;
+  }
+  return (declaredTags as readonly string[]).length;
+}
+
+export function acceptPendingIslandEvent(
+  event: Event,
+  target: EventTarget,
+  declaredTags?: ReadonlySet<string> | readonly string[],
+): boolean {
   try {
+    const hasDeclared = declaredTags !== undefined && declaredTagCount(declaredTags) > 0;
     const path = eventPathNodes(event, target);
+    if (hasDeclared) {
+      const lookup = Array.isArray(declaredTags)
+        ? new Set(declaredTags.map((tag) => tag.toLowerCase()))
+        : declaredTags as ReadonlySet<string>;
+      for (const node of path) {
+        const tag = tagNameOf(node);
+        if (!tag || !lookup.has(tag)) continue;
+        if (!settledIslandHosts.has(node as object)) return true;
+      }
+      return false;
+    }
     for (const node of path) {
       if (!isIslandHostTag(node)) continue;
       // A pending host anywhere on the path (delayed / idle / visible /
@@ -1843,7 +1884,10 @@ export function acceptPendingIslandEvent(event: Event, target: EventTarget): boo
     // No island host (background) or every host settled (live traffic).
     return false;
   } catch {
-    return true;
+    // Strict mode fails closed (never let an undecodable event occupy the
+    // bounded queue); legacy mode preserves the old uncertainty-captures rule.
+    const hasDeclared = declaredTags !== undefined && declaredTagCount(declaredTags) > 0;
+    return !hasDeclared;
   }
 }
 

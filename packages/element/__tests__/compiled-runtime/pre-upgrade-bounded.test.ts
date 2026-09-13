@@ -2,11 +2,13 @@
  * pre-upgrade-bounded.test.ts — the pre-hydration capture stays bounded.
  *
  * The facade document capture (ensurePreHydrationClickCapture) carries the
- * pending-island filter: only interactions that could belong to a
- * still-pending island enter the queue. Ordinary traffic inside settled
- * islands is skipped, the queue carries a hard capacity cap (fail closed),
- * and every release sweeps detached targets. Covered behavior:
- *   - pending island clicks are captured; background clicks are not
+ * declared-island filter: only interactions under a still-pending DECLARED
+ * island tag enter the queue (the entry's __tags own the declaration, so
+ * undeclared third-party custom elements can never exhaust the bounded
+ * queue). Ordinary traffic inside settled islands is skipped, the queue
+ * carries a hard capacity cap (fail closed), and every release sweeps
+ * detached targets. Covered behavior:
+ *   - pending island clicks capture, background clicks do not
  *   - settled-island traffic (same target x N, many distinct targets) adds nothing
  *   - a nested pending island still captures after its outer settled
  *   - a morph-inserted island still captures and replays once
@@ -14,6 +16,10 @@
  *   - removal before activation replays nowhere and leaks nothing
  *   - the capacity cap fails closed: pending replays are never evicted
  *   - nested pending replay after outer activation fires exactly once
+ *   - 64 undeclared third-party targets add nothing; the declared island
+ *     still captures afterwards (no queue exhaustion)
+ *   - declared/third-party nesting judges only the declared host
+ *   - repeated ensure() calls merge tags without reinstalling listeners
  */
 
 import { assert, assertEquals, assertStrictEquals } from '@std/assert';
@@ -325,4 +331,124 @@ Deno.test('bounded: an island removed before activation replays nowhere', () => 
   const survivor = upgradeInPlace(survivorHost);
   assertEquals(survivor.count, 1, 'the surviving island still replays exactly once');
   cleanup(survivor as unknown as FacadeElement);
+});
+
+// ─── Declared-island scoping: third-party custom elements never queue ───
+
+const THIRD_PARTY_PREFIXES = ['sl', 'md-filled', 'ion', 'vaadin', 'lion', 'fast', 'mui', 't'];
+
+Deno.test('declared: 64 undeclared third-party targets add nothing, the declared island still captures', () => {
+  const declared = new Set(['oe-declared-real']);
+  const capture = capturePreUpgradeEvents(dom.document as unknown as EventTarget, undefined, {
+    accept: (event, target) => acceptPendingIslandEvent(event as Event, target, declared),
+  });
+  const foreign: FacadeElement[] = [];
+  try {
+    for (let i = 0; i < MAX_PRE_UPGRADE_CAPTURED_EVENTS; i++) {
+      const prefix = THIRD_PARTY_PREFIXES[i % THIRD_PARTY_PREFIXES.length];
+      const host = new FacadeElement(`${prefix}-foreign-${i}`, dom.document);
+      const button = new FacadeElement('button', dom.document);
+      host.appendChild(button);
+      dom.document.body.appendChild(host);
+      foreign.push(host);
+      button.dispatchEvent(click());
+    }
+    assertEquals(
+      capture.events.length,
+      0,
+      'undeclared third-party custom elements must never enter the pending queue',
+    );
+    const { host, button } = pendingHost('oe-declared-real');
+    try {
+      button.dispatchEvent(click());
+      assertEquals(capture.events.length, 1, 'the declared delayed island still captures');
+      assertStrictEquals(capture.events[0].target as unknown, button as unknown);
+    } finally {
+      cleanup(host);
+    }
+    assertEquals(
+      capture.events.length,
+      1,
+      'the real replay was never evicted by foreign pressure',
+    );
+  } finally {
+    capture.stop();
+    cleanup(...foreign);
+  }
+});
+
+Deno.test('declared: nesting with third-party judges only the declared host', () => {
+  const declared = new Set(['oe-declared-nested']);
+  const accept = (event: unknown, target: unknown): boolean =>
+    acceptPendingIslandEvent(event as Event, target as EventTarget, declared);
+  const capture = capturePreUpgradeEvents(dom.document as unknown as EventTarget, undefined, {
+    accept: accept as (event: Event, target: EventTarget) => boolean,
+  });
+  try {
+    // Declared island inside an undeclared third-party wrapper.
+    const wrapper = new FacadeElement('sl-card-wrap', dom.document);
+    const inner = new FacadeElement('oe-declared-nested', dom.document);
+    const button = new FacadeElement('button', dom.document);
+    inner.appendChild(button);
+    wrapper.appendChild(inner);
+    dom.document.body.appendChild(wrapper);
+    try {
+      button.dispatchEvent(click());
+      assertEquals(
+        capture.events.length,
+        1,
+        'declared inner island captures through foreign wrapper',
+      );
+    } finally {
+      cleanup(wrapper);
+    }
+    releasePreUpgradeEvents(dom.document.body as unknown as Node, capture.events);
+
+    // Undeclared third-party control inside a declared pending island.
+    const outer = new FacadeElement('oe-declared-nested', dom.document);
+    const foreign = new FacadeElement('ion-button-inner', dom.document);
+    const deep = new FacadeElement('button', dom.document);
+    foreign.appendChild(deep);
+    outer.appendChild(foreign);
+    dom.document.body.appendChild(outer);
+    try {
+      deep.dispatchEvent(click());
+      assertEquals(
+        capture.events.length,
+        1,
+        'foreign control under a declared host still captures',
+      );
+    } finally {
+      cleanup(outer);
+    }
+  } finally {
+    capture.stop();
+  }
+});
+
+Deno.test('declared: repeated ensure() merges tags without reinstalling listeners', () => {
+  defineCounter('oe-merge-a');
+  defineCounter('oe-merge-b');
+  const listenersOf = (type: string): number =>
+    (dom.document as unknown as { listeners: Map<string, unknown[]> }).listeners.get(type)
+      ?.length ?? 0;
+  ensurePreHydrationClickCapture(dom.document as unknown as EventTarget, ['oe-merge-a']);
+  const afterFirst = listenersOf('click');
+  ensurePreHydrationClickCapture(dom.document as unknown as EventTarget, ['oe-merge-b']);
+  const afterSecond = listenersOf('click');
+  assertEquals(
+    afterSecond,
+    afterFirst,
+    'the second ensure() for the same root must not reinstall listeners',
+  );
+
+  const first = mountSsr('oe-merge-a');
+  first.button.dispatchEvent(click());
+  const second = mountSsr('oe-merge-b');
+  second.button.dispatchEvent(click());
+  const upgradedA = upgradeInPlace(first.host);
+  const upgradedB = upgradeInPlace(second.host);
+  assertEquals(upgradedA.count, 1, 'first merged tag replays exactly once');
+  assertEquals(upgradedB.count, 1, 'second merged tag replays exactly once');
+  cleanup(upgradedA as unknown as FacadeElement, upgradedB as unknown as FacadeElement);
 });

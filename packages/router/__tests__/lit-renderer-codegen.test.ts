@@ -89,6 +89,7 @@ Deno.test('lit renderer: client entry installs hydrate-support first and stays e
   // The header comment names the native claim helpers to document their
   // absence; assert the CALLS are gone, not the words.
   assertEquals(client.includes('ensurePreHydrationClickCapture();'), false);
+  assertEquals(client.includes('ensurePreHydrationClickCapture(document, __tags);'), false);
   assertEquals(client.includes('ensureDeepFragmentNavigation();'), false);
 
   const nativeClient = generateClientEntry(

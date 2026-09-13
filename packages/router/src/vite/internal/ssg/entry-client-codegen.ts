@@ -291,9 +291,6 @@ ${
     }
 var log = createLogger('openElement');
 
-// #942: install the pre-hydration click capture before any island module
-// loads — clicks landing in the hydration window are replayed after hydration.
-ensurePreHydrationClickCapture();
 ensureDeepFragmentNavigation();`;
 
   return `${headerComment}
@@ -304,6 +301,15 @@ var __map = {
 ${islandMap}
 };
 var __tags = [${tags}];
+${
+    lit ? '' : `// #942 + declared-island scoping: install the pre-hydration click capture
+// AFTER __tags is defined so the filter knows the entry's island tags, and
+// BEFORE any island dynamic import below can evaluate — clicks landing in
+// the hydration window replay after hydration. Undeclared third-party custom
+// elements never enter the bounded queue.
+ensurePreHydrationClickCapture(document, __tags);
+`
+  }
 ${activationLines.length > 0 ? `\n${activationLines.join('\n\n')}\n` : ''}
 
 var __scheduler = __schedule({

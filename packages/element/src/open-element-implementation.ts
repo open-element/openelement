@@ -73,15 +73,19 @@ const facadeStates = new WeakMap<OpenElement, FacadePropertyState>();
 
 // ─── Pre-upgrade event capture (claim replay seam) ──────────────────
 
-const preUpgradeCaptures = new Map<EventTarget, PreUpgradeEventCapture>();
+const preUpgradeCaptures = new Map<
+  EventTarget,
+  { capture: PreUpgradeEventCapture; declared: Set<string> }
+>();
 
 /**
  * Install the bounded pre-upgrade interaction capture on an owning root
- * (default: the document). Generated client entries call this before any
- * compiled element upgrades; after a successful claim the element replays the
- * captured events whose targets live inside its root (compiled claim
- * capture/replay, internal/compiled/runtime.ts). Idempotent per root and a no-op
- * where no DOM exists (SSR).
+ * (default: the document). Generated client entries call this with their
+ * declared island tags before any compiled element upgrades; after a
+ * successful claim the element replays the captured events whose targets
+ * live inside its root (compiled claim capture/replay,
+ * internal/compiled/runtime.ts). Idempotent per root (repeat calls merge
+ * tags, never reinstall listeners) and a no-op where no DOM exists (SSR).
  *
  * Invariant: the capture itself — one fixed listener set per owning root,
  * installed once per page — is page-lifetime by design and is NOT the leak.
@@ -90,27 +94,50 @@ const preUpgradeCaptures = new Map<EventTarget, PreUpgradeEventCapture>();
  * records owned by still-pending elements survive for their delayed/lazy
  * upgrade (#1170).
  *
- * Boundedness: the facade capture passes the pending-island filter, so only
- * interactions that could belong to a still-pending island enter the queue —
- * ordinary events inside already-settled islands are skipped (nested pending
- * islands still capture through their own unsettled host). The queue additionally
- * carries a hard capacity cap (fail closed) and every release sweeps detached
- * targets, so post-hydration traffic and removals never grow retention.
+ * Boundedness: the facade capture passes the declared-island filter, so only
+ * interactions under a still-pending DECLARED island tag enter the queue —
+ * ordinary events and undeclared third-party custom elements are skipped
+ * (nested pending declared islands still capture through their own unsettled
+ * host). With no tags declared the legacy dash heuristic applies. The queue
+ * additionally carries a hard capacity cap (fail closed) and every release
+ * sweeps detached targets, so post-hydration traffic and removals never grow
+ * retention.
  */
-export function ensurePreHydrationClickCapture(root?: EventTarget): void {
+export function ensurePreHydrationClickCapture(
+  root?: EventTarget,
+  pendingTags?: readonly string[],
+): void {
   const target = root ??
     (typeof document !== 'undefined' ? (document as unknown as EventTarget) : undefined);
   if (!target || typeof target.addEventListener !== 'function') return;
-  if (preUpgradeCaptures.has(target)) return;
+  const existing = preUpgradeCaptures.get(target);
+  if (existing) {
+    if (pendingTags) {
+      for (const tag of pendingTags) {
+        if (typeof tag === 'string' && tag) existing.declared.add(tag.toLowerCase());
+      }
+    }
+    return;
+  }
+  const declared = new Set<string>();
+  if (pendingTags) {
+    for (const tag of pendingTags) {
+      if (typeof tag === 'string' && tag) declared.add(tag.toLowerCase());
+    }
+  }
+  // The accept closure holds the LIVE declared set: later merges into the
+  // same Set are visible to the filter without reinstalling listeners.
+  const accept = (event: Event, eventTarget: EventTarget): boolean =>
+    acceptPendingIslandEvent(event, eventTarget, declared);
   preUpgradeCaptures.set(
     target,
-    capturePreUpgradeEvents(target, undefined, { accept: acceptPendingIslandEvent }),
+    { capture: capturePreUpgradeEvents(target, undefined, { accept }), declared },
   );
 }
 
 /** Replay captured pre-upgrade events owned by a successfully claimed root. */
 function replayPreUpgradeCaptures(root: Node): void {
-  for (const capture of preUpgradeCaptures.values()) {
+  for (const { capture } of preUpgradeCaptures.values()) {
     replayPreUpgradeEvents(root, capture.events);
   }
 }
@@ -122,7 +149,7 @@ function replayPreUpgradeCaptures(root: Node): void {
  * elements that have not yet activated; their records are left pending.
  */
 function releasePreUpgradeCapturesFor(root: Node): void {
-  for (const capture of preUpgradeCaptures.values()) {
+  for (const { capture } of preUpgradeCaptures.values()) {
     releasePreUpgradeEvents(root, capture.events);
   }
 }
