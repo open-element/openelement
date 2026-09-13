@@ -36,7 +36,6 @@ deno task build
 
 - [当前架构](./docs/architecture/README.md)
 - [活跃决策](./docs/adr/README.md)
-- [架构历史](./docs/history/architecture-evolution.md)
 - [发布操作](./docs/maintainers/releasing.md)
 - [安全策略](./SECURITY.md)
 - [贡献指南](./CONTRIBUTING.md)

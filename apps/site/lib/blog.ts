@@ -1,5 +1,5 @@
 /**
- * www blog collection.
+ * site blog collection.
  *
  * Blog posts were formerly a second adapter-provided collection (the blog half
  * of the retired `content` plugin). They are the same pipeline as the guide /
@@ -10,7 +10,7 @@
  * module built at dev/build time, with a checked-in `.d.ts` stub supplying
  * types for `deno check`. Virtual modules are gone, so the module is now a real
  * generated file — `apps/site/app/data/_generated-blog-data.ts` — written by
- * `deno task generate:www-content-data` alongside the article collections.
+ * `deno task generate:site-content-data` alongside the article collections.
  */
 
 import type { BlogPost, BlogPostFrontmatter } from './content.ts';

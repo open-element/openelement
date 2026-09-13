@@ -33,10 +33,10 @@ export default defineConfig({
 
 ## 内容 collection 归站点所有
 
-1.0 的 router 提供路由、locale/渲染上下文、SSG descriptor 与 Document 归属——不是 CMS，也不是内容数据库。站点的 Markdown 管线由站点自己拥有。本仓库的参考站点用声明式 schema 校验 frontmatter、用 `marked` 渲染、把渲染结果视为第一方可信内容（`www/lib/content.ts` 的 `trustCollectionHtml`，`trustedHtml` 信任级别——非可信来源请先在你自己的边界消毒），在 `www/lib/blog.ts` 中定义 collection，并用 `tools/generate-www-content-data.ts` 写出带类型的数据模块：
+1.0 的 router 提供路由、locale/渲染上下文、SSG descriptor 与 Document 归属——不是 CMS，也不是内容数据库。站点的 Markdown 管线由站点自己拥有。本仓库的参考站点用声明式 schema 校验 frontmatter、用 `marked` 渲染、把渲染结果视为第一方可信内容（`apps/site/lib/content.ts` 的 `trustCollectionHtml`，`trustedHtml` 信任级别——非可信来源请先在你自己的边界消毒），在 `apps/site/lib/blog.ts` 中定义 collection，并用 `tools/generate-site-content-data.ts` 写出带类型的数据模块：
 
 ```sh
-deno task generate:www-content-data   # www:build 会在 router 构建前先运行
+deno task generate:site-content-data   # www:build 会在 router 构建前先运行
 ```
 
 生成模块通过站点自己的 import-map 别名消费——不存在框架虚拟模块：
@@ -120,7 +120,7 @@ export default definePage(BlogPostPage, {
 
 ## 代码块语法高亮（可选）
 
-站点自有的 collection loader 把围栏代码块渲染为 `<pre><code class="language-x">`，无 token 级着色。collection 的 `markdown` 选项可以替换 renderer；其输出仍是第一方可信内容，hljs span 只追加 `class` 属性。路由/页面里的代码块则用 `<open-code-block>`（`@openelement/ui`）包裹——它通过全局 Prism 高亮，页面必须自行加载 Prism（core + 语言 grammar，参考本站在 `www/vite.config.ts` 注入的 CDN script）；不加载 Prism 就只有 copy 按钮、没有 token 着色。
+站点自有的 collection loader 把围栏代码块渲染为 `<pre><code class="language-x">`，无 token 级着色。collection 的 `markdown` 选项可以替换 renderer；其输出仍是第一方可信内容，hljs span 只追加 `class` 属性。路由/页面里的代码块则用 `<open-code-block>`（`@openelement/ui`）包裹——它通过全局 Prism 高亮，页面必须自行加载 Prism（core + 语言 grammar，参考本站在 `apps/site/vite.config.ts` 注入的 CDN script）；不加载 Prism 就只有 copy 按钮、没有 token 着色。
 
 ### lib/blog.ts —— 语法高亮配方（可选，#930）
 

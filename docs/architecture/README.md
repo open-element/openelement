@@ -12,5 +12,4 @@ adapt, scaffold, build, and distribute those products.
 - [1.0 Alpha final convergence audit](./1.0-alpha-final-convergence-audit.md)
 
 Active ADRs retain decisions that still constrain the implementation. Retired
-decisions are indexed under [`docs/history`](../history/decision-index.md) and
-remain recoverable from Git history.
+decisions remain recoverable from Git history.

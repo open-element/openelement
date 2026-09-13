@@ -47,8 +47,8 @@ new-baseline statement.
    are deleted after their conclusions landed: CEM stays upstream-typed with
    OE admission classification in product code, the TS7 posture is owned by
    the non-blocking `gate:ts7:shadow` executable gate, and one-off evidence
-   remains in `docs/evidence/` history plus Git history. Revisit only with a
-   new consumer and a new decision record.
+   is removed from the tree (recoverable from Git history). Revisit only
+   with a new consumer and a new decision record.
 
 ## Consequences
 

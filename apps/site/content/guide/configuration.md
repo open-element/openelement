@@ -33,10 +33,10 @@ export default defineConfig({
 
 ## Content collections are site-owned
 
-The 1.0 router ships routing, locale/render context, the SSG descriptor and Document ownership — not a CMS or content database. A site owns its Markdown pipeline. This repository's reference site validates frontmatter against declarative schemas, renders with `marked`, treats the rendered HTML as first-party trusted content (`trustCollectionHtml` in `www/lib/content.ts`, `trustedHtml` trust level — untrusted sources must be sanitized at your own boundary first), defines collections in `www/lib/blog.ts`, and writes typed data modules with `tools/generate-www-content-data.ts`:
+The 1.0 router ships routing, locale/render context, the SSG descriptor and Document ownership — not a CMS or content database. A site owns its Markdown pipeline. This repository's reference site validates frontmatter against declarative schemas, renders with `marked`, treats the rendered HTML as first-party trusted content (`trustCollectionHtml` in `apps/site/lib/content.ts`, `trustedHtml` trust level — untrusted sources must be sanitized at your own boundary first), defines collections in `apps/site/lib/blog.ts`, and writes typed data modules with `tools/generate-site-content-data.ts`:
 
 ```sh
-deno task generate:www-content-data   # www:build runs this before the router build
+deno task generate:site-content-data   # www:build runs this before the router build
 ```
 
 Generated modules are consumed through the site's own import-map alias — there is no framework virtual module:
@@ -120,7 +120,7 @@ export default definePage(BlogPostPage, {
 
 ## Code-block highlighting (optional)
 
-The site-owned collection loader renders fenced blocks as `<pre><code class="language-x">` with no token-level colors. A collection's `markdown` option replaces the renderer; its output is still first-party trusted content, and hljs spans only add `class` attributes. For code blocks in routes/pages, wrap them in `<open-code-block>` (`@openelement/ui`) — it highlights via a global Prism that your page must load (core + language grammars, e.g. the CDN scripts this site injects in `www/vite.config.ts`); without Prism you get the copy button but no token spans.
+The site-owned collection loader renders fenced blocks as `<pre><code class="language-x">` with no token-level colors. A collection's `markdown` option replaces the renderer; its output is still first-party trusted content, and hljs spans only add `class` attributes. For code blocks in routes/pages, wrap them in `<open-code-block>` (`@openelement/ui`) — it highlights via a global Prism that your page must load (core + language grammars, e.g. the CDN scripts this site injects in `apps/site/vite.config.ts`); without Prism you get the copy button but no token spans.
 
 ### lib/blog.ts — syntax highlighting recipe (optional, #930)
 
