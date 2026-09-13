@@ -183,6 +183,38 @@ jobs:
       - name: Packed serve proof under Bun
         run: deno run --allow-read --allow-write --allow-run --allow-env --allow-net tools/release/consumer-packaged-node-serve.ts bun
 
+  # Pre-publish packed-consumer matrix (1.0 Alpha convergence, item 5).
+  # The current-SHA packed tarballs must install into a scratch consumer
+  # outside the repo and pass the full external starter lifecycle on Linux,
+  # macOS, AND Windows — before any publish. Post-publish registry checks
+  # (published-consumers.yml, workflow_dispatch) cannot substitute for this
+  # matrix: only current-SHA tarballs prove the candidate shippable.
+  packed-consumer-matrix:
+    name: packed starter consumer (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      # v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          # #1156 R11: same exact-SHA expression as every required job.
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: ./.github/actions/setup-deno-workspace
+      # v7.0.0 — the scratch consumer installs tarballs through npm; Node 24
+      # is the deployment floor and the harness's install/build tool here.
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: '24'
+      - name: Pack the release tarballs
+        run: deno task --cwd tools/release pack:dry-run
+      - name: Fresh packed-starter consumer proof
+        run: deno task --cwd tools/release consumer:packaged
+
   # TypeScript 7 SHADOW gate (1.0 Alpha convergence, "TypeScript 7: split
   # decision"). Non-blocking by design: continue-on-error keeps the run
   # advisory while the TS7 CLI matrix is compared against the packed TS6

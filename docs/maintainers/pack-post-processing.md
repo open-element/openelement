@@ -1,7 +1,7 @@
 # Pack post-processing: what `deno pack` does not do (Deno 2.9)
 
 `deno pack` is the sole tarball generator. The release coordinator
-(`tools/publish-npm.ts`) never transpiles the normal module graph, never
+(`tools/release/publish-npm.ts`) never transpiles the normal module graph, never
 rewrites normal relative extensions, never constructs normal exports, and
 never deletes files pack already excludes — native output already ships
 `.js` + `.d.ts` (+ inline source maps), `"type": "module"`, and

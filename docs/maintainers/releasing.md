@@ -18,3 +18,29 @@ Public alpha packages use the npm `alpha` dist-tag. npm `latest` stays on the st
 6. Obtain explicit publication approval before creating tags, publishing packages, changing dist-tags, or creating the GitHub Release.
 
 Never use a release-deletion option that also deletes tags. Never publish from copied logs or evidence generated for another SHA.
+
+## Release authorization contract
+
+The `Release` workflow (`autoflow-release.yml`, `workflow_dispatch` only)
+publishes only through the `openelement-release` GitHub environment. The
+environment is platform configuration, not code — the workflow binds the
+name, and these settings must exist in the repository settings before any
+publish; a missing environment fails the job closed instead of publishing:
+
+- Environment `openelement-release` with required reviewers (at least one
+  maintainer human approval; dispatches are not self-approving).
+- No long-lived npm token in secrets: authentication is npm Trusted
+  Publishing via the workflow's `id-token: write` OIDC claim. The publish
+  step passes `--provenance` only under `GITHUB_ACTIONS=true`, so local runs
+  can never mint registry attestations.
+- `publish:npm` runs only after `release:check` (packed qualification,
+  `publish:npm:dry-run`, candidate evidence) on the exact `candidate_sha`;
+  the job re-verifies `git rev-parse HEAD == candidate_sha` after checkout.
+- Prereleases publish under `--tag alpha|beta|rc` only; `latest` never moves
+  onto an alpha (`publishPackage` guard, tested).
+- Required pre-publish CI (branch protection on `main`): the AutoFlow CI
+  `autoflow-ci`, `node-serve-smoke` (24/26), `packed-consumer-matrix`
+  (Linux/macOS/Windows), `bun-serve-smoke` (optional/non-blocking Bun proof),
+  dependency-review on PRs, and CodeQL. Post-publish
+  (`published-consumers.yml`) verifies the registry afterward and never
+  substitutes for the pre-publish matrix.

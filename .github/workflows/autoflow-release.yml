@@ -23,6 +23,11 @@ jobs:
   release:
     runs-on: ubuntu-latest
     timeout-minutes: 120
+    # Release authorization contract (docs/maintainers/releasing.md): the
+    # named environment binds human approval + OIDC-minted npm provenance.
+    # It must exist in the GitHub repo settings with the protections below;
+    # without it this job fails closed instead of publishing unreviewed.
+    environment: openelement-release
     permissions:
       contents: read
       id-token: write
