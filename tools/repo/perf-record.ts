@@ -54,7 +54,12 @@ async function gitSha(): Promise<string> {
 const build = {
   element: await measure(Deno.execPath(), ['task', '--filter', '@openelement/element', 'build']),
   router: await measure(Deno.execPath(), ['task', '--filter', '@openelement/router', 'build']),
-  requestTimeFixture: await measure(Deno.execPath(), ['task', '--cwd', 'tests/fixtures/router-request-time', 'build']),
+  requestTimeFixture: await measure(Deno.execPath(), [
+    'task',
+    '--cwd',
+    'tests/fixtures/router-request-time',
+    'build',
+  ]),
 };
 const { report: micro } = runMicroSuite({ openElementSha: await gitSha() });
 const evidence = {

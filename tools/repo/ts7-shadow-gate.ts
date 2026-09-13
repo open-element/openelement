@@ -197,7 +197,9 @@ try {
     );
     if (!packed.success) throw new Error(`tools/release#pack:dry-run failed:\n${packed.output}`);
     for (const [name, tar] of tarballs) {
-      if (!existsSync(tar)) throw new Error(`Missing ${tar} for ${name} after tools/release#pack:dry-run`);
+      if (!existsSync(tar)) {
+        throw new Error(`Missing ${tar} for ${name} after tools/release#pack:dry-run`);
+      }
     }
     return `${tarballs.size} fresh tarballs`;
   });
