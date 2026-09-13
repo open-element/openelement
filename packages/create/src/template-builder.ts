@@ -69,13 +69,11 @@ const TEMPLATE_FILES: readonly (readonly [string, string])[] = [
   ['README.tmpl', 'README.md'],
   ['public/openelement-mark.svg', 'public/openelement-mark.svg'],
   ['deno.json.tmpl', 'deno.json'],
-  // package.json carries ONLY the @std/* npm aliases: packed first-party
-  // modules keep bare @std/* specifiers, and Vite's esbuild config loader
-  // resolves through node_modules (the deno.json import map does not reach
-  // it). npmrc.tmpl is renamed for the same dotfile-in-tarball reason as
-  // gitignore.tmpl; it points the @jsr scope at JSR's npm compat registry.
+  // package.json carries no runtime npm dependencies: framework consumption
+  // resolves through the deno.json import map, and packed first-party
+  // modules carry no bare @std/* specifiers, so no @jsr registry bridge is
+  // generated. npm is the only public registry.
   ['package.json.tmpl', 'package.json'],
-  ['npmrc.tmpl', '.npmrc'],
   ['vite.config.ts.tmpl', 'vite.config.ts'],
   ['app/islands/app-shell.tsx.tmpl', 'app/islands/app-shell.tsx'],
   ['app/components/page-styles.ts.tmpl', 'app/components/page-styles.ts'],

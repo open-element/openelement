@@ -58,11 +58,6 @@ Deno.test('starter exposes only product imports and the standard lifecycle', () 
     '@openelement/router',
     '@openelement/router/nitro-mount',
     '@openelement/router/vite',
-    '@std/fs',
-    '@std/fs/',
-    '@std/jsonc',
-    '@std/media-types',
-    '@std/path',
     'hono',
     'vite',
   ]);
@@ -127,21 +122,22 @@ Deno.test('async template build returns deterministic path order', async () => {
   assertFalse(Object.values(templates).some((content) => content.includes('${v.')));
 });
 
-Deno.test('generated starter package.json bridges packed @std imports for Node resolution', async () => {
+Deno.test('generated starter carries no JSR bridge', async () => {
   const templates = await buildTemplates(resolveVersions(), 'sample-app');
   const pkg = JSON.parse(templates['package.json']);
   assertEquals(pkg.name, 'sample-app');
   assertEquals(pkg.private, true);
-  // The bridge must cover every bare @std scope the packed tarballs emit;
-  // Vite's esbuild config loader resolves through node_modules, where only
-  // the npm-compat @jsr/std__* directories would otherwise exist.
-  assertEquals(pkg.dependencies, {
-    '@std/fs': 'npm:@jsr/std__fs@^1.0.0',
-    '@std/jsonc': 'npm:@jsr/std__jsonc@^1.0.0',
-    '@std/media-types': 'npm:@jsr/std__media-types@^1.0.0',
-    '@std/path': 'npm:@jsr/std__path@^1.0.0',
-  });
-  assertEquals(templates['.npmrc'], '@jsr:registry=https://npm.jsr.io\n');
+  // Packed first-party modules carry no bare @std/* specifiers, so the
+  // starter needs no @std npm aliases and no @jsr registry mapping: npm is
+  // the only public registry.
+  assertEquals(pkg.dependencies, {});
+  assertFalse('.npmrc' in templates);
+  const denoJson = JSON.parse(templates['deno.json']);
+  for (const value of Object.values(denoJson.imports as Record<string, string>)) {
+    assertFalse(value.includes('@jsr/'), `import map must not reference @jsr: ${value}`);
+    assertFalse(value.startsWith('jsr:'), `import map must not use jsr: ${value}`);
+  }
+  assertFalse(JSON.stringify(templates).includes('npm.jsr.io'));
 });
 
 Deno.test('generated starter pins every OpenElement import to the exact release', async () => {
@@ -434,10 +430,9 @@ Deno.test('packed CLI retains every starter template, including dotfiles', async
     assert(existsSync(join(tmpRoot, 'sample-app', 'app', 'routes', 'blog', 'welcome.tsx')));
     assert(existsSync(join(tmpRoot, 'sample-app', 'README.md')));
     assert(existsSync(join(tmpRoot, 'sample-app', 'app', 'components', 'page-home.tsx')));
-    // The Node-resolution bridge (package.json @std aliases + @jsr registry)
-    // must ship in packed scaffolds, not just workspace runs.
+    // No JSR bridge may ship in packed scaffolds, not just workspace runs.
     assert(existsSync(join(tmpRoot, 'sample-app', 'package.json')));
-    assert(existsSync(join(tmpRoot, 'sample-app', '.npmrc')));
+    assertFalse(existsSync(join(tmpRoot, 'sample-app', '.npmrc')));
   } finally {
     Deno.removeSync(tmpRoot, { recursive: true });
   }
