@@ -25,7 +25,7 @@ of the Deno workspace. It is wired into the repo gates through the
 ```
 __wtr__/
 ├── package.json                       npm-local pinned deps (exact versions)
-├── web-test-runner.config.mjs         main config: 3 browsers, alias, esbuild, zero-test guard
+├── web-test-runner.config.js         main config: 3 browsers, alias, esbuild, zero-test guard
 ├── fixtures/                          authored TSX grammar (compiler input)
 │   ├── wtr-shadow-button.tsx          shadow-open event source
 │   └── wtr-field.tsx                  minimal FACE (distilled from packages/ui open-input)
@@ -141,7 +141,7 @@ Case 8 compiles the REAL production components
 (`packages/ui/src/open-dialog.tsx` / `open-dropdown.tsx`) through the suite's
 official fixture path — no fakes. Their `./component-recipes.ts` /
 `./instance-state.ts` imports are served straight from `packages/ui/src` by
-the `ui-source` plugin in `web-test-runner.config.mjs` (nothing copied), so
+the `ui-source` plugin in `web-test-runner.config.js` (nothing copied), so
 the tests cannot drift from production sources. The config also raises the
 mocha timeout to 15s: trusted-input cases (sendKeys/sendMouse round-trip
 through the Playwright driver) exceed the 2s default; every wait remains a
@@ -182,15 +182,15 @@ five-proof sweep runs as `deno task test:element:browser:negative`.
 
 | Proof | Command (`cd packages/element/__wtr__`) | Exit | Evidence excerpt |
 | ----- | --------------------------------------- | ---- | ---------------- |
-| (a) failing assertion | `npx web-test-runner --config negative/failing-assertion.config.mjs` | **1** | `AssertionError: intentional failure` at `negative/failing-assertion.test.js:5:11` |
-| (b) missing browser | `npx web-test-runner --config negative/missing-browser.config.mjs` | **1** | `browserType.launch: Failed to launch chromium because executable doesn't exist at /nonexistent/wtr-pilot-bogus-chromium-executable` |
-| (c1) setup/transform failure | `npx web-test-runner --config negative/broken-transform.config.mjs` | **1** | `Error while handling server request. Error: intentional transform failure` → `Could not import your test module` |
-| (c2) zero tests executed | `npx web-test-runner --config negative/zero-tests.config.mjs` | **1** | `zero-tests-guard: run executed 0 tests; marking the run as failed` → `Error while running tests.` |
-| (c3) files glob matches nothing | `npx web-test-runner --config negative/no-matching-files.config.mjs` | **1** | `Error: Could not find any test files with pattern(s): negative/no-such-dir/**/*.test.js` |
+| (a) failing assertion | `npx web-test-runner --config negative/failing-assertion.config.js` | **1** | `AssertionError: intentional failure` at `negative/failing-assertion.test.js:5:11` |
+| (b) missing browser | `npx web-test-runner --config negative/missing-browser.config.js` | **1** | `browserType.launch: Failed to launch chromium because executable doesn't exist at /nonexistent/wtr-pilot-bogus-chromium-executable` |
+| (c1) setup/transform failure | `npx web-test-runner --config negative/broken-transform.config.js` | **1** | `Error while handling server request. Error: intentional transform failure` → `Could not import your test module` |
+| (c2) zero tests executed | `npx web-test-runner --config negative/zero-tests.config.js` | **1** | `zero-tests-guard: run executed 0 tests; marking the run as failed` → `Error while running tests.` |
+| (c3) files glob matches nothing | `npx web-test-runner --config negative/no-matching-files.config.js` | **1** | `Error: Could not find any test files with pattern(s): negative/no-such-dir/**/*.test.js` |
 
 Zero-test caveat and guard: stock WTR 1.0.0 **reports success** on a run that
 executes zero tests — proven by the committed counterfactual
-`negative/zero-tests-unguarded.config.mjs` (same run without the guard: exit
+`negative/zero-tests-unguarded.config.js` (same run without the guard: exit
 **0**, "all tests passed!"). A session only counts as failed when a test or the
 session itself errors. The main config therefore carries `zero-tests-guard`, a
 small reporter that flips zero-test runs to failed. Gate wiring must keep the

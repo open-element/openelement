@@ -3,7 +3,7 @@
  * tests must not report success. The main config's zero-tests-guard reporter
  * flips the run to failed; this run proves it exits nonzero.
  */
-import base from '../web-test-runner.config.mjs';
+import base from '../web-test-runner.config.js';
 import { playwrightLauncher } from '@web/test-runner-playwright';
 
 export default {

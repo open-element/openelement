@@ -2,7 +2,7 @@
  * Negative proof (b): a missing browser executable must exit nonzero.
  * Points the Chromium launcher at a bogus executable path.
  */
-import base from '../web-test-runner.config.mjs';
+import base from '../web-test-runner.config.js';
 import { playwrightLauncher } from '@web/test-runner-playwright';
 
 export default {

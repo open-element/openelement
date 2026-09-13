@@ -1,7 +1,7 @@
 /**
  * Fail-closed configuration smoke for the element browser suite: the configs
  * below must make the runner exit NON-ZERO. It proves the suite's own wiring
- * — the zero-tests-guard reporter in web-test-runner.config.mjs, which encodes
+ * — the zero-tests-guard reporter in web-test-runner.config.js, which encodes
  * the OpenElement exit contract that a run executing zero tests is a failure,
  * never a silent pass.
  *
@@ -21,7 +21,7 @@ const CONFIGS = [
 let failed = 0;
 for (const name of CONFIGS) {
   const status = await new Deno.Command('npx', {
-    args: ['web-test-runner', '--config', `negative/${name}.config.mjs`],
+    args: ['web-test-runner', '--config', `negative/${name}.config.js`],
     cwd: WTR_DIR,
     stdout: 'piped',
     stderr: 'piped',

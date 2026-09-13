@@ -16,7 +16,7 @@
     "typescript": "npm:typescript@6.0.3"
   },
   "peerDependencies": {
-    "vite": "npm:vite@8.0.16"
+    "vite": "npm:vite@^8.0.0"
   },
   "peerDependenciesMeta": {
     "vite": {

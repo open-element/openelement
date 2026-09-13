@@ -2,7 +2,7 @@
  * Negative proof (c3): a files glob that matches nothing must exit nonzero
  * (stock WTR behavior — the runner refuses a run with no test files).
  */
-import base from '../web-test-runner.config.mjs';
+import base from '../web-test-runner.config.js';
 import { playwrightLauncher } from '@web/test-runner-playwright';
 
 export default {

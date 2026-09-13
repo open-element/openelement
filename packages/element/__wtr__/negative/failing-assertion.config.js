@@ -2,7 +2,7 @@
  * Negative proof (a): a deliberately failing assertion must exit nonzero.
  * Chromium-only: assertion failure semantics are engine-independent.
  */
-import base from '../web-test-runner.config.mjs';
+import base from '../web-test-runner.config.js';
 import { playwrightLauncher } from '@web/test-runner-playwright';
 
 export default {

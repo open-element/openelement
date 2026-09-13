@@ -3,7 +3,7 @@
  * plugin below throws for every served test module, so the browser session
  * can never load its test file.
  */
-import base from '../web-test-runner.config.mjs';
+import base from '../web-test-runner.config.js';
 import { playwrightLauncher } from '@web/test-runner-playwright';
 
 const brokenTransform = {
