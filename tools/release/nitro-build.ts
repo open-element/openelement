@@ -4,7 +4,7 @@
  * Nitro selects its preset through its own CLI (`--preset`, also honored from
  * the official `NITRO_PRESET` env var), so first-party `nitro.config.ts`
  * files stay static and free of Node-only env reads. The driver runs the
- * pinned Nitro line (single-sourced in `tools/nitro-compatibility.ts`),
+ * pinned Nitro line (single-sourced in `tools/release/nitro-compatibility.ts`),
  * places the output directory, and optionally prunes a generated public
  * subdirectory (the SaaS build maps `dist/` as public assets for client
  * chunks, so the server bundle subdirectory must not stay publicly served).

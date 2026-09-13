@@ -1,4 +1,4 @@
-import { NITRO_COMPATIBILITY_DATE } from '../../tools/nitro-compatibility.ts';
+import { NITRO_COMPATIBILITY_DATE } from '../../tools/release/nitro-compatibility.ts';
 
 // The preset is selected by the caller (`deno task nitro:build[-workers]`
 // through tools/release/nitro-build.ts `--preset`), so this config stays static and
