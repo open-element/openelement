@@ -1,6 +1,5 @@
 import { openElement } from '@openelement/router/vite';
 import { defineConfig } from 'vite';
-import deno from '@deno/vite-plugin';
 
 // Design tokens (from Open Props) plus the global baseline. `--brand` must
 // stay aligned with the ui package tokens (`--violet-6` in
@@ -95,6 +94,5 @@ export default defineConfig({
         ],
       },
     }),
-    deno(),
   ],
 });

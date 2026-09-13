@@ -49,7 +49,6 @@ function assertCleanError(stderr: string): void {
 Deno.test('starter exposes only product imports and the standard lifecycle', () => {
   const denoJson = JSON.parse(readTemplate('deno.json.tmpl'));
   assertEquals(Object.keys(denoJson.imports).sort(), [
-    '@deno/vite-plugin',
     '@hono/vite-dev-server',
     '@openelement/element',
     '@openelement/element/build-utils',
@@ -162,11 +161,9 @@ Deno.test('generated starter pins every OpenElement import to the exact release'
   );
 });
 
-Deno.test('starter pins vite exactly, pins @deno/vite-plugin, and type-checks app-shell', () => {
+Deno.test('starter pins vite exactly and type-checks app-shell', () => {
   const denoJson = JSON.parse(readTemplate('deno.json.tmpl'));
-  // #680: @deno/vite-plugin must be pinned to an exact version, not a range.
-  const vitePlugin = String(denoJson.imports['@deno/vite-plugin'] || '');
-  assert(/^npm:@deno\/vite-plugin@\d+\.\d+\.\d+$/.test(vitePlugin), vitePlugin);
+  assertFalse('@deno/vite-plugin' in denoJson.imports, 'starter must not depend on @deno/vite-plugin');
   // #681: starter vite version must stay aligned with packages/router.
   const routerImports = JSON.parse(
     Deno.readTextFileSync(join(packageDir, '..', 'router', 'deno.json')),
