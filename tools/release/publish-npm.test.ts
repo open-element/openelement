@@ -3,13 +3,13 @@ import {
   deriveAllDependencies,
   deriveDependencies,
   type DeriveDepsIo,
+  findRawTypeScriptPayload,
   npmPublishTag,
   NpmViewError,
   prereleaseTag,
   previousPrerelease,
   publishPackage,
   type PublishPackageIo,
-  removeRawTypeScriptPayload,
   rewriteDtsRelativeExtensions,
   verifyNpmRelease,
 } from './publish-npm.ts';
@@ -148,7 +148,7 @@ Deno.test('deriveAllDependencies reads root imports once for the full package gr
   assertEquals(dependencies.get('@openelement/router'), { react: '^18.2.0' });
 });
 
-Deno.test('removeRawTypeScriptPayload keeps declarations and template payloads', async () => {
+Deno.test('findRawTypeScriptPayload flags sources but keeps declarations and templates', async () => {
   const root = await Deno.makeTempDir({ prefix: 'pack-raw-typescript-' });
   try {
     await Deno.mkdir(`${root}/nested`);
@@ -158,7 +158,7 @@ Deno.test('removeRawTypeScriptPayload keeps declarations and template payloads',
     await Deno.writeTextFile(`${root}/nested/view.tsx`, 'export const view = <div />;');
     await Deno.writeTextFile(`${root}/nested/template.tsx.tmpl`, '<div />');
 
-    assertEquals(removeRawTypeScriptPayload(root), ['nested/source.ts', 'nested/view.tsx']);
+    assertEquals(findRawTypeScriptPayload(root), ['nested/source.ts', 'nested/view.tsx']);
     for (const retained of ['entry.js', 'entry.d.ts', 'nested/template.tsx.tmpl']) {
       await Deno.stat(`${root}/${retained}`);
     }

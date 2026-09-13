@@ -29,6 +29,10 @@
       "deno.json",
       "README.md",
       "LICENSE"
+    ],
+    "exclude": [
+      "src/internal/protocol/hydration-markers.ts",
+      "src/internal/protocol/ssr-registry-markers.ts"
     ]
   },
   "tasks": {

@@ -75,13 +75,16 @@ function cleanStaleTarballs(packages: PackageInfo[]): void {
 }
 
 /**
- * `deno pack` may retain source modules that do not participate in the
- * declaration graph. npm consumers must receive emitted JavaScript and
- * declarations only; raw TypeScript is source-repository implementation
- * detail. Create templates use the `.tmpl` suffix so they remain payload data.
+ * Fail-closed raw-TypeScript guard: npm consumers must receive emitted
+ * JavaScript and declarations only. Every known unimported source (element
+ * provenance markers) is excluded from `deno pack` input via the package's
+ * own `publish.exclude`, so any `.ts`/`.tsx` surviving in the extracted
+ * tarball is a pack-input regression — packPackage throws instead of
+ * silently deleting it. Create templates use the `.tmpl` suffix so they
+ * remain payload data.
  */
-export function removeRawTypeScriptPayload(packageRoot: string): string[] {
-  const removed: string[] = [];
+export function findRawTypeScriptPayload(packageRoot: string): string[] {
+  const found: string[] = [];
   const visit = (dir: string): void => {
     for (const entry of Deno.readDirSync(dir)) {
       const path = `${dir}/${entry.name}`;
@@ -94,13 +97,12 @@ export function removeRawTypeScriptPayload(packageRoot: string): string[] {
         (entry.name.endsWith('.ts') || entry.name.endsWith('.tsx')) &&
         !entry.name.endsWith('.d.ts')
       ) {
-        Deno.removeSync(path);
-        removed.push(path.slice(packageRoot.length + 1));
+        found.push(path.slice(packageRoot.length + 1));
       }
     }
   };
   visit(packageRoot);
-  return removed.sort();
+  return found.sort();
 }
 
 export interface DeriveDepsIo {
@@ -544,10 +546,12 @@ export async function packPackage(
     await runCommand('tar', ['-xzf', out, '-C', tmp], { env: tarEnv });
     const pkgJsonPath = `${tmp}/package/package.json`;
     const pkgJson = JSON.parse(Deno.readTextFileSync(pkgJsonPath));
-    const removedPayload = removeRawTypeScriptPayload(`${tmp}/package`);
-    if (removedPayload.length > 0) {
-      console.log(
-        `[npm] ${pkg.name}: removed ${removedPayload.length} raw TypeScript payload file(s).`,
+    const rawPayload = findRawTypeScriptPayload(`${tmp}/package`);
+    if (rawPayload.length > 0) {
+      throw new Error(
+        `[npm] ${pkg.name}: raw TypeScript in tarball (fix publish input, never silently strip):\n${
+          rawPayload.join('\n')
+        }`,
       );
     }
     applyPackageJsonOverrides(pkg, pkgJson);
