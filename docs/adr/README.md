@@ -17,3 +17,4 @@ Only decisions that still govern hard-to-reverse Element or Router contracts rem
 - [ADR-0148-compiler-semantic-core-vite-integration-boundary.md](./ADR-0148-compiler-semantic-core-vite-integration-boundary.md)
 - [ADR-0152-product-router-and-alpha-convergence.md](./ADR-0152-product-router-and-alpha-convergence.md)
 - [ADR-0153-beta2-2-document-seam-and-submission-tuple.md](./ADR-0153-beta2-2-document-seam-and-submission-tuple.md)
+- [ADR-0154-alpha-baseline-removals.md](./ADR-0154-alpha-baseline-removals.md)
