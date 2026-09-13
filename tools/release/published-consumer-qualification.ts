@@ -720,8 +720,13 @@ async function nitroSmoke(): Promise<void> {
   console.log('\n[Nitro output smoke]');
 
   for (const target of ['node', 'workers']) {
-    console.log(`  deno task nitro:proof:${target}`);
-    const result = await runWithOutput('deno', ['task', `nitro:proof:${target}`]);
+    console.log(`  deno task --cwd tests/fixtures/router-nitro proof:${target}`);
+    const result = await runWithOutput('deno', [
+      'task',
+      '--cwd',
+      'tests/fixtures/router-nitro',
+      `proof:${target}`,
+    ]);
     const output = result.stdout + result.stderr;
     if (!result.success) {
       console.error(`  ${target} failed:\n${output.slice(0, 2000)}`);
