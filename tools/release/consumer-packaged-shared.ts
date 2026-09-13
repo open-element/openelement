@@ -32,9 +32,12 @@
  *   start                  cli/start serves /, /notes, /notes/<seed>, 404
  *   form-422               POST /notes/new missing title -> 422
  *   form-303               POST /notes/new valid -> 303 + Location
- *   browser-continuation   chromium: island activates without a full reload
- *                          (native: kernel claims the DSD; lit: hydrate-support
- *                          lifts defer-hydration adopting the DSD)
+ *   browser-continuation   chromium+firefox+webkit: island activates
+ *                          without a full reload (native: kernel claims the
+ *                          DSD; lit: hydrate-support lifts defer-hydration
+ *                          adopting the DSD). Each renderer x browser pair is
+ *                          an individually reported PASS/FAIL unit; any single
+ *                          browser failure fails the cell.
  *   boundary               dist/client asset scan + @openelement/router .d.ts
  *                          declaration-graph walk (no compiler/router-vite/
  *                          node:/workspace: edges, every edge resolves)
@@ -381,17 +384,25 @@ async function attempt(fn: () => Promise<string | undefined>): Promise<PackedApp
 // a `deno run -A` child against the repo config (which maps @playwright/test),
 // exactly how consumer-packaged-element.ts and the fixture e2e tasks invoke
 // Playwright. The script is generated into the temp consumer and removed with
-// it. Args: <baseUrl> <native|lit>.
+// it. Args: <baseUrl> <native|lit> <chromium|firefox|webkit>. One browser
+// per invocation so every renderer x browser pair is an individually
+// identifiable PASS/FAIL unit in the gate output.
+
+const PACKED_BROWSERS = ['chromium', 'firefox', 'webkit'] as const;
 
 const PW_PROBE_SCRIPT = `import { assertEquals } from '@std/assert';
-import { chromium } from '@playwright/test';
+import { chromium, firefox, webkit } from '@playwright/test';
 
-const [baseUrl, renderer] = Deno.args;
+const [baseUrl, renderer, browserName] = Deno.args;
 if (!baseUrl || (renderer !== 'native' && renderer !== 'lit')) {
-  throw new Error('usage: pw-continuation-probe.ts <baseUrl> <native|lit>');
+  throw new Error('usage: pw-continuation-probe.ts <baseUrl> <native|lit> <browser>');
+}
+const browserTypes = { chromium, firefox, webkit };
+if (!(browserName in browserTypes)) {
+  throw new Error('usage: pw-continuation-probe.ts <baseUrl> <native|lit> <browser>');
 }
 
-const browser = await chromium.launch({ headless: true });
+const browser = await browserTypes[browserName].launch({ headless: true });
 try {
   const page = await browser.newPage();
   await page.goto(baseUrl + '/notes', { waitUntil: 'load' });
@@ -465,7 +476,7 @@ try {
     );
     await assertNoReload();
   }
-  console.log('BROWSER-CONTINUATION-OK ' + renderer + ' chromium ' + browser.version());
+  console.log('BROWSER-CONTINUATION-OK ' + renderer + ' ' + browserName + ' ' + browser.version());
 } finally {
   await browser.close();
 }
@@ -674,24 +685,43 @@ async function runBrowserContinuationProbe(
   tmp: string,
   baseUrl: string,
   leg: PackedAppRenderer,
-) {
-  const probe = await run(
-    Deno.execPath(),
-    [
-      'run',
-      '--config',
-      join(repoRoot, 'deno.json'),
-      '-A',
-      join(tmp, 'pw-continuation-probe.ts'),
-      baseUrl,
-      leg,
-    ],
-    repoRoot,
-    BROWSER_TIMEOUT_MS,
-  );
-  if (!probe.success || !probe.output.includes(`BROWSER-CONTINUATION-OK ${leg}`)) {
-    throw new Error(`Browser continuation probe failed:\n${probe.output}`);
+): Promise<string> {
+  // Packed three-browser matrix: every renderer x browser pair runs as its
+  // own probe invocation with its own OK marker; any single browser failure
+  // fails the cell (no workspace-fixture inference, no shared-browser pass).
+  const passed: string[] = [];
+  const failures: string[] = [];
+  for (const browserName of PACKED_BROWSERS) {
+    const probe = await run(
+      Deno.execPath(),
+      [
+        'run',
+        '--config',
+        join(repoRoot, 'deno.json'),
+        '-A',
+        join(tmp, 'pw-continuation-probe.ts'),
+        baseUrl,
+        leg,
+        browserName,
+      ],
+      repoRoot,
+      BROWSER_TIMEOUT_MS,
+    );
+    const marker = `BROWSER-CONTINUATION-OK ${leg} ${browserName}`;
+    if (probe.success && probe.output.includes(marker)) {
+      passed.push(`${leg} / ${browserName} / pass`);
+    } else {
+      failures.push(`${leg} / ${browserName} / FAIL:\n${probe.output.slice(-2000)}`);
+    }
   }
+  for (const line of [...passed, ...failures]) console.log(line);
+  if (failures.length > 0) {
+    throw new Error(
+      `Browser continuation probe failed (${failures.length}/${PACKED_BROWSERS.length} browsers):\n` +
+        failures.join('\n'),
+    );
+  }
+  return passed.join('; ');
 }
 
 /**
@@ -1236,14 +1266,18 @@ export async function qualifyPackedAppLeg(spec: PackedAppLegSpec): Promise<void>
     );
 
     await cell(leg, 'browser-continuation', ['build'], async () => {
+      let summary = '';
       await withServer(
         `packed-app-${leg} browser host`,
         Deno.execPath(),
         () => ['task', 'start'],
         tmp,
-        (baseUrl) => runBrowserContinuationProbe(tmp, baseUrl, leg),
+        async (baseUrl) => {
+          summary = await runBrowserContinuationProbe(tmp, baseUrl, leg);
+        },
       );
-      return 'chromium: island activates in place without a full reload';
+      return summary ||
+        'chromium+firefox+webkit: island activates in place without a full reload';
     });
 
     await cell(leg, 'boundary', ['install'], () => {

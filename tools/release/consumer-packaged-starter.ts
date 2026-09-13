@@ -21,6 +21,12 @@
  *            outside the generated import map may survive into the bundle
  *            (a packed starter must never need workspace aliases)
  *   start    cli/start serves static + request-time + API routes over HTTP
+ *   browser  packed three-browser matrix (chromium+firefox+webkit): the
+ *            starter island hydrates in place, interaction patches without a
+ *            full reload, and request-time navigation renders. One probe
+ *            invocation per browser with its own OK marker; any single
+ *            browser failure fails the gate (workspace-fixture results never
+ *            substitute for this packed consumer).
  *   preview  fails closed with start guidance (the starter is dynamic, #601)
  *
  * Every leg asserts over-the-wire output, not just a green exit. Gated in CI
@@ -44,6 +50,10 @@ const repoRoot = resolve(import.meta.dirname!, '../..');
 // packed adapter must fail the tool instead of stalling CI forever.
 const BUILD_TIMEOUT_MS = 10 * 60_000;
 const NPM_INSTALL_TIMEOUT_MS = 5 * 60_000;
+const BROWSER_TIMEOUT_MS = 5 * 60_000;
+// One browser per probe invocation so every starter x browser pair is an
+// individually identifiable PASS/FAIL unit in the gate output.
+const PACKED_BROWSERS = ['chromium', 'firefox', 'webkit'] as const;
 // Cold-cache vite dev under Deno can take well over a minute before the
 // first SSR response; dev/start/deploy legs share this readiness ceiling.
 const SERVER_READY_TIMEOUT_MS = 3 * 60_000;
@@ -161,6 +171,139 @@ function findMissingGeneratedImports(
  * A green exit alone is not lifecycle evidence: the packed artifacts must
  * actually serve the documented routes.
  */
+// ─── Packed three-browser matrix (starter island hydration + continuation) ─
+//
+// Playwright runs as a `deno run -A` child against the repo config (which
+// maps @playwright/test), matching consumer-packaged-element.ts and the
+// fixture e2e tasks. Args: <baseUrl> <chromium|firefox|webkit>.
+const PW_STARTER_PROBE_SCRIPT = `import { chromium, firefox, webkit } from '@playwright/test';
+
+const [baseUrl, browserName] = Deno.args;
+const browserTypes = { chromium, firefox, webkit };
+if (!baseUrl || !(browserName in browserTypes)) {
+  throw new Error('usage: pw-starter-probe.ts <baseUrl> <chromium|firefox|webkit>');
+}
+const browser = await browserTypes[browserName].launch({ headless: true });
+try {
+  const page = await browser.newPage();
+  await page.goto(baseUrl + '/', { waitUntil: 'load' });
+  // A full document reload would drop this marker; island interaction must
+  // not reload.
+  await page.evaluate(() => {
+    (globalThis as { __starterContinuation?: string }).__starterContinuation = 'alive';
+  });
+  // The idle island hydrates in place: the SSR node identity must survive
+  // activation and interaction (no re-render, no reload).
+  const countText = (expected: string): string =>
+    '(function(){var c=document.querySelector("my-counter");' +
+    'var s=c&&c.shadowRoot&&c.shadowRoot.querySelector("#count");' +
+    'return !!(s&&s.textContent==="' + expected + '");})()';
+  await page.waitForFunction(countText('0'), undefined, { timeout: 60000 });
+  const count = page.locator('my-counter #count');
+  const ssrCount = await count.elementHandle();
+  const plus = page.locator('my-counter').getByRole('button', { name: '+' });
+  await plus.click();
+  await page.waitForFunction(countText('1'), undefined, { timeout: 60000 });
+  const activeCount = await count.elementHandle();
+  if (!await ssrCount!.evaluate((node, candidate) => node === candidate, activeCount)) {
+    throw new Error('starter island re-rendered instead of claiming the SSR node');
+  }
+  const marker = await page.evaluate(() =>
+    (globalThis as { __starterContinuation?: string }).__starterContinuation ?? null
+  );
+  if (marker !== 'alive') throw new Error('starter island interaction caused a full reload');
+  // Request-time navigation renders through the packed server entry.
+  await page.goto(baseUrl + '/contact', { waitUntil: 'load' });
+  await page.getByText('Stay in the loop').waitFor({ timeout: 30000 });
+  console.log('STARTER-BROWSER-OK ' + browserName + ' ' + browser.version());
+} finally {
+  await browser.close();
+}
+`;
+
+/** Boot cli/start, run the three-browser matrix, then stop the server. */
+async function runStarterBrowserMatrix(starter: string, tmp: string): Promise<void> {
+  const port = reservePort();
+  const server = new Deno.Command(Deno.execPath(), {
+    args: ['task', 'start'],
+    cwd: starter,
+    env: { OPEN_ELEMENT_PORT: String(port), OPEN_ELEMENT_HOST: '127.0.0.1' },
+    stdout: 'piped',
+    stderr: 'piped',
+  }).spawn();
+  let exited = false;
+  const status = server.status.then((s) => {
+    exited = true;
+    return s;
+  });
+  const stdout = new Response(server.stdout).text();
+  const stderr = new Response(server.stderr).text();
+  try {
+    const baseUrl = `http://127.0.0.1:${port}`;
+    let ready = false;
+    const deadline = Date.now() + SERVER_READY_TIMEOUT_MS;
+    while (Date.now() < deadline && !exited) {
+      try {
+        const response = await fetch(`${baseUrl}/`);
+        await response.text();
+        ready = true;
+        break;
+      } catch {
+        await new Promise((resolveWait) => setTimeout(resolveWait, 150));
+      }
+    }
+    if (!ready) {
+      throw new Error(
+        `Packed starter browser host did not become ready within ${SERVER_READY_TIMEOUT_MS}ms:\n${await stdout}\n${await stderr}`,
+      );
+    }
+    const probePath = join(tmp, 'pw-starter-probe.ts');
+    await Deno.writeTextFile(probePath, PW_STARTER_PROBE_SCRIPT);
+    const failures: string[] = [];
+    for (const browserName of PACKED_BROWSERS) {
+      const probe = await run(
+        Deno.execPath(),
+        [
+          'run',
+          '--config',
+          join(repoRoot, 'deno.json'),
+          '-A',
+          probePath,
+          baseUrl,
+          browserName,
+        ],
+        repoRoot,
+        BROWSER_TIMEOUT_MS,
+      );
+      if (probe.success && probe.output.includes(`STARTER-BROWSER-OK ${browserName}`)) {
+        console.log(`PASS starter / ${browserName} / pass`);
+      } else {
+        failures.push(`starter / ${browserName} / FAIL:\n${probe.output.slice(-2000)}`);
+        console.log(`FAIL starter / ${browserName} / fail`);
+      }
+    }
+    if (failures.length > 0) {
+      throw new Error(
+        `Packed starter browser matrix failed (${failures.length}/${PACKED_BROWSERS.length} browsers):\n` +
+          failures.join('\n'),
+      );
+    }
+    console.log('Packed starter browser matrix passed (chromium+firefox+webkit).');
+  } finally {
+    if (!exited) {
+      try {
+        server.kill('SIGTERM');
+      } catch (error) {
+        if (!(error instanceof TypeError)) {
+          console.error('[consumer-packaged-starter] failed to stop browser host:', error);
+        }
+      }
+    }
+    await status.catch(() => undefined);
+    await Promise.all([stdout.catch(() => ''), stderr.catch(() => '')]);
+  }
+}
+
 async function exerciseServer(
   label: string,
   command: string,
@@ -485,7 +628,9 @@ try {
     {},
     serveProbes,
   );
-  // Lifecycle leg 6 — preview: the starter ships a request-time route, so the
+  // Lifecycle leg 6 — browser: packed three-browser matrix over cli/start.
+  await runStarterBrowserMatrix(starter, tmp);
+  // Lifecycle leg 7 — preview: the starter ships a request-time route, so the
   // documented preview behavior is a fail-closed refusal that points at
   // `deno task start` (#601); a silent static-only preview would be wrong.
   const preview = await run(Deno.execPath(), ['task', 'preview'], starter);
