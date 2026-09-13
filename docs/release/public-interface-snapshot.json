@@ -16,7 +16,7 @@
       },
       "declarations": {
         ".": {
-          "publicShapeSha256": "bd48b1e4e0e08847b918deadeea67e441f5a7835a183d9c1962f61cdd3c3e7d3",
+          "publicShapeSha256": "2bcb3e35c05f8d476ecdfd6334ea43d9731e84da9093db740792bd9d2ca8c531",
           "publicSymbols": [
             "ACTION_FETCH_HEADER=value:\"x-openelement-action\"",
             "Action=type:{call:(ctx:{env:Env;formData:FormData;params:Record<string, string>;platform:union(Platform|undefined);request:Request;responseHeaders:Headers;route:Route})=>union(Promise<T>|T)}",
@@ -79,7 +79,7 @@
             "effect=value:{call:(fn:{call:()=>union(void|{call:()=>void})})=>{call:()=>void}}",
             "element=value:{call:(_tag:string,_options:union(undefined|{delegatesFocus?:union(false|true|undefined);formAssociated?:union(false|true|undefined);root?:union(\"light\"|\"shadow-closed\"|\"shadow-open\"|undefined)}))=>{call:(target:unknown,context:unknown)=>void}}",
             "ensureDeepFragmentNavigation=value:{call:(options:{enabled?:union(false|true|undefined)})=>void}",
-            "ensurePreHydrationClickCapture=value:{call:(root:union(EventTarget|undefined))=>void}",
+            "ensurePreHydrationClickCapture=value:{call:(root:union(EventTarget|undefined),pendingTags:union(array(string)|undefined))=>void}",
             "escapeAttr=value:{call:(value:string)=>string}",
             "escapeHtml=value:{call:(str:string)=>string}",
             "formatError=value:{call:(e:unknown)=>string}",

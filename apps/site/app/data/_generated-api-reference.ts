@@ -248,10 +248,10 @@ export const apiReference = {
             {
               "name": "ensurePreHydrationClickCapture",
               "kind": "function",
-              "summary": "Install the bounded pre-upgrade interaction capture on an owning root (default: the document). Generated client entries call this before any compiled element upgrades; after a successful claim the element replays the captured events whose targets live inside its root (compiled claim capture/replay, internal/compiled/runtime.ts). Idempotent per root and a no-op where no DOM exists (SSR). Invariant: the capture itself — one fixed listener set per owning root, installed once per page — is page-lifetime by design and is NOT the leak. The M1 leak was retained event-target records; each element releases exactly its own records at its activation decision (success or failure), while records owned by still-pending elements survive for their delayed/lazy upgrade (#1170). Boundedness: the facade capture passes the pending-island filter, so only interactions that could belong to a still-pending island enter the queue — ordinary events inside already-settled islands are skipped (nested pending islands still capture through their own unsettled host). The queue additionally carries a hard capacity cap (fail closed) and every release sweeps detached targets, so post-hydration traffic and removals never grow retention.",
+              "summary": "Install the bounded pre-upgrade interaction capture on an owning root (default: the document). Generated client entries call this with their declared island tags before any compiled element upgrades; after a successful claim the element replays the captured events whose targets live inside its root (compiled claim capture/replay, internal/compiled/runtime.ts). Idempotent per root (repeat calls merge tags, never reinstall listeners) and a no-op where no DOM exists (SSR). Invariant: the capture itself — one fixed listener set per owning root, installed once per page — is page-lifetime by design and is NOT the leak. The M1 leak was retained event-target records; each element releases exactly its own records at its activation decision (success or failure), while records owned by still-pending elements survive for their delayed/lazy upgrade (#1170). Boundedness: the facade capture passes the declared-island filter, so only interactions under a still-pending DECLARED island tag enter the queue — ordinary events and undeclared third-party custom elements are skipped (nested pending declared islands still capture through their own unsettled host). With no tags declared the legacy dash heuristic applies. The queue additionally carries a hard capacity cap (fail closed) and every release sweeps detached targets, so post-hydration traffic and removals never grow retention.",
               "source": {
                 "path": "packages/element/src/open-element-implementation.ts",
-                "line": 100
+                "line": 106
               },
               "stability": "public",
               "anchor": "api-element-root-ensurePreHydrationClickCapture"
@@ -471,7 +471,7 @@ export const apiReference = {
               "summary": "Custom Element base class for the compiled Part Program architecture. Subclasses are produced by the 0.44 compiler; hand-written subclasses that never pass through the compiler fail closed at connect time.",
               "source": {
                 "path": "packages/element/src/open-element-implementation.ts",
-                "line": 146
+                "line": 173
               },
               "stability": "public",
               "anchor": "api-element-root-OpenElement"
@@ -1182,7 +1182,7 @@ export const apiReference = {
               "summary": "",
               "source": {
                 "path": "packages/element/src/internal/compiler/semantic-core/compile.ts",
-                "line": 1676
+                "line": 1683
               },
               "stability": "public",
               "anchor": "api-element-compiler-compileElementProgram"
