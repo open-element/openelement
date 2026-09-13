@@ -14,8 +14,8 @@
  *   deno run -A setup.ts            (build everything into work/)
  */
 
-import { join, relative, resolve } from 'node:path';
-import { existsSync } from 'node:fs';
+import { join, relative, resolve } from '@std/path';
+import { existsSync } from '@std/fs';
 
 const repoRoot = resolve(import.meta.dirname!, '..', '..');
 const suiteDir = join(repoRoot, 'e2e', 'starter-smoke');
