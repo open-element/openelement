@@ -1,11 +1,14 @@
 import { assertEquals, assertRejects, assertThrows } from '@std/assert';
 import {
+  classifyPackLog,
   deriveAllDependencies,
   deriveDependencies,
   type DeriveDepsIo,
   findRawTypeScriptPayload,
   npmPublishTag,
   NpmViewError,
+  packExportTargets,
+  packRelativePath,
   prereleaseTag,
   previousPrerelease,
   publishPackage,
@@ -433,4 +436,61 @@ Deno.test('previousPrerelease returns the predecessor on the same line', () => {
   assertEquals(previousPrerelease('0.41.0-rc.2'), '0.41.0-rc.1');
   assertEquals(previousPrerelease('0.41.0-alpha.1'), null);
   assertEquals(previousPrerelease('0.41.0'), null);
+});
+
+Deno.test('classifyPackLog flags fast-check errors and missing-explicit mentions', () => {
+  const parsed = classifyPackLog(
+    '  71 modules collected\n' +
+      'error[missing-explicit-type]: missing explicit type in the public API\n' +
+      'some line mentioning missing-explicit-return-type inline\n',
+  );
+  assertEquals(parsed.errors.length, 2);
+  assertEquals(parsed.typeWarnings, []);
+  assertEquals(parsed.unexpectedWarnings, []);
+});
+
+Deno.test('classifyPackLog pairs exact private-module warnings, flags the rest', () => {
+  const parsed = classifyPackLog(
+    "Could not generate types for 'file:///pkg/src/internal/helper.ts'. Types will not be included for this module.\n" +
+      '  2 modules collected\n' +
+      'a slow type was detected somewhere\n' +
+      'unsupported feature x\n' +
+      'build failed badly\n' +
+      'some warning about chunks\n',
+  );
+  assertEquals(parsed.errors, []);
+  assertEquals(parsed.typeWarnings.map((warning) => warning.file), [
+    'file:///pkg/src/internal/helper.ts',
+  ]);
+  assertEquals(parsed.unexpectedWarnings.length, 4);
+});
+
+Deno.test('classifyPackLog leaves clean pack output empty', () => {
+  assertEquals(
+    classifyPackLog('  71 modules collected\n  2 assets collected\nDry run ok\n'),
+    { errors: [], typeWarnings: [], unexpectedWarnings: [] },
+  );
+});
+
+Deno.test('packExportTargets collects nested string targets', () => {
+  assertEquals(
+    packExportTargets({ '.': './src/index.ts', './open-button': './src/open-button.tsx' }),
+    new Set(['src/index.ts', 'src/open-button.tsx']),
+  );
+  assertEquals(packExportTargets('./src/cli.ts'), new Set(['src/cli.ts']));
+  assertEquals(packExportTargets(undefined), new Set());
+});
+
+Deno.test('packRelativePath scopes warned files to the packed directory', () => {
+  assertEquals(
+    packRelativePath('/tmp/stage/ui', 'file:///tmp/stage/ui/src/internal/helper.ts'),
+    'src/internal/helper.ts',
+  );
+  assertEquals(packRelativePath('/tmp/stage/ui', '/tmp/stage/ui/src/a.ts'), 'src/a.ts');
+  assertEquals(packRelativePath('/tmp/stage/ui', 'file:///tmp/other/src/a.ts'), null);
+  assertEquals(packRelativePath('/tmp/stage/ui', '/tmp/stage/ui2/src/a.ts'), null);
+  assertEquals(
+    packRelativePath('/var/folders/x/y', 'file:///private/var/folders/x/y/src/a.ts'),
+    'src/a.ts',
+  );
 });

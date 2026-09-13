@@ -18,7 +18,7 @@ import {
   readPackages,
   releasePublishOrder,
 } from '../lib/package-graph.ts';
-import { runCommand } from '../lib/process.ts';
+import { runCommand, runWithOutput } from '../lib/process.ts';
 import { assertCleanWorktree } from '../lib/git-cleanliness.ts';
 import { formatError } from '@openelement/element';
 import { formatJson } from '@openelement/element/build-utils';
@@ -103,6 +103,113 @@ export function findRawTypeScriptPayload(packageRoot: string): string[] {
   };
   visit(packageRoot);
   return found.sort();
+}
+
+/**
+ * Structured `deno pack` diagnostics for one package. publish-npm.ts is the
+ * sole owner of pack diagnostics: raw and staged packs flow through
+ * packPackage, so there is exactly one classification point and no second
+ * log-scanner tool.
+ *
+ *   - errors: any `error[` fast-check diagnostic or `missing-explicit`
+ *     mention — always repo-fixable, always FAIL.
+ *   - unexpectedWarnings: any other warning token (`warning`, `slow type`,
+ *     `unsupported`, `failed`) outside the exact known pair — FAIL.
+ *   - knownUpstreamPrivateWarnings: exact
+ *     `Could not generate types ... Types will not be included` lines for
+ *     modules that are (a) inside the packed package, (b) NOT a public
+ *     export target, with (c) every public export carrying a verified types
+ *     file — recorded, never FAIL by itself.
+ */
+export interface PackDiagnosticSummary {
+  errors: string[];
+  unexpectedWarnings: string[];
+  knownUpstreamPrivateWarnings: string[];
+  publicDeclarations: number;
+}
+
+export interface ClassifiedPackLog {
+  errors: string[];
+  typeWarnings: Array<{ file: string; raw: string }>;
+  unexpectedWarnings: string[];
+}
+
+const PACK_KNOWN_PAIR =
+  /Could not generate types for '([^']+)'\. Types will not be included for this module\./;
+
+/** Strip ANSI color escapes for stable log scans. */
+export function stripPackAnsi(text: string): string {
+  // Intentional ANSI color stripping for log scans.
+  // deno-lint-ignore no-control-regex
+  return text.replace(/\x1b\[[0-9;]*m/g, '');
+}
+
+/** Pure parse of one `deno pack` combined output (stdout+stderr). */
+export function classifyPackLog(output: string): ClassifiedPackLog {
+  const errors: string[] = [];
+  const typeWarnings: Array<{ file: string; raw: string }> = [];
+  const unexpectedWarnings: string[] = [];
+  for (const rawLine of stripPackAnsi(output).split('\n')) {
+    const line = rawLine.trim();
+    if (!line) continue;
+    if (line.includes('error[') || line.includes('missing-explicit')) {
+      errors.push(line.slice(0, 220));
+      continue;
+    }
+    const pair = PACK_KNOWN_PAIR.exec(line);
+    if (pair) {
+      typeWarnings.push({ file: pair[1], raw: line.slice(0, 220) });
+      continue;
+    }
+    if (
+      /\bwarning\b/i.test(line) || /slow type/i.test(line) || /\bunsupported\b/i.test(line) ||
+      /\bfailed\b/i.test(line)
+    ) {
+      unexpectedWarnings.push(line.slice(0, 220));
+    }
+  }
+  return { errors, typeWarnings, unexpectedWarnings };
+}
+
+/** Package-relative export source targets from a deno.json exports map. */
+export function packExportTargets(
+  exportsMap: unknown,
+): Set<string> {
+  const targets = new Set<string>();
+  const visit = (value: unknown): void => {
+    if (typeof value === 'string') {
+      if (value.startsWith('./')) targets.add(value.slice(2));
+    } else if (value && typeof value === 'object') {
+      for (const entry of Object.values(value as Record<string, unknown>)) visit(entry);
+    }
+  };
+  visit(exportsMap);
+  return targets;
+}
+
+/** A warned file URL/path relative to the directory pack ran in, or null when outside it. */
+export function packRelativePath(packDir: string, file: string): string | null {
+  // Lexical macOS normalization: TMPDIR may surface as /var/... in one
+  // place and /private/var/... in the other (same directory). realpath is
+  // unavailable (staged dirs are cleaned before classification), so strip
+  // the well-known alias prefix on both sides instead.
+  const canon = (value: string): string => {
+    const noPrivate = value.startsWith('/private/') ? value.slice('/private'.length) : value;
+    return noPrivate.endsWith('/') ? noPrivate.slice(0, -1) : noPrivate;
+  };
+  let path = file;
+  if (path.startsWith('file://')) {
+    try {
+      path = new URL(path).pathname;
+    } catch {
+      return null;
+    }
+  }
+  const normalizedDir = canon(packDir);
+  path = canon(path);
+  if (path === normalizedDir) return '';
+  if (!path.startsWith(`${normalizedDir}/`)) return null;
+  return path.slice(normalizedDir.length + 1);
 }
 
 export interface DeriveDepsIo {
@@ -333,14 +440,37 @@ export async function packPackage(
     );
   }
 
+  const packDir = staged?.packDir ?? pkg.dir;
+  console.log(`$ deno ${args.join(' ')}  # cwd=${packDir}`);
+  let packed: { success: boolean; code: number; stdout: string; stderr: string } | null = null;
   try {
-    const packDir = staged?.packDir ?? pkg.dir;
-    await runCommand('deno', args, { cwd: packDir });
+    packed = await runWithOutput('deno', args, { cwd: packDir });
     if (staged) {
-      await Deno.copyFile(`${staged.packDir}/${filename}`, out);
+      await Deno.copyFile(`${packDir}/${filename}`, out);
     }
   } finally {
     await staged?.cleanup();
+  }
+  const packOutput = `${packed?.stdout ?? ''}\n${packed?.stderr ?? ''}`;
+  if (!packed?.success) {
+    throw new Error(
+      `[npm] ${pkg.name}: deno pack exited ${packed?.code ?? 'unknown'}:\n${packOutput}`,
+    );
+  }
+  const packSummary = classifyPackLog(packOutput);
+  if (packSummary.errors.length > 0) {
+    throw new Error(
+      `[npm] ${pkg.name}: deno pack fast-check errors (repo-fixable, failing closed):\n${
+        packSummary.errors.join('\n')
+      }`,
+    );
+  }
+  if (packSummary.unexpectedWarnings.length > 0) {
+    throw new Error(
+      `[npm] ${pkg.name}: deno pack unexpected warnings (repo-fixable, failing closed):\n${
+        packSummary.unexpectedWarnings.join('\n')
+      }`,
+    );
   }
 
   const tmp = await Deno.makeTempDir({ prefix: 'pack-' });
@@ -415,6 +545,57 @@ export async function packPackage(
         delete pkgJson.dependencies[name];
       }
     }
+    // Known-upstream classification: exact private-module warnings only.
+    // A warned file must live in the packed package and must NOT be a public
+    // export target; anything else (outside the package, or an export target
+    // missing its declaration) fails closed here.
+    const exportTargets = packExportTargets(
+      (JSON.parse(Deno.readTextFileSync(`${pkg.dir}/deno.json`)) as { exports?: unknown })
+        .exports,
+    );
+    // packDir is repo-relative for direct packs but absolute for staged
+    // packs; warned file URLs are always absolute.
+    const absolutePackDir = packDir.startsWith('/') ? packDir : `${Deno.cwd()}/${packDir}`;
+    const knownUpstream: string[] = [];
+    for (const warning of packSummary.typeWarnings) {
+      const relative = packRelativePath(absolutePackDir, warning.file);
+      if (relative === null) {
+        throw new Error(
+          `[npm] ${pkg.name}: pack warned outside the package (failing closed):\n${warning.raw}`,
+        );
+      }
+      if (exportTargets.has(relative)) {
+        throw new Error(
+          `[npm] ${pkg.name}: pack dropped the declaration of public export '${relative}' (failing closed):\n${warning.raw}`,
+        );
+      }
+      knownUpstream.push(`${relative}`);
+    }
+    // Every public export must carry a verified types file from deno pack
+    // itself (no declaration repair step exists anymore).
+    const packedExports = (pkgJson.exports ?? {}) as Record<string, unknown>;
+    let publicDeclarations = 0;
+    for (const [subpath, conditions] of Object.entries(packedExports)) {
+      const types = (conditions as { types?: unknown } | null)?.types;
+      if (typeof types !== 'string' || !types.startsWith('./')) {
+        throw new Error(
+          `[npm] ${pkg.name}: export '${subpath}' has no native types condition (failing closed).`,
+        );
+      }
+      try {
+        await Deno.stat(`${tmp}/package/${types.slice(2)}`);
+      } catch {
+        throw new Error(
+          `[npm] ${pkg.name}: export '${subpath}' types file missing at ${types} (failing closed).`,
+        );
+      }
+      publicDeclarations++;
+    }
+    console.log(
+      `[npm] ${pkg.name}: pack diagnostics ` +
+        `errors=0 unexpectedWarnings=0 knownUpstreamPrivateWarnings=${knownUpstream.length} ` +
+        `publicDeclarations=${publicDeclarations}`,
+    );
     Deno.writeTextFileSync(pkgJsonPath, formatJson(pkgJson));
     await runCommand('tar', ['-czf', out, '-C', tmp, 'package'], {
       env: tarEnv,

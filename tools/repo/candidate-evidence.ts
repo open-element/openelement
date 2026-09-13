@@ -10,9 +10,10 @@
  * child exit code plus a semantic assertion (e.g. gate step counts).
  *
  * Sections:
- *   check | gate:source | gate:packed | publish:npm:dry-run |
- *   pack:clean-log (expected FAIL on the upstream private-module warnings;
- *   recorded honestly, see .artifacts/deno-pack-repros/README.md) |
+ *   check | gate:source | gate:packed | publish:npm:dry-run (the sole pack
+ *   diagnostic owner: repo-fixable diagnostics fail its exit code; exact
+ *   upstream private-module warnings are structured per package, see
+ *   .artifacts/deno-pack-repros/README.md) |
  *   permission-scans | ffi-non-interactive | matrix-rollup (parsed from the
  *   gate logs, not re-run) | environment | skips | tarballs
  *
@@ -113,6 +114,18 @@ function stripAnsi(text: string): string {
   // Intentional ANSI color stripping for log scans.
   // deno-lint-ignore no-control-regex
   return text.replace(/\x1b\[[0-9;]*m/g, '');
+}
+
+/**
+ * Test counts from Deno's final summary line (`ok | N passed | M failed`).
+ * Never derived by counting per-test `ok` markers (that inflated 3-test
+ * files to 4+).
+ */
+function parseDenoTestSummary(logText: string): { passed: number; failed: number } {
+  const summaries = [...stripAnsi(logText).matchAll(/(\d+) passed \| (\d+) failed/g)];
+  if (summaries.length === 0) return { passed: 0, failed: -1 };
+  const last = summaries[summaries.length - 1];
+  return { passed: Number(last[1]), failed: Number(last[2]) };
 }
 
 /** Gate step lines printed by tools/repo/gate.ts (`PASS name (Ns)`). */
@@ -238,26 +251,43 @@ async function main(): Promise<void> {
     'gate:packed',
   ]);
   gatePacked.counts = gateStepCounts(logs['gate-packed']);
-  await run('publish-npm-dry-run', [
+  const publishDryRun = await run('publish-npm-dry-run', [
     denoExe,
     'task',
     '--cwd',
     'tools/release',
     'publish:npm:dry-run',
   ]);
-
-  const cleanLog = await run('pack-clean-log', [
-    denoExe,
-    'task',
-    '--cwd',
-    'tools/release',
-    'pack:clean-log',
-  ]);
-  cleanLog.counts = {
-    warningLines: countMatches(logs['pack-clean-log'], /Could not generate types|error\[/g),
+  // Structured per-package pack diagnostics printed by publish-npm.ts (the
+  // sole diagnostic owner). Any repo-fixable diagnostic already failed the
+  // section exit code above; the remaining counts are exact upstream
+  // private-module warnings with complete public declarations.
+  const packSummaries = [
+    ...stripAnsi(logs['publish-npm-dry-run']).matchAll(
+      /\[npm\] (@openelement\/\S+): pack diagnostics errors=(\d+) unexpectedWarnings=(\d+) knownUpstreamPrivateWarnings=(\d+) publicDeclarations=(\d+)/g,
+    ),
+  ].map((match) => ({
+    package: match[1],
+    errors: Number(match[2]),
+    unexpectedWarnings: Number(match[3]),
+    knownUpstreamPrivateWarnings: Number(match[4]),
+    publicDeclarations: Number(match[5]),
+  }));
+  publishDryRun.counts = {
+    packages: packSummaries.length,
+    errors: packSummaries.reduce((sum, entry) => sum + entry.errors, 0),
+    unexpectedWarnings: packSummaries.reduce((sum, entry) => sum + entry.unexpectedWarnings, 0),
+    knownUpstreamPrivateWarnings: packSummaries.reduce(
+      (sum, entry) => sum + entry.knownUpstreamPrivateWarnings,
+      0,
+    ),
+    publicDeclarations: packSummaries.reduce((sum, entry) => sum + entry.publicDeclarations, 0),
   };
-  cleanLog.note =
-    'Expected FAIL on Deno 2.9: fully-typed runtime-only private modules warn (repro: .artifacts/deno-pack-repros/). Zero error[ diagnostics; every public export .d.ts is native.';
+  if (packSummaries.length < 4) {
+    throw new Error(
+      `publish dry-run printed ${packSummaries.length} pack summaries, expected 4 (one per package).`,
+    );
+  }
 
   const permScans = await run('permission-scans', [
     denoExe,
@@ -271,10 +301,7 @@ async function main(): Promise<void> {
     'tools/repo/check-no-allow-all.test.ts',
     'tools/repo/check-task-permissions.test.ts',
   ]);
-  permScans.counts = {
-    passed: countMatches(stripAnsi(logs['permission-scans']), /\bok\b/g),
-    failed: countMatches(stripAnsi(logs['permission-scans']), /\bFAILED?\b/g),
-  };
+  permScans.counts = parseDenoTestSummary(logs['permission-scans']);
 
   const ffiProof = await run('ffi-non-interactive', [
     denoExe,
@@ -287,10 +314,7 @@ async function main(): Promise<void> {
     '--no-prompt',
     'tools/release/non-interactive-permissions.test.ts',
   ]);
-  ffiProof.counts = {
-    passed: countMatches(stripAnsi(logs['ffi-non-interactive']), /\bok\b/g),
-    failed: countMatches(stripAnsi(logs['ffi-non-interactive']), /\bFAILED?\b/g),
-  };
+  ffiProof.counts = parseDenoTestSummary(logs['ffi-non-interactive']);
 
   // Rollup: named proofs parsed from the gate logs (no re-runs).
   const packedLog = logs['gate-packed'] ?? '';
@@ -324,9 +348,16 @@ async function main(): Promise<void> {
     required('npm', ['--version']),
   ]);
   const skips = await skipCounts();
+  // gate:packed embeds the package-artifact scan and every packed consumer;
+  // its PASS plus the publish dry-run PASS is the artifact/consumer proof.
+  // requiredOk is fail-closed: any repo-fixable diagnostic already failed
+  // its section exit code, so result PASS never coexists with one.
+  const artifactCheck = /PASS tools\/release#package-artifacts:check/.test(packedLog);
+  const consumerSteps = (packedLog.match(/^PASS tools\/release#consumer:[^\n]*$/gm) ?? []).length;
   const requiredOk = ['check', 'gate-source', 'gate-packed', 'publish-npm-dry-run'].every(
     (name) => sections.find((section) => section.name === name)?.result === 'PASS',
-  );
+  ) && artifactCheck && consumerSteps >= 5;
+  const upstreamWarnings = publishDryRun.counts['knownUpstreamPrivateWarnings'] ?? 0;
   const evidence = {
     sha,
     tree: await required('git', ['rev-parse', 'HEAD^{tree}']),
@@ -342,11 +373,14 @@ async function main(): Promise<void> {
     },
     tarballs,
     sections,
-    rollup,
+    rollup: { ...rollup, artifactCheck, consumerSteps, packSummaries },
     skips,
     requiredOk,
-    knownFailures: cleanLog.result === 'FAIL'
-      ? ['pack-clean-log (upstream private-module warnings)']
+    externalPending: upstreamWarnings > 0
+      ? [
+        `deno-pack exact private-module warnings: ${upstreamWarnings} (structured per package, ` +
+        'all public declarations native and complete; repro: .artifacts/deno-pack-repros/)',
+      ]
       : [],
     generatedAt: new Date().toISOString(),
     result: requiredOk ? 'PASS' : 'FAIL',
