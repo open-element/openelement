@@ -1714,6 +1714,19 @@ const SUPPORTED_PRE_UPGRADE_EVENTS = new Set([
   'submit',
 ]);
 
+/**
+ * Hard bound on retained pre-upgrade records per page-lifetime capture.
+ * One record per target/type; hits beyond the bound fail closed (the new
+ * interaction is dropped, pending replays are never evicted). 64 covers a
+ * large island page (8 event types x 8 pending islands) while keeping the
+ * queue provably finite in a long-lived SPA.
+ *
+ * ponytail: fixed cap, not LRU — evicting pending replays would silently
+ * drop pre-hydration clicks; upgrade path is per-pending-root local capture
+ * if a page ever legitimately exceeds this bound (no such page known).
+ */
+export const MAX_PRE_UPGRADE_CAPTURED_EVENTS = 64;
+
 const consumedEventRecords = new WeakSet<object>();
 const consumedEventObjects = new WeakSet<object>();
 /**
@@ -1750,22 +1763,172 @@ function resolveCaptureTarget(event: Event): EventTarget | null {
 }
 
 /**
+ * Island hosts that already reached their activation decision (claim or
+ * fresh, success or failure). The facade marks its host element here; the
+ * document-level capture then skips ordinary traffic inside settled islands
+ * while still capturing for nested still-pending islands. Kernel-level
+ * callers (claimExistingDom tests, non-facade hosts) never consult this set:
+ * their capture contract is "everything inside the claim root".
+ */
+const settledIslandHosts = new WeakSet<object>();
+
+/** Facade activation decisions land here (success or failure). */
+export function markPreUpgradeIslandSettled(host: unknown): void {
+  if (host && typeof host === 'object') settledIslandHosts.add(host);
+}
+
+function isIslandHostTag(node: unknown): boolean {
+  try {
+    const element = node as { localName?: unknown; tagName?: unknown };
+    if (!element || typeof element !== 'object') return false;
+    const rawName = typeof element.localName === 'string'
+      ? element.localName
+      : typeof element.tagName === 'string'
+      ? element.tagName.toLowerCase()
+      : '';
+    return rawName.includes('-');
+  } catch {
+    return false;
+  }
+}
+
+function eventPathNodes(event: Event, target: EventTarget): readonly unknown[] {
+  try {
+    const withPath = event as Event & { composedPath?: () => unknown };
+    if (typeof withPath.composedPath === 'function') {
+      const path = withPath.composedPath();
+      if (Array.isArray(path)) return path;
+    }
+  } catch {
+    // Fall through to the target-ancestor walk below.
+  }
+  // No composedPath (older harness / exotic event): walk the target chain
+  // directly, crossing shadow boundaries through hosts where visible.
+  const out: unknown[] = [];
+  let current: unknown = target;
+  let depth = 0;
+  while (current && typeof current === 'object' && depth < 1024) {
+    out.push(current);
+    const node = current as { parentNode?: unknown; host?: unknown };
+    if (node.parentNode) current = node.parentNode;
+    else if (node.host) current = node.host;
+    else break;
+    depth++;
+  }
+  return out;
+}
+
+/**
+ * Facade document-capture filter: only interactions that could belong to a
+ * still-pending island enter the queue.
+ *
+ *   - no island host on the path (plain page background) → skip;
+ *   - every island host on the path already settled → skip (live traffic);
+ *   - otherwise (a pending host anywhere on the path: delayed / idle /
+ *     visible / nested-late / morph-added island) → capture.
+ *
+ * Over-capture is safe (replay dedups via consumed sets, per-root cutoffs,
+ * and inside-root ownership); under-capture would lose replays, so
+ * uncertainty captures and the capacity cap still bounds retention.
+ */
+export function acceptPendingIslandEvent(event: Event, target: EventTarget): boolean {
+  try {
+    const path = eventPathNodes(event, target);
+    for (const node of path) {
+      if (!isIslandHostTag(node)) continue;
+      // A pending host anywhere on the path (delayed / idle / visible /
+      // nested-late / morph-added) keeps the record capturable.
+      if (!settledIslandHosts.has(node as object)) return true;
+    }
+    // No island host (background) or every host settled (live traffic).
+    return false;
+  } catch {
+    return true;
+  }
+}
+
+function isDetachedTarget(target: EventTarget): boolean {
+  try {
+    const node = target as { isConnected?: unknown };
+    return (node as { isConnected?: boolean }).isConnected === false;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Drop records whose target left the document. Detached nodes can never
+ * hydrate, so holding them only leaks memory until page end.
+ */
+function pruneDetachedTargets(
+  events: PreUpgradeEvent[],
+  index: Map<EventTarget, Map<string, number>>,
+): void {
+  let removed = false;
+  for (let position = events.length - 1; position >= 0; position--) {
+    if (isDetachedTarget(events[position].target)) {
+      events.splice(position, 1);
+      removed = true;
+    }
+  }
+  if (removed) rebuildCaptureIndex(events, index);
+}
+
+function rebuildCaptureIndex(
+  events: PreUpgradeEvent[],
+  index: Map<EventTarget, Map<string, number>>,
+): void {
+  index.clear();
+  for (let position = 0; position < events.length; position++) {
+    const record = events[position];
+    let byType = index.get(record.target);
+    if (!byType) {
+      byType = new Map<string, number>();
+      index.set(record.target, byType);
+    }
+    byType.set(record.type, position);
+  }
+}
+
+/**
  * Capture the bounded pre-upgrade interaction set on an owning root. One
  * latest event per target/type is retained, matching the one-click-per-host
  * queue contract while keeping replay deterministic and finite.
+ *
+ * Boundedness (three independent mechanisms, any one suffices):
+ *   1. pending-owner filter (opt-in via `options.accept`, used by the facade
+ *      document capture) — only interactions that could belong to a
+ *      still-pending island enter the queue; ordinary events inside
+ *      already-settled islands are skipped. Kernel-level callers pass no
+ *      filter and keep the "everything inside the claim root" contract;
+ *   2. capacity cap — beyond MAX_PRE_UPGRADE_CAPTURED_EVENTS the incoming
+ *      record is dropped (fail closed, pending replays are never evicted);
+ *   3. detached prune — removed nodes are swept (on capture pressure and on
+ *      every release) instead of being held to page end.
  */
 export function capturePreUpgradeEvents(
   root: EventTarget,
   eventTypes: readonly string[] = [...SUPPORTED_PRE_UPGRADE_EVENTS],
+  options: { accept?: (event: Event, target: EventTarget) => boolean } = {},
 ): PreUpgradeEventCapture {
   const events: PreUpgradeEvent[] = [];
+  const index = new Map<EventTarget, Map<string, number>>();
   const listeners: Array<{ type: string; listener: EventListener }> = [];
   const replaceFor = (record: PreUpgradeEvent): void => {
-    const existing = events.findIndex((candidate) =>
-      candidate.target === record.target && candidate.type === record.type
-    );
-    if (existing >= 0) events[existing] = record;
-    else events.push(record);
+    const position = index.get(record.target)?.get(record.type);
+    if (position !== undefined && events[position]?.target === record.target) {
+      events[position] = record;
+      return;
+    }
+    if (events.length >= MAX_PRE_UPGRADE_CAPTURED_EVENTS) {
+      // One detached sweep before failing closed: a burst of removals
+      // (navigation / morph) must free budget for genuinely pending islands.
+      pruneDetachedTargets(events, index);
+      if (events.length >= MAX_PRE_UPGRADE_CAPTURED_EVENTS) return;
+    }
+    index.get(record.target)?.set(record.type, events.length) ??
+      index.set(record.target, new Map([[record.type, events.length]]));
+    events.push(record);
   };
   for (const type of eventTypes) {
     if (!SUPPORTED_PRE_UPGRADE_EVENTS.has(type)) continue;
@@ -1779,6 +1942,12 @@ export function capturePreUpgradeEvents(
       // records fail closed at replay (never misdelivered, never crashed).
       const target = resolveCaptureTarget(event);
       if (!target) return;
+      // No connected check here: harness and parser flows dispatch before
+      // the nodes connect (they still hydrate later). Detached fate is
+      // decided at replay (fail closed, never dispatched) and at release
+      // (swept, never held to page end).
+      // Opt-in pending-owner filter (facade document capture only).
+      if (options.accept && !options.accept(event as Event, target)) return;
       replaceFor({ target, type, event, seq: ++preUpgradeCaptureSequence });
     };
     root.addEventListener(type, listener, { capture: true });
@@ -1906,6 +2075,12 @@ export function releasePreUpgradeEvents(root: Node, captured: readonly PreUpgrad
   const events = captured as PreUpgradeEvent[];
   for (let index = events.length - 1; index >= 0; index--) {
     if (isInsideRoot(root, events[index].target)) events.splice(index, 1);
+  }
+  // Removal / navigation / morph replacement detaches pending targets that
+  // no activation will ever own: sweep them with every release so they never
+  // survive to page end waiting for an island that is already gone.
+  for (let index = events.length - 1; index >= 0; index--) {
+    if (isDetachedTarget(events[index].target)) events.splice(index, 1);
   }
 }
 

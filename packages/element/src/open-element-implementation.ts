@@ -52,7 +52,9 @@ import {
   syncAttributesToSignals,
 } from './internal/compiled/facade-host.ts';
 import {
+  acceptPendingIslandEvent,
   capturePreUpgradeEvents,
+  markPreUpgradeIslandSettled,
   type PreUpgradeEventCapture,
   releasePreUpgradeEvents,
   replayPreUpgradeEvents,
@@ -87,13 +89,23 @@ const preUpgradeCaptures = new Map<EventTarget, PreUpgradeEventCapture>();
  * its own records at its activation decision (success or failure), while
  * records owned by still-pending elements survive for their delayed/lazy
  * upgrade (#1170).
+ *
+ * Boundedness: the facade capture passes the pending-island filter, so only
+ * interactions that could belong to a still-pending island enter the queue —
+ * ordinary events inside already-settled islands are skipped (nested pending
+ * islands still capture through their own unsettled host). The queue additionally
+ * carries a hard capacity cap (fail closed) and every release sweeps detached
+ * targets, so post-hydration traffic and removals never grow retention.
  */
 export function ensurePreHydrationClickCapture(root?: EventTarget): void {
   const target = root ??
     (typeof document !== 'undefined' ? (document as unknown as EventTarget) : undefined);
   if (!target || typeof target.addEventListener !== 'function') return;
   if (preUpgradeCaptures.has(target)) return;
-  preUpgradeCaptures.set(target, capturePreUpgradeEvents(target));
+  preUpgradeCaptures.set(
+    target,
+    capturePreUpgradeEvents(target, undefined, { accept: acceptPendingIslandEvent }),
+  );
 }
 
 /** Replay captured pre-upgrade events owned by a successfully claimed root. */
@@ -265,8 +277,15 @@ export class OpenElement extends OpenElementConfiguration {
       // Per-element release, win or lose: this element's captured records
       // (strong event-target references) never outlive its activation
       // decision. The shared page-level capture stays installed for elements
-      // still awaiting their delayed/lazy upgrade (#1170).
-      const root = kernel.root;
+      // still awaiting their delayed/lazy upgrade (#1170). A failed claim may
+      // leave kernel.root unset, so fall back to the host element itself:
+      // its light children / shadow content are still inside it, while a
+      // pending sibling's records live outside it and survive. The host is
+      // marked settled first so later live traffic inside it no longer
+      // enters the queue (nested pending islands keep their own unsettled
+      // host on the path and still capture).
+      markPreUpgradeIslandSettled(this as unknown as object);
+      const root = kernel.root ?? (this as unknown as Node);
       if (root) releasePreUpgradeCapturesFor(root as unknown as Node);
     }
     this.clientActivate();
@@ -311,7 +330,15 @@ export class OpenElement extends OpenElementConfiguration {
    * Disposes the kernel activation (subscriptions, listeners, styles).
    */
   disconnectedCallback(): void {
-    this.#kernel?.disconnect();
+    try {
+      // Removal / morph replacement must not strand this root's records:
+      // release them with the disconnect (detached targets are additionally
+      // swept by the release itself, so cancelled islands free their queue).
+      const root = this.#kernel?.root;
+      if (root) releasePreUpgradeCapturesFor(root as unknown as Node);
+    } finally {
+      this.#kernel?.disconnect();
+    }
   }
 
   /** Lifecycle: called when the element is adopted into a new document. */
