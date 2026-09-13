@@ -11,7 +11,14 @@
  * no test logic — it only sequences formal tasks.
  *
  * Usage:
- *   deno run --allow-run tools/repo/gate.ts <task> [<task> ...]
+ *   deno run --allow-run tools/repo/gate.ts <step> [<step> ...]
+ *
+ * A step is either a root task (`typecheck`) or a workspace task
+ * (`<dir>#<task>`, e.g. `apps/site#build`): the latter runs as
+ * `deno task --cwd <dir> <task>` from the repository root. `<dir>` must
+ * stay inside the repo (no `..`, no absolute paths) and both parts are
+ * restricted to task-name characters, so a gate definition cannot smuggle
+ * shell composition past review.
  */
 
 export interface GateStepResult {
@@ -21,6 +28,29 @@ export interface GateStepResult {
 }
 
 export type GateSpawn = (task: string) => Promise<number>;
+
+export interface GateStep {
+  dir: string | null;
+  task: string;
+}
+
+const STEP_CHARS = /^[A-Za-z0-9:_-]+$/;
+const DIR_CHARS = /^[A-Za-z0-9_./-]+$/;
+
+export function parseGateStep(step: string): GateStep {
+  const hash = step.indexOf('#');
+  if (hash < 0) {
+    if (!STEP_CHARS.test(step)) throw new Error(`gate: invalid task name '${step}'`);
+    return { dir: null, task: step };
+  }
+  const dir = step.slice(0, hash);
+  const task = step.slice(hash + 1);
+  if (!dir || !DIR_CHARS.test(dir) || dir.startsWith('/') || dir.split('/').includes('..')) {
+    throw new Error(`gate: dir must stay inside the repo, got '${dir}'`);
+  }
+  if (!task || !STEP_CHARS.test(task)) throw new Error(`gate: invalid task name '${task}'`);
+  return { dir, task };
+}
 
 const repoRoot = new URL('../..', import.meta.url).pathname;
 
@@ -45,9 +75,19 @@ export async function runGate(
   return { ok: true, results };
 }
 
-async function defaultSpawn(task: string): Promise<number> {
+async function defaultSpawn(step: string): Promise<number> {
+  let parsed: GateStep;
+  try {
+    parsed = parseGateStep(step);
+  } catch (error) {
+    console.error((error as Error).message);
+    return 127;
+  }
+  const args = parsed.dir === null
+    ? ['task', parsed.task]
+    : ['task', '--cwd', parsed.dir, parsed.task];
   const child = new Deno.Command(Deno.execPath(), {
-    args: ['task', task],
+    args,
     cwd: repoRoot,
     stdin: 'inherit',
     stdout: 'inherit',

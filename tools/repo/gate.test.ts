@@ -1,5 +1,5 @@
 import { assert, assertEquals } from '@std/assert';
-import { runGate } from './gate.ts';
+import { parseGateStep, runGate } from './gate.ts';
 
 Deno.test('gate: green steps all pass with per-step results', async () => {
   const seen: string[] = [];
@@ -37,4 +37,40 @@ Deno.test('gate: first failure stops the gate fail-closed', async () => {
   assertEquals(results.length, 2);
   assert(lines.some((l) => l.startsWith('FAIL failing')));
   assert(lines.some((l) => l.includes('gate stopped')));
+});
+
+Deno.test('gate: parseGateStep accepts a root task', () => {
+  const { dir, task } = parseGateStep('typecheck');
+  assertEquals(dir, null);
+  assertEquals(task, 'typecheck');
+});
+
+Deno.test('gate: parseGateStep accepts a workspace DIR#TASK step', () => {
+  const { dir, task } = parseGateStep('apps/site#build');
+  assertEquals(dir, 'apps/site');
+  assertEquals(task, 'build');
+});
+
+Deno.test('gate: parseGateStep rejects escapes and shell composition', () => {
+  const bad = [
+    '',
+    '#build',
+    'apps/site#',
+    '../evil#build',
+    'apps/../evil#build',
+    '/abs#build',
+    'apps/site#build && rm -rf /',
+    'apps/site#build;evil',
+    'a b#c',
+    'apps/site#',
+  ];
+  for (const step of bad) {
+    let threw = false;
+    try {
+      parseGateStep(step);
+    } catch {
+      threw = true;
+    }
+    assert(threw, `expected parseGateStep to reject '${step}'`);
+  }
 });
