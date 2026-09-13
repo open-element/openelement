@@ -51,6 +51,38 @@ Deno.test('ci contract: packed-consumer matrix installs all three packed-gate br
   );
 });
 
+Deno.test('ci contract: dependency-review runs on pull requests', () => {
+  assert(
+    /pull_request:/.test(workflow),
+    'autoflow-ci must trigger on pull_request for dependency review',
+  );
+  const block = jobBlock(workflow, 'dependency-review');
+  assert(
+    /github\.event_name\s*==\s*['"]pull_request['"]/.test(block),
+    'dependency-review must be gated to pull_request events',
+  );
+  assert(
+    /dependency-review-action@/.test(block),
+    'dependency-review must run the dependency review action',
+  );
+});
+
+Deno.test('ci contract: node serve smoke pins the required Node matrix', () => {
+  const block = jobBlock(workflow, 'node-serve-smoke');
+  assert(
+    /'24'/.test(block) && /'26'/.test(block),
+    'node-serve-smoke must pin the required Node 24/26 matrix',
+  );
+});
+
+Deno.test('ci contract: packed-consumer matrix pins all three release OSes', () => {
+  const block = jobBlock(workflow, 'packed-consumer-matrix');
+  assert(
+    /ubuntu-latest/.test(block) && /macos-latest/.test(block) && /windows-latest/.test(block),
+    'packed-consumer-matrix must stay Linux/macOS/Windows required',
+  );
+});
+
 Deno.test('ci contract: release docs never present Bun as required', () => {
   const flat = releasing.replace(/\s+/g, ' ');
   assert(
