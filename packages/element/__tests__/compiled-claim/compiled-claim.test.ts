@@ -38,13 +38,14 @@ const claimExistingDom = claimExistingDomCanonical as unknown as (
   options?: WireClaimOptions,
 ) => { dispose(): void };
 
-const { capturePreUpgradeEvents, replayPreUpgradeEvents } = (await import(
+const { capturePreUpgradeEvents, releasePreUpgradeEvents, replayPreUpgradeEvents } = (await import(
   '../../src/internal/compiled/runtime.ts'
 )) as unknown as {
   capturePreUpgradeEvents: (
     root: EventTarget,
     eventTypes?: readonly string[],
   ) => WirePreUpgradeEventCapture;
+  releasePreUpgradeEvents: (root: Node, captured: readonly unknown[]) => void;
   replayPreUpgradeEvents: (root: Node, captured: readonly unknown[]) => number;
 };
 
@@ -534,6 +535,103 @@ Deno.test('alpha.3 failed claim stops a live pre-upgrade capture', async () => {
   );
   dom.button.dispatchEvent(new TestEvent('click'));
   assertEquals(invalidCapture.events.length, 0);
+});
+
+Deno.test('replay pins a first-activation cutoff: morph reconnect never re-handles live clicks', () => {
+  const doc = new TestDocument();
+  const root = doc.createElement('div');
+  const button = doc.createElement('button');
+  root.appendChild(button);
+  let handled = 0;
+  const capture = capturePreUpgradeEvents(root as unknown as EventTarget, ['click']);
+
+  // Pre-upgrade interaction: no live listener yet, only the capture observes.
+  button.dispatchEvent(new TestEvent('click'));
+  assertEquals(capture.events.length, 1);
+
+  // Activation attaches the live listener, replays the captured click once,
+  // and releases this root's records (facade connectedCallback contract).
+  button.addEventListener('click', () => {
+    handled++;
+  });
+  assertEquals(replayPreUpgradeEvents(root as unknown as Node, capture.events), 1);
+  assertEquals(handled, 1);
+  releasePreUpgradeEvents(root as unknown as Node, capture.events);
+  assertEquals(capture.events.length, 0);
+
+  // Live interactions run the handler directly while the page-lifetime
+  // capture keeps observing (latest record per target/type).
+  button.dispatchEvent(new TestEvent('click'));
+  button.dispatchEvent(new TestEvent('click'));
+  button.dispatchEvent(new TestEvent('click'));
+  assertEquals(handled, 4);
+
+  // A morph reconnect reuses the cached claim activation and replays again:
+  // post-activation records must not re-handle (still 4, never 5).
+  assertEquals(replayPreUpgradeEvents(root as unknown as Node, capture.events), 0);
+  assertEquals(handled, 4);
+});
+
+Deno.test('replay cutoffs are per-root: a pending sibling still receives its pre-upgrade click', () => {
+  const doc = new TestDocument();
+  const scope = doc.createElement('div');
+  const first = doc.createElement('div');
+  const second = doc.createElement('div');
+  const firstButton = doc.createElement('button');
+  const secondButton = doc.createElement('button');
+  scope.appendChild(first);
+  scope.appendChild(second);
+  first.appendChild(firstButton);
+  second.appendChild(secondButton);
+  let firstHandled = 0;
+  let secondHandled = 0;
+  firstButton.addEventListener('click', () => {
+    firstHandled++;
+  });
+  secondButton.addEventListener('click', () => {
+    secondHandled++;
+  });
+  const capture = capturePreUpgradeEvents(scope as unknown as EventTarget, ['click']);
+
+  // The first island activates with nothing captured yet.
+  assertEquals(replayPreUpgradeEvents(first as unknown as Node, capture.events), 0);
+
+  // A live click on the active island plus a pre-upgrade click on the
+  // still-pending sibling.
+  firstButton.dispatchEvent(new TestEvent('click'));
+  secondButton.dispatchEvent(new TestEvent('click'));
+  assertEquals(firstHandled, 1);
+  assertEquals(secondHandled, 1);
+
+  // The pending sibling replays its own pre-upgrade click exactly once ...
+  assertEquals(replayPreUpgradeEvents(second as unknown as Node, capture.events), 1);
+  assertEquals(secondHandled, 2);
+  // ... while the already-active sibling never re-handles its live click.
+  assertEquals(replayPreUpgradeEvents(first as unknown as Node, capture.events), 0);
+  assertEquals(firstHandled, 1);
+  assertEquals(replayPreUpgradeEvents(second as unknown as Node, capture.events), 0);
+  assertEquals(secondHandled, 2);
+});
+
+Deno.test('replay accepts hand-built records without a capture sequence', () => {
+  const doc = new TestDocument();
+  const root = doc.createElement('div');
+  const button = doc.createElement('button');
+  root.appendChild(button);
+  let handled = 0;
+  button.addEventListener('click', () => {
+    handled++;
+  });
+  // No capture sequence: hand-built records sort before every captured event.
+  const records = [{
+    target: button as unknown as EventTarget,
+    type: 'click',
+    event: new TestEvent('click') as unknown as Event,
+  }];
+  assertEquals(replayPreUpgradeEvents(root as unknown as Node, records), 1);
+  assertEquals(handled, 1);
+  assertEquals(replayPreUpgradeEvents(root as unknown as Node, records), 0);
+  assertEquals(handled, 1);
 });
 
 Deno.test('alpha.3 owning recovery replaces only a bounded Region range', async () => {

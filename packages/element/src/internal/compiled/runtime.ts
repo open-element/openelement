@@ -1688,6 +1688,14 @@ export interface PreUpgradeEvent {
   readonly type: string;
   readonly event?: Event;
   readonly init?: EventInit;
+  /**
+   * Capture order assigned by the page-lifetime capture that recorded this
+   * event. A root replays only records that predate its first activation, so
+   * a morph reconnect (cached claim activation) never re-handles an
+   * interaction the live island already processed. Hand-built records omit
+   * it and sort before every captured event.
+   */
+  readonly seq?: number;
 }
 
 export interface PreUpgradeEventCapture {
@@ -1708,6 +1716,19 @@ const SUPPORTED_PRE_UPGRADE_EVENTS = new Set([
 
 const consumedEventRecords = new WeakSet<object>();
 const consumedEventObjects = new WeakSet<object>();
+/**
+ * Page-lifetime capture order. Bumped for every recorded interaction so a
+ * claim root can distinguish pre-upgrade events (replayable) from
+ * post-activation events the live island already handled (never replayed).
+ */
+let preUpgradeCaptureSequence = 0;
+/**
+ * First-activation cutoff per claim root. Pinned at a root's first replay
+ * pass; later passes for the same root node (morph reconnect reuses the
+ * cached claim activation) replay nothing newer. Keyed by root node, so a
+ * nested pending island keeps its own later cutoff.
+ */
+const claimRootActivationSequence = new WeakMap<object, number>();
 
 /**
  * Resolve the original interaction target for a captured event (#942).
@@ -1758,7 +1779,7 @@ export function capturePreUpgradeEvents(
       // records fail closed at replay (never misdelivered, never crashed).
       const target = resolveCaptureTarget(event);
       if (!target) return;
-      replaceFor({ target, type, event });
+      replaceFor({ target, type, event, seq: ++preUpgradeCaptureSequence });
     };
     root.addEventListener(type, listener, { capture: true });
     listeners.push({ type, listener });
@@ -1810,14 +1831,26 @@ function preUpgradeEventList(
  * owned by this root. Records owned by OTHER roots stay pending: an element
  * that upgrades late (delayed/lazy island) must still receive its replay when
  * its own activation arrives (#1170), so an outside-root record is neither
- * replayed nor consumed here.
+ * replayed nor consumed here. Records captured after this root's first
+ * activation stay pending too: the live island already handled them, and a
+ * later pass for the same root (morph reconnect) must not re-handle them.
  */
 export function replayPreUpgradeEvents(
   root: Node,
   captured: readonly PreUpgradeEvent[],
 ): number {
+  // Pin this root's first-activation cutoff. Records captured after the pin
+  // are interactions a live island already handled: replaying them on a
+  // later pass for the same root (morph reconnect) would double-handle one
+  // event per target/type. Records owned by other (nested, still-pending)
+  // roots are unaffected: each root pins its own cutoff, and a skipped
+  // record stays pending for the root it actually belongs to.
+  const seenCutoff = claimRootActivationSequence.get(root as object);
+  const cutoff = seenCutoff ?? preUpgradeCaptureSequence;
+  if (seenCutoff === undefined) claimRootActivationSequence.set(root as object, cutoff);
   let replayed = 0;
   for (const record of captured) {
+    if ((record.seq ?? 0) > cutoff) continue;
     if (consumedEventRecords.has(record)) continue;
     if (!SUPPORTED_PRE_UPGRADE_EVENTS.has(record.type)) {
       consumedEventRecords.add(record);
