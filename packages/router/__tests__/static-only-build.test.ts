@@ -19,7 +19,7 @@ import { join } from '@std/path';
 
 const fixtureDir = join(import.meta.dirname!, '../../../tests/fixtures/router-static-only');
 const distDir = join(fixtureDir, 'dist');
-const repoRoot = join(fixtureDir, '../..');
+const repoRoot = join(fixtureDir, '../../..');
 
 async function ensureFixtureBuild(): Promise<void> {
   // #953: the assertion below requires output from current sources — a stale
@@ -31,7 +31,7 @@ async function ensureFixtureBuild(): Promise<void> {
       '--config',
       join(repoRoot, 'deno.json'),
       '-A',
-      join(fixtureDir, '../../packages/router/src/cli/build.ts'),
+      join(fixtureDir, '../../../packages/router/src/cli/build.ts'),
     ],
     cwd: fixtureDir,
     stdout: 'piped',
@@ -78,6 +78,8 @@ Deno.test({
       server = new Deno.Command(Deno.execPath(), {
         args: [
           'run',
+          '--config',
+          join(repoRoot, 'deno.json'),
           '-A',
           startCli,
           '--mode=preview',

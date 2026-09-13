@@ -83,6 +83,36 @@ async function main(): Promise<void> {
   await runStart();
 }
 
+/**
+ * Nearest enclosing deno.json that declares a Deno workspace, walking up
+ * from cwd. The preview subprocess (`deno run npm:vite preview`) must reuse
+ * it as `--config`: Vite externalizes workspace bare imports
+ * (`@openelement/*`) when bundling vite.config.ts and the Deno runtime
+ * resolves them through the active config. A tasks-only fixture deno.json
+ * (no workspace/imports) would leave them unresolvable and float the Vite
+ * version. npm consumers have no workspace root, so resolution falls back
+ * to their node_modules exactly as before.
+ */
+function findWorkspaceConfig(from: string): string | null {
+  let dir = from;
+  for (;;) {
+    const candidate = join(dir, 'deno.json');
+    if (existsSync(candidate)) {
+      try {
+        const parsed = JSON.parse(Deno.readTextFileSync(candidate)) as {
+          workspace?: unknown;
+        };
+        if (Array.isArray(parsed.workspace)) return candidate;
+      } catch {
+        // Unreadable config: keep walking up.
+      }
+    }
+    const parent = join(dir, '..');
+    if (parent === dir) return null;
+    dir = parent;
+  }
+}
+
 async function runPreview(viteArgs: string[]): Promise<void> {
   if (existsSync(serverEntry)) {
     console.error(
@@ -93,8 +123,10 @@ async function runPreview(viteArgs: string[]): Promise<void> {
     );
     Deno.exit(1);
   }
+  const workspaceConfig = findWorkspaceConfig(root);
+  const configArgs = workspaceConfig === null ? [] : ['--config', workspaceConfig];
   const command = new Deno.Command('deno', {
-    args: ['run', '-A', 'npm:vite', 'preview', ...viteArgs],
+    args: ['run', ...configArgs, '-A', 'npm:vite', 'preview', ...viteArgs],
     stdin: 'inherit',
     stdout: 'inherit',
     stderr: 'inherit',

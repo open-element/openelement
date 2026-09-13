@@ -129,7 +129,7 @@ Deno.test({
     if (!fixtureBuilt) {
       const build = await new Deno.Command(Deno.execPath(), {
         args: ['task', 'fixture:router-request-time:build'],
-        cwd: join(fixtureDir, '../..'),
+        cwd: join(fixtureDir, '../../..'),
         stdout: 'inherit',
         stderr: 'inherit',
       }).output();
