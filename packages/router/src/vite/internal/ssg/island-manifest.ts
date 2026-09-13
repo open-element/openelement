@@ -5,8 +5,8 @@
  * Each manifest lists the islands found on a page with their chunk URLs and strategies.
  */
 
-import { existsSync } from '@std/fs';
-import { join } from '@std/path';
+import { existsSync } from '../../../internal/host-path.ts';
+import { join } from '../../../internal/host-path.ts';
 import type { ComponentLayer } from '../protocol/framework.ts';
 import { formatJson, normalizeSeparators } from '@openelement/element/build-utils';
 import { isValidTagName } from '@openelement/element';

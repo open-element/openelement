@@ -1,4 +1,4 @@
-import { join } from '@std/path';
+import { join } from '../../internal/host-path.ts';
 
 interface HtmlFileEntry {
   absolutePath: string;

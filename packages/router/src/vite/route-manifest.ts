@@ -38,7 +38,7 @@
  */
 
 import { scanRoutes } from './internal/ssg/index.ts';
-import { dirname, join, relative } from '@std/path';
+import { dirname, join, relative } from '../internal/host-path.ts';
 import { normalizeSeparators } from '@openelement/element/build-utils';
 import { DEFAULT_ROUTES_DIR } from './internal/paths.ts';
 import { quoteGeneratedJavaScriptValue } from './internal/ssg/codegen-literals.ts';

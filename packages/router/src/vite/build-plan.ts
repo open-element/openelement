@@ -1,4 +1,4 @@
-import { join, relative } from '@std/path';
+import { join, relative } from '../internal/host-path.ts';
 import type { BuildArtifacts, BuildPlan } from './internal/protocol/ssg.ts';
 import type { OpenElementBuildContext } from './build-context.ts';
 import { fsPathToModuleSpecifier } from './internal/ssg/module-specifier.ts';

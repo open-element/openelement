@@ -12,10 +12,10 @@
  *   deno task build  (unified entry - runs all 3 phases)
  */
 
-import { existsSync } from '@std/fs';
+import { existsSync } from '../internal/host-path.ts';
 import { build as viteBuild, type InlineConfig } from 'vite';
-import { dirname, isAbsolute, join, relative, resolve } from '@std/path';
-import { fromFileUrl } from '@std/path';
+import { dirname, isAbsolute, join, relative, resolve } from '../internal/host-path.ts';
+import { fromFileUrl } from '../internal/host-path.ts';
 import { extractCustomElementTags, generateClientEntry } from '../vite/internal/ssg/index.ts';
 import { buildClientIslandEntries } from '../vite/internal/ssg/client-island-entries.ts';
 import {

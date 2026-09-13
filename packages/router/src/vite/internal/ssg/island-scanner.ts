@@ -4,7 +4,7 @@ import type { IslandDecl } from '../protocol/ssg.ts';
 import { formatError, isValidTagName, OpenElementError } from '@openelement/element';
 import { createLogger } from '@openelement/element';
 import { normalizeSeparators, pathToTagName } from '@openelement/element/build-utils';
-import { join } from '@std/path';
+import { join } from '../../../internal/host-path.ts';
 import { safeReadDir, safeReadFile, safeStat } from './route-scanner-fs.ts';
 import {
   ISLAND_DELIVERY_STRATEGIES,

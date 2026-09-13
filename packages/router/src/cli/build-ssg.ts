@@ -14,9 +14,9 @@
  *   deno task build  (unified entry - runs all 3 phases)
  */
 
-import { existsSync } from '@std/fs';
-import { join, resolve } from '@std/path';
-import { toFileUrl } from '@std/path';
+import { existsSync } from '../internal/host-path.ts';
+import { join, resolve } from '../internal/host-path.ts';
+import { toFileUrl } from '../internal/host-path.ts';
 import { normalizePath } from 'vite';
 import type {
   CompatibilityClassification,

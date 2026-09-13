@@ -8,7 +8,7 @@
  * module paths, hydration strategies and ssr/dsd coercion identically.
  */
 
-import { resolve } from '@std/path';
+import { resolve } from '../../../internal/host-path.ts';
 
 import type { HydrationStrategy } from '../protocol/framework.ts';
 import type { IslandDecl } from '../protocol/ssg.ts';

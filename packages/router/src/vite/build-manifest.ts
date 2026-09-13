@@ -15,8 +15,8 @@
  *   - cli/build-ssg.ts    (after Phase 3: HTML + post-process complete)
  */
 
-import { existsSync } from '@std/fs';
-import { basename, join, resolve } from '@std/path';
+import { existsSync } from '../internal/host-path.ts';
+import { basename, join, resolve } from '../internal/host-path.ts';
 import { createLogger } from '@openelement/element';
 import { normalizeSeparators } from '@openelement/element/build-utils';
 import { DEFAULT_OUT_DIR } from './internal/paths.ts';

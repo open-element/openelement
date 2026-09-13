@@ -14,8 +14,8 @@
  * standard fetch entry; this CLI maintains no Node HTTP bridge.
  */
 
-import { existsSync } from '@std/fs';
-import { join } from '@std/path';
+import { existsSync } from '../internal/host-path.ts';
+import { join } from '../internal/host-path.ts';
 import { formatError } from '@openelement/element';
 import { DEFAULT_OUT_DIR } from '../vite/internal/paths.ts';
 import {

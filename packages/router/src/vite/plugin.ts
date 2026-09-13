@@ -16,7 +16,7 @@ import type {
 import type { SsgBehaviorOptions } from './internal/protocol/ssg.ts';
 import type { IslandDecl } from './internal/protocol/ssg.ts';
 
-import { join, relative, resolve } from '@std/path';
+import { join, relative, resolve } from '../internal/host-path.ts';
 import { formatError, OpenElementError } from '@openelement/element';
 import { createLogger } from '@openelement/element';
 

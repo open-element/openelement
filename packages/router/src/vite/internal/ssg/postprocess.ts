@@ -13,8 +13,8 @@
  * 4. injectCspMeta() - Content-Security-Policy meta tag
  */
 
-import { existsSync } from '@std/fs';
-import { join, resolve } from '@std/path';
+import { existsSync } from '../../../internal/host-path.ts';
+import { join, resolve } from '../../../internal/host-path.ts';
 import { createLogger } from '@openelement/element';
 import { formatError } from '@openelement/element';
 import { insertBeforeBodyClose } from '@openelement/element/build-utils';

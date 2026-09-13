@@ -12,8 +12,8 @@
  *   - Utility helpers (ssg-helpers.ts)
  */
 
-import { existsSync } from '@std/fs';
-import { dirname, join, relative } from '@std/path';
+import { existsSync } from '../../../internal/host-path.ts';
+import { dirname, join, relative } from '../../../internal/host-path.ts';
 import type {
   RouteInfoEntry,
   SsgPageOutput,

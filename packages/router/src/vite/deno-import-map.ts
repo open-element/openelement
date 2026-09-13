@@ -21,9 +21,9 @@
  * plugin hooks.
  */
 
-import { existsSync } from '@std/fs';
-import { join, resolve } from '@std/path';
-import { fromFileUrl } from '@std/path';
+import { existsSync } from '../internal/host-path.ts';
+import { join, resolve } from '../internal/host-path.ts';
+import { fromFileUrl } from '../internal/host-path.ts';
 import type { Plugin } from 'vite';
 import { createLogger } from '@openelement/element';
 import { normalizeSeparators } from '@openelement/element/build-utils';

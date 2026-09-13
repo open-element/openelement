@@ -16,10 +16,10 @@
  * (entry-orchestrator.ts, __withDevClientScript).
  */
 
-import { existsSync } from '@std/fs';
+import { existsSync } from '../internal/host-path.ts';
 import type { Plugin } from 'vite';
 
-import { fromFileUrl } from '@std/path';
+import { fromFileUrl } from '../internal/host-path.ts';
 
 import type { FrameworkOptions } from './internal/protocol/framework.ts';
 import type { OpenElementBuildContext } from './build-context.ts';

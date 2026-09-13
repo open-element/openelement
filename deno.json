@@ -24,6 +24,7 @@
     "@types/node": "npm:@types/node@26.5.0",
     "yaml": "npm:yaml@^2.8.1",
     "@playwright/test": "npm:@playwright/test@1.59.1",
+ "@jridgewell/trace-mapping": "npm:@jridgewell/trace-mapping@0.3.31",
     "preact": "npm:preact@^10.28.0",
     "@preact/signals-core": "npm:@preact/signals-core@^1.12.1",
     "@lit/context": "npm:@lit/context@1.1.6",

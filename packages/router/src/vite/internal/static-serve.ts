@@ -1,19 +1,26 @@
 /**
  * @openelement/router - Shared static-file + request-time server helpers.
  *
- * Content types come from `@std/media-types`; this module only owns the
- * static candidate rules, the cache-control policy, and the generated
- * request-time server module contract. Standard fetch(Request): Response
- * entry; local serving uses Deno.serve, Node/Workers/Bun deploys use the
- * Nitro mount. No Node HTTP bridge.
+ * Content types come from the mature zero-dependency npm package `mime`
+ * (IANA-derived DB, verified byte-identical to the previous source on every
+ * pinned extension); this module only owns the static candidate rules, the
+ * cache-control policy, and the generated request-time server module
+ * contract. `@std/media-types` is deliberately not used: it would surface as
+ * an `npm:@jsr/*` dependency in the packed tarball. Standard
+ * fetch(Request): Response entry; local serving uses Deno.serve,
+ * Node/Workers/Bun deploys use the Nitro mount. No Node HTTP bridge.
  */
 
-import { contentType } from '@std/media-types';
-import { extname, join, resolve, SEPARATOR, toFileUrl } from '@std/path';
+import mime from 'mime';
+import { extname, join, resolve, SEP, toFileUrl } from '../../internal/host-path.ts';
 
-/** Content-Type for a static file, by extension. Source of truth: `@std/media-types`. */
+/**
+ * Content-Type for a static file, by extension. `text/*` types carry an
+ * explicit UTF-8 charset (previous wire contract, pinned by tests).
+ */
 export function contentTypeFor(filePath: string): string {
-  return contentType(extname(filePath).toLowerCase()) ?? 'application/octet-stream';
+  const type = mime.getType(extname(filePath).toLowerCase()) ?? 'application/octet-stream';
+  return type.startsWith('text/') ? `${type}; charset=UTF-8` : type;
 }
 
 const CONTENT_HASHED_ASSET_RE = /(?:^|\/)assets\/[^/]*-[0-9a-zA-Z_-]{8,}\.[^/]+$/;
@@ -23,7 +30,7 @@ const CONTENT_HASHED_ASSET_RE = /(?:^|\/)assets\/[^/]*-[0-9a-zA-Z_-]{8,}\.[^/]+$
  * immutable; HTML is the deployment boundary and must be rechecked.
  */
 export function cacheControlFor(filePath: string): string | null {
-  if (CONTENT_HASHED_ASSET_RE.test(filePath.replaceAll(SEPARATOR, '/'))) {
+  if (CONTENT_HASHED_ASSET_RE.test(filePath.replaceAll(SEP, '/'))) {
     return 'public, max-age=31536000, immutable';
   }
   if (extname(filePath).toLowerCase() === '.html') return 'no-cache';
@@ -65,7 +72,7 @@ export function tryStatic(distDir: string, pathname: string): Response | null {
   const root = resolve(distDir);
   for (const candidate of candidates) {
     const filePath = resolve(join(root, candidate));
-    if (!filePath.startsWith(root + SEPARATOR)) continue;
+    if (!filePath.startsWith(root + SEP)) continue;
     let body: Uint8Array;
     try {
       body = Deno.readFileSync(filePath);

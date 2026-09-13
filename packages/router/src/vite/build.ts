@@ -8,12 +8,12 @@
  * No globalThis bridge - ctx stays in createOpenPlugin() closure scope throughout.
  */
 
-import { existsSync } from '@std/fs';
+import { existsSync } from '../internal/host-path.ts';
 import type { Plugin, ResolvedConfig } from 'vite';
 import type { FrameworkOptions } from './internal/protocol/framework.ts';
 import type { SsgBehaviorOptions } from './internal/protocol/ssg.ts';
 import type { OpenElementBuildContext } from './build-context.ts';
-import { join } from '@std/path';
+import { join } from '../internal/host-path.ts';
 import { createLogger } from '@openelement/element';
 import { escapeAttr, escapeHtml } from '@openelement/element';
 import { cleanSsrArtifacts, postProcessClientIslandBuild } from './internal/ssg/index.ts';

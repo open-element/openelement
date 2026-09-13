@@ -5,7 +5,7 @@
  * shape with absolute, root-relative replacements.
  */
 
-import { basename, dirname, join, resolve } from '@std/path';
+import { basename, dirname, join, resolve } from '../internal/host-path.ts';
 import { type Alias } from 'vite';
 import { OPENELEMENT_EXPORT_FILES } from './generated-export-files.ts';
 

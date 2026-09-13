@@ -15,7 +15,7 @@
  * both expansion paths (dynamic routes and i18n locale expansion).
  */
 
-import { join } from '@std/path';
+import { join } from '../../../internal/host-path.ts';
 import type {
   RouteInfoEntry,
   SsgPageOutput,

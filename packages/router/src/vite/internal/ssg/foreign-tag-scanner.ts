@@ -18,7 +18,7 @@
  * files and aggregates the returned module facts.
  */
 import { createLogger } from '@openelement/element';
-import { join } from '@std/path';
+import { join } from '../../../internal/host-path.ts';
 import { safeReadFile } from './route-scanner-fs.ts';
 import { analyzeModuleSemantics } from '@openelement/element/compiler';
 

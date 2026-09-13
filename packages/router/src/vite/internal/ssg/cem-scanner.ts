@@ -1,7 +1,7 @@
 /** CEM manifest discovery and compatibility classification. */
 import type { CompatibilityClassification } from '../protocol/framework.ts';
 import { createLogger } from '@openelement/element';
-import { join } from '@std/path';
+import { join } from '../../../internal/host-path.ts';
 import { classifyCemManifest, parseCem } from './cem-compat.ts';
 import { safeReadDir, safeReadFile } from './route-scanner-fs.ts';
 

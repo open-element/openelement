@@ -1,5 +1,12 @@
 /** Discover compiled static components reachable from local route imports. */
-import { dirname, extname, isAbsolute, join, relative, resolve } from '@std/path';
+import {
+  dirname,
+  extname,
+  isAbsolute,
+  join,
+  relative,
+  resolve,
+} from '../../../internal/host-path.ts';
 import type { RouteEntry } from '../protocol/framework.ts';
 import type { StaticComponentDecl } from '../protocol/ssg.ts';
 import { normalizeSeparators } from '@openelement/element/build-utils';

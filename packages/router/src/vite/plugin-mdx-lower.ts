@@ -16,7 +16,7 @@
 
 import { marked } from 'marked';
 import { normalizeSeparators, pathToTagName } from '@openelement/element/build-utils';
-import { basename, relative, resolve } from '@std/path';
+import { basename, relative, resolve } from '../internal/host-path.ts';
 
 /** Quote one text run as a JSX expression container (`{"..."}`). */
 function jsxText(value: string): string {

@@ -6,7 +6,7 @@
  * dependency and only reads/writes files.
  */
 
-import { join } from '@std/path';
+import { join } from '../../../internal/host-path.ts';
 import type { ComponentLayer, HydrationStrategy } from '../protocol/framework.ts';
 import type { IslandDecl } from '../protocol/ssg.ts';
 import { createLogger } from '@openelement/element';
