@@ -3,7 +3,7 @@
  * fixture (#1171).
  *
  * Builds tests/fixtures/router-static-only/ through the repo's
- * own build path — the same CLI module the root `fixture:router-static-only:build`
+ * own build path — the same CLI module the `tests/fixtures/router-static-only#build`
  * task invokes — and pins the empty-islands delivery contract end to end
  * (buildClient()'s zero-island path, which backs removeClientDeliveryArtifacts
  * and the Phase 2 skip):
@@ -33,7 +33,7 @@ async function removeDist(): Promise<void> {
 
 async function buildFixture(): Promise<void> {
   await removeDist();
-  // Same CLI invocation as the root deno.json `fixture:router-static-only:build` task.
+  // Same CLI invocation as the `tests/fixtures/router-static-only#build` task.
   const build = await new Deno.Command(Deno.execPath(), {
     args: [
       'run',

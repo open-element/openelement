@@ -86,7 +86,7 @@ async function main(): Promise<void> {
   await assertTrackedClean();
 
   const packStartedAt = Date.now();
-  const packed = await command(Deno.execPath(), ['task', 'pack:dry-run']);
+  const packed = await command(Deno.execPath(), ['task', '--cwd', 'tools/release', 'pack:dry-run']);
   if (!packed.ok) throw new Error(`pack:dry-run failed:\n${packed.output}`);
 
   const packages = await readPackages();

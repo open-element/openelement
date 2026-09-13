@@ -11,7 +11,7 @@
  * starter's own `start` command during the Playwright run.
  *
  * Usage:
- *   deno task starter-smoke:setup   (build everything into work/)
+ *   deno task --cwd tests/e2e/starter-smoke setup   (build everything into work/)
  */
 
 import { join, relative, resolve } from '@std/path';

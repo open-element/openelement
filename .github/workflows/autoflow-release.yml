@@ -63,7 +63,7 @@ jobs:
       - name: Qualify candidate
         env:
           CANDIDATE_SHA: ${{ inputs.candidate_sha }}
-        run: deno task candidate:check
+        run: deno task release:check
       - name: Publish retained packages
         if: inputs.publish
-        run: deno task publish:npm
+        run: deno task --cwd tools/release publish:npm

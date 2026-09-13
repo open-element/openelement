@@ -64,11 +64,11 @@ const content = {
       {
         id: 'publish',
         before: 'Publish via ',
-        code1: 'deno task publish:jsr',
+        code1: 'deno task --cwd tools/release pack:dry-run',
         middle1: ', ',
-        code2: 'deno task publish:npm',
+        code2: 'deno task release:check',
         middle2: ', ',
-        code3: 'deno task pack:dry-run',
+        code3: 'deno task --cwd tools/release publish:npm',
         after: '',
       },
       {
@@ -196,11 +196,11 @@ const content = {
       {
         id: 'publish',
         before: '通过 ',
-        code1: 'deno task publish:jsr',
+        code1: 'deno task --cwd tools/release pack:dry-run',
         middle1: '、',
-        code2: 'deno task publish:npm',
+        code2: 'deno task release:check',
         middle2: '、',
-        code3: 'deno task pack:dry-run',
+        code3: 'deno task --cwd tools/release publish:npm',
         after: ' 发布',
       },
       {

@@ -13,9 +13,9 @@
  * now wins under the stub, so the next request renders the edited module.
  *
  * Prerequisites:
- *   deno task starter-smoke:setup
+ *   deno task --cwd tests/e2e/starter-smoke setup
  *
- * Run: deno task test:starter-smoke:dev
+ * Run: deno task --cwd tests/e2e/starter-smoke test:dev
  */
 import { expect, test } from '@playwright/test';
 import { readFile, writeFile } from 'node:fs/promises';

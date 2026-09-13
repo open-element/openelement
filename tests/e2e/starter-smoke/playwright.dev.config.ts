@@ -6,9 +6,9 @@
  * instead of the production `start` command.
  *
  * Prerequisites:
- *   deno task starter-smoke:setup
+ *   deno task --cwd tests/e2e/starter-smoke setup
  *
- * Run: deno task test:starter-smoke:dev
+ * Run: deno task --cwd tests/e2e/starter-smoke test:dev
  */
 import { defineConfig } from '@playwright/test';
 import process from 'node:process';

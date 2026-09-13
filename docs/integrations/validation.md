@@ -1,6 +1,6 @@
 # Validation recipe (zod / valibot)
 
-> Status: **verified by the `fixture:router-request-time:e2e:browsers` gate in
+> Status: **verified by the `tests/fixtures/router-request-time#e2e:browsers` gate in
 > the CI release gate (three engines)** — both shapes are exercised end-to-end by
 > the request-time fixture
 > (`fixtures/router-request-time/`: `/register` with

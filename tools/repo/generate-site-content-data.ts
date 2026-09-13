@@ -20,7 +20,7 @@ import { blogCollection, prepareBlogPosts } from '../../apps/site/lib/blog.ts';
 import { fromFileUrl, join } from '@std/path';
 import { articleCollections } from '../../apps/site/content-collections.ts';
 
-const siteRoot = fromFileUrl(new URL('../apps/site/', import.meta.url));
+const siteRoot = fromFileUrl(new URL('../../apps/site/', import.meta.url));
 
 for (const name of ['guide', 'architecture'] as const) {
   const options = {

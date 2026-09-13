@@ -2,7 +2,7 @@
  * TypeScript 7 shadow gate (1.0 Alpha convergence — "TypeScript 7: split
  * decision"). An INDEPENDENT SHADOW GATE, not a required gate: it is wired
  * into CI as a non-blocking job and is deliberately absent from
- * gate:ci/gate:release. It graduates to required only after a complete
+ * gate:ci/release:check. It graduates to required only after a complete
  * matching matrix against the current checker.
  *
  * The layered TypeScript strategy this gate enforces/observes:
@@ -12,7 +12,7 @@
  *   "typescript" -> npm:typescript@6.0.3. The packed Element dependency owns
  *   that classic compiler API; the disposable consumer root owns TS7 only.
  * - The TS7 tsc CLI is exercised here, and only here, against the Node/npm
- *   consumer contract: the pack:dry-run tarballs installed into a disposable
+ *   consumer contract: the tools/release#pack:dry-run tarballs installed into a disposable
  *   consumer OUTSIDE the workspace (same observational rule as
  *   tools/consumer-packaged-shared.ts — qualify the packed artifact, never the
  *   workspace source).
@@ -20,7 +20,7 @@
  * Cells (every cell prints PASS/FAIL; any TS7 checker error fails the run —
  * a shadow gate that always passes is not evidence):
  *
- *   pack                fresh pack:dry-run tarballs for all three packages
+ *   pack                fresh tools/release#pack:dry-run tarballs for all three packages
  *   manifest            packed @openelement/element package.json pins its own
  *                       classic TypeScript 6 dependency
  *   install             hermetic npm install of the tarballs plus pinned
@@ -191,13 +191,13 @@ try {
   await cell('pack', [], async () => {
     const packed = await run(
       Deno.execPath(),
-      ['task', 'pack:dry-run'],
+      ['task', '--cwd', 'tools/release', 'pack:dry-run'],
       repoRoot,
       PACK_TIMEOUT_MS,
     );
-    if (!packed.success) throw new Error(`pack:dry-run failed:\n${packed.output}`);
+    if (!packed.success) throw new Error(`tools/release#pack:dry-run failed:\n${packed.output}`);
     for (const [name, tar] of tarballs) {
-      if (!existsSync(tar)) throw new Error(`Missing ${tar} for ${name} after pack:dry-run`);
+      if (!existsSync(tar)) throw new Error(`Missing ${tar} for ${name} after tools/release#pack:dry-run`);
     }
     return `${tarballs.size} fresh tarballs`;
   });

@@ -71,7 +71,7 @@ jobs:
       # ADR-0144 / #1229 (B2.7): generic toolchain gates are pinned OSS tool steps, not AutoFlow gates.
       - run: deno fmt --check
       - run: deno lint
-      - run: deno task lint:markdown
+      - run: deno task --cwd tools/repo lint:markdown
       - run: deno task typecheck
       - name: Install Playwright browsers
         # All three engines up front: the gate's fixture gates run their
@@ -143,7 +143,7 @@ jobs:
         with:
           node-version: ${{ matrix.node }}
       - name: Pack the release tarballs
-        run: deno task pack:dry-run
+        run: deno task --cwd tools/release pack:dry-run
       - name: Packed serve proof under Node ${{ matrix.node }}
         run: deno run --allow-read --allow-write --allow-run --allow-env --allow-net tools/release/consumer-packaged-node-serve.ts node
 
@@ -179,7 +179,7 @@ jobs:
         with:
           node-version: '24'
       - name: Pack the release tarballs
-        run: deno task pack:dry-run
+        run: deno task --cwd tools/release pack:dry-run
       - name: Packed serve proof under Bun
         run: deno run --allow-read --allow-write --allow-run --allow-env --allow-net tools/release/consumer-packaged-node-serve.ts bun
 
@@ -207,4 +207,4 @@ jobs:
         with:
           node-version: '24'
       - name: TS7 shadow gate (pack:dry-run + consumer matrix)
-        run: deno task gate:ts7:shadow
+        run: deno task --cwd tools/repo gate:ts7:shadow

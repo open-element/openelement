@@ -48,7 +48,7 @@ checks there.
 ## Run
 
 ```sh
-deno task third-party-wc:smoke   # from the repository root
+deno task --cwd tests/fixtures/third-party-web-components smoke   # from the repository root
 # or directly:
 deno run --allow-read --allow-write --allow-run --allow-env --allow-net --allow-sys \
   fixtures/third-party-web-components/qualify.ts

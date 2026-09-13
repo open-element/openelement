@@ -3,7 +3,7 @@
 # openElement pre-commit hook. Format/lint are owned by the Deno toolchain
 # directly; heavier gates run pre-push and in CI.
 #
-# Install: deno task hooks:install
+# Install: deno task --cwd tools/repo hooks:install
 
 set -e
 

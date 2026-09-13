@@ -11,7 +11,7 @@
  *     prerendered with real content.
  *
  * The fixture dist is gitignored; build it on demand (a no-op when present):
- *   deno task fixture:router-static-only:build
+ *   deno task --cwd tests/fixtures/router-static-only build
  */
 
 import { assert, assertEquals, assertStringIncludes } from '@std/assert';

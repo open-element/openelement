@@ -18,7 +18,7 @@ docs 站点通过 SSG 管线生成。
 
 ## Nitro 预设
 
-Nitro 是第一方生产部署 adapter。用 `@openelement/router/nitro-mount` 的 `createOpenElementNitroHandler` 把构建出的 handler 桥接进 Nitro v3 event——在 fetch 原生接缝上近乎透传：event 的标准 `Request`（`event.req`）进，handler 的 `Response` 出；两个受支持的预设——`node-server` 与 `cloudflare_module`（Workers）——都由 `deno task nitro:proof:node` / `nitro:proof:workers` 门禁对真实 Nitro 产物背书。
+Nitro 是第一方生产部署 adapter。用 `@openelement/router/nitro-mount` 的 `createOpenElementNitroHandler` 把构建出的 handler 桥接进 Nitro v3 event——在 fetch 原生接缝上近乎透传：event 的标准 `Request`（`event.req`）进，handler 的 `Response` 出；两个受支持的预设——`node-server` 与 `cloudflare_module`（Workers）——都由 `deno task --cwd tests/fixtures/router-nitro proof:node` / `proof:workers` 门禁对真实 Nitro 产物背书。
 
 ## Dev 服务器
 

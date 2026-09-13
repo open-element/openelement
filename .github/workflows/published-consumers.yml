@@ -61,13 +61,13 @@ jobs:
           --report published-consumer-runtime-linux.json
       - name: Verify Nitro Node and Workers through nitro-mount
         run: |
-          deno task nitro:proof:node
-          deno task nitro:proof:workers
+          deno task --cwd tests/fixtures/router-nitro proof:node
+          deno task --cwd tests/fixtures/router-nitro proof:workers
       - name: Verify third-party Web Components and CDN consumption
         env:
           OPEN_ELEMENT_PUBLISHED_VERSION: ${{ inputs.version }}
         run: |
-          deno task third-party-wc:smoke
+          deno task --cwd tests/fixtures/third-party-web-components smoke
           deno run --allow-read --allow-write --allow-env --allow-run --allow-net tools/release/published-consumer-qualification.ts --smoke --version "$OPEN_ELEMENT_PUBLISHED_VERSION" --jsdelivr
       - name: Archive published runtime diagnostics
         if: always()

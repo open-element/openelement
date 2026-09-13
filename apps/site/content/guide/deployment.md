@@ -18,7 +18,7 @@ When any route declares `renderIntent: { mode: 'dynamic' }`, the build also emit
 
 ## Nitro presets
 
-Nitro is the first-party production deployment adapter. Bridge the built handler into a Nitro v3 event with `createOpenElementNitroHandler` from `@openelement/router/nitro-mount` — a near pass-through over the fetch-native seam: the event's standard `Request` (`event.req`) goes in, the handler's `Response` comes out; both supported presets — `node-server` and `cloudflare_module` (Workers) — are proven against real Nitro output by the `deno task nitro:proof:node` / `nitro:proof:workers` gates.
+Nitro is the first-party production deployment adapter. Bridge the built handler into a Nitro v3 event with `createOpenElementNitroHandler` from `@openelement/router/nitro-mount` — a near pass-through over the fetch-native seam: the event's standard `Request` (`event.req`) goes in, the handler's `Response` comes out; both supported presets — `node-server` and `cloudflare_module` (Workers) — are proven against real Nitro output by the `deno task --cwd tests/fixtures/router-nitro proof:node` / `proof:workers` gates.
 
 ## Dev server
 

@@ -138,7 +138,7 @@ or not exercised for that tag. It is never converted to a passing `true`.
 Run the fixture with:
 
 ```sh
-deno task third-party-wc:smoke
+deno task --cwd tests/fixtures/third-party-web-components smoke
 ```
 
 The fixture source lives under `fixtures/third-party-web-components/` and is copied

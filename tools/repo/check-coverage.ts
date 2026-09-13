@@ -100,11 +100,12 @@ async function runCoverage(crashRetries: number): Promise<string> {
             '--no-lock',
             `--coverage=${coverageDir}`,
             // element's WTR browser suite is gated separately
-            // (test:element:browser:gate). apps/saas/ and tests/fixtures/ are
-            // independent projects with their own deno.json boundaries —
-            // the root sweep must not resolve them under the root import
-            // map. Each runs under its own config via its own gate
-            // (examples:check, fixture:*:gate); none contributes to the
+            // (packages/element#browser:gate). apps/saas/ and
+            // tests/fixtures/ are independent projects with their own
+            // deno.json boundaries — the root sweep must not resolve them
+            // under the root import map. Each runs under its own config
+            // via its own gate (tests/fixtures/<name>#gate,
+            // tests/e2e/starter-smoke#gate); none contributes to the
             // root coverage denominator.
             '--ignore=packages/element/__wtr__,examples,fixtures',
             '--allow-read',
@@ -167,7 +168,7 @@ async function main(): Promise<void> {
   const profiledFiles = lcovFilePaths(lcov);
 
   // Threshold baseline: 2026-08-04 (v0.42.0-alpha.14 cycle), measured with the
-  // full-denominator logic below on a local `deno task test:coverage` run:
+  // full-denominator logic below on a local `deno task --cwd tools/repo test:coverage:check` run:
   //   packages/*/src: lines 81.46%, branches 85.24%, functions 87.66%
   //   tools/lib:      lines 72.97%, branches 83.47%, functions 70.31%
   // Thresholds sit one point under the measured floor to absorb platform

@@ -5,7 +5,7 @@ the resulting browser modules with Web Test Runner on Chromium, Firefox, and
 WebKit (#1333).
 
 ```sh
-deno task test:element:browser:gate
+deno task --cwd packages/element browser:gate
 ```
 
 The positive suite covers compiled rendering, events, forms, shadow DOM,
@@ -18,7 +18,7 @@ tests is flipped to failed by the zero-tests-guard reporter and exits non-zero.
 This directory is intentionally self-contained: it has its own `package.json`
 with exact-pinned npm deps and its own `node_modules`, and it is **not** part
 of the Deno workspace. It is wired into the repo gates through the
-`test:element:browser:*` tasks in the root `deno.json`.
+`browser:*` tasks in `packages/element/deno.json`.
 
 ## Layout
 
@@ -50,14 +50,14 @@ __wtr__/
 
 ```sh
 # hermetic gate (npm ci + compile + browsers + negative proofs):
-deno task test:element:browser:gate
+deno task --cwd packages/element browser:gate
 
 # manual equivalents, from the repository root:
-deno task test:element:browser:compile   # regenerate generated/ via tools/compile-fixtures.ts
+deno task --cwd packages/element browser:compile   # regenerate generated/ via tools/compile-fixtures.ts
 # green suite (Chromium + Firefox + WebKit):
 cd packages/element/__wtr__ && npx web-test-runner
 # negative proofs:
-deno task test:element:browser:negative
+deno task --cwd packages/element browser:negative
 ```
 
 ## Decision: compile path
@@ -178,7 +178,7 @@ map as the repo's E2E stack (`@web/test-runner-playwright@1.0.0` accepts it via
 ## Negative proofs (exit contract)
 
 All run with `set -o pipefail`; exit codes are the runner's own. The full
-five-proof sweep runs as `deno task test:element:browser:negative`.
+five-proof sweep runs as `deno task --cwd packages/element browser:negative`.
 
 | Proof | Command (`cd packages/element/__wtr__`) | Exit | Evidence excerpt |
 | ----- | --------------------------------------- | ---- | ---------------- |

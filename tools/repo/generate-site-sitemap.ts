@@ -21,7 +21,7 @@ export const SITE_DIST = 'apps/site/dist';
 const SITE_ROUTES = 'apps/site/app/routes';
 const SITE_LOCALES = ['en', 'zh'] as const;
 
-const siteRoot = fromFileUrl(new URL('../apps/site/', import.meta.url));
+const siteRoot = fromFileUrl(new URL('../../apps/site/', import.meta.url));
 
 export async function generateSiteSitemap(dist = SITE_DIST): Promise<string[]> {
   const blogOptions = { ...blogCollection, contentDir: join(siteRoot, blogCollection.contentDir) };

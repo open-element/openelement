@@ -7,7 +7,7 @@
  *
  * (Written as a script because deno-task shell has no for-loops.)
  *
- * Run from the repo root: deno task test:element:browser:negative
+ * Run from the repo root: deno task --cwd packages/element browser:negative
  */
 const WTR_DIR = new URL('..', import.meta.url).pathname;
 const CONFIGS = [
