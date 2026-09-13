@@ -10,7 +10,7 @@
  *   deno run -A www/e2e/static-server.ts --port 4174 --dir www/dist
  */
 
-import { findPort, serveStatic } from '../../tools/lib/static-server.ts';
+import { findPort, serveStatic } from '../../../tools/lib/static-server.ts';
 
 const args = Object.fromEntries(
   Deno.args.reduce<string[]>((acc, arg, i, arr) => {

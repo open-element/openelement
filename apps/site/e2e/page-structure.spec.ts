@@ -21,7 +21,6 @@ const guideRoutes = [
   '/guide/islands-and-ssr',
   '/guide/deployment',
   '/guide/testing',
-  '/guide/migration',
   '/guide/security',
 ];
 

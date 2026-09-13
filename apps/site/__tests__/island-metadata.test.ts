@@ -4,11 +4,11 @@ import {
   fileToTagName,
   scanIslandMeta,
   scanIslands,
-} from '../../packages/router/src/vite/internal/ssg/route-scanner.ts';
-import { generateClientEntry } from '../../packages/router/src/vite/internal/ssg/entry-client-codegen.ts';
+} from '../../../packages/router/src/vite/internal/ssg/route-scanner.ts';
+import { generateClientEntry } from '../../../packages/router/src/vite/internal/ssg/entry-client-codegen.ts';
 
-const REPO_ROOT = fromFileUrl(new URL('../..', import.meta.url));
-const WWW_ISLANDS_DIR = join(REPO_ROOT, 'www', 'app', 'islands');
+const REPO_ROOT = fromFileUrl(new URL('../../..', import.meta.url));
+const SITE_ISLANDS_DIR = join(REPO_ROOT, 'apps', 'site', 'app', 'islands');
 
 const REQUIRED_LOCAL_ISLANDS = {
   'open-cinematic-atmosphere': { hydrate: 'idle', ssr: true, dsd: true },
@@ -19,17 +19,17 @@ const REQUIRED_LOCAL_ISLANDS = {
 } as const;
 
 async function scanWwwIslandMetadata() {
-  const islandFiles = await scanIslands(WWW_ISLANDS_DIR);
-  const meta = await scanIslandMeta(WWW_ISLANDS_DIR, islandFiles);
+  const islandFiles = await scanIslands(SITE_ISLANDS_DIR);
+  const meta = await scanIslandMeta(SITE_ISLANDS_DIR, islandFiles);
   return { islandFiles, meta };
 }
 
-Deno.test('www local islands expose explicit v0.33 metadata', async () => {
+Deno.test('site local islands expose explicit island metadata', async () => {
   const { islandFiles, meta } = await scanWwwIslandMetadata();
   const scannedTags = new Set(islandFiles.map(fileToTagName));
 
   for (const [tagName, expected] of Object.entries(REQUIRED_LOCAL_ISLANDS)) {
-    assert(scannedTags.has(tagName), `${tagName} must exist under www/app/islands`);
+    assert(scannedTags.has(tagName), `${tagName} must exist under apps/site/app/islands`);
     const actual = meta[tagName];
     assertExists(actual, `${tagName} must export defineIslandConfig(...) metadata`);
     assertEquals(actual.hydrate, expected.hydrate, `${tagName} hydrate strategy drifted`);
@@ -41,11 +41,11 @@ Deno.test('www local islands expose explicit v0.33 metadata', async () => {
   assertEquals(
     missingMetadata,
     [],
-    `All www/app/islands files must declare defineIslandConfig(...): ${missingMetadata.join(', ')}`,
+    `All apps/site/app/islands files must declare defineIslandConfig(...): ${missingMetadata.join(', ')}`,
   );
 });
 
-Deno.test('www search island metadata schedules immediate client hydration', async () => {
+Deno.test('site search island metadata schedules immediate client hydration', async () => {
   const { islandFiles, meta } = await scanWwwIslandMetadata();
   const entries = islandFiles.map((filePath) => {
     const tagName = fileToTagName(filePath);

@@ -131,16 +131,8 @@ Request-time (`'dynamic'`) loaders/actions run on the server with the Web-standa
 
 ### Integration recipes
 
-[better-auth](https://github.com/open-element/openelement/blob/main/docs/integrations/better-auth.md) — session read in loaders, auth endpoints mounted as API routes, authorization in actions (doc-level recipe).
-
-[Drizzle](https://github.com/open-element/openelement/blob/main/docs/integrations/drizzle.md) — queries in loaders, mutations in actions, connection secrets on `ctx.env` only (doc-level recipe).
-
 [Validation (zod / valibot)](https://github.com/open-element/openelement/blob/main/docs/integrations/validation.md) — schema parse inside the action, `fail(422)` with the echo on failure; verified by the request-time fixture e2e gate.
 
-[Rate limit (fetch middleware)](https://github.com/open-element/openelement/blob/main/docs/integrations/rate-limit.md) — fixed-window per-IP limiting on `middleware.use`, scoped to action POSTs, 429 `problem+json` over the limit; verified against a scratch app built from repo source.
+[Rate limit (fetch middleware)](https://github.com/open-element/openelement/tree/main/apps/saas#status-working-product) — fixed-window per-IP limiting (`apps/saas/lib/rate-limit.ts`), scoped to action POSTs, 429 `problem+json` over the limit; covered by the SaaS test suite.
 
-[FileDataAdapter (filesystem data)](https://github.com/open-element/openelement/blob/main/docs/integrations/file-data-adapter.md) — the ADR-0095 recipe: a read-only JSON-file adapter with the unstorage read surface (`getItem`/`keys`), used from loaders; verified against a scratch app built from repo source.
-
-[Auth guard (better-auth middleware)](https://github.com/open-element/openelement/blob/main/docs/integrations/better-auth-guard.md) — redirects anonymous users out of a protected route group (303) and passes session identity through to loaders; guard mechanics verified, better-auth call stubbed.
-
-[Supabase (reference starter)](https://github.com/open-element/openelement/blob/main/docs/integrations/supabase.md) — `@supabase/ssr` server client writing session cookies over the ADR-0129 response-header channel, authorization re-checked in loaders/actions, RLS-first notes / Storage / Realtime; every code block lifted from `apps/saas` and qualified against a real Supabase project.
+[Supabase (first-party SaaS)](https://github.com/open-element/openelement/tree/main/apps/saas) — `@supabase/ssr` server client writing session cookies over the ADR-0129 response-header channel, authorization re-checked in loaders/actions, RLS-first notes / Storage / Realtime; implemented in `apps/saas` and covered by its test suite.

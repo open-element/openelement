@@ -110,6 +110,7 @@ Deno.test('v0.44 surface: JSX factories live only in the supported jsx-runtime s
     import.meta.dirname ?? '.',
     '..',
     '..',
+    '..',
     'packages',
     'element',
     'src',
@@ -119,6 +120,7 @@ Deno.test('v0.44 surface: JSX factories live only in the supported jsx-runtime s
     import.meta.dirname ?? '.',
     '..',
     '..',
+    '..',
     'packages',
     'element',
     'src',
@@ -126,6 +128,7 @@ Deno.test('v0.44 surface: JSX factories live only in the supported jsx-runtime s
   );
   const devRuntimePath = join(
     import.meta.dirname ?? '.',
+    '..',
     '..',
     '..',
     'packages',
@@ -149,7 +152,7 @@ Deno.test('v0.44 surface: JSX factories live only in the supported jsx-runtime s
 // ─── parse5 not a dependency ─────────────────────────────────────────
 
 Deno.test('alpha.10 surface: retired package directories stay deleted', () => {
-  const packages = join(import.meta.dirname ?? '.', '..', '..', 'packages');
+  const packages = join(import.meta.dirname ?? '.', '..', '..', '..', 'packages');
   // 1.0 baseline note: 'router' was retired at v0.27, but the directory name was
   // re-legitimized by the @openelement/router product (ADR-0152) — excluded here.
   for (const name of ['core', 'signal', 'protocol', 'content', 'ssg']) {

@@ -1,6 +1,6 @@
 import { assert, assertEquals, assertExists, assertStringIncludes } from '@std/assert';
 import { loadCollectionData } from '../lib/content.ts';
-import { fileURLToPath } from 'node:url';
+import { fromFileUrl } from '@std/path';
 import { articleCollections } from '../content-collections.ts';
 import { projectArticlePage } from '../app/site-ui/article-page-model.ts';
 
@@ -12,16 +12,16 @@ type ArticleContentPage = {
   content: string;
   html: string;
 };
-const wwwRoot = fileURLToPath(new URL('../', import.meta.url));
+const siteRoot = fromFileUrl(new URL('../', import.meta.url));
 const loadContentPages = (collection: ArticleCollection) =>
   loadCollectionData(collection, {
     ...articleCollections[collection],
-    contentDir: `${wwwRoot}/${articleCollections[collection].contentDir}`,
+    contentDir: `${siteRoot}/${articleCollections[collection].contentDir}`,
   }) as Promise<ArticleContentPage[]>;
 
 // The content routes share the site-ui article shell: each route module is a
 // thin binding — meta (the nav contract) plus a content slug; the body lives
-// in www/content/<collection>/<slug>[.<locale>].md (#1087, ADR-0136).
+// in apps/site/content/<collection>/<slug>[.<locale>].md (#1087, ADR-0136).
 const articleRoutes = [
   ['guide', 'api', 'GuideApiPage', 60],
   ['guide', 'architecture', 'GuideArchitecturePage', 20],
@@ -33,7 +33,6 @@ const articleRoutes = [
   ['guide', 'getting-started', 'GuideGettingStartedPage', 1],
   ['guide', 'islands-and-ssr', 'GuideIslandsAndSsrPage', 90],
   ['guide', 'mdx', 'GuideMdxPage', 50],
-  ['guide', 'migration', 'GuideMigrationPage', 75],
   ['guide', 'routing-and-data', 'GuideRoutingAndDataPage', 40],
   ['guide', 'security', 'GuideSecurityPage', 95],
   ['guide', 'styling', 'GuideStylingPage', 5],

@@ -2219,62 +2219,6 @@
       }
     },
     {
-      "id": "article:guide/migration:en",
-      "kind": "article",
-      "locale": "en",
-      "source": {
-        "path": "www/content/guide/migration.md"
-      },
-      "alternates": [
-        {
-          "locale": "zh",
-          "id": "article:guide/migration:zh"
-        }
-      ],
-      "references": [
-        {
-          "kind": "route",
-          "target": "/guide/getting-started",
-          "line": 2
-        }
-      ],
-      "route": "/guide/migration",
-      "fingerprint": "43c6833808b4d90b7dc697d7f3019f17565e1410a752a8062fb444804bd0ab73",
-      "data": {
-        "lede": "Every breaking change since 0.40.x, grouped by the version that shipped it.",
-        "order": 75,
-        "title": "Migrating to 0.41.0"
-      }
-    },
-    {
-      "id": "article:guide/migration:zh",
-      "kind": "article",
-      "locale": "zh",
-      "source": {
-        "path": "www/content/guide/migration.zh.md"
-      },
-      "alternates": [
-        {
-          "locale": "en",
-          "id": "article:guide/migration:en"
-        }
-      ],
-      "references": [
-        {
-          "kind": "route",
-          "target": "/guide/getting-started",
-          "line": 2
-        }
-      ],
-      "route": "/guide/migration",
-      "fingerprint": "5536f52a06a9101130a135b002615ef5a2f7acaf651fe61ce2a364ddbfd14233",
-      "data": {
-        "lede": "自 0.40.x 以来的全部 breaking change，按发布版本分组。",
-        "order": 75,
-        "title": "迁移到 0.41.0"
-      }
-    },
-    {
       "id": "article:guide/routing-and-data:en",
       "kind": "article",
       "locale": "en",
@@ -3926,20 +3870,6 @@
       }
     },
     {
-      "id": "release:v0.41.0-migration",
-      "kind": "release",
-      "locale": "en",
-      "source": {
-        "path": "docs/release/v0.41.0-migration.md"
-      },
-      "alternates": [],
-      "references": [],
-      "fingerprint": "009a99a1de98b954705dfd62c6369d59564a75a9c80a30e474eb36bb205c6166",
-      "data": {
-        "title": "Migrating to 0.41.0 from the 0.41 alpha line (and 0.40.x)"
-      }
-    },
-    {
       "id": "release:v0.41.0-plan",
       "kind": "release",
       "locale": "en",
@@ -4231,20 +4161,6 @@
       "fingerprint": "b3f901b95800d91a7cdd296aa52797cd49fabb66955769022e124a768c4ad0c2",
       "data": {
         "title": "v0.42.0-alpha.9"
-      }
-    },
-    {
-      "id": "release:v0.42.0-migration",
-      "kind": "release",
-      "locale": "en",
-      "source": {
-        "path": "docs/release/v0.42.0-migration.md"
-      },
-      "alternates": [],
-      "references": [],
-      "fingerprint": "056abd9fcd23f177c2b997470cd0f8b9fb705220703a6efd26dc7419c4ef448a",
-      "data": {
-        "title": "Migrating to 0.42.0 (WC light fullstack)"
       }
     },
     {

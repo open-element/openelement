@@ -14,7 +14,7 @@
 
 import { expect, test } from '@playwright/test';
 import { getCustomElementTags } from './helpers.js';
-import { deepQueryAllInPage } from '../../tools/lib/shadow-walker.ts';
+import { deepQueryAllInPage } from '../../../tools/lib/shadow-walker.ts';
 
 test.describe('DSD Layers', () => {
   test.beforeEach(async ({ page }) => {

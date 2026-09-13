@@ -130,16 +130,8 @@ request-time(`'dynamic'`)loader/action 运行在服务端,上下文是 Web 标�
 
 ### 集成配方
 
-[better-auth](https://github.com/open-element/openelement/blob/main/docs/integrations/better-auth.md)——在 loader 中读会话、把 auth 端点挂为 API 路由、在 action 中授权（文档级配方）。
-
-[Drizzle](https://github.com/open-element/openelement/blob/main/docs/integrations/drizzle.md)——查询放在 loader、变更放在 action，连接密钥只走 `ctx.env`（文档级配方）。
-
 [Validation（zod / valibot）](https://github.com/open-element/openelement/blob/main/docs/integrations/validation.md)——在 action 内做 schema 解析，失败 `fail(422)` 回显；由 request-time fixture 的 e2e 门禁验证。
 
-[Rate limit（限流中间件）](https://github.com/open-element/openelement/blob/main/docs/integrations/rate-limit.md)——`middleware.use` 上的固定窗口每 IP 限流，作用于 action POST，超限返回 429 `problem+json`；已对仓库源码构建的 scratch 应用验证。
+[Rate limit（限流中间件）](https://github.com/open-element/openelement/tree/main/apps/saas#status-working-product)——固定窗口每 IP 限流（`apps/saas/lib/rate-limit.ts`），作用于 action POST，超限返回 429 `problem+json`；由 SaaS 测试套件覆盖。
 
-[FileDataAdapter（文件数据适配器）](https://github.com/open-element/openelement/blob/main/docs/integrations/file-data-adapter.md)——ADR-0095 的 recipe 落地：unstorage 读面（`getItem`/`keys`）的只读 JSON 文件适配器，在 loader 中使用；已对仓库源码构建的 scratch 应用验证。
-
-[Auth guard（better-auth 守卫中间件）](https://github.com/open-element/openelement/blob/main/docs/integrations/better-auth-guard.md)——把匿名用户 303 重定向出受保护路由组，并把会话身份透传给 loader；守卫机制已验证，better-auth 调用以 stub 代替。
-
-[Supabase（参考应用配方）](https://github.com/open-element/openelement/blob/main/docs/integrations/supabase.md)——`@supabase/ssr` 服务端客户端经 ADR-0129 响应头通道写会话 cookie，loader/action 内复检授权，RLS 优先的 notes / Storage / Realtime；所有代码块取自 `apps/saas`，已对真实 Supabase 项目完成资格验证。
+[Supabase（第一方 SaaS）](https://github.com/open-element/openelement/tree/main/apps/saas)——`@supabase/ssr` 服务端客户端经 ADR-0129 响应头通道写会话 cookie，loader/action 内复检授权，RLS 优先的 notes / Storage / Realtime；在 `apps/saas` 中实现，由其测试套件覆盖。

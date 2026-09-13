@@ -1,0 +1,71 @@
+{
+  "version": "5",
+  "specifiers": {
+    "npm:gray-matter@^4.0.3": "4.0.3",
+    "npm:marked@15": "15.0.12"
+  },
+  "npm": {
+    "argparse@1.0.10": {
+      "integrity": "sha512-o5Roy6tNG4SL/FOkCAN6RzjiakZS25RLYFrcMttJqbdd8BWrnA+fGz57iN5Pb06pvBGvl5gQ0B48dJlslXvoTg==",
+      "dependencies": [
+        "sprintf-js"
+      ]
+    },
+    "esprima@4.0.1": {
+      "integrity": "sha512-eGuFFw7Upda+g4p+QHvnW0RyTX/SVeJBDM/gCtMARO0cLuT2HcEKnTPvhjV6aGeqrCB/sbNop0Kszm0jsaWU4A==",
+      "bin": true
+    },
+    "extend-shallow@2.0.1": {
+      "integrity": "sha512-zCnTtlxNoAiDc3gqY2aYAWFx7XWWiasuF2K8Me5WbN8otHKTUKBwjPtNpRs/rbUZm7KxWAaNj7P1a/p52GbVug==",
+      "dependencies": [
+        "is-extendable"
+      ]
+    },
+    "gray-matter@4.0.3": {
+      "integrity": "sha512-5v6yZd4JK3eMI3FqqCouswVqwugaA9r4dNZB1wwcmrD02QkV5H0y7XBQW8QwQqEaZY1pM9aqORSORhJRdNK44Q==",
+      "dependencies": [
+        "js-yaml",
+        "kind-of",
+        "section-matter",
+        "strip-bom-string"
+      ]
+    },
+    "is-extendable@0.1.1": {
+      "integrity": "sha512-5BMULNob1vgFX6EjQw5izWDxrecWK9AM72rugNr0TFldMOi0fj6Jk+zeKIt0xGj4cEfQIJth4w3OKWOJ4f+AFw=="
+    },
+    "js-yaml@3.15.2": {
+      "integrity": "sha512-6EuL879VkRA+1Cz578mKMiKvjPNEuk6+r1JaFzoSWejZmtf7xWbIyw1e3KkxlkzTIt9Taw6JBhEppG7utc1P+w==",
+      "dependencies": [
+        "argparse",
+        "esprima"
+      ],
+      "bin": true
+    },
+    "kind-of@6.0.3": {
+      "integrity": "sha512-dcS1ul+9tmeD95T+x28/ehLgd9mENa3LsvDTtzm3vyBEO7RPptvAD+t44WVXaUjTBRcrpFeFlC8WCruUR456hw=="
+    },
+    "marked@15.0.12": {
+      "integrity": "sha512-8dD6FusOQSrpv9Z1rdNMdlSgQOIP880DHqnohobOmYLElGEqAL/JvxvuxZO16r4HtjTlfPRDC1hbvxC9dPN2nA==",
+      "bin": true
+    },
+    "section-matter@1.0.0": {
+      "integrity": "sha512-vfD3pmTzGpufjScBh50YHKzEu2lxBWhVEHsNGoEXmCmn2hKGfeNLYMzCJpe8cD7gqX7TJluOVpBkAequ6dgMmA==",
+      "dependencies": [
+        "extend-shallow",
+        "kind-of"
+      ]
+    },
+    "sprintf-js@1.0.3": {
+      "integrity": "sha512-D9cPgkvLlV3t3IzL0D0YLvGA9Ahk4PcvVwUbN0dSGr1aP0Nrt4AEnTUbuGvquEC0mA64Gqt1fzirlRs5ibXx8g=="
+    },
+    "strip-bom-string@1.0.0": {
+      "integrity": "sha512-uCC2VHvQRYu+lMh4My/sFNmF2klFymLX1wHJeXnbEJERpV/ZsVuonzerjfrGpIGF7LBVa1O7i9kjiWvJiFck8g=="
+    }
+  },
+  "workspace": {
+    "dependencies": [
+      "npm:gray-matter@^4.0.3",
+      "npm:marked@15"
+    ]
+  }
+}

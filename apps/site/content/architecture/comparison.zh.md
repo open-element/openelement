@@ -47,27 +47,23 @@ order: 20
 - 选择 **Astro / Enhance / Lit / Stencil** 当标准优先的 Web Components 方案很重要，且想避开沉重的应用运行时时。
 - 选择 **Next.js / Nuxt / SvelteKit** 当你的产品明确围绕 React、Vue 或 Svelte 应用模型构建时。
 - 选择 **Fresh** 当你想要 Deno 原生、近乎零构建的 Preact island 体验时。
-- 不要选择 **openElement** 当主要诉求是成熟生态、框架专属 UI 运行时或现成的企业级设计系统时。采用稳定 0.43 线的团队仍应在自己的生产环境中验证文档里的 starter 与部署路径。
+- 不要选择 **openElement** 当主要诉求是成熟生态、框架专属 UI 运行时或现成的企业级设计系统时。评估 openElement 的团队仍应在自己的生产环境中验证 SaaS 消费方与部署路径。
 
 ## 官方组合路径
 
-OpenElement × Supabase × Cloudflare 是经过验证的全栈交付路径，所有权边界明确：OpenElement 负责应用 UX；Supabase 负责数据、Auth、RLS、Storage 与 Realtime；Cloudflare 负责边缘交付、安全、缓存与异步执行。Supabase 与 Cloudflare 是被组合的服务提供方——绝不是框架内建功能——tier-1 边界门禁保证服务提供方代码不进入框架包。
+OpenElement × Supabase × Cloudflare 是经过验证的全栈交付路径，所有权边界明确：OpenElement 负责应用 UX；Supabase 负责数据、Auth、RLS、Storage 与 Realtime；Cloudflare 负责边缘交付、安全、缓存与异步执行。Supabase 与 Cloudflare 是被组合的服务提供方——绝不是框架内建功能——包图谱边界门禁保证服务提供方代码不进入框架包。
 
 最初随 0.43 线与 Universal WC SSR 一同交付，并由当前编译型版本线继承。框架自有的生产运行时恢复与缓存语义仍在当前契约之外，尚未分配发布版本。
 
-- [Supabase 配方](https://github.com/open-element/openelement/blob/main/docs/integrations/supabase.md)
-- [已验证的参考应用](https://github.com/open-element/openelement/tree/main/apps/saas)
-- [真实项目验证工作流](https://github.com/open-element/openelement/blob/main/.github/workflows/supabase-project-smoke.yml)
-- [真实 Workers 部署冒烟（绿色运行 31925944647）](https://github.com/open-element/openelement/blob/main/.github/workflows/fullstack-deploy-smoke.yml)
-- [tier-1 边界门禁](https://github.com/open-element/openelement/blob/main/tools/check-fullstack-boundary.ts)
+- [已验证的 SaaS 消费方](https://github.com/open-element/openelement/tree/main/apps/saas)
 - [ADR-0129 响应头通道](https://github.com/open-element/openelement/blob/main/docs/adr/ADR-0129-response-header-channel.md)
 
 ## 定位背后的证据
 
-- Custom Elements 作为持久的应用契约——静态面在 ADR-0119 下冻结，请求时应用闭环在 ADR-0122 下冻结。[ADR-0119 / ADR-0122 冻结](https://github.com/open-element/openelement/blob/main/docs/adr/ADR-0122-0-42-0-stable-scope-freeze.md)
-- DSD-first SSR 与选择性升级，以及显式的外来 WC 准入——语料库把每个第三方库形态的观测 SSR 输出与准入钉为机器可读证据。[第三方 WC SSR 语料库](https://github.com/open-element/openelement/blob/main/docs/evidence/third-party-wc-ssr-corpus.json)
-- 浏览器与打包产物验证——候选版本需要 Chromium、Firefox 与 WebKit 证明，消费方从打包的公开产物构建。[栈契约](https://github.com/open-element/openelement/blob/main/docs/current/STACK_CONTRACT.md)
-- 可组合的服务提供方栈，而不是框架自有的 Auth 或数据库包——由参考应用与真实提供方冒烟端到端验证。[Supabase × Cloudflare 参考应用](https://github.com/open-element/openelement/tree/main/apps/saas)
+- Custom Elements 作为持久的应用契约——静态面与请求时应用闭环由当前架构文档描述。[当前架构](https://github.com/open-element/openelement/tree/main/docs/architecture)
+- DSD-first SSR 与选择性升级，以及显式的外来 WC 准入——语料库把每个第三方库形态的观测 SSR 输出与准入钉为机器可读证据。[第三方 WC 互操作语料库](https://github.com/open-element/openelement/blob/main/fixtures/web-component-interop/corpus.json)
+- 浏览器与打包产物验证——候选版本需要 Chromium、Firefox 与 WebKit 证明，消费方从打包的公开产物构建。[发布流程](https://github.com/open-element/openelement/blob/main/docs/maintainers/releasing.md)
+- 可组合的服务提供方栈，而不是框架自有的 Auth 或数据库包——由第一方 SaaS 消费方端到端验证。[Supabase × Cloudflare SaaS](https://github.com/open-element/openelement/tree/main/apps/saas)
 
 ## 来源与评审范围
 

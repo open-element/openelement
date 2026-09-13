@@ -47,29 +47,25 @@ order: 20
 - Choose **Astro / Enhance / Lit / Stencil** when a standards-first Web Components story matters and you want to avoid a heavy application runtime.
 - Choose **Next.js / Nuxt / SvelteKit** when your product is intentionally built around a React, Vue, or Svelte application model.
 - Choose **Fresh** when you want a Deno-native, near-zero-build Preact island experience.
-- Do not choose **openElement** when a mature ecosystem, a framework-specific UI runtime, or a ready-made enterprise design system is the main requirement. Teams adopting the stable 0.43 line should validate the documented starter and deployment path against their own production environment.
+- Do not choose **openElement** when a mature ecosystem, a framework-specific UI runtime, or a ready-made enterprise design system is the main requirement. Teams evaluating openElement should validate the SaaS consumer and the deployment path against their own production environment.
 
 ## The official composition path
 
-OpenElement × Supabase × Cloudflare is the verified fullstack delivery path, with explicit ownership boundaries: OpenElement owns the application UX; Supabase owns data, Auth, RLS, Storage and Realtime; Cloudflare owns edge delivery, security, cache and async execution. Supabase and Cloudflare are composed providers — never built-in framework features — and a tier-1 boundary gate keeps provider code out of the framework packages.
+OpenElement × Supabase × Cloudflare is the verified fullstack delivery path, with explicit ownership boundaries: OpenElement owns the application UX; Supabase owns data, Auth, RLS, Storage and Realtime; Cloudflare owns edge delivery, security, cache and async execution. Supabase and Cloudflare are composed providers — never built-in framework features — and the package-graph boundary gate keeps provider code out of the framework packages.
 
 First shipped on the 0.43 line together with Universal WC SSR and carried by the current compiled line. Framework-owned
 production-runtime recovery and cache semantics remain outside the current
 contract and have no assigned release version.
 
-- [Supabase recipe](https://github.com/open-element/openelement/blob/main/docs/integrations/supabase.md)
-- [Verified reference app](https://github.com/open-element/openelement/tree/main/apps/saas)
-- [Real-project qualification workflow](https://github.com/open-element/openelement/blob/main/.github/workflows/supabase-project-smoke.yml)
-- [Real Workers deploy smoke (green run 31925944647)](https://github.com/open-element/openelement/blob/main/.github/workflows/fullstack-deploy-smoke.yml)
-- [Tier-1 boundary gate](https://github.com/open-element/openelement/blob/main/tools/check-fullstack-boundary.ts)
+- [Verified SaaS consumer](https://github.com/open-element/openelement/tree/main/apps/saas)
 - [ADR-0129 response-header channel](https://github.com/open-element/openelement/blob/main/docs/adr/ADR-0129-response-header-channel.md)
 
 ## Evidence behind the position
 
-- Custom Elements as the durable application contract — the static surface froze under ADR-0119 and the request-time application loop under ADR-0122. [ADR-0119 / ADR-0122 freezes](https://github.com/open-element/openelement/blob/main/docs/adr/ADR-0122-0-42-0-stable-scope-freeze.md)
-- DSD-first SSR with selective upgrade, and explicit foreign-WC admission — the corpus pins the observed SSR form and admission of each third-party library kind as machine-readable evidence. [Third-party WC SSR corpus](https://github.com/open-element/openelement/blob/main/docs/evidence/third-party-wc-ssr-corpus.json)
-- Browser and packaged-artifact qualification — candidate releases prove Chromium, Firefox and WebKit, and consumers build from packed public artifacts. [Stack contract](https://github.com/open-element/openelement/blob/main/docs/current/STACK_CONTRACT.md)
-- A composable provider stack instead of framework-owned Auth or database packages — verified end to end by the reference app and its real-provider smokes. [Supabase × Cloudflare reference app](https://github.com/open-element/openelement/tree/main/apps/saas)
+- Custom Elements as the durable application contract — the static surface and the request-time application loop are described by the current architecture. [Current architecture](https://github.com/open-element/openelement/tree/main/docs/architecture)
+- DSD-first SSR with selective upgrade, and explicit foreign-WC admission — the corpus pins the observed SSR form and admission of each third-party library kind as machine-readable evidence. [Third-party WC interop corpus](https://github.com/open-element/openelement/blob/main/fixtures/web-component-interop/corpus.json)
+- Browser and packaged-artifact qualification — candidate releases prove Chromium, Firefox and WebKit, and consumers build from packed public artifacts. [Release procedure](https://github.com/open-element/openelement/blob/main/docs/maintainers/releasing.md)
+- A composable provider stack instead of framework-owned Auth or database packages — verified end to end by the first-party SaaS consumer. [Supabase × Cloudflare SaaS](https://github.com/open-element/openelement/tree/main/apps/saas)
 
 ## Sources and review scope
 

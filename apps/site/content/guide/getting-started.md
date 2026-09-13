@@ -4,19 +4,19 @@ lede: 'OpenElement is a Web Components-native, static-first application framewor
 order: 1
 ---
 
-> The current source line is `{{OPENELEMENT_VERSION}}`, a public prerelease published under dist-tag `beta`; npm `latest` remains the stable 0.43 line, carrying the ADR-0119 static freeze, the ADR-0122 application-loop freeze and the 0.43 Universal WC SSR contract.
+> `1.0.0-alpha.1` is the new baseline: a public prerelease published under the npm `alpha` dist-tag. There is no supported migration from 0.x — start new projects from `@openelement/create`.
 
 ## Install
 
 Three commands to a running app:
 
 ```bash
-deno run -A --minimum-dependency-age 0 npm:@openelement/create my-app
+deno run -A --minimum-dependency-age 0 npm:@openelement/create@alpha my-app
 cd my-app
 deno task dev
 ```
 
-The default dist-tag is the stable 0.43 line. `--minimum-dependency-age 0` keeps the bootstrap usable during the first day after a compatible patch is published, when Deno's default `minimumDependencyAge` would otherwise refuse it.
+The `@alpha` dist-tag tracks the 1.0 prerelease line. `--minimum-dependency-age 0` keeps the bootstrap usable during the first day after a compatible patch is published, when Deno's default `minimumDependencyAge` would otherwise refuse it.
 
 > Deno 2.8+ is required — the generated starter writes the `minimumDependencyAge` config key, which older Deno versions do not understand.
 

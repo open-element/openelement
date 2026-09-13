@@ -11,7 +11,7 @@
 
 import { expect, test } from '@playwright/test';
 import process from 'node:process';
-import { deepQueryAllInPage } from '../../tools/lib/shadow-walker.ts';
+import { deepQueryAllInPage } from '../../../tools/lib/shadow-walker.ts';
 
 // CI runners are fast and deterministic; local Windows dev boxes can be
 // much slower, so relax the load-time ceiling outside of CI.
