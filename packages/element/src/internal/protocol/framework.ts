@@ -178,9 +178,10 @@ export interface FrameworkOptions {
       }
     >;
     /**
-     * @dangerous fragments injected as-is. Trust boundary: never concatenate
-     * unsanitized user-controlled content into these fragments; they are
-     * sanitized against a <head> allow-list, not a general HTML sanitizer.
+     * @dangerous fragments injected as-is. Trust boundary (same level as
+     * `trustedHtml`): never concatenate user-controlled content into these
+     * fragments; sanitize untrusted data at your own system boundary first.
+     * The framework only enforces no-`<script>` and no-executable-`<style>`.
      */
     headFragments?: string[];
   };

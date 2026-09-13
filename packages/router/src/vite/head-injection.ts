@@ -15,45 +15,23 @@ import type { FrameworkOptions } from './internal/protocol/framework.ts';
 import { OpenElementError } from '@openelement/element';
 import { escapeAttr as escapeHtmlAttr } from '@openelement/element';
 import { createLogger, isSafeAttributeName } from '@openelement/element';
-import { sanitizeHtml, type SanitizeOptions } from '@openelement/element/sanitize';
 
 const log = createLogger('router-vite:head-injection');
 
-const SAFE_SCHEMES = ['http', 'https', 'mailto', 'tel', 'sms'];
-const HEAD_SANITIZE_OPTIONS: SanitizeOptions = {
-  // <base> is excluded: it can hijack every relative URL in the document.
-  allowedTags: ['link', 'meta', 'noscript', 'title'],
-  allowedAttributes: {
-    link: [
-      'as',
-      'crossorigin',
-      'href',
-      'hreflang',
-      'imagesizes',
-      'imagesrcset',
-      'integrity',
-      'media',
-      'referrerpolicy',
-      'rel',
-      'sizes',
-      'title',
-      'type',
-    ],
-    // http-equiv is excluded because http-equiv="refresh" enables open redirects.
-    // charset/viewport/name/
-    // property metas do not need it; CSP metas are emitted by the SSG
-    // postprocess, not through this allow-list.
-    meta: ['charset', 'content', 'name', 'property'],
-    noscript: [],
-    title: [],
-  },
-  allowedSchemes: SAFE_SCHEMES,
-  disallowedTagsMode: 'discard',
-  allowDangerousTags: ['link', 'meta', 'noscript'],
-  allowProtocolRelative: false,
-  voidElementStyle: 'xhtml',
-};
-
+/**
+ * Trust boundary for raw head markup (`headExtras`, `inject.headFragments`).
+ *
+ * These fragments are developer-authored trusted input at the same trust level
+ * as `trustedHtml`: the framework passes them through verbatim and does NOT
+ * sanitize them. Never concatenate untrusted content (user input, CMS output,
+ * third-party HTML) into these fragments; sanitize such data at your own
+ * system boundary before it reaches the framework.
+ *
+ * Two fail-closed invariants are still enforced on every fragment:
+ * - no `<script>` tags (use the structured `inject.scripts` API instead);
+ * - `<style>` blocks must not carry executable CSS (`@import`, `javascript:`
+ *   URLs, …) or event-handler attributes.
+ */
 /** Fold CSS escapes and strip comments so the blacklist below cannot be
  *  bypassed by `@\69mport`, `@im/**\/port`, or `u\72l(...)`. */
 function foldCssForCheck(css: string): string {
@@ -66,7 +44,7 @@ function foldCssForCheck(css: string): string {
     .replace(/\\(.)/g, '$1');
 }
 
-function sanitizeStyleTag(attributes: string, css: string, context: string): string {
+function assertStyleTag(attributes: string, css: string, context: string): string {
   if (
     /(?:@import|expression\s*\(|url\s*\(\s*["']?\s*(?:javascript|data|vbscript|file)\s*:)/i.test(
       foldCssForCheck(css),
@@ -106,26 +84,13 @@ function sanitizeStyleTag(attributes: string, css: string, context: string): str
   return `<style${rendered.length ? ` ${rendered.join(' ')}` : ''}>${css}</style>`;
 }
 
-function sanitizeHeadHtml(html: string, context: string): string {
-  const styles: string[] = [];
-  let marker = '__OPEN_ELEMENT_SAFE_STYLE_';
-  while (html.includes(marker)) marker += '_';
-  const withoutStyles = html.replace(
+function assertTrustedHeadHtml(html: string, context: string): string {
+  const checked = html.replace(
     /<style\b([^>]*)>([\s\S]*?)<\/style\s*>/gi,
-    (_, attrs, css) => {
-      const index = styles.push(sanitizeStyleTag(attrs, css, context)) - 1;
-      return `${marker}${index}__`;
-    },
+    (_, attrs, css) => assertStyleTag(attrs, css, context),
   );
-  let sanitized = sanitizeHtml(withoutStyles, HEAD_SANITIZE_OPTIONS);
-  sanitized = sanitized.replace(
-    new RegExp(`${marker}(\\d+)__`, 'g'),
-    (_, index) => styles[Number(index)],
-  );
-  if (sanitized.trim() !== html.trim()) {
-    log.warn(`${context} contained unsafe head markup; sanitized before injection`);
-  }
-  return sanitized;
+  void checked;
+  return html;
 }
 
 function assertSafeAttributeName(name: string, context: string): void {
@@ -249,7 +214,7 @@ export function buildHeadExtras(options: FrameworkOptions): HeadExtrasResult {
   if (options.headExtras) {
     assertNoScriptTags(options.headExtras, 'headExtras');
     return {
-      headExtras: sanitizeHeadHtml(options.headExtras, 'headExtras'),
+      headExtras: assertTrustedHeadHtml(options.headExtras, 'headExtras'),
       allowHeadExtrasScripts: false,
     };
   }
@@ -265,7 +230,7 @@ export function buildHeadExtras(options: FrameworkOptions): HeadExtrasResult {
   // before scripts that reference them (e.g. theme-init.js removes anti-flash).
   for (const frag of options.inject.headFragments || []) {
     assertNoScriptTags(frag, 'inject.headFragments');
-    fragments.push(sanitizeHeadHtml(frag, 'inject.headFragments'));
+    fragments.push(assertTrustedHeadHtml(frag, 'inject.headFragments'));
   }
 
   // Stylesheets second

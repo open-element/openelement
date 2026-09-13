@@ -136,7 +136,6 @@ const ELEMENT_ENTRIES = [
   '@openelement/element',
   '@openelement/element/jsx-runtime',
   '@openelement/element/jsx-dev-runtime',
-  '@openelement/element/sanitize',
   '@openelement/element/authoring',
   '@openelement/element/html',
   '@openelement/element/logger',

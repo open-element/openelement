@@ -4,7 +4,7 @@
  * The site's article collections used to be served by the adapter's Vite
  * content plugin. That adapter dissolved into the packages (ADR-0148), and the
  * site only ever needed the build-time half of it: parse frontmatter, validate
- * it against a declarative schema, render Markdown, sanitize, and emit a typed
+ * it against a declarative schema, render Markdown, and emit a typed
  * data module. That build-time half lives here.
  *
  * The schema shape is unchanged from the adapter so `content-collections.ts`
@@ -13,7 +13,6 @@
  * routes and tests consume.
  */
 
-import { sanitizeHtml, type SanitizeOptions } from '@openelement/element/sanitize';
 import matter from 'gray-matter';
 import { marked } from 'marked';
 
@@ -59,7 +58,7 @@ export interface CollectionOptions {
   contentDir: string;
   basePath?: string;
   schema?: CollectionSchema;
-  /** Custom Markdown renderer; its output still crosses the shared sanitizer. */
+  /** Custom Markdown renderer for first-party collection content (see trust note below). */
   markdown?: (content: string) => string | Promise<string>;
 }
 
@@ -91,67 +90,17 @@ export interface BlogPost {
   html: string;
 }
 
-/** ADR-0126: the single shared allow-list for every Markdown collection. */
-export const CONTENT_SANITIZE_OPTIONS: SanitizeOptions = {
-  allowedTags: [
-    'p',
-    'a',
-    'code',
-    'pre',
-    'ul',
-    'ol',
-    'li',
-    'h1',
-    'h2',
-    'h3',
-    'h4',
-    'h5',
-    'h6',
-    'blockquote',
-    'strong',
-    'em',
-    'b',
-    'i',
-    's',
-    'del',
-    'ins',
-    'table',
-    'thead',
-    'tbody',
-    'tr',
-    'th',
-    'td',
-    'br',
-    'hr',
-    'img',
-    'figure',
-    'figcaption',
-    'details',
-    'summary',
-    'sup',
-    'sub',
-    'abbr',
-    'input',
-  ],
-  allowedAttributes: {
-    '*': ['class', 'id'],
-    a: ['href', 'title', 'target', 'rel'],
-    img: ['src', 'alt', 'title', 'width', 'height'],
-    td: ['colspan', 'rowspan'],
-    th: ['colspan', 'rowspan'],
-    code: ['language', 'data-language'],
-    input: ['type', 'disabled', 'checked'],
-    abbr: ['title'],
-  },
-  allowedSchemes: ['http', 'https', 'mailto', '#', 'relative'],
-  disallowedTagsMode: 'discard',
-  allowDangerousTags: ['details', 'summary', 'input'],
-  linkRel: ['noopener', 'noreferrer'],
-  voidElementStyle: 'xhtml',
-};
-
-export function sanitizeContentHtml(html: string): string {
-  return sanitizeHtml(html, CONTENT_SANITIZE_OPTIONS);
+/** Trust boundary for collection HTML.
+ *
+ * Collection sources are first-party repository files (`www/content/**`); the
+ * rendered Markdown is emitted as-is at the same trust level as `trustedHtml`.
+ * Do NOT point a collection at untrusted input (user uploads, CMS output,
+ * third-party HTML) without sanitizing that data at your own system boundary
+ * before it reaches the collection loader: this module provides no HTML
+ * sanitizer.
+ */
+export function trustCollectionHtml(html: string): string {
+  return html;
 }
 
 function definition(
@@ -250,7 +199,7 @@ export async function loadCollectionData(
         : {}),
       frontmatter: result.frontmatter,
       content: parsed.content,
-      html: sanitizeContentHtml(renderedMarkdown),
+      html: trustCollectionHtml(renderedMarkdown),
     });
   }
   return entries;

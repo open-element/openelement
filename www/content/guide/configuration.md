@@ -6,7 +6,7 @@ order: 70
 
 ## openPipeline()
 
-The lean Vite plugin entry, configured in `vite.config.ts`: `openPipeline({ mode, routes: { dir }, island: { dir, upgradeStrategy }, output: { outDir }, viewTransition, headExtras })`. Defaults: routes `app/routes`, islands `app/islands`, components `app/components`, `viewTransition` on. `headExtras` is sanitized on injection against a head allowlist — only `link`/`meta`/`noscript`/`title` survive, `base` and `meta http-equiv` are stripped, and `script` tags are rejected outright (use `inject.scripts` for scripts) (#931; frozen under ADR-0122).
+The lean Vite plugin entry, configured in `vite.config.ts`: `openPipeline({ mode, routes: { dir }, island: { dir, upgradeStrategy }, output: { outDir }, viewTransition, headExtras })`. Defaults: routes `app/routes`, islands `app/islands`, components `app/components`, `viewTransition` on. `headExtras` is developer-trusted input passed through verbatim at the `trustedHtml` trust level — the framework does not sanitize it. `<script>` tags are rejected outright (use `inject.scripts` for scripts), and `<style>` blocks must not carry executable CSS; anything else, including `base` and `meta http-equiv`, is the fragment author's responsibility (#931).
 
 ### vite.config.ts
 
@@ -33,7 +33,7 @@ export default defineConfig({
 
 ## Content collections are site-owned
 
-The 1.0 router ships routing, locale/render context, the SSG descriptor and Document ownership — not a CMS or content database. A site owns its Markdown pipeline. This repository's reference site validates frontmatter against declarative schemas, renders with `marked`, sanitizes with `sanitizeHtml` from `@openelement/element/sanitize` (`www/lib/content.ts`), defines collections in `www/lib/blog.ts`, and writes typed data modules with `tools/generate-www-content-data.ts`:
+The 1.0 router ships routing, locale/render context, the SSG descriptor and Document ownership — not a CMS or content database. A site owns its Markdown pipeline. This repository's reference site validates frontmatter against declarative schemas, renders with `marked`, treats the rendered HTML as first-party trusted content (`trustCollectionHtml` in `www/lib/content.ts`, `trustedHtml` trust level — untrusted sources must be sanitized at your own boundary first), defines collections in `www/lib/blog.ts`, and writes typed data modules with `tools/generate-www-content-data.ts`:
 
 ```sh
 deno task generate:www-content-data   # www:build runs this before the router build
@@ -120,7 +120,7 @@ export default definePage(BlogPostPage, {
 
 ## Code-block highlighting (optional)
 
-The site-owned collection loader renders fenced blocks as `<pre><code class="language-x">` with no token-level colors. A collection's `markdown` option replaces the renderer; its output still crosses the shared sanitizer allow-list (`sanitizeHtml` in `www/lib/content.ts`), and hljs spans only add `class` attributes, which pass untouched. For code blocks in routes/pages, wrap them in `<open-code-block>` (`@openelement/ui`) — it highlights via a global Prism that your page must load (core + language grammars, e.g. the CDN scripts this site injects in `www/vite.config.ts`); without Prism you get the copy button but no token spans.
+The site-owned collection loader renders fenced blocks as `<pre><code class="language-x">` with no token-level colors. A collection's `markdown` option replaces the renderer; its output is still first-party trusted content, and hljs spans only add `class` attributes. For code blocks in routes/pages, wrap them in `<open-code-block>` (`@openelement/ui`) — it highlights via a global Prism that your page must load (core + language grammars, e.g. the CDN scripts this site injects in `www/vite.config.ts`); without Prism you get the copy button but no token spans.
 
 ### lib/blog.ts — syntax highlighting recipe (optional, #930)
 
@@ -130,7 +130,7 @@ import hljs from 'npm:highlight.js@^11';
 import type { CollectionOptions } from '../lib/content.ts';
 
 // Default marked behavior + hljs token spans. hljs output only adds class
-// attributes to <code>, which the sanitizer allowlist keeps.
+// attributes to <code>.
 const markdown = (content: string) =>
   marked(content, {
     async: true,
@@ -150,7 +150,7 @@ export const blogCollection: CollectionOptions = {
 };
 ```
 
-Custom renderer output still passes the same sanitizer allowlist (class attributes are kept).
+Custom renderer output stays within the same first-party trust boundary.
 
 ## middleware.use
 

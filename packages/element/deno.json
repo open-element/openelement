@@ -5,7 +5,6 @@
     ".": "./src/index.ts",
     "./jsx-runtime": "./src/jsx-runtime.ts",
     "./jsx-dev-runtime": "./src/jsx-dev-runtime.ts",
-    "./sanitize": "./src/sanitize.ts",
     "./authoring": "./src/authoring.ts",
     "./html": "./src/html.ts",
     "./logger": "./src/logger.ts",
@@ -33,9 +32,9 @@
     ]
   },
   "tasks": {
-    "build": "deno check src/index.ts src/jsx-runtime.ts src/jsx-dev-runtime.ts src/sanitize.ts src/authoring.ts src/html.ts src/logger.ts src/build-utils.ts src/compiler.ts src/vite.ts",
+    "build": "deno check src/index.ts src/jsx-runtime.ts src/jsx-dev-runtime.ts src/authoring.ts src/html.ts src/logger.ts src/build-utils.ts src/compiler.ts src/vite.ts",
     "lint": "deno lint src/ __tests__/",
-    "typecheck": "deno check src/index.ts src/jsx-runtime.ts src/jsx-dev-runtime.ts src/sanitize.ts src/authoring.ts src/html.ts src/logger.ts src/build-utils.ts src/compiler.ts src/vite.ts",
+    "typecheck": "deno check src/index.ts src/jsx-runtime.ts src/jsx-dev-runtime.ts src/authoring.ts src/html.ts src/logger.ts src/build-utils.ts src/compiler.ts src/vite.ts",
     "test": "deno test --allow-read --allow-write --allow-env --allow-net --allow-run __tests__/",
     "test:ci": "deno test --allow-read --allow-write --allow-env --allow-net --allow-run --coverage --junit-path=test-results.xml __tests__/"
   },

@@ -213,12 +213,17 @@ Deno.test('buildHeadExtras: returns headExtras directly when provided', () => {
   assertEquals(result.allowHeadExtrasScripts, false);
 });
 
-Deno.test('buildHeadExtras: sanitizes unsafe direct headExtras markup', () => {
+Deno.test('buildHeadExtras: passes trusted headExtras markup through verbatim', () => {
+  // Raw head markup is developer-trusted input (trustedHtml trust level): the
+  // framework does not sanitize it. Untrusted data must be sanitized at the
+  // consumer system boundary before it reaches the framework.
   const result = buildHeadExtras({
-    headExtras: '<meta name="x" content="ok"><link rel="stylesheet" href="javascript:bad">',
+    headExtras: '<meta name="x" content="ok"><link rel="stylesheet" href="/app.css">',
   });
-  assertStringIncludes(result.headExtras!, '<meta name="x" content="ok" />');
-  assertEquals(result.headExtras!.includes('javascript:'), false);
+  assertEquals(
+    result.headExtras,
+    '<meta name="x" content="ok"><link rel="stylesheet" href="/app.css">',
+  );
 });
 
 Deno.test('buildHeadExtras: preserves style through restricted style path', () => {
@@ -443,7 +448,7 @@ Deno.test('buildHeadExtras: headFragments are included verbatim', () => {
       headFragments: ['<meta name="theme-color" content="#000">'],
     },
   });
-  assertStringIncludes(result.headExtras!, '<meta name="theme-color" content="#000" />');
+  assertEquals(result.headExtras, '<meta name="theme-color" content="#000">');
 });
 
 Deno.test('buildHeadExtras: headFragments reject script tags', () => {
@@ -459,15 +464,13 @@ Deno.test('buildHeadExtras: headFragments reject script tags', () => {
   );
 });
 
-Deno.test('buildHeadExtras: sanitizes unsafe headFragments markup', () => {
+Deno.test('buildHeadExtras: passes trusted headFragments through verbatim', () => {
   const result = buildHeadExtras({
     inject: {
-      headFragments: ['<meta name="x" content="ok"><img src=x onerror=alert(1)>'],
+      headFragments: ['<meta name="x" content="ok">'],
     },
   });
-  assertStringIncludes(result.headExtras!, '<meta name="x" content="ok" />');
-  assertEquals(result.headExtras!.includes('<img'), false);
-  assertEquals(result.headExtras!.includes('onerror'), false);
+  assertEquals(result.headExtras, '<meta name="x" content="ok">');
 });
 
 Deno.test('buildHeadExtras: order is headFragments → stylesheets → scripts', () => {
@@ -500,7 +503,7 @@ Deno.test('buildHeadExtras: full inject with all three types', () => {
       ],
     },
   });
-  assertStringIncludes(result.headExtras!, '<meta charset="utf-8" />');
+  assertStringIncludes(result.headExtras!, '<meta charset="utf-8">');
   assertStringIncludes(result.headExtras!, '<meta name="viewport"');
   assertStringIncludes(result.headExtras!, 'base.css');
   assertStringIncludes(result.headExtras!, 'theme.css');
@@ -545,21 +548,24 @@ Deno.test('buildHeadExtras: returns empty string for inject with no items', () =
   assertEquals(result.headExtras, '');
 });
 
-Deno.test('buildHeadExtras: strips meta http-equiv (blocks refresh open redirect)', () => {
+Deno.test('buildHeadExtras: trusted headExtras are not rewritten (no implicit sanitizer)', () => {
+  // http-equiv/base handling is the fragment author's responsibility: raw head
+  // markup is trusted developer input, not an untrusted-HTML sanitization
+  // boundary. A refresh redirect here can only come from the app's own config.
   const result = buildHeadExtras({
-    headExtras: '<meta http-equiv="refresh" content="0;url=https://evil.example/">',
+    headExtras: '<meta http-equiv="refresh" content="0;url=https://example.com/home">',
   });
-  // The http-equiv attribute must not survive; the leftover meta is inert.
-  assertEquals(result.headExtras!.includes('http-equiv'), false);
+  assertEquals(
+    result.headExtras,
+    '<meta http-equiv="refresh" content="0;url=https://example.com/home">',
+  );
 });
 
-Deno.test('buildHeadExtras: removes <base> tags entirely (relative-URL hijack)', () => {
+Deno.test('buildHeadExtras: trusted headExtras keep author-controlled base tags', () => {
   const result = buildHeadExtras({
-    headExtras: '<base href="https://evil.example/"><meta charset="utf-8">',
+    headExtras: '<base href="/docs/"><meta charset="utf-8">',
   });
-  assertEquals(result.headExtras!.includes('<base'), false);
-  assertEquals(result.headExtras!.includes('evil.example'), false);
-  assertStringIncludes(result.headExtras!, '<meta charset="utf-8" />');
+  assertEquals(result.headExtras, '<base href="/docs/"><meta charset="utf-8">');
 });
 
 Deno.test('buildHeadExtras: keeps charset and viewport metas', () => {
@@ -571,7 +577,7 @@ Deno.test('buildHeadExtras: keeps charset and viewport metas', () => {
       ],
     },
   });
-  assertStringIncludes(result.headExtras!, '<meta charset="utf-8" />');
+  assertStringIncludes(result.headExtras!, '<meta charset="utf-8">');
   assertStringIncludes(result.headExtras!, 'name="viewport"');
 });
 

@@ -42,10 +42,6 @@ export function escapeHtml(str: string): string {
  * Delegates to `escapeHtml` so both share the single `ESCAPE_MAP` and the
  * same single-pass replacement (consolidated in v0.42.0-alpha.9, #633).
  *
- * Twin: sanitize.ts has its own escapeAttr with a deliberately different
- * entity-preservation contract — do not consolidate (see the note at
- * sanitize.ts:161).
- *
  * Empty-value conventions remain intentionally distinct by design:
  * - `escapeHtml` returns '' for non-string input.
  * - `escapeAttrValue` (below) coerces via `String()` and is the boundary
@@ -63,7 +59,7 @@ export function escapeAttrValue(value: unknown): string {
 
 /**
  * HTML void elements — the ONE canonical tag set for every serializer,
- * sanitizer, validator, and compiler in the workspace (issue #1220, M4).
+ * validator, and compiler in the workspace (issue #1220, M4).
  * Content is the full HTML Standard void-element list, `param` included.
  *
  * The mirrored Part Program exchange artifacts (`internal/compiled/program.ts`

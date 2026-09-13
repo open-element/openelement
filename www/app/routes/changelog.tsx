@@ -1,7 +1,6 @@
 /** Changelog route: request projection and build-time Markdown loading. */
 import { definePage } from '@openelement/router';
 import { trustedHtml } from '@openelement/element';
-import { sanitizeHtml } from '@openelement/element/sanitize';
 import { siteHead } from '@openelement/site-ui/head.ts';
 import { contentLocale } from '@openelement/site-ui/locale.ts';
 import { localizePath } from '@openelement/site-ui/link.ts';
@@ -95,7 +94,9 @@ function loadChangelogHtml(loadError: string): string {
         '](./',
         '](https://github.com/open-element/openelement/tree/main/',
       );
-    return sanitizeHtml(marked.parse(markdown, { async: false }) as string);
+    // CHANGELOG.md is a first-party repository file: trustedHtml trust level.
+    // Do not feed untrusted Markdown here without sanitizing it first.
+    return marked.parse(markdown, { async: false }) as string;
   } catch {
     return loadError;
   }

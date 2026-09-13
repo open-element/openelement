@@ -54,6 +54,6 @@ export default async function csrfGuard(c: Context, next: Next) {
 
 `middleware.corsOrigin` (the `openElement()` option) governs cross-origin resource sharing only — it is not a CSRF check. The two compose: CORS for reads, this guard for writes. Guards that do not need the Hono context can also ride `middleware.use` — the dialect-free fetch middleware chain composed at the handler boundary with identical dev/start/Nitro semantics (see [Configuration → middleware.use](/guide/configuration#middleware-use)).
 
-## Safe HTML by default
+## HTML trust boundary
 
-Render untrusted HTML fragments (markdown output, CMS content, third-party HTML) through `sanitizeHtml` from `@openelement/element/sanitize` — an allow-list sanitizer with a decode-then-revalidate URL scheme policy (ADR-0126). Use `trustedHtml` only when you sanitized upstream; it is a trust boundary, not a sanitizer.
+`trustedHtml` is the framework's explicit trust boundary for HTML: only values created by `trustedHtml()` reach `html` Parts and `innerHTML` sinks — ordinary strings are rejected at render time. The framework ships no HTML sanitizer, so sanitize untrusted fragments (user input, CMS output, third-party HTML) at your own system boundary, before the data enters the framework. Raw head fragments (`headExtras`, `inject.headFragments`) are likewise developer-trusted input; the framework enforces only no-`<script>` and no-executable-`<style>`.

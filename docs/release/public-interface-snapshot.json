@@ -12,7 +12,6 @@
         "./jsx-dev-runtime": "./src/jsx-dev-runtime.ts",
         "./jsx-runtime": "./src/jsx-runtime.ts",
         "./logger": "./src/logger.ts",
-        "./sanitize": "./src/sanitize.ts",
         "./vite": "./src/vite.ts"
       },
       "declarations": {
@@ -185,14 +184,6 @@
             "createLogger=value:{call:(tag:string)=>{debug:{call:(msg:string,...args:array(unknown))=>void};error:{call:(msg:string,...args:array(unknown))=>void};info:{call:(msg:string,...args:array(unknown))=>void};warn:{call:(msg:string,...args:array(unknown))=>void}}}",
             "createWarnScope=value:{call:()=>{warned:Set<string>}}",
             "warnOnce=value:{call:(key:string,logger:{debug:{call:(msg:string,...args:array(unknown))=>void};error:{call:(msg:string,...args:array(unknown))=>void};info:{call:(msg:string,...args:array(unknown))=>void};warn:{call:(msg:string,...args:array(unknown))=>void}},msg:string,scope:union(undefined|{warned:Set<string>}))=>void}"
-          ]
-        },
-        "./sanitize": {
-          "publicShapeSha256": "f7ad8f6a778c621b2f7205b83ddfbd524eb46369dad2d0aa448d4220a5c36cc1",
-          "publicSymbols": [
-            "SanitizeOptions=type:{allowDangerousTags?:union(array(string)|undefined);allowProtocolRelative?:union(false|true|undefined);allowedAttributes?:union(Record<string, readonly string[]>|undefined);allowedSchemes?:union(array(string)|undefined);allowedTags?:union(array(string)|undefined);disallowedTagsMode?:union(\"discard\"|\"keepText\"|undefined);linkRel?:union(array(string)|undefined);voidElementStyle?:union(\"html\"|\"xhtml\"|undefined)}",
-            "isSafeUrl=value:{call:(value:string,allowedSchemes:ReadonlySet<string>,allowDataImages:union(false|true))=>union(false|true)}",
-            "sanitizeHtml=value:{call:(input:string,options:{allowDangerousTags?:union(array(string)|undefined);allowProtocolRelative?:union(false|true|undefined);allowedAttributes?:union(Record<string, readonly string[]>|undefined);allowedSchemes?:union(array(string)|undefined);allowedTags?:union(array(string)|undefined);disallowedTagsMode?:union(\"discard\"|\"keepText\"|undefined);linkRel?:union(array(string)|undefined);voidElementStyle?:union(\"html\"|\"xhtml\"|undefined)})=>string}"
           ]
         },
         "./vite": {

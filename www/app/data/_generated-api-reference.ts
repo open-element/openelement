@@ -17,7 +17,6 @@ export const apiReference = {
         "./jsx-dev-runtime",
         "./jsx-runtime",
         "./logger",
-        "./sanitize",
         "./vite"
       ],
       "internalSubpaths": [],
@@ -109,7 +108,7 @@ export const apiReference = {
               "summary": "",
               "source": {
                 "path": "packages/element/src/internal/protocol/framework.ts",
-                "line": 233
+                "line": 234
               },
               "stability": "public",
               "anchor": "api-element-root-CompatibilityClassification"
@@ -120,7 +119,7 @@ export const apiReference = {
               "summary": "",
               "source": {
                 "path": "packages/element/src/internal/protocol/framework.ts",
-                "line": 231
+                "line": 232
               },
               "stability": "public",
               "anchor": "api-element-root-CompatibilityTier"
@@ -293,10 +292,10 @@ export const apiReference = {
             {
               "name": "escapeAttr",
               "kind": "function",
-              "summary": "Escape an HTML attribute value. Delegates to `escapeHtml` so both share the single `ESCAPE_MAP` and the same single-pass replacement (consolidated in v0.42.0-alpha.9, #633). Twin: sanitize.ts has its own escapeAttr with a deliberately different entity-preservation contract — do not consolidate (see the note at sanitize.ts:161). Empty-value conventions remain intentionally distinct by design: - `escapeHtml` returns '' for non-string input. - `escapeAttrValue` (below) coerces via `String()` and is the boundary meant for unknown/variable attribute values.",
+              "summary": "Escape an HTML attribute value. Delegates to `escapeHtml` so both share the single `ESCAPE_MAP` and the same single-pass replacement (consolidated in v0.42.0-alpha.9, #633). Empty-value conventions remain intentionally distinct by design: - `escapeHtml` returns '' for non-string input. - `escapeAttrValue` (below) coerces via `String()` and is the boundary meant for unknown/variable attribute values.",
               "source": {
                 "path": "packages/element/src/internal/core/html-escape.ts",
-                "line": 54
+                "line": 50
               },
               "stability": "public",
               "anchor": "api-element-root-escapeAttr"
@@ -868,7 +867,7 @@ export const apiReference = {
               "summary": "Wrap rendered HTML in a full HTML document. Adds DOCTYPE, head (title, meta, preload), and body. Supports CSP nonce and dev scripts (e.g. Vite client, route module registration).",
               "source": {
                 "path": "packages/element/src/internal/core/html-escape.ts",
-                "line": 98
+                "line": 94
               },
               "stability": "public",
               "anchor": "api-element-root-wrapInDocument"
@@ -1274,10 +1273,10 @@ export const apiReference = {
             {
               "name": "escapeAttr",
               "kind": "function",
-              "summary": "Escape an HTML attribute value. Delegates to `escapeHtml` so both share the single `ESCAPE_MAP` and the same single-pass replacement (consolidated in v0.42.0-alpha.9, #633). Twin: sanitize.ts has its own escapeAttr with a deliberately different entity-preservation contract — do not consolidate (see the note at sanitize.ts:161). Empty-value conventions remain intentionally distinct by design: - `escapeHtml` returns '' for non-string input. - `escapeAttrValue` (below) coerces via `String()` and is the boundary meant for unknown/variable attribute values.",
+              "summary": "Escape an HTML attribute value. Delegates to `escapeHtml` so both share the single `ESCAPE_MAP` and the same single-pass replacement (consolidated in v0.42.0-alpha.9, #633). Empty-value conventions remain intentionally distinct by design: - `escapeHtml` returns '' for non-string input. - `escapeAttrValue` (below) coerces via `String()` and is the boundary meant for unknown/variable attribute values.",
               "source": {
                 "path": "packages/element/src/internal/core/html-escape.ts",
-                "line": 54
+                "line": 50
               },
               "stability": "public",
               "anchor": "api-element-html-escapeAttr"
@@ -1288,7 +1287,7 @@ export const apiReference = {
               "summary": "Escape a string for use as an attribute value (double-quoted)",
               "source": {
                 "path": "packages/element/src/internal/core/html-escape.ts",
-                "line": 59
+                "line": 55
               },
               "stability": "public",
               "anchor": "api-element-html-escapeAttrValue"
@@ -1354,7 +1353,7 @@ export const apiReference = {
               "summary": "Wrap rendered HTML in a full HTML document. Adds DOCTYPE, head (title, meta, preload), and body. Supports CSP nonce and dev scripts (e.g. Vite client, route module registration).",
               "source": {
                 "path": "packages/element/src/internal/core/html-escape.ts",
-                "line": 98
+                "line": 94
               },
               "stability": "public",
               "anchor": "api-element-html-wrapInDocument"
@@ -1508,45 +1507,6 @@ export const apiReference = {
               },
               "stability": "public",
               "anchor": "api-element-logger-WarnScope"
-            }
-          ]
-        },
-        {
-          "subpath": "./sanitize",
-          "label": "./sanitize",
-          "exports": [
-            {
-              "name": "isSafeUrl",
-              "kind": "function",
-              "summary": "URL scheme policy (ADR-0126): reject anything that could become an executable scheme after browser-side parsing. - Numeric entities are decoded first (they can forge scheme characters). - Any entity reference (named or raw `&`) before the first `:` means the scheme could be forged by characters we do not decode — reject. - Otherwise the prefix before the first `:` must be exactly an allowed scheme; control characters in the prefix are rejected (the WHATWG URL parser strips tabs/newlines before resolving — we stay conservative).",
-              "source": {
-                "path": "packages/element/src/sanitize.ts",
-                "line": 236
-              },
-              "stability": "public",
-              "anchor": "api-element-sanitize-isSafeUrl"
-            },
-            {
-              "name": "sanitizeHtml",
-              "kind": "function",
-              "summary": "Sanitize untrusted HTML against the allow-list (ADR-0126). See `SanitizeOptions` for policy knobs. The defaults match common safe content: prose, lists, tables, images (http/https/data:image), links (http/https/mailto/tel/sms) with forced `rel=\"noopener noreferrer\"` on `_blank` targets.",
-              "source": {
-                "path": "packages/element/src/sanitize.ts",
-                "line": 353
-              },
-              "stability": "public",
-              "anchor": "api-element-sanitize-sanitizeHtml"
-            },
-            {
-              "name": "SanitizeOptions",
-              "kind": "interface",
-              "summary": "Per-tag attribute allow-list; '*' applies to every tag.",
-              "source": {
-                "path": "packages/element/src/sanitize.ts",
-                "line": 26
-              },
-              "stability": "public",
-              "anchor": "api-element-sanitize-SanitizeOptions"
             }
           ]
         },
@@ -2272,7 +2232,7 @@ export const apiReference = {
               "summary": "",
               "source": {
                 "path": "packages/router/src/internal/router/route-table.ts",
-                "line": 22
+                "line": 21
               },
               "stability": "public",
               "anchor": "api-router-router-RouteMatch"
@@ -2283,7 +2243,7 @@ export const apiReference = {
               "summary": "",
               "source": {
                 "path": "packages/router/src/internal/router/route-table.ts",
-                "line": 14
+                "line": 13
               },
               "stability": "public",
               "anchor": "api-router-router-RouteRecord"
@@ -2294,7 +2254,7 @@ export const apiReference = {
               "summary": "",
               "source": {
                 "path": "packages/router/src/internal/router/route-table.ts",
-                "line": 30
+                "line": 29
               },
               "stability": "public",
               "anchor": "api-router-router-RouteResolution"
@@ -2305,7 +2265,7 @@ export const apiReference = {
               "summary": "",
               "source": {
                 "path": "packages/router/src/internal/router/route-table.ts",
-                "line": 90
+                "line": 102
               },
               "stability": "public",
               "anchor": "api-router-router-RouteTable"
@@ -2316,7 +2276,7 @@ export const apiReference = {
               "summary": "",
               "source": {
                 "path": "packages/router/src/internal/router/route-table.ts",
-                "line": 35
+                "line": 34
               },
               "stability": "public",
               "anchor": "api-router-router-RouteTableOptions"
@@ -2460,7 +2420,7 @@ export const apiReference = {
               "summary": "Build the headExtras string from FrameworkOptions.inject. Serializes headFragments, stylesheets, and scripts into a single HTML string to inject into <head>. Validates all URLs and ensures no raw <script> tags bypass the structured injection APIs.",
               "source": {
                 "path": "packages/router/src/vite/head-injection.ts",
-                "line": 247
+                "line": 212
               },
               "stability": "public",
               "anchor": "api-router-vite-buildHeadExtras"
@@ -2548,7 +2508,7 @@ export const apiReference = {
               "summary": "Result of building head extras from FrameworkOptions.",
               "source": {
                 "path": "packages/router/src/vite/head-injection.ts",
-                "line": 235
+                "line": 200
               },
               "stability": "public",
               "anchor": "api-router-vite-HeadExtrasResult"
@@ -4474,24 +4434,6 @@ export const apiReference = {
       "route": "/apilist",
       "anchor": "api-element-root-wrapInDocument",
       "title": "wrapInDocument (@openelement/element/root)",
-      "kind": "api"
-    },
-    {
-      "route": "/apilist",
-      "anchor": "api-element-sanitize-isSafeUrl",
-      "title": "isSafeUrl (@openelement/element/./sanitize)",
-      "kind": "api"
-    },
-    {
-      "route": "/apilist",
-      "anchor": "api-element-sanitize-sanitizeHtml",
-      "title": "sanitizeHtml (@openelement/element/./sanitize)",
-      "kind": "api"
-    },
-    {
-      "route": "/apilist",
-      "anchor": "api-element-sanitize-SanitizeOptions",
-      "title": "SanitizeOptions (@openelement/element/./sanitize)",
       "kind": "api"
     },
     {

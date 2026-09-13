@@ -14,7 +14,6 @@ export const OPENELEMENT_EXPORT_FILES: Record<string, Record<string, string>> = 
     'jsx-dev-runtime': 'src/jsx-dev-runtime.ts',
     'jsx-runtime': 'src/jsx-runtime.ts',
     'logger': 'src/logger.ts',
-    'sanitize': 'src/sanitize.ts',
     'vite': 'src/vite.ts',
   },
   'router': {

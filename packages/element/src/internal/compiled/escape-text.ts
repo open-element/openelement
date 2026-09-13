@@ -14,8 +14,6 @@
  * this surface:
  * - `escapeAttr`/`escapeHtml` (`internal/core/html-escape.ts`) additionally
  *   escape quotes for the attribute context.
- * - `sanitize.ts` has its own entity-preserving `escapeText` with a
- *   deliberately different contract — do not consolidate.
  */
 export function escapeText(value: string): string {
   return value.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');

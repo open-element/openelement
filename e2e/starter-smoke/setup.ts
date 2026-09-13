@@ -70,7 +70,6 @@ function main(): void {
     '@openelement/element': 'packages/element/src/index.ts',
     '@openelement/element/jsx-runtime': 'packages/element/src/jsx-runtime.ts',
     '@openelement/element/jsx-dev-runtime': 'packages/element/src/jsx-dev-runtime.ts',
-    '@openelement/element/sanitize': 'packages/element/src/sanitize.ts',
     '@openelement/element/build-utils': 'packages/element/src/build-utils.ts',
   };
 

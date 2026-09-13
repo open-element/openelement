@@ -6,7 +6,7 @@ order: 70
 
 ## openPipeline()
 
-精简的 Vite 插件入口，在 `vite.config.ts` 中配置：`openPipeline({ mode, routes: { dir }, island: { dir, upgradeStrategy }, output: { outDir }, viewTransition, headExtras })`。默认值：routes 为 `app/routes`，islands 为 `app/islands`，components 为 `app/components`，`viewTransition` 开启。`headExtras` 注入前按 head allowlist 消毒——仅放行 `link`/`meta`/`noscript`/`title`，`base` 与 `meta http-equiv` 被剔除，`script` 标签直接拒绝（脚本请走 `inject.scripts`）（#931，已按 ADR-0122 冻结）。
+精简的 Vite 插件入口，在 `vite.config.ts` 中配置：`openPipeline({ mode, routes: { dir }, island: { dir, upgradeStrategy }, output: { outDir }, viewTransition, headExtras })`。默认值：routes 为 `app/routes`，islands 为 `app/islands`，components 为 `app/components`，`viewTransition` 开启。`headExtras` 是开发者可信输入，以 `trustedHtml` 信任级别原样透传——框架不做消毒。`script` 标签直接拒绝（脚本请走 `inject.scripts`），`style` 块不得携带可执行 CSS；其余内容（含 `base` 与 `meta http-equiv`）由片段作者负责（#931）。
 
 ### vite.config.ts
 
@@ -33,7 +33,7 @@ export default defineConfig({
 
 ## 内容 collection 归站点所有
 
-1.0 的 router 提供路由、locale/渲染上下文、SSG descriptor 与 Document 归属——不是 CMS，也不是内容数据库。站点的 Markdown 管线由站点自己拥有。本仓库的参考站点用声明式 schema 校验 frontmatter、用 `marked` 渲染、用 `@openelement/element/sanitize` 的 `sanitizeHtml` 清洗（`www/lib/content.ts`），在 `www/lib/blog.ts` 中定义 collection，并用 `tools/generate-www-content-data.ts` 写出带类型的数据模块：
+1.0 的 router 提供路由、locale/渲染上下文、SSG descriptor 与 Document 归属——不是 CMS，也不是内容数据库。站点的 Markdown 管线由站点自己拥有。本仓库的参考站点用声明式 schema 校验 frontmatter、用 `marked` 渲染、把渲染结果视为第一方可信内容（`www/lib/content.ts` 的 `trustCollectionHtml`，`trustedHtml` 信任级别——非可信来源请先在你自己的边界消毒），在 `www/lib/blog.ts` 中定义 collection，并用 `tools/generate-www-content-data.ts` 写出带类型的数据模块：
 
 ```sh
 deno task generate:www-content-data   # www:build 会在 router 构建前先运行
@@ -120,7 +120,7 @@ export default definePage(BlogPostPage, {
 
 ## 代码块语法高亮（可选）
 
-站点自有的 collection loader 把围栏代码块渲染为 `<pre><code class="language-x">`，无 token 级着色。collection 的 `markdown` 选项可以替换 renderer；其输出仍会经过同一道 sanitizer 白名单（`www/lib/content.ts` 的 `sanitizeHtml`），hljs span 只追加 `class` 属性，原样通过。路由/页面里的代码块则用 `<open-code-block>`（`@openelement/ui`）包裹——它通过全局 Prism 高亮，页面必须自行加载 Prism（core + 语言 grammar，参考本站在 `www/vite.config.ts` 注入的 CDN script）；不加载 Prism 就只有 copy 按钮、没有 token 着色。
+站点自有的 collection loader 把围栏代码块渲染为 `<pre><code class="language-x">`，无 token 级着色。collection 的 `markdown` 选项可以替换 renderer；其输出仍是第一方可信内容，hljs span 只追加 `class` 属性。路由/页面里的代码块则用 `<open-code-block>`（`@openelement/ui`）包裹——它通过全局 Prism 高亮，页面必须自行加载 Prism（core + 语言 grammar，参考本站在 `www/vite.config.ts` 注入的 CDN script）；不加载 Prism 就只有 copy 按钮、没有 token 着色。
 
 ### lib/blog.ts —— 语法高亮配方（可选，#930）
 
@@ -130,7 +130,7 @@ import hljs from 'npm:highlight.js@^11';
 import type { CollectionOptions } from '../lib/content.ts';
 
 // Default marked behavior + hljs token spans. hljs output only adds class
-// attributes to <code>, which the sanitizer allowlist keeps.
+// attributes to <code>.
 const markdown = (content: string) =>
   marked(content, {
     async: true,
@@ -150,7 +150,7 @@ export const blogCollection: CollectionOptions = {
 };
 ```
 
-自定义 renderer 的输出仍会经过同一道 sanitizer 白名单（class 属性保留）。
+自定义 renderer 的输出保持在同一第一方信任边界内。
 
 ## middleware.use
 

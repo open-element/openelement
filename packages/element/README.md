@@ -15,7 +15,6 @@ Also includes:
 - `element` / `property` — compile-time-only decorator intrinsics: the compiler admits them by binding provenance and erases them from generated code; evaluated without the compiler they are inert no-ops
 - Signals: `signal`, `computed`, `effect`, and the `Signal` type
 - Context (`createContext` / `provideContext` / `consumeContext`), `StyleSheet`, HTML escaping utilities, and the `trustedHtml` explicit trust boundary
-- `@openelement/element/sanitize` — the `sanitizeHtml` allow-list sanitizer
 
 ## Install
 

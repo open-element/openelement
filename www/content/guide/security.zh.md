@@ -56,4 +56,4 @@ export default async function csrfGuard(c: Context, next: Next) {
 
 ## 默认安全 HTML
 
-渲染不可信 HTML 片段（markdown 输出、CMS 内容、第三方 HTML）时，先经过 `@openelement/element/sanitize` 的 `sanitizeHtml`——基于 allow-list 的消毒器，带「先解码再校验」的 URL scheme 策略（ADR-0126）。只有上游已消毒时才使用 `trustedHtml`：它是信任边界，不是消毒器。
+`trustedHtml` 是框架显式的 HTML 信任边界：只有经 `trustedHtml()` 创建的值才能进入 `html` Part 与 `innerHTML` 接收点——普通字符串会在渲染时被拒绝。框架不提供 HTML 消毒器：不可信片段（用户输入、CMS 输出、第三方 HTML）请在进入框架之前，在你自己的系统边界完成消毒。原始 head 片段（`headExtras`、`inject.headFragments`）同样是开发者可信输入；框架只强制「无 `<script>`、无可执行 `<style>`」两条失败关闭的不变式。
