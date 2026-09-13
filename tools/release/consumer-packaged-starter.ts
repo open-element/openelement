@@ -179,11 +179,17 @@ function findMissingGeneratedImports(
 const PW_STARTER_PROBE_SCRIPT = `import { chromium, firefox, webkit } from '@playwright/test';
 
 const [baseUrl, browserName] = Deno.args;
-const browserTypes = { chromium, firefox, webkit };
-if (!baseUrl || !(browserName in browserTypes)) {
+const browserType = browserName === 'chromium'
+  ? chromium
+  : browserName === 'firefox'
+  ? firefox
+  : browserName === 'webkit'
+  ? webkit
+  : null;
+if (!baseUrl || !browserType) {
   throw new Error('usage: pw-starter-probe.ts <baseUrl> <chromium|firefox|webkit>');
 }
-const browser = await browserTypes[browserName].launch({ headless: true });
+const browser = await browserType.launch({ headless: true });
 try {
   const page = await browser.newPage();
   await page.goto(baseUrl + '/', { waitUntil: 'load' });

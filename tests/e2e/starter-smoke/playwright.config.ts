@@ -40,6 +40,24 @@ export default defineConfig({
     screenshot: 'only-on-failure',
   },
 
+  // The #942 replay contract is a real-browser contract: the interaction
+  // matrix (including the shadow-DSD pre-hydration replay) runs on all
+  // three engines. Serial workers share the one packed starter server.
+  projects: [
+    {
+      name: 'chromium',
+      use: { browserName: 'chromium' },
+    },
+    {
+      name: 'firefox',
+      use: { browserName: 'firefox' },
+    },
+    {
+      name: 'webkit',
+      use: { browserName: 'webkit' },
+    },
+  ],
+
   webServer: {
     command: `exec deno run --config deno.json -A ../../../../../packages/router/src/cli/start.ts`,
     cwd: new URL('./work/my-blog', import.meta.url).pathname,

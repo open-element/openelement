@@ -397,12 +397,18 @@ const [baseUrl, renderer, browserName] = Deno.args;
 if (!baseUrl || (renderer !== 'native' && renderer !== 'lit')) {
   throw new Error('usage: pw-continuation-probe.ts <baseUrl> <native|lit> <browser>');
 }
-const browserTypes = { chromium, firefox, webkit };
-if (!(browserName in browserTypes)) {
+const browserType = browserName === 'chromium'
+  ? chromium
+  : browserName === 'firefox'
+  ? firefox
+  : browserName === 'webkit'
+  ? webkit
+  : null;
+if (!browserType) {
   throw new Error('usage: pw-continuation-probe.ts <baseUrl> <native|lit> <browser>');
 }
 
-const browser = await browserTypes[browserName].launch({ headless: true });
+const browser = await browserType.launch({ headless: true });
 try {
   const page = await browser.newPage();
   await page.goto(baseUrl + '/notes', { waitUntil: 'load' });
