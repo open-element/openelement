@@ -302,11 +302,8 @@ ${islandMap}
 };
 var __tags = [${tags}];
 ${
-    lit ? '' : `// #942 + declared-island scoping: install the pre-hydration click capture
-// AFTER __tags is defined so the filter knows the entry's island tags, and
-// BEFORE any island dynamic import below can evaluate — clicks landing in
-// the hydration window replay after hydration. Undeclared third-party custom
-// elements never enter the bounded queue.
+    lit ? '' : `// #942: capture AFTER __tags (declared-island filter) and BEFORE
+// any island import below can evaluate.
 ensurePreHydrationClickCapture(document, __tags);
 `
   }
