@@ -43,5 +43,10 @@
     "@openelement/element/html": "../../packages/element/src/html.ts",
     "@openelement/element/logger": "../../packages/element/src/logger.ts",
     "@openelement/element/": "../../packages/element/src/"
+  },
+  "tasks": {
+    "build": "deno run --config ../../deno.json --allow-read --allow-write --allow-net --allow-env --allow-ffi --allow-sys --allow-run ../../packages/router/src/cli/build.ts",
+    "e2e": "deno run -A npm:@playwright/test@1.59.1 test --config e2e/playwright.config.ts --project=chromium",
+    "e2e:browsers": "deno run -A npm:@playwright/test@1.59.1 test --config e2e/playwright.config.ts"
   }
 }

@@ -163,7 +163,10 @@ Deno.test('generated starter pins every OpenElement import to the exact release'
 
 Deno.test('starter pins vite exactly and type-checks app-shell', () => {
   const denoJson = JSON.parse(readTemplate('deno.json.tmpl'));
-  assertFalse('@deno/vite-plugin' in denoJson.imports, 'starter must not depend on @deno/vite-plugin');
+  assertFalse(
+    '@deno/vite-plugin' in denoJson.imports,
+    'starter must not depend on @deno/vite-plugin',
+  );
   // #681: starter vite version must stay aligned with packages/router.
   const routerImports = JSON.parse(
     Deno.readTextFileSync(join(packageDir, '..', 'router', 'deno.json')),

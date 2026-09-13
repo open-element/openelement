@@ -1,0 +1,5 @@
+{
+  "tasks": {
+    "build": "deno run --config ../../deno.json --allow-read --allow-write ../../tools/repo/clean.ts dist && deno run --config ../../deno.json --allow-read --allow-write --allow-net --allow-env --allow-ffi --allow-sys --allow-run ../../packages/router/src/cli/build.ts"
+  }
+}
