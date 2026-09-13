@@ -120,6 +120,12 @@ function countMatches(text: string, pattern: RegExp): number {
   return matches ? matches.length : 0;
 }
 
+function stripAnsi(text: string): string {
+  // Intentional ANSI color stripping for log scans.
+  // deno-lint-ignore no-control-regex
+  return text.replace(/\x1b\[[0-9;]*m/g, '');
+}
+
 /** Gate step lines printed by tools/repo/gate.ts (`PASS name (Ns)`). */
 function gateStepCounts(text: string): { pass: number; fail: number } {
   return {
@@ -270,7 +276,10 @@ async function main(): Promise<void> {
     'tools/repo/check-no-allow-all.test.ts',
     'tools/repo/check-task-permissions.test.ts',
   ]);
-  permScans.counts = { passed: countMatches(logs['permission-scans'], / ok /g) };
+  permScans.counts = {
+    passed: countMatches(stripAnsi(logs['permission-scans']), /\bok\b/g),
+    failed: countMatches(stripAnsi(logs['permission-scans']), /\bFAILED?\b/g),
+  };
 
   const ffiProof = await run('ffi-non-interactive', [
     denoExe,
@@ -283,14 +292,17 @@ async function main(): Promise<void> {
     '--no-prompt',
     'tools/release/non-interactive-permissions.test.ts',
   ]);
-  ffiProof.counts = { passed: countMatches(logs['ffi-non-interactive'], / ok /g) };
+  ffiProof.counts = {
+    passed: countMatches(stripAnsi(logs['ffi-non-interactive']), /\bok\b/g),
+    failed: countMatches(stripAnsi(logs['ffi-non-interactive']), /\bFAILED?\b/g),
+  };
 
   // Rollup: named proofs parsed from the gate logs (no re-runs).
   const packedLog = logs['gate-packed'] ?? '';
   const sourceLog = logs['gate-source'] ?? '';
   const matrixCells = packedLog.split('\n').filter((line) =>
-    /chromium|firefox|webkit/i.test(line) && /PASS|FAIL/.test(line)
-  ).slice(0, 60);
+    /chromium|firefox|webkit/i.test(line) && /pass|fail/i.test(line)
+  ).slice(0, 100);
   const rollup = {
     packedRendererBrowserCells: matrixCells,
     nodeProof: /proof:node \(\d+\.\d+s\)\s*$|PASS tests\/fixtures\/router-nitro#proof:node/m.test(
@@ -389,7 +401,10 @@ async function validate(path: string): Promise<void> {
   if (raw.includes('www/') || raw.includes('www\\')) {
     failures.push('evidence references stale www/ paths');
   }
-  if (/[0-9a-f]{40}/.test(raw.replace(evidence.sha, ''))) {
+  // Log/tarball sha256 digests (64 hex) legitimately contain 40-hex runs:
+  // strip them and the bound SHA before looking for a second commit SHA.
+  const scrubbed = raw.replace(/sha256:[0-9a-f]{64}/g, '').replaceAll(evidence.sha, '');
+  if (/[0-9a-f]{40}/.test(scrubbed)) {
     failures.push('evidence references a second commit SHA');
   }
   if (failures.length > 0) {
