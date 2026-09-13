@@ -26,7 +26,6 @@ import { copy, existsSync } from '@std/fs';
 import { join, resolve } from '@std/path';
 import { formatJson } from '@openelement/element/build-utils';
 import { PACKAGE_VERSION } from './project-constants.ts';
-import { PACKED_STD_ALIASES } from './consumer-packaged-shared.ts';
 import { NITRO_VERSION } from './nitro-compatibility.ts';
 
 const repoRoot = resolve(import.meta.dirname!, '..');
@@ -98,14 +97,9 @@ for (const tarball of [routerTarball, elementTarball]) {
 const tmp = await Deno.makeTempDir({ prefix: `openelement-packed-serve-${runtime}-` });
 let server: Deno.ChildProcess | undefined;
 try {
-  // @jsr/* packages are served by JSR's npm compatibility layer (same idiom
-  // as the other packed-consumer harnesses, #886); without it plain npm
-  // cannot install the packed manifests' @jsr/std__* dependencies.
-  Deno.writeTextFileSync(join(tmp, '.npmrc'), '@jsr:registry=https://npm.jsr.io\n');
   // Deno-driven build contract (same shape as the packed-app legs): the
   // unpublished @openelement/* pins resolve into the pre-laid node_modules
-  // tree instead of the registry, and the @std/* pins cover direct Deno
-  // resolution of the packed modules.
+  // tree instead of the registry.
   Deno.writeTextFileSync(
     join(tmp, 'deno.json'),
     formatJson({
@@ -115,11 +109,6 @@ try {
         '@openelement/element': `npm:@openelement/element@${PACKAGE_VERSION}`,
         'hono': 'npm:hono@4.12.0',
         'vite': 'npm:vite@8.0.16',
-        '@std/fs': 'jsr:@std/fs@^1.0.0',
-        '@std/fs/': 'jsr:@std/fs@^1.0.0/',
-        '@std/jsonc': 'jsr:@std/jsonc@^1.0.0',
-        '@std/media-types': 'jsr:@std/media-types@^1.0.0',
-        '@std/path': 'jsr:@std/path@^1.0.0',
       },
       nodeModulesDir: 'manual',
       minimumDependencyAge: 0,
@@ -137,12 +126,6 @@ try {
         'vite': '8.0.16',
         'hono': '4.12.0',
         'nitro': NITRO_VERSION,
-        // Packed first-party modules keep bare @std/* specifiers; the
-        // Nitro server output preserves node_modules imports for serve
-        // time, and plain node resolves through node_modules, so alias
-        // them to the npm-compat @jsr/std__* dirs (same contract as
-        // consumer-packaged-shared.ts).
-        ...PACKED_STD_ALIASES,
       },
     }),
   );

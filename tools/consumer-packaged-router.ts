@@ -25,9 +25,6 @@ async function run(command: string, args: string[], cwd: string): Promise<string
 
 const tmp = await Deno.makeTempDir({ prefix: 'openelement-packed-router-' });
 try {
-  // @jsr/* packages are served by JSR's npm compatibility layer, not by
-  // registry.npmjs.org (same idiom as consumer-packaged-shared.ts, #886).
-  await Deno.writeTextFile(join(tmp, '.npmrc'), '@jsr:registry=https://npm.jsr.io\n');
   await Deno.writeTextFile(
     join(tmp, 'package.json'),
     JSON.stringify(

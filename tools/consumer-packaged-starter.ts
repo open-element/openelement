@@ -33,7 +33,6 @@ import { formatJson } from '@openelement/element/build-utils';
 import { PACKAGE_VERSION, RETAINED_PACKAGE_NAMES } from './project-constants.ts';
 import { readPackages } from './lib/package-graph.ts';
 import { tarballPath } from './lib/npm-tarball.ts';
-import { PACKED_STD_ALIASES } from './consumer-packaged-shared.ts';
 import { extractStaticModuleSpecifiers } from './lib/typescript-ast.ts';
 
 async function readJson<T = unknown>(path: string | URL): Promise<T> {
@@ -134,8 +133,7 @@ function isBareSpecifier(specifier: string): boolean {
     !specifier.startsWith('https:') &&
     !specifier.startsWith('data:') &&
     !specifier.startsWith('node:') &&
-    !specifier.startsWith('npm:') &&
-    !specifier.startsWith('jsr:');
+    !specifier.startsWith('npm:');
 }
 
 function isMappedSpecifier(
@@ -249,15 +247,6 @@ try {
     }
   }
 
-  // @jsr/* packages are served by JSR's npm compatibility layer at
-  // https://npm.jsr.io, not by registry.npmjs.org. The openElement packages
-  // themselves are @jsr-free; the mapping is required by the starter's
-  // upstream dependency @deno/vite-plugin, whose npm manifest depends on
-  // @jsr/deno__loader and @jsr/std__jsonc — #886.
-  Deno.writeTextFileSync(
-    join(tmp, '.npmrc'),
-    '@jsr:registry=https://npm.jsr.io\n',
-  );
   const install = await run(
     'npm',
     [
@@ -288,7 +277,6 @@ try {
   // surface — no more, no less (a missing pin breaks the consumer; an extra
   // one would leak an internal alias into the public contract).
   const productImports = [
-    '@deno/vite-plugin',
     '@hono/vite-dev-server',
     '@openelement/element',
     '@openelement/element/build-utils',
@@ -297,11 +285,6 @@ try {
     '@openelement/router',
     '@openelement/router/nitro-mount',
     '@openelement/router/vite',
-    '@std/fs',
-    '@std/fs/',
-    '@std/jsonc',
-    '@std/media-types',
-    '@std/path',
     'hono',
     'vite',
   ];
@@ -326,10 +309,10 @@ try {
     }
   }
 
-  // Provision the starter's external npm deps (@deno/vite-plugin, vite, hono)
+  // Provision the starter's external npm deps (vite, hono, dev-server)
   // explicitly: the packed tarballs only cover @openelement/*, and scavenging
   // the repo's node_modules is not hermetic — a fresh checkout (or a CI cache
-  // miss) has no @deno/vite-plugin and the starter build fails to resolve it.
+  // miss) may lack them and the starter build fails to resolve them.
   // Already-installed transitive deps of the tarballs (vite, hono) are skipped.
   const missingExternals = Object.values(config.imports)
     .filter((spec) => spec.startsWith('npm:') && !spec.startsWith('npm:@openelement/'))
@@ -357,32 +340,6 @@ try {
     );
     if (!provision.success) {
       throw new Error(`Starter external dependency install failed:\n${provision.output}`);
-    }
-  }
-
-  // Bridge the packed modules' bare @std/* specifiers to real
-  // node_modules/@std/* directories (same contract as the packed-app legs in
-  // consumer-packaged-shared.ts): the starter's import map resolves them for
-  // Deno tasks, but Vite's esbuild config loader resolves through
-  // node_modules, where only the npm-compat @jsr/std__* dirs exist.
-  {
-    const aliases = Object.entries(PACKED_STD_ALIASES).map(([name, target]) => `${name}@${target}`);
-    const bridge = await run(
-      'npm',
-      [
-        'install',
-        '--ignore-scripts',
-        '--no-audit',
-        '--no-fund',
-        '--fetch-timeout=30000',
-        ...aliases,
-      ],
-      tmp,
-      NPM_INSTALL_TIMEOUT_MS,
-      npmEnv,
-    );
-    if (!bridge.success) {
-      throw new Error(`Starter @std alias bridge install failed:\n${bridge.output}`);
     }
   }
 

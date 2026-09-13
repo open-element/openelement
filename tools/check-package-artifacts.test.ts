@@ -460,38 +460,43 @@ Deno.test('package artifacts: accepts an export with a matching declaration', as
   );
 });
 
-Deno.test('package artifacts: accepts the @std bridge only in Deno-driven tooling', async () => {
+Deno.test('package artifacts: rejects the JSR bridge in every packed module', async () => {
   await withPackage(
     '@openelement/router',
     {
       'src/vite/plugin.js': `import { join } from '@std/path';\nexport const p = join;\n`,
       'src/cli/start.js': `import { existsSync } from '@std/fs';\nexport const e = existsSync;\n`,
-      'src/index.js': `import { join } from '@std/path';\nexport const q = join;\n`,
+      'src/index.js': `import { map } from 'jsr:@std/collections@^1.0.0';\nexport const q = map;\n`,
     },
     (root) => {
-      const pkg = JSON.parse(Deno.readTextFileSync(`${root}/package.json`));
-      pkg.dependencies = { '@jsr/std__path': '1.0.0', '@jsr/std__fs': '1.0.0' };
-      Deno.writeTextFileSync(`${root}/package.json`, JSON.stringify(pkg));
       const violations = scanExtractedPackage('@openelement/router', root).violations;
       const paths = violations.map((v) => v.path);
-      assert(paths.includes('@openelement/router/src/index.js'), 'runtime @std must fail');
-      assert(!paths.includes('@openelement/router/src/vite/plugin.js'), 'tooling bridge must pass');
-      assert(!paths.includes('@openelement/router/src/cli/start.js'), 'cli bridge must pass');
+      assert(paths.includes('@openelement/router/src/vite/plugin.js'), 'tooling @std must fail');
+      assert(paths.includes('@openelement/router/src/cli/start.js'), 'cli @std must fail');
+      assert(paths.includes('@openelement/router/src/index.js'), 'runtime jsr: must fail');
+      const bridge = violations.filter((v) => v.path.endsWith('.js'));
+      assert(
+        bridge.length === 3 &&
+          bridge.every((v) => v.message.includes('npm is the only public registry')),
+        `bridge violations must name npm as the only registry: ${JSON.stringify(violations)}`,
+      );
     },
   );
 });
 
-Deno.test('package artifacts: rejects @std without the compat dependency declared', async () => {
+Deno.test('package artifacts: rejects @jsr dependencies in packed manifests', async () => {
   await withPackage(
     '@openelement/router',
-    { 'src/vite/plugin.js': `import { join } from '@std/path';\nexport const p = join;\n` },
+    { 'src/index.js': `export const version = 1;\n` },
     (root) => {
+      const pkg = JSON.parse(Deno.readTextFileSync(`${root}/package.json`));
+      pkg.dependencies = { '@jsr/std__path': '1.0.0' };
+      Deno.writeTextFileSync(`${root}/package.json`, JSON.stringify(pkg));
       const messages = scanExtractedPackage('@openelement/router', root)
         .violations.map((v) => v.message);
       assert(
-        messages.includes(
-          "external import '@std/path' is absent from package dependencies or peers",
-        ),
+        messages.some((m) => m.includes("bridge dependency '@jsr/std__path' is forbidden")),
+        `expected a bridge-dependency violation, got: ${JSON.stringify(messages)}`,
       );
     },
   );

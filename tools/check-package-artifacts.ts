@@ -34,21 +34,15 @@ const HOST_TOOLING_PATH_ALLOWLIST: Record<string, RegExp> = {
 };
 
 /**
- * JSR npm-compat bridge (Deno-driven host tooling only): packed tooling
- * keeps bare `@std/<name>` specifiers while the manifest declares the
- * npm-compat `@jsr/std__<name>` dependency. Consumers alias the bare names
- * onto the compat packages (create template + PACKED_STD_ALIASES); the
- * public runtime graph must never rely on this bridge, so it is accepted
- * only under the Deno-driven tooling trees below.
+ * The JSR npm-compat bridge is deleted: packed first-party modules carry no
+ * bare `@std/*` specifiers, so no `@jsr/*` dependency may appear in any
+ * packed manifest and no `@std/`/`jsr:`/`@jsr/` specifier may appear in any
+ * packed module. npm is the only public registry.
  */
-const STD_BRIDGE_TOOLING_PATHS: Record<string, RegExp> = {
-  '@openelement/router': /^src\/(?:vite\/|cli\/)/,
-};
-
-function jsrCompatDeclared(specifier: string, declared: Set<string>): boolean {
-  const match = specifier.match(/^@std\/([^/]+)(\/.*)?$/);
-  if (!match) return false;
-  return declared.has(`@jsr/std__${match[1]}`);
+function isForbiddenBridgeSpecifier(specifier: string): boolean {
+  return specifier.startsWith('@std/') ||
+    specifier.startsWith('@jsr/') ||
+    specifier.startsWith('jsr:');
 }
 
 const RUNTIME_EXTENSIONS = new Set(['.js', '.mjs', '.cjs']);
@@ -153,15 +147,21 @@ function manifestImportViolations(
     ...Object.keys(packageJson.optionalDependencies as Record<string, string> ?? {}),
   ]);
   const violations: ArtifactViolation[] = [];
-  const bridgePaths = STD_BRIDGE_TOOLING_PATHS[packageName];
   for (const entry of walkSync(packageRoot, { includeDirs: false, skip: [/^node_modules$/] })) {
     const relative = entry.path.slice(packageRoot.length + 1);
     if (!isModuleScanPath(relative)) continue;
     const source = Deno.readTextFileSync(entry.path);
     for (const { value, line } of extractStaticModuleSpecifiers(source, relative)) {
+      if (isForbiddenBridgeSpecifier(value)) {
+        violations.push({
+          path: `${packageName}/${relative}`,
+          line,
+          message: `JSR bridge specifier '${value}' is forbidden; npm is the only public registry`,
+        });
+        continue;
+      }
       const name = dependencyName(value);
       if (!name || declared.has(name)) continue;
-      if (bridgePaths?.test(relative) && jsrCompatDeclared(value, declared)) continue;
       violations.push({
         path: `${packageName}/${relative}`,
         line,
@@ -197,6 +197,18 @@ function pushPackageJsonViolations(
       path: `${packageName}/package.json`,
       message: 'package.json must expose an exports map',
     });
+  }
+  for (
+    const section of ['dependencies', 'peerDependencies', 'optionalDependencies'] as const
+  ) {
+    for (const key of Object.keys(packageJson[section] as Record<string, string> ?? {})) {
+      if (key.startsWith('@jsr/')) {
+        violations.push({
+          path: `${packageName}/package.json`,
+          message: `bridge dependency '${key}' is forbidden; npm is the only public registry`,
+        });
+      }
+    }
   }
   return packageJson;
 }
