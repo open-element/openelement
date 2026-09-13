@@ -52,7 +52,7 @@ function normalizeSlashes(path: string): string {
   return path.replace(/\\/g, '/');
 }
 
-const repoRoot = dirname(dirname(dirname(fromFileUrl(import.meta.url))));
+const repoRoot = dirname(dirname(dirname(dirname(fromFileUrl(import.meta.url)))));
 const fixtureDir = dirname(fromFileUrl(import.meta.url));
 const PROJECT_NAME = 'third-party-web-components-app';
 
