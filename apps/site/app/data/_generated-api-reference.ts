@@ -248,10 +248,10 @@ export const apiReference = {
             {
               "name": "ensurePreHydrationClickCapture",
               "kind": "function",
-              "summary": "Install the bounded pre-upgrade interaction capture on an owning root (default: the document). Generated client entries call this before any compiled element upgrades; after a successful claim the element replays the captured events whose targets live inside its root (compiled claim capture/replay, internal/compiled/runtime.ts). Idempotent per root and a no-op where no DOM exists (SSR). Invariant: the capture itself — one fixed listener set per owning root, installed once per page — is page-lifetime by design and is NOT the leak. The M1 leak was retained event-target records; each element releases exactly its own records at its activation decision (success or failure), while records owned by still-pending elements survive for their delayed/lazy upgrade (#1170).",
+              "summary": "Install the bounded pre-upgrade interaction capture on an owning root (default: the document). Generated client entries call this before any compiled element upgrades; after a successful claim the element replays the captured events whose targets live inside its root (compiled claim capture/replay, internal/compiled/runtime.ts). Idempotent per root and a no-op where no DOM exists (SSR). Invariant: the capture itself — one fixed listener set per owning root, installed once per page — is page-lifetime by design and is NOT the leak. The M1 leak was retained event-target records; each element releases exactly its own records at its activation decision (success or failure), while records owned by still-pending elements survive for their delayed/lazy upgrade (#1170). Boundedness: the facade capture passes the pending-island filter, so only interactions that could belong to a still-pending island enter the queue — ordinary events inside already-settled islands are skipped (nested pending islands still capture through their own unsettled host). The queue additionally carries a hard capacity cap (fail closed) and every release sweeps detached targets, so post-hydration traffic and removals never grow retention.",
               "source": {
                 "path": "packages/element/src/open-element-implementation.ts",
-                "line": 91
+                "line": 100
               },
               "stability": "public",
               "anchor": "api-element-root-ensurePreHydrationClickCapture"
@@ -471,7 +471,7 @@ export const apiReference = {
               "summary": "Custom Element base class for the compiled Part Program architecture. Subclasses are produced by the 0.44 compiler; hand-written subclasses that never pass through the compiler fail closed at connect time.",
               "source": {
                 "path": "packages/element/src/open-element-implementation.ts",
-                "line": 134
+                "line": 146
               },
               "stability": "public",
               "anchor": "api-element-root-OpenElement"
@@ -2031,7 +2031,7 @@ export const apiReference = {
               "summary": "Splits `--mode=start|preview` (or `--mode start|preview`) off the CLI args.",
               "source": {
                 "path": "packages/router/src/cli/start.ts",
-                "line": 37
+                "line": 39
               },
               "stability": "public",
               "anchor": "api-router-cli-start-extractServeMode"
@@ -2839,7 +2839,7 @@ export const apiReference = {
               "summary": "Minimal button component following Swiss International Style.",
               "source": {
                 "path": "packages/ui/src/open-button.tsx",
-                "line": 36
+                "line": 37
               },
               "stability": "public",
               "anchor": "api-ui-root-OpenButton"
@@ -2850,7 +2850,7 @@ export const apiReference = {
               "summary": "Callout/notice box for inline documentation alerts.",
               "source": {
                 "path": "packages/ui/src/open-callout.tsx",
-                "line": 33
+                "line": 34
               },
               "stability": "public",
               "anchor": "api-ui-root-OpenCallout"
@@ -2894,7 +2894,7 @@ export const apiReference = {
               "summary": "Popover-API dropdown with CSS Anchor Positioning placement.",
               "source": {
                 "path": "packages/ui/src/open-dropdown.tsx",
-                "line": 27
+                "line": 28
               },
               "stability": "public",
               "anchor": "api-ui-root-OpenDropdown"
@@ -2905,7 +2905,7 @@ export const apiReference = {
               "summary": "Minimal input field following Swiss International Style.",
               "source": {
                 "path": "packages/ui/src/open-input.tsx",
-                "line": 47
+                "line": 48
               },
               "stability": "public",
               "anchor": "api-ui-root-OpenInput"
@@ -2994,7 +2994,7 @@ export const apiReference = {
               "summary": "Minimal button component following Swiss International Style.",
               "source": {
                 "path": "packages/ui/src/open-button.tsx",
-                "line": 36
+                "line": 37
               },
               "stability": "public",
               "anchor": "api-ui-open-button-OpenButton"
@@ -3011,7 +3011,7 @@ export const apiReference = {
               "summary": "Callout/notice box for inline documentation alerts.",
               "source": {
                 "path": "packages/ui/src/open-callout.tsx",
-                "line": 33
+                "line": 34
               },
               "stability": "public",
               "anchor": "api-ui-open-callout-OpenCallout"
@@ -3079,7 +3079,7 @@ export const apiReference = {
               "summary": "Popover-API dropdown with CSS Anchor Positioning placement.",
               "source": {
                 "path": "packages/ui/src/open-dropdown.tsx",
-                "line": 27
+                "line": 28
               },
               "stability": "public",
               "anchor": "api-ui-open-dropdown-OpenDropdown"
@@ -3096,7 +3096,7 @@ export const apiReference = {
               "summary": "Minimal input field following Swiss International Style.",
               "source": {
                 "path": "packages/ui/src/open-input.tsx",
-                "line": 47
+                "line": 48
               },
               "stability": "public",
               "anchor": "api-ui-open-input-OpenInput"
