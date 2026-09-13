@@ -29,7 +29,7 @@
     "@lit-labs/ssr-client": "npm:@lit-labs/ssr-client@1.1.8",
     "@zag-js/combobox": "npm:@zag-js/combobox@1.43.3",
     "@zag-js/vanilla": "npm:@zag-js/vanilla@1.43.3",
-    "nitro": "npm:nitro@3.0.0",
+    "nitro": "npm:nitro@3.0.260610-beta",
     "zod": "npm:zod@^3.25",
     "valibot": "npm:valibot@^1.1",
     "marked": "npm:marked@^15.0.0",

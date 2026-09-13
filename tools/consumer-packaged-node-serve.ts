@@ -27,6 +27,7 @@ import { join, resolve } from '@std/path';
 import { formatJson } from '@openelement/element/build-utils';
 import { PACKAGE_VERSION } from './project-constants.ts';
 import { PACKED_STD_ALIASES } from './consumer-packaged-shared.ts';
+import { NITRO_VERSION } from './nitro-compatibility.ts';
 
 const repoRoot = resolve(import.meta.dirname!, '..');
 const INSTALL_TIMEOUT_MS = 10 * 60_000;
@@ -135,7 +136,7 @@ try {
         '@openelement/element': `file:${elementTarball}`,
         'vite': '8.0.16',
         'hono': '4.12.0',
-        'nitro': '3.0.0',
+        'nitro': NITRO_VERSION,
         // Packed first-party modules keep bare @std/* specifiers; the
         // Nitro server output preserves node_modules imports for serve
         // time, and plain node resolves through node_modules, so alias
@@ -145,13 +146,12 @@ try {
       },
     }),
   );
-  // --legacy-peer-deps: nitro@3.0.0 peer-declares vite ^7 while the Alpha
-  // line runs vite 8 (its peer is optional and the Deno-driven fixture
-  // proof already qualifies this combination); plain npm would otherwise
-  // refuse an install Deno accepts.
+  // The pinned Nitro line formally supports the Alpha Vite major in its
+  // peer metadata (see tools/nitro-compatibility.ts), so the install runs
+  // without --legacy-peer-deps; a peer conflict fails closed here.
   const install = await run(
     'npm',
-    ['install', '--ignore-scripts', '--no-audit', '--no-fund', '--legacy-peer-deps'],
+    ['install', '--ignore-scripts', '--no-audit', '--no-fund'],
     tmp,
     { NPM_CONFIG_CACHE: join(tmp, '.npm-cache') },
     INSTALL_TIMEOUT_MS,
@@ -173,7 +173,7 @@ try {
   const nitroPreset = runtime === 'bun' ? 'bun' : 'node-server';
   const files: Record<string, string> = {
     'nitro.config.ts': `export default defineNitroConfig({
-  srcDir: 'server',
+  serverDir: 'server',
   preset: '${nitroPreset}',
   publicAssets: [{ dir: 'nitro-public' }],
   output: { dir: '.output-serve' },
@@ -294,7 +294,7 @@ export default class PackedLive extends OpenElement {
   }
   const nitroBuild = await run(
     Deno.execPath(),
-    ['run', '-A', 'npm:nitro@3.0.0', 'build'],
+    ['run', '-A', `npm:nitro@${NITRO_VERSION}`, 'build'],
     tmp,
     {},
     BUILD_TIMEOUT_MS,

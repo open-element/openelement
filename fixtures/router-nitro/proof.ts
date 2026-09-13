@@ -14,7 +14,7 @@ import { walkSync } from '@std/fs/walk';
 import { exists } from '@std/fs';
 import { assertCompatibilityDate } from '../../tools/lib/compatibility-date.ts';
 import { runWithOutput } from '../../tools/lib/process.ts';
-import { NITRO_COMPATIBILITY_DATE } from '../../tools/nitro-compatibility.ts';
+import { NITRO_COMPATIBILITY_DATE, NITRO_VERSION } from '../../tools/nitro-compatibility.ts';
 
 async function readJson<T = unknown>(path: string | URL): Promise<T> {
   return JSON.parse(await Deno.readTextFile(path)) as T;
@@ -355,7 +355,7 @@ const buildLog = await run([
   'run',
   '--node-modules-dir=auto',
   '-A',
-  'npm:nitro@3.0.0',
+  `npm:nitro@${NITRO_VERSION}`,
   'build',
 ], {
   OPEN_ELEMENT_NITRO_PRESET: nitroPreset,
