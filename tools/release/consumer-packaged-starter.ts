@@ -199,9 +199,16 @@ try {
     (globalThis as { __starterContinuation?: string }).__starterContinuation = 'alive';
   });
   // The idle island hydrates in place: the SSR node identity must survive
-  // activation and interaction (no re-render, no reload).
+  // activation and interaction (no re-render, no reload). The packed SSR
+  // nests page hosts inside the shell DSD, so the island is found through a
+  // shadow-piercing search (same deep traversal the starter-smoke matrix
+  // uses) rather than a document-level querySelector.
   const countText = (expected: string): string =>
-    '(function(){var c=document.querySelector("my-counter");' +
+    '(function(){var deep=function(r){var d=r.querySelector("my-counter");' +
+    'if(d)return d;var els=r.querySelectorAll("*");' +
+    'for(var k=0;k<els.length;k++){var sh=els[k].shadowRoot;' +
+    'if(sh){var f=deep(sh);if(f)return f}}return null;};' +
+    'var c=deep(document);' +
     'var s=c&&c.shadowRoot&&c.shadowRoot.querySelector("#count");' +
     'return !!(s&&s.textContent==="' + expected + '");})()';
   await page.waitForFunction(countText('0'), undefined, { timeout: 60000 });
