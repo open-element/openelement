@@ -1,8 +1,8 @@
 /**
- * Regenerate the WTR pilot compiled fixtures (#1333).
+ * Regenerate the browser-conformance compiled fixtures (#1333).
  *
  * Uses compileElementModule — the exact function the open:compiled-element
- * Vite plugin's transform hook calls (packages/adapter-vite/src/internal/
+ * Vite plugin's transform hook calls (packages/element/src/internal/
  * compiler/plugin.ts) — so WTR consumes the same ESM the official build path
  * produces, including the embedded Source Map v3 back to the authored .tsx.
  * No second TSX transform is introduced: the emitted module keeps its TS
@@ -14,13 +14,13 @@
  */
 // NOTE: __wtr__/package.json makes Deno treat this directory as outside the
 // repo workspace, so no workspace import-map specifiers (@std/*) here —
-// plain relative paths only. The adapter's own imports still resolve through
-// its workspace member map.
-import { compileElementModule } from '../../../adapter-vite/src/internal/compiler/plugin.ts';
+// plain relative paths only. The compiler's own imports still resolve through
+// the element workspace member map.
+import { compileElementModule } from '../../src/internal/compiler/plugin.ts';
 
 const here = import.meta.dirname!; // packages/element/__wtr__/tools
-const pilot = join(here, '..');
-const elementPkg = join(pilot, '..');
+const suite = join(here, '..');
+const elementPkg = join(suite, '..');
 
 function join(...segments: string[]): string {
   return segments.join('/').replace(/\/+/g, '/').replace(/\/$/, '');
@@ -38,17 +38,17 @@ interface FixtureSpec {
 const fixtures: FixtureSpec[] = [
   {
     // The repo's canonical compiler-v1 fixture, consumed byte-for-byte.
-    source: join(elementPkg, '../adapter-vite/__fixtures__/compiled-element-v1/counter.tsx'),
+    source: join(elementPkg, '__fixtures__/compiled-element-v1/counter.tsx'),
     id: 'counter.tsx',
     out: 'oe-program-counter.ts',
   },
   {
-    source: join(pilot, 'fixtures/wtr-shadow-button.tsx'),
+    source: join(suite, 'fixtures/wtr-shadow-button.tsx'),
     id: 'wtr-shadow-button.tsx',
     out: 'wtr-shadow-button.ts',
   },
   {
-    source: join(pilot, 'fixtures/wtr-field.tsx'),
+    source: join(suite, 'fixtures/wtr-field.tsx'),
     id: 'wtr-field.tsx',
     out: 'wtr-field.ts',
   },
@@ -68,7 +68,7 @@ const fixtures: FixtureSpec[] = [
   },
 ];
 
-const outDir = join(pilot, 'generated');
+const outDir = join(suite, 'generated');
 await Deno.mkdir(outDir, { recursive: true });
 
 for (const fixture of fixtures) {

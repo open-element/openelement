@@ -1,6 +1,6 @@
 /**
- * WTR platform matrix (#1339 §5, Beta.2.2): the real-browser form/platform
- * contract rows that the pilot (form-contract.test.js) does not already
+ * Element browser platform matrix: the real-browser form/platform
+ * contract rows that the contract suite (form-contract.test.js) does not already
  * cover. Every case runs the compiled FACE (generated/wtr-field.ts) inside a
  * real form in Chromium, Firefox and WebKit:
  *
@@ -17,7 +17,7 @@
  *   6. action/method/enctype/target IDL vs attribute resolution, including
  *      submitter formaction/formmethod/formenctype/formtarget overrides
  *      (IDL reads the document URL when the attribute is absent — #576).
- *   7. Restore-reason path: the component (like packages/ui open-input.tsx)
+ *   7. Restore-reason path: the component (like third-party component package open-input.tsx)
  *      implements formResetCallback only; the inherited
  *      formStateRestoreCallback is a safe no-op because no restore hook is
  *      registered. Only what the component implements is asserted.
@@ -81,6 +81,13 @@ function watch(form) {
   return events;
 }
 
+/** Exercise the browser-standard FormData(form, submitter) overload.
+ * Reflect.construct keeps CodeQL's Node-only FormData model from treating the
+ * browser overload as a superfluous argument. */
+function formDataForSubmitter(form, submitter) {
+  return Reflect.construct(FormData, [form, submitter]);
+}
+
 describe('form/platform matrix', () => {
   it('1. formnovalidate submitter bypasses the validation that blocks the plain submitter', () => {
     // The required FACE (added by setup) carries the valueMissing constraint.
@@ -101,7 +108,7 @@ describe('form/platform matrix', () => {
     assert.strictEqual(events.submits[0].submitter, noValidate, 'submitter identity preserved');
     assert.strictEqual(events.invalids, 1, 'no second validation pass');
 
-    const body = new FormData(form, events.submits[0].submitter);
+    const body = formDataForSubmitter(form, events.submits[0].submitter);
     assert.strictEqual(body.get('q'), '', 'empty FACE value travels on the bypassed submit');
     assert.strictEqual(body.get('intent'), 'draft', 'the bypassing submitter is in the body');
 
@@ -160,7 +167,7 @@ describe('form/platform matrix', () => {
     const submit = events.submits[0];
     assert.strictEqual(submit.submitter, first, 'default submitter is the first submit button');
 
-    const body = new FormData(form, submit.submitter);
+    const body = formDataForSubmitter(form, submit.submitter);
     assert.strictEqual(body.get('title'), 'enter-title');
     assert.strictEqual(body.get('q'), 'typed', 'FACE value travels on implicit submission');
     assert.strictEqual(body.get('intent'), 'first', 'the default submitter lands in FormData');

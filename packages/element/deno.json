@@ -1,6 +1,6 @@
 {
   "name": "@openelement/element",
-  "version": "0.44.0-beta.2.2",
+  "version": "1.0.0-alpha.1",
   "exports": {
     ".": "./src/index.ts",
     "./jsx-runtime": "./src/jsx-runtime.ts",
@@ -9,7 +9,20 @@
     "./authoring": "./src/authoring.ts",
     "./html": "./src/html.ts",
     "./logger": "./src/logger.ts",
-    "./build-utils": "./src/build-utils.ts"
+    "./build-utils": "./src/build-utils.ts",
+    "./compiler": "./src/compiler.ts",
+    "./vite": "./src/vite.ts"
+  },
+  "imports": {
+    "typescript": "npm:typescript@6.0.3"
+  },
+  "peerDependencies": {
+    "vite": "npm:vite@8.0.16"
+  },
+  "peerDependenciesMeta": {
+    "vite": {
+      "optional": true
+    }
   },
   "publish": {
     "include": [
@@ -20,9 +33,9 @@
     ]
   },
   "tasks": {
-    "build": "deno check src/index.ts",
+    "build": "deno check src/index.ts src/jsx-runtime.ts src/jsx-dev-runtime.ts src/sanitize.ts src/authoring.ts src/html.ts src/logger.ts src/build-utils.ts src/compiler.ts src/vite.ts",
     "lint": "deno lint src/ __tests__/",
-    "typecheck": "deno check src/index.ts",
+    "typecheck": "deno check src/index.ts src/jsx-runtime.ts src/jsx-dev-runtime.ts src/sanitize.ts src/authoring.ts src/html.ts src/logger.ts src/build-utils.ts src/compiler.ts src/vite.ts",
     "test": "deno test --allow-read --allow-write --allow-env --allow-net --allow-run __tests__/",
     "test:ci": "deno test --allow-read --allow-write --allow-env --allow-net --allow-run --coverage --junit-path=test-results.xml __tests__/"
   },

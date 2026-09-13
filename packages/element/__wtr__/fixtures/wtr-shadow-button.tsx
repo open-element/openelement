@@ -1,5 +1,5 @@
 /**
- * WTR pilot fixture (#1333): shadow-root event source.
+ * Element browser conformance fixture (#1333): shadow-root event source.
  *
  * Mirrors the `activationProgram({ rootMode: 'shadow-open' })` shape used by
  * the simulated-DOM facade-activation tests (button + text part + click

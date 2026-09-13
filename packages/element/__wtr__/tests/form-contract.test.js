@@ -1,7 +1,7 @@
 /**
- * WTR pilot (#1333): form contract slice on the compiled side, against real
- * browser form semantics (docs/architecture/alpha-maturation.md "First
- * cases": required controls, reset/restore, submitter name/value).
+ * Element browser conformance (#1333): form contract slice on the compiled side, against real
+ * browser form semantics: required controls, reset/restore, and submitter
+ * name/value.
  *
  * The component is a minimal FACE (form-associated custom element) compiled
  * through the official path; its inner native <input> lives in the shadow
@@ -14,7 +14,7 @@
  * listing, form.checkValidity(), :invalid/:valid matching, the invalid event,
  * and the FormData entry list. (The validity/checkValidity members of a FACE
  * live on its ElementInternals, not on the host element — probed in Chromium
- * during this pilot; see README.)
+ * during this suite; see README.)
  */
 import { assert } from 'chai';
 import { WtrField } from '../generated/wtr-field.ts';
@@ -43,6 +43,13 @@ function typeInto(field, value) {
   input.value = value;
   input.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
   return input;
+}
+
+/** Exercise the browser-standard FormData(form, submitter) overload.
+ * Reflect.construct keeps CodeQL's Node-only FormData model from treating the
+ * browser overload as a superfluous argument. */
+function formDataForSubmitter(form, submitter) {
+  return Reflect.construct(FormData, [form, submitter]);
 }
 
 describe('compiled FACE form contract', () => {
@@ -82,7 +89,7 @@ describe('compiled FACE form contract', () => {
     let captured = null;
     form.addEventListener('submit', (event) => {
       event.preventDefault();
-      captured = new FormData(form, event.submitter);
+      captured = formDataForSubmitter(form, event.submitter);
     });
     form.requestSubmit(submitter);
 

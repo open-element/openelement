@@ -4,7 +4,7 @@
  * Compiled classes carry only @property fields and methods — ephemeral
  * imperative state (highlight bookkeeping, pointer guards, effect teardown)
  * lives here, in a plain module, keyed by host. This mirrors the fixture
- * pattern (packages/adapter-vite request-time zag-combobox-shared.ts): the
+ * pre-1.0 request-time pattern): the
  * compiled kernel owns the program sinks; everything else is host-scoped and
  * garbage-collected with it.
  */

@@ -1,10 +1,10 @@
 /**
- * WTR pilot config (#1333 slice, Beta.2.2) — Chromium + Firefox + WebKit via
- * @web/test-runner-playwright.
+ * Element browser conformance config (#1333) — Chromium + Firefox + WebKit
+ * via @web/test-runner-playwright.
  *
  * Serving model:
  *   - rootDir is packages/element, so the working-tree runtime source at
- *     /src/** and the pilot files at /__wtr__/** are both served directly.
+ *     /src/** and the suite files at /__wtr__/** are both served directly.
  *   - The compiled fixtures under /__wtr__/generated/*.ts are the official
  *     compiler output (compileElementModule); they still carry TS annotations
  *     exactly as the Vite plugin emits them, and esbuildPlugin lowers them
@@ -12,7 +12,7 @@
  *     plugin in a real build. No second TSX transform is introduced.
  *   - The bare '@openelement/element' specifier in generated modules resolves
  *     to the workspace runtime (/src/index.ts) via the alias plugin below, so
- *     the pilot tests THIS working tree, not a published tarball.
+ *     the suite tests THIS working tree, not a published tarball.
  *   - 'lit' and 'chai' resolve from this directory's own node_modules through
  *     nodeResolve (lit@3.3.3 pinned in package.json).
  */

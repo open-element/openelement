@@ -35,12 +35,9 @@ the page.
 
 ## Import map notes
 
-`deno.json` maps `@openelement/adapter-vite/nitro-mount` and `hono` even
+`deno.json` maps `@openelement/router/nitro-mount` and `hono` even
 though no source file imports them: the production build output (`dist/`)
-imports them at runtime. Do not remove them. `@openelement/generated/blog-data`
-is the adapter's generated content-data module name; the starter maps it to a
-local type stub so the import surface stays stable for apps that opt into the
-content collection plugin.
+imports them at runtime. Do not remove them.
 
 ## Brand assets
 

@@ -2,7 +2,7 @@
  * @openelement/element — #1160 compiled Part Program v1 (runtime vertical).
  *
  * Behavior-first coverage proving the ADR-0143 replacement path on the
- * canonical alpha.1 fixture program (packages/adapter-vite/__fixtures__/
+ * canonical alpha.1 fixture program (packages/element/__fixtures__/
  * compiled-element-v1/expected-program.json — the same artifact the Vite
  * transform test asserts structurally):
  *   - server serialization, fresh DOM creation and existing-DOM claim consume
@@ -350,7 +350,7 @@ interface ProgramRuntime {
 }
 
 const PROGRAM_URL = new URL(
-  '../../adapter-vite/__fixtures__/compiled-element-v1/expected-program.json',
+  '../__fixtures__/compiled-element-v1/expected-program.json',
   import.meta.url,
 );
 

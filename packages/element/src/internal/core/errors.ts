@@ -81,7 +81,7 @@ export class OpenElementError extends Error implements ProtocolOpenElementError 
 }
 
 // ─── SsrRenderError ──────────────────────────────────────────────────
-// Thrown by the SSG build pipeline (adapter-vite cli/build-ssg.ts) when the
+// Thrown by the SSG build pipeline (Router cli/build-ssg.ts) when the
 // SSR bundle fails to load or the pipeline throws; re-exported via build-utils.ts.
 
 export class SsrRenderError extends OpenElementError {

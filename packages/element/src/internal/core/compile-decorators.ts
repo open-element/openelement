@@ -2,7 +2,7 @@
  * Runtime no-op stand-ins for the compile-time-only @element/@property
  * decorator intrinsics (ADR-0143, #1209).
  *
- * The OpenElement compiler (the @openelement/adapter-vite
+ * The OpenElement compiler (the @openelement/router/vite
  * open:compiled-element transform) recognizes these decorators by binding
  * provenance — a runtime named import of `element`/`property` from
  * '@openelement/element', aliases followed — and erases the applications

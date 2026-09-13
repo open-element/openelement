@@ -11,7 +11,11 @@ import {
 const packageDir = join(import.meta.dirname!, '..');
 
 function readTemplate(path: string): string {
-  return Deno.readTextFileSync(join(packageDir, 'templates', path));
+  const logicalPath = join(packageDir, 'templates', path);
+  // Pack-safe source payloads add .tmpl, while callers intentionally keep the
+  // generated project's logical .ts/.tsx names.
+  const payloadPath = `${logicalPath}.tmpl`;
+  return Deno.readTextFileSync(existsSync(payloadPath) ? payloadPath : logicalPath);
 }
 
 async function runCreate(executable: string, cwd: string, name: string) {
@@ -46,24 +50,17 @@ Deno.test('starter exposes only product imports and the standard lifecycle', () 
   const denoJson = JSON.parse(readTemplate('deno.json.tmpl'));
   assertEquals(Object.keys(denoJson.imports).sort(), [
     '@deno/vite-plugin',
-    '@openelement/adapter-vite',
-    '@openelement/adapter-vite/nitro-mount',
-    '@openelement/app',
+    '@hono/vite-dev-server',
     '@openelement/element',
     '@openelement/element/build-utils',
     '@openelement/element/jsx-dev-runtime',
     '@openelement/element/jsx-runtime',
-    '@openelement/generated/blog-data',
+    '@openelement/router',
+    '@openelement/router/nitro-mount',
+    '@openelement/router/vite',
     'hono',
     'vite',
   ]);
-  // The blog routes import the adapter-generated data module; the import map
-  // points at the local type stub so `deno task check` passes before the
-  // first dev/build generates the runtime module.
-  assertEquals(
-    denoJson.imports['@openelement/generated/blog-data'],
-    './app/data/_generated-blog-data.d.ts',
-  );
   assertEquals(
     denoJson.imports['@openelement/element/jsx-runtime'],
     'npm:@openelement/element@${v.element}/jsx-runtime',
@@ -77,10 +74,10 @@ Deno.test('starter exposes only product imports and the standard lifecycle', () 
     ['build', 'check', 'dev', 'preview', 'start', 'test'],
   );
   assert(
-    String(denoJson.imports['@openelement/adapter-vite/nitro-mount'] || '').includes(
+    String(denoJson.imports['@openelement/router/nitro-mount'] || '').includes(
       'nitro-mount',
     ),
-    'starter import map must include adapter-vite/nitro-mount (#601)',
+    'starter import map must include router/nitro-mount (#601)',
   );
   assert(
     String(denoJson.tasks.start || '').includes('cli/start'),
@@ -90,7 +87,7 @@ Deno.test('starter exposes only product imports and the standard lifecycle', () 
   assertEquals(denoJson.imports.hono, 'npm:hono@^4.12');
   assertEquals(denoJson.compilerOptions.jsxImportSource, '@openelement/element');
   assertFalse(JSON.stringify(denoJson).includes('@openelement/core'));
-  assertFalse(JSON.stringify(denoJson).includes('@openelement/router'));
+  assertFalse(JSON.stringify(denoJson).includes('@openelement/app'));
   assertFalse(JSON.stringify(denoJson).includes('@openelement/signal'));
 });
 
@@ -100,19 +97,18 @@ Deno.test('embedded CLI version matches its package manifest', () => {
   assert(versionSource.includes(`'${manifest.version}'`));
 });
 
-Deno.test('Create and all five packages share one release version', () => {
-  const versions = ['adapter-vite', 'app', 'create', 'element', 'ui'].map((name) =>
+Deno.test('Create and all support-distribution packages share one release version', () => {
+  const versions = ['router', 'create', 'element'].map((name) =>
     JSON.parse(Deno.readTextFileSync(join(packageDir, '..', name, 'deno.json'))).version as string
   );
-  assertEquals([...new Set(versions)], [resolveVersions().app]);
+  assertEquals([...new Set(versions)], [resolveVersions().router]);
 });
 
 Deno.test('Create rejects mixed product versions instead of silently generating', () => {
   assertThrows(
     () =>
       assertUnifiedProductVersions({
-        app: '0.41.0-alpha.13',
-        adapterVite: '0.41.0-alpha.12',
+        router: '0.41.0-alpha.12',
         element: '0.41.0-alpha.13',
       }),
     Error,
@@ -129,10 +125,10 @@ Deno.test('async template build returns deterministic path order', async () => {
 Deno.test('generated starter pins every OpenElement import to the exact release', async () => {
   const versions = resolveVersions();
   const config = JSON.parse((await buildTemplates(versions))['deno.json']);
-  assertEquals(config.imports['@openelement/app'], `npm:@openelement/app@${versions.app}`);
+  assertEquals(config.imports['@openelement/router'], `npm:@openelement/router@${versions.router}`);
   assertEquals(
-    config.imports['@openelement/adapter-vite'],
-    `npm:@openelement/adapter-vite@${versions.adapterVite}`,
+    config.imports['@openelement/router/vite'],
+    `npm:@openelement/router@${versions.router}/vite`,
   );
   assertEquals(
     config.imports['@openelement/element'],
@@ -153,11 +149,11 @@ Deno.test('starter pins vite exactly, pins @deno/vite-plugin, and type-checks ap
   // #680: @deno/vite-plugin must be pinned to an exact version, not a range.
   const vitePlugin = String(denoJson.imports['@deno/vite-plugin'] || '');
   assert(/^npm:@deno\/vite-plugin@\d+\.\d+\.\d+$/.test(vitePlugin), vitePlugin);
-  // #681: starter vite version must stay aligned with packages/adapter-vite.
-  const adapterViteImports = JSON.parse(
-    Deno.readTextFileSync(join(packageDir, '..', 'adapter-vite', 'deno.json')),
+  // #681: starter vite version must stay aligned with packages/router.
+  const routerImports = JSON.parse(
+    Deno.readTextFileSync(join(packageDir, '..', 'router', 'deno.json')),
   ).imports;
-  assertEquals(denoJson.imports.vite, adapterViteImports.vite);
+  assertEquals(denoJson.imports.vite, routerImports.vite);
   assert(/^npm:vite@\d+\.\d+\.\d+$/.test(String(denoJson.imports.vite)), denoJson.imports.vite);
   // #927: the dev task must pin the same exact vite version as the import
   // map — a bare npm:vite resolves to latest independently of import maps,
@@ -272,15 +268,25 @@ Deno.test('starter blog is a pair of compiled page routes', () => {
   assertFalse(slugRouteExists, 'the legacy dynamic [slug] route must not ship');
 });
 
-Deno.test('starter --brand token stays aligned with the ui package --violet-6 (#804)', () => {
+Deno.test('starter owns a concrete --brand token without a UI package dependency', () => {
   const viteConfig = readTemplate('vite.config.ts');
   const brand = viteConfig.match(/--brand:(#[0-9a-fA-F]{3,8})/)?.[1];
-  const uiTokens = Deno.readTextFileSync(
-    join(packageDir, '..', 'ui', 'src', 'open-props-tokens.css'),
-  );
-  const violet6 = uiTokens.match(/--violet-6:\s*(#[0-9a-fA-F]{3,8})/)?.[1];
   assert(brand, 'starter vite.config.ts must define a --brand token');
-  assertEquals(brand, violet6);
+});
+
+Deno.test('TypeScript starter sources are pack-safe template payloads', () => {
+  for (
+    const path of [
+      'vite.config.ts',
+      'app/islands/app-shell.tsx',
+      'app/components/page-home.tsx',
+      'app/routes/api/health.ts',
+    ]
+  ) {
+    const logicalPath = join(packageDir, 'templates', path);
+    assertFalse(existsSync(logicalPath), `raw TypeScript source must not be packed: ${path}`);
+    assert(existsSync(`${logicalPath}.tmpl`), `missing template payload: ${path}.tmpl`);
+  }
 });
 
 Deno.test('source CLI generates a complete, token-free starter', async () => {
@@ -291,12 +297,11 @@ Deno.test('source CLI generates a complete, token-free starter', async () => {
     assert(existsSync(join(appDir, '.gitignore')));
     assertFalse(existsSync(join(appDir, 'gitignore.tmpl')));
     assertFalse(Deno.readTextFileSync(join(appDir, 'deno.json')).includes('${v.'));
-    // Starter ships the blog markdown route, the compiled index page, the
-    // blog-data type stub, and a README explaining tasks/conventions.
+    // Starter ships the compiled blog routes and a README explaining
+    // tasks/conventions.
     assert(existsSync(join(appDir, 'README.md')));
     assert(existsSync(join(appDir, 'app', 'routes', 'blog', 'index.tsx')));
     assert(existsSync(join(appDir, 'app', 'routes', 'blog', 'welcome.tsx')));
-    assert(existsSync(join(appDir, 'app', 'data', '_generated-blog-data.d.ts')));
     // Success output points at the README for the full task list.
     assert(stdout.includes('README.md'), stdout);
   } finally {
@@ -407,7 +412,6 @@ Deno.test('packed CLI retains every starter template, including dotfiles', async
     assert(existsSync(join(tmpRoot, 'sample-app', 'app', 'routes', 'blog', 'welcome.tsx')));
     assert(existsSync(join(tmpRoot, 'sample-app', 'README.md')));
     assert(existsSync(join(tmpRoot, 'sample-app', 'app', 'components', 'page-home.tsx')));
-    assert(existsSync(join(tmpRoot, 'sample-app', 'app', 'data', '_generated-blog-data.d.ts')));
   } finally {
     Deno.removeSync(tmpRoot, { recursive: true });
   }

@@ -4,8 +4,8 @@
  * This package is the single import surface for authoring compiled custom
  * elements. The public OpenElement base class runs on the compiled Part
  * Program kernel; the legacy VNode renderer and runtime JSX factories were
- * removed — components are compiled by @openelement/adapter-vite. Build
- * orchestration remains in @openelement/app and @openelement/adapter-vite;
+ * removed — components are compiled by @openelement/element/compiler. Build
+ * orchestration remains in @openelement/router;
  * build adapters import build-time helpers from `@openelement/element/build-utils`.
  */
 
@@ -45,7 +45,7 @@ export { ERROR_PREFIX, reportError, setErrorTelemetryHook } from './public-runti
 // ─── Signals (re-export) ─────────────────────────────────
 
 export { computed, effect, signal } from './public-runtime.ts';
-export type { Signal } from './public-runtime.ts';
+export type { ReadonlySignal, Signal } from './public-runtime.ts';
 
 /**
  * @experimental Compile-time-only decorator intrinsics (#1209): the compiler
@@ -89,7 +89,7 @@ export {
   OpenElementError,
   StyleSheet,
 } from './public-runtime.ts';
-export type { StyleSheetLike } from './public-runtime.ts';
+export type { Logger, StyleSheetLike } from './public-runtime.ts';
 
 // App-owned contracts use these types without reopening the retired protocol package.
 export type {

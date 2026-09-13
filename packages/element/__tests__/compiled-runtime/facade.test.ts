@@ -40,7 +40,7 @@ const { OpenElementError } = await import('../../src/internal/core/errors.ts');
 const FIXTURE_PROGRAM = JSON.parse(
   await Deno.readTextFile(
     new URL(
-      '../../../adapter-vite/__fixtures__/compiled-element-v1/expected-program.json',
+      '../../__fixtures__/compiled-element-v1/expected-program.json',
       import.meta.url,
     ),
   ),

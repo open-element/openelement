@@ -1,5 +1,5 @@
 /**
- * WTR pilot (#1333): composed event across the shadow boundary on the REAL
+ * Element browser conformance (#1333): composed event across the shadow boundary on the REAL
  * browser platform.
  *
  * Migrated from the simulated-DOM suite packages/element/__tests__/

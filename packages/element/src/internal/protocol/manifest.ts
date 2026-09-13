@@ -57,7 +57,7 @@ export interface OpenElementDeclaration {
   description?: string;
 }
 
-/** Package manifest of component declarations (not CEM-compatible; see packages/ui README). */
+/** Package manifest of component declarations (not a Custom Elements Manifest). */
 export interface OpenElementPackageManifest {
   schemaVersion: string;
   packageName: string;

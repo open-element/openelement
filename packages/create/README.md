@@ -4,8 +4,8 @@ Project scaffolding CLI for openElement applications.
 
 > Stable surface (frozen under ADR-0122):
 > Framework product entry. This package is part of the
-> first-run Framework story alongside `@openelement/app` and
-> `@openelement/adapter-vite`.
+> first-run Framework story alongside `@openelement/router` and
+> `@openelement/router` lifecycle tooling.
 
 `@openelement/create` generates a new openElement project with the recommended
 directory structure, Deno configuration, Vite setup, and starter pages.

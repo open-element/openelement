@@ -1,4 +1,3 @@
-import { join, resolve } from 'node:path';
 import { CREATE_VERSION } from './version.ts';
 
 // npm package-name ceiling (validate-npm-package-name); a generated project
@@ -31,21 +30,19 @@ export function validateProjectName(name: string): string | null {
 }
 
 interface ProductVersions {
-  app: string;
-  adapterVite: string;
+  router: string;
   element: string;
 }
 
 /**
- * The published starter relies on the five-package same-version release
+ * The published starter relies on the support-package same-version release
  * invariant. Package-graph and release-prepare gates verify that invariant;
  * Create deliberately has no runtime registry fallback or mixed-version mode.
  * Caller-supplied versions are validated by `buildTemplates` below.
  */
 export function resolveVersions(): ProductVersions {
   return {
-    app: CREATE_VERSION,
-    adapterVite: CREATE_VERSION,
+    router: CREATE_VERSION,
     element: CREATE_VERSION,
   };
 }
@@ -54,7 +51,7 @@ export function assertUnifiedProductVersions(versions: ProductVersions): Product
   const observed = [...new Set(Object.values(versions))];
   if (observed.length !== 1) {
     throw new Error(
-      `Create requires the five-package same-version release invariant; observed ${
+      `Create requires the support-package same-version release invariant; observed ${
         observed.join(', ')
       }`,
     );
@@ -72,41 +69,39 @@ const TEMPLATE_FILES: readonly (readonly [string, string])[] = [
   ['README.tmpl', 'README.md'],
   ['public/openelement-mark.svg', 'public/openelement-mark.svg'],
   ['deno.json.tmpl', 'deno.json'],
-  ['vite.config.ts', 'vite.config.ts'],
-  ['app/islands/app-shell.tsx', 'app/islands/app-shell.tsx'],
-  ['app/components/page-styles.ts', 'app/components/page-styles.ts'],
-  ['app/components/page-home.tsx', 'app/components/page-home.tsx'],
-  ['app/components/page-freshness.tsx', 'app/components/page-freshness.tsx'],
-  ['app/components/page-404.tsx', 'app/components/page-404.tsx'],
-  ['app/components/page-contact.tsx', 'app/components/page-contact.tsx'],
-  ['app/components/page-blog-index.tsx', 'app/components/page-blog-index.tsx'],
-  ['app/components/page-blog-welcome.tsx', 'app/components/page-blog-welcome.tsx'],
-  ['app/data/_generated-blog-data.d.ts', 'app/data/_generated-blog-data.d.ts'],
-  ['app/routes/404.tsx', 'app/routes/404.tsx'],
-  ['app/routes/index.tsx', 'app/routes/index.tsx'],
-  ['app/routes/freshness.tsx', 'app/routes/freshness.tsx'],
-  ['app/routes/contact.tsx', 'app/routes/contact.tsx'],
-  ['app/routes/blog/index.tsx', 'app/routes/blog/index.tsx'],
-  ['app/routes/blog/welcome.tsx', 'app/routes/blog/welcome.tsx'],
-  ['app/routes/api/health.ts', 'app/routes/api/health.ts'],
-  ['app/islands/my-counter.tsx', 'app/islands/my-counter.tsx'],
-  ['app/islands/only-ticker.tsx', 'app/islands/only-ticker.tsx'],
+  ['vite.config.ts.tmpl', 'vite.config.ts'],
+  ['app/islands/app-shell.tsx.tmpl', 'app/islands/app-shell.tsx'],
+  ['app/components/page-styles.ts.tmpl', 'app/components/page-styles.ts'],
+  ['app/components/page-home.tsx.tmpl', 'app/components/page-home.tsx'],
+  ['app/components/page-freshness.tsx.tmpl', 'app/components/page-freshness.tsx'],
+  ['app/components/page-404.tsx.tmpl', 'app/components/page-404.tsx'],
+  ['app/components/page-contact.tsx.tmpl', 'app/components/page-contact.tsx'],
+  ['app/components/page-blog-index.tsx.tmpl', 'app/components/page-blog-index.tsx'],
+  ['app/components/page-blog-welcome.tsx.tmpl', 'app/components/page-blog-welcome.tsx'],
+  ['app/routes/404.tsx.tmpl', 'app/routes/404.tsx'],
+  ['app/routes/index.tsx.tmpl', 'app/routes/index.tsx'],
+  ['app/routes/freshness.tsx.tmpl', 'app/routes/freshness.tsx'],
+  ['app/routes/contact.tsx.tmpl', 'app/routes/contact.tsx'],
+  ['app/routes/blog/index.tsx.tmpl', 'app/routes/blog/index.tsx'],
+  ['app/routes/blog/welcome.tsx.tmpl', 'app/routes/blog/welcome.tsx'],
+  ['app/routes/api/health.ts.tmpl', 'app/routes/api/health.ts'],
+  ['app/islands/my-counter.tsx.tmpl', 'app/islands/my-counter.tsx'],
+  ['app/islands/only-ticker.tsx.tmpl', 'app/islands/only-ticker.tsx'],
 ];
 
 function versionTokens(v: ProductVersions): Record<string, string> {
   return {
-    ['$' + '{v.app}']: v.app,
-    ['$' + '{v.adapterVite}']: v.adapterVite,
+    ['$' + '{v.router}']: v.router,
     ['$' + '{v.element}']: v.element,
   };
 }
 
 export async function buildTemplates(v: ProductVersions): Promise<Record<string, string>> {
   assertUnifiedProductVersions(v);
-  const templatesDir = resolve(import.meta.dirname!, '..', 'templates');
+  const templatesBase = new URL('../templates/', import.meta.url);
   const tokens = versionTokens(v);
   const entries = await Promise.all(TEMPLATE_FILES.map(async ([source, target]) => {
-    let content = await Deno.readTextFile(join(templatesDir, source));
+    let content = await Deno.readTextFile(new URL(source, templatesBase));
     for (const [token, value] of Object.entries(tokens)) {
       if (content.includes(token)) content = content.split(token).join(value);
     }

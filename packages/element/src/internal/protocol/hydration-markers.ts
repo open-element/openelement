@@ -5,7 +5,7 @@
  * `data-ssr-props`, `oe-branch:`/`oe-for-item:` comments) was removed with the
  * compiled Part Program model: claim now binds through program anchors
  * (`oe:pN`, internal/compiled/program.ts), and the legacy marker strings are
- * forbidden in built artifacts by tools/check-v044-legacy-absence.ts.
+ * intentionally excluded from built public artifacts.
  *
  * One marker survives. Its consumers (internal/compiled/server,
  * internal/compiled/runtime, and the adapter's SSG/dev toolchain) reference

@@ -7,12 +7,10 @@
  * openElement Architecture: Keep It Simple, Stupid.
  * One template, zero prompts, instant start.
  *
- * L9: every failure mode (invalid name, existing directory, permission or
- * write errors, unexpected defects) exits 1 with one actionable message —
- * never a runtime stack trace.
+ * L9: every failure mode exits 1 with one actionable message — never a
+ * runtime stack trace.
  */
 
-import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { buildTemplates, resolveVersions, validateProjectName } from './template-builder.ts';
 
 function errorMessage(error: unknown): string {
@@ -24,6 +22,17 @@ function fail(message: string): never {
   Deno.exit(1);
 }
 
+function joinPosix(...parts: string[]): string {
+  return parts.join('/').replace(/\/{2,}/g, '/');
+}
+
+function dirnameOf(path: string): string {
+  const normalized = path.replace(/\\+/g, '/');
+  const idx = normalized.lastIndexOf('/');
+  if (idx <= 0) return '.';
+  return path.slice(0, idx);
+}
+
 async function main(): Promise<void> {
   const name = Deno.args[0];
   if (!name || name === '--help' || name === '-h') {
@@ -33,21 +42,20 @@ async function main(): Promise<void> {
     Deno.exit(name ? 0 : 1);
   }
 
-  // L11: npm-name + path-traversal validation before any filesystem work.
   const invalid = validateProjectName(name);
   if (invalid) fail(`Invalid project name "${name}". ${invalid}`);
 
-  const cwd = Deno.cwd();
-  const targetDir = resolve(cwd, name);
-  const relativeTarget = relative(cwd, targetDir);
+  const cwd = Deno.cwd().replace(/\/+$/, '');
+  const targetDir = `${cwd}/${name}`;
+  const relativeTarget = name;
 
-  // Defense in depth behind validateProjectName: even a name that passes the
-  // character rules must resolve inside the current directory.
   if (
     !relativeTarget ||
-    relativeTarget === '..' ||
-    relativeTarget.startsWith(`..${sep}`) ||
-    isAbsolute(relativeTarget)
+    relativeTarget.includes('..') ||
+    relativeTarget.includes('/') ||
+    relativeTarget.includes('\\') ||
+    /^[a-zA-Z]:/.test(relativeTarget) ||
+    relativeTarget.startsWith('/')
   ) {
     fail(`Refusing to create project outside the current directory: ${name}`);
   }
@@ -63,15 +71,14 @@ async function main(): Promise<void> {
     }
   }
 
-  // Resolve package versions before generating templates
   const v = resolveVersions();
 
   try {
     await Deno.mkdir(targetDir, { recursive: true });
     const TPL = await buildTemplates(v);
     for (const [path, content] of Object.entries(TPL)) {
-      const fullPath = join(targetDir, path);
-      await Deno.mkdir(dirname(fullPath), { recursive: true });
+      const fullPath = joinPosix(targetDir, path);
+      await Deno.mkdir(dirnameOf(fullPath), { recursive: true });
       await Deno.writeTextFile(fullPath, content);
       console.info(`  created ${path}`);
     }

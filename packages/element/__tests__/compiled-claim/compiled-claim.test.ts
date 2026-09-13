@@ -286,7 +286,7 @@ function makeSsrDom(doc: TestDocument): {
   items: TestElement[];
 } {
   const root = element(doc, 'host');
-  const div = element(doc, 'div', [['class', 'alpha3']]);
+  const div = element(doc, 'div', [['class', 'demo']]);
   const h1 = element(doc, 'h1');
   h1.appendChild(doc.createTextNode('Count: '));
   h1.appendChild(doc.createComment('oe:p0'));
@@ -415,7 +415,7 @@ Deno.test('alpha.3 claim resolves fixed sinks across expanded dynamic anchors', 
   // runtime; the unified path-safety rule keeps sink paths statically indexed,
   // and the claim walk still crosses the expanded anchor before the sinks.
   const program = testProgram({
-    tag: 'oe-alpha3-path',
+    tag: 'oe-demo-path',
     template: [{
       k: 'el',
       tag: 'section',
@@ -606,7 +606,7 @@ Deno.test('alpha.3 owning recovery can replace only the root owner after root dr
   assertEquals(mismatches[0].ownerKind, 'root');
   const recoveredDiv = dom.root.childNodes[0] as TestElement;
   assert(recoveredDiv !== oldDiv);
-  assertEquals(recoveredDiv.getAttribute('class'), 'alpha3');
+  assertEquals(recoveredDiv.getAttribute('class'), 'demo');
   assertEquals((recoveredDiv.childNodes[1] as TestElement).value, 'ready');
   (recoveredDiv.childNodes[2] as TestElement).dispatchEvent(new TestEvent('click'));
   assertEquals(count.value, 1);
@@ -703,11 +703,11 @@ Deno.test('alpha.3 keyed Region moves, reuses, updates, and removes only owned e
 
 Deno.test('alpha.3 claim preserves nested custom-element node identity without entering its internals', () => {
   const program = testProgram({
-    tag: 'oe-alpha3-nested',
+    tag: 'oe-demo-nested',
     template: [{
       k: 'el',
       tag: 'x-shell',
-      attrs: [['data-owner', 'alpha3']],
+      attrs: [['data-owner', 'demo']],
       children: [{
         k: 'el',
         tag: 'x-third-party',
@@ -719,7 +719,7 @@ Deno.test('alpha.3 claim preserves nested custom-element node identity without e
   });
   const doc = new TestDocument();
   const root = element(doc, 'host');
-  const shell = element(doc, 'x-shell', [['data-owner', 'alpha3']]);
+  const shell = element(doc, 'x-shell', [['data-owner', 'demo']]);
   const foreign = element(doc, 'x-third-party');
   foreign.appendChild(doc.createTextNode('foreign'));
   shell.appendChild(foreign);
