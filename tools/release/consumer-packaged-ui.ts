@@ -6,7 +6,7 @@ import ts from 'typescript';
 import { PACKAGE_VERSION } from '../repo/project-constants.ts';
 import { DECLARATION_LEAK_PATTERN } from './consumer-packaged-shared.ts';
 
-const repoRoot = resolve(import.meta.dirname!, '..');
+const repoRoot = resolve(import.meta.dirname!, '../..');
 const INSTALL_TIMEOUT_MS = 5 * 60_000;
 const TYPES_TIMEOUT_MS = 5 * 60_000;
 

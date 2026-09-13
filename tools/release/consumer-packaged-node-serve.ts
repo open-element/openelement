@@ -28,7 +28,7 @@ import { formatJson } from '@openelement/element/build-utils';
 import { PACKAGE_VERSION } from '../repo/project-constants.ts';
 import { NITRO_VERSION } from './nitro-compatibility.ts';
 
-const repoRoot = resolve(import.meta.dirname!, '..');
+const repoRoot = resolve(import.meta.dirname!, '../..');
 const INSTALL_TIMEOUT_MS = 10 * 60_000;
 const BUILD_TIMEOUT_MS = 10 * 60_000;
 const SERVER_READY_TIMEOUT_MS = 60_000;

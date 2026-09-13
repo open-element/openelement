@@ -39,7 +39,7 @@ async function readJson<T = unknown>(path: string | URL): Promise<T> {
   return JSON.parse(await Deno.readTextFile(path)) as T;
 }
 
-const repoRoot = resolve(import.meta.dirname!, '..');
+const repoRoot = resolve(import.meta.dirname!, '../..');
 // Generous ceiling for the starter's real SSG build (vite + nitro); a hung
 // packed adapter must fail the tool instead of stalling CI forever.
 const BUILD_TIMEOUT_MS = 10 * 60_000;

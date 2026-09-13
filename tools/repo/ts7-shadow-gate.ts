@@ -46,7 +46,7 @@ import { join, resolve } from '@std/path';
 import { readPackages } from '../lib/package-graph.ts';
 import { tarballPath } from '../lib/npm-tarball.ts';
 
-const repoRoot = resolve(import.meta.dirname!, '..');
+const repoRoot = resolve(import.meta.dirname!, '../..');
 
 // Exact pins: the shadow checker and the classic-API baseline. Bump
 // deliberately; a floating shadow gate is not reproducible evidence.

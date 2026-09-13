@@ -5,7 +5,7 @@ import { PACKAGE_VERSION } from '../repo/project-constants.ts';
 import { readPackages } from '../lib/package-graph.ts';
 import { tarballPath } from '../lib/npm-tarball.ts';
 
-const repoRoot = resolve(import.meta.dirname!, '..');
+const repoRoot = resolve(import.meta.dirname!, '../..');
 const router = (await readPackages()).find((pkg) => pkg.name === '@openelement/router');
 if (!router) throw new Error('@openelement/router is missing from the package graph');
 const tarball = join(repoRoot, tarballPath(router));

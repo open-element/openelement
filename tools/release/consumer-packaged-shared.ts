@@ -71,7 +71,7 @@ import { PACKAGE_VERSION, RETAINED_PACKAGE_NAMES } from '../repo/project-constan
 import { readPackages } from '../lib/package-graph.ts';
 import { tarballPath } from '../lib/npm-tarball.ts';
 
-const repoRoot = resolve(import.meta.dirname!, '..');
+const repoRoot = resolve(import.meta.dirname!, '../..');
 // Generous ceilings for the real SSG build and cold-cache vite/dev server
 // boots; a hung packed router must fail the harness instead of stalling CI
 // forever (same contract as consumer-packaged-starter.ts).

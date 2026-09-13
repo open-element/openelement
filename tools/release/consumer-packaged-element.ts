@@ -5,7 +5,7 @@ import { chromium, firefox, webkit } from '@playwright/test';
 import ts from 'typescript';
 import { PACKAGE_VERSION } from '../repo/project-constants.ts';
 
-const root = resolve(import.meta.dirname!, '..');
+const root = resolve(import.meta.dirname!, '../..');
 const author = await Deno.makeTempDir({ prefix: 'oe-element-author-' });
 const consumer = await Deno.makeTempDir({ prefix: 'oe-element-html-' });
 async function run(args: string[]): Promise<void> {
