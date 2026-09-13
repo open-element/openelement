@@ -27,7 +27,11 @@
  *   line (merged from the former standalone package-config verification)
  */
 
-import { PACKAGE_COUNT, PACKAGE_VERSION, RETAINED_PACKAGE_NAMES } from './project-constants.ts';
+import {
+  PACKAGE_COUNT,
+  PACKAGE_VERSION,
+  RETAINED_PACKAGE_NAMES,
+} from '../repo/project-constants.ts';
 import {
   buildDependencyGraph,
   detectCycles,
@@ -38,7 +42,7 @@ import {
   readPackages,
   releasePublishOrder,
   topologicalSort,
-} from './lib/package-graph.ts';
+} from '../lib/package-graph.ts';
 import { walk, walkSync } from '@std/fs/walk';
 import { basename, dirname, join } from '@std/path';
 import { formatError } from '@openelement/element';

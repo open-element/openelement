@@ -67,9 +67,9 @@ import { dirname, join, resolve } from '@std/path';
 import { formatJson } from '@openelement/element/build-utils';
 import { formatError } from '@openelement/element';
 import ts from 'typescript';
-import { PACKAGE_VERSION, RETAINED_PACKAGE_NAMES } from './project-constants.ts';
-import { readPackages } from './lib/package-graph.ts';
-import { tarballPath } from './lib/npm-tarball.ts';
+import { PACKAGE_VERSION, RETAINED_PACKAGE_NAMES } from '../repo/project-constants.ts';
+import { readPackages } from '../lib/package-graph.ts';
+import { tarballPath } from '../lib/npm-tarball.ts';
 
 const repoRoot = resolve(import.meta.dirname!, '..');
 // Generous ceilings for the real SSG build and cold-cache vite/dev server

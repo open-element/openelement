@@ -6,9 +6,9 @@ Deno.test('gate: green steps all pass with per-step results', async () => {
   const lines: string[] = [];
   const { ok, results } = await runGate(
     ['a', 'b'],
-    async (task) => {
+    (task) => {
       seen.push(task);
-      return 0;
+      return Promise.resolve(0);
     },
     (line) => lines.push(line),
   );
@@ -26,9 +26,9 @@ Deno.test('gate: first failure stops the gate fail-closed', async () => {
   const lines: string[] = [];
   const { ok, results } = await runGate(
     ['a', 'failing', 'never'],
-    async (task) => {
+    (task) => {
       seen.push(task);
-      return task === 'failing' ? 3 : 0;
+      return Promise.resolve(task === 'failing' ? 3 : 0);
     },
     (line) => lines.push(line),
   );

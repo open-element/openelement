@@ -7,11 +7,11 @@
 
 import { walkSync } from '@std/fs/walk';
 import { dirname } from '@std/path';
-import { stripComments } from './lib/text.ts';
-import { runCommand } from './lib/process.ts';
-import { type PackageInfo, readPackages, releasePublishOrder } from './lib/package-graph.ts';
-import { tarballPath } from './lib/npm-tarball.ts';
-import { extractStaticModuleSpecifiers } from './lib/typescript-ast.ts';
+import { stripComments } from '../lib/text.ts';
+import { runCommand } from '../lib/process.ts';
+import { type PackageInfo, readPackages, releasePublishOrder } from '../lib/package-graph.ts';
+import { tarballPath } from '../lib/npm-tarball.ts';
+import { extractStaticModuleSpecifiers } from '../lib/typescript-ast.ts';
 
 const PUBLINT_VERSION = '0.3.21';
 const ATTW_VERSION = '0.18.4';

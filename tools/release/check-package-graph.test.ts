@@ -5,8 +5,8 @@ import {
   isAllowedDependencyDirection,
   packageSetFailures,
 } from './check-package-graph.ts';
-import { PACKAGE_VERSION } from './project-constants.ts';
-import type { PackageInfo } from './lib/package-graph.ts';
+import { PACKAGE_VERSION } from '../repo/project-constants.ts';
+import type { PackageInfo } from '../lib/package-graph.ts';
 
 function fixture(name: string, exports: unknown): PackageInfo {
   return {

@@ -19,14 +19,14 @@
  */
 import { parseArgs } from '@std/cli/parse-args';
 import { exists } from '@std/fs';
-import { NITRO_VERSION } from '../nitro-compatibility.ts';
+import { NITRO_VERSION } from './nitro-compatibility.ts';
 
 const args = parseArgs(Deno.args, {
   string: ['root', 'preset', 'out', 'prune-public'],
 });
 
 const root = args.root ?? '.';
-const preset = args.preset;
+const preset = args.preset ?? '';
 const out = args.out ?? '.output';
 const prunePublic = args['prune-public'];
 

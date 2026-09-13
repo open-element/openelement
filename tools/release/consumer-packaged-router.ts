@@ -1,9 +1,9 @@
 /** Packed Router Route Mode consumer: no Element or renderer dependency. */
 import { existsSync } from '@std/fs';
 import { join, resolve } from '@std/path';
-import { PACKAGE_VERSION } from './project-constants.ts';
-import { readPackages } from './lib/package-graph.ts';
-import { tarballPath } from './lib/npm-tarball.ts';
+import { PACKAGE_VERSION } from '../repo/project-constants.ts';
+import { readPackages } from '../lib/package-graph.ts';
+import { tarballPath } from '../lib/npm-tarball.ts';
 
 const repoRoot = resolve(import.meta.dirname!, '..');
 const router = (await readPackages()).find((pkg) => pkg.name === '@openelement/router');

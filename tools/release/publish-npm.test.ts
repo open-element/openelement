@@ -13,7 +13,7 @@ import {
   rewriteDtsRelativeExtensions,
   verifyNpmRelease,
 } from './publish-npm.ts';
-import type { PackageInfo } from './lib/package-graph.ts';
+import type { PackageInfo } from '../lib/package-graph.ts';
 
 function pkg(name: string, version: string): PackageInfo {
   return {

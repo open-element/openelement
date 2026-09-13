@@ -14,7 +14,10 @@ import { walkSync } from '@std/fs/walk';
 import { exists } from '@std/fs';
 import { assertCompatibilityDate } from '../../../tools/lib/compatibility-date.ts';
 import { runWithOutput } from '../../../tools/lib/process.ts';
-import { NITRO_COMPATIBILITY_DATE, NITRO_VERSION } from '../../../tools/nitro-compatibility.ts';
+import {
+  NITRO_COMPATIBILITY_DATE,
+  NITRO_VERSION,
+} from '../../../tools/release/nitro-compatibility.ts';
 
 async function readJson<T = unknown>(path: string | URL): Promise<T> {
   return JSON.parse(await Deno.readTextFile(path)) as T;

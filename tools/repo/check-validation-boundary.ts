@@ -6,7 +6,7 @@
  */
 
 import { walkSync } from '@std/fs/walk';
-import { extractStaticModuleSpecifiers } from './lib/typescript-ast.ts';
+import { extractStaticModuleSpecifiers } from '../lib/typescript-ast.ts';
 
 const SOURCE_ROOTS = [
   'packages/element/src',

@@ -25,7 +25,7 @@
 import { copy, existsSync } from '@std/fs';
 import { join, resolve } from '@std/path';
 import { formatJson } from '@openelement/element/build-utils';
-import { PACKAGE_VERSION } from './project-constants.ts';
+import { PACKAGE_VERSION } from '../repo/project-constants.ts';
 import { NITRO_VERSION } from './nitro-compatibility.ts';
 
 const repoRoot = resolve(import.meta.dirname!, '..');

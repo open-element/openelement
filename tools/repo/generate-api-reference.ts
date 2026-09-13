@@ -11,7 +11,7 @@
 import { formatJson } from '@openelement/element/build-utils';
 import { resolve } from '@std/path';
 import ts from 'typescript';
-import { readPackages, releasePublishOrder } from './lib/package-graph.ts';
+import { readPackages, releasePublishOrder } from '../lib/package-graph.ts';
 
 export const API_REFERENCE_ARTIFACT = 'apps/site/app/data/_generated-api-reference.ts';
 const UI_MANIFEST = 'packages/ui/src/generated-manifest.json';

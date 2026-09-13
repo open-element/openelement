@@ -6,7 +6,7 @@
 
 import { walk } from '@std/fs/walk';
 import { join } from '@std/path';
-import { runMicroSuite } from '../benchmarks/micro/micro.ts';
+import { runMicroSuite } from '../../benchmarks/micro/micro.ts';
 
 interface CommandMeasurement {
   command: string;

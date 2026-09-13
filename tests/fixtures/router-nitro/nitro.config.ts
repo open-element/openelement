@@ -1,4 +1,4 @@
-import { NITRO_COMPATIBILITY_DATE } from '../../../tools/nitro-compatibility.ts';
+import { NITRO_COMPATIBILITY_DATE } from '../../../tools/release/nitro-compatibility.ts';
 
 // The preset is selected by the caller (`nitro build --preset ...`, driven by
 // tests/fixtures/router-nitro/proof.ts (same --preset convention as tools/release/nitro-build.ts)), so

@@ -35,8 +35,8 @@
  */
 import ts from 'typescript';
 import { walk } from '@std/fs/walk';
-import { readPackages } from './lib/package-graph.ts';
-import { apiReference } from '../apps/site/app/data/_generated-api-reference.ts';
+import { readPackages } from '../lib/package-graph.ts';
+import { apiReference } from '../../apps/site/app/data/_generated-api-reference.ts';
 
 /** The maintained authoring surface; blog is excluded deliberately (header). */
 const CHECKED_CONTENT_DIRS = ['apps/site/content/guide', 'apps/site/content/architecture'];

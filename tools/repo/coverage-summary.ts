@@ -1,6 +1,6 @@
 import { walk } from '@std/fs/walk';
 import ts from 'typescript';
-import { parseTypeScript } from './lib/typescript-ast.ts';
+import { parseTypeScript } from '../lib/typescript-ast.ts';
 
 export interface CoverageMetric {
   covered: number;

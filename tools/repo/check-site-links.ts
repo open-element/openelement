@@ -25,8 +25,8 @@ import {
   type LinkFailure,
   pageSeo,
   resolveBuiltPath,
-} from './lib/site-links.ts';
-import { apiReference } from '../apps/site/app/data/_generated-api-reference.ts';
+} from '../lib/site-links.ts';
+import { apiReference } from '../../apps/site/app/data/_generated-api-reference.ts';
 
 export const SITE_DIST = 'apps/site/dist';
 const SITE_LOCALES = ['en', 'zh'] as const;

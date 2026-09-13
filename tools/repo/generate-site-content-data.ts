@@ -15,10 +15,10 @@ import {
   loadCollectionData,
   writeBlogDataModule,
   writeCollectionDataModule,
-} from '../apps/site/lib/content.ts';
-import { blogCollection, prepareBlogPosts } from '../apps/site/lib/blog.ts';
+} from '../../apps/site/lib/content.ts';
+import { blogCollection, prepareBlogPosts } from '../../apps/site/lib/blog.ts';
 import { fromFileUrl, join } from '@std/path';
-import { articleCollections } from '../apps/site/content-collections.ts';
+import { articleCollections } from '../../apps/site/content-collections.ts';
 
 const siteRoot = fromFileUrl(new URL('../apps/site/', import.meta.url));
 

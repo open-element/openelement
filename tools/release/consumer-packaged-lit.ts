@@ -16,7 +16,7 @@
  * Run via the root `consumer:packaged-app` task (chained with the native leg).
  */
 
-import { PACKAGE_VERSION } from './project-constants.ts';
+import { PACKAGE_VERSION } from '../repo/project-constants.ts';
 import { type PackedAppLegSpec, qualifyPackedAppLeg } from './consumer-packaged-shared.ts';
 
 // ─── Consumer app sources (lit renderer leg) ────────────────────────────────

@@ -43,8 +43,8 @@
 
 import { existsSync } from '@std/fs';
 import { join, resolve } from '@std/path';
-import { readPackages } from './lib/package-graph.ts';
-import { tarballPath } from './lib/npm-tarball.ts';
+import { readPackages } from '../lib/package-graph.ts';
+import { tarballPath } from '../lib/npm-tarball.ts';
 
 const repoRoot = resolve(import.meta.dirname!, '..');
 

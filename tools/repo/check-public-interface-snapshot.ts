@@ -2,7 +2,7 @@
 import { formatJson } from '@openelement/element/build-utils';
 import ts from 'typescript';
 import { resolve } from '@std/path';
-import { readPackages, releasePublishOrder } from './lib/package-graph.ts';
+import { readPackages, releasePublishOrder } from '../lib/package-graph.ts';
 
 const SNAPSHOT = 'docs/release/public-interface-snapshot.json';
 const TYPE_FLAGS = ts.TypeFormatFlags.NoTruncation |

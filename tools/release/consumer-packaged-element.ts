@@ -3,7 +3,7 @@ import { assert, assertEquals } from '@std/assert';
 import { join, resolve } from '@std/path';
 import { chromium, firefox, webkit } from '@playwright/test';
 import ts from 'typescript';
-import { PACKAGE_VERSION } from './project-constants.ts';
+import { PACKAGE_VERSION } from '../repo/project-constants.ts';
 
 const root = resolve(import.meta.dirname!, '..');
 const author = await Deno.makeTempDir({ prefix: 'oe-element-author-' });

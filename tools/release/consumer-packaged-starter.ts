@@ -30,10 +30,10 @@
 import { existsSync } from '@std/fs';
 import { join, resolve } from '@std/path';
 import { formatJson } from '@openelement/element/build-utils';
-import { PACKAGE_VERSION, RETAINED_PACKAGE_NAMES } from './project-constants.ts';
-import { readPackages } from './lib/package-graph.ts';
-import { tarballPath } from './lib/npm-tarball.ts';
-import { extractStaticModuleSpecifiers } from './lib/typescript-ast.ts';
+import { PACKAGE_VERSION, RETAINED_PACKAGE_NAMES } from '../repo/project-constants.ts';
+import { readPackages } from '../lib/package-graph.ts';
+import { tarballPath } from '../lib/npm-tarball.ts';
+import { extractStaticModuleSpecifiers } from '../lib/typescript-ast.ts';
 
 async function readJson<T = unknown>(path: string | URL): Promise<T> {
   return JSON.parse(await Deno.readTextFile(path)) as T;

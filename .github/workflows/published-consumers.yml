@@ -30,7 +30,7 @@ jobs:
           OPEN_ELEMENT_PUBLISHED_VERSION: ${{ inputs.version }}
         run: >-
           deno run --allow-read --allow-write --allow-run --allow-env --allow-net
-          tools/published-consumer-qualification.ts --mode starter
+          tools/release/published-consumer-qualification.ts --mode starter
           --report published-consumer-starter-${{ runner.os }}.json
       - name: Archive published starter diagnostics
         if: always()
@@ -57,7 +57,7 @@ jobs:
           OPEN_ELEMENT_PUBLISHED_VERSION: ${{ inputs.version }}
         run: >-
           deno run --allow-read --allow-write --allow-run --allow-env --allow-net
-          tools/published-consumer-qualification.ts --mode runtime
+          tools/release/published-consumer-qualification.ts --mode runtime
           --report published-consumer-runtime-linux.json
       - name: Verify Nitro Node and Workers through nitro-mount
         run: |
@@ -68,7 +68,7 @@ jobs:
           OPEN_ELEMENT_PUBLISHED_VERSION: ${{ inputs.version }}
         run: |
           deno task third-party-wc:smoke
-          deno run -A tools/published-consumer-qualification.ts --smoke --version "$OPEN_ELEMENT_PUBLISHED_VERSION" --jsdelivr
+          deno run --allow-read --allow-write --allow-env --allow-run --allow-net tools/release/published-consumer-qualification.ts --smoke --version "$OPEN_ELEMENT_PUBLISHED_VERSION" --jsdelivr
       - name: Archive published runtime diagnostics
         if: always()
         # v7.0.1

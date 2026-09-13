@@ -4,8 +4,8 @@
  * and tracked changes reject the run before any artifacts are trusted.
  */
 
-import { readPackages } from './lib/package-graph.ts';
-import { tarballPath } from './lib/npm-tarball.ts';
+import { readPackages } from '../lib/package-graph.ts';
+import { tarballPath } from '../lib/npm-tarball.ts';
 
 interface CommandResult {
   ok: boolean;

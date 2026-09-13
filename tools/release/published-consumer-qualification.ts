@@ -39,8 +39,8 @@
 import { dirname, join } from '@std/path';
 import { formatError } from '@openelement/element';
 import { formatJson } from '@openelement/element/build-utils';
-import { PACKAGE_VERSION } from './project-constants.ts';
-import { runWithOutput } from './lib/process.ts';
+import { PACKAGE_VERSION } from '../repo/project-constants.ts';
+import { runWithOutput } from '../lib/process.ts';
 
 // ---------------------------------------------------------------------------
 // Release-gate verdict contract (#1216, A10.8)

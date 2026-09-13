@@ -11,24 +11,24 @@ import {
   packagesByVersion,
   readPackages,
   releasePublishOrder,
-} from './lib/package-graph.ts';
-import { runCommand, runWithOutput } from './lib/process.ts';
-import { assertCleanWorktree } from './lib/git-cleanliness.ts';
+} from '../lib/package-graph.ts';
+import { runCommand, runWithOutput } from '../lib/process.ts';
+import { assertCleanWorktree } from '../lib/git-cleanliness.ts';
 import { formatError } from '@openelement/element';
 import { formatJson } from '@openelement/element/build-utils';
-import { extractStaticModuleSpecifiers } from './lib/typescript-ast.ts';
-import { npmTarballName, tarballPath } from './lib/npm-tarball.ts';
+import { extractStaticModuleSpecifiers } from '../lib/typescript-ast.ts';
+import { npmTarballName, tarballPath } from '../lib/npm-tarball.ts';
 import {
   compilePackageElementModules,
   stageCompiledPackWorkspace,
-} from './lib/compiled-pack-staging.ts';
+} from '../lib/compiled-pack-staging.ts';
 import {
   assertPublicReleaseVersion,
   type PrereleaseChannel,
   prereleaseChannel,
   previousPrereleaseVersion,
   tryParseLineVersion,
-} from './lib/version.ts';
+} from '../lib/version.ts';
 
 const COMMANDS = new Set([
   'pack',

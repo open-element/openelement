@@ -145,7 +145,7 @@ jobs:
       - name: Pack the release tarballs
         run: deno task pack:dry-run
       - name: Packed serve proof under Node ${{ matrix.node }}
-        run: deno run --allow-read --allow-write --allow-run --allow-env --allow-net tools/consumer-packaged-node-serve.ts node
+        run: deno run --allow-read --allow-write --allow-run --allow-env --allow-net tools/release/consumer-packaged-node-serve.ts node
 
   # #1228 (B2.5): the deployment guide and PACKAGE_SURFACE.md claim the
   # generated dist/server artifacts run on Bun. A claim that survives only on
@@ -181,7 +181,7 @@ jobs:
       - name: Pack the release tarballs
         run: deno task pack:dry-run
       - name: Packed serve proof under Bun
-        run: deno run --allow-read --allow-write --allow-run --allow-env --allow-net tools/consumer-packaged-node-serve.ts bun
+        run: deno run --allow-read --allow-write --allow-run --allow-env --allow-net tools/release/consumer-packaged-node-serve.ts bun
 
   # TypeScript 7 SHADOW gate (1.0 Alpha convergence, "TypeScript 7: split
   # decision"). Non-blocking by design: continue-on-error keeps the run
