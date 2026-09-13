@@ -19,8 +19,7 @@
  * committed as a second hand-written source of truth.
  */
 
-import { dirname, join, resolve } from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { dirname, fromFileUrl, join, resolve, toFileUrl } from '@std/path';
 import type {
   CustomElementDeclaration,
   CustomElementField,
@@ -36,7 +35,7 @@ import type {
  */
 export type InteropCemManifest = CemPackage & { $schema?: string };
 
-const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
+const repoRoot = resolve(dirname(fromFileUrl(import.meta.url)), '..', '..', '..');
 const defaultFixtureRoot = new URL('./', import.meta.url);
 const requiredFrameworks = ['native', 'lit', 'fast', 'stencil'] as const;
 const requiredProbes = [
@@ -195,9 +194,7 @@ function readJson<T>(path: string): Promise<T> {
 }
 
 function pathFromRoot(root: URL | string, relativePath: string): string {
-  return root instanceof URL
-    ? fileURLToPath(new URL(relativePath, root))
-    : join(root, relativePath);
+  return root instanceof URL ? fromFileUrl(new URL(relativePath, root)) : join(root, relativePath);
 }
 
 function equalArrays(
@@ -642,7 +639,7 @@ function localPackageAliases(root: string): Array<[string, string]> {
     if (typeof exportsField === 'string') {
       entries.push([
         packageJson.name,
-        pathToFileURL(join(packageDir, exportsField)).href,
+        toFileUrl(join(packageDir, exportsField)).href,
       ]);
       continue;
     }
@@ -652,7 +649,7 @@ function localPackageAliases(root: string): Array<[string, string]> {
       const specifier = subpath === '.'
         ? packageJson.name
         : `${packageJson.name}${subpath.slice(1)}`;
-      entries.push([specifier, pathToFileURL(join(packageDir, target)).href]);
+      entries.push([specifier, toFileUrl(join(packageDir, target)).href]);
     }
   }
   return entries.sort((left, right) => right[0].length - left[0].length);
@@ -740,7 +737,7 @@ async function patchApp(appDir: string): Promise<void> {
   const vitePath = join(appDir, 'vite.config.ts');
   const viteText = await Deno.readTextFile(vitePath);
   const localAliases = localPackageAliases(repoRoot).map(([find, target]) =>
-    `{ find: ${JSON.stringify(find)}, replacement: ${JSON.stringify(fileURLToPath(target))} }`
+    `{ find: ${JSON.stringify(find)}, replacement: ${JSON.stringify(fromFileUrl(target))} }`
   );
   const externalAliases = [
     '@preact/signals-core',
