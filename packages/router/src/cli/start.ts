@@ -6,9 +6,11 @@
  *                      fetch(Request): Response dispatch. When
  *                      dist/server/index.js exists, dynamic routes and
  *                      mutations dispatch to it.
+ *                      (`deno task start` in a generated project.)
  *   preview          - static-only `vite preview`; refuses to run when
  *                      dist/server/index.js exists because `vite preview`
  *                      cannot serve dynamic routes.
+ *                      (`deno task preview` in a generated project.)
  *
  * Node/Workers/Bun deploys are produced by the Nitro mount from the same
  * standard fetch entry; this CLI maintains no Node HTTP bridge.
@@ -119,14 +121,30 @@ async function runPreview(viteArgs: string[]): Promise<void> {
       `[openElement preview] This project has request-time routes (${DEFAULT_OUT_DIR}/server).\n` +
         '  `vite preview` cannot serve dynamic loader/action routes.\n' +
         '  Use: deno task start\n' +
-        '  (or: deno run -A npm:@openelement/router/cli/start)',
+        '  (or: deno run --allow-read --allow-write --allow-env --allow-net --allow-run --allow-sys --allow-ffi --no-prompt npm:@openelement/router/cli/start)',
     );
     Deno.exit(1);
   }
   const workspaceConfig = findWorkspaceConfig(root);
   const configArgs = workspaceConfig === null ? [] : ['--config', workspaceConfig];
+  // Preview shells to the Vite native binding: scoped build-host permissions
+  // with prompts off (least privilege — never -A).
   const command = new Deno.Command('deno', {
-    args: ['run', ...configArgs, '-A', 'npm:vite', 'preview', ...viteArgs],
+    args: [
+      'run',
+      ...configArgs,
+      '--allow-read',
+      '--allow-write',
+      '--allow-env',
+      '--allow-net',
+      '--allow-run',
+      '--allow-sys',
+      '--allow-ffi',
+      '--no-prompt',
+      'npm:vite',
+      'preview',
+      ...viteArgs,
+    ],
     stdin: 'inherit',
     stdout: 'inherit',
     stderr: 'inherit',

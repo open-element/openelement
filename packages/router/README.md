@@ -88,9 +88,13 @@ this); npm consumers install them as dev dependencies.
 Generated applications build and serve through the Router CLI subpaths:
 
 ```bash
-deno run -A npm:@openelement/router/cli/build   # production build (SSG + client)
-deno run -A npm:@openelement/router/cli/start   # serve built output
+deno run --allow-read --allow-write --allow-env --allow-net --allow-run --allow-sys --allow-ffi --no-prompt npm:@openelement/router/cli/build   # production build (SSG + client)
+deno run --allow-read --allow-write --allow-env --allow-net --allow-run --allow-sys --allow-ffi --no-prompt npm:@openelement/router/cli/start   # serve built output
 ```
+
+In a generated project the same commands are the scoped `deno task build`
+and `deno task start` tasks (the Vite native binding needs `--allow-ffi`;
+browser/consumer harnesses instead run `--deny-ffi --no-prompt`).
 
 The build executes in a fixed phase order — SSG (Phase 3) runs before the client
 bundle (Phase 2), because client chunk hashes do not affect HTML content and

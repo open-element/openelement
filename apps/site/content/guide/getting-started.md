@@ -11,7 +11,7 @@ order: 1
 Three commands to a running app:
 
 ```bash
-deno run -A --minimum-dependency-age 0 npm:@openelement/create@alpha my-app
+deno run --allow-read --allow-write --allow-env --allow-net --deny-ffi --no-prompt --minimum-dependency-age 0 npm:@openelement/create@alpha my-app
 cd my-app
 deno task dev
 ```

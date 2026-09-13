@@ -6,8 +6,8 @@
  * script only keeps the port preference + findPort retry the Playwright
  * webServer needs.
  *
- * Usage:
- *   deno run -A www/e2e/static-server.ts --port 4174 --dir www/dist
+ * Usage (scoped permissions, never -A):
+ *   deno run --allow-read --allow-net --allow-env --deny-ffi --no-prompt apps/site/e2e/static-server.ts --port 4174 --dir apps/site/dist
  */
 
 import { findPort, serveStatic } from '../../../tools/lib/static-server.ts';

@@ -6,7 +6,7 @@
  * No orchestrator needed - all three phases run in a single viteBuild() call.
  *
  * Usage:
- *   deno run -A npm:@openelement/router/cli/build
+ *   deno run --allow-read --allow-write --allow-env --allow-net --allow-run --allow-sys --allow-ffi --no-prompt npm:@openelement/router/cli/build
  *   deno task build
  */
 

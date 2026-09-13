@@ -25,12 +25,21 @@ async function ensureFixtureBuild(): Promise<void> {
   // #953: the assertion below requires output from current sources — a stale
   // dist/server from a pre-fix build would falsify the contract, so always
   // rebuild (the build is incremental enough for local runs).
+  // The fixture build runs the Vite native binding: scoped build-host
+  // permissions with prompts off, never -A.
   const build = await new Deno.Command(Deno.execPath(), {
     args: [
       'run',
       '--config',
       join(repoRoot, 'deno.json'),
-      '-A',
+      '--allow-read',
+      '--allow-write',
+      '--allow-env',
+      '--allow-net',
+      '--allow-run',
+      '--allow-sys',
+      '--allow-ffi',
+      '--no-prompt',
       join(fixtureDir, '../../../packages/router/src/cli/build.ts'),
     ],
     cwd: fixtureDir,
@@ -80,7 +89,14 @@ Deno.test({
           'run',
           '--config',
           join(repoRoot, 'deno.json'),
-          '-A',
+          '--allow-read',
+          '--allow-write',
+          '--allow-env',
+          '--allow-net',
+          '--allow-run',
+          '--allow-sys',
+          '--allow-ffi',
+          '--no-prompt',
           startCli,
           '--mode=preview',
           '--port',
@@ -112,7 +128,7 @@ Deno.test({
         // The process may have already exited.
       }
       await server?.status.catch(() => undefined);
-      // Preview delegates to a `deno run -A npm:vite preview` grandchild;
+      // Preview delegates to a scoped-permission `npm:vite preview` grandchild;
       // kill it by its unique port argument so no server leaks.
       await new Deno.Command('pkill', {
         args: ['-f', `npm:vite preview --port ${freePort}`],

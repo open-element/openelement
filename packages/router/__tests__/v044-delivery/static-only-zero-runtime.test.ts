@@ -14,8 +14,8 @@
  *
  * The fixture dist is gitignored. The test rebuilds from a clean dist and
  * removes it afterwards, so repeated runs are deterministic and the worktree
- * ends clean. Run it directly with:
- *   deno test -A packages/router/__tests__/v044-delivery/static-only-zero-runtime.test.ts
+ * ends clean. Run it through the package suite (scoped permissions):
+ *   deno task --cwd packages/router test
  */
 
 import { assert, assertEquals } from '@std/assert';
@@ -33,13 +33,21 @@ async function removeDist(): Promise<void> {
 
 async function buildFixture(): Promise<void> {
   await removeDist();
-  // Same CLI invocation as the `tests/fixtures/router-static-only#build` task.
+  // Same CLI invocation as the `tests/fixtures/router-static-only#build` task:
+  // scoped build-host permissions (Vite native binding), never -A.
   const build = await new Deno.Command(Deno.execPath(), {
     args: [
       'run',
       '--config',
       join(repoRoot, 'deno.json'),
-      '-A',
+      '--allow-read',
+      '--allow-write',
+      '--allow-env',
+      '--allow-net',
+      '--allow-run',
+      '--allow-sys',
+      '--allow-ffi',
+      '--no-prompt',
       join(fixtureDir, '../../../packages/router/src/cli/build.ts'),
     ],
     cwd: fixtureDir,

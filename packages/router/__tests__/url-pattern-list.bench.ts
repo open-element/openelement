@@ -1,5 +1,6 @@
 /**
- * Bounded diagnostic, not a ranking: deno run -A this-file. The qualified
+ * Bounded diagnostic, not a ranking: run through the package suite
+ * (scoped permissions, never -A). The qualified
  * construction/hit/miss/memory evidence for #1324 lives in the maintained
  * fork: open-element/url-pattern-list BENCHMARKS.md (Node, GC-controlled).
  */

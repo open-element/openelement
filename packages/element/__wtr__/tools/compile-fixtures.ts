@@ -9,8 +9,8 @@
  * annotations, and the WTR dev server lowers them with esbuild, mirroring how
  * Vite's builtin TS/JSX lowering runs after the plugin in a real build.
  *
- * Run from the repository root:
- *   deno run -A packages/element/__wtr__/tools/compile-fixtures.ts
+ * Run through the package task (scoped permissions, never -A):
+ *   deno task --cwd packages/element browser:compile
  */
 // NOTE: __wtr__/package.json makes Deno treat this directory as outside the
 // repo workspace, so no workspace import-map specifiers (@std/*) here —

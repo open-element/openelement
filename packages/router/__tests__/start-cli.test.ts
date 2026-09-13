@@ -39,8 +39,22 @@ async function runCli(
   args: string[],
   env: Record<string, string> = {},
 ): Promise<{ code: number; output: string }> {
+  // The start CLI serves over the vite module graph (preview delegates to the
+  // Vite native binding): scoped permissions with prompts off, never -A.
   const command = new Deno.Command(Deno.execPath(), {
-    args: ['run', '-A', startCli, ...args],
+    args: [
+      'run',
+      '--allow-read',
+      '--allow-write',
+      '--allow-env',
+      '--allow-net',
+      '--allow-run',
+      '--allow-sys',
+      '--allow-ffi',
+      '--no-prompt',
+      startCli,
+      ...args,
+    ],
     cwd,
     env,
     stdout: 'piped',
@@ -114,7 +128,18 @@ Deno.test({
       await Deno.writeTextFile(join(dir, 'dist', 'index.html'), '<h1>merged cli</h1>\n');
 
       server = new Deno.Command(Deno.execPath(), {
-        args: ['run', '-A', startCli],
+        args: [
+          'run',
+          '--allow-read',
+          '--allow-write',
+          '--allow-env',
+          '--allow-net',
+          '--allow-run',
+          '--allow-sys',
+          '--allow-ffi',
+          '--no-prompt',
+          startCli,
+        ],
         cwd: dir,
         env: { OPEN_ELEMENT_PORT: String(freePort), OPEN_ELEMENT_HOST: '127.0.0.1' },
         stdout: 'null',

@@ -61,7 +61,8 @@ export default defineConfig({
   webServer: {
     // `exec` prevents the shell Playwright launches from orphaning Deno when
     // the suite finishes or is interrupted.
-    command: `exec deno run -A static-server.ts --port ${PORT} --dir ../dist`,
+    command:
+      `exec deno run --allow-read --allow-net --allow-env --deny-ffi --no-prompt static-server.ts --port ${PORT} --dir ../dist`,
     url: baseURL,
     reuseExistingServer: false,
     timeout: 120_000,

@@ -13,7 +13,7 @@ directory structure, Deno configuration, Vite setup, and starter pages.
 ## Usage
 
 ```bash
-deno run -A --minimum-dependency-age 0 npm:@openelement/create my-app
+deno run --allow-read --allow-write --allow-env --allow-net --deny-ffi --no-prompt --minimum-dependency-age 0 npm:@openelement/create my-app
 cd my-app
 deno task dev
 ```

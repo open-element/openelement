@@ -263,7 +263,10 @@ export class OpenCounter extends OpenElement {
           <h2>{this.begin}</h2>
           <div class='command'>
             <code>$</code>
-            <span>deno run -A --minimum-dependency-age 0 npm:@openelement/create my-app</span>
+            <span>
+              deno run --allow-read --allow-write --allow-env --allow-net --deny-ffi --no-prompt
+              --minimum-dependency-age 0 npm:@openelement/create my-app
+            </span>
           </div>
           <p class='command-note'>{this.beginNote}</p>
           <div class='actions'>
