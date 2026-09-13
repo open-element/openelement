@@ -15,6 +15,7 @@
     "consumer:element-smoke": "deno run --allow-run ../repo/run-in.ts --root ../.. -- deno run --allow-read --allow-write --allow-env --allow-run tools/release/published-consumer-qualification.ts --smoke --local",
     "graph:check": "deno run --allow-run ../repo/run-in.ts --root ../.. -- deno run --allow-read --allow-env tools/release/check-package-graph.ts",
     "consumer:packaged-app": "deno run --allow-run ../repo/run-in.ts --root ../.. -- deno run --allow-read --allow-write --allow-run --allow-env --allow-net tools/release/consumer-packaged-native.ts && deno run --allow-run ../repo/run-in.ts --root ../.. -- deno run --allow-read --allow-write --allow-run --allow-env --allow-net tools/release/consumer-packaged-lit.ts",
-    "gate:packed": "deno run --allow-run ./gate.ts tools/release#pack:native-check tools/release#pack:dry-run tools/release#package-artifacts:check tools/release#consumer:packaged tools/release#consumer:packaged-app tools/release#consumer:packaged-router tools/release#consumer:packaged-element tools/release#consumer:packaged-ui tests/fixtures/third-party-web-components#smoke"
+    "gate:packed": "deno run --allow-run ./gate.ts tools/release#typecheck tools/release#pack:native-check tools/release#pack:dry-run tools/release#package-artifacts:check tools/release#consumer:packaged tools/release#consumer:packaged-app tools/release#consumer:packaged-router tools/release#consumer:packaged-element tools/release#consumer:packaged-ui tests/fixtures/third-party-web-components#smoke",
+    "typecheck": "deno run --allow-run ../repo/run-in.ts --root ../.. -- deno check tools/release/ tools/lib/"
   }
 }
