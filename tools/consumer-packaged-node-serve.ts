@@ -18,9 +18,9 @@
  * filesystem/process capability (per the Alpha platform doctrine), and the
  * supported build toolchain is Deno-driven (`deno run npm:vite`,
  * `deno run <router>/cli/build`). The deploy target runs the Nitro output:
- * dist/server/serve.mjs is the Deno local runner and fails closed outside
- * Deno, so plain node (or bun) boots the Nitro server entry built from the
- * packed app via the packed @openelement/router/nitro-mount.
+ * local preview is served by cli/start (Deno.serve from TypeScript source),
+ * so plain node (or bun) boots the Nitro server entry built from the packed
+ * app via the packed @openelement/router/nitro-mount.
  */
 import { copy, existsSync } from '@std/fs';
 import { join, resolve } from '@std/path';
@@ -168,8 +168,8 @@ try {
   console.log(`PASS packed-serve-${runtime} boundary — no dependency resolves into the repository`);
 
   // Nitro deploy contract: the packed app is served on the target runtime
-  // through the packed nitro-mount, never through dist/server/serve.mjs
-  // (the Deno local runner, which fails closed outside Deno).
+  // through the packed nitro-mount. Local preview stays on cli/start; the
+  // build generates no second production server.
   const nitroPreset = runtime === 'bun' ? 'bun' : 'node-server';
   const files: Record<string, string> = {
     'nitro.config.ts': `export default defineNitroConfig({
@@ -273,7 +273,7 @@ export default class PackedLive extends OpenElement {
 
   const build = await run(Deno.execPath(), ['run', '-A', 'build.mjs'], tmp, {}, BUILD_TIMEOUT_MS);
   if (!build.success) throw new Error(`Packed serve build failed:\n${build.output}`);
-  for (const artifact of ['dist/server/index.js', 'dist/server/serve.mjs', 'dist/index.html']) {
+  for (const artifact of ['dist/server/index.js', 'dist/index.html']) {
     if (!existsSync(join(tmp, artifact))) {
       throw new Error(`Packed build emitted no ${artifact}`);
     }

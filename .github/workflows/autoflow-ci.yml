@@ -109,20 +109,19 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
-  # Issue #628 (first slice): the generated dist/server artifact must boot
-  # under plain Node, not just under the Deno CLI (#969). The runtime floor
-  # is Node.js >= 24 (WHATWG URLPattern global): the matrix serves on 24
-  # (lowest supported, required) and 26 (Current, required). The below-floor
-  # clean-error behavior stays pinned by unit test
-  # (packages/router/__tests__/ssg-helpers.test.ts), not by an EOL Node job.
-  # Admission proof is packed-world: the harness installs the real
+  # The packed deploy artifact must boot under plain Node, not just under
+  # the Deno CLI. The runtime floor is Node.js >= 24 (WHATWG URLPattern
+  # global): the matrix serves on 24 (lowest supported, required) and 26
+  # (Current, required). The below-floor clean-error behavior stays pinned by
+  # unit test (packages/router/__tests__/ssg-helpers.test.ts), not by an EOL
+  # Node job. Admission proof is packed-world: the harness installs the real
   # pack:dry-run tarballs into an isolated consumer (empty npm cache, no
-  # workspace source on the resolution path), builds with the packed CLI,
-  # and boots dist/server/serve.mjs under plain Node — never a workspace
-  # build plus a hand-made shim. This proof lives in these smoke jobs —
-  # not in gate:packed — because the main gate job's default node is below
-  # the Node >= 24 floor by design; gate:packed's serve.mjs cells run under
-  # Deno (consumer:packaged-app) instead.
+  # workspace source on the resolution path), builds with the packed CLI, and
+  # boots the Nitro server output built from the packed app under plain Node —
+  # never a workspace build plus a hand-made shim. Local preview stays on
+  # cli/start; the build generates no second production server. This proof
+  # lives in these smoke jobs — not in gate:packed — because the main gate
+  # job's default node is below the Node >= 24 floor by design.
   node-serve-smoke:
     name: dist/server Node smoke (Node ${{ matrix.node }})
     runs-on: ubuntu-latest

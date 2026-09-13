@@ -56,3 +56,15 @@ new-baseline statement.
   bytes change as above; runtimes without `URLPattern` fail fast.
 - Docs, the site security guide, generated API reference, the public
   interface snapshot, and generated site data are updated in the same change.
+
+## Addendum (2026-09-13): generated standalone server deleted
+
+Item 3 above kept a derived MIME table inside the generated
+`dist/server/serve.mjs`. Follow-up convergence deletes that second
+production server entirely: the build emits only the portable
+`fetch(Request) -> Response` entry (`dist/server/index.js`), local preview
+is served by the start CLI from TypeScript source (`Deno.serve` over the
+shared fetch handler in `static-serve.ts`), and production deploys go
+through the Nitro mount. GET/POST/loader/action/static/cache/404/error
+coverage moves to the start-CLI and Nitro proof legs; no MIME table,
+request dispatch, or server file is generated anymore.

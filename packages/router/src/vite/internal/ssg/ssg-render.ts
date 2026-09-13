@@ -24,11 +24,7 @@ import type {
 } from '../protocol/ssg.ts';
 import { createLogger } from '@openelement/element';
 import { expandDynamicRoutes, expandI18nLocales } from './ssg-dynamic.ts';
-import {
-  findHtmlFiles,
-  renderRequestTimeServerModule,
-  renderStandaloneServerModule,
-} from './ssg-helpers.ts';
+import { findHtmlFiles, renderRequestTimeServerModule } from './ssg-helpers.ts';
 import { formatJson, normalizeSeparators } from '@openelement/element/build-utils';
 import { DEFAULT_OUT_DIR } from './../paths.ts';
 
@@ -239,12 +235,9 @@ export async function ssgRender(
       join(serverDir, 'client-script.js'),
       `export const clientScriptSrc = '';\n`,
     );
-    // #959: standalone server entry so the built output runs without the
-    // CLI or a hand-written Nitro bootstrap.
-    Deno.writeTextFileSync(
-      join(serverDir, 'serve.mjs'),
-      renderStandaloneServerModule(),
-    );
+    // Local preview is served by the start CLI from TypeScript source
+    // (Deno.serve over the shared fetch handler); production deploys go
+    // through the Nitro mount. No second production server is generated.
     // index.js/entry.js are ESM .js files; mark the server dir as ESM.
     Deno.writeTextFileSync(
       join(serverDir, 'package.json'),
@@ -255,11 +248,6 @@ export async function ssgRender(
         `(${requestTimeRoutes.length} route(s): ${
           requestTimeRoutes.map((r) => r.path).join(', ')
         })`,
-    );
-    log.info(
-      `Standalone server -> ${
-        join(serverDir, 'serve.mjs')
-      } (run: deno run -A dist/server/serve.mjs)`,
     );
   }
 

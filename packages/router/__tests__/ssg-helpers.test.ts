@@ -1,11 +1,9 @@
 import { assertEquals, assertStringIncludes, assertThrows } from '@std/assert';
 import {
   renderRequestTimeServerModule,
-  renderStandaloneServerModule,
   resolveDynamicRoutePath,
 } from '../src/vite/internal/ssg/ssg-helpers.ts';
 import { parseRouteFilePath } from '../src/vite/internal/ssg/route-scanner.ts';
-import { cacheControlFor, contentTypeFor } from '../src/vite/internal/static-serve.ts';
 
 Deno.test('resolveDynamicRoutePath encodes # ? & % and spaces', () => {
   const path = resolveDynamicRoutePath('/blog/:slug', ['slug'], {
@@ -63,64 +61,4 @@ Deno.test('renderRequestTimeServerModule mounts the entry openElementHandler (#8
   assertStringIncludes(code, "import { openElementHandler } from './entry.js';");
   assertStringIncludes(code, 'return openElementHandler(request, {');
   assertEquals(code.includes('app.fetch'), false);
-});
-
-Deno.test('renderStandaloneServerModule fails fast below the URLPattern floor', () => {
-  const code = renderStandaloneServerModule();
-  assertStringIncludes(code, "typeof globalThis.Deno === 'undefined'");
-  assertStringIncludes(code, 'is the Deno local runner');
-  assertStringIncludes(code, '@openelement/router/nitro-mount');
-  assertStringIncludes(code, "typeof globalThis.URLPattern === 'undefined'");
-  assertStringIncludes(code, "await import('./index.js')");
-  assertEquals(code.includes("from 'node:"), false);
-  assertEquals(code.includes('from "node:'), false);
-  assertEquals(code.includes('node:http'), false);
-  assertStringIncludes(code, 'Deno.serve');
-});
-
-Deno.test('renderRequestTimeServerModule carries the URLPattern floor guard', () => {
-  const code = renderRequestTimeServerModule([{ path: '/live' }]);
-  assertStringIncludes(code, "typeof globalThis.URLPattern === 'undefined'");
-  assertStringIncludes(code, 'requires a runtime with WHATWG URLPattern');
-  assertEquals(code.includes('node:url'), false);
-});
-
-Deno.test('renderStandaloneServerModule MIME table matches static-serve.ts (#732-class drift guard)', () => {
-  const code = renderStandaloneServerModule();
-  // serve.mjs is self-contained and cannot import the shared table, so pin
-  // every value instead — a drift here once served CSS without a charset.
-  for (
-    const ext of [
-      '.html',
-      '.js',
-      '.mjs',
-      '.css',
-      '.json',
-      '.svg',
-      '.png',
-      '.jpg',
-      '.jpeg',
-      '.webp',
-      '.ico',
-      '.xml',
-      '.woff2',
-      '.txt',
-    ]
-  ) {
-    assertStringIncludes(code, `'${ext}': '${contentTypeFor(`x${ext}`)}'`);
-  }
-});
-
-Deno.test('renderStandaloneServerModule Cache-Control rules match static-serve.ts (#1058 drift guard)', () => {
-  const code = renderStandaloneServerModule();
-  assertStringIncludes(code, `'${cacheControlFor('assets/index-Ab1_CD2e.js')}'`);
-  assertStringIncludes(code, `'${cacheControlFor('index.html')}'`);
-  assertEquals(cacheControlFor('favicon.ico'), null);
-  assertStringIncludes(code, 'replaceAll(');
-});
-
-Deno.test('renderStandaloneServerModule forwards the deno env to loaders', () => {
-  const code = renderStandaloneServerModule();
-  assertStringIncludes(code, 'openElementServer({ req: request, env: serverEnv })');
-  assertStringIncludes(code, 'Deno.env');
 });

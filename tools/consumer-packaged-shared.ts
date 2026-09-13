@@ -30,7 +30,6 @@
  *                          stale success), stop frees the port, restart works
  *   build                  packed cli/build emits dist/server/index.js + SSG
  *   start                  cli/start serves /, /notes, /notes/<seed>, 404
- *   serve.mjs              standalone dist/server/serve.mjs serves the same
  *   form-422               POST /notes/new missing title -> 422
  *   form-303               POST /notes/new valid -> 303 + Location
  *   browser-continuation   chromium: island activates without a full reload
@@ -137,12 +136,12 @@ function reservePort(): number {
 }
 
 /**
- * Boot one long-running server (cli/start, the standalone serve.mjs or the
- * vite dev server), wait for it to answer HTTP, run the probe callback against
- * it, then stop it. A green exit alone is not lifecycle evidence: the packed
- * artifacts must actually serve the documented routes over the wire.
+ * Boot one long-running server (cli/start or the vite dev server), wait for
+ * it to answer HTTP, run the probe callback against it, then stop it. A
+ * green exit alone is not lifecycle evidence: the packed artifacts must
+ * actually serve the documented routes over the wire.
  * `argsFor` receives the reserved port so servers configured by CLI flag (the
- * vite dev server) and by env (cli/start, serve.mjs) share this lifecycle.
+ * vite dev server) and by env (cli/start) share this lifecycle.
  * Resolves to the port so callers can assert the port is freed after stop.
  */
 async function withServer(
@@ -317,7 +316,6 @@ export const PACKED_APP_CELL_NAMES = [
   'dev',
   'build',
   'start',
-  'serve.mjs',
   'form-422',
   'form-303',
   'browser-continuation',
@@ -679,7 +677,7 @@ async function postValid(spec: PackedAppLegSpec, baseUrl: string): Promise<strin
 
 /**
  * Run the generated Playwright continuation probe against one already-serving
- * base URL (production serve.mjs or the dev server). The probe itself asserts
+ * base URL (cli/start or the dev server). The probe itself asserts
  * renderer-specific continuation: the native kernel claims the island DSD and
  * lit hydrate-support adopts it, node identity survives interaction, and no
  * full reload happens.
@@ -855,8 +853,6 @@ async function devSession(spec: PackedAppLegSpec, tmp: string): Promise<string> 
 
 // ─── Server sessions ────────────────────────────────────────────────────────
 
-type ServeMode = 'start' | 'serve.mjs';
-
 interface SessionOutcome {
   gets: PackedAppOutcome;
   form422: PackedAppOutcome;
@@ -864,19 +860,16 @@ interface SessionOutcome {
 }
 
 /**
- * Boot one serve mode and run every over-the-wire probe against it. Probe
+ * Boot cli/start and run every over-the-wire probe against it. Probe
  * failures are captured per phase (the session keeps going so a GET failure
  * does not hide the form results); a readiness failure fails all three.
  */
 async function serveSession(
   spec: PackedAppLegSpec,
   tmp: string,
-  mode: ServeMode,
 ): Promise<SessionOutcome> {
-  const label = `packed-app-${spec.renderer} ${mode} server`;
-  const argsFor = mode === 'start'
-    ? () => ['task', 'start']
-    : () => ['run', '-A', 'dist/server/serve.mjs'];
+  const label = `packed-app-${spec.renderer} start server`;
+  const argsFor = () => ['task', 'start'];
   const pending = (phase: string): PackedAppOutcome => ({
     ok: false,
     detail: `${phase} not reached`,
@@ -903,18 +896,11 @@ async function serveSession(
 
 function combineFormOutcomes(
   label: string,
-  results: Partial<Record<ServeMode, PackedAppOutcome>>,
+  outcome: PackedAppOutcome | undefined,
 ): string {
-  const modes: ServeMode[] = ['start', 'serve.mjs'];
-  const parts = modes.map((mode) => {
-    const outcome = results[mode];
-    if (!outcome) return `${mode}: not run`;
-    return `${mode}: ${outcome.ok ? `ok (${outcome.detail})` : `FAIL (${outcome.detail})`}`;
-  });
-  if (!modes.every((mode) => results[mode]?.ok)) {
-    throw new Error(`${label} failed: ${parts.join('; ')}`);
-  }
-  return parts.join('; ');
+  if (!outcome) throw new Error(`${label} failed: start: not run`);
+  if (!outcome.ok) throw new Error(`${label} failed: start: FAIL (${outcome.detail})`);
+  return `start: ok (${outcome.detail})`;
 }
 
 // ─── Declaration graph walker (boundary cell) ───────────────────────────────
@@ -1132,8 +1118,8 @@ export async function qualifyPackedAppLeg(spec: PackedAppLegSpec): Promise<void>
   for (const tarball of tarballs) console.log(`  ${tarball.path}`);
 
   const tmp = await Deno.makeTempDir({ prefix: `openelement-packaged-app-${leg}-` });
-  const form422: Partial<Record<ServeMode, PackedAppOutcome>> = {};
-  const form303: Partial<Record<ServeMode, PackedAppOutcome>> = {};
+  const form422: { start?: PackedAppOutcome } = {};
+  const form303: { start?: PackedAppOutcome } = {};
   try {
     await cell(leg, 'install', [], async () => {
       // @jsr/* packages are served by JSR's npm compatibility layer (see
@@ -1262,39 +1248,31 @@ export async function qualifyPackedAppLeg(spec: PackedAppLegSpec): Promise<void>
     });
 
     await cell(leg, 'start', ['build'], async () => {
-      const result = await serveSession(spec, tmp, 'start');
+      const result = await serveSession(spec, tmp);
       form422['start'] = result.form422;
       form303['start'] = result.form303;
       if (!result.gets.ok) throw new Error(result.gets.detail);
       return `cli/start: ${result.gets.detail}`;
     });
 
-    await cell(leg, 'serve.mjs', ['build'], async () => {
-      const result = await serveSession(spec, tmp, 'serve.mjs');
-      form422['serve.mjs'] = result.form422;
-      form303['serve.mjs'] = result.form303;
-      if (!result.gets.ok) throw new Error(result.gets.detail);
-      return `dist/server/serve.mjs: ${result.gets.detail}`;
-    });
-
     await cell(
       leg,
       'form-422',
       ['build'],
-      () => Promise.resolve(combineFormOutcomes('form-422', form422)),
+      () => Promise.resolve(combineFormOutcomes('form-422', form422.start)),
     );
     await cell(
       leg,
       'form-303',
       ['build'],
-      () => Promise.resolve(combineFormOutcomes('form-303', form303)),
+      () => Promise.resolve(combineFormOutcomes('form-303', form303.start)),
     );
 
     await cell(leg, 'browser-continuation', ['build'], async () => {
       await withServer(
         `packed-app-${leg} browser host`,
         Deno.execPath(),
-        () => ['run', '-A', 'dist/server/serve.mjs'],
+        () => ['task', 'start'],
         tmp,
         (baseUrl) => runBrowserContinuationProbe(tmp, baseUrl, leg),
       );

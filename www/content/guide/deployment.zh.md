@@ -14,7 +14,7 @@ docs 站点通过 SSG 管线生成。
 
 ## 请求时服务器
 
-当任何路由声明 `renderIntent: { mode: 'dynamic' }` 时,构建还会产出 `dist/server/index.js`——挂在同一个 SSR bundle 上、可由 Nitro 挂载的处理器——以及列出请求时路由的 `server-manifest.json`,以及独立生产入口 `dist/server/serve.mjs`(`node dist/server/serve.mjs`;支持 Node 24+、Deno、Bun),无需 CLI 即可伺服静态树并分派请求时路由。纯静态构建三者都不产出；该输出契约已按 ADR-0122 冻结。
+当任何路由声明 `renderIntent: { mode: 'dynamic' }` 时,构建还会产出 `dist/server/index.js`——挂在同一个 SSR bundle 上的可移植 `fetch(Request) -> Response` 处理器——以及列出请求时路由的 `server-manifest.json`。本地预览由 `deno task start` 提供(Start CLI 在 `Deno.serve` 上运行同一 fetch handler);生产部署走下文的 Nitro 挂载。纯静态构建三者都不产出；该输出契约已按 ADR-0122 冻结。
 
 ## Nitro 预设
 

@@ -21,7 +21,6 @@
  *            outside the generated import map may survive into the bundle
  *            (a packed starter must never need workspace aliases)
  *   start    cli/start serves static + request-time + API routes over HTTP
- *   deploy   the standalone dist/server/serve.mjs serves the same probes
  *   preview  fails closed with start guidance (the starter is dynamic, #601)
  *
  * Every leg asserts over-the-wire output, not just a green exit. Gated in CI
@@ -512,10 +511,10 @@ try {
   }
   console.log(`Packed starter SSG build passed for ${PACKAGE_VERSION}.`);
 
-  // Lifecycle legs 5–6 — start and deploy: serve the built output through the
-  // documented production entries (cli/start and the standalone
-  // dist/server/serve.mjs a consumer deploys without the CLI) and assert the
-  // static route, the request-time route and the API route over HTTP.
+  // Lifecycle leg 5 — start: serve the built output through the documented
+  // local entry (cli/start) and assert the static route, the request-time
+  // route and the API route over HTTP. Production deploys go through the
+  // Nitro mount (qualified by nitro:proof and the packed serve consumer).
   const serveProbes = [
     ['/', 'Static pages, alive where it counts'],
     ['/contact', 'Stay in the loop'],
@@ -529,16 +528,7 @@ try {
     {},
     serveProbes,
   );
-  await exerciseServer(
-    'Packed starter standalone deploy entry (dist/server/serve.mjs)',
-    Deno.execPath(),
-    () => ['run', '-A', 'dist/server/serve.mjs'],
-    starter,
-    {},
-    serveProbes,
-  );
-
-  // Lifecycle leg 7 — preview: the starter ships a request-time route, so the
+  // Lifecycle leg 6 — preview: the starter ships a request-time route, so the
   // documented preview behavior is a fail-closed refusal that points at
   // `deno task start` (#601); a silent static-only preview would be wrong.
   const preview = await run(Deno.execPath(), ['task', 'preview'], starter);
