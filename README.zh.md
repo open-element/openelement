@@ -25,6 +25,7 @@ Element 与 Router 是公共框架核心；UI、Site、SaaS 不扩大其稳定 A
 源码仓库使用 Deno；发布到 npm 的产物在一次性外部 npm 项目中独立验证。
 
 ```sh
+deno install
 deno task fmt:check
 deno task lint
 deno task typecheck

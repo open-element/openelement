@@ -24,6 +24,7 @@ Element and Router are the public framework core; UI, Site, and SaaS do not exte
 The source repository is Deno-native; published npm artifacts are qualified separately in disposable npm consumers.
 
 ```sh
+deno install
 deno task fmt:check
 deno task lint
 deno task typecheck
