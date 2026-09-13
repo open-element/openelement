@@ -186,7 +186,7 @@ async function skipCounts(): Promise<
     counts,
     files,
     note:
-      'Tracked files with >=1 match. The starter-matrix bfcache fixme is a declared Playwright-harness limit (one site, three browsers); all other skips must be listed in the final report.',
+      'Tracked files with >=1 match. The starter-matrix back-forward-cache entry is a declared Playwright-harness limit (one site, three browsers); all other skips must be listed in the final report.',
   };
 }
 
@@ -396,9 +396,13 @@ async function validate(path: string): Promise<void> {
   if (raw.includes('www/') || raw.includes('www\\')) {
     failures.push('evidence references stale www/ paths');
   }
-  // Log/tarball sha256 digests (64 hex) legitimately contain 40-hex runs:
-  // strip them and the bound SHA before looking for a second commit SHA.
-  const scrubbed = raw.replace(/sha256:[0-9a-f]{64}/g, '').replaceAll(evidence.sha, '');
+  // Log/tarball sha256 digests (64 hex) legitimately contain 40-hex runs,
+  // as does the bound tree hash: strip them and the bound SHA before
+  // looking for a second commit SHA.
+  const scrubbed = raw.replace(/sha256:[0-9a-f]{64}/g, '').replaceAll(evidence.sha, '').replaceAll(
+    evidence.tree,
+    '',
+  );
   if (/[0-9a-f]{40}/.test(scrubbed)) {
     failures.push('evidence references a second commit SHA');
   }
