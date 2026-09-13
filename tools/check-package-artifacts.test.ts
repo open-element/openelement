@@ -459,3 +459,40 @@ Deno.test('package artifacts: accepts an export with a matching declaration', as
     },
   );
 });
+
+Deno.test('package artifacts: accepts the @std bridge only in Deno-driven tooling', async () => {
+  await withPackage(
+    '@openelement/router',
+    {
+      'src/vite/plugin.js': `import { join } from '@std/path';\nexport const p = join;\n`,
+      'src/cli/start.js': `import { existsSync } from '@std/fs';\nexport const e = existsSync;\n`,
+      'src/index.js': `import { join } from '@std/path';\nexport const q = join;\n`,
+    },
+    (root) => {
+      const pkg = JSON.parse(Deno.readTextFileSync(`${root}/package.json`));
+      pkg.dependencies = { '@jsr/std__path': '1.0.0', '@jsr/std__fs': '1.0.0' };
+      Deno.writeTextFileSync(`${root}/package.json`, JSON.stringify(pkg));
+      const violations = scanExtractedPackage('@openelement/router', root).violations;
+      const paths = violations.map((v) => v.path);
+      assert(paths.includes('@openelement/router/src/index.js'), 'runtime @std must fail');
+      assert(!paths.includes('@openelement/router/src/vite/plugin.js'), 'tooling bridge must pass');
+      assert(!paths.includes('@openelement/router/src/cli/start.js'), 'cli bridge must pass');
+    },
+  );
+});
+
+Deno.test('package artifacts: rejects @std without the compat dependency declared', async () => {
+  await withPackage(
+    '@openelement/router',
+    { 'src/vite/plugin.js': `import { join } from '@std/path';\nexport const p = join;\n` },
+    (root) => {
+      const messages = scanExtractedPackage('@openelement/router', root)
+        .violations.map((v) => v.message);
+      assert(
+        messages.includes(
+          "external import '@std/path' is absent from package dependencies or peers",
+        ),
+      );
+    },
+  );
+});

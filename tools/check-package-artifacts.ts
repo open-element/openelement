@@ -33,6 +33,24 @@ const HOST_TOOLING_PATH_ALLOWLIST: Record<string, RegExp> = {
   '@openelement/router': /^src\/(?:vite\/|cli\/|nitro-mount\.)/,
 };
 
+/**
+ * JSR npm-compat bridge (Deno-driven host tooling only): packed tooling
+ * keeps bare `@std/<name>` specifiers while the manifest declares the
+ * npm-compat `@jsr/std__<name>` dependency. Consumers alias the bare names
+ * onto the compat packages (create template + PACKED_STD_ALIASES); the
+ * public runtime graph must never rely on this bridge, so it is accepted
+ * only under the Deno-driven tooling trees below.
+ */
+const STD_BRIDGE_TOOLING_PATHS: Record<string, RegExp> = {
+  '@openelement/router': /^src\/(?:vite\/|cli\/)/,
+};
+
+function jsrCompatDeclared(specifier: string, declared: Set<string>): boolean {
+  const match = specifier.match(/^@std\/([^/]+)(\/.*)?$/);
+  if (!match) return false;
+  return declared.has(`@jsr/std__${match[1]}`);
+}
+
 const RUNTIME_EXTENSIONS = new Set(['.js', '.mjs', '.cjs']);
 const CJS_PATTERNS: Array<[RegExp, string]> = [
   [/\brequire\s*\(/, 'CommonJS require()'],
@@ -135,19 +153,20 @@ function manifestImportViolations(
     ...Object.keys(packageJson.optionalDependencies as Record<string, string> ?? {}),
   ]);
   const violations: ArtifactViolation[] = [];
+  const bridgePaths = STD_BRIDGE_TOOLING_PATHS[packageName];
   for (const entry of walkSync(packageRoot, { includeDirs: false, skip: [/^node_modules$/] })) {
     const relative = entry.path.slice(packageRoot.length + 1);
     if (!isModuleScanPath(relative)) continue;
     const source = Deno.readTextFileSync(entry.path);
     for (const { value, line } of extractStaticModuleSpecifiers(source, relative)) {
       const name = dependencyName(value);
-      if (name && !declared.has(name)) {
-        violations.push({
-          path: `${packageName}/${relative}`,
-          line,
-          message: `external import '${value}' is absent from package dependencies or peers`,
-        });
-      }
+      if (!name || declared.has(name)) continue;
+      if (bridgePaths?.test(relative) && jsrCompatDeclared(value, declared)) continue;
+      violations.push({
+        path: `${packageName}/${relative}`,
+        line,
+        message: `external import '${value}' is absent from package dependencies or peers`,
+      });
     }
   }
   return violations;
