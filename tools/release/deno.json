@@ -1,0 +1,19 @@
+{
+  "tasks": {
+    "pack": "deno run --allow-run ../repo/run-in.ts --root ../.. -- deno run --allow-read --allow-write --allow-run --allow-env tools/release/publish-npm.ts pack",
+    "pack:dry-run": "deno run --allow-run ../repo/run-in.ts --root ../.. -- deno run --allow-read --allow-write --allow-run --allow-env tools/release/publish-npm.ts pack:dry-run",
+    "package-artifacts:check": "deno run --allow-run ../repo/run-in.ts --root ../.. -- deno run --allow-read --allow-write --allow-run --allow-net --allow-env tools/release/check-package-artifacts.ts",
+    "publish:npm": "deno run --allow-run ../repo/run-in.ts --root ../.. -- deno run --allow-read --allow-write --allow-run --allow-env --allow-net tools/release/publish-npm.ts publish:npm",
+    "publish:npm:dry-run": "deno run --allow-run ../repo/run-in.ts --root ../.. -- deno run --allow-read --allow-write --allow-run --allow-env --allow-net tools/release/publish-npm.ts publish:npm:dry-run",
+    "consumer:packaged": "deno run --allow-run ../repo/run-in.ts --root ../.. -- deno run --allow-read --allow-write --allow-run --allow-env --allow-net tools/release/consumer-packaged-starter.ts",
+    "consumer:packaged-element": "deno run --allow-run ../repo/run-in.ts --root ../.. -- deno run --allow-read --allow-write --allow-env --allow-net --allow-run --allow-sys tools/release/consumer-packaged-element.ts",
+    "consumer:packaged-router": "deno run --allow-run ../repo/run-in.ts --root ../.. -- deno run --allow-read --allow-write --allow-run --allow-env --allow-net tools/release/consumer-packaged-router.ts",
+    "consumer:packaged-ui": "deno run --allow-run ../repo/run-in.ts --root ../.. -- deno run --allow-read --allow-write --allow-run --allow-env --allow-net tools/release/consumer-packaged-ui.ts",
+    "consumer:packaged-serve:node": "deno run --allow-run ../repo/run-in.ts --root ../.. -- deno run --allow-read --allow-write --allow-run --allow-env --allow-net tools/release/consumer-packaged-node-serve.ts node",
+    "consumer:packaged-serve:bun": "deno run --allow-run ../repo/run-in.ts --root ../.. -- deno run --allow-read --allow-write --allow-run --allow-env --allow-net tools/release/consumer-packaged-node-serve.ts bun",
+    "consumer:element-smoke": "deno run --allow-run ../repo/run-in.ts --root ../.. -- deno run --allow-read --allow-write --allow-env --allow-run tools/release/published-consumer-qualification.ts --smoke --local",
+    "graph:check": "deno run --allow-run ../repo/run-in.ts --root ../.. -- deno run --allow-read --allow-env tools/release/check-package-graph.ts",
+    "consumer:packaged-app": "deno run --allow-run ../repo/run-in.ts --root ../.. -- deno run --allow-read --allow-write --allow-run --allow-env --allow-net tools/release/consumer-packaged-native.ts && deno run --allow-run ../repo/run-in.ts --root ../.. -- deno run --allow-read --allow-write --allow-run --allow-env --allow-net tools/release/consumer-packaged-lit.ts",
+    "gate:packed": "deno run --allow-run ./gate.ts tools/release#pack:dry-run tools/release#package-artifacts:check tools/release#consumer:packaged tools/release#consumer:packaged-app tools/release#consumer:packaged-router tools/release#consumer:packaged-element tools/release#consumer:packaged-ui tests/fixtures/third-party-web-components#smoke"
+  }
+}

@@ -6,7 +6,10 @@
     "./packages/create",
     "./packages/router",
     "./apps/saas",
-    "./apps/site"
+    "./apps/site",
+    "./tools/repo",
+    "./tools/release",
+    "./tests/e2e/starter-smoke"
   ],
   "imports": {
     "@openelement/url-pattern-list": "npm:@openelement/url-pattern-list@0.6.0",
