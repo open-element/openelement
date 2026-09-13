@@ -1,14 +1,16 @@
 import { walkSync } from '@std/fs/walk';
 import { extractStaticModuleSpecifiers } from './lib/typescript-ast.ts';
-import { readJson } from './lib/fs.ts';
+
+async function readJson<T = unknown>(path: string | URL): Promise<T> {
+  return JSON.parse(await Deno.readTextFile(path)) as T;
+}
 
 type Failure = { file: string; message: string };
 
-const SOURCE_ROOTS = ['packages/element/src', 'packages/app/src', 'packages/ui/src'];
+const SOURCE_ROOTS = ['packages/element/src', 'packages/router/src'];
 const PROTECTED_PACKAGE_CONFIGS = [
   'packages/element/deno.json',
-  'packages/app/deno.json',
-  'packages/ui/deno.json',
+  'packages/router/deno.json',
 ];
 const FORBIDDEN_REQUIRED_DEPS = ['@preact/signals-core', '@preact/signals'];
 

@@ -141,7 +141,7 @@ test.describe('navigation', () => {
   // short to scroll at the default 720px viewport (max scrollY=0), so the
   // test could never pass. The framework-side fix is the entry-codegen
   // relaxation of request-time GET 200s from no-store to private,no-cache
-  // (covered by the adapter-vite request-time parity gate); this test gates
+  // (covered by the Router request-time parity gate); this test gates
   // the user-visible outcome — back/forward restores the scroll position —
   // on a genuinely scrollable starter page (narrow viewport).
   test('scroll position is restored on back navigation (#943)', async ({ page }) => {

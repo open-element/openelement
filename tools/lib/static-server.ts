@@ -10,7 +10,7 @@ import {
   cacheControlFor,
   contentTypeFor,
   staticFileCandidates,
-} from '../../packages/adapter-vite/src/internal/static-serve.ts';
+} from '../../packages/router/src/vite/internal/static-serve.ts';
 import { join } from '@std/path';
 
 interface StaticServer {

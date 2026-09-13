@@ -101,11 +101,11 @@ Flags: `--iterations N` (default 10; stock JFB uses 15), `--impl a,b`,
 - `benchmarks/jfb/evidence.json` — committed browser results with full
   provenance (OE SHA, JFB commit, browser/toolchain versions, machine,
   warmup policy, raw samples, medians, geometric mean).
-- `benchmarks/v044/micro-evidence.json` — kernel/Region/claim/compiler
+- `benchmarks/micro/micro-evidence.json` — kernel/Region/claim/compiler
   microbenchmarks on the counting fake DOM (no layout/paint).
 
 ## Tests
 
-`harness.test.ts` and `../v044/micro.test.ts` are deterministic: they assert
+`harness.test.ts` and `../micro/micro.test.ts` are deterministic: they assert
 spec/model consistency, OE granularity, DOM-op counts and evidence schema —
 never timings.

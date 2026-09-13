@@ -99,6 +99,14 @@ async function runCoverage(crashRetries: number): Promise<string> {
             'test',
             '--no-lock',
             `--coverage=${coverageDir}`,
+            // element's WTR browser suite is gated separately
+            // (test:element:browser:gate). examples/ and fixtures/ are
+            // independent projects with their own deno.json boundaries —
+            // the root sweep must not resolve them under the root import
+            // map. Each runs under its own config via its own gate
+            // (examples:check, fixture:*:gate); none contributes to the
+            // root coverage denominator.
+            '--ignore=packages/element/__wtr__,examples,fixtures',
             '--allow-read',
             '--allow-write',
             '--allow-env',
@@ -144,25 +152,6 @@ async function runCoverage(crashRetries: number): Promise<string> {
   }
 }
 
-async function ensureWwwBuildOutput(): Promise<void> {
-  try {
-    await Deno.stat('www/dist');
-    return;
-  } catch (error) {
-    if (!(error instanceof Deno.errors.NotFound)) throw error;
-  }
-
-  // AutoFlow normally schedules the build gate before coverage. Keep this
-  // fallback so a directly invoked/tools-only coverage gate remains valid on
-  // a fresh checkout and still runs every build-output regression test.
-  const build = await new Deno.Command(Deno.execPath(), {
-    args: ['task', 'build'],
-    stdout: 'inherit',
-    stderr: 'inherit',
-  }).spawn().status;
-  if (!build.success) throw new Error(`WWW prerequisite build failed with code ${build.code}`);
-}
-
 function formatMetric(name: string, metric: CoverageMetric, threshold: number): string {
   return `${name}: ${metric.covered}/${metric.total} ${
     metric.percentage.toFixed(2)
@@ -170,7 +159,6 @@ function formatMetric(name: string, metric: CoverageMetric, threshold: number): 
 }
 
 async function main(): Promise<void> {
-  await ensureWwwBuildOutput();
   // Bounded crash retry for #1278: one clean run plus `--crash-retries`
   // retries that only fire on native-crash exits (>= 128 + signal), never on
   // assertion failures. Loud by design: every crash prints to stderr.

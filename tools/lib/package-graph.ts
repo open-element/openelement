@@ -55,7 +55,7 @@ export function extractOpenImports(source: string): string[] {
   ];
 }
 
-function collectInternalDeps(dir: string, exports: unknown): string[] {
+function collectInternalDeps(dir: string, exports: unknown, self: string): string[] {
   const deps = new Set<string>();
   const srcDir = `${dir}/src`;
 
@@ -64,7 +64,7 @@ function collectInternalDeps(dir: string, exports: unknown): string[] {
     try {
       const text = Deno.readTextFileSync(`${dir}/${cleanPath}`);
       for (const specifier of extractOpenImports(text)) {
-        const base = normalizeInternalDep(specifier, '');
+        const base = normalizeInternalDep(specifier, self);
         if (base) deps.add(base);
       }
     } catch {
@@ -83,7 +83,7 @@ function collectInternalDeps(dir: string, exports: unknown): string[] {
       if (!entry.name.endsWith('.ts') && !entry.name.endsWith('.tsx')) continue;
       const text = Deno.readTextFileSync(entry.path);
       for (const specifier of extractOpenImports(text)) {
-        const base = normalizeInternalDep(specifier, '');
+        const base = normalizeInternalDep(specifier, self);
         if (base) deps.add(base);
       }
     }
@@ -134,7 +134,7 @@ export async function readPackage(dir: string): Promise<PackageInfo | null> {
   const declaredDeps = Object.keys(imports)
     .map((specifier) => normalizeInternalDep(specifier, name))
     .filter((specifier): specifier is string => specifier !== null);
-  const sourceDeps = collectInternalDeps(dir, json.exports);
+  const sourceDeps = collectInternalDeps(dir, json.exports, name);
   const deps = [...new Set([...declaredDeps, ...sourceDeps])];
   return {
     name,
@@ -273,7 +273,7 @@ export function packagesByVersion(packages: PackageInfo[]): Map<string, string[]
 
 export function releasePublishOrder(packages: PackageInfo[]): PackageInfo[] {
   // Publish-priority ranking of the canonical retained package line
-  // (RETAINED_PACKAGE_NAMES in tools/project-constants.ts), dependency-lean
+  // (the package roster in docs/release/release-state.json), dependency-lean
   // packages first. The order is a deliberate permutation, not derivable
   // from the canonical list's ordering; a new retained package must be
   // inserted here by rank — unranked packages publish last, and the
@@ -281,10 +281,9 @@ export function releasePublishOrder(packages: PackageInfo[]): PackageInfo[] {
   // its dependency (#828).
   const releasePriority = [
     '@openelement/element',
-    '@openelement/app',
-    '@openelement/adapter-vite',
-    '@openelement/ui',
+    '@openelement/router',
     '@openelement/create',
+    '@openelement/ui',
   ];
   const topological = sortPackages(packages);
   const rank = new Map(releasePriority.map((name, index) => [name, index]));
@@ -314,8 +313,8 @@ export function releasePublishOrder(packages: PackageInfo[]): PackageInfo[] {
 
 /**
  * Returns a Map of specifier → file URL for all local package entries
- * derived from each package's deno.json exports. Used by smoke tests and
- * consumer-local builds to resolve @openelement/* imports to local source.
+ * derived from each package's deno.json exports. Used by smoke tests to
+ * resolve @openelement/* imports to local source.
  *
  * Entries are ordered by key length descending so that Vite alias resolution
  * matches the most specific specifier first.

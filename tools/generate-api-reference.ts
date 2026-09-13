@@ -1,38 +1,34 @@
 /**
- * API + Custom Element reference generator (#1158, B2.4).
+ * API + Custom Element reference generator (#1158 lineage, 1.0 alpha surface).
  *
- * Builds www/app/data/_generated-api-reference.ts from the real public
- * exports of every supported subpath (TypeScript compiler API enumeration),
- * their JSDoc, the PACKAGE_SURFACE.md stability classes and the
- * @openelement/ui compiler manifest (tags/attributes/events/slots/CSS
- * parts/SSR/claim/activation). `--check` regenerates and requires
+ * Builds www/app/data/_generated-api-reference.ts from the real public exports
+ * of every supported subpath of the retained 1.0 packages (TypeScript
+ * enumeration of the export map declared in each packages/<name>/deno.json),
+ * their JSDoc, and the @openelement/ui compiler manifest (tags/attributes/
+ * slots/CSS parts/SSR/claim/activation). `--check` regenerates and requires
  * byte-identical output — the CI drift gate.
- *
- * Fails closed on: unclassified exports, stale classifications (removed
- * exports), undocumented stable-candidate exports, internal exports leaking
- * into the documented surface, and duplicate anchors.
  */
 import { formatJson } from '@openelement/element/build-utils';
-import { readPackages } from './lib/package-graph.ts';
-import {
-  type ApiExportRecord,
-  enumerateSubpathExports,
-  parseExportClassMap,
-  parseSurfaceMap,
-  workspacePaths,
-} from './lib/api-reference.ts';
+import { resolve } from '@std/path';
+import ts from 'typescript';
+import { readPackages, releasePublishOrder } from './lib/package-graph.ts';
 
 export const API_REFERENCE_ARTIFACT = 'www/app/data/_generated-api-reference.ts';
-const PACKAGE_SURFACE = 'docs/current/PACKAGE_SURFACE.md';
 const UI_MANIFEST = 'packages/ui/src/generated-manifest.json';
 
-/** Classes that appear on the documented surface; internal-importable never does. */
-const DOCUMENTED_CLASSES = new Set(['stable-candidate', 'experimental', 'compatibility-only']);
+interface ExportRecord {
+  name: string;
+  kind: string;
+  summary: string;
+  source: { path: string; line: number };
+  stability: string;
+  anchor: string;
+}
 
 interface SubpathRecord {
   subpath: string;
   label: string;
-  exports: ApiExportRecord[];
+  exports: ExportRecord[];
 }
 
 interface PackageRecord {
@@ -58,33 +54,89 @@ interface ElementRecord {
   anchor: string;
 }
 
-function subpathLabel(subpath: string): string {
-  return subpath === '.' ? 'root' : subpath;
-}
-
-function anchorFor(pkg: string, subpath: string, name: string): string {
-  const clean = (value: string) => value.replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '');
-  return `api-${clean(pkg)}-${clean(subpathLabel(subpath))}-${clean(name)}`;
-}
-
 export interface ApiReferenceBuild {
   packages: PackageRecord[];
   elements: ElementRecord[];
   failures: string[];
 }
 
+function clean(value: string): string {
+  return value.replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '');
+}
+
+function subpathLabel(subpath: string): string {
+  return subpath === '.' ? 'root' : subpath;
+}
+
+function anchorFor(pkgId: string, subpath: string, name: string): string {
+  return `api-${clean(pkgId)}-${clean(subpathLabel(subpath))}-${clean(name)}`;
+}
+
+function exportKind(flags: ts.SymbolFlags): string {
+  if (flags & ts.SymbolFlags.Class) return 'class';
+  if (flags & ts.SymbolFlags.Interface) return 'interface';
+  if (flags & ts.SymbolFlags.TypeAlias) return 'type';
+  if (flags & ts.SymbolFlags.Enum) return 'enum';
+  if (flags & ts.SymbolFlags.Function) return 'function';
+  if (flags & ts.SymbolFlags.Variable) return 'const';
+  if (flags & ts.SymbolFlags.Namespace) return 'namespace';
+  return 'export';
+}
+
+function resolveAlias(checker: ts.TypeChecker, symbol: ts.Symbol): ts.Symbol {
+  let current = symbol;
+  const seen = new Set<ts.Symbol>();
+  while ((current.flags & ts.SymbolFlags.Alias) !== 0 && !seen.has(current)) {
+    seen.add(current);
+    current = checker.getAliasedSymbol(current);
+  }
+  return current;
+}
+
+function enumerateExports(entryFile: string, repoRoot: string): ExportRecord[] {
+  const resolvedEntry = resolve(entryFile);
+  const program = ts.createProgram([resolvedEntry], {
+    allowImportingTsExtensions: true,
+    jsx: ts.JsxEmit.ReactJSX,
+    module: ts.ModuleKind.ESNext,
+    moduleResolution: ts.ModuleResolutionKind.Bundler,
+    noEmit: true,
+    skipLibCheck: true,
+    strict: true,
+    target: ts.ScriptTarget.ESNext,
+  });
+  const checker = program.getTypeChecker();
+  const source = program.getSourceFile(resolvedEntry);
+  if (!source) throw new Error(`TypeScript did not load public entry ${entryFile}`);
+  const moduleSymbol = checker.getSymbolAtLocation(source);
+  if (!moduleSymbol) throw new Error(`TypeScript did not resolve module ${entryFile}`);
+
+  return checker.getExportsOfModule(moduleSymbol).map((exportSymbol) => {
+    const target = resolveAlias(checker, exportSymbol);
+    const declaration = target.valueDeclaration ?? target.declarations?.[0] ?? source;
+    const file = declaration.getSourceFile().fileName;
+    const relative = resolve(file).startsWith(`${resolve(repoRoot)}/`)
+      ? resolve(file).slice(resolve(repoRoot).length + 1)
+      : file;
+    const line = declaration.getSourceFile().getLineAndCharacterOfPosition(
+      declaration.getStart(),
+    ).line + 1;
+    const summary = ts.displayPartsToString(target.getDocumentationComment(checker))
+      .replace(/\s+/g, ' ').trim();
+    return {
+      name: exportSymbol.getName(),
+      kind: exportKind(target.flags),
+      summary,
+      source: { path: relative, line },
+      stability: 'public',
+      anchor: '',
+    };
+  }).sort((a, b) => a.name.localeCompare(b.name));
+}
+
 export async function buildApiReference(): Promise<ApiReferenceBuild> {
   const repoRoot = Deno.cwd();
   const failures: string[] = [];
-  const doc = await Deno.readTextFile(PACKAGE_SURFACE);
-  const surfaceMap = parseSurfaceMap(doc);
-  const classMap = parseExportClassMap(doc);
-  if (!surfaceMap || !classMap) {
-    throw new Error(`${PACKAGE_SURFACE} machine-readable blocks are missing or malformed`);
-  }
-  // Custom Element reference from the compiler manifest; loaded first because
-  // the manifest's file-header descriptions are the documentation truth for
-  // the @openelement/ui component classes (#1158 merge rule).
   const manifest = JSON.parse(await Deno.readTextFile(UI_MANIFEST)) as {
     declarations?: Array<Record<string, unknown>>;
   };
@@ -96,98 +148,55 @@ export async function buildApiReference(): Promise<ApiReferenceBuild> {
     );
   }
 
-  const packages = await readPackages();
-  const byName = new Map(packages.map((pkg) => [pkg.name, pkg]));
-  const paths = workspacePaths(packages);
+  const packages = releasePublishOrder(await readPackages());
   const anchors = new Set<string>();
   const records: PackageRecord[] = [];
 
-  for (const name of Object.keys(surfaceMap).sort()) {
-    const surface = surfaceMap[name];
-    const info = byName.get(name);
-    if (!info) {
-      failures.push(`${name}: listed in the surface map but not present under packages/`);
-      continue;
-    }
+  for (const info of packages) {
     const exportsMap = typeof info.exports === 'string'
       ? { '.': info.exports }
       : (info.exports ?? {}) as Record<string, string>;
-    const shortName = name.slice(name.lastIndexOf('/') + 1);
+    const shortName = info.name.slice(info.name.lastIndexOf('/') + 1);
     const subpaths: SubpathRecord[] = [];
 
-    for (const subpath of [...surface.supported].sort()) {
-      const target = exportsMap[subpath] ?? exportsMap[`.${subpath === '.' ? '' : `/${subpath}`}`];
+    for (const subpath of Object.keys(exportsMap).sort()) {
+      const target = exportsMap[subpath];
       if (typeof target !== 'string') {
-        // A supported subpath with no exports entry is missing API truth.
-        failures.push(`${name}: supported subpath '${subpath}' has no exports entry`);
+        failures.push(`${info.name}: subpath '${subpath}' has no exports target`);
         continue;
       }
-      const classes = classMap[name]?.[subpath] ?? {};
-      let enumerated: Omit<ApiExportRecord, 'stability' | 'anchor'>[] = [];
+      let enumerated: ExportRecord[];
       try {
-        enumerated = enumerateSubpathExports(
+        enumerated = enumerateExports(
           `${info.dir}/${target.replace(/^\.\//, '')}`,
           repoRoot,
-          paths,
         );
       } catch (error) {
-        failures.push(`${name}/${subpathLabel(subpath)}: enumeration failed: ${error}`);
+        failures.push(`${info.name}/${subpathLabel(subpath)}: enumeration failed: ${error}`);
         continue;
       }
-      const exported = new Set(enumerated.map((record) => record.name));
-      for (const classified of Object.keys(classes)) {
-        if (!exported.has(classified)) {
-          failures.push(
-            `${name}/${
-              subpathLabel(subpath)
-            }: '${classified}' is classified but no longer exported (removed export)`,
-          );
-        }
-      }
-      const documented: ApiExportRecord[] = [];
-      for (let record of enumerated) {
-        const stability = classes[record.name];
-        if (stability === undefined) {
-          failures.push(
-            `${name}/${subpathLabel(subpath)}: '${record.name}' is exported but unclassified`,
-          );
-          continue;
-        }
-        if (stability === 'stable-candidate' && record.summary === '') {
-          // UI component classes document themselves through the file-header
-          // JSDoc captured in the compiler manifest, not a class-level block.
+      for (const record of enumerated) {
+        if (info.name === '@openelement/ui' && record.summary === '') {
           const manifestDescription = manifestDescriptionByClass.get(record.name);
-          if (name === '@openelement/ui' && manifestDescription) {
-            record = { ...record, summary: manifestDescription };
-          } else {
-            failures.push(
-              `${name}/${
-                subpathLabel(subpath)
-              }: '${record.name}' is a stable-candidate with no JSDoc summary (undocumented export)`,
-            );
-          }
+          if (manifestDescription) record.summary = manifestDescription;
         }
-        // Internal exports never appear on the documented surface.
-        if (!DOCUMENTED_CLASSES.has(stability)) continue;
-        const anchor = anchorFor(shortName, subpath, record.name);
-        if (anchors.has(anchor)) failures.push(`duplicate anchor '${anchor}'`);
-        anchors.add(anchor);
-        documented.push({ ...record, stability, anchor });
+        record.anchor = anchorFor(shortName, subpath, record.name);
+        if (anchors.has(record.anchor)) failures.push(`duplicate anchor '${record.anchor}'`);
+        anchors.add(record.anchor);
       }
-      subpaths.push({ subpath, label: subpathLabel(subpath), exports: documented });
+      subpaths.push({ subpath, label: subpathLabel(subpath), exports: enumerated });
     }
 
     records.push({
       id: shortName,
-      name,
-      importPath: name,
-      supportedSubpaths: [...surface.supported].sort(),
-      internalSubpaths: [...surface.internal].sort(),
+      name: info.name,
+      importPath: info.name,
+      supportedSubpaths: Object.keys(exportsMap).sort(),
+      internalSubpaths: [],
       subpaths,
     });
   }
 
-  // Custom Element reference records from the manifest loaded above.
   const elements: ElementRecord[] = [];
   for (const declaration of manifest.declarations ?? []) {
     const tag = String(declaration.tagName);
@@ -246,8 +255,8 @@ export function renderApiReferenceModule(build: ApiReferenceBuild): string {
     searchRecords: searchRecords(build),
   };
   return '// Auto-generated by tools/generate-api-reference.ts (#1158) — do not edit\n' +
-    '// Source of truth: package exports + JSDoc, PACKAGE_SURFACE.md stability\n' +
-    '// classes and packages/ui/src/generated-manifest.json. Drift fails the\n' +
+    '// Source of truth: packages/<name>/deno.json exports + JSDoc and\n' +
+    '// packages/ui/src/generated-manifest.json. Drift fails the\n' +
     '// `api-reference:check` CI gate; regenerate with `deno task generate:api-reference`.\n' +
     `export const apiReference = ${formatJson(payload).trimEnd()} as const;\n`;
 }

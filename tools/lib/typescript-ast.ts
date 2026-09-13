@@ -30,6 +30,8 @@ export function extractStaticModuleSpecifiers(
   const visit = (node: ts.Node): void => {
     if (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) {
       add(node.moduleSpecifier);
+    } else if (ts.isImportTypeNode(node)) {
+      add(ts.isLiteralTypeNode(node.argument) ? node.argument.literal : undefined);
     } else if (
       ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword
     ) {

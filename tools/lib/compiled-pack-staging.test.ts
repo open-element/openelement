@@ -47,20 +47,6 @@ async function makeFixturePackage(): Promise<{ dir: string; cleanup: () => Promi
   return { dir, cleanup: () => Deno.remove(dir, { recursive: true }).catch(() => undefined) };
 }
 
-Deno.test('compilePackageElementModules compiles opted-in .tsx and passes plain modules through', () => {
-  const outputs = compilePackageElementModules('packages/ui');
-  assert(outputs.length > 0, 'packages/ui ships compiled-element modules');
-  for (const output of outputs) {
-    assertStringIncludes(output.code, 'static __partProgram = __partProgram;');
-    assert(!output.code.includes('@element('), 'decorator application must be erased');
-    assert(!output.code.includes('@property('), 'property intrinsic must be erased');
-    assert(
-      !output.code.includes('sourceMappingURL=data:application/json'),
-      'standalone inline map must be stripped for the packed artifact',
-    );
-  }
-});
-
 Deno.test('compilePackageElementModules returns [] for packages without compiled elements', () => {
   assertEquals(compilePackageElementModules('packages/create'), []);
 });

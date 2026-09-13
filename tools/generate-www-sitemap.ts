@@ -1,12 +1,12 @@
 /**
  * Generate www sitemap.xml + robots.txt from the route catalog (Beta.2.2,
- * #1327). Runs in `deno task build` after the adapter build: the public
+ * #1327). Runs in `deno task www:build` after the router build: the public
  * index is enumerated from the route catalog and the drift-gated content
  * graph — never by scanning built output or request-time Documents.
  * Fails closed: an unenumerable dynamic route or a duplicate fails the build.
  */
 import { join } from '@std/path';
-import { scanRoutes } from '../packages/adapter-vite/src/internal/ssg/route-scanner.ts';
+import { scanWwwRoutes } from './lib/www-route-scan.ts';
 import type { ContentGraph } from './lib/content-graph.ts';
 import {
   enumeratePublicRoutes,
@@ -25,7 +25,7 @@ export async function generateWwwSitemap(dist = WWW_DIST): Promise<string[]> {
   const blogPostRoutes = graph.entries
     .filter((entry) => entry.kind === 'blog-post' && entry.route !== undefined)
     .map((entry) => entry.route as string);
-  const routes = await scanRoutes(WWW_ROUTES);
+  const routes = await scanWwwRoutes(WWW_ROUTES);
   const { routes: publicRoutes, failures } = enumeratePublicRoutes({
     routes,
     blogPostRoutes,

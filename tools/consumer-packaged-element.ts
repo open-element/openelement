@@ -34,8 +34,6 @@ try {
           `file:${root}/packages/element/openelement-element-${PACKAGE_VERSION}.tgz`,
       },
       devDependencies: {
-        '@openelement/adapter-vite':
-          `file:${root}/packages/adapter-vite/openelement-adapter-vite-${PACKAGE_VERSION}.tgz`,
         vite: '8.0.16',
       },
     }),
@@ -57,8 +55,8 @@ export class Counter extends OpenElement {
   );
   await Deno.writeTextFile(
     join(author, 'vite.config.js'),
-    `import {element} from '@openelement/adapter-vite/element';
-export default {plugins:[element(), {name:'proof-module-boundary',generateBundle(){for(const id of this.getModuleIds()){if(/compiler|adapter-vite|node:/.test(id))this.error('Browser tooling leak: '+id)}}}],build:{sourcemap:true,lib:{entry:'register.js',formats:['es'],fileName:'counter'}}};`,
+    `import {element} from '@openelement/element/vite';
+export default {plugins:[element(), {name:'proof-module-boundary',generateBundle(){for(const id of this.getModuleIds()){if(/compiler|router\\/src\\/(?:vite|cli)|node:/.test(id))this.error('Browser tooling leak: '+id)}}}],build:{sourcemap:true,lib:{entry:'register.js',formats:['es'],fileName:'counter'}}};`,
   );
   await run([
     'npm',
@@ -70,7 +68,10 @@ export default {plugins:[element(), {name:'proof-module-boundary',generateBundle
     '--fetch-timeout=30000',
   ]);
   assert(
-    !await Deno.stat(join(author, 'node_modules/@openelement/app')).then(() => true, () => false),
+    !await Deno.stat(join(author, 'node_modules/@openelement/router')).then(
+      () => true,
+      () => false,
+    ),
     'Router must not be installed',
   );
   await run(['node', 'node_modules/vite/bin/vite.js', 'build']);
@@ -83,7 +84,7 @@ export default {plugins:[element(), {name:'proof-module-boundary',generateBundle
     const text = await Deno.readTextFile(path);
     for (const { fileName } of ts.preProcessFile(text).importedFiles) {
       assert(
-        !/compiler|adapter-vite|\bvite\b|^node:|workspace:/.test(fileName),
+        !/compiler|router\/src\/(?:vite|cli)|\bvite\b|^node:|workspace:/.test(fileName),
         `Browser declaration leak: ${path} -> ${fileName}`,
       );
       const resolved = ts.resolveModuleName(fileName, path, {
@@ -118,7 +119,7 @@ export default {plugins:[element(), {name:'proof-module-boundary',generateBundle
   const js = await Deno.readTextFile(join(author, 'dist/counter.js'));
   assert(
     ts.preProcessFile(js).importedFiles.every(({ fileName }) =>
-      !/workspace:|@openelement\/adapter-vite|^node:/.test(fileName)
+      !/workspace:|@openelement\/router\/(?:vite|cli)|^node:/.test(fileName)
     ),
     'compiled browser artifact boundary',
   );

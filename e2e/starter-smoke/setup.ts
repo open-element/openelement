@@ -23,7 +23,7 @@ const workDir = join(suiteDir, 'work');
 const appDir = join(workDir, 'my-blog');
 const depsDir = join(workDir, 'deps');
 
-const PACKAGES = ['element', 'app', 'adapter-vite', 'create'] as const;
+const PACKAGES = ['element', 'router', 'create'] as const;
 
 function run(cmd: string, args: string[], cwd: string): void {
   const result = new Deno.Command(cmd, { args, cwd, stdout: 'piped', stderr: 'piped' })
@@ -64,13 +64,9 @@ function main(): void {
   const imports = denoJson.imports as Record<string, string>;
 
   const sourceMap: Record<string, string> = {
-    '@openelement/app': 'packages/app/src/index.ts',
-    '@openelement/app/model': 'packages/app/src/model.ts',
-    '@openelement/app/spa': 'packages/app/src/spa.ts',
-    '@openelement/app/i18n': 'packages/app/src/i18n.ts',
-    '@openelement/app/preact': 'packages/app/src/preact.ts',
-    '@openelement/adapter-vite': 'packages/adapter-vite/src/index.ts',
-    '@openelement/adapter-vite/nitro-mount': 'packages/adapter-vite/src/nitro-mount.ts',
+    '@openelement/router': 'packages/router/src/index.ts',
+    '@openelement/router/vite': 'packages/router/src/vite/index.ts',
+    '@openelement/router/nitro-mount': 'packages/router/src/nitro-mount.ts',
     '@openelement/element': 'packages/element/src/index.ts',
     '@openelement/element/jsx-runtime': 'packages/element/src/jsx-runtime.ts',
     '@openelement/element/jsx-dev-runtime': 'packages/element/src/jsx-dev-runtime.ts',
@@ -96,9 +92,9 @@ function main(): void {
 
   for (const [name, command] of Object.entries(denoJson.tasks as Record<string, string>)) {
     const replaced = command.replace(
-      /npm:@openelement\/adapter-vite@[0-9][^/]*\/cli\/(build|start)/,
+      /npm:@openelement\/router@[0-9][^/]*\/cli\/(build|start)/,
       (_, sub: 'build' | 'start') =>
-        relativeSource('packages', 'adapter-vite', 'src', 'cli', `${sub}.ts`),
+        relativeSource('packages', 'router', 'src', 'cli', `${sub}.ts`),
     );
     if (replaced !== command) denoJson.tasks[name] = replaced;
   }

@@ -10,15 +10,27 @@ import { stripComments } from './lib/text.ts';
 import { runCommand } from './lib/process.ts';
 import { type PackageInfo, readPackages, releasePublishOrder } from './lib/package-graph.ts';
 import { tarballPath } from './lib/npm-tarball.ts';
+import { extractStaticModuleSpecifiers } from './lib/typescript-ast.ts';
 
 const PUBLINT_VERSION = '0.3.21';
 const ATTW_VERSION = '0.18.4';
 
 const RUNTIME_FREE_PACKAGES = new Set([
   '@openelement/element',
-  '@openelement/ui',
-  '@openelement/app',
+  '@openelement/router',
 ]);
+
+/**
+ * Host-side tooling trees inside runtime-free packages: the packed artifacts
+ * ship src/** transpiled, so the Router lifecycle tooling (Vite orchestration,
+ * build/start CLI, Nitro mount) would otherwise trip the host-API scan. These
+ * paths mirror HOST_TOOLING_ALLOWLIST in tools/check-deno-api-free.ts and are
+ * reachable only through the @openelement/router/vite, /cli/* and
+ * /nitro-mount subpaths; every other packed file stays fail-closed.
+ */
+const HOST_TOOLING_PATH_ALLOWLIST: Record<string, RegExp> = {
+  '@openelement/router': /^src\/(?:vite\/|cli\/|nitro-mount\.)/,
+};
 
 const RUNTIME_EXTENSIONS = new Set(['.js', '.mjs', '.cjs']);
 const CJS_PATTERNS: Array<[RegExp, string]> = [
@@ -58,9 +70,8 @@ const FORBIDDEN_LEGACY_PATHS: Record<string, ReadonlyArray<string>> = {
 };
 
 // Marker strings of the removed v0.43 marker-hydration channel, scanned in
-// comment-stripped packed sources. The same literals are forbidden in built
-// artifacts by tools/check-v044-legacy-absence.ts; this rule extends that
-// absence contract to the published src/** payload.
+// comment-stripped packed sources. This rule extends the historical built-
+// artifact absence contract to the published src/** payload.
 const FORBIDDEN_LEGACY_SOURCE_PATTERNS: Record<string, ReadonlyArray<[RegExp, string]>> = {
   '@openelement/element': [
     [/\bDATA_SSR_PROPS\b/u, 'dead data-ssr-props channel export (#836, removed in 0.44)'],
@@ -73,6 +84,11 @@ const FORBIDDEN_LEGACY_SOURCE_PATTERNS: Record<string, ReadonlyArray<[RegExp, st
 };
 
 const SOURCE_SCAN_EXTENSIONS = new Set(['.ts', '.tsx', '.js', '.mjs', '.cjs']);
+const MODULE_SCAN_EXTENSIONS = new Set(['.js', '.mjs', '.cjs', '.d.ts']);
+
+function isRawTypeScript(relative: string): boolean {
+  return (relative.endsWith('.ts') || relative.endsWith('.tsx')) && !relative.endsWith('.d.ts');
+}
 
 export interface ArtifactViolation {
   path: string;
@@ -90,12 +106,58 @@ function extension(path: string): string {
   return idx === -1 ? '' : path.slice(idx);
 }
 
+function isModuleScanPath(path: string): boolean {
+  return MODULE_SCAN_EXTENSIONS.has(extension(path)) || path.endsWith('.d.ts');
+}
+
+function dependencyName(specifier: string): string | null {
+  if (
+    specifier.startsWith('.') || specifier.startsWith('/') || specifier.startsWith('node:') ||
+    specifier.startsWith('data:') || specifier.startsWith('file:') ||
+    specifier.startsWith('http:') ||
+    specifier.startsWith('https:')
+  ) return null;
+  const bare = specifier.startsWith('npm:') ? specifier.slice('npm:'.length) : specifier;
+  if (bare.startsWith('@')) return bare.split('/').slice(0, 2).join('/').replace(/@[^/]*$/u, '');
+  return bare.split('/')[0].split('@')[0];
+}
+
+function manifestImportViolations(
+  packageName: string,
+  packageRoot: string,
+  packageJson: Record<string, unknown>,
+): ArtifactViolation[] {
+  const declared = new Set<string>([
+    packageName,
+    ...Object.keys(packageJson.dependencies as Record<string, string> ?? {}),
+    ...Object.keys(packageJson.peerDependencies as Record<string, string> ?? {}),
+    ...Object.keys(packageJson.optionalDependencies as Record<string, string> ?? {}),
+  ]);
+  const violations: ArtifactViolation[] = [];
+  for (const entry of walkSync(packageRoot, { includeDirs: false, skip: [/^node_modules$/] })) {
+    const relative = entry.path.slice(packageRoot.length + 1);
+    if (!isModuleScanPath(relative)) continue;
+    const source = Deno.readTextFileSync(entry.path);
+    for (const { value, line } of extractStaticModuleSpecifiers(source, relative)) {
+      const name = dependencyName(value);
+      if (name && !declared.has(name)) {
+        violations.push({
+          path: `${packageName}/${relative}`,
+          line,
+          message: `external import '${value}' is absent from package dependencies or peers`,
+        });
+      }
+    }
+  }
+  return violations;
+}
+
 function pushPackageJsonViolations(
   packageName: string,
   packageJsonPath: string,
   violations: ArtifactViolation[],
-): void {
-  const packageJson = JSON.parse(Deno.readTextFileSync(packageJsonPath));
+): Record<string, unknown> {
+  const packageJson = JSON.parse(Deno.readTextFileSync(packageJsonPath)) as Record<string, unknown>;
   if (packageJson.type !== 'module') {
     violations.push({
       path: `${packageName}/package.json`,
@@ -116,6 +178,7 @@ function pushPackageJsonViolations(
       message: 'package.json must expose an exports map',
     });
   }
+  return packageJson;
 }
 
 function scanRuntimeFile(
@@ -170,9 +233,14 @@ function scanRuntimeFile(
 
 export function scanExtractedPackage(packageName: string, packageRoot: string): PackageScanResult {
   const violations: ArtifactViolation[] = [];
-  pushPackageJsonViolations(packageName, `${packageRoot}/package.json`, violations);
+  const packageJson = pushPackageJsonViolations(
+    packageName,
+    `${packageRoot}/package.json`,
+    violations,
+  );
+  violations.push(...manifestImportViolations(packageName, packageRoot, packageJson));
 
-  const runtimeFree = RUNTIME_FREE_PACKAGES.has(packageName);
+  const runtimeFreePackage = RUNTIME_FREE_PACKAGES.has(packageName);
   const forbiddenPaths = FORBIDDEN_LEGACY_PATHS[packageName] ?? [];
   const forbiddenSourcePatterns = FORBIDDEN_LEGACY_SOURCE_PATTERNS[packageName] ?? [];
   const files = new Set<string>();
@@ -184,6 +252,13 @@ export function scanExtractedPackage(packageName: string, packageRoot: string): 
   ) {
     const relative = entry.path.slice(packageRoot.length + 1);
     files.add(relative);
+    if (isRawTypeScript(relative)) {
+      violations.push({
+        path: `${packageName}/${relative}`,
+        message:
+          'raw TypeScript source must not be published; emit JavaScript and declarations only',
+      });
+    }
     if (forbiddenPaths.includes(relative)) {
       violations.push({
         path: `${packageName}/${relative}`,
@@ -201,7 +276,7 @@ export function scanExtractedPackage(packageName: string, packageRoot: string): 
       }
     }
     if (
-      packageName === '@openelement/adapter-vite' &&
+      packageName === '@openelement/router' &&
       relative.split('/').some((segment) =>
         segment === '__tests__' || segment === '__fixtures__' || segment === 'fixtures'
       )
@@ -212,10 +287,12 @@ export function scanExtractedPackage(packageName: string, packageRoot: string): 
       });
     }
     if (!RUNTIME_EXTENSIONS.has(extension(entry.path))) continue;
+    const runtimeFree = runtimeFreePackage &&
+      !HOST_TOOLING_PATH_ALLOWLIST[packageName]?.test(relative);
     violations.push(...scanRuntimeFile(packageRoot, entry.path, packageName, runtimeFree));
   }
 
-  if (packageName === '@openelement/adapter-vite') {
+  if (packageName === '@openelement/router') {
     for (const required of ['package.json', 'README.md', 'LICENSE']) {
       if (!files.has(required)) {
         violations.push({
@@ -223,6 +300,31 @@ export function scanExtractedPackage(packageName: string, packageRoot: string): 
           message: 'required package metadata is missing',
         });
       }
+    }
+  }
+
+  // Every object-form export that serves JavaScript must serve a matching
+  // declaration file: publint/attw catch most of this, but an explicit
+  // violation names the subpath instead of burying it in tool output.
+  const exports = (packageJson.exports ?? {}) as Record<string, unknown>;
+  for (const [subpath, conditions] of Object.entries(exports)) {
+    if (!conditions || typeof conditions !== 'object') continue;
+    const cond = conditions as Record<string, unknown>;
+    const jsTarget = cond.import ?? cond.default;
+    if (typeof jsTarget !== 'string') continue;
+    const typesTarget = cond.types;
+    if (typeof typesTarget !== 'string' || !typesTarget.endsWith('.d.ts')) {
+      violations.push({
+        path: `${packageName}/package.json`,
+        message: `export '${subpath}' must expose a types condition`,
+      });
+      continue;
+    }
+    if (!files.has(typesTarget.replace(/^\.\//, ''))) {
+      violations.push({
+        path: `${packageName}/package.json`,
+        message: `export '${subpath}' types target '${typesTarget}' is missing from the tarball`,
+      });
     }
   }
 

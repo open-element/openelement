@@ -1,4 +1,4 @@
-/** Generate/check the deterministic five-package public-interface baseline. */
+/** Generate/check the deterministic retained-package public-interface baseline. */
 import { formatJson } from '@openelement/element/build-utils';
 import ts from 'typescript';
 import { resolve } from '@std/path';

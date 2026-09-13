@@ -17,7 +17,7 @@
  * so repo gates never scan generated or third-party files.
  */
 import { join } from '@std/path';
-import { compileElementProgram } from '../../../packages/adapter-vite/src/internal/compiler/semantic-core/compile.ts';
+import { compileElementProgram } from '../../../packages/element/src/internal/compiler/semantic-core/compile.ts';
 import { fetchStockSources, JFB_COMMIT } from './fetch-stock.ts';
 
 const repoRoot = new URL('../../..', import.meta.url).pathname;
