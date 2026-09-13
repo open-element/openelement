@@ -1,9 +1,9 @@
 # Validation recipe (zod / valibot)
 
-> Status: **verified by the `fixture:request-time:e2e:browsers` gate in
-> AutoFlow3 CI (three engines)** — both shapes are exercised end-to-end by
+> Status: **verified by the `fixture:router-request-time:e2e:browsers` gate in
+> the CI release gate (three engines)** — both shapes are exercised end-to-end by
 > the request-time fixture
-> (`packages/adapter-vite/__fixtures__/request-time/`: `/register` with
+> (`fixtures/router-request-time/`: `/register` with
 > zod, `/subscribe` with valibot, 422/303 asserted in three engines).
 
 The framework is deliberately validation-agnostic: an action receives the
@@ -18,7 +18,7 @@ the ADR-0120 protocol, not the library:
    after validation passes.
 
 ```ts
-import { fail, redirect } from '@openelement/app';
+import { fail, redirect } from '@openelement/router';
 import { z } from 'zod';
 
 const schema = z.object({ email: z.string().email('a valid email is required') });
@@ -37,8 +37,8 @@ export function action(ctx: { formData: FormData }) {
 
 valibot is interchangeable (`v.safeParse(schema, input)`); see the fixture
 for both. The dual-library presence is the interop proof, and published
-packages stay validation-library-free by policy — see
-`docs/governance/DEPENDENCY_POLICY.md` §3 for the decision and boundary rule.
+packages stay validation-library-free by policy; the package boundary is
+recorded in [packages and distribution](../architecture/packages-and-distribution.md).
 The page reads the failure through its descriptor's `props`
 projector (`actionData` on the projector context, mapped onto the compiled
 page properties); mark the form

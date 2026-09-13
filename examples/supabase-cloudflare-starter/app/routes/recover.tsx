@@ -4,7 +4,7 @@
  * app/route-logic/recover.ts so Deno tests import it without evaluating the
  * compiled class.
  */
-import { definePage } from '@openelement/app';
+import { definePage } from '@openelement/router';
 import RecoverPage from '../components/page-recover.tsx';
 import { createRecoverAction, recoverLoader, recoverPageProps } from '../route-logic/recover.ts';
 

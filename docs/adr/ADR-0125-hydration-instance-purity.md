@@ -55,8 +55,8 @@ root to a client-side re-render.
 
 ## Consequences
 
-- The hydration contract (`docs/current/HYDRATION_CONTRACT.md`) gains an
-  explicit purity requirement under "Boundary rules".
+- The Element architecture contract carries an explicit render-purity
+  requirement.
 - Authoring guidance documents the constraint.
 - No serializer, no wire-format change, no WeakMap cache. The mismatch
   degrade path (correctness-preserving) remains the response to render

@@ -1,5 +1,5 @@
 /** Changelog route: request projection and build-time Markdown loading. */
-import { definePage } from '@openelement/app';
+import { definePage } from '@openelement/router';
 import { trustedHtml } from '@openelement/element';
 import { sanitizeHtml } from '@openelement/element/sanitize';
 import { siteHead } from '@openelement/site-ui/head.ts';

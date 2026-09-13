@@ -2,12 +2,12 @@
  * /workspace-records route logic (v0.44): plain module so Deno tests never
  * evaluate the compiled page class.
  */
-import { type LoaderContext, type PagePropsContext, redirect } from '@openelement/app';
+import { type LoaderContext, type PagePropsContext, redirect } from '@openelement/router';
 import {
   encodeWorkspaceCursor,
   parseWorkspaceListInput,
   WORKSPACE_PAGE_SIZE,
-} from '../../../../lib/workspace-pagination.ts';
+} from '../../lib/workspace-pagination.ts';
 import { createServerSupabase } from '../../lib/supabase-server.ts';
 
 export interface WorkspaceRecord {

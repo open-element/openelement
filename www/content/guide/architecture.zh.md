@@ -6,7 +6,7 @@ order: 20
 
 ## 分层
 
-消费包图为五包：`element`（统一编写表面）、`app`（pages、routes、islands）、`adapter-vite`（唯一宿主侧）、`create`（starter）与可选 `ui`。Deep modules 隐藏实现复杂度。
+消费包图为四包：`element`（统一编写表面）、`router`（pages、routes、islands、Vite 构建与 Nitro 输出）、`create`（starter）与可选 `ui`。Deep modules 隐藏实现复杂度。
 
 ## 战略方向
 

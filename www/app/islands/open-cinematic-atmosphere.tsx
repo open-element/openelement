@@ -9,7 +9,7 @@
 import { element, OpenElement } from '@openelement/element';
 import { compiledStyle } from '../site-ui/compiled-style.ts';
 import { readIslandState } from '../site-ui/island-state.ts';
-import { defineIslandConfig } from '@openelement/app';
+import { defineIslandConfig } from '@openelement/router';
 
 interface AtmosphereState {
   frame: number;

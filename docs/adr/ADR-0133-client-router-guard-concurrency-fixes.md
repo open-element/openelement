@@ -8,7 +8,7 @@
 ## Context
 
 Two concurrency defects in
-`packages/app/src/internal/router/client-router.ts` were reproduced ahead of
+`packages/router/src/internal/router/client-router.ts` were reproduced ahead of
 the 0.43.0-alpha.2 release. The client router carries the SPA side of the
 ADR-0122 §1 loop contract (navigation, guard veto/redirect, and PRG
 revalidation entry points), so per the ADR-0122 Consequences rule (enforced
@@ -19,7 +19,7 @@ leave the frozen contracts intact.
 
 Accept the following maintenance change as contract-preserving:
 
-**`packages/app/src/internal/router/client-router.ts` (§1 loop contract).**
+**`packages/router/src/internal/router/client-router.ts` (§1 loop contract).**
 Two holes in the #1023 latest-wins sequencing are closed, both strictly
 inside guard concurrency handling:
 
@@ -47,7 +47,7 @@ meant to skip, in await windows it failed to cover.
 ## Consequences
 
 - Regression tests pin both interleavings in
-  `packages/app/__tests__/client-router.test.ts` (nested guard window;
+  `packages/router/__tests__/client-router.test.ts` (nested guard window;
   back onto a veto-restored entry after a programmatic navigation).
 - The frozen-semantics gate passes on this change set via this amendment
   (option 1 in `tools/check-frozen-semantics.ts`).

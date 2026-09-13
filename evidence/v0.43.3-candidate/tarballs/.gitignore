@@ -1,3 +1,0 @@
-# Candidate tarballs are regenerable binaries (`deno task pack` at source
-# commit d244eacb); SHA-256SUMS.txt is the durable identity record.
-*.tgz

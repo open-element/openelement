@@ -1,5 +1,5 @@
 import { assertEquals, assertStringIncludes } from '@std/assert';
-import { compileElementProgram } from '../../packages/adapter-vite/src/internal/compiler/semantic-core/compile.ts';
+import { compileElementProgram } from '../../packages/element/src/internal/compiler/semantic-core/compile.ts';
 
 const siteModules = [
   ['open-lab-panel', '../app/site-ui/open-lab-panel.tsx'],

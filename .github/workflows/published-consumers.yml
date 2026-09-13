@@ -68,7 +68,7 @@ jobs:
           OPEN_ELEMENT_PUBLISHED_VERSION: ${{ inputs.version }}
         run: |
           deno task third-party-wc:smoke
-          deno run -A tools/consumer-smoke.ts --version "$OPEN_ELEMENT_PUBLISHED_VERSION" --jsdelivr
+          deno run -A tools/published-consumer-qualification.ts --smoke --version "$OPEN_ELEMENT_PUBLISHED_VERSION" --jsdelivr
       - name: Archive published runtime diagnostics
         if: always()
         # v7.0.1

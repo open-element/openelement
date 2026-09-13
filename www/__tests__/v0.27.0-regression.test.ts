@@ -150,7 +150,9 @@ Deno.test('v0.44 surface: JSX factories live only in the supported jsx-runtime s
 
 Deno.test('alpha.10 surface: retired package directories stay deleted', () => {
   const packages = join(import.meta.dirname ?? '.', '..', '..', 'packages');
-  for (const name of ['core', 'signal', 'router', 'protocol', 'content', 'ssg']) {
+  // 1.0 baseline note: 'router' was retired at v0.27, but the directory name was
+  // re-legitimized by the @openelement/router product (ADR-0152) — excluded here.
+  for (const name of ['core', 'signal', 'protocol', 'content', 'ssg']) {
     assertFalse(existsSync(join(packages, name)), `retired package directory returned: ${name}`);
   }
 });

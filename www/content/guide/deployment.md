@@ -6,7 +6,7 @@ order: 100
 
 ## Build, start, preview
 
-A generated project wires its Deno tasks to the adapter CLI subpaths: `deno task build` runs `@openelement/adapter-vite/cli/build`; `deno task start` runs `cli/start` — one command that serves `dist/` statically and, when `dist/server/index.js` exists, dispatches dynamic routes and mutations to it (port `OPEN_ELEMENT_PORT` or `PORT`, default 4173; host `OPEN_ELEMENT_HOST`). The same command with `--mode=preview` is static-only and refuses to run when `dist/server` exists, pointing at start mode instead.
+A generated project wires its Deno tasks to the router CLI subpaths: `deno task build` runs `@openelement/router/cli/build`; `deno task start` runs `cli/start` — one command that serves `dist/` statically and, when `dist/server/index.js` exists, dispatches dynamic routes and mutations to it (port `OPEN_ELEMENT_PORT` or `PORT`, default 4173; host `OPEN_ELEMENT_HOST`). The same command with `--mode=preview` is static-only and refuses to run when `dist/server` exists, pointing at start mode instead.
 
 ## Static output
 
@@ -18,11 +18,11 @@ When any route declares `renderIntent: { mode: 'dynamic' }`, the build also emit
 
 ## Nitro presets
 
-Nitro is the first-party production deployment adapter. Bridge the built handler into a Nitro v3 event with `createOpenElementNitroHandler` from `@openelement/adapter-vite/nitro-mount` — a near pass-through over the fetch-native seam: the event's standard `Request` (`event.req`) goes in, the handler's `Response` comes out; both supported presets — `node-server` and `cloudflare_module` (Workers) — are proven against real Nitro output by the `deno task nitro:proof:node` / `nitro:proof:workers` gates.
+Nitro is the first-party production deployment adapter. Bridge the built handler into a Nitro v3 event with `createOpenElementNitroHandler` from `@openelement/router/nitro-mount` — a near pass-through over the fetch-native seam: the event's standard `Request` (`event.req`) goes in, the handler's `Response` comes out; both supported presets — `node-server` and `cloudflare_module` (Workers) — are proven against real Nitro output by the `deno task nitro:proof:node` / `nitro:proof:workers` gates.
 
 ## Dev server
 
-`deno task dev` runs the Vite dev server; the adapter serves the generated Hono entry through `@hono/vite-dev-server`, so routes, loaders and actions execute in dev against the same generated entry the build prerenders and serves.
+`deno task dev` runs the Vite dev server; the router dev pipeline serves the generated Hono entry through `@hono/vite-dev-server`, so routes, loaders and actions execute in dev against the same generated entry the build prerenders and serves.
 
 ## Verification
 

@@ -1,4 +1,4 @@
-import type { PageHead } from '@openelement/app';
+import type { PageHead } from '@openelement/router';
 import { prepareArticle } from './article-body.ts';
 import { siteHead } from './head.ts';
 import { contentLocale } from './locale.ts';

@@ -6,7 +6,7 @@ order: 90
 
 ## 当前契约
 
-`@openelement/element` 负责编写体验；`app` 与 `adapter-vite` 让应用行为与构建行为保持分离。
+`@openelement/element` 负责编写体验；`router` 包把应用行为与构建行为收敛在一个边界之内。
 
 ## 显式准入
 

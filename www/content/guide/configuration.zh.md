@@ -12,7 +12,7 @@ order: 70
 
 ```ts
 import { defineConfig } from 'vite';
-import { openPipeline } from '@openelement/adapter-vite';
+import { openPipeline } from '@openelement/router/vite';
 
 export default defineConfig({
   plugins: [
@@ -29,62 +29,46 @@ export default defineConfig({
 
 ## openElement() 伞入口
 
-需要 content（blog/nav/sitemap）或 i18n 模块的应用使用同一包根导出的 `openElement()`：它包装 `openPipeline`，采用扁平选项名——`routesDir`、`islandsDir`、`componentsDir`、`packageIslands`、`html`、`inject`、`middleware`——外加 `content` 与 `i18n` 模块选项；省略对应模块即禁用。
+`openElement()` 用统一的 SSG 与 island 插件集包装 `openPipeline`。它接受扁平框架选项——`routesDir`、`islandsDir`、`componentsDir`、`packageIslands`、`html`、`inject`、`middleware`——外加用于 locale 前缀构建的 `i18n: { locales, defaultLocale }`，以及 SSG 渲染失败策略 `ssg: { dynamicRouteFailure: 'fail' | 'warn' }`。内容 collection 不在其中；markdown/frontmatter 解析、schema、collection、导航与文档路由映射均由站点自己拥有。
 
-## 生成的 blog-data 虚拟模块
+## 内容 collection 归站点所有
 
-`content: { blog: { contentDir, basePath } }` 把每篇 markdown 文章编译进一个生成模块：`import { posts, getPostBySlug } from '@openelement/generated/blog-data'`。模块在 build/dev 时写入；仓库内一份 `.d.ts` stub 加 import-map 条目保证 `deno task check` 通过。frontmatter 支持 `title`、`date`、`draft`、`tags`、`excerpt`、`type`。
+1.0 的 router 提供路由、locale/渲染上下文、SSG descriptor 与 Document 归属——不是 CMS，也不是内容数据库。站点的 Markdown 管线由站点自己拥有。本仓库的参考站点用声明式 schema 校验 frontmatter、用 `marked` 渲染、用 `@openelement/element/sanitize` 的 `sanitizeHtml` 清洗（`www/lib/content.ts`），在 `www/lib/blog.ts` 中定义 collection，并用 `tools/generate-www-content-data.ts` 写出带类型的数据模块：
 
-命名 Markdown 内容区使用 `content.collections`。每个 collection 声明目录和可选的 frontmatter schema，并生成 `app/data/_generated-{name}-data.ts`。`content.blog` 是同一管线上的兼容别名，因此所有 collection 共用同一个 watcher 和 HTML sanitizer allow-list。
-
-```ts
-content: {
-  collections: {
-    guide: {
-      contentDir: 'content/guide',
-      basePath: '/guide',
-      schema: {
-        fields: {
-          title: { type: 'string', required: true },
-          order: { type: 'number', required: true },
-          lede: 'string',
-        },
-      },
-    },
-  },
-}
+```sh
+deno task generate:www-content-data   # www:build 会在 router 构建前先运行
 ```
 
-### vite.config.ts —— blog-data 模块（#924）
-
-```ts
-import { defineConfig } from 'vite';
-import { openElement } from '@openelement/adapter-vite';
-
-export default defineConfig({
-  plugins: [
-    openElement({
-      content: {
-        blog: { contentDir: 'content/blog', basePath: '/blog' },
-      },
-    }),
-  ],
-});
-```
-
-启动 `openElement()`（content 模块必需；`openPipeline()` 不生成 blog-data）。每篇 `content/blog/*.md` 编译为一个 post；draft 文章在 production 构建中被排除。
-
-### deno.json —— .d.ts stub 与 import-map 条目
+生成模块通过站点自己的 import-map 别名消费——不存在框架虚拟模块：
 
 ```json
 {
   "imports": {
-    "@openelement/generated/blog-data": "./app/data/_generated-blog-data.d.ts"
+    "@openelement/generated/blog-data": "./app/data/_generated-blog-data.ts"
   }
 }
 ```
 
-运行时模块由 adapter-vite 在 build/dev 时生成；stub 让 `deno task check` 在生成文件缺席时仍能类型检查。
+每篇 `content/blog/*.md` 编译为一个 post；draft 文章在 production 构建中被排除。frontmatter 支持 `title`、`date`、`draft`、`tags`、`excerpt`、`type`、`lang`。
+
+collection 声明自己的目录、base path 与 schema：
+
+```ts
+import type { CollectionOptions } from '../lib/content.ts';
+
+export const blogCollection: CollectionOptions = {
+  contentDir: 'content/blog',
+  basePath: '/blog',
+  schema: {
+    fields: {
+      title: 'string',
+      date: 'string',
+      draft: 'boolean',
+      tags: 'string[]',
+    },
+  },
+};
+```
 
 ### app/routes/blog/[slug].tsx —— 使用模式（#924）
 
@@ -114,7 +98,7 @@ export default class BlogPostPage extends OpenElement {
 
 ```ts
 // app/routes/blog/[slug].tsx —— scanner 发现的路由模块
-import { definePage, notFound } from '@openelement/app';
+import { definePage, notFound } from '@openelement/router';
 import { getPostBySlug, posts } from '@openelement/generated/blog-data';
 import BlogPostPage from '../../components/page-blog-post.tsx';
 
@@ -136,15 +120,14 @@ export default definePage(BlogPostPage, {
 
 ## 代码块语法高亮（可选）
 
-blog 管线把围栏代码块渲染为 `<pre><code class="language-x">`，无 token 级着色。可通过 `content.blog.markdown` 钩子接入你自己的高亮器——下方配方保留默认 marked 行为并追加 hljs span，这些 span 原样通过 sanitizer 白名单。路由/页面里的代码块则用 `<open-code-block>`（`@openelement/ui`）包裹——它通过全局 Prism 高亮，页面必须自行加载 Prism（core + 语言 grammar，参考本站在 `www/vite.config.ts` 注入的 CDN script）；不加载 Prism 就只有 copy 按钮、没有 token 着色。
+站点自有的 collection loader 把围栏代码块渲染为 `<pre><code class="language-x">`，无 token 级着色。collection 的 `markdown` 选项可以替换 renderer；其输出仍会经过同一道 sanitizer 白名单（`www/lib/content.ts` 的 `sanitizeHtml`），hljs span 只追加 `class` 属性，原样通过。路由/页面里的代码块则用 `<open-code-block>`（`@openelement/ui`）包裹——它通过全局 Prism 高亮，页面必须自行加载 Prism（core + 语言 grammar，参考本站在 `www/vite.config.ts` 注入的 CDN script）；不加载 Prism 就只有 copy 按钮、没有 token 着色。
 
-### vite.config.ts —— 语法高亮配方（可选，#930）
+### lib/blog.ts —— 语法高亮配方（可选，#930）
 
 ```ts
-import { defineConfig } from 'vite';
-import { openElement } from '@openelement/adapter-vite';
 import { marked } from 'npm:marked@^15';
 import hljs from 'npm:highlight.js@^11';
+import type { CollectionOptions } from '../lib/content.ts';
 
 // Default marked behavior + hljs token spans. hljs output only adds class
 // attributes to <code>, which the sanitizer allowlist keeps.
@@ -160,13 +143,11 @@ const markdown = (content: string) =>
     },
   });
 
-export default defineConfig({
-  plugins: [
-    openElement({
-      content: { blog: { contentDir: 'content/blog', markdown } },
-    }),
-  ],
-});
+export const blogCollection: CollectionOptions = {
+  contentDir: 'content/blog',
+  basePath: '/blog',
+  markdown,
+};
 ```
 
 自定义 renderer 的输出仍会经过同一道 sanitizer 白名单（class 属性保留）。
@@ -179,7 +160,7 @@ export default defineConfig({
 
 ```ts
 import { defineConfig } from 'vite';
-import { openElement } from '@openelement/adapter-vite';
+import { openElement } from '@openelement/router/vite';
 import type { Middleware } from '@openelement/element';
 
 // Self-contained: the source is inlined into the generated server entry,
@@ -211,7 +192,7 @@ export default defineConfig({
 
 ## mode: 'spa'
 
-`openPipeline({ mode: 'spa' })` 产出纯客户端应用（无 SSR）。用 `@openelement/app` 的 `defineApp({ mode: 'spa', routes })` 启动：每条路由是 `{ path, tagName, loader?, action?, guard? }`，路径支持 `:id` 参数与 `:path{.+}` 多段 catch-all（Hono 风格）。`mount(selector)` 挂载 client router。页面类是编译的 `@element` 类，loader 数据由其 `@property` 字段承载；bootstrap 需导入每个页面模块，使其类在 `mount` 前完成注册。
+`openPipeline({ mode: 'spa' })` 产出纯客户端应用（无 SSR）。用 `@openelement/router` 的 `defineApp({ mode: 'spa', routes })` 启动：每条路由是 `{ path, tagName, loader?, action?, guard? }`，路径支持 `:id` 参数与 `:path{.+}` 多段 catch-all（Hono 风格）。`mount(selector)` 挂载 client router。页面类是编译的 `@element` 类，loader 数据由其 `@property` 字段承载；bootstrap 需导入每个页面模块，使其类在 `mount` 前完成注册。
 
 ### app/main.ts —— SPA 启动
 
@@ -232,7 +213,7 @@ export default class HomePage extends OpenElement {
 
 ```ts
 // app/main.ts
-import { defineApp } from '@openelement/app';
+import { defineApp } from '@openelement/router';
 import './components/page-home.tsx';
 // 'page-doc' 以同样方式导入
 

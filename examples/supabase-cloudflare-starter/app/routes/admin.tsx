@@ -3,7 +3,7 @@
  * lives in app/components/page-admin.tsx, the loader/action logic in
  * app/route-logic/admin.ts.
  */
-import { definePage } from '@openelement/app';
+import { definePage } from '@openelement/router';
 import AdminPage from '../components/page-admin.tsx';
 import {
   adminPageProps,

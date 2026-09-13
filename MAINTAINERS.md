@@ -1,10 +1,5 @@
-# Maintainer ownership
+# Maintainers
 
-Repository maintainers with write access own triage, review, merge, release,
-and security-response decisions. A change with architecture, public API,
-security, release, or dependency-policy impact requires maintainer approval
-under [the project workflow](./docs/governance/PROJECT_WORKFLOW.md).
+Maintainers review changes for the Element/Router product boundary, security, package artifacts, and exact-SHA qualification. Operational authority is exercised through protected branches and the [release procedure](./docs/maintainers/releasing.md), not through committed agent prompts or copied evidence.
 
-The author of a pull request may not be its only approving reviewer. If no
-maintainer is available, leave the pull request open rather than bypassing the
-required review or release gates.
+Use GitHub CODEOWNERS or repository settings for the current maintainer roster rather than duplicating mutable identities here.

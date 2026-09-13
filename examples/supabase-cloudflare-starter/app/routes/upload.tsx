@@ -4,7 +4,7 @@
  * app/components/page-upload.tsx, the loader/action logic in
  * app/route-logic/upload.ts.
  */
-import { definePage } from '@openelement/app';
+import { definePage } from '@openelement/router';
 import UploadPage from '../components/page-upload.tsx';
 import {
   createDeleteAction,

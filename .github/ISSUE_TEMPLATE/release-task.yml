@@ -4,19 +4,12 @@ title: '[Release]: '
 body:
   - type: markdown
     attributes:
-      value: 'Release work must follow `docs/governance/PROJECT_WORKFLOW.md` and `docs/current/VERSION_PLAN.md`.'
+      value: 'Release work must follow `docs/maintainers/releasing.md` and bind evidence to one exact candidate SHA.'
   - type: input
     id: version
     attributes:
       label: Version
-      description: Example: vX.Y.Z — use the active line from docs/current/VERSION_PLAN.md
-    validations:
-      required: true
-  - type: input
-    id: plan
-    attributes:
-      label: Version plan
-      description: Example: docs/current/VERSION_PLAN.md
+      description: Example: v1.0.0-alpha.1
     validations:
       required: true
   - type: textarea

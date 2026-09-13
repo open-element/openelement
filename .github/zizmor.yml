@@ -1,8 +1,7 @@
 # zizmor configuration (#1156 B2.6). Findings are fixed, not suppressed; the
-# only disabled audit is a style preference already covered by an owned gate.
+# only disabled audit is a repository-local path style preference.
 rules:
   self-repository:
     # The repository standardizes on the `./.github/...` local-action form;
-    # tools/check-action-pins.ts already audits every `uses:` clause, so the
-    # `$/` prefix would add a second convention without new evidence.
+    # The `$/` prefix would add a second convention without new evidence.
     disable: true

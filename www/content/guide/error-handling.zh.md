@@ -61,7 +61,7 @@ import {
   notFound,
   type OpenElementActionFailure,
   redirect,
-} from '@openelement/app';
+} from '@openelement/router';
 import PostPage from '../../components/page-post.tsx';
 
 interface PostActionData {

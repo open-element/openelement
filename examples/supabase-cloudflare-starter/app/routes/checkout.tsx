@@ -3,7 +3,7 @@
  * page element lives in app/components/page-checkout.tsx, the loader/action
  * logic in app/route-logic/checkout.ts.
  */
-import { definePage } from '@openelement/app';
+import { definePage } from '@openelement/router';
 import CheckoutPage from '../components/page-checkout.tsx';
 import {
   checkoutPageProps,

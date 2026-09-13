@@ -43,7 +43,7 @@ jobs:
           persist-credentials: false
       # #1156 (B2.6): mature OSS governance gates (ADR-0144) — fail fast,
       # before the heavy matrix. Binaries pinned by version + SHA-256;
-      # zizmor-action pinned in tools/check-action-pins.ts.
+      # Action revisions and downloaded binaries are pinned in this workflow.
       - name: actionlint (workflow lint)
         run: |
           curl -sSfL -o /tmp/actionlint.tar.gz \
@@ -74,11 +74,23 @@ jobs:
       - run: deno task lint:markdown
       - run: deno task typecheck
       - name: Install Playwright browsers
-        # All three engines up front: the gate's fixture:request-time:gate
-        # runs the request-time fixture suite on Chromium, Firefox and WebKit.
+        # All three engines up front: the gate's fixture gates run their
+        # suites on Chromium, Firefox and WebKit.
         run: ./node_modules/.bin/playwright install --with-deps chromium firefox webkit
-      - name: AutoFlow3 CI gate
-        run: deno task autoflow:ci
+      - name: OpenElement CI gate
+        run: deno task gate:ci
+      - name: Bind candidate evidence to this exact SHA
+        env:
+          CANDIDATE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: deno task candidate:evidence
+      - name: Upload candidate evidence
+        # v7.0.1
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: candidate-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+          path: .artifacts/candidate-evidence.json
+          if-no-files-found: error
+          retention-days: 14
       # #1232 (B2.10): e2e failures must be inspectable — the 'github'
       # reporter annotates the run inline, and this step publishes the
       # Playwright HTML report + per-test traces/screenshots on failure.
@@ -89,20 +101,28 @@ jobs:
         with:
           name: playwright-failure-artifacts-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
-            www/e2e/test-results
-            www/e2e/playwright-report
             e2e/starter-smoke/test-results
-            packages/adapter-vite/__fixtures__/request-time/e2e/test-results
-            packages/adapter-vite/__fixtures__/ui-dogfood/e2e/test-results
-            packages/adapter-vite/__fixtures__/app-flow-native/e2e/test-results
-            packages/adapter-vite/__fixtures__/app-flow-lit/e2e/test-results
+            fixtures/router-request-time/e2e/test-results
+            fixtures/router-native-framework/e2e/test-results
+            fixtures/router-lit-framework/e2e/test-results
+            fixtures/router-ui-dogfood/e2e/test-results
           if-no-files-found: ignore
           retention-days: 14
 
   # Issue #628 (first slice): the generated dist/server artifact must boot
   # under plain Node, not just under the Deno CLI (#969). The runtime floor
-  # is Node.js >= 24 (WHATWG URLPattern global), so the matrix asserts real
-  # serving on 24 and the clean early error on 20.
+  # is Node.js >= 24 (WHATWG URLPattern global): the matrix serves on 24
+  # (lowest supported, required) and 26 (Current, required). The below-floor
+  # clean-error behavior stays pinned by unit test
+  # (packages/router/__tests__/ssg-helpers.test.ts), not by an EOL Node job.
+  # Admission proof is packed-world: the harness installs the real
+  # pack:dry-run tarballs into an isolated consumer (empty npm cache, no
+  # workspace source on the resolution path), builds with the packed CLI,
+  # and boots dist/server/serve.mjs under plain Node — never a workspace
+  # build plus a hand-made shim. This proof lives in these smoke jobs —
+  # not in gate:packed — because the main gate job's default node is below
+  # the Node >= 24 floor by design; gate:packed's serve.mjs cells run under
+  # Deno (consumer:packaged-app) instead.
   node-serve-smoke:
     name: dist/server Node smoke (Node ${{ matrix.node }})
     runs-on: ubuntu-latest
@@ -110,7 +130,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        node: ['20', '24']
+        node: ['24', '26']
     steps:
       # v7.0.1
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -123,75 +143,19 @@ jobs:
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
           node-version: ${{ matrix.node }}
-      - name: Build the request-time fixture
-        run: deno task fixture:request-time:build
-      - name: Shim @openelement/adapter-vite/nitro-mount for Node resolution
-        # The workspace publishes to JSR, so plain Node cannot resolve the
-        # bare specifier the generated index.js imports. Materialize the
-        # exact nitro-mount an npm consumer would get, transpiled from the
-        # real source (type-only imports drop out). The shim lives under
-        # dist/node_modules: on Node's resolution path from
-        # dist/server/index.js, but invisible to the fixture's own Vite
-        # config resolution (which walks up from the fixture root).
-        run: |
-          shim=packages/adapter-vite/__fixtures__/request-time/dist/node_modules/@openelement/adapter-vite
-          mkdir -p "$shim"
-          ./node_modules/.bin/esbuild packages/adapter-vite/src/nitro-mount.ts \
-            --format=esm --outfile="$shim/nitro-mount.js"
-          printf '{ "name": "@openelement/adapter-vite", "version": "0.0.0-smoke", "type": "module", "exports": { "./nitro-mount": "./nitro-mount.js" } }\n' \
-            > "$shim/package.json"
-      - name: Boot dist/server/serve.mjs under Node ${{ matrix.node }}
-        working-directory: packages/adapter-vite/__fixtures__/request-time
-        run: |
-          set -u
-          if [ "${{ matrix.node }}" = "24" ]; then
-            OPEN_ELEMENT_PORT=4891 OPEN_ELEMENT_HOST=127.0.0.1 node dist/server/serve.mjs &
-            server_pid=$!
-            trap 'kill $server_pid 2>/dev/null || true' EXIT
-            for _ in $(seq 1 50); do
-              curl -sf -o /dev/null http://127.0.0.1:4891/ && break
-              sleep 0.2
-            done
-            curl -sf http://127.0.0.1:4891/ | grep -q 'request-time fixture home'
-            curl -sf http://127.0.0.1:4891/live | grep -q 'request-time live'
-          else
-            # Below the URLPattern floor (#969): serve.mjs must fail fast
-            # with guidance, not a SyntaxError/ReferenceError.
-            if node dist/server/serve.mjs > serve-error.log 2>&1; then
-              echo 'expected a clean early exit below the runtime floor'
-              exit 1
-            fi
-            grep -q 'requires a runtime with WHATWG URLPattern' serve-error.log
-          fi
-
-  # #1276 (B1.3-F1): the definePage route SSR tag-mismatch defect shipped
-  # because the workspace runtime qualification was not CI-gated. Run the full
-  # qualification leg (starter build -> Node 24 standalone + Wrangler workerd,
-  # byte-identical HTML across both) as a required CI job so this defect class
-  # cannot regress silently. Needs real Node 24 (the serve.mjs runtime floor,
-  # #969) — the autoflow-ci job itself has no Node setup.
-  workspace-qualification:
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      # v7.0.1
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          # #1156 R11: same exact-SHA expression as every required job.
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
-          persist-credentials: false
-      - uses: ./.github/actions/setup-deno-workspace
-      # v7.0.0
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
-        with:
-          node-version: '24'
-      - name: Workspace runtime qualification (Node 24 + workerd)
-        run: deno task fullstack:workspace-qualification
+      - name: Pack the release tarballs
+        run: deno task pack:dry-run
+      - name: Packed serve proof under Node ${{ matrix.node }}
+        run: deno run --allow-read --allow-write --allow-run --allow-env --allow-net tools/consumer-packaged-node-serve.ts node
 
   # #1228 (B2.5): the deployment guide and PACKAGE_SURFACE.md claim the
   # generated dist/server artifacts run on Bun. A claim that survives only on
-  # local evidence is an overclaim, so the same fixture the Node legs serve is
-  # booted under a pinned Bun here: real server, real HTTP probes.
+  # local evidence is an overclaim, so the packed serve harness — same
+  # tarballs, same isolated consumer as the Node legs — boots under a pinned
+  # Bun here: real server, real HTTP probes. The harness builds the consumer
+  # app with plain node (a build tool, not the serving runtime), so this job
+  # sets up Node 24 for the build while Bun remains the serving runtime
+  # under test.
   bun-serve-smoke:
     name: dist/server Bun smoke
     runs-on: ubuntu-latest
@@ -211,66 +175,37 @@ jobs:
           echo "74c1c3bee7cd998500c8f969cd8972355ac6a07207e94a39eece1999b56ffabf  /tmp/bun.zip" | sha256sum -c -
           unzip -q /tmp/bun.zip -d /tmp/bun
           echo "/tmp/bun/bun-linux-x64" >> "$GITHUB_PATH"
-      - name: Build the request-time fixture
-        run: deno task fixture:request-time:build
-      - name: Boot dist/server/serve.mjs under Bun
-        working-directory: packages/adapter-vite/__fixtures__/request-time
-        run: |
-          set -u
-          OPEN_ELEMENT_PORT=4893 OPEN_ELEMENT_HOST=127.0.0.1 bun dist/server/serve.mjs &
-          server_pid=$!
-          trap 'kill $server_pid 2>/dev/null || true' EXIT
-          for _ in $(seq 1 50); do
-            curl -sf -o /dev/null http://127.0.0.1:4893/ && break
-            sleep 0.2
-          done
-          curl -sf http://127.0.0.1:4893/ | grep -q 'request-time fixture home'
-          curl -sf http://127.0.0.1:4893/live | grep -q 'request-time live'
+      # v7.0.0 — Node 24 is the harness's build tool only; Bun serves.
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: '24'
+      - name: Pack the release tarballs
+        run: deno task pack:dry-run
+      - name: Packed serve proof under Bun
+        run: deno run --allow-read --allow-write --allow-run --allow-env --allow-net tools/consumer-packaged-node-serve.ts bun
 
-  # #1156 (ADR-0146): one deterministic exact-SHA PR full-CI evidence artifact.
-  # This job runs only for pull requests and only after every required
-  # full-matrix job succeeded (default needs gating — no `if: always()`), so a
-  # failed, skipped or cancelled matrix leg produces no artifact at all. The
-  # record is derived from trusted workflow context (github.* / needs.*),
-  # never from user-controlled inputs; the release lane independently resolves
-  # the run through the GitHub API before trusting any field.
-  pr-full-ci-evidence:
-    name: pr-full-ci-evidence
-    if: github.event_name == 'pull_request'
-    needs: [
-      dependency-review,
-      autoflow-ci,
-      node-serve-smoke,
-      bun-serve-smoke,
-      workspace-qualification,
-    ]
+  # TypeScript 7 SHADOW gate (1.0 Alpha convergence, "TypeScript 7: split
+  # decision"). Non-blocking by design: continue-on-error keeps the run
+  # advisory while the TS7 CLI matrix is compared against the packed TS6
+  # baseline. This job graduates to a required gate only after a complete
+  # matching matrix (typecheck + build + declaration emit, all green and
+  # equivalent) — until then gate:ci/gate:release must not reference it.
+  ts7-shadow:
+    name: TypeScript 7 shadow gate (non-blocking)
+    continue-on-error: true
     runs-on: ubuntu-latest
-    timeout-minutes: 5
-    permissions:
-      contents: read
+    timeout-minutes: 30
     steps:
       # v7.0.1
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          # #1156 R11: the aggregation job checks out the exact SHA it attests.
+          # #1156 R11: same exact-SHA expression as every required job.
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
       - uses: ./.github/actions/setup-deno-workspace
-      - name: Write exact-SHA PR CI evidence record
-        env:
-          # R11: one trusted expression for checkout, attestation and naming.
-          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-          RUN_ID: ${{ github.run_id }}
-          RUN_ATTEMPT: ${{ github.run_attempt }}
-          REPOSITORY: ${{ github.repository }}
-          EVENT_NAME: ${{ github.event_name }}
-          NEEDS_JSON: ${{ toJSON(needs) }}
-          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        run: deno run --allow-env --allow-write tools/autoflow/write-pr-ci-evidence.ts
-      # v7.0.1
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      # v7.0.0 — the shadow consumer runs the TS7 tsc CLI under Node.
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
-          name: pr-full-ci-evidence-${{ github.event.pull_request.head.sha || github.sha }}
-          path: pr-full-ci-evidence.json
-          if-no-files-found: error
-          retention-days: 90
+          node-version: '24'
+      - name: TS7 shadow gate (pack:dry-run + consumer matrix)
+        run: deno task gate:ts7:shadow

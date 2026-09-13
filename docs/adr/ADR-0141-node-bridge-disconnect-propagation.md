@@ -13,7 +13,7 @@ the Node response. A client abort could leave request work alive; response
 disconnects did not reliably cancel the web stream; and a saturated Node
 response did not wait for `drain`. The standalone generated server and
 `openElement start` share this bridge, so the correction touches
-`packages/adapter-vite/src/cli/start.ts`, which ADR-0122 freezes as part of the
+`packages/router/src/cli/start.ts`, which ADR-0122 freezes as part of the
 first-mile start contract.
 
 ## Decision
@@ -40,8 +40,8 @@ semantics.
   Node stream semantics instead of a new OpenElement API.
 - Tests lock request abort, response cancellation, `drain`, listener cleanup,
   keep-alive reuse and repeated-run resource behavior
-  (`packages/adapter-vite/__tests__/node-bridge-lifecycle.test.ts`,
-  `packages/adapter-vite/__tests__/node-bridge-adversarial-http.test.ts`),
+  (`packages/router/__tests__/node-bridge-lifecycle.test.ts`,
+  `packages/router/__tests__/node-bridge-adversarial-http.test.ts`),
   including the two terminal-race holes closed in #1152 (a disconnect that
   precedes `writeWebResponse` is detected from the response's terminal state,
   not a missed event) and #1154 (listener cleanup is never gated on a hanging

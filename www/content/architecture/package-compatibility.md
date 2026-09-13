@@ -6,7 +6,7 @@ order: 90
 
 ## Current contract
 
-`@openelement/element` owns authoring; `app` and `adapter-vite` keep application and build behavior separate.
+`@openelement/element` owns authoring; the `router` package keeps application and build behavior behind one boundary.
 
 ## Explicit admission
 

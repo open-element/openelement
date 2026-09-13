@@ -1,57 +1,23 @@
 # ADR-0137: Public package ownership boundaries
 
-- Status: ACCEPTED (v0.43.1; #1097)
-- Amends: ADR-0119 and ADR-0135 public-interface freeze
-
-## Context
-
-The stable package roots still named implementation files below `internal/`.
-The element root also exported adapter-specific blog, navigation, i18n and
-build-context types, while adapter-vite mirrored the complete element type
-surface through `export type *`. This made an internal refactor observable and
-let unrelated element additions silently become adapter contracts.
-
-The v0.43.1 architecture review requires those ownership leaks to be corrected
-before the v1 surface is frozen. Because five misplaced type exports were on a
-stable root, this decision is an explicit narrow amendment to the freeze.
+- Status: ACCEPTED (reconciled for `1.0.0-alpha.1`)
+- Depends on: ADR-0110, ADR-0111
 
 ## Decision
 
-1. Package root entries may not name an `internal/` module specifier. Supported
-   implementations are exposed through deliberate, named public facade modules.
-2. Adapter-vite owns and exports `OpenElementBlogOptions`,
-   `OpenElementNavSection`, `OpenElementHeaderNavLink`,
-   `OpenElementI18nContextOptions`, and `OpenElementBuildContextLike`.
-   The element root no longer exports these five adapter-only contracts.
-3. The adapter framework compatibility module uses an explicit type list. Type
-   star exports are forbidden there.
-4. App's loader/action hooks live in a public source module; the private
-   render-context store remains internal.
-5. `arch:check` mechanically rejects a regression, and the public-interface
-   snapshot records the intentional ownership transfer.
+1. Public package entries expose deliberate facade modules and never name an `internal/` module.
+2. Element exports only component authoring/runtime contracts. It does not own routing, content,
+   application, Vite, or deployment types.
+3. App exports Router Route Mode and Framework Mode contracts. Pure Route Mode does not import
+   Element or renderer packages.
+4. Adapter-vite owns compiler/build integration and related public configuration types. It may not
+   mirror another package root with `export type *`.
+5. Create owns onboarding templates and their version selection, not runtime behavior.
+6. Private implementation movement does not change public exports. Every intentional public-surface
+   change updates the checked interface snapshot.
 
-## Compatibility and migration
+## Verification
 
-Runtime behavior and retained symbol shapes do not change. The only consumer
-change is the import authority for five build-only types:
-
-```ts
-// before
-import type { OpenElementBuildContextLike } from '@openelement/element';
-
-// v0.43.1+
-import type { OpenElementBuildContextLike } from '@openelement/adapter-vite';
-```
-
-This break is preferred to preserving a deprecated alias because an alias would
-keep the incorrect element ownership and fail the issue's required surface
-reduction. No other element export is removed.
-
-## Consequences
-
-- Internal implementation moves no longer alter package-root specifiers.
-- Adapter public types cannot expand when element adds an unrelated export.
-- The element surface is narrower by five build/content contracts; adapter-vite
-  gains the same explicitly owned names.
-- Future root-surface changes still require the normal snapshot and amendment
-  process.
+The package-surface, dependency-graph, declaration-graph, package-artifact, and public-interface
+snapshot gates enforce these boundaries. Isolated packed consumers prove that package metadata does
+not install optional products or hide workspace-only imports.

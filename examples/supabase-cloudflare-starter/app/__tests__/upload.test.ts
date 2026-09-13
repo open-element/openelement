@@ -4,7 +4,7 @@
  * lib/supabase-server.ts, composition boundary #981).
  */
 import { assert, assertEquals, assertRejects } from '@std/assert';
-import { isActionFailure, isOpenElementRedirect } from '@openelement/app';
+import { isActionFailure, isOpenElementRedirect } from '@openelement/router';
 
 // v0.44: route logic lives in app/route-logic/ so tests never evaluate the
 // compiled page class (decorators are compile-time-only input).

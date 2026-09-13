@@ -18,7 +18,7 @@ response headers from a loader or action**. Session sign-in needs to write
 
 - `redirect(location, status)` takes no headers (ADR-0121 §3);
 - an action returning a `Response` is rejected by design (ADR-0121 §2);
-- `OpenElementRequestContext` (packages/app/src/model.ts) is read-only —
+- `OpenElementRequestContext` (packages/router/src/model.ts) is read-only —
   `request`, `url`, `params`, `env`, `platform`, nothing mutable;
 - the middleware layer cannot substitute: the cookie value exists only
   after the action completes, and middleware shares nothing with the

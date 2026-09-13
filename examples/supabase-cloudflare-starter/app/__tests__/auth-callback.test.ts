@@ -1,5 +1,5 @@
 import { assertEquals, assertRejects } from '@std/assert';
-import { isOpenElementRedirect } from '@openelement/app';
+import { isOpenElementRedirect } from '@openelement/router';
 // v0.44: route logic lives in app/route-logic/ so tests never evaluate the
 // compiled page class (decorators are compile-time-only input).
 const { createCallbackLoader } = await import('../route-logic/auth-callback.ts');

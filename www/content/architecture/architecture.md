@@ -10,46 +10,55 @@ order: 10
 
 Dependency direction — consumers point at what they use.
 
-| Package                     | Role                          | Depends on                   |
-| --------------------------- | ----------------------------- | ---------------------------- |
-| `@openelement/element`      | runtime · zero framework deps | —                            |
-| `@openelement/app`          | pages · routing               | uses `@openelement/element`  |
-| `@openelement/adapter-vite` | the only host side            | builds on `@openelement/app` |
-| `@openelement/ui`           | optional primitives           | optional                     |
-| `@openelement/create`       | starter · build time          | —                            |
+| Package                | Role                          | Depends on                  |
+| ---------------------- | ----------------------------- | --------------------------- |
+| `@openelement/element` | runtime · zero framework deps | —                           |
+| `@openelement/router`  | pages · routing · build       | uses `@openelement/element` |
+| `@openelement/ui`      | optional primitives           | optional                    |
+| `@openelement/create`  | starter · build time          | —                           |
 
-> Retired: `core` · `signal` · `router` · `protocol` · `content` · `ssg`.
+> Retired: `core` · `signal` · `protocol` · `content` · `ssg` · `app` ·
+> `adapter-vite` · `app/preact` · `app/spa`.
 
 ## Deep modules hide implementation complexity.
 
-Authors use product interfaces. Renderer, router, signal, content and build-phase details stay internal until real variation proves a public seam.
+Authors use product interfaces. Renderer, router, signal, content and
+build-phase details stay internal until real variation proves a public seam.
 
-| Layer       | Package                                           | Scope                                                                                               |
-| ----------- | ------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
-| element     | `@openelement/element`                            | One authoring surface for Custom Elements, JSX, DSD, hydration and signals.                         |
-| application | `@openelement/app`                                | Pages, routes, islands and render semantics for complete applications.                              |
-| build       | `@openelement/adapter-vite`                       | Vite integration, content, static generation and deployable Nitro output behind one build boundary. |
-| adoption    | `@openelement/create`, optional `@openelement/ui` | Starter-first adoption and optional primitives; neither exposes retired implementation packages.    |
+| Layer       | Package                                           | Scope                                                                                            |
+| ----------- | ------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| element     | `@openelement/element`                            | One authoring surface for Custom Elements, JSX, DSD, hydration and signals.                      |
+| application | `@openelement/router`                             | Pages, routes, islands and render semantics for complete applications.                           |
+| build       | `@openelement/router`                             | Vite integration, static generation and deployable Nitro output behind one build boundary.       |
+| adoption    | `@openelement/create`, optional `@openelement/ui` | Starter-first adoption and optional primitives; neither exposes retired implementation packages. |
 
 ## Web Components are the application architecture.
 
-The roadmap earns WC fullstack leadership through compatibility evidence, complete application loops and portable operations—not a growing package count.
+The roadmap earns WC fullstack leadership through compatibility evidence,
+complete application loops and portable operations—not a growing package count.
 
 ### WC SSR
 
-The current line classifies admitted standard, Lit, FAST and Stencil elements for DSD, light DOM or client-only rendering with actionable diagnostics and corpus evidence — a contract first shipped on the 0.43 line and kept green by CI on the compiled line.
+The current line classifies admitted standard, Lit, FAST and Stencil elements
+for DSD, light DOM or client-only rendering with actionable diagnostics and
+corpus evidence — a contract first shipped on the 0.43 line and kept green by CI
+on the compiled line.
 
 ### Application loop
 
-Routes, data, progressive forms, actions, redirects and revalidation form one deep App interface rather than separate shallow packages.
+Routes, data, progressive forms, actions, redirects and revalidation form one
+deep App interface rather than separate shallow packages.
 
 ### Portable output
 
-Node and Workers output is verified from packed public artifacts. Provider-owned recovery is proven in the reference stack; framework-owned cache/recovery APIs remain unassigned and require a future ADR.
+Node and Workers output is verified from packed public artifacts. Provider-owned
+recovery is proven in the reference stack; framework-owned cache/recovery APIs
+remain unassigned and require a future ADR.
 
 ## Current truth is checked mechanically.
 
-Package surface, docs truth, artifacts, critical paths and browser tests reject a return to the retired product graph.
+Package surface, docs truth, artifacts, critical paths and browser tests reject
+a return to the retired product graph.
 
 | Gate         | Requirement                                                                     |
 | ------------ | ------------------------------------------------------------------------------- |

@@ -1,5 +1,5 @@
 blank_issues_enabled: false
 contact_links:
-  - name: AutoWorkflow
-    url: https://github.com/open-element/openelement/blob/main/docs/governance/PROJECT_WORKFLOW.md
-    about: Read the mandatory project workflow before filing work.
+  - name: Contributing guide
+    url: https://github.com/open-element/openelement/blob/main/CONTRIBUTING.md
+    about: Read the contribution and verification expectations before filing work.

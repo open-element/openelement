@@ -1,31 +1,27 @@
 # Pull Request
 
-Read first: `docs/governance/PROJECT_WORKFLOW.md`
+Read [CONTRIBUTING.md](../CONTRIBUTING.md) first.
 
-## Target
+## Product boundary
 
-- Version plan: `docs/current/VERSION_PLAN.md`
-- ADRs:
+- Element / Router / support tooling / documentation:
+- Active ADRs changed, if any:
 
-## What Changed
+## What changed
 
 -
 
-## Evidence
+## Verification
 
-- [ ] `deno task workflow:check`
-- [ ] `deno task arch:check`
-- [ ] `deno task graph:check`
-- [ ] `deno task docs:check-current`
-- [ ] `deno task docs:check-strategy`
+- [ ] Focused behavioral tests
 - [ ] `deno task fmt:check`
 - [ ] `deno task lint`
 - [ ] `deno task typecheck`
 - [ ] `deno task test`
 - [ ] `deno task build`
+- [ ] Packed/browser/runtime gates applicable to this change
 
-## Release Impact
+## Release impact
 
-- Changelog:
-- Release note:
-- Package bump:
+- Package or public API impact:
+- Release-state impact:
