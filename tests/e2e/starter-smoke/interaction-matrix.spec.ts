@@ -61,20 +61,16 @@ test.describe('hydration timing', () => {
     await ticker.getByRole('button', { name: 'tick' }).click();
     await expect(span).toHaveText('1');
   });
-  // Diagnosed during the v0.44 consumer migration (alpha.8): the compiled
-  // capture/replay mechanism installs one document-level capture listener
-  // (ensurePreHydrationClickCapture). For a shadow-rooted island nested in
-  // the page's shadow tree, the captured event.target is retargeted to the
-  // outer page host before the listener sees it, and the claiming island's
-  // isInside(root, target) check (parentNode walk from the retargeted host)
-  // can never reach the island's shadow root — the recorded click is consumed
-  // without replay. Replay therefore only works for light-root island content
-  // with no shadow boundary between the target and the capture root, which
-  // the starter's shadow-DSD island layout does not satisfy. Framework-side
-  // fix (per-root capture on unclaimed DSD roots, or composedPath-based
-  // target recording) is tracked separately; until then this stays fixme
-  // rather than weakening the assertion.
-  test.fixme('click before idle hydration is replayed after hydration (#942)', async ({ page }) => {
+  // #942 (fixed): the document-level capture listener
+  // (ensurePreHydrationClickCapture) observes a retargeted event.target (the
+  // island host) for clicks originating inside the island's open shadow root.
+  // The capture now resolves the original target through composedPath()[0],
+  // so the claiming island's isInside(root, target) check sees the true
+  // target and replays exactly once. Unit coverage (all three replay
+  // invariants plus cross-island and removed-target cases) lives in
+  // packages/element/__tests__/compiled-runtime/shadow-replay.test.ts; this
+  // test gates the user-visible outcome on the real starter surface.
+  test('click before idle hydration is replayed after hydration (#942)', async ({ page }) => {
     // Hold the idle callback so the island module cannot evaluate before the
     // click: the click lands in the pre-hydration window and must be replayed
     // by the capture/replay mechanism once the island hydrates.

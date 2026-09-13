@@ -1710,6 +1710,25 @@ const consumedEventRecords = new WeakSet<object>();
 const consumedEventObjects = new WeakSet<object>();
 
 /**
+ * Resolve the original interaction target for a captured event (#942).
+ * Prefers the composed path head (shadow-aware) and falls back to the
+ * retargeted event.target where composedPath is unavailable. Never throws:
+ * a hostile or exotic event object degrades to event.target.
+ */
+function resolveCaptureTarget(event: Event): EventTarget | null {
+  try {
+    const withPath = event as Event & { composedPath?: () => EventTarget[] };
+    if (typeof withPath.composedPath === 'function') {
+      const path = withPath.composedPath();
+      if (Array.isArray(path) && path.length > 0 && path[0]) return path[0];
+    }
+  } catch {
+    // Fall through to event.target below.
+  }
+  return event.target;
+}
+
+/**
  * Capture the bounded pre-upgrade interaction set on an owning root. One
  * latest event per target/type is retained, matching the one-click-per-host
  * queue contract while keeping replay deterministic and finite.
@@ -1730,7 +1749,14 @@ export function capturePreUpgradeEvents(
   for (const type of eventTypes) {
     if (!SUPPORTED_PRE_UPGRADE_EVENTS.has(type)) continue;
     const listener: EventListener = (event) => {
-      const target = event.target;
+      // Shadow-aware target resolution (#942): a document-level capture
+      // listener observes a retargeted event.target (the outer host) when the
+      // interaction originates inside an open shadow root. composedPath()[0]
+      // is the original interaction target, which is what the claiming
+      // island's isInsideRoot check must see. Closed shadow roots hide their
+      // internals from outside composedPath() by platform design; those
+      // records fail closed at replay (never misdelivered, never crashed).
+      const target = resolveCaptureTarget(event);
       if (!target) return;
       replaceFor({ target, type, event });
     };
@@ -1807,6 +1833,15 @@ export function replayPreUpgradeEvents(
       consumedEventObjects.add(record.event);
     }
     consumedEventRecords.add(record);
+    // Fail closed on detached targets: an interaction whose node left the
+    // document before its island hydrated replays nowhere (never throws,
+    // never delivers to a recycled node, never retries on a later upgrade).
+    if (
+      isNodeValue(target) && typeof target.isConnected === 'boolean' &&
+      target.isConnected === false
+    ) {
+      continue;
+    }
     if (typeof target.dispatchEvent !== 'function') continue;
     const event = record.event ?? (
       typeof globalThis.Event === 'function'

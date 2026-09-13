@@ -43,6 +43,16 @@ export class FacadeEvent {
   preventDefault(): void {
     this.defaultPrevented = true;
   }
+
+  /**
+   * Browser-faithful composed path (#942): the full target-to-root chain
+   * crossing open shadow boundaries via hosts. dispatchEvent() rebinds this
+   * to the dispatch-original target so mid-propagation callers observe the
+   * true path even while `target` is retargeted per listener.
+   */
+  composedPath(): FacadeNode[] {
+    return propagationPath(this.target as FacadeNode);
+  }
 }
 
 type FacadeNode = FacadeElement | FacadeText | FacadeComment | FacadeShadowRoot | FacadeDocument;
@@ -113,18 +123,86 @@ export abstract class FacadeNodeBase {
   }
 }
 
+function connectedDescendants(element: {
+  childNodes: FacadeNode[];
+  shadowRoot?: FacadeShadowRoot;
+}): FacadeNode[] {
+  // Light children plus shadow children (open and closed): the whole
+  // composition shares the host's connection (real isConnected, #942).
+  const out = [...element.childNodes];
+  const shadow = element.shadowRoot;
+  if (shadow) out.push(...shadow.childNodes);
+  const closed = closedShadowRoots.get(element as FacadeElement);
+  if (closed && closed !== shadow) out.push(...closed.childNodes);
+  return out;
+}
+
 function setConnected(node: FacadeNode, connected: boolean): void {
   const element = node as unknown as {
     __connected?: boolean;
     childNodes: FacadeNode[];
+    shadowRoot?: FacadeShadowRoot;
+    attachInternals?: () => { shadowRoot?: FacadeShadowRoot };
     connectedCallback?(): void;
     disconnectedCallback?(): void;
   };
   if ((element.__connected ?? false) === connected) return;
+  // Insertion connects the whole subtree before reactions run: browsers
+  // report children as connected inside connectedCallback, and the replay
+  // fail-closed check (#942) depends on that ordering. Flags first, then
+  // tree-order callbacks (parent before descendants, as before).
+  markConnected(element, connected);
+  invokeConnectionCallbacks(element, connected);
+}
+
+function markConnected(
+  element: {
+    __connected?: boolean;
+    childNodes: FacadeNode[];
+    shadowRoot?: FacadeShadowRoot;
+    attachInternals?: () => { shadowRoot?: FacadeShadowRoot };
+  },
+  connected: boolean,
+): void {
+  if ((element.__connected ?? false) === connected) return;
   element.__connected = connected;
+  for (const child of connectedDescendants(element)) {
+    markConnected(
+      child as unknown as {
+        __connected?: boolean;
+        childNodes: FacadeNode[];
+        shadowRoot?: FacadeShadowRoot;
+        attachInternals?: () => { shadowRoot?: FacadeShadowRoot };
+      },
+      connected,
+    );
+  }
+}
+
+function invokeConnectionCallbacks(
+  element: {
+    childNodes: FacadeNode[];
+    shadowRoot?: FacadeShadowRoot;
+    attachInternals?: () => { shadowRoot?: FacadeShadowRoot };
+    connectedCallback?(): void;
+    disconnectedCallback?(): void;
+  },
+  connected: boolean,
+): void {
   if (connected) element.connectedCallback?.();
   else element.disconnectedCallback?.();
-  for (const child of element.childNodes) setConnected(child, connected);
+  for (const child of connectedDescendants(element)) {
+    invokeConnectionCallbacks(
+      child as unknown as {
+        childNodes: FacadeNode[];
+        shadowRoot?: FacadeShadowRoot;
+        attachInternals?: () => { shadowRoot?: FacadeShadowRoot };
+        connectedCallback?(): void;
+        disconnectedCallback?(): void;
+      },
+      connected,
+    );
+  }
 }
 
 export class FacadeText extends FacadeNodeBase {
@@ -160,10 +238,24 @@ export class FacadeShadowRoot extends FacadeNodeBase {
   constructor(ownerDocument: FacadeDocument, readonly host: FacadeElement) {
     super(ownerDocument);
   }
+
+  /** Shadow children share the host's connection (real isConnected, #942). */
+  get isConnected(): boolean {
+    return this.host.isConnected;
+  }
 }
 
 /** Define-time observedAttributes snapshots, keyed by constructor. */
 const defineTimeObservedAttributes = new WeakMap<object, readonly string[]>();
+
+/**
+ * Closed shadow roots by host (#942): closed roots are invisible through
+ * .shadowRoot by design, but connection propagation must still reach their
+ * children (real isConnected semantics). Tracked here so traversal never
+ * calls attachInternals() speculatively (its call count is asserted by
+ * form-associated tests).
+ */
+const closedShadowRoots = new WeakMap<FacadeElement, FacadeShadowRoot>();
 
 export class FacadeElement extends FacadeNodeBase {
   readonly nodeType = 1;
@@ -247,7 +339,10 @@ export class FacadeElement extends FacadeNodeBase {
     if (this.shadowRoot) throw new Error('shadow root already exists');
     const root = new FacadeShadowRoot(this.ownerDocument, this);
     if (init.mode === 'open') this.shadowRoot = root;
-    else this.#closedShadowRoot = root;
+    else {
+      this.#closedShadowRoot = root;
+      closedShadowRoots.set(this, root);
+    }
     return root;
   }
 
@@ -289,11 +384,23 @@ export class FacadeElement extends FacadeNodeBase {
 
   dispatchEvent(event: FacadeEvent): boolean {
     if (event.target === null) event.target = this;
-    const path = propagationPath(event.target as FacadeNode);
+    const originalTarget = event.target as FacadeNode;
+    const path = propagationPath(originalTarget);
+    // Pin the composed path to the dispatch-original target: per-listener
+    // retargeting below must not rewrite what composedPath() reports (#942).
+    event.composedPath = () => propagationPath(originalTarget);
+    // Browser fidelity: retargeting is transient per listener. Restore the
+    // dispatch-original target (and clear currentTarget) when propagation
+    // ends, so a replayed re-dispatch starts from the true target (#942).
     for (const phase of ['capture', 'bubble'] as const) {
       const ordered = phase === 'capture' ? [...path].reverse() : path;
       for (const node of ordered) {
         if (!(node instanceof FacadeElement) && !(node instanceof FacadeDocument)) continue;
+        // Browser retargeting (#942): for composed events crossing an open
+        // shadow boundary, listeners outside the shadow tree observe the host
+        // as target. Non-composed events keep the harness's legacy behavior
+        // (no boundary crossing semantics change for existing tests).
+        if (event.composed) event.target = retargetForListener(originalTarget, node);
         const listeners = [...(node.listeners.get(event.type) ?? [])];
         for (const listener of listeners) {
           if (listener.capture !== (phase === 'capture')) continue;
@@ -303,8 +410,26 @@ export class FacadeElement extends FacadeNodeBase {
         }
       }
     }
+    event.target = originalTarget;
+    event.currentTarget = null;
     return !event.defaultPrevented;
   }
+}
+
+/** Retarget the dispatch-original target for one listener node (#942). */
+function retargetForListener(original: FacadeNode, listenerNode: FacadeNode): FacadeNode {
+  const path = propagationPath(original);
+  const listenerIndex = path.indexOf(listenerNode);
+  if (listenerIndex < 0) return original;
+  let adjusted: FacadeNode = original;
+  for (let index = 0; index < listenerIndex; index++) {
+    const node = path[index];
+    if (node instanceof FacadeShadowRoot) {
+      const hostIndex = path.indexOf(node.host);
+      if (hostIndex >= 0 && hostIndex <= listenerIndex) adjusted = node.host;
+    }
+  }
+  return adjusted;
 }
 
 /** target -> ... -> root, crossing shadow boundaries via the host. */
