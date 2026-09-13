@@ -1,5 +1,5 @@
 /**
- * Route-catalog sitemap for www (Beta.2.2, #1327).
+ * Route-catalog sitemap for apps/site (Beta.2.2, #1327).
  *
  * sitemap.xml is generated from the route catalog plus explicit public
  * eligibility — never by scanning built output or request-time Documents:
@@ -19,10 +19,10 @@
  * lastmod semantics are unchanged from the previous generator: the build
  * date for every URL. Pagefind consumes dist independently of this file.
  *
- * Pure functions only; IO lives in ../generate-www-sitemap.ts.
+ * Pure functions only; IO lives in ../generate-site-sitemap.ts.
  */
 
-import { SITE_ORIGIN } from '../../www/app/site-ui/head.ts';
+import { SITE_ORIGIN } from '../../apps/site/app/site-ui/head.ts';
 
 export interface SitemapUrlEntry {
   loc: string;
@@ -31,7 +31,7 @@ export interface SitemapUrlEntry {
   priority: number;
 }
 
-export interface WwwRouteCatalogEntry {
+export interface SiteRouteCatalogEntry {
   path: string;
   type: string;
 }
@@ -42,11 +42,11 @@ export interface WwwRouteCatalogEntry {
  * nav scanner never picks it up either (no meta export). Exclusion applies to
  * the canonical route, so every locale variant is excluded by construction.
  */
-export const WWW_SITEMAP_EXCLUDE: readonly string[] = ['/probe-light'];
+export const SITE_SITEMAP_EXCLUDE: readonly string[] = ['/probe-light'];
 
 export interface EnumeratePublicRoutesOptions {
   /** Route catalog from the adapter route scanner. */
-  routes: readonly WwwRouteCatalogEntry[];
+  routes: readonly SiteRouteCatalogEntry[];
   /** Blog-post routes enumerated from the drift-gated content graph. */
   blogPostRoutes: readonly string[];
   /** Site locales; the first is the default (unprefixed) locale. */
@@ -56,7 +56,7 @@ export interface EnumeratePublicRoutesOptions {
 }
 
 /**
- * Dynamic page routes the www build prerenders through getStaticPaths, keyed
+ * Dynamic page routes the site build prerenders through getStaticPaths, keyed
  * by the scanned route path, each mapped to its explicit public enumeration.
  * A dynamic route missing from this table fails the enumeration closed —
  * "SSR could render it" is never evidence of publicness (#1327).

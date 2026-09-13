@@ -1,7 +1,7 @@
 /**
  * Built-output internal link + fragment truth (#1159, B2.4).
  *
- * Walks www/dist HTML, resolves every internal href/src against the built
+ * Walks apps/site/dist HTML, resolves every internal href/src against the built
  * output tree and requires fragment targets (#id) to exist in the target
  * document. External links are out of scope here — the scheduled external
  * checker is deferred to Beta.3 (#1156, workflow-cap ruling).
@@ -88,7 +88,7 @@ export function pageSeo(html: string, file: string, locales: readonly string[]):
  * default description left in the output to reconcile against. Per-page
  * description presence/length stays asserted by findSeoFailures; locale
  * honesty of the copy is guarded by the route-locale gates in
- * check-www-truth.ts and the i18n e2e suites.
+ * check-site-truth.ts and the i18n e2e suites.
  */
 export function findCrossPageSeoFailures(
   pages: readonly BuiltPageSeo[],

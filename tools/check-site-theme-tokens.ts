@@ -1,6 +1,6 @@
 /**
- * www theme-token gate: theme values in the site must come from open-props
- * tokens (packages/ui/src/open-props-tokens.css) and the www alias layer
+ * site theme-token gate: theme values in the site must come from open-props
+ * tokens (packages/ui/src/open-props-tokens.css) and the site alias layer
  * (apps/site/vite.config.ts), never from hardcoded literals.
  *
  * Rules for sources under apps/site/app/ and apps/site/islands/:
@@ -64,7 +64,7 @@ async function main(): Promise<void> {
     }
   }
   if (failures.length > 0) {
-    console.error('www theme token check failed:');
+    console.error('site theme token check failed:');
     for (const failure of failures) {
       console.error(`- ${failure.file}:${failure.line} [${failure.rule}] ${failure.text}`);
     }
@@ -73,7 +73,7 @@ async function main(): Promise<void> {
     );
     Deno.exit(1);
   }
-  console.log('www theme token check passed.');
+  console.log('site theme token check passed.');
 }
 
 if (import.meta.main) {

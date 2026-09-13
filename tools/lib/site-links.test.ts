@@ -7,7 +7,7 @@ import {
   findSeoFailures,
   pageSeo,
   resolveBuiltPath,
-} from './www-links.ts';
+} from './site-links.ts';
 
 Deno.test('extractBuiltLinks: keeps internal targets, skips external/protocol/fragment-only', () => {
   const links = extractBuiltLinks(

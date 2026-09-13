@@ -1255,6 +1255,12 @@
           "npm:vite@8.0.16"
         ]
       },
+      "apps/site": {
+        "dependencies": [
+          "npm:gray-matter@^4.0.3",
+          "npm:marked@15"
+        ]
+      },
       "packages/element": {
         "dependencies": [
           "npm:typescript@6.0.3"

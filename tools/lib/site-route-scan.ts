@@ -1,13 +1,13 @@
 /**
- * Site-owned route discovery for the www sitemap (1.0.0-alpha.1): enumerate
- * www/app/routes files into { path, type } catalog entries. This replaces
+ * Site-owned route discovery for the site sitemap (1.0.0-alpha.1): enumerate
+ * apps/site/app/routes files into { path, type } catalog entries. This replaces
  * the retired adapter-vite internal route scanner — the sitemap must never
  * import a deleted adapter or a Router internal path. Conventions: index.tsx
  * maps to its directory, [param].tsx maps to :param, every route file is a
  * page; dynamic enumeration stays fail-closed in enumeratePublicRoutes.
  */
 import { join } from '@std/path';
-import type { WwwRouteCatalogEntry } from './www-sitemap.ts';
+import type { SiteRouteCatalogEntry } from './site-sitemap.ts';
 
 function fileToRoutePath(relativePath: string): string | undefined {
   const withoutExtension = relativePath.replace(/\.tsx?$/, '');
@@ -22,8 +22,8 @@ function fileToRoutePath(relativePath: string): string | undefined {
 }
 
 /** Scan a routes directory into sitemap catalog entries (sorted by path). */
-export async function scanWwwRoutes(routesDir: string): Promise<WwwRouteCatalogEntry[]> {
-  const entries: WwwRouteCatalogEntry[] = [];
+export async function scanSiteRoutes(routesDir: string): Promise<SiteRouteCatalogEntry[]> {
+  const entries: SiteRouteCatalogEntry[] = [];
   async function walk(dir: string, relative: string): Promise<void> {
     for await (const dirEntry of Deno.readDir(dir)) {
       const relativePath = relative === '' ? dirEntry.name : `${relative}/${dirEntry.name}`;

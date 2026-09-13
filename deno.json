@@ -5,7 +5,8 @@
     "./packages/ui",
     "./packages/create",
     "./packages/router",
-    "./apps/saas"
+    "./apps/saas",
+    "./apps/site"
   ],
   "imports": {
     "@openelement/url-pattern-list": "npm:@openelement/url-pattern-list@0.6.0",
@@ -111,11 +112,11 @@
     "nitro:proof:node": "deno run --allow-read --allow-write --allow-run --allow-env --allow-net fixtures/router-nitro/proof.ts node",
     "nitro:proof:workers": "deno run --allow-read --allow-write --allow-run --allow-env --allow-net fixtures/router-nitro/proof.ts workers",
     "test:coverage:check": "deno run --allow-read --allow-run --allow-write --allow-env --allow-net --allow-ffi --allow-sys tools/check-coverage.ts --threshold 80 --branch-threshold 84 --function-threshold 86",
-    "generate:site-content-data": "deno run --allow-read --allow-write tools/generate-www-content-data.ts",
+    "generate:site-content-data": "deno run --allow-read --allow-write tools/generate-site-content-data.ts",
     "site:build": "deno task generate:site-content-data && deno task --cwd apps/site build && deno task site:sitemap",
-    "site:sitemap": "deno run --allow-read --allow-write --allow-env tools/generate-www-sitemap.ts",
-    "site:check-links": "deno run --allow-read tools/check-www-links.ts",
-    "site:check-theme-tokens": "deno run --allow-read tools/check-www-theme-tokens.ts",
+    "site:sitemap": "deno run --allow-read --allow-write --allow-env tools/generate-site-sitemap.ts",
+    "site:check-links": "deno run --allow-read tools/check-site-links.ts",
+    "site:check-theme-tokens": "deno run --allow-read tools/check-site-theme-tokens.ts",
     "content-examples:check": "deno run --allow-read --allow-env --allow-write tools/check-content-examples.ts",
     "retired-api:check": "deno run --allow-read tools/check-retired-api-refs.ts",
     "site:check": "deno task --cwd apps/site check",

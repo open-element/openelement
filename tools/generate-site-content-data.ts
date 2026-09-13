@@ -1,5 +1,5 @@
 /**
- * Generate the www data modules required by tests, the site check tools and the
+ * Generate the site data modules required by tests, the site check tools and the
  * site build on a clean clone.
  *
  * Emits, from the checked-in content collections:
@@ -21,21 +21,21 @@ import { blogCollection, prepareBlogPosts } from '../apps/site/lib/blog.ts';
 import { fromFileUrl, join } from '@std/path';
 import { articleCollections } from '../apps/site/content-collections.ts';
 
-const wwwRoot = fromFileUrl(new URL('../apps/site/', import.meta.url));
+const siteRoot = fromFileUrl(new URL('../apps/site/', import.meta.url));
 
 for (const name of ['guide', 'architecture'] as const) {
   const options = {
     ...articleCollections[name],
-    contentDir: join(wwwRoot, articleCollections[name].contentDir),
+    contentDir: join(siteRoot, articleCollections[name].contentDir),
   };
   const entries = await loadCollectionData(name, options);
   const output = writeCollectionDataModule(name, entries, options);
-  await Deno.writeTextFile(join(wwwRoot, `app/data/_generated-${name}-data.ts`), output);
+  await Deno.writeTextFile(join(siteRoot, `app/data/_generated-${name}-data.ts`), output);
 }
 
-const blogOptions = { ...blogCollection, contentDir: join(wwwRoot, blogCollection.contentDir) };
+const blogOptions = { ...blogCollection, contentDir: join(siteRoot, blogCollection.contentDir) };
 const blogEntries = await loadCollectionData('blog', blogOptions);
 await Deno.writeTextFile(
-  join(wwwRoot, 'app/data/_generated-blog-data.ts'),
+  join(siteRoot, 'app/data/_generated-blog-data.ts'),
   writeBlogDataModule(prepareBlogPosts(blogEntries)),
 );

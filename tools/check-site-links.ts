@@ -25,13 +25,13 @@ import {
   type LinkFailure,
   pageSeo,
   resolveBuiltPath,
-} from './lib/www-links.ts';
+} from './lib/site-links.ts';
 import { apiReference } from '../apps/site/app/data/_generated-api-reference.ts';
 
-export const WWW_DIST = 'apps/site/dist';
+export const SITE_DIST = 'apps/site/dist';
 const SITE_LOCALES = ['en', 'zh'] as const;
 
-export async function checkBuiltLinks(dist = WWW_DIST): Promise<LinkFailure[]> {
+export async function checkBuiltLinks(dist = SITE_DIST): Promise<LinkFailure[]> {
   const failures: LinkFailure[] = [];
   const files = new Set<string>();
   const htmlFiles: string[] = [];
@@ -133,5 +133,5 @@ if (import.meta.main) {
     }
     Deno.exit(1);
   }
-  console.log(`Built-output link check passed (${WWW_DIST}).`);
+  console.log(`Built-output link check passed (${SITE_DIST}).`);
 }
