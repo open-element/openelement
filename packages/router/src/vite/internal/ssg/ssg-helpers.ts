@@ -251,11 +251,20 @@ export function renderStandaloneServerModule(): string {
 // Do not edit; regenerated per build.
 //
 // Runtime: Deno with Web Standard URL/URLPattern/Request/Response.
-// Node/Workers/Bun deploys use the Nitro mount from the same fetch entry.
+// This file is the Deno local runner, not a multi-runtime entry:
+// executing it outside Deno fails closed below. Node/Workers/Bun deploys
+// use the Nitro mount (@openelement/router/nitro-mount) from the same
+// fetch entry — never this file.
 //
 // Usage:
 //   deno run -A dist/server/serve.mjs
 //   OPEN_ELEMENT_PORT=8080 OPEN_ELEMENT_HOST=127.0.0.1 deno run -A dist/server/serve.mjs
+if (typeof globalThis.Deno === 'undefined') {
+  throw new Error(
+    '[openElement serve] dist/server/serve.mjs is the Deno local runner. ' +
+    'Deploy on Node/Workers/Bun via the Nitro mount (@openelement/router/nitro-mount).',
+  );
+}
 if (typeof globalThis.URLPattern === 'undefined') {
   console.error(
     "[openElement serve] This build requires a runtime with WHATWG URLPattern.",

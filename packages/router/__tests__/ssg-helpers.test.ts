@@ -67,6 +67,9 @@ Deno.test('renderRequestTimeServerModule mounts the entry openElementHandler (#8
 
 Deno.test('renderStandaloneServerModule fails fast below the URLPattern floor', () => {
   const code = renderStandaloneServerModule();
+  assertStringIncludes(code, "typeof globalThis.Deno === 'undefined'");
+  assertStringIncludes(code, 'is the Deno local runner');
+  assertStringIncludes(code, '@openelement/router/nitro-mount');
   assertStringIncludes(code, "typeof globalThis.URLPattern === 'undefined'");
   assertStringIncludes(code, "await import('./index.js')");
   assertEquals(code.includes("from 'node:"), false);

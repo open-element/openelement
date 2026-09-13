@@ -4,17 +4,29 @@
  * workspace source — build a minimal app and serve it under a plain
  * production runtime. Usage: `deno run ... consumer-packaged-node-serve.ts
  * <node|bun>`. The runtime binary must be on PATH (CI provides it per job);
- * the app build always runs under plain node.
+ * the app builds on the Deno-driven toolchain and serves its Nitro output
+ * under the target runtime.
  *
  * Cells: install (empty npm cache, explicit timeouts) -> boundary (no dep
- * resolves into the repository) -> build (packed /vite buildApp under node)
- * -> serve (boot dist/server/serve.mjs under the target runtime, probe the
+ * resolves into the repository) -> build (packed /vite buildApp on the
+ * supported Deno-driven toolchain) -> serve (build the Nitro server output
+ * from the packed app and boot it under the target runtime, probe the
  * static home and one request-time dynamic route over HTTP).
+ *
+ * The build deliberately does NOT run under plain node: packed first-party
+ * build modules use the Deno API where the Web platform offers no
+ * filesystem/process capability (per the Alpha platform doctrine), and the
+ * supported build toolchain is Deno-driven (`deno run npm:vite`,
+ * `deno run <router>/cli/build`). The deploy target runs the Nitro output:
+ * dist/server/serve.mjs is the Deno local runner and fails closed outside
+ * Deno, so plain node (or bun) boots the Nitro server entry built from the
+ * packed app via the packed @openelement/router/nitro-mount.
  */
-import { existsSync } from '@std/fs';
+import { copy, existsSync } from '@std/fs';
 import { join, resolve } from '@std/path';
 import { formatJson } from '@openelement/element/build-utils';
 import { PACKAGE_VERSION } from './project-constants.ts';
+import { PACKED_STD_ALIASES } from './consumer-packaged-shared.ts';
 
 const repoRoot = resolve(import.meta.dirname!, '..');
 const INSTALL_TIMEOUT_MS = 10 * 60_000;
@@ -85,6 +97,33 @@ for (const tarball of [routerTarball, elementTarball]) {
 const tmp = await Deno.makeTempDir({ prefix: `openelement-packed-serve-${runtime}-` });
 let server: Deno.ChildProcess | undefined;
 try {
+  // @jsr/* packages are served by JSR's npm compatibility layer (same idiom
+  // as the other packed-consumer harnesses, #886); without it plain npm
+  // cannot install the packed manifests' @jsr/std__* dependencies.
+  Deno.writeTextFileSync(join(tmp, '.npmrc'), '@jsr:registry=https://npm.jsr.io\n');
+  // Deno-driven build contract (same shape as the packed-app legs): the
+  // unpublished @openelement/* pins resolve into the pre-laid node_modules
+  // tree instead of the registry, and the @std/* pins cover direct Deno
+  // resolution of the packed modules.
+  Deno.writeTextFileSync(
+    join(tmp, 'deno.json'),
+    formatJson({
+      imports: {
+        '@openelement/router': `npm:@openelement/router@${PACKAGE_VERSION}`,
+        '@openelement/router/vite': `npm:@openelement/router@${PACKAGE_VERSION}/vite`,
+        '@openelement/element': `npm:@openelement/element@${PACKAGE_VERSION}`,
+        'hono': 'npm:hono@4.12.0',
+        'vite': 'npm:vite@8.0.16',
+        '@std/fs': 'jsr:@std/fs@^1.0.0',
+        '@std/fs/': 'jsr:@std/fs@^1.0.0/',
+        '@std/jsonc': 'jsr:@std/jsonc@^1.0.0',
+        '@std/media-types': 'jsr:@std/media-types@^1.0.0',
+        '@std/path': 'jsr:@std/path@^1.0.0',
+      },
+      nodeModulesDir: 'manual',
+      minimumDependencyAge: 0,
+    }),
+  );
   Deno.writeTextFileSync(
     join(tmp, 'package.json'),
     formatJson({
@@ -96,12 +135,23 @@ try {
         '@openelement/element': `file:${elementTarball}`,
         'vite': '8.0.16',
         'hono': '4.12.0',
+        'nitro': '3.0.0',
+        // Packed first-party modules keep bare @std/* specifiers; the
+        // Nitro server output preserves node_modules imports for serve
+        // time, and plain node resolves through node_modules, so alias
+        // them to the npm-compat @jsr/std__* dirs (same contract as
+        // consumer-packaged-shared.ts).
+        ...PACKED_STD_ALIASES,
       },
     }),
   );
+  // --legacy-peer-deps: nitro@3.0.0 peer-declares vite ^7 while the Alpha
+  // line runs vite 8 (its peer is optional and the Deno-driven fixture
+  // proof already qualifies this combination); plain npm would otherwise
+  // refuse an install Deno accepts.
   const install = await run(
     'npm',
-    ['install', '--ignore-scripts', '--no-audit', '--no-fund'],
+    ['install', '--ignore-scripts', '--no-audit', '--no-fund', '--legacy-peer-deps'],
     tmp,
     { NPM_CONFIG_CACHE: join(tmp, '.npm-cache') },
     INSTALL_TIMEOUT_MS,
@@ -117,7 +167,33 @@ try {
   }
   console.log(`PASS packed-serve-${runtime} boundary — no dependency resolves into the repository`);
 
+  // Nitro deploy contract: the packed app is served on the target runtime
+  // through the packed nitro-mount, never through dist/server/serve.mjs
+  // (the Deno local runner, which fails closed outside Deno).
+  const nitroPreset = runtime === 'bun' ? 'bun' : 'node-server';
   const files: Record<string, string> = {
+    'nitro.config.ts': `export default defineNitroConfig({
+  srcDir: 'server',
+  preset: '${nitroPreset}',
+  publicAssets: [{ dir: 'nitro-public' }],
+  output: { dir: '.output-serve' },
+});
+`,
+    'server/routes/[...path].ts':
+      `import { createOpenElementNitroHandler } from '@openelement/router/nitro-mount';
+import openElementServer from '../../dist/server/index.js';
+
+// Catch-all over the Nitro static layer (nitro-public/): prerendered files
+// win, everything else — dynamic routes, actions, 404s — falls through to
+// the packed request-time server through the standard fetch seam.
+export default createOpenElementNitroHandler({
+  handler: (request, context) =>
+    openElementServer({
+      req: request,
+      env: (context.env ?? {}) as Record<string, string>,
+    }),
+});
+`,
     'vite.config.js': `import { openElement } from '@openelement/router/vite';
 import { defineConfig } from 'vite';
 
@@ -195,7 +271,7 @@ export default class PackedLive extends OpenElement {
     Deno.writeTextFileSync(target, content);
   }
 
-  const build = await run('node', ['build.mjs'], tmp, {}, BUILD_TIMEOUT_MS);
+  const build = await run(Deno.execPath(), ['run', '-A', 'build.mjs'], tmp, {}, BUILD_TIMEOUT_MS);
   if (!build.success) throw new Error(`Packed serve build failed:\n${build.output}`);
   for (const artifact of ['dist/server/index.js', 'dist/server/serve.mjs', 'dist/index.html']) {
     if (!existsSync(join(tmp, artifact))) {
@@ -204,13 +280,41 @@ export default class PackedLive extends OpenElement {
   }
   console.log(`PASS packed-serve-${runtime} build — packed CLI emitted dist + request-time server`);
 
+  // Publish the prerendered tree for Nitro's static layer. dist/server/*
+  // is server code, not a public asset, so it stays out of nitro-public/.
+  Deno.mkdirSync(join(tmp, 'nitro-public'), { recursive: true });
+  for (const entry of Deno.readDirSync(join(tmp, 'dist'))) {
+    if (entry.name === 'server') continue;
+    await copy(join(tmp, 'dist', entry.name), join(tmp, 'nitro-public', entry.name), {
+      overwrite: true,
+    });
+  }
+  if (existsSync(join(tmp, 'nitro-public', 'server'))) {
+    throw new Error('Static publish leaked dist/server into the Nitro public dir');
+  }
+  const nitroBuild = await run(
+    Deno.execPath(),
+    ['run', '-A', 'npm:nitro@3.0.0', 'build'],
+    tmp,
+    {},
+    BUILD_TIMEOUT_MS,
+  );
+  if (!nitroBuild.success) throw new Error(`Packed Nitro build failed:\n${nitroBuild.output}`);
+  const nitroEntry = join(tmp, '.output-serve', 'server', 'index.mjs');
+  if (!existsSync(nitroEntry)) {
+    throw new Error(`Packed Nitro build emitted no server entry: ${nitroEntry}`);
+  }
+  console.log(
+    `PASS packed-serve-${runtime} nitro — ${nitroPreset} output built from the packed app`,
+  );
+
   const probe = Deno.listen({ hostname: '127.0.0.1', port: 0 });
   const port = (probe.addr as Deno.NetAddr).port;
   probe.close();
   server = new Deno.Command(runtime, {
-    args: ['dist/server/serve.mjs'],
+    args: [nitroEntry],
     cwd: tmp,
-    env: { OPEN_ELEMENT_PORT: String(port), OPEN_ELEMENT_HOST: '127.0.0.1' },
+    env: { PORT: String(port), HOST: '127.0.0.1' },
     stdout: 'piped',
     stderr: 'piped',
   }).spawn();
@@ -273,7 +377,7 @@ export default class PackedLive extends OpenElement {
     throw new Error('packed serve /live missing the request-time marker or loader echo');
   }
   console.log(
-    `PASS packed-serve-${runtime} serve — static home + request-time /live green over HTTP under ${runtime}`,
+    `PASS packed-serve-${runtime} serve — Nitro ${nitroPreset} output: static home + request-time /live green over HTTP under ${runtime}`,
   );
 } finally {
   try {
