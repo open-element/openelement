@@ -107,7 +107,7 @@ async function runCoverage(crashRetries: number): Promise<string> {
             // via its own gate (tests/fixtures/<name>#gate,
             // tests/e2e/starter-smoke#gate); none contributes to the
             // root coverage denominator.
-            '--ignore=packages/element/__wtr__,examples,fixtures',
+            '--ignore=packages/element/__wtr__,examples,fixtures,tests/fixtures',
             '--allow-read',
             '--allow-write',
             '--allow-env',
