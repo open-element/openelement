@@ -4,9 +4,9 @@
   "exports": "./src/cli.ts",
   "imports": {},
   "tasks": {
-    "run": "deno run -A src/cli.ts",
+    "run": "deno run --allow-read --allow-write --allow-run --allow-env --allow-net src/cli.ts",
     "build": "deno check src/",
-    "test": "deno test -A",
+    "test": "deno test --allow-read --allow-write --allow-env --allow-net --allow-run --allow-ffi --allow-sys",
     "lint": "deno lint src/ __tests__/",
     "typecheck": "deno check src/"
   },

@@ -1,8 +1,8 @@
-#!/usr/bin/env -S deno run -A
+#!/usr/bin/env -S deno run --allow-read --allow-write
 /**
  * @openelement/create - Minimal project scaffold for openElement framework.
  *
- * Usage: deno run -A --minimum-dependency-age 0 npm:@openelement/create my-app
+ * Usage: deno run --allow-read --allow-write --minimum-dependency-age 0 npm:@openelement/create my-app
  *
  * openElement Architecture: Keep It Simple, Stupid.
  * One template, zero prompts, instant start.
@@ -37,7 +37,7 @@ async function main(): Promise<void> {
   const name = Deno.args[0];
   if (!name || name === '--help' || name === '-h') {
     console.log(
-      'Usage: deno run -A --minimum-dependency-age 0 npm:@openelement/create <project-name>',
+      'Usage: deno run --allow-read --allow-write --minimum-dependency-age 0 npm:@openelement/create <project-name>',
     );
     Deno.exit(name ? 0 : 1);
   }

@@ -20,7 +20,7 @@ function readTemplate(path: string): string {
 
 async function runCreate(executable: string, cwd: string, name: string) {
   const result = await new Deno.Command(Deno.execPath(), {
-    args: ['run', '-A', executable, name],
+    args: ['run', '--allow-read', '--allow-write', executable, name],
     cwd,
     stdout: 'piped',
     stderr: 'piped',
@@ -31,7 +31,7 @@ async function runCreate(executable: string, cwd: string, name: string) {
 
 async function runCreateExpectingFailure(executable: string, cwd: string, name: string) {
   const result = await new Deno.Command(Deno.execPath(), {
-    args: ['run', '-A', executable, name],
+    args: ['run', '--allow-read', '--allow-write', executable, name],
     cwd,
     stdout: 'piped',
     stderr: 'piped',
