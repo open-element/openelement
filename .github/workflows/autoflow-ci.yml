@@ -157,6 +157,10 @@ jobs:
   # under test.
   bun-serve-smoke:
     name: dist/server Bun smoke
+    # Optional compatibility signal only (1.0 Alpha convergence): Bun is not
+    # an Alpha support target, so this job must never block the candidate or
+    # the release graph. Enforced by tools/repo/check-ci-contracts.test.ts.
+    continue-on-error: true
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -210,6 +214,13 @@ jobs:
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
           node-version: '24'
+      - name: Install Playwright browsers
+        # The packed gates assert island hydration/continuation per packed
+        # tarball consumer on Chromium, Firefox and WebKit.
+        run: ./node_modules/.bin/playwright install chromium firefox webkit
+      - name: Install Playwright system dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: sudo ./node_modules/.bin/playwright install-deps chromium firefox webkit
       - name: Pack the release tarballs
         run: deno task --cwd tools/release pack:dry-run
       - name: Fresh packed-starter consumer proof

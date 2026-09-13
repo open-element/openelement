@@ -39,8 +39,11 @@ publish; a missing environment fails the job closed instead of publishing:
 - Prereleases publish under `--tag alpha|beta|rc` only; `latest` never moves
   onto an alpha (`publishPackage` guard, tested).
 - Required pre-publish CI (branch protection on `main`): the AutoFlow CI
-  `autoflow-ci`, `node-serve-smoke` (24/26), `packed-consumer-matrix`
-  (Linux/macOS/Windows), `bun-serve-smoke` (optional/non-blocking Bun proof),
-  dependency-review on PRs, and CodeQL. Post-publish
+  `autoflow-ci`, `node-serve-smoke` (24/26, required), `packed-consumer-matrix`
+  (Linux/macOS/Windows packed tarball consumers, required),
+  dependency-review on PRs, and CodeQL. `bun-serve-smoke` is an
+  optional/non-blocking Bun compatibility signal: it runs with
+  `continue-on-error: true`, is not a required check, and never gates the
+  candidate or the release graph. Post-publish
   (`published-consumers.yml`) verifies the registry afterward and never
   substitutes for the pre-publish matrix.
