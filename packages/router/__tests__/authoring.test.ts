@@ -8,7 +8,7 @@
  * The render coverage of the legacy suite (VNode rendering, render-scope data
  * hooks) is replaced by the compiled serializer path — the hand-built
  * compiled class below renders through the public renderDsd(), and the
- * request-time fixture (fixtures/router-request-time)
+ * request-time fixture (tests/fixtures/router-request-time)
  * covers loader/action data reaching rendered HTML end-to-end.
  */
 

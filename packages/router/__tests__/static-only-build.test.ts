@@ -17,7 +17,7 @@
 import { assert, assertEquals, assertStringIncludes } from '@std/assert';
 import { join } from '@std/path';
 
-const fixtureDir = join(import.meta.dirname!, '../../../fixtures/router-static-only');
+const fixtureDir = join(import.meta.dirname!, '../../../tests/fixtures/router-static-only');
 const distDir = join(fixtureDir, 'dist');
 const repoRoot = join(fixtureDir, '../..');
 

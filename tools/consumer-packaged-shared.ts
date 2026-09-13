@@ -14,7 +14,7 @@
  * the repository (so the workspace auto-alias in workspace-alias.ts cannot
  * substitute workspace source), installs the tarballs hermetically through an
  * explicit package.json (file: deps + pinned externals), materializes a
- * minimal notes app modeled on fixtures/router-{native,lit}-framework/ using
+ * minimal notes app modeled on tests/fixtures/router-{native,lit}-framework/ using
  * only published specifiers, and then runs the verification cells:
  *
  *   install                hermetic npm install of the tarballs

@@ -1,0 +1,6 @@
+{
+  "tasks": {
+    "proof:node": "deno run --config ../../../deno.json --allow-read --allow-write --allow-run --allow-env --allow-net proof.ts node",
+    "proof:workers": "deno run --config ../../../deno.json --allow-read --allow-write --allow-run --allow-env --allow-net proof.ts workers"
+  }
+}

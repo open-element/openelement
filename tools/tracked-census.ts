@@ -6,7 +6,7 @@ function category(path: string): string {
   if (path.includes('/__tests__/') || path.endsWith('.test.ts') || path.endsWith('.spec.ts')) {
     return 'test';
   }
-  if (path.startsWith('fixtures/')) return 'fixture';
+  if (path.startsWith('tests/fixtures/')) return 'fixture';
   if (path.startsWith('benchmarks/')) return 'benchmark';
   if (path.startsWith('tools/')) return 'tooling';
   if (path.startsWith('packages/')) return 'product-source';

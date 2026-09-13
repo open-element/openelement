@@ -26,7 +26,7 @@ import { assert, assertEquals, assertStringIncludes } from '@std/assert';
 import { join, toFileUrl } from '@std/path';
 import { createServer as createNodeServer } from 'node:http';
 
-const fixtureDir = join(import.meta.dirname!, '../../../fixtures/router-request-time');
+const fixtureDir = join(import.meta.dirname!, '../../../tests/fixtures/router-request-time');
 const serverEntryPath = join(fixtureDir, 'dist/server/index.js');
 
 type ServerHandle = { base: string; close: () => Promise<void> };

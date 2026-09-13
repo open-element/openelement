@@ -3,7 +3,7 @@
  * (Beta.2.2, #1339 §11): prove that the pack:dry-run tarballs support the
  * complete notes-app flow on the explicitly-configured lit renderer.
  *
- * The app sources below are modeled on fixtures/router-lit-framework/: pages
+ * The app sources below are modeled on tests/fixtures/router-lit-framework/: pages
  * are LitElement classes default-exported via defineLitPage() from the
  * published @openelement/router/lit subpath, rendered server-side by
  * @lit-labs/ssr (DSD) and hydrated by @lit-labs/ssr-client. All

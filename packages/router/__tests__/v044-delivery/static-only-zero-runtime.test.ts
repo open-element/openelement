@@ -2,7 +2,7 @@
  * @openelement/router — v0.44 zero-runtime proof for the static-only
  * fixture (#1171).
  *
- * Builds fixtures/router-static-only/ through the repo's
+ * Builds tests/fixtures/router-static-only/ through the repo's
  * own build path — the same CLI module the root `fixture:router-static-only:build`
  * task invokes — and pins the empty-islands delivery contract end to end
  * (buildClient()'s zero-island path, which backs removeClientDeliveryArtifacts
@@ -21,7 +21,7 @@
 import { assert, assertEquals } from '@std/assert';
 import { join } from '@std/path';
 
-const fixtureDir = join(import.meta.dirname!, '../../../../fixtures/router-static-only');
+const fixtureDir = join(import.meta.dirname!, '../../../../tests/fixtures/router-static-only');
 const distDir = join(fixtureDir, 'dist');
 const repoRoot = join(fixtureDir, '../..');
 

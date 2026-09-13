@@ -100,7 +100,7 @@ async function runCoverage(crashRetries: number): Promise<string> {
             '--no-lock',
             `--coverage=${coverageDir}`,
             // element's WTR browser suite is gated separately
-            // (test:element:browser:gate). apps/saas/ and fixtures/ are
+            // (test:element:browser:gate). apps/saas/ and tests/fixtures/ are
             // independent projects with their own deno.json boundaries —
             // the root sweep must not resolve them under the root import
             // map. Each runs under its own config via its own gate

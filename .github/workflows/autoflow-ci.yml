@@ -101,11 +101,11 @@ jobs:
         with:
           name: playwright-failure-artifacts-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
-            e2e/starter-smoke/test-results
-            fixtures/router-request-time/e2e/test-results
-            fixtures/router-native-framework/e2e/test-results
-            fixtures/router-lit-framework/e2e/test-results
-            fixtures/router-ui-dogfood/e2e/test-results
+            tests/e2e/starter-smoke/test-results
+            tests/fixtures/router-request-time/e2e/test-results
+            tests/fixtures/router-native-framework/e2e/test-results
+            tests/fixtures/router-lit-framework/e2e/test-results
+            tests/fixtures/router-ui-dogfood/e2e/test-results
           if-no-files-found: ignore
           retention-days: 14
 

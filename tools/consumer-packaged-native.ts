@@ -3,7 +3,7 @@
  * (Beta.2.2, #1339 §11): prove that the pack:dry-run tarballs support the
  * complete notes-app flow on the native compiled-element renderer.
  *
- * The app sources below are modeled on fixtures/router-native-framework/,
+ * The app sources below are modeled on tests/fixtures/router-native-framework/,
  * importing only published specifiers (@openelement/router,
  * @openelement/element + the jsx-runtime via jsxImportSource). Marker strings
  * are renamed so the harness log is attributable to the packed consumer, not

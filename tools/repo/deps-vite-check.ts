@@ -24,7 +24,7 @@ const MANIFEST_GLOB_ROOTS = [
   'packages/*/deno.json',
   'apps/site/deno.json',
   'apps/saas/deno.json',
-  'fixtures/*/deno.json',
+  'tests/fixtures/*/deno.json',
 ];
 
 export interface ManifestRecord {
