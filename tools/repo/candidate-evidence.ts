@@ -110,6 +110,111 @@ function countMatches(text: string, pattern: RegExp): number {
   return matches ? matches.length : 0;
 }
 
+interface FreshCloneCommand {
+  argv: string[];
+  cwd: string;
+  startedAt: string;
+  durationMs: number;
+  exitCode: number;
+  logPath: string;
+  logSha256: string;
+}
+
+interface FreshCloneProof {
+  sha: string;
+  cloneDir: string;
+  envSummary: Record<string, string>;
+  commands: FreshCloneCommand[];
+  note: string;
+}
+
+/**
+ * Fresh-clone proof at the bound SHA: clone --no-hardlinks into a temp dir,
+ * detach at the SHA, and run the README bootstrap plus the packed and
+ * publish gates with empty DENO_DIR / npm cache (nothing copied:
+ * no node_modules, dist, tgz, or coverage). Playwright browser binaries are
+ * reused from the preinstalled user cache (disclosed, not hidden). The temp
+ * clone is removed afterwards; logs and hashes stay under .artifacts/logs.
+ */
+async function runFreshClone(
+  sha: string,
+  denoExe: string,
+  logsDir: string,
+): Promise<{ proof: FreshCloneProof; combinedLog: string }> {
+  const tmpRoot = await Deno.makeTempDir({ prefix: 'fresh-candidate-' });
+  const cloneDir = join(tmpRoot, 'repo');
+  const denoDir = join(tmpRoot, 'deno-dir');
+  const npmCache = join(tmpRoot, 'npm-cache');
+  const commands: FreshCloneCommand[] = [];
+  const combined: string[] = [];
+  const run = async (argv: string[], cwd: string, env?: Record<string, string>): Promise<void> => {
+    const startedAt = new Date().toISOString();
+    const started = Date.now();
+    const output = await new Deno.Command(argv[0], {
+      args: argv.slice(1),
+      cwd,
+      stdin: 'null',
+      stdout: 'piped',
+      stderr: 'piped',
+      env,
+    }).output();
+    const text = new TextDecoder().decode(output.stdout) + new TextDecoder().decode(output.stderr);
+    const logPath = join(logsDir, `fresh-clone-${commands.length}-${argv[0].split('/').pop()}.log`);
+    await Deno.writeTextFile(logPath, text);
+    commands.push({
+      argv,
+      cwd,
+      startedAt,
+      durationMs: Date.now() - started,
+      exitCode: output.code,
+      logPath: logPath.startsWith(repoRoot) ? logPath.slice(repoRoot.length + 1) : logPath,
+      logSha256: await sha256Bytes(new TextEncoder().encode(text)),
+    });
+    combined.push(`$ ${argv.join(' ')}  # cwd=${cwd}  -> exit ${output.code}\n${text}`);
+    if (!output.success) {
+      throw new Error(`fresh-clone step failed: ${argv.join(' ')} (exit ${output.code})`);
+    }
+  };
+  try {
+    await run(['git', 'clone', '--no-hardlinks', repoRoot, cloneDir], tmpRoot);
+    await run(['git', '-C', cloneDir, 'checkout', sha], tmpRoot);
+    const clonedSha = (await required('git', ['-C', cloneDir, 'rev-parse', 'HEAD'])).trim();
+    if (clonedSha !== sha) throw new Error(`fresh clone checked out ${clonedSha}, want ${sha}`);
+    const isolatedEnv = {
+      ...Deno.env.toObject(),
+      DENO_DIR: denoDir,
+      NPM_CONFIG_CACHE: npmCache,
+      npm_config_cache: npmCache,
+      DENO_NO_UPDATE_CHECK: '1',
+    };
+    await run([denoExe, 'install'], cloneDir, isolatedEnv);
+    await run([denoExe, 'task', 'check'], cloneDir, isolatedEnv);
+    await run([denoExe, 'task', '--cwd', 'tools/release', 'gate:packed'], cloneDir, isolatedEnv);
+    await run(
+      [denoExe, 'task', '--cwd', 'tools/release', 'publish:npm:dry-run'],
+      cloneDir,
+      isolatedEnv,
+    );
+  } finally {
+    await Deno.remove(tmpRoot, { recursive: true }).catch(() => undefined);
+  }
+  return {
+    proof: {
+      sha,
+      cloneDir: `${tmpRoot}/repo (removed after the run; logs retained)`,
+      envSummary: {
+        DENO_DIR: `${denoDir} (fresh, empty at start)`,
+        npmCache: `${npmCache} (fresh, empty at start)`,
+        shared: 'HOME (Playwright browser binaries reused from the preinstalled cache)',
+        copied: 'nothing: no node_modules, dist, tgz, or coverage carried over',
+      },
+      commands,
+      note: 'README bootstrap + packed + publish gates, stdin closed throughout.',
+    },
+    combinedLog: combined.join('\n'),
+  };
+}
+
 function stripAnsi(text: string): string {
   // Intentional ANSI color stripping for log scans.
   // deno-lint-ignore no-control-regex
@@ -316,6 +421,38 @@ async function main(): Promise<void> {
   ]);
   ffiProof.counts = parseDenoTestSummary(logs['ffi-non-interactive']);
 
+  console.log('[evidence] starting fresh-clone: git clone + bootstrap + gates at the bound SHA');
+  const freshStartedAt = new Date().toISOString();
+  const freshStarted = Date.now();
+  const { proof: freshClone, combinedLog: freshCombined } = await runFreshClone(
+    sha,
+    denoExe,
+    logsDir,
+  );
+  const freshLogPath = join(logsDir, 'fresh-clone.log');
+  await Deno.writeTextFile(freshLogPath, freshCombined);
+  const freshSection: SectionResult = {
+    name: 'fresh-clone',
+    command: ['git', 'clone', '--no-hardlinks', '<repo>', '<tmp>/repo', '+ bootstrap + gates'],
+    startedAt: freshStartedAt,
+    durationMs: Date.now() - freshStarted,
+    exitCode: 0,
+    result: 'PASS',
+    counts: {
+      commands: freshClone.commands.length,
+      failed: freshClone.commands.filter((command) => command.exitCode !== 0).length,
+    },
+    logPath: freshLogPath.startsWith(repoRoot)
+      ? freshLogPath.slice(repoRoot.length + 1)
+      : freshLogPath,
+    logSha256: await sha256Bytes(new TextEncoder().encode(freshCombined)),
+  };
+  sections.push(freshSection);
+  logs['fresh-clone'] = freshCombined;
+  console.log(
+    `[evidence] PASS fresh-clone (${(freshSection.durationMs / 1000).toFixed(1)}s)`,
+  );
+
   // Rollup: named proofs parsed from the gate logs (no re-runs).
   const packedLog = logs['gate-packed'] ?? '';
   const sourceLog = logs['gate-source'] ?? '';
@@ -374,6 +511,7 @@ async function main(): Promise<void> {
     tarballs,
     sections,
     rollup: { ...rollup, artifactCheck, consumerSteps, packSummaries },
+    freshClone,
     skips,
     requiredOk,
     externalPending: upstreamWarnings > 0
@@ -399,6 +537,10 @@ async function validate(path: string): Promise<void> {
     sections: SectionResult[];
     toolVersions?: Record<string, unknown>;
     tarballs?: Record<string, string>;
+    freshClone?: {
+      sha: string;
+      commands: Array<{ argv: string[]; exitCode: number; logPath: string; logSha256: string }>;
+    };
   };
   const failures: string[] = [];
   const sha = await required('git', ['rev-parse', 'HEAD']);
@@ -424,6 +566,27 @@ async function validate(path: string): Promise<void> {
     }
     if ((await sha256Bytes(bytes)) !== section.logSha256) {
       failures.push(`section ${section.name}: log hash mismatch`);
+    }
+  }
+  if (!evidence.freshClone) {
+    failures.push('freshClone proof missing');
+  } else {
+    if (evidence.freshClone.sha !== sha) {
+      failures.push(`freshClone sha ${evidence.freshClone.sha} != HEAD ${sha}`);
+    }
+    if (evidence.freshClone.commands.length < 6) {
+      failures.push('freshClone commands incomplete (clone+checkout+install+check+packed+publish)');
+    }
+    for (const command of evidence.freshClone.commands) {
+      if (command.exitCode !== 0) {
+        failures.push(`freshClone step failed: ${command.argv.join(' ')}`);
+      }
+      const bytes = await Deno.readFile(join(repoRoot, command.logPath)).catch(() => null);
+      if (!bytes) {
+        failures.push(`freshClone log missing at ${command.logPath}`);
+      } else if ((await sha256Bytes(bytes)) !== command.logSha256) {
+        failures.push(`freshClone log hash mismatch at ${command.logPath}`);
+      }
     }
   }
   const raw = JSON.stringify(evidence);
