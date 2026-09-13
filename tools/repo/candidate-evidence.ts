@@ -46,17 +46,6 @@ async function sha256Bytes(bytes: Uint8Array): Promise<string> {
     Array.from(new Uint8Array(digest)).map((byte) => byte.toString(16).padStart(2, '0')).join('');
 }
 
-async function commandText(command: string, args: string[]): Promise<string> {
-  const result = await new Deno.Command(command, {
-    args,
-    cwd: repoRoot,
-    stdout: 'piped',
-    stderr: 'piped',
-  }).output();
-  return new TextDecoder().decode(result.stdout).trim() +
-    new TextDecoder().decode(result.stderr).trim();
-}
-
 async function required(command: string, args: string[]): Promise<string> {
   const child = new Deno.Command(command, {
     args,
@@ -161,37 +150,43 @@ async function playwrightBrowserVersions(): Promise<Record<string, string>> {
   return out;
 }
 
-async function skipCounts(): Promise<{ counts: Record<string, number>; note: string }> {
+async function skipCounts(): Promise<
+  { counts: Record<string, number>; files: Record<string, string[]>; note: string }
+> {
+  // Tracked files only (git grep): untracked caches, node_modules, and .git
+  // must never inflate the counts.
   const counts: Record<string, number> = {};
+  const files: Record<string, string[]> = {};
   const probes: Array<[string, string[]]> = [
-    ['fixme', ['grep', '-r', '--include=*.ts', '-c', 'fixme', 'tests', 'packages', 'apps']],
-    ['testSkip', [
-      'grep',
-      '-r',
-      '-E',
-      '--include=*.ts',
-      '-c',
-      '\\b(test|it|describe)\\.skip\\b',
-      'tests',
-      'packages',
-      'apps',
-    ]],
-    ['bfcache', ['grep', '-r', '-i', '--include=*.ts', '-l', 'bfcache', 'tests']],
+    ['fixme', ['grep', '-l', '-i', 'fixme', '--', '*.ts']],
+    ['testSkip', ['grep', '-l', '-E', '\\b(test|it|describe)\\.skip\\b', '--', '*.ts']],
+    ['bfcache', ['grep', '-l', '-i', 'bfcache', '--', '*.ts']],
   ];
   for (const [key, args] of probes) {
     try {
-      const text = await commandText(args[0], args.slice(1));
-      counts[key] = text.split('\n').filter((line) =>
-        !/:0$/.test(line) && line.trim().length > 0
-      ).length;
+      const child = new Deno.Command('git', {
+        args,
+        cwd: repoRoot,
+        stdout: 'piped',
+        stderr: 'piped',
+      });
+      const result = await child.output();
+      const list = new TextDecoder().decode(result.stdout).split('\n').map((line) => line.trim())
+        .filter((
+          line,
+        ) => line.length > 0);
+      files[key] = list;
+      counts[key] = list.length;
     } catch {
+      files[key] = [];
       counts[key] = -1;
     }
   }
   return {
     counts,
+    files,
     note:
-      'fixme/testSkip count files with >=1 match. The starter-matrix bfcache fixme is a declared Playwright-harness limit (one site, three browsers); all other skips must be listed in the final report.',
+      'Tracked files with >=1 match. The starter-matrix bfcache fixme is a declared Playwright-harness limit (one site, three browsers); all other skips must be listed in the final report.',
   };
 }
 
