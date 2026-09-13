@@ -35,7 +35,7 @@
     "build": "deno check src/index.ts src/jsx-runtime.ts src/jsx-dev-runtime.ts src/authoring.ts src/html.ts src/logger.ts src/build-utils.ts src/compiler.ts src/vite.ts",
     "lint": "deno lint src/ __tests__/",
     "typecheck": "deno check src/index.ts src/jsx-runtime.ts src/jsx-dev-runtime.ts src/authoring.ts src/html.ts src/logger.ts src/build-utils.ts src/compiler.ts src/vite.ts",
-    "test": "deno test --allow-read --allow-write --allow-env --allow-net --allow-run __tests__/",
+    "test": "deno test --deny-ffi --no-prompt --allow-read --allow-write --allow-env --allow-net --allow-run __tests__/",
     "test:ci": "deno test --allow-read --allow-write --allow-env --allow-net --allow-run --coverage --junit-path=test-results.xml __tests__/",
     "browser:compile": "deno run --allow-read --allow-write --allow-env __wtr__/tools/compile-fixtures.ts",
     "browser:test": "deno task browser:compile && deno task --cwd __wtr__ test",

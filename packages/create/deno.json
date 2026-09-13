@@ -6,7 +6,7 @@
   "tasks": {
     "run": "deno run --allow-read --allow-write --allow-run --allow-env --allow-net src/cli.ts",
     "build": "deno check src/",
-    "test": "deno test --allow-read --allow-write --allow-env --allow-net --allow-run --allow-ffi --allow-sys",
+    "test": "deno test --deny-ffi --no-prompt --allow-read --allow-write --allow-env --allow-net --allow-run --allow-sys",
     "lint": "deno lint src/ __tests__/",
     "typecheck": "deno check src/"
   },
