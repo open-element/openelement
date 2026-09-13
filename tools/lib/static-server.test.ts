@@ -2,9 +2,9 @@ import { assertEquals, assertStringIncludes } from '@std/assert';
 import { contentType, serveStatic } from './static-server.ts';
 
 Deno.test('contentType maps known extensions and falls back to octet-stream', () => {
-  assertEquals(contentType('/a/b.html'), 'text/html; charset=utf-8');
-  assertEquals(contentType('/a/b.JS'), 'text/javascript; charset=utf-8');
-  assertEquals(contentType('/a/b.css'), 'text/css; charset=utf-8');
+  assertEquals(contentType('/a/b.html'), 'text/html; charset=UTF-8');
+  assertEquals(contentType('/a/b.JS'), 'text/javascript; charset=UTF-8');
+  assertEquals(contentType('/a/b.css'), 'text/css; charset=UTF-8');
   assertEquals(contentType('/a/b.svg'), 'image/svg+xml');
   assertEquals(contentType('/a/font.woff2'), 'font/woff2');
   assertEquals(contentType('no-extension'), 'application/octet-stream');
@@ -28,7 +28,7 @@ Deno.test('serveStatic serves files and uses production candidate/cache semantic
     assertStringIncludes(dir, 'guide');
 
     const js = await fetch(`${server.origin}/app.js`);
-    assertEquals(js.headers.get('content-type'), 'text/javascript; charset=utf-8');
+    assertEquals(js.headers.get('content-type'), 'text/javascript; charset=UTF-8');
 
     const font = await fetch(`${server.origin}/font.woff2`);
     assertEquals(font.headers.get('content-type'), 'font/woff2');
