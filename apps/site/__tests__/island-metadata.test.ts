@@ -29,10 +29,20 @@ Deno.test('site local islands expose explicit island metadata', async () => {
   const scannedTags = new Set(islandFiles.map(fileToTagName));
 
   for (const [tagName, expected] of Object.entries(REQUIRED_LOCAL_ISLANDS)) {
-    assert(scannedTags.has(tagName), `${tagName} must exist under apps/site/app/islands`);
+    assert(
+      scannedTags.has(tagName),
+      `${tagName} must exist under apps/site/app/islands`,
+    );
     const actual = meta[tagName];
-    assertExists(actual, `${tagName} must export defineIslandConfig(...) metadata`);
-    assertEquals(actual.hydrate, expected.hydrate, `${tagName} hydrate strategy drifted`);
+    assertExists(
+      actual,
+      `${tagName} must export defineIslandConfig(...) metadata`,
+    );
+    assertEquals(
+      actual.hydrate,
+      expected.hydrate,
+      `${tagName} hydrate strategy drifted`,
+    );
     assertEquals(actual.ssr, expected.ssr, `${tagName} SSR flag drifted`);
     assertEquals(actual.dsd, expected.dsd, `${tagName} DSD flag drifted`);
   }
@@ -41,7 +51,9 @@ Deno.test('site local islands expose explicit island metadata', async () => {
   assertEquals(
     missingMetadata,
     [],
-    `All apps/site/app/islands files must declare defineIslandConfig(...): ${missingMetadata.join(', ')}`,
+    `All apps/site/app/islands files must declare defineIslandConfig(...): ${
+      missingMetadata.join(', ')
+    }`,
   );
 });
 
@@ -59,7 +71,8 @@ Deno.test('site search island metadata schedules immediate client hydration', as
   const code = generateClientEntry(entries);
   // #606/#610 (alpha.13): strategy buckets live in the generated scheduler
   // config — `strategies: { load: [...], idle: [...] }`.
-  const loadTags = code.match(/strategies:\s*\{\s*load:\s*\[(.*?)\]/s)?.[1] ?? '';
+  const loadTags = code.match(/strategies:\s*\{\s*load:\s*\[(.*?)\]/s)?.[1] ??
+    '';
   const idleTags = code.match(/idle:\s*\[(.*?)\]/s)?.[1] ?? '';
 
   assertStringIncludes(

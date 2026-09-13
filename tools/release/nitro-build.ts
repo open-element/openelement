@@ -31,7 +31,9 @@ const out = args.out ?? '.output';
 const prunePublic = args['prune-public'];
 
 if (!preset) {
-  console.error('tools/release/nitro-build.ts requires --preset (e.g. node-server, cloudflare_module)');
+  console.error(
+    'tools/release/nitro-build.ts requires --preset (e.g. node-server, cloudflare_module)',
+  );
   Deno.exit(2);
 }
 
@@ -80,7 +82,9 @@ if (prunePublic) {
   await removeIfExists(`${root}/${out}/public/${prunePublic}`);
 }
 if (!(await exists(`${root}/${out}/nitro.json`))) {
-  console.error(`Nitro build produced no manifest at ${root}/${out}/nitro.json`);
+  console.error(
+    `Nitro build produced no manifest at ${root}/${out}/nitro.json`,
+  );
   Deno.exit(1);
 }
 console.log(`nitro build ok: preset=${preset} out=${root}/${out}`);
