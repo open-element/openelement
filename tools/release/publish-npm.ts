@@ -3,6 +3,30 @@
  *
  * Runs in dependency order (leaves first) so a package is packed/published
  * only after its workspace dependencies are already available as npm tarballs.
+ *
+ * `deno pack` is the sole tarball generator (proven by
+ * tools/release#pack:native-check and the raw-pack experiment below). Native
+ * pack natively provides JavaScript, most declarations, package.json
+ * name/version/type/exports, and source maps. OpenElement post-processing
+ * covers only measured native gaps — each with its deletion condition:
+ *
+ * - dependency + peer stamping (deriveDependencies, peer loop):
+ *   raw `deno pack` emits NO dependencies, peers, metadata, or bin
+ *   (verified 2026-09-13: element/router/ui/create raw package.json files
+ *   carry zero deps). Delete when native pack translates deno.json
+ *   imports/peerDependencies into package.json dependencies.
+ * - repository/homepage/bugs/license/description/keywords/bin stamp:
+ *   native pack omits all npm registry metadata. Delete when native pack
+ *   forwards these deno.json/package fields.
+ * - removeRawTypeScriptPayload: native pack retains source modules outside
+ *   the declaration graph (element ships ssr-registry-markers.ts and
+ *   hydration-markers.ts raw). Delete when native pack stops retaining
+ *   non-graph TypeScript.
+ * - emitUiDeclarations: native pack emits ZERO UI declarations
+ *   ("Could not generate types" — every UI module infers through element
+ *   internals). Delete when native pack emits declarations for such graphs.
+ * - compiled-element staging (#1301): product-specific intrinsic transform,
+ *   not a pack gap — never delete via pack upgrades.
  */
 
 import {
