@@ -8,9 +8,9 @@
  * the resolver). This script makes deno.json the single source of truth.
  *
  * Usage:
- *   deno run --allow-read --allow-write --allow-run tools/generate-openelement-export-files.ts
+ *   deno run --allow-read --allow-write --allow-run tools/repo/generate-openelement-export-files.ts
  *     -> (re)write the generated file and format it.
- *   deno run --allow-read --allow-write --allow-run tools/generate-openelement-export-files.ts --check
+ *   deno run --allow-read --allow-write --allow-run tools/repo/generate-openelement-export-files.ts --check
  *     -> regenerate, format, and fail (exit 1) if the committed file is stale.
  */
 
@@ -30,7 +30,7 @@ interface PackageConfig {
   exports?: unknown;
 }
 
-const REPO_ROOT = new URL('../', import.meta.url).pathname;
+const REPO_ROOT = new URL('../../', import.meta.url).pathname;
 const TARGET = `${REPO_ROOT}packages/router/src/vite/generated-export-files.ts`;
 
 async function resolverPackages(): Promise<string[]> {
@@ -39,7 +39,9 @@ async function resolverPackages(): Promise<string[]> {
     throw new Error('deno.json workspace must be an array of package paths');
   }
 
-  return rootConfig.workspace.map((entry: unknown) => {
+  return rootConfig.workspace.filter((entry: unknown) =>
+    typeof entry === 'string' && entry.startsWith('./packages/')
+  ).map((entry: unknown) => {
     if (typeof entry !== 'string' || !/^\.\/packages\/[^/]+$/u.test(entry)) {
       throw new Error(`unsupported workspace package path: ${String(entry)}`);
     }
