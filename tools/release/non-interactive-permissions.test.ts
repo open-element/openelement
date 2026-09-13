@@ -27,6 +27,9 @@ async function runClosed(
   args: string[],
   timeoutMs: number,
 ): Promise<{ code: number; output: string; timedOut: boolean }> {
+  // output() drains piped stdio concurrently with the wait (awaiting status
+  // first deadlocks once output exceeds the pipe buffer); the timeout kills
+  // the child so a prompt can never hang the test.
   const child = new Deno.Command(Deno.execPath(), {
     args,
     cwd: repoRoot,
@@ -37,11 +40,13 @@ async function runClosed(
   const timeout = new Promise<{ timedOut: true }>((resolve) =>
     setTimeout(() => resolve({ timedOut: true as const }), timeoutMs)
   );
-  const status = await Promise.race([
-    child.status.then((status) => ({ ...status, timedOut: false as const })),
-    timeout,
-  ]);
-  if (status.timedOut) {
+  const finished = child.output().then((output) => ({
+    code: output.code,
+    output: new TextDecoder().decode(output.stdout) + new TextDecoder().decode(output.stderr),
+    timedOut: false as const,
+  }));
+  const result = await Promise.race([finished, timeout]);
+  if (result.timedOut) {
     try {
       child.kill('SIGKILL');
     } catch {
@@ -50,11 +55,7 @@ async function runClosed(
     await child.status.catch(() => undefined);
     return { code: -1, output: '', timedOut: true };
   }
-  const output = await child.output().catch(() => undefined);
-  const text = output
-    ? new TextDecoder().decode(output.stdout) + new TextDecoder().decode(output.stderr)
-    : '';
-  return { code: status.code, output: text, timedOut: false };
+  return result;
 }
 
 Deno.test('permissions: an FFI request with stdin closed fails closed without prompting', async () => {

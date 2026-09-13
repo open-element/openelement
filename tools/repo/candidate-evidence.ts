@@ -89,18 +89,16 @@ async function runSection(
   const startedAt = new Date().toISOString();
   const started = Date.now();
   const logPath = join(logsDir, `${name}.log`);
-  const child = new Deno.Command(command[0], {
+  // output() drains piped stdout/stderr concurrently with the wait: awaiting
+  // status first would deadlock once a gate log exceeds the pipe buffer.
+  const output = await new Deno.Command(command[0], {
     args: command.slice(1),
     cwd: repoRoot,
     stdin: 'null',
     stdout: 'piped',
     stderr: 'piped',
-  }).spawn();
-  const status = await child.status;
-  const output = await child.output().catch(() => undefined);
-  const text = output
-    ? new TextDecoder().decode(output.stdout) + new TextDecoder().decode(output.stderr)
-    : '';
+  }).output();
+  const text = new TextDecoder().decode(output.stdout) + new TextDecoder().decode(output.stderr);
   await Deno.writeTextFile(logPath, text);
   const logSha256 = await sha256Bytes(new TextEncoder().encode(text));
   const section: SectionResult = {
@@ -108,8 +106,8 @@ async function runSection(
     command,
     startedAt,
     durationMs: Date.now() - started,
-    exitCode: status.code,
-    result: status.code === 0 ? 'PASS' : 'FAIL',
+    exitCode: output.code,
+    result: output.success ? 'PASS' : 'FAIL',
     counts: {},
     logPath: logPath.startsWith(repoRoot) ? logPath.slice(repoRoot.length + 1) : logPath,
     logSha256,
