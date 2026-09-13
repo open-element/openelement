@@ -17,12 +17,12 @@
  * dependencies (e.g. @openelement/element for @acme/components) keep resolving
  * to source during the pack-time module-graph build.
  *
- * The compiler emission predates strict pack-time typechecking: it drops the
- * authored `override` modifiers on statics and leaves computed-factory
- * parameters implicitly typed (consumers never typecheck the emission — Vite
- * transpiles it). The staged member therefore relaxes noImplicitOverride and
- * noImplicitAny; the authored sources remain strictly typechecked by the
- * package's own gates.
+ * The compiler emission carries the same strict types as authored sources:
+ * generated statics use typeof/declared annotations with override where the
+ * base declares the member, and every computed factory is explicitly typed
+ * through the outer __computedFields annotation. No strictness rule is
+ * relaxed here; a future emission regression fails the pack typecheck
+ * instead of being silently absorbed.
  */
 
 import { walkSync } from '@std/fs/walk';
@@ -126,17 +126,6 @@ export async function stageCompiledPackWorkspace(
     for (const output of compiled) {
       Deno.writeTextFileSync(join(packDir, output.relativePath), output.code);
     }
-
-    // Relax only the two strictness rules the compiler emission does not
-    // satisfy; everything else stays at the workspace root's strictness.
-    const memberConfigPath = join(packDir, 'deno.json');
-    const memberConfig = JSON.parse(Deno.readTextFileSync(memberConfigPath)) as DenoJsonShape;
-    memberConfig.compilerOptions = {
-      ...(memberConfig.compilerOptions ?? {}),
-      noImplicitOverride: false,
-      noImplicitAny: false,
-    };
-    Deno.writeTextFileSync(memberConfigPath, formatJson(memberConfig));
 
     return { packDir, cleanup };
   } catch (error) {

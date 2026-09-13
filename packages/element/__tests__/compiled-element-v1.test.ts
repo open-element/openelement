@@ -139,9 +139,15 @@ Deno.test('compiled-element v1 - fixture transforms through the Vite hook', asyn
     ]);
     // Compile-time data only: no runtime reflection behavior is emitted.
     assertEquals(emitted!.includes('attributeChangedCallback'), false);
-    assertStringIncludes(emitted!, 'static __compiledProperties = __compiledProperties;');
-    assertStringIncludes(emitted!, 'static props = __compiledProps;');
-    assertStringIncludes(emitted!, 'static observedAttributes = __observedAttributes;');
+    assertStringIncludes(
+      emitted!,
+      'static __compiledProperties: typeof __compiledProperties = __compiledProperties;',
+    );
+    assertStringIncludes(emitted!, 'static props: typeof __compiledProps = __compiledProps;');
+    assertStringIncludes(
+      emitted!,
+      'static observedAttributes: typeof __observedAttributes = __observedAttributes;',
+    );
   });
 
   await t.step('program carries static structure plus typed Part/Region instructions', () => {
@@ -488,8 +494,11 @@ Deno.test('compiled-element alpha.1 - canonical program records and decorator lo
       record.id === 'p0' && record.source.file === id
     ),
   );
-  assertStringIncludes(emitted, 'static observedAttributes = __observedAttributes;');
-  assertStringIncludes(emitted, 'static props = __compiledProps;');
+  assertStringIncludes(
+    emitted,
+    'static observedAttributes: typeof __observedAttributes = __observedAttributes;',
+  );
+  assertStringIncludes(emitted, 'static props: typeof __compiledProps = __compiledProps;');
   assertEquals(emitted.includes('@element'), false);
   assertEquals(emitted.includes('@property'), false);
   assertEquals(emitted.includes('accessor '), false);
@@ -735,9 +744,9 @@ Deno.test('compiled-element alpha.8 - canonical page/island authoring grammar', 
       assertEquals(meta.computed, true);
       assertEquals(meta.deps, ['label']);
       assert(program.parts.some((p: { k: string }) => p.k === 'html'), 'html Part must exist');
-      assertStringIncludes(code, 'static delegatesFocus = true;');
-      assertStringIncludes(code, 'static formAssociated = true;');
-      assertStringIncludes(code, 'static __computedFields = {');
+      assertStringIncludes(code, 'static override delegatesFocus: boolean = true;');
+      assertStringIncludes(code, 'static override formAssociated: boolean = true;');
+      assertStringIncludes(code, 'static __computedFields: {');
       assertStringIncludes(code, "noLabel: (__s) => computed(() => __s.label.value === '')");
 
       const expectFailure = (src: string, code: string, fragment: string) => {
@@ -877,5 +886,123 @@ Deno.test('compiled-element alpha.9 - trusted HTML sink admission matrix', async
       'alpha9-incomplete-trusted-html-field',
       sourceFor('<div innerHTML={this.bodyHtml} trustedHtml></div>', incompleteField),
     );
+  });
+});
+
+Deno.test('compiled-element strict emission - generated statics carry explicit types for native pack', async (t) => {
+  const { compileElementProgram } = await import(
+    '../src/internal/compiler/semantic-core/compile.ts'
+  );
+
+  await t.step('module-local constants are referenced through typeof (no API growth)', () => {
+    const source = [
+      "import { element, OpenElement, property } from '@openelement/element';",
+      "@element('oe-strict-statics')",
+      'export class StrictStatics extends OpenElement {',
+      "  @property({ reflect: false }) label = '';",
+      '  render() {',
+      '    return <main>{this.label}</main>;',
+      '  }',
+      '}',
+    ].join('\n');
+    const { code } = compileElementProgram(source, '/project/app/islands/strict-statics.tsx');
+    assertStringIncludes(code, 'static __partProgram: typeof __partProgram = __partProgram;');
+    assertStringIncludes(
+      code,
+      'static __compiledProperties: typeof __compiledProperties = __compiledProperties;',
+    );
+    assertStringIncludes(
+      code,
+      'static __elementMetadata: typeof __elementMetadata = __elementMetadata;',
+    );
+    assertStringIncludes(code, 'static props: typeof __compiledProps = __compiledProps;');
+    assertStringIncludes(
+      code,
+      'static observedAttributes: typeof __observedAttributes = __observedAttributes;',
+    );
+    // The attribute list is explicitly typed (an empty list must not infer
+    // an evolving any[]).
+    assertStringIncludes(code, 'const __observedAttributes: string[] = [');
+  });
+
+  await t.step('styles keeps the authored annotation with override', () => {
+    const source = [
+      "import { element, OpenElement, property, type StyleSheetLike } from '@openelement/element';",
+      "import { recipe } from './component-recipes.ts';",
+      "@element('oe-strict-styles', { root: 'shadow-open' })",
+      'export class StrictStyles extends OpenElement {',
+      '  static override styles: StyleSheetLike[] = [recipe(`:host { display: block; }`)];',
+      "  @property({ reflect: false }) label = '';",
+      '  render() {',
+      '    return <main>{this.label}</main>;',
+      '  }',
+      '}',
+    ].join('\n');
+    const { code } = compileElementProgram(source, '/project/app/islands/strict-styles.tsx');
+    assertStringIncludes(code, 'static override styles: StyleSheetLike[] = [recipe(');
+  });
+
+  await t.step('computed factories are explicitly typed through the outer annotation', () => {
+    const source = [
+      "import { computed, element, OpenElement, property, type ReadonlySignal } from '@openelement/element';",
+      "@element('oe-strict-computed')",
+      'export class StrictComputed extends OpenElement {',
+      "  @property({ reflect: false }) label = '';",
+      '  @property({ reflect: false }) count = 0;',
+      "  @property({ reflect: false, attribute: false }) noLabel: ReadonlySignal<boolean> = computed(() => this.label === '');",
+      '  @property({ reflect: false, attribute: false }) doubled: ReadonlySignal<number> = computed(() => this.count * 2);',
+      '  render() {',
+      '    return <main>{this.label}</main>;',
+      '  }',
+      '}',
+    ].join('\n');
+    const { code } = compileElementProgram(source, '/project/app/islands/strict-computed.tsx');
+    // Precise per-field signatures: authored return types, per-dep signal types.
+    assertStringIncludes(
+      code,
+      'noLabel: (__s: { label: ReadonlySignal<string> }) => ReadonlySignal<boolean>;',
+    );
+    assertStringIncludes(
+      code,
+      'doubled: (__s: { count: ReadonlySignal<number> }) => ReadonlySignal<number>;',
+    );
+    // Inner factories stay textually unchanged and contextually typed.
+    assertStringIncludes(code, "noLabel: (__s) => computed(() => __s.label.value === '')");
+  });
+
+  await t.step('missing ReadonlySignal binding is added as a type-only import', () => {
+    const source = [
+      "import { computed, element, OpenElement, property } from '@openelement/element';",
+      "@element('oe-strict-import')",
+      'export class StrictImport extends OpenElement {',
+      "  @property({ reflect: false }) label = '';",
+      '  @property({ reflect: false, attribute: false }) shouty = computed(() => this.label);',
+      '  render() {',
+      '    return <main>{this.label}</main>;',
+      '  }',
+      '}',
+    ].join('\n');
+    const { code } = compileElementProgram(source, '/project/app/islands/strict-import.tsx');
+    assertStringIncludes(code, "import type { ReadonlySignal } from '@openelement/element';");
+    // Unannotated computed fields fall back to the contract-level signal type.
+    assertStringIncludes(
+      code,
+      'shouty: (__s: { label: ReadonlySignal<string> }) => ReadonlySignal<unknown>;',
+    );
+  });
+
+  await t.step('element options emit override boolean flags', () => {
+    const source = [
+      "import { element, OpenElement } from '@openelement/element';",
+      "@element('oe-strict-flags', { root: 'shadow-open', delegatesFocus: true, formAssociated: true })",
+      'export class StrictFlags extends OpenElement {',
+      '  render() {',
+      '    return <main></main>;',
+      '  }',
+      '}',
+    ].join('\n');
+    const { code } = compileElementProgram(source, '/project/app/islands/strict-flags.tsx');
+    assertStringIncludes(code, 'static override delegatesFocus: boolean = true;');
+    assertStringIncludes(code, 'static override formAssociated: boolean = true;');
   });
 });

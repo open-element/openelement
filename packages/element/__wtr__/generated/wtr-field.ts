@@ -535,7 +535,7 @@ const __elementMetadata = {
   }
 };
 
-const __observedAttributes = [
+const __observedAttributes: string[] = [
   "value",
   "name",
   "required"
@@ -548,12 +548,12 @@ const __compiledProps = {
 };
 
 export class WtrField extends OpenElement {
-  static __partProgram = __partProgram;
-  static __compiledProperties = __compiledProperties;
-  static __elementMetadata = __elementMetadata;
-  static props = __compiledProps;
-  static observedAttributes = __observedAttributes;
-  static formAssociated = true;
+  static __partProgram: typeof __partProgram = __partProgram;
+  static __compiledProperties: typeof __compiledProperties = __compiledProperties;
+  static __elementMetadata: typeof __elementMetadata = __elementMetadata;
+  static props: typeof __compiledProps = __compiledProps;
+  static observedAttributes: typeof __observedAttributes = __observedAttributes;
+  static override formAssociated: boolean = true;
   value = '';
   name = '';
   required = false;

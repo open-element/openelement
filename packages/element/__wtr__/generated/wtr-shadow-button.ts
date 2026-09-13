@@ -301,7 +301,7 @@ const __elementMetadata = {
   }
 };
 
-const __observedAttributes = [
+const __observedAttributes: string[] = [
   "count"
 ];
 
@@ -310,11 +310,11 @@ const __compiledProps = {
 };
 
 export class WtrShadowButton extends OpenElement {
-  static __partProgram = __partProgram;
-  static __compiledProperties = __compiledProperties;
-  static __elementMetadata = __elementMetadata;
-  static props = __compiledProps;
-  static observedAttributes = __observedAttributes;
+  static __partProgram: typeof __partProgram = __partProgram;
+  static __compiledProperties: typeof __compiledProperties = __compiledProperties;
+  static __elementMetadata: typeof __elementMetadata = __elementMetadata;
+  static props: typeof __compiledProps = __compiledProps;
+  static observedAttributes: typeof __observedAttributes = __observedAttributes;
   count = 0;
   increment(): void {
       this.count++;

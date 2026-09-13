@@ -1262,12 +1262,15 @@ function propertyFields(
   render: ts.MethodDeclaration;
   stylesText?: string;
   stylesNode?: ts.Expression;
+  /** Authored `static styles` type annotation (e.g. `: StyleSheetLike[]`), preserved verbatim. */
+  stylesTypeText?: string;
 } {
   const fields: CompiledField[] = [];
   const methods: ts.MethodDeclaration[] = [];
   let render: ts.MethodDeclaration | null = null;
   let stylesText: string | undefined;
   let stylesNode: ts.Expression | undefined;
+  let stylesTypeText: string | undefined;
   const names = new Set<string>();
   const propertyAttributeNames = new Set<string>();
   for (const member of classNode.members) {
@@ -1293,6 +1296,10 @@ function propertyFields(
         }
         stylesText = member.initializer.getText(sf);
         stylesNode = member.initializer;
+        // Preserve the authored annotation (native pack fast-check requires
+        // an explicit static styles type; the generated class must not drop
+        // it). Unannotated styles keep the legacy bare emission.
+        stylesTypeText = member.type ? `: ${member.type.getText(sf)}` : undefined;
         continue;
       }
       const accessibilityModifiers = modifiers.filter((modifier) =>
@@ -1527,7 +1534,7 @@ function propertyFields(
     );
   }
   if (!render) fail(classNode, 'OEC9007', 'compiled classes must declare render()');
-  return { fields, methods, render, stylesText, stylesNode };
+  return { fields, methods, render, stylesText, stylesNode, stylesTypeText };
 }
 
 function isDeclareStatement(statement: ts.Statement): boolean {
@@ -1875,7 +1882,7 @@ export function compileElementProgram(source: string, fileName: string): Compile
   const openElementLocalName = heritageResolution.localName!;
   if (!classNode.name) fail(classNode, 'OEC9003', 'compiled classes must be named');
   const className = classNode.name.text;
-  const { fields, methods, render, stylesText, stylesNode } = propertyFields(
+  const { fields, methods, render, stylesText, stylesNode, stylesTypeText } = propertyFields(
     sf,
     classNode,
     intrinsics,
@@ -2055,6 +2062,30 @@ export function compileElementProgram(source: string, fileName: string): Compile
     // and is carried by the copied imports above.
     if (rewritten !== null) pushVerbatim(rewritten, statement);
   }
+  // Native pack fast-check types the generated __computedFields through
+  // ReadonlySignal: reuse the source's local binding (possibly aliased), or
+  // add a type-only import when the source never bound it. The specifier is
+  // fixed: computed factories already require the canonical element import.
+  let readonlySignalLocal: string | null = null;
+  for (const statement of sf.statements) {
+    if (!ts.isImportDeclaration(statement)) continue;
+    if (
+      !ts.isStringLiteral(statement.moduleSpecifier) ||
+      statement.moduleSpecifier.text !== '@openelement/element'
+    ) continue;
+    const bindings = statement.importClause?.namedBindings;
+    if (!bindings || !ts.isNamedImports(bindings)) continue;
+    for (const element of bindings.elements) {
+      if ((element.propertyName?.text ?? element.name.text) === 'ReadonlySignal') {
+        readonlySignalLocal = element.name.text;
+      }
+    }
+  }
+  const needsComputedTypes = fields.some((field) => field.computed);
+  const signalType = readonlySignalLocal ?? 'ReadonlySignal';
+  if (needsComputedTypes && readonlySignalLocal === null) {
+    push(`import type { ReadonlySignal } from '@openelement/element';`);
+  }
   push('');
   for (const statement of passthroughStatements) pushVerbatim(statement.getText(sf), statement);
   if (passthroughStatements.length > 0) push('');
@@ -2097,7 +2128,9 @@ export function compileElementProgram(source: string, fileName: string): Compile
   push('');
   pushDerivedBlock(`const __elementMetadata = ${metadataJson};`, classNode.name!);
   push('');
-  pushDerivedBlock(`const __observedAttributes = ${observedJson};`, classNode.name!);
+  // Explicit string[]: an empty attribute list would otherwise infer an
+  // evolving any[] that strict noImplicitAny rejects at staged-pack check.
+  pushDerivedBlock(`const __observedAttributes: string[] = ${observedJson};`, classNode.name!);
   push('');
 
   pushDerivedBlock('const __compiledProps = {', classNode.name!);
@@ -2129,23 +2162,67 @@ export function compileElementProgram(source: string, fileName: string): Compile
   }class ${className} extends ${openElementLocalName} {`;
   push(classLine);
   mapLineAt(codeLines.length, classLine.indexOf(className), classNode.name!, className);
+  // Native pack fast-check: every generated static carries an explicit type.
+  // Module-local constants use typeof (exact, no API growth); synthesized
+  // boolean flags use boolean with override (the base declares them); styles
+  // keeps the authored annotation with override (the base declares styles).
   push(
     [
-      '  static __partProgram = __partProgram;',
-      '  static __compiledProperties = __compiledProperties;',
-      '  static __elementMetadata = __elementMetadata;',
-      '  static props = __compiledProps;',
-      '  static observedAttributes = __observedAttributes;',
+      '  static __partProgram: typeof __partProgram = __partProgram;',
+      '  static __compiledProperties: typeof __compiledProperties = __compiledProperties;',
+      '  static __elementMetadata: typeof __elementMetadata = __elementMetadata;',
+      '  static props: typeof __compiledProps = __compiledProps;',
+      '  static observedAttributes: typeof __observedAttributes = __observedAttributes;',
     ].join('\n'),
   );
-  if (delegatesFocus) push('  static delegatesFocus = true;');
-  if (formAssociated) push('  static formAssociated = true;');
+  if (delegatesFocus) push('  static override delegatesFocus: boolean = true;');
+  if (formAssociated) push('  static override formAssociated: boolean = true;');
   const computedFields = fields.filter((field) => field.computed);
   if (computedFields.length > 0) {
     // Derived-signal factories: each builds the field's read-only computed
     // over the instance's plain property signals (facade + renderDsd run the
     // same factories, so server output and client claim read one value set).
-    push('  static __computedFields = {');
+    // The outer annotation gives every factory an explicit function type
+    // (native pack fast-check): the return is the authored field type, the
+    // signal record is keyed per dependency with its own signal value type.
+    // Inner factories stay textually unchanged and contextually typed.
+    const plainFieldByName = new Map(
+      fields.filter((field) => !field.computed).map((field) => [field.name, field]),
+    );
+    const signalValueType = (name: string): string => {
+      const plain = plainFieldByName.get(name);
+      const annotated = plain?.typeText.replace(/^:\s*/, '').trim() ?? '';
+      if (annotated) return annotated;
+      switch (plain?.typeConstructor) {
+        case 'String':
+          return 'string';
+        case 'Number':
+          return 'number';
+        case 'Boolean':
+          return 'boolean';
+        case 'Array':
+          return 'unknown[]';
+        case 'Object':
+          return 'Record<string, unknown>';
+        default:
+          return 'unknown';
+      }
+    };
+    const computedReturnType = (field: (typeof computedFields)[number]): string => {
+      const annotated = field.typeText.replace(/^:\s*/, '').trim();
+      // Unannotated computed fields fall back to the contract-level signal
+      // type (every computed() result is assignable to it); annotated fields
+      // keep their precise authored type.
+      return annotated || `${signalType}<unknown>`;
+    };
+    push('  static __computedFields: {');
+    for (const field of computedFields) {
+      const params = field.computed!.deps
+        .map((dep) => `${dep}: ${signalType}<${signalValueType(dep)}>`)
+        .join(', ');
+      push(`    ${field.name}: (__s: { ${params} }) => ${computedReturnType(field)};`);
+    }
+    push('  } = {');
     for (const field of computedFields) {
       const factoryLine = codeLines.length + 1;
       push(`    ${field.name}: ${field.computed!.factoryText},`);
@@ -2159,9 +2236,10 @@ export function compileElementProgram(source: string, fileName: string): Compile
     // Copied verbatim: the facade reads static styles into the compiled style
     // scope (adoptedStyleSheets on shadow roots, a document-head sink on light
     // roots); the serializer inlines them as the marked DSD <style> element.
+    const stylesHead = `  static override styles${stylesTypeText ?? ''} = `;
     const stylesLine = codeLines.length + 1;
-    push(`  static styles = ${stylesText};`);
-    mapLineAt(stylesLine, '  static styles = '.length, stylesNode);
+    push(`${stylesHead}${stylesText};`);
+    mapLineAt(stylesLine, stylesHead.length, stylesNode);
     mapContinuationLines(stylesText, stylesLine, stylesNode, 0);
   }
   for (const field of fields) {

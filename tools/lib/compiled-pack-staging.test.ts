@@ -51,7 +51,7 @@ Deno.test('compilePackageElementModules returns [] for packages without compiled
   assertEquals(compilePackageElementModules('packages/create'), []);
 });
 
-Deno.test('stageCompiledPackWorkspace stages compiler output and relaxed member options', async () => {
+Deno.test('stageCompiledPackWorkspace stages strictly-typed compiler output', async () => {
   const fixture = await makeFixturePackage();
   try {
     const target = pkg('@openelement/demo', fixture.dir);
@@ -64,7 +64,14 @@ Deno.test('stageCompiledPackWorkspace stages compiler output and relaxed member 
     }, compiled);
     try {
       const stagedComponent = Deno.readTextFileSync(join(staged.packDir, 'src', 'demo-widget.tsx'));
-      assertStringIncludes(stagedComponent, 'static __partProgram = __partProgram;');
+      assertStringIncludes(
+        stagedComponent,
+        'static __partProgram: typeof __partProgram = __partProgram;',
+      );
+      assertStringIncludes(
+        stagedComponent,
+        'static observedAttributes: typeof __observedAttributes = __observedAttributes;',
+      );
       assert(!stagedComponent.includes('@element('));
 
       // Non-component files pass through untouched.
@@ -78,11 +85,13 @@ Deno.test('stageCompiledPackWorkspace stages compiler output and relaxed member 
       } catch { /* expected absent */ }
       assert(!strayPresent, 'stale .tgz must not be staged');
 
+      // Strictness is never relaxed: the staged member keeps its own
+      // config untouched so emission regressions fail the pack typecheck.
       const memberConfig = JSON.parse(
         Deno.readTextFileSync(join(staged.packDir, 'deno.json')),
-      ) as { compilerOptions: Record<string, unknown> };
-      assertEquals(memberConfig.compilerOptions.noImplicitOverride, false);
-      assertEquals(memberConfig.compilerOptions.noImplicitAny, false);
+      ) as { compilerOptions?: Record<string, unknown> };
+      assertEquals(memberConfig.compilerOptions?.noImplicitOverride, undefined);
+      assertEquals(memberConfig.compilerOptions?.noImplicitAny, undefined);
 
       const rootConfig = JSON.parse(
         Deno.readTextFileSync(join(staged.packDir, '..', 'deno.json')),
