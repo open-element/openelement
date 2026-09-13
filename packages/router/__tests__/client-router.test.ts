@@ -5,11 +5,14 @@ import {
   matchRoute,
   type RouteConfig,
 } from '../src/internal/router/client-router.ts';
-import {
-  RouteTable,
-  type URLPatternConstructor,
-  URLPatternPolyfillConstructor,
-} from '../src/internal/router/route-table.ts';
+import { RouteTable, type URLPatternConstructor } from '../src/internal/router/route-table.ts';
+
+if (typeof globalThis.URLPattern !== 'function') {
+  throw new TypeError(
+    'Client router tests require the Web Standard URLPattern API, which is unavailable in this runtime.',
+  );
+}
+const NativeURLPattern = globalThis.URLPattern as unknown as URLPatternConstructor;
 
 const routes: RouteConfig[] = [{ path: '/items/:id', tagName: 'item-page' }];
 
@@ -58,20 +61,10 @@ function concreteMatch(
 }
 
 function matcherEngines(routes: RouteConfig[]): MatcherEngine[] {
-  const engines: MatcherEngine[] = [{
-    name: 'polyfill',
-    table: new RouteTable(routes, URLPatternPolyfillConstructor),
+  return [{
+    name: 'native',
+    table: new RouteTable(routes, NativeURLPattern),
   }];
-  if (typeof globalThis.URLPattern === 'function') {
-    engines.push({
-      name: 'native',
-      table: new RouteTable(
-        routes,
-        globalThis.URLPattern as unknown as URLPatternConstructor,
-      ),
-    });
-  }
-  return engines;
 }
 
 const semanticRoutes: RouteConfig[] = [
@@ -233,9 +226,9 @@ Deno.test('RouteTable and URLPattern engines agree on the semantic corpus', () =
       result: concreteMatch(table.match(testCase.pathname, testCase.search)),
     }));
     const canonical = results[0].result;
-    assertEquals(canonical, testCase.expected, `${testCase.name}: polyfill expected result`);
+    assertEquals(canonical, testCase.expected, `${testCase.name}: native expected result`);
     for (const { name, result } of results) {
-      assertEquals(result, canonical, `${testCase.name}: ${name} differs from polyfill`);
+      assertEquals(result, canonical, `${testCase.name}: ${name} differs from native`);
     }
 
     const publicResult = concreteMatch(matchRoute(
@@ -254,7 +247,7 @@ Deno.test('RouteTable preserves the 5,000-route static candidate regression', ()
     path: `/catalog/${index}/details`,
     tagName: `catalog-${index}`,
   }));
-  const table = new RouteTable(largeRoutes, URLPatternPolyfillConstructor);
+  const table = new RouteTable(largeRoutes, NativeURLPattern);
   const compiled = compileRouteMatcher(largeRoutes);
 
   const expected = { route: 'catalog-4999', params: {} };
@@ -274,14 +267,8 @@ Deno.test('RouteTable rejects malformed URLPattern patterns consistently', () =>
     '/foo/:name{(?:a}',
   ];
   const constructors: Array<[string, URLPatternConstructor]> = [
-    ['polyfill', URLPatternPolyfillConstructor],
+    ['native', NativeURLPattern],
   ];
-  if (typeof globalThis.URLPattern === 'function') {
-    constructors.push([
-      'native',
-      globalThis.URLPattern as unknown as URLPatternConstructor,
-    ]);
-  }
 
   for (const path of malformedPatterns) {
     for (const [, Pattern] of constructors) {
@@ -302,19 +289,10 @@ Deno.test('RouteTable classifies methods, HEAD, base paths, and trailing-slash p
     { path: '/items/:id', tagName: 'item', methods: ['GET', 'POST'] },
   ];
   const tables = [
-    new RouteTable(methodRoutes, URLPatternPolyfillConstructor, {
+    new RouteTable(methodRoutes, NativeURLPattern, {
       basePath: '/api',
       trailingSlash: 'ignore',
     }),
-    ...(typeof globalThis.URLPattern === 'function'
-      ? [
-        new RouteTable(
-          methodRoutes,
-          globalThis.URLPattern as unknown as URLPatternConstructor,
-          { basePath: '/api', trailingSlash: 'ignore' },
-        ),
-      ]
-      : []),
   ];
 
   const expected = [

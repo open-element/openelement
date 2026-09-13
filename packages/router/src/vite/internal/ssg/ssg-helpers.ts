@@ -7,6 +7,34 @@
 
 import { normalizeRoutePatternForURLPattern } from '@openelement/router/router';
 import { walkHtmlFileEntries } from '../html-files.ts';
+import { contentTypeFor } from '../static-serve.ts';
+
+/**
+ * Extensions pinned into the self-contained `serve.mjs`. Values are derived
+ * from `contentTypeFor` (backed by `@std/media-types`) at build time so the
+ * generated server cannot drift from the shared static-file contract; the
+ * generated file itself stays dependency-free.
+ */
+const STANDALONE_MIME_EXTENSIONS = [
+  '.html',
+  '.js',
+  '.mjs',
+  '.css',
+  '.json',
+  '.svg',
+  '.png',
+  '.jpg',
+  '.jpeg',
+  '.webp',
+  '.ico',
+  '.xml',
+  '.woff2',
+  '.txt',
+];
+
+const standaloneMimeTable = STANDALONE_MIME_EXTENSIONS.map((ext) =>
+  `  '${ext}': '${contentTypeFor(`x${ext}`)}',`
+).join('\n');
 
 // ─── Path / URL helpers ────────────────────────────────────────
 
@@ -240,20 +268,7 @@ const { default: openElementServer, isRequestTimePath } = await import('./index.
 const distDirUrl = new URL('../', import.meta.url);
 
 const MIME = {
-  '.html': 'text/html; charset=utf-8',
-  '.js': 'text/javascript; charset=utf-8',
-  '.mjs': 'text/javascript; charset=utf-8',
-  '.css': 'text/css; charset=utf-8',
-  '.json': 'application/json; charset=utf-8',
-  '.svg': 'image/svg+xml',
-  '.png': 'image/png',
-  '.jpg': 'image/jpeg',
-  '.jpeg': 'image/jpeg',
-  '.webp': 'image/webp',
-  '.ico': 'image/x-icon',
-  '.xml': 'application/xml; charset=utf-8',
-  '.woff2': 'font/woff2',
-  '.txt': 'text/plain; charset=utf-8',
+${standaloneMimeTable}
 };
 
 function extname(path) {

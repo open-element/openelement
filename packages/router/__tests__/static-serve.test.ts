@@ -64,13 +64,13 @@ Deno.test('dispatchRequest shares mutating and styled-fallback production semant
   }
 });
 
-Deno.test('contentTypeFor covers the merged MIME table (#732)', () => {
-  assertEquals(contentTypeFor('/d/index.html'), 'text/html; charset=utf-8');
-  assertEquals(contentTypeFor('/d/app.js'), 'text/javascript; charset=utf-8');
+Deno.test('contentTypeFor follows @std/media-types (#732)', () => {
+  assertEquals(contentTypeFor('/d/index.html'), 'text/html; charset=UTF-8');
+  assertEquals(contentTypeFor('/d/app.js'), 'text/javascript; charset=UTF-8');
   // Added to close the drift: start.ts lacked these three.
-  assertEquals(contentTypeFor('/d/app.mjs'), 'text/javascript; charset=utf-8');
-  assertEquals(contentTypeFor('/d/favicon.ico'), 'image/x-icon');
-  assertEquals(contentTypeFor('/d/sitemap.xml'), 'application/xml; charset=utf-8');
+  assertEquals(contentTypeFor('/d/app.mjs'), 'text/javascript; charset=UTF-8');
+  assertEquals(contentTypeFor('/d/favicon.ico'), 'image/vnd.microsoft.icon');
+  assertEquals(contentTypeFor('/d/sitemap.xml'), 'application/xml');
   assertEquals(contentTypeFor('/d/unknown.bin'), 'application/octet-stream');
 });
 
@@ -105,7 +105,7 @@ Deno.test('tryStatic serves files and refuses path escape', async () => {
 
     const feed = tryStatic(root, '/feed.xml');
     assert(feed);
-    assertEquals(feed.headers.get('content-type'), 'application/xml; charset=utf-8');
+    assertEquals(feed.headers.get('content-type'), 'application/xml');
 
     assertEquals(tryStatic(root, '/missing'), null);
     // Path escape outside the static root must never be served.

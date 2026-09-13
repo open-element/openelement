@@ -1,6 +1,13 @@
 import { assertEquals, assertStrictEquals, assertThrows } from '@std/assert';
 import { type ListPattern, URLPatternList } from '@openelement/url-pattern-list';
-import { URLPatternPolyfillConstructor } from '../src/internal/router/route-table.ts';
+import type { URLPatternConstructor } from '../src/internal/router/route-table.ts';
+
+if (typeof globalThis.URLPattern !== 'function') {
+  throw new TypeError(
+    'URLPatternList tests require the Web Standard URLPattern API, which is unavailable in this runtime.',
+  );
+}
+const NativeURLPattern = globalThis.URLPattern as unknown as URLPatternConstructor;
 
 /** Build a list from entry pairs (the package registers via addPattern). */
 function listFromEntries<T>(
@@ -11,10 +18,7 @@ function listFromEntries<T>(
   return list;
 }
 
-const constructors = [
-  ['polyfill', URLPatternPolyfillConstructor],
-  ...('URLPattern' in globalThis ? [['native', globalThis.URLPattern] as const] : []),
-] as const;
+const constructors = [['native', NativeURLPattern] as const];
 
 for (const [name, Pattern] of constructors) {
   Deno.test(`URLPatternList ${name}: complete results and identity against ordered oracle`, () => {
@@ -171,7 +175,7 @@ for (const [name, Pattern] of constructors) {
 
 Deno.test('URLPatternList invalid URL boundary is consistent for empty and populated lists', () => {
   for (
-    const entries of [[], [[new URLPatternPolyfillConstructor({ pathname: '*' }), 1] as const]]
+    const entries of [[], [[new NativeURLPattern({ pathname: '*' }), 1] as const]]
   ) {
     const list = listFromEntries(entries);
     assertThrows(() => list.match('/relative'), TypeError);
@@ -180,7 +184,7 @@ Deno.test('URLPatternList invalid URL boundary is consistent for empty and popul
   }
 });
 
-Deno.test('admitted route patterns have consistent native/polyfill observable results', () => {
+Deno.test('admitted route patterns match the native URLPattern oracle', () => {
   for (
     const pathname of [
       '/',
@@ -196,8 +200,8 @@ Deno.test('admitted route patterns have consistent native/polyfill observable re
     for (const path of ['/', '/a', '/a/123', '/a/b/c', '/a//b', '/東京', '/%2F', '/%E0%A4%A']) {
       const input = new URL(path, 'https://example.com').href;
       assertEquals(
-        new URLPatternPolyfillConstructor({ pathname }).exec(input),
-        new URLPattern({ pathname }).exec(input),
+        listFromEntries([[new NativeURLPattern({ pathname }), 1]]).match(input)?.value ?? null,
+        new NativeURLPattern({ pathname }).exec(input) ? 1 : null,
         `${pathname} ${input}`,
       );
     }

@@ -1,36 +1,19 @@
 /**
  * @openelement/router - Shared static-file + request-time server helpers.
  *
- * Single source for the MIME table, the static candidate rules, and the
- * generated request-time server module contract. Standard fetch(Request):
- * Response entry; local serving uses Deno.serve, Node/Workers/Bun deploys
- * use the Nitro mount. No Node HTTP bridge.
+ * Content types come from `@std/media-types`; this module only owns the
+ * static candidate rules, the cache-control policy, and the generated
+ * request-time server module contract. Standard fetch(Request): Response
+ * entry; local serving uses Deno.serve, Node/Workers/Bun deploys use the
+ * Nitro mount. No Node HTTP bridge.
  */
 
+import { contentType } from '@std/media-types';
 import { extname, join, resolve, SEPARATOR, toFileUrl } from '@std/path';
 
-const MIME: Record<string, string> = {
-  '.html': 'text/html; charset=utf-8',
-  '.js': 'text/javascript; charset=utf-8',
-  '.mjs': 'text/javascript; charset=utf-8',
-  '.css': 'text/css; charset=utf-8',
-  '.json': 'application/json; charset=utf-8',
-  '.svg': 'image/svg+xml',
-  '.png': 'image/png',
-  '.jpg': 'image/jpeg',
-  '.jpeg': 'image/jpeg',
-  '.webp': 'image/webp',
-  '.ico': 'image/x-icon',
-  '.xml': 'application/xml; charset=utf-8',
-  '.woff2': 'font/woff2',
-  '.mp4': 'video/mp4',
-  '.webm': 'video/webm',
-  '.txt': 'text/plain; charset=utf-8',
-};
-
-/** Content-Type for a static file, by extension. */
+/** Content-Type for a static file, by extension. Source of truth: `@std/media-types`. */
 export function contentTypeFor(filePath: string): string {
-  return MIME[extname(filePath).toLowerCase()] || 'application/octet-stream';
+  return contentType(extname(filePath).toLowerCase()) ?? 'application/octet-stream';
 }
 
 const CONTENT_HASHED_ASSET_RE = /(?:^|\/)assets\/[^/]*-[0-9a-zA-Z_-]{8,}\.[^/]+$/;

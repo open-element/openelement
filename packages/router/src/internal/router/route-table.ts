@@ -1,7 +1,6 @@
 /** Route identity, URL winner and HTTP policy; URLPatternList owns indexing. */
 import { URLPatternList } from '@openelement/url-pattern-list';
 import { normalizeRoutePatternForURLPattern } from './route-pattern.ts';
-import { URLPattern as URLPatternPolyfill } from 'urlpattern-polyfill';
 
 /**
  * Non-pathname URL components for explicit Route Mode (protocol, hostname,
@@ -38,8 +37,21 @@ export interface RouteTableOptions {
 }
 
 export type URLPatternConstructor = new (init: URLPatternInit) => URLPattern;
-const runtimeURLPattern = (): URLPatternConstructor =>
-  (globalThis.URLPattern ?? URLPatternPolyfill) as URLPatternConstructor;
+/**
+ * Native Web Standard URLPattern. All Alpha targets (Deno 2.9, Node 24,
+ * current Chromium/Firefox/WebKit) ship it, so there is no polyfill fallback:
+ * a missing implementation fails closed with a locatable diagnostic instead
+ * of silently diverging in route matching.
+ */
+const runtimeURLPattern = (): URLPatternConstructor => {
+  const Pattern = globalThis.URLPattern as unknown as URLPatternConstructor | undefined;
+  if (typeof Pattern !== 'function') {
+    throw new TypeError(
+      'OpenElement router requires the Web Standard URLPattern API, which is unavailable in this runtime.',
+    );
+  }
+  return Pattern;
+};
 
 function staticPathKey(pathname: string): string {
   const url = new URL('https://openelement.invalid');
@@ -177,5 +189,3 @@ export class RouteTable<T extends RouteRecord> {
     return url ? this.#list.candidateCount(url) : 0;
   }
 }
-
-export const URLPatternPolyfillConstructor = URLPatternPolyfill as URLPatternConstructor;
