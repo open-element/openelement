@@ -3,6 +3,10 @@
 Qualifies that mature third-party Web Components can be consumed directly
 inside an OpenElement app.
 
+## Contract
+
+The human-readable interop contract lives at [using-third-party-web-components.md](../../../docs/integrations/using-third-party-web-components.md).
+
 ## Artifact consumption
 
 This fixture consumes workspace **source** artifacts: `qualify.ts` generates a

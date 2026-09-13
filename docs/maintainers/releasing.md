@@ -11,7 +11,7 @@ Public alpha packages use the npm `alpha` dist-tag. npm `latest` stays on the st
 ## Candidate procedure
 
 1. Pin the exact candidate SHA and require a clean tracked worktree.
-2. Build and pack the intended packages through the release path.
+2. Build and pack the intended packages through the release path. See [pack-post-processing](pack-post-processing.md) for what `deno pack` does not do and the deletion condition of each retained step.
 3. Install actual tarballs in disposable projects outside the workspace and verify exports, declarations, ESM graphs, and the independent Element/Router consumer worlds.
 4. Require all applicable Chromium, Firefox, WebKit, Deno, Node, Workers, Bun, and Nitro evidence for claims that remain supported.
 5. Require green exact-SHA CI, CodeQL/security checks, human review, and a fresh independent verifier.

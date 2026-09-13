@@ -5,6 +5,10 @@ synthetic probe corpus covering the four framework origins — native, Lit,
 FAST, and Stencil (Ionic compiled output) — exercised against the
 browser-native Custom Element contract.
 
+## Contract
+
+The human-readable interop contract lives at [web-components-interop.md](../../../docs/integrations/web-components-interop.md).
+
 ## Artifact consumption
 
 This fixture consumes workspace **source** artifacts: `qualify.ts` generates a
