@@ -1,0 +1,5 @@
+{
+  "tasks": {
+    "smoke": "deno run --config ../../deno.json --allow-read --allow-write --allow-run --allow-env --allow-net --allow-sys qualify.ts"
+  }
+}
