@@ -22,8 +22,8 @@ export const VITE_PEER_RANGE = 'npm:vite@^8.0.0';
 const MANIFEST_GLOB_ROOTS = [
   'deno.json',
   'packages/*/deno.json',
-  'www/deno.json',
-  'examples/*/deno.json',
+  'apps/site/deno.json',
+  'apps/saas/deno.json',
   'fixtures/*/deno.json',
 ];
 

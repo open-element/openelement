@@ -1,9 +1,9 @@
 /**
  * www theme-token gate: theme values in the site must come from open-props
  * tokens (packages/ui/src/open-props-tokens.css) and the www alias layer
- * (www/vite.config.ts), never from hardcoded literals.
+ * (apps/site/vite.config.ts), never from hardcoded literals.
  *
- * Rules for sources under www/app/ and www/islands/:
+ * Rules for sources under apps/site/app/ and apps/site/islands/:
  *  1. No hex color literals. 6/8-digit forms always fail; 3/4-digit forms
  *     fail only on lines carrying a CSS property keyword, so issue
  *     references like `#390` in prose stay legal.
@@ -11,13 +11,13 @@
  *  3. No `font-size` literals in px/rem/em outside var(); clamp() fluid
  *     typography is allowed.
  *
- * Token definitions belong in www/vite.config.ts (site aliases) or
+ * Token definitions belong in apps/site/vite.config.ts (site aliases) or
  * packages/ui/src/open-props-tokens.css (source of truth).
  */
 
 import { walk } from '@std/fs/walk';
 
-const SCAN_ROOTS = ['www/app'];
+const SCAN_ROOTS = ['apps/site/app'];
 const SOURCE = /\.(ts|tsx)$/;
 const HEX_LONG = /#(?:[0-9a-fA-F]{6}|[0-9a-fA-F]{8})\b/;
 const HEX_SHORT = /#(?:[0-9a-fA-F]{3,4})\b/;
@@ -69,7 +69,7 @@ async function main(): Promise<void> {
       console.error(`- ${failure.file}:${failure.line} [${failure.rule}] ${failure.text}`);
     }
     console.error(
-      'Theme values must come from open-props tokens or the www/vite.config.ts alias layer.',
+      'Theme values must come from open-props tokens or the apps/site/vite.config.ts alias layer.',
     );
     Deno.exit(1);
   }

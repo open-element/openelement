@@ -1,3 +1,4 @@
+// esm-boundary:scanner
 /**
  * Fail-closed pure-ESM boundary gate (1.0 Alpha baseline).
  *

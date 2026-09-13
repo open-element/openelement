@@ -56,7 +56,7 @@ OpenElement × Supabase × Cloudflare 是经过验证的全栈交付路径，所
 最初随 0.43 线与 Universal WC SSR 一同交付，并由当前编译型版本线继承。框架自有的生产运行时恢复与缓存语义仍在当前契约之外，尚未分配发布版本。
 
 - [Supabase 配方](https://github.com/open-element/openelement/blob/main/docs/integrations/supabase.md)
-- [已验证的参考应用](https://github.com/open-element/openelement/tree/main/examples/supabase-cloudflare-starter)
+- [已验证的参考应用](https://github.com/open-element/openelement/tree/main/apps/saas)
 - [真实项目验证工作流](https://github.com/open-element/openelement/blob/main/.github/workflows/supabase-project-smoke.yml)
 - [真实 Workers 部署冒烟（绿色运行 31925944647）](https://github.com/open-element/openelement/blob/main/.github/workflows/fullstack-deploy-smoke.yml)
 - [tier-1 边界门禁](https://github.com/open-element/openelement/blob/main/tools/check-fullstack-boundary.ts)
@@ -67,7 +67,7 @@ OpenElement × Supabase × Cloudflare 是经过验证的全栈交付路径，所
 - Custom Elements 作为持久的应用契约——静态面在 ADR-0119 下冻结，请求时应用闭环在 ADR-0122 下冻结。[ADR-0119 / ADR-0122 冻结](https://github.com/open-element/openelement/blob/main/docs/adr/ADR-0122-0-42-0-stable-scope-freeze.md)
 - DSD-first SSR 与选择性升级，以及显式的外来 WC 准入——语料库把每个第三方库形态的观测 SSR 输出与准入钉为机器可读证据。[第三方 WC SSR 语料库](https://github.com/open-element/openelement/blob/main/docs/evidence/third-party-wc-ssr-corpus.json)
 - 浏览器与打包产物验证——候选版本需要 Chromium、Firefox 与 WebKit 证明，消费方从打包的公开产物构建。[栈契约](https://github.com/open-element/openelement/blob/main/docs/current/STACK_CONTRACT.md)
-- 可组合的服务提供方栈，而不是框架自有的 Auth 或数据库包——由参考应用与真实提供方冒烟端到端验证。[Supabase × Cloudflare 参考应用](https://github.com/open-element/openelement/tree/main/examples/supabase-cloudflare-starter)
+- 可组合的服务提供方栈，而不是框架自有的 Auth 或数据库包——由参考应用与真实提供方冒烟端到端验证。[Supabase × Cloudflare 参考应用](https://github.com/open-element/openelement/tree/main/apps/saas)
 
 ## 来源与评审范围
 

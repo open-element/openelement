@@ -1,7 +1,8 @@
 /**
- * Reference fullstack starter (#983): OpenElement app shell + DSD-first SSR,
- * deployed through the Nitro cloudflare_module output. The notes route
- * renders at request time (session-aware); the home page is prerendered.
+ * OpenElement SaaS (#983): first-party core consumer product. OpenElement app
+ * shell + DSD-first SSR, deployed through the Nitro cloudflare_module output
+ * (see `deno task nitro:build-workers`). The notes route renders at request
+ * time (session-aware); the home page is prerendered.
  */
 import { openElement } from '@openelement/router/vite';
 import { defineConfig } from 'vite';
@@ -22,7 +23,7 @@ export default defineConfig({
         import: new URL('./app/shell.tsx', import.meta.url).pathname,
       },
       html: {
-        title: 'OpenElement × Supabase × Cloudflare reference',
+        title: 'OpenElement SaaS',
       },
       build: {
         // Realtime's Phoenix/WebSocket protocol plus the bounded REST
@@ -36,7 +37,7 @@ export default defineConfig({
       // local request-time server (deno task start, default port 4173).
       middleware: {
         corsOrigin: [
-          'https://openelement-ref-starter.freemanzheng.workers.dev',
+          'https://openelement-saas.freemanzheng.workers.dev',
           'http://localhost:4173',
           'http://127.0.0.1:4173',
         ],

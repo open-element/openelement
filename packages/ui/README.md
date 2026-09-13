@@ -53,7 +53,7 @@ Tokens contain shared style values and classes and import no components.
 Primitives may consume tokens but never composites. Composites may compose
 primitives and tokens. Application routing and document navigation belongs to
 `@openelement/router`; the site layout component (`OpenLayout`) lives in the
-reference site (`www/app/islands/open-layout.tsx`).
+reference site (`apps/site/app/islands/open-layout.tsx`).
 
 ## `open-code-block` syntax highlighting
 
@@ -76,7 +76,7 @@ button (and retries briefly while deferred scripts load).
 ```
 
 The reference site wires the same scripts through the `inject` option in
-`www/vite.config.ts`.
+`apps/site/vite.config.ts`.
 
 The package vendors an audited subset of Open Props scales at build time —
 dead scales are deleted, so only tokens with a live consumer survive. The

@@ -58,7 +58,7 @@ production-runtime recovery and cache semantics remain outside the current
 contract and have no assigned release version.
 
 - [Supabase recipe](https://github.com/open-element/openelement/blob/main/docs/integrations/supabase.md)
-- [Verified reference app](https://github.com/open-element/openelement/tree/main/examples/supabase-cloudflare-starter)
+- [Verified reference app](https://github.com/open-element/openelement/tree/main/apps/saas)
 - [Real-project qualification workflow](https://github.com/open-element/openelement/blob/main/.github/workflows/supabase-project-smoke.yml)
 - [Real Workers deploy smoke (green run 31925944647)](https://github.com/open-element/openelement/blob/main/.github/workflows/fullstack-deploy-smoke.yml)
 - [Tier-1 boundary gate](https://github.com/open-element/openelement/blob/main/tools/check-fullstack-boundary.ts)
@@ -69,7 +69,7 @@ contract and have no assigned release version.
 - Custom Elements as the durable application contract — the static surface froze under ADR-0119 and the request-time application loop under ADR-0122. [ADR-0119 / ADR-0122 freezes](https://github.com/open-element/openelement/blob/main/docs/adr/ADR-0122-0-42-0-stable-scope-freeze.md)
 - DSD-first SSR with selective upgrade, and explicit foreign-WC admission — the corpus pins the observed SSR form and admission of each third-party library kind as machine-readable evidence. [Third-party WC SSR corpus](https://github.com/open-element/openelement/blob/main/docs/evidence/third-party-wc-ssr-corpus.json)
 - Browser and packaged-artifact qualification — candidate releases prove Chromium, Firefox and WebKit, and consumers build from packed public artifacts. [Stack contract](https://github.com/open-element/openelement/blob/main/docs/current/STACK_CONTRACT.md)
-- A composable provider stack instead of framework-owned Auth or database packages — verified end to end by the reference app and its real-provider smokes. [Supabase × Cloudflare reference app](https://github.com/open-element/openelement/tree/main/examples/supabase-cloudflare-starter)
+- A composable provider stack instead of framework-owned Auth or database packages — verified end to end by the reference app and its real-provider smokes. [Supabase × Cloudflare reference app](https://github.com/open-element/openelement/tree/main/apps/saas)
 
 ## Sources and review scope
 

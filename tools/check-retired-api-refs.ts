@@ -20,10 +20,10 @@ const RETIRED = [
 ];
 
 const SCAN_DIRS = [
-  'www/content/guide',
-  'www/content/architecture',
-  'www/app',
-  'www/lib',
+  'apps/site/content/guide',
+  'apps/site/content/architecture',
+  'apps/site/app',
+  'apps/site/lib',
   'packages/ui',
 ];
 
@@ -37,7 +37,7 @@ for (const dir of SCAN_DIRS) {
     // Generated data modules are derived from scanned sources (content
     // collections, package exports); version-titled blog history may name
     // retired APIs, so scan sources rather than serialized output.
-    if (file.includes('www/app/data/_generated-')) continue;
+    if (file.includes('apps/site/app/data/_generated-')) continue;
     const text = await Deno.readTextFile(file);
     // Markdown formatters may wrap a retired-package list across physical
     // lines; match against logical lines (consecutive blockquote lines

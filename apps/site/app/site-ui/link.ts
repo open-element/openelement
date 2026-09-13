@@ -1,7 +1,7 @@
 /**
- * Shared in-content link helpers for www routes and site-ui shells.
+ * Shared in-content link helpers for site routes and site-ui shells.
  *
- * The site builds exactly two locales (www/vite.config.ts `locales`); the
+ * The site builds exactly two locales (apps/site/vite.config.ts `locales`); the
  * default locale keeps canonical unprefixed paths, every other locale gets a
  * `/<locale>` prefix. All in-content internal links must go through
  * localizePath so a zh page never drops the reader back into the English
@@ -9,7 +9,7 @@
  */
 import { normalizeLocalePath } from './i18n.ts';
 
-/** Locales emitted by the www build (www/vite.config.ts `locales`). */
+/** Locales emitted by the site build (apps/site/vite.config.ts `locales`). */
 export const SITE_LOCALES: readonly string[] = ['en', 'zh'];
 // Internal default-locale anchor for the two helpers below; not part of the
 // module's public surface.

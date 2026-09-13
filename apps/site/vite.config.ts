@@ -1,6 +1,5 @@
 import { openElement } from '@openelement/router/vite';
 import { openPropsTokenSheet, registerOpenUi } from '@openelement/ui';
-import { readFileSync } from 'node:fs';
 import { defineConfig } from 'vite';
 
 // www/ is an npm-first consumer; local workspace resolution during dev, npm
@@ -147,7 +146,7 @@ const fontPreloads = [
   `<link rel="preload" href="${href}" as="font" type="font/woff2" crossorigin="anonymous" />`
 ).join('');
 const prismThemeStyle = `<style>${
-  readFileSync(new URL('./public/assets/vendor/prism/prism.min.css', import.meta.url), 'utf-8')
+  Deno.readTextFileSync(new URL('./public/assets/vendor/prism/prism.min.css', import.meta.url))
 }</style>`;
 
 const openElementPlugins = openElement({

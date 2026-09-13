@@ -1,7 +1,7 @@
 /**
  * Built-output internal link/fragment gate (#1159, B2.4).
  *
- * Runs against www/dist after the build: every internal href/src must resolve
+ * Runs against apps/site/dist after the build: every internal href/src must resolve
  * to a built file, every #fragment must anchor in the target document, and
  * every sitemap.xml URL must resolve. Fails closed — the acceptance bar is
  * zero broken internal links or fragments. External URLs are deliberately not
@@ -26,9 +26,9 @@ import {
   pageSeo,
   resolveBuiltPath,
 } from './lib/www-links.ts';
-import { apiReference } from '../www/app/data/_generated-api-reference.ts';
+import { apiReference } from '../apps/site/app/data/_generated-api-reference.ts';
 
-export const WWW_DIST = 'www/dist';
+export const WWW_DIST = 'apps/site/dist';
 const SITE_LOCALES = ['en', 'zh'] as const;
 
 export async function checkBuiltLinks(dist = WWW_DIST): Promise<LinkFailure[]> {

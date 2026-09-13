@@ -3,11 +3,11 @@
  * site build on a clean clone.
  *
  * Emits, from the checked-in content collections:
- *   www/app/data/_generated-guide-data.ts
- *   www/app/data/_generated-architecture-data.ts
- *   www/app/data/_generated-blog-data.ts
+ *   apps/site/app/data/_generated-guide-data.ts
+ *   apps/site/app/data/_generated-architecture-data.ts
+ *   apps/site/app/data/_generated-blog-data.ts
  *
- * The remaining modules under www/app/data/ (_generated-api-reference.ts,
+ * The remaining modules under apps/site/app/data/ (_generated-api-reference.ts,
  * _generated-content-graph.json, version.ts) have no generator on this line
  * yet and are consumed as ordinary checked-in modules; the API reference has
  * its own `deno task generate:api-reference` gate.
@@ -16,12 +16,12 @@ import {
   loadCollectionData,
   writeBlogDataModule,
   writeCollectionDataModule,
-} from '../www/lib/content.ts';
-import { blogCollection, prepareBlogPosts } from '../www/lib/blog.ts';
+} from '../apps/site/lib/content.ts';
+import { blogCollection, prepareBlogPosts } from '../apps/site/lib/blog.ts';
 import { fromFileUrl, join } from '@std/path';
-import { articleCollections } from '../www/content-collections.ts';
+import { articleCollections } from '../apps/site/content-collections.ts';
 
-const wwwRoot = fromFileUrl(new URL('../www/', import.meta.url));
+const wwwRoot = fromFileUrl(new URL('../apps/site/', import.meta.url));
 
 for (const name of ['guide', 'architecture'] as const) {
   const options = {

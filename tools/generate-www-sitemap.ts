@@ -1,6 +1,6 @@
 /**
  * Generate www sitemap.xml + robots.txt from the route catalog (Beta.2.2,
- * #1327). Runs in `deno task www:build` after the router build: the public
+ * #1327). Runs in `deno task site:build` after the router build: the public
  * index is enumerated from the route catalog and the drift-gated content
  * graph — never by scanning built output or request-time Documents.
  * Fails closed: an unenumerable dynamic route or a duplicate fails the build.
@@ -15,9 +15,9 @@ import {
   WWW_SITEMAP_EXCLUDE,
 } from './lib/www-sitemap.ts';
 
-export const WWW_DIST = 'www/dist';
-const WWW_ROUTES = 'www/app/routes';
-const CONTENT_GRAPH = 'www/app/data/_generated-content-graph.json';
+export const WWW_DIST = 'apps/site/dist';
+const WWW_ROUTES = 'apps/site/app/routes';
+const CONTENT_GRAPH = 'apps/site/app/data/_generated-content-graph.json';
 const SITE_LOCALES = ['en', 'zh'] as const;
 
 export async function generateWwwSitemap(dist = WWW_DIST): Promise<string[]> {

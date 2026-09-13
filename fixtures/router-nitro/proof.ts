@@ -350,6 +350,7 @@ async function assertRuntimePublicAsset(
 
 assertCompatibilityDate(NITRO_COMPATIBILITY_DATE);
 await removeIfExists(output);
+await removeIfExists(new URL('.output/', fixture));
 const buildLog = await run([
   'deno',
   'run',
@@ -357,9 +358,12 @@ const buildLog = await run([
   '-A',
   `npm:nitro@${NITRO_VERSION}`,
   'build',
-], {
-  OPEN_ELEMENT_NITRO_PRESET: nitroPreset,
-});
+  '--dir',
+  fixture.pathname,
+  '--preset',
+  nitroPreset,
+]);
+await Deno.rename(new URL('.output/', fixture), output);
 assertNotIncludes(buildLog, 'Node.js compatibility is not enabled', 'Nitro build log');
 const serializationWarning =
   'Runtime config option `nitro.routeRules./cached.cache` may not be able to be serialized.';

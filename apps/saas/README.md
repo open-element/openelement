@@ -1,16 +1,16 @@
-# Supabase × Cloudflare reference starter
+# OpenElement SaaS (Supabase × Cloudflare)
 
-> Experimental, advanced reference — not a minimal starter. It shows one
-> opinionated fullstack composition; new projects should start from
-> `@openelement/create`.
+> First-party core consumer product and standard consumption shape for
+> OpenElement: it proves the public framework surface end to end. New
+> projects should still start from `@openelement/create`.
 
-Maintained reference application for the OpenElement × Supabase × Cloudflare
+Maintained first-party SaaS for the OpenElement × Supabase × Cloudflare
 fullstack delivery path (epic #981, issue #983). Composition only: no
 framework-owned auth/database abstractions — Supabase owns data/Auth/RLS,
 Cloudflare owns edge delivery, OpenElement is the Web Components-native
 application layer.
 
-## Status: working reference
+## Status: working product
 
 - [x] application shell + request-time routes (login, signup, Magic Link,
       PKCE callback, recovery/reset, notes, upload, admin)

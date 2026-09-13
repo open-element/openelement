@@ -2,7 +2,7 @@
  * E2E: full public information architecture coverage (#1232, B2.10).
  *
  * The route list is derived MECHANICALLY from the built sitemap
- * (www/dist/sitemap.xml) at collection time — never hand-maintained — so a
+ * (apps/site/dist/sitemap.xml) at collection time — never hand-maintained — so a
  * new public route is covered the moment the build emits it, and a missing
  * or empty sitemap fails the suite closed. A second fail-closed cross-check
  * requires every guide/architecture article route from the generated content

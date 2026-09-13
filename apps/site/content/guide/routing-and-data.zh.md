@@ -142,4 +142,4 @@ request-time(`'dynamic'`)loader/action 运行在服务端,上下文是 Web 标�
 
 [Auth guard（better-auth 守卫中间件）](https://github.com/open-element/openelement/blob/main/docs/integrations/better-auth-guard.md)——把匿名用户 303 重定向出受保护路由组，并把会话身份透传给 loader；守卫机制已验证，better-auth 调用以 stub 代替。
 
-[Supabase（参考应用配方）](https://github.com/open-element/openelement/blob/main/docs/integrations/supabase.md)——`@supabase/ssr` 服务端客户端经 ADR-0129 响应头通道写会话 cookie，loader/action 内复检授权，RLS 优先的 notes / Storage / Realtime；所有代码块取自 `examples/supabase-cloudflare-starter`，已对真实 Supabase 项目完成资格验证。
+[Supabase（参考应用配方）](https://github.com/open-element/openelement/blob/main/docs/integrations/supabase.md)——`@supabase/ssr` 服务端客户端经 ADR-0129 响应头通道写会话 cookie，loader/action 内复检授权，RLS 优先的 notes / Storage / Realtime；所有代码块取自 `apps/saas`，已对真实 Supabase 项目完成资格验证。

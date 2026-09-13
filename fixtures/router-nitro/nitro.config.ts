@@ -1,11 +1,10 @@
 import { NITRO_COMPATIBILITY_DATE } from '../../tools/nitro-compatibility.ts';
 
-const preset = process.env.OPEN_ELEMENT_NITRO_PRESET || 'node';
-const outputDir = preset === 'cloudflare_module' ? '.output-workers' : '.output-node';
-
+// The preset is selected by the caller (`nitro build --preset ...`, driven by
+// fixtures/router-nitro/proof.ts through tools/nitro-build.ts semantics), so
+// this config stays static and free of Node-only env reads.
 export default defineNitroConfig({
   serverDir: 'server',
-  preset,
   publicAssets: [{ dir: '../public' }],
   routeRules: {
     '/cached': {
@@ -16,7 +15,7 @@ export default defineNitroConfig({
     },
   },
   output: {
-    dir: outputDir,
+    dir: '.output',
   },
   compatibilityDate: NITRO_COMPATIBILITY_DATE,
   cloudflare: {

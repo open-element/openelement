@@ -92,7 +92,7 @@ export interface BlogPost {
 
 /** Trust boundary for collection HTML.
  *
- * Collection sources are first-party repository files (`www/content/**`); the
+ * Collection sources are first-party repository files (`apps/site/content/**`); the
  * rendered Markdown is emitted as-is at the same trust level as `trustedHtml`.
  * Do NOT point a collection at untrusted input (user uploads, CMS output,
  * third-party HTML) without sanitizing that data at your own system boundary

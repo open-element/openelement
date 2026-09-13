@@ -1,14 +1,15 @@
-import { NITRO_COMPATIBILITY_DATE } from '../../../tools/project-constants.ts';
+import { NITRO_COMPATIBILITY_DATE } from '../../tools/nitro-compatibility.ts';
 
-const preset = process.env.OPEN_ELEMENT_NITRO_PRESET || 'node';
-const outputDir = preset === 'cloudflare_module' ? '.output-workers' : '.output-node';
-
+// The preset is selected by the caller (`deno task nitro:build[-workers]`
+// through tools/nitro-build.ts `--preset`), so this config stays static and
+// free of Node-only env reads. `dist/` is mapped as public assets for the
+// client chunks; the driver prunes `public/server` afterwards so the portable
+// server bundle is never publicly served.
 export default defineNitroConfig({
-  srcDir: 'server',
-  preset,
+  serverDir: 'server',
   publicAssets: [{ dir: '../dist' }],
   output: {
-    dir: outputDir,
+    dir: '.output',
   },
   compatibilityDate: NITRO_COMPATIBILITY_DATE,
   cloudflare: {

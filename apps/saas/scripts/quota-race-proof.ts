@@ -23,7 +23,7 @@
  * Usage:
  *   SUPABASE_URL=... SUPABASE_ANON_KEY=... SUPABASE_SERVICE_ROLE_KEY=... \
  *     deno run --allow-net --allow-env \
- *     examples/supabase-cloudflare-starter/scripts/quota-race-proof.ts
+ *     apps/saas/scripts/quota-race-proof.ts
  */
 
 const QUOTA_BYTES = 10 * 1024 * 1024; // 10 MiB, from the migration

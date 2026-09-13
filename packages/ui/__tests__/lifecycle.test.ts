@@ -18,7 +18,7 @@
  *   is kernel/detached-lifecycle owned.
  * Browser-level evidence for those lives in
  * fixtures/router-ui-dogfood/e2e (forms, tabs reconnect,
- * dialog states) and www/e2e/theme-system.spec.ts (theme init/toggle/
+ * dialog states) and apps/site/e2e/theme-system.spec.ts (theme init/toggle/
  * persistence/multi-toggle on the shipped page).
  */
 import { assertEquals, assertNotEquals } from '@std/assert';

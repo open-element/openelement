@@ -1,15 +1,18 @@
 /**
- * Test helper (v0.44): run the real open:compiled-element compiler over a
- * page/island component source and import the emitted module, so Deno tests
- * exercise the actual compiled class (Part Program + facade) instead of a
- * hand-built double. Deno tests must never import the authoring .tsx modules
- * directly — the ambient @element/@property decorators are compile-time-only
- * input and throw at module evaluation outside the adapter transform.
+ * Test helper: run the real element compiler over a page/island component
+ * source (through the public `@openelement/element/compiler` entry) and
+ * import the emitted module, so Deno tests exercise the actual compiled
+ * class (Part Program + facade) instead of a hand-built double. Deno tests
+ * must never import the authoring .tsx modules directly — the ambient
+ * @element/@property decorators are compile-time-only input and throw at
+ * module evaluation outside the adapter transform.
  */
-import { compileElementProgram } from '../../../../packages/element/src/internal/compiler/semantic-core/compile.ts';
+import { compileElementProgram } from '@openelement/element/compiler';
 
-const ELEMENT_URL = new URL('../../../../packages/element/src/index.ts', import.meta.url).href;
-const APP_URL = new URL('../../../../packages/router/src/index.ts', import.meta.url).href;
+// Resolved through the workspace (daily dev) or the installed packed
+// tarballs (release qualification) — never a relative path into a package.
+const ELEMENT_URL = import.meta.resolve('@openelement/element');
+const APP_URL = import.meta.resolve('@openelement/router');
 
 /** Compile + import the default-exported compiled class of one component module. */
 export async function compileComponentClass(

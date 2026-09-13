@@ -3,3 +3,4 @@ dist/
 .output-node/
 .output-workers/
 .nitro/
+.output/

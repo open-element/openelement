@@ -1,3 +1,4 @@
+// esm-boundary:scanner
 import { assertEquals } from '@std/assert';
 import { firstCodeLine, scanCjsSyntax, scanExportsConditions } from './check-esm-boundary.ts';
 

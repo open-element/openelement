@@ -1,6 +1,6 @@
 /**
  * Starts the actual repository `deno task dev` entry point and requires the
- * first SSR requests to succeed. The production E2E suite serves www/dist, so
+ * first SSR requests to succeed. The production E2E suite serves apps/site/dist, so
  * it cannot cover dependency-resolution failures in Vite's development SSR.
  */
 

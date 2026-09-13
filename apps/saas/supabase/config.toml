@@ -1,6 +1,6 @@
 # Local identifier only; the hosted project is selected explicitly with
 # SUPABASE_PROJECT_ID by the migration workflow.
-project_id = "openelement-supabase-cloudflare-starter"
+project_id = "openelement-saas"
 
 [db]
 major_version = 17
