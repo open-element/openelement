@@ -8,10 +8,9 @@
 
 Current truth lives in:
 
-- [`docs/current/VERSION_PLAN.md`](./docs/current/VERSION_PLAN.md)
-- [`docs/current/PACKAGE_SURFACE.md`](./docs/current/PACKAGE_SURFACE.md)
-- [`docs/status/STATUS.md`](./docs/status/STATUS.md)
-- [`docs/roadmap/ROADMAP.md`](./docs/roadmap/ROADMAP.md)
+- [`docs/architecture/product-model.md`](./docs/architecture/product-model.md)
+- [`docs/release/release-state.json`](./docs/release/release-state.json)
+- [`docs/release/public-interface-snapshot.json`](./docs/release/public-interface-snapshot.json)
 
 Historical changelog details remain available through git history and release
 evidence.
@@ -22,7 +21,7 @@ evidence.
 stable 0.43 line).** Framework qualification under a frozen governance
 envelope (ADR-0151): the TSX-to-Part Program compiler, page-route SSR bound
 to the compiled program, and the delivery gates. The authoritative note is
-[`docs/release/v0.44.0-beta.1.md`](./docs/release/v0.44.0-beta.1.md); the
+`docs/release/v0.44.0-beta.1.md` (historical; see git history); the
 0.41.0-era npm `beta.1`–`beta.3` artifacts remain withdrawn partial
 publishes, unrelated to this line.
 
@@ -31,9 +30,9 @@ publishes, unrelated to this line.
 **Stable maintenance line (npm `latest`).** Compatible bug, security,
 runtime, documentation and release-truth patches under ADR-0140 — no 0.44
 feature train. Per-release notes:
-[`docs/release/v0.43.0.md`](./docs/release/v0.43.0.md),
-[`v0.43.1`](./docs/release/v0.43.1.md), [`v0.43.2`](./docs/release/v0.43.2.md),
-[`v0.43.3`](./docs/release/v0.43.3.md).
+`docs/release/v0.43.0.md` (historical; see git history),
+`v0.43.1`, `v0.43.2`,
+`v0.43.3`.
 
 ## 0.42.0
 
@@ -365,7 +364,7 @@ Round-5 full-spectrum audit remediation train: all 78 findings from the
 
 - Audit round 2 remediation (TP-5.6): the second, independent review of
   the application loop
-  ([`docs/audit/2026-07-28-alpha5-round2-review.md`](./docs/audit/2026-07-28-alpha5-round2-review.md),
+  (`docs/audit/2026-07-28-alpha5-round2-review.md` (historical; see git history),
   issues #576–#593) is closed — five high-severity defects in the morph
   client plus the protocol and evidence tail.
 - Morph client correctness: an explicit `<form action>` now wins over
