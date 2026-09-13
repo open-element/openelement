@@ -1,4 +1,4 @@
-import { assertEquals, assertStringIncludes } from '@std/assert';
+import { assertEquals, assertMatch, assertStringIncludes } from '@std/assert';
 import { join } from '@std/path';
 import { OpenElementBuildContext } from '../src/vite/build-context.ts';
 import {
@@ -48,7 +48,10 @@ Deno.test('production BuildPlan returns typed failure evidence for a missing out
   const result = collectBuildArtifacts(createProductionBuildPlan(ctx));
   assertEquals(result.success, false);
   assertEquals(result.errors.length, 1);
-  assertStringIncludes(result.errors[0], 'no such file or directory');
+  // Deno's native ENOENT wording is version-dependent (2.9 capitalizes and
+  // appends the os error); match the stable core case-insensitively.
+  assertMatch(result.errors[0], /no such file or directory/i);
+  assertStringIncludes(result.errors[0], '/definitely/missing/openelement-build/dist');
 });
 
 Deno.test('writeBuildEvidence writes the build artifacts manifest', async () => {
@@ -113,38 +116,28 @@ Deno.test('writeBuildEvidence creates the evidence dir on a clean tree (#741)', 
   }
 });
 
-Deno.test('build-plan uses process.cwd when Deno is unavailable', async () => {
-  const deno = Deno;
-  const originalCwd = deno.cwd();
-  const originalDeno = globalThis.Deno;
-  const root = await deno.makeTempDir({ prefix: 'oe-build-plan-node-' });
+Deno.test('build-plan defaults the output root to the current working directory', async () => {
+  // Build runs on Deno; the output root defaults to Deno.cwd(). There is no
+  // Node fallback: first-party build code must not use Node-only APIs such
+  // as process.cwd().
+  const originalCwd = Deno.cwd();
+  const root = await Deno.makeTempDir({ prefix: 'oe-build-plan-cwd-' });
   try {
-    deno.chdir(root);
-    Object.defineProperty(globalThis, 'Deno', {
-      configurable: true,
-      value: undefined,
-      writable: true,
-    });
-
+    Deno.chdir(root);
     const ctx = new OpenElementBuildContext({ mode: 'ssg' });
     ctx.phase3.outDir = 'dist';
     const plan = createProductionBuildPlan(ctx);
-    await deno.mkdir(join(root, 'dist'), { recursive: true });
-    await deno.writeTextFile(join(root, 'dist', 'index.html'), '<html>ok</html>');
+    await Deno.mkdir(join(root, 'dist'), { recursive: true });
+    await Deno.writeTextFile(join(root, 'dist', 'index.html'), '<html>ok</html>');
 
     const artifacts = collectBuildArtifacts(plan);
     assertEquals(artifacts.success, true);
-    await deno.mkdir(join(root, '.openElement'), { recursive: true });
+    await Deno.mkdir(join(root, '.openElement'), { recursive: true });
     writeBuildEvidence(plan, artifacts);
-    const evidence = await deno.readTextFile(join(root, '.openElement', 'build-artifacts.json'));
+    const evidence = await Deno.readTextFile(join(root, '.openElement', 'build-artifacts.json'));
     assertStringIncludes(evidence, '"success": true');
   } finally {
-    Object.defineProperty(globalThis, 'Deno', {
-      configurable: true,
-      value: originalDeno,
-      writable: true,
-    });
-    deno.chdir(originalCwd);
-    await deno.remove(root, { recursive: true });
+    Deno.chdir(originalCwd);
+    await Deno.remove(root, { recursive: true });
   }
 });

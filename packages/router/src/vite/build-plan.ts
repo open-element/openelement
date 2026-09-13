@@ -99,7 +99,7 @@ function readRequestTimeRouteEvidence(outputDir: string): { requestTimeRoutes?: 
 }
 
 export function collectBuildArtifacts(plan: BuildPlan): BuildArtifacts {
-  const root = plan.output.root ?? (typeof Deno !== 'undefined' ? Deno.cwd() : Deno.cwd());
+  const root = plan.output.root ?? Deno.cwd();
   const outputDir = join(root, plan.output.outDir ?? DEFAULT_OUT_DIR);
   try {
     const emitted = files(outputDir);
@@ -144,7 +144,7 @@ export function collectBuildArtifacts(plan: BuildPlan): BuildArtifacts {
 }
 
 export function writeBuildEvidence(plan: BuildPlan, artifacts: BuildArtifacts): void {
-  const root = plan.output.root ?? (typeof Deno !== 'undefined' ? Deno.cwd() : Deno.cwd());
+  const root = plan.output.root ?? Deno.cwd();
   const evidence = {
     success: artifacts.success,
     pages: artifacts.pages.map(({ path, errors }) => ({ path, errors })),
@@ -159,8 +159,7 @@ export function writeBuildEvidence(plan: BuildPlan, artifacts: BuildArtifacts): 
   // The evidence dir may not exist on a clean checkout (nothing else creates
   // it since the route-types generation step was removed in #741). Write
   // first; only on ENOENT create the dir and retry once. The lazy path keeps
-  // writeFileSync the single fs call on the common path and avoids node:fs
-  // mkdirSync in Deno-free shims (build-plan tests hide globalThis.Deno).
+  // writeFileSync the single fs call on the common path.
   const evidencePath = join(root, OPEN_ELEMENT_DIR, 'build-artifacts.json');
   try {
     Deno.writeTextFileSync(evidencePath, formatJson(evidence));

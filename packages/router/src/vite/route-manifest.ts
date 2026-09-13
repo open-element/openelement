@@ -110,7 +110,7 @@ ${entries.join(',\n')}
  */
 function relativeToOutput(absSourcePath: string, fromDir: string): string {
   const rel = relative(fromDir, absSourcePath);
-  const posixRel = normalizeSeparators(rel).replace(/^\.+\//, '');
+  const posixRel = normalizeSeparators(rel).replace(/^\.\//, '');
   const normalized = posixRel.replaceAll('\\', '/');
   if (normalized.startsWith('.')) return normalized;
   return './' + normalized;
