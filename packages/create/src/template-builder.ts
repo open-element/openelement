@@ -69,6 +69,13 @@ const TEMPLATE_FILES: readonly (readonly [string, string])[] = [
   ['README.tmpl', 'README.md'],
   ['public/openelement-mark.svg', 'public/openelement-mark.svg'],
   ['deno.json.tmpl', 'deno.json'],
+  // package.json carries ONLY the @std/* npm aliases: packed first-party
+  // modules keep bare @std/* specifiers, and Vite's esbuild config loader
+  // resolves through node_modules (the deno.json import map does not reach
+  // it). npmrc.tmpl is renamed for the same dotfile-in-tarball reason as
+  // gitignore.tmpl; it points the @jsr scope at JSR's npm compat registry.
+  ['package.json.tmpl', 'package.json'],
+  ['npmrc.tmpl', '.npmrc'],
   ['vite.config.ts.tmpl', 'vite.config.ts'],
   ['app/islands/app-shell.tsx.tmpl', 'app/islands/app-shell.tsx'],
   ['app/components/page-styles.ts.tmpl', 'app/components/page-styles.ts'],
@@ -96,17 +103,22 @@ function versionTokens(v: ProductVersions): Record<string, string> {
   };
 }
 
-export async function buildTemplates(v: ProductVersions): Promise<Record<string, string>> {
+export async function buildTemplates(
+  v: ProductVersions,
+  projectName: string,
+): Promise<Record<string, string>> {
   assertUnifiedProductVersions(v);
+  const invalid = validateProjectName(projectName);
+  if (invalid) throw new Error(`Invalid project name "${projectName}". ${invalid}`);
   const templatesBase = new URL('../templates/', import.meta.url);
-  const tokens = versionTokens(v);
+  const tokens = { ...versionTokens(v), ['$' + '{name}']: projectName };
   const entries = await Promise.all(TEMPLATE_FILES.map(async ([source, target]) => {
     let content = await Deno.readTextFile(new URL(source, templatesBase));
     for (const [token, value] of Object.entries(tokens)) {
       if (content.includes(token)) content = content.split(token).join(value);
     }
-    if (content.includes('${v.')) {
-      throw new Error(`Unresolved package-version token in starter template: ${source}`);
+    if (content.includes('${v.') || content.includes('${name}')) {
+      throw new Error(`Unresolved scaffold token in starter template: ${source}`);
     }
     return [target, content] as const;
   }));

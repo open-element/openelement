@@ -326,6 +326,18 @@ export const PACKED_APP_CELL_NAMES = [
 export type PackedAppCellName = (typeof PACKED_APP_CELL_NAMES)[number];
 export type PackedAppRenderer = 'native' | 'lit';
 
+/**
+ * npm-alias bridge for the bare @std/* specifiers inside packed first-party
+ * modules (see the install cell). The alias lines track the workspace JSR
+ * pins (root deno.json `@std/*` entries); bump them together.
+ */
+export const PACKED_STD_ALIASES: Record<string, string> = {
+  '@std/fs': 'npm:@jsr/std__fs@^1.0.0',
+  '@std/jsonc': 'npm:@jsr/std__jsonc@^1.0.0',
+  '@std/media-types': 'npm:@jsr/std__media-types@^1.0.0',
+  '@std/path': 'npm:@jsr/std__path@^1.0.0',
+};
+
 export interface PackedAppOutcome {
   ok: boolean;
   detail: string;
@@ -1079,6 +1091,15 @@ function consumerDenoJson(spec: PackedAppLegSpec): Record<string, unknown> {
       ...spec.importMapExtras,
       'hono': 'npm:hono@4.12.0',
       'vite': 'npm:vite@8.0.16',
+      // Packed first-party modules import bare @std/* scopes (workspace
+      // import-map names survive deno pack); resolve them to the same JSR
+      // versions the workspace pins so the Deno-driven consumer can load
+      // the packed Vite plugin and build CLI.
+      '@std/fs': 'jsr:@std/fs@^1.0.0',
+      '@std/fs/': 'jsr:@std/fs@^1.0.0/',
+      '@std/jsonc': 'jsr:@std/jsonc@^1.0.0',
+      '@std/media-types': 'jsr:@std/media-types@^1.0.0',
+      '@std/path': 'jsr:@std/path@^1.0.0',
     },
     nodeModulesDir: 'manual',
     minimumDependencyAge: 0,
@@ -1129,6 +1150,14 @@ export async function qualifyPackedAppLeg(spec: PackedAppLegSpec): Promise<void>
         'vite': '8.0.16',
         'hono': '4.12.0',
         '@hono/vite-dev-server': '^0.25.3',
+        // Packed first-party modules keep bare @std/* specifiers (workspace
+        // import-map names survive deno pack) while the packed manifests
+        // declare the npm-compat @jsr/std__* deps. Vite's esbuild config
+        // loader resolves through node_modules (the consumer import map does
+        // not reach it), so alias the @std scopes to the same JSR lines the
+        // workspace pins; without real node_modules/@std/* directories the
+        // packed Vite plugin and build CLI fail with ERR_MODULE_NOT_FOUND.
+        ...PACKED_STD_ALIASES,
         ...spec.externals,
       };
       for (const tarball of tarballs) dependencies[tarball.name] = `file:${tarball.path}`;

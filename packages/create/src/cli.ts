@@ -75,7 +75,7 @@ async function main(): Promise<void> {
 
   try {
     await Deno.mkdir(targetDir, { recursive: true });
-    const TPL = await buildTemplates(v);
+    const TPL = await buildTemplates(v, name);
     for (const [path, content] of Object.entries(TPL)) {
       const fullPath = joinPosix(targetDir, path);
       await Deno.mkdir(dirnameOf(fullPath), { recursive: true });

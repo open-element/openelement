@@ -58,6 +58,11 @@ Deno.test('starter exposes only product imports and the standard lifecycle', () 
     '@openelement/router',
     '@openelement/router/nitro-mount',
     '@openelement/router/vite',
+    '@std/fs',
+    '@std/fs/',
+    '@std/jsonc',
+    '@std/media-types',
+    '@std/path',
     'hono',
     'vite',
   ]);
@@ -117,14 +122,31 @@ Deno.test('Create rejects mixed product versions instead of silently generating'
 });
 
 Deno.test('async template build returns deterministic path order', async () => {
-  const templates = await buildTemplates(resolveVersions());
+  const templates = await buildTemplates(resolveVersions(), 'sample-app');
   assertEquals(Object.keys(templates), Object.keys(templates).toSorted());
   assertFalse(Object.values(templates).some((content) => content.includes('${v.')));
 });
 
+Deno.test('generated starter package.json bridges packed @std imports for Node resolution', async () => {
+  const templates = await buildTemplates(resolveVersions(), 'sample-app');
+  const pkg = JSON.parse(templates['package.json']);
+  assertEquals(pkg.name, 'sample-app');
+  assertEquals(pkg.private, true);
+  // The bridge must cover every bare @std scope the packed tarballs emit;
+  // Vite's esbuild config loader resolves through node_modules, where only
+  // the npm-compat @jsr/std__* directories would otherwise exist.
+  assertEquals(pkg.dependencies, {
+    '@std/fs': 'npm:@jsr/std__fs@^1.0.0',
+    '@std/jsonc': 'npm:@jsr/std__jsonc@^1.0.0',
+    '@std/media-types': 'npm:@jsr/std__media-types@^1.0.0',
+    '@std/path': 'npm:@jsr/std__path@^1.0.0',
+  });
+  assertEquals(templates['.npmrc'], '@jsr:registry=https://npm.jsr.io\n');
+});
+
 Deno.test('generated starter pins every OpenElement import to the exact release', async () => {
   const versions = resolveVersions();
-  const config = JSON.parse((await buildTemplates(versions))['deno.json']);
+  const config = JSON.parse((await buildTemplates(versions, 'sample-app'))['deno.json']);
   assertEquals(config.imports['@openelement/router'], `npm:@openelement/router@${versions.router}`);
   assertEquals(
     config.imports['@openelement/router/vite'],
@@ -412,6 +434,10 @@ Deno.test('packed CLI retains every starter template, including dotfiles', async
     assert(existsSync(join(tmpRoot, 'sample-app', 'app', 'routes', 'blog', 'welcome.tsx')));
     assert(existsSync(join(tmpRoot, 'sample-app', 'README.md')));
     assert(existsSync(join(tmpRoot, 'sample-app', 'app', 'components', 'page-home.tsx')));
+    // The Node-resolution bridge (package.json @std aliases + @jsr registry)
+    // must ship in packed scaffolds, not just workspace runs.
+    assert(existsSync(join(tmpRoot, 'sample-app', 'package.json')));
+    assert(existsSync(join(tmpRoot, 'sample-app', '.npmrc')));
   } finally {
     Deno.removeSync(tmpRoot, { recursive: true });
   }

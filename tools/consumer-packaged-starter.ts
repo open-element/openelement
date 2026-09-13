@@ -34,6 +34,7 @@ import { formatJson } from '@openelement/element/build-utils';
 import { PACKAGE_VERSION, RETAINED_PACKAGE_NAMES } from './project-constants.ts';
 import { readPackages } from './lib/package-graph.ts';
 import { tarballPath } from './lib/npm-tarball.ts';
+import { PACKED_STD_ALIASES } from './consumer-packaged-shared.ts';
 import { extractStaticModuleSpecifiers } from './lib/typescript-ast.ts';
 
 async function readJson<T = unknown>(path: string | URL): Promise<T> {
@@ -297,6 +298,11 @@ try {
     '@openelement/router',
     '@openelement/router/nitro-mount',
     '@openelement/router/vite',
+    '@std/fs',
+    '@std/fs/',
+    '@std/jsonc',
+    '@std/media-types',
+    '@std/path',
     'hono',
     'vite',
   ];
@@ -352,6 +358,32 @@ try {
     );
     if (!provision.success) {
       throw new Error(`Starter external dependency install failed:\n${provision.output}`);
+    }
+  }
+
+  // Bridge the packed modules' bare @std/* specifiers to real
+  // node_modules/@std/* directories (same contract as the packed-app legs in
+  // consumer-packaged-shared.ts): the starter's import map resolves them for
+  // Deno tasks, but Vite's esbuild config loader resolves through
+  // node_modules, where only the npm-compat @jsr/std__* dirs exist.
+  {
+    const aliases = Object.entries(PACKED_STD_ALIASES).map(([name, target]) => `${name}@${target}`);
+    const bridge = await run(
+      'npm',
+      [
+        'install',
+        '--ignore-scripts',
+        '--no-audit',
+        '--no-fund',
+        '--fetch-timeout=30000',
+        ...aliases,
+      ],
+      tmp,
+      NPM_INSTALL_TIMEOUT_MS,
+      npmEnv,
+    );
+    if (!bridge.success) {
+      throw new Error(`Starter @std alias bridge install failed:\n${bridge.output}`);
     }
   }
 
