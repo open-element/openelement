@@ -55,10 +55,12 @@
  *
  * Playwright note: playwright-core requires --allow-sys at import time
  * (osRelease), which the harness's documented 5-flag permission set does not
- * grant. The browser cell therefore runs as a child process
- * (`deno run -A` on a generated probe script, matching the -A invocation of
- * consumer-packaged-element and the fixture e2e tasks); the parent harness
- * itself stays on --allow-read/write/run/env/net.
+ * grant. The browser cell therefore runs as a child process (a scoped
+ * permission set on a generated probe script, matching the scoped invocation
+ * of consumer-packaged-element and the fixture e2e tasks); the parent harness
+ * itself stays on --allow-read/write/run/env/net. Probe children carry
+ * --deny-ffi --no-prompt: browser automation needs no native binding, so a
+ * permission request fails closed instead of prompting.
  *
  * Every cell prints a PASS/FAIL line so the #1339 §11 support matrix can be
  * filled from the log; any FAIL fails the harness run.
@@ -381,14 +383,31 @@ async function attempt(fn: () => Promise<string | undefined>): Promise<PackedApp
 //
 // playwright-core calls os.release() at import time, which needs --allow-sys —
 // outside the harness's documented permission set. The probe therefore runs as
-// a `deno run -A` child against the repo config (which maps @playwright/test),
-// exactly how consumer-packaged-element.ts and the fixture e2e tasks invoke
-// Playwright. The script is generated into the temp consumer and removed with
-// it. Args: <baseUrl> <native|lit> <chromium|firefox|webkit>. One browser
-// per invocation so every renderer x browser pair is an individually
-// identifiable PASS/FAIL unit in the gate output.
+// a scoped-permission child against the repo config (which maps
+// @playwright/test), exactly how consumer-packaged-element.ts and the fixture
+// e2e tasks invoke Playwright. The script is generated into the temp consumer
+// and removed with it. Args: <baseUrl> <native|lit> <chromium|firefox|webkit>.
+// One browser per invocation so every renderer x browser pair is an
+// individually identifiable PASS/FAIL unit in the gate output. Probe children
+// carry --deny-ffi --no-prompt (browser automation needs no native binding).
 
 const PACKED_BROWSERS = ['chromium', 'firefox', 'webkit'] as const;
+
+/**
+ * Scoped permission envelope for generated Playwright probe children:
+ * browser automation needs no native binding, so FFI is denied and prompts
+ * are off — a permission request fails closed instead of hanging on input.
+ */
+export const PACKED_PROBE_PERMISSIONS = [
+  '--allow-read',
+  '--allow-write',
+  '--allow-env',
+  '--allow-net',
+  '--allow-run',
+  '--allow-sys',
+  '--deny-ffi',
+  '--no-prompt',
+] as const;
 
 const PW_PROBE_SCRIPT = `import { assertEquals } from '@std/assert';
 import { chromium, firefox, webkit } from '@playwright/test';
@@ -704,7 +723,7 @@ async function runBrowserContinuationProbe(
         'run',
         '--config',
         join(repoRoot, 'deno.json'),
-        '-A',
+        ...PACKED_PROBE_PERMISSIONS,
         join(tmp, 'pw-continuation-probe.ts'),
         baseUrl,
         leg,
@@ -743,7 +762,7 @@ async function runDevWarmupProbe(tmp: string, baseUrl: string, leg: PackedAppRen
       'run',
       '--config',
       join(repoRoot, 'deno.json'),
-      '-A',
+      ...PACKED_PROBE_PERMISSIONS,
       join(tmp, 'pw-dev-warmup-probe.ts'),
       baseUrl,
       leg,
@@ -1105,10 +1124,15 @@ function consumerDenoJson(spec: PackedAppLegSpec): Record<string, unknown> {
     nodeModulesDir: 'manual',
     minimumDependencyAge: 0,
     tasks: {
-      // The public development command, same shape as the create template.
-      dev: `deno run --config deno.json -A npm:vite@8.0.16 dev`,
-      build: `deno run --config deno.json -A npm:@openelement/router@${PACKAGE_VERSION}/cli/build`,
-      start: `deno run --config deno.json -A npm:@openelement/router@${PACKAGE_VERSION}/cli/start`,
+      // The public development command, same shape as the create template:
+      // scoped permissions with the Vite native binding allowed (build/dev
+      // host) and prompts off.
+      dev:
+        `deno run --config deno.json --allow-read --allow-write --allow-env --allow-net --allow-run --allow-sys --allow-ffi --no-prompt npm:vite@8.0.16 dev`,
+      build:
+        `deno run --config deno.json --allow-read --allow-write --allow-env --allow-net --allow-run --allow-sys --allow-ffi --no-prompt npm:@openelement/router@${PACKAGE_VERSION}/cli/build`,
+      start:
+        `deno run --config deno.json --allow-read --allow-write --allow-env --allow-net --allow-run --allow-sys --allow-ffi --no-prompt npm:@openelement/router@${PACKAGE_VERSION}/cli/start`,
       check: `deno check --config deno.json ${
         spec.checkEntries.map((entry) => `'${entry}'`).join(' ')
       }`,

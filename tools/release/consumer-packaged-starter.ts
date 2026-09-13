@@ -40,6 +40,7 @@ import { PACKAGE_VERSION, RETAINED_PACKAGE_NAMES } from '../repo/project-constan
 import { readPackages } from '../lib/package-graph.ts';
 import { tarballPath } from '../lib/npm-tarball.ts';
 import { extractStaticModuleSpecifiers } from '../lib/typescript-ast.ts';
+import { PACKED_PROBE_PERMISSIONS } from './consumer-packaged-shared.ts';
 
 async function readJson<T = unknown>(path: string | URL): Promise<T> {
   return JSON.parse(await Deno.readTextFile(path)) as T;
@@ -173,9 +174,10 @@ function findMissingGeneratedImports(
  */
 // ─── Packed three-browser matrix (starter island hydration + continuation) ─
 //
-// Playwright runs as a `deno run -A` child against the repo config (which
+// Playwright runs as a scoped-permission child against the repo config (which
 // maps @playwright/test), matching consumer-packaged-element.ts and the
-// fixture e2e tasks. Args: <baseUrl> <chromium|firefox|webkit>.
+// fixture e2e tasks (--deny-ffi --no-prompt: browser automation needs no
+// native binding). Args: <baseUrl> <chromium|firefox|webkit>.
 const PW_STARTER_PROBE_SCRIPT = `import { chromium, firefox, webkit } from '@playwright/test';
 
 const [baseUrl, browserName] = Deno.args;
@@ -280,7 +282,7 @@ async function runStarterBrowserMatrix(starter: string, tmp: string): Promise<vo
           'run',
           '--config',
           join(repoRoot, 'deno.json'),
-          '-A',
+          ...PACKED_PROBE_PERMISSIONS,
           probePath,
           baseUrl,
           browserName,
@@ -420,7 +422,23 @@ try {
   if (!install.success) throw new Error(`Packed package installation failed:\n${install.output}`);
 
   const createCli = join(tmp, 'node_modules', '@openelement', 'create', 'src', 'cli.js');
-  const create = await run(Deno.execPath(), ['run', '-A', createCli, 'starter'], tmp);
+  // The packed Create CLI only scaffolds files: read/write/env/net, no FFI,
+  // no prompts.
+  const create = await run(
+    Deno.execPath(),
+    [
+      'run',
+      '--allow-read',
+      '--allow-write',
+      '--allow-env',
+      '--allow-net',
+      '--deny-ffi',
+      '--no-prompt',
+      createCli,
+      'starter',
+    ],
+    tmp,
+  );
   if (!create.success) throw new Error(`Packed starter generation failed:\n${create.output}`);
 
   const starter = join(tmp, 'starter');

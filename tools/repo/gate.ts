@@ -89,7 +89,9 @@ async function defaultSpawn(step: string): Promise<number> {
   const child = new Deno.Command(Deno.execPath(), {
     args,
     cwd: repoRoot,
-    stdin: 'inherit',
+    // Gates never interact: stdin stays closed so a permission request fails
+    // closed instead of hanging on a prompt (non-interactive invariant).
+    stdin: 'null',
     stdout: 'inherit',
     stderr: 'inherit',
   }).spawn();

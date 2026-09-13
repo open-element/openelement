@@ -7,21 +7,16 @@
  *    support distribution from a clean temporary directory. The JSON report
  *    is deliberately portable: CI uploads it even if a platform-specific
  *    command fails, so adopters get the environment and the exact failed
- *    command rather than a truncated Actions log alone.
- *
- *      deno run -A tools/published-consumer-qualification.ts \
- *        [--mode starter|runtime|all] [--report <path>] [--version <x.y.z>]
+ *    command rather than a truncated Actions log alone. Run it through the
+ *    repo task (scoped permissions, prompts off), e.g.
+ *    `deno task --cwd tools/release consumer:element-smoke`.
  *
  * 2. Consumer smoke (`--smoke`): post-publish npm smoke test. Creates
  *    temporary consumer projects and verifies @openelement/element can be
  *    consumed from npm in Deno and Node. Also checks the exact-version
  *    starter, and on request the jsDelivr CDN browser-safe export and the
- *    Nitro build output.
- *
- *      deno run -A tools/published-consumer-qualification.ts --smoke
- *      deno run -A tools/published-consumer-qualification.ts --smoke --local
- *      deno run -A tools/published-consumer-qualification.ts --smoke --version <x.y.z>
- *      deno run -A tools/published-consumer-qualification.ts --smoke --version <x.y.z> --jsdelivr --nitro
+ *    Nitro build output. Same invocation rule: use the repo task, never a
+ *    broad-permission one-liner.
  *
  * This module also owns the canonical release-gate verdict contract (#1216,
  * A10.8; umbrella #1155; ADR-0151), formerly tools/gate-verdict.ts. A release
@@ -224,7 +219,12 @@ async function qualificationMain(): Promise<void> {
         Deno.execPath(),
         [
           'run',
-          '-A',
+          '--allow-read',
+          '--allow-write',
+          '--allow-env',
+          '--allow-net',
+          '--deny-ffi',
+          '--no-prompt',
           '--minimum-dependency-age',
           '0',
           `npm:@openelement/create@${options.version}`,
@@ -565,7 +565,12 @@ async function exactVersionStarterSmoke(version: string): Promise<void> {
       'deno',
       [
         'run',
-        '-A',
+        '--allow-read',
+        '--allow-write',
+        '--allow-env',
+        '--allow-net',
+        '--deny-ffi',
+        '--no-prompt',
         '--minimum-dependency-age',
         '0',
         `npm:@openelement/create@${version}`,

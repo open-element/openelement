@@ -103,9 +103,10 @@ async function patchDenoJson(appDir: string): Promise<void> {
     imports[specifier] = url;
   }
 
-  denoJson.tasks.build = `deno run --unstable-sloppy-imports --config deno.json -A ${
-    join(repoRoot, 'packages', 'router', 'src', 'cli', 'build.ts')
-  }`;
+  denoJson.tasks.build =
+    `deno run --unstable-sloppy-imports --config deno.json --allow-read --allow-write --allow-env --allow-net --allow-run --allow-sys --allow-ffi --no-prompt ${
+      join(repoRoot, 'packages', 'router', 'src', 'cli', 'build.ts')
+    }`;
 
   await Deno.writeTextFile(denoJsonPath, formatJson(denoJson));
 }
@@ -485,7 +486,17 @@ async function verifySsrHtml(appDir: string): Promise<void> {
  */
 export async function prepareFixtureApp(tmpRoot: string): Promise<string> {
   await run(
-    ['run', '-A', join(repoRoot, 'packages', 'create', 'src', 'cli.ts'), PROJECT_NAME],
+    [
+      'run',
+      '--allow-read',
+      '--allow-write',
+      '--allow-env',
+      '--allow-net',
+      '--deny-ffi',
+      '--no-prompt',
+      join(repoRoot, 'packages', 'create', 'src', 'cli.ts'),
+      PROJECT_NAME,
+    ],
     tmpRoot,
   );
   const appDir = join(tmpRoot, PROJECT_NAME);

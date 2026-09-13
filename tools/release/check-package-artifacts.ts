@@ -373,9 +373,17 @@ async function verifyTarball(pkg: PackageInfo): Promise<PackageScanResult> {
   const tarball = tarballPath(pkg);
   await Deno.stat(tarball);
 
+  // publint/ATTW are pure-JS verifiers: scoped permissions with FFI denied
+  // (fail closed, never prompt).
   await runCommand(Deno.execPath(), [
     'run',
-    '-A',
+    '--allow-read',
+    '--allow-write',
+    '--allow-env',
+    '--allow-net',
+    '--allow-run',
+    '--deny-ffi',
+    '--no-prompt',
     `npm:publint@${PUBLINT_VERSION}`,
     'run',
     tarball,
@@ -383,7 +391,13 @@ async function verifyTarball(pkg: PackageInfo): Promise<PackageScanResult> {
   ]);
   await runCommand(Deno.execPath(), [
     'run',
-    '-A',
+    '--allow-read',
+    '--allow-write',
+    '--allow-env',
+    '--allow-net',
+    '--allow-run',
+    '--deny-ffi',
+    '--no-prompt',
     `npm:@arethetypeswrong/cli@${ATTW_VERSION}`,
     '--profile',
     'esm-only',

@@ -59,7 +59,8 @@ export default defineConfig({
   ],
 
   webServer: {
-    command: `exec deno run --config deno.json -A ../../../../../packages/router/src/cli/start.ts`,
+    command:
+      `exec deno run --config deno.json --allow-read --allow-write --allow-env --allow-net --allow-run --allow-sys --allow-ffi --no-prompt ../../../../../packages/router/src/cli/start.ts`,
     cwd: new URL('./work/my-blog', import.meta.url).pathname,
     url: baseURL,
     reuseExistingServer: false,

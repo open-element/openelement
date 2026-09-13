@@ -718,9 +718,10 @@ async function patchApp(appDir: string): Promise<void> {
     imports[specifier] = target;
   }
   const tasks = denoJson.tasks ??= {};
-  tasks.build = `deno run --unstable-sloppy-imports --config deno.json -A ${
-    join(repoRoot, 'packages', 'router', 'src', 'cli', 'build.ts')
-  }`;
+  tasks.build =
+    `deno run --unstable-sloppy-imports --config deno.json --allow-read --allow-write --allow-env --allow-net --allow-run --allow-sys --allow-ffi --no-prompt ${
+      join(repoRoot, 'packages', 'router', 'src', 'cli', 'build.ts')
+    }`;
   await Deno.writeTextFile(denoPath, json(denoJson));
 
   await runCommand(
@@ -787,7 +788,12 @@ async function prepareInteropApp(
     Deno.execPath(),
     [
       'run',
-      '-A',
+      '--allow-read',
+      '--allow-write',
+      '--allow-env',
+      '--allow-net',
+      '--deny-ffi',
+      '--no-prompt',
       join(repoRoot, 'packages', 'create', 'src', 'cli.ts'),
       appProjectName,
     ],

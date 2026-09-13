@@ -254,7 +254,26 @@ export default class PackedLive extends OpenElement {
     Deno.writeTextFileSync(target, content);
   }
 
-  const build = await run(Deno.execPath(), ['run', '-A', 'build.mjs'], tmp, {}, BUILD_TIMEOUT_MS);
+  // build.mjs drives the packed router vite build (Rolldown native binding):
+  // scoped build-host permissions with prompts off.
+  const build = await run(
+    Deno.execPath(),
+    [
+      'run',
+      '--allow-read',
+      '--allow-write',
+      '--allow-env',
+      '--allow-net',
+      '--allow-run',
+      '--allow-sys',
+      '--allow-ffi',
+      '--no-prompt',
+      'build.mjs',
+    ],
+    tmp,
+    {},
+    BUILD_TIMEOUT_MS,
+  );
   if (!build.success) throw new Error(`Packed serve build failed:\n${build.output}`);
   for (const artifact of ['dist/server/index.js', 'dist/index.html']) {
     if (!existsSync(join(tmp, artifact))) {
@@ -275,9 +294,23 @@ export default class PackedLive extends OpenElement {
   if (existsSync(join(tmp, 'nitro-public', 'server'))) {
     throw new Error('Static publish leaked dist/server into the Nitro public dir');
   }
+  // Nitro 3 builds on a Rolldown-based pipeline (native binding): scoped
+  // build-host permissions with prompts off.
   const nitroBuild = await run(
     Deno.execPath(),
-    ['run', '-A', `npm:nitro@${NITRO_VERSION}`, 'build'],
+    [
+      'run',
+      '--allow-read',
+      '--allow-write',
+      '--allow-env',
+      '--allow-net',
+      '--allow-run',
+      '--allow-sys',
+      '--allow-ffi',
+      '--no-prompt',
+      `npm:nitro@${NITRO_VERSION}`,
+      'build',
+    ],
     tmp,
     {},
     BUILD_TIMEOUT_MS,

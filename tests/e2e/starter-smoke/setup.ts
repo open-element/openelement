@@ -55,7 +55,19 @@ function main(): void {
   const createCli = join(depsDir, 'create', 'src', 'cli.js');
   run(
     'deno',
-    ['run', '--minimum-dependency-age', '0', '-A', createCli, 'my-blog'],
+    [
+      'run',
+      '--minimum-dependency-age',
+      '0',
+      '--allow-read',
+      '--allow-write',
+      '--allow-env',
+      '--allow-net',
+      '--deny-ffi',
+      '--no-prompt',
+      createCli,
+      'my-blog',
+    ],
     workDir,
   );
 

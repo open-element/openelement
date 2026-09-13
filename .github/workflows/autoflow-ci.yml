@@ -145,7 +145,7 @@ jobs:
       - name: Pack the release tarballs
         run: deno task --cwd tools/release pack:dry-run
       - name: Packed serve proof under Node ${{ matrix.node }}
-        run: deno run --allow-read --allow-write --allow-run --allow-env --allow-net tools/release/consumer-packaged-node-serve.ts node
+        run: deno run --allow-read --allow-write --allow-run --allow-env --allow-net --deny-ffi --no-prompt tools/release/consumer-packaged-node-serve.ts node
 
   # #1228 (B2.5): the deployment guide and PACKAGE_SURFACE.md claim the
   # generated dist/server artifacts run on Bun. A claim that survives only on
@@ -185,7 +185,7 @@ jobs:
       - name: Pack the release tarballs
         run: deno task --cwd tools/release pack:dry-run
       - name: Packed serve proof under Bun
-        run: deno run --allow-read --allow-write --allow-run --allow-env --allow-net tools/release/consumer-packaged-node-serve.ts bun
+        run: deno run --allow-read --allow-write --allow-run --allow-env --allow-net --deny-ffi --no-prompt tools/release/consumer-packaged-node-serve.ts bun
 
   # Pre-publish packed-consumer matrix (1.0 Alpha convergence, item 5).
   # The current-SHA packed tarballs must install into a scratch consumer
