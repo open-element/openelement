@@ -22,12 +22,12 @@
  * </open-card>
  * ```
  */
-import { element, OpenElement, property } from '@openelement/element';
+import { element, OpenElement, property, type StyleSheetLike } from '@openelement/element';
 import { recipe, surfaceRecipe } from './component-recipes.ts';
 
 @element('open-card', { root: 'shadow-open' })
 export class OpenCard extends OpenElement {
-  static override styles = [
+  static override styles: StyleSheetLike[] = [
     surfaceRecipe,
     recipe(`
     :host {
@@ -97,7 +97,7 @@ export class OpenCard extends OpenElement {
   @property({ reflect: false })
   variant = '';
 
-  render() {
+  render(): unknown {
     return (
       <article class='surface' part='container'>
         <slot name='header'></slot>

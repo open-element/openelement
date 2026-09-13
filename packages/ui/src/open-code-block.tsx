@@ -25,13 +25,13 @@
  * </open-code-block>
  * ```
  */
-import { element, OpenElement, property } from '@openelement/element';
+import { element, OpenElement, property, type StyleSheetLike } from '@openelement/element';
 import { CODE_BLOCK_CONSTANTS, log, recipe } from './component-recipes.ts';
 import { readInstanceState, writeInstanceState } from './instance-state.ts';
 
 @element('open-code-block', { root: 'shadow-open' })
 export class OpenCodeBlock extends OpenElement {
-  static override styles = [recipe(`
+  static override styles: StyleSheetLike[] = [recipe(`
     :host {
       display: block;
       position: relative;
@@ -135,7 +135,7 @@ export class OpenCodeBlock extends OpenElement {
   @property({ reflect: false, attribute: false })
   copyLabel = 'Copy';
 
-  render() {
+  render(): unknown {
     return (
       <div style='display:contents'>
         <slot></slot>

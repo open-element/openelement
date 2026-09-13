@@ -19,7 +19,7 @@
  * <open-theme-toggle theme="light"></open-theme-toggle>
  * ```
  */
-import { element, OpenElement, property } from '@openelement/element';
+import { element, OpenElement, property, type StyleSheetLike } from '@openelement/element';
 import { log, recipe } from './component-recipes.ts';
 import { readInstanceState, writeInstanceState } from './instance-state.ts';
 
@@ -30,7 +30,7 @@ export class OpenThemeToggle extends OpenElement {
   // semantic token sheets are already injected as page-level <style> by
   // vite.config.ts — CSS custom properties cascade from :root naturally.
   // Only adopt the component-specific sheet.
-  static override styles = [recipe(`
+  static override styles: StyleSheetLike[] = [recipe(`
     :host {
       display: inline-block;
     }
@@ -80,7 +80,7 @@ export class OpenThemeToggle extends OpenElement {
   @property({ reflect: false })
   theme: 'dark' | 'light' = 'dark';
 
-  render() {
+  render(): unknown {
     return (
       <button
         type='button'

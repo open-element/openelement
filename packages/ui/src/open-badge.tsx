@@ -7,12 +7,12 @@
  *
  * @csspart badge - The badge span
  */
-import { element, OpenElement, property } from '@openelement/element';
+import { element, OpenElement, property, type StyleSheetLike } from '@openelement/element';
 import { recipe } from './component-recipes.ts';
 
 @element('open-badge', { root: 'shadow-open' })
 export class OpenBadge extends OpenElement {
-  static override styles = [recipe(`
+  static override styles: StyleSheetLike[] = [recipe(`
     :host {
       display: inline-flex;
       vertical-align: middle;
@@ -72,7 +72,7 @@ export class OpenBadge extends OpenElement {
   @property({ reflect: true })
   size = 'md';
 
-  render() {
+  render(): unknown {
     return (
       <span class='badge' part='badge'>
         <slot></slot>

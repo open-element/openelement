@@ -41,6 +41,7 @@ import {
   OpenElement,
   property,
   type ReadonlySignal,
+  type StyleSheetLike,
 } from '@openelement/element';
 import { controlRecipe, nextInstanceId, recipe, syncDisabledState } from './component-recipes.ts';
 
@@ -50,7 +51,7 @@ import { controlRecipe, nextInstanceId, recipe, syncDisabledState } from './comp
   formAssociated: true,
 })
 export class OpenInput extends OpenElement {
-  static override styles = [
+  static override styles: StyleSheetLike[] = [
     controlRecipe,
     recipe(`
     :host {
@@ -192,7 +193,7 @@ export class OpenInput extends OpenElement {
     this.error === '' || this.inputId === '' ? null : `${this.inputId}-error`
   );
 
-  render() {
+  render(): unknown {
     return (
       <div class='input-wrapper' part='wrapper'>
         <label part='label' for={this.idAttr} hidden={this.noLabel}>

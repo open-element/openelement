@@ -29,13 +29,13 @@
  * - `label` - Title text and aria-label of the dialog
  * - `mode` - `modal` (default, showModal()) or `non-modal` (show()); read at open time
  */
-import { effect, element, OpenElement, property } from '@openelement/element';
+import { effect, element, OpenElement, property, type StyleSheetLike } from '@openelement/element';
 import { overlayRecipe, recipe } from './component-recipes.ts';
 import { readInstanceState, writeInstanceState } from './instance-state.ts';
 
 @element('open-dialog', { root: 'shadow-open', delegatesFocus: true })
 export class OpenDialog extends OpenElement {
-  static override styles = [
+  static override styles: StyleSheetLike[] = [
     overlayRecipe,
     recipe(`
     :host {
@@ -128,7 +128,7 @@ export class OpenDialog extends OpenElement {
   @property({ reflect: false })
   label = '';
 
-  render() {
+  render(): unknown {
     return (
       <div style='display:contents'>
         <slot name='trigger' onClick={this.handleTrigger}></slot>

@@ -27,12 +27,13 @@ import {
   OpenElement,
   property,
   type ReadonlySignal,
+  type StyleSheetLike,
 } from '@openelement/element';
 import { CALLOUT_TYPE_ICONS, recipe } from './component-recipes.ts';
 
 @element('open-callout', { root: 'shadow-open' })
 export class OpenCallout extends OpenElement {
-  static override styles = [recipe(`
+  static override styles: StyleSheetLike[] = [recipe(`
     :host { display: block; }
     .callout {
       padding: var(--size-3) var(--size-4);
@@ -77,7 +78,7 @@ export class OpenCallout extends OpenElement {
   @property({ reflect: false, attribute: false, type: Boolean })
   headerHidden: ReadonlySignal<boolean> = computed(() => this.label === '');
 
-  render() {
+  render(): unknown {
     return (
       <div class='callout' part='container'>
         <div class='callout-header' hidden={this.headerHidden}>

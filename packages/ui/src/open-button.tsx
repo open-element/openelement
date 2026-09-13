@@ -30,6 +30,7 @@ import {
   OpenElement,
   property,
   type ReadonlySignal,
+  type StyleSheetLike,
 } from '@openelement/element';
 import { closestFormOf, controlRecipe, recipe, syncDisabledState } from './component-recipes.ts';
 
@@ -39,7 +40,7 @@ import { closestFormOf, controlRecipe, recipe, syncDisabledState } from './compo
   formAssociated: true,
 })
 export class OpenButton extends OpenElement {
-  static override styles = [
+  static override styles: StyleSheetLike[] = [
     controlRecipe,
     recipe(`
     :host {
@@ -201,7 +202,7 @@ export class OpenButton extends OpenElement {
   @property({ reflect: false, attribute: false, type: String })
   linkAriaDisabled: ReadonlySignal<string | null> = computed(() => this.disabled ? 'true' : null);
 
-  render() {
+  render(): unknown {
     return (
       <span style='display:contents'>
         <a

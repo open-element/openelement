@@ -20,13 +20,14 @@ import {
   OpenElement,
   property,
   type ReadonlySignal,
+  type StyleSheetLike,
 } from '@openelement/element';
 import { deepActiveElement, nextInstanceId, overlayRecipe, recipe } from './component-recipes.ts';
 import { readInstanceState, writeInstanceState } from './instance-state.ts';
 
 @element('open-dropdown', { root: 'shadow-open' })
 export class OpenDropdown extends OpenElement {
-  static override styles = [
+  static override styles: StyleSheetLike[] = [
     overlayRecipe,
     recipe(`
     :host {
@@ -65,7 +66,7 @@ export class OpenDropdown extends OpenElement {
     this.anchorName === '' ? '' : `position-anchor: ${this.anchorName}`
   );
 
-  render() {
+  render(): unknown {
     return (
       <div>
         <span

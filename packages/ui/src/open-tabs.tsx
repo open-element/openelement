@@ -18,13 +18,13 @@
  * @slot tab - Tab label element (one per panel)
  * @slot panel - Panel shown while its tab is active
  */
-import { effect, element, OpenElement, property } from '@openelement/element';
+import { effect, element, OpenElement, property, type StyleSheetLike } from '@openelement/element';
 import { nextInstanceId, recipe } from './component-recipes.ts';
 import { readInstanceState, writeInstanceState } from './instance-state.ts';
 
 @element('open-tabs', { root: 'shadow-open' })
 export class OpenTabs extends OpenElement {
-  static override styles = [recipe(`
+  static override styles: StyleSheetLike[] = [recipe(`
     :host {
       display: block;
     }
@@ -68,7 +68,7 @@ export class OpenTabs extends OpenElement {
   @property({ reflect: false, attribute: false })
   tabsId = '';
 
-  render() {
+  render(): unknown {
     return (
       <div>
         <div
