@@ -20,6 +20,24 @@ UI, showcase/site code, Reader/Mastodon, SaaS/reference applications, and agent/
 infrastructure are outside this repository. Their history remains in Git. Future reference apps
 must consume packed or published artifacts from an independent environment.
 
+### Amendment (2026-09-13): reconciled repository ownership
+
+The ownership sentence above is superseded. Reconciled for `1.0.0-alpha.1`:
+
+- Element and Router are the public framework core.
+- Create is the supported creation entry.
+- UI stays in this repository as an experimental product, outside the 1.0
+  stable API promise.
+- Site stays in this repository (`apps/site`) as the official product
+  surface.
+- SaaS stays in this repository (`apps/saas`) as the first-party core
+  consumer product and standard consumption shape.
+- "Not a core public package" does not mean "not owned by this
+  repository": UI/Site/SaaS do not extend the Element/Router stable API
+  promise, but all are maintained here. Daily development may use
+  workspace resolution; release qualification must install `deno pack`
+  tarballs, never relative internal source paths.
+
 ### Router
 
 Route Mode consumes explicit records. Its matching core is independent of Element, renderers, Vite,

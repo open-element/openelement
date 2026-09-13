@@ -1,5 +1,8 @@
 # @openelement/ui
 
+> Experimental product: maintained in the OpenElement repository, outside the
+> 1.0 stable API promise. APIs may change without a migration path during Alpha.
+
 First-party dogfood and reference UI package for OpenElement.
 
 Element and Router are the two core products; Router includes Framework Mode.

@@ -9,12 +9,15 @@ The source tree is `1.0.0-alpha.1`, a new public baseline for Element and Router
 
 ## Repository shape
 
-- `packages/element` — the Element product.
-- `packages/router` — Router Route Mode and Framework Mode implementation plus the application
+- `packages/element` — the Element core product.
+- `packages/router` — the Router core product: Route Mode and Framework Mode plus the application
   lifecycle tooling (`@openelement/router/vite`, `/nitro-mount`, `/cli/*`).
-- `packages/create` — thin consumer scaffolding for the two products.
+- `packages/create` — the supported creation entry for the two core products.
+- `packages/ui` — experimental UI product, maintained in this repository outside the 1.0 stable promise.
+- `apps/site` — the official product surface (documentation site).
+- `apps/saas` — the first-party core consumer product and standard consumption shape.
 
-UI components, Reader/Mastodon applications, reference SaaS projects, examples, and the documentation site are separate consumers rather than core-repository products. Historical snapshots remain available through Git tags.
+Element and Router are the public framework core; UI, Site, and SaaS do not extend their stable API promise, but all are owned and maintained by this repository. Historical snapshots remain available through Git tags.
 
 ## Development
 

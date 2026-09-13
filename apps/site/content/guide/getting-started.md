@@ -4,7 +4,7 @@ lede: 'OpenElement is a Web Components-native, static-first application framewor
 order: 1
 ---
 
-> `1.0.0-alpha.1` is the new baseline: a public prerelease published under the npm `alpha` dist-tag. There is no supported migration from 0.x — start new projects from `@openelement/create`.
+> `1.0.0-alpha.1` is the new baseline for Element and Router. There is no supported migration from 0.x — start new projects from `@openelement/create`.
 
 ## Install
 

@@ -9,13 +9,16 @@ Element 将 JSX 编写的 Custom Element 编译为 Part Program，并统一用�
 
 ## 仓库结构
 
-- `packages/element`：Element 产品。
-- `packages/router`：Router 的 Route Mode 与 Framework Mode 实现。
+- `packages/element`：Element 核心产品。
+- `packages/router`：Router 核心产品：Route Mode 与 Framework Mode 实现。
 - `packages/element` 的 `/compiler` 与 `/vite` 子路径：Element 编译与 Vite 工具集成；
   `packages/router` 的 `/vite`、`/cli/*` 与 `/nitro-mount` 子路径：Router 的应用生命周期与服务器输出。
-- `packages/create`：面向这两个产品的轻量脚手架。
+- `packages/create`：面向这两个核心产品的正式创建入口。
+- `packages/ui`：实验性 UI 产品，由本仓库维护，不在 1.0 稳定承诺内。
+- `apps/site`：官方产品表面（文档站点）。
+- `apps/saas`：第一方核心消费者产品与标准消费形态。
 
-UI 组件、Reader/Mastodon、参考 SaaS、示例及文档站点属于独立消费者，不再是核心仓库产品。历史快照继续由 Git 标签保存。
+Element 与 Router 是公共框架核心；UI、Site、SaaS 不扩大其稳定 API 承诺，但全部由本仓库拥有和维护。历史快照继续由 Git 标签保存。
 
 ## 开发
 

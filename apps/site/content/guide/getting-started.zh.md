@@ -4,7 +4,7 @@ lede: 'OpenElement 是以 Web Components 为原生契约、static-first 的应�
 order: 1
 ---
 
-> `1.0.0-alpha.1` 是新的基线：以 npm `alpha` dist-tag 发布的公开预发布版。不提供从 0.x 的受支持迁移路径——新项目请从 `@openelement/create` 开始。
+> `1.0.0-alpha.1` 是 Element 与 Router 的新基线。不提供从 0.x 的受支持迁移路径——新项目请从 `@openelement/create` 开始。
 
 ## 安装
 
