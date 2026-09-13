@@ -13,7 +13,7 @@
  * now wins under the stub, so the next request renders the edited module.
  *
  * Prerequisites:
- *   deno run -A e2e/starter-smoke/setup.ts
+ *   deno task starter-smoke:setup
  *
  * Run: deno task test:starter-smoke:dev
  */
