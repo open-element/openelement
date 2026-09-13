@@ -6,10 +6,10 @@
  *
  *   - static page routes come from the adapter route scanner (the file-owned
  *     route catalog);
- *   - dynamic-but-public routes come from explicit enumeration: the committed,
- *     drift-gated content graph's blog-post entries (the same truth the
- *     route's getStaticPaths projects). An unenumerated dynamic page route
- *     fails closed instead of silently dropping out of the public index;
+ *   - dynamic-but-public routes come from explicit enumeration: the blog
+ *     collection loaded straight from source (the same posts the route's
+ *     getStaticPaths projects). An unenumerated dynamic page route fails
+ *     closed instead of silently dropping out of the public index;
  *   - error documents (/404) are never sitemap entries, and the exclude list
  *     below removes routes that are real pages but not a public surface
  *     (#1148 probe);
@@ -47,7 +47,7 @@ export const SITE_SITEMAP_EXCLUDE: readonly string[] = ['/probe-light'];
 export interface EnumeratePublicRoutesOptions {
   /** Route catalog from the adapter route scanner. */
   routes: readonly SiteRouteCatalogEntry[];
-  /** Blog-post routes enumerated from the drift-gated content graph. */
+  /** Blog-post routes enumerated from the source-loaded blog collection. */
   blogPostRoutes: readonly string[];
   /** Site locales; the first is the default (unprefixed) locale. */
   locales: readonly string[];

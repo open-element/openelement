@@ -1,7 +1,7 @@
-// Current source line. The npm registry line may lag by one alpha (see
-// docs/status/STATUS.md); prose that claims a published line must not use
-// this constant directly.
-export const OPENELEMENT_VERSION = 'v0.44.0-beta.2.2';
+// Current source line. The npm registry line may lag (publish is a gated
+// human authorization, not an automatic step); prose that claims a published
+// line must not use this constant directly.
+export const OPENELEMENT_VERSION = 'v1.0.0-alpha.1';
 
 // Current npm registry line — the newest actually published five-package
 // release. Registry-line copy must use this constant; OPENELEMENT_VERSION is

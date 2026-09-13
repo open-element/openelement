@@ -8,9 +8,8 @@
  *   apps/site/app/data/_generated-blog-data.ts
  *
  * The remaining modules under apps/site/app/data/ (_generated-api-reference.ts,
- * _generated-content-graph.json, version.ts) have no generator on this line
- * yet and are consumed as ordinary checked-in modules; the API reference has
- * its own `deno task generate:api-reference` gate.
+ * version.ts) are consumed as ordinary checked-in modules; the API reference
+ * has its own `deno task generate:api-reference` gate.
  */
 import {
   loadCollectionData,

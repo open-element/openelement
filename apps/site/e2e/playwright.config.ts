@@ -55,7 +55,7 @@ export default defineConfig({
     screenshot: 'only-on-failure',
   },
 
-  // Auto-start a Deno static file server for www/dist/.
+  // Auto-start a Deno static file server for apps/site/dist/.
   // Callers that need parallel isolation can pass openElement_E2E_PORT.  A
   // deterministic default keeps the server and all workers on the same URL.
   webServer: {

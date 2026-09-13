@@ -6,11 +6,12 @@
  * new public route is covered the moment the build emits it, and a missing
  * or empty sitemap fails the suite closed. A second fail-closed cross-check
  * requires every guide/architecture article route from the generated content
- * graph (tools/lib/content-graph.ts truth) to appear in the sitemap in both
- * locales, so a source-level route that never reached the built public
- * surface is a CI failure here as well. Blog post URLs are slug-rewritten by
- * the blog plugin at build time, so the built sitemap is their only
- * mechanical source of truth (they are covered by the enumeration itself).
+ * content sources (apps/site/content/{guide,architecture}/*.md, paired en/zh)
+ * to appear in the sitemap in both locales, so a source-level route that
+ * never reached the built public surface is a CI failure here as well. Blog
+ * post URLs are slug-rewritten by the blog plugin at build time, so the
+ * built sitemap is their only mechanical source of truth (they are covered
+ * by the enumeration itself).
  *
  * Per route, the smoke assertion is user-visible: the page answers < 400,
  * carries the correct html lang for its locale, renders exactly one visible
@@ -19,20 +20,13 @@
  */
 
 import { expect, test } from '@playwright/test';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const WWW_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
-const SITEMAP_PATH = join(WWW_ROOT, 'dist', 'sitemap.xml');
-const CONTENT_GRAPH_PATH = join(WWW_ROOT, 'app', 'data', '_generated-content-graph.json');
-
-interface GraphEntryLite {
-  route?: string;
-  locale?: string;
-  kind?: string;
-  alternates?: Array<{ locale?: string }>;
-}
+const SITE_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
+const SITEMAP_PATH = join(SITE_ROOT, 'dist', 'sitemap.xml');
+const CONTENT_DIR = join(SITE_ROOT, 'content');
 
 /** Public routes enumerated from the built sitemap; throws fail-closed. */
 function readSitemapRoutes(): string[] {
@@ -52,29 +46,40 @@ function readSitemapRoutes(): string[] {
   return routes;
 }
 
-/** Fail-closed drift check: content-graph article routes ⊆ sitemap routes. */
-function contentGraphDrift(sitemapRoutes: Set<string>): string[] {
-  let graph: { entries?: GraphEntryLite[] };
-  try {
-    graph = JSON.parse(readFileSync(CONTENT_GRAPH_PATH, 'utf-8'));
-  } catch (error) {
-    return [`content graph unreadable at ${CONTENT_GRAPH_PATH}: ${error}`];
-  }
+/** Article collection bases mirrored from apps/site/content-collections.ts. */
+const ARTICLE_COLLECTIONS = ['guide', 'architecture'] as const;
+
+/**
+ * Fail-closed drift check: every article source route ⊆ sitemap routes.
+ * Derived independently from the Markdown sources (X.md => en, X.zh.md => zh)
+ * rather than from any intermediate index, so a page the build drops is
+ * caught here.
+ */
+function contentSourceDrift(sitemapRoutes: Set<string>): string[] {
   const failures: string[] = [];
-  for (const entry of graph.entries ?? []) {
-    if (entry.kind !== 'article' || typeof entry.route !== 'string') continue;
-    if (!sitemapRoutes.has(entry.route)) {
-      failures.push(`content-graph route '${entry.route}' is missing from the built sitemap`);
+  for (const collection of ARTICLE_COLLECTIONS) {
+    let files: string[];
+    try {
+      files = readdirSync(join(CONTENT_DIR, collection));
+    } catch (error) {
+      return [`content collection unreadable at ${collection}: ${error}`];
     }
-    for (const alternate of entry.alternates ?? []) {
+    const slugs = new Set<string>();
+    const zhSlugs = new Set<string>();
+    for (const file of files) {
+      if (!file.endsWith('.md')) continue;
+      if (file.endsWith('.zh.md')) zhSlugs.add(file.slice(0, -'.zh.md'.length));
+      else slugs.add(file.slice(0, -'.md'.length));
+    }
+    for (const slug of slugs) {
+      const route = `/${collection}/${slug}`;
+      if (!sitemapRoutes.has(route)) {
+        failures.push(`article route '${route}' is missing from the built sitemap`);
+      }
       // The default locale (en) is served at the canonical unprefixed route —
       // covered by the check above; only non-default alternates prefix.
-      if (typeof alternate.locale !== 'string' || alternate.locale === 'en') continue;
-      const localized = `/${alternate.locale}${entry.route}`;
-      if (!sitemapRoutes.has(localized)) {
-        failures.push(
-          `locale alternate '${localized}' of '${entry.route}' is missing from the built sitemap`,
-        );
+      if (zhSlugs.has(slug) && !sitemapRoutes.has(`/zh${route}`)) {
+        failures.push(`locale alternate '/zh${route}' is missing from the built sitemap`);
       }
     }
   }
@@ -88,8 +93,8 @@ function expectedLocale(route: string): string {
 const routes = readSitemapRoutes();
 
 test.describe('Public IA route coverage', () => {
-  test('sitemap covers every content-graph article route in every locale', () => {
-    expect(contentGraphDrift(new Set(routes))).toEqual([]);
+  test('sitemap covers every article source route in every locale', () => {
+    expect(contentSourceDrift(new Set(routes))).toEqual([]);
   });
 
   for (const route of routes) {

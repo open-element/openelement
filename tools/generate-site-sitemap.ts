@@ -1,13 +1,15 @@
 /**
- * Generate site sitemap.xml + robots.txt from the route catalog (Beta.2.2,
- * #1327). Runs in `deno task site:build` after the router build: the public
- * index is enumerated from the route catalog and the drift-gated content
- * graph — never by scanning built output or request-time Documents.
+ * Generate site sitemap.xml + robots.txt from the route catalog (#1327).
+ * Runs in `deno task site:build` after the router build: the public index is
+ * enumerated from the route catalog plus the blog collection loaded straight
+ * from source — never by scanning built output or request-time Documents,
+ * and never from a hand-synced index.
  * Fails closed: an unenumerable dynamic route or a duplicate fails the build.
  */
-import { join } from '@std/path';
+import { fromFileUrl, join } from '@std/path';
+import { loadCollectionData } from '../apps/site/lib/content.ts';
+import { blogCollection, prepareBlogPosts } from '../apps/site/lib/blog.ts';
 import { scanSiteRoutes } from './lib/site-route-scan.ts';
-import type { ContentGraph } from './lib/content-graph.ts';
 import {
   enumeratePublicRoutes,
   renderRobotsTxt,
@@ -17,14 +19,15 @@ import {
 
 export const SITE_DIST = 'apps/site/dist';
 const SITE_ROUTES = 'apps/site/app/routes';
-const CONTENT_GRAPH = 'apps/site/app/data/_generated-content-graph.json';
 const SITE_LOCALES = ['en', 'zh'] as const;
 
+const siteRoot = fromFileUrl(new URL('../apps/site/', import.meta.url));
+
 export async function generateSiteSitemap(dist = SITE_DIST): Promise<string[]> {
-  const graph = JSON.parse(await Deno.readTextFile(CONTENT_GRAPH)) as ContentGraph;
-  const blogPostRoutes = graph.entries
-    .filter((entry) => entry.kind === 'blog-post' && entry.route !== undefined)
-    .map((entry) => entry.route as string);
+  const blogOptions = { ...blogCollection, contentDir: join(siteRoot, blogCollection.contentDir) };
+  const blogPostRoutes = prepareBlogPosts(await loadCollectionData('blog', blogOptions)).map(
+    (post) => `/blog/${post.slug}`,
+  );
   const routes = await scanSiteRoutes(SITE_ROUTES);
   const { routes: publicRoutes, failures } = enumeratePublicRoutes({
     routes,
