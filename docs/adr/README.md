@@ -1,6 +1,6 @@
 # Active decisions
 
-Only decisions that still govern hard-to-reverse Element or Router contracts remain here. Retired decisions are indexed in [the historical decision index](../history/decision-index.md) and preserved in Git history.
+Only decisions that still govern hard-to-reverse Element or Router contracts remain here. Retired decisions are preserved in Git history; this repository keeps no separate historical decision index.
 
 - [ADR-0108-deno-native-npm-distribution.md](./ADR-0108-deno-native-npm-distribution.md)
 - [ADR-0110-two-product-doctrine-and-package-truth.md](./ADR-0110-two-product-doctrine-and-package-truth.md)

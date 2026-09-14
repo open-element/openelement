@@ -1,6 +1,7 @@
 import { assert, assertEquals, assertFalse, assertThrows } from '@std/assert';
 import { existsSync } from '@std/fs';
 import { join } from '@std/path';
+import { CREATE_VERSION } from '../src/version.ts';
 import {
   assertUnifiedProductVersions,
   buildTemplates,
@@ -94,6 +95,24 @@ Deno.test('embedded CLI version matches its package manifest', () => {
   const manifest = JSON.parse(Deno.readTextFileSync(join(packageDir, 'deno.json')));
   const versionSource = Deno.readTextFileSync(join(packageDir, 'src', 'version.ts'));
   assert(versionSource.includes(`'${manifest.version}'`));
+});
+
+Deno.test('Alpha README never emits an untagged create install command', () => {
+  const readme = Deno.readTextFileSync(join(packageDir, 'README.md'));
+  const installs = [...readme.matchAll(/npm:@openelement\/create(?:@([^\s`]+))?/g)];
+  assert(installs.length > 0, 'README must document at least one install command');
+  for (const [command, tag] of installs) {
+    // A versionless `npm:@openelement/create` resolves the stable 0.43 line.
+    assert(tag, `install command must carry an explicit tag or version: ${command}`);
+  }
+  assert(
+    readme.includes('npm:@openelement/create@alpha my-app'),
+    'the primary Alpha install path must use the @alpha dist-tag',
+  );
+  assert(
+    readme.includes(`npm:@openelement/create@${CREATE_VERSION}`),
+    `README must document the exact Alpha version @${CREATE_VERSION}`,
+  );
 });
 
 Deno.test('Create and all support-distribution packages share one release version', () => {

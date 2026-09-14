@@ -62,7 +62,7 @@ a return to the retired product graph.
 
 | Gate         | Requirement                                                                     |
 | ------------ | ------------------------------------------------------------------------------- |
-| 5 packages   | Current consumer surface, starter and docs agree.                               |
+| 4 packages   | Current consumer surface, starter and docs agree.                               |
 | ADR-0122     | 0.42.0 frozen (ACCEPTED); the 0.41.x static freeze under ADR-0119 is untouched. |
 | 3 browsers   | Candidate releases require Chromium, Firefox and WebKit proof.                  |
 | packed proof | Consumers build from public artifacts, not workspace aliases.                   |

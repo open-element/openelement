@@ -1,5 +1,5 @@
 /**
- * build-pagefind.ts - Pagefind search index generation for the www site.
+ * build-pagefind.ts - Pagefind search index generation for the site.
  *
  * Runs after the vite/SSG build (`deno task build`). Replaces the old
  * bespoke public/search-index.json pipeline (ADR-0123 item 17, #867).
@@ -12,10 +12,10 @@
  *      is identical on every page and would otherwise flood the index;
  *   2. unwrap every remaining `<template>` tag so page prose becomes
  *      indexable light-DOM text.
- * The transform only touches the throwaway staging copy; www/dist itself is
- * untouched apart from the emitted /pagefind directory.
+ * The transform only touches the throwaway staging copy; apps/site/dist itself
+ * is untouched apart from the emitted /pagefind directory.
  *
- * Usage: deno task www:pagefind
+ * Usage: run after the site build (`deno task site:build`); no dedicated task.
  */
 
 import { walk } from '@std/fs/walk';
@@ -64,7 +64,7 @@ async function stageDist(): Promise<number> {
 }
 
 const staged = await stageDist();
-console.log(`Pagefind: staged ${staged} HTML file(s) from www/dist`);
+console.log(`Pagefind: staged ${staged} HTML file(s) from apps/site/dist`);
 
 const { errors, index } = await createIndex();
 if (!index) {

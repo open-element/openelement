@@ -23,7 +23,7 @@ const content = {
     specOutput: 'Server output',
     begin: 'Begin.',
     beginNote:
-      `The default dist-tag is stable ${PUBLISHED_STABLE_VERSION}; --minimum-dependency-age 0 keeps same-day compatible patches installable despite Deno's default ~24h minimumDependencyAge.`,
+      `The @alpha dist-tag tracks the 1.0 prerelease line; a versionless install stays on the stable 0.43 line. --minimum-dependency-age 0 keeps same-day compatible patches installable despite Deno's default ~24h minimumDependencyAge.`,
     facts: 'Facts behind the feeling',
     continueComposition: 'Continue the composition.',
     referenceCopy:
@@ -45,7 +45,7 @@ const content = {
     specOutput: '服务端输出',
     begin: '开始。',
     beginNote:
-      `默认 dist-tag 即稳定版 ${PUBLISHED_STABLE_VERSION}；--minimum-dependency-age 0 可绕过 Deno 默认约 24 小时的 minimumDependencyAge，使当天发布的兼容补丁仍可安装。`,
+      `@alpha dist-tag 跟踪 1.0 预发布线；不带 tag 的安装仍指向稳定 0.43 线。--minimum-dependency-age 0 可绕过 Deno 默认约 24 小时的 minimumDependencyAge，使当天发布的兼容补丁仍可安装。`,
     facts: '感觉背后的事实',
     continueComposition: '继续这场组合。',
     referenceCopy: '每一个场景都立足于公开产品面、架构与发布真相——不是装饰性的虚构。',
@@ -120,7 +120,7 @@ const references = [
     '/guide/getting-started',
     'Create a real app from the supported public interface.',
   ],
-  ['02', 'API reference', '/apilist', 'Inspect the five-package surface and optional primitives.'],
+  ['02', 'API reference', '/apilist', 'Inspect the four-package surface and optional primitives.'],
   [
     '03',
     'Architecture',

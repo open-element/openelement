@@ -10,7 +10,7 @@
  *   - JSX must be available from the supported Element root
  *   - parse5 must NOT be a dependency
  *
- * Run: deno test www/__tests__/v0.27.0-regression.test.ts --allow-read --allow-run
+ * Run: deno test apps/site/__tests__/v0.27.0-regression.test.ts --allow-read --allow-run
  * Prerequisite: `deno task build`
  */
 

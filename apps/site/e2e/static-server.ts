@@ -26,7 +26,7 @@ const args = Object.fromEntries(
 );
 
 const PORT = Number(args.port ?? '4174');
-const ROOT = args.dir ?? 'www/dist';
+const ROOT = args.dir ?? 'apps/site/dist';
 
 const server = serveStatic(ROOT, { port: findPort(PORT) });
 console.log(`E2E static server listening on ${server.origin}`);

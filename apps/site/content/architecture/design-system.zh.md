@@ -1,11 +1,11 @@
 ---
 title: '设计体系'
-lede: 'www 站点当前生效的 dogfood 契约：经过审计的 Open Props token、沿用的 UI 原语、产品化图示，以及完整的暗色模式对等。它不是框架的强制要求。'
+lede: '站点当前生效的 dogfood 契约：经过审计的 Open Props token、沿用的 UI 原语、产品化图示，以及完整的暗色模式对等。它不是框架的强制要求。'
 order: 15
 ---
 
 - 只使用严格的 Open Props 与语义化 token。
-- 只有可复用的原语才进入 `@openelement/ui`；站点视觉留在 `www`。
+- 只有可复用的原语才进入 `@openelement/ui`；站点视觉留在 `apps/site`。
 - 动效尊重 reduced-motion 偏好。
 - 不做 Linear 翻版、装饰性色块或局部色彩体系。
 - Letter spacing 保持为 `0`。

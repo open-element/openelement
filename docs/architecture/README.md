@@ -9,7 +9,6 @@ adapt, scaffold, build, and distribute those products.
 - [Router and server runtime](./router-and-server-runtime.md)
 - [Packages and distribution](./packages-and-distribution.md)
 - [Security and release engineering](./security-and-release-engineering.md)
-- [1.0 Alpha final convergence audit](./1.0-alpha-final-convergence-audit.md)
 
 Active ADRs retain decisions that still constrain the implementation. Retired
 decisions remain recoverable from Git history.

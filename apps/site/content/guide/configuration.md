@@ -36,7 +36,7 @@ export default defineConfig({
 The 1.0 router ships routing, locale/render context, the SSG descriptor and Document ownership — not a CMS or content database. A site owns its Markdown pipeline. This repository's reference site validates frontmatter against declarative schemas, renders with `marked`, treats the rendered HTML as first-party trusted content (`trustCollectionHtml` in `apps/site/lib/content.ts`, `trustedHtml` trust level — untrusted sources must be sanitized at your own boundary first), defines collections in `apps/site/lib/blog.ts`, and writes typed data modules with `tools/generate-site-content-data.ts`:
 
 ```sh
-deno task generate:site-content-data   # www:build runs this before the router build
+deno task generate:site-content-data   # site:build runs this before the router build
 ```
 
 Generated modules are consumed through the site's own import-map alias — there is no framework virtual module:

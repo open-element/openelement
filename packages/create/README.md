@@ -2,25 +2,38 @@
 
 Project scaffolding CLI for openElement applications.
 
-> Stable surface (frozen under ADR-0122):
-> Framework product entry. This package is part of the
-> first-run Framework story alongside `@openelement/router` and
-> `@openelement/router` lifecycle tooling.
+> 1.0 Alpha line: the supported creation entry for Element and Router. The npm
+> `alpha` dist-tag tracks the `1.0.0-alpha.1` prerelease line; `latest` stays
+> on the stable 0.43 line until a separately admitted stable release.
 
 `@openelement/create` generates a new openElement project with the recommended
 directory structure, Deno configuration, Vite setup, and starter pages.
 
-## Usage
+## Usage (1.0 Alpha)
 
 ```bash
-deno run --allow-read --allow-write --allow-env --allow-net --deny-ffi --no-prompt --minimum-dependency-age 0 npm:@openelement/create my-app
+deno run --allow-read --allow-write --allow-env --allow-net --deny-ffi --no-prompt --minimum-dependency-age 0 npm:@openelement/create@alpha my-app
 cd my-app
 deno task dev
 ```
 
-The default dist-tag is the stable 0.43 line, and
+`@alpha` tracks the 1.0 prerelease line; pin the exact version with
+`npm:@openelement/create@1.0.0-alpha.1` when reproducibility matters.
 `--minimum-dependency-age 0` is needed because Deno's default
 minimumDependencyAge (~24h) refuses packages published within the last day.
+
+The generated starter pins the exact `@openelement/*` versions it was built
+from in its `deno.json` import map.
+
+## Stable 0.43 (maintenance line)
+
+The stable 0.43 line is still published, but it is not the Alpha install path.
+A versionless install resolves the npm `latest` dist-tag to it; pin the line
+explicitly instead:
+
+```bash
+deno run --allow-read --allow-write --allow-env --allow-net --deny-ffi --no-prompt --minimum-dependency-age 0 npm:@openelement/create@0.43 my-app
+```
 
 ## Requirements
 

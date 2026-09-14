@@ -120,7 +120,7 @@ export default class PageHome extends OpenElement {
             </div>
             <div class='spec-cell'>
               <small>{this.specGraph}</small>
-              <strong>five packages</strong>
+              <strong>four packages</strong>
             </div>
             <div class='spec-cell'>
               <small>{this.specEngines}</small>
@@ -265,7 +265,7 @@ export class OpenCounter extends OpenElement {
             <code>$</code>
             <span>
               deno run --allow-read --allow-write --allow-env --allow-net --deny-ffi --no-prompt
-              --minimum-dependency-age 0 npm:@openelement/create my-app
+              --minimum-dependency-age 0 npm:@openelement/create@alpha my-app
             </span>
           </div>
           <p class='command-note'>{this.beginNote}</p>

@@ -5,6 +5,10 @@ A file-based openElement app: page routes live in `app/routes/`, compiled page
 elements and shared style sheets in `app/components/`, and client islands
 (including the `app-shell` layout island) in `app/islands/`.
 
+This starter pins the exact `@openelement/element` and `@openelement/router`
+versions it was generated from (`${v.element}`) in `deno.json`; update both
+there when moving to a new release.
+
 Pages use light roots: page classes are not registered client-side and the
 compiled serializer never inlines styles into SSR output, so page rules live
 in the global baseline in `vite.config.ts`, scoped under each page's host

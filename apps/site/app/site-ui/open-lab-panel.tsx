@@ -1,6 +1,6 @@
 /** @jsxImportSource @openelement/element */
 /**
- * www/site-ui - open-lab-panel
+ * apps/site/app/site-ui - open-lab-panel
  *
  * Standards-lab panel for specs, artifact frames, and reference desks.
  */

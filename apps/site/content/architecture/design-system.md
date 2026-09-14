@@ -1,11 +1,11 @@
 ---
 title: 'Design System'
-lede: 'The active www dogfood contract: audited Open Props tokens, retained UI primitives, product-art diagrams and full dark-mode parity. It is not a framework requirement.'
+lede: 'The active site dogfood contract: audited Open Props tokens, retained UI primitives, product-art diagrams and full dark-mode parity. It is not a framework requirement.'
 order: 15
 ---
 
 - Strict Open Props and semantic tokens only.
-- Only reusable primitives live in `@openelement/ui`; site visuals stay in `www`.
+- Only reusable primitives live in `@openelement/ui`; site visuals stay in `apps/site`.
 - Kinetic motion respects reduced-motion preferences.
 - No Linear clone, decorative blobs, or local color systems.
 - Letter spacing remains `0`.

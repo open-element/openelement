@@ -12,6 +12,6 @@ Standard Custom Elements and Declarative Shadow DOM define the durable component
 
 `Request`, `Response` and `FormData` are the basis of the 0.42 loader/action surfaces — application interaction without a proprietary transport.
 
-## Five-package ownership
+## Four-package ownership
 
-`Element`, `App`, `Adapter Vite`, `Create` and optional `UI` are the current consumer surface; internal contracts stay internal.
+`Element`, `Router`, `Create` and the experimental `UI` package are the current consumer surface; internal contracts stay internal.

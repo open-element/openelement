@@ -11,7 +11,7 @@ const content = {
   en: {
     headTitle: 'Documentation',
     headDescription:
-      'openElement documentation: guides, architecture notes and the supported public surface of the five consumer packages.',
+      'openElement documentation: guides, architecture notes and the supported public surface of the four consumer packages.',
     sidenote: 'Spec-042 · Docs index',
     eyebrow: 'Docs — The manual',
     serifLine: 'Read the',
@@ -21,7 +21,7 @@ const content = {
   },
   zh: {
     headTitle: '文档',
-    headDescription: 'openElement 文档：指南、架构说明，以及五个面向使用者包的受支持公开面。',
+    headDescription: 'openElement 文档：指南、架构说明，以及四个面向使用者包的受支持公开面。',
     sidenote: 'Spec-042 · 文档索引',
     eyebrow: 'Docs — 手册',
     serifLine: '通读',
@@ -34,13 +34,13 @@ const content = {
 const entrances = {
   en: [
     ['Get started', 'Zero to a running application in three commands.', '/guide/getting-started'],
-    ['API reference', 'The five-package surface, export by export.', '/apilist'],
+    ['API reference', 'The four-package surface, export by export.', '/apilist'],
     ['Architecture', 'Who owns what, and why the boundaries hold.', '/architecture/architecture'],
     ['Roadmap', 'Where the stable line goes next.', '/roadmap'],
   ],
   zh: [
     ['快速开始', '三条命令，从零到可运行的应用。', '/guide/getting-started'],
-    ['API 参考', '五个包的接口面，逐个 export 列出。', '/apilist'],
+    ['API 参考', '四个包的接口面，逐个 export 列出。', '/apilist'],
     ['架构', '谁负责什么，以及边界为何成立。', '/architecture/architecture'],
     ['路线图', 'stable 线的下一步走向。', '/roadmap'],
   ],

@@ -1,5 +1,5 @@
 /**
- * article-body.ts — shared long-form article treatment for www routes.
+ * article-body.ts — shared long-form article treatment for site routes.
  *
  * Extracted from routes/blog/[slug].tsx so the blog and the guide section
  * render identical prose typography (the guide redesign references the blog

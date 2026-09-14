@@ -1,5 +1,5 @@
 /**
- * The single write path for www page <head> meaning (Beta.2.2, #1327).
+ * The single write path for site page <head> meaning (Beta.2.2, #1327).
  *
  * Every route module declares its head through the page descriptor (static
  * object or resolver); this helper owns the site-wide derivation rules so the

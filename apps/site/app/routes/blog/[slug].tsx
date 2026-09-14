@@ -74,8 +74,8 @@ export default definePage(PageBlogPost, {
     }
 
     const tags = post.frontmatter.tags ?? [];
-    // #1307: dispatches are single-language originals (the www:check-truth
-    // blog-language gate requires the `lang` frontmatter). When the rendered
+    // #1307: dispatches are single-language originals (`lang` frontmatter
+    // records the original language). When the rendered
     // locale does not match the post's language, say so instead of letting
     // the locale prefix imply a translation.
     const postLang = post.frontmatter.lang ?? 'en';

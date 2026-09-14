@@ -5,12 +5,15 @@
 > projects should still start from `@openelement/create`.
 
 Maintained first-party SaaS for the OpenElement × Supabase × Cloudflare
-fullstack delivery path (epic #981, issue #983). Composition only: no
-framework-owned auth/database abstractions — Supabase owns data/Auth/RLS,
-Cloudflare owns edge delivery, OpenElement is the Web Components-native
-application layer.
+fullstack delivery path. Composition only: no framework-owned auth/database
+abstractions — Supabase owns data/Auth/RLS, Cloudflare owns edge delivery,
+OpenElement is the Web Components-native application layer.
 
-## Status: working product
+## Status
+
+Implemented and unit-tested in this candidate. Hosted and deployed
+qualification is external pending; see
+[Qualification status](#qualification-status).
 
 - [x] application shell + request-time routes (login, signup, Magic Link,
       PKCE callback, recovery/reset, notes, upload, admin)
@@ -27,9 +30,9 @@ application layer.
 - [x] application-owned Cloudflare module entry composes Nitro `fetch` with
       Queue scan and Cron reconciliation handlers; unscanned objects stay
       hidden, duplicate verdicts are idempotent, and lifecycle events are audited
-- [x] Tier 3 deployment can render a generated bounded Queue/DLQ/Cron overlay
-      from the one safe Wrangler source; DLQ rows persist before ack and admin
-      replay is durable; no duplicate provider config is maintained
+- [x] deployment renders a generated bounded Queue/DLQ/Cron overlay from the
+      one safe Wrangler source; DLQ rows persist before ack and admin replay
+      is durable; no duplicate provider config is maintained
 - [x] notes-live island: Supabase Realtime INSERT subscription in the browser,
       RLS-scoped via the user's short-lived access token + a hard `user_id`
       filter, with bounded/deduplicated state and a periodic RLS Data API
@@ -55,7 +58,9 @@ application layer.
 
 - Deno (workspace tasks), Node (Nitro `node` preset run),
 - Supabase CLI + Docker (local emulator; migrations), or a hosted project,
-- Cloudflare account for deployment (wrangler, secret-boundary runbook).
+- Cloudflare account for deployment (wrangler; see
+  [`docs/runbooks/payment-events.md`](../../docs/runbooks/payment-events.md)
+  for the server-side secret boundary),
 - An operator-selected malware scanner for production attachment scanning.
   MetaDefender Core is a reference adapter; the scanner fails closed when no
   provider is configured.
@@ -73,14 +78,15 @@ deno task test         # unit smoke for route logic (stubbed Supabase client)
 ## Migrations
 
 ```sh
-supabase link --project-ref <ref>
-supabase db push        # applies ordered, manifest-checked migrations
+supabase start          # local emulator
+supabase migration up   # apply ordered migrations locally
 ```
 
-Production migration checks and deployment use the pinned
-`Supabase project smoke (real project)` workflow and the dedicated credentials documented in
-[`docs/runbooks/supabase-migrations.md`](../../docs/runbooks/supabase-migrations.md). Runtime
-service-role credentials are not migration credentials.
+Local development and tests run against the emulator. Hosted-project
+migration and deployment qualification is external pending; the operator
+procedure, credential boundary, and rollback policy are documented in
+[`docs/runbooks/supabase-migrations.md`](../../docs/runbooks/supabase-migrations.md).
+Runtime service-role credentials are not migration credentials.
 
 Payment delivery, DLQ recovery, and replay operations are documented in
 [`docs/runbooks/payment-events.md`](../../docs/runbooks/payment-events.md).
@@ -126,19 +132,22 @@ handlers and must never be rendered or prefixed with `VITE_`.
 
 ## Qualification status
 
-- Historical Tier 2 real Supabase password/OAuth/RLS/Realtime matrix: green
-  (14/14 on 2026-08-18), evidence in
-  [`docs/evidence/2026-08-18-reference-saas-freeze-check.md`](../../docs/evidence/2026-08-18-reference-saas-freeze-check.md).
-- Current v0.43.1 requalification: Auth/session/Notes write/curl RLS passed
-  twice, but Realtime delivery/recovery failed at two different points. #1134
-  retains the JWT across reconnect and adds bounded durable reconciliation;
-  two exact-candidate real-project passes are still required.
-- Tier 3 deployed Workers journey and Cloudflare production rate limiting:
-  green.
-- Production SMTP domain authentication and signup email-confirmation E2E:
-  verified (same evidence file, follow-ups 3/4). Known limitation: a fresh
-  sender domain has zero reputation, so the first mail can land in spam on
-  some providers — reputation ramps with volume; operational, not a defect.
-- Real scan-engine qualification is tracked for v0.44 (#1070 / ADR-0139).
-  v0.43.1 proves the provider-neutral fail-closed state machine without
-  requiring commercial credentials or paid container infrastructure.
+External qualification is pending. The following claims are **not** proven by
+this candidate and must be re-established by an operator against a hosted
+project and a deployed Worker:
+
+- **Hosted Auth/session/Notes matrix (Tier 2): external pending.** Requires a
+  hosted Supabase project, real password/OAuth/RLS/Realtime journeys, and a
+  recorded result on the exact candidate. The local emulator and stubbed unit
+  suites do not substitute.
+- **Deployed Workers journey and Cloudflare rate limiting (Tier 3): external
+  pending.** Requires a Cloudflare account, deployed Queues/DLQ/Cron bindings,
+  and the production rate-limit rule. No "deployed green" claim is made here.
+- **Production SMTP domain authentication and signup email-confirmation
+  E2E: external pending.** Requires a verified sender domain in the hosted
+  project. Known operational caveat: a fresh sender domain has zero
+  reputation, so the first mail can land in spam on some providers;
+  reputation ramps with volume, not a code defect.
+- **Real scan-engine qualification: external pending** (ADR-0139). The
+  provider-neutral fail-closed state machine is implemented and unit-tested
+  without commercial credentials or paid container infrastructure.

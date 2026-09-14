@@ -1,5 +1,5 @@
 /**
- * Shared page styles for www documentation routes.
+ * Shared page styles for site documentation routes.
  *
  * Scope: docs typography, prose width, code, tables, callouts, and simple
  * content navigation. Product components still come from @openelement/ui.

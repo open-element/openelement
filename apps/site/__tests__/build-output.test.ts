@@ -1,8 +1,8 @@
 /**
- * Build output assertions — runs against www/dist after a production build.
+ * Build output assertions — runs against apps/site/dist after a production build.
  * These tests validate that build artifacts meet security and size constraints.
  *
- * Run: deno test www/__tests__/build-output.test.ts --allow-read
+ * Run: deno test apps/site/__tests__/build-output.test.ts --allow-read
  * (must run after `deno task build`)
  */
 import { assert, assertEquals } from '@std/assert';

@@ -3,7 +3,7 @@
  *
  * The element/ui unit suites run on a hand-written DOM shim whose semantics
  * diverge from a real browser (shim attachShadow throws, no closest()). This
- * suite guards the activation contract in real Chromium against the built www
+ * suite guards the activation contract in real Chromium against the built site
  * site:
  *
  *   1. A compiled property/event binding patches a shipped SSR node in place.

@@ -1,7 +1,7 @@
 /**
- * Shared content-locale selector for www routes and site-ui shells.
+ * Shared content-locale selector for site routes and site-ui shells.
  *
- * The site builds exactly two locales (www/vite.config.ts `locales`); any
+ * The site builds exactly two locales (apps/site/vite.config.ts `locales`); any
  * value other than 'zh' falls back to the English content record.
  */
 export function contentLocale(locale: string): 'en' | 'zh' {

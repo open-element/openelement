@@ -1,6 +1,6 @@
 # Packages and distribution
 
-The repository publishes three physical support-distribution packages for two products:
+The repository publishes four public packages for two core products:
 
 - `@openelement/element` — Element.
 - `@openelement/router` — Router Route Mode, Framework Mode, and the application lifecycle
@@ -11,6 +11,8 @@ The repository publishes three physical support-distribution packages for two pr
   peers when they resolve — applications that deploy through `./nitro-mount` install
   `nitro` themselves (pinned line: `tools/nitro-compatibility.ts`, Vite 8 compatible).
 - `@openelement/create` — thin consumer scaffolding.
+- `@openelement/ui` — experimental UI primitives, maintained in this repository outside the
+  1.0 stable promise.
 
 The source repository is Deno-native and has no root npm workspace authority. Published npm tarballs must install in disposable projects outside the monorepo, resolve standard exports and declarations, and remain free of workspace aliases, private source paths, and unintended server/browser dependency leakage.
 

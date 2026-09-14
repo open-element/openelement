@@ -3,7 +3,7 @@
 // line must not use this constant directly.
 export const OPENELEMENT_VERSION = 'v1.0.0-alpha.1';
 
-// Current npm registry line — the newest actually published five-package
+// Current npm registry line — the newest actually published four-package
 // release. Registry-line copy must use this constant; OPENELEMENT_VERSION is
 // reserved for source-line context.
 export const PUBLISHED_PACKAGE_VERSION = 'v0.44.0-beta.2.2';

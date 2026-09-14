@@ -12,6 +12,9 @@ import ApiCorePage, {
 
 export const meta = { section: 'Reference', label: 'API Reference', order: 5 };
 
+/** The consumer-package count is generated truth, never a hand-written number. */
+const packageCount = apiReference.packages.length;
+
 type Locale = 'en' | 'zh';
 
 /**
@@ -122,7 +125,7 @@ function projectPackages(): Array<{
     const authored = authoredCopy[pkg.id];
     if (!authored) {
       throw new Error(
-        `apilist: generated package '${pkg.id}' has no authored bilingual copy in www/app/routes/apilist.tsx`,
+        `apilist: generated package '${pkg.id}' has no authored bilingual copy in apps/site/app/routes/apilist.tsx`,
       );
     }
     return {
@@ -231,16 +234,16 @@ const content = {
   en: {
     headTitle: 'API Reference',
     headDescription:
-      'The supported openElement API surface: five consumer packages, every documented export and every custom element, generated from repository truth.',
+      `The supported openElement API surface: ${packageCount} consumer packages, every documented export and every custom element, generated from repository truth.`,
     pageTitle: 'API Reference',
     lede: (v: string) =>
-      `The ${v} current line documents only the five consumer packages. Retired alpha packages and internal subpaths are not authoring surfaces.`,
+      `The ${v} current line documents only the ${packageCount} consumer packages. Retired alpha packages and internal subpaths are not authoring surfaces.`,
     s1Index: '01 / interface rule',
     s1Title: 'Authoring starts at product packages.',
     s1Copy:
-      'Current documentation, starters and dogfood use the five supported interfaces. Loader, action and form semantics are frozen at 0.42.0 (ADR-0122); framework session, active cache and streaming are outside the current contract and have no assigned version.',
+      `Current documentation, starters and dogfood use the ${packageCount} supported interfaces. Loader, action and form semantics are frozen at 0.42.0 (ADR-0122); framework session, active cache and streaming are outside the current contract and have no assigned version.`,
     s2Index: '02 / supported surface',
-    s2Title: 'Five products, one application path.',
+    s2Title: `${packageCount} packages, one application path.`,
     s2Copy:
       'Each package owns a distinct consumer decision; absorbed implementation packages remain private.',
     headPackage: 'Package',
@@ -271,16 +274,16 @@ const content = {
   zh: {
     headTitle: 'API 参考',
     headDescription:
-      'openElement 受支持的 API 面：五个产品包、全部记录在案的导出与 Custom Element，由仓库真值生成。',
+      `openElement 受支持的 API 面：${packageCount} 个面向使用者的包、全部记录在案的导出与 Custom Element，由仓库真值生成。`,
     pageTitle: 'API 参考',
     lede: (v: string) =>
-      `${v} 当前线只记录五个面向使用者的包。已退役的 alpha 包与内部子路径都不是创作面。`,
+      `${v} 当前线只记录 ${packageCount} 个面向使用者的包。已退役的 alpha 包与内部子路径都不是创作面。`,
     s1Index: '01 / 接口规则',
     s1Title: '创作从产品包开始。',
     s1Copy:
-      '当前文档、starter 与 dogfood 都使用这五个受支持的接口。Loader、action 与表单语义已在 0.42.0 冻结（ADR-0122）；框架 session、active cache 与 streaming 不在当前契约内，且尚未分配版本。',
+      `当前文档、starter 与 dogfood 都使用这 ${packageCount} 个受支持的接口。Loader、action 与表单语义已在 0.42.0 冻结（ADR-0122）；框架 session、active cache 与 streaming 不在当前契约内，且尚未分配版本。`,
     s2Index: '02 / 受支持的产品面',
-    s2Title: '五个产品，一条应用路径。',
+    s2Title: `${packageCount} 个包，一条应用路径。`,
     s2Copy: '每个包对应一个明确的使用者决策；被吸收的实现包保持私有。',
     headPackage: '包',
     headSubpaths: '受支持的子路径',

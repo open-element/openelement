@@ -6,12 +6,12 @@ order: 100
 
 ## Build Performance
 
-| Metric          | Value                                              |
-| --------------- | -------------------------------------------------- |
-| SSG build (www) | Every route prerendered; sitemap built from routes |
-| Dev cold start  | Measured by CI performance evidence                |
-| Vite dev start  | Measured by CI performance evidence                |
-| Client bundle   | Budgeted island chunks; no mandatory page runtime  |
+| Metric           | Value                                              |
+| ---------------- | -------------------------------------------------- |
+| SSG build (site) | Every route prerendered; sitemap built from routes |
+| Dev cold start   | Measured by CI performance evidence                |
+| Vite dev start   | Measured by CI performance evidence                |
+| Client bundle    | Budgeted island chunks; no mandatory page runtime  |
 
 ## Rendering
 

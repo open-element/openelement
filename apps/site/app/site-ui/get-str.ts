@@ -1,5 +1,5 @@
 /**
- * Shared attribute/prop readers for www site-ui components.
+ * Shared attribute/prop readers for the site's site-ui components.
  *
  * SSR injectProps() sets camelCase JS properties while plain markup only sets
  * attributes; read the property first (camelCase, then raw name), then the

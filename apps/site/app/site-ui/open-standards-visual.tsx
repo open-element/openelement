@@ -1,6 +1,6 @@
 /** @jsxImportSource @openelement/element */
 /**
- * www/site-ui - open-standards-visual
+ * apps/site/app/site-ui - open-standards-visual
  *
  * Product-art diagrams for the openElement standards lab website.
  */

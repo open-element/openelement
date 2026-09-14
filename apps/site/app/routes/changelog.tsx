@@ -25,7 +25,7 @@ const content = {
       'The project follows Keep a Changelog and SemVer. Historical entries preserve older names where they describe older releases; current docs use the openElement contract.',
     stampCurrent: 'Current',
     regCurrentSummary:
-      'The published five-package line — unified product and website surface, sealed export seams.',
+      'The published four-package line — unified product and website surface, sealed export seams.',
     regArchiveNote: 'archive →',
     regGhostSummary: 'The eleven-package era — JSR-only, before the collapse. Historical record.',
     stableHeading: 'Stable line',
@@ -53,7 +53,7 @@ const content = {
     publishedIntro:
       '本项目遵循 Keep a Changelog 与 SemVer。历史条目在描述旧版本时保留旧名称；当前文档使用 openElement 契约。',
     stampCurrent: '当前',
-    regCurrentSummary: '已发布的五包线——统一的产品与网站接口面，封口的导出边界。',
+    regCurrentSummary: '已发布的四包线——统一的产品与网站接口面，封口的导出边界。',
     regArchiveNote: '归档 →',
     regGhostSummary: '十一包时代——仅限 JSR，在收拢之前。历史记录。',
     stableHeading: '稳定线',

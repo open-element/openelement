@@ -1,6 +1,6 @@
 /** @jsxImportSource @openelement/element */
 /**
- * www/site-ui - open-lab-stage
+ * apps/site/app/site-ui - open-lab-stage
  *
  * Kinetic standards-lab hero primitive for product-art landing pages.
  */

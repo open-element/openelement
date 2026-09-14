@@ -1,12 +1,12 @@
 /**
  * Playwright configuration for openElement E2E tests.
  *
- * Tests run against the built www site (static HTML).
+ * Tests run against the built site (static HTML).
  * Uses a simple HTTP server instead of Vite preview (which may fail
  * in CI due to config resolution issues).
  *
  * Prerequisites:
- *   1. deno task build   (build the www site to www/dist/)
+ *   1. deno task site:build   (build the site to apps/site/dist/)
  *
  * Run: deno task test:e2e
  */
