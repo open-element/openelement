@@ -8,7 +8,6 @@
  * `--jfb-path <dir>` uses a local js-framework-benchmark checkout instead of
  * the network (must sit at the pinned commit).
  */
-import { createHash } from 'node:crypto';
 import { join } from '@std/path';
 
 export const JFB_REPO = 'krausest/js-framework-benchmark';
@@ -97,8 +96,9 @@ export const PINNED_STOCK_FILES: PinnedStockFile[] = [
   },
 ];
 
-function sha256Hex(bytes: Uint8Array): string {
-  return createHash('sha256').update(bytes).digest('hex');
+async function sha256Hex(bytes: Uint8Array): Promise<string> {
+  const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', bytes as BufferSource));
+  return [...digest].map((byte) => byte.toString(16).padStart(2, '0')).join('');
 }
 
 export interface FetchStockOptions {
@@ -146,7 +146,7 @@ export async function fetchStockSources(
       bytes = new Uint8Array(await response.arrayBuffer());
       source = 'network';
     }
-    const digest = sha256Hex(bytes);
+    const digest = await sha256Hex(bytes);
     if (digest !== pinned.sha256) {
       throw new Error(
         `[jfb-harness] sha256 mismatch for ${pinned.path}: expected ${pinned.sha256}, got ${digest}`,

@@ -435,7 +435,8 @@ export function runMicroSuite(options: MicroOptions = {}): MicroSuiteResult {
       openElementSha: options.openElementSha ?? 'unknown',
       deno: Deno.version.deno,
       note: 'fake-DOM kernel/region numbers isolate algorithmic behavior (no layout/paint); ' +
-        'browser-inclusive numbers live in benchmarks/jfb/evidence.json',
+        'browser-inclusive numbers come from the JFB harness local output ' +
+        '(.artifacts/jfb-evidence.json)',
     },
     granularity: { textPart, attrPart, propPart, engineFloor },
     table1k: {

@@ -1,7 +1,11 @@
 /**
- * Runs the local JFB harness against every built implementation and writes
- * the evidence file (issue #1219). Driver semantics are a faithful local
- * re-implementation of the stock webdriver-ts "afterframe" driver:
+ * Runs the local JFB harness against every built implementation and writes a
+ * result file (issue #1219). Results are local output / CI artifacts — never a
+ * committed baseline. The default destination is .artifacts/jfb-evidence.json
+ * (gitignored); hostname, account names, and absolute paths are redacted and
+ * the record is re-validated before it is written. Driver semantics are a
+ * faithful local re-implementation of the stock webdriver-ts "afterframe"
+ * driver:
  *
  * - fresh browser page per measured iteration (stock: new page per run)
  * - stock warmup/init sequences with stock DOM verifications between steps
@@ -15,9 +19,18 @@
  * afterframe driver leaves swap unmeasured; the CDP variant measures it),
  * no CPU throttling (stock default), and OE-diagnostic memory probe 26.
  */
-import { join } from '@std/path';
-import { arch, cpus, hostname, platform, release, totalmem } from 'node:os';
+import { dirname, join } from '@std/path';
+// Host metadata the benchmark schema requires: Deno has no CPU-model API, and
+// OS release strings come from the same host boundary. Identity values are
+// read from the environment instead (redacted before writing).
+import { cpus, release, totalmem } from 'node:os';
 import { buildHarness, type BuildReport } from './build.ts';
+import {
+  assertEvidenceSafe,
+  DEFAULT_EVIDENCE_PATH,
+  type EvidenceIdentity,
+  redactEvidence,
+} from './evidence.ts';
 import {
   AFTERFRAME_SOURCE,
   CPU_BENCHMARKS,
@@ -240,16 +253,34 @@ async function commandVersion(command: string, args: string[]): Promise<string> 
 async function machineProvenance(): Promise<Record<string, unknown>> {
   const cpuInfo = cpus();
   return {
-    platform: platform(),
+    platform: Deno.build.os,
     release: release(),
-    arch: arch(),
-    hostname: hostname(),
+    arch: Deno.build.arch,
     cpuModel: cpuInfo[0]?.model ?? 'unknown',
     cpuCount: cpuInfo.length,
     totalMemoryBytes: totalmem(),
     deno: Deno.version,
     node: await commandVersion('node', ['--version']),
     npm: await commandVersion('npm', ['--version']),
+  };
+}
+
+/** Identity values the evidence writer must scrub before writing. */
+function recordingIdentity(buildDir: string): EvidenceIdentity {
+  const hostname = (() => {
+    try {
+      return Deno.hostname();
+    } catch {
+      return undefined;
+    }
+  })();
+  return {
+    hostname,
+    username: Deno.env.get('USER') ?? Deno.env.get('USERNAME'),
+    homeDir: Deno.env.get('HOME') ?? Deno.env.get('USERPROFILE'),
+    repoRoot: new URL('../../..', import.meta.url).pathname,
+    buildDir,
+    tmpDir: Deno.env.get('TMPDIR') ?? Deno.env.get('TEMP'),
   };
 }
 
@@ -424,7 +455,12 @@ export async function runHarness(options: RunOptions = {}): Promise<Record<strin
     },
     results,
   };
-  return evidence;
+  // Never write raw machine identity: redact, then fail closed if a leak or a
+  // schema violation survives the scrub.
+  const identity = recordingIdentity(buildReport.buildDir);
+  const safeEvidence = redactEvidence(evidence, identity);
+  assertEvidenceSafe(safeEvidence, identity, { jfbCommit: JFB_COMMIT });
+  return safeEvidence;
 }
 
 if (import.meta.main) {
@@ -441,7 +477,10 @@ if (import.meta.main) {
     implementations: flagValue('impl') ? flagValue('impl')!.split(',') : undefined,
     memory: args.includes('--memory'),
   });
-  const out = flagValue('out') ?? new URL('../evidence.json', import.meta.url).pathname;
+  // Results are local output, not a tracked file (identity-free by default).
+  const repoRoot = new URL('../../..', import.meta.url).pathname;
+  const out = flagValue('out') ?? join(repoRoot, DEFAULT_EVIDENCE_PATH);
+  await Deno.mkdir(dirname(out), { recursive: true });
   await Deno.writeTextFile(out, `${JSON.stringify(evidence, null, 2)}\n`);
   console.log(`wrote ${out}`);
 }

@@ -11,15 +11,15 @@
  *   elements, no per-item event handlers
  * - the OE data generator is the verbatim stock algorithm
  * - the stock comparator pin table is well-formed
- * - the committed evidence file has the required provenance shape and
- *   contains only finite measured numbers
+ * - recorded evidence is identity-free, reproducible in shape, and written to
+ *   local output rather than a committed baseline
  */
 import { assert, assertEquals, assertMatch, assertStringIncludes } from '@std/assert';
 import { compileElementProgram } from '../../packages/element/src/internal/compiler/semantic-core/compile.ts';
 import type {
   ProgramElementNode,
   ProgramTreeNode,
-} from '../../packages/element/src/internal/compiler/semantic-core/program.ts';
+} from '../../packages/element/src/internal/protocol/part-program.ts';
 import { executeIteration, JfbModel, verifyAllSpecsAgainstModel } from './harness/model.ts';
 import {
   CPU_BENCHMARKS,
@@ -30,6 +30,12 @@ import {
   MEM_BENCHMARKS,
 } from './harness/spec.ts';
 import { JFB_COMMIT, PINNED_STOCK_FILES } from './harness/fetch-stock.ts';
+import {
+  DEFAULT_EVIDENCE_PATH,
+  findIdentityLeaks,
+  redactEvidence,
+  validateEvidence,
+} from './harness/evidence.ts';
 
 Deno.test('jfb spec reproduces stock store semantics (model check)', () => {
   verifyAllSpecsAgainstModel();
@@ -151,52 +157,89 @@ Deno.test('stock comparator pin table is well-formed', () => {
   }
 });
 
-Deno.test('committed evidence has the required provenance and finite numbers', async () => {
-  const evidenceUrl = new URL('./evidence.json', import.meta.url);
-  let raw: string;
-  try {
-    raw = await Deno.readTextFile(evidenceUrl);
-  } catch {
-    throw new Error('benchmarks/jfb/evidence.json must be committed (run harness/run.ts)');
-  }
-  const evidence = JSON.parse(raw) as Record<string, unknown>;
-  assertEquals(evidence.kind, 'jfb-local-baseline');
-  assertEquals(evidence.issue, 1219);
-  const provenance = evidence.provenance as Record<string, unknown>;
-  const oe = provenance.openElement as { sha: string };
-  assertMatch(oe.sha, /^[0-9a-f]{40}$/);
-  const jfb = provenance.jfb as { commit: string };
-  assertEquals(jfb.commit, JFB_COMMIT);
-  const browser = provenance.browser as { engine: string; version: string };
-  assert(browser.engine.length > 0 && browser.version.length > 0);
-  assert(Array.isArray(provenance.deviationsFromStock));
+const IDENTITY = {
+  hostname: 'bench-host',
+  username: 'bench-user',
+  homeDir: '/Users/bench-user',
+  repoRoot: '/Users/bench-user/code/openelement',
+  buildDir: '/var/folders/bench/openelement-jfb-abcd',
+  tmpDir: '/var/folders/bench',
+};
 
-  const results = evidence.results as Array<Record<string, unknown>>;
-  const ids = results.map((result) => result.id);
-  assert(ids.includes('oe') && ids.includes('vanillajs'), 'oe and vanillajs are mandatory');
-  for (const result of results) {
-    const cpu = result.cpu as Array<Record<string, unknown>>;
-    assertEquals(cpu.length, CPU_BENCHMARKS.length, `${result.id} must cover the full CPU set`);
-    for (const bench of cpu) {
-      const samples = bench.samplesMs as number[];
-      assert(samples.length >= CPU_ITERATIONS, `${result.id}/${bench.id} has all samples`);
-      for (const key of ['medianMs', 'meanMs', 'minMs', 'maxMs']) {
-        const value = bench[key] as number;
-        // minMs may legitimately be 0: stock select1k re-clicks the already
-        // selected row, which is a no-op frame for guarded implementations.
-        const lowerBound = key === 'minMs' ? 0 : Number.MIN_VALUE;
-        assert(
-          Number.isFinite(value) && value >= lowerBound,
-          `${result.id}/${bench.id}.${key} finite`,
-        );
-      }
-      for (const sample of samples) {
-        assert(Number.isFinite(sample) && sample >= 0, `${result.id}/${bench.id} sample finite`);
-      }
-    }
-    const geomean = result.cpuGeomeanMs as number;
-    assert(Number.isFinite(geomean) && geomean > 0);
-    const pageErrors = result.pageErrors as string[];
-    assertEquals(pageErrors, [], `${result.id} recorded page errors`);
-  }
+function validEvidence() {
+  return {
+    schemaVersion: 1,
+    kind: 'jfb-local-baseline',
+    issue: 1219,
+    recordedAt: '2026-09-14T00:00:00.000Z',
+    provenance: {
+      openElement: { sha: 'a'.repeat(40), package: '@openelement/element workspace source' },
+      jfb: { repo: 'krausest/js-framework-benchmark', commit: JFB_COMMIT },
+      browser: { engine: 'chromium', version: '152.0.0', launchArgs: [] },
+      toolchain: {
+        platform: 'darwin',
+        release: '25.0.0',
+        arch: 'arm64',
+        cpuModel: 'Apple M4',
+        cpuCount: 10,
+        totalMemoryBytes: 16_000_000_000,
+        deno: { deno: '2.9.0' },
+        node: 'v24.18.0',
+        npm: '11.0.0',
+      },
+      iterations: { cpu: 10, cpuStock: 15, mem: 5 },
+    },
+    results: [{
+      id: 'oe',
+      stock: false,
+      pageErrors: [],
+      cpu: [{
+        id: '01_run1k',
+        samplesMs: [1.2, 1.1],
+        medianMs: 1.1,
+        meanMs: 1.15,
+        minMs: 1.1,
+        maxMs: 1.2,
+      }],
+      cpuGeomeanMs: 1.1,
+      memory: [],
+    }],
+  };
+}
+
+Deno.test('jfb evidence redaction strips hostname, account, and absolute paths', () => {
+  const dirty = {
+    ...validEvidence(),
+    note: `recorded on ${IDENTITY.hostname} by ${IDENTITY.username}`,
+    build: { error: `${IDENTITY.buildDir}/oe-src/main.ts missing under ${IDENTITY.repoRoot}` },
+  };
+  assert(findIdentityLeaks(dirty, IDENTITY).length > 0, 'raw identity must be detectable');
+
+  const clean = redactEvidence(dirty, IDENTITY);
+  assertEquals(findIdentityLeaks(clean, IDENTITY), []);
+  assertEquals(validateEvidence(clean, { jfbCommit: JFB_COMMIT }), []);
+});
+
+Deno.test('jfb evidence validation keeps the reproducible JFB commit and schema', () => {
+  assertEquals(validateEvidence(validEvidence(), { jfbCommit: JFB_COMMIT }), []);
+  const drifted = validEvidence();
+  drifted.provenance.jfb.commit = 'b'.repeat(40);
+  assert(validateEvidence(drifted, { jfbCommit: JFB_COMMIT }).length > 0);
+  const broken = validEvidence();
+  broken.results[0].cpu[0].samplesMs = [Number.NaN];
+  assert(validateEvidence(broken, { jfbCommit: JFB_COMMIT }).length > 0);
+  const missingVersion = validEvidence();
+  missingVersion.provenance.toolchain.node = '';
+  assert(validateEvidence(missingVersion, { jfbCommit: JFB_COMMIT }).length > 0);
+});
+
+Deno.test('jfb results default to local output, never a committed baseline', async () => {
+  assertEquals(DEFAULT_EVIDENCE_PATH, '.artifacts/jfb-evidence.json');
+  assert(DEFAULT_EVIDENCE_PATH.endsWith('.json'));
+  const runner = await Deno.readTextFile(new URL('./harness/run.ts', import.meta.url));
+  assertStringIncludes(runner, 'DEFAULT_EVIDENCE_PATH');
+  assert(
+    !runner.includes("'../evidence.json'"),
+    'the runner must not write benchmarks/jfb/evidence.json by default',
+  );
 });
