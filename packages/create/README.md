@@ -38,10 +38,10 @@ deno run --allow-read --allow-write --allow-env --allow-net --deny-ffi --no-prom
 ## Requirements
 
 **Deno 2.9+.** The generated starter writes the `minimumDependencyAge` config
-key into its `deno.json` (a key introduced in Deno 2.5.5) and is exercised
-against the same toolchain the repo pins in CI (2.9.x, see `.dvmrc`); 2.8 is
-the declared support floor. Older Deno versions do not understand the key and
-will warn or error.
+key into its `deno.json` (a key introduced in Deno 2.5.5); the 2.9 floor is the
+toolchain this repository pins in `.dvmrc`, exercises in CI, and verifies in
+its native-pack, scaffold, package, and consumer proof. No earlier version is
+claimed or tested.
 
 ## What It Creates
 
