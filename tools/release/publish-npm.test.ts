@@ -4,10 +4,11 @@ import {
   deriveAllDependencies,
   deriveDependencies,
   type DeriveDepsIo,
+  findAbsoluteFileUrlPayload,
   findRawTypeScriptPayload,
   npmPublishTag,
   NpmViewError,
-  packExportTargets,
+  packArgs,
   packRelativePath,
   prereleaseTag,
   previousPrerelease,
@@ -149,7 +150,6 @@ Deno.test('deriveAllDependencies reads root imports once for the full package gr
   assertEquals(dependencies.get('@openelement/element'), { react: '^18.2.0' });
   assertEquals(dependencies.get('@openelement/router'), { react: '^18.2.0' });
 });
-
 Deno.test('findRawTypeScriptPayload flags sources but keeps declarations and templates', async () => {
   const root = await Deno.makeTempDir({ prefix: 'pack-raw-typescript-' });
   try {
@@ -164,6 +164,45 @@ Deno.test('findRawTypeScriptPayload flags sources but keeps declarations and tem
     for (const retained of ['entry.js', 'entry.d.ts', 'nested/template.tsx.tmpl']) {
       await Deno.stat(`${root}/${retained}`);
     }
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+Deno.test('packArgs pins deterministic path hygiene with --no-source-maps', () => {
+  assertEquals(packArgs('pkg-1.0.0.tgz'), [
+    'pack',
+    '--output',
+    'pkg-1.0.0.tgz',
+    '--allow-dirty',
+    '--no-source-maps',
+  ]);
+});
+
+Deno.test('findAbsoluteFileUrlPayload fails closed on machine paths in inline maps', async () => {
+  const root = await Deno.makeTempDir({ prefix: 'pack-absolute-urls-' });
+  try {
+    // A generic file:// URL in a comment is authored content, not a leak.
+    await Deno.writeTextFile(
+      `${root}/clean.js`,
+      "export const x = 1; // see 'file:///client/islands/client.js'\n",
+    );
+    await Deno.writeTextFile(`${root}/plain.txt`, 'file:///Users/somebody/project\n');
+    assertEquals(findAbsoluteFileUrlPayload(root), []);
+
+    await Deno.writeTextFile(
+      `${root}/mapped.js`,
+      'export {};\n//# sourceMappingURL=data:application/json;base64,' +
+        btoa(JSON.stringify({ sources: ['file:///Users/somebody/project/src/a.ts'] })),
+    );
+    assertEquals(findAbsoluteFileUrlPayload(root), ['mapped.js']);
+
+    await Deno.writeTextFile(
+      `${root}/portable.js`,
+      'export {};\n//# sourceMappingURL=data:application/json;base64,' +
+        btoa(JSON.stringify({ sources: ['../src/a.ts'] })),
+    );
+    assertEquals(findAbsoluteFileUrlPayload(root), ['mapped.js']);
   } finally {
     await Deno.remove(root, { recursive: true });
   }
@@ -470,15 +509,6 @@ Deno.test('classifyPackLog leaves clean pack output empty', () => {
     classifyPackLog('  71 modules collected\n  2 assets collected\nDry run ok\n'),
     { errors: [], typeWarnings: [], unexpectedWarnings: [] },
   );
-});
-
-Deno.test('packExportTargets collects nested string targets', () => {
-  assertEquals(
-    packExportTargets({ '.': './src/index.ts', './open-button': './src/open-button.tsx' }),
-    new Set(['src/index.ts', 'src/open-button.tsx']),
-  );
-  assertEquals(packExportTargets('./src/cli.ts'), new Set(['src/cli.ts']));
-  assertEquals(packExportTargets(undefined), new Set());
 });
 
 Deno.test('packRelativePath scopes warned files to the packed directory', () => {

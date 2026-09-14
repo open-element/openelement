@@ -4,11 +4,13 @@
  * Runs in dependency order (leaves first) so a package is packed/published
  * only after its workspace dependencies are already available as npm tarballs.
  *
- * `deno pack` is the sole tarball generator (proven by
- * tools/release#pack:native-check). The retained post-processing steps,
- * each with its Deno 2.9 repro, regression test, and deletion condition,
- * are contracted in docs/maintainers/pack-post-processing.md — read it
- * before touching this file.
+ * `deno pack` is the sole code and declaration generator (proven by
+ * tools/release#pack:native-check); the final npm tarball is re-wrapped by the
+ * release coordinator after metadata, dependency, peer-dependency, and Create
+ * bin assembly. The deterministic archive writer and the manifest-only delta
+ * proof live in tools/lib/deterministic-tar.ts; every retained step is
+ * contracted in docs/maintainers/pack-post-processing.md — read it before
+ * touching this file.
  */
 
 import {
@@ -23,7 +25,13 @@ import { assertCleanWorktree } from '../lib/git-cleanliness.ts';
 import { formatError } from '@openelement/element';
 import { formatJson } from '@openelement/element/build-utils';
 import { extractStaticModuleSpecifiers } from '../lib/typescript-ast.ts';
+import {
+  buildDeclarationClosure,
+  classifyDroppedDeclarationWarnings,
+  packageRootDeclarationIo,
+} from '../lib/declaration-closure.ts';
 import { npmTarballName, tarballPath } from '../lib/npm-tarball.ts';
+import { createDeterministicTarGz, readTreeEntries, sha256Hex } from '../lib/deterministic-tar.ts';
 import {
   compilePackageElementModules,
   stageCompiledPackWorkspace,
@@ -63,6 +71,104 @@ const CREATE_BIN = {
   'openelement-create': './src/cli.js',
   'create-openelement': './src/cli.js',
 };
+
+/**
+ * The only `package.json` fields the coordinator may change after `deno pack`.
+ * Everything else (name, version, exports, ...) must be byte-identical; the
+ * proof is enforced by assertOnlyApprovedManifestChanges at pack time and
+ * documented in docs/maintainers/pack-post-processing.md.
+ */
+export const APPROVED_MANIFEST_MUTATIONS: ReadonlySet<string> = new Set([
+  'type',
+  'repository',
+  'homepage',
+  'bugs',
+  'license',
+  'description',
+  'keywords',
+  'bin',
+  'dependencies',
+  'peerDependencies',
+  'peerDependenciesMeta',
+]);
+
+/** Sorted package-relative path -> SHA-256 for every file under `root`. */
+export async function hashFileTree(root: string): Promise<Record<string, string>> {
+  const manifest: Record<string, string> = {};
+  const visit = async (dir: string, prefix: string): Promise<void> => {
+    for (const entry of Deno.readDirSync(dir)) {
+      const diskPath = `${dir}/${entry.name}`;
+      const path = prefix ? `${prefix}/${entry.name}` : entry.name;
+      if (entry.isDirectory) {
+        await visit(diskPath, path);
+      } else if (entry.isFile) {
+        manifest[path] = await sha256Hex(Deno.readFileSync(diskPath));
+      }
+    }
+  };
+  await visit(root, '');
+  const sorted: Record<string, string> = {};
+  for (const path of Object.keys(manifest).sort()) sorted[path] = manifest[path];
+  return sorted;
+}
+
+/**
+ * Post-pack proof for the coordinator's manifest mutations:
+ *   1. every file except package/package.json is content-identical;
+ *   2. only APPROVED_MANIFEST_MUTATIONS fields changed in the manifest.
+ * JS, declarations, source maps, and the exports map can never drift here.
+ */
+export function assertOnlyApprovedManifestChanges(
+  rawManifest: Record<string, string>,
+  finalManifest: Record<string, string>,
+  rawPackageJson: Record<string, unknown>,
+  finalPackageJson: Record<string, unknown>,
+): void {
+  const rawPaths = Object.keys(rawManifest).sort();
+  const finalPaths = Object.keys(finalManifest).sort();
+  if (rawPaths.join('\n') !== finalPaths.join('\n')) {
+    throw new Error(
+      '[npm] repack changed the packed file set (failing closed):\n' +
+        `raw: ${rawPaths.join(', ')}\nfinal: ${finalPaths.join(', ')}`,
+    );
+  }
+  for (const path of rawPaths) {
+    if (path === 'package/package.json') continue;
+    if (rawManifest[path] !== finalManifest[path]) {
+      throw new Error(
+        `[npm] repack modified '${path}' content (failing closed); ` +
+          'only package.json metadata may change after deno pack.',
+      );
+    }
+  }
+  const changed = new Set<string>();
+  for (
+    const key of new Set([...Object.keys(rawPackageJson), ...Object.keys(finalPackageJson)])
+  ) {
+    if (JSON.stringify(rawPackageJson[key]) !== JSON.stringify(finalPackageJson[key])) {
+      changed.add(key);
+    }
+  }
+  const unapproved = [...changed].filter((key) => !APPROVED_MANIFEST_MUTATIONS.has(key));
+  if (unapproved.length > 0) {
+    throw new Error(
+      `[npm] repack changed unapproved manifest fields (failing closed): ${unapproved.join(', ')}`,
+    );
+  }
+}
+
+function packageBinArchivePaths(pkgJson: Record<string, unknown>): string[] {
+  const bin = pkgJson.bin;
+  if (typeof bin === 'string') {
+    return [`package/${bin.replace(/^\.\//, '')}`];
+  }
+  if (bin && typeof bin === 'object') {
+    return Object.values(bin as Record<string, unknown>)
+      .filter((value): value is string => typeof value === 'string')
+      .map((value) => `package/${value.replace(/^\.\//, '')}`);
+  }
+  return [];
+}
 
 function cleanStaleTarballs(packages: PackageInfo[]): void {
   for (const pkg of packages) {
@@ -117,9 +223,13 @@ export function findRawTypeScriptPayload(packageRoot: string): string[] {
  *     `unsupported`, `failed`) outside the exact known pair — FAIL.
  *   - knownUpstreamPrivateWarnings: exact
  *     `Could not generate types ... Types will not be included` lines for
- *     modules that are (a) inside the packed package, (b) NOT a public
- *     export target, with (c) every public export carrying a verified types
- *     file — recorded, never FAIL by itself.
+ *     modules provably outside the public declaration closure (all public
+ *     export types targets and their package-local declaration edges; see
+ *     tools/lib/declaration-closure.ts) — recorded, never FAIL by itself.
+ *     A warned module that is reachable, a broken relative edge, or a path
+ *     escape fails closed. The single allowed diagnostic shape, its verified
+ *     Deno versions, and its deletion condition are documented in
+ *     docs/maintainers/deno-pack-diagnostic-exception.md.
  */
 export interface PackDiagnosticSummary {
   errors: string[];
@@ -169,22 +279,6 @@ export function classifyPackLog(output: string): ClassifiedPackLog {
     }
   }
   return { errors, typeWarnings, unexpectedWarnings };
-}
-
-/** Package-relative export source targets from a deno.json exports map. */
-export function packExportTargets(
-  exportsMap: unknown,
-): Set<string> {
-  const targets = new Set<string>();
-  const visit = (value: unknown): void => {
-    if (typeof value === 'string') {
-      if (value.startsWith('./')) targets.add(value.slice(2));
-    } else if (value && typeof value === 'object') {
-      for (const entry of Object.values(value as Record<string, unknown>)) visit(entry);
-    }
-  };
-  visit(exportsMap);
-  return targets;
 }
 
 /** A warned file URL/path relative to the directory pack ran in, or null when outside it. */
@@ -383,6 +477,65 @@ function applyPackageJsonOverrides(
   }
 }
 
+/** Fixed `deno pack` arguments; see the --no-source-maps note in packPackage. */
+export function packArgs(filename: string): string[] {
+  return ['pack', '--output', filename, '--allow-dirty', '--no-source-maps'];
+}
+
+/**
+ * Fail closed when packed JavaScript embeds an inline source map whose
+ * `sources` are absolute `file:///` URLs. deno pack 2.9 emits such maps with
+ * the build machine's path (and, for staged packs, a random temp directory):
+ * non-portable, identity-leaking, and non-reproducible. `--no-source-maps`
+ * prevents it; this scan proves no other path reintroduces it. The URLs are
+ * base64-encoded inside the data URL, so each map is decoded before scanning;
+ * an undecodable map is itself a defect.
+ */
+export function findAbsoluteFileUrlPayload(packageRoot: string): string[] {
+  const sourceMapDataUrl = /sourceMappingURL=data:[^,]*;base64,([A-Za-z0-9+/=]+)/g;
+  const hasMachineSourceUrl = (content: string): boolean => {
+    for (const match of content.matchAll(sourceMapDataUrl)) {
+      let decoded: string;
+      try {
+        decoded = atob(match[1]);
+      } catch {
+        return true;
+      }
+      try {
+        const map = JSON.parse(decoded) as { sources?: unknown };
+        if (
+          Array.isArray(map.sources) &&
+          map.sources.some((source) => typeof source === 'string' && source.startsWith('file:///'))
+        ) {
+          return true;
+        }
+      } catch {
+        return true;
+      }
+    }
+    return false;
+  };
+  const found: string[] = [];
+  const visit = (dir: string): void => {
+    for (const entry of Deno.readDirSync(dir)) {
+      const path = `${dir}/${entry.name}`;
+      if (entry.isDirectory) {
+        visit(path);
+        continue;
+      }
+      if (
+        entry.isFile &&
+        /\.(?:js|mjs|cjs)$/.test(entry.name) &&
+        hasMachineSourceUrl(Deno.readTextFileSync(path))
+      ) {
+        found.push(path.slice(packageRoot.length + 1));
+      }
+    }
+  };
+  visit(packageRoot);
+  return found.sort();
+}
+
 export async function packPackage(
   pkg: PackageInfo,
   dependencies: Record<string, string>,
@@ -398,7 +551,13 @@ export async function packPackage(
   // every change except deterministic gate output. Deno itself cannot express
   // that allowlist, so packing must allow those known generated files in both
   // dry-run and publish mode.
-  const args = ['pack', '--output', filename, '--allow-dirty'];
+  //
+  // --no-source-maps: deno pack 2.9 embeds inline maps whose `sources` are
+  // absolute file:// URLs. That leaks the build machine path and, for staged
+  // UI packs, a random temp directory — breaking byte reproducibility of the
+  // final tarball. Delete the flag when deno pack emits portable relative
+  // sources (see docs/maintainers/pack-post-processing.md).
+  const args = packArgs(filename);
 
   // #1301: a package shipping compiled-element sources (.tsx modules with a
   // canonically bound @element decorator) must run the open:compiled-element
@@ -479,11 +638,23 @@ export async function packPackage(
     await runCommand('tar', ['-xzf', out, '-C', tmp], { env: tarEnv });
     const pkgJsonPath = `${tmp}/package/package.json`;
     const pkgJson = JSON.parse(Deno.readTextFileSync(pkgJsonPath));
+    const rawManifest = await hashFileTree(tmp);
+    const rawPackageJson = JSON.parse(
+      Deno.readTextFileSync(pkgJsonPath),
+    ) as Record<string, unknown>;
     const rawPayload = findRawTypeScriptPayload(`${tmp}/package`);
     if (rawPayload.length > 0) {
       throw new Error(
         `[npm] ${pkg.name}: raw TypeScript in tarball (fix publish input, never silently strip):\n${
           rawPayload.join('\n')
+        }`,
+      );
+    }
+    const absoluteUrls = findAbsoluteFileUrlPayload(`${tmp}/package`);
+    if (absoluteUrls.length > 0) {
+      throw new Error(
+        `[npm] ${pkg.name}: packed modules embed absolute file:// URLs (failing closed):\n${
+          absoluteUrls.join('\n')
         }`,
       );
     }
@@ -545,35 +716,13 @@ export async function packPackage(
         delete pkgJson.dependencies[name];
       }
     }
-    // Known-upstream classification: exact private-module warnings only.
-    // A warned file must live in the packed package and must NOT be a public
-    // export target; anything else (outside the package, or an export target
-    // missing its declaration) fails closed here.
-    const exportTargets = packExportTargets(
-      (JSON.parse(Deno.readTextFileSync(`${pkg.dir}/deno.json`)) as { exports?: unknown })
-        .exports,
-    );
-    // packDir is repo-relative for direct packs but absolute for staged
-    // packs; warned file URLs are always absolute.
-    const absolutePackDir = packDir.startsWith('/') ? packDir : `${Deno.cwd()}/${packDir}`;
-    const knownUpstream: string[] = [];
-    for (const warning of packSummary.typeWarnings) {
-      const relative = packRelativePath(absolutePackDir, warning.file);
-      if (relative === null) {
-        throw new Error(
-          `[npm] ${pkg.name}: pack warned outside the package (failing closed):\n${warning.raw}`,
-        );
-      }
-      if (exportTargets.has(relative)) {
-        throw new Error(
-          `[npm] ${pkg.name}: pack dropped the declaration of public export '${relative}' (failing closed):\n${warning.raw}`,
-        );
-      }
-      knownUpstream.push(`${relative}`);
-    }
-    // Every public export must carry a verified types file from deno pack
-    // itself (no declaration repair step exists anymore).
+    // Known-upstream classification: a dropped private declaration is only
+    // classified as an upstream warning when it is provably outside the
+    // public declaration closure. Reachable-and-missing declarations, broken
+    // relative edges, and path escapes all fail closed here — see
+    // tools/lib/declaration-closure.ts.
     const packedExports = (pkgJson.exports ?? {}) as Record<string, unknown>;
+    const typeRoots: string[] = [];
     let publicDeclarations = 0;
     for (const [subpath, conditions] of Object.entries(packedExports)) {
       const types = (conditions as { types?: unknown } | null)?.types;
@@ -589,17 +738,82 @@ export async function packPackage(
           `[npm] ${pkg.name}: export '${subpath}' types file missing at ${types} (failing closed).`,
         );
       }
+      typeRoots.push(types.slice(2));
       publicDeclarations++;
     }
+    const declarationGraph = buildDeclarationClosure(
+      typeRoots,
+      packageRootDeclarationIo(`${tmp}/package`),
+    );
+    if (declarationGraph.escaped.length > 0) {
+      throw new Error(
+        `[npm] ${pkg.name}: public declaration edges escape the package root (failing closed):\n${
+          declarationGraph.escaped.map((edge) => `${edge.from} -> ${edge.specifier}`).join('\n')
+        }`,
+      );
+    }
+    if (declarationGraph.missing.length > 0) {
+      throw new Error(
+        `[npm] ${pkg.name}: public declarations reference missing declaration files (failing closed):\n${
+          declarationGraph.missing.map((edge) => `${edge.from} -> ${edge.specifier}`).join('\n')
+        }`,
+      );
+    }
+    // packDir is repo-relative for direct packs but absolute for staged
+    // packs; warned file URLs are always absolute.
+    const absolutePackDir = packDir.startsWith('/') ? packDir : `${Deno.cwd()}/${packDir}`;
+    const warningRecords: Array<{ relative: string; raw: string }> = [];
+    for (const warning of packSummary.typeWarnings) {
+      const relative = packRelativePath(absolutePackDir, warning.file);
+      if (relative === null) {
+        throw new Error(
+          `[npm] ${pkg.name}: pack warned outside the package (failing closed):\n${warning.raw}`,
+        );
+      }
+      warningRecords.push({ relative, raw: warning.raw });
+    }
+    const classifiedWarnings = classifyDroppedDeclarationWarnings(
+      declarationGraph,
+      warningRecords,
+    );
+    if (classifiedWarnings.reachableFromPublicTypes.length > 0) {
+      throw new Error(
+        `[npm] ${pkg.name}: pack dropped declarations reachable from public types (failing closed):\n${
+          classifiedWarnings.reachableFromPublicTypes
+            .map((warning) => `${warning.relative}: ${warning.raw}`)
+            .join('\n')
+        }`,
+      );
+    }
+    const knownUpstream = classifiedWarnings.knownUpstream.map((warning) => warning.relative);
     console.log(
       `[npm] ${pkg.name}: pack diagnostics ` +
         `errors=0 unexpectedWarnings=0 knownUpstreamPrivateWarnings=${knownUpstream.length} ` +
-        `publicDeclarations=${publicDeclarations}`,
+        `publicDeclarations=${publicDeclarations} declarationClosure=${declarationGraph.reached.length}`,
     );
     Deno.writeTextFileSync(pkgJsonPath, formatJson(pkgJson));
-    await runCommand('tar', ['-czf', out, '-C', tmp, 'package'], {
-      env: tarEnv,
+    // Repack proof: only approved manifest fields may differ from the raw
+    // `deno pack` output; every JS/declaration/source-map byte is identical.
+    const finalManifest = await hashFileTree(tmp);
+    assertOnlyApprovedManifestChanges(rawManifest, finalManifest, rawPackageJson, pkgJson);
+    const archive = await createDeterministicTarGz(readTreeEntries(tmp), {
+      executablePaths: packageBinArchivePaths(pkgJson),
     });
+    await Deno.writeFile(out, archive);
+    // Shipped-archive proof: re-extract the final tarball and confirm every
+    // member matches the verified tree (catches any writer defect).
+    const verifyDir = await Deno.makeTempDir({ prefix: 'pack-verify-' });
+    try {
+      await runCommand('tar', ['-xzf', out, '-C', verifyDir], { env: tarEnv });
+      const shippedManifest = await hashFileTree(verifyDir);
+      if (JSON.stringify(shippedManifest) !== JSON.stringify(finalManifest)) {
+        throw new Error(
+          '[npm] final tarball content drifted from the verified package tree (failing closed).',
+        );
+      }
+    } finally {
+      await Deno.remove(verifyDir, { recursive: true });
+    }
   } finally {
     await Deno.remove(tmp, { recursive: true });
   }
