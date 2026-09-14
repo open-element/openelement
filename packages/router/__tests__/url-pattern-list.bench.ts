@@ -4,14 +4,14 @@
  * construction/hit/miss/memory evidence for #1324 lives in the maintained
  * fork: open-element/url-pattern-list BENCHMARKS.md (Node, GC-controlled).
  */
-import { RouteTable, type URLPatternConstructor } from '../src/internal/router/route-table.ts';
+import { RouteTable } from '../src/internal/router/route-table.ts';
 
 if (typeof globalThis.URLPattern !== 'function') {
   throw new TypeError(
     'URLPattern bench requires the Web Standard URLPattern API, which is unavailable in this runtime.',
   );
 }
-const NativeURLPattern = globalThis.URLPattern as unknown as URLPatternConstructor;
+const NativeURLPattern = globalThis.URLPattern;
 import { URLPatternList } from '@openelement/url-pattern-list';
 
 async function main(): Promise<void> {

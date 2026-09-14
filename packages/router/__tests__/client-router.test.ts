@@ -12,7 +12,7 @@ if (typeof globalThis.URLPattern !== 'function') {
     'Client router tests require the Web Standard URLPattern API, which is unavailable in this runtime.',
   );
 }
-const NativeURLPattern = globalThis.URLPattern as unknown as URLPatternConstructor;
+const NativeURLPattern = globalThis.URLPattern;
 
 const routes: RouteConfig[] = [{ path: '/items/:id', tagName: 'item-page' }];
 

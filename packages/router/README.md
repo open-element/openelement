@@ -4,17 +4,30 @@ Application authoring API and lifecycle tooling for openElement: pages,
 routes, loaders, actions, islands, the SPA bootstrap, and the Vite/SSG build
 pipeline (dev/build/start/preview) that ships Framework Mode applications.
 
-The package root and runtime subpaths stay host-free: installing
-`@openelement/router` for Route Mode pulls no Vite, Nitro, Element, or Node
-host dependencies. Host tooling lives behind explicit subpath exports
-(`./vite`, `./cli/build`, `./cli/start`) whose dependencies are optional
-peers. The `./nitro-mount` deployment subpath instead expects the deploying
-application to install `nitro` itself: declaring it as a peer would make npm
-auto-place `nitro@3.0.0`, whose own `vite@^7` peer conflicts with the
-tooling's `vite@^8` requirement and breaks a bare `npm install`.
+The Route Mode subpaths (`@openelement/router/router`,
+`@openelement/router/router/client`, `@openelement/router/http`) and the
+request-context root export are host-free at runtime: Route Mode pulls no
+Vite, Nitro, Element, or Node host dependencies into its module graph.
+
+Framework Mode authoring — the package root (`definePage`,
+`defineIslandConfig`, the action protocol) and the Element route-data types it
+re-exports — is built on compiled element classes (ADR-0143) and therefore
+requires `@openelement/element` to be installed. Element is declared as an
+optional peer so a Route Mode install stays lean; install it explicitly when
+you import from the package root or use Framework Mode. The declarations are
+checked against that contract by a strict, isolated npm consumer
+(`tools/release/consumer-packaged-router.ts`).
+
+Host tooling lives behind explicit subpath exports (`./vite`, `./cli/build`,
+`./cli/start`) whose dependencies are optional peers. The `./nitro-mount`
+deployment subpath instead expects the deploying application to install
+`nitro` itself: declaring it as a peer would make npm auto-place
+`nitro@3.0.0`, whose own `vite@^7` peer conflicts with the tooling's
+`vite@^8` requirement and breaks a bare `npm install`.
 
 > The 1.0 baseline uses compiled element classes for page authoring
-> (ADR-0143) while Router remains independently consumable.
+> (ADR-0143). Route Mode stays independently consumable without Element;
+> Framework Mode installs Element alongside Router.
 
 Use the package root in route, island, and component modules. A route module
 default-exports the compiled page class wrapped in `definePage()`:
@@ -167,6 +180,13 @@ surface stays free of host dependencies.
 
 ```bash
 npm install @openelement/router
+```
+
+Route Mode only uses these subpaths and needs nothing else. Framework Mode
+(the package root) also needs Element:
+
+```bash
+npm install @openelement/router @openelement/element
 ```
 
 ## License

@@ -1,13 +1,12 @@
 import { assertEquals, assertStrictEquals, assertThrows } from '@std/assert';
 import { type ListPattern, URLPatternList } from '@openelement/url-pattern-list';
-import type { URLPatternConstructor } from '../src/internal/router/route-table.ts';
 
 if (typeof globalThis.URLPattern !== 'function') {
   throw new TypeError(
     'URLPatternList tests require the Web Standard URLPattern API, which is unavailable in this runtime.',
   );
 }
-const NativeURLPattern = globalThis.URLPattern as unknown as URLPatternConstructor;
+const NativeURLPattern = globalThis.URLPattern;
 
 /** Build a list from entry pairs (the package registers via addPattern). */
 function listFromEntries<T>(

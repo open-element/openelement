@@ -7,8 +7,48 @@ import { normalizeRoutePatternForURLPattern } from './route-pattern.ts';
  * port, search, hash, …). `path` is the single pathname truth: a record
  * whose pattern disagrees on pathname would fork route identity, so the
  * type omits it and the constructor rejects it at runtime (#1325).
+ *
+ * Router owns this structural contract instead of referencing the global
+ * `URLPatternInit`: the Web Standard URLPattern types are missing from the
+ * DOM lib of supported TypeScript consumers (e.g. 5.9), so a published
+ * declaration that named them would not resolve without an undeclared global.
+ * The native constructor is adapted at the one runtime boundary instead.
  */
-export type RoutePatternComponents = Omit<URLPatternInit, 'pathname'>;
+export interface RoutePatternComponents {
+  protocol?: string;
+  username?: string;
+  password?: string;
+  hostname?: string;
+  port?: string;
+  search?: string;
+  hash?: string;
+  baseURL?: string;
+}
+
+/** One URL-component match group; mirrors the Web Standard shape structurally. */
+export interface RoutePatternComponentResult {
+  readonly input: string;
+  readonly groups: Record<string, string | undefined>;
+}
+
+/** Router-owned structural result of a route pattern `exec()`. */
+export interface RoutePatternResult {
+  readonly inputs: readonly unknown[];
+  readonly protocol: RoutePatternComponentResult;
+  readonly username: RoutePatternComponentResult;
+  readonly password: RoutePatternComponentResult;
+  readonly hostname: RoutePatternComponentResult;
+  readonly port: RoutePatternComponentResult;
+  readonly pathname: RoutePatternComponentResult;
+  readonly search: RoutePatternComponentResult;
+  readonly hash: RoutePatternComponentResult;
+}
+
+/** Router-owned structural URLPattern instance (native and polyfill alike). */
+export interface RoutePattern {
+  readonly pathname: string;
+  exec(input: string, baseURL?: string): RoutePatternResult | null;
+}
 
 export interface RouteRecord {
   path: string;
@@ -23,7 +63,7 @@ export interface RouteMatch<T extends RouteRecord> {
   id: string;
   params: Record<string, string>;
   searchParams: URLSearchParams;
-  patternResult: URLPatternResult;
+  patternResult: RoutePatternResult;
 }
 
 export type RouteResolution<T extends RouteRecord> =
@@ -36,7 +76,9 @@ export interface RouteTableOptions {
   trailingSlash?: 'strict' | 'ignore';
 }
 
-export type URLPatternConstructor = new (init: URLPatternInit) => URLPattern;
+export type URLPatternConstructor = new (
+  init: RoutePatternComponents & { pathname: string },
+) => RoutePattern;
 /**
  * Native Web Standard URLPattern. All Alpha targets (Deno 2.9, Node 24,
  * current Chromium/Firefox/WebKit) ship it, so there is no polyfill fallback:
@@ -138,7 +180,12 @@ export class RouteTable<T extends RouteRecord> {
       return [new Pattern({ ...route.pattern, pathname }), { route, id }] as const;
     });
     const list = new URLPatternList<{ route: T; id: string }>();
-    for (const [pattern, value] of entries) list.addPattern(pattern, value);
+    for (const [pattern, value] of entries) {
+      // The list only stores/execs patterns; Router's structural contract is
+      // the public one, so adapt at this single internal boundary rather than
+      // leaking the global URLPattern result type into declarations.
+      list.addPattern(pattern as unknown as Parameters<typeof list.addPattern>[0], value);
+    }
     this.#list = list;
   }
 
