@@ -35,9 +35,12 @@ publish; a missing environment fails the job closed instead of publishing:
   Publishing via the workflow's `id-token: write` OIDC claim. The publish
   step passes `--provenance` only under `GITHUB_ACTIONS=true`, so local runs
   can never mint registry attestations.
-- `publish:npm` runs only after `release:check` (packed qualification and
-  `publish:npm:dry-run`) on the exact `candidate_sha`; the job re-verifies
-  `git rev-parse HEAD == candidate_sha` after checkout.
+- `publish:npm` runs only after `release:check` (packed qualification,
+  `publish:npm:dry-run`, and the read-only registry-state check) on the exact
+  `candidate_sha`, and re-verifies `git rev-parse HEAD == candidate_sha` after
+  checkout.
+- `publish:npm` publishes each package, then verifies every published package's exact version and dist-tag against the registry (continuity is checked per package, not just the first), and writes `.artifacts/release-receipt.json` bound to the exact SHA, tree, and tarball hashes. A partial publish is recorded as `partial` and fails the job instead of reporting success; a re-run safely resumes because already-published versions are skipped. `latest` is never moved onto a prerelease.
+- After a successful publish the same workflow chains the published-consumer qualification workflow automatically; it is no longer a manual-only proof.
 - The release job refuses to proceed without a successful, non-expired
   `autoflow-ci` artifact for the same SHA: it finds the CI run for that
   commit, downloads the `candidate-evidence-*` artifact, recomputes every log

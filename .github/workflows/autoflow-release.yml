@@ -105,3 +105,14 @@ jobs:
       - name: Publish retained packages
         if: inputs.publish
         run: deno task --cwd tools/release publish:npm
+
+  # Post-publish consumer qualification is chained automatically after a real
+  # publish; a partial publish fails the release job before this runs.
+  post-publish-consumers:
+    needs: release
+    if: inputs.publish
+    permissions:
+      contents: read
+    uses: ./.github/workflows/published-consumers.yml
+    with:
+      version: ${{ inputs.version }}

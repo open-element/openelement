@@ -14,6 +14,9 @@ import {
   previousPrerelease,
   publishPackage,
   type PublishPackageIo,
+  publishRelease,
+  type PublishReleaseIo,
+  type ReleaseReceipt,
   verifyNpmRelease,
 } from './publish-npm.ts';
 import type { PackageInfo } from '../lib/package-graph.ts';
@@ -523,4 +526,85 @@ Deno.test('packRelativePath scopes warned files to the packed directory', () => 
     packRelativePath('/var/folders/x/y', 'file:///private/var/folders/x/y/src/a.ts'),
     'src/a.ts',
   );
+});
+
+// ─── Post-publish release flow (receipt + partial publish) ───────────
+
+function releasePackages(): PackageInfo[] {
+  return [
+    pkg('@openelement/element', '1.0.0-alpha.1'),
+    pkg('@openelement/router', '1.0.0-alpha.1'),
+    pkg('@openelement/create', '1.0.0-alpha.1'),
+    pkg('@openelement/ui', '1.0.0-alpha.1'),
+  ];
+}
+
+function releaseIo(overrides: Partial<PublishReleaseIo> = {}): {
+  io: PublishReleaseIo;
+  receipt: () => ReleaseReceipt | undefined;
+  verified: () => boolean;
+} {
+  let written: ReleaseReceipt | undefined;
+  let verifyCalled = false;
+  const io: PublishReleaseIo = {
+    publish: () => Promise.resolve(),
+    verify: () => {
+      verifyCalled = true;
+      return Promise.resolve();
+    },
+    sha: () => Promise.resolve('a'.repeat(40)),
+    tree: () => Promise.resolve('b'.repeat(40)),
+    tarballHash: (entry) => Promise.resolve(`sha256:${entry.name}`),
+    writeReceipt: (value) => {
+      written = value;
+      return Promise.resolve();
+    },
+    log: () => {},
+    ...overrides,
+  };
+  return { io, receipt: () => written, verified: () => verifyCalled };
+}
+
+Deno.test('publishRelease verifies every package and writes a bound receipt', async () => {
+  const { io, receipt, verified } = releaseIo();
+  const result = await publishRelease(releasePackages(), io);
+  assertEquals(result.result, 'published');
+  assertEquals(result.packages.every((entry) => entry.published && entry.verified), true);
+  assertEquals(result.sha, 'a'.repeat(40));
+  assertEquals(result.tree, 'b'.repeat(40));
+  assertEquals(Object.keys(result.tarballs).length, 4);
+  assertEquals(verified(), true);
+  assertEquals(receipt()?.result, 'published');
+});
+
+Deno.test('publishRelease records a partial publish and does not claim success', async () => {
+  const { io, receipt, verified } = releaseIo({
+    publish: (entry) =>
+      entry.name === '@openelement/router'
+        ? Promise.reject(new Error('E403 forbidden'))
+        : Promise.resolve(),
+  });
+  const result = await publishRelease(releasePackages(), io);
+  assertEquals(result.result, 'partial');
+  assertEquals(verified(), false, 'verification must not run for a partial publish');
+  const router = result.packages.find((entry) => entry.name === '@openelement/router');
+  assertEquals(router?.published, false);
+  assertEquals(router?.error?.includes('E403'), true);
+  assertEquals(
+    result.packages.filter((entry) => entry.published).length,
+    3,
+  );
+  assertEquals(receipt()?.result, 'partial');
+});
+
+Deno.test('publishRelease fails closed when registry verification fails', async () => {
+  const { io, receipt } = releaseIo({
+    verify: () => Promise.reject(new Error('dist-tag beta moved')),
+  });
+  const result = await publishRelease(releasePackages(), io);
+  assertEquals(result.result, 'failed');
+  assertEquals(result.packages.every((entry) => entry.published), true);
+  assertEquals(result.packages.every((entry) => !entry.verified), true);
+  assertEquals(result.packages[0].error?.includes('dist-tag beta moved'), true);
+  assertEquals(receipt()?.result, 'failed');
 });

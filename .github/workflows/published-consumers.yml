@@ -7,6 +7,14 @@ on:
         description: Published package version to qualify (defaults to project constants)
         required: false
         type: string
+  # Chained by the Release workflow after a successful publish so published
+  # consumers are qualified automatically, not only by a manual dispatch.
+  workflow_call:
+    inputs:
+      version:
+        description: Published package version to qualify (defaults to project constants)
+        required: false
+        type: string
 
 permissions:
   contents: read

@@ -1045,35 +1045,35 @@ export async function verifyNpmRelease(
     );
   }
 
-  // #869-2.5: no version skips — the predecessor on the same line must already
-  // be published before this release can proceed.
+  // #869-2.5: no version skips — the predecessor on the same line must
+  // already be published for every package before this release can proceed.
   const predecessor = previousPrerelease(options.version);
   if (predecessor) {
-    const packageName = `@openelement/${options.packages[0]}`;
-    let published: string[] = [];
-    for (let attempt = 0; attempt < runtime.delaysMs.length; attempt++) {
-      const delay = runtime.delaysMs[attempt];
-      if (delay > 0) await runtime.sleep(delay);
-      try {
-        const raw = await runtime.query(packageName, 'versions');
-        const parsed = JSON.parse(raw) as unknown;
-        if (Array.isArray(parsed)) {
-          published = parsed.filter((v): v is string => typeof v === 'string');
-          break;
+    for (const name of options.packages) {
+      const packageName = `@openelement/${name}`;
+      let published: string[] = [];
+      for (let attempt = 0; attempt < runtime.delaysMs.length; attempt++) {
+        const delay = runtime.delaysMs[attempt];
+        if (delay > 0) await runtime.sleep(delay);
+        try {
+          const raw = await runtime.query(packageName, 'versions');
+          const parsed = JSON.parse(raw) as unknown;
+          if (Array.isArray(parsed)) {
+            published = parsed.filter((v): v is string => typeof v === 'string');
+            break;
+          }
+        } catch (error) {
+          if (!(error instanceof NpmViewError) || !error.retryable) throw error;
         }
-      } catch (error) {
-        if (!(error instanceof NpmViewError) || !error.retryable) throw error;
+      }
+      if (!published.includes(predecessor)) {
+        throw new Error(
+          `Continuity check failed for ${options.version}: predecessor ${predecessor} ` +
+            `is not among published versions of ${packageName}.`,
+        );
       }
     }
-    if (!published.includes(predecessor)) {
-      throw new Error(
-        `Continuity check failed for ${options.version}: predecessor ${predecessor} ` +
-          `is not among published versions of ${packageName}.`,
-      );
-    }
-    options.log?.(
-      `Continuity verified: ${predecessor} precedes ${options.version}.`,
-    );
+    options.log?.(`Continuity verified: ${predecessor} precedes ${options.version}.`);
   }
 
   for (const name of options.packages) {
@@ -1111,6 +1111,123 @@ export async function verifyNpmRelease(
       );
     }
   }
+}
+
+async function gitRef(ref: string): Promise<string> {
+  const result = await runWithOutput('git', ['rev-parse', ref]);
+  if (!result.success) throw new Error(`git rev-parse ${ref} failed: ${result.stderr}`);
+  return result.stdout.trim();
+}
+
+async function sha256File(path: string): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', await Deno.readFile(path));
+  return 'sha256:' +
+    [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+
+export interface ReleasePackageOutcome {
+  name: string;
+  version: string;
+  published: boolean;
+  verified: boolean;
+  error?: string;
+}
+
+export interface ReleaseReceipt {
+  schemaVersion: 1;
+  sha: string;
+  tree: string;
+  version: string;
+  tarballs: Record<string, string>;
+  packages: ReleasePackageOutcome[];
+  result: 'published' | 'partial' | 'failed';
+  generatedAt: string;
+}
+
+export interface PublishReleaseIo {
+  publish: (pkg: PackageInfo) => Promise<void>;
+  verify: (version: string, packages: PackageInfo[]) => Promise<void>;
+  sha: () => Promise<string>;
+  tree: () => Promise<string>;
+  tarballHash: (pkg: PackageInfo) => Promise<string>;
+  writeReceipt: (receipt: ReleaseReceipt) => Promise<void>;
+  log: (message: string) => void;
+}
+
+/**
+ * Publish every package, then verify every published package against the
+ * registry, and always emit a per-package receipt bound to the exact
+ * SHA/tree/tarball hashes. Partial publication is recorded as partial (never
+ * reported as overall success) and a re-run safely resumes: `publishPackage`
+ * skips versions that already exist.
+ */
+export async function publishRelease(
+  packages: PackageInfo[],
+  io: PublishReleaseIo,
+): Promise<ReleaseReceipt> {
+  const version = packages[0]?.version ?? '';
+  const [sha, tree] = [await io.sha(), await io.tree()];
+  const tarballs: Record<string, string> = {};
+  for (const pkg of packages) tarballs[pkg.name] = await io.tarballHash(pkg);
+
+  const outcomes: ReleasePackageOutcome[] = [];
+  for (const pkg of packages) {
+    try {
+      await io.publish(pkg);
+      outcomes.push({ name: pkg.name, version: pkg.version, published: true, verified: false });
+    } catch (error) {
+      outcomes.push({
+        name: pkg.name,
+        version: pkg.version,
+        published: false,
+        verified: false,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+  const publishedCount = outcomes.filter((outcome) => outcome.published).length;
+  let result: ReleaseReceipt['result'] = publishedCount === outcomes.length
+    ? 'published'
+    : publishedCount > 0
+    ? 'partial'
+    : 'failed';
+
+  if (result === 'published') {
+    try {
+      await io.verify(version, packages);
+      for (const outcome of outcomes) outcome.verified = true;
+    } catch (error) {
+      result = 'failed';
+      const message = error instanceof Error ? error.message : String(error);
+      for (const outcome of outcomes) outcome.error = message;
+    }
+  } else {
+    io.log(
+      `[npm] partial publish: published=${
+        outcomes.filter((o) => o.published).map((o) => o.name).join(',') || 'none'
+      }; missing=${
+        outcomes.filter((o) => !o.published).map((o) => o.name).join(',') || 'none'
+      } (registry verification skipped; re-run to resume)`,
+    );
+  }
+
+  const receipt: ReleaseReceipt = {
+    schemaVersion: 1,
+    sha,
+    tree,
+    version,
+    tarballs,
+    packages: outcomes,
+    result,
+    generatedAt: new Date().toISOString(),
+  };
+  await io.writeReceipt(receipt);
+  io.log(
+    `[npm] release receipt: ${result} (${
+      outcomes.filter((o) => o.verified).length
+    }/${outcomes.length} verified)`,
+  );
+  return receipt;
 }
 
 function assertVersionConsistency(packages: PackageInfo[]): void {
@@ -1178,9 +1295,27 @@ async function main(): Promise<void> {
   }
 
   if (publish) {
-    for (const pkg of packages) {
-      await publishPackage(pkg, dryRun);
-    }
+    const receipt = await publishRelease(packages, {
+      publish: (pkg) => publishPackage(pkg, dryRun),
+      verify: (version, pkgs) =>
+        verifyNpmRelease({
+          version,
+          packages: pkgs.map((pkg) => pkg.name.replace('@openelement/', '')),
+          query: npmView,
+        }),
+      sha: () => gitRef('HEAD'),
+      tree: () => gitRef('HEAD^{tree}'),
+      tarballHash: (pkg) => sha256File(tarballPath(pkg)),
+      writeReceipt: async (value) => {
+        await Deno.mkdir('.artifacts', { recursive: true });
+        await Deno.writeTextFile(
+          '.artifacts/release-receipt.json',
+          JSON.stringify(value, null, 2) + '\n',
+        );
+      },
+      log: console.log,
+    });
+    if (receipt.result !== 'published') Deno.exit(1);
   }
 
   console.log(`[npm] ${command} complete. Tarballs:`);

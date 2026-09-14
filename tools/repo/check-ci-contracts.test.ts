@@ -202,6 +202,28 @@ Deno.test('ci contract: release consumes the bound, non-expired CI artifact', as
   );
 });
 
+Deno.test('ci contract: post-publish consumers are chained, not manual-only', async () => {
+  const releasing = await Deno.readTextFile(
+    join(repoRoot, '.github/workflows/autoflow-release.yml'),
+  );
+  const published = await Deno.readTextFile(
+    join(repoRoot, '.github/workflows/published-consumers.yml'),
+  );
+  assert(
+    /workflow_call:/.test(published),
+    'published-consumers must expose workflow_call so release can chain it',
+  );
+  const postPublish = jobBlock(releasing, 'post-publish-consumers');
+  assert(
+    /needs:\s*release/.test(postPublish) && /if:\s*inputs\.publish/.test(postPublish),
+    'post-publish-consumers must run after a real publish',
+  );
+  assert(
+    /uses:\s*\.\/\.github\/workflows\/published-consumers\.yml/.test(postPublish),
+    'post-publish-consumers must call the published-consumers workflow',
+  );
+});
+
 Deno.test('ci contract: packed-consumer matrix pins all three release OSes', () => {
   const block = jobBlock(workflow, 'packed-consumer-matrix');
   assert(
