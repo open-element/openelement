@@ -26,17 +26,21 @@ import { dirname, join, relative } from '@std/path';
 import { readPackages } from '../lib/package-graph.ts';
 import { auditSiteE2e, type SiteE2eResult } from './site-e2e-result.ts';
 import { tarballPath } from '../lib/npm-tarball.ts';
+import {
+  auditFreshCloneIsolation,
+  auditStepCommand,
+  FRESH_CLONE_ISOLATION,
+  freshCloneCommands,
+  JOB_NAMES,
+  type JobName,
+  REQUIRED_STEPS,
+  STATIC_JOB_STEPS,
+} from './candidate-steps.ts';
+
+export { JOB_NAMES, REQUIRED_STEPS } from './candidate-steps.ts';
 
 const repoRoot = join(dirname(new URL(import.meta.url).pathname), '..', '..');
 const ARTIFACT_RETENTION_DAYS = 14;
-
-type JobName = 'fast-checks' | 'source-matrix' | 'packed' | 'fresh-clone';
-const JOB_NAMES: readonly JobName[] = [
-  'fast-checks',
-  'source-matrix',
-  'packed',
-  'fresh-clone',
-];
 
 /** Required production-package tarball keys; extras or fakes are rejected. */
 export const REQUIRED_PACKAGE_TARBALLS: readonly string[] = [
@@ -62,21 +66,6 @@ export const REQUIRED_PACKED_CONSUMERS: readonly string[] = [
 
 /** Site E2E projects (single canonical list lives in site-e2e-result.ts). */
 export { SITE_E2E_PROJECTS as REQUIRED_SITE_BROWSERS } from './site-e2e-result.ts';
-
-/** Minimum required steps per job; missing/duplicate/failed steps fail closed. */
-export const REQUIRED_STEPS: Record<JobName, readonly string[]> = {
-  'fast-checks': ['fmt-check', 'lint', 'markdown', 'typecheck'],
-  'source-matrix': ['gate-source'],
-  packed: ['gate-packed', 'publish-npm-dry-run'],
-  'fresh-clone': [
-    'clone',
-    'git-checkout',
-    'install',
-    'task-check',
-    'task-gate-source',
-    'task-release-check',
-  ],
-};
 
 interface StepResult {
   name: string;
@@ -237,37 +226,6 @@ async function runStep(
   };
 }
 
-const JOB_STEPS: Record<
-  Exclude<JobName, 'fresh-clone'>,
-  Array<{ name: string; command: string[] }>
-> = {
-  'fast-checks': [
-    { name: 'fmt-check', command: [denoExe, 'fmt', '--check'] },
-    { name: 'lint', command: [denoExe, 'lint'] },
-    {
-      name: 'markdown',
-      command: [denoExe, 'task', '--cwd', 'tools/repo', 'lint:markdown'],
-    },
-    { name: 'typecheck', command: [denoExe, 'task', 'typecheck'] },
-  ],
-  'source-matrix': [
-    {
-      name: 'gate-source',
-      command: [denoExe, 'task', '--cwd', 'tools/repo', 'gate:source'],
-    },
-  ],
-  packed: [
-    {
-      name: 'gate-packed',
-      command: [denoExe, 'task', '--cwd', 'tools/release', 'gate:packed'],
-    },
-    {
-      name: 'publish-npm-dry-run',
-      command: [denoExe, 'task', '--cwd', 'tools/release', 'publish:npm:dry-run'],
-    },
-  ],
-};
-
 const PACKED_CONSUMER_STEP = /^PASS ((?:tools|apps|tests)\/[^\s(]+#(?:consumer:[^\s(]+|smoke))\b/m;
 
 /** Derive packed-gate facts from the real gate log, never from a summary. */
@@ -349,9 +307,10 @@ async function recordJob(job: Exclude<JobName, 'fresh-clone'>, outDir: string): 
   const { sha, tree } = await assertCleanAtSha(expected);
   await Deno.mkdir(join(outDir, 'logs'), { recursive: true });
   const steps: StepResult[] = [];
-  for (const { name, command } of JOB_STEPS[job]) {
-    console.log(`[evidence] ${job}: ${name}: ${command.join(' ')}`);
-    const step = await runStep(name, command, outDir);
+  for (const { name, command } of STATIC_JOB_STEPS[job]) {
+    const argv = [...command];
+    console.log(`[evidence] ${job}: ${name}: ${argv.join(' ')}`);
+    const step = await runStep(name, argv, outDir);
     if (name === 'gate-source' || name === 'gate-packed') {
       const text = await Deno.readTextFile(join(outDir, step.logPath));
       step.counts = gateStepCounts(text);
@@ -445,8 +404,8 @@ async function recordFreshClone(outDir: string): Promise<void> {
     }
   };
   try {
-    await run(['git', 'clone', '--no-hardlinks', repoRoot, cloneDir], tmpRoot);
-    await run(['git', '-C', cloneDir, 'checkout', sha], tmpRoot);
+    await run(freshCloneCommands.clone(repoRoot, cloneDir), tmpRoot);
+    await run(freshCloneCommands.checkout(cloneDir, sha), tmpRoot);
     const clonedSha = (await required('git', ['-C', cloneDir, 'rev-parse', 'HEAD'])).trim();
     if (clonedSha !== sha) throw new Error(`fresh clone checked out ${clonedSha}, want ${sha}`);
     const isolatedEnv = {
@@ -456,17 +415,13 @@ async function recordFreshClone(outDir: string): Promise<void> {
       npm_config_cache: npmCache,
       DENO_NO_UPDATE_CHECK: '1',
     };
-    await run([denoExe, 'install'], cloneDir, isolatedEnv);
-    await run([denoExe, 'task', 'check'], cloneDir, isolatedEnv);
+    await run(freshCloneCommands.install(denoExe), cloneDir, isolatedEnv);
+    await run(freshCloneCommands.check(denoExe), cloneDir, isolatedEnv);
     // The real source gate (includes Site E2E) and the real release check
     // (registry check + packed gate + publish dry-run) — no duplicated
     // packed/dry-run steps, since release:check already owns them.
-    await run(
-      [denoExe, 'task', '--cwd', 'tools/repo', 'gate:source'],
-      cloneDir,
-      isolatedEnv,
-    );
-    await run([denoExe, 'task', 'release:check'], cloneDir, isolatedEnv);
+    await run(freshCloneCommands.gateSource(denoExe), cloneDir, isolatedEnv);
+    await run(freshCloneCommands.releaseCheck(denoExe), cloneDir, isolatedEnv);
   } finally {
     await Deno.remove(tmpRoot, { recursive: true }).catch(() => undefined);
   }
@@ -488,14 +443,7 @@ async function recordFreshClone(outDir: string): Promise<void> {
       logSha256: command.logSha256,
     })),
     toolVersions: await toolVersions(),
-    extras: {
-      envSummary: {
-        DENO_DIR: 'fresh, empty at start (removed after the run)',
-        npmCache: 'fresh, empty at start (removed after the run)',
-        shared: 'HOME (Playwright browser binaries reused from the preinstalled cache)',
-        copied: 'nothing: no node_modules, dist, tgz, or coverage carried over',
-      },
-    },
+    extras: { isolation: FRESH_CLONE_ISOLATION },
     generatedAt: new Date().toISOString(),
   };
   await Deno.writeTextFile(join(outDir, 'result.json'), JSON.stringify(result, null, 2) + '\n');
@@ -510,67 +458,190 @@ interface LoadedJob {
   read: (path: string) => Promise<Uint8Array | null>;
 }
 
-interface AuditableStep {
-  name: string;
-  command?: string[];
-  startedAt?: string;
-  durationMs?: number;
-  result: string;
-  exitCode?: number;
-  logPath: string;
-  logSha256: string;
+const ISO_TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/u;
+const SHA256_HEX = /^sha256:[0-9a-f]{64}$/u;
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isCommit(value: unknown): value is string {
+  return typeof value === 'string' && /^[0-9a-f]{40}$/u.test(value);
+}
+
+function auditSafeRelativePath(value: unknown): string[] {
+  if (typeof value !== 'string' || value === '') return ['path must be a non-empty string'];
+  if (value.startsWith('/') || value.includes('\\')) {
+    return [`path must be a relative POSIX path, got ${JSON.stringify(value)}`];
+  }
+  const segments = value.split('/');
+  if (segments.some((segment) => segment === '' || segment === '.' || segment === '..')) {
+    return [`path must not contain empty, '.', or '..' segments, got ${JSON.stringify(value)}`];
+  }
+  return [];
+}
+
+function auditArtifactPath(
+  jobName: JobName,
+  value: unknown,
+  mode: 'job' | 'bundle',
+): string[] {
+  if (typeof value !== 'string' || value === '') return ['log path must be a non-empty string'];
+  if (value.startsWith('/') || value.includes('\\')) {
+    return [`log path must be a relative POSIX path, got ${JSON.stringify(value)}`];
+  }
+  const segments = value.split('/');
+  if (segments.some((segment) => segment === '' || segment === '.' || segment === '..')) {
+    return [`log path must not contain empty, '.', or '..' segments, got ${JSON.stringify(value)}`];
+  }
+  const prefix = mode === 'bundle' ? `ci/${jobName}/logs/` : 'logs/';
+  if (!value.startsWith(prefix) || !value.endsWith('.log')) {
+    return [`log path must be under ${prefix} and end with .log, got ${JSON.stringify(value)}`];
+  }
+  return [];
+}
+
+interface AuditJobContext {
+  mode: 'job' | 'bundle';
+  sha: string;
+  tree: string;
+  generatedAt: string;
+  read: (path: string) => Promise<Uint8Array | null>;
+  extras?: unknown;
 }
 
 /**
  * Single source of job invariants shared by aggregate (job result.json files)
- * and validate (the aggregated bundle), so the two can never disagree.
+ * and validate (the aggregated bundle). Everything is treated as untrusted
+ * JSON: every field is required and validated, and malformed input returns
+ * explicit failures instead of defaulting or throwing.
  */
 async function auditJob(
-  jobName: string,
-  sha: string,
-  tree: string,
-  jobResult: string,
-  steps: readonly AuditableStep[],
-  read: (path: string) => Promise<Uint8Array | null>,
+  jobName: unknown,
+  jobResult: unknown,
+  rawSteps: unknown,
+  context: AuditJobContext,
 ): Promise<string[]> {
   const failures: string[] = [];
-  if (!JOB_NAMES.includes(jobName as JobName)) {
-    failures.push(`unknown job result: ${jobName}`);
+  if (typeof jobName !== 'string' || !JOB_NAMES.includes(jobName as JobName)) {
+    return [`unknown job result: ${JSON.stringify(jobName)}`];
+  }
+  const job = jobName as JobName;
+  if (!isCommit(context.sha)) failures.push(`${job}: sha is not a 40-character commit`);
+  if (!isCommit(context.tree)) failures.push(`${job}: tree is not a 40-character tree`);
+  if (jobResult !== 'PASS') {
+    failures.push(`${job}: job result must be PASS, got ${JSON.stringify(jobResult)}`);
+  }
+  const generatedAtMs = ISO_TIMESTAMP.test(context.generatedAt ?? '')
+    ? Date.parse(context.generatedAt)
+    : Number.NaN;
+  if (Number.isNaN(generatedAtMs)) {
+    failures.push(
+      `${job}: generatedAt must be an ISO-8601 timestamp, got ${
+        JSON.stringify(context.generatedAt)
+      }`,
+    );
+  }
+  if (!Array.isArray(rawSteps) || rawSteps.length === 0) {
+    failures.push(`${job}: steps must be a non-empty array`);
     return failures;
   }
-  if (sha.length !== 40) failures.push(`${jobName}: sha is not a 40-character commit`);
-  if (tree.length !== 40) failures.push(`${jobName}: tree is not a 40-character tree`);
-  if (jobResult !== 'PASS') failures.push(`${jobName}: job result ${jobResult}`);
-  const stepNames = steps.map((step) => step.name);
-  for (const required of REQUIRED_STEPS[jobName as JobName]) {
-    const count = stepNames.filter((name) => name === required).length;
-    if (count === 0) failures.push(`${jobName}: required step missing: ${required}`);
-    else if (count > 1) failures.push(`${jobName}: required step duplicated: ${required}`);
+  const byName = new Map<string, Record<string, unknown>>();
+  for (const [index, raw] of rawSteps.entries()) {
+    if (!isRecord(raw)) {
+      failures.push(`${job}: steps[${index}] must be an object`);
+      continue;
+    }
+    const name = raw.name;
+    if (typeof name !== 'string' || name === '') {
+      failures.push(`${job}: steps[${index}].name must be a non-empty string`);
+      continue;
+    }
+    if (byName.has(name)) {
+      failures.push(`${job}: duplicate step '${name}'`);
+      continue;
+    }
+    byName.set(name, raw);
   }
-  for (const step of steps) {
-    if (step.result !== 'PASS' || (step.exitCode ?? 0) !== 0) {
-      failures.push(`${jobName}/${step.name}: ${step.result} (exit ${step.exitCode ?? 0})`);
+  const required = REQUIRED_STEPS[job];
+  for (const name of required) {
+    if (!byName.has(name)) failures.push(`${job}: required step missing: ${name}`);
+  }
+  for (const name of byName.keys()) {
+    if (!required.includes(name)) {
+      failures.push(`${job}: unknown step '${name}' (not in the canonical contract)`);
     }
-    if (step.command !== undefined && (!Array.isArray(step.command) || step.command.length === 0)) {
-      failures.push(`${jobName}/${step.name}: command (argv) must be a non-empty array`);
+  }
+  let previousStartedAt = Number.NEGATIVE_INFINITY;
+  for (const name of required) {
+    const step = byName.get(name);
+    if (!step) continue;
+    const label = `${job}/${name}`;
+    failures.push(
+      ...auditStepCommand(job, name, step.command, { sha: context.sha }).map(
+        (failure) => `${label}: ${failure}`,
+      ),
+    );
+    const startedAt = step.startedAt;
+    if (typeof startedAt !== 'string' || !ISO_TIMESTAMP.test(startedAt)) {
+      failures.push(
+        `${label}: startedAt must be an ISO-8601 timestamp, got ${JSON.stringify(startedAt)}`,
+      );
+    } else {
+      const startedAtMs = Date.parse(startedAt);
+      if (Number.isNaN(startedAtMs)) {
+        failures.push(`${label}: startedAt is not a valid date`);
+      } else {
+        if (!Number.isNaN(generatedAtMs) && startedAtMs > generatedAtMs) {
+          failures.push(`${label}: startedAt ${startedAt} is after the evidence generatedAt`);
+        }
+        if (startedAtMs < previousStartedAt) {
+          failures.push(`${label}: startedAt ${startedAt} is out of order`);
+        }
+        previousStartedAt = Math.max(previousStartedAt, startedAtMs);
+      }
     }
-    if (
-      step.startedAt !== undefined && (typeof step.startedAt !== 'string' || step.startedAt === '')
-    ) {
-      failures.push(`${jobName}/${step.name}: startedAt must be a non-empty string`);
+    if (!Number.isSafeInteger(step.durationMs) || (step.durationMs as number) < 0) {
+      failures.push(
+        `${label}: durationMs must be a non-negative safe integer, got ${
+          JSON.stringify(step.durationMs)
+        }`,
+      );
     }
-    if (
-      step.durationMs !== undefined &&
-      (!Number.isFinite(step.durationMs) || step.durationMs < 0)
-    ) {
-      failures.push(`${jobName}/${step.name}: durationMs must be a non-negative number`);
+    if (step.result !== 'PASS') {
+      failures.push(`${label}: result must be PASS, got ${JSON.stringify(step.result)}`);
     }
-    const bytes = await read(step.logPath);
-    if (!bytes) {
-      failures.push(`${jobName}/${step.name}: log missing at ${step.logPath}`);
-    } else if ((await sha256Bytes(bytes)) !== step.logSha256) {
-      failures.push(`${jobName}/${step.name}: log hash mismatch`);
+    if (!Number.isSafeInteger(step.exitCode) || step.exitCode !== 0) {
+      failures.push(
+        `${label}: exitCode must be the integer 0, got ${JSON.stringify(step.exitCode)}`,
+      );
     }
+    failures.push(
+      ...auditArtifactPath(job, step.logPath, context.mode).map((failure) =>
+        `${label}: ${failure}`
+      ),
+    );
+    if (typeof step.logSha256 !== 'string' || !SHA256_HEX.test(step.logSha256)) {
+      failures.push(
+        `${label}: logSha256 must be sha256:<64 lowercase hex>, got ${
+          JSON.stringify(step.logSha256)
+        }`,
+      );
+    }
+    if (typeof step.logPath === 'string' && step.logPath !== '') {
+      const bytes = await context.read(step.logPath);
+      if (!bytes) {
+        failures.push(`${label}: log missing at ${step.logPath}`);
+      } else if (
+        typeof step.logSha256 === 'string' && (await sha256Bytes(bytes)) !== step.logSha256
+      ) {
+        failures.push(`${label}: log hash mismatch`);
+      }
+    }
+  }
+  if (job === 'fresh-clone') {
+    const isolation = isRecord(context.extras) ? context.extras.isolation : undefined;
+    failures.push(...auditFreshCloneIsolation(isolation).map((failure) => `${job}: ${failure}`));
   }
   return failures;
 }
@@ -584,9 +655,13 @@ export async function collectJobFailures(
   const failures: string[] = [];
   const byName = new Map<string, Pick<LoadedJob, 'job' | 'read'>>();
   for (const entry of jobs) {
-    const name = entry.job.job;
-    if (byName.has(name)) failures.push(`duplicate job result: ${name}`);
-    byName.set(name, entry);
+    const raw: unknown = entry.job;
+    if (!isRecord(raw) || typeof raw.job !== 'string') {
+      failures.push('job result is missing a string job name');
+      continue;
+    }
+    if (byName.has(raw.job)) failures.push(`duplicate job result: ${raw.job}`);
+    byName.set(raw.job, entry);
   }
   for (const jobName of JOB_NAMES) {
     const entry = byName.get(jobName);
@@ -594,31 +669,26 @@ export async function collectJobFailures(
       failures.push(`required job result missing: ${jobName}`);
       continue;
     }
-    if (entry.job.sha !== expected) {
-      failures.push(`${jobName}: sha ${entry.job.sha} != ${expected}`);
+    const raw = entry.job as unknown as Record<string, unknown>;
+    if (raw.sha !== expected) {
+      failures.push(`${jobName}: sha ${JSON.stringify(raw.sha)} != ${expected}`);
     }
-    if (entry.job.tree !== expectedTree) {
-      failures.push(`${jobName}: tree ${entry.job.tree} != ${expectedTree}`);
+    if (raw.tree !== expectedTree) {
+      failures.push(`${jobName}: tree ${JSON.stringify(raw.tree)} != ${expectedTree}`);
     }
     failures.push(
-      ...await auditJob(
-        jobName,
-        entry.job.sha,
-        entry.job.tree,
-        entry.job.result,
-        entry.job.steps.map((step) => ({
-          name: step.name,
-          command: step.command,
-          startedAt: step.startedAt,
-          durationMs: step.durationMs,
-          result: step.result,
-          exitCode: step.exitCode,
-          logPath: step.logPath,
-          logSha256: step.logSha256,
-        })),
-        entry.read,
-      ),
+      ...await auditJob(jobName, raw.result, raw.steps, {
+        mode: 'job',
+        sha: typeof raw.sha === 'string' ? raw.sha : '',
+        tree: typeof raw.tree === 'string' ? raw.tree : '',
+        generatedAt: typeof raw.generatedAt === 'string' ? raw.generatedAt : '',
+        read: entry.read,
+        extras: raw.extras,
+      }),
     );
+  }
+  for (const name of byName.keys()) {
+    if (!JOB_NAMES.includes(name as JobName)) failures.push(`unknown job result: ${name}`);
   }
   return failures;
 }
@@ -649,30 +719,7 @@ interface Rollup {
 
 /** Pure artifact checks for an aggregated evidence bundle. Exported for tests. */
 export async function collectBundleFailures(
-  evidence: {
-    sha: string;
-    tree: string;
-    generatedAt: string;
-    jobs?: Array<{
-      job: string;
-      result: string;
-      steps: Array<{
-        name: string;
-        command?: string[];
-        startedAt?: string;
-        durationMs?: number;
-        result: string;
-        exitCode?: number;
-        logSource: string;
-        logSha256: string;
-      }>;
-    }>;
-    tarballs?: Record<string, string>;
-    tarballManifest?: { path: string; sha256: string };
-    packDiagnostics?: { path: string; sha256: string };
-    freshClone?: { path: string; sha256: string };
-    rollup?: Rollup;
-  },
+  evidence: unknown,
   options: {
     expectedSha?: string;
     expectedTree: string;
@@ -681,56 +728,74 @@ export async function collectBundleFailures(
     maxAgeDays?: number;
   },
 ): Promise<string[]> {
+  if (!isRecord(evidence)) return ['evidence bundle must be a JSON object'];
   const failures: string[] = [];
-  if (options.expectedSha && evidence.sha !== options.expectedSha) {
-    failures.push(`evidence sha ${evidence.sha} != expected ${options.expectedSha}`);
+  const sha = evidence.sha;
+  const tree = evidence.tree;
+  if (!isCommit(sha)) failures.push('evidence sha is not a 40-character commit');
+  if (options.expectedSha && sha !== options.expectedSha) {
+    failures.push(`evidence sha ${JSON.stringify(sha)} != expected ${options.expectedSha}`);
   }
-  if (evidence.tree !== options.expectedTree) {
-    failures.push(`evidence tree ${evidence.tree} != HEAD tree ${options.expectedTree}`);
+  if (!isCommit(tree)) failures.push('evidence tree is not a 40-character tree');
+  if (tree !== options.expectedTree) {
+    failures.push(`evidence tree ${JSON.stringify(tree)} != HEAD tree ${options.expectedTree}`);
   }
-  if (evidence.sha.length !== 40) failures.push('evidence sha is not a 40-character commit');
-  const recorded = Date.parse(evidence.generatedAt);
+  const generatedAt = typeof evidence.generatedAt === 'string' ? evidence.generatedAt : '';
+  const recorded = ISO_TIMESTAMP.test(generatedAt) ? Date.parse(generatedAt) : Number.NaN;
   const maxAgeDays = options.maxAgeDays ?? ARTIFACT_RETENTION_DAYS;
   const now = options.now ?? Date.now();
   if (Number.isNaN(recorded)) {
     failures.push('evidence generatedAt is missing or unparsable');
+  } else if (recorded > now) {
+    failures.push('evidence generatedAt is in the future');
   } else if (now - recorded > maxAgeDays * 24 * 60 * 60 * 1000) {
     failures.push(`evidence is older than the ${maxAgeDays}-day retention window`);
   }
-
-  // Same job/step invariants as aggregate, over the bundle's log sources.
-  const bundleJobNames = (evidence.jobs ?? []).map((job) => job.job);
-  const seenBundleJobs = new Set<string>();
-  for (const name of bundleJobNames) {
-    if (seenBundleJobs.has(name)) failures.push(`duplicate job result: ${name}`);
-    seenBundleJobs.add(name);
-  }
-  for (const jobName of JOB_NAMES) {
-    if (!seenBundleJobs.has(jobName)) failures.push(`required job result missing: ${jobName}`);
-  }
-  for (const job of evidence.jobs ?? []) {
-    failures.push(
-      ...await auditJob(
-        job.job,
-        evidence.sha,
-        evidence.tree,
-        job.result,
-        job.steps.map((step) => ({
-          name: step.name,
-          command: step.command,
-          startedAt: step.startedAt,
-          durationMs: step.durationMs,
-          result: step.result,
-          exitCode: step.exitCode,
-          logPath: step.logSource,
-          logSha256: step.logSha256,
-        })),
-        options.read,
-      ),
-    );
+  if (evidence.requiredOk !== true) {
+    failures.push('evidence requiredOk must be exactly true');
   }
 
-  const tarballs = evidence.tarballs ?? {};
+  const rawJobs = evidence.jobs;
+  if (!Array.isArray(rawJobs)) {
+    failures.push('evidence jobs must be an array');
+  } else {
+    const seen = new Set<string>();
+    for (const [index, raw] of rawJobs.entries()) {
+      if (!isRecord(raw)) {
+        failures.push(`evidence.jobs[${index}] must be an object`);
+        continue;
+      }
+      const name = raw.job;
+      if (typeof name !== 'string') {
+        failures.push(`evidence.jobs[${index}].job must be a string`);
+        continue;
+      }
+      if (seen.has(name)) failures.push(`duplicate job result: ${name}`);
+      seen.add(name);
+      // Bundle steps carry `logSource`; auditJob reads `logPath`.
+      const steps = Array.isArray(raw.steps)
+        ? raw.steps.map((step) => isRecord(step) ? { ...step, logPath: step.logSource } : step)
+        : raw.steps;
+      failures.push(
+        ...await auditJob(name, raw.result, steps, {
+          mode: 'bundle',
+          sha: typeof sha === 'string' ? sha : '',
+          tree: typeof tree === 'string' ? tree : '',
+          generatedAt,
+          read: options.read,
+          extras: raw.extras,
+        }),
+      );
+    }
+    for (const jobName of JOB_NAMES) {
+      if (!seen.has(jobName)) failures.push(`required job result missing: ${jobName}`);
+    }
+    for (const name of seen) {
+      if (!JOB_NAMES.includes(name as JobName)) failures.push(`unknown job result: ${name}`);
+    }
+  }
+
+  const tarballs = isRecord(evidence.tarballs) ? evidence.tarballs : {};
   const tarballKeys = Object.keys(tarballs).sort();
   const expectedKeys = [...REQUIRED_PACKAGE_TARBALLS].sort();
   if (tarballKeys.join(',') !== expectedKeys.join(',')) {
@@ -742,26 +807,38 @@ export async function collectBundleFailures(
   }
   for (const name of REQUIRED_PACKAGE_TARBALLS) {
     const hash = tarballs[name];
-    if (!hash || !/^sha256:[0-9a-f]{64}$/u.test(hash)) {
+    if (typeof hash !== 'string' || !SHA256_HEX.test(hash)) {
       failures.push(`tarball ${name}: missing or malformed sha256`);
     }
   }
-  failures.push(...collectRollupFailures(evidence.rollup));
+  failures.push(
+    ...collectRollupFailures(isRecord(evidence.rollup) ? evidence.rollup as Rollup : undefined),
+  );
   for (
-    const manifest of [
-      evidence.tarballManifest,
-      evidence.packDiagnostics,
-      evidence.freshClone,
-    ]
+    const [label, manifest] of [
+      ['tarballManifest', evidence.tarballManifest],
+      ['packDiagnostics', evidence.packDiagnostics],
+    ] as const
   ) {
-    if (!manifest) {
-      failures.push('required manifest reference missing');
+    if (!isRecord(manifest)) {
+      failures.push(`${label} reference missing`);
       continue;
     }
-    const bytes = await options.read(manifest.path);
-    if (!bytes) failures.push(`manifest missing at ${manifest.path}`);
-    else if ((await sha256Bytes(bytes)) !== manifest.sha256) {
-      failures.push(`manifest hash mismatch at ${manifest.path}`);
+    const path = manifest.path;
+    const hash = manifest.sha256;
+    const pathFailures = auditSafeRelativePath(path);
+    if (pathFailures.length > 0) {
+      failures.push(`${label}: ${pathFailures.join('; ')}`);
+      continue;
+    }
+    if (typeof hash !== 'string' || !SHA256_HEX.test(hash)) {
+      failures.push(`${label}: sha256 must be sha256:<64 lowercase hex>`);
+      continue;
+    }
+    const bytes = await options.read(path as string);
+    if (!bytes) failures.push(`${label} missing at ${path}`);
+    else if ((await sha256Bytes(bytes)) !== hash) {
+      failures.push(`${label} hash mismatch at ${path}`);
     }
   }
   return failures;
@@ -832,23 +909,6 @@ async function aggregate(inputDir: string, output: string): Promise<void> {
     'pack-diagnostics.json',
     packed.job.extras?.packDiagnostics ?? [],
   );
-  const fresh = jobs.find(({ job }) => job.job === 'fresh-clone') as LoadedJob;
-  const freshManifestSha = await writeManifest('fresh-clone-manifest.json', {
-    sha: fresh.job.sha,
-    steps: fresh.job.steps.map((step) => ({
-      name: step.name,
-      command: step.command,
-      startedAt: step.startedAt,
-      durationMs: step.durationMs,
-      exitCode: step.exitCode,
-      result: step.result,
-      logPath: step.logPath,
-      logSha256: step.logSha256,
-      logSource: relative(outDir, join(fresh.dir, step.logPath)),
-    })),
-    envSummary: fresh.job.extras?.envSummary ?? {},
-    generatedAt: fresh.job.generatedAt,
-  });
 
   const evidence = {
     schemaVersion: 1,
@@ -860,6 +920,7 @@ async function aggregate(inputDir: string, output: string): Promise<void> {
       job: job.job,
       result: job.result,
       generatedAt: job.generatedAt,
+      extras: job.extras ?? {},
       steps: job.steps.map((step) => ({
         name: step.name,
         command: step.command,
@@ -875,9 +936,9 @@ async function aggregate(inputDir: string, output: string): Promise<void> {
     tarballs,
     tarballManifest: { path: 'tarball-manifest.json', sha256: tarballManifestSha },
     packDiagnostics: { path: 'pack-diagnostics.json', sha256: packDiagnosticsSha },
-    freshClone: { path: 'fresh-clone-manifest.json', sha256: freshManifestSha },
     rollup,
-    requiredOk: rollupFailures.length === 0,
+    // Computed from the assembled bundle below, never assumed.
+    requiredOk: false,
     aggregate: {
       inputs: jobs.map(({ job, dir }) => `${job.job}@${relative(outDir, dir)}`),
       recomputedLogHashes: jobs.reduce((sum, { job }) => sum + job.steps.length, 0),
@@ -885,6 +946,20 @@ async function aggregate(inputDir: string, output: string): Promise<void> {
     generatedAt: new Date().toISOString(),
     result: 'PASS' as const,
   };
+  const assemblyFailures = await collectBundleFailures(evidence, {
+    expectedSha: expected,
+    expectedTree: headTree,
+    read: (path) => Deno.readFile(join(outDir, path)).catch(() => null),
+  });
+  if (assemblyFailures.length > 0) {
+    console.error(
+      `candidate aggregation FAILED while validating the assembled bundle:\n${
+        assemblyFailures.join('\n')
+      }`,
+    );
+    Deno.exit(1);
+  }
+  evidence.requiredOk = true;
   await Deno.writeTextFile(output, JSON.stringify(evidence, null, 2) + '\n');
   console.log(`candidate evidence aggregated: ${output}`);
 }
@@ -912,7 +987,10 @@ async function validate(
     console.error(`evidence validation FAILED:\n${failures.join('\n')}`);
     Deno.exit(1);
   }
-  console.log(`evidence validation ok: ${evidencePath} binds ${evidence.sha}`);
+  const boundSha = isRecord(evidence) && typeof evidence.sha === 'string'
+    ? evidence.sha
+    : 'unknown';
+  console.log(`evidence validation ok: ${evidencePath} binds ${boundSha}`);
 }
 
 // ─── CLI ─────────────────────────────────────────────────────────────

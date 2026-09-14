@@ -37,7 +37,9 @@ Deno.test('ci contract: bun-serve-smoke is explicitly non-blocking', () => {
 });
 
 Deno.test('ci contract: required jobs stay blocking', () => {
-  for (const job of ['autoflow-ci', 'node-serve-smoke', 'packed-consumer-matrix']) {
+  for (
+    const job of ['autoflow-ci', 'node-serve-smoke', 'packed-consumer-matrix']
+  ) {
     const block = jobBlock(workflow, job);
     assert(
       !/continue-on-error:\s*true/.test(block),
@@ -133,7 +135,6 @@ Deno.test('ci contract: candidate evidence bundle ships JSON and every log/manif
       '.artifacts/candidate-evidence.json',
       '.artifacts/tarball-manifest.json',
       '.artifacts/pack-diagnostics.json',
-      '.artifacts/fresh-clone-manifest.json',
       '.artifacts/ci',
     ]
   ) {
