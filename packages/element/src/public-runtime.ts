@@ -14,7 +14,7 @@ import type {
   CompiledElementMetadata,
   CompiledPropertyMetadata,
   PartProgram,
-} from './internal/compiled/program.ts';
+} from './internal/protocol/part-program.ts';
 import { OpenElementError } from './internal/core/errors.ts';
 import { signal } from './internal/signal/index.ts';
 import type { CompiledProgramHost } from './internal/compiled/server/index.ts';

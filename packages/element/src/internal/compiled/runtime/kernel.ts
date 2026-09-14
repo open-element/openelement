@@ -1,4 +1,4 @@
-import type { PartProgram } from '../program.ts';
+import type { PartProgram } from '../../protocol/part-program.ts';
 import {
   claimExistingDom,
   type CompiledProgramInstance,

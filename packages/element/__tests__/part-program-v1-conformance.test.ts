@@ -27,7 +27,7 @@ import { assertEquals, assertStrictEquals, assertStringIncludes, assertThrows } 
 import { signal } from '../src/internal/signal/framework.ts';
 import type { WritableSignal } from '../src/internal/signal/types.ts';
 import { SIGNAL_BRAND } from '../src/internal/protocol/signal.ts';
-import { validatePartProgram } from '../src/internal/compiled/program.ts';
+import { validatePartProgram } from '../src/internal/protocol/part-program.ts';
 
 // ─── Minimal instrumented DOM harness ────────────────────────────────
 

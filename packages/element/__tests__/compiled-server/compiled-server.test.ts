@@ -1,5 +1,5 @@
 import { assertEquals, assertStringIncludes, assertThrows } from '@std/assert';
-import type { PartProgramV1 } from '../../src/internal/compiled/program.ts';
+import type { PartProgramV1 } from '../../src/internal/protocol/part-program.ts';
 import { trustedHtml } from '../../src/internal/core/security.ts';
 import { testProgram } from '../compiled-runtime/test-program.ts';
 

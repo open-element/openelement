@@ -1,11 +1,12 @@
 /**
- * @openelement/element — serializable Part Program v1.
+ * @openelement/element — serializable Part Program v1 protocol.
  *
- * This is the compiler-side copy of the exchange artifact. It intentionally
- * has no import edge to the element runtime: the generated JSON is the seam
- * shared by server serialization, fresh DOM creation and existing-DOM claim.
- * Every dynamic location receives a compiler-owned identity. Runtime code does
- * not discover bindings by walking a VNode or a generic DOM tree.
+ * The canonical exchange artifact shared by the compiler semantic core, the
+ * server serializer, fresh DOM creation, and existing-DOM claim. It has no
+ * imports at all (ADR-0148): the generated JSON is the seam, and both the
+ * runtime and the compiler import this one module instead of keeping mirrored
+ * copies. Every dynamic location receives a compiler-owned identity. Runtime
+ * code does not discover bindings by walking a VNode or a generic DOM tree.
  */
 
 export const PART_PROGRAM_VERSION = 1 as const;
@@ -341,6 +342,15 @@ export function partAnchorEndMarker(index: number): string {
   return `oe:/p${index}`;
 }
 
+/**
+ * The one `<style>` element the server serializer emits as the first DSD
+ * template child when the class carries static styles (legacy renderDsd
+ * parity — pages never upgrade, so their styles must ship in the payload).
+ * The claim path skips exactly this marked node; a marked node on a
+ * style-less class is claim drift and fails closed.
+ */
+export const STATIC_STYLES_MARKER = 'data-oe-static-styles';
+
 function fail(reason: string): never {
   throw new Error(`[compiled-program] invalid Part Program v1: ${reason}`);
 }
@@ -375,10 +385,9 @@ function isAttributeName(value: unknown): value is string {
 
 // Mechanical mirror of the canonical VOID_TAGS in @openelement/element
 // src/internal/core/html-escape.ts (issue #1220, M4): this exchange artifact
-// intentionally has no import edge (ADR-0148: the semantic core stays
-// bundler-neutral and inside the core), so the tag list is duplicated here
-// and must stay byte-identical to the canonical definition (the convergence
-// guard test enforces that). Exported for compile.ts.
+// intentionally has no import edge (ADR-0148), so the tag list is duplicated
+// here and must stay byte-identical to the canonical definition (the
+// convergence guard test enforces that).
 export const VOID_TAGS = new Set([
   'area',
   'base',

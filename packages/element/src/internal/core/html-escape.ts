@@ -62,7 +62,7 @@ export function escapeAttrValue(value: unknown): string {
  * validator, and compiler in the workspace (issue #1220, M4).
  * Content is the full HTML Standard void-element list, `param` included.
  *
- * The mirrored Part Program exchange artifacts (`internal/compiled/program.ts`
+ * The mirrored Part Program exchange artifacts (`internal/protocol/part-program.ts`
  * and its semantic-core copy) intentionally have no import edge, so each
  * carries a mechanical mirror of this list that must stay byte-identical to
  * the tags here; the convergence guard test (Router tooling

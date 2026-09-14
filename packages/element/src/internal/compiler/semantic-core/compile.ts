@@ -37,7 +37,7 @@ import {
   type SerializableValue,
   validatePartProgram,
   VOID_TAGS,
-} from './program.ts';
+} from '../../protocol/part-program.ts';
 
 export interface ElementCompilerDiagnostic extends CompilerDiagnostic {}
 

@@ -28,7 +28,7 @@ import {
   assertStringIncludes,
   assertThrows,
 } from '@std/assert';
-import { validatePartProgram } from '../../src/internal/compiled/program.ts';
+import { validatePartProgram } from '../../src/internal/protocol/part-program.ts';
 import {
   claimExistingDom,
   createFreshDom,

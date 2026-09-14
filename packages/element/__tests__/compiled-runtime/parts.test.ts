@@ -5,7 +5,7 @@ import {
   createFreshDom,
   serializeToHtml,
 } from '../../src/internal/compiled/runtime.ts';
-import { validatePartProgram } from '../../src/internal/compiled/program.ts';
+import { validatePartProgram } from '../../src/internal/protocol/part-program.ts';
 import { trustedHtml } from '../../src/internal/core/security.ts';
 import { signal } from '../../src/internal/signal/framework.ts';
 import { parseHtml, TestDocument, type TestElement, toHtml } from './test-dom.ts';

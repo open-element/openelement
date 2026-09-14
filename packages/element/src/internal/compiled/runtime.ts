@@ -37,7 +37,7 @@ import {
   type ProgramTreeNode,
   type ProgramWhenPart,
   STATIC_STYLES_MARKER,
-} from './program.ts';
+} from '../protocol/part-program.ts';
 import { normalizePartProgram, type RuntimeProgramIR } from './runtime-program.ts';
 
 type ProgramFixedPart = Extract<

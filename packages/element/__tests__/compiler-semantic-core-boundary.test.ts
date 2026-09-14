@@ -6,6 +6,15 @@ import {
 } from '../src/internal/compiler/semantic-core/compile.ts';
 
 const CORE_ROOT = new URL('../src/internal/compiler/semantic-core/', import.meta.url);
+/**
+ * The canonical Part Program protocol module (ADR-0148 exchange artifact).
+ * It is the one deliberate outside-module import: import-free, bundler-neutral,
+ * and shared with the runtime so compiler and runtime cannot drift.
+ */
+const PROTOCOL_PROGRAM = new URL(
+  '../src/internal/protocol/part-program.ts',
+  import.meta.url,
+);
 
 async function sourceFiles(root: URL): Promise<URL[]> {
   const files: URL[] = [];
@@ -49,8 +58,10 @@ Deno.test('ADR-0148 semantic core imports stay bundler-neutral and inside the co
         continue;
       }
       const resolved = new URL(specifier, file);
+      const insideCore = resolved.href.startsWith(CORE_ROOT.href);
+      const isCanonicalProtocol = resolved.href === PROTOCOL_PROGRAM.href;
       assert(
-        resolved.href.startsWith(CORE_ROOT.href),
+        insideCore || isCanonicalProtocol,
         `${file.pathname} escapes semantic core through ${specifier}`,
       );
     }
@@ -60,6 +71,19 @@ Deno.test('ADR-0148 semantic core imports stay bundler-neutral and inside the co
       `${file.pathname} accepts integration lifecycle state`,
     );
   }
+
+  // The one allowed outside module must stay import-free and neutral: no
+  // runtime, Vite, or Node capability may ride into the semantic core.
+  const protocolSource = await Deno.readTextFile(PROTOCOL_PROGRAM);
+  assertEquals(
+    moduleSpecifiers(protocolSource, PROTOCOL_PROGRAM),
+    [],
+    'canonical Part Program protocol must stay import-free (ADR-0148)',
+  );
+  assert(
+    !/PluginContext|moduleGraph|hotUpdate|devServer|Deno\./.test(protocolSource),
+    'canonical Part Program protocol must not accept integration or host state',
+  );
 });
 
 Deno.test('ADR-0148 semantic output and diagnostics are stable for canonical inputs', () => {

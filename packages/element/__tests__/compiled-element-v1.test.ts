@@ -507,7 +507,7 @@ Deno.test('compiled-element alpha.1 - canonical program records and decorator lo
 Deno.test('compiled-element alpha.1 - program validation fails closed on unsafe identity', async () => {
   const [{ compileElementProgram }, { validatePartProgram }] = await Promise.all([
     import('../src/internal/compiler/semantic-core/compile.ts'),
-    import('../src/internal/compiler/semantic-core/program.ts'),
+    import('../src/internal/protocol/part-program.ts'),
   ]);
   const source = await readFixture('counter.tsx');
   const program = compileElementProgram(source, '/project/app/islands/counter.tsx').program;

@@ -2,14 +2,14 @@
  * VOID_TAGS convergence guard (issue #1220, M4).
  *
  * The canonical void-element set lives in
- * packages/element/src/internal/core/html-escape.ts. Two modules cannot
- * import it by design and therefore carry a documented mechanical mirror:
- *   - packages/element/src/internal/compiled/program.ts (import-free exchange artifact)
- *   - packages/element/src/internal/compiler/semantic-core/program.ts (same mirror)
- * This guard asserts every mirror's tag list is identical to the canonical
- * list and that no other production module re-introduces a local VOID_TAGS
- * definition. Test-harness DOM facades under __tests__ are independent
- * serializers and intentionally out of scope.
+ * packages/element/src/internal/core/html-escape.ts. The import-free Part
+ * Program exchange artifact
+ * (packages/element/src/internal/protocol/part-program.ts, ADR-0148) cannot
+ * import it and therefore carries a documented mechanical mirror. This guard
+ * asserts the mirror's tag list is identical to the canonical list and that no
+ * production module re-introduces a local VOID_TAGS definition. Test-harness
+ * DOM facades under __tests__ are independent serializers and intentionally
+ * out of scope.
  */
 
 import { assert, assertEquals } from '@std/assert';
@@ -18,8 +18,7 @@ const REPO_ROOT = new URL('../../../', import.meta.url);
 
 const CANONICAL = 'packages/element/src/internal/core/html-escape.ts';
 const MIRRORS = [
-  'packages/element/src/internal/compiled/program.ts',
-  'packages/element/src/internal/compiler/semantic-core/program.ts',
+  'packages/element/src/internal/protocol/part-program.ts',
 ];
 const IMPORTERS = [
   'packages/element/src/internal/compiled/runtime.ts',

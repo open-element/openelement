@@ -1,8 +1,10 @@
 import { assertEquals, assertNotStrictEquals, assertThrows } from '@std/assert';
 import { compileElementProgram } from '../src/internal/compiler/semantic-core/compile.ts';
-import { validatePartProgram as validateCompilerProgram } from '../src/internal/compiler/semantic-core/program.ts';
-import { validatePartProgram as validateRuntimeProgram } from '../src/internal/compiled/program.ts';
+import { validatePartProgram } from '../src/internal/protocol/part-program.ts';
 import { normalizePartProgram } from '../src/internal/compiled/runtime-program.ts';
+
+/** The validator surface under test (one canonical module since ADR-0148 unification). */
+const PART_PROGRAM_VALIDATORS = [validatePartProgram] as const;
 
 const FIXTURE = new URL('../__fixtures__/compiled-element-v1/counter.tsx', import.meta.url);
 const GOLDEN = new URL(
@@ -261,8 +263,7 @@ Deno.test('canonical serialized corpus normalizes to one immutable RuntimeProgra
   const golden = JSON.parse(await Deno.readTextFile(GOLDEN));
   assertEquals(compiled, golden);
   assertEquals(JSON.stringify(compiled), JSON.stringify(golden));
-  validateCompilerProgram(golden);
-  validateRuntimeProgram(golden);
+  validatePartProgram(golden);
   const ir = normalizePartProgram(golden);
   assertNotStrictEquals(ir, golden);
   assertEquals(ir, golden);
@@ -270,34 +271,24 @@ Deno.test('canonical serialized corpus normalizes to one immutable RuntimeProgra
   assertEquals(Object.isFrozen(ir.parts), true);
 });
 
-Deno.test('Part Program validators independently fail closed across the artifact surface', async () => {
+Deno.test('the canonical Part Program validator fails closed across the artifact surface', async () => {
   const source = await Deno.readTextFile(FIXTURE);
   const valid = compileElementProgram(source, '/project/app/islands/counter.tsx').program;
-  validateCompilerProgram(valid);
-  validateRuntimeProgram(valid);
+  validatePartProgram(valid);
 
   for (const fault of faults) {
-    const compilerCandidate = structuredClone(valid);
-    setPath(compilerCandidate, fault.path, fault.value);
+    const candidate = structuredClone(valid);
+    setPath(candidate, fault.path, fault.value);
     assertThrows(
-      () => validateCompilerProgram(compilerCandidate),
+      () => validatePartProgram(candidate),
       Error,
       undefined,
-      `compiler validator accepted ${fault.label}`,
-    );
-
-    const runtimeCandidate = structuredClone(valid);
-    setPath(runtimeCandidate, fault.path, fault.value);
-    assertThrows(
-      () => validateRuntimeProgram(runtimeCandidate),
-      Error,
-      undefined,
-      `runtime validator accepted ${fault.label}`,
+      `validator accepted ${fault.label}`,
     );
   }
 });
 
-Deno.test('Part Program sink validators reject corrupted class, style, bool, html, ref and attr records', () => {
+Deno.test('Part Program sink validation rejects corrupted class, style, bool, html, ref and attr records', () => {
   const source = `
     import { element, OpenElement, property, trustedHtml, type TrustedHtml } from '@openelement/element';
     @element('oe-sink-matrix')
@@ -318,8 +309,7 @@ Deno.test('Part Program sink validators reject corrupted class, style, bool, htm
     }
   `;
   const valid = compileElementProgram(source, '/project/app/components/sink-matrix.tsx').program;
-  validateCompilerProgram(valid);
-  validateRuntimeProgram(valid);
+  validatePartProgram(valid);
 
   const kinds = ['class', 'style', 'attr', 'bool', 'html', 'ref'] as const;
   for (const kind of kinds) {
@@ -356,7 +346,7 @@ Deno.test('Part Program sink validators reject corrupted class, style, bool, htm
       });
     }
     for (const fault of corruptions) {
-      for (const validate of [validateCompilerProgram, validateRuntimeProgram]) {
+      for (const validate of PART_PROGRAM_VALIDATORS) {
         const candidate = structuredClone(valid);
         setPath(candidate, fault.path, fault.value);
         assertThrows(() => validate(candidate), Error, undefined, fault.label);
@@ -369,13 +359,13 @@ Deno.test('Part Program sink validators reject corrupted class, style, bool, htm
   setPath(occupiedHtmlTarget, ['template', 0, 'children', 1, 'children'], [
     { k: 'text', value: 'occupied' },
   ]);
-  for (const validate of [validateCompilerProgram, validateRuntimeProgram]) {
+  for (const validate of PART_PROGRAM_VALIDATORS) {
     assertThrows(() => validate(occupiedHtmlTarget), Error, 'childless');
   }
   if (htmlIndex < 0) throw new Error('fixture did not emit html');
 });
 
-Deno.test('Part Program event-action and item-slot grammars fail closed independently', () => {
+Deno.test('Part Program event-action and item-slot grammars fail closed', () => {
   const source = `
     import { element, OpenElement, property } from '@openelement/element';
     @element('oe-action-matrix')
@@ -397,8 +387,7 @@ Deno.test('Part Program event-action and item-slot grammars fail closed independ
     }
   `;
   const valid = compileElementProgram(source, '/project/app/components/action-matrix.tsx').program;
-  validateCompilerProgram(valid);
-  validateRuntimeProgram(valid);
+  validatePartProgram(valid);
 
   const actionKinds = valid.parts
     .filter((part) => part.k === 'event')
@@ -424,7 +413,7 @@ Deno.test('Part Program event-action and item-slot grammars fail closed independ
   ];
   for (const [position, action] of actionFaults.entries()) {
     const index = eventIndices[position % eventIndices.length];
-    for (const validate of [validateCompilerProgram, validateRuntimeProgram]) {
+    for (const validate of PART_PROGRAM_VALIDATORS) {
       const candidate = structuredClone(valid);
       setPath(candidate, ['parts', index, 'action'], action);
       assertThrows(() => validate(candidate), Error, undefined, `event action fault ${position}`);
@@ -468,7 +457,7 @@ Deno.test('Part Program event-action and item-slot grammars fail closed independ
     },
   ];
   for (const fault of itemFaults) {
-    for (const validate of [validateCompilerProgram, validateRuntimeProgram]) {
+    for (const validate of PART_PROGRAM_VALIDATORS) {
       const candidate = structuredClone(valid);
       setPath(candidate, fault.path, fault.value);
       assertThrows(() => validate(candidate), Error, undefined, fault.label);
@@ -576,7 +565,7 @@ Deno.test('Part Program ownership tables reject duplicate, missing, and misplace
   ];
 
   for (const candidate of candidates) {
-    for (const validate of [validateCompilerProgram, validateRuntimeProgram]) {
+    for (const validate of PART_PROGRAM_VALIDATORS) {
       const corrupted = structuredClone(valid);
       candidate.mutate(corrupted);
       assertThrows(() => validate(corrupted), Error, undefined, candidate.label);

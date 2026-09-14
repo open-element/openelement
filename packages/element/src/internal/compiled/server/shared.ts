@@ -10,7 +10,11 @@
  * static branches; other unified-schema kinds fail closed here.
  */
 
-import { type PartProgramV1, type ProgramPart, type ProgramTreeNode } from '../program.ts';
+import {
+  type PartProgramV1,
+  type ProgramPart,
+  type ProgramTreeNode,
+} from '../../protocol/part-program.ts';
 import { normalizePartProgram, type RuntimeProgramIR } from '../runtime-program.ts';
 // Canonical void-element set (issue #1220, M4) — single source of truth.
 import { VOID_TAGS } from '../../core/html-escape.ts';

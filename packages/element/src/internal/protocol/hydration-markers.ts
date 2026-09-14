@@ -4,7 +4,7 @@
  * The v0.43 marker-based hydration channel (`data-signal*`, `data-eid`,
  * `data-ssr-props`, `oe-branch:`/`oe-for-item:` comments) was removed with the
  * compiled Part Program model: claim now binds through program anchors
- * (`oe:pN`, internal/compiled/program.ts), and the legacy marker strings are
+ * (`oe:pN`, internal/protocol/part-program.ts), and the legacy marker strings are
  * intentionally excluded from built public artifacts.
  *
  * One marker survives. Its consumers (internal/compiled/server,

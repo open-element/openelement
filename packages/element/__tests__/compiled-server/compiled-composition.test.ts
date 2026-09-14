@@ -1,7 +1,7 @@
 import { assertEquals, assertStringIncludes, assertThrows } from '@std/assert';
 import { renderDsd } from '../../src/public-runtime.ts';
 import { trustedHtml } from '../../src/internal/core/security.ts';
-import type { PartProgram } from '../../src/internal/compiled/program.ts';
+import type { PartProgram } from '../../src/internal/protocol/part-program.ts';
 import { testProgram } from '../compiled-runtime/test-program.ts';
 
 function compiledClass(program: PartProgram): CustomElementConstructor {

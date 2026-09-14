@@ -26,4 +26,4 @@ export {
   analyzeModuleSemantics,
   type ModuleSemanticFacts,
 } from './internal/compiler/semantic-core/module-analysis.ts';
-export { validatePartProgram } from './internal/compiler/semantic-core/program.ts';
+export { validatePartProgram } from './internal/protocol/part-program.ts';

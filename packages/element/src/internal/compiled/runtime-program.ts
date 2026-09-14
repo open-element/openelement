@@ -5,7 +5,7 @@
  * a real JSON round trip. Runtime-only instructions cannot enter this IR.
  */
 
-import { type PartProgramV1, validatePartProgram } from './program.ts';
+import { type PartProgramV1, validatePartProgram } from '../protocol/part-program.ts';
 
 declare const runtimeProgramBrand: unique symbol;
 

@@ -17,7 +17,7 @@ import {
   type ProgramTreeNode,
   type ProgramWhenPart,
   STATIC_STYLES_MARKER,
-} from '../program.ts';
+} from '../../protocol/part-program.ts';
 import {
   assertCompiledProgram,
   attributeNameIsSafe,
@@ -65,7 +65,7 @@ export interface CompiledNestedElement {
 // the DSD template (legacy renderDsd parity): never-upgrading hosts (pages)
 // need their styles in the SSR payload. The claim path skips exactly this
 // marked element; the client style scope still adopts the live sheets.
-export { STATIC_STYLES_MARKER } from '../program.ts';
+export { STATIC_STYLES_MARKER } from '../../protocol/part-program.ts';
 
 export interface CompiledServerOptions {
   /** Root ownership mode. Shadow modes become a native DSD template. */

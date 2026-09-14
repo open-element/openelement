@@ -16,7 +16,7 @@ import {
   type ProgramEventAction,
   type RootMode,
   validatePartProgram,
-} from '../../src/internal/compiled/program.ts';
+} from '../../src/internal/protocol/part-program.ts';
 
 export interface TestNodeSpec {
   k: 'el' | 'text' | 'part' | 'ival';
