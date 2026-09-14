@@ -1298,7 +1298,13 @@ async function main(): Promise<void> {
     tarballs.push(tar);
   }
 
-  if (publish) {
+  if (publish && dryRun) {
+    // Dry-run: exercise `npm publish --dry-run` for each package, but never
+    // touch the registry verifier (the version is intentionally not there).
+    for (const pkg of packages) {
+      await publishPackage(pkg, true);
+    }
+  } else if (publish) {
     const receipt = await publishRelease(packages, {
       publish: (pkg) => publishPackage(pkg, dryRun),
       verify: (version, pkgs) =>
