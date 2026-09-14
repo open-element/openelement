@@ -127,8 +127,11 @@ Deno.test({
       fixtureBuilt = false;
     }
     if (!fixtureBuilt) {
+      // The fixture owns its build task; on a clean clone the dist is absent
+      // and this on-demand build is the only path (the coverage gate runs
+      // before the fixture build gate).
       const build = await new Deno.Command(Deno.execPath(), {
-        args: ['task', 'fixture:router-request-time:build'],
+        args: ['task', '--cwd', 'tests/fixtures/router-request-time', 'build'],
         cwd: join(fixtureDir, '../../..'),
         stdout: 'inherit',
         stderr: 'inherit',
