@@ -22,9 +22,8 @@ export default defineConfig({
   testDir: '.',
   testMatch: '*.spec.ts',
   // dev.spec.ts targets the vite dev server (playwright.dev.config.ts), not
-  // the production `start` server this config boots.
-  // dev.spec.ts targets the vite dev server, not the production start server.
-  testIgnore: 'dev.spec.ts',
+  // the production `start` server this config boots; the engine projects below
+  // also ignore bfcache.spec.ts (Chrome-channel lane).
   // Serial by design (#1232): one packed starter serves one app on one port,
   // so fullyParallel and workers agree on sequential execution.
   fullyParallel: false,
@@ -47,19 +46,19 @@ export default defineConfig({
   projects: [
     {
       name: 'chromium',
-      // bfcache.spec.ts runs only in the Chrome-channel project below
-      // (bundled Chromium ships --disable-back-forward-cache).
-      testIgnore: 'bfcache.spec.ts',
+      // dev.spec.ts targets the vite dev server; bfcache.spec.ts runs only in
+      // the Chrome-channel project below (bundled Chromium disables BFCache).
+      testIgnore: ['dev.spec.ts', 'bfcache.spec.ts'],
       use: { browserName: 'chromium' },
     },
     {
       name: 'firefox',
-      testIgnore: 'bfcache.spec.ts',
+      testIgnore: ['dev.spec.ts', 'bfcache.spec.ts'],
       use: { browserName: 'firefox' },
     },
     {
       name: 'webkit',
-      testIgnore: 'bfcache.spec.ts',
+      testIgnore: ['dev.spec.ts', 'bfcache.spec.ts'],
       use: { browserName: 'webkit' },
     },
     // BFCache-capable installed Chrome channel (#943). Bundled Chromium ships

@@ -1,7 +1,7 @@
 {
   "tasks": {
     "setup": "deno run --config ../../../deno.json --allow-read --allow-write --allow-run setup.ts",
-    "test": "deno run --config ../../../deno.json --allow-read --allow-write --allow-env --allow-net --allow-run --allow-sys npm:@playwright/test@1.59.1 test --config ./playwright.config.ts",
+    "test": "deno run --config ../../../deno.json --allow-read --allow-write --allow-env --allow-net --allow-run --allow-sys npm:@playwright/test@1.59.1 test --config ./playwright.config.ts --project=chromium --project=firefox --project=webkit",
     "test:dev": "deno run --config ../../../deno.json --allow-read --allow-write --allow-env --allow-net --allow-run --allow-sys npm:@playwright/test@1.59.1 test --config ./playwright.dev.config.ts",
     "install": "deno run --config ../../../deno.json --allow-read --allow-write --allow-env --allow-net --allow-sys npm:playwright@1.59.1 install chromium firefox webkit",
     "gate": "deno run --allow-run ../../../tools/repo/gate.ts tests/e2e/starter-smoke#setup tests/e2e/starter-smoke#test",
