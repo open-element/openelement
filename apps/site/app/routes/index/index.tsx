@@ -3,7 +3,7 @@ import { siteHead } from '@openelement/site-ui/head.ts';
 import { contentLocale } from '@openelement/site-ui/locale.ts';
 import { localizePath } from '@openelement/site-ui/link.ts';
 import PageHome from '../../components/page-home.tsx';
-import { PUBLISHED_PACKAGE_VERSION, PUBLISHED_STABLE_VERSION } from '../../data/version.ts';
+import { COMMON_PUBLISHED_NOTE, REGISTRY_NOTE } from '../../data/version.ts';
 
 const content = {
   en: {
@@ -149,8 +149,8 @@ export default definePage(PageHome, {
     const { headTitle: _headTitle, headDescription: _headDescription, ...copy } = content[resolved];
     return {
       ...copy,
-      stableVersion: PUBLISHED_STABLE_VERSION,
-      packageVersion: PUBLISHED_PACKAGE_VERSION,
+      registryNote: REGISTRY_NOTE,
+      commonVersionNote: COMMON_PUBLISHED_NOTE,
       marqueeText: marquee + marquee,
       startBuildingHref: localizePath('/guide/getting-started', resolved),
       getStartedHref: localizePath('/guide/getting-started', resolved),

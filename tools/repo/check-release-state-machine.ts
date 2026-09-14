@@ -1,13 +1,20 @@
 /**
  * Release-state validation (offline) and read-only npm registry drift checking.
  *
- * The tracked `docs/release/release-state.json` records registry truth per
- * package, so a partial publish (element/create/ui at a prerelease with Router
- * absent) can never again be represented as one four-package version. Offline
- * `deno task check` validates structure and source-version consistency only;
- * the registry drift check runs in the release/candidate phase and queries npm
- * read-only — it never publishes, tags, or moves a dist-tag.
+ * The tracked `docs/release/release-state.json` records registry truth PER
+ * PACKAGE, so a partial state (element/create/ui on 0.43.3 while Router has no
+ * 0.43.x) can never again be represented as one shared four-package version.
+ *
+ * Offline `deno task check` validates structure + source versions + Site copy
+ * consistency; it is explicitly NOT registry proof. The release/candidate
+ * phase runs the registry drift check, which queries npm read-only and fails
+ * closed. The "common complete version" is computed from the live registry as
+ * the intersection of stable versions across all four packages; a tracked
+ * value must equal that intersection, and no three-package fallback is ever
+ * accepted. The checker never publishes or moves a dist-tag.
  */
+
+import { compare, parse } from '@std/semver';
 
 export type RegistryTags = Record<string, string>;
 
@@ -16,14 +23,15 @@ export interface ReleasePackageState {
   registry: RegistryTags;
 }
 
-export interface ReleaseStateV2 {
-  schemaVersion: 2;
+export interface ReleaseStateV3 {
+  schemaVersion: 3;
   sourceVersion: string;
   activeTarget: string;
   nextPlannedTrain: string;
   maturity: 'alpha' | 'beta' | 'stable';
-  completePublishedVersion: string;
-  stable: { distTag: string; version: string };
+  packages: ReleasePackageState[];
+  /** Newest stable version present in all four packages, or null. */
+  commonCompleteVersion: string | null;
   latestPrerelease: {
     version: string;
     distTag: string;
@@ -31,7 +39,6 @@ export interface ReleaseStateV2 {
     publishedPackages: string[];
     missingPackages: string[];
   };
-  packages: ReleasePackageState[];
 }
 
 export interface RegistryEvidence {
@@ -41,14 +48,16 @@ export interface RegistryEvidence {
   distTags: Record<string, RegistryTags>;
 }
 
-/** Offline structural/source validation. */
+const STABLE_VERSION = /^\d+\.\d+\.\d+$/u;
+
+/** Offline structural + Site-copy validation. Not registry proof. */
 export function validateReleaseState(
-  state: ReleaseStateV2,
+  state: ReleaseStateV3,
   packageVersions: Map<string, string>,
   siteVersionSource: string,
 ): string[] {
   const failures: string[] = [];
-  if (state.schemaVersion !== 2) failures.push('unsupported release-state schema');
+  if (state.schemaVersion !== 3) failures.push('unsupported release-state schema');
   const names = state.packages.map((entry) => entry.name).sort();
   const manifestNames = [...packageVersions.keys()].sort();
   if (names.join(',') !== manifestNames.join(',')) {
@@ -70,8 +79,13 @@ export function validateReleaseState(
   if (state.nextPlannedTrain !== 'not scheduled') {
     failures.push('future trains must not be invented before admission');
   }
-  if (state.completePublishedVersion !== state.stable.version) {
-    failures.push('completePublishedVersion must equal the stable version');
+  if (state.commonCompleteVersion !== null) {
+    if (
+      typeof state.commonCompleteVersion !== 'string' ||
+      !STABLE_VERSION.test(state.commonCompleteVersion)
+    ) {
+      failures.push('commonCompleteVersion must be a stable x.y.z or null');
+    }
   }
   const prerelease = state.latestPrerelease;
   const published = new Set(prerelease.publishedPackages);
@@ -89,32 +103,56 @@ export function validateReleaseState(
   if (prerelease.state !== expectedState) {
     failures.push(`latestPrerelease.state must be ${expectedState}`);
   }
-  // Site copy must use the same model.
-  const siteExpectations: Array<[string, string]> = [
-    ['PUBLISHED_STABLE_VERSION', `v${state.stable.version}`],
-    ['PUBLISHED_PACKAGE_VERSION', `v${state.completePublishedVersion}`],
-    ['LATEST_PRERELEASE_VERSION', `v${prerelease.version}`],
-  ];
-  for (const [constant, value] of siteExpectations) {
-    if (!siteVersionSource.includes(`${constant} = '${value}'`)) {
-      failures.push(`apps/site version constant ${constant} must be ${value}`);
+
+  // Site copy must use the per-package model, never a fabricated shared line.
+  const commonMatch = /COMMON_PUBLISHED_VERSION:\s*string\s*\|\s*null\s*=\s*(null|'([^']+)')/.exec(
+    siteVersionSource,
+  );
+  if (!commonMatch) {
+    failures.push('apps/site must declare COMMON_PUBLISHED_VERSION as null or a version string');
+  } else if (state.commonCompleteVersion === null) {
+    if (commonMatch[1] !== 'null') {
+      failures.push('apps/site COMMON_PUBLISHED_VERSION must be null (no common stable version)');
     }
+  } else if (commonMatch[2] !== state.commonCompleteVersion) {
+    failures.push(
+      `apps/site COMMON_PUBLISHED_VERSION must be ${state.commonCompleteVersion}`,
+    );
   }
-  for (const name of missing) {
-    if (!siteVersionSource.includes(`'${name}': null`)) {
-      failures.push(`apps/site version map must mark ${name} as not published for the prerelease`);
+  for (const entry of state.packages) {
+    if (!siteVersionSource.includes(`'${entry.name}': 'v${entry.registry.latest}'`)) {
+      failures.push(
+        `apps/site PUBLISHED_LATEST must record ${entry.name} v${entry.registry.latest}`,
+      );
     }
   }
   return failures;
 }
 
+/** Latest stable version present in every package, or null. */
+export function commonStableVersion(
+  versions: Record<string, string[]>,
+  packageNames: readonly string[],
+): string | null {
+  const sets = packageNames.map((name) => new Set(versions[name] ?? []));
+  if (sets.some((set) => set.size === 0)) return null;
+  const [first, ...rest] = sets;
+  const intersection = [...first].filter(
+    (version) => STABLE_VERSION.test(version) && rest.every((set) => set.has(version)),
+  );
+  if (intersection.length === 0) return null;
+  intersection.sort((a, b) => compare(parse(b), parse(a)));
+  return intersection[0];
+}
+
 /**
  * Fail-closed comparison of tracked registry state against read-only npm
- * evidence. A tracked dist-tag must match exactly; a tracked package that the
- * state says was never published at the prerelease version must not list it.
+ * evidence. Every recorded dist-tag must match; the tracked common complete
+ * version must equal the live four-package stable intersection; a tracked
+ * value present in only three packages is rejected.
  */
 export function validateRegistryEvidence(
-  state: ReleaseStateV2,
+  state: ReleaseStateV3,
   evidence: RegistryEvidence,
 ): string[] {
   const failures: string[] = [];
@@ -134,18 +172,43 @@ export function validateRegistryEvidence(
         );
       }
     }
-    const prerelease = state.latestPrerelease;
-    if (prerelease.missingPackages.includes(entry.name)) {
-      if (versions.includes(prerelease.version)) {
-        failures.push(
-          `${entry.name} is recorded as missing at ${prerelease.version} but is published`,
-        );
-      }
+    if (!versions.includes(entry.registry.latest)) {
+      failures.push(
+        `${entry.name} recorded latest ${entry.registry.latest} is not among registry versions`,
+      );
     }
-    if (prerelease.publishedPackages.includes(entry.name)) {
-      if (!versions.includes(prerelease.version)) {
+    const prerelease = state.latestPrerelease;
+    if (prerelease.missingPackages.includes(entry.name) && versions.includes(prerelease.version)) {
+      failures.push(
+        `${entry.name} is recorded as missing at ${prerelease.version} but is published`,
+      );
+    }
+    if (
+      prerelease.publishedPackages.includes(entry.name) && !versions.includes(prerelease.version)
+    ) {
+      failures.push(
+        `${entry.name} is recorded as published at ${prerelease.version} but is absent`,
+      );
+    }
+  }
+
+  // The common complete version is computed from the live registry, never
+  // inferred from a three-package majority.
+  const computedCommon = commonStableVersion(
+    evidence.versions,
+    state.packages.map((entry) => entry.name),
+  );
+  if (state.commonCompleteVersion !== computedCommon) {
+    failures.push(
+      `commonCompleteVersion: tracked ${state.commonCompleteVersion ?? 'null'}, ` +
+        `registry four-package stable intersection ${computedCommon ?? 'null'}`,
+    );
+  }
+  if (state.commonCompleteVersion !== null) {
+    for (const entry of state.packages) {
+      if (!(evidence.versions[entry.name] ?? []).includes(state.commonCompleteVersion)) {
         failures.push(
-          `${entry.name} is recorded as published at ${prerelease.version} but is absent`,
+          `commonCompleteVersion ${state.commonCompleteVersion} is absent from ${entry.name}`,
         );
       }
     }
@@ -153,10 +216,10 @@ export function validateRegistryEvidence(
   return failures;
 }
 
-async function readState(): Promise<ReleaseStateV2> {
+async function readState(): Promise<ReleaseStateV3> {
   return JSON.parse(
     await Deno.readTextFile('docs/release/release-state.json'),
-  ) as ReleaseStateV2;
+  ) as ReleaseStateV3;
 }
 
 async function workspaceVersions(): Promise<Map<string, string>> {
@@ -215,8 +278,9 @@ async function main(): Promise<void> {
   }
   console.log(
     `Release state check passed: source ${state.sourceVersion}; ` +
-      `complete ${state.completePublishedVersion}; ` +
-      `prerelease ${state.latestPrerelease.version} (${state.latestPrerelease.state}).`,
+      `common complete ${
+        state.commonCompleteVersion ?? 'none'
+      }; prerelease ${state.latestPrerelease.version} (${state.latestPrerelease.state}).`,
   );
 }
 

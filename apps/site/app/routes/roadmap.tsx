@@ -1,5 +1,5 @@
 import { definePage } from '@openelement/router';
-import { PUBLISHED_PACKAGE_VERSION, PUBLISHED_STABLE_VERSION } from '../data/version.ts';
+import { COMMON_PUBLISHED_VERSION, REGISTRY_NOTE } from '../data/version.ts';
 import { siteHead } from '@openelement/site-ui/head.ts';
 import { contentLocale } from '@openelement/site-ui/locale.ts';
 import RoadmapPage from '../components/page-roadmap.tsx';
@@ -247,10 +247,12 @@ export default definePage(RoadmapPage, {
     const resolved = contentLocale(locale ?? 'en');
     const t = content[resolved];
     const timeline: RoadmapTimelineItem[] = entries[resolved].map((phase) => {
-      // The current-line stamp follows the bump-maintained anchor
-      // (PUBLISHED_PACKAGE_VERSION) so a release bump re-marks the timeline
-      // without manual edits.
-      const stamp = phase.version === PUBLISHED_PACKAGE_VERSION ? 'CURRENT' : phase.stamp;
+      // There is no four-package published version (Router has no 0.43.x),
+      // so COMMON_PUBLISHED_VERSION is null and no timeline row is marked
+      // current from registry state.
+      const stamp = COMMON_PUBLISHED_VERSION !== null && phase.version === COMMON_PUBLISHED_VERSION
+        ? 'CURRENT'
+        : phase.stamp;
       return {
         key: phase.version,
         rowClass: `tl-row tl-${phase.state}`,
@@ -285,7 +287,7 @@ export default definePage(RoadmapPage, {
       releaseLineCopy: t.releaseLineCopy,
       freezeBadge: t.freezeBadge,
       nowTitle: t.nowTitle,
-      nowCopy: t.nowCopy(PUBLISHED_STABLE_VERSION),
+      nowCopy: t.nowCopy(REGISTRY_NOTE),
       timelineAria: t.timelineAria,
       timeline,
       designRuleTitle: t.designRuleTitle,

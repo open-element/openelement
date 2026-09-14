@@ -3,14 +3,35 @@
 // line must not use this constant directly.
 export const OPENELEMENT_VERSION = 'v1.0.0-alpha.1';
 
-// The newest release published for ALL four packages (npm `latest`). Stable
-// registry-line copy uses this; a prerelease that shipped only some packages
-// must never be presented as the complete published line.
-export const PUBLISHED_STABLE_VERSION = 'v0.43.3';
+// Per-package registry `latest` dist-tag truth. There is deliberately NO
+// single "published version" constant: @openelement/router has never shipped
+// the 0.43.x stable line, so no one version covers all four packages. Site and
+// docs copy must present the per-package state, never a fabricated shared
+// version. Keep in sync with docs/release/release-state.json
+// (release:state-machine:check offline; release:registry-check verifies it
+// against the live registry).
+export const PUBLISHED_LATEST: Readonly<Record<string, string>> = {
+  '@openelement/element': 'v0.43.3',
+  '@openelement/create': 'v0.43.3',
+  '@openelement/ui': 'v0.43.3',
+  '@openelement/router': 'v0.41.0-alpha.6',
+};
 
-// The newest release published for all four packages, named for callers that
-// want the complete published line without implying the stable track.
-export const PUBLISHED_PACKAGE_VERSION = 'v0.43.3';
+// The newest STABLE version published for every package, or null when none
+// exists. It is null today: Router has no 0.43.x. release:registry-check
+// computes this from the live registry and rejects any value that is absent
+// from any package.
+export const COMMON_PUBLISHED_VERSION: string | null = null;
+
+// Human-readable note for the (absent) common complete version.
+export const COMMON_PUBLISHED_NOTE = COMMON_PUBLISHED_VERSION === null
+  ? 'no single stable version is published for all four packages'
+  : `${COMMON_PUBLISHED_VERSION} — published for all four packages`;
+
+// Human-readable per-package latest summary derived from PUBLISHED_LATEST.
+export const REGISTRY_NOTE = Object.entries(PUBLISHED_LATEST)
+  .map(([name, version]) => `${name.replace('@openelement/', '')} ${version}`)
+  .join(' · ');
 
 // The newest prerelease train. It was a PARTIAL publish: element/create/ui
 // published at this version, Router never did. Registry-line copy must use

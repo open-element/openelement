@@ -63,9 +63,9 @@ export default class PageHome extends OpenElement {
   @property({ reflect: false, attribute: false })
   referenceCopy = '';
   @property({ reflect: false, attribute: false })
-  stableVersion = '';
+  registryNote = '';
   @property({ reflect: false, attribute: false })
-  packageVersion = '';
+  commonVersionNote = '';
   @property({ reflect: false, attribute: false })
   marqueeText = '';
   @property({ reflect: false, attribute: false })
@@ -113,10 +113,8 @@ export default class PageHome extends OpenElement {
           <div class='spec-strip'>
             <div class='spec-cell'>
               <small>{this.specVersion}</small>
-              <strong>{this.stableVersion} — stable line</strong>
-              <small>
-                {this.packageVersion} — cumulative maintenance baseline (ADR-0140)
-              </small>
+              <strong>public registry — {this.registryNote}</strong>
+              <small>{this.commonVersionNote}</small>
             </div>
             <div class='spec-cell'>
               <small>{this.specGraph}</small>

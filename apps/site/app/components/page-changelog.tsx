@@ -30,7 +30,7 @@ export default class PageChangelog extends OpenElement {
   @property({ reflect: false, attribute: false })
   metaPrefix = '';
   @property({ reflect: false, attribute: false })
-  packageVersion = '';
+  registryNote = '';
   @property({ reflect: false, attribute: false })
   metaSuffix = '';
   @property({ reflect: false, attribute: false })
@@ -48,7 +48,7 @@ export default class PageChangelog extends OpenElement {
   @property({ reflect: false, attribute: false })
   stableHeading = '';
   @property({ reflect: false, attribute: false })
-  stableVersion = '';
+  commonVersionLabel = '';
   @property({ reflect: false, attribute: false })
   stableBody = '';
   @property({ reflect: false, attribute: false })
@@ -81,7 +81,7 @@ export default class PageChangelog extends OpenElement {
             <h1 class='page-title'>{this.pageTitle}</h1>
             <p class='lede'>{this.lede}</p>
             <p class='version-line'>
-              {this.metaPrefix} <code>{this.packageVersion}</code>
+              {this.metaPrefix} <code>{this.registryNote}</code>
               {this.metaSuffix}
             </p>
           </div>
@@ -92,7 +92,7 @@ export default class PageChangelog extends OpenElement {
           <div class='register' aria-label='Release register'>
             <div class='reg-row reg-current'>
               <div class='reg-head'>
-                <span class='reg-version'>{this.packageVersion}</span>
+                <span class='reg-version'>{this.commonVersionLabel}</span>
                 <span class='reg-stamp'>{this.stampCurrent}</span>
               </div>
               <p class='reg-summary'>{this.regCurrentSummary}</p>
@@ -108,7 +108,7 @@ export default class PageChangelog extends OpenElement {
           <section id='candidate'>
             <h2>{this.stableHeading}</h2>
             <p>
-              <code>{this.stableVersion}</code> {this.stableBody}
+              <code>{this.commonVersionLabel}</code> {this.stableBody}
             </p>
           </section>
           <section id='withdrawn'>

@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 2,
+  "schemaVersion": 3,
   "sourceVersion": "1.0.0-alpha.1",
   "activeTarget": "v1.0.0-alpha.1",
   "nextPlannedTrain": "not scheduled",
@@ -27,8 +27,8 @@
       "registry": { "latest": "0.43.3", "alpha": "0.43.0-alpha.2", "beta": "0.44.0-beta.2.2" }
     }
   ],
-  "completePublishedVersion": "0.43.3",
-  "stable": { "distTag": "latest", "version": "0.43.3" },
+  "commonCompleteVersion": null,
+  "commonCompleteVersionNote": "No stable version is published for all four packages. @openelement/router has only 0.41.0 prereleases; the 0.43.3 stable line covers element, create, and ui only. Any non-null value here must be present in every package and is verified by release:registry-check.",
   "latestPrerelease": {
     "version": "0.44.0-beta.2.2",
     "distTag": "beta",
