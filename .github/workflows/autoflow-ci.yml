@@ -15,6 +15,13 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+# Execution is separated from evidence aggregation:
+#   fast-checks / source-matrix / packed / fresh-clone each RUN one slice of
+#   the suite and upload their result.json + logs; `autoflow-ci` only reads
+#   those artifacts (same SHA/tree, recomputed log hashes) and fails if any
+#   input is missing or inconsistent. Nothing re-runs the suite in the
+#   aggregation step. The fresh-clone job is isolated with empty DENO_DIR and
+#   npm cache. Bun remains an optional, non-blocking compatibility signal.
 jobs:
   dependency-review:
     if: github.event_name == 'pull_request'
@@ -28,9 +35,9 @@ jobs:
         with:
           fail-on-severity: high
 
-  autoflow-ci:
+  fast-checks:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 20
     steps:
       # v7.0.1
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -68,45 +75,145 @@ jobs:
           tar -xzf /tmp/gitleaks.tar.gz -C /tmp gitleaks
           /tmp/gitleaks git --redact --verbose .
       - uses: ./.github/actions/setup-deno-workspace
-      # ADR-0144 / #1229 (B2.7): generic toolchain gates are pinned OSS tool steps, not AutoFlow gates.
-      - run: deno fmt --check
-      - run: deno lint
-      - run: deno task --cwd tools/repo lint:markdown
-      - run: deno task typecheck
-      - name: Install Playwright browsers
-        # All three engines up front: the gate's fixture gates run their
-        # suites on Chromium, Firefox and WebKit.
-        run: ./node_modules/.bin/playwright install --with-deps chromium firefox webkit
-      - name: OpenElement CI gate
-        run: deno task gate:ci
-      - name: Bind candidate evidence to this exact SHA
+      # ADR-0144 / #1229 (B2.7): generic toolchain gates are pinned OSS tool
+      # steps, not AutoFlow gates.
+      - name: Fast checks (fmt, lint, markdown, typecheck)
         env:
           CANDIDATE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-        run: deno task candidate:evidence
+        run: deno task --cwd tools/repo candidate:evidence:fast
+      - name: Upload fast-checks evidence
+        if: always()
+        # v7.0.1
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: evidence-fast-checks
+          path: .artifacts/ci
+          if-no-files-found: ignore
+          retention-days: 14
+
+  source-matrix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: ./.github/actions/setup-deno-workspace
+      - name: Install Playwright browsers
+        # The source matrix's fixture gates run Chromium, Firefox and WebKit.
+        run: ./node_modules/.bin/playwright install --with-deps chromium firefox webkit
+      - name: Source matrix (unit/integration, Site, SaaS, Node, Workers, browsers)
+        env:
+          CANDIDATE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: deno task --cwd tools/repo candidate:evidence:source
+      - name: Upload source-matrix evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: evidence-source-matrix
+          path: .artifacts/ci
+          if-no-files-found: ignore
+          retention-days: 14
+
+  packed-consumers:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: ./.github/actions/setup-deno-workspace
+      - name: Install Playwright browsers
+        # Packed Native/Lit/Starter/Create/UI consumers assert hydration on
+        # all three engines.
+        run: ./node_modules/.bin/playwright install --with-deps chromium firefox webkit
+      - name: Packed consumers (pack, artifact scan, all packed gates, publish dry-run)
+        env:
+          CANDIDATE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: deno task --cwd tools/repo candidate:evidence:packed
+      - name: Upload packed evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: evidence-packed
+          path: .artifacts/ci
+          if-no-files-found: ignore
+          retention-days: 14
+
+  fresh-clone:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: ./.github/actions/setup-deno-workspace
+      - name: Install Playwright browsers
+        # The clone's own packed gate runs the three-browser consumers; the
+        # browser binaries are reused from the preinstalled HOME cache
+        # (disclosed in the fresh-clone manifest), while the clone's DENO_DIR
+        # and npm cache start empty.
+        run: ./node_modules/.bin/playwright install --with-deps chromium firefox webkit
+      - name: Fresh clone (install, check, packed gate, publish dry-run)
+        env:
+          CANDIDATE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: deno task --cwd tools/repo candidate:evidence:fresh
+      - name: Upload fresh-clone evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: evidence-fresh-clone
+          path: .artifacts/ci
+          if-no-files-found: ignore
+          retention-days: 14
+
+  # Candidate evidence aggregation: reads the four job artifacts, verifies one
+  # commit/tree, recomputes every log hash from real bytes, and publishes the
+  # full bundle (evidence JSON + all logs + tarball manifest + fresh-clone
+  # manifest + pack diagnostic summary). It never re-runs the suite.
+  autoflow-ci:
+    name: AutoFlow CI
+    needs: [fast-checks, source-matrix, packed-consumers, fresh-clone]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: ./.github/actions/setup-deno-workspace
+      # v7.0.0
+      - name: Download job evidence
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131
+        with:
+          pattern: evidence-*
+          path: .artifacts/ci
+          merge-multiple: true
+      - name: Aggregate candidate evidence
+        env:
+          CANDIDATE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          deno task --cwd tools/repo candidate:evidence:aggregate
+          deno task --cwd tools/repo candidate:evidence:validate
       - name: Upload candidate evidence
         # v7.0.1
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: candidate-evidence-${{ github.run_id }}-${{ github.run_attempt }}
-          path: .artifacts/candidate-evidence.json
-          if-no-files-found: error
-          retention-days: 14
-      # #1232 (B2.10): e2e failures must be inspectable — the 'github'
-      # reporter annotates the run inline, and this step publishes the
-      # Playwright HTML report + per-test traces/screenshots on failure.
-      - name: Upload Playwright failure artifacts
-        if: failure()
-        # v7.0.1
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-        with:
-          name: playwright-failure-artifacts-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
-            tests/e2e/starter-smoke/test-results
-            tests/fixtures/router-request-time/e2e/test-results
-            tests/fixtures/router-native-framework/e2e/test-results
-            tests/fixtures/router-lit-framework/e2e/test-results
-            tests/fixtures/router-ui-dogfood/e2e/test-results
-          if-no-files-found: ignore
+            .artifacts/candidate-evidence.json
+            .artifacts/tarball-manifest.json
+            .artifacts/pack-diagnostics.json
+            .artifacts/fresh-clone-manifest.json
+            .artifacts/ci
+          if-no-files-found: error
           retention-days: 14
 
   # The packed deploy artifact must boot under plain Node, not just under

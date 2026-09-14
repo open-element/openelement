@@ -33,15 +33,24 @@ publish; a missing environment fails the job closed instead of publishing:
   Publishing via the workflow's `id-token: write` OIDC claim. The publish
   step passes `--provenance` only under `GITHUB_ACTIONS=true`, so local runs
   can never mint registry attestations.
-- `publish:npm` runs only after `release:check` (packed qualification,
-  `publish:npm:dry-run`, candidate evidence) on the exact `candidate_sha`;
-  the job re-verifies `git rev-parse HEAD == candidate_sha` after checkout.
+- `publish:npm` runs only after `release:check` (packed qualification and
+  `publish:npm:dry-run`) on the exact `candidate_sha`; the job re-verifies
+  `git rev-parse HEAD == candidate_sha` after checkout.
+- The release job refuses to proceed without a successful, non-expired
+  `autoflow-ci` artifact for the same SHA: it finds the CI run for that
+  commit, downloads the `candidate-evidence-*` artifact, recomputes every log
+  and manifest hash, and rejects evidence older than the 14-day retention
+  window. Copied or hand-written evidence is never accepted.
 - Prereleases publish under `--tag alpha|beta|rc` only; `latest` never moves
   onto an alpha (`publishPackage` guard, tested).
 - Required pre-publish CI (branch protection on `main`): the AutoFlow CI
-  `autoflow-ci`, `node-serve-smoke` (24/26, required), `packed-consumer-matrix`
+  `autoflow-ci` aggregation job (which depends on `fast-checks`,
+  `source-matrix`, `packed-consumers`, and the isolated `fresh-clone`),
+  `node-serve-smoke` (24/26, required), `packed-consumer-matrix`
   (Linux/macOS/Windows packed tarball consumers, required),
-  dependency-review on PRs, and CodeQL. `bun-serve-smoke` is an
+  dependency-review on PRs, and CodeQL. The execution jobs run the suite;
+  `autoflow-ci` only aggregates and validates their artifacts — it never
+  re-runs the suite. `bun-serve-smoke` is an
   optional/non-blocking Bun compatibility signal: it runs with
   `continue-on-error: true`, is not a required check, and never gates the
   candidate or the release graph. Post-publish

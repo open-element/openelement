@@ -52,6 +52,34 @@ jobs:
           test "$(git rev-parse HEAD)" = "$CANDIDATE_SHA"
           test "$(deno eval "console.log(JSON.parse(Deno.readTextFileSync('packages/element/deno.json')).version)")" = "$RELEASE_VERSION"
           test "$(deno eval "console.log(JSON.parse(Deno.readTextFileSync('packages/router/deno.json')).version)")" = "$RELEASE_VERSION"
+      # Release accepts only successful, non-expired CI evidence bound to the
+      # exact candidate SHA — never a hand-written or copied status. The
+      # artifact is validated by recomputing every log/manifest hash.
+      - name: Require green CI candidate evidence for this SHA
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CANDIDATE_SHA: ${{ inputs.candidate_sha }}
+        run: |
+          run_id="$(gh run list --repo "$GITHUB_REPOSITORY" --workflow autoflow-ci.yml \
+            --commit "$CANDIDATE_SHA" --status success --limit 1 --json databaseId --jq '.[0].databaseId')"
+          if [ -z "$run_id" ]; then
+            echo "No successful AutoFlow CI run found for $CANDIDATE_SHA" >&2
+            exit 1
+          fi
+          created="$(gh run view "$run_id" --repo "$GITHUB_REPOSITORY" --json createdAt --jq '.createdAt')"
+          age_days="$(( ( $(date -u +%s) - $(date -u -d "$created" +%s) ) / 86400 ))"
+          if [ "$age_days" -gt 14 ]; then
+            echo "CI evidence for $CANDIDATE_SHA is $age_days days old (retention window 14)" >&2
+            exit 1
+          fi
+          mkdir -p .artifacts/ci-evidence
+          gh run download "$run_id" --repo "$GITHUB_REPOSITORY" \
+            --pattern 'candidate-evidence-*' --dir .artifacts/ci-evidence
+          evidence="$(find .artifacts/ci-evidence -name candidate-evidence.json | head -1)"
+          test -n "$evidence"
+          deno run --allow-read --allow-write --allow-run --allow-env --allow-net \
+            --deny-ffi --no-prompt tools/repo/candidate-evidence.ts \
+            --validate "$evidence" --expected-sha "$CANDIDATE_SHA" --max-age-days 14
       - name: Verify npm CLI supports Trusted Publishing
         if: inputs.publish
         run: |

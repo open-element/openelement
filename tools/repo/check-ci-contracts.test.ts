@@ -78,6 +78,100 @@ Deno.test('ci contract: node serve smoke pins the required Node matrix', () => {
   );
 });
 
+Deno.test('ci contract: execution jobs are separate from evidence aggregation', () => {
+  const producers: Array<[string, RegExp]> = [
+    ['fast-checks', /candidate:evidence:fast/],
+    ['source-matrix', /candidate:evidence:source/],
+    ['packed-consumers', /candidate:evidence:packed/],
+    ['fresh-clone', /candidate:evidence:fresh/],
+  ];
+  for (const [job, command] of producers) {
+    const block = jobBlock(workflow, job);
+    assert(command.test(block), `${job} must run its own evidence slice`);
+    assert(
+      /actions\/upload-artifact@/.test(block),
+      `${job} must upload its result + logs artifact`,
+    );
+  }
+  const aggregate = jobBlock(workflow, 'autoflow-ci');
+  assert(
+    /needs:\s*\[[^\]]*fast-checks[^\]]*source-matrix[^\]]*packed-consumers[^\]]*fresh-clone/.test(
+      aggregate,
+    ),
+    'autoflow-ci must depend on every producer job',
+  );
+  assert(
+    /candidate:evidence:aggregate/.test(aggregate) && /candidate:evidence:validate/.test(aggregate),
+    'autoflow-ci must aggregate and validate, never recompute',
+  );
+  const rerunForbidden = aggregate
+    .split('\n')
+    .filter((line) => !line.trimStart().startsWith('#'))
+    .join('\n');
+  for (const rerun of ['gate:source', 'gate:packed', 'publish:npm:dry-run', 'deno task check']) {
+    assert(
+      !rerunForbidden.includes(rerun),
+      `autoflow-ci aggregation must not re-run the suite: found ${rerun}`,
+    );
+  }
+  assert(
+    /actions\/download-artifact@/.test(aggregate),
+    'autoflow-ci must read the producer artifacts',
+  );
+});
+
+Deno.test('ci contract: candidate evidence bundle ships JSON and every log/manifest', () => {
+  const aggregate = jobBlock(workflow, 'autoflow-ci');
+  assert(
+    /name:\s*candidate-evidence-\$\{\{ github\.run_id \}\}-\$\{\{ github\.run_attempt \}\}/.test(
+      aggregate,
+    ),
+    'the candidate artifact name must stay SHA/run-bound',
+  );
+  for (
+    const path of [
+      '.artifacts/candidate-evidence.json',
+      '.artifacts/tarball-manifest.json',
+      '.artifacts/pack-diagnostics.json',
+      '.artifacts/fresh-clone-manifest.json',
+      '.artifacts/ci',
+    ]
+  ) {
+    assert(aggregate.includes(path), `candidate artifact must include ${path}`);
+  }
+  assert(
+    /retention-days:\s*14/.test(aggregate) &&
+      /retention-days:\s*14/.test(jobBlock(workflow, 'fresh-clone')),
+    'evidence retention must stay 14 days and match the release window',
+  );
+});
+
+Deno.test('ci contract: release consumes the bound, non-expired CI artifact', async () => {
+  const releasingWorkflow = await Deno.readTextFile(
+    join(repoRoot, '.github/workflows/autoflow-release.yml'),
+  );
+  assert(
+    /gh run list[^]*--commit "\$CANDIDATE_SHA"[^]*--status success/.test(releasingWorkflow),
+    'release must require a successful CI run for the exact candidate SHA',
+  );
+  assert(
+    /gh run download[^]*--pattern 'candidate-evidence-\*'/.test(releasingWorkflow),
+    'release must download the candidate evidence artifact',
+  );
+  assert(
+    /candidate-evidence\.ts[^]*--validate/.test(releasingWorkflow),
+    'release must validate the downloaded evidence by recomputing hashes',
+  );
+  assert(
+    /age_days[^\n]*14/.test(releasingWorkflow),
+    'release must refuse evidence older than the retention window',
+  );
+  assert(
+    !/pull_request_target/.test(releasingWorkflow) && /workflow_dispatch/.test(releasingWorkflow),
+    'release stays workflow_dispatch only and never runs on untrusted PR events',
+  );
+});
+
 Deno.test('ci contract: packed-consumer matrix pins all three release OSes', () => {
   const block = jobBlock(workflow, 'packed-consumer-matrix');
   assert(
