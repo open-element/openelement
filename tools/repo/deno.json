@@ -42,7 +42,7 @@
     "candidate:evidence:fresh": "deno run --allow-run ./run-in.ts --root ../.. -- deno run --allow-read --allow-write --allow-run --allow-env --allow-net --deny-ffi --no-prompt tools/repo/candidate-evidence.ts --job fresh-clone --out .artifacts/ci/fresh-clone",
     "candidate:evidence:aggregate": "deno run --allow-run ./run-in.ts --root ../.. -- deno run --allow-read --allow-write --allow-run --allow-env --allow-net --deny-ffi --no-prompt tools/repo/candidate-evidence.ts --aggregate --input-dir .artifacts/ci --output .artifacts/candidate-evidence.json",
     "candidate:evidence:validate": "deno run --allow-run ./run-in.ts --root ../.. -- deno run --allow-read --allow-write --allow-run --allow-env --allow-net --deny-ffi --no-prompt tools/repo/candidate-evidence.ts --validate .artifacts/candidate-evidence.json --max-age-days 14",
-    "release:registry-check": "deno run --allow-run ./run-in.ts --root ../.. -- deno run --allow-read --allow-run=git --allow-run=npm tools/repo/check-release-state-machine.ts",
+    "release:registry-check": "deno run --allow-run ./run-in.ts --root ../.. -- deno run --allow-read --allow-run=git,npm tools/repo/check-release-state-machine.ts",
     "generate:site-nav": "deno run --allow-run ./run-in.ts --root ../.. -- deno run --allow-read --allow-write tools/repo/generate-site-nav.ts",
     "site-nav:check": "deno run --allow-run ./run-in.ts --root ../.. -- deno run --allow-read --allow-write tools/repo/generate-site-nav.ts --check"
   }
