@@ -53,6 +53,9 @@ publish; a missing environment fails the job closed instead of publishing:
   `source-matrix`, `packed-consumers`, and the isolated `fresh-clone`),
   `node-serve-smoke` (24/26, required), `packed-consumer-matrix`
   (Linux/macOS/Windows packed tarball consumers, required),
+  `bfcache-chrome` (installed Chrome channel under xvfb; the bundled Chromium
+  disables BFCache, so this is the only lane that proves the #943 restore
+  contract, required),
   dependency-review on PRs, and CodeQL. The execution jobs run the suite;
   `autoflow-ci` only aggregates and validates their artifacts — it never
   re-runs the suite. `bun-serve-smoke` is an

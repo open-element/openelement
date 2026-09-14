@@ -38,7 +38,7 @@ Deno.test('ci contract: bun-serve-smoke is explicitly non-blocking', () => {
 
 Deno.test('ci contract: required jobs stay blocking', () => {
   for (
-    const job of ['autoflow-ci', 'node-serve-smoke', 'packed-consumer-matrix']
+    const job of ['autoflow-ci', 'node-serve-smoke', 'packed-consumer-matrix', 'bfcache-chrome']
   ) {
     const block = jobBlock(workflow, job);
     assert(
@@ -262,6 +262,30 @@ Deno.test('ci contract: release docs never present Bun as required', () => {
     false,
     'bun-serve-smoke must not appear in the required branch-protection list',
   );
+});
+
+Deno.test('ci contract: BFCache runs a blocking Chrome-channel lane', async () => {
+  const block = jobBlock(workflow, 'bfcache-chrome');
+  assert(block.length > 0, 'bfcache-chrome job must exist');
+  assertEquals(
+    /continue-on-error:\s*true/.test(block),
+    false,
+    'the BFCache lane must be blocking, not optional',
+  );
+  assert(
+    block.includes('playwright install chrome'),
+    'the BFCache lane must install the Chrome channel',
+  );
+  assert(
+    block.includes('test:bfcache'),
+    'the BFCache lane must run the chrome-bfcache project task',
+  );
+  // The official three-browser Site matrix must remain unchanged in the
+  // source gate the candidate runs.
+  const repoConfig = JSON.parse(
+    await Deno.readTextFile(join(repoRoot, 'tools/repo/deno.json')),
+  ) as { tasks: Record<string, string> };
+  assert(repoConfig.tasks['gate:source'].includes('apps/site#e2e:browsers'));
 });
 
 Deno.test('ci contract: SaaS is decoupled from the core candidate gate', async () => {

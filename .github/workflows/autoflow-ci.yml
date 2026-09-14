@@ -219,6 +219,32 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+  # BFCache restore contract (#943). Bundled Playwright Chromium ships
+  # --disable-back-forward-cache, so this lane installs the Google Chrome
+  # channel and runs headed under xvfb; the launch drops the disabling switch
+  # and asserts the direct pageshow.persisted signal. Required for the candidate
+  # — it must not become optional while the contract is claimed.
+  bfcache-chrome:
+    name: BFCache Chrome channel (#943)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      # v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: ./.github/actions/setup-deno-workspace
+      - name: Install Chrome channel and xvfb
+        run: |
+          ./node_modules/.bin/playwright install chrome
+          sudo apt-get update
+          sudo apt-get install -y xvfb
+      - name: Build the packed starter
+        run: deno task --cwd tests/e2e/starter-smoke setup
+      - name: BFCache restore (Chrome channel, headed under xvfb)
+        run: xvfb-run -a deno task --cwd tests/e2e/starter-smoke test:bfcache
+
   # The packed deploy artifact must boot under plain Node, not just under
   # the Deno CLI. The runtime floor is Node.js >= 24 (WHATWG URLPattern
   # global): the matrix serves on 24 (lowest supported, required) and 26

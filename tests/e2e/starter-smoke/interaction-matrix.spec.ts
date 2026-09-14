@@ -154,30 +154,6 @@ test.describe('hydration timing', () => {
 });
 
 test.describe('navigation', () => {
-  // Diagnosed 2026-08 (#944 round-4 leftover): still red, but not for a
-  // framework reason. The server now sends `private, no-cache` on request-time
-  // GET 200s (4056fafa), which Chromium allows into the bfcache; a real Chrome
-  // (channel: 'chrome') run restores the page — goBack() hangs waiting for a
-  // `load` event that a bfcache restore never fires. The blocker is the
-  // harness: Playwright's bundled Chromium launches with
-  // `--disable-back-forward-cache` by default (playwright-core
-  // chromiumSwitches.js), and overriding it via
-  // launchOptions.ignoreDefaultArgs still does not restore in headless shell
-  // (a window marker set before leaving is gone after goBack). Activating
-  // this test needs a bfcache-capable browser channel in CI plus
-  // `goBack({ waitUntil: 'commit' })` below instead of waitForLoadState('load').
-  test.fixme('island state survives back/forward (bfcache, #943)', async ({ page }) => {
-    await page.goto('/');
-    await page.locator('my-counter').getByRole('button', { name: '+' }).click();
-    await expect(page.locator('my-counter #count')).toHaveText('1');
-    await page.goto('/blog');
-    await page.goBack();
-    await page.waitForLoadState('load');
-    await expect(page.locator('my-counter #count')).toHaveText('1');
-    await page.locator('my-counter').getByRole('button', { name: '+' }).click();
-    await expect(page.locator('my-counter #count')).toHaveText('2');
-  });
-
   // #943: was fixme-red against alpha.15 — the original repro page was too
   // short to scroll at the default 720px viewport (max scrollY=0), so the
   // test could never pass. The framework-side fix is the entry-codegen

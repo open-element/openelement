@@ -23,6 +23,7 @@ export default defineConfig({
   testMatch: '*.spec.ts',
   // dev.spec.ts targets the vite dev server (playwright.dev.config.ts), not
   // the production `start` server this config boots.
+  // dev.spec.ts targets the vite dev server, not the production start server.
   testIgnore: 'dev.spec.ts',
   // Serial by design (#1232): one packed starter serves one app on one port,
   // so fullyParallel and workers agree on sequential execution.
@@ -46,15 +47,36 @@ export default defineConfig({
   projects: [
     {
       name: 'chromium',
+      // bfcache.spec.ts runs only in the Chrome-channel project below
+      // (bundled Chromium ships --disable-back-forward-cache).
+      testIgnore: 'bfcache.spec.ts',
       use: { browserName: 'chromium' },
     },
     {
       name: 'firefox',
+      testIgnore: 'bfcache.spec.ts',
       use: { browserName: 'firefox' },
     },
     {
       name: 'webkit',
+      testIgnore: 'bfcache.spec.ts',
       use: { browserName: 'webkit' },
+    },
+    // BFCache-capable installed Chrome channel (#943). Bundled Chromium ships
+    // with --disable-back-forward-cache, so this is the only lane that can
+    // prove the restore contract.
+    {
+      name: 'chrome-bfcache',
+      testMatch: 'bfcache.spec.ts',
+      use: {
+        browserName: 'chromium',
+        channel: 'chrome',
+        // Playwright disables BFCache for every Chromium-based launch; a
+        // restore is only observable once that default switch is dropped.
+        // Headed (xvfb in CI) because Chrome's headless mode does not restore.
+        headless: false,
+        launchOptions: { ignoreDefaultArgs: ['--disable-back-forward-cache'] },
+      },
     },
   ],
 
