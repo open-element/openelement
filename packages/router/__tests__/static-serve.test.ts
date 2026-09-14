@@ -64,7 +64,7 @@ Deno.test('dispatchRequest shares mutating and styled-fallback production semant
   }
 });
 
-Deno.test('contentTypeFor follows @std/media-types (#732)', () => {
+Deno.test('contentTypeFor uses the maintained mime database (#732)', () => {
   assertEquals(contentTypeFor('/d/index.html'), 'text/html; charset=UTF-8');
   assertEquals(contentTypeFor('/d/app.js'), 'text/javascript; charset=UTF-8');
   // Added to close the drift: start.ts lacked these three.

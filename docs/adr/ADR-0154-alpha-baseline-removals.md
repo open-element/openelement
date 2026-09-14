@@ -57,6 +57,19 @@ new-baseline statement.
 - Docs, the site security guide, generated API reference, the public
   interface snapshot, and generated site data are updated in the same change.
 
+## Amendment (2026-09-14): JSONC and content-type ownership reverted to maintained npm packages
+
+Items 2 and 3 above are superseded. The `@std/jsonc` / `@std/media-types`
+choice forced an `npm:@jsr/*` bridge into shipped Router tooling and the packed
+tarball, which the Alpha dependency rule (Web Standards, then Deno/`@std`,
+then mature third party; no bridge in shipped output) does not justify. The
+config reader now uses the mature zero-dependency `jsonc-parser` npm package
+(`packages/router/src/vite/internal/jsonc.ts`) and static serving uses `mime`
+(`packages/router/src/vite/internal/static-serve.ts`). The contracts those
+items fixed (null on invalid JSONC; `charset=UTF-8` casing,
+`image/vnd.microsoft.icon`, bare `application/xml`) are preserved and pinned
+by `packages/router/__tests__/static-serve.test.ts`.
+
 ## Addendum (2026-09-13): generated standalone server deleted
 
 Item 3 above kept a derived MIME table inside the generated

@@ -1,13 +1,14 @@
 /**
  * Native `deno pack --dry-run` packability proof (1.0 Alpha baseline).
  *
- * `deno pack` is the sole tarball generator: tools/release#pack:dry-run
- * runs the real pack plus OpenElement post-processing, and this gate
- * member proves the workspace packages stay packable by the native command
- * alone. It fails closed listing every package whose native dry-run fails.
- * The OpenElement post-processing gaps this does NOT cover (dependency and
- * peer stamping, UI declarations, raw-TS strip) are documented with
- * deletion conditions in publish-npm.ts.
+ * `deno pack` is the sole code and declaration generator. The final npm
+ * tarball is a deterministic re-wrap after approved manifest mutation
+ * (docs/maintainers/pack-post-processing.md); tools/release#pack:dry-run runs
+ * the real pack plus that coordinator step. This gate member proves the
+ * workspace packages stay packable by the native command alone, failing closed
+ * listing every package whose native dry-run fails. The coordinator steps this
+ * does NOT cover are documented with deletion conditions in
+ * docs/maintainers/pack-post-processing.md.
  */
 
 import { type PackageInfo, readPackages } from '../lib/package-graph.ts';

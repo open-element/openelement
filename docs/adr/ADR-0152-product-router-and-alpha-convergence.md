@@ -30,8 +30,9 @@ The ownership sentence above is superseded. Reconciled for `1.0.0-alpha.1`:
   stable API promise.
 - Site stays in this repository (`apps/site`) as the official product
   surface.
-- SaaS stays in this repository (`apps/saas`) as the first-party core
-  consumer product and standard consumption shape.
+- SaaS stays in this repository (`apps/saas`) as an independent first-party
+  application, governed separately from the Alpha repository candidate. It is
+  not a core product and not part of the Alpha repository GO criteria.
 - "Not a core public package" does not mean "not owned by this
   repository": UI/Site/SaaS do not extend the Element/Router stable API
   promise, but all are maintained here. Daily development may use

@@ -33,7 +33,7 @@ lines and no migration path from 0.x is offered: new projects start from
   baseline; `@openelement/element/sanitize` is gone and `trustedHtml` is the
   trust boundary; raw head fragments are passed through verbatim with only
   fail-closed invariants (`<script>` and executable `<style>` rejected);
-  served `Content-Type` bytes follow `@std/media-types`; runtimes without the
+  served `Content-Type` values derive from the maintained `mime` package; runtimes without the
   Web Standard `URLPattern` fail fast; the generated standalone
   `dist/server/serve.mjs` is replaced by the portable
   `fetch(Request) -> Response` entry plus the start CLI.
