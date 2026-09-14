@@ -13,6 +13,7 @@ import {
   REQUIRED_PACKAGE_TARBALLS,
   REQUIRED_PACKED_CONSUMERS,
   REQUIRED_SITE_BROWSERS,
+  REQUIRED_STEPS,
 } from './candidate-evidence.ts';
 
 const SHA = 'a'.repeat(40);
@@ -25,20 +26,6 @@ async function sha256(text: string): Promise<string> {
   return 'sha256:' +
     [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
 }
-
-const REQUIRED_STEPS: Record<string, string[]> = {
-  'fast-checks': ['fmt-check', 'lint', 'markdown', 'typecheck'],
-  'source-matrix': ['gate-source'],
-  packed: ['gate-packed', 'publish-npm-dry-run'],
-  'fresh-clone': [
-    'clone',
-    'git-checkout',
-    'install',
-    'task-check',
-    'task-gate-packed',
-    'task-publish-npm-dry-run',
-  ],
-};
 
 function validRollup() {
   return {
@@ -365,5 +352,63 @@ Deno.test('collectBundleFailures rejects a stale bundle and manifest/hash tamper
       read: (path) =>
         path === 'fresh-clone-manifest.json' ? Promise.resolve(null) : base.read(path),
     })).some((f) => f.includes('manifest missing')),
+  );
+});
+
+Deno.test('collectJobFailures rejects an old-style fresh clone that skips source/release gates', async () => {
+  const { jobs } = await fixture();
+  const cloneJobs = () =>
+    jobs.map((entry) => ({ job: structuredClone(entry.job), read: entry.read }));
+  const oldStyle = cloneJobs();
+  const fresh = oldStyle.find((entry) => entry.job.job === 'fresh-clone');
+  if (!fresh) throw new Error('fresh-clone fixture missing');
+  fresh.job.steps = fresh.job.steps.filter((step) =>
+    ['clone', 'git-checkout', 'install', 'task-check'].includes(step.name)
+  );
+  const failures = await collectJobFailures(oldStyle, SHA, TREE);
+  assert(failures.some((f) => f.includes('required step missing: task-gate-source')));
+  assert(failures.some((f) => f.includes('required step missing: task-release-check')));
+});
+
+Deno.test('collectJobFailures requires each specific fresh-clone gate step once', async () => {
+  const { jobs } = await fixture();
+  const cloneJobs = () =>
+    jobs.map((entry) => ({ job: structuredClone(entry.job), read: entry.read }));
+  for (const missing of ['task-gate-source', 'task-release-check']) {
+    const mutated = cloneJobs();
+    const fresh = mutated.find((entry) => entry.job.job === 'fresh-clone');
+    if (!fresh) throw new Error('fresh-clone fixture missing');
+    fresh.job.steps = fresh.job.steps.filter((step) => step.name !== missing);
+    assert(
+      (await collectJobFailures(mutated, SHA, TREE)).some((f) =>
+        f.includes(`required step missing: ${missing}`)
+      ),
+      `expected rejection when ${missing} is missing`,
+    );
+  }
+  const duplicated = cloneJobs();
+  const fresh = duplicated.find((entry) => entry.job.job === 'fresh-clone');
+  if (!fresh) throw new Error('fresh-clone fixture missing');
+  fresh.job.steps.push(structuredClone(fresh.job.steps[0]));
+  assert(
+    (await collectJobFailures(duplicated, SHA, TREE)).some((f) =>
+      f.includes('required step duplicated')
+    ),
+  );
+});
+
+Deno.test('collectJobFailures rejects a non-zero fresh-clone gate step', async () => {
+  const { jobs } = await fixture();
+  const mutated = jobs.map((entry) => ({ job: structuredClone(entry.job), read: entry.read }));
+  const fresh = mutated.find((entry) => entry.job.job === 'fresh-clone');
+  if (!fresh) throw new Error('fresh-clone fixture missing');
+  const step = fresh.job.steps.find((candidate) => candidate.name === 'task-release-check');
+  if (!step) throw new Error('task-release-check step missing');
+  step.result = 'FAIL';
+  step.exitCode = 1;
+  assert(
+    (await collectJobFailures(mutated, SHA, TREE)).some((f) =>
+      f.includes('fresh-clone/task-release-check')
+    ),
   );
 });

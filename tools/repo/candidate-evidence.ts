@@ -9,7 +9,7 @@
  *   packed       -> gate:packed + publish:npm:dry-run + tarball hashes +
  *                   structured pack diagnostics
  *   fresh-clone  -> clean clone, empty DENO_DIR/npm cache, install, check,
- *                   packed gate, publish dry-run
+ *                   source gate, release check
  *
  * Each `--job` run writes `<out>/result.json` plus `<out>/logs/*.log`; the
  * result records command, exit code, result, log path, and the log SHA-256.
@@ -64,7 +64,7 @@ export const REQUIRED_PACKED_CONSUMERS: readonly string[] = [
 export { SITE_E2E_PROJECTS as REQUIRED_SITE_BROWSERS } from './site-e2e-result.ts';
 
 /** Minimum required steps per job; missing/duplicate/failed steps fail closed. */
-const REQUIRED_STEPS: Record<JobName, readonly string[]> = {
+export const REQUIRED_STEPS: Record<JobName, readonly string[]> = {
   'fast-checks': ['fmt-check', 'lint', 'markdown', 'typecheck'],
   'source-matrix': ['gate-source'],
   packed: ['gate-packed', 'publish-npm-dry-run'],
@@ -73,8 +73,8 @@ const REQUIRED_STEPS: Record<JobName, readonly string[]> = {
     'git-checkout',
     'install',
     'task-check',
-    'task-gate-packed',
-    'task-publish-npm-dry-run',
+    'task-gate-source',
+    'task-release-check',
   ],
 };
 
@@ -458,16 +458,15 @@ async function recordFreshClone(outDir: string): Promise<void> {
     };
     await run([denoExe, 'install'], cloneDir, isolatedEnv);
     await run([denoExe, 'task', 'check'], cloneDir, isolatedEnv);
+    // The real source gate (includes Site E2E) and the real release check
+    // (registry check + packed gate + publish dry-run) — no duplicated
+    // packed/dry-run steps, since release:check already owns them.
     await run(
-      [denoExe, 'task', '--cwd', 'tools/release', 'gate:packed'],
+      [denoExe, 'task', '--cwd', 'tools/repo', 'gate:source'],
       cloneDir,
       isolatedEnv,
     );
-    await run(
-      [denoExe, 'task', '--cwd', 'tools/release', 'publish:npm:dry-run'],
-      cloneDir,
-      isolatedEnv,
-    );
+    await run([denoExe, 'task', 'release:check'], cloneDir, isolatedEnv);
   } finally {
     await Deno.remove(tmpRoot, { recursive: true }).catch(() => undefined);
   }
