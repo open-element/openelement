@@ -30,6 +30,9 @@ export const DEFAULT_TARGETS: readonly string[] = [
   'packages/*/pack-*.log',
   'apps/site/dist',
   'apps/site/.openElement',
+  'apps/site/e2e/test-results',
+  'apps/site/e2e/playwright-report',
+  'apps/site/playwright-report',
   'apps/saas/dist',
   'apps/saas/.openElement',
   'apps/saas/.output',
@@ -58,6 +61,7 @@ export const DEFAULT_TARGETS: readonly string[] = [
 /** Opt-in extras: reinstallable dependency trees, never touched by default. */
 export const DEEP_TARGETS: readonly string[] = [
   '.deno',
+  'node_modules',
   'apps/saas/node_modules',
   'packages/element/__wtr__/node_modules',
   'tests/fixtures/*/node_modules',

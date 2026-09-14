@@ -48,7 +48,7 @@ Deno.test('clean CLI only accepts allowlisted generated patterns', () => {
   assertThrows(() => parseCleanArgs(['docs']), Error, 'not an allowlisted');
   assertThrows(() => parseCleanArgs(['README.md']), Error, 'not an allowlisted');
   assertThrows(() => parseCleanArgs(['.env']), Error, 'not an allowlisted');
-  assertThrows(() => parseCleanArgs(['node_modules']), Error, 'not an allowlisted');
+  assertThrows(() => parseCleanArgs(['apps/site/app']), Error, 'not an allowlisted');
   assertThrows(() => parseCleanArgs(['--nuke']), Error, 'unknown flag');
   assertEquals(parseCleanArgs(['packages/*/dist']).targets, ['packages/*/dist']);
 });
@@ -59,6 +59,19 @@ Deno.test('clean defaults stay separate from opt-in deep targets', () => {
   assertEquals(parseCleanArgs(['--deep']).deep, true);
   assertEquals(parseCleanArgs(['--deep']).targets, [...DEFAULT_TARGETS, ...DEEP_TARGETS]);
   assert(DEEP_TARGETS.every((target) => !DEFAULT_TARGETS.includes(target)));
+  // The root dependency tree is opt-in deep clean only.
+  assert(DEEP_TARGETS.includes('node_modules'));
+  assert(!DEFAULT_TARGETS.includes('node_modules'));
+  // Site E2E output is regenerable and safe by default.
+  for (
+    const target of [
+      'apps/site/e2e/test-results',
+      'apps/site/e2e/playwright-report',
+      'apps/site/playwright-report',
+    ]
+  ) {
+    assert(DEFAULT_TARGETS.includes(target), `${target} must be a default clean target`);
+  }
 });
 
 Deno.test('default clean removes generated output and preserves user content', async () => {
@@ -71,6 +84,9 @@ Deno.test('default clean removes generated output and preserves user content', a
     'packages/ui/dist/index.js',
     'apps/site/dist/index.html',
     'apps/site/.openElement/cache.json',
+    'apps/site/e2e/test-results/report.json',
+    'apps/site/e2e/playwright-report/index.html',
+    'apps/site/playwright-report/index.html',
     'apps/saas/dist/index.html',
     'apps/saas/.openElement/cache.json',
     'apps/saas/.output-node/server.js',
