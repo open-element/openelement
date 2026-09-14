@@ -8,7 +8,7 @@
  * Prerequisites:
  *   1. deno task site:build   (build the site to apps/site/dist/)
  *
- * Run: deno task test:e2e
+ * Run: deno task --cwd apps/site e2e:browsers
  */
 import { defineConfig } from '@playwright/test';
 import process from 'node:process';
@@ -37,17 +37,6 @@ export default defineConfig({
     : [['list'], ['html', { open: 'never' }]],
   outputDir: 'test-results',
   timeout: 120_000,
-  // Visual baselines are product artifacts, not host-OS artifacts. JetBrains
-  // Mono is self-hosted and a small pixel allowance absorbs rasterizer-only
-  // differences between the macOS authoring environment and Linux CI.
-  snapshotPathTemplate: '{snapshotDir}/{testFilePath}-snapshots/{arg}-chromium-canonical{ext}',
-
-  expect: {
-    toHaveScreenshot: {
-      maxDiffPixelRatio: 0.05,
-    },
-  },
-
   use: {
     baseURL,
     trace: 'on-first-retry',

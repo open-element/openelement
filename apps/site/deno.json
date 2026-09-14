@@ -28,6 +28,8 @@
   "tasks": {
     "build": "deno run --config ../../deno.json --allow-read --allow-write --allow-net --allow-env --allow-ffi --allow-sys --allow-run ../../packages/router/src/cli/build.ts",
     "check": "deno check --config ../../deno.json __tests__/article-body.test.ts __tests__/article-pages.test.ts __tests__/build-output.test.ts __tests__/island-metadata.test.ts __tests__/open-layout-navigation.test.ts __tests__/site-ui.test.ts __tests__/v0.27.0-regression.test.ts",
-    "test": "deno test --config ../../deno.json --allow-read --allow-write --allow-env --allow-net --allow-run --allow-ffi --allow-sys __tests__/"
+    "test": "deno test --config ../../deno.json --allow-read --allow-write --allow-env --allow-net --allow-run --allow-ffi --allow-sys __tests__/",
+    "pagefind": "deno run --config ../../deno.json --allow-read --allow-write --allow-env --allow-run --allow-net build-pagefind.ts",
+    "e2e:browsers": "deno run --config ../../deno.json --allow-read --allow-write --allow-env --allow-net --allow-run --allow-sys npm:@playwright/test@1.59.1 test --config e2e/playwright.config.ts"
   }
 }

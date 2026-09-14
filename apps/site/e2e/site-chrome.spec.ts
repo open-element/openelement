@@ -5,8 +5,8 @@
  * and reduced the footer to a bare strip, and the public-route suite missed it
  * because it only asserted main-landmark+h1 per route. This suite codifies the
  * restored chrome per layout class with semantic assertions — landmarks,
- * navigation roles, aria-current, and link targets — never pixel-only checks
- * (pixel coverage lives in visual-baselines.spec.ts chrome snapshots).
+ * navigation roles, aria-current, and link targets. No pixel baselines are
+ * maintained for the Site; this suite is the visual contract that runs.
  *
  * Layout classes under test:
  *   - reading layouts (/guide/*, /architecture/*): filtered section sidebar
