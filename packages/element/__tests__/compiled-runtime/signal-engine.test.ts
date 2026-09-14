@@ -94,7 +94,7 @@ Deno.test('the alternate engine coalesces direct subscriptions inside a batch', 
 
 Deno.test('the framework intrinsics default to the Preact engine', () => {
   // The Preact adapter delivers a synchronous subscription-time echo; the lazy
-  // conformance engine does not. Never calling selectSignalEngine must keep
+  // conformance engine does not. The default engine path must keep
   // the current default behavior.
   const source = signal(1);
   const seen: number[] = [];

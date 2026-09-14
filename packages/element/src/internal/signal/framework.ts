@@ -11,24 +11,19 @@
  * @module ./framework.ts
  */
 
-import { noteSignalCreated, selectedSignalEngine } from './selection.ts';
+import { selectedSignalEngine } from './selection.ts';
 import type { ReadonlySignal, Unsubscribe, WritableSignal } from './types.ts';
 
 // ─── Engine (default: @preact/signals-core adapter) ─────────────
 /** Create a writable signal through the selected signal engine. */
 export function signal<T>(initialValue: T): WritableSignal<T> {
-  const created = selectedSignalEngine().signal(initialValue);
-  noteSignalCreated();
-  return created;
+  return selectedSignalEngine().signal(initialValue);
 }
 /** Create a derived read-only signal recomputed from its dependencies. */
 export function computed<T>(fn: () => T): ReadonlySignal<T> {
-  const created = selectedSignalEngine().computed(fn);
-  noteSignalCreated();
-  return created;
+  return selectedSignalEngine().computed(fn);
 }
 /** Run a side effect that re-subscribes whenever its signal dependencies change. */
 export function effect(fn: () => void | Unsubscribe): Unsubscribe {
-  noteSignalCreated();
   return selectedSignalEngine().effect(fn);
 }

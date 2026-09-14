@@ -25,16 +25,10 @@ export type {
 } from '../protocol/signal.ts';
 export { isSignalLike, unwrapSignalLike } from './types.ts';
 
-// Internal static engine-selection seam (#723). One engine per application,
-// selected before signals exist; also not re-exported from the package root.
-export {
-  selectedSignalEngine,
-  selectSignalEngine,
-  SIGNAL_ENGINE_ACTIVATED,
-  SIGNAL_ENGINE_INVALID,
-  SIGNAL_ENGINE_LOCKED,
-  SignalEngineSelectionError,
-} from './selection.ts';
+// Internal engine seam (#723): the built-in adapter getter. One engine per
+// application; not re-exported from the package root and no arbitrary-engine
+// switching (multiple engines are not a supported promise).
+export { selectedSignalEngine } from './selection.ts';
 
 // ─── Framework layer ────────────────────────────────────────────
 export { computed, effect, signal } from './framework.ts';

@@ -18,7 +18,6 @@ import { escapeAttr, VOID_TAGS } from '../core/html-escape.ts';
 // Canonical text-node escape contract (#1272) — shared with the server
 // serializer; do not reintroduce a private copy.
 import { escapeText } from './escape-text.ts';
-import { noteCompiledProgramActivated } from '../signal/selection.ts';
 import {
   DATA_OE_LIGHT,
   partAnchorEndMarker,
@@ -1101,7 +1100,6 @@ export function createFreshDom(
   host: CompiledRuntimeHost,
   root: Node,
 ): CompiledProgramInstance {
-  noteCompiledProgramActivated();
   const ctx = createContext(normalizePartProgram(program), host);
   const doc = root.ownerDocument;
   if (!doc) throw new Error('[compiled-runtime] root must have an ownerDocument');
@@ -2434,7 +2432,6 @@ export function claimExistingDom(
   root: Node,
   options: CompiledClaimOptions = {},
 ): CompiledProgramInstance {
-  noteCompiledProgramActivated();
   // Stop a live capture before staged validation so a failed claim cannot
   // leave its root listener installed. The captured records are replayed only
   // after the complete plan has attached successfully.
