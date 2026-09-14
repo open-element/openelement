@@ -5,7 +5,13 @@
  * evidence.
  */
 import { assert, assertEquals } from '@std/assert';
-import { collectBundleFailures, collectJobFailures } from './candidate-evidence.ts';
+import {
+  collectBundleFailures,
+  collectJobFailures,
+  collectRollupFailures,
+  packedRollupFromLog,
+  sourceRollupFromLog,
+} from './candidate-evidence.ts';
 
 const SHA = 'a'.repeat(40);
 const TREE = 'b'.repeat(40);
@@ -149,6 +155,14 @@ Deno.test('collectBundleFailures accepts a complete bundle and rejects tampering
       '@openelement/create': 'sha256:3',
       '@openelement/ui': 'sha256:4',
     },
+    rollup: {
+      artifactCheck: true,
+      consumers: [
+        'tools/release#consumer:packaged',
+        'tests/fixtures/third-party-web-components#smoke',
+      ],
+      siteE2e: { ran: true, browsers: ['chromium', 'firefox', 'webkit'] },
+    },
     tarballManifest: {
       path: 'tarball-manifest.json',
       sha256: await sha256(files['tarball-manifest.json']),
@@ -207,4 +221,74 @@ Deno.test('collectBundleFailures accepts a complete bundle and rejects tampering
       read,
     })).some((failure) => failure.includes('required manifest reference missing')),
   );
+});
+
+Deno.test('rollup: packed log must prove the artifact scan and consumers', () => {
+  const healthy = [
+    'PASS tools/release#package-artifacts:check (13.7s)',
+    'PASS tools/release#consumer:packaged (40.8s)',
+    'PASS tests/fixtures/third-party-web-components#smoke (1.0s)',
+  ].join('\n');
+  const parsed = packedRollupFromLog(healthy);
+  assertEquals(parsed.artifactCheck, true);
+  assertEquals(parsed.consumers.length, 2);
+
+  const noConsumers =
+    'PASS tools/release#package-artifacts:check (13.7s)\nPASS tools/release#pack:dry-run (3.3s)';
+  assertEquals(packedRollupFromLog(noConsumers).consumers, []);
+
+  const noArtifact = 'PASS tools/release#consumer:packaged (40.8s)';
+  assertEquals(packedRollupFromLog(noArtifact).artifactCheck, false);
+});
+
+Deno.test('rollup: Site E2E proof must come from the source gate log', () => {
+  const ran = 'PASS apps/site#e2e:browsers (780.0s)\nchromium firefox webkit';
+  assertEquals(sourceRollupFromLog(ran).siteE2e.ran, true);
+  assertEquals(sourceRollupFromLog(ran).siteE2e.browsers, ['chromium', 'firefox', 'webkit']);
+  assertEquals(sourceRollupFromLog('FAIL apps/site#e2e:browsers').siteE2e.ran, false);
+});
+
+Deno.test('rollup: aggregate fails when artifact, consumers, or Site E2E are missing', () => {
+  assertEquals(
+    collectRollupFailures({
+      artifactCheck: true,
+      consumers: ['tools/release#consumer:packaged'],
+      siteE2e: { ran: true },
+    }),
+    [],
+  );
+  assertEquals(
+    collectRollupFailures({ artifactCheck: false, consumers: ['x'], siteE2e: { ran: true } })
+      .some((f) => f.includes('artifact scan')),
+    true,
+  );
+  assertEquals(
+    collectRollupFailures({ artifactCheck: true, consumers: [], siteE2e: { ran: true } })
+      .some((f) => f.includes('consumer count is zero')),
+    true,
+  );
+  assertEquals(
+    collectRollupFailures({ artifactCheck: true, consumers: ['x'], siteE2e: { ran: false } })
+      .some((f) => f.includes('Site E2E')),
+    true,
+  );
+  assertEquals(collectRollupFailures(undefined).length, 1);
+});
+
+Deno.test('rollup: a copied healthy bundle without the rollup is rejected', async () => {
+  const { ...rest } = {
+    sha: SHA,
+    tree: TREE,
+    generatedAt: new Date().toISOString(),
+    jobs: [],
+    tarballs: {
+      '@openelement/element': 'sha256:1',
+      '@openelement/router': 'sha256:2',
+      '@openelement/create': 'sha256:3',
+      '@openelement/ui': 'sha256:4',
+    },
+  };
+  const read = () => Promise.resolve(null);
+  const failures = await collectBundleFailures(rest, { expectedTree: TREE, read });
+  assertEquals(failures.some((f) => f.includes('rollup missing')), true);
 });

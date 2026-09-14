@@ -227,10 +227,40 @@ const JOB_STEPS: Record<
   ],
 };
 
+const PACKED_CONSUMER_STEP = /^PASS ((?:tools|apps|tests)\/[^\s(]+#(?:consumer:[^\s(]+|smoke))\b/m;
+
+/** Derive packed-gate facts from the real gate log, never from a summary. */
+export function packedRollupFromLog(logText: string): {
+  artifactCheck: boolean;
+  consumers: string[];
+} {
+  const consumers = [
+    ...stripAnsi(logText).matchAll(new RegExp(PACKED_CONSUMER_STEP.source, 'gm')),
+  ].map((match) => match[1]);
+  return {
+    artifactCheck: /^PASS tools\/release#package-artifacts:check\b/m.test(stripAnsi(logText)),
+    consumers: [...new Set(consumers)].sort(),
+  };
+}
+
+/** Derive the official Site E2E proof from the source-gate log. */
+export function sourceRollupFromLog(logText: string): {
+  siteE2e: { ran: boolean; browsers: string[] };
+} {
+  const text = stripAnsi(logText);
+  const ran = /^PASS apps\/site#e2e:browsers\b/m.test(text);
+  const browsers = ['chromium', 'firefox', 'webkit'].filter((browser) => text.includes(browser));
+  return { siteE2e: { ran, browsers } };
+}
+
 async function packExtras(
   packedSteps: StepResult[],
   outDir: string,
 ): Promise<Record<string, unknown>> {
+  const gatePacked = packedSteps.find((step) => step.name === 'gate-packed');
+  const packedText = gatePacked ? await Deno.readTextFile(join(outDir, gatePacked.logPath)) : '';
+  const { artifactCheck, consumers } = packedRollupFromLog(packedText);
+
   const publish = packedSteps.find((step) => step.name === 'publish-npm-dry-run');
   const text = publish ? await Deno.readTextFile(join(outDir, publish.logPath)) : '';
   const packSummaries = [
@@ -260,9 +290,18 @@ async function packExtras(
   return {
     tarballs,
     packDiagnostics: packSummaries,
-    artifactCheck: /PASS tools\/release#package-artifacts:check/.test(text),
-    consumerSteps: (text.match(/consumer:/g) ?? []).length,
+    artifactCheck,
+    consumers,
   };
+}
+
+async function sourceExtras(
+  sourceSteps: StepResult[],
+  outDir: string,
+): Promise<Record<string, unknown>> {
+  const gateSource = sourceSteps.find((step) => step.name === 'gate-source');
+  const text = gateSource ? await Deno.readTextFile(join(outDir, gateSource.logPath)) : '';
+  return sourceRollupFromLog(text);
 }
 
 async function recordJob(job: Exclude<JobName, 'fresh-clone'>, outDir: string): Promise<void> {
@@ -282,7 +321,11 @@ async function recordJob(job: Exclude<JobName, 'fresh-clone'>, outDir: string): 
       `[evidence] ${job}: ${step.result} ${name} (${(step.durationMs / 1000).toFixed(1)}s)`,
     );
   }
-  const extras = job === 'packed' ? await packExtras(steps, outDir) : undefined;
+  const extras = job === 'packed'
+    ? await packExtras(steps, outDir)
+    : job === 'source-matrix'
+    ? await sourceExtras(steps, outDir)
+    : undefined;
   const result: JobResult = {
     schemaVersion: 1,
     job,
@@ -474,6 +517,11 @@ export async function collectBundleFailures(
     tarballManifest?: { path: string; sha256: string };
     packDiagnostics?: { path: string; sha256: string };
     freshClone?: { path: string; sha256: string };
+    rollup?: {
+      artifactCheck?: boolean;
+      consumers?: string[];
+      siteE2e?: { ran?: boolean; browsers?: string[] };
+    };
   },
   options: {
     expectedSha?: string;
@@ -513,6 +561,7 @@ export async function collectBundleFailures(
   if (!evidence.tarballs || Object.keys(evidence.tarballs).length < 4) {
     failures.push('tarball hashes missing (four packages required)');
   }
+  failures.push(...collectRollupFailures(evidence.rollup));
   for (
     const manifest of [
       evidence.tarballManifest,
@@ -529,6 +578,31 @@ export async function collectBundleFailures(
     else if ((await sha256Bytes(bytes)) !== manifest.sha256) {
       failures.push(`manifest hash mismatch at ${manifest.path}`);
     }
+  }
+  return failures;
+}
+
+/** Pure checks for the packed artifact/consumer and Site E2E rollup. */
+export function collectRollupFailures(
+  rollup: {
+    artifactCheck?: boolean;
+    consumers?: string[];
+    siteE2e?: { ran?: boolean; browsers?: string[] };
+  } | undefined,
+): string[] {
+  const failures: string[] = [];
+  if (!rollup) {
+    failures.push('rollup missing (packed artifact scan, packed consumers, and Site E2E proof)');
+    return failures;
+  }
+  if (rollup.artifactCheck !== true) {
+    failures.push('packed artifact scan did not run (package-artifacts:check missing)');
+  }
+  if (!Array.isArray(rollup.consumers) || rollup.consumers.length === 0) {
+    failures.push('no packed consumers recorded (consumer count is zero)');
+  }
+  if (rollup.siteE2e?.ran !== true) {
+    failures.push('official Site E2E did not run or did not pass');
   }
   return failures;
 }
@@ -570,9 +644,20 @@ async function aggregate(inputDir: string, output: string): Promise<void> {
   }
 
   const packed = jobs.find(({ job }) => job.job === 'packed') as LoadedJob;
+  const source = jobs.find(({ job }) => job.job === 'source-matrix') as LoadedJob;
   const tarballs = (packed.job.extras?.tarballs ?? {}) as Record<string, string>;
   if (Object.keys(tarballs).length < 4) {
     throw new Error('packed job: tarball manifest must contain at least four packages');
+  }
+  const rollup = {
+    artifactCheck: packed.job.extras?.artifactCheck === true,
+    consumers: (packed.job.extras?.consumers ?? []) as string[],
+    siteE2e: (source.job.extras?.siteE2e ?? {}) as { ran?: boolean; browsers?: string[] },
+  };
+  const rollupFailures = collectRollupFailures(rollup);
+  if (rollupFailures.length > 0) {
+    console.error(`candidate aggregation FAILED:\n${rollupFailures.join('\n')}`);
+    Deno.exit(1);
   }
   const outDir = dirname(output);
   await Deno.mkdir(outDir, { recursive: true });
@@ -626,6 +711,7 @@ async function aggregate(inputDir: string, output: string): Promise<void> {
     tarballManifest: { path: 'tarball-manifest.json', sha256: tarballManifestSha },
     packDiagnostics: { path: 'pack-diagnostics.json', sha256: packDiagnosticsSha },
     freshClone: { path: 'fresh-clone-manifest.json', sha256: freshManifestSha },
+    rollup,
     requiredOk: true,
     aggregate: {
       inputs: jobs.map(({ job, dir }) => `${job.job}@${relative(outDir, dir)}`),
