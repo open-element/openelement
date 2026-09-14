@@ -512,6 +512,9 @@ interface LoadedJob {
 
 interface AuditableStep {
   name: string;
+  command?: string[];
+  startedAt?: string;
+  durationMs?: number;
   result: string;
   exitCode?: number;
   logPath: string;
@@ -547,6 +550,20 @@ async function auditJob(
   for (const step of steps) {
     if (step.result !== 'PASS' || (step.exitCode ?? 0) !== 0) {
       failures.push(`${jobName}/${step.name}: ${step.result} (exit ${step.exitCode ?? 0})`);
+    }
+    if (step.command !== undefined && (!Array.isArray(step.command) || step.command.length === 0)) {
+      failures.push(`${jobName}/${step.name}: command (argv) must be a non-empty array`);
+    }
+    if (
+      step.startedAt !== undefined && (typeof step.startedAt !== 'string' || step.startedAt === '')
+    ) {
+      failures.push(`${jobName}/${step.name}: startedAt must be a non-empty string`);
+    }
+    if (
+      step.durationMs !== undefined &&
+      (!Number.isFinite(step.durationMs) || step.durationMs < 0)
+    ) {
+      failures.push(`${jobName}/${step.name}: durationMs must be a non-negative number`);
     }
     const bytes = await read(step.logPath);
     if (!bytes) {
@@ -591,6 +608,9 @@ export async function collectJobFailures(
         entry.job.result,
         entry.job.steps.map((step) => ({
           name: step.name,
+          command: step.command,
+          startedAt: step.startedAt,
+          durationMs: step.durationMs,
           result: step.result,
           exitCode: step.exitCode,
           logPath: step.logPath,
@@ -638,6 +658,9 @@ export async function collectBundleFailures(
       result: string;
       steps: Array<{
         name: string;
+        command?: string[];
+        startedAt?: string;
+        durationMs?: number;
         result: string;
         exitCode?: number;
         logSource: string;
@@ -694,6 +717,9 @@ export async function collectBundleFailures(
         job.result,
         job.steps.map((step) => ({
           name: step.name,
+          command: step.command,
+          startedAt: step.startedAt,
+          durationMs: step.durationMs,
           result: step.result,
           exitCode: step.exitCode,
           logPath: step.logSource,
@@ -811,6 +837,9 @@ async function aggregate(inputDir: string, output: string): Promise<void> {
     sha: fresh.job.sha,
     steps: fresh.job.steps.map((step) => ({
       name: step.name,
+      command: step.command,
+      startedAt: step.startedAt,
+      durationMs: step.durationMs,
       exitCode: step.exitCode,
       result: step.result,
       logPath: step.logPath,
@@ -834,6 +863,8 @@ async function aggregate(inputDir: string, output: string): Promise<void> {
       steps: job.steps.map((step) => ({
         name: step.name,
         command: step.command,
+        startedAt: step.startedAt,
+        durationMs: step.durationMs,
         exitCode: step.exitCode,
         result: step.result,
         counts: step.counts ?? {},

@@ -93,6 +93,9 @@ async function fixture(): Promise<Fixture> {
       });
       bundleSteps.push({
         name,
+        command: ['deno', 'task', name],
+        startedAt: new Date().toISOString(),
+        durationMs: 1,
         result: 'PASS',
         exitCode: 0,
         logSource: `ci/${jobName}/${name}.log`,
