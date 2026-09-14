@@ -1,15 +1,43 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "sourceVersion": "1.0.0-alpha.1",
-  "packages": [
-    "@openelement/router",
-    "@openelement/create",
-    "@openelement/element",
-    "@openelement/ui"
-  ],
-  "publishedVersion": "0.44.0-beta.2.2",
-  "latestLandedTrain": "v0.44.0-beta.2.2",
   "activeTarget": "v1.0.0-alpha.1",
   "nextPlannedTrain": "not scheduled",
-  "maturity": "alpha"
+  "maturity": "alpha",
+  "registry": {
+    "source": "registry.npmjs.org",
+    "verifiedAt": "2026-09-14",
+    "method": "read-only npm view versions + dist-tags"
+  },
+  "packages": [
+    {
+      "name": "@openelement/element",
+      "registry": { "latest": "0.43.3", "alpha": "0.43.0-alpha.2", "beta": "0.44.0-beta.2.2" }
+    },
+    {
+      "name": "@openelement/router",
+      "registry": { "latest": "0.41.0-alpha.6", "alpha": "0.41.0-alpha.8" }
+    },
+    {
+      "name": "@openelement/create",
+      "registry": { "latest": "0.43.3", "alpha": "0.43.0-alpha.2", "beta": "0.44.0-beta.2.2" }
+    },
+    {
+      "name": "@openelement/ui",
+      "registry": { "latest": "0.43.3", "alpha": "0.43.0-alpha.2", "beta": "0.44.0-beta.2.2" }
+    }
+  ],
+  "completePublishedVersion": "0.43.3",
+  "stable": { "distTag": "latest", "version": "0.43.3" },
+  "latestPrerelease": {
+    "version": "0.44.0-beta.2.2",
+    "distTag": "beta",
+    "state": "partial",
+    "publishedPackages": [
+      "@openelement/element",
+      "@openelement/create",
+      "@openelement/ui"
+    ],
+    "missingPackages": ["@openelement/router"]
+  }
 }

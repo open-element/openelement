@@ -18,14 +18,14 @@ const content = {
     eyebrow: 'Changelog',
     pageTitle: 'Every line, evidenced.',
     lede: 'Published, candidate, withdrawn and historical release evidence for OpenElement.',
-    metaPrefix: 'The currently published package line is',
+    metaPrefix: 'The newest release published for all four packages is',
     metaSuffix: '.',
     railLabels: ['Published', 'Stable line', 'Withdrawn', 'Historical archive'],
     publishedIntro:
       'The project follows Keep a Changelog and SemVer. Historical entries preserve older names where they describe older releases; current docs use the openElement contract.',
     stampCurrent: 'Current',
     regCurrentSummary:
-      'The published four-package line — unified product and website surface, sealed export seams.',
+      'The complete four-package line — unified product and website surface, sealed export seams.',
     regArchiveNote: 'archive →',
     regGhostSummary: 'The eleven-package era — JSR-only, before the collapse. Historical record.',
     stableHeading: 'Stable line',
@@ -33,7 +33,7 @@ const content = {
       'is the published stable maintenance baseline on the 0.43 track. The static, request-time, and Universal WC SSR contracts remain frozen under ADR-0119, ADR-0122, and ADR-0135; ADR-0140 admits compatible bug, security, runtime, documentation, and release-truth patches without scheduling a 0.44 feature train.',
     withdrawnHeading: 'Withdrawn partial artifacts',
     withdrawnBody:
-      'The npm 0.41.0-era beta.1–beta.3 artifacts — published under the 0.41 line before its stable cut — are withdrawn partial releases: never a supported product line, never an upgrade path. The current v0.44.0-beta.2.2 prerelease on dist-tag beta is a separate, unrelated line.',
+      'The npm 0.41.0-era beta.1–beta.3 artifacts — published under the 0.41 line before its stable cut — are withdrawn partial releases: never a supported product line, never an upgrade path. The v0.44.0-beta.2.2 prerelease on dist-tag beta is also partial: element, create, and ui published; Router never did, so it is not a four-package release.',
     footnote:
       '※ The withdrawn 0.41.0-era npm beta.1–beta.3 partial artifacts stay withdrawn from the active release story. History is kept, not rewritten.',
     loadError:
@@ -47,13 +47,13 @@ const content = {
     eyebrow: 'Changelog',
     pageTitle: '每一行，皆有证据。',
     lede: 'openElement 已发布、候选、已撤回与历史版本的发布证据。',
-    metaPrefix: '当前发布的包线版本为',
+    metaPrefix: '四个包共同发布的最新版本为',
     metaSuffix: '。',
     railLabels: ['已发布', '稳定线', '已撤回', '历史归档'],
     publishedIntro:
       '本项目遵循 Keep a Changelog 与 SemVer。历史条目在描述旧版本时保留旧名称；当前文档使用 openElement 契约。',
     stampCurrent: '当前',
-    regCurrentSummary: '已发布的四包线——统一的产品与网站接口面，封口的导出边界。',
+    regCurrentSummary: '完整四包线——统一的产品与网站接口面，封口的导出边界。',
     regArchiveNote: '归档 →',
     regGhostSummary: '十一包时代——仅限 JSR，在收拢之前。历史记录。',
     stableHeading: '稳定线',
@@ -61,7 +61,7 @@ const content = {
       '是 0.43 轨道上已发布的稳定维护基线。静态、请求时与 Universal WC SSR 契约继续受 ADR-0119、ADR-0122 和 ADR-0135 冻结；ADR-0140 允许兼容的 bug、安全、运行时、文档与发布真值 patch，但不预排 0.44 功能列车。',
     withdrawnHeading: '已撤回的残缺产物',
     withdrawnBody:
-      'npm 上 0.41.0 时代的 beta.1–beta.3 产物——在 0.41 线正式版之前发布——是已撤回的残缺发布：既非受支持的产品线，也不构成升级路径。当前 dist-tag beta 上的 v0.44.0-beta.2.2 预发布是独立的线路，与它们无关。',
+      'npm 上 0.41.0 时代的 beta.1–beta.3 产物——在 0.41 线正式版之前发布——是已撤回的残缺发布：既非受支持的产品线，也不构成升级路径。dist-tag beta 上的 v0.44.0-beta.2.2 预发布同样是残缺发布：element、create、ui 已发布，Router 从未发布，因此它不是四包版本。',
     footnote:
       '※ 已撤回的 0.41.0 时代 npm beta.1–beta.3 残缺产物在活跃发布叙事中保持撤回状态。历史被保留，不被改写。',
     loadError:

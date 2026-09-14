@@ -54,7 +54,7 @@
     "build": "deno task --filter @openelement/element build && deno task --filter @openelement/router build && deno task --filter @openelement/create build && deno task --filter @openelement/ui build",
     "pack": "deno task --cwd tools/release pack",
     "verify": "deno run --allow-run tools/repo/gate.ts check test test:e2e site:verify saas:verify tools/release#gate:packed",
-    "release:check": "deno run --allow-run tools/repo/gate.ts tools/release#gate:packed tools/release#publish:npm:dry-run",
+    "release:check": "deno run --allow-run tools/repo/gate.ts tools/repo#release:registry-check tools/release#gate:packed tools/release#publish:npm:dry-run",
     "site:build": "deno run --allow-run tools/repo/gate.ts tools/repo#generate:site-content-data tools/repo#generate:api-reference apps/site#build tools/repo#site:sitemap",
     "site:verify": "deno run --allow-run tools/repo/gate.ts site:build tools/repo#site:check-links tools/repo#site:check-theme-tokens tools/repo#content-examples:check tools/repo#retired-api:check",
     "saas:build": "deno task --cwd apps/saas build",

@@ -2,6 +2,8 @@
 
 Release state is owned by package manifests, registry state, Git tags, and the small machine-readable `docs/release/release-state.json` record. Do not maintain a second writable status or roadmap projection.
 
+`release-state.json` records registry truth **per package**: each package's `latest`/prerelease dist-tags, the complete published line, and the latest prerelease's published/missing package partition. A partial publish (some packages shipped, others absent) is represented explicitly, never as one shared version string. `deno task --cwd tools/repo release:state-machine:check` validates that model offline (structure, source versions, Site copy consistency); `deno task --cwd tools/repo release:registry-check` queries npm read-only and fails closed on any drift — it never publishes or moves a dist-tag, and the ordinary offline `deno task check` does not require network.
+
 ## Public 1.0 prerelease baseline
 
 `1.0.0-alpha.1` is the first public 1.0 baseline, not a migration from 0.x. Historic pre-1.0 Git tags remain source snapshots. GitHub Release objects begin with `1.0.0-alpha.1`; release tooling must not require an earlier GitHub Release object.
