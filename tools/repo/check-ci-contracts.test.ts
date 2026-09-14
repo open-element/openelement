@@ -289,3 +289,37 @@ Deno.test('ci contract: the SaaS CI job is optional and never required', () => {
   const aggregate = jobBlock(workflow, 'autoflow-ci');
   assert(!/saas-optional/.test(aggregate), 'aggregation must not depend on the SaaS job');
 });
+
+Deno.test('ci contract: partial publish receipts are persisted as recovery records', async () => {
+  const releasing = await Deno.readTextFile(
+    join(repoRoot, '.github/workflows/autoflow-release.yml'),
+  );
+  const block = releasing.slice(releasing.indexOf('Upload release receipt'));
+  assert(
+    /if:\s*\$\{\{\s*always\(\)\s*&&\s*inputs\.publish\s*\}\}/.test(block),
+    'the receipt upload must run on always() when publishing',
+  );
+  assert(
+    /path:\s*\.artifacts\/release-receipt\.json/.test(block),
+    'the receipt upload must target exactly .artifacts/release-receipt.json',
+  );
+  assert(
+    !/path:\s*\.artifacts\/?\s*$/m.test(block),
+    'the receipt upload must not upload the whole .artifacts tree',
+  );
+  assert(
+    /release-receipt-\$\{\{\s*inputs\.candidate_sha\s*\}\}-\$\{\{\s*github\.run_id\s*\}\}-\$\{\{\s*github\.run_attempt\s*\}\}/
+      .test(block),
+    'the receipt artifact name must bind the candidate SHA and run id/attempt',
+  );
+  assert(
+    /if-no-files-found:\s*error/.test(block),
+    'a publish run with no receipt must fail closed',
+  );
+
+  const publish = await Deno.readTextFile(join(repoRoot, 'tools/release/publish-npm.ts'));
+  assert(
+    /receipt\.result !== 'published'[\s\S]{0,40}Deno\.exit\(1\)/.test(publish),
+    'a partial/failed publish must exit non-zero',
+  );
+});

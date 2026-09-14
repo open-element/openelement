@@ -105,7 +105,20 @@ jobs:
       - name: Publish retained packages
         if: inputs.publish
         run: deno task --cwd tools/release publish:npm
-
+      # Recovery record, not a success proof: publish:npm always writes the
+      # receipt (successful, partial, or failed) at .artifacts/release-receipt.json.
+      # Upload it even when the publish step failed so a partial publish can be
+      # inspected and safely resumed. Fail closed if orchestration ran but no
+      # receipt exists.
+      - name: Upload release receipt (recovery record)
+        if: ${{ always() && inputs.publish }}
+        # v7.0.1
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: release-receipt-${{ inputs.candidate_sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: .artifacts/release-receipt.json
+          if-no-files-found: error
+          retention-days: 30
   # Post-publish consumer qualification is chained automatically after a real
   # publish; a partial publish fails the release job before this runs.
   post-publish-consumers:
