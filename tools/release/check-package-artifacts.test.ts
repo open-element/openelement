@@ -68,6 +68,47 @@ Deno.test('package artifacts: rejects CJS and host APIs in runtime-free packages
   );
 });
 
+Deno.test('package artifacts: bars Node and Deno APIs in packed ui modules', async () => {
+  await withPackage(
+    '@openelement/ui',
+    {
+      'src/open-button.js': `
+        import process from 'node:process';
+        export const cwd = process.cwd();
+        export const read = Deno.readTextFile;
+      `,
+    },
+    (root) => {
+      const messages = scanExtractedPackage('@openelement/ui', root)
+        .violations.map((v) => v.message);
+      assert(messages.includes('node:* import'));
+      assert(messages.includes('Node process global'));
+      assert(messages.includes('Deno API'));
+    },
+  );
+});
+
+Deno.test('package artifacts: create CLI allows Deno APIs but bars Node APIs', async () => {
+  await withPackage(
+    '@openelement/create',
+    {
+      'src/cli.js': `
+        import { join } from 'node:path';
+        export const cwd = process.cwd();
+        export const target = Deno.cwd();
+        console.log(join(cwd, target));
+      `,
+    },
+    (root) => {
+      const messages = scanExtractedPackage('@openelement/create', root)
+        .violations.map((v) => v.message);
+      assert(messages.includes('node:* import'));
+      assert(messages.includes('Node process global'));
+      assert(!messages.includes('Deno API'));
+    },
+  );
+});
+
 Deno.test('package artifacts: allows documented host API escape hatches', async () => {
   await withPackage(
     '@openelement/router',

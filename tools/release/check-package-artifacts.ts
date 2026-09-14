@@ -1,8 +1,11 @@
 #!/usr/bin/env -S deno run --allow-read --allow-write --allow-run --allow-net --allow-env
 // esm-boundary:scanner — this file scans for CJS constructs, so it names them.
 /**
- * Release gate: verify packed npm artifacts stay ESM-only and keep host APIs out
- * of runtime-free/browser-facing package surfaces.
+ * Release gate: verify packed npm artifacts stay ESM-only and keep host APIs
+ * out of all four published packages — runtime-free element/router/ui bar
+ * Node and Deno APIs, the Deno-hosted create CLI bars Node APIs, and every
+ * packed module is checked for CJS syntax, undeclared imports, and the JSR
+ * bridge.
  */
 
 import { walkSync } from '@std/fs/walk';
@@ -19,13 +22,23 @@ const ATTW_VERSION = '0.18.4';
 const RUNTIME_FREE_PACKAGES = new Set([
   '@openelement/element',
   '@openelement/router',
+  '@openelement/ui',
+]);
+
+/**
+ * Shipped-but-Deno-hosted packages: the packed artifact may use Deno APIs
+ * (the create CLI runs under Deno) but must stay free of Node APIs, the same
+ * `node:*`/process/Buffer bar every packed artifact carries.
+ */
+const NODE_FREE_PACKAGES = new Set([
+  '@openelement/create',
 ]);
 
 /**
  * Host-side tooling trees inside runtime-free packages: the packed artifacts
  * ship src/** transpiled, so the Router lifecycle tooling (Vite orchestration,
  * build/start CLI, Nitro mount) would otherwise trip the host-API scan. These
- * paths mirror HOST_TOOLING_ALLOWLIST in tools/check-deno-api-free.ts and are
+ * paths mirror DENO_HOST_TOOLING in tools/repo/check-deno-api-free.ts and are
  * reachable only through the @openelement/router/vite, /cli/* and
  * /nitro-mount subpaths; every other packed file stays fail-closed.
  */
@@ -54,13 +67,17 @@ const CJS_PATTERNS: Array<[RegExp, string]> = [
   [/\b__filename\b/, 'CommonJS __filename'],
 ];
 
-const HOST_PATTERNS: Array<[RegExp, string]> = [
+const NODE_PATTERNS: Array<[RegExp, string]> = [
   [/(?:^|['"])node:[^'"]+/, 'node:* import'],
-  [/\bDeno\.[A-Za-z_]/, 'Deno API'],
   [/\bprocess\b/, 'Node process global'],
   [/\bBuffer\b/, 'Node Buffer global'],
   [/\bsetImmediate\b/, 'Node setImmediate global'],
   [/\bclearImmediate\b/, 'Node clearImmediate global'],
+];
+
+const HOST_PATTERNS: Array<[RegExp, string]> = [
+  ...NODE_PATTERNS,
+  [/\bDeno\.[A-Za-z_]/, 'Deno API'],
 ];
 
 // #1273 / B2.13 (stage #1288 risk #8): dead v0.43 renderer/binding/hydration
@@ -213,11 +230,13 @@ function pushPackageJsonViolations(
   return packageJson;
 }
 
+type HostPolicy = 'runtime-free' | 'node-free' | 'none';
+
 function scanRuntimeFile(
   root: string,
   path: string,
   packageName: string,
-  runtimeFree: boolean,
+  hostPolicy: HostPolicy,
 ): ArtifactViolation[] {
   const violations: ArtifactViolation[] = [];
   const relative = path.slice(root.length + 1);
@@ -233,6 +252,11 @@ function scanRuntimeFile(
   const firstCodeLine = text.split('\n').find((l) => l.trim() !== '') ?? '';
   const hostScanAllowed = !firstCodeLine.trim().startsWith('// deno-api-free:ignore');
   const lines = stripComments(text).split('\n');
+  const hostPatterns = hostPolicy === 'runtime-free'
+    ? HOST_PATTERNS
+    : hostPolicy === 'node-free'
+    ? NODE_PATTERNS
+    : [];
 
   for (let index = 0; index < lines.length; index++) {
     const line = lines[index];
@@ -247,8 +271,8 @@ function scanRuntimeFile(
       }
     }
 
-    if (runtimeFree && hostScanAllowed) {
-      for (const [pattern, message] of HOST_PATTERNS) {
+    if (hostScanAllowed) {
+      for (const [pattern, message] of hostPatterns) {
         if (pattern.test(line)) {
           violations.push({
             path: `${packageName}/${relative}`,
@@ -272,7 +296,7 @@ export function scanExtractedPackage(packageName: string, packageRoot: string): 
   );
   violations.push(...manifestImportViolations(packageName, packageRoot, packageJson));
 
-  const runtimeFreePackage = RUNTIME_FREE_PACKAGES.has(packageName);
+  const nodeFreePackage = NODE_FREE_PACKAGES.has(packageName);
   const forbiddenPaths = FORBIDDEN_LEGACY_PATHS[packageName] ?? [];
   const forbiddenSourcePatterns = FORBIDDEN_LEGACY_SOURCE_PATTERNS[packageName] ?? [];
   const files = new Set<string>();
@@ -319,9 +343,12 @@ export function scanExtractedPackage(packageName: string, packageRoot: string): 
       });
     }
     if (!RUNTIME_EXTENSIONS.has(extension(entry.path))) continue;
-    const runtimeFree = runtimeFreePackage &&
-      !HOST_TOOLING_PATH_ALLOWLIST[packageName]?.test(relative);
-    violations.push(...scanRuntimeFile(packageRoot, entry.path, packageName, runtimeFree));
+    const hostPolicy: HostPolicy = RUNTIME_FREE_PACKAGES.has(packageName)
+      ? (HOST_TOOLING_PATH_ALLOWLIST[packageName]?.test(relative) ? 'none' : 'runtime-free')
+      : nodeFreePackage
+      ? 'node-free'
+      : 'none';
+    violations.push(...scanRuntimeFile(packageRoot, entry.path, packageName, hostPolicy));
   }
 
   if (packageName === '@openelement/router') {

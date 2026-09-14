@@ -9,7 +9,7 @@
  */
 
 import { assertEquals } from '@std/assert';
-import { join } from 'node:path';
+import { join } from '@std/path';
 import { ssrBundleImportUrl } from '../src/cli/build-ssg.ts';
 
 Deno.test('build-ssg: SSR bundle import URL survives spaces, #, ? and non-ASCII in the path', async () => {

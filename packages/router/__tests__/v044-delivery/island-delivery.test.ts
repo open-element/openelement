@@ -1,5 +1,5 @@
 import { assertEquals, assertStringIncludes, assertThrows } from '@std/assert';
-import { join } from 'node:path';
+import { join } from '@std/path';
 import { buildCriticalHeadExtras } from '../../src/vite/internal/ssg/critical-assets.ts';
 import { compiledElementPlugin, compileElementModule } from '@openelement/element/compiler';
 import { generateClientEntry } from '../../src/vite/internal/ssg/entry-client-codegen.ts';

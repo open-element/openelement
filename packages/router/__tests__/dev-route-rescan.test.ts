@@ -8,9 +8,9 @@
  * virtual entry module, and full-reload.
  */
 import { assertEquals, assertStringIncludes } from '@std/assert';
-import { EventEmitter } from 'node:events';
-import { join } from 'node:path';
+import { join } from '@std/path';
 import { createOpenPlugin } from '../src/vite/plugin.ts';
+import { TestFileWatcher } from './test-watcher.ts';
 
 const RESOLVED_ENTRY_ID = '\0virtual:open-hono-entry';
 
@@ -70,8 +70,7 @@ Deno.test('openPlugin: route file added during dev triggers descriptor rescan (#
     assertStringIncludes(entryBefore, 'index.tsx');
     assertEquals(entryBefore.includes('about.tsx'), false);
 
-    const watcher = new EventEmitter() as EventEmitter & { add(path: string): void };
-    watcher.add = () => {};
+    const watcher = new TestFileWatcher();
     const sent: unknown[] = [];
     const invalidated: string[] = [];
     core.configureServer!({
@@ -119,8 +118,7 @@ Deno.test('openPlugin: dev watcher ignores non-route files outside routesDir (#1
     const core = plugins.find((p) => (p as { name?: string }).name === 'open:core')!;
     await core.buildStart!();
 
-    const watcher = new EventEmitter() as EventEmitter & { add(path: string): void };
-    watcher.add = () => {};
+    const watcher = new TestFileWatcher();
     const sent: unknown[] = [];
     core.configureServer!({
       config: { root: dir },
@@ -157,8 +155,7 @@ Deno.test('openPlugin: route content changes rebuild descriptor once after a bur
     )!;
     await core.buildStart!();
 
-    const watcher = new EventEmitter() as EventEmitter & { add(path: string): void };
-    watcher.add = () => {};
+    const watcher = new TestFileWatcher();
     const sent: unknown[] = [];
     const invalidated: string[] = [];
     core.configureServer!({

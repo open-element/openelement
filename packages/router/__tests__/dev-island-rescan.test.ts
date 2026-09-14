@@ -14,10 +14,10 @@
  * fixture dir and pass relative dir names.
  */
 import { assert, assertEquals, assertStringIncludes } from '@std/assert';
-import { EventEmitter } from 'node:events';
-import { join } from 'node:path';
+import { join } from '@std/path';
 import { createOpenPlugin } from '../src/vite/plugin.ts';
 import { OpenElementBuildContext } from '../src/vite/build-context.ts';
+import { TestFileWatcher } from './test-watcher.ts';
 
 const RESOLVED_ENTRY_ID = '\0virtual:open-hono-entry';
 const RESOLVED_CLIENT_ENTRY_ID = '\0virtual:open-client-entry';
@@ -79,8 +79,7 @@ Deno.test('openPlugin: island file added during dev triggers descriptor + client
     assertStringIncludes(entryBefore, 'first-island');
     assertEquals(entryBefore.includes('my-counter'), false);
 
-    const watcher = new EventEmitter() as EventEmitter & { add(path: string): void };
-    watcher.add = () => {};
+    const watcher = new TestFileWatcher();
     const sent: unknown[] = [];
     const invalidated: string[] = [];
     core.configureServer!({
@@ -145,8 +144,7 @@ Deno.test('openPlugin: dev watcher ignores non-island files outside islandsDir (
     const core = plugins.find((p) => (p as { name?: string }).name === 'open:core')!;
     await core.buildStart!();
 
-    const watcher = new EventEmitter() as EventEmitter & { add(path: string): void };
-    watcher.add = () => {};
+    const watcher = new TestFileWatcher();
     const sent: unknown[] = [];
     core.configureServer!({
       config: { root: dir },
