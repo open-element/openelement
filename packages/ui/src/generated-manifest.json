@@ -1,7 +1,8 @@
 {
+  "$comment": "GENERATED FILE - do not edit. Regenerate with: deno task --cwd tools/repo generate:ui-manifest (drift gate: ui-manifest:check).",
   "schemaVersion": "1.0.0",
   "packageName": "@openelement/ui",
-  "version": "0.44.0-beta.2.2",
+  "version": "1.0.0-alpha.1",
   "description": "Open Props Web Component library for openElement",
   "author": "openElement",
   "license": "MIT",
