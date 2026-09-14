@@ -1,8 +1,8 @@
 /**
  * E2E: Light-mode in-place activation after a delayed upgrade (#1148).
  *
- * ADR-0142 acceptance on the real SSR -> delayed-upgrade path: the
- * /probe-light page ships a server-rendered `renderMode = 'light'` island
+ * ADR-0142 acceptance on the real SSR -> delayed-upgrade path: the fixture's
+ * root page ships a server-rendered `renderMode = 'light'` island
  * (open-light-probe, hydrate 'load') whose host carries the internal
  * `data-oe-light` provenance marker. The spec holds the island's chunk
  * response with page.route so client.js evaluates (installing the
@@ -24,11 +24,15 @@
  * Runs on all three configured browser projects (Chromium, Firefox, WebKit).
  *
  * Note: never assert via networkidle before the release — the held chunk
- * request keeps the network busy by construction. The statically imported
- * shared-runtime chunk in client.js must never be the one held here (see the
- * comment above CHUNK_URL_PATTERN).
+ * request keeps the network busy by construction. The fixture carries a
+ * second (trivial) island so the shared runtime helpers stay in its chunk:
+ * client.js must statically import that carrier and import the probe chunk
+ * dynamically. `fixture build: the probe chunk stays a dynamic import` below
+ * pins that build invariant, otherwise holding the probe chunk would stall
+ * client.js evaluation (no click capture, no replay).
  */
 
+import { assertEquals } from '@std/assert';
 import { expect, test } from '@playwright/test';
 
 // The island chunk hash changes with every build; match by prefix. client.js
@@ -43,6 +47,28 @@ interface PreUpgradeRefs {
   button: Element;
   span: Element;
 }
+
+test('fixture build: the probe chunk stays a dynamic import', () => {
+  // The delayed-upgrade gate holds the probe chunk. If Rollup ever folds the
+  // shared runtime into it, client.js would statically import it, holding
+  // would stall client.js evaluation, and this spec's premise is gone.
+  const islandsDir = new URL('../dist/client/islands/', import.meta.url);
+  const files = [...Deno.readDirSync(islandsDir)].map((entry) => entry.name);
+  const probe = files.find((name) => name.startsWith('island-open-light-probe-'));
+  const carrier = files.find((name) => name.startsWith('island-light-probe-runtime-carrier-'));
+  if (!probe || !carrier) throw new Error('fixture island chunks missing; build first');
+  const client = Deno.readTextFileSync(new URL('client.js', islandsDir));
+  assertEquals(
+    client.includes(`from"./${probe}"`),
+    false,
+    'client.js must not statically import the probe chunk',
+  );
+  assertEquals(
+    client.includes(`from"./${carrier}"`),
+    true,
+    'client.js must statically import the shared-runtime carrier chunk',
+  );
+});
 
 test.describe('light-mode in-place activation', () => {
   test('SSR light island activates in place after a delayed upgrade, replaying the pre-upgrade click exactly once', async ({ page }) => {
@@ -73,7 +99,7 @@ test.describe('light-mode in-place activation', () => {
       // deadlock this test. Module scripts still evaluate before
       // DOMContentLoaded, so the click capture listener is installed either
       // way.
-      await page.goto('/probe-light', { waitUntil: 'domcontentloaded' });
+      await page.goto('/', { waitUntil: 'domcontentloaded' });
 
       // client.js has evaluated by the load event (module scripts block it):
       // the click capture listener is installed and the chunk import is in

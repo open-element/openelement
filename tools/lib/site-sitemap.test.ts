@@ -4,7 +4,6 @@ import {
   enumeratePublicRoutes,
   renderRobotsTxt,
   renderSitemapXml,
-  SITE_SITEMAP_EXCLUDE,
 } from './site-sitemap.ts';
 
 const LOCALES = ['en', 'zh'] as const;
@@ -15,14 +14,12 @@ Deno.test('enumeratePublicRoutes: static catalog + blog enumeration, both locale
       { path: '/', type: 'page' },
       { path: '/404', type: 'page' },
       { path: '/docs', type: 'page' },
-      { path: '/probe-light', type: 'page' },
       { path: '/blog/:slug', type: 'page' },
       { path: '/api/hello', type: 'api' },
       { path: '/_renderer', type: 'special' },
     ],
     blogPostRoutes: ['/blog/a', '/blog/b'],
     locales: LOCALES,
-    exclude: SITE_SITEMAP_EXCLUDE,
   });
   assertEquals(failures, []);
   assertEquals(routes, [

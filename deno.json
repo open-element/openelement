@@ -9,7 +9,8 @@
     "./apps/site",
     "./tools/repo",
     "./tools/release",
-    "./tests/e2e/starter-smoke"
+    "./tests/e2e/starter-smoke",
+    "./tests/fixtures/site-light-probe"
   ],
   "imports": {
     "@openelement/url-pattern-list": "npm:@openelement/url-pattern-list@0.6.0",

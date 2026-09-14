@@ -67,6 +67,34 @@ Deno.test('build output: client island JS stays within core budget and ships no 
   );
 });
 
+Deno.test('build output: the light-mode probe fixture stays out of the public Site (#1148)', () => {
+  assert(existsSync(DIST), `Build output is missing: ${DIST}`);
+
+  // The probe moved to tests/fixtures/site-light-probe; a re-introduced Site
+  // route must fail loudly in every locale artifact and index.
+  for (const path of [join(DIST, 'probe-light'), join(DIST, 'zh', 'probe-light')]) {
+    assertEquals(existsSync(path), false, `internal probe output must not ship: ${path}`);
+  }
+
+  // Route manifests: every emitted island manifest records its route.
+  const manifestDir = join(DIST, 'island-manifests');
+  if (existsSync(manifestDir)) {
+    for (const entry of Deno.readDirSync(manifestDir)) {
+      if (!entry.isFile || !entry.name.endsWith('.json')) continue;
+      const manifest = JSON.parse(
+        Deno.readTextFileSync(join(manifestDir, entry.name)),
+      ) as { route?: string };
+      assert(
+        manifest.route !== '/probe-light' && manifest.route !== '/zh/probe-light',
+        `route manifest ${entry.name} still contains the internal probe`,
+      );
+    }
+  }
+
+  const sitemap = Deno.readTextFileSync(join(DIST, 'sitemap.xml'));
+  assert(!sitemap.includes('/probe-light'), 'sitemap must not list the internal probe');
+});
+
 Deno.test('build output: zh pages keep in-content links inside the zh tree (#1031)', () => {
   assert(existsSync(DIST), `Build output is missing: ${DIST}`);
   const zhDir = join(DIST, 'zh');

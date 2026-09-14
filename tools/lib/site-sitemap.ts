@@ -10,9 +10,7 @@
  *     collection loaded straight from source (the same posts the route's
  *     getStaticPaths projects). An unenumerated dynamic page route fails
  *     closed instead of silently dropping out of the public index;
- *   - error documents (/404) are never sitemap entries, and the exclude list
- *     below removes routes that are real pages but not a public surface
- *     (#1148 probe);
+ *   - error documents (/404) are never sitemap entries;
  *   - every public route expands to one URL per site locale: the default
  *     locale keeps the canonical unprefixed path, other locales prefix.
  *
@@ -36,14 +34,6 @@ export interface SiteRouteCatalogEntry {
   type: string;
 }
 
-/**
- * Real pages that are not a public surface. #1148: /probe-light is an e2e
- * probe route (built in both locales) that must stay out of sitemap.xml; the
- * nav scanner never picks it up either (no meta export). Exclusion applies to
- * the canonical route, so every locale variant is excluded by construction.
- */
-export const SITE_SITEMAP_EXCLUDE: readonly string[] = ['/probe-light'];
-
 export interface EnumeratePublicRoutesOptions {
   /** Route catalog from the adapter route scanner. */
   routes: readonly SiteRouteCatalogEntry[];
@@ -51,8 +41,6 @@ export interface EnumeratePublicRoutesOptions {
   blogPostRoutes: readonly string[];
   /** Site locales; the first is the default (unprefixed) locale. */
   locales: readonly string[];
-  /** Canonical routes excluded from the public index. */
-  exclude?: readonly string[];
 }
 
 /**
@@ -78,13 +66,9 @@ function dynamicRouteEnumeration(
 export function enumeratePublicRoutes(
   options: EnumeratePublicRoutesOptions,
 ): { routes: string[]; failures: string[] } {
-  const { routes, blogPostRoutes, locales, exclude = [] } = options;
+  const { routes, blogPostRoutes, locales } = options;
   const defaultLocale = locales[0];
   const failures: string[] = [];
-  const excluded = (path: string): boolean =>
-    exclude.some((pattern) =>
-      path === pattern || path.startsWith(pattern.endsWith('/') ? pattern : `${pattern}/`)
-    );
 
   const canonical: string[] = [];
   for (const entry of routes) {
@@ -92,7 +76,6 @@ export function enumeratePublicRoutes(
     // Error documents are never sitemap entries (both the flat default-locale
     // artifact and the locale-prefixed variants share the /404 route).
     if (entry.path === '/404' || entry.path.endsWith('/404')) continue;
-    if (excluded(entry.path)) continue;
     if (entry.path.includes(':')) {
       const enumeration = dynamicRouteEnumeration(entry.path, blogPostRoutes);
       if (enumeration === undefined) {

@@ -1,15 +1,14 @@
 /**
- * WWW light-mode probe island (#1148 / ADR-0142 acceptance fixture).
+ * Light-mode probe island (#1148 / ADR-0142 acceptance fixture).
  *
  * Exercises the real SSR -> delayed-upgrade path of a `renderMode = 'light'`
  * island in a browser: the server-rendered host carries the internal
- * `data-oe-light` provenance marker plus the hydration marker set
- * (data-eid / data-signal), and the client upgrade must activate the
+ * `data-oe-light` provenance marker, and the client upgrade must activate the
  * surviving DOM in place — node identity, focus, selection, live form values,
  * and a pre-upgrade click all preserved.
  *
- * Driven by www/e2e/light-mode-activation.spec.ts on Chromium, Firefox, and
- * WebKit; rendered by the /probe-light route (www/app/routes/probe-light.tsx).
+ * Driven by tests/fixtures/site-light-probe/e2e/light-mode-activation.spec.ts
+ * on Chromium, Firefox, and WebKit; rendered by the fixture's root route.
  *
  * Island config: `ssr: true` admits the host to the SSR renderable set;
  * `dsd` is deliberately omitted — light mode renders into the host and emits

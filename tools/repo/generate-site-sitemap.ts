@@ -14,7 +14,6 @@ import {
   enumeratePublicRoutes,
   renderRobotsTxt,
   renderSitemapXml,
-  SITE_SITEMAP_EXCLUDE,
 } from '../lib/site-sitemap.ts';
 
 export const SITE_DIST = 'apps/site/dist';
@@ -33,7 +32,6 @@ export async function generateSiteSitemap(dist = SITE_DIST): Promise<string[]> {
     routes,
     blogPostRoutes,
     locales: SITE_LOCALES,
-    exclude: SITE_SITEMAP_EXCLUDE,
   });
   if (failures.length > 0) {
     console.error('site sitemap generation failed:');

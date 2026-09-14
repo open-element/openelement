@@ -1,0 +1,8 @@
+{
+  "tasks": {
+    "build": "deno run --config ../../../deno.json --allow-read --allow-write ../../../tools/repo/clean.ts dist && deno run --config ../../../deno.json --allow-read --allow-write --allow-net --allow-env --allow-ffi --allow-sys --allow-run ../../../packages/router/src/cli/build.ts",
+    "e2e": "deno run --config ../../../deno.json --allow-read --allow-write --allow-env --allow-net --allow-run --allow-sys npm:@playwright/test@1.59.1 test --config e2e/playwright.config.ts --project=chromium",
+    "e2e:browsers": "deno run --config ../../../deno.json --allow-read --allow-write --allow-env --allow-net --allow-run --allow-sys npm:@playwright/test@1.59.1 test --config e2e/playwright.config.ts",
+    "gate": "deno run --allow-run ../../../tools/repo/gate.ts tests/fixtures/site-light-probe#build tests/fixtures/site-light-probe#e2e:browsers"
+  }
+}
