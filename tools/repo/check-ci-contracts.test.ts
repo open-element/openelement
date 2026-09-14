@@ -146,6 +146,36 @@ Deno.test('ci contract: candidate evidence bundle ships JSON and every log/manif
   );
 });
 
+Deno.test('ci contract: release workflow permissions cover its GitHub API use', async () => {
+  const releasing = await Deno.readTextFile(
+    join(repoRoot, '.github/workflows/autoflow-release.yml'),
+  );
+  // With an explicit permissions map, unlisted scopes are none. The release
+  // job calls `gh run list/view/download`, which needs Actions read.
+  assert(
+    /actions:\s*read/.test(releasing),
+    'release must grant actions: read to read workflow runs and artifacts',
+  );
+  assert(
+    /contents:\s*read/.test(releasing),
+    'release must keep contents: read',
+  );
+  assert(
+    /id-token:\s*write/.test(releasing),
+    'release must keep id-token: write for npm Trusted Publishing',
+  );
+  const writeScopes = [...releasing.matchAll(/^\s{6}([a-z-]+):\s*write\s*$/gm)].map((m) => m[1]);
+  assertEquals(
+    writeScopes.sort(),
+    ['id-token'],
+    'only id-token may be a write scope in the release job',
+  );
+  assert(
+    /gh run list/.test(releasing) && /gh run download/.test(releasing),
+    'the API-scope contract test assumes the release job reads runs/artifacts',
+  );
+});
+
 Deno.test('ci contract: release consumes the bound, non-expired CI artifact', async () => {
   const releasingWorkflow = await Deno.readTextFile(
     join(repoRoot, '.github/workflows/autoflow-release.yml'),

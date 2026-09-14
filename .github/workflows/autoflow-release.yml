@@ -30,6 +30,11 @@ jobs:
     environment: openelement-release
     permissions:
       contents: read
+      # The release job finds, reads, and downloads the AutoFlow CI evidence
+      # artifact for the candidate SHA. With an explicit permissions map,
+      # unlisted scopes are none, so workflow-run and artifact reads require
+      # Actions read. No write scope is granted.
+      actions: read
       id-token: write
     steps:
       # v7.0.1
