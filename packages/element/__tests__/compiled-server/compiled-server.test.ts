@@ -59,8 +59,11 @@ Deno.test('compiled server requires the TrustedHtml capability for html Parts', 
   );
 });
 
+// One canonical compiled-counter program: compiled-claim owns the fixture and
+// the server suite renders the same bytes, so the program cannot drift into a
+// second copy (audit P3-02).
 const FIXTURE_PROGRAM_URL = new URL(
-  '../../__fixtures__/compiled-server/program.json',
+  '../../__fixtures__/compiled-claim/program.json',
   import.meta.url,
 );
 
