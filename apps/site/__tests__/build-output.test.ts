@@ -9,6 +9,7 @@ import { assert, assertEquals } from '@std/assert';
 import { existsSync } from '@std/fs';
 import { walkSync } from '@std/fs/walk';
 import { join } from '@std/path';
+import { SITE_BUDGET } from '../site-budget.ts';
 
 const DIST = join(import.meta.dirname ?? '.', '..', 'dist');
 
@@ -44,13 +45,17 @@ Deno.test('build output: client island JS stays within core budget and ships no 
   const files = [...walkSync(clientDir, { includeDirs: false })].map((entry) => entry.path);
   let coreBytes = 0;
   const emittedShowcase: string[] = [];
+  const oversizedIslands: string[] = [];
   for (const f of files) {
-    if (f.endsWith('.js')) {
-      if (removedShowcaseChunks.some((prefix) => f.includes(prefix))) {
-        emittedShowcase.push(f);
-      } else {
-        coreBytes += Deno.statSync(f).size;
-      }
+    if (!f.endsWith('.js')) continue;
+    if (removedShowcaseChunks.some((prefix) => f.includes(prefix))) {
+      emittedShowcase.push(f);
+      continue;
+    }
+    const size = Deno.statSync(f).size;
+    coreBytes += size;
+    if (f.includes('island-') && size > SITE_BUDGET.islandKB * 1024) {
+      oversizedIslands.push(`${f} (${(size / 1024).toFixed(1)}KB)`);
     }
   }
   const coreKB = coreBytes / 1024;
@@ -61,9 +66,18 @@ Deno.test('build output: client island JS stays within core budget and ships no 
       emittedShowcase.join(', ')
     }`,
   );
+  // The one shared official-Site SLO (apps/site/site-budget.ts) is enforced
+  // here and by the build manifest; exceeding it fails instead of warning.
+  assertEquals(
+    oversizedIslands,
+    [],
+    `Islands exceed the ${SITE_BUDGET.islandKB}KB island budget: ${oversizedIslands.join(', ')}`,
+  );
   assert(
-    coreKB < 700,
-    `Core client island JS total ${coreKB.toFixed(1)}KB exceeds 700KB limit`,
+    coreKB <= SITE_BUDGET.totalJsKB,
+    `Client island JS total ${
+      coreKB.toFixed(1)
+    }KB exceeds the ${SITE_BUDGET.totalJsKB}KB Site budget`,
   );
 });
 

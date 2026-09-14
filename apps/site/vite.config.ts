@@ -1,6 +1,7 @@
 import { openElement } from '@openelement/router/vite';
 import { openPropsTokenSheet, registerOpenUi } from '@openelement/ui';
 import { defineConfig } from 'vite';
+import { SITE_BUDGET } from './site-budget.ts';
 import { headerNav, navSections } from './app/data/_generated-nav-data.ts';
 
 // apps/site is an npm-first consumer; local workspace resolution during dev,
@@ -157,6 +158,11 @@ const openElementPlugins = openElement({
   html: {
     title: 'openElement',
   },
+  // One shared official-Site SLO (apps/site/site-budget.ts): the build
+  // manifest reports against exactly these values.
+  build: {
+    manifestBudget: SITE_BUDGET,
+  },
   appShell: {
     tagName: 'open-layout',
     import: new URL('./app/islands/open-layout.tsx', import.meta.url).pathname,
@@ -232,9 +238,6 @@ export default defineConfig({
     },
   },
   base: '/',
-  build: {
-    chunkSizeWarningLimit: 600,
-  },
   // Keep Vite's automatic JSX transform aligned with the workspace compiler.
   esbuild: {
     jsx: 'automatic',

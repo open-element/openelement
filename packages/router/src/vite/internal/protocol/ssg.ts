@@ -330,11 +330,14 @@ export interface SsgRenderEvidence {
   } | null;
   /** SSR admission decisions from the plan that rendered the pages. */
   admissionDecisions?: SsrAdmissionDecision[];
+  /** Build-manifest budget thresholds (KB) from the plugin options. */
+  manifestBudget?: { islandKB?: number; totalJsKB?: number; pageKB?: number };
   onPrintBuildManifest?: (input: {
     root: string;
     outDir: string;
     phase: 3;
     headExtras?: string;
+    budget?: { islandKB?: number; totalJsKB?: number; pageKB?: number };
   }) => void | Promise<void>;
 }
 

@@ -366,6 +366,7 @@ export async function ssgRender(
     outDir,
     phase: 3,
     headExtras: options.headExtras,
+    budget: evidence.manifestBudget,
   });
 
   return { staticNon200, warnings };

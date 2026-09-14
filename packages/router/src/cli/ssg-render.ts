@@ -18,6 +18,7 @@ export function createSsgRenderEvidence(
   return {
     i18nOptions: ctx.plugins.i18nOptions,
     admissionDecisions: ctx.phase1.ssrAdmissionPlan?.decisions || [],
+    manifestBudget: ctx.phase3.manifestBudget,
     onPrintBuildManifest: (input) => {
       printBuildManifest(input);
     },
