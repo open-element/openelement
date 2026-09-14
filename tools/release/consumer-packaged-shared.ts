@@ -80,6 +80,17 @@ const repoRoot = resolve(import.meta.dirname!, '../..');
 // Generous ceilings for the real SSG build and cold-cache vite/dev server
 // boots; a hung packed router must fail the harness instead of stalling CI
 // forever (same contract as consumer-packaged-starter.ts).
+// Responsibility boundary (round-3 review): this module is intentionally one
+// unit. The scratch-consumer staging, hermetic install, reserved-port server
+// lifecycle, teardown, HTTP/form probes, browser continuation, and boundary
+// walks share one mutable session (temp dir, port, child process, served
+// document state) and one ordering contract. Splitting them into
+// install/server/browser/boundary modules would thread that session through
+// single-caller abstractions and duplicate the timeout/probe orchestration —
+// less traceable, not more testable. Each renderer leg keeps its own spec
+// (consumer-packaged-native.ts / consumer-packaged-lit.ts); shared lifecycle
+// stays here.
+
 const BUILD_TIMEOUT_MS = 10 * 60_000;
 const TYPES_TIMEOUT_MS = 5 * 60_000;
 const SERVER_READY_TIMEOUT_MS = 3 * 60_000;
