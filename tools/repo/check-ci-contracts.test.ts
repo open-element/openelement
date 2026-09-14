@@ -262,3 +262,30 @@ Deno.test('ci contract: release docs never present Bun as required', () => {
     'bun-serve-smoke must not appear in the required branch-protection list',
   );
 });
+
+Deno.test('ci contract: SaaS is decoupled from the core candidate gate', async () => {
+  const repoConfig = JSON.parse(
+    await Deno.readTextFile(join(repoRoot, 'tools/repo/deno.json')),
+  ) as { tasks: Record<string, string> };
+  const gateSource = repoConfig.tasks['gate:source'];
+  for (const token of ['saas:verify', 'apps/saas', 'workers:boundary-check']) {
+    assert(!gateSource.includes(token), `gate:source must not include SaaS step ${token}`);
+  }
+  // The framework core still proves deploy output through the Router fixture.
+  assert(gateSource.includes('tests/fixtures/router-nitro#proof:workers'));
+  assert(gateSource.includes('tests/fixtures/router-nitro#proof:node'));
+
+  const rootConfig = JSON.parse(await Deno.readTextFile(join(repoRoot, 'deno.json'))) as {
+    tasks: Record<string, string>;
+  };
+  assert(rootConfig.tasks['verify:core'], 'root verify:core must exist');
+  assert(!rootConfig.tasks['verify:core'].toLowerCase().includes('saas'));
+  assert(rootConfig.tasks['verify'].includes('saas:verify'), 'full verify keeps SaaS');
+});
+
+Deno.test('ci contract: the SaaS CI job is optional and never required', () => {
+  const block = jobBlock(workflow, 'saas-optional');
+  assert(/continue-on-error:\s*true/.test(block), 'saas-optional must be non-blocking');
+  const aggregate = jobBlock(workflow, 'autoflow-ci');
+  assert(!/saas-optional/.test(aggregate), 'aggregation must not depend on the SaaS job');
+});

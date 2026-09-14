@@ -91,6 +91,10 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
+  # Core source matrix for the candidate scope (Element, Router, Create, UI,
+  # Site, repo/release tooling). Independently governed apps/saas is NOT here:
+  # its build/test/Workers proof are the separate, non-blocking saas-optional
+  # job below. Router Nitro Node/Workers fixtures remain the core deploy proof.
   source-matrix:
     runs-on: ubuntu-latest
     timeout-minutes: 60
@@ -104,7 +108,7 @@ jobs:
       - name: Install Playwright browsers
         # The source matrix's fixture gates run Chromium, Firefox and WebKit.
         run: ./node_modules/.bin/playwright install --with-deps chromium firefox webkit
-      - name: Source matrix (unit/integration, Site, SaaS, Node, Workers, browsers)
+      - name: Source matrix (unit/integration, Site, Node, Workers, browsers)
         env:
           CANDIDATE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: deno task --cwd tools/repo candidate:evidence:source
@@ -253,6 +257,26 @@ jobs:
         run: deno task --cwd tools/release pack:dry-run
       - name: Packed serve proof under Node ${{ matrix.node }}
         run: deno run --allow-read --allow-write --allow-run --allow-env --allow-net --deny-ffi --no-prompt tools/release/consumer-packaged-node-serve.ts node
+
+  # Independently governed first-party SaaS application. Optional and
+  # non-blocking by owner direction: it is not part of the Element/Router Alpha
+  # repository candidate, is not a required check, and never gates the
+  # candidate or the release graph. No secrets, Supabase, Stripe, or
+  # Cloudflare connection is made here — build/test only.
+  saas-optional:
+    name: SaaS (optional, non-blocking)
+    continue-on-error: true
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      # v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: ./.github/actions/setup-deno-workspace
+      - name: SaaS verify + Workers boundary
+        run: deno run --allow-run tools/repo/gate.ts saas:verify saas:workers
 
   # #1228 (B2.5): the deployment guide and PACKAGE_SURFACE.md claim the
   # generated dist/server artifacts run on Bun. A claim that survives only on

@@ -2,7 +2,7 @@
 
 Release state is owned by package manifests, registry state, Git tags, and the small machine-readable `docs/release/release-state.json` record. Do not maintain a second writable status or roadmap projection.
 
-`release-state.json` records registry truth **per package**: each package's `latest`/prerelease dist-tags, the complete published line, and the latest prerelease's published/missing package partition. A partial publish (some packages shipped, others absent) is represented explicitly, never as one shared version string. `deno task --cwd tools/repo release:state-machine:check` validates that model offline (structure, source versions, Site copy consistency); `deno task --cwd tools/repo release:registry-check` queries npm read-only and fails closed on any drift — it never publishes or moves a dist-tag, and the ordinary offline `deno task check` does not require network.
+`release-state.json` records registry truth **per package**: each package's `latest`/prerelease dist-tags, the latest prerelease's published/missing package partition, and a `commonCompleteVersion` that is the stable version present in **all four** packages or `null` when none exists (it is `null` today — Router has no 0.43.x). Never present a version present in only some packages as the shared published line. A partial publish (some packages shipped, others absent) is represented explicitly, never as one shared version string. `deno task --cwd tools/repo release:state-machine:check` validates that model offline (structure, source versions, Site copy consistency); `deno task --cwd tools/repo release:registry-check` queries npm read-only, recomputes the four-package stable intersection, and fails closed on any drift or false common version — it never publishes or moves a dist-tag, and the ordinary offline `deno task check` does not require network.
 
 ## Public 1.0 prerelease baseline
 
@@ -58,6 +58,12 @@ publish; a missing environment fails the job closed instead of publishing:
   re-runs the suite. `bun-serve-smoke` is an
   optional/non-blocking Bun compatibility signal: it runs with
   `continue-on-error: true`, is not a required check, and never gates the
-  candidate or the release graph. Post-publish
+  candidate or the release graph. The independently governed `apps/saas`
+  application is decoupled from the candidate: `tools/repo#gate:source` and
+  candidate evidence contain no SaaS step, and `saas-optional` runs with
+  `continue-on-error: true`, is not required, and never sets `requiredOk`
+  false. Scope is explicit at the task level: `deno task verify:core` is the
+  Element/Router Alpha candidate verification, `deno task verify` is the full
+  repository verification (including SaaS). Post-publish
   (`published-consumers.yml`) verifies the registry afterward and never
   substitutes for the pre-publish matrix.
