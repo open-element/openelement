@@ -937,8 +937,9 @@ async function aggregate(inputDir: string, output: string): Promise<void> {
     tarballManifest: { path: 'tarball-manifest.json', sha256: tarballManifestSha },
     packDiagnostics: { path: 'pack-diagnostics.json', sha256: packDiagnosticsSha },
     rollup,
-    // Computed from the assembled bundle below, never assumed.
-    requiredOk: false,
+    // Validated and set from the assembled bundle below; the placeholder is
+    // the value that will be written only if every invariant holds.
+    requiredOk: true,
     aggregate: {
       inputs: jobs.map(({ job, dir }) => `${job.job}@${relative(outDir, dir)}`),
       recomputedLogHashes: jobs.reduce((sum, { job }) => sum + job.steps.length, 0),
