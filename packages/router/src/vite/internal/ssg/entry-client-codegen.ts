@@ -1,5 +1,6 @@
 /** Client island entry emission; browser runtime wiring only. */
 import { ACTION_FETCH_HEADER } from '@openelement/element';
+import { stableModuleId } from '@openelement/element/compiler';
 import { quoteGeneratedJavaScriptValue } from './codegen-literals.ts';
 import {
   type AdmittedClientIslandEntry,
@@ -17,8 +18,12 @@ function islandImportFactory(
 ): string {
   const nameLiteral = exportName ? quoteGeneratedJavaScriptValue(exportName) : 'undefined';
   const tagLiteral = quoteGeneratedJavaScriptValue(tagName);
+  // Error copy uses a stable, machine-independent module identity; the import
+  // specifier above stays absolute for the bundler.
   const errorLiteral = quoteGeneratedJavaScriptValue(
-    `[openElement] Capability module ${modulePath} did not export a constructor for ${tagName}`,
+    `[openElement] Capability module ${
+      stableModuleId(modulePath, undefined)
+    } did not export a constructor for ${tagName}`,
   );
   // #1339 lit: after definition the island is a hydration ROOT — its page
   // host is never client-registered, so no parent hydrate() will remove the
@@ -115,7 +120,9 @@ function sharedActivationFactory(
       ? `mod[${quoteGeneratedJavaScriptValue(entry.exportName)}]`
       : 'mod.default';
     const errorLiteral = quoteGeneratedJavaScriptValue(
-      `[openElement] Capability module ${group.modulePath} did not export a constructor for ${entry.tagName}`,
+      `[openElement] Capability module ${
+        stableModuleId(group.modulePath, undefined)
+      } did not export a constructor for ${entry.tagName}`,
     );
     lines.push(`    var ${ctor} = ${value};`);
     lines.push(

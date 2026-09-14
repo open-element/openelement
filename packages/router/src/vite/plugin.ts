@@ -39,7 +39,11 @@ import {
   minifyCriticalStyleBlocks,
 } from './internal/ssg/critical-assets.ts';
 import { islandTransformPlugin } from './island-transform.ts';
-import { compileElementModule, stripInlineSourceMapComment } from '@openelement/element/compiler';
+import {
+  compileElementModule,
+  stableModuleId,
+  stripInlineSourceMapComment,
+} from '@openelement/element/compiler';
 import { devIslandClientPlugin, RESOLVED_CLIENT_ENTRY_ID } from './dev-island-client.ts';
 import {
   detectAndClassifyCemPackages,
@@ -136,6 +140,13 @@ export function createOpenPlugin(
   // force a full reload for every keystroke instead of only for
   // template/Part/Region shape changes.
   const compiledProgramShapes = new Map<string, string>();
+
+  // The element compiler records a logical source identity in the Part Program
+  // (metadata.sourceFile / sourceMap.file). Passing Vite's absolute module id
+  // embedded the build machine's path in client and SSR output and made chunk
+  // bytes depend on the checkout location. Use a project-relative POSIX id
+  // instead, matching the packed staging compiler's basename identity.
+  let viteRoot: string | undefined;
   const programShape = (program: unknown): string => {
     const { sourceMap: _sourceMap, ...shape } = program as Record<string, unknown>;
     return JSON.stringify(shape);
@@ -326,6 +337,7 @@ export function createOpenPlugin(
     },
 
     configResolved(cfg) {
+      viteRoot = cfg.root;
       if (cfg.resolve?.alias && !ctx.phase1.userResolveAlias) {
         ctx.phase1.userResolveAlias = cfg.resolve.alias;
       }
@@ -344,7 +356,7 @@ export function createOpenPlugin(
 
     transform(code, id) {
       try {
-        const result = compileElementModule(code, id);
+        const result = compileElementModule(code, stableModuleId(id, viteRoot));
         if (!result) return null;
         const key = id.split('?', 1)[0];
         compiledProgramShapes.set(key, programShape(result.program));
@@ -372,7 +384,7 @@ export function createOpenPlugin(
         return;
       }
       try {
-        const result = compileElementModule(source, hmr.file);
+        const result = compileElementModule(source, stableModuleId(hmr.file, viteRoot));
         if (!result) {
           compiledProgramShapes.delete(hmr.file);
           return;

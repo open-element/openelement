@@ -14,6 +14,7 @@ export {
   compileElementModule,
   hasElementDecoratorApplication,
   isCompiledElementModule,
+  stableModuleId,
   stripInlineSourceMapComment,
 } from './internal/compiler/plugin.ts';
 export {

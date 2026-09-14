@@ -84,9 +84,32 @@ export function stripInlineSourceMapComment(code: string): string {
   return code.replace(/\n\/\/# sourceMappingURL=data:application\/json;base64,[^\n]*(?=\n?$)/, '');
 }
 
+/**
+ * Compile-time source identity for a module: absolute Vite ids are converted
+ * to project-relative POSIX paths so Part Program `metadata.sourceFile` and
+ * `sourceMap.file` never embed the build machine's path. Module resolution,
+ * diagnostics, and HMR keys keep using the caller's own id.
+ */
+export function stableModuleId(file: string, root: string | undefined): string {
+  const clean = file.split('?', 1)[0];
+  if (!clean.startsWith('/')) return clean;
+  if (root) {
+    const prefix = root.endsWith('/') ? root : `${root}/`;
+    if (clean.startsWith(prefix)) return clean.slice(prefix.length);
+  }
+  // No root (or outside it): drop the machine prefix by anchoring on the
+  // nearest known workspace segment.
+  const match = /\/(?:packages|apps|tests)\//u.exec(clean);
+  return match ? clean.slice(match.index + 1) : clean;
+}
+
 export function compiledElementPlugin(): Plugin {
+  let viteRoot: string | undefined;
   return {
     name: 'open:compiled-element',
+    configResolved(config) {
+      viteRoot = config.root;
+    },
     // The compiler owns the whole TSX module and must see the authored source:
     // enforce 'pre' so this hook runs before Vite's builtin TS/JSX lowering
     // (which would rewrite render() into runtime _jsx() calls the compiler
@@ -95,7 +118,7 @@ export function compiledElementPlugin(): Plugin {
 
     transform(code, id) {
       try {
-        return compileElementModule(code, id)?.code ?? null;
+        return compileElementModule(code, stableModuleId(id, viteRoot))?.code ?? null;
       } catch (error) {
         if (error instanceof CompiledElementError) {
           this.error(error.message);
