@@ -24,6 +24,7 @@
 
 import { dirname, join, relative } from '@std/path';
 import { readPackages } from '../lib/package-graph.ts';
+import { auditSiteE2e, type SiteE2eResult } from './site-e2e-result.ts';
 import { tarballPath } from '../lib/npm-tarball.ts';
 
 const repoRoot = join(dirname(new URL(import.meta.url).pathname), '..', '..');
@@ -59,8 +60,8 @@ export const REQUIRED_PACKED_CONSUMERS: readonly string[] = [
   'tests/fixtures/third-party-web-components#smoke',
 ];
 
-/** Site E2E projects that must all execute with zero failures. */
-export const REQUIRED_SITE_BROWSERS: readonly string[] = ['chromium', 'firefox', 'webkit'];
+/** Site E2E projects (single canonical list lives in site-e2e-result.ts). */
+export { SITE_E2E_PROJECTS as REQUIRED_SITE_BROWSERS } from './site-e2e-result.ts';
 
 /** Minimum required steps per job; missing/duplicate/failed steps fail closed. */
 const REQUIRED_STEPS: Record<JobName, readonly string[]> = {
@@ -283,19 +284,8 @@ export function packedRollupFromLog(logText: string): {
   };
 }
 
-export interface SiteProjectSummary {
-  passed?: number;
-  failed?: number;
-  skipped?: number;
-}
-
-export interface SiteE2eRollup {
-  ran?: boolean;
-  projects?: Record<string, SiteProjectSummary>;
-  passed?: number;
-  failed?: number;
-  skipped?: number;
-}
+/** Partial sidecar shape as embedded in the aggregated evidence bundle. */
+export type SiteE2eRollup = Partial<SiteE2eResult>;
 
 async function packExtras(
   packedSteps: StepResult[],
@@ -628,22 +618,7 @@ export function collectRollupFailures(rollup: Rollup | undefined): string[] {
   for (const required of REQUIRED_PACKED_CONSUMERS) {
     if (!consumers.has(required)) failures.push(`packed consumer missing: ${required}`);
   }
-  const site = rollup.siteE2e;
-  if (site?.ran !== true) {
-    failures.push('official Site E2E did not run or did not pass');
-  } else {
-    for (const browser of REQUIRED_SITE_BROWSERS) {
-      const summary = site.projects?.[browser];
-      if (!summary) {
-        failures.push(`Site E2E missing browser proof: ${browser}`);
-      } else if ((summary.failed ?? 0) !== 0) {
-        failures.push(`Site E2E ${browser} failed=${summary.failed}`);
-      }
-    }
-    if (typeof site.failed === 'number' && site.failed > 0) {
-      failures.push(`Site E2E reported ${site.failed} failed test(s)`);
-    }
-  }
+  failures.push(...auditSiteE2e(rollup.siteE2e));
   return failures;
 }
 

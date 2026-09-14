@@ -46,7 +46,9 @@ function validRollup() {
     consumers: [...REQUIRED_PACKED_CONSUMERS],
     siteE2e: {
       ran: true,
+      passed: 3 * REQUIRED_SITE_BROWSERS.length,
       failed: 0,
+      skipped: 0,
       projects: Object.fromEntries(
         REQUIRED_SITE_BROWSERS.map((browser) => [browser, { passed: 3, failed: 0, skipped: 0 }]),
       ),

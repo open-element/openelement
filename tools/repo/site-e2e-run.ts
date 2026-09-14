@@ -3,88 +3,22 @@
  *
  * Runs the official `apps/site` Playwright suite and writes two artifacts:
  *   .artifacts/site-e2e-report.json — the raw Playwright JSON reporter output
- *   .artifacts/site-e2e-result.json — a compact sidecar manifest:
- *     { ran, projects: { chromium: {passed,failed,skipped}, ... }, passed,
- *       failed, skipped, generatedAt }
+ *   .artifacts/site-e2e-result.json — a compact sidecar manifest
+ *     (see tools/repo/site-e2e-result.ts for the schema)
  *
  * Candidate evidence reads the sidecar, not free-text log lines, so a browser
  * name in an unrelated fixture's output can never fake the Site proof. The
- * runner fails closed if Playwright exits non-zero, a required project is
- * missing, or any test failed.
+ * runner fails closed unless Playwright succeeds AND every required browser
+ * executed real tests with zero failures and zero skips.
  */
 import { dirname, fromFileUrl, join } from '@std/path';
-
-export const SITE_E2E_PROJECTS = ['chromium', 'firefox', 'webkit'] as const;
-
-export interface SiteProjectSummary {
-  passed: number;
-  failed: number;
-  skipped: number;
-}
-
-export interface SiteE2eResult {
-  ran: boolean;
-  projects: Record<string, SiteProjectSummary>;
-  passed: number;
-  failed: number;
-  skipped: number;
-  generatedAt: string;
-}
-
-interface PlaywrightTest {
-  projectName?: string;
-  status?: string;
-  results?: Array<{ status?: string }>;
-}
-
-interface PlaywrightSpec {
-  tests?: PlaywrightTest[];
-}
-
-interface PlaywrightSuite {
-  suites?: PlaywrightSuite[];
-  specs?: PlaywrightSpec[];
-}
-
-interface PlaywrightReport {
-  suites?: PlaywrightSuite[];
-  stats?: { expected?: number; unexpected?: number; skipped?: number; flaky?: number };
-}
-
-/** Pure per-project aggregation over a Playwright JSON report. */
-export function summarizePlaywrightReport(
-  report: PlaywrightReport,
-): Record<string, SiteProjectSummary> {
-  const projects: Record<string, SiteProjectSummary> = {};
-  const ensure = (name: string): SiteProjectSummary => {
-    projects[name] ??= { passed: 0, failed: 0, skipped: 0 };
-    return projects[name];
-  };
-  const visit = (suites: PlaywrightSuite[] | undefined): void => {
-    for (const suite of suites ?? []) {
-      for (const spec of suite.specs ?? []) {
-        for (const test of spec.tests ?? []) {
-          const name = test.projectName ?? 'unknown';
-          const summary = ensure(name);
-          const results = test.results ?? [];
-          const failed = test.status === 'unexpected' ||
-            results.some((result) =>
-              result.status === 'failed' || result.status === 'timedOut' ||
-              result.status === 'interrupted'
-            );
-          const skipped = test.status === 'skipped' ||
-            (results.length > 0 && results.every((result) => result.status === 'skipped'));
-          if (failed) summary.failed++;
-          else if (skipped) summary.skipped++;
-          else summary.passed++;
-        }
-      }
-      visit(suite.suites);
-    }
-  };
-  visit(report.suites);
-  return projects;
-}
+import {
+  auditSiteE2e,
+  type PlaywrightReport,
+  SITE_E2E_PROJECTS,
+  type SiteE2eResult,
+  summarizePlaywrightReport,
+} from './site-e2e-result.ts';
 
 const repoRoot = fromFileUrl(new URL('../../', import.meta.url));
 const artifactsDir = join(repoRoot, '.artifacts');
@@ -136,16 +70,12 @@ async function main(): Promise<void> {
       totals.failed += summary.failed;
       totals.skipped += summary.skipped;
     }
-    const missing = SITE_E2E_PROJECTS.filter((project) => !projects[project]);
     result = {
-      ran: missing.length === 0,
+      ran: SITE_E2E_PROJECTS.every((project) => projects[project] !== undefined),
       projects,
       ...totals,
       generatedAt: new Date().toISOString(),
     };
-    if (missing.length > 0) {
-      console.error(`site-e2e: missing project output: ${missing.join(', ')}`);
-    }
   } catch (error) {
     console.error(`site-e2e: no usable Playwright report: ${error}`);
     result = {
@@ -158,7 +88,12 @@ async function main(): Promise<void> {
     };
   }
   await writeResult(result);
-  if (!status.success || !result.ran || result.failed > 0) {
+
+  const failures = auditSiteE2e(result);
+  if (!status.success) failures.unshift(`site-e2e: Playwright exited ${status.code}`);
+  if (failures.length > 0) {
+    console.error('site-e2e: candidate proof is not valid:');
+    for (const failure of failures) console.error(`- ${failure}`);
     Deno.exit(1);
   }
 }
