@@ -15,6 +15,11 @@ const PROTOCOL_PROGRAM = new URL(
   '../src/internal/protocol/part-program.ts',
   import.meta.url,
 );
+/** The import-free, host-free canonical VOID_TAGS owner (protocol base). */
+const PROTOCOL_VOID_TAGS = new URL(
+  '../src/internal/protocol/void-tags.ts',
+  import.meta.url,
+);
 
 async function sourceFiles(root: URL): Promise<URL[]> {
   const files: URL[] = [];
@@ -72,18 +77,32 @@ Deno.test('ADR-0148 semantic core imports stay bundler-neutral and inside the co
     );
   }
 
-  // The one allowed outside module must stay import-free and neutral: no
-  // runtime, Vite, or Node capability may ride into the semantic core.
+  // The allowed outside modules must stay neutral: no runtime, Vite, or Node
+  // capability may ride into the semantic core. The Part Program artifact's
+  // only edge is the import-free canonical VOID_TAGS owner.
   const protocolSource = await Deno.readTextFile(PROTOCOL_PROGRAM);
   assertEquals(
     moduleSpecifiers(protocolSource, PROTOCOL_PROGRAM),
+    ['./void-tags.ts'],
+    'canonical Part Program protocol may only import the VOID_TAGS owner (ADR-0148)',
+  );
+  const voidTagsSource = await Deno.readTextFile(PROTOCOL_VOID_TAGS);
+  assertEquals(
+    moduleSpecifiers(voidTagsSource, PROTOCOL_VOID_TAGS),
     [],
-    'canonical Part Program protocol must stay import-free (ADR-0148)',
+    'canonical VOID_TAGS owner must stay import-free',
   );
-  assert(
-    !/PluginContext|moduleGraph|hotUpdate|devServer|Deno\./.test(protocolSource),
-    'canonical Part Program protocol must not accept integration or host state',
-  );
+  for (
+    const [source, label] of [
+      [protocolSource, 'Part Program protocol'],
+      [voidTagsSource, 'VOID_TAGS owner'],
+    ] as const
+  ) {
+    assert(
+      !/PluginContext|moduleGraph|hotUpdate|devServer|Deno\./.test(source),
+      `${label} must not accept integration or host state`,
+    );
+  }
 });
 
 Deno.test('ADR-0148 semantic output and diagnostics are stable for canonical inputs', () => {

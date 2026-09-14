@@ -57,34 +57,10 @@ export function escapeAttrValue(value: unknown): string {
   return escapeAttr(String(value));
 }
 
-/**
- * HTML void elements — the ONE canonical tag set for every serializer,
- * validator, and compiler in the workspace (issue #1220, M4).
- * Content is the full HTML Standard void-element list, `param` included.
- *
- * The mirrored Part Program exchange artifacts (`internal/protocol/part-program.ts`
- * and its semantic-core copy) intentionally have no import edge, so each
- * carries a mechanical mirror of this list that must stay byte-identical to
- * the tags here; the convergence guard test (Router tooling
- * __tests__/void-tags-convergence.test.ts) enforces that. Every other
- * consumer imports this definition.
- */
-export const VOID_TAGS: ReadonlySet<string> = new Set([
-  'area',
-  'base',
-  'br',
-  'col',
-  'embed',
-  'hr',
-  'img',
-  'input',
-  'link',
-  'meta',
-  'param',
-  'source',
-  'track',
-  'wbr',
-]);
+// The canonical HTML void-element set lives in one import-free protocol
+// module; this runtime module re-exports it so existing consumers keep a
+// single source of truth (issue #1220, M4).
+export { VOID_TAGS } from '../protocol/void-tags.ts';
 
 /**
  * Wrap rendered HTML in a full HTML document.

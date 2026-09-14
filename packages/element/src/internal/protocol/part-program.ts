@@ -2,12 +2,18 @@
  * @openelement/element — serializable Part Program v1 protocol.
  *
  * The canonical exchange artifact shared by the compiler semantic core, the
- * server serializer, fresh DOM creation, and existing-DOM claim. It has no
- * imports at all (ADR-0148): the generated JSON is the seam, and both the
- * runtime and the compiler import this one module instead of keeping mirrored
- * copies. Every dynamic location receives a compiler-owned identity. Runtime
- * code does not discover bindings by walking a VNode or a generic DOM tree.
+ * server serializer, fresh DOM creation, and existing-DOM claim. Its only
+ * import is the import-free, host-free canonical VOID_TAGS owner (ADR-0148
+ * keeps the artifact free of runtime/host edges; void-tags is neither). The
+ * generated JSON is the seam, and both the runtime and the compiler import
+ * this one module instead of keeping mirrored copies. Every dynamic location
+ * receives a compiler-owned identity. Runtime code does not discover bindings
+ * by walking a VNode or a generic DOM tree.
  */
+
+import { VOID_TAGS } from './void-tags.ts';
+
+export { VOID_TAGS };
 
 export const PART_PROGRAM_VERSION = 1 as const;
 
@@ -393,28 +399,6 @@ function isAttributeName(value: unknown): value is string {
   return typeof value === 'string' && /^[A-Za-z_:][A-Za-z0-9_.:-]*$/.test(value) &&
     !/^on/i.test(value);
 }
-
-// Mechanical mirror of the canonical VOID_TAGS in @openelement/element
-// src/internal/core/html-escape.ts (issue #1220, M4): this exchange artifact
-// intentionally has no import edge (ADR-0148), so the tag list is duplicated
-// here and must stay byte-identical to the canonical definition (the
-// convergence guard test enforces that).
-export const VOID_TAGS = new Set([
-  'area',
-  'base',
-  'br',
-  'col',
-  'embed',
-  'hr',
-  'img',
-  'input',
-  'link',
-  'meta',
-  'param',
-  'source',
-  'track',
-  'wbr',
-]);
 
 function samePath(left: unknown, right: number[]): boolean {
   return isIntegerArray(left) && JSON.stringify(left) === JSON.stringify(right);
