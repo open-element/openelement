@@ -140,7 +140,7 @@ test.describe('i18n SSG Output', () => {
   });
 
   test('English blog post pages contain no /zh/ links', async ({ page }) => {
-    const res = await page.goto('/blog/0001-keep-hono-vite-dev-server');
+    const res = await page.goto('/blog/1-0-0-alpha-1-baseline');
     expect(res?.status()).toBeLessThan(400);
     await page.waitForLoadState('networkidle');
 

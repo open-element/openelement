@@ -80,11 +80,23 @@ test.describe('Unified page structure', () => {
     await expect(entrances.first()).toHaveAttribute('href', '/guide/getting-started');
   });
 
-  test('blog index is a v4 dispatch journal with a featured band', async ({ page }) => {
+  test('blog index is a v4 dispatch journal with a featured band', async ({ page, request }) => {
     await page.goto('/blog');
     await expect(page.locator('blog-index h1')).toHaveText('Dispatches.');
-    await expect(page.locator('blog-index .featured')).toHaveAttribute('href', /\/blog\/.+/);
-    expect(await page.locator('blog-index .row').count()).toBeGreaterThan(0);
+    // The 1.0 baseline ships one dispatch; it is the featured band and the
+    // stream renders any earlier dispatches. Assert the featured post is real
+    // and that every post link on the index resolves.
+    const featured = page.locator('blog-index .featured');
+    await expect(featured).toHaveAttribute('href', /\/blog\/.+/);
+    await expect(featured.locator('h2')).toBeVisible();
+    const hrefs = await page.locator('blog-index a[href^="/blog/"]').evaluateAll((links) =>
+      links.map((link) => link.getAttribute('href') ?? '')
+    );
+    expect(hrefs.length).toBeGreaterThan(0);
+    for (const href of hrefs) {
+      const res = await request.get(href);
+      expect(res.ok()).toBe(true);
+    }
   });
 
   test('contributing is a v4 lab page with terminal, checklist and help rows', async ({ page }) => {
@@ -137,9 +149,10 @@ test.describe('Unified page structure', () => {
   test('apilist renders the generated export and element reference with stable anchors (#1307)', async ({ page }) => {
     await page.goto('/apilist');
     // Every generated searchRecord anchor resolves to a rendered entry.
-    const exportRow = page.locator('#api-adapter-vite-root-buildApp');
+    // (adapter-vite anchors retired with the package; use a current export.)
+    const exportRow = page.locator('#api-element-root-Action');
     await expect(exportRow).toBeVisible();
-    await expect(exportRow.locator('.ref-name')).toHaveText('buildApp');
+    await expect(exportRow.locator('.ref-name')).toHaveText('Action');
     const elementRow = page.locator('#ce-open-button');
     await expect(elementRow).toBeVisible();
     await expect(elementRow.locator('.ce-tag')).toHaveText('<open-button>');
@@ -159,15 +172,23 @@ test.describe('Unified page structure', () => {
   });
 
   test('blog articles SSR their outline and deterministic navigation without mojibake', async ({ page }) => {
-    // A dispatch post with neighbors in the index-visible order (#1066); ADR
-    // pages are excluded from prev/next and render an empty (hidden) pager.
-    await page.goto('/zh/blog/0100-three-audits-later-the-stable-line');
+    // The baseline's dispatch post; ADR pages are excluded from prev/next and
+    // render an empty (hidden) pager.
+    await page.goto('/zh/blog/1-0-0-alpha-1-baseline');
     const rail = page.locator('open-page-rail');
     await expect(rail).toBeVisible();
     expect(await rail.locator('a[href^="#"]').count()).toBeGreaterThan(0);
-    await expect(page.locator('body')).not.toContainText(/鏂|鈫|鍗|杩|鏈/);
-    await expect(page.getByRole('navigation', { name: 'Page navigation' }))
-      .toBeVisible();
+    await expect(page.locator('body')).not.toContainText(/鏂|鈫|鍗|杩|鏈/);
+    // The pager is deterministic: it is visible exactly when the post has
+    // prev/next neighbors. The baseline ships a single dispatch, so no
+    // neighbors means the pager renders hidden.
+    const pager = page.getByRole('navigation', { name: 'Page navigation' });
+    await expect(pager).toHaveCount(1);
+    if (await pager.locator('a:visible').count() > 0) {
+      await expect(pager).toBeVisible();
+    } else {
+      await expect(pager).toBeHidden();
+    }
   });
 
   test('mobile rail is a native details drawer', async ({ page }) => {

@@ -161,9 +161,6 @@ export function decorateHeaderNav(
   locale: string,
   locales: readonly string[],
 ): DecoratedHeaderNavLink[] {
-  // The adapter pre-localizes header hrefs but passes the canonical (bare)
-  // route path — and request-time paths may still carry the locale prefix.
-  // Normalize to one localized form before comparing.
   const localeList = [...locales];
   const defaultLocale = localeList[0] || 'en';
   const bare = normalizeLocalePath(currentPath || '/', {
@@ -172,8 +169,15 @@ export function decorateHeaderNav(
   }).path;
   const localizedCurrent = localizeLayoutPath(bare, locale, localeList, defaultLocale);
   return links.map((link) => {
-    const href = typeof link.href === 'string' && isSafeLayoutUrl(link.href) ? link.href : '';
-    const external = isExternalLayoutUrl(href);
+    const raw = typeof link.href === 'string' && isSafeLayoutUrl(link.href) ? link.href.trim() : '';
+    const external = isExternalLayoutUrl(raw);
+    // Router 1.0 leaves the shell nav contract to the consumer, so this Site
+    // builder owns localization (the router still localizes homeHref).
+    const href = external
+      ? raw
+      : raw
+      ? localizeLayoutPath(raw, locale, localeList, defaultLocale)
+      : '';
     const isCurrent = !external && href !== '' &&
       (localizedCurrent === href || (href !== '/' && localizedCurrent.startsWith(`${href}/`)));
     return {

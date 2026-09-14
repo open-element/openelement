@@ -156,25 +156,20 @@ Deno.test('decorateHeaderNav marks the current section and never external links'
   ]);
   // Section roots stay current on nested routes (blog posts keep Blog current).
   assertEquals(
-    decorateHeaderNav(links, '/blog/0001-keep-hono-vite-dev-server', 'en', ['en', 'zh'])[1].current,
+    decorateHeaderNav(links, '/blog/1-0-0-alpha-1-baseline', 'en', ['en', 'zh'])[1].current,
     'page',
   );
-  // The adapter pre-localizes header hrefs but passes the bare route path;
-  // current marking must still land for non-default locales.
-  const zhLinks = links.map((link) =>
-    link.href.startsWith('https:') ? link : { ...link, href: `/zh${link.href}` }
-  );
-  assertEquals(decorateHeaderNav(zhLinks, '/blog', 'zh', ['en', 'zh']).map((l) => l.current), [
-    false,
-    'page',
-    false,
-  ]);
+  // Router 1.0 does not pre-localize shell nav; the Site builder localizes
+  // bare hrefs, and current marking must still land for non-default locales.
+  const zhNav = decorateHeaderNav(links, '/blog', 'zh', ['en', 'zh']);
+  assertEquals(zhNav.map((link) => link.current), [false, 'page', false]);
+  assertEquals(zhNav[0].href, '/zh/docs');
+  assertEquals(zhNav[2].href, 'https://github.com/open-element/openelement');
   // A locale-prefixed request-time path normalizes to the same result.
-  assertEquals(decorateHeaderNav(zhLinks, '/zh/blog', 'zh', ['en', 'zh']).map((l) => l.current), [
-    false,
-    'page',
-    false,
-  ]);
+  assertEquals(
+    decorateHeaderNav(links, '/zh/blog', 'zh', ['en', 'zh']).map((link) => link.current),
+    [false, 'page', false],
+  );
 });
 
 Deno.test('footerColumn restores the four-column link structure with localized targets', () => {

@@ -1,6 +1,7 @@
 import { openElement } from '@openelement/router/vite';
 import { openPropsTokenSheet, registerOpenUi } from '@openelement/ui';
 import { defineConfig } from 'vite';
+import { headerNav, navSections } from './app/data/_generated-nav-data.ts';
 
 // apps/site is an npm-first consumer; local workspace resolution during dev,
 // npm tarballs in production. No resolve.alias needed.
@@ -161,6 +162,11 @@ const openElementPlugins = openElement({
     import: new URL('./app/islands/open-layout.tsx', import.meta.url).pathname,
     props: {
       footerText: 'Built with OpenElement — Web Components-native application framework',
+      // Router 1.0 keeps the app-shell nav contract in the consumer: the Site
+      // projects its route-meta nav tree into the shell (Nav items are
+      // static; the router injects currentPath/locale per route).
+      navItems: navSections,
+      headerNav,
     },
   },
   packageIslands: ['@openelement/ui'],
