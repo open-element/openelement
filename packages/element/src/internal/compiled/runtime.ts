@@ -2017,12 +2017,30 @@ function isNodeValue(value: unknown): value is Node {
     'childNodes' in value;
 }
 
+/**
+ * One step up the composed tree. ShadowRoot.parentNode is null by spec, so
+ * crossing out of a shadow tree goes through its host. Both fields are
+ * standard: parentNode for ordinary nodes, host for shadow roots.
+ */
+function composedParentNode(node: Node): Node | null {
+  if (node.parentNode) return node.parentNode;
+  const host = (node as { host?: unknown }).host;
+  return isNodeValue(host) ? host : null;
+}
+
+/**
+ * Canonical composed-tree ownership predicate shared by replay and release:
+ * a target belongs to `root` when walking parentNode (crossing each shadow
+ * root through its host) reaches `root`. Traversal only follows the target's
+ * own ancestor chain, so unrelated shadow trees, sibling islands, and
+ * detached subtrees never match.
+ */
 function isInsideRoot(root: Node, target: EventTarget): target is Node {
   if (!isNodeValue(target)) return false;
   let current: Node | null = target;
   while (current) {
     if (current === root) return true;
-    current = current.parentNode;
+    current = composedParentNode(current);
   }
   return false;
 }
