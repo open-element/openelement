@@ -26,10 +26,10 @@ All of the following still fail the pack closed (`tools/release/publish-npm.ts`)
 
 ## Verified versions and warning counts
 
-| Deno version | Verified where                                                                            | `deno pack` private-module warnings   | Notes                                                                               |
-| ------------ | ----------------------------------------------------------------------------------------- | ------------------------------------- | ----------------------------------------------------------------------------------- |
-| 2.9.0        | repo-locked `.dvmrc`; native pack proof + minimal repro in `.artifacts/deno-pack-repros/` | element 18, router 60, create 2, ui 2 | Counts are per exact candidate tree; they are measured, never hardcoded in the gate |
-| 2.9.6        | upstream issue body (`denoland/deno#36829`, reported by the maintainer)                   | minimal repro only (1 warning)        | Not re-verified in this repository; do not widen the exception on this row alone    |
+| Deno version | Verified where                                                                            | `deno pack` private-module warnings                              | Notes                                                                                                                                                                       |
+| ------------ | ----------------------------------------------------------------------------------------- | ---------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 2.9.0        | repo-locked `.dvmrc`; native pack proof + minimal repro in `.artifacts/deno-pack-repros/` | element 16, router 61, create 2, ui 2 (final 1.0.0-alpha.1 tree) | Counts are per exact candidate tree and were 18/60/2/2 before the protocol/marker consolidation moved modules; they are measured at every pack, never hardcoded in the gate |
+| 2.9.6        | upstream issue body (`denoland/deno#36829`, reported by the maintainer)                   | minimal repro only (1 warning)                                   | Not re-verified in this repository; do not widen the exception on this row alone                                                                                            |
 
 First observed: during the `1.0.0-alpha.1` native-pack proof on the
 Deno 2.9.0 pipeline (the earliest toolchain this repository has run the native
