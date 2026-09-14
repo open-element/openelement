@@ -351,6 +351,17 @@ export function partAnchorEndMarker(index: number): string {
  */
 export const STATIC_STYLES_MARKER = 'data-oe-static-styles';
 
+/**
+ * Internal SSR provenance marker on light-mode host tags (ADR-0142, #1148).
+ * Present only when the host's light subtree was server-rendered under the
+ * in-place activation contract: the client binds the existing DOM instead of
+ * clearing it, and a parent's activation walk prunes the nested host's
+ * subtree. Client rendering never writes it and it is never removed. The
+ * writer (internal/compiled/server) and readers (internal/compiled/runtime)
+ * import this constant; nothing writes the literal.
+ */
+export const DATA_OE_LIGHT = 'data-oe-light';
+
 function fail(reason: string): never {
   throw new Error(`[compiled-program] invalid Part Program v1: ${reason}`);
 }

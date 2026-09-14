@@ -36,6 +36,7 @@ import {
   type ProgramTextPart,
   type ProgramTreeNode,
   type ProgramWhenPart,
+  DATA_OE_LIGHT,
   STATIC_STYLES_MARKER,
 } from '../protocol/part-program.ts';
 import { normalizePartProgram, type RuntimeProgramIR } from './runtime-program.ts';
@@ -1297,8 +1298,8 @@ function claimElementAttributes(
     for (const name of dynamic) expected.add(name);
     for (const name of actualNames) {
       if (
-        name.toLowerCase() === 'data-oe-light' && node.children.length === 0 &&
-        node.tag.includes('-') && element.getAttribute('data-oe-light') !== null
+        name.toLowerCase() === DATA_OE_LIGHT && node.children.length === 0 &&
+        node.tag.includes('-') && element.getAttribute(DATA_OE_LIGHT) !== null
       ) continue;
       if (!expected.has(name)) claimFailure(path, `unexpected attribute "${name}"`, owner);
     }
@@ -1505,7 +1506,7 @@ function claimNodes(
       const hasHtmlSink = fixedPartsAtPath(ctx, nodeProgramPath)
         .some((part) => part.k === 'html');
       const ownsExpandedSubtree = node.children.length === 0 && node.tag.includes('-') &&
-        dom.getAttribute('data-oe-light') !== null;
+        dom.getAttribute(DATA_OE_LIGHT) !== null;
       const ownsProjection = node.tag === 'slot' && node.children.length === 0 &&
         dom.childNodes.length > 0;
       const consumed = hasHtmlSink || ownsExpandedSubtree || ownsProjection

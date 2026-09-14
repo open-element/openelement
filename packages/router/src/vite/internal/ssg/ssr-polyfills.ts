@@ -8,6 +8,8 @@
  * ADR-0044: SSR polyfill strategy — browser globals in Deno SSR runtime.
  */
 
+import { SSR_REGISTRY_STUB_MARKER } from '../protocol/registry-markers.ts';
+
 /**
  * Generates the entry-code polyfill (CSSStyleSheet only).
  *
@@ -44,10 +46,9 @@ if (typeof globalThis.customElements === 'undefined') {
     // The stub persists on globalThis across vite dev module-runner
     // re-evaluations; without the marker, idempotent-define guards keep the
     // FIRST registered class forever and route edits never reach SSR output.
-    // Contract: chartered as SSR_REGISTRY_STUB_MARKER in @openelement/element
-    // internal/protocol/ssr-registry-markers.ts (#965) — keep the literal in
-    // sync; this code ships as a generated string and cannot import it.
-    __openElementSsrStub: true,
+    // Contract: SSR_REGISTRY_STUB_MARKER in ../protocol/registry-markers.ts
+    // (#965) is injected here; generated code cannot import it.
+    '${SSR_REGISTRY_STUB_MARKER}': true,
     define(name, ctor, _opts) { __openCeRegistry.set(name, ctor); },
     get(name) { return __openCeRegistry.get(name); },
     whenDefined(name) { return Promise.resolve(__openCeRegistry.get(name)); },

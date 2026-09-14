@@ -29,6 +29,11 @@
  */
 
 import type { EntryDescriptor } from '../protocol/ssg.ts';
+import {
+  ENTRY_REGISTRATION_OWNERS,
+  SSR_REGISTRY_ORIGINAL_DEFINE,
+  SSR_REGISTRY_STUB_MARKER,
+} from '../protocol/registry-markers.ts';
 import { validateIslandModuleSpecifier } from './entry-generators.ts';
 import { renderActionRoute, renderPageRoute } from './entry-codegen.ts';
 import { renderNotFoundRoute } from './entry-not-found-codegen.ts';
@@ -184,7 +189,7 @@ export function renderEntry(desc: EntryDescriptor): string {
       '// The SSR dom-shim does not make define() idempotent, so we patch it.',
     );
     lines.push(
-      '// #952: under the dev SSR stub (__openElementSsrStub) re-definition must',
+      `// #952: under the dev SSR stub (${SSR_REGISTRY_STUB_MARKER}) re-definition must`,
     );
     lines.push(
       '// WIN instead — the registry outlives module re-evaluation, so route',
@@ -197,15 +202,19 @@ export function renderEntry(desc: EntryDescriptor): string {
     // its "original" and every forced overwrite would silently early-return
     // through the previous wrapper (observed: lit page edits never reached
     // dev SSR output). Install the wrapper once and keep the TRUE original on
-    // the registry itself (SSR_REGISTRY_ORIGINAL_DEFINE).
-    lines.push('if (!customElements.__openElementOrigDefine) {');
+    // the registry itself (SSR_REGISTRY_ORIGINAL_DEFINE). The marker names
+    // come from ../protocol/registry-markers.ts; generated code cannot import
+    // them, so the generator injects the values.
+    lines.push(`if (!customElements.${SSR_REGISTRY_ORIGINAL_DEFINE}) {`);
     lines.push(
-      '  customElements.__openElementOrigDefine = customElements.define.bind(customElements);',
+      `  customElements.${SSR_REGISTRY_ORIGINAL_DEFINE} = customElements.define.bind(customElements);`,
     );
     lines.push('  customElements.define = (name, ctor, options) => {');
-    lines.push('    if (!customElements.__openElementSsrStub && customElements.get(name)) return;');
     lines.push(
-      '    try { customElements.__openElementOrigDefine(name, ctor, options); } catch (e) {',
+      `    if (!customElements.${SSR_REGISTRY_STUB_MARKER} && customElements.get(name)) return;`,
+    );
+    lines.push(
+      `    try { customElements.${SSR_REGISTRY_ORIGINAL_DEFINE}(name, ctor, options); } catch (e) {`,
     );
     lines.push('      if (e && e.name === "NotSupportedError") return;');
     lines.push('      throw e;');
@@ -226,13 +235,13 @@ export function renderEntry(desc: EntryDescriptor): string {
     // overwrites registrations it made itself.
     // #965: the marker/property names below are chartered constants —
     // SSR_REGISTRY_STUB_MARKER / ENTRY_REGISTRATION_OWNERS /
-    // SSR_REGISTRY_ORIGINAL_DEFINE in @openelement/element
-    // internal/protocol/ssr-registry-markers.ts; keep the generated literals
-    // in sync (generated code cannot import them).
-    lines.push('const __entryDefined = customElements.__openEntryDefined ||= new Map();');
+    // SSR_REGISTRY_ORIGINAL_DEFINE in ../protocol/registry-markers.ts.
+    lines.push(
+      `const __entryDefined = customElements.${ENTRY_REGISTRATION_OWNERS} ||= new Map();`,
+    );
     lines.push('function __registerSsrComponent(tag, ctor) {');
     lines.push('  const current = customElements.get(tag);');
-    lines.push('  if (customElements.__openElementSsrStub) {');
+    lines.push(`  if (customElements.${SSR_REGISTRY_STUB_MARKER}) {`);
     lines.push('    if (current && __entryDefined.get(tag) !== current) return;');
     lines.push('    customElements.define(tag, ctor);');
     lines.push('    __entryDefined.set(tag, ctor);');
@@ -256,7 +265,7 @@ export function renderEntry(desc: EntryDescriptor): string {
     // live-reload notice). A registration the entry did NOT make is a
     // genuine conflict and keeps the fail-closed no-op.
     lines.push('  if (__entryDefined.get(tag) === current) {');
-    lines.push('    customElements.__openElementOrigDefine(tag, ctor);');
+    lines.push(`    customElements.${SSR_REGISTRY_ORIGINAL_DEFINE}(tag, ctor);`);
     lines.push('    __entryDefined.set(tag, ctor);');
     lines.push('  }');
     lines.push('}');
