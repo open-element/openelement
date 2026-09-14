@@ -3,9 +3,10 @@
  *
  * This IS the default engine: framework.ts wires it up via createPreactEngine()
  * at module load. @preact/signals-core is the single chartered runtime
- * dependency of @openelement/element (ADR: check-deno-api-free.ts). The
- * SignalEngine interface keeps the engine swappable for evaluation without
- * touching the core render paths.
+ * dependency of @openelement/element (ADR: check-deno-api-free.ts) and the
+ * only engine supported and verified in 1.0.0-alpha.1. The SignalEngine
+ * protocol is an internal seam that keeps call sites implementation-agnostic;
+ * it is not a promise of third-party engine support.
  */
 
 import {

@@ -57,8 +57,11 @@ The 1.0 baseline intentionally starts at the compiled class model. Historic
 ## Boundary
 
 `@openelement/element` does not own routing, Vite, Nitro, UI components,
-database, auth, cache, or the default signal engine. Those remain Router,
-application, or adapter concerns.
+database, auth, or cache. It owns the framework-level signal API
+(`signal`/`computed`/`effect`) and a minimal internal `SignalEngine` protocol.
+The only engine supported and verified in 1.0.0-alpha.1 is the built-in
+`@preact/signals-core` adapter; Preact's own API is not Element public API,
+and arbitrary third-party engines are not promised.
 
 ## License
 

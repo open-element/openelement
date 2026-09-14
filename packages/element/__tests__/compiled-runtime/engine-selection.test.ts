@@ -1,6 +1,6 @@
 import { assertEquals, assertStrictEquals, assertThrows } from '@std/assert';
 import { createPreactEngine } from '../../src/internal/signal/preact-engine.ts';
-import { createTestEngine } from '../../src/internal/signal/test-engine.ts';
+import { createTestEngine } from './test-engine.ts';
 import {
   selectedSignalEngine,
   selectSignalEngine,

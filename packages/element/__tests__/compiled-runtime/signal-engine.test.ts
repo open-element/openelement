@@ -1,7 +1,7 @@
 import { assert, assertEquals } from '@std/assert';
 import { createPreactEngine } from '../../src/internal/signal/preact-engine.ts';
-import { createTestEngine } from '../../src/internal/signal/test-engine.ts';
-import { type BatchedSignalEngine, isBatchCapable } from '../../src/internal/signal/types.ts';
+import { createTestEngine } from './test-engine.ts';
+import type { BatchedSignalEngine } from '../../src/internal/signal/types.ts';
 import { signal } from '../../src/internal/signal/framework.ts';
 import { type CompiledRuntimeHost, createFreshDom } from '../../src/internal/compiled/runtime.ts';
 import { TestDocument, type TestElement, toHtml } from './test-dom.ts';
@@ -36,7 +36,7 @@ function exerciseEngine(engine: BatchedSignalEngine, batched: boolean): string[]
  * covered by engine-specific tests below, not by this function.
  */
 function assertSharedConformance(engine: BatchedSignalEngine): void {
-  assert(isBatchCapable(engine), 'both shipped engines are batch-capable');
+  assert(typeof engine.batch === 'function', 'conformance engines are batch-capable');
 
   assertEquals(exerciseEngine(engine, false), [
     'run:2',

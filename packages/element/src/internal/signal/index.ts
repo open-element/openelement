@@ -1,7 +1,11 @@
 /**
  * index.ts - Reactive signals powered by @preact/signals-core.
  *
- * @preact/signals-core is the only supported engine.
+ * @preact/signals-core (via the built-in preact-engine adapter) is the only
+ * engine supported and verified in 1.0.0-alpha.1. Preact's own API is not
+ * Element public API, and this internal barrel is not re-exported from the
+ * package root; the root exposes only the protocol types and the
+ * signal()/computed()/effect() framework functions.
  *
  * Architecture:
  *   Engine layer    -> @preact/signals-core adapter (preact-engine.ts)
@@ -20,14 +24,6 @@ export type {
   WritableSignal,
 } from '../protocol/signal.ts';
 export { isSignalLike, unwrapSignalLike } from './types.ts';
-
-// Internal alpha.2 conformance seam. The alternate engine is intentionally
-// not re-exported from the package root; generated consumers select one engine
-// statically and never dispatch through this test implementation per update.
-export { createTestEngine } from './test-engine.ts';
-export type { TestSignalEngine } from './test-engine.ts';
-export type { BatchedSignalEngine } from './types.ts';
-export { isBatchCapable } from './types.ts';
 
 // Internal static engine-selection seam (#723). One engine per application,
 // selected before signals exist; also not re-exported from the package root.

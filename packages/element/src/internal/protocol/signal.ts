@@ -31,18 +31,17 @@ export interface ReadonlySignal<T> extends SignalLike<T> {
 export type Signal<T> = WritableSignal<T> | ReadonlySignal<T>;
 
 /**
- * Signal engine protocol used by framework and adapter integrations.
+ * Signal engine protocol used by the framework's built-in adapter.
  *
- * This is a deliberate architectural seam, not speculative abstraction. The
- * framework layer (`signal.ts`) talks to signals only through this narrow
- * interface so the concrete implementation can be swapped without touching the
- * public `signal()/computed()/effect()` API surface.
+ * This is a deliberate internal seam, not a public compatibility contract:
+ * the framework layer talks to signals only through this narrow interface so
+ * its call sites stay implementation-agnostic.
  *
- * openElement currently ships exactly one engine implementation
- * (`preact-engine`, backed by `@preact/signals-core`). Additional engines are
- * intentionally out of scope and, if ever needed, would be added here behind
- * this protocol rather than inline. The single-implementation state is the
- * intended charter decision — see #723.
+ * 1.0.0-alpha.1 ships and verifies exactly one engine implementation
+ * (`preact-engine`, backed by `@preact/signals-core`). Preact's own API is not
+ * Element public API, and arbitrary third-party engines are not promised;
+ * any future engine would be added behind this protocol rather than inline
+ * (charter decision — see #723).
  */
 export interface SignalEngine {
   signal<T>(initialValue: T): WritableSignal<T>;

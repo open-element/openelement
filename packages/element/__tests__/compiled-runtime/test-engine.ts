@@ -1,5 +1,7 @@
 /**
- * Small protocol-only SignalEngine used by the alpha.2 conformance tests.
+ * Small protocol-only SignalEngine used by the conformance tests. This lives
+ * in the test tree on purpose: it is not part of the shipped package, and
+ * @preact/signals-core stays the only engine supported by 1.0.0-alpha.1.
  *
  * It intentionally differs from the default Preact adapter in two observable
  * ways allowed by the protocol: subscriptions are lazy (no initial callback),
@@ -7,9 +9,13 @@
  * initial values during construction and subscribe only to future writes.
  */
 
-import { SIGNAL_BRAND } from '../protocol/signal.ts';
-import type { ReadonlySignal, Unsubscribe, WritableSignal } from '../protocol/signal.ts';
-import type { BatchedSignalEngine } from './types.ts';
+import { SIGNAL_BRAND } from '../../src/internal/protocol/signal.ts';
+import type {
+  ReadonlySignal,
+  Unsubscribe,
+  WritableSignal,
+} from '../../src/internal/protocol/signal.ts';
+import type { BatchedSignalEngine } from '../../src/internal/signal/types.ts';
 
 interface ReactiveSource {
   addInvalidation(listener: () => void): Unsubscribe;

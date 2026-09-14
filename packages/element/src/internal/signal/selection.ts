@@ -1,13 +1,16 @@
 /**
- * selection.ts - Static signal-engine selection (alpha.2).
+ * selection.ts - Static signal-engine selection (internal seam, #723).
  *
  * One engine per application, chosen at startup before any signal is created
  * or any compiled program is activated; there is no per-update dispatch. When
- * selection never happens the default remains the Preact adapter, preserving
- * current behavior. The framework intrinsics (framework.ts) and the host
- * signals handed to the compiled runtime all flow through this one engine.
+ * selection never happens the default remains the built-in Preact adapter —
+ * the only engine supported and verified in 1.0.0-alpha.1. The framework
+ * intrinsics (framework.ts) and the host signals handed to the compiled
+ * runtime all flow through this one engine.
  *
- * This seam is internal: it is not re-exported from the package root.
+ * This seam is internal: it is not re-exported from the package root, and
+ * selecting an arbitrary third-party engine is not a supported product
+ * promise.
  *
  * @module ./selection.ts
  */
@@ -73,9 +76,10 @@ function assertConformingEngine(engine: SignalEngine): void {
 }
 
 /**
- * Statically select the one signal engine for this application. Re-selecting
- * the same engine instance is a no-op; switching fails closed once signals
- * were created or compiled programs activated.
+ * Statically select the one signal engine for this application. This validates
+ * the protocol seam; it does not promise third-party engine support.
+ * Re-selecting the same engine instance is a no-op; switching fails closed
+ * once signals were created or compiled programs activated.
  */
 export function selectSignalEngine(engine: SignalEngine): void {
   assertConformingEngine(engine);
