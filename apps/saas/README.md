@@ -1,8 +1,10 @@
 # OpenElement SaaS (Supabase × Cloudflare)
 
-> First-party core consumer product and standard consumption shape for
-> OpenElement: it proves the public framework surface end to end. New
-> projects should still start from `@openelement/create`.
+> Independent first-party consumer application for OpenElement, maintained
+> in this repository but governed separately: it exercises the public framework
+> surface end to end. It is not framework core and not part of the Alpha
+> repository candidate. New projects should still start from
+> `@openelement/create`.
 
 Maintained first-party SaaS for the OpenElement × Supabase × Cloudflare
 fullstack delivery path. Composition only: no framework-owned auth/database

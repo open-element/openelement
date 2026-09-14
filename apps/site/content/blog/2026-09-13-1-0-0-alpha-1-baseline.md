@@ -19,8 +19,9 @@ from `@openelement/create`.
 - **UI** ships in this repository as experimental: usable, but outside the 1.0
   stable API promise.
 - The **site** you are reading is the official product surface; the bundled
-  **SaaS** app is the first-party core consumer that proves the standard
-  consumption shape.
+  **SaaS** app is an independent first-party consumer application maintained in
+  this repository but governed separately — it is not framework core and not
+  part of the Alpha repository candidate.
 
 ## How it is qualified
 
