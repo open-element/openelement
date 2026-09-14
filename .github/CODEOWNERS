@@ -1,0 +1,19 @@
+# Repository-side review ownership. This file is the in-repo source of truth
+# for review routing; the GitHub repository ruleset must name the same
+# handle(s) (see MAINTAINERS.md). Never add an unconfirmed handle here.
+#
+# Default: every path has an owner until a narrower entry names one.
+* @SisyphusZheng
+
+# Product packages
+/packages/element/ @SisyphusZheng
+/packages/router/ @SisyphusZheng
+
+# Release tooling and the workflows it gates
+/tools/release/ @SisyphusZheng
+/.github/workflows/ @SisyphusZheng
+
+# SaaS security, payment, and auth surfaces (auth-security, authorization,
+# stripe-*, supabase-server, service-role, rate-limit, malware-scanner,
+# cloudflare-*)
+/apps/saas/lib/ @SisyphusZheng

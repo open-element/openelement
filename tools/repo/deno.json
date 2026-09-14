@@ -1,7 +1,10 @@
 {
   "tasks": {
     "api-reference:check": "deno run --allow-run ./run-in.ts --root ../.. -- deno run --allow-read --allow-write --allow-env tools/repo/generate-api-reference.ts --check",
+    "assets:check-provenance": "deno run --allow-run ./run-in.ts --root ../.. -- deno run --allow-read tools/repo/check-assets-provenance.ts",
     "generate:api-reference": "deno run --allow-run ./run-in.ts --root ../.. -- deno run --allow-read --allow-write --allow-env tools/repo/generate-api-reference.ts",
+    "generate:ui-manifest": "deno run --allow-run ./run-in.ts --root ../.. -- deno run --allow-read --allow-write --allow-env tools/repo/generate-ui-manifest.ts",
+    "ui-manifest:check": "deno run --allow-run ./run-in.ts --root ../.. -- deno run --allow-read --allow-write --allow-env tools/repo/generate-ui-manifest.ts --check",
     "census": "deno run --allow-run ./run-in.ts --root ../.. -- deno run --allow-read --allow-write --allow-run --allow-env tools/repo/tracked-census.ts",
     "content-examples:check": "deno run --allow-run ./run-in.ts --root ../.. -- deno run --allow-read --allow-env --allow-write tools/repo/check-content-examples.ts",
     "deno-api:check": "deno run --allow-run ./run-in.ts --root ../.. -- deno run --allow-read --allow-env tools/repo/check-deno-api-free.ts",
@@ -9,6 +12,8 @@
     "esm:boundary-check": "deno run --allow-run ./run-in.ts --root ../.. -- deno run --allow-read --allow-run tools/repo/check-esm-boundary.ts",
     "export-files:check": "deno run --allow-run ./run-in.ts --root ../.. -- deno run --allow-read --allow-write --allow-run tools/repo/generate-openelement-export-files.ts --check",
     "export-files:generate": "deno run --allow-run ./run-in.ts --root ../.. -- deno run --allow-read --allow-write --allow-run tools/repo/generate-openelement-export-files.ts",
+    "fixtures:locks:check": "deno run --allow-run ./run-in.ts --root ../.. -- deno run --allow-read tools/repo/check-fixture-locks.ts",
+    "fixtures:locks:update": "deno run --allow-run ./run-in.ts --root ../.. -- deno run --allow-read --allow-write --allow-run --allow-env tools/repo/check-fixture-locks.ts --update",
     "interface:snapshot": "deno run --allow-run ./run-in.ts --root ../.. -- deno run --allow-read --allow-env tools/repo/check-public-interface-snapshot.ts",
     "interface:snapshot:write": "deno run --allow-run ./run-in.ts --root ../.. -- deno run --allow-read --allow-write --allow-env tools/repo/check-public-interface-snapshot.ts --write",
     "release:state-machine:check": "deno run --allow-run ./run-in.ts --root ../.. -- deno run --allow-read --allow-run=git tools/repo/check-release-state-machine.ts",
@@ -22,13 +27,14 @@
     "candidate:evidence": "deno run --allow-run ./run-in.ts --root ../.. -- deno run --allow-read --allow-write --allow-run --allow-env tools/repo/candidate-evidence.ts",
     "gate:ts7:shadow": "deno run --allow-run ./run-in.ts --root ../.. -- deno run --allow-read --allow-write --allow-run --allow-env --allow-net tools/repo/ts7-shadow-gate.ts",
     "validation:boundary-check": "deno run --allow-run ./run-in.ts --root ../.. -- deno run --allow-read --allow-env tools/repo/check-validation-boundary.ts",
+    "workers:boundary-check": "deno run --allow-run ./run-in.ts --root ../.. -- deno run --allow-read --allow-env tools/repo/check-workers-boundary.ts apps/saas/.output-workers",
     "perf:baseline": "deno run --allow-run ./run-in.ts --root ../.. -- deno run --allow-read --allow-run --allow-env benchmarks/micro/micro.ts",
     "perf:record": "deno run --allow-run ./run-in.ts --root ../.. -- deno run --allow-read --allow-write --allow-run --allow-env tools/repo/perf-record.ts",
     "lint:markdown": "deno run --allow-run ./run-in.ts --root ../.. -- deno run --allow-read --allow-write --allow-env --allow-net --allow-sys npm:markdownlint-cli2@0.23.2 \"**/*.md\"",
     "url-pattern-list:provenance": "deno run --allow-run ./run-in.ts --root ../.. -- npm ci --prefix tests/fixtures/url-pattern-list-audit --ignore-scripts --no-audit --no-fund && deno run --allow-run ./run-in.ts --root ../.. -- npm audit signatures --prefix tests/fixtures/url-pattern-list-audit --ignore-scripts",
     "hooks:install": "git -C ../.. config core.hooksPath .githooks && chmod +x ../../.githooks/pre-commit ../../.githooks/pre-push",
     "hooks:uninstall": "git -C ../.. config --unset core.hooksPath",
-    "gate:source": "deno run --allow-run ./gate.ts tools/repo#typecheck tools/release#graph:check tools/repo#deps:vite-check tools/repo#esm:boundary-check tools/repo#interface:snapshot tools/repo#api-reference:check tools/repo#export-files:check tools/repo#url-pattern-list:provenance tools/repo#release:state-machine:check tools/repo#signals:check-protocol-boundary tools/repo#deno-api:check tools/repo#validation:boundary-check build site:build tools/repo#test:coverage:check saas:verify tests/fixtures/router-request-time#gate tests/fixtures/router-static-only#build tests/fixtures/router-native-framework#gate tests/fixtures/router-lit-framework#gate tests/fixtures/router-ui-dogfood#gate tests/fixtures/site-light-probe#gate tests/fixtures/web-component-interop#test packages/element#browser:gate tests/e2e/starter-smoke#gate tests/fixtures/router-nitro#proof:node tests/fixtures/router-nitro#proof:workers apps/saas#nitro:build-workers tools/repo#site:check-links tools/repo#site:check-theme-tokens tools/repo#content-examples:check tools/repo#retired-api:check",
+    "gate:source": "deno run --allow-run ./gate.ts tools/repo#typecheck tools/release#graph:check tools/repo#deps:vite-check tools/repo#esm:boundary-check tools/repo#interface:snapshot tools/repo#generate:api-reference tools/repo#ui-manifest:check tools/repo#export-files:check tools/repo#url-pattern-list:provenance tools/repo#release:state-machine:check tools/repo#signals:check-protocol-boundary tools/repo#assets:check-provenance tools/repo#deno-api:check tools/repo#fixtures:locks:check tools/repo#validation:boundary-check build site:build tools/repo#test:coverage:check saas:verify tests/fixtures/router-request-time#gate tests/fixtures/router-static-only#build tests/fixtures/router-native-framework#gate tests/fixtures/router-lit-framework#gate tests/fixtures/router-ui-dogfood#gate tests/fixtures/site-light-probe#gate tests/fixtures/web-component-interop#test packages/element#browser:gate tests/e2e/starter-smoke#gate tests/fixtures/router-nitro#proof:node tests/fixtures/router-nitro#proof:workers apps/saas#nitro:build-workers tools/repo#workers:boundary-check tools/repo#site:check-links tools/repo#site:check-theme-tokens tools/repo#content-examples:check tools/repo#retired-api:check",
     "typecheck": "deno run --allow-run ./run-in.ts --root ../.. -- deno check tools/repo/ tools/lib/"
   }
 }

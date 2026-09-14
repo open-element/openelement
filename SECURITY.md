@@ -1,5 +1,9 @@
 # Security policy
 
+This channel is for security vulnerabilities only. Conduct concerns go to the
+dedicated private channel in [CODE_OF_CONDUCT.md](./CODE_OF_CONDUCT.md), never
+here.
+
 Report suspected vulnerabilities through [GitHub private vulnerability reporting](https://github.com/open-element/openelement/security/advisories/new), not a public issue or discussion. Include the affected package and version, reproduction steps, impact, and any proposed mitigation.
 
 Maintainers aim to acknowledge reports within five business days and provide a status update within ten business days. The latest stable release is supported; prerelease code may change before stable.

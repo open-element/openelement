@@ -1,0 +1,36 @@
+name: Dependency audit
+
+# GitHub Dependabot cannot read the Deno workspace lockfile, so npm/jsr
+# updates are audited here instead of left silently stale. This workflow
+# never opens or merges update PRs: it fails when compatible updates or known
+# vulnerabilities exist. A human opens the update PR, and that PR runs the
+# full CI gate (autoflow-ci) like any other change.
+on:
+  schedule:
+    # Weekly, off the hour to avoid the busiest runner window.
+    - cron: '17 5 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deno-dependencies:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      # v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-deno-workspace
+      - name: Compatible dependency updates
+        run: |
+          output=$(NO_COLOR=1 deno outdated --compatible)
+          if [ -n "$output" ]; then
+            printf '%s\n' "$output"
+            echo "::error::Compatible dependency updates are available; update deno.json/locks and let the full CI gate run on the PR."
+            exit 1
+          fi
+      - name: Vulnerability audit
+        run: deno audit

@@ -15,6 +15,9 @@ import { dirname, join } from '@std/path';
 const repoRoot = join(dirname(new URL(import.meta.url).pathname), '..', '..');
 const workflow = await Deno.readTextFile(join(repoRoot, '.github/workflows/autoflow-ci.yml'));
 const releasing = await Deno.readTextFile(join(repoRoot, 'docs/maintainers/releasing.md'));
+const dependencyAudit = await Deno.readTextFile(
+  join(repoRoot, '.github/workflows/dependency-audit.yml'),
+);
 
 /** Extract one top-level job block (two-space `name:` jobs) by job key. */
 function jobBlock(text: string, job: string): string {
@@ -80,6 +83,22 @@ Deno.test('ci contract: packed-consumer matrix pins all three release OSes', () 
   assert(
     /ubuntu-latest/.test(block) && /macos-latest/.test(block) && /windows-latest/.test(block),
     'packed-consumer-matrix must stay Linux/macOS/Windows required',
+  );
+});
+
+Deno.test('ci contract: Deno dependencies are audited, never auto-merged', () => {
+  assert(
+    /contents:\s*read/.test(dependencyAudit),
+    'dependency-audit must stay read-only',
+  );
+  assert(
+    /deno outdated/.test(dependencyAudit) && /deno audit/.test(dependencyAudit),
+    'dependency-audit must run the Deno outdated and vulnerability audits',
+  );
+  assert(
+    !/pull_request_target/.test(dependencyAudit) &&
+      !/auto-merge|dependabot\[bot\][^\n]*merge/i.test(dependencyAudit),
+    'dependency-audit must never auto-merge or run on pull_request_target',
   );
 });
 
