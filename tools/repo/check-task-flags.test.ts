@@ -10,6 +10,7 @@
  */
 import { assert, assertEquals } from '@std/assert';
 import { dirname, join } from '@std/path';
+import { REQUIRED_PACKED_CONSUMERS } from './candidate-evidence.ts';
 
 const repoRoot = join(dirname(new URL(import.meta.url).pathname), '..', '..');
 
@@ -86,6 +87,18 @@ Deno.test('task wiring: release:check invokes the registry task, not an internal
       command.includes('tools/release#publish:npm:dry-run'),
     'release:check must still run the packed gate and publish dry-run',
   );
+});
+
+Deno.test('task wiring: gate:packed covers every required packed consumer', async () => {
+  const gatePacked = (await tasks('tools/release/deno.json'))['gate:packed'];
+  assert(gatePacked, 'gate:packed must exist');
+  for (const consumer of REQUIRED_PACKED_CONSUMERS) {
+    assert(
+      gatePacked.includes(consumer),
+      `gate:packed must run the required packed consumer ${consumer}; ` +
+        `update the gate or the canonical REQUIRED_PACKED_CONSUMERS list`,
+    );
+  }
 });
 
 Deno.test('task wiring: the release workflow qualifies through the official task', async () => {

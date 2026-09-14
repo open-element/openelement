@@ -37,6 +37,46 @@ const JOB_NAMES: readonly JobName[] = [
   'fresh-clone',
 ];
 
+/** Required production-package tarball keys; extras or fakes are rejected. */
+export const REQUIRED_PACKAGE_TARBALLS: readonly string[] = [
+  '@openelement/element',
+  '@openelement/router',
+  '@openelement/create',
+  '@openelement/ui',
+];
+
+/**
+ * Required packed-consumer proof set. Kept as the single canonical list that
+ * the validator and its tests share; a task-wiring guard asserts every entry
+ * appears in the gate:packed definition so the two cannot drift.
+ */
+export const REQUIRED_PACKED_CONSUMERS: readonly string[] = [
+  'tools/release#consumer:packaged',
+  'tools/release#consumer:packaged-app',
+  'tools/release#consumer:packaged-router',
+  'tools/release#consumer:packaged-element',
+  'tools/release#consumer:packaged-ui',
+  'tests/fixtures/third-party-web-components#smoke',
+];
+
+/** Site E2E projects that must all execute with zero failures. */
+export const REQUIRED_SITE_BROWSERS: readonly string[] = ['chromium', 'firefox', 'webkit'];
+
+/** Minimum required steps per job; missing/duplicate/failed steps fail closed. */
+const REQUIRED_STEPS: Record<JobName, readonly string[]> = {
+  'fast-checks': ['fmt-check', 'lint', 'markdown', 'typecheck'],
+  'source-matrix': ['gate-source'],
+  packed: ['gate-packed', 'publish-npm-dry-run'],
+  'fresh-clone': [
+    'clone',
+    'git-checkout',
+    'install',
+    'task-check',
+    'task-gate-packed',
+    'task-publish-npm-dry-run',
+  ],
+};
+
 interface StepResult {
   name: string;
   command: string[];
@@ -243,14 +283,18 @@ export function packedRollupFromLog(logText: string): {
   };
 }
 
-/** Derive the official Site E2E proof from the source-gate log. */
-export function sourceRollupFromLog(logText: string): {
-  siteE2e: { ran: boolean; browsers: string[] };
-} {
-  const text = stripAnsi(logText);
-  const ran = /^PASS apps\/site#e2e:browsers\b/m.test(text);
-  const browsers = ['chromium', 'firefox', 'webkit'].filter((browser) => text.includes(browser));
-  return { siteE2e: { ran, browsers } };
+export interface SiteProjectSummary {
+  passed?: number;
+  failed?: number;
+  skipped?: number;
+}
+
+export interface SiteE2eRollup {
+  ran?: boolean;
+  projects?: Record<string, SiteProjectSummary>;
+  passed?: number;
+  failed?: number;
+  skipped?: number;
 }
 
 async function packExtras(
@@ -296,12 +340,18 @@ async function packExtras(
 }
 
 async function sourceExtras(
-  sourceSteps: StepResult[],
-  outDir: string,
+  _sourceSteps: StepResult[],
+  _outDir: string,
 ): Promise<Record<string, unknown>> {
-  const gateSource = sourceSteps.find((step) => step.name === 'gate-source');
-  const text = gateSource ? await Deno.readTextFile(join(outDir, gateSource.logPath)) : '';
-  return sourceRollupFromLog(text);
+  // The Site E2E task writes a structured sidecar (Playwright JSON summary),
+  // so unrelated fixture output can never fake the browser proof.
+  try {
+    const raw = await Deno.readTextFile(join(repoRoot, '.artifacts/site-e2e-result.json'));
+    const result = JSON.parse(raw) as SiteE2eRollup;
+    return { siteE2e: result };
+  } catch {
+    return { siteE2e: { ran: false } };
+  }
 }
 
 async function recordJob(job: Exclude<JobName, 'fresh-clone'>, outDir: string): Promise<void> {
@@ -471,6 +521,54 @@ interface LoadedJob {
   read: (path: string) => Promise<Uint8Array | null>;
 }
 
+interface AuditableStep {
+  name: string;
+  result: string;
+  exitCode?: number;
+  logPath: string;
+  logSha256: string;
+}
+
+/**
+ * Single source of job invariants shared by aggregate (job result.json files)
+ * and validate (the aggregated bundle), so the two can never disagree.
+ */
+async function auditJob(
+  jobName: string,
+  sha: string,
+  tree: string,
+  jobResult: string,
+  steps: readonly AuditableStep[],
+  read: (path: string) => Promise<Uint8Array | null>,
+): Promise<string[]> {
+  const failures: string[] = [];
+  if (!JOB_NAMES.includes(jobName as JobName)) {
+    failures.push(`unknown job result: ${jobName}`);
+    return failures;
+  }
+  if (sha.length !== 40) failures.push(`${jobName}: sha is not a 40-character commit`);
+  if (tree.length !== 40) failures.push(`${jobName}: tree is not a 40-character tree`);
+  if (jobResult !== 'PASS') failures.push(`${jobName}: job result ${jobResult}`);
+  const stepNames = steps.map((step) => step.name);
+  for (const required of REQUIRED_STEPS[jobName as JobName]) {
+    const count = stepNames.filter((name) => name === required).length;
+    if (count === 0) failures.push(`${jobName}: required step missing: ${required}`);
+    else if (count > 1) failures.push(`${jobName}: required step duplicated: ${required}`);
+  }
+  for (const step of steps) {
+    if (step.result !== 'PASS' || (step.exitCode ?? 0) !== 0) {
+      failures.push(`${jobName}/${step.name}: ${step.result} (exit ${step.exitCode ?? 0})`);
+    }
+    const bytes = await read(step.logPath);
+    if (!bytes) {
+      failures.push(`${jobName}/${step.name}: log missing at ${step.logPath}`);
+    } else if ((await sha256Bytes(bytes)) !== step.logSha256) {
+      failures.push(`${jobName}/${step.name}: log hash mismatch`);
+    }
+  }
+  return failures;
+}
+
 /** Pure proof checks for one recorded job. Exported for tests. */
 export async function collectJobFailures(
   jobs: readonly Pick<LoadedJob, 'job' | 'read'>[],
@@ -478,28 +576,81 @@ export async function collectJobFailures(
   expectedTree: string,
 ): Promise<string[]> {
   const failures: string[] = [];
-  const seen = new Set<string>();
-  for (const { job, read } of jobs) {
-    seen.add(job.job);
-    if (job.sha !== expected) failures.push(`${job.job}: sha ${job.sha} != ${expected}`);
-    if (job.tree !== expectedTree) failures.push(`${job.job}: tree ${job.tree} != ${expectedTree}`);
-    if (job.result !== 'PASS') failures.push(`${job.job}: job result ${job.result}`);
-    for (const step of job.steps) {
-      if (step.result !== 'PASS' || step.exitCode !== 0) {
-        failures.push(`${job.job}/${step.name}: ${step.result} (exit ${step.exitCode})`);
-      }
-      const bytes = await read(step.logPath);
-      if (!bytes) {
-        failures.push(`${job.job}/${step.name}: log missing at ${step.logPath}`);
-      } else if ((await sha256Bytes(bytes)) !== step.logSha256) {
-        failures.push(`${job.job}/${step.name}: log hash mismatch`);
-      }
-    }
+  const byName = new Map<string, Pick<LoadedJob, 'job' | 'read'>>();
+  for (const entry of jobs) {
+    const name = entry.job.job;
+    if (byName.has(name)) failures.push(`duplicate job result: ${name}`);
+    byName.set(name, entry);
   }
   for (const jobName of JOB_NAMES) {
-    if (!seen.has(jobName)) failures.push(`required job result missing: ${jobName}`);
+    const entry = byName.get(jobName);
+    if (!entry) {
+      failures.push(`required job result missing: ${jobName}`);
+      continue;
+    }
+    if (entry.job.sha !== expected) {
+      failures.push(`${jobName}: sha ${entry.job.sha} != ${expected}`);
+    }
+    if (entry.job.tree !== expectedTree) {
+      failures.push(`${jobName}: tree ${entry.job.tree} != ${expectedTree}`);
+    }
+    failures.push(
+      ...await auditJob(
+        jobName,
+        entry.job.sha,
+        entry.job.tree,
+        entry.job.result,
+        entry.job.steps.map((step) => ({
+          name: step.name,
+          result: step.result,
+          exitCode: step.exitCode,
+          logPath: step.logPath,
+          logSha256: step.logSha256,
+        })),
+        entry.read,
+      ),
+    );
   }
   return failures;
+}
+
+/** Pure checks for the packed artifact/consumer and Site E2E rollup. */
+export function collectRollupFailures(rollup: Rollup | undefined): string[] {
+  const failures: string[] = [];
+  if (!rollup) {
+    failures.push('rollup missing (packed artifact scan, packed consumers, and Site E2E proof)');
+    return failures;
+  }
+  if (rollup.artifactCheck !== true) {
+    failures.push('packed artifact scan did not run (package-artifacts:check missing)');
+  }
+  const consumers = new Set(rollup.consumers ?? []);
+  for (const required of REQUIRED_PACKED_CONSUMERS) {
+    if (!consumers.has(required)) failures.push(`packed consumer missing: ${required}`);
+  }
+  const site = rollup.siteE2e;
+  if (site?.ran !== true) {
+    failures.push('official Site E2E did not run or did not pass');
+  } else {
+    for (const browser of REQUIRED_SITE_BROWSERS) {
+      const summary = site.projects?.[browser];
+      if (!summary) {
+        failures.push(`Site E2E missing browser proof: ${browser}`);
+      } else if ((summary.failed ?? 0) !== 0) {
+        failures.push(`Site E2E ${browser} failed=${summary.failed}`);
+      }
+    }
+    if (typeof site.failed === 'number' && site.failed > 0) {
+      failures.push(`Site E2E reported ${site.failed} failed test(s)`);
+    }
+  }
+  return failures;
+}
+
+interface Rollup {
+  artifactCheck?: boolean;
+  consumers?: string[];
+  siteE2e?: SiteE2eRollup;
 }
 
 /** Pure artifact checks for an aggregated evidence bundle. Exported for tests. */
@@ -511,17 +662,19 @@ export async function collectBundleFailures(
     jobs?: Array<{
       job: string;
       result: string;
-      steps: Array<{ name: string; result: string; logSource: string; logSha256: string }>;
+      steps: Array<{
+        name: string;
+        result: string;
+        exitCode?: number;
+        logSource: string;
+        logSha256: string;
+      }>;
     }>;
     tarballs?: Record<string, string>;
     tarballManifest?: { path: string; sha256: string };
     packDiagnostics?: { path: string; sha256: string };
     freshClone?: { path: string; sha256: string };
-    rollup?: {
-      artifactCheck?: boolean;
-      consumers?: string[];
-      siteE2e?: { ran?: boolean; browsers?: string[] };
-    };
+    rollup?: Rollup;
   },
   options: {
     expectedSha?: string;
@@ -538,6 +691,7 @@ export async function collectBundleFailures(
   if (evidence.tree !== options.expectedTree) {
     failures.push(`evidence tree ${evidence.tree} != HEAD tree ${options.expectedTree}`);
   }
+  if (evidence.sha.length !== 40) failures.push('evidence sha is not a 40-character commit');
   const recorded = Date.parse(evidence.generatedAt);
   const maxAgeDays = options.maxAgeDays ?? ARTIFACT_RETENTION_DAYS;
   const now = options.now ?? Date.now();
@@ -546,20 +700,51 @@ export async function collectBundleFailures(
   } else if (now - recorded > maxAgeDays * 24 * 60 * 60 * 1000) {
     failures.push(`evidence is older than the ${maxAgeDays}-day retention window`);
   }
-  for (const job of evidence.jobs ?? []) {
-    if (job.result !== 'PASS') failures.push(`job ${job.job} result ${job.result}`);
-    for (const step of job.steps) {
-      if (step.result !== 'PASS') failures.push(`${job.job}/${step.name} result ${step.result}`);
-      const bytes = await options.read(step.logSource);
-      if (!bytes) {
-        failures.push(`${job.job}/${step.name}: log missing at ${step.logSource}`);
-      } else if ((await sha256Bytes(bytes)) !== step.logSha256) {
-        failures.push(`${job.job}/${step.name}: log hash mismatch`);
-      }
-    }
+
+  // Same job/step invariants as aggregate, over the bundle's log sources.
+  const bundleJobNames = (evidence.jobs ?? []).map((job) => job.job);
+  const seenBundleJobs = new Set<string>();
+  for (const name of bundleJobNames) {
+    if (seenBundleJobs.has(name)) failures.push(`duplicate job result: ${name}`);
+    seenBundleJobs.add(name);
   }
-  if (!evidence.tarballs || Object.keys(evidence.tarballs).length < 4) {
-    failures.push('tarball hashes missing (four packages required)');
+  for (const jobName of JOB_NAMES) {
+    if (!seenBundleJobs.has(jobName)) failures.push(`required job result missing: ${jobName}`);
+  }
+  for (const job of evidence.jobs ?? []) {
+    failures.push(
+      ...await auditJob(
+        job.job,
+        evidence.sha,
+        evidence.tree,
+        job.result,
+        job.steps.map((step) => ({
+          name: step.name,
+          result: step.result,
+          exitCode: step.exitCode,
+          logPath: step.logSource,
+          logSha256: step.logSha256,
+        })),
+        options.read,
+      ),
+    );
+  }
+
+  const tarballs = evidence.tarballs ?? {};
+  const tarballKeys = Object.keys(tarballs).sort();
+  const expectedKeys = [...REQUIRED_PACKAGE_TARBALLS].sort();
+  if (tarballKeys.join(',') !== expectedKeys.join(',')) {
+    failures.push(
+      `tarball manifest must contain exactly ${expectedKeys.join(', ')}; found ${
+        tarballKeys.join(', ') || 'none'
+      }`,
+    );
+  }
+  for (const name of REQUIRED_PACKAGE_TARBALLS) {
+    const hash = tarballs[name];
+    if (!hash || !/^sha256:[0-9a-f]{64}$/u.test(hash)) {
+      failures.push(`tarball ${name}: missing or malformed sha256`);
+    }
   }
   failures.push(...collectRollupFailures(evidence.rollup));
   for (
@@ -578,31 +763,6 @@ export async function collectBundleFailures(
     else if ((await sha256Bytes(bytes)) !== manifest.sha256) {
       failures.push(`manifest hash mismatch at ${manifest.path}`);
     }
-  }
-  return failures;
-}
-
-/** Pure checks for the packed artifact/consumer and Site E2E rollup. */
-export function collectRollupFailures(
-  rollup: {
-    artifactCheck?: boolean;
-    consumers?: string[];
-    siteE2e?: { ran?: boolean; browsers?: string[] };
-  } | undefined,
-): string[] {
-  const failures: string[] = [];
-  if (!rollup) {
-    failures.push('rollup missing (packed artifact scan, packed consumers, and Site E2E proof)');
-    return failures;
-  }
-  if (rollup.artifactCheck !== true) {
-    failures.push('packed artifact scan did not run (package-artifacts:check missing)');
-  }
-  if (!Array.isArray(rollup.consumers) || rollup.consumers.length === 0) {
-    failures.push('no packed consumers recorded (consumer count is zero)');
-  }
-  if (rollup.siteE2e?.ran !== true) {
-    failures.push('official Site E2E did not run or did not pass');
   }
   return failures;
 }
@@ -652,7 +812,7 @@ async function aggregate(inputDir: string, output: string): Promise<void> {
   const rollup = {
     artifactCheck: packed.job.extras?.artifactCheck === true,
     consumers: (packed.job.extras?.consumers ?? []) as string[],
-    siteE2e: (source.job.extras?.siteE2e ?? {}) as { ran?: boolean; browsers?: string[] },
+    siteE2e: (source.job.extras?.siteE2e ?? {}) as SiteE2eRollup,
   };
   const rollupFailures = collectRollupFailures(rollup);
   if (rollupFailures.length > 0) {
@@ -712,7 +872,7 @@ async function aggregate(inputDir: string, output: string): Promise<void> {
     packDiagnostics: { path: 'pack-diagnostics.json', sha256: packDiagnosticsSha },
     freshClone: { path: 'fresh-clone-manifest.json', sha256: freshManifestSha },
     rollup,
-    requiredOk: true,
+    requiredOk: rollupFailures.length === 0,
     aggregate: {
       inputs: jobs.map(({ job, dir }) => `${job.job}@${relative(outDir, dir)}`),
       recomputedLogHashes: jobs.reduce((sum, { job }) => sum + job.steps.length, 0),
