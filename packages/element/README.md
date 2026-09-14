@@ -6,8 +6,9 @@ This package exposes `OpenElement`, the product-facing base class for native
 Web Components, running on the compiled Part Program kernel: one mandatory
 compiler (`@openelement/element/compiler`) lowers each component's `render()` into
 a serializable program consumed by server serialization, fresh DOM creation,
-and existing-DOM claim alike. Shadow/DSD is the default render mode; light DOM
-remains explicit opt-in.
+and existing-DOM claim alike. Light DOM is the current compiled default;
+Shadow/DSD is a first-class mode selected explicitly with
+`@element(tag, { root: 'shadow-open' | 'shadow-closed' })`.
 
 Also includes:
 
