@@ -10,11 +10,7 @@ import { fromFileUrl, join } from '@std/path';
 import { loadCollectionData } from '../../apps/site/lib/content.ts';
 import { blogCollection, prepareBlogPosts } from '../../apps/site/lib/blog.ts';
 import { scanSiteRoutes } from '../lib/site-route-scan.ts';
-import {
-  enumeratePublicRoutes,
-  renderRobotsTxt,
-  renderSitemapXml,
-} from '../lib/site-sitemap.ts';
+import { enumeratePublicRoutes, renderRobotsTxt, renderSitemapXml } from '../lib/site-sitemap.ts';
 
 export const SITE_DIST = 'apps/site/dist';
 const SITE_ROUTES = 'apps/site/app/routes';

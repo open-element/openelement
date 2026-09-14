@@ -9,6 +9,7 @@
  */
 
 import {
+  DATA_OE_LIGHT,
   partAnchorEndMarker,
   partAnchorMarker,
   type PartProgramV1,
@@ -16,7 +17,6 @@ import {
   type ProgramElementNode,
   type ProgramTreeNode,
   type ProgramWhenPart,
-  DATA_OE_LIGHT,
   STATIC_STYLES_MARKER,
 } from '../../protocol/part-program.ts';
 import {

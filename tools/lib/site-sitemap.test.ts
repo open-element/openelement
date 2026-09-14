@@ -1,10 +1,6 @@
 /** Route-catalog sitemap enumeration unit tests (Beta.2.2, #1327). */
 import { assert, assertEquals } from '@std/assert';
-import {
-  enumeratePublicRoutes,
-  renderRobotsTxt,
-  renderSitemapXml,
-} from './site-sitemap.ts';
+import { enumeratePublicRoutes, renderRobotsTxt, renderSitemapXml } from './site-sitemap.ts';
 
 const LOCALES = ['en', 'zh'] as const;
 

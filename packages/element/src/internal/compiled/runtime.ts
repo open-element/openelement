@@ -20,6 +20,7 @@ import { escapeAttr, VOID_TAGS } from '../core/html-escape.ts';
 import { escapeText } from './escape-text.ts';
 import { noteCompiledProgramActivated } from '../signal/selection.ts';
 import {
+  DATA_OE_LIGHT,
   partAnchorEndMarker,
   partAnchorMarker,
   type PartProgramV1,
@@ -36,7 +37,6 @@ import {
   type ProgramTextPart,
   type ProgramTreeNode,
   type ProgramWhenPart,
-  DATA_OE_LIGHT,
   STATIC_STYLES_MARKER,
 } from '../protocol/part-program.ts';
 import { normalizePartProgram, type RuntimeProgramIR } from './runtime-program.ts';
