@@ -18,7 +18,7 @@ Element 将 JSX 编写的 Custom Element 编译为 Part Program，并统一用�
 - `apps/site`：官方产品表面（文档站点）。
 - `apps/saas`：第一方核心消费者产品与标准消费形态。
 
-Element 与 Router 是公共框架核心；UI、Site、SaaS 不扩大其稳定 API 承诺，但全部由本仓库拥有和维护。历史快照继续由 Git 标签保存。
+Element 与 Router 是公共框架核心。UI 是 experimental 产品；Site 是官方产品表面；SaaS 是独立治理的第一方应用，不属于本次 Alpha 仓库候选。它们都不扩大 Element/Router 的稳定 API 承诺，但全部由本仓库拥有和维护。历史快照继续由 Git 标签保存。
 
 ## 开发
 

@@ -60,9 +60,11 @@ reference site (`apps/site/app/islands/open-layout.tsx`).
 
 ## `open-code-block` syntax highlighting
 
-`open-code-block` ships the copy button and Prism token styles, but **no
-tokenizer** — the package is dependency-free and cross-runtime, so the host
-page must load Prism (core plus each language grammar) as a global script.
+`open-code-block` ships the copy button and Prism token styles, but bundles
+**no tokenizer and no highlighting runtime** — the component itself stays
+cross-runtime, so the host page must load Prism (core plus each language
+grammar) as a global script. (The package as a whole depends on
+`@openelement/element`; this note is scoped to the code block.)
 On hydration the component looks for `globalThis.Prism`, tokenizes the
 slotted `<pre><code class="language-x">`, and swaps in the highlighted copy
 inside the shadow root. Without Prism it renders plain text with the copy

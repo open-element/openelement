@@ -18,7 +18,7 @@ deno task dev
 
 The `@alpha` dist-tag tracks the 1.0 prerelease line. `--minimum-dependency-age 0` keeps the bootstrap usable during the first day after a compatible patch is published, when Deno's default `minimumDependencyAge` would otherwise refuse it.
 
-> Deno 2.8+ is required — the generated starter writes the `minimumDependencyAge` config key, which older Deno versions do not understand.
+> Deno 2.9+ is required (the Alpha baseline is verified on Deno 2.9). The generated starter writes the `minimumDependencyAge` config key, which older Deno versions do not understand.
 
 ## Explore
 

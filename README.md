@@ -17,7 +17,7 @@ The source tree is `1.0.0-alpha.1`, a new public baseline for Element and Router
 - `apps/site` — the official product surface (documentation site).
 - `apps/saas` — the first-party core consumer product and standard consumption shape.
 
-Element and Router are the public framework core; UI, Site, and SaaS do not extend their stable API promise, but all are owned and maintained by this repository. Historical snapshots remain available through Git tags.
+Element and Router are the public framework core. UI is an experimental product; Site is the official product surface; SaaS is an independent first-party application governed separately and is not part of the Alpha repository candidate. None extends the Element/Router stable API promise, and all are owned and maintained by this repository. Historical snapshots remain available through Git tags.
 
 ## Development
 

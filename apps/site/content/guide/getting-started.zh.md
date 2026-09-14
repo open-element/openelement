@@ -18,7 +18,7 @@ deno task dev
 
 `@alpha` dist-tag 跟踪 1.0 预发布线。`--minimum-dependency-age 0` 让新兼容补丁发布后的首日仍可正常创建项目；否则 Deno 默认的 `minimumDependencyAge` 会拒绝发布未满约 24 小时的包。
 
-> 需要 Deno 2.8+——生成的 starter 会写入 `minimumDependencyAge` 配置键，更旧的 Deno 版本不认识该键。
+> 需要 Deno 2.9+（Alpha 基线在 Deno 2.9 上验证）。生成的 starter 会写入 `minimumDependencyAge` 配置键，更旧的 Deno 版本不认识该键。
 
 ## 探索
 

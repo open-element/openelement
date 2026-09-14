@@ -44,7 +44,7 @@ lines and no migration path from 0.x is offered: new projects start from
   ```
 
   `@alpha` tracks the 1.0 prerelease line; a versionless install resolves the
-  stable 0.43 line. Deno 2.8+ is required.
+  stable 0.43 line. Deno 2.9+ is required.
 - **Known limitations**: Alpha APIs may still change. `@openelement/ui` is
   experimental and outside the stable API promise. Hosted/deployed SaaS
   qualification, production SMTP, and real scan-engine qualification are

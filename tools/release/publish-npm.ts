@@ -57,6 +57,9 @@ const REPOSITORY = {
 };
 
 const KEYWORDS = ['openelement', 'web-components', 'ssg', 'framework', 'deno'];
+const PACKAGE_KEYWORDS: Record<string, string[]> = {
+  '@openelement/ui': [...KEYWORDS, 'experimental'],
+};
 const HOMEPAGE = 'https://openelement.org';
 const BUGS = 'https://github.com/open-element/openelement/issues';
 const PACKAGE_DESCRIPTIONS: Record<string, string> = {
@@ -64,7 +67,8 @@ const PACKAGE_DESCRIPTIONS: Record<string, string> = {
     'Routing, application runtime, and lifecycle tooling for the OpenElement framework.',
   '@openelement/create': 'Project generator for the OpenElement Web Components framework.',
   '@openelement/element': 'Custom element base class and authoring APIs for OpenElement.',
-  '@openelement/ui': 'Reference Web Components and UI primitives built on the OpenElement runtime.',
+  '@openelement/ui':
+    'Experimental reference Web Components and UI primitives built on the OpenElement runtime.',
 };
 
 const CREATE_BIN = {
@@ -471,7 +475,7 @@ function applyPackageJsonOverrides(
   pkgJson.bugs = BUGS;
   pkgJson.license = 'MIT';
   pkgJson.description = PACKAGE_DESCRIPTIONS[pkg.name];
-  pkgJson.keywords = KEYWORDS;
+  pkgJson.keywords = PACKAGE_KEYWORDS[pkg.name] ?? KEYWORDS;
   if (pkg.name === '@openelement/create') {
     pkgJson.bin = CREATE_BIN;
   }
