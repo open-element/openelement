@@ -7,18 +7,20 @@ import {
   findAbsoluteFileUrlPayload,
   findRawTypeScriptPayload,
   npmPublishTag,
-  NpmViewError,
   packArgs,
   packRelativePath,
-  prereleaseTag,
-  previousPrerelease,
   publishPackage,
   type PublishPackageIo,
   publishRelease,
   type PublishReleaseIo,
   type ReleaseReceipt,
-  verifyNpmRelease,
 } from './publish-npm.ts';
+import {
+  NpmViewError,
+  prereleaseTag,
+  previousPrerelease,
+  verifyNpmRelease,
+} from './npm-release-verifier.ts';
 import type { PackageInfo } from '../lib/package-graph.ts';
 
 function pkg(name: string, version: string): PackageInfo {
