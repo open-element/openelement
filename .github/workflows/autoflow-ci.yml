@@ -102,7 +102,7 @@ jobs:
           probe "video + Origin (h2)" -H "Origin: http://127.0.0.1:4174" "$URL"
           probe "video + Origin + Range (h2)" -H "Origin: http://127.0.0.1:4174" -H "Range: bytes=0-" "$URL"
           probe "video without Origin (h2)" "$URL"
-          probe "video Chromium UA (h2)" -A "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36" "$URL"
+          probe "video Chromium UA (h2)" -H "User-Agent: Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36" "$URL"
           probe "video cache-bust query (h2)" "$URL?probe=$RANDOM"
           probe "video HEAD (h2)" -I "$URL"
           probe "frame + Origin (h2)" -H "Origin: http://127.0.0.1:4174" "$FRAME"
