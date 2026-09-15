@@ -72,7 +72,15 @@ export function classifyClauses(text: string): string[] {
 
 /** Parentheticals do not change the relation; drop them before scanning. */
 function stripParentheticals(clause: string): string {
-  return clause.replace(/\([^)]*\)|（[^）]*）/gu, ' ');
+  const innermost = /\([^()]*\)|（[^（）]*）/gu;
+  // Iterate to a fixpoint so nested groups ( "((a))" ) cannot leave one
+  // half-stripped level behind and shift the negation window.
+  let stripped = clause;
+  for (let previous = ''; previous !== stripped;) {
+    previous = stripped;
+    stripped = stripped.replace(innermost, ' ');
+  }
+  return stripped;
 }
 
 function countNegations(segment: string): number {

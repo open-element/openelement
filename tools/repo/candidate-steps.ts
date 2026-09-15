@@ -85,7 +85,10 @@ export function normalizeArgv(argv: readonly string[]): string[] {
   return [executable, ...argv.slice(1)];
 }
 
-function exact(expected: readonly string[]): StepContract['match'] {
+/** Context-free argv matcher; callers that need the context wrap it. */
+type ArgvMatcher = (argv: readonly string[]) => string | null;
+
+function exact(expected: readonly string[]): ArgvMatcher {
   return (argv) => {
     const normalized = normalizeArgv(argv);
     if (normalized.length !== expected.length) {
@@ -140,7 +143,7 @@ function cleanProof(phase: 'before' | 'after', cwd: EvidenceRole): StepContract 
     cwd,
     match: (argv, context) => {
       const expected = cleanProofArgv(context.sha, context.tree, phase);
-      return exact(expected)(argv, context);
+      return exact(expected)(argv);
     },
   };
 }
@@ -186,10 +189,7 @@ export const FRESH_CLONE_STEPS: readonly StepContract[] = [
     name: 'clone',
     cwd: EVIDENCE_ROLES.temp,
     match: (argv) =>
-      exact(['git', 'clone', '--no-hardlinks', EVIDENCE_ROLES.source, EVIDENCE_ROLES.clone])(argv, {
-        sha: '',
-        tree: '',
-      }),
+      exact(['git', 'clone', '--no-hardlinks', EVIDENCE_ROLES.source, EVIDENCE_ROLES.clone])(argv),
   },
   {
     name: 'git-checkout',

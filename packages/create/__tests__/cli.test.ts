@@ -155,7 +155,22 @@ Deno.test('generated starter carries no JSR bridge', async () => {
     assertFalse(value.includes('@jsr/'), `import map must not reference @jsr: ${value}`);
     assertFalse(value.startsWith('jsr:'), `import map must not use jsr: ${value}`);
   }
-  assertFalse(JSON.stringify(templates).includes('npm.jsr.io'));
+  // Parse, don't substring: a bridge might hide behind a proxy subdomain.
+  const serialized = JSON.stringify(templates);
+  const templateUrls = serialized.match(/https?:\/\/[^"'\\\s]+/g) ?? [];
+  for (const url of templateUrls) {
+    const host = new URL(url).hostname;
+    assertFalse(
+      host === 'jsr.io' || host.endsWith('.jsr.io'),
+      `starter must not route through the JSR registry: ${url}`,
+    );
+  }
+  // Host-boundary match, so "notnpm.jsr.io.evil" cannot pass as a non-match.
+  assertFalse(
+    /(^|[^a-z0-9.-])npm\.jsr\.io([^a-z0-9.-]|$)/i.test(serialized),
+    'starter must not mention the JSR npm proxy',
+  );
+  assertFalse(/@jsr\//.test(serialized), 'starter must not use @jsr scopes');
 });
 
 Deno.test('generated starter pins every OpenElement import to the exact release', async () => {

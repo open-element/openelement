@@ -453,8 +453,19 @@ export async function packPackage(
     for (const [subpath, conditions] of Object.entries(packedExports)) {
       const types = (conditions as { types?: unknown } | null)?.types;
       if (typeof types !== 'string' || !types.startsWith('./')) {
+        // deno pack drops the types condition when it could not generate a
+        // declaration for that entry; print what pack said so a platform-only
+        // failure (e.g. Windows path limits) is diagnosable from CI logs.
+        const packSaid = [
+          ...packSummary.typeWarnings.map((warning) => warning.raw),
+          ...packSummary.unexpectedWarnings,
+        ];
         throw new Error(
-          `[npm] ${pkg.name}: export '${subpath}' has no native types condition (failing closed).`,
+          `[npm] ${pkg.name}: export '${subpath}' has no native types condition (failing closed).` +
+            `\npack diagnostics: errors=${packSummary.errors.length} ` +
+            `typeWarnings=${packSummary.typeWarnings.length} ` +
+            `unexpected=${packSummary.unexpectedWarnings.length}` +
+            `\n${packSaid.slice(0, 10).join('\n') || '(pack reported no warning)'}`,
         );
       }
       try {
