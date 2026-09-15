@@ -462,6 +462,7 @@ export async function packPackage(
         ];
         throw new Error(
           `[npm] ${pkg.name}: export '${subpath}' has no native types condition (failing closed).` +
+            `\npacked conditions: ${JSON.stringify(conditions)}` +
             `\npack diagnostics: errors=${packSummary.errors.length} ` +
             `typeWarnings=${packSummary.typeWarnings.length} ` +
             `unexpected=${packSummary.unexpectedWarnings.length}` +

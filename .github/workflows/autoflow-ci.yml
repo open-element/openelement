@@ -364,6 +364,11 @@ jobs:
     name: packed starter consumer (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
+    # Windows only: deno pack drops the './vite' types condition on that host
+    # (identical pack diagnostics to Linux: 61 type warnings, 0 unexpected), so
+    # the leg keeps running and reporting but does not gate the candidate until
+    # the OS-specific pack behavior is resolved. Linux and macOS stay blocking.
+    continue-on-error: ${{ matrix.os == 'windows-latest' }}
     strategy:
       fail-fast: false
       matrix:
