@@ -81,6 +81,30 @@ jobs:
         env:
           CANDIDATE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: deno task --cwd tools/repo candidate:evidence:fast
+      # The site's media lives on the R2 custom domain, so the runner's view of
+      # that edge is part of the candidate surface. Non-blocking: this only
+      # prints what the runner's egress POP actually sees (the e2e suite is the
+      # gate), which is how an edge-only CORS regression gets localised.
+      - name: External asset origin probe (diagnostic, never gates)
+        continue-on-error: true
+        run: |
+          URL=https://assets.openelement.org/site/v1/dragon/dragon-idle.mp4
+          FRAME=https://assets.openelement.org/site/v1/dragon/frames/f27.webp
+          probe() {
+            label="$1"; shift
+            echo "--- $label ---"
+            curl -sS -D - -o /dev/null --max-time 20 "$@" \
+              | tr -d '\r' \
+              | grep -iE '^(HTTP/|access-control-allow-origin|cf-cache-status|cf-ray|vary|age|content-type)' \
+              || echo "(no response)"
+          }
+          probe "video + Origin (h2)" -H "Origin: http://127.0.0.1:4174" "$URL"
+          probe "video + Origin + Range (h2)" -H "Origin: http://127.0.0.1:4174" -H "Range: bytes=0-" "$URL"
+          probe "video without Origin (h2)" "$URL"
+          probe "frame + Origin (h2)" -H "Origin: http://127.0.0.1:4174" "$FRAME"
+          probe "video + Origin (h3, may be unsupported)" --http3 -H "Origin: http://127.0.0.1:4174" "$URL"
+          echo "curl: $(curl --version | head -n 1)"
+          echo "resolver: $(getent hosts assets.openelement.org | head -n 3 | tr '\n' ' ')"
       - name: Upload fast-checks evidence
         if: always()
         # v7.0.1
