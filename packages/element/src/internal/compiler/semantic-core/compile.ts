@@ -698,6 +698,22 @@ class Lowering {
       const field = this.fieldAccess(expr);
       if (field) {
         if (staticOnly) this.fail(prop, 'OEC9012', 'Region branches must be fully static');
+        // Security sinks are classified before host lowering: an innerHTML sink
+        // is the same TrustedHtml boundary on an intrinsic element and on a
+        // custom-element host, so the custom-host prop lowering below must not
+        // be able to skip the capability admission.
+        if (name === 'innerHTML') {
+          this.lowerDynamicAttribute(
+            name,
+            field,
+            tag,
+            path,
+            prop,
+            elementId,
+            trustedHtmlCapability,
+          );
+          continue;
+        }
         if (isCustomHost) {
           // Host attributes cross the SSR boundary as host attributes: lower
           // every dynamic host attribute as a prop Part so the serializer

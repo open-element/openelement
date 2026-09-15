@@ -852,6 +852,50 @@ Deno.test('compiled-element alpha.9 - trusted HTML sink admission matrix', async
     assertStringIncludes(String(thrown), 'OEC9026');
   };
 
+  await t.step('accepts marker + Object + TrustedHtml initializer on a custom-element host', () => {
+    // Same boundary as an intrinsic element: the custom-host prop lowering must
+    // not skip innerHTML capability admission.
+    const result = compileElementProgram(
+      sourceFor(
+        '<some-custom-element innerHTML={this.bodyHtml} trustedHtml></some-custom-element>',
+      ),
+      '/project/app/components/alpha9-trusted-html.tsx',
+    );
+    const htmlPart = result.program.parts.find((part: { k: string }) => part.k === 'html') as
+      | { k: string; signal?: string }
+      | undefined;
+    assert(htmlPart, 'custom host innerHTML must lower as a security-classified html sink');
+    assertEquals(htmlPart?.signal, 'bodyHtml');
+  });
+
+  await t.step('rejects a custom-element host innerHTML sink without the marker', () => {
+    expectOec9026(
+      'alpha9-custom-host-missing-marker',
+      sourceFor('<some-custom-element innerHTML={this.bodyHtml}></some-custom-element>'),
+    );
+  });
+
+  await t.step('rejects a custom-element host innerHTML sink with trustedHtml={false}', () => {
+    expectOec9026(
+      'alpha9-custom-host-false-marker',
+      sourceFor(
+        '<some-custom-element innerHTML={this.bodyHtml} trustedHtml={false}></some-custom-element>',
+      ),
+    );
+  });
+
+  await t.step('rejects a string-typed custom-element host innerHTML sink', () => {
+    const stringField =
+      "  @property({ type: String, reflect: false, attribute: false }) bodyHtml: string = '';";
+    expectOec9026(
+      'alpha9-custom-host-string-sink',
+      sourceFor(
+        '<some-custom-element innerHTML={this.bodyHtml} trustedHtml></some-custom-element>',
+        stringField,
+      ),
+    );
+  });
+
   await t.step('rejects an innerHTML sink without the marker', () => {
     expectOec9026(
       'alpha9-missing-marker',
