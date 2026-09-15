@@ -43,6 +43,13 @@ Deno.test('product classification: SaaS-core clauses fail in English and Chinese
     'SaaS is the standard consumption shape.',
     'apps/saas is the core concept of the platform.',
     'The core product of this repository is SaaS.',
+    'SaaS is not outside the framework core.',
+    'SaaS is not independent; it is a core product.',
+    'SaaS is not independent and is a core product.',
+    'SaaS 不是独立应用，而是框架核心。',
+    'SaaS 不属于独立产品，它是核心产品。',
+    'SaaS is not merely a core product.',
+    'SaaS is not a public package, but the standard consumption shape.',
   ];
   for (const phrase of falseStatements) {
     const failures = scanProductClassification([{ path: 'probe.md', text: phrase }]);
@@ -67,6 +74,11 @@ Deno.test('product classification: legal statements pass', () => {
     'SaaS is excluded from the framework core.',
     'SaaS is outside the framework core and governed separately.',
     'The framework core (Element and Router) does not include SaaS.',
+    'SaaS is not part of the framework core.',
+    'SaaS is independent of the framework core.',
+    'SaaS is no longer a core product.',
+    'SaaS is not a core product or a standard consumption shape.',
+    'SaaS is excluded from the framework core and from the stable API promise.',
   ];
   for (const phrase of legal) {
     const failures = scanProductClassification([{ path: 'probe.md', text: phrase }]);
