@@ -75,6 +75,10 @@ jobs:
           tar -xzf /tmp/gitleaks.tar.gz -C /tmp gitleaks
           /tmp/gitleaks git --redact --verbose .
       - uses: ./.github/actions/setup-deno-workspace
+      - name: Install Playwright browsers for evidence metadata
+        # Every evidence producer records the exact three browser revisions.
+        # Fast checks do not launch them, so system dependencies are unnecessary.
+        run: ./node_modules/.bin/playwright install chromium firefox webkit
       # ADR-0144 / #1229 (B2.7): generic toolchain gates are pinned OSS tool
       # steps, not AutoFlow gates.
       - name: Fast checks (fmt, lint, markdown, typecheck)

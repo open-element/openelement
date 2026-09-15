@@ -122,6 +122,16 @@ Deno.test('ci contract: execution jobs are separate from evidence aggregation', 
   );
 });
 
+Deno.test('ci contract: every evidence producer installs the recorded browsers', () => {
+  for (const job of ['fast-checks', 'source-matrix', 'packed-consumers', 'fresh-clone']) {
+    const block = jobBlock(workflow, job);
+    assert(
+      /playwright install[^\n]*chromium[^\n]*firefox[^\n]*webkit/.test(block),
+      `${job} must install chromium+firefox+webkit before recording toolVersions`,
+    );
+  }
+});
+
 Deno.test('ci contract: candidate evidence bundle ships JSON and every log/manifest', () => {
   const aggregate = jobBlock(workflow, 'autoflow-ci');
   assert(
