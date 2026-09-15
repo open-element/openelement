@@ -87,11 +87,13 @@ Deno.test('product classification: legal statements pass', () => {
   }
 });
 
-Deno.test('product classification: parenthetical stripping handles nesting and stray brackets', () => {
-  // Balanced groups (nested included) collapse to one space.
-  assertEquals(stripParentheticals('((a))'), ' ');
-  assertEquals(stripParentheticals('a (b (c) d) e'), 'a   e');
-  assertEquals(stripParentheticals('SaaS （独立治理） 是核心产品'), 'SaaS   是核心产品');
+Deno.test('product classification: parenthetical masking keeps positions and stray brackets', () => {
+  const collapsed = (text: string) => text.replace(/\s+/g, ' ').trim();
+  // Balanced groups (nested included) are masked out, positions preserved.
+  assertEquals(collapsed(stripParentheticals('((a))')), '');
+  assertEquals(collapsed(stripParentheticals('a (b (c) d) e')), 'a e');
+  assertEquals(collapsed(stripParentheticals('SaaS （独立治理） 是核心产品')), 'SaaS 是核心产品');
+  assertEquals(stripParentheticals('a (b) c').length, 'a (b) c'.length);
   // Unbalanced brackets are prose, not a group boundary.
   assertEquals(stripParentheticals('a (b'), 'a (b');
   assertEquals(stripParentheticals('a b) c'), 'a b) c');

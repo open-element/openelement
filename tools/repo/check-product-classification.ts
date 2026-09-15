@@ -71,38 +71,33 @@ export function classifyClauses(text: string): string[] {
 }
 
 /**
- * Parentheticals do not change the relation; drop them before scanning.
+ * Parentheticals do not change the relation; mask them before scanning.
  *
- * Depth-tracking scan, not a bracket-stripping regex: balanced groups
- * (including nested ones) collapse to a single space, while unbalanced
- * brackets stay literal so malformed prose reads as written instead of
+ * Two passes, because only groups that actually close are parentheticals:
+ * pass one pairs brackets (CJK pairs too), pass two blanks out the paired
+ * spans so positions — and therefore negation windows — survive. Unbalanced
+ * brackets stay literal, so malformed prose reads as written instead of
  * silently losing the rest of the clause.
  */
 export function stripParentheticals(clause: string): string {
-  const out: string[] = [];
+  const chars = [...clause];
+  const masked = [...chars];
   const open: Array<{ index: number; char: string }> = [];
-  for (const char of clause) {
+  for (let index = 0; index < chars.length; index++) {
+    const char = chars[index];
     if (char === '(' || char === '（') {
-      open.push({ index: out.length, char });
-      out.push(char);
+      open.push({ index, char });
       continue;
     }
-    if (char === ')' || char === '）') {
-      const top = open.at(-1);
-      const pairs = (top?.char === '(' && char === ')') ||
-        (top?.char === '（' && char === '）');
-      if (top && pairs) {
-        open.pop();
-        out.length = top.index;
-        out.push(' ');
-        continue;
-      }
-      out.push(char);
-      continue;
-    }
-    out.push(char);
+    if (char !== ')' && char !== '）') continue;
+    const top = open.at(-1);
+    const pairs = (top?.char === '(' && char === ')') ||
+      (top?.char === '（' && char === '）');
+    if (!top || !pairs) continue;
+    open.pop();
+    for (let span = top.index; span <= index; span++) masked[span] = ' ';
   }
-  return out.join('');
+  return masked.join('');
 }
 
 function countNegations(segment: string): number {
