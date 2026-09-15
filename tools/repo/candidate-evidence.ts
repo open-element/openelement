@@ -22,10 +22,10 @@
  * All commands run with stdin closed (non-interactive invariant).
  */
 
-import { basename, dirname, join, relative } from '@std/path';
+import { dirname, join, relative } from '@std/path';
 import { readPackages } from '../lib/package-graph.ts';
 import { auditSiteE2e, type SiteE2eResult } from './site-e2e-result.ts';
-import { tarballPath } from '../lib/npm-tarball.ts';
+import { npmTarballName, tarballPath } from '../lib/npm-tarball.ts';
 import {
   auditFreshCloneIsolation,
   auditStep,
@@ -260,6 +260,222 @@ export function packedRollupFromLog(logText: string): {
 /** Partial sidecar shape as embedded in the aggregated evidence bundle. */
 export type SiteE2eRollup = Partial<SiteE2eResult>;
 
+interface TarballEvidencePackage {
+  name: string;
+  version: string;
+}
+
+/** Copy byte-verified release archives into a self-contained evidence tree. */
+export async function stageTarballEvidence<T extends TarballEvidencePackage>(
+  packages: readonly T[],
+  sourcePath: (pkg: T) => string,
+  destinationRoot: string,
+  expectedHashes?: Readonly<Record<string, string>>,
+): Promise<{ hashes: Record<string, string>; files: Record<string, string> }> {
+  const hashes: Record<string, string> = {};
+  const files: Record<string, string> = {};
+  await Deno.mkdir(join(destinationRoot, 'tarballs'), { recursive: true });
+  for (const pkg of packages) {
+    const source = sourcePath(pkg);
+    const bytes = await Deno.readFile(source).catch(() => null);
+    if (!bytes) throw new Error(`Candidate tarball missing for ${pkg.name}: ${source}`);
+    const hash = await sha256Bytes(bytes);
+    const expected = expectedHashes?.[pkg.name];
+    if (expectedHashes && expected !== hash) {
+      throw new Error(
+        `Candidate tarball hash mismatch for ${pkg.name}: expected ${expected}, got ${hash}`,
+      );
+    }
+    const relativeArchive = `tarballs/${npmTarballName(pkg)}`;
+    await Deno.writeFile(join(destinationRoot, relativeArchive), bytes);
+    hashes[pkg.name] = hash;
+    files[pkg.name] = relativeArchive;
+  }
+  return { hashes, files };
+}
+
+/**
+ * Job-level packed tarball contract (producer ownership). Validates the
+ * packed extras shape (exact package set, safe paths, filename binding) and,
+ * when `checkBytes` is true, the carried archive bytes (existence, sha256,
+ * package name/version). Reuses auditTarballPackage; no second tar parser.
+ */
+export async function collectPackedTarballFailures(
+  extras: unknown,
+  options: {
+    read: (path: string) => Promise<Uint8Array | null>;
+    checkBytes?: boolean;
+  },
+): Promise<string[]> {
+  const failures: string[] = [];
+  if (!isRecord(extras)) return ['packed: extras must be an object'];
+  const checkBytes = options.checkBytes ?? true;
+  const version = extras.packageVersion;
+  if (typeof version !== 'string' || !PACKAGE_VERSION_PATTERN.test(version)) {
+    failures.push(
+      `packed packageVersion must be an x.y.z(-label) string, got ${JSON.stringify(version)}`,
+    );
+  }
+  const tarballs = isRecord(extras.tarballs) ? extras.tarballs as Record<string, unknown> : {};
+  const tarballKeys = Object.keys(tarballs).sort();
+  const expectedKeys = [...REQUIRED_PACKAGE_TARBALLS].sort();
+  if (tarballKeys.join(',') !== expectedKeys.join(',')) {
+    failures.push(
+      `packed tarballs must contain exactly ${expectedKeys.join(', ')}; found ${
+        tarballKeys.join(', ') || 'none'
+      }`,
+    );
+  }
+  for (const name of REQUIRED_PACKAGE_TARBALLS) {
+    const hash = tarballs[name];
+    if (typeof hash !== 'string' || !SHA256_HEX.test(hash)) {
+      failures.push(`packed tarball ${name}: missing or malformed sha256`);
+    }
+  }
+  const files = isRecord(extras.tarballFiles) ? extras.tarballFiles as Record<string, unknown> : {};
+  const fileKeys = Object.keys(files).sort();
+  if (fileKeys.join(',') !== expectedKeys.join(',')) {
+    failures.push(
+      `packed tarballFiles must map exactly ${expectedKeys.join(', ')}; found ${
+        fileKeys.join(', ') || 'none'
+      }`,
+    );
+  }
+  const seenPaths = new Set<string>();
+  for (const name of REQUIRED_PACKAGE_TARBALLS) {
+    const path = files[name];
+    const pathFailures = auditSafeRelativePath(path);
+    if (pathFailures.length > 0) {
+      failures.push(`packed tarballFiles.${name}: ${pathFailures.join('; ')}`);
+      continue;
+    }
+    const relativePath = path as string;
+    if (!relativePath.startsWith('tarballs/') || !relativePath.endsWith('.tgz')) {
+      failures.push(
+        `packed tarballFiles.${name}: must be a tarballs/*.tgz path, got ${relativePath}`,
+      );
+      continue;
+    }
+    if (typeof version === 'string' && PACKAGE_VERSION_PATTERN.test(version)) {
+      const expectedPath = `tarballs/${npmTarballName({ name, version })}`;
+      if (relativePath !== expectedPath) {
+        failures.push(
+          `packed tarballFiles.${name}: must be ${expectedPath}, got ${relativePath}`,
+        );
+        continue;
+      }
+    }
+    if (seenPaths.has(relativePath)) {
+      failures.push(`packed tarballFiles.${name}: duplicate archive path ${relativePath}`);
+      continue;
+    }
+    seenPaths.add(relativePath);
+    if (!checkBytes) continue;
+    const bytes = await options.read(relativePath);
+    if (!bytes) {
+      failures.push(`packed tarball ${name}: archive missing at ${relativePath}`);
+      continue;
+    }
+    const actual = await sha256Bytes(bytes);
+    if (tarballs[name] !== actual) {
+      failures.push(
+        `packed tarball ${name}: archive sha256 ${actual} != recorded ${tarballs[name]}`,
+      );
+    }
+    if (typeof version === 'string' && PACKAGE_VERSION_PATTERN.test(version)) {
+      failures.push(
+        ...(await auditTarballPackage(bytes, name, version)).map((failure) =>
+          `packed tarball ${name}: ${failure}`
+        ),
+      );
+    }
+  }
+  return failures;
+}
+
+/**
+ * Aggregator composition (aggregator ownership). Carries the packed-evidence
+ * archives into the final bundle using only the downloaded evidence: no
+ * readPackages(), no tarballPath(), no re-pack, no producer workspace paths.
+ */
+export async function carryPackedTarballs(
+  extras: unknown,
+  readPacked: (path: string) => Promise<Uint8Array | null>,
+  outDir: string,
+): Promise<
+  { tarballs: Record<string, string>; tarballFiles: Record<string, string>; packageVersion: string }
+> {
+  if (!isRecord(extras)) throw new Error('packed job: extras must be an object');
+  const packageVersion = extras.packageVersion;
+  const recorded = isRecord(extras.tarballs) ? extras.tarballs as Record<string, string> : {};
+  const carried = isRecord(extras.tarballFiles)
+    ? extras.tarballFiles as Record<string, string>
+    : {};
+  const expectedKeys = [...REQUIRED_PACKAGE_TARBALLS].sort();
+  if (Object.keys(recorded).sort().join(',') !== expectedKeys.join(',')) {
+    throw new Error(
+      `packed job: tarballs must contain exactly ${expectedKeys.join(', ')}; found ${
+        Object.keys(recorded).sort().join(', ') || 'none'
+      }`,
+    );
+  }
+  if (Object.keys(carried).sort().join(',') !== expectedKeys.join(',')) {
+    throw new Error(
+      `packed job: tarballFiles must map exactly ${expectedKeys.join(', ')}; found ${
+        Object.keys(carried).sort().join(', ') || 'none'
+      }`,
+    );
+  }
+  if (typeof packageVersion !== 'string' || !PACKAGE_VERSION_PATTERN.test(packageVersion)) {
+    throw new Error(
+      `packed job: packageVersion must be an x.y.z(-label) string, got ${
+        JSON.stringify(packageVersion)
+      }`,
+    );
+  }
+  const tarballFiles: Record<string, string> = {};
+  await Deno.mkdir(join(outDir, 'tarballs'), { recursive: true });
+  for (const packageName of REQUIRED_PACKAGE_TARBALLS) {
+    const sourcePath = carried[packageName];
+    if (
+      typeof sourcePath !== 'string' || sourcePath === '' || sourcePath.startsWith('/') ||
+      sourcePath.includes('\\') ||
+      sourcePath.split('/').some((segment) => segment === '' || segment === '.' || segment === '..')
+    ) {
+      throw new Error(
+        `packed job: tarballFiles.${packageName} path must be a safe relative POSIX path, got ${
+          JSON.stringify(sourcePath)
+        }`,
+      );
+    }
+    if (!sourcePath.startsWith('tarballs/') || !sourcePath.endsWith('.tgz')) {
+      throw new Error(
+        `packed job: tarballFiles.${packageName} must be a tarballs/*.tgz path, got ${sourcePath}`,
+      );
+    }
+    const bytes = await readPacked(sourcePath);
+    if (!bytes) {
+      throw new Error(`packed tarball missing for ${packageName}: ${sourcePath}`);
+    }
+    const actualHash = await sha256Bytes(bytes);
+    if (actualHash !== recorded[packageName]) {
+      throw new Error(
+        `packed tarball hash mismatch for ${packageName}: expected ${
+          recorded[packageName]
+        }, got ${actualHash}`,
+      );
+    }
+    const fileName = sourcePath.split('/').at(-1) as string;
+    const finalRelativePath = `tarballs/${fileName}`;
+    if (Object.values(tarballFiles).includes(finalRelativePath)) {
+      throw new Error(`packed job: duplicate archive path ${finalRelativePath}`);
+    }
+    await Deno.writeFile(join(outDir, finalRelativePath), bytes);
+    tarballFiles[packageName] = finalRelativePath;
+  }
+  return { tarballs: { ...recorded }, tarballFiles, packageVersion };
+}
+
 async function packExtras(
   packedSteps: StepResult[],
   outDir: string,
@@ -287,15 +503,41 @@ async function packExtras(
       `publish dry-run printed ${packSummaries.length} pack summaries, expected 4 (one per package).`,
     );
   }
-  const packages = await readPackages();
-  const tarballs: Record<string, string> = {};
-  for (const pkg of packages) {
-    const bytes = await Deno.readFile(tarballPath(pkg)).catch(() => null);
-    if (!bytes) throw new Error(`Candidate tarball missing for ${pkg.name}: ${tarballPath(pkg)}`);
-    tarballs[pkg.name] = await sha256Bytes(bytes);
+  const packages = (await readPackages()).filter((pkg) =>
+    REQUIRED_PACKAGE_TARBALLS.includes(pkg.name as (typeof REQUIRED_PACKAGE_TARBALLS)[number])
+  );
+  const versions = new Set(packages.map((pkg) => pkg.version));
+  if (versions.size !== 1) {
+    throw new Error(
+      `Candidate packages must share one version; found ${
+        [...versions].sort().join(', ') || 'none'
+      }.`,
+    );
+  }
+  const packageVersion = packages[0]?.version ?? '';
+  if (!PACKAGE_VERSION_PATTERN.test(packageVersion)) {
+    throw new Error(`Candidate packageVersion is malformed: ${JSON.stringify(packageVersion)}.`);
+  }
+  const { hashes: tarballs, files: tarballFiles } = await stageTarballEvidence(
+    packages,
+    (pkg) => tarballPath(pkg),
+    outDir,
+  );
+  for (const [label, keys] of [['tarballs', tarballs], ['tarballFiles', tarballFiles]] as const) {
+    const actual = Object.keys(keys).sort();
+    const expected = [...REQUIRED_PACKAGE_TARBALLS].sort();
+    if (actual.join(',') !== expected.join(',')) {
+      throw new Error(
+        `Candidate ${label} must contain exactly ${expected.join(', ')}; found ${
+          actual.join(', ') || 'none'
+        }.`,
+      );
+    }
   }
   return {
+    packageVersion,
     tarballs,
+    tarballFiles,
     packDiagnostics: packSummaries,
     artifactCheck,
     consumers,
@@ -770,6 +1012,16 @@ async function auditJob(
   if (job === 'fresh-clone') {
     const isolation = isRecord(rawJob.extras) ? rawJob.extras.isolation : undefined;
     failures.push(...auditFreshCloneIsolation(isolation).map((failure) => `${job}: ${failure}`));
+  } else if (job === 'packed') {
+    // ponytail: bundle mode checks shape only; final archive bytes are
+    // re-verified against the top-level maps (upgrade: byte-check here too
+    // once packed paths are bundle-relative).
+    failures.push(
+      ...await collectPackedTarballFailures(rawJob.extras, {
+        read: context.read,
+        checkBytes: context.mode === 'job',
+      }),
+    );
   } else if (
     rawJob.extras !== undefined &&
     unknownKeys(rawJob.extras as Record<string, unknown>, []).length > 0
@@ -909,6 +1161,15 @@ async function auditTarballFiles(
   const packedExtras = packedJob && isRecord(packedJob.extras) ? packedJob.extras : undefined;
   if (packedExtras && !deepEqual(packedExtras.tarballs, evidence.tarballs)) {
     failures.push('packed job extras.tarballs must equal the top-level tarballs map');
+  }
+  if (packedExtras && !deepEqual(packedExtras.tarballFiles, evidence.tarballFiles)) {
+    failures.push('packed job extras.tarballFiles must equal the top-level tarballFiles map');
+  }
+  if (
+    packedExtras && typeof version === 'string' && PACKAGE_VERSION_PATTERN.test(version) &&
+    packedExtras.packageVersion !== version
+  ) {
+    failures.push('packed job extras.packageVersion must equal the top-level packageVersion');
   }
   const seenPaths = new Set<string>();
   for (const name of REQUIRED_PACKAGE_TARBALLS) {
@@ -1232,10 +1493,6 @@ async function aggregate(inputDir: string, output: string): Promise<void> {
 
   const packed = jobs.find(({ job }) => job.job === 'packed') as LoadedJob;
   const source = jobs.find(({ job }) => job.job === 'source-matrix') as LoadedJob;
-  const tarballs = (packed.job.extras?.tarballs ?? {}) as Record<string, string>;
-  if (Object.keys(tarballs).length < 4) {
-    throw new Error('packed job: tarball manifest must contain at least four packages');
-  }
   const rollup = {
     artifactCheck: packed.job.extras?.artifactCheck === true,
     consumers: (packed.job.extras?.consumers ?? []) as string[],
@@ -1249,6 +1506,15 @@ async function aggregate(inputDir: string, output: string): Promise<void> {
   const outDir = dirname(output);
   await Deno.mkdir(outDir, { recursive: true });
 
+  // Aggregator owns composition: carry the shipped archives from the
+  // downloaded packed evidence only — never readPackages(), tarballPath(),
+  // or the producer workspace. The validator recomputes the final bytes.
+  const { tarballs, tarballFiles, packageVersion } = await carryPackedTarballs(
+    packed.job.extras,
+    packed.read,
+    outDir,
+  );
+
   const writeManifest = async (name: string, value: unknown): Promise<string> => {
     const path = join(outDir, name);
     await Deno.writeTextFile(path, JSON.stringify(value, null, 2) + '\n');
@@ -1259,18 +1525,6 @@ async function aggregate(inputDir: string, output: string): Promise<void> {
     'pack-diagnostics.json',
     packed.job.extras?.packDiagnostics ?? [],
   );
-
-  // Carry the shipped archives so the validator can recompute their bytes
-  // instead of trusting recorded hash strings.
-  const packages = await readPackages();
-  const tarballFiles: Record<string, string> = {};
-  await Deno.mkdir(join(outDir, 'tarballs'), { recursive: true });
-  for (const pkg of packages) {
-    const relativeArchive = `tarballs/${basename(tarballPath(pkg))}`;
-    tarballFiles[pkg.name] = relativeArchive;
-    await Deno.copyFile(tarballPath(pkg), join(outDir, relativeArchive));
-  }
-  const packageVersion = packages[0]?.version ?? '';
 
   const evidence = {
     schemaVersion: CANDIDATE_EVIDENCE_SCHEMA_VERSION,

@@ -8,16 +8,19 @@
  * and aggregate counts — requiring explicit rejection for each. Every forgery
  * reported by the round-2 review is a regression here.
  */
-import { assert, assertEquals } from '@std/assert';
+import { assert, assertEquals, assertRejects } from '@std/assert';
 import {
+  carryPackedTarballs,
   collectBundleFailures,
   collectJobFailures,
+  collectPackedTarballFailures,
   collectRollupFailures,
   packedRollupFromLog,
   REQUIRED_PACKAGE_TARBALLS,
   REQUIRED_PACKED_CONSUMERS,
   REQUIRED_SITE_BROWSERS,
   REQUIRED_STEPS,
+  stageTarballEvidence,
 } from './candidate-evidence.ts';
 import {
   CANDIDATE_EVIDENCE_SCHEMA_VERSION,
@@ -182,7 +185,9 @@ async function fixture(): Promise<Fixture> {
       ? { isolation: FRESH_CLONE_ISOLATION }
       : job === 'packed'
       ? {
+        packageVersion: VERSION,
         tarballs,
+        tarballFiles,
         packDiagnostics,
         artifactCheck: true,
         consumers: [...REQUIRED_PACKED_CONSUMERS],
@@ -217,6 +222,7 @@ async function fixture(): Promise<Fixture> {
     jobs.push({
       job: jobRecord,
       read: (path) => {
+        if (path in archives) return Promise.resolve(archives[path]);
         const value = logs[`${job}/${path.replace(/^logs\//u, '').replace(/\.log$/u, '')}`];
         return Promise.resolve(value === undefined ? null : encoder.encode(value));
       },
@@ -289,6 +295,231 @@ async function fixture(): Promise<Fixture> {
 function REQUIRED_STEPS_REDUCED(): number {
   return JOB_NAMES.reduce((sum, job) => sum + REQUIRED_STEPS[job].length, 0);
 }
+
+Deno.test('packed tarballs travel with job evidence and are hash-checked on aggregation', async () => {
+  const root = await Deno.makeTempDir();
+  try {
+    const source = `${root}/source`;
+    const recorded = `${root}/recorded`;
+    const aggregated = `${root}/aggregated`;
+    await Deno.mkdir(source);
+    const packages = [{ name: '@openelement/example', version: VERSION }];
+    const archive = `${source}/openelement-example-${VERSION}.tgz`;
+    await Deno.writeFile(archive, encoder.encode('release archive bytes'));
+
+    const first = await stageTarballEvidence(packages, () => archive, recorded);
+    assertEquals(first.files, {
+      '@openelement/example': `tarballs/openelement-example-${VERSION}.tgz`,
+    });
+    const carried = `${recorded}/${first.files['@openelement/example']}`;
+    const second = await stageTarballEvidence(
+      packages,
+      () => carried,
+      aggregated,
+      first.hashes,
+    );
+    assertEquals(second, first);
+    assertEquals(
+      await Deno.readFile(`${aggregated}/${second.files['@openelement/example']}`),
+      encoder.encode('release archive bytes'),
+    );
+
+    await assertRejects(
+      () =>
+        stageTarballEvidence(packages, () => carried, aggregated, {
+          '@openelement/example': `sha256:${'0'.repeat(64)}`,
+        }),
+      Error,
+      'Candidate tarball hash mismatch',
+    );
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+async function validPackedStore(version = VERSION) {
+  const archives = new Map<string, Uint8Array>();
+  const tarballs: Record<string, string> = {};
+  const tarballFiles: Record<string, string> = {};
+  for (const name of REQUIRED_PACKAGE_TARBALLS) {
+    const short = name.replace('@openelement/', '');
+    const path = `tarballs/openelement-${short}-${version}.tgz`;
+    const bytes = await createDeterministicTarGz([{
+      path: 'package/package.json',
+      data: encoder.encode(JSON.stringify({ name, version })),
+    }]);
+    archives.set(path, bytes);
+    tarballFiles[name] = path;
+    tarballs[name] = await sha256BytesLocal(bytes);
+  }
+  const extras = {
+    packageVersion: version,
+    tarballs,
+    tarballFiles,
+    packDiagnostics: [],
+    artifactCheck: true,
+    consumers: [...REQUIRED_PACKED_CONSUMERS],
+  };
+  const read = (path: string) => Promise.resolve(archives.get(path) ?? null);
+  return { extras, archives, read };
+}
+
+Deno.test('valid packed evidence capsule validates and carries without the workspace', async () => {
+  const { extras, archives, read } = await validPackedStore();
+  assertEquals(await collectPackedTarballFailures(extras, { read }), []);
+  const outDir = await Deno.makeTempDir();
+  try {
+    // ponytail: the guard simulates an aggregate runner with no producer
+    // workspace — any packages/* fallback throws (upgrade: prove it with the
+    // real aggregate CLI after deleting packages tgz files).
+    const guarded = (path: string) => {
+      if (!path.startsWith('tarballs/')) throw new Error(`workspace fallback: ${path}`);
+      return read(path);
+    };
+    const carried = await carryPackedTarballs(extras, guarded, outDir);
+    assertEquals(carried.tarballs, extras.tarballs);
+    assertEquals(carried.tarballFiles, extras.tarballFiles);
+    assertEquals(carried.packageVersion, VERSION);
+    for (const path of Object.values(extras.tarballFiles)) {
+      const expected = archives.get(path);
+      assert(expected !== undefined);
+      assertEquals(await Deno.readFile(`${outDir}/${path}`), expected);
+    }
+  } finally {
+    await Deno.remove(outDir, { recursive: true });
+  }
+});
+
+Deno.test('packed validation fails when the archive bytes are missing', async () => {
+  const { extras } = await validPackedStore();
+  const read = (_path: string) => Promise.resolve(null);
+  const failures = await collectPackedTarballFailures(extras, { read });
+  assert(
+    failures.some((failure) => failure.includes('archive missing')),
+    failures.join(' | '),
+  );
+  const outDir = await Deno.makeTempDir();
+  try {
+    await assertRejects(
+      () => carryPackedTarballs(extras, read, outDir),
+      Error,
+      'packed tarball missing',
+    );
+  } finally {
+    await Deno.remove(outDir, { recursive: true });
+  }
+});
+
+Deno.test('packed validation fails when archive bytes are tampered', async () => {
+  const { extras, archives } = await validPackedStore();
+  const victim = REQUIRED_PACKAGE_TARBALLS[0];
+  const path = extras.tarballFiles[victim];
+  const original = archives.get(path);
+  assert(original !== undefined);
+  const tampered = new Uint8Array(original);
+  tampered[0] ^= 0xff;
+  const tamperedRead = (candidate: string) =>
+    Promise.resolve(candidate === path ? tampered : archives.get(candidate) ?? null);
+  const failures = await collectPackedTarballFailures(extras, { read: tamperedRead });
+  assert(
+    failures.some((failure) => failure.includes('sha256')),
+    failures.join(' | '),
+  );
+  const outDir = await Deno.makeTempDir();
+  try {
+    await assertRejects(
+      () => carryPackedTarballs(extras, tamperedRead, outDir),
+      Error,
+      'hash mismatch',
+    );
+  } finally {
+    await Deno.remove(outDir, { recursive: true });
+  }
+});
+
+Deno.test('packed validation rejects every path-traversal vector', async () => {
+  const vectors = [
+    '../../packages/foo.tgz',
+    '../foo.tgz',
+    'tarballs/../foo.tgz',
+    '/tmp/foo.tgz',
+    'C:\\foo.tgz',
+  ];
+  for (const vector of vectors) {
+    const { extras, read } = await validPackedStore();
+    extras.tarballFiles[REQUIRED_PACKAGE_TARBALLS[0]] = vector;
+    const failures = await collectPackedTarballFailures(extras, { read });
+    assert(
+      failures.some((failure) => failure.includes('tarballFiles')),
+      `expected path rejection for ${vector}; got ${failures.join(' | ')}`,
+    );
+  }
+});
+
+Deno.test('packed validation rejects a missing package from the exact set', async () => {
+  const { extras, read } = await validPackedStore();
+  delete extras.tarballs['@openelement/ui'];
+  delete extras.tarballFiles['@openelement/ui'];
+  const failures = await collectPackedTarballFailures(extras, { read });
+  assert(
+    failures.some((failure) => failure.includes('must contain exactly')),
+    failures.join(' | '),
+  );
+  assert(
+    failures.some((failure) => failure.includes('must map exactly')),
+    failures.join(' | '),
+  );
+  const outDir = await Deno.makeTempDir();
+  try {
+    await assertRejects(
+      () => carryPackedTarballs(extras, read, outDir),
+      Error,
+      'must contain exactly',
+    );
+  } finally {
+    await Deno.remove(outDir, { recursive: true });
+  }
+});
+
+Deno.test('packed validation rejects an unknown extra package', async () => {
+  const { extras, read } = await validPackedStore();
+  extras.tarballs['@openelement/fake'] = `sha256:${'1'.repeat(64)}`;
+  extras.tarballFiles['@openelement/fake'] = `tarballs/openelement-fake-${VERSION}.tgz`;
+  const failures = await collectPackedTarballFailures(extras, { read });
+  assert(
+    failures.some((failure) => failure.includes('must contain exactly')),
+    failures.join(' | '),
+  );
+  const outDir = await Deno.makeTempDir();
+  try {
+    await assertRejects(
+      () => carryPackedTarballs(extras, read, outDir),
+      Error,
+      'must contain exactly',
+    );
+  } finally {
+    await Deno.remove(outDir, { recursive: true });
+  }
+});
+
+Deno.test('packed validation rejects divergent package versions', async () => {
+  const { extras, archives } = await validPackedStore();
+  const victim = '@openelement/router';
+  const driftedVersion = '1.0.0-alpha.2';
+  const drifted = await createDeterministicTarGz([{
+    path: 'package/package.json',
+    data: encoder.encode(JSON.stringify({ name: victim, version: driftedVersion })),
+  }]);
+  const path = extras.tarballFiles[victim];
+  archives.set(path, drifted);
+  extras.tarballs[victim] = await sha256BytesLocal(drifted);
+  const read = (candidate: string) => Promise.resolve(archives.get(candidate) ?? null);
+  const failures = await collectPackedTarballFailures(extras, { read });
+  assert(
+    failures.some((failure) => failure.includes('package version')),
+    failures.join(' | '),
+  );
+});
 
 async function sha256BytesLocal(bytes: Uint8Array): Promise<string> {
   const digest = await crypto.subtle.digest('SHA-256', Uint8Array.from(bytes));

@@ -8,10 +8,16 @@
 
 import type { PackageInfo } from './package-graph.ts';
 
-export function npmTarballName(pkg: PackageInfo): string {
+/** Logical artifact naming: name + version only, no workspace path. */
+export type TarballNameInput = Pick<PackageInfo, 'name' | 'version'>;
+
+/** Producer workspace physical path: naming inputs plus the package dir. */
+export type TarballPathInput = Pick<PackageInfo, 'dir' | 'name' | 'version'>;
+
+export function npmTarballName(pkg: TarballNameInput): string {
   return `${pkg.name.replace('@', '').replace('/', '-')}-${pkg.version}.tgz`;
 }
 
-export function tarballPath(pkg: PackageInfo): string {
+export function tarballPath(pkg: TarballPathInput): string {
   return `${pkg.dir}/${npmTarballName(pkg)}`;
 }
