@@ -93,15 +93,20 @@ jobs:
           probe() {
             label="$1"; shift
             echo "--- $label ---"
-            curl -sS -D - -o /dev/null --max-time 20 "$@" \
-              | tr -d '\r' \
-              | grep -iE '^(HTTP/|access-control-allow-origin|cf-cache-status|cf-ray|vary|age|content-type)' \
+            curl -sS -D /tmp/h.txt -o /tmp/b.txt --max-time 20 "$@" || true
+            tr -d '\r' < /tmp/h.txt \
+              | grep -iE '^(HTTP/|access-control-allow-origin|cf-cache-status|cf-ray|cf-mitigated|vary|age|content-type|server)' \
               || echo "(no response)"
+            echo "body: $(head -c 200 /tmp/b.txt | tr -d '\n')"
           }
           probe "video + Origin (h2)" -H "Origin: http://127.0.0.1:4174" "$URL"
           probe "video + Origin + Range (h2)" -H "Origin: http://127.0.0.1:4174" -H "Range: bytes=0-" "$URL"
           probe "video without Origin (h2)" "$URL"
+          probe "video Chromium UA (h2)" -A "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36" "$URL"
+          probe "video cache-bust query (h2)" "$URL?probe=$RANDOM"
+          probe "video HEAD (h2)" -I "$URL"
           probe "frame + Origin (h2)" -H "Origin: http://127.0.0.1:4174" "$FRAME"
+          probe "openelement.org homepage (h2)" "https://openelement.org/"
           probe "video + Origin (h3, may be unsupported)" --http3 -H "Origin: http://127.0.0.1:4174" "$URL"
           echo "curl: $(curl --version | head -n 1)"
           echo "resolver: $(getent hosts assets.openelement.org | head -n 3 | tr '\n' ' ')"
