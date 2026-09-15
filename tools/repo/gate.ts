@@ -14,7 +14,7 @@
  *   deno run --allow-run tools/repo/gate.ts <step> [<step> ...]
  *
  * A step is either a root task (`typecheck`) or a workspace task
- * (`<dir>#<task>`, e.g. `apps/site#build`): the latter runs as
+ * (`<dir>#<task>`, e.g. `www#build`): the latter runs as
  * `deno task --cwd <dir> <task>` from the repository root. `<dir>` must
  * stay inside the repo (no `..`, no absolute paths) and both parts are
  * restricted to task-name characters, so a gate definition cannot smuggle

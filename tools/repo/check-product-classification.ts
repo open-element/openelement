@@ -196,7 +196,7 @@ export async function readProductDocs(repoRoot: string): Promise<ClassificationR
     const root of [
       `${repoRoot}/docs`,
       `${repoRoot}/packages`,
-      `${repoRoot}/apps/site/content`,
+      `${repoRoot}/www/content`,
     ]
   ) {
     try {

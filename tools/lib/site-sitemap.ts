@@ -1,5 +1,5 @@
 /**
- * Route-catalog sitemap for apps/site (Beta.2.2, #1327).
+ * Route-catalog sitemap for www (Beta.2.2, #1327).
  *
  * sitemap.xml is generated from the route catalog plus explicit public
  * eligibility — never by scanning built output or request-time Documents:
@@ -20,7 +20,7 @@
  * Pure functions only; IO lives in ../generate-site-sitemap.ts.
  */
 
-import { SITE_ORIGIN } from '../../apps/site/app/site-ui/head.ts';
+import { SITE_ORIGIN } from '../../www/app/site-ui/head.ts';
 
 export interface SitemapUrlEntry {
   loc: string;

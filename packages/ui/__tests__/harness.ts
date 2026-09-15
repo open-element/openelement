@@ -9,7 +9,7 @@
  * reactivity, ElementInternals attachment, connectedCallback scheduling — are
  * NOT observable through this harness; those are covered by the element
  * package's compiled suites and by the browser-level fixtures
- * (tests/fixtures/router-ui-dogfood, apps/site/e2e/theme-system.spec.ts).
+ * (tests/fixtures/router-ui-dogfood, www/e2e/theme-system.spec.ts).
  */
 
 type TestAttributeStore = WeakMap<object, Map<string, string>>;

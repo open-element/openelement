@@ -1,8 +1,8 @@
 /**
  * Site asset provenance and size-budget gate.
  *
- * Every file under `apps/site/public/assets` (except the manifest itself) must
- * be declared in `apps/site/public/assets/manifest.json` with a matching
+ * Every file under `www/public/assets` (except the manifest itself) must
+ * be declared in `www/public/assets/manifest.json` with a matching
  * SHA-256. External first-party assets remain in the same provenance ledger,
  * but carry an immutable HTTPS origin/key and must not also exist in the
  * vendored tree. Every entry must carry a non-empty role, source, and license;
@@ -16,7 +16,7 @@
 
 import { walkSync } from '@std/fs/walk';
 
-export const ASSETS_DIR = 'apps/site/public/assets';
+export const ASSETS_DIR = 'www/public/assets';
 export const MANIFEST_PATH = `${ASSETS_DIR}/manifest.json`;
 export const NOTICES_PATH = 'THIRD_PARTY_NOTICES.md';
 

@@ -7,16 +7,16 @@
  * Fails closed: an unenumerable dynamic route or a duplicate fails the build.
  */
 import { fromFileUrl, join } from '@std/path';
-import { loadCollectionData } from '../../apps/site/lib/content.ts';
-import { blogCollection, prepareBlogPosts } from '../../apps/site/lib/blog.ts';
+import { loadCollectionData } from '../../www/lib/content.ts';
+import { blogCollection, prepareBlogPosts } from '../../www/lib/blog.ts';
 import { scanSiteRoutes } from '../lib/site-route-scan.ts';
 import { enumeratePublicRoutes, renderRobotsTxt, renderSitemapXml } from '../lib/site-sitemap.ts';
 
-export const SITE_DIST = 'apps/site/dist';
-const SITE_ROUTES = 'apps/site/app/routes';
+export const SITE_DIST = 'www/dist';
+const SITE_ROUTES = 'www/app/routes';
 const SITE_LOCALES = ['en', 'zh'] as const;
 
-const siteRoot = fromFileUrl(new URL('../../apps/site/', import.meta.url));
+const siteRoot = fromFileUrl(new URL('../../www/', import.meta.url));
 
 export async function generateSiteSitemap(dist = SITE_DIST): Promise<string[]> {
   const blogOptions = { ...blogCollection, contentDir: join(siteRoot, blogCollection.contentDir) };

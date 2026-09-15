@@ -30,7 +30,7 @@ const TASK_FILES = [
   'packages/router/deno.json',
   'packages/ui/deno.json',
   'packages/create/deno.json',
-  'apps/site/deno.json',
+  'www/deno.json',
 ];
 
 Deno.test('task wiring: no single deno invocation repeats a --allow-run flag', async () => {

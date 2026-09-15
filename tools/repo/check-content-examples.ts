@@ -11,7 +11,7 @@
  * syntax), so the alias can no longer smuggle an unchecked framework example
  * past the gate.
  *
- * Blog exclusion (#1307 adjudication): apps/site/content/blog is deliberately NOT
+ * Blog exclusion (#1307 adjudication): www/content/blog is deliberately NOT
  * type-checked. Dispatches are dated historical records — their snippets
  * document the API surface of their era (LessJS-era names, since-removed
  * packages) and stay truthful as history, not as current authoring guidance.
@@ -36,10 +36,10 @@
 import ts from 'typescript';
 import { walk } from '@std/fs/walk';
 import { readPackages } from '../lib/package-graph.ts';
-import { apiReference } from '../../apps/site/app/data/_generated-api-reference.ts';
+import { apiReference } from '../../www/app/data/_generated-api-reference.ts';
 
 /** The maintained authoring surface; blog is excluded deliberately (header). */
-const CHECKED_CONTENT_DIRS = ['apps/site/content/guide', 'apps/site/content/architecture'];
+const CHECKED_CONTENT_DIRS = ['www/content/guide', 'www/content/architecture'];
 
 /** Every documented framework export + custom-element class name. */
 function frameworkExportNames(): ReadonlySet<string> {

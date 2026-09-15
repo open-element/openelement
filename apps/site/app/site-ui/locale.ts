@@ -1,9 +1,0 @@
-/**
- * Shared content-locale selector for site routes and site-ui shells.
- *
- * The site builds exactly two locales (apps/site/vite.config.ts `locales`); any
- * value other than 'zh' falls back to the English content record.
- */
-export function contentLocale(locale: string): 'en' | 'zh' {
-  return locale === 'zh' ? 'zh' : 'en';
-}

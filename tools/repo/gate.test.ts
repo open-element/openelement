@@ -46,8 +46,8 @@ Deno.test('gate: parseGateStep accepts a root task', () => {
 });
 
 Deno.test('gate: parseGateStep accepts a workspace DIR#TASK step', () => {
-  const { dir, task } = parseGateStep('apps/site#build');
-  assertEquals(dir, 'apps/site');
+  const { dir, task } = parseGateStep('www#build');
+  assertEquals(dir, 'www');
   assertEquals(task, 'build');
 });
 
@@ -55,14 +55,14 @@ Deno.test('gate: parseGateStep rejects escapes and shell composition', () => {
   const bad = [
     '',
     '#build',
-    'apps/site#',
+    'www#',
     '../evil#build',
     'apps/../evil#build',
     '/abs#build',
-    'apps/site#build && rm -rf /',
-    'apps/site#build;evil',
+    'www#build && rm -rf /',
+    'www#build;evil',
     'a b#c',
-    'apps/site#',
+    'www#',
   ];
   for (const step of bad) {
     let threw = false;

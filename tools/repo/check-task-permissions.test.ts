@@ -52,7 +52,7 @@ const TASK_FILES: TaskFile[] = [
     ffiAllowed: {},
   },
   {
-    path: 'apps/site/deno.json',
+    path: 'www/deno.json',
     ffiAllowed: {
       build: 'vite SSG build (native binding)',
       test: 'site build-graph assertions (residual: not yet proven FFI-free)',

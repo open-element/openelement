@@ -114,7 +114,7 @@ Deno.test('deno-api-free classifies product, Deno-host, and Node-host paths', ()
     'node-host',
   );
   assertEquals(policyFor('benchmarks/jfb/harness/run.ts').kind, 'node-host');
-  assertEquals(policyFor('apps/site/e2e/playwright.config.ts').kind, 'node-host');
+  assertEquals(policyFor('www/e2e/playwright.config.ts').kind, 'node-host');
   assertEquals(policyFor('README.md').kind, 'skip');
 });
 

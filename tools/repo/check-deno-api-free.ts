@@ -62,7 +62,7 @@ export const NODE_HOST_ALLOWLIST: readonly HostFileEntry[] = [
       'boots the Vite middlewareMode stack behind a Node http server to compare dev and build semantics (rule 3: Node test server)',
   },
   {
-    path: 'apps/site/e2e/',
+    path: 'www/e2e/',
     reason: 'Playwright config, specs, and Node-side fixtures (rule 3)',
   },
   {
@@ -136,13 +136,13 @@ export const PRODUCT_ROOTS: readonly ProductRoot[] = [
   { root: 'packages/ui/src', denoApis: 'ban', npm: 'allow' },
   { root: 'packages/create/src', denoApis: 'allow', npm: 'allow' },
   { root: 'packages/create/templates', denoApis: 'allow', npm: 'allow' },
-  { root: 'apps/site/app', denoApis: 'allow', npm: 'allow' },
-  { root: 'apps/site/lib', denoApis: 'allow', npm: 'allow' },
+  { root: 'www/app', denoApis: 'allow', npm: 'allow' },
+  { root: 'www/lib', denoApis: 'allow', npm: 'allow' },
   { root: 'apps/saas/app', denoApis: 'allow', npm: 'allow' },
   { root: 'apps/saas/lib', denoApis: 'allow', npm: 'allow' },
 ];
 
-const WALK_ROOTS = ['packages', 'apps', 'tests', 'tools', 'benchmarks'];
+const WALK_ROOTS = ['packages', 'www', 'apps', 'tests', 'tools', 'benchmarks'];
 const EXTENSIONS = new Set(['.ts', '.tsx']);
 const WALK_SKIP: RegExp[] = [
   /(^|\/)node_modules(\/|$)/,

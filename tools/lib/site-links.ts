@@ -1,7 +1,7 @@
 /**
  * Built-output internal link + fragment truth (#1159, B2.4).
  *
- * Walks apps/site/dist HTML, resolves every internal href/src against the built
+ * Walks www/dist HTML, resolves every internal href/src against the built
  * output tree and requires fragment targets (#id) to exist in the target
  * document. External links are out of scope here — the scheduled external
  * checker is deferred to Beta.3 (#1156, workflow-cap ruling).

@@ -1,7 +1,7 @@
 /**
  * Structured Site E2E runner.
  *
- * Runs the official `apps/site` Playwright suite and writes two artifacts:
+ * Runs the official `www` Playwright suite and writes two artifacts:
  *   .artifacts/site-e2e-report.json — the raw Playwright JSON reporter output
  *   .artifacts/site-e2e-result.json — a compact sidecar manifest
  *     (see tools/repo/site-e2e-result.ts for the schema)
@@ -24,7 +24,7 @@ const repoRoot = fromFileUrl(new URL('../../', import.meta.url));
 const artifactsDir = join(repoRoot, '.artifacts');
 const reportPath = join(artifactsDir, 'site-e2e-report.json');
 const resultPath = join(artifactsDir, 'site-e2e-result.json');
-const siteDir = join(repoRoot, 'apps/site');
+const siteDir = join(repoRoot, 'www');
 
 async function writeResult(result: SiteE2eResult): Promise<void> {
   await Deno.mkdir(dirname(resultPath), { recursive: true });

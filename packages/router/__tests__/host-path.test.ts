@@ -47,6 +47,6 @@ Deno.test('toFileUrl converts absolute paths to file URLs', () => {
 });
 
 Deno.test('file URL round-trip preserves build paths', () => {
-  const original = '/repo/apps/site/dist/server/index.js';
+  const original = '/repo/www/dist/server/index.js';
   assertEquals(fromFileUrl(toFileUrl(original)), original);
 });

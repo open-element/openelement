@@ -209,7 +209,7 @@ Deno.test('the committed assets tree passes the provenance gate', async () => {
 
 Deno.test('dragon consumers stay bound to the external provenance keys', async () => {
   const committed = JSON.parse(
-    await Deno.readTextFile('apps/site/public/assets/manifest.json'),
+    await Deno.readTextFile('www/public/assets/manifest.json'),
   ) as {
     assets: Array<{
       path: string;
@@ -224,9 +224,9 @@ Deno.test('dragon consumers stay bound to the external provenance keys', async (
   const frameBase = `${frames.remote.origin}/${frames.remote.key}`;
   const videoUrl = `${video.remote.origin}/${video.remote.key}`;
   const controller = await Deno.readTextFile(
-    'apps/site/app/site-ui/open-dragon-live-gaze-controller.ts',
+    'www/app/site-ui/open-dragon-live-gaze-controller.ts',
   );
-  const island = await Deno.readTextFile('apps/site/app/islands/open-dragon-live-gaze.tsx');
+  const island = await Deno.readTextFile('www/app/islands/open-dragon-live-gaze.tsx');
   assert(controller.includes(frameBase.replace('/frames/', '')));
   assert(island.includes(`${frameBase}f27.webp`));
   assert(island.includes(videoUrl));

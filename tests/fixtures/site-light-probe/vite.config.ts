@@ -1,7 +1,7 @@
 /**
  * Minimal light-mode probe fixture (#1148 / ADR-0142).
  *
- * Moved out of apps/site: the probe is an acceptance fixture for the compiled
+ * Moved out of www: the probe is an acceptance fixture for the compiled
  * light-root rendering path, not a public Site surface. It keeps the exact
  * SSR -> delayed-upgrade shape the browser matrix proves (light-root page,
  * light-root island, real public package exports) without any Site shell,

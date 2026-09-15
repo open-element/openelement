@@ -48,7 +48,7 @@ Deno.test('clean CLI only accepts allowlisted generated patterns', () => {
   assertThrows(() => parseCleanArgs(['docs']), Error, 'not an allowlisted');
   assertThrows(() => parseCleanArgs(['README.md']), Error, 'not an allowlisted');
   assertThrows(() => parseCleanArgs(['.env']), Error, 'not an allowlisted');
-  assertThrows(() => parseCleanArgs(['apps/site/app']), Error, 'not an allowlisted');
+  assertThrows(() => parseCleanArgs(['www/app']), Error, 'not an allowlisted');
   assertThrows(() => parseCleanArgs(['--nuke']), Error, 'unknown flag');
   assertEquals(parseCleanArgs(['packages/*/dist']).targets, ['packages/*/dist']);
 });
@@ -65,9 +65,9 @@ Deno.test('clean defaults stay separate from opt-in deep targets', () => {
   // Site E2E output is regenerable and safe by default.
   for (
     const target of [
-      'apps/site/e2e/test-results',
-      'apps/site/e2e/playwright-report',
-      'apps/site/playwright-report',
+      'www/e2e/test-results',
+      'www/e2e/playwright-report',
+      'www/playwright-report',
     ]
   ) {
     assert(DEFAULT_TARGETS.includes(target), `${target} must be a default clean target`);
@@ -82,11 +82,11 @@ Deno.test('default clean removes generated output and preserves user content', a
     'packages/router/dist-test-ssg-render/index.html',
     'packages/router/custom-dist/index.js',
     'packages/ui/dist/index.js',
-    'apps/site/dist/index.html',
-    'apps/site/.openElement/cache.json',
-    'apps/site/e2e/test-results/report.json',
-    'apps/site/e2e/playwright-report/index.html',
-    'apps/site/playwright-report/index.html',
+    'www/dist/index.html',
+    'www/.openElement/cache.json',
+    'www/e2e/test-results/report.json',
+    'www/e2e/playwright-report/index.html',
+    'www/playwright-report/index.html',
     'apps/saas/dist/index.html',
     'apps/saas/.openElement/cache.json',
     'apps/saas/.output-node/server.js',
@@ -110,7 +110,7 @@ Deno.test('default clean removes generated output and preserves user content', a
   const user = [
     'packages/element/src/index.ts',
     'packages/ui/src/generated-manifest.json',
-    'apps/site/public/assets/logo.svg',
+    'www/public/assets/logo.svg',
     'apps/saas/lib/stripe-checkout.ts',
     'apps/saas/local.db',
     'docs/release/public-interface-snapshot.json',
@@ -156,9 +156,9 @@ Deno.test('clean refuses non-allowlisted targets and symlinks are unlinked, not 
     // A generated target behind a symlinked parent must not delete outside.
     await writeTree(outside, ['site-src/dist/keep.txt']);
     await Deno.mkdir(join(root, 'apps'), { recursive: true });
-    await Deno.symlink(join(outside, 'site-src'), join(root, 'apps/site'));
+    await Deno.symlink(join(outside, 'site-src'), join(root, 'www'));
     await assertRejects(
-      () => cleanTargets(root, ['apps/site/dist'], quiet),
+      () => cleanTargets(root, ['www/dist'], quiet),
       Error,
       'resolves outside',
     );

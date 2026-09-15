@@ -5,7 +5,7 @@
  * generated entry carries empty defaults); the Site owns its own navigation.
  * Route files are the single source of truth via
  * `export const meta = { section, label, order }`, and this generator projects
- * them into `apps/site/app/data/_generated-nav-data.ts` for the app shell:
+ * them into `www/app/data/_generated-nav-data.ts` for the app shell:
  *
  *   navSections — grouped sidebar tree consumed by the open-layout sidebar
  *   headerNav   — the curated top-level header links, filtered to real routes
@@ -16,7 +16,7 @@
 import { walk } from '@std/fs/walk';
 import { fromFileUrl, join } from '@std/path';
 
-const siteRoot = fromFileUrl(new URL('../../apps/site/', import.meta.url));
+const siteRoot = fromFileUrl(new URL('../../www/', import.meta.url));
 const routesDir = join(siteRoot, 'app/routes');
 const outFile = join(siteRoot, 'app/data/_generated-nav-data.ts');
 

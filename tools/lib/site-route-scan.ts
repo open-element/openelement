@@ -1,6 +1,6 @@
 /**
  * Site-owned route discovery for the site sitemap (1.0.0-alpha.1): enumerate
- * apps/site/app/routes files into { path, type } catalog entries. This replaces
+ * www/app/routes files into { path, type } catalog entries. This replaces
  * the retired adapter-vite internal route scanner — the sitemap must never
  * import a deleted adapter or a Router internal path. Conventions: index.tsx
  * maps to its directory, [param].tsx maps to :param, every route file is a

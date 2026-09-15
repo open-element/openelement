@@ -28,7 +28,7 @@ The ownership sentence above is superseded. Reconciled for `1.0.0-alpha.1`:
 - Create is the supported creation entry.
 - UI stays in this repository as an experimental product, outside the 1.0
   stable API promise.
-- Site stays in this repository (`apps/site`) as the official product
+- Site stays in this repository (`www`) as the official product
   surface.
 - SaaS stays in this repository (`apps/saas`) as an independent first-party
   application, governed separately from the Alpha repository candidate. It is

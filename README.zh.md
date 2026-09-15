@@ -15,7 +15,7 @@ Element 将 JSX 编写的 Custom Element 编译为 Part Program，并统一用�
   `packages/router` 的 `/vite`、`/cli/*` 与 `/nitro-mount` 子路径：Router 的应用生命周期与服务器输出。
 - `packages/create`：面向这两个核心产品的正式创建入口。
 - `packages/ui`：实验性 UI 产品，由本仓库维护，不在 1.0 稳定承诺内。
-- `apps/site`：官方产品表面（文档站点）。
+- `www`：官方产品表面（文档站点）。
 - `apps/saas`：独立的第一方消费者应用，由本仓库维护但单独治理；不属于 framework core，也不属于本次 Alpha 仓库候选。
 
 Element 与 Router 是公共框架核心。UI 是 experimental 产品；Site 是官方产品表面；SaaS 是独立治理的第一方应用，不属于本次 Alpha 仓库候选。它们都不扩大 Element/Router 的稳定 API 承诺，但全部由本仓库拥有和维护。历史快照继续由 Git 标签保存。

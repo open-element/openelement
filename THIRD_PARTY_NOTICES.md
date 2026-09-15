@@ -3,7 +3,7 @@
 OpenElement is MIT-licensed (see [LICENSE](./LICENSE)). This file records the
 third-party components redistributed with the repository's distribution
 artifacts. The machine-readable inventory with per-file SHA-256 digests lives
-in [`apps/site/public/assets/manifest.json`](./apps/site/public/assets/manifest.json)
+in [`www/public/assets/manifest.json`](./www/public/assets/manifest.json)
 (verified by `tools/repo/check-assets-provenance.ts`).
 
 First-party assets (OpenElement brand SVGs and the generated dragon hero media)
@@ -12,9 +12,9 @@ the manifest for size/provenance accounting, not as third-party works.
 
 ## Prism 1.29.0
 
-Vendored under `apps/site/public/assets/vendor/prism/` and served by the
+Vendored under `www/public/assets/vendor/prism/` and served by the
 documentation site (license text included in the distribution at
-`apps/site/public/assets/vendor/prism/LICENSE`).
+`www/public/assets/vendor/prism/LICENSE`).
 
 - Upstream: <https://github.com/PrismJS/prism> (tag `v1.29.0`)
 - Distribution mirror used for the vendored files:
@@ -50,12 +50,12 @@ THE SOFTWARE.
 
 The site ships four WOFF2 subsets, all under the SIL Open Font License 1.1:
 
-| File                                                                 | Font                   | Upstream source                                                                            | Copyright                                           |
-| -------------------------------------------------------------------- | ---------------------- | ------------------------------------------------------------------------------------------ | --------------------------------------------------- |
-| `apps/site/public/assets/fonts/inter-latin-variable.woff2`           | Inter 4.001            | `@fontsource-variable/inter@5.3.0` / <https://github.com/rsms/inter>                       | Copyright 2016 The Inter Project Authors            |
-| `apps/site/public/assets/fonts/jetbrains-mono-latin-variable.woff2`  | JetBrains Mono 2.211   | `@fontsource-variable/jetbrains-mono@5.3.0` / <https://github.com/JetBrains/JetBrainsMono> | Copyright 2020 The JetBrains Mono Project Authors   |
-| `apps/site/public/assets/fonts/instrument-serif-latin-regular.woff2` | Instrument Serif 1.000 | <https://fonts.google.com/specimen/Instrument+Serif>                                       | Copyright 2022 The Instrument Serif Project Authors |
-| `apps/site/public/assets/fonts/instrument-serif-latin-italic.woff2`  | Instrument Serif 1.000 | <https://fonts.google.com/specimen/Instrument+Serif>                                       | Copyright 2022 The Instrument Serif Project Authors |
+| File                                                           | Font                   | Upstream source                                                                            | Copyright                                           |
+| -------------------------------------------------------------- | ---------------------- | ------------------------------------------------------------------------------------------ | --------------------------------------------------- |
+| `www/public/assets/fonts/inter-latin-variable.woff2`           | Inter 4.001            | `@fontsource-variable/inter@5.3.0` / <https://github.com/rsms/inter>                       | Copyright 2016 The Inter Project Authors            |
+| `www/public/assets/fonts/jetbrains-mono-latin-variable.woff2`  | JetBrains Mono 2.211   | `@fontsource-variable/jetbrains-mono@5.3.0` / <https://github.com/JetBrains/JetBrainsMono> | Copyright 2020 The JetBrains Mono Project Authors   |
+| `www/public/assets/fonts/instrument-serif-latin-regular.woff2` | Instrument Serif 1.000 | <https://fonts.google.com/specimen/Instrument+Serif>                                       | Copyright 2022 The Instrument Serif Project Authors |
+| `www/public/assets/fonts/instrument-serif-latin-italic.woff2`  | Instrument Serif 1.000 | <https://fonts.google.com/specimen/Instrument+Serif>                                       | Copyright 2022 The Instrument Serif Project Authors |
 
 Each font's license and copyright are also embedded in its name table. The
 license text follows.

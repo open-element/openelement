@@ -14,7 +14,7 @@ The source tree is `1.0.0-alpha.1`, a new public baseline for Element and Router
   lifecycle tooling (`@openelement/router/vite`, `/nitro-mount`, `/cli/*`).
 - `packages/create` — the supported creation entry for the two core products.
 - `packages/ui` — experimental UI product, maintained in this repository outside the 1.0 stable promise.
-- `apps/site` — the official product surface (documentation site).
+- `www` — the official product surface (documentation site).
 - `apps/saas` — an independent first-party consumer application, maintained in this repository but separately governed; it is not part of the framework core or the Alpha repository candidate.
 
 Element and Router are the public framework core. UI is an experimental product; Site is the official product surface; SaaS is an independent first-party application governed separately and is not part of the Alpha repository candidate. None extends the Element/Router stable API promise, and all are owned and maintained by this repository. Historical snapshots remain available through Git tags.

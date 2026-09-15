@@ -109,20 +109,20 @@ export function validateReleaseState(
     siteVersionSource,
   );
   if (!commonMatch) {
-    failures.push('apps/site must declare COMMON_PUBLISHED_VERSION as null or a version string');
+    failures.push('www must declare COMMON_PUBLISHED_VERSION as null or a version string');
   } else if (state.commonCompleteVersion === null) {
     if (commonMatch[1] !== 'null') {
-      failures.push('apps/site COMMON_PUBLISHED_VERSION must be null (no common stable version)');
+      failures.push('www COMMON_PUBLISHED_VERSION must be null (no common stable version)');
     }
   } else if (commonMatch[2] !== state.commonCompleteVersion) {
     failures.push(
-      `apps/site COMMON_PUBLISHED_VERSION must be ${state.commonCompleteVersion}`,
+      `www COMMON_PUBLISHED_VERSION must be ${state.commonCompleteVersion}`,
     );
   }
   for (const entry of state.packages) {
     if (!siteVersionSource.includes(`'${entry.name}': 'v${entry.registry.latest}'`)) {
       failures.push(
-        `apps/site PUBLISHED_LATEST must record ${entry.name} v${entry.registry.latest}`,
+        `www PUBLISHED_LATEST must record ${entry.name} v${entry.registry.latest}`,
       );
     }
   }
@@ -240,7 +240,7 @@ async function main(): Promise<void> {
   const offline = Deno.args.includes('--offline');
   const state = await readState();
   const versions = await workspaceVersions();
-  const siteVersionSource = await Deno.readTextFile('apps/site/app/data/version.ts');
+  const siteVersionSource = await Deno.readTextFile('www/app/data/version.ts');
   const failures = validateReleaseState(state, versions, siteVersionSource);
 
   if (!offline) {

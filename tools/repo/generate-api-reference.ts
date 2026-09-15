@@ -1,7 +1,7 @@
 /**
  * API + Custom Element reference generator (#1158 lineage, 1.0 alpha surface).
  *
- * Builds apps/site/app/data/_generated-api-reference.ts from the real public exports
+ * Builds www/app/data/_generated-api-reference.ts from the real public exports
  * of every supported subpath of the retained 1.0 packages (TypeScript
  * enumeration of the export map declared in each packages/<name>/deno.json),
  * their JSDoc, and the @openelement/ui compiler manifest (tags/attributes/
@@ -13,7 +13,7 @@ import { resolve } from '@std/path';
 import ts from 'typescript';
 import { readPackages, releasePublishOrder } from '../lib/package-graph.ts';
 
-export const API_REFERENCE_ARTIFACT = 'apps/site/app/data/_generated-api-reference.ts';
+export const API_REFERENCE_ARTIFACT = 'www/app/data/_generated-api-reference.ts';
 const UI_MANIFEST = 'packages/ui/src/generated-manifest.json';
 
 interface ExportRecord {
