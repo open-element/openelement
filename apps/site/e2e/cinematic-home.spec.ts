@@ -50,9 +50,18 @@ test.describe('Cinematic homepage', () => {
     await expect(idleView).toHaveAttribute('loop', '');
     await expect(idleView).toHaveAttribute('preload', 'none');
     await expect(idleView).not.toHaveAttribute('autoplay', '');
+    await expect(idleView).toHaveAttribute(
+      'src',
+      'https://assets.openelement.org/site/v1/dragon/dragon-idle.mp4',
+    );
+    await expect(idleView).toHaveAttribute('crossorigin', 'anonymous');
     const poster = dragon.locator('img.poster');
     await expect(poster).toHaveCount(1);
-    await expect(poster).toHaveAttribute('src', /\/assets\/dragon-frames\/f27\.webp$/);
+    await expect(poster).toHaveAttribute(
+      'src',
+      'https://assets.openelement.org/site/v1/dragon/frames/f27.webp',
+    );
+    await expect(poster).toHaveAttribute('crossorigin', 'anonymous');
     await expect(dragon.locator('canvas')).toHaveCount(1);
     await expect(home.locator('.marquee span').first()).toBeVisible();
     await expect(home.locator('.spec-strip .spec-cell')).toHaveCount(5);

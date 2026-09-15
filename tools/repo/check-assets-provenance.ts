@@ -3,12 +3,12 @@
  *
  * Every file under `apps/site/public/assets` (except the manifest itself) must
  * be declared in `apps/site/public/assets/manifest.json` with a matching
- * SHA-256. Every entry must carry a non-empty role, source, and license;
+ * SHA-256. External first-party assets remain in the same provenance ledger,
+ * but carry an immutable HTTPS origin/key and must not also exist in the
+ * vendored tree. Every entry must carry a non-empty role, source, and license;
  * third-party entries additionally need a name/version and must appear in
- * `THIRD_PARTY_NOTICES.md`. The manifest's byte budgets cap the total asset
- * weight and any single media file, so a hero video or frame set cannot grow
- * silently. External URLs are never fetched here: provenance is the recorded
- * upstream source plus the digest match, and the assets are already vendored.
+ * `THIRD_PARTY_NOTICES.md`. The manifest's byte budgets cap the vendored asset
+ * weight and any single media file, so large media cannot return silently.
  *
  * Group entries (`"path": "dragon-frames/"`) exist so first-party frame sets
  * are one manifest record while still hashing every file individually.
@@ -51,6 +51,11 @@ export interface AssetEntry {
   copyright?: string;
   sha256?: string;
   files?: Record<string, string>;
+  remote?: {
+    type: 'external';
+    origin: string;
+    key: string;
+  };
 }
 
 export interface AssetsManifest {
@@ -107,7 +112,7 @@ export function checkAssetsProvenance(
     return ['manifest must be a JSON object'];
   }
   const candidate = manifest as Partial<AssetsManifest>;
-  if (candidate.schemaVersion !== 1) failures.push('manifest schemaVersion must be 1');
+  if (candidate.schemaVersion !== 2) failures.push('manifest schemaVersion must be 2');
   const budgets = candidate.budgets;
   if (
     typeof budgets !== 'object' || budgets === null ||
@@ -125,6 +130,10 @@ export function checkAssetsProvenance(
 
   const exact = new Map<string, AssetEntry>();
   const groups: Array<{ prefix: string; entry: AssetEntry }> = [];
+  const remoteExact = new Set<string>();
+  const remoteGroups: string[] = [];
+  const declaredPaths = new Set<string>();
+  const remoteUrls = new Set<string>();
   const thirdPartyNames = new Set<string>();
   for (const [index, entry] of candidate.assets.entries()) {
     const label = `assets[${index}]`;
@@ -138,6 +147,8 @@ export function checkAssetsProvenance(
       failures.push(`${label}.path must be a non-empty string`);
       continue;
     }
+    if (declaredPaths.has(asset.path)) failures.push(`${id}: duplicate manifest entry`);
+    declaredPaths.add(asset.path);
     if (asset.kind !== 'third-party' && asset.kind !== 'first-party') {
       failures.push(`${id}: kind must be "third-party" or "first-party"`);
     }
@@ -159,14 +170,66 @@ export function checkAssetsProvenance(
     if (asset.sha256 !== undefined && !/^[0-9a-f]{64}$/.test(asset.sha256)) {
       failures.push(`${id}: sha256 must be 64 lowercase hex characters`);
     }
+    if (asset.files !== undefined && (typeof asset.files !== 'object' || asset.files === null)) {
+      failures.push(`${id}: files must be a digest map`);
+    } else if (asset.files !== undefined) {
+      const fileDigests = Object.entries(asset.files);
+      if (fileDigests.length === 0) failures.push(`${id}: files digest map must not be empty`);
+      for (const [file, digest] of fileDigests) {
+        if (
+          !file || file.startsWith('/') || file.includes('\\') || file.split('/').includes('..')
+        ) {
+          failures.push(`${id}: invalid relative file key ${JSON.stringify(file)}`);
+        }
+        if (!/^[0-9a-f]{64}$/.test(digest)) {
+          failures.push(`${id}: ${file} digest must be 64 lowercase hex characters`);
+        }
+      }
+    }
+
+    const isRemote = asset.remote !== undefined;
+    if (isRemote) {
+      const remote = asset.remote;
+      if (typeof remote !== 'object' || remote === null) {
+        failures.push(`${id}: remote must be an object`);
+      } else {
+        if (remote.type !== 'external') failures.push(`${id}: remote.type must be "external"`);
+        let validOrigin = false;
+        if (!isNonEmptyString(remote.origin)) {
+          failures.push(`${id}: remote.origin must be non-empty`);
+        } else {
+          try {
+            const origin = new URL(remote.origin);
+            validOrigin = origin.protocol === 'https:' && origin.origin === remote.origin;
+          } catch {
+            validOrigin = false;
+          }
+          if (!validOrigin) failures.push(`${id}: remote.origin must be an HTTPS origin`);
+        }
+        const validKey = isNonEmptyString(remote.key) && !remote.key.startsWith('/') &&
+          !remote.key.includes('\\') && !remote.key.split('/').includes('..');
+        if (!validKey) failures.push(`${id}: remote.key must be a safe relative object key`);
+        if (
+          asset.path.endsWith('/') !== (isNonEmptyString(remote.key) && remote.key.endsWith('/'))
+        ) {
+          failures.push(`${id}: grouped path and remote.key must agree on trailing slash`);
+        }
+        if (validOrigin && validKey) {
+          const url = `${remote.origin}/${remote.key}`;
+          if (remoteUrls.has(url)) failures.push(`${id}: duplicate remote URL ${url}`);
+          remoteUrls.add(url);
+        }
+      }
+    }
     if (asset.path.endsWith('/')) {
       if (asset.files === undefined || typeof asset.files !== 'object' || asset.files === null) {
         failures.push(`${id}: group entries need a files digest map`);
       }
-      groups.push({ prefix: asset.path, entry: asset });
+      if (isRemote) remoteGroups.push(asset.path);
+      else groups.push({ prefix: asset.path, entry: asset });
     } else {
-      if (exact.has(asset.path)) failures.push(`${id}: duplicate manifest entry`);
-      exact.set(asset.path, asset);
+      if (isRemote) remoteExact.add(asset.path);
+      else exact.set(asset.path, asset);
     }
   }
 
@@ -176,6 +239,12 @@ export function checkAssetsProvenance(
     if (file.path === 'manifest.json') continue;
     seen.add(file.path);
     totalBytes += file.bytes;
+    if (
+      remoteExact.has(file.path) || remoteGroups.some((prefix) => file.path.startsWith(prefix))
+    ) {
+      failures.push(`${file.path}: declared external but still exists in the vendored asset tree`);
+      continue;
+    }
     let expected: string | undefined;
     let owner: AssetEntry | undefined;
     const direct = exact.get(file.path);

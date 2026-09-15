@@ -84,14 +84,16 @@ export default class DragonLiveGaze extends OpenElement {
       <figure class='stage'>
         <img
           class='poster'
-          src='/assets/dragon-frames/f27.webp'
+          src='https://assets.openelement.org/site/v1/dragon/frames/f27.webp'
           alt='The OpenElement dragon — it turns its head to watch your cursor.'
+          crossorigin='anonymous'
           draggable={false}
         />
         <canvas class='view' aria-hidden='true'></canvas>
         <video
           class='idle-view'
-          src='/assets/dragon-idle.mp4'
+          src='https://assets.openelement.org/site/v1/dragon/dragon-idle.mp4'
+          crossorigin='anonymous'
           muted
           loop
           playsinline

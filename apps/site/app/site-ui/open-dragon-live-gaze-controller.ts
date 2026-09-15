@@ -18,8 +18,9 @@ const WANDER_AMP = 5.5;
 const IDLE_MIN = 20;
 const IDLE_MAX = 34;
 
-const frameUrl = (index: number): string =>
-  `/assets/dragon-frames/f${String(index).padStart(2, '0')}.webp`;
+const DRAGON_ASSET_BASE_URL = 'https://assets.openelement.org/site/v1/dragon';
+const dragonFrameUrl = (index: number): string =>
+  `${DRAGON_ASSET_BASE_URL}/frames/f${String(index).padStart(2, '0')}.webp`;
 
 class DragonLiveGazeController {
   #host: HTMLElement;
@@ -94,6 +95,8 @@ class DragonLiveGazeController {
     // from center — the cursor always travels through near-center frames.
     this.#load(CENTER, () => {
       if (!this.#connected || this.#epoch !== epoch) return;
+      this.#attrFrame = CENTER;
+      host.setAttribute('data-frame', String(CENTER));
       this.#stage?.classList.add('live');
       this.#wake();
       for (let d = 1; d < FRAME_COUNT; d++) {
@@ -213,6 +216,7 @@ class DragonLiveGazeController {
       if (!image) continue;
       image.onload = null;
       image.onerror = null;
+      image.removeAttribute('src');
     }
     this.#canvas?.removeAttribute('width');
     this.#canvas?.removeAttribute('height');
@@ -242,22 +246,30 @@ class DragonLiveGazeController {
     if (this.#state[index] !== 0) return;
     this.#state[index] = 1;
     const img = new Image();
+    img.crossOrigin = 'anonymous';
     img.onload = () => {
       if (!this.#connected || this.#epoch !== epoch) return;
       this.#state[index] = 2;
       this.#dirty = true; // a sharper substitute may now be drawable
       if (onReady) {
+        let promoted = false;
         const ready = (): void => {
+          if (promoted) return;
+          promoted = true;
           if (this.#connected && this.#epoch === epoch) onReady();
         };
         img.decode().then(ready, ready);
+        // Some browsers can leave decode() pending for a cached cross-origin
+        // image even after load. The decoded pixels are already drawable, so
+        // do not let that browser quirk stall the live canvas indefinitely.
+        this.#schedule(ready, 1000, epoch);
       }
     };
     img.onerror = () => {
       if (!this.#connected || this.#epoch !== epoch) return;
       this.#state[index] = 0;
     };
-    img.src = frameUrl(index);
+    img.src = dragonFrameUrl(index);
     this.#imgs[index] = img;
   }
 

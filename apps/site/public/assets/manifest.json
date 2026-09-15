@@ -1,9 +1,9 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "notice": "THIRD_PARTY_NOTICES.md",
   "budgets": {
-    "assetsTotalBytes": 12582912,
-    "singleMediaBytes": 6291456
+    "assetsTotalBytes": 262144,
+    "singleMediaBytes": 65536
   },
   "assets": [
     {
@@ -192,6 +192,11 @@
       "role": "Cursor-steered pose atlas for open-dragon-live-gaze (59 frames f00-f58); the interactive canvas frames. Distinct role from dragon-idle.mp4 (idle loop).",
       "source": "Generated in-project for the OpenElement site hero (commit 526c6970)",
       "license": "MIT",
+      "remote": {
+        "type": "external",
+        "origin": "https://assets.openelement.org",
+        "key": "site/v1/dragon/frames/"
+      },
       "files": {
         "f00.webp": "52f007add260bae09bf1196321187b27f4fed0d8be92e357cc801ff6780205d4",
         "f01.webp": "7163d11df9d51eadaa1b8a0b140947d5b363f97b2ee42655d3ade2b1620c3c77",
@@ -261,6 +266,11 @@
       "role": "Idle-loop video for open-dragon-live-gaze when the pointer is absent; muted, playsinline, preload=none, never autoplayed. Distinct role from the frame atlas, which stays the reduced-motion/no-autoplay poster path.",
       "source": "Generated in-project for the OpenElement site hero (commit 526c6970)",
       "license": "MIT",
+      "remote": {
+        "type": "external",
+        "origin": "https://assets.openelement.org",
+        "key": "site/v1/dragon/dragon-idle.mp4"
+      },
       "sha256": "b7cd7f8a0a13f096b125acd0ce3053f504d9dbc78f83c0afa74373c6adfef9e2"
     }
   ]
