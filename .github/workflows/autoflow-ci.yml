@@ -97,7 +97,10 @@ jobs:
             tr -d '\r' < /tmp/h.txt \
               | grep -iE '^(HTTP/|access-control-allow-origin|cf-cache-status|cf-ray|cf-mitigated|vary|age|content-type|server)' \
               || echo "(no response)"
-            echo "body: $(head -c 200 /tmp/b.txt | tr -d '\n')"
+            # Body only when it is not a payload: keeps the binary out of logs
+            # while still naming a block page (403 challenge, WAF, R2 error).
+            status=$(head -n 1 /tmp/h.txt | tr -d '\r' | awk '{print $2}')
+            case "$status" in 2*|3*) ;; *) echo "body: $(head -c 200 /tmp/b.txt | tr -d '\n')";; esac
           }
           probe "video + Origin (h2)" -H "Origin: http://127.0.0.1:4174" "$URL"
           probe "video + Origin + Range (h2)" -H "Origin: http://127.0.0.1:4174" -H "Range: bytes=0-" "$URL"
@@ -385,23 +388,22 @@ jobs:
 
   # Pre-publish packed-consumer matrix (1.0 Alpha convergence, item 5).
   # The current-SHA packed tarballs must install into a scratch consumer
-  # outside the repo and pass the full external starter lifecycle on Linux,
-  # macOS, AND Windows — before any publish. Post-publish registry checks
+  # outside the repo and pass the full external starter lifecycle on Linux and
+  # macOS — before any publish. Post-publish registry checks
   # (published-consumers.yml, workflow_dispatch) cannot substitute for this
   # matrix: only current-SHA tarballs prove the candidate shippable.
+  # Windows is out of scope: the candidate deploys to Linux/Workers targets,
+  # and `deno pack` on Windows drops the './vite' types condition for the
+  # Router entry (upstream, identical pack diagnostics to Linux otherwise),
+  # which the fail-closed types check correctly refuses to ship.
   packed-consumer-matrix:
     name: packed starter consumer (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
-    # Windows only: deno pack drops the './vite' types condition on that host
-    # (identical pack diagnostics to Linux: 61 type warnings, 0 unexpected), so
-    # the leg keeps running and reporting but does not gate the candidate until
-    # the OS-specific pack behavior is resolved. Linux and macOS stay blocking.
-    continue-on-error: ${{ matrix.os == 'windows-latest' }}
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        os: [ubuntu-latest, macos-latest]
     steps:
       # v7.0.1
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1

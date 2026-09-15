@@ -226,11 +226,15 @@ Deno.test('ci contract: post-publish consumers are chained, not manual-only', as
   );
 });
 
-Deno.test('ci contract: packed-consumer matrix pins all three release OSes', () => {
+Deno.test('ci contract: packed-consumer matrix pins the two release OSes', () => {
   const block = jobBlock(workflow, 'packed-consumer-matrix');
   assert(
-    /ubuntu-latest/.test(block) && /macos-latest/.test(block) && /windows-latest/.test(block),
-    'packed-consumer-matrix must stay Linux/macOS/Windows required',
+    /ubuntu-latest/.test(block) && /macos-latest/.test(block),
+    'packed-consumer-matrix must stay Linux/macOS required',
+  );
+  assert(
+    !/windows-latest/.test(block),
+    'Windows is out of scope for the candidate: deno pack drops the Router ./vite types condition there (upstream), and the deploy targets are Linux/Workers',
   );
 });
 

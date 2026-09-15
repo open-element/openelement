@@ -52,7 +52,7 @@ publish; a missing environment fails the job closed instead of publishing:
   `autoflow-ci` aggregation job (which depends on `fast-checks`,
   `source-matrix`, `packed-consumers`, and the isolated `fresh-clone`),
   `node-serve-smoke` (24/26, required), `packed-consumer-matrix`
-  (Linux/macOS/Windows packed tarball consumers, required),
+  (Linux/macOS packed tarball consumers, required),
   `bfcache-chrome` (installed Chrome channel under xvfb; the bundled Chromium
   disables BFCache, so this is the only lane that proves the #943 restore
   contract, required),
