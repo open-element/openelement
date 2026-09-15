@@ -1,17 +1,21 @@
 /**
- * Canonical candidate job/step contract.
+ * Canonical candidate job/step contract (schema v2).
  *
- * One source of truth for what each candidate job must run. The producer
- * (`candidate-evidence.ts`) emits these argv values and the validator matches
- * received evidence against the same contracts, so a step name can never be
- * paired with a different command.
+ * One source of truth for what each candidate job must run and from which
+ * directory. The producer (`candidate-evidence.ts`) emits these argv values and
+ * the validator matches received evidence against the same contracts, so a
+ * step name can never be paired with a different command, and a fresh-clone
+ * step can never claim a directory it did not run in.
  *
- * Matching normalizes exactly one operationally irrelevant detail: an absolute
- * executable path whose basename is `deno` or `git` (the repository runs the
- * pinned Deno and system git; the basename is the pinned program name). Every
- * other argv element, flag, task name, cwd, and argument position is compared
- * byte-for-byte.
+ * Matching normalizes exactly two operationally irrelevant details:
+ *   - an absolute executable path whose basename is `deno` or `git`;
+ *   - absolute workspace/clone/temp paths, which are recorded under the shared
+ *     roles `$SOURCE`, `$CLONE`, and `$TEMP` via one mapping.
+ * Every other argv element, flag, task name, cwd, and argument position is
+ * compared byte-for-byte.
  */
+
+export const CANDIDATE_EVIDENCE_SCHEMA_VERSION = 2;
 
 export type JobName = 'fast-checks' | 'source-matrix' | 'packed' | 'fresh-clone';
 
@@ -22,13 +26,43 @@ export const JOB_NAMES: readonly JobName[] = [
   'fresh-clone',
 ];
 
+/** Shared path roles; the producer maps real absolute paths onto these. */
+export const EVIDENCE_ROLES = {
+  source: '$SOURCE',
+  clone: '$CLONE',
+  temp: '$TEMP',
+} as const;
+
+export type EvidenceRole = (typeof EVIDENCE_ROLES)[keyof typeof EVIDENCE_ROLES];
+
+/** Ordered [absolutePrefix, role] pairs; longest prefix wins. */
+export type PathRoleMapping = ReadonlyArray<readonly [string, string]>;
+
+function hasBoundary(value: string, prefix: string): boolean {
+  return value === prefix || value.startsWith(`${prefix}/`) || value.startsWith(`${prefix}\\`);
+}
+
+/** Replace one absolute path prefix with its shared role. */
+export function normalizeEvidencePath(path: string, mapping: PathRoleMapping): string {
+  let best: readonly [string, string] | undefined;
+  for (const entry of mapping) {
+    if (hasBoundary(path, entry[0]) && (!best || entry[0].length > best[0].length)) {
+      best = entry;
+    }
+  }
+  if (!best) return path;
+  return `${best[1]}${path.slice(best[0].length).replaceAll('\\', '/')}`;
+}
+
 export interface StepMatchContext {
-  /** The commit the evidence binds to; used to pin the fresh-clone checkout. */
   sha: string;
+  tree: string;
 }
 
 export interface StepContract {
   name: string;
+  /** The role of the directory the step must execute in. */
+  cwd: EvidenceRole;
   /** Returns a failure description, or null when argv matches exactly. */
   match: (argv: readonly string[], context: StepMatchContext) => string | null;
 }
@@ -58,47 +92,46 @@ function exact(expected: readonly string[]): StepContract['match'] {
   };
 }
 
-const denyNonArray = (argv: unknown): string | null =>
-  Array.isArray(argv) ? null : 'command (argv) must be an array of non-empty strings';
-
-function matchClone(argv: readonly string[]): string | null {
-  const normalized = normalizeArgv(argv);
-  if (normalized[0] !== 'git' || normalized[1] !== 'clone') {
-    return `expected 'git clone --no-hardlinks <source> <dest>', got ${JSON.stringify(argv)}`;
-  }
-  if (normalized[2] !== '--no-hardlinks') {
-    return 'fresh-clone clone must pass --no-hardlinks';
-  }
-  if (normalized.length !== 5) {
-    return `fresh-clone clone must be 'git clone --no-hardlinks <source> <dest>', ` +
-      `got ${JSON.stringify(argv)}`;
-  }
-  if (normalized[3] === '' || normalized[4] === '') {
-    return 'fresh-clone clone requires non-empty source and destination';
-  }
-  if (normalized[3] === normalized[4]) {
-    return 'fresh-clone clone destination must differ from the source repository';
-  }
-  return null;
+/** `clean-proof.ts` invocation that binds a job to a clean exact SHA/tree. */
+export function cleanProofArgv(
+  sha: string,
+  tree: string,
+  phase: 'before' | 'after',
+): string[] {
+  return [
+    'deno',
+    'run',
+    '--allow-read',
+    '--allow-run=git',
+    '--deny-ffi',
+    '--no-prompt',
+    'tools/repo/clean-proof.ts',
+    '--sha',
+    sha,
+    '--tree',
+    tree,
+    '--phase',
+    phase,
+  ];
 }
 
-function matchCheckout(boundContext: StepMatchContext): (argv: readonly string[]) => string | null {
-  return (argv) => {
-    const normalized = normalizeArgv(argv);
-    if (
-      normalized.length !== 5 || normalized[0] !== 'git' || normalized[1] !== '-C' ||
-      normalized[3] !== 'checkout'
-    ) {
-      return `expected 'git -C <clone> checkout <sha>', got ${JSON.stringify(argv)}`;
-    }
-    if (normalized[2] === '') return 'fresh-clone checkout requires a clone directory';
-    if (!/^[0-9a-f]{40}$/u.test(normalized[4])) {
-      return `fresh-clone checkout target must be a 40-character commit, got ${normalized[4]}`;
-    }
-    if (normalized[4] !== boundContext.sha) {
-      return `fresh-clone checkout target ${normalized[4]} != evidence sha ${boundContext.sha}`;
-    }
-    return null;
+/** Canonical line a clean-proof log must contain for that phase. */
+export function cleanProofLine(
+  sha: string,
+  tree: string,
+  phase: 'before' | 'after',
+): string {
+  return `clean-proof PASS phase=${phase} sha=${sha} tree=${tree}`;
+}
+
+function cleanProof(phase: 'before' | 'after', cwd: EvidenceRole): StepContract {
+  return {
+    name: `workspace-clean-${phase}`,
+    cwd,
+    match: (argv, context) => {
+      const expected = cleanProofArgv(context.sha, context.tree, phase);
+      return exact(expected)(argv, context);
+    },
   };
 }
 
@@ -125,51 +158,81 @@ export const STATIC_JOB_STEPS: Record<
   ],
 };
 
-/** Fresh-clone argv builders — the producer and the validator share these. */
+/** Fresh-clone argv builders using shared roles; the producer maps paths. */
 export const freshCloneCommands = {
-  clone: (
-    source: string,
-    dest: string,
-  ): string[] => ['git', 'clone', '--no-hardlinks', source, dest],
-  checkout: (cloneDir: string, sha: string): string[] => ['git', '-C', cloneDir, 'checkout', sha],
+  clone: (): string[] => ['git', 'clone', '--no-hardlinks', EVIDENCE_ROLES.source, EVIDENCE_ROLES.clone],
+  checkout: (sha: string): string[] => ['git', '-C', EVIDENCE_ROLES.clone, 'checkout', sha],
   install: (denoExe: string): string[] => [denoExe, 'install'],
   check: (denoExe: string): string[] => [denoExe, 'task', 'check'],
-  gateSource: (
-    denoExe: string,
-  ): string[] => [denoExe, 'task', '--cwd', 'tools/repo', 'gate:source'],
+  gateSource: (denoExe: string): string[] => [denoExe, 'task', '--cwd', 'tools/repo', 'gate:source'],
   releaseCheck: (denoExe: string): string[] => [denoExe, 'task', 'release:check'],
 } as const;
 
 export const FRESH_CLONE_STEPS: readonly StepContract[] = [
-  { name: 'clone', match: (argv) => matchClone(argv) },
-  { name: 'git-checkout', match: (argv, context) => matchCheckout(context)(argv) },
-  { name: 'install', match: exact(['deno', 'install']) },
-  { name: 'task-check', match: exact(['deno', 'task', 'check']) },
+  { name: 'clone', cwd: EVIDENCE_ROLES.temp, match: (argv) => exact(['git', 'clone', '--no-hardlinks', EVIDENCE_ROLES.source, EVIDENCE_ROLES.clone])(argv, { sha: '', tree: '' }) },
+  {
+    name: 'git-checkout',
+    cwd: EVIDENCE_ROLES.temp,
+    match: (argv, context) => {
+      const normalized = normalizeArgv(argv);
+      if (
+        normalized.length !== 5 || normalized[0] !== 'git' || normalized[1] !== '-C' ||
+        normalized[3] !== 'checkout'
+      ) {
+        return `expected 'git -C ${EVIDENCE_ROLES.clone} checkout <sha>', got ${JSON.stringify(argv)}`;
+      }
+      if (normalized[2] !== EVIDENCE_ROLES.clone) {
+        return `git-checkout must run against ${EVIDENCE_ROLES.clone}, got ${JSON.stringify(normalized[2])}`;
+      }
+      if (normalized[4] !== context.sha) {
+        return `git-checkout target ${normalized[4]} != evidence sha ${context.sha}`;
+      }
+      return null;
+    },
+  },
+  cleanProof('before', EVIDENCE_ROLES.clone),
+  { name: 'install', cwd: EVIDENCE_ROLES.clone, match: exact(['deno', 'install']) },
+  { name: 'task-check', cwd: EVIDENCE_ROLES.clone, match: exact(['deno', 'task', 'check']) },
   {
     name: 'task-gate-source',
+    cwd: EVIDENCE_ROLES.clone,
     match: exact(['deno', 'task', '--cwd', 'tools/repo', 'gate:source']),
   },
-  { name: 'task-release-check', match: exact(['deno', 'task', 'release:check']) },
+  { name: 'task-release-check', cwd: EVIDENCE_ROLES.clone, match: exact(['deno', 'task', 'release:check']) },
+  cleanProof('after', EVIDENCE_ROLES.clone),
 ];
 
-const STATIC_CONTRACT = (): Record<JobName, readonly StepContract[]> => ({
-  'fast-checks': STATIC_JOB_STEPS['fast-checks'].map((step) => ({
-    name: step.name,
-    match: exact(step.command),
-  })),
-  'source-matrix': STATIC_JOB_STEPS['source-matrix'].map((step) => ({
-    name: step.name,
-    match: exact(step.command),
-  })),
-  packed: STATIC_JOB_STEPS.packed.map((step) => ({
-    name: step.name,
-    match: exact(step.command),
-  })),
-  'fresh-clone': FRESH_CLONE_STEPS,
-});
-
 /** The one canonical job/step contract table. */
-export const JOB_CONTRACTS: Record<JobName, readonly StepContract[]> = STATIC_CONTRACT();
+export const JOB_CONTRACTS: Record<JobName, readonly StepContract[]> = {
+  'fast-checks': [
+    cleanProof('before', EVIDENCE_ROLES.source),
+    ...STATIC_JOB_STEPS['fast-checks'].map((step) => ({
+      name: step.name,
+      cwd: EVIDENCE_ROLES.source,
+      match: exact(step.command),
+    })),
+    cleanProof('after', EVIDENCE_ROLES.source),
+  ],
+  'source-matrix': [
+    cleanProof('before', EVIDENCE_ROLES.source),
+    ...STATIC_JOB_STEPS['source-matrix'].map((step) => ({
+      name: step.name,
+      cwd: EVIDENCE_ROLES.source,
+      match: exact(step.command),
+    })),
+    cleanProof('after', EVIDENCE_ROLES.source),
+  ],
+  packed: [
+    cleanProof('before', EVIDENCE_ROLES.source),
+    ...STATIC_JOB_STEPS.packed.map((step) => ({
+      name: step.name,
+      cwd: EVIDENCE_ROLES.source,
+      match: exact(step.command),
+    })),
+    cleanProof('after', EVIDENCE_ROLES.source),
+  ],
+  'fresh-clone': FRESH_CLONE_STEPS,
+};
 
 /** Step names required per job, derived from the contracts. */
 export const REQUIRED_STEPS: Record<JobName, readonly string[]> = Object.fromEntries(
@@ -181,40 +244,42 @@ export function findStepContract(job: JobName, name: unknown): StepContract | un
   return JOB_CONTRACTS[job].find((step) => step.name === name);
 }
 
-/** Validate a step's argv against the canonical contract. */
-export function auditStepCommand(
+/** Validate a step's argv and cwd against the canonical contract. */
+export function auditStep(
   job: JobName,
   name: string,
   argv: unknown,
+  cwd: unknown,
   context: StepMatchContext,
 ): string[] {
+  const contract = findStepContract(job, name);
+  if (!contract) return [`unknown step '${name}' for job ${job}`];
   const failures: string[] = [];
-  const nonArray = denyNonArray(argv);
-  if (nonArray) return [nonArray];
-  const elements = argv as unknown[];
-  if (elements.length === 0) return ['command (argv) must not be empty'];
-  for (const [index, element] of elements.entries()) {
+  if (typeof cwd !== 'string' || cwd === '') {
+    failures.push('cwd must be a non-empty string');
+  } else if (cwd !== contract.cwd) {
+    failures.push(`cwd must be ${contract.cwd}, got ${JSON.stringify(cwd)}`);
+  }
+  if (!Array.isArray(argv) || argv.length === 0) {
+    return [...failures, 'command (argv) must be a non-empty array of strings'];
+  }
+  for (const [index, element] of argv.entries()) {
     if (typeof element !== 'string' || element === '') {
       failures.push(`argv[${index}] must be a non-empty string`);
     }
   }
-  if (failures.length > 0) return failures;
-  const contract = findStepContract(job, name);
-  if (!contract) return [`unknown step '${name}' for job ${job}`];
-  const mismatch = contract.match(elements as string[], context);
+  const mismatch = contract.match(argv as string[], context);
   if (mismatch) failures.push(mismatch);
   return failures;
 }
 
-/**
- * Exact isolation disclosure the fresh-clone job must record. The validator
- * requires deep equality, so a forged or drifting isolation claim fails.
- */
+/** Exact isolation disclosure the fresh-clone job must record. */
 export const FRESH_CLONE_ISOLATION = {
-  denoDir: 'fresh, empty at start (removed after the run)',
-  npmCache: 'fresh, empty at start (removed after the run)',
-  copiedFromWorkspace: 'nothing (no node_modules, dist, tgz, coverage, or .artifacts)',
-  cloneProtocol: 'git clone --no-hardlinks <source> <temp-destination>',
+  sourceRepo: EVIDENCE_ROLES.source,
+  cloneDir: EVIDENCE_ROLES.clone,
+  denoDir: `${EVIDENCE_ROLES.temp}/deno-dir`,
+  npmCache: `${EVIDENCE_ROLES.temp}/npm-cache`,
+  copiedFromWorkspace: 'none (no node_modules, dist, tgz, coverage, or .artifacts)',
   sharedBrowserCache: 'HOME Playwright browser binaries only (no module resolution impact)',
 } as const;
 
@@ -232,11 +297,50 @@ export function auditFreshCloneIsolation(value: unknown): string[] {
       );
     }
   }
-  const extra = Object.keys(record).filter(
-    (key) => !(key in FRESH_CLONE_ISOLATION),
-  );
+  const extra = Object.keys(record).filter((key) => !(key in FRESH_CLONE_ISOLATION));
   if (extra.length > 0) {
     failures.push(`fresh-clone isolation has unknown fields: ${extra.join(', ')}`);
+  }
+  return failures;
+}
+
+/** Canonical toolchain shape shared by the bundle and every job. */
+export interface EvidenceToolVersions {
+  deno: string;
+  v8: string;
+  typescript: string;
+  node: string;
+  npm: string;
+  os: string;
+  playwrightBrowsers: Record<string, string>;
+}
+
+export function auditToolVersions(value: unknown, label: string): string[] {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return [`${label}: toolVersions must be an object`];
+  }
+  const record = value as Record<string, unknown>;
+  const failures: string[] = [];
+  for (const key of ['deno', 'v8', 'typescript', 'node', 'npm', 'os', 'playwrightBrowsers']) {
+    if (!(key in record)) failures.push(`${label}: toolVersions missing ${key}`);
+  }
+  for (const key of ['deno', 'v8', 'typescript', 'node', 'npm', 'os']) {
+    const entry = record[key];
+    if (typeof entry !== 'string' || entry === '') {
+      failures.push(`${label}: toolVersions.${key} must be a non-empty string`);
+    }
+  }
+  const browsers = record.playwrightBrowsers;
+  if (!browsers || typeof browsers !== 'object' || Array.isArray(browsers)) {
+    failures.push(`${label}: toolVersions.playwrightBrowsers must be an object`);
+  } else {
+    const browserRecord = browsers as Record<string, unknown>;
+    for (const browser of ['chromium', 'firefox', 'webkit']) {
+      const version = browserRecord[browser];
+      if (typeof version !== 'string' || version === '') {
+        failures.push(`${label}: toolVersions.playwrightBrowsers.${browser} must be a non-empty string`);
+      }
+    }
   }
   return failures;
 }

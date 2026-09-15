@@ -135,6 +135,7 @@ Deno.test('ci contract: candidate evidence bundle ships JSON and every log/manif
       '.artifacts/candidate-evidence.json',
       '.artifacts/tarball-manifest.json',
       '.artifacts/pack-diagnostics.json',
+      '.artifacts/tarballs',
       '.artifacts/ci',
     ]
   ) {

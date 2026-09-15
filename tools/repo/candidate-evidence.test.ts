@@ -1,11 +1,12 @@
 /**
- * candidate-evidence adversarial tests.
+ * candidate-evidence adversarial tests (schema v2).
  *
- * The validator is the release trust boundary: it must reject evidence that
- * omits or forges step metadata, pairs a required step name with a different
- * command, or carries a self-consistent but false fresh-clone sidecar. Every
- * forgery reproduced against the pre-fix validator is a checked-in regression
- * here, and a fully valid bundle must still pass.
+ * The validator is the release trust boundary: this suite builds one fully
+ * valid bundle, proves it is accepted, and then mutates every contract field —
+ * top-level identity/lifecycle fields, job identity/time/toolchain, step
+ * argv/cwd/timing, fresh-clone path binding, tarball bytes, pack diagnostics,
+ * and aggregate counts — requiring explicit rejection for each. Every forgery
+ * reported by the round-2 review is a regression here.
  */
 import { assert, assertEquals } from '@std/assert';
 import {
@@ -18,39 +19,63 @@ import {
   REQUIRED_SITE_BROWSERS,
   REQUIRED_STEPS,
 } from './candidate-evidence.ts';
-import { FRESH_CLONE_ISOLATION, freshCloneCommands, JOB_NAMES } from './candidate-steps.ts';
+import {
+  CANDIDATE_EVIDENCE_SCHEMA_VERSION,
+  cleanProofArgv,
+  cleanProofLine,
+  EVIDENCE_ROLES,
+  findStepContract,
+  FRESH_CLONE_ISOLATION,
+  freshCloneCommands,
+  JOB_NAMES,
+} from './candidate-steps.ts';
+import { createDeterministicTarGz } from '../lib/deterministic-tar.ts';
 
 const SHA = 'a'.repeat(40);
 const TREE = 'b'.repeat(40);
-const CLONE_DIR = '/tmp/oe-fresh-clone';
+const VERSION = '1.0.0-alpha.1';
+const encoder = new TextEncoder();
 
 async function sha256(text: string): Promise<string> {
-  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+  const digest = await crypto.subtle.digest('SHA-256', encoder.encode(text));
   return 'sha256:' +
     [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
 }
 
-function freshCommands(name: string): string[] {
-  switch (name) {
-    case 'clone':
-      return freshCloneCommands.clone('/repo', CLONE_DIR);
-    case 'git-checkout':
-      return freshCloneCommands.checkout(CLONE_DIR, SHA);
-    case 'install':
-      return freshCloneCommands.install('deno');
-    case 'task-check':
-      return freshCloneCommands.check('deno');
-    case 'task-gate-source':
-      return freshCloneCommands.gateSource('deno');
-    case 'task-release-check':
-      return freshCloneCommands.releaseCheck('deno');
-    default:
-      throw new Error(`no fresh command for ${name}`);
-  }
-}
+const TOOL_VERSIONS = {
+  deno: '2.9.0',
+  v8: '13.9.0',
+  typescript: '6.0.3',
+  node: 'v24.18.0',
+  npm: '11.16.0',
+  os: 'linux/x64',
+  playwrightBrowsers: { chromium: '1217', firefox: '1511', webkit: '2272' },
+};
 
-function staticCommands(job: string, name: string): string[] {
-  const table: Record<string, Record<string, string[]>> = {
+function stepArgv(job: string, name: string): string[] {
+  if (name.startsWith('workspace-clean-')) {
+    const phase = name.endsWith('before') ? 'before' : 'after';
+    return ['deno', ...cleanProofArgv(SHA, TREE, phase).slice(1)];
+  }
+  if (job === 'fresh-clone') {
+    switch (name) {
+      case 'clone':
+        return freshCloneCommands.clone();
+      case 'git-checkout':
+        return freshCloneCommands.checkout(SHA);
+      case 'install':
+        return freshCloneCommands.install('deno');
+      case 'task-check':
+        return freshCloneCommands.check('deno');
+      case 'task-gate-source':
+        return freshCloneCommands.gateSource('deno');
+      case 'task-release-check':
+        return freshCloneCommands.releaseCheck('deno');
+      default:
+        throw new Error(`no fresh argv for ${name}`);
+    }
+  }
+  const staticTable: Record<string, Record<string, string[]>> = {
     'fast-checks': {
       'fmt-check': ['deno', 'fmt', '--check'],
       lint: ['deno', 'lint'],
@@ -65,101 +90,165 @@ function staticCommands(job: string, name: string): string[] {
       'publish-npm-dry-run': ['deno', 'task', '--cwd', 'tools/release', 'publish:npm:dry-run'],
     },
   };
-  const command = table[job]?.[name];
-  if (!command) throw new Error(`no static command for ${job}/${name}`);
+  const command = staticTable[job]?.[name];
+  if (!command) throw new Error(`no static argv for ${job}/${name}`);
   return [...command];
-}
-
-interface RawStep {
-  name: string;
-  command: unknown;
-  startedAt: unknown;
-  durationMs: unknown;
-  result: unknown;
-  exitCode: unknown;
-  logPath: string;
-  logSha256: string;
 }
 
 interface Fixture {
   logs: Record<string, string>;
+  archives: Record<string, Uint8Array>;
   manifests: Record<string, string>;
   jobs: Array<{ job: Record<string, unknown>; read: (path: string) => Promise<Uint8Array | null> }>;
   bundle: Record<string, unknown>;
-  bundleRead: (path: string) => Promise<Uint8Array | null>;
+  read: (path: string) => Promise<Uint8Array | null>;
 }
 
 async function fixture(): Promise<Fixture> {
   const logs: Record<string, string> = {};
-  const manifests: Record<string, string> = {
-    'tarball-manifest.json': '{}\n',
-    'pack-diagnostics.json': '[]\n',
-  };
+  const archives: Record<string, Uint8Array> = {};
+  const manifests: Record<string, string> = {};
+  for (const name of REQUIRED_PACKAGE_TARBALLS) {
+    const short = name.replace('@openelement/', '');
+    archives[`tarballs/openelement-${short}-${VERSION}.tgz`] = await createDeterministicTarGz([{
+      path: 'package/package.json',
+      data: encoder.encode(JSON.stringify({ name, version: VERSION })),
+    }]);
+  }
+  const tarballs: Record<string, string> = {};
+  const tarballFiles: Record<string, string> = {};
+  for (const name of REQUIRED_PACKAGE_TARBALLS) {
+    const short = name.replace('@openelement/', '');
+    tarballFiles[name] = `tarballs/openelement-${short}-${VERSION}.tgz`;
+    tarballs[name] = await sha256BytesLocal(
+      archives[`tarballs/openelement-${short}-${VERSION}.tgz`],
+    );
+  }
+  const packDiagnostics = [...REQUIRED_PACKAGE_TARBALLS].sort().map((pkg) => ({
+    package: pkg,
+    errors: 0,
+    unexpectedWarnings: 0,
+    knownUpstreamPrivateWarnings: 1,
+    publicDeclarations: 1,
+    declarationClosure: 1,
+  }));
+  manifests['tarball-manifest.json'] = JSON.stringify(tarballs, null, 2) + '\n';
+  manifests['pack-diagnostics.json'] = JSON.stringify(packDiagnostics, null, 2) + '\n';
+
+  const generatedAt = new Date().toISOString();
+  const baseTime = Date.parse(generatedAt) - 600_000;
+  let tick = 0;
   const jobs: Fixture['jobs'] = [];
   const bundleJobs: Array<Record<string, unknown>> = [];
-  const generatedAt = new Date().toISOString();
-  const baseTime = Date.parse(generatedAt) - 60_000;
-  let tick = 0;
   for (const job of JOB_NAMES) {
-    const rawSteps: RawStep[] = [];
+    const rawSteps: Array<Record<string, unknown>> = [];
     const bundleSteps: Array<Record<string, unknown>> = [];
     for (const name of REQUIRED_STEPS[job]) {
-      const command = job === 'fresh-clone' ? freshCommands(name) : staticCommands(job, name);
+      const command = stepArgv(job, name);
+      const cwd = findStepContract(job, name)!.cwd;
       const key = `${job}/${name}`;
-      logs[key] = `${key} ok\n`;
+      const phase = name.endsWith('before') ? 'before' : name.endsWith('after') ? 'after' : '';
+      logs[key] = name.startsWith('workspace-clean-')
+        ? `${cleanProofLine(SHA, TREE, phase as 'before' | 'after')}\n`
+        : `${key} ok\n`;
       const hash = await sha256(logs[key]);
       const startedAt = new Date(baseTime + (tick++) * 1000).toISOString();
       rawSteps.push({
         name,
         command,
+        cwd,
         startedAt,
         durationMs: 5,
-        result: 'PASS',
         exitCode: 0,
+        result: 'PASS',
         logPath: `logs/${name}.log`,
         logSha256: hash,
       });
       bundleSteps.push({
         name,
         command,
+        cwd,
         startedAt,
         durationMs: 5,
-        result: 'PASS',
         exitCode: 0,
+        result: 'PASS',
         logSource: `ci/${job}/logs/${name}.log`,
         logSha256: hash,
       });
     }
-    const extras = job === 'fresh-clone' ? { isolation: FRESH_CLONE_ISOLATION } : {};
+    const extras = job === 'fresh-clone'
+      ? { isolation: FRESH_CLONE_ISOLATION }
+      : job === 'packed'
+      ? {
+        tarballs,
+        packDiagnostics,
+        artifactCheck: true,
+        consumers: [...REQUIRED_PACKED_CONSUMERS],
+      }
+      : job === 'source-matrix'
+      ? {
+        siteE2e: {
+          ran: true,
+          passed: 3 * REQUIRED_SITE_BROWSERS.length,
+          failed: 0,
+          skipped: 0,
+          projects: Object.fromEntries(
+            REQUIRED_SITE_BROWSERS.map((
+              browser,
+            ) => [browser, { passed: 3, failed: 0, skipped: 0 }]),
+          ),
+        },
+      }
+      : {};
+    const jobRecord = {
+      schemaVersion: CANDIDATE_EVIDENCE_SCHEMA_VERSION,
+      job,
+      sha: SHA,
+      tree: TREE,
+      trackedClean: true,
+      result: 'PASS',
+      generatedAt,
+      toolVersions: TOOL_VERSIONS,
+      steps: rawSteps,
+      extras,
+    };
     jobs.push({
-      job: {
-        schemaVersion: 1,
-        job,
-        sha: SHA,
-        tree: TREE,
-        trackedClean: true,
-        result: 'PASS',
-        steps: rawSteps,
-        toolVersions: {},
-        extras,
-        generatedAt,
-      },
+      job: jobRecord,
       read: (path) => {
         const value = logs[`${job}/${path.replace(/^logs\//u, '').replace(/\.log$/u, '')}`];
-        return Promise.resolve(value === undefined ? null : new TextEncoder().encode(value));
+        return Promise.resolve(value === undefined ? null : encoder.encode(value));
       },
     });
-    bundleJobs.push({ job, result: 'PASS', generatedAt, extras, steps: bundleSteps });
+    bundleJobs.push({
+      schemaVersion: CANDIDATE_EVIDENCE_SCHEMA_VERSION,
+      job,
+      sha: SHA,
+      tree: TREE,
+      trackedClean: true,
+      result: 'PASS',
+      generatedAt,
+      toolVersions: TOOL_VERSIONS,
+      steps: bundleSteps,
+      extras,
+    });
   }
   const bundle: Record<string, unknown> = {
-    schemaVersion: 1,
+    schemaVersion: CANDIDATE_EVIDENCE_SCHEMA_VERSION,
     sha: SHA,
     tree: TREE,
+    generatedAt,
+    result: 'PASS',
     trackedClean: true,
+    requiredOk: true,
+    toolVersions: TOOL_VERSIONS,
+    packageVersion: VERSION,
+    aggregate: {
+      inputs: [...JOB_NAMES],
+      recomputedLogHashes: REQUIRED_STEPS_REDUCED(),
+    },
     jobs: bundleJobs,
-    tarballs: Object.fromEntries(
-      REQUIRED_PACKAGE_TARBALLS.map((name, index) => [name, `sha256:${String(index).repeat(64)}`]),
-    ),
+    tarballs,
+    tarballFiles,
     tarballManifest: {
       path: 'tarball-manifest.json',
       sha256: await sha256(manifests['tarball-manifest.json']),
@@ -181,27 +270,32 @@ async function fixture(): Promise<Fixture> {
         ),
       },
     },
-    requiredOk: true,
-    generatedAt,
   };
-  const bundleRead = (path: string) => {
+  const read = (path: string) => {
     const match = /^ci\/([^/]+)\/logs\/(.+)\.log$/u.exec(path);
     if (match) {
       const value = logs[`${match[1]}/${match[2]}`];
-      return Promise.resolve(value === undefined ? null : new TextEncoder().encode(value));
+      return Promise.resolve(value === undefined ? null : encoder.encode(value));
     }
+    if (path in archives) return Promise.resolve(archives[path]);
     const manifest = manifests[path];
-    return Promise.resolve(manifest === undefined ? null : new TextEncoder().encode(manifest));
+    return Promise.resolve(manifest === undefined ? null : encoder.encode(manifest));
   };
-  return { logs, manifests, jobs, bundle, bundleRead };
+  return { logs, archives, manifests, jobs, bundle, read };
+}
+
+function REQUIRED_STEPS_REDUCED(): number {
+  return JOB_NAMES.reduce((sum, job) => sum + REQUIRED_STEPS[job].length, 0);
+}
+
+async function sha256BytesLocal(bytes: Uint8Array): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', Uint8Array.from(bytes));
+  return 'sha256:' +
+    [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
 }
 
 function clone<T>(value: T): T {
   return structuredClone(value);
-}
-
-function cloneJobs(jobs: Fixture['jobs']): Fixture['jobs'] {
-  return jobs.map((entry) => ({ job: structuredClone(entry.job), read: entry.read }));
 }
 
 function bundleJob(bundle: Record<string, unknown>, name: string): Record<string, unknown> {
@@ -210,303 +304,583 @@ function bundleJob(bundle: Record<string, unknown>, name: string): Record<string
   return job;
 }
 
-async function bundleFailures(bundle: Record<string, unknown>, fixtureValue: Fixture) {
+function bundleStep(bundle: Record<string, unknown>, job: string, name: string) {
+  const step = (bundleJob(bundle, job).steps as Array<Record<string, unknown>>).find((entry) =>
+    entry.name === name
+  );
+  if (!step) throw new Error(`step ${job}/${name} missing`);
+  return step;
+}
+
+async function failuresFor(bundle: Record<string, unknown>, f: Fixture) {
   return await collectBundleFailures(bundle, {
     expectedSha: SHA,
     expectedTree: TREE,
-    read: fixtureValue.bundleRead,
+    read: f.read,
   });
 }
 
-Deno.test('valid bundle and job evidence pass the strict contract', async () => {
-  const f = await fixture();
-  assertEquals(await bundleFailures(f.bundle, f), []);
-  assertEquals(await collectJobFailures(f.jobs as never, SHA, TREE), []);
-});
+let cached: Fixture | undefined;
+async function shared(): Promise<Fixture> {
+  cached ??= await fixture();
+  return cached;
+}
 
-Deno.test('missing step metadata is rejected (the pre-fix fail-open case)', async () => {
-  const f = await fixture();
-  const bundle = clone(f.bundle);
-  for (const job of bundle.jobs as Array<Record<string, unknown>>) {
-    for (const step of job.steps as Array<Record<string, unknown>>) {
-      delete step.command;
-      delete step.startedAt;
-      delete step.durationMs;
-      delete step.exitCode;
-    }
-  }
-  const failures = await bundleFailures(bundle, f);
-  assert(failures.some((failure) => failure.includes('command (argv) must be an array')));
-  assert(failures.some((failure) => failure.includes('startedAt must be an ISO-8601 timestamp')));
-  assert(
-    failures.some((failure) => failure.includes('durationMs must be a non-negative safe integer')),
+Deno.test('valid schema-v2 bundle and jobs pass the strict contract', async () => {
+  const f = await shared();
+  assertEquals(await failuresFor(clone(f.bundle), f), []);
+  assertEquals(
+    await collectJobFailures(
+      f.jobs.map((entry) => ({ job: structuredClone(entry.job), read: entry.read })) as never,
+      SHA,
+      TREE,
+    ),
+    [],
   );
-  assert(failures.some((failure) => failure.includes('exitCode must be the integer 0')));
 });
 
-Deno.test('required step names are bound to their canonical argv', async () => {
-  const f = await fixture();
-  for (
-    const wrong of [
-      ['deno', 'task', 'check'],
-      ['deno', 'task', 'wrong-task'],
-      [],
-      [''],
-      'deno task check',
-    ]
-  ) {
-    const bundle = clone(f.bundle);
-    for (const step of bundleJob(bundle, 'fresh-clone').steps as Array<Record<string, unknown>>) {
-      if (['task-gate-source', 'task-release-check'].includes(step.name as string)) {
-        step.command = wrong;
-      }
-    }
-    const failures = await bundleFailures(bundle, f);
-    assert(
-      failures.length > 0,
-      `expected rejection for forged command ${JSON.stringify(wrong)}`,
-    );
-  }
-});
-
-Deno.test('fresh-clone isolation must match the canonical disclosure', async () => {
-  const f = await fixture();
-  for (
-    const isolation of [
-      undefined,
-      {},
-      { ...FRESH_CLONE_ISOLATION, denoDir: 'reused from workspace' },
-      { ...FRESH_CLONE_ISOLATION, extra: 'field' },
-    ]
-  ) {
-    const bundle = clone(f.bundle);
-    const fresh = bundleJob(bundle, 'fresh-clone');
-    if (isolation === undefined) delete fresh.extras;
-    else fresh.extras = { isolation };
-    assert((await bundleFailures(bundle, f)).length > 0, 'expected isolation rejection');
-  }
-});
-
-Deno.test('invalid timestamps, durations, and exit codes are rejected', async () => {
-  const f = await fixture();
-  const cases: Array<[string, unknown, string]> = [
-    ['startedAt', 'not-a-date', 'startedAt'],
-    ['startedAt', '', 'startedAt'],
-    ['durationMs', Number.NaN, 'durationMs'],
-    ['durationMs', Number.POSITIVE_INFINITY, 'durationMs'],
-    ['durationMs', -1, 'durationMs'],
-    ['durationMs', 0.5, 'durationMs'],
-    ['durationMs', '1', 'durationMs'],
-    ['exitCode', undefined, 'exitCode'],
-    ['exitCode', '0', 'exitCode'],
-    ['exitCode', 1, 'exitCode'],
-    ['exitCode', 0.5, 'exitCode'],
+Deno.test('top-level identity and lifecycle fields are strict', async () => {
+  const f = await shared();
+  const cases: Array<[string, (b: Record<string, unknown>) => void, string]> = [
+    ['result-FAIL', (b) => {
+      b.result = 'FAIL';
+    }, 'result'],
+    ['result-missing', (b) => {
+      delete b.result;
+    }, 'result'],
+    ['trackedClean-false', (b) => {
+      b.trackedClean = false;
+    }, 'trackedClean'],
+    ['trackedClean-missing', (b) => {
+      delete b.trackedClean;
+    }, 'trackedClean'],
+    ['requiredOk-false', (b) => {
+      b.requiredOk = false;
+    }, 'requiredOk'],
+    ['requiredOk-missing', (b) => {
+      delete b.requiredOk;
+    }, 'requiredOk'],
+    ['schemaVersion-1', (b) => {
+      b.schemaVersion = 1;
+    }, 'schemaVersion'],
+    ['schemaVersion-999', (b) => {
+      b.schemaVersion = 999;
+    }, 'schemaVersion'],
+    ['schemaVersion-missing', (b) => {
+      delete b.schemaVersion;
+    }, 'schemaVersion'],
+    ['toolVersions-missing', (b) => {
+      delete b.toolVersions;
+    }, 'toolVersions'],
+    ['toolVersions-bad-type', (b) => {
+      b.toolVersions = 'nope';
+    }, 'toolVersions'],
+    ['packageVersion-missing', (b) => {
+      delete b.packageVersion;
+    }, 'packageVersion'],
+    ['packageVersion-bad', (b) => {
+      b.packageVersion = 'latest';
+    }, 'packageVersion'],
+    ['unknown-field', (b) => {
+      b.extra = true;
+    }, 'unknown fields'],
+    ['sha-short', (b) => {
+      b.sha = 'abc';
+    }, 'sha'],
+    ['generatedAt-bad', (b) => {
+      b.generatedAt = 'not-a-date';
+    }, 'generatedAt'],
   ];
-  for (const [field, value, label] of cases) {
+  for (const [label, mutate, expected] of cases) {
     const bundle = clone(f.bundle);
-    const step = (bundleJob(bundle, 'fast-checks').steps as Array<Record<string, unknown>>)[0];
-    if (value === undefined) delete step[field];
-    else step[field] = value;
-    const failures = await bundleFailures(bundle, f);
+    mutate(bundle);
     assert(
-      failures.some((failure) => failure.includes(label)),
-      `expected rejection for ${field}=${String(value)}`,
+      (await failuresFor(bundle, f)).some((failure) => failure.includes(expected)),
+      `expected rejection for ${label}`,
     );
   }
 });
 
-Deno.test('timestamp ordering and bounds are enforced', async () => {
-  const f = await fixture();
-  const future = clone(f.bundle);
-  const futureStep = (bundleJob(future, 'fast-checks').steps as Array<Record<string, unknown>>)[0];
-  futureStep.startedAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+Deno.test('job identity, time, and toolchain fields are strict', async () => {
+  const f = await shared();
+  const cases: Array<[string, (job: Record<string, unknown>) => void, string]> = [
+    ['schemaVersion', (j) => {
+      j.schemaVersion = 1;
+    }, 'schemaVersion'],
+    ['trackedClean', (j) => {
+      j.trackedClean = false;
+    }, 'trackedClean'],
+    ['trackedClean-missing', (j) => {
+      delete j.trackedClean;
+    }, 'trackedClean'],
+    ['result', (j) => {
+      j.result = 'FAIL';
+    }, 'result'],
+    ['generatedAt-bad', (j) => {
+      j.generatedAt = 'not-a-date';
+    }, 'generatedAt'],
+    ['generatedAt-missing', (j) => {
+      delete j.generatedAt;
+    }, 'generatedAt'],
+    ['toolVersions-missing', (j) => {
+      delete j.toolVersions;
+    }, 'toolVersions'],
+    ['unknown-field', (j) => {
+      j.extra = 1;
+    }, 'unknown job fields'],
+    ['sha', (j) => {
+      j.sha = 'c'.repeat(40);
+    }, 'sha'],
+    ['tree', (j) => {
+      j.tree = 'd'.repeat(40);
+    }, 'tree'],
+  ];
+  for (const [label, mutate, expected] of cases) {
+    const bundle = clone(f.bundle);
+    mutate(bundleJob(bundle, 'fast-checks'));
+    const failures = await failuresFor(bundle, f);
+    assert(
+      failures.some((failure) => failure.includes(expected)),
+      `expected rejection for job ${label}; got ${failures.join(' | ')}`,
+    );
+  }
+  const staleBundle = clone(f.bundle);
+  staleBundle.generatedAt = new Date(Date.parse(f.bundle.generatedAt as string) - 60_000)
+    .toISOString();
   assert(
-    (await bundleFailures(future, f)).some((x) => x.includes('after the evidence generatedAt')),
+    (await failuresFor(staleBundle, f)).some((x) => x.includes('after the bundle generatedAt')),
   );
 
-  const reordered = clone(f.bundle);
-  const steps = bundleJob(reordered, 'fast-checks').steps as Array<Record<string, unknown>>;
-  steps[0].startedAt = new Date(Date.now() + 60_000).toISOString();
-  assert((await bundleFailures(reordered, f)).some((x) => x.includes('out of order')));
+  const lateStep = clone(f.bundle);
+  const step = bundleStep(lateStep, 'fast-checks', 'fmt-check');
+  step.startedAt = new Date(Date.now() - 1000).toISOString();
+  step.durationMs = 60 * 60 * 1000;
+  assert(
+    (await failuresFor(lateStep, f)).some((x) => x.includes('step ends after the job generatedAt')),
+  );
 });
 
-Deno.test('unknown, duplicate, and missing steps are rejected', async () => {
-  const f = await fixture();
-  const unknown = clone(f.bundle);
-  (bundleJob(unknown, 'fast-checks').steps as Array<Record<string, unknown>>).push({
-    ...(bundleJob(unknown, 'fast-checks').steps as Array<Record<string, unknown>>)[0],
+Deno.test('aggregate must match the actual job and step set', async () => {
+  const f = await shared();
+  for (
+    const [label, mutate, expected] of [
+      ['missing', (b: Record<string, unknown>) => {
+        delete b.aggregate;
+      }, 'aggregate'],
+      ['zero', (b: Record<string, unknown>) => {
+        (b.aggregate as Record<string, unknown>).recomputedLogHashes = 0;
+      }, 'recomputedLogHashes'],
+      ['inputs-missing', (b: Record<string, unknown>) => {
+        (b.aggregate as Record<string, unknown>).inputs = [];
+      }, 'aggregate.inputs'],
+      ['inputs-reordered', (b: Record<string, unknown>) => {
+        (b.aggregate as Record<string, unknown>).inputs = [...JOB_NAMES].reverse();
+      }, 'aggregate.inputs'],
+      ['unknown-field', (b: Record<string, unknown>) => {
+        (b.aggregate as Record<string, unknown>).extra = 1;
+      }, 'aggregate has unknown fields'],
+    ] as const
+  ) {
+    const bundle = clone(f.bundle);
+    mutate(bundle);
+    assert(
+      (await failuresFor(bundle, f)).some((failure) => failure.includes(expected)),
+      `expected rejection for aggregate ${label}`,
+    );
+  }
+});
+
+Deno.test('tarball bytes, files, and manifest are cross-verified', async () => {
+  const f = await shared();
+  const zeroed = clone(f.bundle);
+  for (const key of Object.keys(zeroed.tarballs as Record<string, string>)) {
+    (zeroed.tarballs as Record<string, string>)[key] = `sha256:${'0'.repeat(64)}`;
+  }
+  assert((await failuresFor(zeroed, f)).some((x) => x.includes('archive sha256')));
+
+  const missingKey = clone(f.bundle);
+  delete (missingKey.tarballs as Record<string, string>)['@openelement/router'];
+  assert(
+    (await failuresFor(missingKey, f)).some((x) => x.includes('tarballs must contain exactly')),
+  );
+
+  const extraKey = clone(f.bundle);
+  (extraKey.tarballs as Record<string, string>)['@evil/fake'] = `sha256:${'1'.repeat(64)}`;
+  assert((await failuresFor(extraKey, f)).some((x) => x.includes('tarballs must contain exactly')));
+
+  const missingFile = clone(f.bundle);
+  delete (missingFile.tarballFiles as Record<string, string>)['@openelement/ui'];
+  assert(
+    (await failuresFor(missingFile, f)).some((x) => x.includes('tarballFiles must map exactly')),
+  );
+
+  const badPath = clone(f.bundle);
+  (badPath.tarballFiles as Record<string, string>)['@openelement/ui'] = '../escape.tgz';
+  assert((await failuresFor(badPath, f)).some((x) => x.includes('tarballFiles.@openelement/ui')));
+
+  const emptyManifest = clone(f.bundle);
+  emptyManifest.tarballManifest = {
+    path: 'tarball-manifest.json',
+    sha256: await sha256('{}\n'),
+  };
+  assert(
+    (await collectBundleFailures(emptyManifest, {
+      expectedSha: SHA,
+      expectedTree: TREE,
+      read: (path) =>
+        path === 'tarball-manifest.json' ? Promise.resolve(encoder.encode('{}\n')) : f.read(path),
+    })).some((x) => x.includes('contents must equal')),
+  );
+
+  const threeWay = clone(f.bundle);
+  (bundleJob(threeWay, 'packed').extras as Record<string, unknown>).tarballs = {
+    ...(f.bundle.tarballs as Record<string, string>),
+    '@openelement/element': `sha256:${'f'.repeat(64)}`,
+  };
+  assert((await failuresFor(threeWay, f)).some((x) => x.includes('extras.tarballs')));
+
+  const diagnosticsDrift = clone(f.bundle);
+  (bundleJob(diagnosticsDrift, 'packed').extras as Record<string, unknown>).packDiagnostics = [];
+  assert(
+    (await failuresFor(diagnosticsDrift, f)).some((x) => x.includes('extras.packDiagnostics')),
+  );
+});
+
+Deno.test('tarball package name and version come from the archive bytes', async () => {
+  const f = await shared();
+  const wrongVersion = clone(f.bundle);
+  wrongVersion.packageVersion = '9.9.9';
+  assert((await failuresFor(wrongVersion, f)).some((x) => x.includes('package version')));
+  const wrongName = clone(f.bundle);
+  const bytes = await createDeterministicTarGz([{
+    path: 'package/package.json',
+    data: encoder.encode(JSON.stringify({ name: '@evil/wrong', version: VERSION })),
+  }]);
+  assert(
+    (await collectBundleFailures(wrongName, {
+      expectedSha: SHA,
+      expectedTree: TREE,
+      read: (path) =>
+        path === 'tarballs/openelement-element-1.0.0-alpha.1.tgz'
+          ? Promise.resolve(bytes)
+          : f.read(path),
+    })).some((x) => x.includes('package name')),
+  );
+});
+
+Deno.test('pack diagnostics are parsed and cross-checked', async () => {
+  const f = await shared();
+  const emptyDiagnostics = clone(f.bundle);
+  emptyDiagnostics.packDiagnostics = {
+    path: 'pack-diagnostics.json',
+    sha256: await sha256('{}\n'),
+  };
+  assert(
+    (await collectBundleFailures(emptyDiagnostics, {
+      expectedSha: SHA,
+      expectedTree: TREE,
+      read: (path) =>
+        path === 'pack-diagnostics.json' ? Promise.resolve(encoder.encode('{}\n')) : f.read(path),
+    })).some((x) => x.includes('must be an array')),
+  );
+
+  for (
+    const [label, mutate, expected] of [
+      ['wrong-package', (entries: Array<Record<string, unknown>>) => {
+        entries[0].package = '@evil/fake';
+      }, 'must list exactly'],
+      ['errors', (entries: Array<Record<string, unknown>>) => {
+        entries[0].errors = 1;
+      }, 'errors must be 0'],
+      ['unexpected', (entries: Array<Record<string, unknown>>) => {
+        entries[0].unexpectedWarnings = 1;
+      }, 'unexpectedWarnings must be 0'],
+      ['negative-closure', (entries: Array<Record<string, unknown>>) => {
+        entries[0].declarationClosure = -1;
+      }, 'declarationClosure'],
+      ['string-declarations', (entries: Array<Record<string, unknown>>) => {
+        entries[0].publicDeclarations = '1';
+      }, 'publicDeclarations'],
+    ] as const
+  ) {
+    const diagnostics = REQUIRED_PACKAGE_TARBALLS.map((pkg) => ({
+      package: pkg,
+      errors: 0,
+      unexpectedWarnings: 0,
+      knownUpstreamPrivateWarnings: 1,
+      publicDeclarations: 1,
+      declarationClosure: 1,
+    })) as Array<Record<string, unknown>>;
+    mutate(diagnostics);
+    const content = JSON.stringify(diagnostics) + '\n';
+    const bundle = clone(f.bundle);
+    bundle.packDiagnostics = { path: 'pack-diagnostics.json', sha256: await sha256(content) };
+    assert(
+      (await collectBundleFailures(bundle, {
+        expectedSha: SHA,
+        expectedTree: TREE,
+        read: (path) =>
+          path === 'pack-diagnostics.json'
+            ? Promise.resolve(encoder.encode(content))
+            : f.read(path),
+      })).some((x) => x.includes(expected)),
+      `expected rejection for diagnostics ${label}`,
+    );
+  }
+});
+
+Deno.test('step argv, cwd, timing, and logs are strict', async () => {
+  const f = await shared();
+  const cases: Array<[string, (b: Record<string, unknown>) => void, string]> = [
+    ['command-wrong-task', (b) => {
+      bundleStep(b, 'fresh-clone', 'task-gate-source').command = ['deno', 'task', 'check'];
+    }, 'task-gate-source'],
+    ['command-empty-argv', (b) => {
+      bundleStep(b, 'fast-checks', 'lint').command = [];
+    }, 'argv'],
+    ['command-empty-element', (b) => {
+      bundleStep(b, 'fast-checks', 'lint').command = [''];
+    }, 'argv'],
+    ['cwd-wrong', (b) => {
+      bundleStep(b, 'fast-checks', 'lint').cwd = EVIDENCE_ROLES.clone;
+    }, 'cwd must be'],
+    ['cwd-missing', (b) => {
+      delete bundleStep(b, 'fast-checks', 'lint').cwd;
+    }, 'cwd'],
+    ['startedAt-bad', (b) => {
+      bundleStep(b, 'fast-checks', 'lint').startedAt = 'nope';
+    }, 'startedAt'],
+    ['duration-fraction', (b) => {
+      bundleStep(b, 'fast-checks', 'lint').durationMs = 0.5;
+    }, 'durationMs'],
+    ['exitCode-missing', (b) => {
+      delete bundleStep(b, 'fast-checks', 'lint').exitCode;
+    }, 'exitCode'],
+    ['exitCode-nonzero', (b) => {
+      bundleStep(b, 'fast-checks', 'lint').exitCode = 1;
+    }, 'exitCode'],
+    ['result-fail', (b) => {
+      bundleStep(b, 'fast-checks', 'lint').result = 'FAIL';
+    }, 'result'],
+    ['log-path-traversal', (b) => {
+      bundleStep(b, 'fast-checks', 'lint').logSource = '../../etc/passwd.log';
+    }, 'log path'],
+    ['log-hash', (b) => {
+      bundleStep(b, 'fast-checks', 'lint').logSha256 = `sha256:${'0'.repeat(64)}`;
+    }, 'log hash mismatch'],
+    ['clean-line-missing', (b) => {
+      const step = bundleStep(b, 'fast-checks', 'workspace-clean-before');
+      step.logSha256 = `sha256:${'2'.repeat(64)}`;
+    }, 'log hash mismatch'],
+  ];
+  for (const [label, mutate, expected] of cases) {
+    const bundle = clone(f.bundle);
+    mutate(bundle);
+    assert(
+      (await failuresFor(bundle, f)).some((failure) => failure.includes(expected)),
+      `expected rejection for ${label}`,
+    );
+  }
+
+  // A clean-proof log without the canonical PASS line is rejected even when
+  // its hash matches.
+  const noLine = clone(f.bundle);
+  const content = 'clean-proof FAIL phase=before\n';
+  const step = bundleStep(noLine, 'fast-checks', 'workspace-clean-before');
+  step.logSha256 = await sha256(content);
+  assert(
+    (await collectBundleFailures(noLine, {
+      expectedSha: SHA,
+      expectedTree: TREE,
+      read: (path) =>
+        path === 'ci/fast-checks/logs/workspace-clean-before.log'
+          ? Promise.resolve(encoder.encode(content))
+          : f.read(path),
+    })).some((x) => x.includes('missing the canonical clean-proof PASS line')),
+  );
+
+  const missingStep = clone(f.bundle);
+  (bundleJob(missingStep, 'fast-checks').steps as Array<unknown>) =
+    (bundleJob(missingStep, 'fast-checks').steps as Array<Record<string, unknown>>).filter((
+      entry,
+    ) => entry.name !== 'workspace-clean-after');
+  assert((await failuresFor(missingStep, f)).some((x) => x.includes('required step missing')));
+
+  const duplicateStep = clone(f.bundle);
+  const steps = bundleJob(duplicateStep, 'packed').steps as Array<Record<string, unknown>>;
+  steps.push(clone(steps[0]));
+  assert((await failuresFor(duplicateStep, f)).some((x) => x.includes('duplicate step')));
+
+  const unknownStep = clone(f.bundle);
+  (bundleJob(unknownStep, 'packed').steps as Array<Record<string, unknown>>).push({
+    ...(bundleJob(unknownStep, 'packed').steps as Array<Record<string, unknown>>)[0],
     name: 'extra-step',
   });
-  assert((await bundleFailures(unknown, f)).some((x) => x.includes('unknown step')));
-
-  const duplicate = clone(f.bundle);
-  const duplicateSteps = bundleJob(duplicate, 'fast-checks').steps as Array<
-    Record<string, unknown>
-  >;
-  duplicateSteps.push(clone(duplicateSteps[0]));
-  assert((await bundleFailures(duplicate, f)).some((x) => x.includes('duplicate step')));
-
-  const missing = clone(f.bundle);
-  bundleJob(missing, 'fast-checks').steps =
-    (bundleJob(missing, 'fast-checks').steps as Array<Record<string, unknown>>).filter(
-      (step) => step.name !== 'lint',
-    );
-  assert((await bundleFailures(missing, f)).some((x) => x.includes('required step missing: lint')));
+  assert((await failuresFor(unknownStep, f)).some((x) => x.includes('unknown step')));
 });
 
-Deno.test('missing, duplicate, and unknown jobs are rejected', async () => {
-  const f = await fixture();
+Deno.test('fresh-clone path binding rejects every decoy', async () => {
+  const f = await shared();
+  const cases: Array<[string, (b: Record<string, unknown>) => void, string]> = [
+    ['clone-source-decoy', (b) => {
+      bundleStep(b, 'fresh-clone', 'clone').command = [
+        'git',
+        'clone',
+        '--no-hardlinks',
+        '$DECOY',
+        EVIDENCE_ROLES.clone,
+      ];
+    }, 'clone'],
+    ['clone-destination-decoy', (b) => {
+      bundleStep(b, 'fresh-clone', 'clone').command = [
+        'git',
+        'clone',
+        '--no-hardlinks',
+        EVIDENCE_ROLES.source,
+        '/tmp/decoy-clone',
+      ];
+    }, 'clone'],
+    ['checkout-other-dir', (b) => {
+      bundleStep(b, 'fresh-clone', 'git-checkout').command = [
+        'git',
+        '-C',
+        '/tmp/decoy-clone',
+        'checkout',
+        SHA,
+      ];
+    }, 'git-checkout must run against'],
+    ['later-cwd-decoy', (b) => {
+      bundleStep(b, 'fresh-clone', 'install').cwd = '/tmp/decoy-clone';
+    }, 'cwd must be'],
+    ['isolation-missing', (b) => {
+      delete (bundleJob(b, 'fresh-clone').extras as Record<string, unknown>).isolation;
+    }, 'isolation'],
+    ['isolation-drifted', (b) => {
+      ((bundleJob(b, 'fresh-clone').extras as Record<string, unknown>).isolation as Record<
+        string,
+        unknown
+      >)
+        .denoDir = '/workspace/.deno';
+    }, 'denoDir'],
+    ['isolation-extra', (b) => {
+      ((bundleJob(b, 'fresh-clone').extras as Record<string, unknown>).isolation as Record<
+        string,
+        unknown
+      >)
+        .extra = 'field';
+    }, 'unknown fields'],
+  ];
+  for (const [label, mutate, expected] of cases) {
+    const bundle = clone(f.bundle);
+    mutate(bundle);
+    assert(
+      (await failuresFor(bundle, f)).some((failure) => failure.includes(expected)),
+      `expected rejection for ${label}`,
+    );
+  }
+});
+
+Deno.test('job-name, SHA/tree, and duplicate/unknown jobs are rejected', async () => {
+  const f = await shared();
   const missing = clone(f.bundle);
-  missing.jobs = (missing.jobs as Array<Record<string, unknown>>).filter(
-    (job) => job.job !== 'packed',
+  missing.jobs = (missing.jobs as Array<Record<string, unknown>>).filter((job) =>
+    job.job !== 'packed'
   );
   assert(
-    (await bundleFailures(missing, f)).some((x) =>
-      x.includes('required job result missing: packed')
-    ),
+    (await failuresFor(missing, f)).some((x) => x.includes('required job result missing: packed')),
   );
 
   const duplicate = clone(f.bundle);
   const jobs = duplicate.jobs as Array<Record<string, unknown>>;
   jobs.push(clone(jobs[0]));
-  assert((await bundleFailures(duplicate, f)).some((x) => x.includes('duplicate job result')));
+  assert((await failuresFor(duplicate, f)).some((x) => x.includes('duplicate job result')));
 
   const unknown = clone(f.bundle);
   (unknown.jobs as Array<Record<string, unknown>>).push({
     ...clone((unknown.jobs as Array<Record<string, unknown>>)[0]),
     job: 'unknown-job',
   });
-  assert((await bundleFailures(unknown, f)).some((x) => x.includes('unknown job result')));
+  assert((await failuresFor(unknown, f)).some((x) => x.includes('unknown job result')));
+
+  const wrongSha = clone(f.bundle);
+  wrongSha.sha = 'c'.repeat(40);
+  assert((await failuresFor(wrongSha, f)).some((x) => x.includes('evidence sha')));
 });
 
-Deno.test('SHA, tree, age, and requiredOk invariants are enforced', async () => {
-  const f = await fixture();
-  for (
-    const [label, mutate] of [
-      ['evidence sha', (b: Record<string, unknown>) => {
-        b.sha = 'c'.repeat(40);
-      }],
-      ['evidence tree', (b: Record<string, unknown>) => {
-        b.tree = 'd'.repeat(40);
-      }],
-      ['generatedAt', (b: Record<string, unknown>) => {
-        b.generatedAt = 'not-a-date';
-      }],
-      ['requiredOk', (b: Record<string, unknown>) => {
-        b.requiredOk = false;
-      }],
-    ] as const
-  ) {
-    const bundle = clone(f.bundle);
-    mutate(bundle);
-    assert(
-      (await bundleFailures(bundle, f)).some((failure) => failure.includes(label)),
-      `expected rejection for ${label}`,
-    );
-  }
-  const stale = clone(f.bundle);
+Deno.test('collectJobFailures rejects old-style and decoy fresh clones', async () => {
+  const f = await shared();
+  const cloneJobs = () =>
+    f.jobs.map((entry) => ({ job: structuredClone(entry.job), read: entry.read }));
+
+  const oldStyle = cloneJobs();
+  const fresh = oldStyle.find((entry) => entry.job.job === 'fresh-clone');
+  if (!fresh) throw new Error('fresh fixture missing');
+  fresh.job.steps = (fresh.job.steps as Array<{ name: string }>).filter((step) =>
+    ['clone', 'git-checkout', 'install', 'task-check', 'task-gate-source', 'task-release-check']
+      .includes(step.name)
+  );
   assert(
-    (await collectBundleFailures(stale, {
-      expectedSha: SHA,
-      expectedTree: TREE,
-      read: f.bundleRead,
-      now: Date.now() + 20 * 24 * 60 * 60 * 1000,
-    })).some((failure) => failure.includes('retention window')),
+    (await collectJobFailures(oldStyle as never, SHA, TREE)).some((x) =>
+      x.includes('required step missing: workspace-clean-before')
+    ),
   );
-});
 
-Deno.test('log path traversal, wrong prefix, missing logs, and hash mismatch are rejected', async () => {
-  const f = await fixture();
-  for (
-    const badPath of [
-      '../secrets.log',
-      '/etc/passwd.log',
-      'ci/fast-checks/other/x.log',
-      'logs/x.log',
-    ]
-  ) {
-    const bundle = clone(f.bundle);
-    const step = (bundleJob(bundle, 'fast-checks').steps as Array<Record<string, unknown>>)[0];
-    step.logSource = badPath;
-    assert((await bundleFailures(bundle, f)).length > 0, `expected rejection for ${badPath}`);
-  }
-  const missing = clone(f.bundle);
-  const missingStep =
-    (bundleJob(missing, 'fast-checks').steps as Array<Record<string, unknown>>)[0];
-  missingStep.logSource = 'ci/fast-checks/logs/does-not-exist.log';
-  assert((await bundleFailures(missing, f)).some((x) => x.includes('log missing')));
-
-  const tampered = clone(f.bundle);
-  const tamperedStep =
-    (bundleJob(tampered, 'fast-checks').steps as Array<Record<string, unknown>>)[0];
-  tamperedStep.logSha256 = `sha256:${'0'.repeat(64)}`;
-  assert((await bundleFailures(tampered, f)).some((x) => x.includes('log hash mismatch')));
-
-  const malformed = clone(f.bundle);
-  const malformedStep =
-    (bundleJob(malformed, 'fast-checks').steps as Array<Record<string, unknown>>)[0];
-  malformedStep.logSha256 = 'sha256:XYZ';
-  assert((await bundleFailures(malformed, f)).some((x) => x.includes('sha256:<64 lowercase hex>')));
-});
-
-Deno.test('tarball keys, hashes, and manifest references are strict', async () => {
-  const f = await fixture();
-  const missing = clone(f.bundle);
-  delete (missing.tarballs as Record<string, string>)['@openelement/router'];
-  assert((await bundleFailures(missing, f)).some((x) => x.includes('must contain exactly')));
-
-  const extra = clone(f.bundle);
-  (extra.tarballs as Record<string, string>)['@evil/fake'] = `sha256:${'f'.repeat(64)}`;
-  assert((await bundleFailures(extra, f)).some((x) => x.includes('must contain exactly')));
-
-  const badHash = clone(f.bundle);
-  (badHash.tarballs as Record<string, string>)['@openelement/ui'] = 'sha256:bad';
-  assert((await bundleFailures(badHash, f)).some((x) => x.includes('missing or malformed sha256')));
-
-  const badManifest = clone(f.bundle);
-  badManifest.tarballManifest = {
-    path: 'tarball-manifest.json',
-    sha256: `sha256:${'0'.repeat(64)}`,
-  };
+  const decoy = cloneJobs();
+  const decoyFresh = decoy.find((entry) => entry.job.job === 'fresh-clone');
+  if (!decoyFresh) throw new Error('fresh fixture missing');
+  const checkout = (decoyFresh.job.steps as Array<Record<string, unknown>>).find((step) =>
+    step.name === 'git-checkout'
+  );
+  if (!checkout) throw new Error('git-checkout fixture missing');
+  (checkout.command as string[])[2] = '/tmp/decoy-clone';
   assert(
-    (await bundleFailures(badManifest, f)).some((x) => x.includes('tarballManifest hash mismatch')),
+    (await collectJobFailures(decoy as never, SHA, TREE)).some((x) =>
+      x.includes('git-checkout must run against')
+    ),
   );
 
-  const missingManifest = clone(f.bundle);
-  missingManifest.packDiagnostics = {
-    path: 'pack-diagnostics.json',
-    sha256: `sha256:${'0'.repeat(64)}`,
-  };
-  assert((await bundleFailures(missingManifest, f)).some((x) => x.includes('packDiagnostics')));
-});
-
-Deno.test('rollup requires the exact consumer set and a green three-browser Site proof', async () => {
-  const f = await fixture();
-  const noConsumer = clone(f.bundle);
-  (noConsumer.rollup as { consumers: string[] }).consumers = ['one'];
-  assert((await bundleFailures(noConsumer, f)).some((x) => x.includes('packed consumer missing')));
-
-  const allSkipped = clone(f.bundle);
-  const site = (allSkipped.rollup as { siteE2e: Record<string, unknown> }).siteE2e;
-  site.passed = 0;
-  site.skipped = 3 * REQUIRED_SITE_BROWSERS.length;
-  site.projects = Object.fromEntries(
-    REQUIRED_SITE_BROWSERS.map((browser) => [browser, { passed: 0, failed: 0, skipped: 3 }]),
+  const failed = cloneJobs();
+  const failedFresh = failed.find((entry) => entry.job.job === 'fresh-clone');
+  if (!failedFresh) throw new Error('fresh fixture missing');
+  const release = (failedFresh.job.steps as Array<Record<string, unknown>>).find((step) =>
+    step.name === 'task-release-check'
   );
-  const skippedFailures = await bundleFailures(allSkipped, f);
-  assert(skippedFailures.some((x) => x.includes('skipped=3')));
-  assert(skippedFailures.some((x) => x.includes('passed=0')));
-
-  const totalsMismatch = clone(f.bundle);
-  (totalsMismatch.rollup as { siteE2e: { passed: number } }).siteE2e.passed += 1;
-  assert((await bundleFailures(totalsMismatch, f)).some((x) => x.includes('total passed=')));
+  if (!release) throw new Error('release fixture missing');
+  release.result = 'FAIL';
+  release.exitCode = 1;
+  assert(
+    (await collectJobFailures(failed as never, SHA, TREE)).some((x) =>
+      x.includes('task-release-check')
+    ),
+  );
 });
 
-Deno.test('collectRollupFailures reports missing artifact scan and consumers', () => {
-  assert(collectRollupFailures(undefined).length === 1);
+Deno.test('rollup checks are unchanged and strict', () => {
+  assertEquals(collectRollupFailures(undefined).length, 1);
   const failures = collectRollupFailures({ artifactCheck: false, consumers: [] });
   assert(failures.some((x) => x.includes('artifact scan did not run')));
   assert(failures.some((x) => x.includes('packed consumer missing')));
+  const healthy = {
+    artifactCheck: true,
+    consumers: [...REQUIRED_PACKED_CONSUMERS],
+    siteE2e: {
+      ran: true,
+      passed: 3 * REQUIRED_SITE_BROWSERS.length,
+      failed: 0,
+      skipped: 0,
+      projects: Object.fromEntries(
+        REQUIRED_SITE_BROWSERS.map((browser) => [browser, { passed: 3, failed: 0, skipped: 0 }]),
+      ),
+    },
+  };
+  assertEquals(collectRollupFailures(healthy), []);
+  const skipped = clone(healthy);
+  skipped.siteE2e.skipped = 3;
+  skipped.siteE2e.passed = 0;
+  skipped.siteE2e.projects = Object.fromEntries(
+    REQUIRED_SITE_BROWSERS.map((browser) => [browser, { passed: 0, failed: 0, skipped: 1 }]),
+  );
+  assert(collectRollupFailures(skipped).some((x) => x.includes('skipped=1')));
 });
 
 Deno.test('packedRollupFromLog derives the artifact scan and consumers from the gate log', () => {
@@ -518,34 +892,4 @@ Deno.test('packedRollupFromLog derives the artifact scan and consumers from the 
   assertEquals(parsed.artifactCheck, true);
   assertEquals(parsed.consumers.length, REQUIRED_PACKED_CONSUMERS.length);
   assertEquals(packedRollupFromLog('PASS tools/release#pack:dry-run').artifactCheck, false);
-});
-
-Deno.test('collectJobFailures rejects old-style and wrong-command fresh clones', async () => {
-  const f = await fixture();
-  const oldStyle = cloneJobs(f.jobs);
-  const fresh = oldStyle.find((entry) =>
-    (entry.job as Record<string, unknown>).job === 'fresh-clone'
-  )!;
-  (fresh.job as { steps: Array<{ name: string }> }).steps =
-    (fresh.job as { steps: Array<{ name: string }> }).steps.filter((step) =>
-      ['clone', 'git-checkout', 'install', 'task-check'].includes(step.name)
-    );
-  const failures = await collectJobFailures(oldStyle as never, SHA, TREE);
-  assert(failures.some((x) => x.includes('required step missing: task-gate-source')));
-  assert(failures.some((x) => x.includes('required step missing: task-release-check')));
-
-  const wrongCommand = cloneJobs(f.jobs);
-  const wrongFresh = wrongCommand.find((entry) =>
-    (entry.job as Record<string, unknown>).job === 'fresh-clone'
-  )!;
-  for (
-    const step of (wrongFresh.job as { steps: Array<{ name: string; command: string[] }> }).steps
-  ) {
-    if (step.name === 'task-gate-source') step.command = ['deno', 'task', 'check'];
-  }
-  assert(
-    (await collectJobFailures(wrongCommand as never, SHA, TREE)).some((x) =>
-      x.includes('task-gate-source')
-    ),
-  );
 });

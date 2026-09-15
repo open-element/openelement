@@ -215,6 +215,7 @@ jobs:
             .artifacts/candidate-evidence.json
             .artifacts/tarball-manifest.json
             .artifacts/pack-diagnostics.json
+            .artifacts/tarballs
             .artifacts/ci
           if-no-files-found: error
           retention-days: 14
