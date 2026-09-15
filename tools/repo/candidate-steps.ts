@@ -42,6 +42,16 @@ function hasBoundary(value: string, prefix: string): boolean {
   return value === prefix || value.startsWith(`${prefix}/`) || value.startsWith(`${prefix}\\`);
 }
 
+/** Replace one shared role prefix with its real absolute path (inverse of
+ * normalizeEvidencePath). */
+export function materializeEvidencePath(path: string, mapping: PathRoleMapping): string {
+  for (const [real, role] of mapping) {
+    if (path === role) return real;
+    if (path.startsWith(`${role}/`)) return `${real}${path.slice(role.length)}`;
+  }
+  return path;
+}
+
 /** Replace one absolute path prefix with its shared role. */
 export function normalizeEvidencePath(path: string, mapping: PathRoleMapping): string {
   let best: readonly [string, string] | undefined;

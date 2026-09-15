@@ -28,6 +28,8 @@ import {
   FRESH_CLONE_ISOLATION,
   freshCloneCommands,
   JOB_NAMES,
+  materializeEvidencePath,
+  normalizeEvidencePath,
 } from './candidate-steps.ts';
 import { createDeterministicTarGz } from '../lib/deterministic-tar.ts';
 
@@ -852,6 +854,24 @@ Deno.test('collectJobFailures rejects old-style and decoy fresh clones', async (
     (await collectJobFailures(failed as never, SHA, TREE)).some((x) =>
       x.includes('task-release-check')
     ),
+  );
+});
+
+Deno.test('evidence roles materialize back to real paths before spawning', () => {
+  const mapping = [
+    ['/work/repo', EVIDENCE_ROLES.source],
+    ['/tmp/x', EVIDENCE_ROLES.temp],
+    ['/tmp/x/repo', EVIDENCE_ROLES.clone],
+  ] as const;
+  assertEquals(materializeEvidencePath(EVIDENCE_ROLES.source, mapping), '/work/repo');
+  assertEquals(
+    materializeEvidencePath(`${EVIDENCE_ROLES.clone}/tools/repo/clean-proof.ts`, mapping),
+    '/tmp/x/repo/tools/repo/clean-proof.ts',
+  );
+  assertEquals(materializeEvidencePath('git', mapping), 'git');
+  assertEquals(
+    normalizeEvidencePath('/tmp/x/repo/deno-dir', mapping),
+    `${EVIDENCE_ROLES.clone}/deno-dir`,
   );
 });
 

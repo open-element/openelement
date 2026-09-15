@@ -39,6 +39,7 @@ import {
   freshCloneCommands,
   JOB_NAMES,
   type JobName,
+  materializeEvidencePath,
   normalizeEvidencePath,
   type PathRoleMapping,
   REQUIRED_STEPS,
@@ -402,12 +403,15 @@ async function recordFreshClone(outDir: string): Promise<void> {
   const commands: FreshCloneCommand[] = [];
   const run = async (
     name: string,
-    argv: string[],
+    roleArgv: string[],
     cwd: string,
     env?: Record<string, string>,
   ): Promise<void> => {
     const startedAt = new Date().toISOString();
     const started = Date.now();
+    // Commands are declared in shared roles; only the spawn uses real paths,
+    // so the recorded evidence stays free of machine-specific locations.
+    const argv = roleArgv.map((element) => materializeEvidencePath(element, roles));
     const output = await new Deno.Command(argv[0], {
       args: argv.slice(1),
       cwd,
