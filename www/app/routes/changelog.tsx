@@ -6,7 +6,7 @@ import { contentLocale } from '@openelement/site-ui/locale.ts';
 import { localizePath } from '@openelement/site-ui/link.ts';
 import { marked } from 'marked';
 import PageChangelog from '../components/page-changelog.tsx';
-import { COMMON_PUBLISHED_VERSION, REGISTRY_NOTE } from '../data/version.ts';
+import { COMMON_PUBLISHED_LABEL, REGISTRY_NOTE } from '../data/version.ts';
 
 export const meta = { section: '', label: 'Changelog', order: 20 };
 
@@ -135,7 +135,7 @@ export default definePage(PageChangelog, {
       withdrawnBody: text.withdrawnBody,
       footnote: text.footnote,
       registryNote: REGISTRY_NOTE,
-      commonVersionLabel: COMMON_PUBLISHED_VERSION ?? 'none',
+      commonVersionLabel: COMMON_PUBLISHED_LABEL,
       railItems: ids.map((id, index) => ({
         id,
         href: `#${id}`,

@@ -28,6 +28,12 @@ export const COMMON_PUBLISHED_NOTE = COMMON_PUBLISHED_VERSION === null
   ? 'no single stable version is published for all four packages'
   : `${COMMON_PUBLISHED_VERSION} — published for all four packages`;
 
+// Short label for that version in UI chrome: no number until one exists for
+// all four packages, so chrome never fabricates a shared line.
+export const COMMON_PUBLISHED_LABEL = COMMON_PUBLISHED_VERSION === null
+  ? 'none'
+  : COMMON_PUBLISHED_VERSION;
+
 // Human-readable per-package latest summary derived from PUBLISHED_LATEST.
 export const REGISTRY_NOTE = Object.entries(PUBLISHED_LATEST)
   .map(([name, version]) => `${name.replace('@openelement/', '')} ${version}`)

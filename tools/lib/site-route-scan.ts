@@ -29,7 +29,9 @@ export async function scanSiteRoutes(routesDir: string): Promise<SiteRouteCatalo
       const relativePath = relative === '' ? dirEntry.name : `${relative}/${dirEntry.name}`;
       if (dirEntry.isDirectory) {
         await walk(join(dir, dirEntry.name), relativePath);
-      } else if (dirEntry.isFile && /\.tsx?$/.test(dirEntry.name)) {
+      } else if (!dirEntry.isSymlink && /\.tsx?$/.test(dirEntry.name)) {
+        // Symlinks are skipped on purpose: a linked route file would resolve
+        // outside the scanned tree.
         const path = fileToRoutePath(relativePath);
         if (path !== undefined) entries.push({ path, type: 'page' });
       }
