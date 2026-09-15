@@ -168,15 +168,25 @@ export function classifyPackLog(output: string): ClassifiedPackLog {
   return { errors, typeWarnings, unexpectedWarnings };
 }
 
+/** POSIX `/…` or Windows `D:\…`/`D:/…` absolute path. */
+function isAbsolutePackPath(value: string): boolean {
+  return value.startsWith('/') || /^[A-Za-z]:[\\/]/.test(value);
+}
+
 /** A warned file URL/path relative to the directory pack ran in, or null when outside it. */
 export function packRelativePath(packDir: string, file: string): string | null {
-  // Lexical macOS normalization: TMPDIR may surface as /var/... in one
-  // place and /private/var/... in the other (same directory). realpath is
-  // unavailable (staged dirs are cleaned before classification), so strip
-  // the well-known alias prefix on both sides instead.
+  // Lexical normalization: TMPDIR may surface as /var/... in one place and
+  // /private/var/... in the other (same directory), and Windows surfaces the
+  // same file as `D:\...`, `D:/...` or `file:///D:/...`. realpath is
+  // unavailable (staged dirs are cleaned before classification), so reduce
+  // both sides to one lexical form — forward slashes, no leading slash before
+  // the drive, lowercased drive letter — and strip the macOS alias prefix.
   const canon = (value: string): string => {
-    const noPrivate = value.startsWith('/private/') ? value.slice('/private'.length) : value;
-    return noPrivate.endsWith('/') ? noPrivate.slice(0, -1) : noPrivate;
+    let next = value.replace(/\\/g, '/');
+    if (/^\/[A-Za-z]:\//.test(next)) next = next.slice(1);
+    if (/^[A-Za-z]:/.test(next)) next = next[0].toLowerCase() + next.slice(1);
+    if (next.startsWith('/private/')) next = next.slice('/private'.length);
+    return next.endsWith('/') ? next.slice(0, -1) : next;
   };
   let path = file;
   if (path.startsWith('file://')) {
@@ -477,7 +487,7 @@ export async function packPackage(
     }
     // packDir is repo-relative for direct packs but absolute for staged
     // packs; warned file URLs are always absolute.
-    const absolutePackDir = packDir.startsWith('/') ? packDir : `${Deno.cwd()}/${packDir}`;
+    const absolutePackDir = isAbsolutePackPath(packDir) ? packDir : `${Deno.cwd()}/${packDir}`;
     const warningRecords: Array<{ relative: string; raw: string }> = [];
     for (const warning of packSummary.typeWarnings) {
       const relative = packRelativePath(absolutePackDir, warning.file);

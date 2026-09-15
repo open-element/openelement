@@ -131,6 +131,11 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
       - uses: ./.github/actions/setup-deno-workspace
+      # v7.0.0 — ADR-0154 pins the Alpha node runtime to Node 24 (native
+      # URLPattern). The runner default (22) cannot load the packed router.
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: '24'
       - name: Install Playwright browsers
         # Packed Native/Lit/Starter/Create/UI consumers assert hydration on
         # all three engines.
@@ -158,6 +163,11 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
       - uses: ./.github/actions/setup-deno-workspace
+      # v7.0.0 — the clone's own packed gate runs the same Node 24 consumers
+      # (ADR-0154); the runner default (22) lacks native URLPattern.
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: '24'
       - name: Install Playwright browsers
         # The clone's own packed gate runs the three-browser consumers; the
         # browser binaries are reused from the preinstalled HOME cache

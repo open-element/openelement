@@ -528,6 +528,28 @@ Deno.test('packRelativePath scopes warned files to the packed directory', () => 
     packRelativePath('/var/folders/x/y', 'file:///private/var/folders/x/y/src/a.ts'),
     'src/a.ts',
   );
+  // Windows: pack's cwd is backslashed, the warned file is a drive-letter URL.
+  assertEquals(
+    packRelativePath(
+      'D:\\a\\openelement\\openelement/packages/element',
+      'file:///D:/a/openelement/openelement/packages/element/src/internal/compiled/escape-text.ts',
+    ),
+    'src/internal/compiled/escape-text.ts',
+  );
+  assertEquals(
+    packRelativePath(
+      'd:/a/openelement/packages/element',
+      'D:\\a\\openelement\\packages\\element\\src\\a.ts',
+    ),
+    'src/a.ts',
+  );
+  assertEquals(
+    packRelativePath(
+      'D:\\a\\openelement\\packages\\element',
+      'file:///C:/elsewhere/packages/element/src/a.ts',
+    ),
+    null,
+  );
 });
 
 // ─── Post-publish release flow (receipt + partial publish) ───────────
