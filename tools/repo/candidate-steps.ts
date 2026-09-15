@@ -160,16 +160,27 @@ export const STATIC_JOB_STEPS: Record<
 
 /** Fresh-clone argv builders using shared roles; the producer maps paths. */
 export const freshCloneCommands = {
-  clone: (): string[] => ['git', 'clone', '--no-hardlinks', EVIDENCE_ROLES.source, EVIDENCE_ROLES.clone],
+  clone:
+    (): string[] => ['git', 'clone', '--no-hardlinks', EVIDENCE_ROLES.source, EVIDENCE_ROLES.clone],
   checkout: (sha: string): string[] => ['git', '-C', EVIDENCE_ROLES.clone, 'checkout', sha],
   install: (denoExe: string): string[] => [denoExe, 'install'],
   check: (denoExe: string): string[] => [denoExe, 'task', 'check'],
-  gateSource: (denoExe: string): string[] => [denoExe, 'task', '--cwd', 'tools/repo', 'gate:source'],
+  gateSource: (
+    denoExe: string,
+  ): string[] => [denoExe, 'task', '--cwd', 'tools/repo', 'gate:source'],
   releaseCheck: (denoExe: string): string[] => [denoExe, 'task', 'release:check'],
 } as const;
 
 export const FRESH_CLONE_STEPS: readonly StepContract[] = [
-  { name: 'clone', cwd: EVIDENCE_ROLES.temp, match: (argv) => exact(['git', 'clone', '--no-hardlinks', EVIDENCE_ROLES.source, EVIDENCE_ROLES.clone])(argv, { sha: '', tree: '' }) },
+  {
+    name: 'clone',
+    cwd: EVIDENCE_ROLES.temp,
+    match: (argv) =>
+      exact(['git', 'clone', '--no-hardlinks', EVIDENCE_ROLES.source, EVIDENCE_ROLES.clone])(argv, {
+        sha: '',
+        tree: '',
+      }),
+  },
   {
     name: 'git-checkout',
     cwd: EVIDENCE_ROLES.temp,
@@ -179,10 +190,14 @@ export const FRESH_CLONE_STEPS: readonly StepContract[] = [
         normalized.length !== 5 || normalized[0] !== 'git' || normalized[1] !== '-C' ||
         normalized[3] !== 'checkout'
       ) {
-        return `expected 'git -C ${EVIDENCE_ROLES.clone} checkout <sha>', got ${JSON.stringify(argv)}`;
+        return `expected 'git -C ${EVIDENCE_ROLES.clone} checkout <sha>', got ${
+          JSON.stringify(argv)
+        }`;
       }
       if (normalized[2] !== EVIDENCE_ROLES.clone) {
-        return `git-checkout must run against ${EVIDENCE_ROLES.clone}, got ${JSON.stringify(normalized[2])}`;
+        return `git-checkout must run against ${EVIDENCE_ROLES.clone}, got ${
+          JSON.stringify(normalized[2])
+        }`;
       }
       if (normalized[4] !== context.sha) {
         return `git-checkout target ${normalized[4]} != evidence sha ${context.sha}`;
@@ -198,7 +213,11 @@ export const FRESH_CLONE_STEPS: readonly StepContract[] = [
     cwd: EVIDENCE_ROLES.clone,
     match: exact(['deno', 'task', '--cwd', 'tools/repo', 'gate:source']),
   },
-  { name: 'task-release-check', cwd: EVIDENCE_ROLES.clone, match: exact(['deno', 'task', 'release:check']) },
+  {
+    name: 'task-release-check',
+    cwd: EVIDENCE_ROLES.clone,
+    match: exact(['deno', 'task', 'release:check']),
+  },
   cleanProof('after', EVIDENCE_ROLES.clone),
 ];
 
@@ -338,7 +357,9 @@ export function auditToolVersions(value: unknown, label: string): string[] {
     for (const browser of ['chromium', 'firefox', 'webkit']) {
       const version = browserRecord[browser];
       if (typeof version !== 'string' || version === '') {
-        failures.push(`${label}: toolVersions.playwrightBrowsers.${browser} must be a non-empty string`);
+        failures.push(
+          `${label}: toolVersions.playwrightBrowsers.${browser} must be a non-empty string`,
+        );
       }
     }
   }
