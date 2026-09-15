@@ -984,7 +984,9 @@ async function auditPackDiagnostics(
     failures.push('packed job extras.packDiagnostics must equal pack-diagnostics.json');
   }
   const expectedNames = [...REQUIRED_PACKAGE_TARBALLS].sort();
-  const names = parsed.map((entry) => isRecord(entry) ? entry.package : undefined);
+  // Diagnostics order is per-package output order, not a contract; compare as
+  // a set, but require exactly one entry per package.
+  const names = parsed.map((entry) => isRecord(entry) ? entry.package : undefined).sort();
   if (names.join(',') !== expectedNames.join(',')) {
     failures.push(
       `packDiagnostics must list exactly ${expectedNames.join(', ')}; found ${
