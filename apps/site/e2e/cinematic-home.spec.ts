@@ -84,30 +84,32 @@ test.describe('Cinematic homepage', () => {
     const readFrame = () =>
       dragon.evaluate((element) => Number(element.getAttribute('data-frame') ?? -1));
     // Live once the center frame is decoded and the first canvas paint lands.
-    await expect.poll(readFrame, { timeout: 20000 }).toBeGreaterThanOrEqual(0);
+    // ponytail: remote R2 atlas streams progressively after center, so extreme
+    // polls allow 60s for slow networks; same thresholds, just longer waits.
+    await expect.poll(readFrame, { timeout: 60000 }).toBeGreaterThanOrEqual(0);
 
     const viewport = page.viewportSize() ?? { width: 1280, height: 720 };
     // Centered cursor → the frontal anchor frame (27 of 59).
     await page.mouse.move(viewport.width / 2, viewport.height / 2);
-    await expect.poll(readFrame, { timeout: 15000 }).toBeGreaterThanOrEqual(24);
-    await expect.poll(readFrame, { timeout: 15000 }).toBeLessThanOrEqual(30);
+    await expect.poll(readFrame, { timeout: 60000 }).toBeGreaterThanOrEqual(24);
+    await expect.poll(readFrame, { timeout: 60000 }).toBeLessThanOrEqual(30);
     // Cursor hard right → the head turns right (late frames).
     await page.mouse.move(viewport.width * 0.98, viewport.height / 2);
-    await expect.poll(readFrame, { timeout: 15000 }).toBeGreaterThanOrEqual(54);
+    await expect.poll(readFrame, { timeout: 60000 }).toBeGreaterThanOrEqual(54);
     // Cursor hard left → the head turns left (early frames).
     await page.mouse.move(viewport.width * 0.02, viewport.height / 2);
-    await expect.poll(readFrame, { timeout: 15000 }).toBeLessThanOrEqual(3);
+    await expect.poll(readFrame, { timeout: 60000 }).toBeLessThanOrEqual(3);
 
     // Parked inside the squint zone (frames 15-17, ~normX 0.296): fine while
     // moving, but a resting dragon must slide to an open-eyed frame.
     await page.mouse.move(viewport.width * 0.296, viewport.height / 2);
-    await expect.poll(readFrame, { timeout: 15000 }).toBeGreaterThanOrEqual(13);
+    await expect.poll(readFrame, { timeout: 60000 }).toBeGreaterThanOrEqual(13);
     // The park rule fires after 1.2s of stillness — poll for the snap-out.
     await expect
       .poll(async () => {
         const f = await readFrame();
         return f <= 14 || f >= 18;
-      }, { timeout: 15000 })
+      }, { timeout: 60000 })
       .toBe(true);
 
     // Fully idle: the atlas glides to center and hands over to the filmed
@@ -117,12 +119,12 @@ test.describe('Cinematic homepage', () => {
     await expect
       .poll(
         () => dragon.evaluate((element) => Boolean(element.querySelector('.stage.idling'))),
-        { timeout: 20000 },
+        { timeout: 60000 },
       )
       .toBe(true);
     await expect
       .poll(() => video.evaluate((element) => (element as HTMLVideoElement).paused), {
-        timeout: 15000,
+        timeout: 60000,
       })
       .toBe(false);
     const t1 = await video.evaluate((element) => (element as HTMLVideoElement).currentTime);
@@ -131,11 +133,11 @@ test.describe('Cinematic homepage', () => {
     expect(t2).toBeGreaterThan(t1);
     // Moving the cursor again takes back control instantly.
     await page.mouse.move(viewport.width * 0.98, viewport.height / 2);
-    await expect.poll(readFrame, { timeout: 15000 }).toBeGreaterThanOrEqual(54);
+    await expect.poll(readFrame, { timeout: 60000 }).toBeGreaterThanOrEqual(54);
     await expect
       .poll(
         () => dragon.evaluate((element) => Boolean(element.querySelector('.stage.idling'))),
-        { timeout: 15000 },
+        { timeout: 60000 },
       )
       .toBe(false);
   });
