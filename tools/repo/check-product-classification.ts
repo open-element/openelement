@@ -70,17 +70,39 @@ export function classifyClauses(text: string): string[] {
     .filter((clause) => clause.length > 0);
 }
 
-/** Parentheticals do not change the relation; drop them before scanning. */
-function stripParentheticals(clause: string): string {
-  const innermost = /\([^()]*\)|（[^（）]*）/gu;
-  // Iterate to a fixpoint so nested groups ( "((a))" ) cannot leave one
-  // half-stripped level behind and shift the negation window.
-  let stripped = clause;
-  for (let previous = ''; previous !== stripped;) {
-    previous = stripped;
-    stripped = stripped.replace(innermost, ' ');
+/**
+ * Parentheticals do not change the relation; drop them before scanning.
+ *
+ * Depth-tracking scan, not a bracket-stripping regex: balanced groups
+ * (including nested ones) collapse to a single space, while unbalanced
+ * brackets stay literal so malformed prose reads as written instead of
+ * silently losing the rest of the clause.
+ */
+export function stripParentheticals(clause: string): string {
+  const out: string[] = [];
+  const open: Array<{ index: number; char: string }> = [];
+  for (const char of clause) {
+    if (char === '(' || char === '（') {
+      open.push({ index: out.length, char });
+      out.push(char);
+      continue;
+    }
+    if (char === ')' || char === '）') {
+      const top = open.at(-1);
+      const pairs = (top?.char === '(' && char === ')') ||
+        (top?.char === '（' && char === '）');
+      if (top && pairs) {
+        open.pop();
+        out.length = top.index;
+        out.push(' ');
+        continue;
+      }
+      out.push(char);
+      continue;
+    }
+    out.push(char);
   }
-  return stripped;
+  return out.join('');
 }
 
 function countNegations(segment: string): number {

@@ -4,6 +4,7 @@ import {
   readProductDocs,
   REQUIRED_PRODUCT_DOCS,
   scanProductClassification,
+  stripParentheticals,
 } from './check-product-classification.ts';
 
 const repoRoot = join(dirname(new URL(import.meta.url).pathname), '..', '..');
@@ -84,6 +85,16 @@ Deno.test('product classification: legal statements pass', () => {
     const failures = scanProductClassification([{ path: 'probe.md', text: phrase }]);
     assertEquals(failures, [], `unexpected rejection for: ${phrase}`);
   }
+});
+
+Deno.test('product classification: parenthetical stripping handles nesting and stray brackets', () => {
+  // Balanced groups (nested included) collapse to one space.
+  assertEquals(stripParentheticals('((a))'), ' ');
+  assertEquals(stripParentheticals('a (b (c) d) e'), 'a   e');
+  assertEquals(stripParentheticals('SaaS （独立治理） 是核心产品'), 'SaaS   是核心产品');
+  // Unbalanced brackets are prose, not a group boundary.
+  assertEquals(stripParentheticals('a (b'), 'a (b');
+  assertEquals(stripParentheticals('a b) c'), 'a b) c');
 });
 
 Deno.test('product classification: clauses are evaluated independently', () => {

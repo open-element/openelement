@@ -9,7 +9,7 @@
 import { join } from '@std/path';
 import type { SiteRouteCatalogEntry } from './site-sitemap.ts';
 
-function fileToRoutePath(relativePath: string): string | undefined {
+function fileToRoutePath(relativePath: string): string {
   const withoutExtension = relativePath.replace(/\.tsx?$/, '');
   const segments = withoutExtension.split('/');
   const mapped: string[] = [];
@@ -32,8 +32,7 @@ export async function scanSiteRoutes(routesDir: string): Promise<SiteRouteCatalo
       } else if (!dirEntry.isSymlink && /\.tsx?$/.test(dirEntry.name)) {
         // Symlinks are skipped on purpose: a linked route file would resolve
         // outside the scanned tree.
-        const path = fileToRoutePath(relativePath);
-        if (path !== undefined) entries.push({ path, type: 'page' });
+        entries.push({ path: fileToRoutePath(relativePath), type: 'page' });
       }
     }
   }
