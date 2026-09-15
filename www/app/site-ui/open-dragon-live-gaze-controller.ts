@@ -121,9 +121,11 @@ class DragonLiveGazeController {
     }, epoch);
 
     const finePointer = globalThis.matchMedia?.('(pointer: fine)').matches ?? false;
-    if (finePointer) {
-      globalThis.addEventListener('pointermove', this.#onPointerMove, { passive: true });
-    }
+    // Capability media queries are only a coarse snapshot and Firefox can
+    // report `pointer: none` until real mouse input arrives (notably in
+    // headless/remote sessions). Listen universally and classify each event;
+    // touch movement remains ignored by #onPointerMove.
+    globalThis.addEventListener('pointermove', this.#onPointerMove, { passive: true });
     this.#observer = new IntersectionObserver(
       (entries) => {
         if (!this.#connected || this.#epoch !== epoch) return;
@@ -317,6 +319,7 @@ class DragonLiveGazeController {
 
   #onPointerMove = (event: PointerEvent): void => {
     if (!this.#connected) return;
+    if (event.pointerType !== 'mouse' && event.pointerType !== 'pen') return;
     if (this.#farewell) return; // scrolled out — the dragon is its own creature now
     const width = globalThis.innerWidth || 1;
     const norm = Math.max(0, Math.min(1, event.clientX / width));

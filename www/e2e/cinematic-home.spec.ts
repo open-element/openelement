@@ -79,6 +79,20 @@ test.describe('Cinematic homepage', () => {
   });
 
   test('the dragon watches the cursor and stays alive when it parks', async ({ page }) => {
+    // Linux Firefox can report pointer:none in a headless/remote session even
+    // though Playwright is delivering real mouse PointerEvents. Pin that
+    // environment so the test covers event capability, not the media-query
+    // snapshot that caused #1353's source and fresh-clone gates to fail.
+    await page.addInitScript(() => {
+      const nativeMatchMedia = globalThis.matchMedia.bind(globalThis);
+      globalThis.matchMedia = (query) => {
+        const result = nativeMatchMedia(query);
+        if (query === '(pointer: fine)') {
+          Object.defineProperty(result, 'matches', { value: false });
+        }
+        return result;
+      };
+    });
     await page.goto('/');
     const dragon = page.locator('open-dragon-live-gaze');
     const readFrame = () =>
