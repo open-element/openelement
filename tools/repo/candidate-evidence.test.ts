@@ -390,6 +390,21 @@ Deno.test('valid packed evidence capsule validates and carries without the works
   }
 });
 
+Deno.test('tarball map equality ignores key insertion order', async () => {
+  // Producer stages in workspace order; the aggregator composes in
+  // REQUIRED_PACKAGE_TARBALLS order. Identical maps must validate.
+  const f = await shared();
+  const bundle = clone(f.bundle);
+  const reversed = Object.fromEntries(
+    Object.entries(bundle.tarballFiles as Record<string, string>).reverse(),
+  );
+  bundle.tarballFiles = reversed;
+  (bundleJob(bundle, 'packed').extras as Record<string, unknown>).tarballFiles = Object.fromEntries(
+    Object.entries(reversed).reverse(),
+  );
+  assertEquals(await failuresFor(bundle, f), []);
+});
+
 Deno.test('packed validation fails when the archive bytes are missing', async () => {
   const { extras } = await validPackedStore();
   const read = (_path: string) => Promise.resolve(null);

@@ -1119,6 +1119,19 @@ function deepEqual(a: unknown, b: unknown): boolean {
   return JSON.stringify(a) === JSON.stringify(b);
 }
 
+/**
+ * Order-insensitive equality for string maps (insertion order differs
+ * between producer staging and aggregator composition, so JSON.stringify
+ * comparison would false-negative on identical maps).
+ */
+function stringMapsEqual(a: unknown, b: unknown): boolean {
+  if (!isRecord(a) || !isRecord(b)) return false;
+  const aKeys = Object.keys(a).sort();
+  const bKeys = Object.keys(b).sort();
+  if (aKeys.join(',') !== bKeys.join(',') || aKeys.length !== bKeys.length) return false;
+  return aKeys.every((key) => a[key] === b[key]);
+}
+
 async function auditTarballFiles(
   evidence: Record<string, unknown>,
   options: { read: (path: string) => Promise<Uint8Array | null> },
@@ -1159,10 +1172,10 @@ async function auditTarballFiles(
       | undefined
     : undefined;
   const packedExtras = packedJob && isRecord(packedJob.extras) ? packedJob.extras : undefined;
-  if (packedExtras && !deepEqual(packedExtras.tarballs, evidence.tarballs)) {
+  if (packedExtras && !stringMapsEqual(packedExtras.tarballs, evidence.tarballs)) {
     failures.push('packed job extras.tarballs must equal the top-level tarballs map');
   }
-  if (packedExtras && !deepEqual(packedExtras.tarballFiles, evidence.tarballFiles)) {
+  if (packedExtras && !stringMapsEqual(packedExtras.tarballFiles, evidence.tarballFiles)) {
     failures.push('packed job extras.tarballFiles must equal the top-level tarballFiles map');
   }
   if (
@@ -1439,7 +1452,7 @@ export async function collectBundleFailures(
       } else {
         try {
           const parsed = JSON.parse(new TextDecoder().decode(bytes));
-          if (!deepEqual(parsed, evidence.tarballs)) {
+          if (!stringMapsEqual(parsed, evidence.tarballs)) {
             failures.push('tarballManifest contents must equal the top-level tarballs map');
           }
         } catch {
