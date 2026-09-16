@@ -103,3 +103,13 @@ dependency of Framework Mode as the internal composition layer of the generated 
 (`@openelement/router/http`, `_middleware.ts`, API route handlers) speaks the dialect-free WinterCG
 shape `(request, next) => Promise<Response>` adapted at that internal boundary; Route Mode's
 matching core (`RouteTable`/`RouteResolution`) remains independent of Hono.
+
+## Amendment (2026-09-16): Lit renderer mode is doctrine, not debt
+
+`renderer:'lit'` is a first-class qualified renderer mode legislated by this ADR: a product
+differentiator for the edge-runtime and WC-fullstack scenarios, not a platform-gap shim. Its
+existence and removal are ADR-level decisions only. Qualification is enforced continuously by CI
+(the `router-lit-framework` e2e specs run in the root `test:e2e` gate on every push); the spike
+contract in `src/lit-ssr.ts` is the version matrix to consult when bumping lit or @lit-labs/ssr.
+No periodic re-signing rituals, no consumer counting, and no adoption-based retirement triggers
+apply; pre-release zero-consumption readings are void by construction.
