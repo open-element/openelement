@@ -67,7 +67,7 @@ Deno.test('fixture locks: shared universes must be byte-identical', () => {
 Deno.test('fixture locks: task npm specifiers join the lock universe', () => {
   const config = JSON.stringify({
     tasks: {
-      e2e: 'deno run --allow-all npm:@playwright/test@1.59.1 test',
+      e2e: 'deno run --allow-read --allow-run npm:@playwright/test@1.59.1 test',
       build: ['deno', 'run', 'npm:vite@8.0.16', 'build'],
       dev: 'vite dev',
     },
