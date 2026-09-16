@@ -1,7 +1,7 @@
 # @openelement/router
 
 Application authoring API and lifecycle tooling for openElement: pages,
-routes, loaders, actions, islands, the SPA bootstrap, and the Vite/SSG build
+routes, loaders, actions, islands, and the Vite/SSG build
 pipeline (dev/build/start/preview) that ships Framework Mode applications.
 
 The Route Mode subpaths (`@openelement/router/router`,
@@ -142,13 +142,10 @@ import { defineIslandConfig, definePage } from '@openelement/router';
 - `defineIslandConfig({ ssr, dsd, hydrate })` defines static island metadata
   for adapter scanning; the island itself is a single-module compiled
   `@element` class.
-- `defineApp({ mode: 'spa', routes })` bootstraps the client-only SPA chain
-  (exported from the package root); each route is `{ path, tagName, loader?, action?, guard? }`.
 - `fail(status, data)` / `redirect(location)` / `notFound(message)` implement
   the ADR-0120 action protocol; `isActionFailure()` is the duck-typed guard.
 
-SPA action failures expose `{ error: 'Action failed' }` to page renderers. Raw
-exceptions are logged only in development. Route matching preserves declaration
+Route matching preserves declaration
 order while compiling static segments into a trie; named parameters, optional
 parameters, and wildcards remain supported.
 
@@ -162,9 +159,10 @@ interfaces, including Queue, KV, Service Binding, and Rate Limit objects. Write
 response metadata only through `responseHeaders`, which the generated server
 merges into its final `Response`.
 
-SPA handlers are a separate browser execution chain. Use `SpaLoaderContext`
-and `SpaActionContext`; they intentionally expose only route params (and SPA
-action form data). A server loader cannot be reused unchanged in SPA mode,
+Client-router loaders and actions (`@openelement/router/router/client`) are a
+separate browser execution chain. Use `SpaLoaderContext`
+and `SpaActionContext`; they intentionally expose only route params (and
+action form data). A server loader cannot be reused unchanged in the browser,
 because browsers do not receive server `Request`, environment, platform,
 response-header, or route-metadata capabilities.
 

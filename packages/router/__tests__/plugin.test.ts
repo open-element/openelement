@@ -354,38 +354,6 @@ Deno.test('openPlugin: dev server plugin is @hono/vite-dev-server', () => {
   assertExists(devServerPlugin);
 });
 
-// ─── SPA Mode: SSR dev server must be skipped ─────────────────
-// Regression: route modules call customElements.define() at module top level,
-// which crashes in a server context. SPA is client-only, so the @hono/vite-dev-server
-// middleware (which SSR-imports route modules) must NOT be registered.
-
-Deno.test('openPlugin: SPA mode omits @hono/vite-dev-server (6 plugins)', () => {
-  const plugins = createOpenPlugin({ mode: 'spa' });
-  assertEquals(plugins.length, 6);
-
-  const names = plugins.map((p) => p.name);
-  assertEquals(
-    names,
-    [
-      'open:mdx',
-      'open:core',
-      'open:virtual-entry',
-      'open:island-transform',
-      'open:build',
-      // #951: dev-only (apply: 'serve') island client entry serving.
-      'open:dev-island-client',
-    ],
-  );
-
-  // Critical: no SSR dev server in SPA mode
-  assertEquals(
-    names.includes('@hono/vite-dev-server'),
-    false,
-    'SPA mode must not register @hono/vite-dev-server — it SSR-imports route ' +
-      'modules that call customElements.define() and crash on the server',
-  );
-});
-
 Deno.test('openPlugin: SSG mode (default) includes @hono/vite-dev-server (7 plugins)', () => {
   const plugins = createOpenPlugin({});
   assertEquals(plugins.length, 7);

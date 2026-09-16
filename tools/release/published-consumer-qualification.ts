@@ -261,9 +261,9 @@ async function qualificationMain(): Promise<void> {
       );
       const publicSurfaceSource = [
         "import { HYDRATION_STRATEGIES, OpenElement, renderDsd, signal } from '@openelement/element';",
-        "import { defineApp, defineIslandConfig, definePage } from '@openelement/router';",
+        "import { defineIslandConfig, definePage } from '@openelement/router';",
         "import { openPipeline } from '@openelement/router/vite';",
-        'for (const value of [OpenElement, renderDsd, signal, defineApp, defineIslandConfig, definePage, openPipeline]) {',
+        'for (const value of [OpenElement, renderDsd, signal, defineIslandConfig, definePage, openPipeline]) {',
         "  if (typeof value !== 'function') throw new Error('expected published public function');",
         '}',
         "if (!Array.isArray(HYDRATION_STRATEGIES)) throw new Error('expected hydration strategy list');",
@@ -271,8 +271,8 @@ async function qualificationMain(): Promise<void> {
       ].join('\n');
       const denoRuntimeSource = [
         "import { OpenElement, signal } from '@openelement/element';",
-        "import { defineApp, defineIslandConfig, definePage } from '@openelement/router';",
-        'for (const value of [OpenElement, signal, defineApp, defineIslandConfig, definePage]) {',
+        "import { defineIslandConfig, definePage } from '@openelement/router';",
+        'for (const value of [OpenElement, signal, defineIslandConfig, definePage]) {',
         "  if (typeof value !== 'function') throw new Error('expected published public function');",
         '}',
         "console.log('published Deno runtime imports passed');",

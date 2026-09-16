@@ -43,10 +43,6 @@ export type {
 } from '@openelement/element';
 export { ACTION_FETCH_HEADER, PROBLEM_JSON_MEDIA_TYPE } from '@openelement/element/authoring';
 
-// SPA bootstrap
-export { defineApp } from './spa.ts';
-export type { SpaAppInstance } from './spa.ts';
-
 // OpenElement-owned request context contract and convenience constructor.
 // This is the single canonical RequestContext authority. Adapters build it
 // from their own request event:

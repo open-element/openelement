@@ -15,15 +15,13 @@ import type { SsgBehaviorOptions } from './internal/protocol/ssg.ts';
 import type { OpenElementBuildContext } from './build-context.ts';
 import { join } from '../internal/host-path.ts';
 import { createLogger } from '@openelement/element';
-import { escapeAttr, escapeHtml } from '@openelement/element';
 import { cleanSsrArtifacts, postProcessClientIslandBuild } from './internal/ssg/index.ts';
-import { writeRouteManifest } from './route-manifest.ts';
 import {
   collectBuildArtifacts,
   createProductionBuildPlan,
   writeBuildEvidence,
 } from './build-plan.ts';
-import { DEFAULT_OUT_DIR, DEFAULT_ROUTES_DIR } from './internal/paths.ts';
+import { DEFAULT_OUT_DIR } from './internal/paths.ts';
 
 const log = createLogger('build');
 
@@ -128,66 +126,6 @@ export function buildPlugin(
       // don't affect HTML content, and injection is a post-processing step.
       ctx.markComplete(1);
       ctx.buildPlan = createProductionBuildPlan(ctx);
-
-      // SPA mode: skip Phase 3 SSG, generate SPA shell + route manifest
-      if (ctx.options.mode === 'spa') {
-        const root = ctx.phase3.root || Deno.cwd();
-        const outDirName = ctx.phase3.outDir || DEFAULT_OUT_DIR;
-        const absOutDir = join(root, outDirName);
-        const htmlLang = escapeAttr(ctx.phase3.html?.lang ?? 'en');
-        const htmlTitle = escapeHtml(ctx.phase3.html?.title ?? 'openElement App');
-
-        const indexPath = join(absOutDir, 'index.html');
-
-        // Generate a fallback SPA shell only when Vite did not emit an HTML
-        // entry. Apps with their own index.html (for example desktop shells
-        // with a custom client entry) keep the real Vite output.
-        const html = `<!DOCTYPE html>
-<html lang="${htmlLang}">
-<head>
-  <meta charset="UTF-8">
-  <title>${htmlTitle}</title>
-</head>
-<body>
-  <div id="root"></div>
-  <script type="module">
-    console.info('[openElement] SPA fallback shell loaded. Provide an app index.html for a bundled client entry.');
-  </script>
-</body>
-</html>`;
-
-        await Deno.mkdir(absOutDir, { recursive: true });
-        try {
-          await Deno.writeTextFile(indexPath, html, { createNew: true });
-          log.info('SPA shell written to index.html');
-        } catch (error) {
-          if (error instanceof Deno.errors.AlreadyExists) {
-            log.info('SPA shell preserved from Vite output');
-          } else {
-            throw error;
-          }
-        }
-
-        // Generate route manifest for client-side routing
-        const absRoutesDir = join(root, ctx.phase3.routesDir || DEFAULT_ROUTES_DIR);
-        const routeCount = await writeRouteManifest({
-          routesDir: absRoutesDir,
-          outDir: absOutDir,
-        });
-        log.info(`Route manifest written (${routeCount} page route(s))`);
-
-        // Phase 2: Client island bundle (only if islands exist). Unlike the
-        // SSG path below this intentionally skips the hasEnhancedForms check
-        // (#569): in SPA mode form submission is intercepted by the SPA
-        // bootstrap's own client entry, so the zero-island enhancement entry
-        // would never be loaded.
-        if (totalIslands > 0) {
-          await runClientIslandBuild(ctx);
-        }
-
-        log.info('SPA build complete.');
-        return;
-      }
 
       log.info('[3/3] Static site generation...');
       try {

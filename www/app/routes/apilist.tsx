@@ -58,12 +58,12 @@ const authoredCopy: Record<string, AuthoredPackageCopy> = {
     },
     notes: {
       en: [
-        'Use `definePage`, `defineIslandConfig` and `defineApp` for application authoring.',
+        'Use `definePage` and `defineIslandConfig` for application authoring.',
         'Use `openPipeline()`/`openElement()` from `@openelement/router/vite` or the generated build task for builds.',
         'Plugin ordering, manifests and content scans are router implementation details.',
       ],
       zh: [
-        '用 `definePage`、`defineIslandConfig` 与 `defineApp` 进行应用创作。',
+        '用 `definePage` 与 `defineIslandConfig` 进行应用创作。',
         '构建使用 `@openelement/router/vite` 的 `openPipeline()`/`openElement()` 或生成的构建任务。',
         '插件顺序、manifest 与内容扫描属于 router 的实现细节。',
       ],

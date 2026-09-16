@@ -415,8 +415,6 @@ export interface BuildOutputOptions {
   outDir?: string;
   /** Base URL path. */
   base?: string;
-  /** If true, emit a client-only SPA bundle instead of SSG. */
-  spa?: boolean;
 }
 
 /** i18n configuration for the build pipeline. */

@@ -57,7 +57,6 @@ export function createProductionBuildPlan(ctx: OpenElementBuildContext): BuildPl
       root,
       outDir: ctx.phase3.outDir,
       base: ctx.phase3.base,
-      spa: ctx.options.mode === 'spa',
     },
     i18n: ctx.plugins.i18nOptions
       ? {

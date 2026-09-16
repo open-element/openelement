@@ -1,11 +1,11 @@
 /**
  * Alpha.10 closure verification — NEW __proto__ projection probe added by the
- * independent release verifier (packet criterion 8). Vectors NOT present in
- * spa-projection-guard.test.ts:
+ * independent release verifier (packet criterion 8). Vectors beyond the
+ * page-projection guard suite:
  *   - defineProperty-crafted own "__proto__" data key (not JSON.parse)
  *   - nested {"__proto__": {...}} pollution attempt one level down
  *   - {"constructor": {"prototype": {...}}} re-prototyping attempt
- *   - the full SPA-path chain projectPageProps → injectPropsSafe onto a host
+ *   - the full page-projection chain projectPageProps → injectPropsSafe onto a host
  *   - differential control: the SAME payload through a naive assignment loop
  *     DOES re-prototype the host, proving the guard is load-bearing
  */
@@ -59,7 +59,7 @@ Deno.test('alpha10-verifier projection: constructor.prototype re-prototyping att
   assertEquals(({} as { polluted?: unknown }).polluted, undefined);
 });
 
-Deno.test('alpha10-verifier projection: full SPA-path chain projectPageProps → injectPropsSafe fails closed', () => {
+Deno.test('alpha10-verifier projection: full page-projection chain projectPageProps → injectPropsSafe fails closed', () => {
   const params = JSON.parse('{"__proto__": "x", "slug": "hello"}') as Record<string, string>;
   const data = JSON.parse(
     '{"__proto__": {"polluted": true}, "constructor": "evil", "title": "legit"}',

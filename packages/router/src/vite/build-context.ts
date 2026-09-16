@@ -83,9 +83,6 @@ class Phase1Meta {
    */
   foreignTags: string[] = [];
 
-  /** SPA mode active (skips SSR entry generation + SSG rendering) */
-  isSpa?: boolean;
-
   /** User-provided resolve.alias in its original format */
   userResolveAlias: Record<string, string> | Alias[] | null = null;
 }

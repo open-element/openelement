@@ -16,7 +16,6 @@ import { assertEquals, assertExists, assertInstanceOf, assertThrows } from '@std
 import { OpenElement, OpenElementError, renderDsd } from '@openelement/element';
 import {
   classifyActionResult,
-  defineApp,
   defineIslandConfig,
   definePage,
   fail,
@@ -94,10 +93,6 @@ function makeCompiledPageClass(tag: string, text: string): CustomElementConstruc
   }
   return TestPage as unknown as CustomElementConstructor;
 }
-
-Deno.test('@openelement/router root export includes defineApp', () => {
-  assertEquals(typeof defineApp, 'function');
-});
 
 Deno.test('definePage() attaches the descriptor to the compiled class and returns it', () => {
   const Page = makeCompiledPageClass('test-page', 'Hello OpenElement');

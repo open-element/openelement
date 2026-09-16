@@ -148,8 +148,8 @@ export interface FrameworkOptions {
   packageIslands?: string[];
   appShell?: AppShellConfig;
   layouts?: LayoutsConfig;
-  /** Build mode. 'ssg' (default) generates static HTML. 'spa' produces a client-only bundle. */
-  mode?: 'ssg' | 'spa';
+  /** Build mode. 'ssg' (default) generates static HTML. */
+  mode?: 'ssg';
   /** @dangerous injected as-is, only use with controlled content */
   headExtras?: string;
   html?: {
@@ -194,6 +194,11 @@ export interface FrameworkOptions {
   };
   build?: {
     outDir?: string;
+    /**
+     * Advisory only: exceeded budgets print build-manifest warnings and never
+     * fail the build; enforce in your own build-output test (see
+     * www/__tests__/build-output.test.ts).
+     */
     manifestBudget?: {
       islandKB?: number;
       totalJsKB?: number;

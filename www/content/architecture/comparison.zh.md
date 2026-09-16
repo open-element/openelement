@@ -12,7 +12,7 @@ order: 20
 | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 架构     | Custom Elements + Declarative Shadow DOM 是一等公民；标准 Custom Elements 即应用契约；App 掌管路由与渲染；Vite 和 Nitro 是官方构建路径。                                                  |
 | 渲染     | 默认 SSG；DSD/shadow 为显式选择的一等模式（当前编译默认 light DOM），按需升级元素；无需交互时输出不含任何框架 JavaScript 的纯静态内容。                                                   |
-| DX       | JSX + 编译型 Custom Element 类，`@element` / `definePage` / `defineApp` / `buildApp`。                                                                                                    |
+| DX       | JSX + 编译型 Custom Element 类，`@element` / `definePage` / `buildApp`。                                                                                                                  |
 | 适用     | 以 Web Components 为原生组件契约、static-first 的应用框架，用于以标准 Custom Element 契约交付 DSD-first 应用；当前范围是 static-first，而非与 Next.js、Nuxt 或 SvelteKit 的泛全栈对齐。   |
 | 全栈路径 | OpenElement × Supabase × Cloudflare：OpenElement 负责应用 UX，Supabase 负责数据/Auth/RLS/Storage/Realtime，Cloudflare 负责边缘/安全/缓存/异步执行。它们是服务提供方，绝不是框架内建功能。 |
 
@@ -61,7 +61,7 @@ OpenElement × Supabase × Cloudflare 是经过验证的全栈交付路径，所
 ## 定位背后的证据
 
 - Custom Elements 作为持久的应用契约——静态面与请求时应用闭环由当前架构文档描述。[当前架构](https://github.com/open-element/openelement/tree/main/docs/architecture)
-- DSD-first SSR 与选择性升级，以及显式的外来 WC 准入——语料库把每个第三方库形态的观测 SSR 输出与准入钉为机器可读证据。[第三方 WC 互操作语料库](https://github.com/open-element/openelement/blob/main/fixtures/web-component-interop/corpus.json)
+- DSD-first SSR 与选择性升级，以及显式的外来 WC 准入——语料库把每个第三方库形态的观测 SSR 输出与准入钉为机器可读证据。[第三方 WC 互操作语料库](https://github.com/open-element/openelement/blob/main/tests/fixtures/web-component-interop/corpus.json)
 - 浏览器与打包产物验证——候选版本需要 Chromium、Firefox 与 WebKit 证明，消费方从打包的公开产物构建。[发布流程](https://github.com/open-element/openelement/blob/main/docs/maintainers/releasing.md)
 - 可组合的服务提供方栈，而不是框架自有的 Auth 或数据库包——由第一方 SaaS 消费方端到端验证。[Supabase × Cloudflare SaaS](https://github.com/open-element/openelement/tree/main/apps/saas)
 

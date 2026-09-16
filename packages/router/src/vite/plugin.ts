@@ -243,7 +243,6 @@ export function createOpenPlugin(
       islandsDir: resolvedOptions.islandsDir || DEFAULT_ISLANDS_DIR,
       routes,
     });
-    if (resolvedOptions.mode === 'spa') return;
     generateEntry(
       routes,
       ctx.phase1.islandTagNames,
@@ -274,7 +273,6 @@ export function createOpenPlugin(
     ctx.phase1.islandTagNames = islandFiles.map((f) => fileToTagName(f));
     ctx.phase1.islandFiles = islandFiles;
     ctx.phase1.islandMeta = await scanIslandMeta(islandsRoot, islandFiles);
-    if (resolvedOptions.mode === 'spa') return;
     generateEntry(
       ctx.phase1.cachedRoutes || [],
       ctx.phase1.islandTagNames,
@@ -452,21 +450,6 @@ export function createOpenPlugin(
 
         // Cache routes for lazy load() regeneration.
         ctx.phase1.cachedRoutes = routes;
-
-        // SPA mode: skip SSR virtual entry generation + SSR admission plan
-        if (resolvedOptions.mode === 'spa') {
-          ctx.phase1.isSpa = true;
-          log.info('SPA mode: skipping SSR entry generation, SSG rendering will be skipped');
-          const pageCount = routes.filter(
-            (r) => r.type === 'page' && !r.special,
-          ).length;
-          const totalIslands = ctx.phase1.islandTagNames.length +
-            ctx.phase1.packageIslandDecls.length;
-          log.info(
-            `Routes: ${pageCount} page(s), ${totalIslands} island(s) - openElement Architecture (SPA)`,
-          );
-          return;
-        }
 
         // v0.18.0: CEM auto-detection - scan node_modules for custom-elements.json
         // without importing or executing any package code. Runs BEFORE the entry
@@ -753,39 +736,30 @@ export function createOpenPlugin(
     },
   };
 
-  // SPA mode is client-only: the @hono/vite-dev-server middleware would import
-  // route modules on the server to SSR-render them, but route modules call
-  // `customElements.define(...)` at module top level (and may touch `document`/
-  // `localStorage`), which crashes with "customElements is not defined" in a
-  // server context. In SPA mode the client bootstrap (e.g. reader.tsx) owns
-  // rendering, so Vite's built-in SPA middleware (index.html + HMR) is all we
-  // need. Skip the SSR dev server entirely.
   const plugins: Plugin[] = [
     mdxPlugin({ routesDir: resolvedOptions.routesDir }),
     corePlugin,
     virtualEntryPlugin,
   ];
 
-  if (resolvedOptions.mode !== 'spa') {
-    plugins.push(
-      lazyHonoDevServer((honoDevServer) => ({
-        entry: VIRTUAL_ENTRY_ID,
-        // ADR-0123 item 2 (#858): with middleware.use configured, the entry
-        // exposes openElementDevFetch — the dev-server-shaped adapter over the
-        // same composed fetch-middleware handler that the start CLI, the e2e
-        // fixture server, and the Nitro entry use. Without it, keep the
-        // default export (the bare Hono app) so the dev path is unchanged.
-        ...(resolvedOptions.middleware?.use?.length ? { export: 'openElementDevFetch' } : {}),
-        injectClientScript: true,
-        // #951: the upstream exclude regexes test req.url WITH its query
-        // string, so vite's versioned module URLs (/.vite/deps/x.js?v=hash —
-        // the optimized-dependency form of every bare import in the dev island
-        // client graph) fell through to the Hono app and 404'd. Extend the
-        // defaults to let versioned module requests reach Vite.
-        exclude: [...honoDevServer.defaultOptions.exclude, /\?v=[A-Za-z0-9]+$/],
-      })),
-    );
-  }
+  plugins.push(
+    lazyHonoDevServer((honoDevServer) => ({
+      entry: VIRTUAL_ENTRY_ID,
+      // ADR-0123 item 2 (#858): with middleware.use configured, the entry
+      // exposes openElementDevFetch — the dev-server-shaped adapter over the
+      // same composed fetch-middleware handler that the start CLI, the e2e
+      // fixture server, and the Nitro entry use. Without it, keep the
+      // default export (the bare Hono app) so the dev path is unchanged.
+      ...(resolvedOptions.middleware?.use?.length ? { export: 'openElementDevFetch' } : {}),
+      injectClientScript: true,
+      // #951: the upstream exclude regexes test req.url WITH its query
+      // string, so vite's versioned module URLs (/.vite/deps/x.js?v=hash —
+      // the optimized-dependency form of every bare import in the dev island
+      // client graph) fell through to the Hono app and 404'd. Extend the
+      // defaults to let versioned module requests reach Vite.
+      exclude: [...honoDevServer.defaultOptions.exclude, /\?v=[A-Za-z0-9]+$/],
+    })),
+  );
 
   plugins.push(
     islandTransformPlugin(resolvedOptions.islandsDir!),
