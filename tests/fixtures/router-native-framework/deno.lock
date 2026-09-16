@@ -1,13 +1,9 @@
 {
   "version": "5",
   "specifiers": {
-    "npm:@openelement/url-pattern-list@0.6.0": "0.6.0",
     "npm:@preact/signals-core@^1.12.1": "1.14.4"
   },
   "npm": {
-    "@openelement/url-pattern-list@0.6.0": {
-      "integrity": "sha512-djz6c4tih8BL1lonjr41iuoWGGF5pOgldEE0wOB/hzLLB4rS1MQHRQ2X3zM2XxnB6SX5Fphxx7uwTN/+ZDH//g=="
-    },
     "@preact/signals-core@1.14.4": {
       "integrity": "sha512-HNB6HYeYKhQbJ1aKl+YRjrS4+QWHLKX6qKoUsfS/m0vqzsVaEBiZiaKbG/e+NKk2ch5ALQr/ihWaMHxiCuuWHA=="
     }
@@ -24,6 +20,7 @@
         "dependencies": [
           "npm:@hono/vite-dev-server@~0.25.3",
           "npm:@openelement/url-pattern-list@0.6.0",
+          "npm:hono@^4.12.0",
           "npm:jsonc-parser@^3.3.1",
           "npm:marked@15",
           "npm:mime@^4.1.0",

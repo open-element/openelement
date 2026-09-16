@@ -159,12 +159,24 @@ export function lockVersionFailures(fixture: string, lock: string): string[] {
 export async function updateLocks(
   entries: readonly FixtureLockEntry[] = FIXTURE_LOCKS,
 ): Promise<number> {
+  // `deno cache` only ever adds to a lockfile, so a lock that absorbed
+  // build-time specifiers (fixture rebuilds run full vite/server graphs) can
+  // never converge back to the declared universe. Shared-universe entries
+  // must restart from a deleted lock to stay byte-identical.
+  const shared = new Set(
+    entries.flatMap((entry) =>
+      entry.sharedUniverseWith ? [entry.fixture, entry.sharedUniverseWith] : []
+    ),
+  );
   for (const entry of entries) {
     const cwd = `tests/fixtures/${entry.fixture}`;
     const args = entry.fixture === 'router-nitro'
       ? ['task', 'proof:node']
       : ['cache', entry.entrypoint];
     console.log(`[fixtures:locks] ${cwd}: ${regenerateCommand(entry)}`);
+    if (shared.has(entry.fixture) && entry.fixture !== 'router-nitro') {
+      await Deno.remove(`${cwd}/deno.lock`).catch(() => {});
+    }
     const status = await new Deno.Command(Deno.execPath(), {
       args,
       cwd,
