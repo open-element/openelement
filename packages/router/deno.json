@@ -22,7 +22,8 @@
     "mime": "npm:mime@^4.1.0",
     "@hono/vite-dev-server": "npm:@hono/vite-dev-server@^0.25.3",
     "marked": "npm:marked@^15.0.0",
-    "vite": "npm:vite@8.0.16"
+    "vite": "npm:vite@8.0.16",
+    "hono": "npm:hono@^4.12"
   },
   "publish": {
     "include": [
