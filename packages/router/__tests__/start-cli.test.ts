@@ -7,7 +7,7 @@
 
 import { assert, assertEquals, assertStringIncludes } from '@std/assert';
 import { join } from '@std/path';
-import { extractServeMode } from '../src/cli/start.ts';
+import { extractServeMode } from '../src/internal/serve-mode.ts';
 
 const startCli = join(import.meta.dirname!, '../src/cli/start.ts');
 

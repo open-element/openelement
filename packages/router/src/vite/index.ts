@@ -36,8 +36,8 @@ import './internal/ssg/enhance-client.ts';
 
 /** Options for the low-level {@linkcode openPipeline} Vite plugin pipeline. */
 export interface OpenPipelineConfig {
-  /** Build/dev mode. 'ssg' (default) enables SSR dev server + static generation. 'spa' produces a client-only app (no SSR). */
-  mode?: 'ssg' | 'spa';
+  /** Build/dev mode. 'ssg' (default) enables SSR dev server + static generation. */
+  mode?: 'ssg';
   routes?: { dir?: string };
   output?: { outDir?: string };
   island?: { dir?: string; upgradeStrategy?: string };
@@ -88,23 +88,9 @@ export { OpenElementBuildContext } from './build-context.ts';
 
 // Build manifest
 export type { ArtifactInfo, BuildManifest } from './build-manifest.ts';
-export { printBuildManifest, scanClientBuild, scanSSGOutput } from './build-manifest.ts';
-
-// SSG post-processing & island manifests (Router tooling internal build helpers)
-export {
-  buildIslandChunkMap,
-  buildSpeculationRulesJson,
-  extractCustomElementTags,
-  generateIslandManifests,
-  injectClientScript,
-  injectCspMeta,
-  injectSpeculationRules,
-  injectViewTransitionMeta,
-  writeIslandManifests,
-} from './ssg.ts';
 
 // Protocol type re-exports
-export type { SpeculationRulesOptions, SsgBehaviorOptions } from './ssg.ts';
+export type { SpeculationRulesOptions, SsgBehaviorOptions } from './internal/protocol/ssg.ts';
 
 // Head injection (public helpers)
 export { buildHeadExtras } from './head-injection.ts';

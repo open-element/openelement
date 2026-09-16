@@ -20,6 +20,7 @@ import { existsSync } from '../internal/host-path.ts';
 import { join } from '../internal/host-path.ts';
 import { formatError } from '@openelement/element';
 import { DEFAULT_OUT_DIR } from '../vite/internal/paths.ts';
+import { extractServeMode, type ServeMode } from '../internal/serve-mode.ts';
 import {
   createFetchHandler,
   importRequestTimeServer,
@@ -30,37 +31,6 @@ const root = Deno.cwd();
 const distDir = join(root, DEFAULT_OUT_DIR);
 const serverEntry = join(distDir, 'server', 'index.js');
 const hostname = Deno.env.get('OPEN_ELEMENT_HOST') ?? '0.0.0.0';
-
-type ServeMode = 'start' | 'preview';
-
-/**
- * Splits `--mode=start|preview` (or `--mode start|preview`) off the CLI args.
- */
-export function extractServeMode(argv: string[]): { mode: ServeMode; rest: string[] } {
-  const rest: string[] = [];
-  let mode: ServeMode = 'start';
-  for (let i = 0; i < argv.length; i++) {
-    const arg = argv[i];
-    const inline = arg.match(/^--mode=(.+)$/);
-    if (inline) {
-      mode = parseMode(inline[1]);
-    } else if (arg === '--mode') {
-      const value = argv[++i];
-      if (value === undefined) {
-        throw new Error('[openElement start] --mode requires a value: start or preview.');
-      }
-      mode = parseMode(value);
-    } else {
-      rest.push(arg);
-    }
-  }
-  return { mode, rest };
-}
-
-function parseMode(value: string): ServeMode {
-  if (value === 'start' || value === 'preview') return value;
-  throw new Error(`[openElement start] unknown --mode "${value}"; expected start or preview.`);
-}
 
 async function main(): Promise<void> {
   let parsed: { mode: ServeMode; rest: string[] };

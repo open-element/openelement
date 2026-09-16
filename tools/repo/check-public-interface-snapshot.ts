@@ -1,8 +1,15 @@
-/** Generate/check the deterministic retained-package public-interface baseline. */
+/**
+ * Generate/check the deterministic retained-package public-interface baseline.
+ *
+ * Cross-package `@openelement/*` imports are pinned to workspace sources via
+ * `ts.CompilerOptions.paths` built from each package's deno.json exports, so
+ * the snapshot depends only on the checked-out sources — never on whatever
+ * `node_modules/@openelement/*` layout the generating machine happens to have.
+ */
 import { formatJson } from '@openelement/element/build-utils';
 import ts from 'typescript';
 import { resolve } from '@std/path';
-import { readPackages, releasePublishOrder } from '../lib/package-graph.ts';
+import { type PackageInfo, readPackages, releasePublishOrder } from '../lib/package-graph.ts';
 
 const SNAPSHOT = 'docs/release/public-interface-snapshot.json';
 const TYPE_FLAGS = ts.TypeFormatFlags.NoTruncation |
@@ -27,6 +34,23 @@ function resolveAlias(checker: ts.TypeChecker, symbol: ts.Symbol): ts.Symbol {
 function isInsidePackage(declaration: ts.Declaration, packageDir: string): boolean {
   const file = resolve(declaration.getSourceFile().fileName);
   return file.startsWith(`${resolve(packageDir)}/`);
+}
+
+/**
+ * Exact `paths` mapping pinning every declared `@openelement/*` export
+ * subpath to its workspace source entry, so `ts.createProgram` never falls
+ * through to ambient `node_modules` copies for workspace packages.
+ */
+function workspacePaths(packages: PackageInfo[]): Record<string, string[]> {
+  const paths: Record<string, string[]> = {};
+  for (const pkg of packages) {
+    const exports = typeof pkg.exports === 'string' ? { '.': pkg.exports } : pkg.exports;
+    for (const [subpath, source] of Object.entries(exports ?? {})) {
+      const specifier = subpath === '.' ? pkg.name : `${pkg.name}/${subpath.replace(/^\.\//, '')}`;
+      paths[specifier] = [resolve(pkg.dir, String(source).replace(/^\.\//, ''))];
+    }
+  }
+  return paths;
 }
 
 function isPrivate(symbol: ts.Symbol): boolean {
@@ -201,14 +225,19 @@ function typeShape(
 export async function publicInterfaceShape(
   entryFile: string,
   packageDir: string,
-): Promise<{ publicShapeSha256: string; publicSymbols: string[] }> {
+  paths: Record<string, string[]> = {},
+): Promise<
+  { publicShapeSha256: string; publicSymbols: string[]; localAnyTypeAliases: string[] }
+> {
   const resolvedEntry = resolve(entryFile);
   const program = ts.createProgram([resolvedEntry], {
     allowImportingTsExtensions: true,
+    baseUrl: resolve('.'),
     jsx: ts.JsxEmit.ReactJSX,
     module: ts.ModuleKind.ESNext,
     moduleResolution: ts.ModuleResolutionKind.Bundler,
     noEmit: true,
+    paths,
     skipLibCheck: true,
     strict: true,
     target: ts.ScriptTarget.ESNext,
@@ -219,6 +248,7 @@ export async function publicInterfaceShape(
   const moduleSymbol = checker.getSymbolAtLocation(source);
   if (!moduleSymbol) throw new Error(`TypeScript did not resolve module ${entryFile}`);
 
+  const localAnyTypeAliases: string[] = [];
   const publicSymbols = checker.getExportsOfModule(moduleSymbol).map((exportSymbol) => {
     const target = resolveAlias(checker, exportSymbol);
     const declaration = target.valueDeclaration ?? target.declarations?.[0] ?? source;
@@ -236,9 +266,18 @@ export async function publicInterfaceShape(
       (target.flags & (ts.SymbolFlags.Type | ts.SymbolFlags.Interface | ts.SymbolFlags.TypeAlias |
         ts.SymbolFlags.Class | ts.SymbolFlags.Enum)) !== 0
     ) {
-      shapes.push(
-        `type:${typeShape(checker, checker.getDeclaredTypeOfSymbol(target), packageDir)}`,
-      );
+      const declaredShape = typeShape(checker, checker.getDeclaredTypeOfSymbol(target), packageDir);
+      // A local type alias collapsing to `any` means an import failed to
+      // resolve — a resolution defect, not a contract. Reported so the
+      // --write path can refuse to pin a degraded baseline.
+      if (
+        (target.flags & ts.SymbolFlags.TypeAlias) !== 0 &&
+        declaredShape === 'any' &&
+        (target.declarations ?? []).some((item) => isInsidePackage(item, packageDir))
+      ) {
+        localAnyTypeAliases.push(exportSymbol.getName());
+      }
+      shapes.push(`type:${declaredShape}`);
     }
     if ((target.flags & ts.SymbolFlags.Namespace) !== 0) {
       const members = checker.getExportsOfModule(target).map((member) => member.getName()).sort();
@@ -247,12 +286,14 @@ export async function publicInterfaceShape(
     return `${exportSymbol.getName()}=${shapes.sort().join('|')}`;
   }).sort();
   const publicShapeSha256 = await sha256Hex(publicSymbols.join('\n'));
-  return { publicShapeSha256, publicSymbols };
+  return { publicShapeSha256, publicSymbols, localAnyTypeAliases };
 }
 
 async function main(): Promise<void> {
   const write = Deno.args.includes('--write');
   const packages = releasePublishOrder(await readPackages());
+  const paths = workspacePaths(packages);
+  const degraded: string[] = [];
   const snapshot = {
     schema: 2,
     packages: await Promise.all(packages.map(async (pkg) => {
@@ -260,7 +301,14 @@ async function main(): Promise<void> {
       const declarations = await Promise.all(
         Object.entries(exports ?? {}).map(async ([path, source]) => {
           const entry = resolve(pkg.dir, String(source).replace(/^\.\//, ''));
-          return [path, await publicInterfaceShape(entry, pkg.dir)] as const;
+          const shape = await publicInterfaceShape(entry, pkg.dir, paths);
+          for (const alias of shape.localAnyTypeAliases) {
+            degraded.push(`${pkg.name} ${path}: ${alias}`);
+          }
+          return [path, {
+            publicShapeSha256: shape.publicShapeSha256,
+            publicSymbols: shape.publicSymbols,
+          }] as const;
         }),
       );
       return {
@@ -271,8 +319,17 @@ async function main(): Promise<void> {
     })),
   };
   const text = formatJson(snapshot);
-  if (write) await Deno.writeTextFile(SNAPSHOT, text);
-  else if (await Deno.readTextFile(SNAPSHOT) !== text) {
+  if (write) {
+    if (degraded.length > 0) {
+      throw new Error(
+        `Refusing to write ${SNAPSHOT}: local type aliases resolved to \`any\` ` +
+          `(unresolved imports — fix dependency resolution instead of pinning a degraded baseline):\n  ${
+            degraded.sort().join('\n  ')
+          }`,
+      );
+    }
+    await Deno.writeTextFile(SNAPSHOT, text);
+  } else if (await Deno.readTextFile(SNAPSHOT) !== text) {
     throw new Error(`${SNAPSHOT} drifted; run deno task interface:snapshot:write`);
   }
   console.log(

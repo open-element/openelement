@@ -2,6 +2,31 @@ import { assertEquals, assertNotEquals, assertStringIncludes } from '@std/assert
 import { join } from '@std/path';
 import { publicInterfaceShape } from './check-public-interface-snapshot.ts';
 
+Deno.test('public interface snapshot resolves bare specifiers through explicit paths and flags local any aliases', async () => {
+  const root = await Deno.makeTempDir();
+  try {
+    const dep = join(root, 'dep.ts');
+    const entry = join(root, 'index.ts');
+    await Deno.writeTextFile(dep, 'export interface DepOptions { mode?: string; }\n');
+    await Deno.writeTextFile(
+      entry,
+      "export type { DepOptions } from 'x-dep';\n" +
+        "import type { DepOptions } from 'x-dep';\n" +
+        'export type LocalOptions = DepOptions & { extra?: number };\n',
+    );
+    const resolved = await publicInterfaceShape(entry, root, { 'x-dep': [dep] });
+    assertEquals(resolved.localAnyTypeAliases, []);
+    assertStringIncludes(resolved.publicSymbols.join('\n'), 'DepOptions=type:{mode?:');
+    assertStringIncludes(resolved.publicSymbols.join('\n'), 'extra?:');
+
+    const unresolved = await publicInterfaceShape(entry, root);
+    assertEquals(unresolved.localAnyTypeAliases, ['LocalOptions']);
+    assertStringIncludes(unresolved.publicSymbols.join('\n'), 'LocalOptions=type:any');
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
 Deno.test('public interface snapshot follows re-exported type members but ignores function bodies', async () => {
   const root = await Deno.makeTempDir();
   try {
