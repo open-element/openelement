@@ -56,6 +56,29 @@ Deno.test('mdxToCompiledPageSource fails closed outside the static subset', () =
     Error,
     'javascript:',
   );
+  // data:/vbscript:/file: links ride the same canonical validateSafeUrl
+  // blocklist as head injection (H-1: no divergent local regex).
+  assertThrows(
+    () => mdxToCompiledPageSource('[x](data:text/html,<script>alert(1)</script>)\n', '/r/x.mdx'),
+    Error,
+    'data:',
+  );
+  assertThrows(
+    () => mdxToCompiledPageSource('[x](vbscript:msgbox(1))\n', '/r/x.mdx'),
+    Error,
+    'vbscript:',
+  );
+  assertThrows(
+    () => mdxToCompiledPageSource('[x](file:///etc/passwd)\n', '/r/x.mdx'),
+    Error,
+    'file:',
+  );
+  // Case/control-char bypasses are normalised away before the check.
+  assertThrows(
+    () => mdxToCompiledPageSource('[x](DATA:text/html;base64,PHNjcmlwdD4=)\n', '/r/x.mdx'),
+    Error,
+    'data:',
+  );
 });
 
 Deno.test('mdxToCompiledPageSource output passes through the compiler unchanged in shape', () => {

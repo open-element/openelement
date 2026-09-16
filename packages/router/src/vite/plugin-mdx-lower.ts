@@ -17,6 +17,7 @@
 import { marked } from 'marked';
 import { normalizeSeparators, pathToTagName } from '@openelement/element/build-utils';
 import { basename, relative, resolve } from '../internal/host-path.ts';
+import { validateSafeUrl } from './head-injection.ts';
 
 /** Quote one text run as a JSX expression container (`{"..."}`). */
 function jsxText(value: string): string {
@@ -68,8 +69,13 @@ function inlineToJsx(tokens: MarkedToken[] | undefined, filePath: string): strin
         break;
       case 'link': {
         const href = token.href ?? '';
-        if (/^javascript:/i.test(href.trim())) {
-          failMdx(filePath, 'javascript: links are not allowed');
+        // Same canonical validator as head-injection.ts: blocks
+        // javascript:/data:/vbscript:/file: after control-char stripping and
+        // percent-decoding — a local regex would drift from it.
+        try {
+          validateSafeUrl(href, 'MDX link');
+        } catch (error) {
+          failMdx(filePath, error instanceof Error ? error.message : String(error));
         }
         const title = token.title ? ` title=${JSON.stringify(token.title)}` : '';
         out += `<a href=${JSON.stringify(href)}${title}>${inlineToJsx(token.tokens, filePath)}</a>`;
