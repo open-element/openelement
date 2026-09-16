@@ -19,12 +19,27 @@
  * `--validate` re-checks a written artifact (SHA/tree, log presence + hashes,
  * manifest hashes, artifact age) without trusting its contents.
  *
+ * Site E2E proof travels as data, not log lines: the source-matrix producer
+ * stages the raw `.artifacts/site-e2e-report.json` bytes next to its
+ * result.json (the sidecar stays in `extras.siteE2e`), and both aggregation
+ * and validation recompute the summary + SHA-256 from those bytes and
+ * require the sidecar's `candidateSha` to equal the candidate commit. A
+ * forged, stale, or report-less sidecar fails closed.
+ *
  * All commands run with stdin closed (non-interactive invariant).
  */
 
 import { dirname, join, relative } from '@std/path';
 import { readPackages } from '../lib/package-graph.ts';
-import { auditSiteE2e, type SiteE2eResult } from './site-e2e-result.ts';
+import {
+  auditSiteE2e,
+  isEmptyGrep,
+  type PlaywrightReport,
+  sha256Hex,
+  SITE_E2E_CONFIG_FILE,
+  type SiteE2eResult,
+  summarizePlaywrightReport,
+} from './site-e2e-result.ts';
 import { npmTarballName, tarballPath } from '../lib/npm-tarball.ts';
 import {
   auditFreshCloneIsolation,
@@ -259,6 +274,125 @@ export function packedRollupFromLog(logText: string): {
 
 /** Partial sidecar shape as embedded in the aggregated evidence bundle. */
 export type SiteE2eRollup = Partial<SiteE2eResult>;
+
+/** Raw Playwright report file name inside the source-matrix evidence dir. */
+export const SITE_E2E_REPORT_FILE = 'site-e2e-report.json';
+/** Raw report path relative to the aggregated evidence root. */
+export const SITE_E2E_REPORT_BUNDLE_PATH = `ci/source-matrix/${SITE_E2E_REPORT_FILE}`;
+
+/** Order-insensitive deep equality (map insertion order is not evidence). */
+function deepEqualUnordered(a: unknown, b: unknown): boolean {
+  const canonical = (value: unknown): string => {
+    if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`;
+    if (value !== null && typeof value === 'object') {
+      const record = value as Record<string, unknown>;
+      return `{${
+        Object.keys(record).sort().map((key) => `${JSON.stringify(key)}:${canonical(record[key])}`)
+          .join(',')
+      }}`;
+    }
+    return JSON.stringify(value) ?? 'null';
+  };
+  return canonical(a) === canonical(b);
+}
+
+/**
+ * The report's `config.configFile` is absolute on the producer machine;
+ * normalize to the canonical repo-relative path when it points at the
+ * candidate config, otherwise keep the (rejected) posix form.
+ */
+function normalizeReportConfigFile(configFile: unknown): string {
+  if (typeof configFile !== 'string') return '';
+  const posix = configFile.replaceAll('\\', '/');
+  return posix === SITE_E2E_CONFIG_FILE || posix.endsWith(`/${SITE_E2E_CONFIG_FILE}`)
+    ? SITE_E2E_CONFIG_FILE
+    : posix;
+}
+
+/**
+ * Forged-sidecar guard: recompute the Site E2E summary and the SHA-256 from
+ * the raw Playwright report bytes and require equality with the sidecar, and
+ * bind the sidecar to the candidate commit. The raw report is REQUIRED —
+ * where the evidence contract demands it, its absence fails closed.
+ */
+export async function collectSiteE2eRecomputeFailures(
+  siteE2e: SiteE2eRollup | undefined,
+  options: {
+    readReport: () => Promise<Uint8Array | null>;
+    expectedSha?: string;
+  },
+): Promise<string[]> {
+  const failures: string[] = [];
+  if (options.expectedSha !== undefined && siteE2e?.candidateSha !== options.expectedSha) {
+    failures.push(
+      `Site E2E candidateSha ${
+        JSON.stringify(siteE2e?.candidateSha ?? null)
+      } != candidate ${options.expectedSha} (stale or foreign sidecar)`,
+    );
+  }
+  const bytes = await options.readReport();
+  if (!bytes) {
+    failures.push(
+      `Site E2E raw Playwright report missing from the evidence tree (${SITE_E2E_REPORT_FILE})`,
+    );
+    return failures;
+  }
+  if (siteE2e?.reportSha256 !== (await sha256Hex(bytes))) {
+    failures.push(
+      'Site E2E reportSha256 does not match the raw report bytes (forged or stale sidecar)',
+    );
+    return failures;
+  }
+  let report: PlaywrightReport;
+  try {
+    report = JSON.parse(new TextDecoder().decode(bytes)) as PlaywrightReport;
+  } catch {
+    failures.push('Site E2E raw report is not valid JSON');
+    return failures;
+  }
+  const projects = summarizePlaywrightReport(report);
+  if (!deepEqualUnordered(projects, siteE2e?.projects ?? null)) {
+    failures.push('Site E2E sidecar projects do not match the recomputed report summary');
+  }
+  const totals = { passed: 0, failed: 0, skipped: 0 };
+  for (const summary of Object.values(projects)) {
+    totals.passed += summary.passed;
+    totals.failed += summary.failed;
+    totals.skipped += summary.skipped;
+  }
+  for (const field of ['passed', 'failed', 'skipped'] as const) {
+    if (siteE2e?.[field] !== totals[field]) {
+      failures.push(
+        `Site E2E sidecar ${field}=${JSON.stringify(siteE2e?.[field])} != recomputed ${
+          totals[field]
+        } from the raw report`,
+      );
+    }
+  }
+  if (siteE2e?.expected !== report.stats?.expected) {
+    failures.push(
+      `Site E2E sidecar expected=${JSON.stringify(siteE2e?.expected)} != report stats.expected ${
+        JSON.stringify(report.stats?.expected ?? null)
+      }`,
+    );
+  }
+  const configFile = normalizeReportConfigFile(report.config?.configFile);
+  if (siteE2e?.configFile !== configFile) {
+    failures.push(
+      `Site E2E sidecar configFile ${
+        JSON.stringify(siteE2e?.configFile ?? null)
+      } != report config ${JSON.stringify(configFile)}`,
+    );
+  }
+  const grep = report.config?.grep ?? {};
+  if (!isEmptyGrep(grep)) {
+    failures.push('Site E2E raw report config.grep is not empty');
+  }
+  if (!deepEqualUnordered(siteE2e?.grep ?? null, grep)) {
+    failures.push('Site E2E sidecar grep does not match the raw report config.grep');
+  }
+  return failures;
+}
 
 interface TarballEvidencePackage {
   name: string;
@@ -546,17 +680,35 @@ async function packExtras(
 
 async function sourceExtras(
   _sourceSteps: StepResult[],
-  _outDir: string,
+  outDir: string,
 ): Promise<Record<string, unknown>> {
   // The Site E2E task writes a structured sidecar (Playwright JSON summary),
-  // so unrelated fixture output can never fake the browser proof.
+  // so unrelated fixture output can never fake the browser proof. The raw
+  // report bytes are staged next to this job's result.json so aggregation
+  // and validation can recompute the sidecar instead of trusting it.
+  let result: SiteE2eRollup;
+  let reportBytes: Uint8Array;
   try {
     const raw = await Deno.readTextFile(join(repoRoot, '.artifacts/site-e2e-result.json'));
-    const result = JSON.parse(raw) as SiteE2eRollup;
-    return { siteE2e: result };
+    result = JSON.parse(raw) as SiteE2eRollup;
+    reportBytes = await Deno.readFile(join(repoRoot, '.artifacts', SITE_E2E_REPORT_FILE));
   } catch {
     return { siteE2e: { ran: false } };
   }
+  // Fail closed at record time: a sidecar that does not recompute from the
+  // raw report bytes, or that belongs to another commit, is never recorded.
+  const failures = [
+    ...auditSiteE2e(result),
+    ...await collectSiteE2eRecomputeFailures(result, {
+      readReport: () => Promise.resolve(reportBytes),
+      expectedSha: expectedSha(),
+    }),
+  ];
+  if (failures.length > 0) {
+    throw new Error(`Site E2E evidence is not recordable:\n${failures.join('\n')}`);
+  }
+  await Deno.writeFile(join(outDir, SITE_E2E_REPORT_FILE), reportBytes);
+  return { siteE2e: result };
 }
 
 /** Role mapping for workspace jobs: the repository root is $SOURCE. */
@@ -1462,8 +1614,13 @@ export async function collectBundleFailures(
     }
   }
 
+  const rollup = isRecord(evidence.rollup) ? evidence.rollup as Rollup : undefined;
+  failures.push(...collectRollupFailures(rollup));
   failures.push(
-    ...collectRollupFailures(isRecord(evidence.rollup) ? evidence.rollup as Rollup : undefined),
+    ...await collectSiteE2eRecomputeFailures(rollup?.siteE2e, {
+      readReport: () => options.read(SITE_E2E_REPORT_BUNDLE_PATH),
+      expectedSha: options.expectedSha ?? (isCommit(sha) ? sha : undefined),
+    }),
   );
   return failures;
 }
@@ -1512,6 +1669,12 @@ async function aggregate(inputDir: string, output: string): Promise<void> {
     siteE2e: (source.job.extras?.siteE2e ?? {}) as SiteE2eRollup,
   };
   const rollupFailures = collectRollupFailures(rollup);
+  rollupFailures.push(
+    ...await collectSiteE2eRecomputeFailures(rollup.siteE2e, {
+      readReport: () => source.read(SITE_E2E_REPORT_FILE),
+      expectedSha: expected,
+    }),
+  );
   if (rollupFailures.length > 0) {
     console.error(`candidate aggregation FAILED:\n${rollupFailures.join('\n')}`);
     Deno.exit(1);

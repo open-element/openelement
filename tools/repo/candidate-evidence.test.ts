@@ -15,13 +15,21 @@ import {
   collectJobFailures,
   collectPackedTarballFailures,
   collectRollupFailures,
+  collectSiteE2eRecomputeFailures,
   packedRollupFromLog,
   REQUIRED_PACKAGE_TARBALLS,
   REQUIRED_PACKED_CONSUMERS,
   REQUIRED_SITE_BROWSERS,
   REQUIRED_STEPS,
+  SITE_E2E_REPORT_BUNDLE_PATH,
+  SITE_E2E_REPORT_FILE,
   stageTarballEvidence,
 } from './candidate-evidence.ts';
+import {
+  SITE_E2E_CONFIG_FILE,
+  SITE_E2E_MIN_PASSED_PER_PROJECT,
+  summarizePlaywrightReport,
+} from './site-e2e-result.ts';
 import {
   CANDIDATE_EVIDENCE_SCHEMA_VERSION,
   cleanProofArgv,
@@ -143,6 +151,51 @@ async function fixture(): Promise<Fixture> {
   const generatedAt = new Date().toISOString();
   const baseTime = Date.parse(generatedAt) - 600_000;
   let tick = 0;
+
+  // Synthetic full-suite Playwright report: every required browser ran the
+  // floor number of tests and nothing failed or skipped. The sidecar below
+  // is derived from these bytes, so the recompute guard accepts it.
+  const sitePassed = SITE_E2E_MIN_PASSED_PER_PROJECT;
+  const siteTotal = sitePassed * REQUIRED_SITE_BROWSERS.length;
+  const siteReportBytes = encoder.encode(JSON.stringify(
+    {
+      config: {
+        configFile: `/runner/work/openelement/${SITE_E2E_CONFIG_FILE}`,
+        grep: {},
+        projects: REQUIRED_SITE_BROWSERS.map((name) => ({ name })),
+      },
+      suites: [{
+        specs: REQUIRED_SITE_BROWSERS.map((browser) => ({
+          tests: Array.from({ length: sitePassed }, () => ({
+            projectName: browser,
+            status: 'expected',
+            results: [{ status: 'passed' }],
+          })),
+        })),
+      }],
+      stats: { expected: siteTotal, skipped: 0, unexpected: 0, flaky: 0 },
+    },
+    null,
+    2,
+  ));
+  const siteE2e = {
+    ran: true,
+    projects: Object.fromEntries(
+      REQUIRED_SITE_BROWSERS.map((browser) => [
+        browser,
+        { passed: sitePassed, failed: 0, skipped: 0 },
+      ]),
+    ),
+    passed: siteTotal,
+    failed: 0,
+    skipped: 0,
+    expected: siteTotal,
+    configFile: SITE_E2E_CONFIG_FILE,
+    grep: {},
+    reportSha256: (await sha256BytesLocal(siteReportBytes)).slice('sha256:'.length),
+    candidateSha: SHA,
+    generatedAt,
+  };
   const jobs: Fixture['jobs'] = [];
   const bundleJobs: Array<Record<string, unknown>> = [];
   for (const job of JOB_NAMES) {
@@ -193,19 +246,7 @@ async function fixture(): Promise<Fixture> {
         consumers: [...REQUIRED_PACKED_CONSUMERS],
       }
       : job === 'source-matrix'
-      ? {
-        siteE2e: {
-          ran: true,
-          passed: 3 * REQUIRED_SITE_BROWSERS.length,
-          failed: 0,
-          skipped: 0,
-          projects: Object.fromEntries(
-            REQUIRED_SITE_BROWSERS.map((
-              browser,
-            ) => [browser, { passed: 3, failed: 0, skipped: 0 }]),
-          ),
-        },
-      }
+      ? { siteE2e }
       : {};
     const jobRecord = {
       schemaVersion: CANDIDATE_EVIDENCE_SCHEMA_VERSION,
@@ -223,6 +264,9 @@ async function fixture(): Promise<Fixture> {
       job: jobRecord,
       read: (path) => {
         if (path in archives) return Promise.resolve(archives[path]);
+        if (job === 'source-matrix' && path === SITE_E2E_REPORT_FILE) {
+          return Promise.resolve(siteReportBytes);
+        }
         const value = logs[`${job}/${path.replace(/^logs\//u, '').replace(/\.log$/u, '')}`];
         return Promise.resolve(value === undefined ? null : encoder.encode(value));
       },
@@ -268,18 +312,11 @@ async function fixture(): Promise<Fixture> {
     rollup: {
       artifactCheck: true,
       consumers: [...REQUIRED_PACKED_CONSUMERS],
-      siteE2e: {
-        ran: true,
-        passed: 3 * REQUIRED_SITE_BROWSERS.length,
-        failed: 0,
-        skipped: 0,
-        projects: Object.fromEntries(
-          REQUIRED_SITE_BROWSERS.map((browser) => [browser, { passed: 3, failed: 0, skipped: 0 }]),
-        ),
-      },
+      siteE2e,
     },
   };
   const read = (path: string) => {
+    if (path === SITE_E2E_REPORT_BUNDLE_PATH) return Promise.resolve(siteReportBytes);
     const match = /^ci\/([^/]+)\/logs\/(.+)\.log$/u.exec(path);
     if (match) {
       const value = logs[`${match[1]}/${match[2]}`];
@@ -1126,16 +1163,24 @@ Deno.test('rollup checks are unchanged and strict', () => {
   const failures = collectRollupFailures({ artifactCheck: false, consumers: [] });
   assert(failures.some((x) => x.includes('artifact scan did not run')));
   assert(failures.some((x) => x.includes('packed consumer missing')));
+  const floor = SITE_E2E_MIN_PASSED_PER_PROJECT;
   const healthy = {
     artifactCheck: true,
     consumers: [...REQUIRED_PACKED_CONSUMERS],
     siteE2e: {
       ran: true,
-      passed: 3 * REQUIRED_SITE_BROWSERS.length,
+      passed: floor * REQUIRED_SITE_BROWSERS.length,
       failed: 0,
       skipped: 0,
+      expected: floor * REQUIRED_SITE_BROWSERS.length,
+      configFile: SITE_E2E_CONFIG_FILE,
+      grep: {},
+      reportSha256: 'a'.repeat(64),
+      candidateSha: SHA,
       projects: Object.fromEntries(
-        REQUIRED_SITE_BROWSERS.map((browser) => [browser, { passed: 3, failed: 0, skipped: 0 }]),
+        REQUIRED_SITE_BROWSERS.map((
+          browser,
+        ) => [browser, { passed: floor, failed: 0, skipped: 0 }]),
       ),
     },
   };
@@ -1143,10 +1188,138 @@ Deno.test('rollup checks are unchanged and strict', () => {
   const skipped = clone(healthy);
   skipped.siteE2e.skipped = 3;
   skipped.siteE2e.passed = 0;
+  skipped.siteE2e.expected = 3;
   skipped.siteE2e.projects = Object.fromEntries(
     REQUIRED_SITE_BROWSERS.map((browser) => [browser, { passed: 0, failed: 0, skipped: 1 }]),
   );
   assert(collectRollupFailures(skipped).some((x) => x.includes('skipped=1')));
+});
+
+function tinySiteReport(configFile: string) {
+  return {
+    config: { configFile, grep: {} },
+    suites: [{
+      specs: REQUIRED_SITE_BROWSERS.map((browser) => ({
+        tests: [{ projectName: browser, status: 'expected', results: [{ status: 'passed' }] }],
+      })),
+    }],
+    stats: { expected: REQUIRED_SITE_BROWSERS.length },
+  };
+}
+
+async function tinySiteE2e(reportBytes: Uint8Array, report: unknown) {
+  return {
+    projects: summarizePlaywrightReport(report as never),
+    passed: REQUIRED_SITE_BROWSERS.length,
+    failed: 0,
+    skipped: 0,
+    expected: REQUIRED_SITE_BROWSERS.length,
+    configFile: SITE_E2E_CONFIG_FILE,
+    grep: {},
+    reportSha256: (await sha256BytesLocal(reportBytes)).slice('sha256:'.length),
+    candidateSha: SHA,
+  };
+}
+
+Deno.test('site e2e recompute guard accepts a sidecar derived from the raw report', async () => {
+  const report = tinySiteReport('/agent/checkout/www/e2e/playwright.config.ts');
+  const bytes = encoder.encode(JSON.stringify(report));
+  const siteE2e = await tinySiteE2e(bytes, report);
+  assertEquals(
+    await collectSiteE2eRecomputeFailures(siteE2e, {
+      readReport: () => Promise.resolve(bytes),
+      expectedSha: SHA,
+    }),
+    [],
+  );
+});
+
+Deno.test('site e2e recompute guard fails closed on stale, forged, or missing evidence', async () => {
+  const report = tinySiteReport('/agent/checkout/www/e2e/playwright.config.ts');
+  const bytes = encoder.encode(JSON.stringify(report));
+  const siteE2e = await tinySiteE2e(bytes, report);
+  const read = () => Promise.resolve(bytes);
+
+  const stale = await collectSiteE2eRecomputeFailures(
+    { ...siteE2e, candidateSha: 'c'.repeat(40) },
+    { readReport: read, expectedSha: SHA },
+  );
+  assert(stale.some((x) => x.includes('candidateSha')), stale.join(' | '));
+
+  const forgedTotal = await collectSiteE2eRecomputeFailures(
+    { ...siteE2e, passed: siteE2e.passed + 1 },
+    { readReport: read, expectedSha: SHA },
+  );
+  assert(forgedTotal.some((x) => x.includes('!= recomputed')), forgedTotal.join(' | '));
+
+  const forgedProjects = clone(siteE2e);
+  forgedProjects.projects.chromium.passed += 1;
+  const projectFailures = await collectSiteE2eRecomputeFailures(forgedProjects, {
+    readReport: read,
+    expectedSha: SHA,
+  });
+  assert(
+    projectFailures.some((x) => x.includes('projects do not match')),
+    projectFailures.join(' | '),
+  );
+
+  const badHash = await collectSiteE2eRecomputeFailures(
+    { ...siteE2e, reportSha256: '0'.repeat(64) },
+    { readReport: read, expectedSha: SHA },
+  );
+  assert(badHash.some((x) => x.includes('reportSha256 does not match')), badHash.join(' | '));
+
+  const missing = await collectSiteE2eRecomputeFailures(siteE2e, {
+    readReport: () => Promise.resolve(null),
+    expectedSha: SHA,
+  });
+  assert(missing.some((x) => x.includes('raw Playwright report missing')), missing.join(' | '));
+
+  const otherConfig = { ...report, config: { ...report.config, configFile: '/x/e2e/other.ts' } };
+  const otherBytes = encoder.encode(JSON.stringify(otherConfig));
+  const otherSidecar = await tinySiteE2e(otherBytes, otherConfig);
+  const wrongConfig = await collectSiteE2eRecomputeFailures(otherSidecar, {
+    readReport: () => Promise.resolve(otherBytes),
+    expectedSha: SHA,
+  });
+  assert(wrongConfig.some((x) => x.includes('configFile')), wrongConfig.join(' | '));
+});
+
+function rollupSiteE2e(bundle: Record<string, unknown>): Record<string, unknown> {
+  return (bundle.rollup as Record<string, unknown>).siteE2e as Record<string, unknown>;
+}
+
+Deno.test('bundle validation recomputes the site e2e sidecar from the staged raw report', async () => {
+  const f = await shared();
+
+  const stale = clone(f.bundle);
+  rollupSiteE2e(stale).candidateSha = 'c'.repeat(40);
+  assert((await failuresFor(stale, f)).some((x) => x.includes('candidateSha')));
+
+  // Internally consistent forgery: totals match the projects and expected
+  // matches the executed count, so auditSiteE2e alone would accept it — only
+  // the recompute from the raw report catches it.
+  const forged = clone(f.bundle);
+  const site = rollupSiteE2e(forged);
+  (site.projects as Record<string, { passed: number }>).chromium.passed += 1;
+  site.passed = (site.passed as number) + 1;
+  site.expected = (site.expected as number) + 1;
+  const forgedFailures = await failuresFor(forged, f);
+  assert(forgedFailures.some((x) => x.includes('!= recomputed')), forgedFailures.join(' | '));
+
+  const badHash = clone(f.bundle);
+  rollupSiteE2e(badHash).reportSha256 = '0'.repeat(64);
+  assert((await failuresFor(badHash, f)).some((x) => x.includes('reportSha256 does not match')));
+
+  const noReport: Fixture = {
+    ...f,
+    read: (path) => path === SITE_E2E_REPORT_BUNDLE_PATH ? Promise.resolve(null) : f.read(path),
+  };
+  assert(
+    (await failuresFor(clone(f.bundle), noReport)).some((x) =>
+      x.includes('raw Playwright report missing')
+    ),
+  );
 });
 
 Deno.test('packedRollupFromLog derives the artifact scan and consumers from the gate log', () => {

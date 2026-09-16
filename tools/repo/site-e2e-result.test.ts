@@ -1,26 +1,43 @@
 /**
  * Site E2E fail-closed tests. The candidate proof must reject zero-pass,
- * skipped, failed, missing, or malformed browser evidence — including a fully
- * skipped Playwright run, which exits 0 but proves nothing.
+ * skipped, failed, missing, extra, or malformed browser evidence — including
+ * a fully skipped Playwright run, which exits 0 but proves nothing — plus a
+ * shrunk suite (below the per-browser floor), a filtered config, a wrong
+ * config file, an incomplete identity manifest, and a test that never
+ * executed (empty `results`) masquerading as passed.
  */
 import { assert, assertEquals } from '@std/assert';
 import {
   auditSiteE2e,
+  SITE_E2E_CONFIG_FILE,
+  SITE_E2E_MIN_PASSED_PER_PROJECT,
   SITE_E2E_PROJECTS,
   type SiteE2eResult,
   summarizePlaywrightReport,
 } from './site-e2e-result.ts';
+import { checkRunnerArgs } from './site-e2e-run.ts';
+
+const PASSED_PER_BROWSER = 231;
+const TOTAL = PASSED_PER_BROWSER * SITE_E2E_PROJECTS.length;
 
 function healthy(): SiteE2eResult {
   const projects = Object.fromEntries(
-    SITE_E2E_PROJECTS.map((browser) => [browser, { passed: 231, failed: 0, skipped: 0 }]),
+    SITE_E2E_PROJECTS.map((browser) => [
+      browser,
+      { passed: PASSED_PER_BROWSER, failed: 0, skipped: 0 },
+    ]),
   );
   return {
     ran: true,
     projects,
-    passed: 231 * SITE_E2E_PROJECTS.length,
+    passed: TOTAL,
     failed: 0,
     skipped: 0,
+    expected: TOTAL,
+    configFile: SITE_E2E_CONFIG_FILE,
+    grep: {},
+    reportSha256: 'a'.repeat(64),
+    candidateSha: 'b'.repeat(40),
     generatedAt: new Date().toISOString(),
   };
 }
@@ -29,29 +46,39 @@ Deno.test('site e2e audit accepts a healthy three-browser result', () => {
   assertEquals(auditSiteE2e(healthy()), []);
 });
 
+Deno.test('site e2e audit accepts the exact floor', () => {
+  const result = healthy();
+  for (const browser of SITE_E2E_PROJECTS) {
+    result.projects[browser] = { passed: SITE_E2E_MIN_PASSED_PER_PROJECT, failed: 0, skipped: 0 };
+  }
+  result.passed = SITE_E2E_MIN_PASSED_PER_PROJECT * SITE_E2E_PROJECTS.length;
+  result.expected = result.passed;
+  assertEquals(auditSiteE2e(result), []);
+});
+
 Deno.test('site e2e audit rejects a fully skipped run', () => {
   const result = healthy();
   for (const browser of SITE_E2E_PROJECTS) {
-    result.projects[browser] = { passed: 0, failed: 0, skipped: 231 };
+    result.projects[browser] = { passed: 0, failed: 0, skipped: PASSED_PER_BROWSER };
   }
   result.passed = 0;
-  result.skipped = 231 * SITE_E2E_PROJECTS.length;
+  result.skipped = TOTAL;
   const failures = auditSiteE2e(result);
   for (const browser of SITE_E2E_PROJECTS) {
     assert(failures.some((f) => f.includes(`${browser} passed=0`)));
-    assert(failures.some((f) => f.includes(`${browser} skipped=231`)));
+    assert(failures.some((f) => f.includes(`${browser} skipped=${PASSED_PER_BROWSER}`)));
   }
 });
 
 Deno.test('site e2e audit rejects zero-pass, skipped, and failed projects', () => {
   const zero = healthy();
   zero.projects.chromium = { passed: 0, failed: 0, skipped: 0 };
-  zero.passed -= 231;
+  zero.passed -= PASSED_PER_BROWSER;
   assert(auditSiteE2e(zero).some((f) => f.includes('chromium passed=0')));
 
   const skipped = healthy();
   skipped.projects.firefox = { passed: 200, failed: 0, skipped: 31 };
-  skipped.passed = 231 + 200 + 231;
+  skipped.passed = TOTAL - 31;
   skipped.skipped = 31;
   assert(auditSiteE2e(skipped).some((f) => f.includes('firefox skipped=31')));
 
@@ -62,14 +89,120 @@ Deno.test('site e2e audit rejects zero-pass, skipped, and failed projects', () =
   assert(auditSiteE2e(failed).some((f) => f.includes('webkit failed=2')));
 });
 
-Deno.test('site e2e audit rejects a missing browser and ran=false', () => {
+Deno.test('site e2e audit rejects a missing browser, a single-browser run, and ran=false', () => {
   const missing = healthy();
   delete (missing.projects as Record<string, unknown>).webkit;
   assert(auditSiteE2e(missing).some((f) => f.includes('missing browser proof: webkit')));
+
+  const single = healthy();
+  single.projects = { chromium: { passed: PASSED_PER_BROWSER, failed: 0, skipped: 0 } };
+  single.passed = PASSED_PER_BROWSER;
+  single.expected = PASSED_PER_BROWSER;
+  const singleFailures = auditSiteE2e(single);
+  assert(singleFailures.some((f) => f.includes('missing browser proof: firefox')));
+  assert(singleFailures.some((f) => f.includes('missing browser proof: webkit')));
+  assert(singleFailures.some((f) => f.includes('expected must be a safe integer')));
+
   assertEquals(auditSiteE2e({ ...healthy(), ran: false }), [
     'official Site E2E did not run or did not pass',
   ]);
   assertEquals(auditSiteE2e(undefined), ['official Site E2E did not run or did not pass']);
+});
+
+Deno.test('site e2e audit rejects an unexpected extra project', () => {
+  const result = healthy();
+  (result.projects as Record<string, unknown>).opera = { passed: 231, failed: 0, skipped: 0 };
+  assert(
+    auditSiteE2e(result).some((f) => f.includes('unexpected extra projects: opera')),
+  );
+});
+
+Deno.test('site e2e audit rejects a suite shrunk below the per-browser floor', () => {
+  const result = healthy();
+  result.projects.chromium = { passed: SITE_E2E_MIN_PASSED_PER_PROJECT - 1, failed: 0, skipped: 0 };
+  result.passed = TOTAL - (PASSED_PER_BROWSER - SITE_E2E_MIN_PASSED_PER_PROJECT + 1);
+  result.expected = result.passed;
+  const failures = auditSiteE2e(result);
+  assert(
+    failures.some((f) =>
+      f.includes(`chromium passed=${SITE_E2E_MIN_PASSED_PER_PROJECT - 1}`) &&
+      f.includes(`must be >= ${SITE_E2E_MIN_PASSED_PER_PROJECT}`)
+    ),
+  );
+});
+
+Deno.test('site e2e audit rejects a forged or shrunk expected count', () => {
+  const shrunk = healthy();
+  shrunk.expected = 3;
+  assert(
+    auditSiteE2e(shrunk).some((f) => f.includes('expected must be a safe integer >=')),
+  );
+
+  const mismatched = healthy();
+  mismatched.expected = TOTAL + 1;
+  assert(
+    auditSiteE2e(mismatched).some((f) => f.includes(`expected=${TOTAL + 1} != executed tests`)),
+  );
+
+  const missing = healthy() as unknown as Record<string, unknown>;
+  delete missing.expected;
+  assert(
+    auditSiteE2e(missing as unknown as SiteE2eResult).some((f) => f.includes('expected must be')),
+  );
+});
+
+Deno.test('site e2e audit rejects a wrong or missing configFile', () => {
+  for (
+    const bad of ['e2e/playwright.config.ts', '/abs/www/e2e/playwright.config.ts', '', undefined]
+  ) {
+    const result = healthy() as unknown as Record<string, unknown>;
+    result.configFile = bad;
+    assert(
+      auditSiteE2e(result as unknown as SiteE2eResult).some((f) =>
+        f.includes('configFile must be www/e2e/playwright.config.ts')
+      ),
+      `expected configFile rejection for ${JSON.stringify(bad)}`,
+    );
+  }
+});
+
+Deno.test('site e2e audit rejects a non-empty, malformed, or missing grep', () => {
+  for (const bad of [{ source: 'foo' }, 'foo', ['foo'], null, undefined, 0]) {
+    const result = healthy() as unknown as Record<string, unknown>;
+    result.grep = bad;
+    assert(
+      auditSiteE2e(result as unknown as SiteE2eResult).some((f) =>
+        f.includes('grep must be present and serialize to an empty object')
+      ),
+      `expected grep rejection for ${JSON.stringify(bad)}`,
+    );
+  }
+});
+
+Deno.test('site e2e audit rejects a missing or malformed reportSha256', () => {
+  for (const bad of ['', 'a'.repeat(63), 'A'.repeat(64), `sha256:${'a'.repeat(64)}`, undefined]) {
+    const result = healthy() as unknown as Record<string, unknown>;
+    result.reportSha256 = bad;
+    assert(
+      auditSiteE2e(result as unknown as SiteE2eResult).some((f) =>
+        f.includes('reportSha256 must be 64 lowercase hex chars')
+      ),
+      `expected reportSha256 rejection for ${JSON.stringify(bad)}`,
+    );
+  }
+});
+
+Deno.test('site e2e audit rejects a missing or malformed candidateSha', () => {
+  for (const bad of ['', 'b'.repeat(39), 'B'.repeat(40), undefined]) {
+    const result = healthy() as unknown as Record<string, unknown>;
+    result.candidateSha = bad;
+    assert(
+      auditSiteE2e(result as unknown as SiteE2eResult).some((f) =>
+        f.includes('candidateSha must be a 40-char hex commit')
+      ),
+      `expected candidateSha rejection for ${JSON.stringify(bad)}`,
+    );
+  }
 });
 
 Deno.test('site e2e audit rejects inconsistent totals', () => {
@@ -115,4 +248,58 @@ Deno.test('summarizePlaywrightReport counts per project and skips', () => {
     chromium: { passed: 1, failed: 1, skipped: 0 },
     firefox: { passed: 0, failed: 0, skipped: 1 },
   });
+});
+
+Deno.test('summarizePlaywrightReport fails closed on a test that never executed', () => {
+  const report = {
+    suites: [{
+      specs: [{
+        tests: [
+          { projectName: 'chromium', status: 'expected', results: [] },
+          { projectName: 'firefox', status: 'expected' },
+          { projectName: 'webkit', status: 'expected', results: [{ status: 'passed' }] },
+        ],
+      }],
+    }],
+  };
+  assertEquals(summarizePlaywrightReport(report), {
+    chromium: { passed: 0, failed: 1, skipped: 0 },
+    firefox: { passed: 0, failed: 1, skipped: 0 },
+    webkit: { passed: 1, failed: 0, skipped: 0 },
+  });
+});
+
+Deno.test('runner args reject suite-filtering flags before Playwright launches', () => {
+  for (
+    const args of [
+      ['--grep', 'foo'],
+      ['--grep=foo'],
+      ['-g', 'foo'],
+      ['--grep-invert', 'foo'],
+      ['--project', 'chromium'],
+      ['--project=chromium'],
+      ['--only-changed'],
+      ['--last-failed'],
+      ['--list'],
+      ['e2e/specs/home.spec.ts'],
+      ['--headed'],
+      ['--repeat-each', '2'],
+      ['--repeat-each=3'],
+      ['--workers'],
+    ]
+  ) {
+    assert(
+      checkRunnerArgs(args) !== null,
+      `expected rejection for ${JSON.stringify(args)}`,
+    );
+  }
+});
+
+Deno.test('runner args allow only benign knobs', () => {
+  assertEquals(checkRunnerArgs([]), null);
+  assertEquals(checkRunnerArgs(['--workers', '4']), null);
+  assertEquals(checkRunnerArgs(['--workers=4']), null);
+  assertEquals(checkRunnerArgs(['--retries', '1', '--timeout', '30000']), null);
+  assertEquals(checkRunnerArgs(['--repeat-each', '1']), null);
+  assertEquals(checkRunnerArgs(['--repeat-each=1']), null);
 });
