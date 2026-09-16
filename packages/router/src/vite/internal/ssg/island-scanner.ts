@@ -1,4 +1,5 @@
 /** Island and package-manifest discovery without executing local island modules. */
+import ts from 'typescript';
 import type { HydrationStrategy, OpenElementPackageManifest } from '../protocol/framework.ts';
 import type { IslandDecl } from '../protocol/ssg.ts';
 import { formatError, isValidTagName, OpenElementError } from '@openelement/element';
@@ -206,245 +207,119 @@ function staticOpenElementError(message: string): OpenElementError {
   );
 }
 
-function findStaticConfigBody(source: string, from: number): string | undefined {
-  const objectStart = source.indexOf('{', from);
-  if (objectStart === -1) return undefined;
-  let depth = 0;
-  let quote = '';
-  let escaped = false;
-  for (let index = objectStart; index < source.length; index++) {
-    const char = source[index];
-    if (quote) {
-      if (escaped) escaped = false;
-      else if (char === '\\') escaped = true;
-      else if (char === quote) quote = '';
-      continue;
-    }
-    if (char === '"' || char === "'") {
-      quote = char;
-      continue;
-    }
-    if (char === '{') depth++;
-    else if (char === '}' && --depth === 0) return source.slice(objectStart + 1, index);
+/** Static island metadata literal read from defineIslandConfig(). */
+type StaticIslandConfig = Pick<
+  LocalIslandMeta,
+  'ssr' | 'dsd' | 'hydrate' | 'media' | 'tags' | 'tagNames' | 'exportNames'
+>;
+
+function staticEntryKey(name: ts.PropertyName): string {
+  if (ts.isIdentifier(name) || (ts.isStringLiteral(name) && name.text.length > 0)) {
+    return name.text;
   }
-  return undefined;
+  throw staticOpenElementError('metadata keys must be identifiers or string literals');
 }
 
-function splitStaticValues(value: string): string[] {
-  const values: string[] = [];
-  let start = 0;
-  let depth = 0;
-  let quote = '';
-  let escaped = false;
-  for (let index = 0; index < value.length; index++) {
-    const char = value[index];
-    if (quote) {
-      if (escaped) escaped = false;
-      else if (char === '\\') escaped = true;
-      else if (char === quote) quote = '';
-      continue;
+function staticEntries(objectLiteral: ts.ObjectLiteralExpression): Array<[string, ts.Expression]> {
+  return objectLiteral.properties.map((property) => {
+    if (!ts.isPropertyAssignment(property)) {
+      throw staticOpenElementError('metadata must contain key/value pairs');
     }
-    if (char === '"' || char === "'") {
-      quote = char;
-      continue;
-    }
-    if (char === '{' || char === '[' || char === '(') depth++;
-    else if (char === '}' || char === ']' || char === ')') depth--;
-    else if (char === ',' && depth === 0) {
-      values.push(value.slice(start, index).trim());
-      start = index + 1;
-    }
-  }
-  const last = value.slice(start).trim();
-  if (last) values.push(last);
-  return values;
-}
-
-function findStaticColon(value: string): number {
-  let depth = 0;
-  let quote = '';
-  let escaped = false;
-  for (let index = 0; index < value.length; index++) {
-    const char = value[index];
-    if (quote) {
-      if (escaped) escaped = false;
-      else if (char === '\\') escaped = true;
-      else if (char === quote) quote = '';
-      continue;
-    }
-    if (char === '"' || char === "'") {
-      quote = char;
-      continue;
-    }
-    if (char === '{' || char === '[' || char === '(') depth++;
-    else if (char === '}' || char === ']' || char === ')') depth--;
-    else if (char === ':' && depth === 0) return index;
-  }
-  return -1;
-}
-
-function unquoteStaticString(raw: string, context: string): string {
-  const value = raw.trim();
-  if (
-    value.length < 2 ||
-    (value[0] !== '"' && value[0] !== "'") ||
-    value[value.length - 1] !== value[0]
-  ) {
-    throw staticOpenElementError(context + ' must be a string literal');
-  }
-  let result = '';
-  for (let index = 1; index < value.length - 1; index++) {
-    const char = value[index];
-    if (char !== '\\') {
-      result += char;
-      continue;
-    }
-    index++;
-    const escaped = value[index];
-    if (escaped === undefined) throw staticOpenElementError(context + ' has an invalid escape');
-    if (escaped === 'b') result += '\b';
-    else if (escaped === 'f') result += '\f';
-    else if (escaped === 'n') result += '\n';
-    else if (escaped === 'r') result += '\r';
-    else if (escaped === 't') result += '\t';
-    else if (escaped === 'v') result += '\v';
-    else if (escaped === '\\' || escaped === "'" || escaped === '"') result += escaped;
-    else if (escaped === '0') {
-      if (/\d/.test(value[index + 1] ?? '')) {
-        throw staticOpenElementError(context + ' has an unsupported octal escape');
-      }
-      result += '\0';
-    } else if (escaped === 'x') {
-      const hex = value.slice(index + 1, index + 3);
-      if (!/^[0-9a-fA-F]{2}$/.test(hex)) {
-        throw staticOpenElementError(context + ' has an invalid hex escape');
-      }
-      result += String.fromCharCode(Number.parseInt(hex, 16));
-      index += 2;
-    } else if (escaped === 'u') {
-      if (value[index + 1] === '{') {
-        const end = value.indexOf('}', index + 2);
-        const hex = end === -1 ? '' : value.slice(index + 2, end);
-        const code = Number.parseInt(hex, 16);
-        if (!/^[0-9a-fA-F]+$/.test(hex) || code > 0x10FFFF) {
-          throw staticOpenElementError(context + ' has an invalid Unicode escape');
-        }
-        result += String.fromCodePoint(code);
-        index = end;
-      } else {
-        const hex = value.slice(index + 1, index + 5);
-        if (!/^[0-9a-fA-F]{4}$/.test(hex)) {
-          throw staticOpenElementError(context + ' has an invalid Unicode escape');
-        }
-        result += String.fromCharCode(Number.parseInt(hex, 16));
-        index += 4;
-      }
-    } else if (escaped === '\n') {
-      // JavaScript line-continuation escape: it contributes no character.
-    } else if (escaped === '\r') {
-      if (value[index + 1] === '\n') index++;
-    } else {
-      throw staticOpenElementError(context + ` has an unsupported escape "\\${escaped}"`);
-    }
-  }
-  return result;
-}
-
-function isQuotedStaticString(raw: string): boolean {
-  const value = raw.trim();
-  return value.length >= 2 &&
-    (value[0] === '"' || value[0] === "'") &&
-    value[value.length - 1] === value[0];
-}
-
-function readStaticProperties(body: string): Array<[string, string]> {
-  return splitStaticValues(body).filter(Boolean).map((property) => {
-    const colon = findStaticColon(property);
-    if (colon === -1) throw staticOpenElementError('metadata must contain key/value pairs');
-    const rawKey = property.slice(0, colon).trim();
-    const quoted = rawKey.startsWith('"') || rawKey.startsWith("'");
-    const key = quoted ? unquoteStaticString(rawKey, 'metadata key') : rawKey;
-    if ((quoted && key.length === 0) || (!quoted && !/^[A-Za-z_$][A-Za-z0-9_$]*$/.test(key))) {
-      throw staticOpenElementError('metadata keys must be identifiers or string literals');
-    }
-    return [key, property.slice(colon + 1).trim()] as [string, string];
+    return [staticEntryKey(property.name), property.initializer];
   });
 }
 
-function parseStaticStringArray(raw: string, context: string): string[] {
-  const value = raw.trim();
-  if (!value.startsWith('[') || !value.endsWith(']')) {
-    throw staticOpenElementError(context + ' must be an array of string literals');
+function staticStringValue(node: ts.Expression, context: string): string {
+  if (!ts.isStringLiteral(node)) {
+    throw staticOpenElementError(context + ' must be a string literal');
   }
-  const parts = splitStaticValues(value.slice(1, -1));
-  if (parts.length === 0) throw staticOpenElementError(context + ' must not be empty');
-  return parts.map((part) => unquoteStaticString(part, context));
+  return node.text;
 }
 
-function parseStaticStringRecord(raw: string, context: string): Record<string, string> {
-  const value = raw.trim();
-  if (!value.startsWith('{') || !value.endsWith('}')) {
+function parseStaticStringArray(node: ts.Expression, context: string): string[] {
+  if (!ts.isArrayLiteralExpression(node)) {
+    throw staticOpenElementError(context + ' must be an array of string literals');
+  }
+  if (node.elements.length === 0) throw staticOpenElementError(context + ' must not be empty');
+  return node.elements.map((element) => staticStringValue(element, context));
+}
+
+function parseStaticStringRecord(node: ts.Expression, context: string): Record<string, string> {
+  if (!ts.isObjectLiteralExpression(node)) {
     throw staticOpenElementError(context + ' must be an object of string literals');
   }
-  const entries = readStaticProperties(value.slice(1, -1));
   const result: Record<string, string> = {};
-  for (const [key, entry] of entries) {
-    result[key] = unquoteStaticString(entry, context + '.' + key);
+  for (const [key, entry] of staticEntries(node)) {
+    result[key] = staticStringValue(entry, context + '.' + key);
   }
   return result;
 }
 
-function parseStaticIslandConfigBody(body: string): {
-  ssr?: boolean;
-  dsd?: boolean;
-  hydrate?: IslandDeliveryStrategy;
-  media?: string;
-  tags?: string[];
-  tagNames?: string[];
-  exportNames?: Record<string, string>;
-} {
-  const meta: {
-    ssr?: boolean;
-    dsd?: boolean;
-    hydrate?: IslandDeliveryStrategy;
-    media?: string;
-    tags?: string[];
-    tagNames?: string[];
-    exportNames?: Record<string, string>;
-  } = {};
+/** Locate the defineIslandConfig() call the openElement export initializes to. */
+function locateDefineIslandConfigCall(initializer: ts.Expression): ts.CallExpression {
+  let node = initializer;
+  let wrapped = false;
+  for (;;) {
+    if (
+      ts.isCallExpression(node) && ts.isIdentifier(node.expression) &&
+      node.expression.text === 'defineIslandConfig'
+    ) {
+      if (wrapped) {
+        throw staticOpenElementError(
+          'defineIslandConfig() argument must be one static object literal',
+        );
+      }
+      return node;
+    }
+    if (
+      !ts.isPropertyAccessExpression(node) && !ts.isElementAccessExpression(node) &&
+      !ts.isCallExpression(node)
+    ) {
+      throw staticOpenElementError('openElement export must call defineIslandConfig(...)');
+    }
+    node = node.expression;
+    wrapped = true;
+  }
+}
+
+function parseStaticIslandConfig(
+  objectLiteral: ts.ObjectLiteralExpression,
+  sourceFile: ts.SourceFile,
+): StaticIslandConfig {
+  const literalText = (raw: ts.Expression, context: string): string => {
+    if (!ts.isStringLiteral(raw)) {
+      throw staticOpenElementError(
+        `${context} must be a static literal, got dynamic value "${raw.getText(sourceFile)}"`,
+      );
+    }
+    return raw.text;
+  };
+  const meta: StaticIslandConfig = {};
   const seen = new Set<string>();
-  for (const [key, raw] of readStaticProperties(body)) {
+  for (const [key, raw] of staticEntries(objectLiteral)) {
     if (seen.has(key)) throw staticOpenElementError(`duplicate metadata key "${key}"`);
     seen.add(key);
     if (!['ssr', 'dsd', 'hydrate', 'media', 'tags', 'tagNames', 'exportNames'].includes(key)) {
       throw staticOpenElementError(`unsupported openElement metadata key "${key}"`);
     }
     if (key === 'ssr' || key === 'dsd') {
-      if (raw !== 'true' && raw !== 'false') {
+      if (raw.kind !== ts.SyntaxKind.TrueKeyword && raw.kind !== ts.SyntaxKind.FalseKeyword) {
         throw staticOpenElementError(
-          `openElement.${key} must be a static literal, got dynamic value "${raw}"`,
+          `openElement.${key} must be a static literal, got dynamic value "${
+            raw.getText(sourceFile)
+          }"`,
         );
       }
-      meta[key] = raw === 'true';
+      meta[key] = raw.kind === ts.SyntaxKind.TrueKeyword;
     } else if (key === 'hydrate') {
-      if (!isQuotedStaticString(raw)) {
-        throw staticOpenElementError(
-          `openElement.hydrate must be a static literal, got dynamic value "${raw}"`,
-        );
-      }
-      const value = unquoteStaticString(raw, 'openElement.hydrate');
+      const value = literalText(raw, 'openElement.hydrate');
       if (!(ISLAND_DELIVERY_STRATEGIES as readonly string[]).includes(value)) {
         throw staticOpenElementError(`openElement.hydrate has unsupported value "${value}"`);
       }
       meta.hydrate = value as IslandDeliveryStrategy;
     } else if (key === 'media') {
-      if (!isQuotedStaticString(raw)) {
-        throw staticOpenElementError(
-          `openElement.media must be a static literal, got dynamic value "${raw}"`,
-        );
-      }
       meta.media = validateIslandMediaQuery(
-        unquoteStaticString(raw, 'openElement.media'),
+        literalText(raw, 'openElement.media'),
         'openElement.media',
       );
     } else if (key === 'tags' || key === 'tagNames') {
@@ -494,59 +369,51 @@ function parseStaticIslandConfigBody(body: string): {
 /**
  * Statically extract `export const openElement = defineIslandConfig({ ... })`.
  *
- * The scanner intentionally does not execute island modules. It accepts only a
- * defineIslandConfig() call with literal metadata. Dynamic metadata is rejected
- * instead of guessed so the server admission plan and client manifest cannot
- * disagree.
+ * The scanner intentionally does not execute island modules. It locates the
+ * defineIslandConfig() call through the TypeScript compiler front-end — the
+ * same parser the compiler and sibling scanners use — and accepts only a call
+ * with literal metadata. Dynamic metadata is rejected instead of guessed so
+ * the server admission plan and client manifest cannot disagree.
  */
-export function readIslandConfig(source: string): {
-  ssr?: boolean;
-  dsd?: boolean;
-  hydrate?: LocalIslandMeta['hydrate'];
-  media?: string;
-  tags?: string[];
-  tagNames?: string[];
-  exportNames?: Record<string, string>;
-} | null {
-  const declMatch = source.match(/export\s+const\s+openElement\s*=/);
-  if (!declMatch) return null;
-
-  const afterEquals = source.slice(declMatch.index! + declMatch[0].length).trimStart();
-
-  // Must call defineIslandConfig(...) - reject legacy object literals.
-  const callMatch = afterEquals.match(/^defineIslandConfig\s*\(/);
-  if (!callMatch) {
-    throw staticOpenElementError('openElement export must call defineIslandConfig(...)');
+export function readIslandConfig(source: string): StaticIslandConfig | null {
+  const sourceFile = ts.createSourceFile(
+    'island-module.tsx',
+    source,
+    ts.ScriptTarget.Latest,
+    /* setParentNodes */ true,
+    ts.ScriptKind.TSX,
+  );
+  let initializer: ts.Expression | undefined;
+  for (const statement of sourceFile.statements) {
+    if (
+      !ts.isVariableStatement(statement) ||
+      (statement.declarationList.flags & ts.NodeFlags.Const) === 0 ||
+      statement.modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword) !==
+        true
+    ) {
+      continue;
+    }
+    for (const declaration of statement.declarationList.declarations) {
+      if (
+        ts.isIdentifier(declaration.name) && declaration.name.text === 'openElement' &&
+        declaration.initializer !== undefined
+      ) {
+        initializer = declaration.initializer;
+        break;
+      }
+    }
+    if (initializer !== undefined) break;
   }
+  if (initializer === undefined) return null;
 
-  const argument = afterEquals.slice(callMatch[0].length).trimStart();
-  if (!argument.startsWith('{')) {
-    throw staticOpenElementError(
-      'defineIslandConfig() argument must be a static object literal',
-    );
+  const call = locateDefineIslandConfigCall(initializer);
+  if (call.arguments.length === 0 || !ts.isObjectLiteralExpression(call.arguments[0])) {
+    throw staticOpenElementError('defineIslandConfig() argument must be a static object literal');
   }
-  const body = findStaticConfigBody(argument, 0);
-  if (body === undefined) {
-    throw staticOpenElementError(
-      'defineIslandConfig() argument must be a static object literal',
-    );
+  if (call.arguments.length > 1) {
+    throw staticOpenElementError('defineIslandConfig() argument must be one static object literal');
   }
-  const callTail = argument.slice(body.length + 2).trimStart();
-  const afterParen = callTail.startsWith(')') ? callTail.slice(1) : '';
-  const continuation = afterParen.trimStart();
-  const hasStatementTerminator = afterParen.startsWith(';');
-  const hasAutomaticSemicolonBoundary = /^\s*\r?\n/.test(afterParen) &&
-    !/^(?:[.[(`]|[+\-*%/&|^!=<>:]|as\b|satisfies\b)/.test(continuation);
-  if (
-    !callTail.startsWith(')') ||
-    (continuation !== '' && !hasStatementTerminator && !hasAutomaticSemicolonBoundary)
-  ) {
-    throw staticOpenElementError(
-      'defineIslandConfig() argument must be one static object literal',
-    );
-  }
-
-  return parseStaticIslandConfigBody(body);
+  return parseStaticIslandConfig(call.arguments[0], sourceFile);
 }
 
 /**
@@ -592,7 +459,7 @@ export async function scanIslands(
 }
 
 /**
- * v0.41.0-alpha.1: Regex-based — reads island metadata by statically scanning the
+ * v0.41.0-alpha.1: AST-based — reads island metadata by statically scanning the
  * module source for `export const openElement = defineIslandConfig({ ... })`
  * (see readIslandConfig). Island modules are never executed.
  *

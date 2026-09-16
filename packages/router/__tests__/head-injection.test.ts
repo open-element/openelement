@@ -5,11 +5,13 @@
  * URL safety checks, and headExtras serialization.
  */
 import { assertEquals, assertStringIncludes, assertThrows } from '@std/assert';
+import { OpenElementError } from '@openelement/element';
 import {
   assertNoScriptTags,
   buildHeadExtras,
   validateSafeUrl,
 } from '../src/vite/head-injection.ts';
+import { buildCriticalHeadExtras } from '../src/vite/internal/ssg/critical-assets.ts';
 
 // ─── assertNoScriptTags ───────────────────────────────────────
 
@@ -609,6 +611,79 @@ Deno.test('buildHeadExtras: keeps benign CSS escapes in style content', () => {
     headExtras: '<style>.a::before{content:"\\201C"}</style>',
   });
   assertEquals(result.headExtras, '<style>.a::before{content:"\\201C"}</style>');
+});
+
+// F-2 parity: the style guard and the critical-assets inline-CSS guard share
+// one quote-aware preprocessing implementation, so the same corpus must draw
+// the same verdict on both paths (each keeps its own error code).
+Deno.test('buildHeadExtras: rejects unsafe CSS smuggled inside quoted strings', () => {
+  assertThrows(
+    () =>
+      buildHeadExtras({
+        headExtras: '<style>.a::after{content:"/* @import url(evil); */"}</style>',
+      }),
+    Error,
+    'Unsafe CSS',
+  );
+});
+
+Deno.test('buildHeadExtras: rejects unterminated CSS comments', () => {
+  const error = assertThrows(
+    () => buildHeadExtras({ headExtras: '<style>.a { color: red; } /* unterminated</style>' }),
+    Error,
+    'unterminated CSS comment',
+  );
+  assertEquals((error as OpenElementError).code, 'UNSAFE_HEAD_INJECTION');
+});
+
+Deno.test('CSS guard parity: style tags and critical inline CSS reach the same verdict', () => {
+  const headVerdict = (css: string): { verdict: string; code?: string; message?: string } => {
+    try {
+      buildHeadExtras({ headExtras: `<style>${css}</style>` });
+      return { verdict: 'PASS' };
+    } catch (e) {
+      return {
+        verdict: 'THROW',
+        code: (e as OpenElementError).code,
+        message: (e as Error).message,
+      };
+    }
+  };
+  const criticalVerdict = (css: string): { verdict: string; code?: string; message?: string } => {
+    try {
+      buildCriticalHeadExtras({ criticalAssets: { styles: [{ css }] } });
+      return { verdict: 'PASS' };
+    } catch (e) {
+      return {
+        verdict: 'THROW',
+        code: (e as OpenElementError).code,
+        message: (e as Error).message,
+      };
+    }
+  };
+  const rejections: Array<[string, string]> = [
+    ['@import url(https://evil.example/x.css);', 'Unsafe CSS'],
+    ['.a::after{content:"/* @import url(evil); */"}', 'Unsafe CSS'],
+    ['@im/**/port url(https://evil.example/x.css);', 'Unsafe CSS'],
+    ['.a { color: red; } /* unterminated', 'unterminated CSS comment'],
+  ];
+  for (const [css, message] of rejections) {
+    const head = headVerdict(css);
+    const critical = criticalVerdict(css);
+    assertEquals(head.verdict, 'THROW', `head path must reject: ${css}`);
+    assertEquals(critical.verdict, 'THROW', `critical path must reject: ${css}`);
+    assertStringIncludes(head.message!, message);
+    assertStringIncludes(critical.message!, message);
+    // Error codes stay per-path: the head guard only knows
+    // UNSAFE_HEAD_INJECTION; unterminated comments on the critical path keep
+    // INVALID_CRITICAL_ASSETS.
+    assertEquals(head.code, 'UNSAFE_HEAD_INJECTION');
+    if (message === 'Unsafe CSS') assertEquals(critical.code, 'UNSAFE_HEAD_INJECTION');
+    else assertEquals(critical.code, 'INVALID_CRITICAL_ASSETS');
+  }
+  const benign = '.icon::before{content:"/*keep*/";color:red}';
+  assertEquals(headVerdict(benign).verdict, 'PASS');
+  assertEquals(criticalVerdict(benign).verdict, 'PASS');
 });
 
 // ─── Regression: headExtras takes precedence ──────────────────

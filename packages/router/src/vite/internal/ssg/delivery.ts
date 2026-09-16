@@ -9,15 +9,12 @@
 
 import type { ClientIslandEntry, IslandDeliveryStrategy } from '../protocol/ssg.ts';
 export type { IslandDeliveryStrategy } from '../protocol/ssg.ts';
-import { isValidTagName } from '@openelement/element';
+import { HYDRATION_STRATEGIES, isValidTagName } from '@openelement/element';
 
-export const ISLAND_DELIVERY_STRATEGIES = [
-  'load',
-  'idle',
-  'visible',
-  'media',
-  'only',
-] as const;
+// Derived from the element protocol's single-source strategy list (same
+// derivation as authoring.ts): a new hydration strategy lands here
+// automatically instead of drifting behind a hardcoded copy.
+export const ISLAND_DELIVERY_STRATEGIES = [...HYDRATION_STRATEGIES, 'media'] as const;
 
 /** One capability module may deliver several native custom elements. */
 export interface ClientIslandDeliveryEntry extends ClientIslandEntry {

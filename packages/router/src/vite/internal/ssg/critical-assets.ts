@@ -8,7 +8,7 @@
  */
 
 import { escapeAttr, OpenElementError } from '@openelement/element';
-import { validateSafeUrl } from '../../head-injection.ts';
+import { foldCssForCheck, stripCssComments, validateSafeUrl } from '../../head-injection.ts';
 
 function hasControlCharacters(value: string): boolean {
   for (let index = 0; index < value.length; index++) {
@@ -149,61 +149,11 @@ function crossoriginValue(
   return normalized;
 }
 
-/** Small deterministic CSS minifier that preserves quoted strings and values. */
-function stripCssComments(css: string): string {
-  let out = '';
-  let quote = '';
-  let escaped = false;
-  for (let index = 0; index < css.length; index++) {
-    const char = css[index];
-    const next = css[index + 1];
-    if (quote) {
-      out += char;
-      if (escaped) escaped = false;
-      else if (char === '\\') escaped = true;
-      else if (char === quote) quote = '';
-      continue;
-    }
-    if (char === '"' || char === "'") {
-      quote = char;
-      out += char;
-      continue;
-    }
-    if (char === '/' && next === '*') {
-      index += 2;
-      while (index + 1 < css.length && !(css[index] === '*' && css[index + 1] === '/')) {
-        index += 1;
-      }
-      if (index + 1 >= css.length) {
-        throw new OpenElementError('Invalid CSS: unterminated CSS comment', {
-          code: 'INVALID_CRITICAL_ASSETS',
-          statusCode: 400,
-          recoverable: false,
-        });
-      }
-      index += 1;
-      out += ' ';
-      continue;
-    }
-    out += char;
-  }
-  return out;
-}
-
-function foldCssForCheck(css: string): string {
-  return stripCssComments(css)
-    .replace(/\\([0-9a-fA-F]{1,6})\s?/g, (_m, hex: string) => {
-      const code = Number.parseInt(hex, 16);
-      return code === 0 || code > 0x10FFFF ? '\uFFFD' : String.fromCodePoint(code);
-    })
-    .replace(/\\(.)/g, '$1');
-}
-
 function assertSafeInlineCss(css: string, context: string): void {
   if (
     /<\/style/i.test(css) ||
     /(?:@import|expression\s*\(|url\s*\(\s*["']?\s*(?:javascript|data|vbscript|file)\s*:)/i.test(
-      foldCssForCheck(css),
+      foldCssForCheck(css, context, 'INVALID_CRITICAL_ASSETS'),
     )
   ) {
     throw new OpenElementError(`Unsafe CSS in ${context}`, {
@@ -220,7 +170,12 @@ export function minifyCriticalCss(css: string): string {
   let quote = '';
   let escaped = false;
   let pendingSpace = false;
-  const withoutComments = stripCssComments(css);
+  const withoutComments = stripCssComments(
+    css,
+    'critical inline CSS',
+    'INVALID_CRITICAL_ASSETS',
+    ' ',
+  );
 
   const flushSpace = (next: string): void => {
     if (!pendingSpace) return;

@@ -32,14 +32,71 @@ const log = createLogger('router-vite:head-injection');
  * - `<style>` blocks must not carry executable CSS (`@import`, `javascript:`
  *   URLs, …) or event-handler attributes.
  */
+/**
+ * Quote-aware CSS comment stripper shared by the style safety check below and
+ * the critical-assets serializer. Comment sequences inside quoted strings are
+ * content, not comments, so they are preserved (a payload quoted inside a
+ * string must still reach the blacklist); a comment that never closes is
+ * rejected instead of silently kept. `commentReplacement` is a single space
+ * for minification (comments separate tokens there) and the empty string for
+ * the safety fold (CSS consumes comments entirely, so `@im/**\/port` is a
+ * real `@import`). `code` is the caller's failure strategy for unterminated
+ * comments: each call site keeps its own error code.
+ */
+export function stripCssComments(
+  css: string,
+  context: string,
+  code: string,
+  commentReplacement: string,
+): string {
+  let out = '';
+  let quote = '';
+  let escaped = false;
+  for (let index = 0; index < css.length; index++) {
+    const char = css[index];
+    const next = css[index + 1];
+    if (quote) {
+      out += char;
+      if (escaped) escaped = false;
+      else if (char === '\\') escaped = true;
+      else if (char === quote) quote = '';
+      continue;
+    }
+    if (char === '"' || char === "'") {
+      quote = char;
+      out += char;
+      continue;
+    }
+    if (char === '/' && next === '*') {
+      index += 2;
+      while (index + 1 < css.length && !(css[index] === '*' && css[index + 1] === '/')) {
+        index += 1;
+      }
+      if (index + 1 >= css.length) {
+        throw new OpenElementError(`Invalid CSS in ${context}: unterminated CSS comment`, {
+          code,
+          statusCode: 400,
+          recoverable: false,
+        });
+      }
+      index += 1;
+      out += commentReplacement;
+      continue;
+    }
+    out += char;
+  }
+  return out;
+}
+
 /** Fold CSS escapes and strip comments so the blacklist below cannot be
- *  bypassed by `@\69mport`, `@im/**\/port`, or `u\72l(...)`. */
-function foldCssForCheck(css: string): string {
-  return css
-    .replace(/\/\*[\s\S]*?\*\//g, '')
+ *  bypassed by `@\69mport`, `@im/**\/port`, `u\72l(...)`, or payloads quoted
+ *  inside strings. `code` is the caller's error code for unterminated
+ *  comments; the blacklist throw itself stays at the call site. */
+export function foldCssForCheck(css: string, context: string, code: string): string {
+  return stripCssComments(css, context, code, '')
     .replace(/\\([0-9a-fA-F]{1,6})\s?/g, (_m, hex: string) => {
-      const code = Number.parseInt(hex, 16);
-      return code === 0 || code > 0x10FFFF ? '\uFFFD' : String.fromCodePoint(code);
+      const parsed = Number.parseInt(hex, 16);
+      return parsed === 0 || parsed > 0x10FFFF ? '\uFFFD' : String.fromCodePoint(parsed);
     })
     .replace(/\\(.)/g, '$1');
 }
@@ -47,7 +104,7 @@ function foldCssForCheck(css: string): string {
 function assertStyleTag(attributes: string, css: string, context: string): string {
   if (
     /(?:@import|expression\s*\(|url\s*\(\s*["']?\s*(?:javascript|data|vbscript|file)\s*:)/i.test(
-      foldCssForCheck(css),
+      foldCssForCheck(css, context, 'UNSAFE_HEAD_INJECTION'),
     )
   ) {
     throw new OpenElementError(`Unsafe CSS in ${context}`, {

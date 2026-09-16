@@ -59,3 +59,15 @@ export const openElement = defineIslandConfig({ hydrate: 'hover' });
 `;
   assertThrows(() => readIslandConfig(source), Error, 'unsupported value');
 });
+
+Deno.test('readIslandConfig: tolerates comments inside the config object', () => {
+  const source = `import { defineIslandConfig } from '@openelement/router';
+export const openElement = defineIslandConfig({
+  // don't server-render during campaigns
+  ssr: false,
+  /* } */
+  hydrate: 'idle',
+});
+`;
+  assertEquals(readIslandConfig(source), { ssr: false, hydrate: 'idle' });
+});
