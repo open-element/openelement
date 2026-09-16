@@ -2,17 +2,20 @@
  * Home page element — static prerendered (default renderIntent mode).
  *
  * Compiled v0.44 (ADR-0143): the render() below is lowered to a Part Program
- * at build time. The page uses a light root: page classes are not registered
- * client-side and the compiled serializer never inlines styles, so page rules
- * live in the global baseline (vite.config.ts, scoped under the host tag).
- * The two island hosts (<my-counter>, <only-ticker>) are static
- * custom-element hosts that the generated server entry expands through the
- * islands' own compiled classes.
+ * at build time. The page uses a light root and owns its rules via
+ * `static styles` (./page-styles.ts): the server inlines them into the SSR
+ * output as a @scope(index-page) <style data-oe-static-styles> block, so the
+ * page is styled with zero client JS. The two island hosts (<my-counter>,
+ * <only-ticker>) are static custom-element hosts that the generated server
+ * entry expands through the islands' own compiled classes.
  */
 import { element, OpenElement } from '@openelement/element';
+import { homePageStyles } from './page-styles.ts';
 
 @element('index-page', { root: 'light' })
 export default class HomePage extends OpenElement {
+  static override styles = homePageStyles;
+
   render() {
     return (
       <main>

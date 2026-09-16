@@ -289,6 +289,71 @@ Deno.test('starter global style block scopes tokens under :root', () => {
   assert(config.includes('--gray-0:#f8f9fa'), config);
 });
 
+Deno.test('starter pages own their styles via static styles, not the global baseline', () => {
+  const config = readTemplate('vite.config.ts');
+  // The vite.config globalStyle keeps only true globals (design tokens +
+  // body/::selection baseline); per-page rules moved into each page's
+  // `static styles` (inlined into SSR as @scope(<page-tag>) for light roots).
+  for (
+    const tag of [
+      'index-page',
+      'blog-index',
+      'blog-welcome',
+      'freshness-page',
+      'el-404',
+      'contact-page',
+    ]
+  ) {
+    assertFalse(config.includes(`${tag}{`), `globalStyle must not scope rules under ${tag}`);
+    assertFalse(config.includes(`${tag} `), `globalStyle must not scope rules under ${tag}`);
+  }
+  assert(config.includes('body{margin:0;'), config);
+  assert(config.includes('::selection{'), config);
+
+  const styles = readTemplate('app/components/page-styles.ts');
+  for (
+    const exportName of [
+      'postListStyles',
+      'homePageStyles',
+      'blogIndexStyles',
+      'blogWelcomeStyles',
+      'freshnessPageStyles',
+      'notFoundPageStyles',
+      'contactPageStyles',
+    ]
+  ) {
+    assert(
+      styles.includes(`export const ${exportName}`),
+      `page-styles.ts must export ${exportName}`,
+    );
+  }
+  // The post-list rules stay single-source: both list pages spread the shared
+  // sheet instead of duplicating the rules.
+  assertEquals(styles.split('...postListStyles').length - 1, 2, styles);
+
+  const pages: Array<[string, string]> = [
+    ['app/components/page-home.tsx', 'homePageStyles'],
+    ['app/components/page-blog-index.tsx', 'blogIndexStyles'],
+    ['app/components/page-blog-welcome.tsx', 'blogWelcomeStyles'],
+    ['app/components/page-freshness.tsx', 'freshnessPageStyles'],
+    ['app/components/page-404.tsx', 'notFoundPageStyles'],
+    ['app/components/page-contact.tsx', 'contactPageStyles'],
+  ];
+  for (const [path, exportName] of pages) {
+    const source = readTemplate(path);
+    assert(
+      source.includes(`static override styles = ${exportName};`),
+      `${path} must declare static override styles`,
+    );
+    assert(
+      source.includes(`from './page-styles.ts'`),
+      `${path} must import its sheet from ./page-styles.ts`,
+    );
+    // The stale workaround guidance must be gone from the starter.
+    assertFalse(source.includes('global baseline'), path);
+  }
+});
+
 Deno.test('starter blog is a pair of compiled page routes', () => {
   const index = readTemplate('app/routes/blog/index.tsx');
   // The route module is a thin definePage wrapper around the compiled page

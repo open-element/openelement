@@ -1,15 +1,18 @@
 /**
  * /blog/welcome post page element — static prerendered. A post is a compiled
- * page route in the 1.0 Alpha baseline: static markup in the render() below, page rules in the
- * global baseline (vite.config.ts, scoped under the host tag). The path
- * derives the tag ('blog-welcome'); there is no dynamic [slug] route in
- * grammar v1 (with no raw-HTML sink), so unknown
+ * page route in the 1.0 Alpha baseline: static markup in the render() below,
+ * page rules in `static styles` (./page-styles.ts, inlined into SSR as
+ * @scope(blog-welcome)). The path derives the tag ('blog-welcome'); there is
+ * no dynamic [slug] route in grammar v1 (with no raw-HTML sink), so unknown
  * slugs fall through to the styled 404 (#922).
  */
 import { element, OpenElement } from '@openelement/element';
+import { blogWelcomeStyles } from './page-styles.ts';
 
 @element('blog-welcome', { root: 'light' })
 export default class BlogWelcomePage extends OpenElement {
+  static override styles = blogWelcomeStyles;
+
   render() {
     return (
       <main>

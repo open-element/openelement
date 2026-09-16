@@ -4,13 +4,16 @@
  * and morphs in place with it (data-open-enhance). The route module's props
  * projector maps request/action state onto the compiled properties below;
  * the feedback paragraphs render empty (zero-height, invisible) until the
- * action supplies text. Light root: the page rules live in the global
- * baseline (vite.config.ts).
+ * action supplies text. Light root: the page owns its rules via
+ * `static styles` (./page-styles.ts), inlined into SSR as @scope(contact-page).
  */
 import { element, OpenElement, property } from '@openelement/element';
+import { contactPageStyles } from './page-styles.ts';
 
 @element('contact-page', { root: 'light' })
 export default class ContactPage extends OpenElement {
+  static override styles = contactPageStyles;
+
   @property({ reflect: false, attribute: false })
   email = '';
 

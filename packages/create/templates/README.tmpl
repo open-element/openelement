@@ -9,11 +9,13 @@ This starter pins the exact `@openelement/element` and `@openelement/router`
 versions it was generated from (`${v.element}`) in `deno.json`; update both
 there when moving to a new release.
 
-Pages use light roots: page classes are not registered client-side and the
-compiled serializer never inlines styles into SSR output, so page rules live
-in the global baseline in `vite.config.ts`, scoped under each page's host
-tag. The shell and the islands hydrate in the browser and carry their own
-`static styles`.
+Styling ownership is split three ways. Global design tokens and the document
+baseline (`body`, `::selection`) live in `vite.config.ts`
+(`inject.headFragments`). Pages use light roots and own their rules in
+`static styles` (`app/components/page-styles.ts`): the server inlines each
+page's sheets into the SSR output as a `@scope(<page-tag>)` style block, so
+pages are fully styled with zero client JavaScript. The shell and the islands
+hydrate in the browser and carry their own `static styles`.
 
 ## Tasks
 

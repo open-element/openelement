@@ -1,13 +1,17 @@
 /**
  * /freshness page element — prerendered statically at build time like any
  * other static route. v0.44 ships no route-level cache revalidation
- * semantics (ISR was removed, see issue #1217). Light root: the page rules
- * live in the global baseline (vite.config.ts).
+ * semantics (ISR was removed, see issue #1217). Light root: the page owns its
+ * rules via `static styles` (./page-styles.ts), inlined into SSR as
+ * @scope(freshness-page).
  */
 import { element, OpenElement } from '@openelement/element';
+import { freshnessPageStyles } from './page-styles.ts';
 
 @element('freshness-page', { root: 'light' })
 export default class FreshnessPage extends OpenElement {
+  static override styles = freshnessPageStyles;
+
   render() {
     return (
       <main>

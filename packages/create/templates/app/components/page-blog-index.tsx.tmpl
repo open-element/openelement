@@ -3,13 +3,17 @@
  * under app/routes/blog/ (compiled to static pages at build time); the list
  * below is authored statically — add a link per post. (Compiler grammar v1
  * list Regions carry one value slot per item and no per-item attributes, so
- * a data-driven link list is a known v1 boundary.) Light root: the page rules
- * live in the global baseline (vite.config.ts).
+ * a data-driven link list is a known v1 boundary.) Light root: the page owns
+ * its rules via `static styles` (./page-styles.ts), inlined into SSR as
+ * @scope(blog-index).
  */
 import { element, OpenElement } from '@openelement/element';
+import { blogIndexStyles } from './page-styles.ts';
 
 @element('blog-index', { root: 'light' })
 export default class BlogIndexPage extends OpenElement {
+  static override styles = blogIndexStyles;
+
   render() {
     return (
       <main>
