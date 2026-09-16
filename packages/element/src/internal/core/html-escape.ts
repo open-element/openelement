@@ -63,6 +63,22 @@ export function escapeAttrValue(value: unknown): string {
 export { VOID_TAGS } from '../protocol/void-tags.ts';
 
 /**
+ * A framework-generated <script> to embed after the rendered HTML
+ * (v0.44.0-alpha, CSP nonce closure). Structured alternative to the raw
+ * `clientScript`/`devScripts` strings: wrapInDocument serializes every
+ * descriptor through ONE code point, so a valid CSP nonce reaches every
+ * framework-generated script tag uniformly.
+ */
+export interface DocumentScriptDescriptor {
+  /** External script URL (attribute-escaped at serialization). */
+  src?: string;
+  /** Inline script body. Trusted input: never concatenate user content. */
+  code?: string;
+  /** Script type attribute, e.g. 'module'. Omitted means a classic script. */
+  type?: string;
+}
+
+/**
  * Wrap rendered HTML in a full HTML document.
  * Adds DOCTYPE, head (title, meta, preload), and body.
  * Supports CSP nonce and dev scripts (e.g. Vite client, route module registration).
@@ -74,6 +90,8 @@ export function wrapInDocument(
     lang?: string;
     /** Client-side module script injected after rendered HTML. */
     clientScript?: string;
+    /** Structured framework-generated scripts (island client entry, …). */
+    scripts?: DocumentScriptDescriptor[];
     meta?: {
       description?: string;
       tags?: Array<Record<string, string | number | boolean>>;
@@ -108,6 +126,7 @@ export function wrapInDocument(
     title = 'openElement',
     lang = 'en',
     clientScript = '',
+    scripts = [],
     meta,
     devScripts = '',
     headExtras = '',
@@ -134,6 +153,7 @@ export function wrapInDocument(
 
   const safeTitle = escapeHtml(title);
   const safeLang = escapeAttr(lang);
+  const scriptBlock = buildScriptTags(scripts, validNonce);
 
   return `<!DOCTYPE html>
 <html lang="${safeLang}">
@@ -145,9 +165,36 @@ export function wrapInDocument(
 </head>
 <body>
   ${html}
-  ${clientScript}${devScripts}
+  ${clientScript}${devScripts}${scriptBlock}
 </body>
 </html>`;
+}
+
+/**
+ * Serialize structured script descriptors (THE single nonce attachment
+ * point). With no valid nonce the tags are byte-identical to the tags the
+ * retired string-splice injectors emitted; with one, every tag carries
+ * `nonce="..."`. Entries without src or code are meaningless and skipped.
+ */
+function buildScriptTags(
+  scripts: DocumentScriptDescriptor[],
+  nonce: string | undefined,
+): string {
+  const tags: string[] = [];
+  for (const script of scripts) {
+    if (!script || (!script.src && !script.code)) continue;
+    const attrs: string[] = [];
+    if (script.type) attrs.push(`type="${escapeAttrValue(script.type)}"`);
+    if (script.src) attrs.push(`src="${escapeAttrValue(script.src)}"`);
+    if (nonce) attrs.push(`nonce="${nonce}"`);
+    // Inline bodies are trusted framework/developer input (same boundary as
+    // headExtras with allowHeadExtrasScripts). The `<\/script` guard keeps a
+    // literal end tag inside the body from closing the element early.
+    const body = script.src ? '' : (script.code ?? '').replace(/<\/script/gi, '<\\/script');
+    const open = attrs.length > 0 ? `<script ${attrs.join(' ')}>` : '<script>';
+    tags.push(`${open}${body}</script>`);
+  }
+  return tags.join('\n  ');
 }
 
 /**

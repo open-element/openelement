@@ -185,10 +185,10 @@ function renderRouteResponseAndCatch(lines: string[], ctx: RouteHandlerEmitConte
     // no-store baseline.
     lines.push(`    c.header('Cache-Control', 'private, no-cache');`);
   }
-  // #951: in dev the island client script is injected here (prod injects the
-  // built entry post-build); __withDevClientScript is a no-op when
-  // import.meta.env.DEV is false.
-  lines.push(`    return c.html(__withDevClientScript(wrapInDocument(content, {`);
+  // #951: the island client script rides wrapInDocument's script descriptors
+  // (the dev URL, or the request-time src handed in by dist/server/index.js),
+  // so a CSP nonce reaches it; static pages keep the post-build injector.
+  lines.push(`    return c.html(wrapInDocument(content, {`);
   for (
     const optionLine of documentWrapOptionsLines({
       titleExpr: `__doc.title || ${quoteGeneratedJavaScriptValue(docConfig.title)}`,
@@ -196,11 +196,12 @@ function renderRouteResponseAndCatch(lines: string[], ctx: RouteHandlerEmitConte
       headExtrasExpr,
       allowHeadExtrasScripts: docConfig.allowHeadExtrasScripts,
       cspNonce: true,
+      clientScripts: true,
     })
   ) {
     lines.push(`      ${optionLine}`);
   }
-  lines.push(`    }))${isAction ? ', __actionStatus' : ''})`);
+  lines.push(`    })${isAction ? ', __actionStatus' : ''})`);
 
   lines.push(`  } catch (err) {`);
   lines.push(`    if (__isOpenElementRedirect(err)) {`);
@@ -221,7 +222,7 @@ function renderRouteResponseAndCatch(lines: string[], ctx: RouteHandlerEmitConte
   lines.push(`    }`);
   lines.push(`    if (__isOpenElementNotFound(err)) {`);
   lines.push(
-    `      return c.html(__withDevClientScript(wrapInDocument(__statusHtml("404 Not Found", err.message || "Not Found"), {`,
+    `      return c.html(wrapInDocument(__statusHtml("404 Not Found", err.message || "Not Found"), {`,
   );
   lines.push(`        title: "404 Not Found",`);
   lines.push(`        lang: ${quoteGeneratedJavaScriptValue(docConfig.lang)},`);
@@ -230,7 +231,8 @@ function renderRouteResponseAndCatch(lines: string[], ctx: RouteHandlerEmitConte
     `        allowHeadExtrasScripts: ${JSON.stringify(docConfig.allowHeadExtrasScripts)},`,
   );
   lines.push(`        cspNonce: c.get('cspNonce'),`);
-  lines.push(`      })), 404)`);
+  lines.push(`        scripts: __clientScriptDescriptors(),`);
+  lines.push(`      }), 404)`);
   lines.push(`    }`);
 
   // ADR-0121 (#558): the JSON error channel scrubs internals in production,
@@ -273,7 +275,7 @@ function renderRouteResponseAndCatch(lines: string[], ctx: RouteHandlerEmitConte
     lines.push(
       `        const errorContent = __renderAppShell(__errorHtml, c.req.path || ${pathLiteral}, { routeMeta: __routeMetaValue })`,
     );
-    lines.push(`        return c.html(__withDevClientScript(wrapInDocument(errorContent, {`);
+    lines.push(`        return c.html(wrapInDocument(errorContent, {`);
     for (
       const optionLine of documentWrapOptionsLines({
         titleExpr: `__doc.title || ${quoteGeneratedJavaScriptValue(docConfig.title)}`,
@@ -281,11 +283,12 @@ function renderRouteResponseAndCatch(lines: string[], ctx: RouteHandlerEmitConte
         headExtrasExpr,
         allowHeadExtrasScripts: docConfig.allowHeadExtrasScripts,
         cspNonce: true,
+        clientScripts: true,
       })
     ) {
       lines.push(`          ${optionLine}`);
     }
-    lines.push(`        })), 500)`);
+    lines.push(`        }), 500)`);
     lines.push(`      } catch (errorRenderFailure) {`);
     lines.push(
       `        console.error('[openElement] Route error renderer failed for ' + ${pathLiteral} + ':', errorRenderFailure)`,

@@ -147,3 +147,86 @@ Deno.test('wrapInDocument: escapes link attributes and skips entries without rel
     false,
   );
 });
+
+// ─── Structured script descriptors + CSP nonce (Alpha.1 closure) ────────
+
+Deno.test('wrapInDocument: no scripts and no nonce stays byte-identical', () => {
+  const baseline = '<!DOCTYPE html>\n<html lang="en">\n<head>\n  <meta charset="UTF-8">\n' +
+    '  <meta name="viewport" content="width=device-width, initial-scale=1.0">\n' +
+    '  <title>T</title>\n  \n</head>\n<body>\n  x\n  \n</body>\n</html>';
+  assertEquals(wrapInDocument('x', { title: 'T' }), baseline);
+  // An explicitly empty descriptor list changes nothing either.
+  assertEquals(wrapInDocument('x', { title: 'T', scripts: [] }), baseline);
+});
+
+Deno.test('wrapInDocument: script descriptors serialize byte-identically to the retired injectors when no nonce is present', () => {
+  const out = wrapInDocument('x', {
+    scripts: [{ type: 'module', src: '/client/islands/client.js' }],
+  });
+  assertEquals(
+    out.includes('<script type="module" src="/client/islands/client.js"></script>'),
+    true,
+  );
+  assertEquals(out.includes('nonce'), false);
+});
+
+Deno.test('wrapInDocument: a valid CSP nonce reaches EVERY generated script tag', () => {
+  const out = wrapInDocument('x', {
+    cspNonce: 'abc123+/=_-',
+    scripts: [
+      { type: 'module', src: '/client/islands/client.js' },
+      { code: 'window.__x = 1;' },
+    ],
+  });
+  assertEquals(
+    out.includes(
+      '<script type="module" src="/client/islands/client.js" nonce="abc123+/=_-"></script>',
+    ),
+    true,
+  );
+  assertEquals(out.includes('<script nonce="abc123+/=_-">window.__x = 1;</script>'), true);
+  // Every <script ...> in the body carries the nonce.
+  const tags = out.match(/<script[ >][\s\S]*?<\/script>/g) ?? [];
+  assertEquals(tags.length, 2);
+  for (const tag of tags) assertEquals(tag.includes('nonce="abc123+/=_-"'), true, tag);
+});
+
+Deno.test('wrapInDocument: an invalid nonce still warns and emits no nonce attribute', () => {
+  const warnings: string[] = [];
+  const originalWarn = console.warn;
+  console.warn = (msg: unknown) => warnings.push(String(msg));
+  let out = '';
+  try {
+    out = wrapInDocument('x', {
+      cspNonce: 'not a "valid" nonce',
+      scripts: [{ type: 'module', src: '/client/islands/client.js' }],
+    });
+  } finally {
+    console.warn = originalWarn;
+  }
+  assertEquals(warnings.some((w) => w.includes('Invalid CSP nonce format')), true);
+  assertEquals(out.includes('nonce='), false);
+  assertEquals(
+    out.includes('<script type="module" src="/client/islands/client.js"></script>'),
+    true,
+  );
+});
+
+Deno.test('wrapInDocument: script descriptor attributes are escaped; inline </script is guarded', () => {
+  const out = wrapInDocument('x', {
+    cspNonce: 'nonce-1_ok=',
+    scripts: [
+      { type: 'module', src: '/client/a.js?x=1&y=<2>"' },
+      { code: 'const s = "</script><script>alert(1)</script>";' },
+    ],
+  });
+  assertEquals(out.includes('src="/client/a.js?x=1&amp;y=&lt;2&gt;&quot;"'), true);
+  // A literal end tag inside an inline body must not close the element early.
+  assertEquals(out.includes('"</script><script>alert(1)</script>"'), false);
+  assertEquals(out.includes('"<\\/script><script>alert(1)<\\/script>"'), true);
+});
+
+Deno.test('wrapInDocument: descriptors without src or code are skipped', () => {
+  const out = wrapInDocument('x', { scripts: [{ type: 'module' }] });
+  assertEquals(out.includes('<script'), false);
+});

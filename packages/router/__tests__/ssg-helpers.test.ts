@@ -40,11 +40,18 @@ Deno.test('resolveDynamicRoutePath rejects traversal segments inside catch-all v
   assertThrows(() => resolveDynamicRoutePath('/docs/:path{.+}', ['path'], { path: '..' }));
 });
 
-Deno.test('request-time client injection embeds portable tolerant helper and preserves statusText (#1103)', () => {
+Deno.test('request-time client script rides the entry setter — no response splicing (#1103)', () => {
   const code = renderRequestTimeServerModule([]);
-  assertStringIncludes(code, 'function insertBeforeBodyClose(html, fragment)');
-  assertStringIncludes(code, "insertBeforeBodyClose(html, '  ' + tag)");
-  assertStringIncludes(code, 'statusText: response.statusText');
+  // The generated server module hands clientScriptSrc to the SSR entry at
+  // startup; the entry embeds the tag at render time through wrapInDocument
+  // (CSP-nonce-safe). No post-hoc HTML splicing remains.
+  assertStringIncludes(
+    code,
+    "import { openElementHandler, __setRequestTimeClientScript } from './entry.js';",
+  );
+  assertStringIncludes(code, '__setRequestTimeClientScript(clientScriptSrc);');
+  assertEquals(code.includes('insertBeforeBodyClose'), false);
+  assertEquals(code.includes('withClientScript'), false);
   assertEquals(code.includes("from '@openelement/"), false);
 });
 
@@ -58,7 +65,7 @@ Deno.test('renderRequestTimeServerModule mounts the entry openElementHandler (#8
   // The generated server entry delegates to the entry's openElementHandler
   // export, which carries the composed middleware.use chain when configured —
   // no direct app.fetch bypass.
-  assertStringIncludes(code, "import { openElementHandler } from './entry.js';");
+  assertStringIncludes(code, "from './entry.js';");
   assertStringIncludes(code, 'return openElementHandler(request, {');
   assertEquals(code.includes('app.fetch'), false);
 });

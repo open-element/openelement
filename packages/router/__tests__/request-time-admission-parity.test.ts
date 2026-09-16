@@ -183,7 +183,8 @@ async function loadAdmissionPredicate(
   try {
     await Deno.writeTextFile(
       join(dir, 'entry.js'),
-      "export const openElementHandler = () => new Response('stub');\n",
+      "export const openElementHandler = () => new Response('stub');\n" +
+        'export function __setRequestTimeClientScript() {}\n',
     );
     await Deno.writeTextFile(
       join(dir, 'client-script.js'),

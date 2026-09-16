@@ -32,6 +32,17 @@ export default defineConfig({
       // and the short-circuit behave identically in dev and in the built
       // server entry.
       middleware: {
+        // Strict CSP with a per-request nonce (Alpha.1 closure): every
+        // framework-generated <script> must carry the response nonce or the
+        // browser blocks it. 'strict-dynamic' lets the nonced island client
+        // entry import its chunks without an allowlist. Static prerendered
+        // pages get the policy-only <meta> fallback (nonces are impossible
+        // in static files — the SSG fail-closed guard).
+        csp: {
+          nonce: true,
+          policy:
+            "default-src 'self'; script-src 'strict-dynamic'; style-src 'self' 'unsafe-inline'",
+        },
         use: [
           async (_request, next) => {
             const response = await next();

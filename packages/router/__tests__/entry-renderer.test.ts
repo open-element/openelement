@@ -954,7 +954,7 @@ Deno.test('renderEntry: private,no-cache is emitted only after a successful rend
   const renderIndex = code.indexOf('__renderAppShell(__content,');
   const relaxIndex = code.indexOf("c.header('Cache-Control', 'private, no-cache');");
   const returnIndex = code.indexOf(
-    'return c.html(__withDevClientScript(wrapInDocument(content, {',
+    'return c.html(wrapInDocument(content, {',
     relaxIndex,
   );
   assertEquals(renderIndex > 0, true, 'shell render must be emitted');
@@ -962,30 +962,41 @@ Deno.test('renderEntry: private,no-cache is emitted only after a successful rend
   assertEquals(returnIndex > relaxIndex, true, 'private,no-cache must precede the 200 return');
 });
 
-Deno.test('renderEntry: dev client script also wraps notFound/error HTML responses (#1067)', () => {
+Deno.test('renderEntry: island client script descriptors also cover notFound/error HTML responses (#1067)', () => {
   const routes: RouteEntry[] = [
     ...basicRoutes,
     { path: '/404', filePath: '404.ts', type: 'page', varName: 'page404' },
   ];
   const code = renderEntry(buildEntryDescriptor(routes, {}));
 
-  // #951 parity: prod injects the island client entry into every HTML
-  // response (post-build injectClientScript + serve-time withClientScript),
-  // so dev must run the same __withDevClientScript on the 404/error channels,
-  // not only on the successful GET page.
+  // #951 parity: prod embeds the island client entry into every HTML
+  // response (post-build injectClientScript on static pages, render-time
+  // script descriptors on request-time pages), so the 404/error channels
+  // must pass the same descriptors as the successful GET page — one
+  // serialization point (wrapInDocument) attaches the CSP nonce to all of
+  // them.
   assertStringIncludes(
     code,
-    'return c.html(__withDevClientScript(wrapInDocument(__statusHtml("404 Not Found", err.message || "Not Found"), {',
+    'return c.html(wrapInDocument(__statusHtml("404 Not Found", err.message || "Not Found"), {',
   );
-  assertStringIncludes(code, 'return c.html(__withDevClientScript(wrapInDocument(errorContent, {');
+  assertStringIncludes(code, 'return c.html(wrapInDocument(errorContent, {');
   const notFoundBody = code.slice(code.indexOf('app.notFound('));
   assertStringIncludes(
     notFoundBody,
-    'return c.html(__withDevClientScript(wrapInDocument(content, {',
+    'return c.html(wrapInDocument(content, {',
   );
   assertStringIncludes(
     notFoundBody,
-    'return c.html(__withDevClientScript(wrapInDocument(__statusHtml("404 Not Found", "Not Found"), {',
+    'return c.html(wrapInDocument(__statusHtml("404 Not Found", "Not Found"), {',
+  );
+  assertEquals(code.includes('__withDevClientScript'), false);
+  // Every request-time document wrap passes the descriptor line: GET+POST
+  // success, 404 catch and error boundary per page route, plus the two
+  // app.notFound wraps.
+  const pageRouteCount = routes.filter((r) => r.type === 'page').length;
+  assertEquals(
+    code.match(/scripts: __clientScriptDescriptors\(\)/g)?.length,
+    pageRouteCount * 6 + 2,
   );
 });
 
@@ -1081,6 +1092,35 @@ Deno.test('renderEntry: corsOrigin warning is emitted once per process (#925)', 
   );
 });
 
+Deno.test('renderEntry: island client script is descriptor-driven (dev URL + request-time setter)', () => {
+  const code = renderEntry(buildEntryDescriptor(basicRoutes, {
+    islandTagNames: ['live-counter'],
+    islandFiles: ['live-counter.ts'],
+  }));
+
+  // One render-time seam: the dev URL (compile-time constant) or the src the
+  // generated dist/server/index.js hands in at startup. wrapInDocument
+  // serializes the tag — the only place a CSP nonce is attached.
+  assertStringIncludes(code, 'export function __setRequestTimeClientScript(src) {');
+  assertStringIncludes(
+    code,
+    "const __devClientScriptSrc = import.meta.env.DEV && true ? import.meta.env.BASE_URL + 'client/islands/client.js' : null;",
+  );
+  assertStringIncludes(code, 'function __clientScriptDescriptors() {');
+  assertStringIncludes(code, `return src ? [{ type: 'module', src }] : [];`);
+  // No HTML string-splicing survives in the generated entry.
+  assertEquals(code.includes('insertBeforeBodyClose'), false);
+  assertEquals(code.includes('__withDevClientScript'), false);
+});
+
+Deno.test('renderEntry: no islands and no enhanced forms yields no dev client script', () => {
+  const code = renderEntry(buildEntryDescriptor(basicRoutes));
+  assertStringIncludes(
+    code,
+    "const __devClientScriptSrc = import.meta.env.DEV && false ? import.meta.env.BASE_URL + 'client/islands/client.js' : null;",
+  );
+});
+
 Deno.test('renderEntry: /404 page route emits the styled notFound fallback (#923)', () => {
   const routes: RouteEntry[] = [
     { path: '/', filePath: 'index.ts', type: 'page', varName: 'pageIndex' },
@@ -1094,7 +1134,7 @@ Deno.test('renderEntry: /404 page route emits the styled notFound fallback (#923
   // Fallback renders with a forced 404 status and degrades to the plain
   // status page on failure — never a 500 from the fallback itself.
   assertStringIncludes(code, 'wrapInDocument(content, {');
-  assertStringIncludes(code, '})), 404)');
+  assertStringIncludes(code, '}), 404)');
   assertStringIncludes(code, '__statusHtml("404 Not Found", "Not Found")');
 });
 

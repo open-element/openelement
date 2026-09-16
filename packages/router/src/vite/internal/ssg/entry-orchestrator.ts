@@ -95,27 +95,38 @@ export function renderEntry(desc: EntryDescriptor): string {
   lines.push(`const __islandMap = ${quoteGeneratedJavaScriptValue(islandLookup, 2)}`);
   lines.push('');
 
-  // --- Dev island client script (#951) ---
-  // Production injects the built client entry into HTML post-build
-  // (postprocess.ts); in dev there is no build, so the entry injects the tag
-  // itself and the open:dev-island-client plugin serves the module at the
-  // same public URL. import.meta.env.DEV/BASE_URL are compile-time constants
-  // in both the dev module runner and the build, so the built bundle keeps
-  // this as dead code.
+  // --- Island client script (#951, descriptor-driven) ---
+  // The island client entry lives at one deterministic public URL in dev and
+  // prod (cli/build-client.ts emits hash-free islands/[name].js; in dev the
+  // open:dev-island-client plugin serves the same URL). Whoever knows the URL
+  // hands it to the entry; the entry embeds the tag at render time through
+  // wrapInDocument's `scripts` descriptors, so a CSP nonce
+  // (middleware.csp.nonce) reaches it — no post-hoc HTML splicing.
+  // - Dev: no client build exists, so the entry computes the URL itself
+  //   (import.meta.env.DEV/BASE_URL are compile-time constants in both the
+  //   dev module runner and the build; the built bundle keeps this branch as
+  //   dead code).
+  // - Prod request-time: whether Phase 2 actually shipped a client bundle is
+  //   only known after the SSR build, so the generated dist/server/index.js
+  //   pushes clientScriptSrc (from ./client-script.js) in through
+  //   __setRequestTimeClientScript once at startup. SSG prerendering never
+  //   calls the setter, so static pages stay script-free here and keep the
+  //   post-build injector (postprocess.ts).
   {
     const hasClientEntry = desc.islands.length > 0 || desc.hasEnhancedForms === true;
-    lines.push('// #951: dev-only island client script injection (prod injects post-build)');
+    lines.push('// #951: island client script descriptors (serialized by wrapInDocument)');
+    lines.push('let __requestTimeClientScriptSrc = null;');
+    lines.push('export function __setRequestTimeClientScript(src) {');
+    lines.push('  __requestTimeClientScriptSrc = src || null;');
+    lines.push('}');
     lines.push(
       `const __devClientScriptSrc = import.meta.env.DEV && ${
         JSON.stringify(hasClientEntry)
       } ? import.meta.env.BASE_URL + 'client/islands/client.js' : null;`,
     );
-    lines.push('function __withDevClientScript(html) {');
-    lines.push('  if (!__devClientScriptSrc) return html;');
-    lines.push(
-      `  const tag = '<script type="module" src="' + __devClientScriptSrc + '"></script>';`,
-    );
-    lines.push(`  return __insertBeforeBodyClose(html, '  ' + tag);`);
+    lines.push('function __clientScriptDescriptors() {');
+    lines.push('  const src = __devClientScriptSrc || __requestTimeClientScriptSrc;');
+    lines.push(`  return src ? [{ type: 'module', src }] : [];`);
     lines.push('}');
     lines.push('');
   }
@@ -125,7 +136,7 @@ export function renderEntry(desc: EntryDescriptor): string {
   // entry never loads the Native runtime barrel (#1339 boundary).
   lines.push(`import { createLogger } from '@openelement/element/logger';`);
   lines.push(
-    `import { createRuntimeAdapter, insertBeforeBodyClose as __insertBeforeBodyClose } from '@openelement/element/build-utils';`,
+    `import { createRuntimeAdapter } from '@openelement/element/build-utils';`,
   );
   if (desc.fetchMiddleware?.length) {
     lines.push(`import { composeFetchMiddleware } from '@openelement/element/build-utils';`);

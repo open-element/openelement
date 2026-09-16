@@ -98,6 +98,8 @@ export function documentWrapOptionsLines(options: {
   allowHeadExtrasScripts: boolean;
   /** Emit the per-request CSP nonce line (Hono handlers only). */
   cspNonce?: boolean;
+  /** Emit the island client script descriptor line (request-time handlers only; SSG keeps the post-build injector). */
+  clientScripts?: boolean;
 }): string[] {
   const lines = [
     `title: ${options.titleExpr},`,
@@ -109,5 +111,6 @@ export function documentWrapOptionsLines(options: {
     `allowHeadExtrasScripts: ${JSON.stringify(options.allowHeadExtrasScripts)},`,
   ];
   if (options.cspNonce) lines.push(`cspNonce: c.get('cspNonce'),`);
+  if (options.clientScripts) lines.push(`scripts: __clientScriptDescriptors(),`);
   return lines;
 }

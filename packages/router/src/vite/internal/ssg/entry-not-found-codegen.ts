@@ -76,7 +76,7 @@ export function renderNotFoundRoute(
       quoteGeneratedJavaScriptValue(route.path)
     }, { routeMeta: __routeMetaValue })`,
   );
-  lines.push(`    return c.html(__withDevClientScript(wrapInDocument(content, {`);
+  lines.push(`    return c.html(wrapInDocument(content, {`);
   for (
     const optionLine of documentWrapOptionsLines({
       titleExpr: `__doc.title || ${quoteGeneratedJavaScriptValue(docConfig.title)}`,
@@ -84,20 +84,21 @@ export function renderNotFoundRoute(
       headExtrasExpr,
       allowHeadExtrasScripts: docConfig.allowHeadExtrasScripts,
       cspNonce: true,
+      clientScripts: true,
     })
   ) {
     lines.push(`      ${optionLine}`);
   }
-  lines.push(`    })), 404)`);
+  lines.push(`    }), 404)`);
   lines.push(`  } catch (err) {`);
   lines.push(`    if (__isOpenElementRedirect(err)) return c.redirect(err.location, err.status);`);
   lines.push(`    console.error('[openElement] 404 page render failed:', err);`);
   lines.push(
-    `    return c.html(__withDevClientScript(wrapInDocument(__statusHtml("404 Not Found", "Not Found"), { title: "404 Not Found", lang: ${
+    `    return c.html(wrapInDocument(__statusHtml("404 Not Found", "Not Found"), { title: "404 Not Found", lang: ${
       quoteGeneratedJavaScriptValue(docConfig.lang)
     }, headExtras: ${headExtrasExpr}, allowHeadExtrasScripts: ${
       JSON.stringify(docConfig.allowHeadExtrasScripts)
-    }, cspNonce: c.get('cspNonce') })), 404);`,
+    }, cspNonce: c.get('cspNonce'), scripts: __clientScriptDescriptors() }), 404);`,
   );
   lines.push(`  }`);
   // ADR-0129: close the IIFE and merge the 404-page loader's channel too.

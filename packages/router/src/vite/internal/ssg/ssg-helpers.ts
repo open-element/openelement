@@ -144,7 +144,7 @@ if (typeof globalThis.URLPattern === 'undefined') {
     '[openElement] dist/server/index.js requires a runtime with WHATWG URLPattern.',
   );
 }
-import { openElementHandler } from './entry.js';
+import { openElementHandler, __setRequestTimeClientScript } from './entry.js';
 import { clientScriptSrc } from './client-script.js';
 
 // ADR-0123 item 2 (#858): the entry's openElementHandler export already
@@ -161,11 +161,13 @@ const nitroHandler = async (event) => {
   });
 };
 
-function insertBeforeBodyClose(html, fragment) {
-  const match = /<\\/body\\s*>/i.exec(html);
-  if (!match || match.index === undefined) return html + fragment;
-  return html.slice(0, match.index) + fragment + '\\n' + html.slice(match.index);
-}
+// Island hydration parity with static pages: the static pipeline injects the
+// island client entry into prerendered HTML post-build, which request-time
+// rendering bypasses. Hand the entry the client script URL once at startup;
+// the entry embeds the tag at render time through wrapInDocument's script
+// descriptors, so a per-request CSP nonce (middleware.csp.nonce) reaches it.
+// An empty clientScriptSrc (no client bundle shipped) embeds nothing.
+__setRequestTimeClientScript(clientScriptSrc);
 
 // Request-time admission predicate (#1215): DERIVED from the request-time
 // route table — a boolean OR over the route URLPatterns (#856, ADR-0123).
@@ -186,26 +188,8 @@ export function isRequestTimePath(pathname) {
   return false;
 }
 
-// Island hydration parity with static pages: the static pipeline injects the
-// island client entry into prerendered HTML as a post-build step, which
-// request-time rendering bypasses. Inject the same script at serve time.
-function withClientScript(response) {
-  if (!clientScriptSrc) return response;
-  const type = response.headers.get('content-type') || '';
-  if (!type.includes('text/html')) return Promise.resolve(response);
-  return response.text().then((html) => {
-    if (html.includes(clientScriptSrc)) {
-      return new Response(html, { status: response.status, statusText: response.statusText, headers: response.headers });
-    }
-    const tag = '<script type="module" src="' + clientScriptSrc + '"></script>';
-    const out = insertBeforeBodyClose(html, '  ' + tag);
-    return new Response(out, { status: response.status, statusText: response.statusText, headers: response.headers });
-  });
-}
-
 export default async function openElementRequestTimeServer(event) {
-  const response = await nitroHandler(event);
-  return withClientScript(response);
+  return nitroHandler(event);
 }
 `;
 }

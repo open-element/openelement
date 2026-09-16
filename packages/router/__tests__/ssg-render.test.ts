@@ -483,12 +483,16 @@ Deno.test('request-time server entry serves the SSR bundle at request time', asy
     // A minimal stand-in for the built SSR bundle: one request-time route
     // whose output depends on the live request (unlike a prerendered page).
     // The openElementHandler named export mirrors the real entry's handler
-    // contract (#858) that the generated server module imports.
+    // contract (#858), and __setRequestTimeClientScript mirrors the render-
+    // time client-script embedding the generated index.js wires up.
     await Deno.writeTextFile(
       join(dir, 'entry.js'),
       `import { Hono } from 'hono';
 const app = new Hono();
-app.get('/live', (c) => c.html('<h1>live ' + new URL(c.req.url).searchParams.get('x') + '</h1>'));
+let __clientSrc = null;
+export function __setRequestTimeClientScript(src) { __clientSrc = src || null; }
+app.get('/live', (c) => c.html('<h1>live ' + new URL(c.req.url).searchParams.get('x') + '</h1>' +
+  (__clientSrc ? '<script type="module" src="' + __clientSrc + '"></script>' : '')));
 export const openElementHandler = (request, context = {}) =>
   app.fetch(request, context.env || {}, context.platform);
 export default app;
@@ -510,7 +514,7 @@ export default app;
   }
 });
 
-Deno.test('request-time server entry injects the island client script into HTML responses', async () => {
+Deno.test('request-time server entry wires the island client script into the entry render', async () => {
   const { renderRequestTimeServerModule } = await import(
     '../src/vite/internal/ssg/ssg-helpers.ts'
   );
@@ -522,7 +526,11 @@ Deno.test('request-time server entry injects the island client script into HTML 
       join(dir, 'entry.js'),
       `import { Hono } from 'hono';
 const app = new Hono();
-app.get('/live', (c) => c.html('<html><body><h1>live</h1></body></html>'));
+let __clientSrc = null;
+export function __setRequestTimeClientScript(src) { __clientSrc = src || null; }
+app.get('/live', (c) => c.html('<html><body><h1>live</h1>' +
+  (__clientSrc ? '<script type="module" src="' + __clientSrc + '"></script>' : '') +
+  '</body></html>'));
 export const openElementHandler = (request, context = {}) =>
   app.fetch(request, context.env || {}, context.platform);
 export default app;
@@ -560,6 +568,7 @@ Deno.test('request-time server entry isRequestTimePath admits request-time paths
       join(dir, 'entry.js'),
       `import { Hono } from 'hono';
 const app = new Hono();
+export function __setRequestTimeClientScript() {}
 export const openElementHandler = (request, context = {}) =>
   app.fetch(request, context.env || {}, context.platform);
 export default app;

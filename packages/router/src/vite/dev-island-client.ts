@@ -12,8 +12,9 @@
  * the virtual client entry and serves the generated client entry code
  * through Vite's normal dev transform pipeline, so island imports, the
  * client runtimes and HMR all behave like any other dev module. The
- * generated SSR entry injects the matching <script> tag itself
- * (entry-orchestrator.ts, __withDevClientScript).
+ * generated SSR entry embeds the matching <script> tag at render time
+ * through wrapInDocument's script descriptors (entry-orchestrator.ts,
+ * __clientScriptDescriptors).
  */
 
 import { existsSync } from '../internal/host-path.ts';

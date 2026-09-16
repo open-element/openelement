@@ -56,10 +56,11 @@ export async function readClientEntryFromManifest(manifestPath: string): Promise
 
 /**
  * Write the island client entry URL for the request-time server entry
- * (0.42.0-alpha.1 / ADR-0120). dist/server/index.js imports this module to
- * inject the same island client script into request-time HTML that the
- * static pipeline injects post-build. No-op for pure-static builds (no
- * request-time server entry was emitted).
+ * (0.42.0-alpha.1 / ADR-0120). dist/server/index.js imports this module and
+ * hands the URL to the SSR entry (__setRequestTimeClientScript), which
+ * embeds the same island client script into request-time HTML at render time
+ * that the static pipeline injects post-build. No-op for pure-static builds
+ * (no request-time server entry was emitted).
  */
 export function writeRequestTimeClientScript(
   ctx: OpenElementBuildContext,
