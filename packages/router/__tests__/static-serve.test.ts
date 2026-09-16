@@ -115,6 +115,27 @@ Deno.test('tryStatic serves files and refuses path escape', async () => {
   }
 });
 
+Deno.test('tryStatic refuses symlink escape but allows in-root symlinks', async () => {
+  const root = await Deno.makeTempDir();
+  const outside = await Deno.makeTempDir();
+  try {
+    await Deno.writeTextFile(join(outside, 'secret.txt'), 'TOP-SECRET');
+    await Deno.writeTextFile(join(root, 'real.html'), '<h1>real</h1>');
+    await Deno.symlink(join(outside, 'secret.txt'), join(root, 'leak.txt'));
+    await Deno.symlink(join(root, 'real.html'), join(root, 'linked.html'));
+
+    // A symlink resolving outside the static root must never be served.
+    assertEquals(tryStatic(root, '/leak.txt'), null);
+    // A symlink resolving back inside the root is ordinary static content.
+    const linked = tryStatic(root, '/linked.html');
+    assert(linked);
+    assertEquals(await linked.text(), '<h1>real</h1>');
+  } finally {
+    await Deno.remove(root, { recursive: true });
+    await Deno.remove(outside, { recursive: true });
+  }
+});
+
 Deno.test('tryStatic treats a directory at a candidate path as a miss (#1281, CodeQL file-system-race)', async () => {
   // The candidate check is read-and-fallback instead of existsSync/statSync
   // guard-then-read (check-then-act TOCTOU): a directory named like a file

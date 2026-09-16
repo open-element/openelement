@@ -69,13 +69,29 @@ export function tryStatic(distDir: string, pathname: string): Response | null {
     }
     throw err;
   }
-  const root = resolve(distDir);
+  let root: string;
+  try {
+    root = Deno.realPathSync(resolve(distDir));
+  } catch {
+    return null;
+  }
   for (const candidate of candidates) {
     const filePath = resolve(join(root, candidate));
+    // Lexical containment stays the first layer; it cannot see symlinks, and
+    // readFileSync follows them, so the canonical realpath boundary below is
+    // the authoritative check. Residual TOCTOU between realpath and read is
+    // accepted: exploiting it needs write access to the static tree itself.
     if (!filePath.startsWith(root + SEP)) continue;
+    let realPath: string;
+    try {
+      realPath = Deno.realPathSync(filePath);
+    } catch {
+      continue;
+    }
+    if (!realPath.startsWith(root + SEP)) continue;
     let body: Uint8Array;
     try {
-      body = Deno.readFileSync(filePath);
+      body = Deno.readFileSync(realPath);
     } catch {
       continue;
     }
