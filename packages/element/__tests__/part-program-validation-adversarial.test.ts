@@ -39,9 +39,17 @@ const faults: Fault[] = [
   { label: 'template node record', path: ['template', 0], value: null },
   { label: 'element id', path: ['template', 0, 'id'], value: 'root' },
   { label: 'element tag', path: ['template', 0, 'tag'], value: 'Invalid' },
+  { label: 'element raw-text script tag', path: ['template', 0, 'tag'], value: 'script' },
+  {
+    label: 'element raw-text style tag',
+    path: ['template', 0, 'children', 0, 'tag'],
+    value: 'style',
+  },
   { label: 'attributes type', path: ['template', 0, 'attrs'], value: null },
   { label: 'attribute tuple', path: ['template', 0, 'attrs', 0], value: ['class'] },
   { label: 'attribute name', path: ['template', 0, 'attrs', 0, 0], value: 'onclick' },
+  { label: 'attribute srcdoc sink', path: ['template', 0, 'attrs', 0, 0], value: 'srcdoc' },
+  { label: 'attribute innerHTML sink', path: ['template', 0, 'attrs', 0, 0], value: 'innerHTML' },
   { label: 'children type', path: ['template', 0, 'children'], value: null },
   { label: 'text value', path: ['template', 0, 'children', 0, 'children', 0, 'value'], value: 1 },
   { label: 'anchor id', path: ['template', 0, 'children', 0, 'children', 1, 'id'], value: 'p9' },
@@ -63,6 +71,9 @@ const faults: Fault[] = [
   { label: 'text signal', path: ['parts', 0, 'signal'], value: 'not valid' },
   { label: 'text location kind', path: ['parts', 0, 'location', 'kind'], value: 'sink' },
   { label: 'property name', path: ['parts', 1, 'name'], value: 'onclick' },
+  { label: 'property name __proto__', path: ['parts', 1, 'name'], value: '__proto__' },
+  { label: 'property name constructor', path: ['parts', 1, 'name'], value: 'constructor' },
+  { label: 'property name prototype', path: ['parts', 1, 'name'], value: 'prototype' },
   { label: 'property path', path: ['parts', 1, 'path'], value: [99] },
   { label: 'property location node', path: ['parts', 1, 'location', 'node'], value: 'e0' },
   { label: 'event handler', path: ['parts', 2, 'handler'], value: 'not valid' },
@@ -343,6 +354,16 @@ Deno.test('Part Program sink validation rejects corrupted class, style, bool, ht
         label: `${kind} unsafe name`,
         path: ['parts', index, 'name'],
         value: 'onclick',
+      });
+      corruptions.push({
+        label: `${kind} srcdoc sink name`,
+        path: ['parts', index, 'name'],
+        value: 'srcdoc',
+      });
+      corruptions.push({
+        label: `${kind} innerHTML sink name`,
+        path: ['parts', index, 'name'],
+        value: 'innerHTML',
       });
     }
     for (const fault of corruptions) {

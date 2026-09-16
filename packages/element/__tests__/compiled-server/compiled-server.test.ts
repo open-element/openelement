@@ -199,6 +199,23 @@ Deno.test('alpha.3 server output escapes values, supports native DSD flags, and 
   if (rawTextRoot.k !== 'el') throw new Error('test setup: expected an element root');
   rawTextRoot.tag = 'script';
   assertThrows(() => serializeProgramContent(rawText, {}), Error);
+  const rawTextStyle = structuredClone(staticProgram);
+  const rawTextStyleRoot = rawTextStyle.template[0];
+  if (rawTextStyleRoot.k !== 'el') throw new Error('test setup: expected an element root');
+  rawTextStyleRoot.tag = 'style';
+  assertThrows(() => serializeProgramContent(rawTextStyle, {}), Error);
+
+  const srcdocAttr = structuredClone(staticProgram);
+  const srcdocRoot = srcdocAttr.template[0];
+  if (srcdocRoot.k !== 'el') throw new Error('test setup: expected an element root');
+  srcdocRoot.attrs = [['srcdoc', '<p>forged</p>']];
+  const srcdocError = assertThrows(() => serializeProgramContent(srcdocAttr, {}), Error);
+  assertStringIncludes(srcdocError.message, 'unsafe name');
+  const innerHtmlAttr = structuredClone(staticProgram);
+  const innerHtmlRoot = innerHtmlAttr.template[0];
+  if (innerHtmlRoot.k !== 'el') throw new Error('test setup: expected an element root');
+  innerHtmlRoot.attrs = [['innerHTML', '<p>forged</p>']];
+  assertThrows(() => serializeProgramContent(innerHtmlAttr, {}), Error);
 
   const inheritedItem = Object.create({ id: 'a', text: 'alpha' });
   const eachProgram = testProgram({
@@ -233,6 +250,18 @@ Deno.test('alpha.3 server output escapes values, supports native DSD flags, and 
     Error,
   );
   assertStringIncludes(propertyError.message, 'unsafe property sink name');
+
+  for (const forbiddenName of ['constructor', 'prototype']) {
+    const forged = structuredClone(PROGRAM);
+    const forgedPart = forged.parts[0];
+    if (forgedPart.k !== 'prop') throw new Error('test setup: expected a prop Part');
+    forgedPart.name = forbiddenName;
+    const forgedError = assertThrows(
+      () => serializeProgramContent(forged, HOST),
+      Error,
+    );
+    assertStringIncludes(forgedError.message, 'unsafe property sink name');
+  }
 
   const inheritedSignals = Object.create({ value: HOST.signals.value });
   const signalError = assertThrows(
@@ -269,6 +298,53 @@ Deno.test('alpha.3 static-only server fixture needs no client signal artifact', 
   const program = JSON.parse(await Deno.readTextFile(STATIC_ONLY_PROGRAM_URL));
   const expected = (await Deno.readTextFile(STATIC_ONLY_EXPECTED_URL)).trimEnd();
   assertEquals(serializeProgramContent(program, {}), expected);
+});
+
+Deno.test('compiled server validation rejects the shared forbidden-sink deny list', async () => {
+  const { assertCompiledProgram } = await import(
+    '../../src/internal/compiled/server/index.ts'
+  );
+  const forge = (mutate: (program: PartProgramV1) => void): PartProgramV1 => {
+    const program = structuredClone(PROGRAM);
+    mutate(program);
+    return program;
+  };
+
+  for (const tag of ['script', 'style']) {
+    const forged = forge((program) => {
+      const root = program.template[0];
+      if (root.k !== 'el') throw new Error('test setup: expected an element root');
+      root.tag = tag;
+    });
+    assertThrows(() => assertCompiledProgram(forged), Error);
+  }
+
+  for (const name of ['srcdoc', 'innerHTML']) {
+    const forgedAttr = forge((program) => {
+      const root = program.template[0];
+      if (root.k !== 'el') throw new Error('test setup: expected an element root');
+      root.attrs = [[name, 'forged']];
+    });
+    assertThrows(() => assertCompiledProgram(forgedAttr), Error);
+
+    const forgedSink = forge((program) => {
+      const part = program.parts[0];
+      if (part.k !== 'prop') throw new Error('test setup: expected a prop Part');
+      (part as unknown as { k: string; name: string }).k = 'attr';
+      part.name = name;
+    });
+    assertThrows(() => assertCompiledProgram(forgedSink), Error);
+  }
+
+  for (const name of ['__proto__', 'constructor', 'prototype']) {
+    const forged = forge((program) => {
+      const part = program.parts[0];
+      if (part.k !== 'prop') throw new Error('test setup: expected a prop Part');
+      part.name = name;
+    });
+    const error = assertThrows(() => assertCompiledProgram(forged), Error);
+    assertStringIncludes(error.message, 'unsafe property sink name');
+  }
 });
 
 Deno.test('compiled server preserves structured custom-element property values for nested SSR', async () => {

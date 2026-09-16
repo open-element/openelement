@@ -38,6 +38,7 @@ import {
   validatePartProgram,
   VOID_TAGS,
 } from '../../protocol/part-program.ts';
+import { forbiddenSinkReason } from '../../protocol/forbidden-sinks.ts';
 
 export interface ElementCompilerDiagnostic extends CompilerDiagnostic {}
 
@@ -158,7 +159,8 @@ function camelToKebab(value: string): string {
 }
 
 function isSafeAttributeName(value: string): boolean {
-  return /^[A-Za-z_:][A-Za-z0-9_.:-]*$/.test(value) && !/^on/i.test(value);
+  return /^[A-Za-z_:][A-Za-z0-9_.:-]*$/.test(value) && !/^on/i.test(value) &&
+    forbiddenSinkReason('attr', value) === null;
 }
 
 function isIdentifier(value: string): boolean {
@@ -630,6 +632,8 @@ class Lowering {
         `component tag <${tag}> is outside the compiler grammar (intrinsic lowercase elements and custom-element hosts only)`,
       );
     }
+    const tagReason = forbiddenSinkReason('tag', tag);
+    if (tagReason !== null) this.fail(tagNameNode, 'OEC9010', tagReason);
     const attrs: Array<[string, string]> = [];
     const elementId = this.reserveElement(tag, path, sourceNode);
     const attributeNames = new Set<string>();
@@ -656,7 +660,19 @@ class Lowering {
       if (isCustomHost && (isDynamicEvent || /^on[A-Z]/.test(name))) {
         this.fail(prop, 'OEC9017', `custom-element host <${tag}> may not carry event handlers`);
       }
-      if (!isSafeAttributeName(name) && !isDynamicEvent) {
+      if (!isSafeAttributeName(name) && !isDynamicEvent && name !== 'innerHTML') {
+        this.fail(prop, 'OEC9011', `attribute name "${name}" is unsafe`);
+      }
+      // innerHTML is exempt from the generic name check only so the dynamic
+      // trusted-HTML sink path below can admit it; every static or non-field
+      // form is a plain attribute and rejected by the same shared predicate.
+      if (
+        name === 'innerHTML' &&
+        !(
+          init !== undefined && ts.isJsxExpression(init) && init.expression !== undefined &&
+          this.fieldAccess(unwrapExpression(init.expression)) !== null
+        )
+      ) {
         this.fail(prop, 'OEC9011', `attribute name "${name}" is unsafe`);
       }
       const attributeKey = name.toLowerCase();
@@ -718,6 +734,10 @@ class Lowering {
           // Host attributes cross the SSR boundary as host attributes: lower
           // every dynamic host attribute as a prop Part so the serializer
           // emits it and the client claim assigns it as a JS property.
+          const propReason = forbiddenSinkReason('prop', name);
+          if (propReason !== null) {
+            this.fail(prop, 'OEC9011', `property sink name "${name}" is unsafe`);
+          }
           this.addPart({ k: 'prop', signal: field, name, path }, path, prop, elementId);
           continue;
         }
@@ -968,12 +988,21 @@ class Lowering {
       return;
     }
     if (BOOLEAN_ATTRIBUTES.has(lowerName)) {
+      if (forbiddenSinkReason('bool', name) !== null) {
+        this.fail(sourceNode, 'OEC9011', `attribute name "${name}" is unsafe`);
+      }
       this.addPart({ k: 'bool', signal, name, path }, path, sourceNode, elementId);
       return;
     }
     if (name === 'value' || DOM_PROPERTY_NAMES.has(name) || (tag === 'input' && name === 'value')) {
+      if (forbiddenSinkReason('prop', name) !== null) {
+        this.fail(sourceNode, 'OEC9011', `property sink name "${name}" is unsafe`);
+      }
       this.addPart({ k: 'prop', signal, name, path }, path, sourceNode, elementId);
       return;
+    }
+    if (forbiddenSinkReason('attr', name) !== null) {
+      this.fail(sourceNode, 'OEC9011', `attribute name "${name}" is unsafe`);
     }
     this.addPart({ k: 'attr', signal, name, path }, path, sourceNode, elementId);
   }
@@ -1160,6 +1189,8 @@ class Lowering {
     if (!/^[a-z][a-z0-9]*$/.test(tag) && !isCustomHost) {
       this.fail(tagName, 'OEC9010', 'list Region item must be an intrinsic lowercase element');
     }
+    const itemTagReason = forbiddenSinkReason('tag', tag);
+    if (itemTagReason !== null) this.fail(tagName, 'OEC9010', itemTagReason);
     const elementId = this.reserveElement(tag, path, element);
     const attrs: Array<[string, string]> = [];
     const iattrs: Array<[string, string]> = [];
@@ -1298,7 +1329,8 @@ function propertyFields(
       // roots). The initializer is copied verbatim; it typically references a
       // StyleSheet built in a non-compiled module (compiled modules ban
       // runtime top-level statements). Raw-text <style>/<script> elements are
-      // rejected from templates by the serializer, so styles never inline.
+      // rejected from templates by the shared forbidden-sink rule (lowerElement
+      // fails with OEC9010), so styles never inline.
       if (
         modifiers.some((modifier) => modifier.kind === ts.SyntaxKind.StaticKeyword) &&
         ts.isIdentifier(member.name) && member.name.text === 'styles' &&

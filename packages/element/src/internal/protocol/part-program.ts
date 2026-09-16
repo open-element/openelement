@@ -3,14 +3,16 @@
  *
  * The canonical exchange artifact shared by the compiler semantic core, the
  * server serializer, fresh DOM creation, and existing-DOM claim. Its only
- * import is the import-free, host-free canonical VOID_TAGS owner (ADR-0148
- * keeps the artifact free of runtime/host edges; void-tags is neither). The
+ * imports are the import-free, host-free canonical VOID_TAGS and forbidden
+ * sink owners (ADR-0148 keeps the artifact free of runtime/host edges;
+ * void-tags and forbidden-sinks are neither). The
  * generated JSON is the seam, and both the runtime and the compiler import
  * this one module instead of keeping mirrored copies. Every dynamic location
  * receives a compiler-owned identity. Runtime code does not discover bindings
  * by walking a VNode or a generic DOM tree.
  */
 
+import { forbiddenSinkReason } from './forbidden-sinks.ts';
 import { VOID_TAGS } from './void-tags.ts';
 
 export { VOID_TAGS };
@@ -397,7 +399,7 @@ function isIdentifier(value: unknown): value is string {
 
 function isAttributeName(value: unknown): value is string {
   return typeof value === 'string' && /^[A-Za-z_:][A-Za-z0-9_.:-]*$/.test(value) &&
-    !/^on/i.test(value);
+    !/^on/i.test(value) && forbiddenSinkReason('attr', value) === null;
 }
 
 function samePath(left: unknown, right: number[]): boolean {
@@ -479,6 +481,8 @@ function validateTreeNodes(
         ) {
           fail(`${where}[${position}].tag must be a lowercase element tag`);
         }
+        const tagReason = forbiddenSinkReason('tag', rawNode.tag);
+        if (tagReason !== null) fail(`${where}[${position}].tag ${tagReason}`);
         elementLocations.set(rawNode.id, {
           tag: rawNode.tag,
           path: position === 0 && rootPath !== undefined
@@ -830,6 +834,10 @@ export function validatePartProgram(raw: unknown): asserts raw is PartProgram {
         }
         if (part.k === 'prop' && (!isIdentifier(part.name) || /^on/i.test(part.name))) {
           fail(`parts[${position}] prop name must be an identifier`);
+        }
+        if (part.k === 'prop') {
+          const propNameReason = forbiddenSinkReason('prop', part.name);
+          if (propNameReason !== null) fail(`parts[${position}] ${propNameReason}`);
         }
         if ((part.k === 'attr' || part.k === 'bool') && !isAttributeName(part.name)) {
           fail(`parts[${position}] ${part.k} name is unsafe`);

@@ -136,3 +136,50 @@ Deno.test('semantic compiler rejects unsupported property converters and event a
     );
   }
 });
+
+Deno.test('semantic compiler rejects forbidden sinks from the shared deny list', () => {
+  const fields = `@property({ reflect: false }) label = 'ready';`;
+  const attributeCases: Array<[string, string]> = [
+    // srcdoc was previously rejected only by SSR; the compiler now fails too.
+    ['<x-widget srcdoc={this.label}></x-widget>', 'unsafe'],
+    ['<iframe srcdoc="raw"></iframe>', 'unsafe'],
+    // Prototype-pollution primitives as host property sinks.
+    ['<x-widget __proto__={this.label}></x-widget>', 'unsafe'],
+    ['<x-widget constructor={this.label}></x-widget>', 'unsafe'],
+    ['<x-widget prototype={this.label}></x-widget>', 'unsafe'],
+    // innerHTML is admissible only as a dynamic trusted-HTML sink; every
+    // static or non-field form is a plain attribute and rejected.
+    ['<div innerHTML="raw"></div>', 'unsafe'],
+    ["<div innerHTML={'raw'}></div>", 'unsafe'],
+    ['<div innerHTML></div>', 'unsafe'],
+  ];
+  for (const [render, fragment] of attributeCases) {
+    expectCompilerFailure(component(fields, render), 'OEC9011', fragment);
+  }
+
+  const tagCases: Array<[string, string]> = [
+    ['<script>alert(1)</script>', 'raw-text'],
+    ['<style>raw text</style>', 'raw-text'],
+  ];
+  for (const [render, fragment] of tagCases) {
+    expectCompilerFailure(component(fields, render), 'OEC9010', fragment);
+  }
+
+  const itemFields = `@property({ type: Array, reflect: false }) items = [{ id: 'a', text: 'x' }];`;
+  expectCompilerFailure(
+    component(
+      itemFields,
+      '<main>{this.items.map((item) => <script key={item.id}>{item.text}</script>)}</main>',
+    ),
+    'OEC9010',
+    'raw-text',
+  );
+  expectCompilerFailure(
+    component(
+      itemFields,
+      '<main>{this.items.map((item) => <li key={item.id} srcdoc="raw">{item.text}</li>)}</main>',
+    ),
+    'OEC9011',
+    'unsafe',
+  );
+});

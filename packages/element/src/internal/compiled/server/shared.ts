@@ -15,6 +15,11 @@ import {
   type ProgramPart,
   type ProgramTreeNode,
 } from '../../protocol/part-program.ts';
+import {
+  FORBIDDEN_PROPERTY_NAMES,
+  forbiddenSinkReason,
+  RAW_TEXT_TAGS,
+} from '../../protocol/forbidden-sinks.ts';
 import { normalizePartProgram, type RuntimeProgramIR } from '../runtime-program.ts';
 // Canonical void-element set (issue #1220, M4) — single source of truth.
 import { VOID_TAGS } from '../../core/html-escape.ts';
@@ -44,9 +49,6 @@ export class CompiledProgramValidationError extends Error {
 const HTML_TAG_RE = /^[a-z][a-z0-9._:-]*$/;
 const ATTRIBUTE_NAME_RE = /^[A-Za-z_:][A-Za-z0-9_.:-]*$/;
 const EVENT_NAME_RE = /^[a-z][a-z0-9:.-]*$/;
-const FORBIDDEN_ATTRIBUTE_NAMES = new Set(['srcdoc']);
-const FORBIDDEN_PROPERTY_NAMES = new Set(['__proto__', 'constructor', 'prototype']);
-const RAW_TEXT_TAGS = new Set(['script', 'style']);
 
 function fail(path: string, message: string): never {
   throw new CompiledProgramValidationError(path, message);
@@ -58,15 +60,14 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function validateTag(tag: string, path: string): void {
   if (!HTML_TAG_RE.test(tag)) fail(path, `unsafe element tag ${JSON.stringify(tag)}`);
-  if (RAW_TEXT_TAGS.has(tag)) {
-    fail(path, `raw-text element <${tag}> is outside the compiled Part Program grammar`);
-  }
+  const tagReason = forbiddenSinkReason('tag', tag);
+  if (tagReason !== null) fail(path, tagReason);
 }
 
 function validateAttributeName(name: string, path: string): void {
   if (!ATTRIBUTE_NAME_RE.test(name)) fail(path, `unsafe attribute name ${JSON.stringify(name)}`);
   const lower = name.toLowerCase();
-  if (lower.startsWith('on') || FORBIDDEN_ATTRIBUTE_NAMES.has(lower)) {
+  if (lower.startsWith('on') || forbiddenSinkReason('attr', name) !== null) {
     fail(path, `event or executable attribute ${JSON.stringify(name)} is not supported`);
   }
 }
@@ -447,5 +448,5 @@ export function rawTextElement(tag: string): boolean {
 export function attributeNameIsSafe(name: string): boolean {
   const lower = name.toLowerCase();
   return ATTRIBUTE_NAME_RE.test(name) && !lower.startsWith('on') &&
-    !FORBIDDEN_ATTRIBUTE_NAMES.has(lower);
+    forbiddenSinkReason('attr', name) === null;
 }

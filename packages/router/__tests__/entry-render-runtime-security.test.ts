@@ -8,11 +8,21 @@
  * route params, loader data, or author projector records can never pollute
  * the props record that flows into renderDsd.
  */
-import { assertEquals } from '@std/assert';
+import { assert, assertEquals } from '@std/assert';
+import { DANGEROUS_KEYS } from '../../element/src/internal/core/security.ts';
 import { renderRuntimeHelpers } from '../src/vite/internal/ssg/entry-render-runtime.ts';
 
 const HOSTILE_JSON =
   '{"__proto__": {"polluted": true}, "constructor": {"evil": true}, "prototype": {"evil": true}, "title": "legit"}';
+
+Deno.test('the serialized __DANGEROUS_KEYS copy equals the canonical security.ts set (drift guard)', () => {
+  const helpers = renderRuntimeHelpers({ default: false, layouts: {} }, []);
+  const match = /const __DANGEROUS_KEYS = new Set\((\[.*\])\);/.exec(helpers);
+  assert(match, 'generated helpers must serialize a __DANGEROUS_KEYS copy');
+  const serialized = JSON.parse(match[1]) as string[];
+  assertEquals(serialized.length, DANGEROUS_KEYS.size);
+  assertEquals(new Set(serialized), new Set(DANGEROUS_KEYS));
+});
 
 interface ProjectionHarness {
   defaultProps(
