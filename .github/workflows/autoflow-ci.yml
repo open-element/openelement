@@ -48,8 +48,9 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 0
           persist-credentials: false
-      # #1156 (B2.6): mature OSS governance gates (ADR-0144) — fail fast,
-      # before the heavy matrix. Binaries pinned by version + SHA-256;
+      # #1156 (B2.6): mature OSS governance gates (ADR-0144, retired;
+      # preserved in Git history) — fail fast, before the heavy matrix.
+      # Binaries pinned by version + SHA-256;
       # Action revisions and downloaded binaries are pinned in this workflow.
       - name: actionlint (workflow lint)
         run: |
@@ -79,8 +80,8 @@ jobs:
         # Every evidence producer records the exact three browser revisions.
         # Fast checks do not launch them, so system dependencies are unnecessary.
         run: ./node_modules/.bin/playwright install chromium firefox webkit
-      # ADR-0144 / #1229 (B2.7): generic toolchain gates are pinned OSS tool
-      # steps, not AutoFlow gates.
+      # ADR-0144 (retired; preserved in Git history) / #1229 (B2.7): generic
+      # toolchain gates are pinned OSS tool steps, not AutoFlow gates.
       - name: Fast checks (fmt, lint, markdown, typecheck)
         env:
           CANDIDATE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
@@ -227,12 +228,28 @@ jobs:
   # commit/tree, recomputes every log hash from real bytes, and publishes the
   # full bundle (evidence JSON + all logs + tarball manifest + fresh-clone
   # manifest + pack diagnostic summary). It never re-runs the suite.
+  # `if: always()` keeps this required check fail-closed: without it a failed
+  # producer would leave this job skipped, which GitHub reports as Success.
   autoflow-ci:
     name: AutoFlow CI
     needs: [fast-checks, source-matrix, packed-consumers, fresh-clone]
+    if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
+      # With `if: always()` this job runs even when a producer failed or was
+      # cancelled; assert every producer result explicitly so the required
+      # check fails instead of aggregating partial evidence.
+      - name: Assert producer job results
+        run: |
+          echo "fast-checks: ${{ needs.fast-checks.result }}"
+          echo "source-matrix: ${{ needs.source-matrix.result }}"
+          echo "packed-consumers: ${{ needs.packed-consumers.result }}"
+          echo "fresh-clone: ${{ needs.fresh-clone.result }}"
+          test "${{ needs.fast-checks.result }}" = success
+          test "${{ needs.source-matrix.result }}" = success
+          test "${{ needs.packed-consumers.result }}" = success
+          test "${{ needs.fresh-clone.result }}" = success
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}

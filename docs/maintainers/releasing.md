@@ -58,7 +58,11 @@ publish; a missing environment fails the job closed instead of publishing:
   contract, required),
   dependency-review on PRs, and CodeQL. The execution jobs run the suite;
   `autoflow-ci` only aggregates and validates their artifacts — it never
-  re-runs the suite. `bun-serve-smoke` is an
+  re-runs the suite. The four producers are not individual required checks
+  by design: `autoflow-ci` runs with `if: always()` and asserts each
+  producer's result before aggregating, so a failed or cancelled producer
+  fails the required check explicitly instead of passing as GitHub's
+  skipped-reports-Success. `bun-serve-smoke` is an
   optional/non-blocking Bun compatibility signal: it runs with
   `continue-on-error: true`, is not a required check, and never gates the
   candidate or the release graph. The independently governed `apps/saas`
