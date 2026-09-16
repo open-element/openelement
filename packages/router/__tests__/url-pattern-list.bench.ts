@@ -26,7 +26,9 @@ async function main(): Promise<void> {
       '@openelement/element/build-utils',
       new URL('../src/internal/router/route-pattern.ts', import.meta.url).href,
     )
-    .replace("'urlpattern-polyfill'", "'npm:urlpattern-polyfill@10.1.0'");
+    // The baseline's retired 'urlpattern-polyfill' import resolves through the
+    // maintained fork — same code lineage, present in every lockfile (#1324).
+    .replace("'urlpattern-polyfill'", "'@openelement/url-pattern-list'");
   const file = await Deno.makeTempFile({ suffix: '.ts' });
   await Deno.writeTextFile(file, baselineCode);
   try {
