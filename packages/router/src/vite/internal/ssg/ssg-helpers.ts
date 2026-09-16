@@ -109,9 +109,11 @@ function renderRequestTimeAdmissionPatterns(routes: RequestTimeRoutePattern[]): 
 }
 
 /**
- * Source of the generated `dist/server/index.js`. Emitted only when at
- * least one route declares `renderIntent: { mode: 'dynamic' }`, so
- * pure-static output trees stay byte-identical. The module mounts the
+ * Source of the generated `dist/server/index.js`. Emitted when at least one
+ * route declares `renderIntent: { mode: 'dynamic' }` OR any page exports an
+ * action (hybrid pages keep their prerendered static GET; the dispatcher
+ * admits their POSTs by method), so pure-static output trees stay
+ * byte-identical. The module mounts the
  * prerendering SSR bundle (the same Hono app, with loaders/actions) on the
  * public `nitro-mount` seam; Nitro Node/Workers builds bundle it as the
  * server entry, and plain Node (>= 24 — the route table below builds

@@ -142,6 +142,23 @@ const CORPUS: CorpusCase[] = [
     ],
   },
   {
+    // ADR-0120 amendment (2026-09-16): a hybrid page (static GET + action
+    // POST) is NOT a request-time route — admission must exclude its path so
+    // the GET stays on the static artifact, while the canonical surfaces
+    // still route its POST to the action handler.
+    name: 'hybrid route (static GET + action POST) is not admitted',
+    routes: [
+      { path: '/guestbook', requestTime: false, methods: ['GET', 'POST'] },
+      { path: '/live', requestTime: true },
+    ],
+    probes: [
+      { pathname: '/guestbook', winner: '/guestbook', params: {} },
+      { pathname: '/guestbook', method: 'POST', winner: '/guestbook', params: {} },
+      { pathname: '/guestbook', method: 'PUT', winner: null },
+      { pathname: '/live', winner: '/live', params: {} },
+    ],
+  },
+  {
     name: 'percent-encoded, malformed and unsafe params',
     routes: [
       { path: '/item/:id', requestTime: true },

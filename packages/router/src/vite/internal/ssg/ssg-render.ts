@@ -75,19 +75,10 @@ export async function ssgRender(
   // renderIntent.mode was inert metadata before this line: 'dynamic' routes
   // are no longer prerendered — they are served at request time by the
   // generated server entry and recorded in server-manifest.json.
+  // ADR-0120 amendment (2026-09-16): a page may be hybrid — static GET
+  // prerendered below plus a request-time action POST. HTTP admits both on
+  // one path; only 'dynamic' routes leave the prerender set.
   const requestTimeRoutes = routeInfo.filter((r) => r.rendering === 'dynamic');
-  const prerenderViolations = routeInfo.filter((r) =>
-    r.hasAction === true && r.rendering !== 'dynamic'
-  );
-  if (prerenderViolations.length > 0) {
-    throw new Error(
-      '[openElement] Pages with actions cannot be prerendered (ADR-0120): ' +
-        prerenderViolations.map((r) => r.path).join(', ') +
-        `. Set renderIntent: { mode: 'dynamic' } on ${
-          prerenderViolations.length === 1 ? 'this route' : 'these routes'
-        }.`,
-    );
-  }
 
   const dynamicRoutes = routeInfo.filter((r) => r.isDynamic && r.rendering !== 'dynamic');
   log.info(
@@ -203,9 +194,14 @@ export async function ssgRender(
 
   if (!result.success) throw result.error;
 
-  // Emit the request-time server artifacts only when such routes exist, so a
-  // pure-static project's output tree is unchanged (freeze regression rule).
-  if (requestTimeRoutes.length > 0) {
+  // Emit the request-time server artifacts when any route needs the server at
+  // request time: a 'dynamic' route (GET + POST) or any page with an action
+  // (POST only — its static GET stays on the prerendered artifact, and the
+  // dispatcher admits every non-GET/HEAD method by method, not by path). A
+  // pure-static project (no actions, no dynamic routes) keeps an unchanged
+  // output tree (freeze regression rule).
+  const actionRoutes = routeInfo.filter((r) => r.hasAction === true);
+  if (requestTimeRoutes.length > 0 || actionRoutes.length > 0) {
     const serverDir = join(outputDir, 'server');
     Deno.mkdirSync(serverDir, { recursive: true });
     const serverManifest = {
@@ -245,9 +241,11 @@ export async function ssgRender(
     );
     log.info(
       `Request-time server -> ${join(serverDir, 'index.js')} ` +
-        `(${requestTimeRoutes.length} route(s): ${
-          requestTimeRoutes.map((r) => r.path).join(', ')
-        })`,
+        `(${requestTimeRoutes.length} request-time route(s)` +
+        (requestTimeRoutes.length > 0
+          ? `: ${requestTimeRoutes.map((r) => r.path).join(', ')}`
+          : '') +
+        `; ${actionRoutes.length} action route(s))`,
     );
   }
 

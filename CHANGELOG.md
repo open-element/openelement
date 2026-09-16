@@ -36,7 +36,11 @@ lines and no migration path from 0.x is offered: new projects start from
   served `Content-Type` values derive from the maintained `mime` package; runtimes without the
   Web Standard `URLPattern` fail fast; the generated standalone
   `dist/server/serve.mjs` is replaced by the portable
-  `fetch(Request) -> Response` entry plus the start CLI.
+  `fetch(Request) -> Response` entry plus the start CLI; the ADR-0120 hard
+  rule "pages with actions cannot be prerendered" is repealed — a page may be
+  hybrid: prerendered static GET plus a request-time action POST, with
+  `dist/server/` emitted whenever any route has an action (ADR-0120
+  amendment, 2026-09-16).
 - **Install (Alpha)**:
 
   ```bash
@@ -307,7 +311,9 @@ semantics. `rendering: 'dynamic'` routes skip prerendering and are served per
 request by the generated `dist/server/index.js`, with
 `dist/server/server-manifest.json` recording the partition. Hard rule: pages
 with actions cannot be prerendered — a route module exporting an action without
-`mode: 'dynamic'` fails the build. Pure-static projects emit no new artifacts.
+`mode: 'dynamic'` fails the build (repealed by the ADR-0120 amendment of
+2026-09-16: hybrid static GET + request-time POST is now allowed). Pure-static
+projects emit no new artifacts.
 
 ## 0.41.2 / 0.41.1
 

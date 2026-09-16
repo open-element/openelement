@@ -491,8 +491,9 @@ async function buildSSG(
     );
 
     // #953: the SSR bundle in dist/server is a build-time-only artifact.
-    // ssgRender() adds the request-time entry (dist/server/index.js) only
-    // when the project declares renderIntent 'dynamic' routes; for a
+    // ssgRender() adds the request-time entry (dist/server/index.js) when the
+    // project declares renderIntent 'dynamic' routes or any page exports an
+    // action (hybrid static-GET pages still need the server for POST); for a
     // pure-static project nothing under dist/server is deployable, so remove
     // the directory instead of shipping the server bundle to static hosting.
     if (!existsSync(join(ssrOutDir, 'index.js'))) {

@@ -6,6 +6,7 @@ Only decisions that still govern hard-to-reverse Element or Router contracts rem
 - [ADR-0110-two-product-doctrine-and-package-truth.md](./ADR-0110-two-product-doctrine-and-package-truth.md)
 - [ADR-0111-router-package-ownership-boundary.md](./ADR-0111-router-package-ownership-boundary.md)
 - [ADR-0112-protocol-types-and-tiny-runtime.md](./ADR-0112-protocol-types-and-tiny-runtime.md)
+- [ADR-0120-0-42-0-wc-application-loop-scope.md](./ADR-0120-0-42-0-wc-application-loop-scope.md)
 - [ADR-0125-hydration-instance-purity.md](./ADR-0125-hydration-instance-purity.md)
 - [ADR-0128-decouple-page-registration-from-tagname-export.md](./ADR-0128-decouple-page-registration-from-tagname-export.md)
 - [ADR-0129-response-header-channel.md](./ADR-0129-response-header-channel.md)

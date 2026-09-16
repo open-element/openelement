@@ -23,8 +23,10 @@ import type { HydrationStrategy } from '@openelement/element/authoring';
 /**
  * Where a page renders (#609, ADR-0123):
  * - `'static'` (default when renderIntent.mode is unset): prerendered at
- *   build time by SSG; pages exporting an action must NOT use this mode —
- *   the build rejects prerendered action pages (ADR-0120).
+ *   build time by SSG. A page exporting an action may stay static — a hybrid
+ *   page whose prerendered GET is served from the static artifact while its
+ *   action POST is dispatched to the generated server entry at request time
+ *   (ADR-0120 amendment, 2026-09-16).
  * - `'dynamic'`: skipped by prerendering and rendered per request through
  *   the generated `dist/server` entry, running the route loader on every
  *   request.

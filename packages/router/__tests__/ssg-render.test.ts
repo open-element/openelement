@@ -428,15 +428,19 @@ Deno.test('ssgRender - index route under a directory prefix gets a clean URL (#9
   await Deno.remove(outDir, { recursive: true }).catch(() => {});
 });
 
-Deno.test('ssgRender - pages with actions cannot be prerendered (hard rule)', async () => {
-  const outDir = './dist-test-ssg-render-action-rule';
+Deno.test('ssgRender - hybrid pages (static GET + action) prerender and emit server artifacts (ADR-0120 amendment)', async () => {
+  const outDir = './dist-test-ssg-render-hybrid';
   await Deno.remove(outDir, { recursive: true }).catch(() => {});
+  const app = new Hono();
+  app.get('/', (c) => c.html('<html><body>static home</body></html>'));
+  app.get('/guestbook', (c) => c.html('<html><body>guestbook</body></html>'));
   const bundle = createMockBundle({
+    default: app,
     routeInfo: [
       { path: '/', tagName: 'index-page', isDynamic: false, paramNames: [] },
       {
-        path: '/form',
-        tagName: 'form-page',
+        path: '/guestbook',
+        tagName: 'guestbook-page',
         isDynamic: false,
         paramNames: [],
         hasAction: true,
@@ -444,11 +448,25 @@ Deno.test('ssgRender - pages with actions cannot be prerendered (hard rule)', as
     ],
   });
 
-  await assertRejects(
-    () => ssgRender(bundle, { ...defaultOptions, outDir }),
-    Error,
-    'Pages with actions cannot be prerendered',
+  await ssgRender(bundle, { ...defaultOptions, outDir });
+
+  // The hybrid route's GET is prerendered like any static page.
+  assert(
+    await pathExists(`${outDir}/guestbook/index.html`),
+    'hybrid route GET must be prerendered',
   );
+
+  // dist/server IS emitted for a static+action-only project so POSTs do not
+  // 404 in production; the manifest schema is unchanged and lists no
+  // request-time routes (POST admission is method-based).
+  const manifest = JSON.parse(await Deno.readTextFile(`${outDir}/server/server-manifest.json`));
+  assertEquals(manifest, { version: 1, requestTimeRoutes: [] });
+  assert(await pathExists(`${outDir}/server/index.js`), 'server entry must be emitted');
+  // The admission table is empty: hybrid GET paths are NOT admitted to the
+  // request-time server (they stay on the static artifact).
+  const serverEntry = await Deno.readTextFile(`${outDir}/server/index.js`);
+  assertStringIncludes(serverEntry, 'const requestTimePatterns = [\n\n];');
+
   await Deno.remove(outDir, { recursive: true }).catch(() => {});
 });
 
