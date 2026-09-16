@@ -98,7 +98,7 @@
           ]
         },
         "./authoring": {
-          "publicShapeSha256": "d69c35c0248226a3e855c51ca1bf8673efcbab12dd3a1d42092a22ea72c09ea5",
+          "publicShapeSha256": "5ecbd25c4ab5c143b33cff84aee5755e6a0f83e0d0193e1ba65d8c58b8d76af7",
           "publicSymbols": [
             "ACTION_FETCH_HEADER=value:\"x-openelement-action\"",
             "DANGEROUS_KEYS=value:ReadonlySet<string>",
@@ -110,6 +110,7 @@
             "assertValidTagName=value:{call:(tagName:string)=>void}",
             "injectPropsSafe=value:{call:(target:Record<string, unknown>,props:Record<string, unknown>,tagName:string,log:{debug:{call:(message:string)=>void};warn:{call:(message:string)=>void}})=>void}",
             "isDangerousKey=value:{call:(key:string)=>union(false|true)}",
+            "isSafeAttributeName=value:{call:(name:string)=>union(false|true)}",
             "isValidTagName=value:{call:(tagName:string)=>union(false|true)}"
           ]
         },

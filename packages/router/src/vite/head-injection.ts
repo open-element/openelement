@@ -12,9 +12,10 @@
 
 import type { FrameworkOptions } from './internal/protocol/framework.ts';
 
-import { OpenElementError } from '@openelement/element';
-import { escapeAttr as escapeHtmlAttr } from '@openelement/element';
-import { createLogger, isSafeAttributeName } from '@openelement/element';
+import { OpenElementError } from '@openelement/element/authoring';
+import { isSafeAttributeName } from '@openelement/element/authoring';
+import { escapeAttr as escapeHtmlAttr } from '@openelement/element/html';
+import { createLogger } from '@openelement/element/logger';
 
 const log = createLogger('router-vite:head-injection');
 
