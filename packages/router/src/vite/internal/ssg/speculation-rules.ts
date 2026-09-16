@@ -1,4 +1,5 @@
 import type { SpeculationRulesOptions } from '../protocol/ssg.ts';
+import { quoteGeneratedJavaScriptValue } from './codegen-literals.ts';
 
 interface SpeculationRoute {
   path: string;
@@ -26,7 +27,7 @@ export function buildSpeculationRulesJson(
       }));
     }
     addExclusions(rules, options.exclude ?? []);
-    return JSON.stringify(rules, null, 2);
+    return quoteGeneratedJavaScriptValue(rules, 2);
   }
 
   if (!routes?.length) return '';
@@ -60,7 +61,7 @@ export function buildSpeculationRulesJson(
     // correct behavior (#847).
     routes.filter((route) => route.type === 'api').map((route) => `${route.path}/*`),
   );
-  return JSON.stringify(rules, null, 2);
+  return quoteGeneratedJavaScriptValue(rules, 2);
 }
 
 function addExclusions(rules: Record<string, unknown[]>, patterns: string[]): void {

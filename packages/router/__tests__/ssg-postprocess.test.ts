@@ -684,6 +684,20 @@ Deno.test('buildSpeculationRulesJson generates user-provided prerender rules', (
   assertEquals(parsed.prerender[0].where.href_matches, '/guide/*');
 });
 
+Deno.test('buildSpeculationRulesJson escapes raw-text terminators in config patterns', () => {
+  // The JSON is inlined into a <script type="speculationrules"> raw-text
+  // element; a config/plugin pattern containing </script> must not terminate
+  // it. Angle brackets in patterns are emitted as unicode escapes, which
+  // are legal inside JSON strings, so the parsed value is unchanged.
+  const payload = '/x</script><script>alert(1)</script>';
+  const result = buildSpeculationRulesJson({ prerender: [payload] });
+
+  assertEquals(result.includes('</script>'), false);
+  assertEquals(result.includes('<'), false);
+  const parsed = JSON.parse(result);
+  assertEquals(parsed.prerender[0].where.href_matches, payload);
+});
+
 Deno.test('buildSpeculationRulesJson generates user-provided prefetch rules', () => {
   const result = buildSpeculationRulesJson({
     prefetch: ['/about', '/blog/*'],
