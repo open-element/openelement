@@ -81,3 +81,22 @@ shared fetch handler in `static-serve.ts`), and production deploys go
 through the Nitro mount. GET/POST/loader/action/static/cache/404/error
 coverage moves to the start-CLI and Nitro proof legs; no MIME table,
 request dispatch, or server file is generated anymore.
+
+## Amendment (2026-09-16): raw-head channels enumerated; route-resolved fragments now guarded
+
+The §4 statement above named two raw head channels (`headExtras`,
+`inject.headFragments`) and claimed the document serializer keeps sink-side
+stripping as last-resort defense. Two corrections, landed post-merge of #1353:
+
+1. A third raw channel exists and is the only one reachable from request data:
+   `PageHead.dangerouslyHeadFragments` resolves through
+   `resolvePageDocument` with `{ data, actionData, params, request, route }`.
+   It now receives the same two fail-closed predicates as the config-time
+   channels — `assertNoScriptTags` and `assertTrustedHeadHtml`
+   (`packages/router/src/document.ts`) — rejecting `<script>` and blacklisted
+   `<style>` at resolution time for both static and resolver heads.
+2. The "last-resort defense" clause is precise only when
+   `allowHeadExtrasScripts` is false; when `inject` is configured, the
+   document serializer's script/event-handler stripping is disabled by design
+   (`html-escape.ts`), and enforcement lives entirely in the two predicates
+   above plus URL validation on `inject.scripts`.

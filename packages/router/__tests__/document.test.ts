@@ -10,6 +10,7 @@
  */
 
 import { assertEquals, assertThrows } from '@std/assert';
+import { OpenElementError } from '@openelement/element';
 import { resolvePageDocument } from '../src/document.ts';
 import type { PageHead, PagePropsContext } from '../src/index.ts';
 
@@ -147,4 +148,47 @@ Deno.test('resolvePageDocument: the resolver runs once per resolution, not per f
     ctx(),
   );
   assertEquals(calls, 1);
+});
+
+Deno.test('resolvePageDocument: dangerouslyHeadFragments rejects <script> (fail-closed, route-data channel)', () => {
+  assertThrows(
+    () =>
+      resolvePageDocument(
+        ({ data }: PagePropsContext) => ({
+          dangerouslyHeadFragments: [
+            `<meta name="x" content="${String(data)}"><script>alert(1)</script>`,
+          ],
+        }),
+        ctx({ data: 'user input' }),
+      ),
+    OpenElementError,
+    'must not contain <script>',
+  );
+});
+
+Deno.test('resolvePageDocument: dangerouslyHeadFragments rejects blacklisted CSS in <style>', () => {
+  assertThrows(
+    () =>
+      resolvePageDocument(
+        {
+          dangerouslyHeadFragments: ['<style>@import url("https://evil.example/x.css");</style>'],
+        },
+        ctx(),
+      ),
+    OpenElementError,
+    'Unsafe CSS',
+  );
+});
+
+Deno.test('resolvePageDocument: dangerouslyHeadFragments accepts benign meta and style', () => {
+  const document = resolvePageDocument(
+    {
+      dangerouslyHeadFragments: [
+        '<meta property="og:title" content="Notes">',
+        '<style media="print">body { color: black; }</style>',
+      ],
+    },
+    ctx(),
+  );
+  assertEquals(document.dangerouslyHeadFragments?.length, 2);
 });

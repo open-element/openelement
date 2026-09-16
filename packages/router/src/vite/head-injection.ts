@@ -141,13 +141,16 @@ function assertStyleTag(attributes: string, css: string, context: string): strin
   return `<style${rendered.length ? ` ${rendered.join(' ')}` : ''}>${css}</style>`;
 }
 
-function assertTrustedHeadHtml(html: string, context: string): string {
-  const checked = html.replace(
+/**
+ * Assert that every `<style>` tag in a trusted head fragment passes the CSS
+ * blacklist (assertStyleTag). The assertion is the whole contract — it throws
+ * on the first unsafe tag and returns nothing.
+ */
+export function assertTrustedHeadHtml(html: string, context: string): void {
+  html.replace(
     /<style\b([^>]*)>([\s\S]*?)<\/style\s*>/gi,
     (_, attrs, css) => assertStyleTag(attrs, css, context),
   );
-  void checked;
-  return html;
 }
 
 function assertSafeAttributeName(name: string, context: string): void {
@@ -270,8 +273,9 @@ export function buildHeadExtras(options: FrameworkOptions): HeadExtrasResult {
   // If direct headExtras provided, validate and return
   if (options.headExtras) {
     assertNoScriptTags(options.headExtras, 'headExtras');
+    assertTrustedHeadHtml(options.headExtras, 'headExtras');
     return {
-      headExtras: assertTrustedHeadHtml(options.headExtras, 'headExtras'),
+      headExtras: options.headExtras,
       allowHeadExtrasScripts: false,
     };
   }
@@ -287,7 +291,8 @@ export function buildHeadExtras(options: FrameworkOptions): HeadExtrasResult {
   // before scripts that reference them (e.g. theme-init.js removes anti-flash).
   for (const frag of options.inject.headFragments || []) {
     assertNoScriptTags(frag, 'inject.headFragments');
-    fragments.push(assertTrustedHeadHtml(frag, 'inject.headFragments'));
+    assertTrustedHeadHtml(frag, 'inject.headFragments');
+    fragments.push(frag);
   }
 
   // Stylesheets second

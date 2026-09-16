@@ -18,6 +18,7 @@
  */
 
 import type { PageHead, PageHeadResolver, PagePropsContext } from './authoring.ts';
+import { assertNoScriptTags, assertTrustedHeadHtml } from './vite/head-injection.ts';
 
 /** One <link rel="alternate"> record, typically carrying an hreflang. */
 export interface PageHeadAlternate {
@@ -87,6 +88,14 @@ export function resolvePageDocument(
       dangerouslyHeadFragments.some((fragment) => typeof fragment !== 'string'))
   ) {
     fail('head.dangerouslyHeadFragments must be an array of strings.');
+  }
+  // Route-resolved fragments are the only raw-head channel reachable from
+  // request data (loader output, params, query), so they get the same two
+  // fail-closed predicates as the config-time channels: no <script> at all,
+  // and every <style> must pass the CSS blacklist (ADR-0154 §4 amendment).
+  for (const fragment of dangerouslyHeadFragments ?? []) {
+    assertNoScriptTags(fragment, 'head.dangerouslyHeadFragments');
+    assertTrustedHeadHtml(fragment, 'head.dangerouslyHeadFragments');
   }
   if (canonical !== undefined && typeof canonical !== 'string') {
     fail('head.canonical must be a string.');
