@@ -13,7 +13,7 @@ Do not commit agent prompts, dispatch transcripts, copied CI logs, temporary evi
 
 ## Architecture review
 
-Use an ADR only for a hard-to-reverse public API, package topology, architecture, security/trust, or explicit compatibility decision. Ordinary fixes do not need an ADR. Current architecture belongs in `docs/architecture`; retired decisions belong in Git history and the compact history index.
+Review every change against [docs/architecture/design-principles.md](./docs/architecture/design-principles.md): the four-question gate (P7) applies to ordinary pull requests, and deviations follow the comply-or-explain rule. Use an ADR only for a hard-to-reverse public API, package topology, architecture, security/trust, or explicit compatibility decision. Ordinary fixes do not need an ADR. Current architecture belongs in `docs/architecture`; retired decisions belong in Git history and the compact history index.
 
 ## Development
 
