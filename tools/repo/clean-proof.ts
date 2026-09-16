@@ -55,6 +55,12 @@ if (headTree.code !== 0 || headTree.stdout !== tree) {
 
 if (failures.length > 0) {
   for (const failure of failures) console.error(`clean-proof FAIL phase=${phase}: ${failure}`);
+  // Name the offenders: a gate that dirties the worktree must identify which
+  // tracked files changed, or the next investigator has to re-run CI blind.
+  const status = await git(['status', '--porcelain']);
+  if (status.stdout) console.error(`clean-proof dirty files:\n${status.stdout}`);
+  const stat = await git(['diff', '--stat']);
+  if (stat.stdout) console.error(`clean-proof diff stat:\n${stat.stdout}`);
   Deno.exit(1);
 }
 console.log(`clean-proof PASS phase=${phase} sha=${sha} tree=${tree}`);

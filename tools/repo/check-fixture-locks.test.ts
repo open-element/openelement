@@ -6,6 +6,7 @@ import {
   lockVersionFailures,
   registryFailures,
   sharedUniverseFailures,
+  taskNpmSpecifiers,
 } from './check-fixture-locks.ts';
 
 const ENTRIES: FixtureLockEntry[] = [
@@ -61,6 +62,19 @@ Deno.test('fixture locks: shared universes must be byte-identical', () => {
     sharedUniverseFailures(ENTRIES, importsDrifted)[0],
     'deno.json imports differ',
   );
+});
+
+Deno.test('fixture locks: task npm specifiers join the lock universe', () => {
+  const config = JSON.stringify({
+    tasks: {
+      e2e: 'deno run --allow-all npm:@playwright/test@1.59.1 test',
+      build: ['deno', 'run', 'npm:vite@8.0.16', 'build'],
+      dev: 'vite dev',
+    },
+  });
+  assertEquals(taskNpmSpecifiers(config), ['npm:@playwright/test@1.59.1', 'npm:vite@8.0.16']);
+  assertEquals(taskNpmSpecifiers('{"tasks":{"check":"deno lint"}}'), []);
+  assertEquals(taskNpmSpecifiers('not json'), []);
 });
 
 Deno.test('fixture locks: lock version must be supported JSON', () => {

@@ -9,7 +9,11 @@
  *
  * The lockfiles are generated, never hand-written. Regenerate all of them
  * with `deno task --cwd tools/repo fixtures:locks:update`; each entry below
- * carries the entrypoint that resolves its universe. A lockfile that is not
+ * carries the entrypoint that resolves its universe. A universe is the
+ * closure of the source entrypoint PLUS every npm: tool specifier the
+ * fixture's own tasks invoke (e.g. the e2e runner): a task whose npm tool
+ * is missing from the lock rewrites the lockfile when CI runs it, which is
+ * how a minimal lock dirties the worktree mid-gate. A lockfile that is not
  * registered here fails the check until it is reviewed and added.
  */
 
@@ -64,11 +68,36 @@ export interface FixtureLockFiles {
 }
 
 /** The single documented regeneration command for a fixture lock. */
-export function regenerateCommand(entry: FixtureLockEntry): string {
+export function regenerateCommand(
+  entry: FixtureLockEntry,
+  taskSpecifiers: readonly string[] = [],
+): string {
   // Nitro's universe is resolved by the real build, not a source entrypoint.
   return entry.fixture === 'router-nitro'
     ? 'deno task proof:node'
-    : `deno cache ${entry.entrypoint}`;
+    : `deno cache ${[entry.entrypoint, ...taskSpecifiers].join(' ')}`;
+}
+
+/**
+ * Npm tool specifiers declared by the fixture's own tasks (e.g. the e2e
+ * runner's `npm:@playwright/test@…`). They belong to the lock universe:
+ * invoking the task resolves the tool, and a lock that lacks it gets
+ * rewritten in place — the CI workspace-clean-after failure mode.
+ */
+export function taskNpmSpecifiers(config: string): string[] {
+  let tasks: unknown;
+  try {
+    tasks = (JSON.parse(config) as { tasks?: unknown }).tasks;
+  } catch {
+    return [];
+  }
+  if (tasks === null || typeof tasks !== 'object') return [];
+  const specifiers = new Set<string>();
+  for (const value of Object.values(tasks as Record<string, unknown>)) {
+    const text = typeof value === 'string' ? value : Array.isArray(value) ? value.join(' ') : '';
+    for (const match of text.matchAll(/\bnpm:[^\s"']+/g)) specifiers.add(match[0]);
+  }
+  return [...specifiers].sort();
 }
 
 export function registryFailures(
@@ -97,8 +126,8 @@ export function absolutePathFailures(fixture: string, lock: string): string[] {
 
 /**
  * Shared universes must resolve identically: same dependency declaration
- * (deno.json imports) and byte-identical lockfiles. Regenerating one fixture
- * alone is the failure mode this catches.
+ * (deno.json imports and task npm specifiers) and byte-identical lockfiles.
+ * Regenerating one fixture alone is the failure mode this catches.
  */
 export function sharedUniverseFailures(
   entries: readonly FixtureLockEntry[],
@@ -133,6 +162,12 @@ export function sharedUniverseFailures(
       failures.push(
         `${entry.fixture} and ${peer.fixture} share one dependency universe but their ` +
           'deno.json imports differ; align the declaration, then regenerate both locks',
+      );
+    }
+    if (taskNpmSpecifiers(a.config).join(' ') !== taskNpmSpecifiers(b.config).join(' ')) {
+      failures.push(
+        `${entry.fixture} and ${peer.fixture} share one dependency universe but their ` +
+          'deno.json task npm specifiers differ; align the tasks, then regenerate both locks',
       );
     }
   }
@@ -170,10 +205,13 @@ export async function updateLocks(
   );
   for (const entry of entries) {
     const cwd = `tests/fixtures/${entry.fixture}`;
+    const taskSpecifiers = entry.fixture === 'router-nitro'
+      ? []
+      : taskNpmSpecifiers(await Deno.readTextFile(`${cwd}/deno.json`).catch(() => ''));
     const args = entry.fixture === 'router-nitro'
       ? ['task', 'proof:node']
-      : ['cache', entry.entrypoint];
-    console.log(`[fixtures:locks] ${cwd}: ${regenerateCommand(entry)}`);
+      : ['cache', entry.entrypoint, ...taskSpecifiers];
+    console.log(`[fixtures:locks] ${cwd}: ${regenerateCommand(entry, taskSpecifiers)}`);
     if (shared.has(entry.fixture) && entry.fixture !== 'router-nitro') {
       await Deno.remove(`${cwd}/deno.lock`).catch(() => {});
     }
@@ -224,8 +262,12 @@ async function main(): Promise<void> {
       ? ''
       : ` [shared with ${entry.sharedUniverseWith}]`;
     console.log(`  ${entry.fixture}${shared} — ${entry.purpose}`);
+    const config = files.get(entry.fixture)?.config ??
+      await Deno.readTextFile(`tests/fixtures/${entry.fixture}/deno.json`).catch(() => '');
     console.log(
-      `    regenerate: ${regenerateCommand(entry)} (cwd tests/fixtures/${entry.fixture})`,
+      `    regenerate: ${
+        regenerateCommand(entry, taskNpmSpecifiers(config))
+      } (cwd tests/fixtures/${entry.fixture})`,
     );
   }
 
