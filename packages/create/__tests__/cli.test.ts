@@ -213,21 +213,16 @@ Deno.test('starter pins vite exactly and type-checks app-shell', () => {
   const devTask = String(denoJson.tasks.dev || '');
   const pinnedVite = String(denoJson.imports.vite).match(/@([^@]+)$/)?.[1] ?? '';
   assert(devTask.includes(`npm:vite@${pinnedVite}`), devTask);
-  // #679: the check task must cover the app-shell layout island template.
+  // #679: the check task must cover the app-shell layout island template —
+  // and every other shipped TypeScript file — by checking the app/ directory
+  // recursively instead of a hardcoded file list, so new template files (and
+  // files the user adds later) are type-checked without manual registration.
+  // Deno 2.9 resolves a directory argument to all modules beneath it; the
+  // markdown post route is compiled at build time and is not a check entry.
   const checkTask = String(denoJson.tasks.check || '');
-  assert(checkTask.includes('app/islands/app-shell.tsx'), checkTask);
-  // The check task must cover every shipped TypeScript route/component (the
-  // markdown post route is compiled at build time and is not a check entry)
-  // plus vite.config.ts, so template regressions surface in the generated
-  // app's own `deno task check`.
-  assert(checkTask.includes('app/routes/404.tsx'), checkTask);
-  assert(checkTask.includes('app/routes/blog/index.tsx'), checkTask);
-  assert(checkTask.includes('app/routes/api/health.ts'), checkTask);
-  assert(checkTask.includes('app/components/page-contact.tsx'), checkTask);
-  assert(checkTask.includes('app/components/page-styles.ts'), checkTask);
-  assert(checkTask.includes('app/islands/my-counter.tsx'), checkTask);
-  assert(checkTask.includes('app/islands/only-ticker.tsx'), checkTask);
+  assert(checkTask.includes('app/'), checkTask);
   assert(checkTask.includes('vite.config.ts'), checkTask);
+  assertFalse(checkTask.includes('app/routes/404.tsx'), checkTask);
 });
 
 Deno.test('starter templates use the compiled element authoring surface (v0.44)', () => {

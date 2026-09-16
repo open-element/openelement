@@ -15,7 +15,7 @@
   "minimumDependencyAge": 0,
   "tasks": {
     "dev": "deno run --config deno.json --allow-read --allow-write --allow-env --allow-net --allow-run --allow-sys --allow-ffi npm:vite@8.0.16",
-    "check": "deno check --config deno.json app/routes/404.tsx app/routes/index.tsx app/routes/freshness.tsx app/routes/contact.tsx app/routes/blog/index.tsx app/routes/blog/welcome.tsx app/routes/api/health.ts app/islands/my-counter.tsx app/islands/only-ticker.tsx app/islands/app-shell.tsx app/components/page-home.tsx app/components/page-freshness.tsx app/components/page-404.tsx app/components/page-contact.tsx app/components/page-blog-index.tsx app/components/page-blog-welcome.tsx app/components/page-styles.ts vite.config.ts",
+    "check": "deno check --config deno.json app/ vite.config.ts",
     "test": "deno test --config deno.json --permit-no-files",
     "build": "deno run --config deno.json --allow-read --allow-write --allow-net --allow-env --allow-ffi --allow-sys --allow-run npm:@openelement/router@${v.router}/cli/build",
     "start": "deno run --config deno.json --allow-read --allow-write --allow-net --allow-env --allow-ffi --allow-sys --allow-run npm:@openelement/router@${v.router}/cli/start",
