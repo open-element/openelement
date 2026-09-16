@@ -14,7 +14,7 @@ The docs site is generated through the SSG pipeline.
 
 ## Request-time server
 
-When any route declares `renderIntent: { mode: 'dynamic' }` or any page exports an action, the build also emits `dist/server/index.js` — a portable `fetch(Request) -> Response` handler over the same SSR bundle — plus `server-manifest.json` listing the request-time (`'dynamic'`) routes. Hybrid pages (static GET + action) keep their prerendered artifact for GET; their POSTs reach the server by method dispatch. Local preview is served by `deno task start` (the start CLI runs the same fetch handler on `Deno.serve`); production deploys go through the Nitro mount below. Pure-static builds (no actions, no dynamic routes) emit none of these; this output contract is frozen under ADR-0122.
+When any route declares `renderIntent: { mode: 'dynamic' }` or any page exports an action, the build also emits `dist/server/index.js` — a portable `fetch(Request) -> Response` handler over the same SSR bundle — plus `server-manifest.json` listing the request-time (`'dynamic'`) routes. Hybrid pages (static GET + action) keep their prerendered artifact for GET; their POSTs reach the server by method dispatch. Local preview is served by `deno task start` (the start CLI runs the same fetch handler on `Deno.serve`); production deploys go through the Nitro mount below. Pure-static builds (no actions, no dynamic routes) emit none of these; this output contract is frozen under ADR-0122 (retired; recoverable from Git history).
 
 ## Nitro presets
 

@@ -6,7 +6,7 @@ order: 95
 
 ## Standing assumption
 
-Generated action POST handlers ship with a fail-closed same-origin floor (ADR-0121 §12 amendment): a request is rejected when `Sec-Fetch-Site` is `cross-site`, when `Origin` is present and does not match the request URL origin, or when `Sec-Fetch-Site` is `same-site` but `Origin` is missing or `null` — a forged header, since browsers always send `Origin` on POST (#921). Loopback hostname aliases (`localhost` / `127.0.0.1` / `[::1]`) count as the same origin (#937). Clients that omit both headers (typical non-browser tools) are allowed. Set `OPEN_ELEMENT_DISABLE_CSRF=1` on the request env binding (`c.env` / Nitro runtime env) to opt out. Framework-owned session APIs are not in the current contract; provider recipes own their cookie/session transport and must apply the same-origin floor plus explicit cookie attributes.
+Generated action POST handlers ship with a fail-closed same-origin floor (ADR-0121 §12 (retired; recoverable from Git history) amendment): a request is rejected when `Sec-Fetch-Site` is `cross-site`, when `Origin` is present and does not match the request URL origin, or when `Sec-Fetch-Site` is `same-site` but `Origin` is missing or `null` — a forged header, since browsers always send `Origin` on POST (#921). Loopback hostname aliases (`localhost` / `127.0.0.1` / `[::1]`) count as the same origin (#937). Clients that omit both headers (typical non-browser tools) are allowed. Set `OPEN_ELEMENT_DISABLE_CSRF=1` on the request env binding (`c.env` / Nitro runtime env) to opt out. Framework-owned session APIs are not in the current contract; provider recipes own their cookie/session transport and must apply the same-origin floor plus explicit cookie attributes.
 
 ## Ambient authentication
 
@@ -23,7 +23,7 @@ The built-in floor guards generated action handlers only. For custom API routes 
 ### app/routes/_middleware.ts
 
 ```ts
-// CSRF guard for custom API routes and defense in depth (ADR-0121 §12):
+// CSRF guard for custom API routes and defense in depth (ADR-0121 §12, retired; recoverable from Git history):
 // generated action POST handlers already enforce a fail-closed same-origin
 // floor (opt out with OPEN_ELEMENT_DISABLE_CSRF=1 on the request env). Apps
 // using ambient authentication (Basic, mTLS, SameSite=None cookies) should

@@ -18,11 +18,11 @@ Routes 应当能从仓库目录树中被发现。`definePage` 路由默认导出
 
 ## 渲染模式
 
-`renderIntent.mode` 决定页面在哪里渲染:`'static'`(默认)在构建时预渲染;`'dynamic'` 跳过预渲染,通过生成的 `dist/server` 入口按请求渲染,每次请求都会运行路由 loader。导出 action 的页面可以保持 `'static'`——即混合页:其 GET 被预渲染并由静态产物伺服,而其 action POST 在请求时分派给生成的服务器入口。当 GET 本身必须按请求执行时(按请求的 loader、响应头、不可重复的内容)才选择 `'dynamic'`。该行为已按 ADR-0122 冻结,并经 ADR-0120 修订(2026-09-16)。
+`renderIntent.mode` 决定页面在哪里渲染:`'static'`(默认)在构建时预渲染;`'dynamic'` 跳过预渲染,通过生成的 `dist/server` 入口按请求渲染,每次请求都会运行路由 loader。导出 action 的页面可以保持 `'static'`——即混合页:其 GET 被预渲染并由静态产物伺服,而其 action POST 在请求时分派给生成的服务器入口。当 GET 本身必须按请求执行时(按请求的 loader、响应头、不可重复的内容)才选择 `'dynamic'`。该行为已按 ADR-0122（已退役，可从 Git 历史恢复）冻结,并经 ADR-0120 修订(2026-09-16)。
 
 ## 表单 action
 
-路由可导出 `action({ formData })`——纯 HTML 表单无需 JavaScript 即可工作:校验失败返回 `fail(4xx, data)`,以 `fail()` 的状态码(惯例为 422)重渲染并回显;成功则以 303 应答(PRG)。命名 action 通过 `formaction='?/name'` 分派。标记 `data-open-enhance` 的表单经 fetch 提交并把返回的文档 morph 就位:light DOM 未变化的已水合 island 状态保留,`data-open-preserve` 豁免子树,URL 跟随 PRG 目标。action 在校验失败后必须可安全重跑；这些应用闭环语义已按 ADR-0122 冻结。
+路由可导出 `action({ formData })`——纯 HTML 表单无需 JavaScript 即可工作:校验失败返回 `fail(4xx, data)`,以 `fail()` 的状态码(惯例为 422)重渲染并回显;成功则以 303 应答(PRG)。命名 action 通过 `formaction='?/name'` 分派。标记 `data-open-enhance` 的表单经 fetch 提交并把返回的文档 morph 就位:light DOM 未变化的已水合 island 状态保留,`data-open-preserve` 豁免子树,URL 跟随 PRG 目标。action 在校验失败后必须可安全重跑；这些应用闭环语义已按 ADR-0122（已退役，可从 Git 历史恢复）冻结。
 
 ### app/components/page-guestbook.tsx
 
@@ -126,7 +126,7 @@ export default definePage(GuestbookPage, {
 
 ## 两条 loader/action 链
 
-request-time(`'dynamic'`)loader/action 运行在服务端,上下文是 Web 标准的 `{ request, params, env, platform, route, responseHeaders }`,并使用 `fail()`/`redirect()` 协议。`responseHeaders`(ADR-0129)是可变的 `Headers` 通道,会被合并进该请求的所有响应——渲染、重定向、422 重渲染与 fetch 通道 JSON——配方借此写入会话 cookie;冲突时框架协议头永远优先。SPA 模式的 loader/action 运行在客户端,上下文只有 `{ params }`(action 另有 `formData`),通过抛出异常来表达失败——throw 会被规整为 action 数据。两者命名刻意保持一致,但上下文不同:针对其中一条链编写的代码不能假设另一条链的上下文(#570,ADR-0119 已冻结的 SPA 语义)。
+request-time(`'dynamic'`)loader/action 运行在服务端,上下文是 Web 标准的 `{ request, params, env, platform, route, responseHeaders }`,并使用 `fail()`/`redirect()` 协议。`responseHeaders`(ADR-0129)是可变的 `Headers` 通道,会被合并进该请求的所有响应——渲染、重定向、422 重渲染与 fetch 通道 JSON——配方借此写入会话 cookie;冲突时框架协议头永远优先。SPA 模式的 loader/action 运行在客户端,上下文只有 `{ params }`(action 另有 `formData`),通过抛出异常来表达失败——throw 会被规整为 action 数据。两者命名刻意保持一致,但上下文不同:针对其中一条链编写的代码不能假设另一条链的上下文(#570,ADR-0119（已退役，可从 Git 历史恢复）已冻结的 SPA 语义)。
 
 ### 集成配方
 

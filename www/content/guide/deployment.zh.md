@@ -14,7 +14,7 @@ docs 站点通过 SSG 管线生成。
 
 ## 请求时服务器
 
-当任何路由声明 `renderIntent: { mode: 'dynamic' }` 或任何页面导出 action 时,构建还会产出 `dist/server/index.js`——挂在同一个 SSR bundle 上的可移植 `fetch(Request) -> Response` 处理器——以及列出请求时(`'dynamic'`)路由的 `server-manifest.json`。混合页(静态 GET + action)的 GET 仍由预渲染产物伺服,其 POST 按方法分派到服务器。本地预览由 `deno task start` 提供(Start CLI 在 `Deno.serve` 上运行同一 fetch handler);生产部署走下文的 Nitro 挂载。纯静态构建(无 action、无 dynamic 路由)三者都不产出；该输出契约已按 ADR-0122 冻结。
+当任何路由声明 `renderIntent: { mode: 'dynamic' }` 或任何页面导出 action 时,构建还会产出 `dist/server/index.js`——挂在同一个 SSR bundle 上的可移植 `fetch(Request) -> Response` 处理器——以及列出请求时(`'dynamic'`)路由的 `server-manifest.json`。混合页(静态 GET + action)的 GET 仍由预渲染产物伺服,其 POST 按方法分派到服务器。本地预览由 `deno task start` 提供(Start CLI 在 `Deno.serve` 上运行同一 fetch handler);生产部署走下文的 Nitro 挂载。纯静态构建(无 action、无 dynamic 路由)三者都不产出；该输出契约已按 ADR-0122（已退役，可从 Git 历史恢复）冻结。
 
 ## Nitro 预设
 

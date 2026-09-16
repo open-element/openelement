@@ -154,7 +154,7 @@ export const blogCollection: CollectionOptions = {
 
 ## middleware.use
 
-`middleware.use`（ADR-0123，#858）注册 WinterCG 形态的 fetch 中间件：`(request, next) => Promise<Response>`——不含任何 HTTP 框架方言。中间件链在生成的 handler 边界按洋葱序组合（`use[0]` 最外层：最先看到请求，最后看到响应），位于内置 `requestId`/`logger`/`cors`/`securityHeaders`/`csp` 中间件之外。中间件语义仅作用于请求时路径：静态 GET/HEAD 由构建产物直接给出（`tryStatic`），不经过 `middleware.use` 链与内置中间件，因此不要用中间件守卫预渲染页面。在请求时派发路径（dynamic 路由、POST 与非静态回退）上，dev server、`start` CLI、e2e fixture server 与 Nitro 生产入口运行同一条中间件链（由 request-time parity 契约测试锁定）。中间件可以不调用 `next()` 直接返回 `Response` 来短路。每一项是一个**模块路径**（解析方式与 `appShell.import` 相同）：模块默认导出中间件，生成的 server entry 直接 import 该模块——因此中间件可以闭包引用模块作用域，也可以 import 本地 helper 和第三方包。路由级 `_middleware.ts` 文件使用同一 WinterCG 形态：根级或嵌套的 `_middleware.ts` 默认导出 `(request, next) => Promise<Response>`，作用于其路由子树。
+`middleware.use`（ADR-0123（已退役，可从 Git 历史恢复），#858）注册 WinterCG 形态的 fetch 中间件：`(request, next) => Promise<Response>`——不含任何 HTTP 框架方言。中间件链在生成的 handler 边界按洋葱序组合（`use[0]` 最外层：最先看到请求，最后看到响应），位于内置 `requestId`/`logger`/`cors`/`securityHeaders`/`csp` 中间件之外。中间件语义仅作用于请求时路径：静态 GET/HEAD 由构建产物直接给出（`tryStatic`），不经过 `middleware.use` 链与内置中间件，因此不要用中间件守卫预渲染页面。在请求时派发路径（dynamic 路由、POST 与非静态回退）上，dev server、`start` CLI、e2e fixture server 与 Nitro 生产入口运行同一条中间件链（由 request-time parity 契约测试锁定）。中间件可以不调用 `next()` 直接返回 `Response` 来短路。每一项是一个**模块路径**（解析方式与 `appShell.import` 相同）：模块默认导出中间件，生成的 server entry 直接 import 该模块——因此中间件可以闭包引用模块作用域，也可以 import 本地 helper 和第三方包。路由级 `_middleware.ts` 文件使用同一 WinterCG 形态：根级或嵌套的 `_middleware.ts` 默认导出 `(request, next) => Promise<Response>`，作用于其路由子树。
 
 ### vite.config.ts —— middleware.use（#858）
 
