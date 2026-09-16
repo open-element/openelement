@@ -4,6 +4,7 @@ import {
   allowlistCoverageFailures,
   allowlistMatches,
   NODE_HOST_ALLOWLIST,
+  packagePolicyFailures,
   policyFor,
   scanDenoApiSource,
   scanPath,
@@ -116,6 +117,28 @@ Deno.test('deno-api-free classifies product, Deno-host, and Node-host paths', ()
   assertEquals(policyFor('benchmarks/jfb/harness/run.ts').kind, 'node-host');
   assertEquals(policyFor('www/e2e/playwright.config.ts').kind, 'node-host');
   assertEquals(policyFor('README.md').kind, 'skip');
+});
+
+Deno.test('deno-api-free never skips a package src tree the policy table missed', () => {
+  // Fail closed: a new package's src tree is never skipped — it scans under
+  // the strictest product policy, and the coverage assertion names the
+  // package so an explicit reviewed policy gets added.
+  assertEquals(policyFor('packages/newpkg/src/index.ts'), {
+    kind: 'product',
+    denoApis: 'ban',
+    npm: 'chartered',
+  });
+  assertEquals(
+    packagePolicyFailures([{ name: '@openelement/newpkg', dir: 'packages/newpkg' }]),
+    [
+      'packages/newpkg: no PACKAGE_POLICIES entry for @openelement/newpkg; ' +
+      'review the package runtime boundary and add an explicit policy',
+    ],
+  );
+  assertEquals(
+    packagePolicyFailures([{ name: '@openelement/router', dir: 'packages/router' }]),
+    [],
+  );
 });
 
 Deno.test('deno-api-free product scan bars Node APIs while Deno-host scan allows Deno', () => {

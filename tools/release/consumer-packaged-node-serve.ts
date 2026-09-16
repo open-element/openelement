@@ -26,6 +26,7 @@ import { copy, existsSync } from '@std/fs';
 import { join, resolve } from '@std/path';
 import { formatJson } from '@openelement/element/build-utils';
 import { PACKAGE_VERSION } from '../repo/project-constants.ts';
+import { VITE_DEV_PIN } from '../repo/deps-vite-check.ts';
 import { NITRO_VERSION } from './nitro-compatibility.ts';
 
 const repoRoot = resolve(import.meta.dirname!, '../..');
@@ -108,7 +109,7 @@ try {
         '@openelement/router/vite': `npm:@openelement/router@${PACKAGE_VERSION}/vite`,
         '@openelement/element': `npm:@openelement/element@${PACKAGE_VERSION}`,
         'hono': 'npm:hono@4.12.0',
-        'vite': 'npm:vite@8.0.16',
+        'vite': `npm:vite@${VITE_DEV_PIN}`,
       },
       nodeModulesDir: 'manual',
       minimumDependencyAge: 0,
@@ -123,7 +124,7 @@ try {
       dependencies: {
         '@openelement/router': `file:${routerTarball}`,
         '@openelement/element': `file:${elementTarball}`,
-        'vite': '8.0.16',
+        'vite': VITE_DEV_PIN,
         'hono': '4.12.0',
         'nitro': NITRO_VERSION,
       },

@@ -162,8 +162,8 @@ export async function updateLocks(
   for (const entry of entries) {
     const cwd = `tests/fixtures/${entry.fixture}`;
     const args = entry.fixture === 'router-nitro'
-      ? ['task', '--no-prompt', 'proof:node']
-      : ['cache', '--no-prompt', entry.entrypoint];
+      ? ['task', 'proof:node']
+      : ['cache', entry.entrypoint];
     console.log(`[fixtures:locks] ${cwd}: ${regenerateCommand(entry)}`);
     const status = await new Deno.Command(Deno.execPath(), {
       args,

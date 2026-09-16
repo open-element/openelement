@@ -26,12 +26,13 @@
  * Usage: deno run --allow-read --allow-run tools/repo/check-esm-boundary.ts
  */
 
-const SOURCE_ROOTS = [
-  'packages/element/src',
-  'packages/router/src',
-  'packages/create/src',
+import { readPackages } from '../lib/package-graph.ts';
+
+/** Non-package source roots covered by the pure-ESM boundary. Package src
+ * trees are discovered from the workspace (readPackages) so a new package is
+ * scanned automatically instead of escaping the gate. */
+const EXTRA_SOURCE_ROOTS = [
   'packages/create/templates',
-  'packages/ui/src',
   'tools',
 ];
 
@@ -101,12 +102,16 @@ async function trackedFiles(): Promise<string[]> {
   return new TextDecoder().decode(stdout).split('\n').map((line) => line.trim()).filter(Boolean);
 }
 
-function inSourceRoot(path: string): boolean {
-  return SOURCE_ROOTS.some((root) => path === root || path.startsWith(`${root}/`));
+function inSourceRoot(path: string, roots: readonly string[]): boolean {
+  return roots.some((root) => path === root || path.startsWith(`${root}/`));
 }
 
 if (import.meta.main) {
   const violations: EsmViolation[] = [];
+  const sourceRoots = [
+    ...(await readPackages()).map((pkg) => `${pkg.dir}/src`),
+    ...EXTRA_SOURCE_ROOTS,
+  ];
   const files = await trackedFiles();
   for (const path of files) {
     if (path.endsWith('.mjs')) {
@@ -121,7 +126,7 @@ if (import.meta.main) {
   const syntaxFiles: { path: string; text: string }[] = [];
   const exportRecords: { path: string; exports?: unknown }[] = [];
   for (const path of files) {
-    if (!inSourceRoot(path)) continue;
+    if (!inSourceRoot(path, sourceRoots)) continue;
     if (
       path.endsWith('.ts') || path.endsWith('.tsx') || path.endsWith('.js') || path.endsWith('.mjs')
     ) {

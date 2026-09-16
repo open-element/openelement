@@ -9,12 +9,12 @@
     "@openelement/element/jsx-dev-runtime": "npm:@openelement/element@${v.element}/jsx-dev-runtime",
     "@openelement/element/jsx-runtime": "npm:@openelement/element@${v.element}/jsx-runtime",
     "hono": "npm:hono@^4.12",
-    "vite": "npm:vite@8.0.16"
+    "vite": "npm:vite@${v.vite}"
   },
   "nodeModulesDir": "auto",
   "minimumDependencyAge": 0,
   "tasks": {
-    "dev": "deno run --config deno.json --allow-read --allow-write --allow-env --allow-net --allow-run --allow-sys --allow-ffi npm:vite@8.0.16",
+    "dev": "deno run --config deno.json --allow-read --allow-write --allow-env --allow-net --allow-run --allow-sys --allow-ffi npm:vite@${v.vite}",
     "check": "deno check --config deno.json app/ vite.config.ts",
     "test": "deno test --config deno.json --permit-no-files",
     "build": "deno run --config deno.json --allow-read --allow-write --allow-net --allow-env --allow-ffi --allow-sys --allow-run npm:@openelement/router@${v.router}/cli/build",

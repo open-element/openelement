@@ -7,6 +7,9 @@
  * shims `node:process` and `node:buffer` — and only when the Nitro manifest
  * asserts `cloudflare.nodeCompat === true`. Any external bare specifier
  * (unbundled dependency) or other `node:*` builtin would fail at the edge.
+ * Modules in the graph are also scanned for bare-global `process.env`
+ * accesses: bundled third-party code that skips the `node:process` shim
+ * throws a ReferenceError on a strict Workers runtime.
  *
  * Generated third-party output is not product source: the check proves the
  * entry dependency graph, it does not rewrite Nitro/unenv output. Run after
@@ -14,7 +17,8 @@
  */
 
 import { walkSync } from '@std/fs/walk';
-import { extractStaticModuleSpecifiers } from '../lib/typescript-ast.ts';
+import ts from 'typescript';
+import { extractStaticModuleSpecifiers, parseTypeScript } from '../lib/typescript-ast.ts';
 
 export interface WorkersManifest {
   preset?: string;
@@ -40,6 +44,106 @@ export const WORKERS_NODE_SHIMS: readonly { specifier: string; reason: string }[
 
 function normalize(path: string): string {
   return path.replaceAll('\\', '/');
+}
+
+/**
+ * Bare-global `process.env` detection. The import graph proves specifiers, but
+ * bundled third-party code can still touch the `process` global directly; on
+ * Workers that global only exists when the module binds it through the
+ * `node:process` shim or reads `globalThis.process`, so a free `process.env`
+ * access throws a ReferenceError at the edge. Only a property/element access
+ * on a free `process` identifier counts: `typeof process` guards, locally
+ * bound `process` (imports, parameters, `const { process } = globalThis`), and
+ * comments/strings never do.
+ */
+function bindingDeclaresProcess(name: ts.BindingName): boolean {
+  if (ts.isIdentifier(name)) return name.text === 'process';
+  return name.elements.some((element) =>
+    ts.isBindingElement(element) && ts.isIdentifier(element.name) && element.name.text === 'process'
+  );
+}
+
+function scopeBindsProcess(scope: ts.Node): boolean {
+  if (ts.isFunctionLike(scope) && scope.parameters.some((p) => bindingDeclaresProcess(p.name))) {
+    return true;
+  }
+  if (
+    ts.isCatchClause(scope) && scope.variableDeclaration !== undefined &&
+    bindingDeclaresProcess(scope.variableDeclaration.name)
+  ) {
+    return true;
+  }
+  if (
+    !ts.isSourceFile(scope) && !ts.isBlock(scope) && !ts.isModuleBlock(scope) &&
+    !ts.isCaseClause(scope) && !ts.isDefaultClause(scope)
+  ) {
+    return false;
+  }
+  for (const statement of scope.statements) {
+    if (ts.isVariableStatement(statement)) {
+      if (statement.declarationList.declarations.some((d) => bindingDeclaresProcess(d.name))) {
+        return true;
+      }
+    } else if (
+      (ts.isFunctionDeclaration(statement) || ts.isClassDeclaration(statement)) &&
+      statement.name?.text === 'process'
+    ) {
+      return true;
+    } else if (ts.isImportDeclaration(statement)) {
+      const clause = statement.importClause;
+      if (clause?.name?.text === 'process') return true;
+      const named = clause?.namedBindings;
+      if (named !== undefined && ts.isNamespaceImport(named) && named.name.text === 'process') {
+        return true;
+      }
+      if (
+        named !== undefined && ts.isNamedImports(named) &&
+        named.elements.some((element) => element.name.text === 'process')
+      ) {
+        return true;
+      }
+    } else if (ts.isImportEqualsDeclaration(statement) && statement.name.text === 'process') {
+      return true;
+    }
+  }
+  return false;
+}
+
+function processIsBound(node: ts.Node): boolean {
+  let scope = node.parent;
+  while (scope !== undefined) {
+    if (scopeBindsProcess(scope)) return true;
+    scope = scope.parent;
+  }
+  return false;
+}
+
+/** 1-based lines of bare `process.env` accesses, mirroring the AST helpers. */
+function extractBareProcessEnvLines(source: string, path: string): number[] {
+  const file = parseTypeScript(source, path);
+  const lines: number[] = [];
+  const visit = (node: ts.Node): void => {
+    let processRef: ts.Identifier | undefined;
+    if (
+      ts.isPropertyAccessExpression(node) && node.name.text === 'env' &&
+      ts.isIdentifier(node.expression) && node.expression.text === 'process'
+    ) {
+      processRef = node.expression;
+    } else if (
+      ts.isElementAccessExpression(node) && ts.isIdentifier(node.expression) &&
+      node.expression.text === 'process' &&
+      ts.isStringLiteralLike(node.argumentExpression) &&
+      node.argumentExpression.text === 'env'
+    ) {
+      processRef = node.expression;
+    }
+    if (processRef !== undefined && !processIsBound(processRef)) {
+      lines.push(file.getLineAndCharacterOfPosition(node.getStart(file)).line + 1);
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(file);
+  return lines;
 }
 
 function resolveRelative(from: string, specifier: string, present: Set<string>): string | null {
@@ -110,6 +214,11 @@ export function scanWorkersOutput(
       if (value.startsWith('/') || value.includes(':')) continue;
       violations.push(
         `${path}:${specifier.line}: external import must be bundled for Workers: ${value}`,
+      );
+    }
+    for (const line of extractBareProcessEnvLines(byPath.get(path)!.text, path)) {
+      violations.push(
+        `${path}:${line}: bare global process.env access; import the node:process shim`,
       );
     }
   }

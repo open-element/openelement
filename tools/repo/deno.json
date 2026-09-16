@@ -9,7 +9,7 @@
     "content-examples:check": "deno run --allow-run ./run-in.ts --root ../.. -- deno run --allow-read --allow-env --allow-write tools/repo/check-content-examples.ts",
     "deno-api:check": "deno run --allow-run ./run-in.ts --root ../.. -- deno run --allow-read --allow-env tools/repo/check-deno-api-free.ts",
     "deps:vite-check": "deno run --allow-run ./run-in.ts --root ../.. -- deno run --allow-read tools/repo/deps-vite-check.ts",
-    "esm:boundary-check": "deno run --allow-run ./run-in.ts --root ../.. -- deno run --allow-read --allow-run tools/repo/check-esm-boundary.ts",
+    "esm:boundary-check": "deno run --allow-run ./run-in.ts --root ../.. -- deno run --allow-read --allow-run --allow-env tools/repo/check-esm-boundary.ts",
     "export-files:check": "deno run --allow-run ./run-in.ts --root ../.. -- deno run --allow-read --allow-write --allow-run tools/repo/generate-openelement-export-files.ts --check",
     "export-files:generate": "deno run --allow-run ./run-in.ts --root ../.. -- deno run --allow-read --allow-write --allow-run tools/repo/generate-openelement-export-files.ts",
     "fixtures:locks:check": "deno run --allow-run ./run-in.ts --root ../.. -- deno run --allow-read tools/repo/check-fixture-locks.ts",

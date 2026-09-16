@@ -25,7 +25,13 @@ const MANIFEST_GLOB_ROOTS = [
   'www/deno.json',
   'apps/saas/deno.json',
   'tests/fixtures/*/deno.json',
+  // The starter template ships to every new user; its vite entries must
+  // inject the canonical pin through the ${v.vite} scaffold token.
+  'packages/create/templates/deno.json.tmpl',
 ];
+
+/** Scaffold token form the starter template must use for every vite specifier. */
+const VITE_TEMPLATE_TOKEN = 'npm:vite@${v.vite}';
 
 export interface ManifestRecord {
   path: string;
@@ -77,6 +83,18 @@ function viteSpecifierViolations(
     return out;
   }
   if (key !== 'vite') return out;
+  if (path.endsWith('.tmpl')) {
+    // Templates inject the canonical pin through the ${v.vite} scaffold
+    // token; a literal pin here would ship an unguarded second source.
+    if (value !== VITE_TEMPLATE_TOKEN) {
+      out.push({
+        where: `${path} ${slot}.${key}`,
+        message:
+          `template vite specifier must be the '${VITE_TEMPLATE_TOKEN}' token (canonical pin: ${VITE_DEV_PIN})`,
+      });
+    }
+    return out;
+  }
   const parsed = parseNpmSpecifier(value);
   if (!parsed) {
     out.push({ where: `${path} ${slot}.${key}`, message: `unparseable vite specifier '${value}'` });
@@ -151,6 +169,43 @@ export function checkBundlerImports(files: { path: string; text: string }[]): Vi
   return violations;
 }
 
+/**
+ * The starter template's raw text must carry no literal vite pin anywhere
+ * (import map AND task commands): every occurrence goes through the
+ * ${v.vite} token fed by the embedded VITE_STARTER_PIN.
+ */
+export function checkTemplateViteText(path: string, text: string): ViteViolation[] {
+  if (!path.endsWith('.tmpl')) return [];
+  return /npm:vite@\d/.test(text)
+    ? [{
+      where: path,
+      message: `literal vite pin in template; use the '${VITE_TEMPLATE_TOKEN}' token`,
+    }]
+    : [];
+}
+
+/**
+ * Anchor the create CLI's embedded VITE_STARTER_PIN to the canonical dev pin
+ * (same pattern as the CREATE_VERSION anchor in check-package-graph): the
+ * packed CLI cannot import workspace tooling, so the copy is asserted here.
+ */
+export function checkStarterVitePin(versionSource: string): ViteViolation[] {
+  const match = versionSource.match(/VITE_STARTER_PIN = '([^']+)'/u);
+  if (!match) {
+    return [{
+      where: 'packages/create/src/version.ts',
+      message: 'VITE_STARTER_PIN anchor missing',
+    }];
+  }
+  if (match[1] !== VITE_DEV_PIN) {
+    return [{
+      where: 'packages/create/src/version.ts',
+      message: `VITE_STARTER_PIN ${match[1]} does not match canonical VITE_DEV_PIN ${VITE_DEV_PIN}`,
+    }];
+  }
+  return [];
+}
+
 async function readJsonFile<T>(path: string): Promise<T | null> {
   try {
     return JSON.parse(await Deno.readTextFile(path)) as T;
@@ -215,6 +270,24 @@ if (import.meta.main) {
   const failures: ViteViolation[] = [];
   const records: ManifestRecord[] = [];
   for (const path of await expandManifestPaths()) {
+    if (path.endsWith('.tmpl')) {
+      let text: string;
+      let manifest: ManifestRecord;
+      try {
+        text = await Deno.readTextFile(path);
+        manifest = JSON.parse(text) as ManifestRecord;
+      } catch {
+        failures.push({ where: path, message: 'manifest missing or unparseable' });
+        continue;
+      }
+      failures.push(...checkTemplateViteText(path, text));
+      records.push({
+        path,
+        imports: manifest.imports,
+        peerDependencies: manifest.peerDependencies,
+      });
+      continue;
+    }
     const manifest = await readJsonFile<ManifestRecord>(path);
     if (!manifest) {
       failures.push({ where: path, message: 'manifest missing or unparseable' });
@@ -223,6 +296,7 @@ if (import.meta.main) {
     records.push({ path, imports: manifest.imports, peerDependencies: manifest.peerDependencies });
   }
   failures.push(...checkManifests(records));
+  failures.push(...checkStarterVitePin(await Deno.readTextFile('packages/create/src/version.ts')));
   const lockfile = await readJsonFile<{ specifiers?: Record<string, string> }>('deno.lock');
   if (!lockfile?.specifiers) {
     failures.push({ where: 'deno.lock', message: 'lockfile missing specifiers' });

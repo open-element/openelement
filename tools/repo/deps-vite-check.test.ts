@@ -1,5 +1,12 @@
 import { assertEquals } from '@std/assert';
-import { checkBundlerImports, checkLockfileVite, checkManifests } from './deps-vite-check.ts';
+import {
+  checkBundlerImports,
+  checkLockfileVite,
+  checkManifests,
+  checkStarterVitePin,
+  checkTemplateViteText,
+  VITE_DEV_PIN,
+} from './deps-vite-check.ts';
 
 Deno.test('vite gate accepts the unified Vite 8 baseline', () => {
   assertEquals(
@@ -38,4 +45,25 @@ Deno.test('vite gate rejects split lockfile instances and second bundlers', () =
       .length,
     1,
   );
+});
+
+Deno.test('vite gate holds the starter template to the ${v.vite} token and anchors its embedded pin', () => {
+  const tmpl = 'packages/create/templates/deno.json.tmpl';
+  // The token form passes; a literal pin in the template fails even when it
+  // matches the canonical dev pin (the template must not carry a copy).
+  assertEquals(checkManifests([{ path: tmpl, imports: { vite: 'npm:vite@${v.vite}' } }]), []);
+  assertEquals(
+    checkManifests([{ path: tmpl, imports: { vite: `npm:vite@${VITE_DEV_PIN}` } }]).length,
+    1,
+  );
+  // Task commands sit outside the manifest slots, so the raw-text rule
+  // covers them.
+  assertEquals(checkTemplateViteText(tmpl, '"dev": "deno run npm:vite@${v.vite}"'), []);
+  assertEquals(checkTemplateViteText(tmpl, '"dev": "deno run npm:vite@8.0.16"').length, 1);
+  assertEquals(checkTemplateViteText('packages/router/deno.json', 'npm:vite@8.0.16'), []);
+  // The embedded copy the packed CLI stamps into generated starters is
+  // anchored to the canonical pin.
+  assertEquals(checkStarterVitePin(`export const VITE_STARTER_PIN = '${VITE_DEV_PIN}';\n`), []);
+  assertEquals(checkStarterVitePin("export const VITE_STARTER_PIN = '7.0.0';\n").length, 1);
+  assertEquals(checkStarterVitePin("export const CREATE_VERSION = 'x';\n").length, 1);
 });

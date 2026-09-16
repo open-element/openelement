@@ -730,7 +730,7 @@ async function patchApp(appDir: string): Promise<void> {
       'eval',
       '--config',
       'deno.json',
-      "import '@preact/signals-core'; import 'preact'; import 'preact-render-to-string';",
+      "import '@preact/signals-core';",
     ],
     appDir,
   );
@@ -740,13 +740,7 @@ async function patchApp(appDir: string): Promise<void> {
   const localAliases = localPackageAliases(repoRoot).map(([find, target]) =>
     `{ find: ${JSON.stringify(find)}, replacement: ${JSON.stringify(fromFileUrl(target))} }`
   );
-  const externalAliases = [
-    '@preact/signals-core',
-    'preact',
-    'preact-render-to-string',
-  ].map((
-    find,
-  ) =>
+  const externalAliases = ['@preact/signals-core'].map((find) =>
     `{ find: ${JSON.stringify(find)}, replacement: ${
       JSON.stringify(join(appDir, 'node_modules', ...find.split('/')))
     } }`

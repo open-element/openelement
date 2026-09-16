@@ -4,6 +4,7 @@ import { join, resolve } from '@std/path';
 import { chromium, firefox, webkit } from '@playwright/test';
 import ts from 'typescript';
 import { PACKAGE_VERSION } from '../repo/project-constants.ts';
+import { VITE_DEV_PIN } from '../repo/deps-vite-check.ts';
 
 const root = resolve(import.meta.dirname!, '../..');
 const author = await Deno.makeTempDir({ prefix: 'oe-element-author-' });
@@ -34,7 +35,7 @@ try {
           `file:${root}/packages/element/openelement-element-${PACKAGE_VERSION}.tgz`,
       },
       devDependencies: {
-        vite: '8.0.16',
+        vite: VITE_DEV_PIN,
       },
     }),
   );

@@ -76,3 +76,43 @@ Deno.test('workers boundary: rejects a missing entry', () => {
   const violations = scanWorkersOutput(MANIFEST, modules({ 'other.mjs': 'export {};' }));
   assertStringIncludes(violations.join('\n'), 'entry module missing from output');
 });
+
+Deno.test('workers boundary: rejects bare global process.env in the dependency graph', () => {
+  const violations = scanWorkersOutput(
+    MANIFEST,
+    modules({
+      'index.mjs': `import './_libs/vendor.mjs';\nexport default {};`,
+      '_libs/vendor.mjs':
+        `export function mode() {\n  return process.env.NODE_ENV;\n}\nconst alt = process["env"];`,
+    }),
+  );
+  assertStringIncludes(violations.join('\n'), '_libs/vendor.mjs:2: bare global process.env');
+  assertStringIncludes(violations.join('\n'), '_libs/vendor.mjs:4: bare global process.env');
+});
+
+Deno.test('workers boundary: accepts process.env through the node:process shim', () => {
+  const violations = scanWorkersOutput(
+    MANIFEST,
+    modules({
+      'index.mjs': `import process from 'node:process';\nexport const mode = process.env.NODE_ENV;`,
+    }),
+  );
+  assertEquals(violations, []);
+});
+
+Deno.test('workers boundary: ignores bound process, typeof guards, comments, and strings', () => {
+  const violations = scanWorkersOutput(
+    MANIFEST,
+    modules({
+      'index.mjs': [
+        `// process.env in a comment`,
+        `const doc = "process.env in a string";`,
+        `const { process } = globalThis;`,
+        `export const noColor = process !== void 0 ? "NO_COLOR" in process?.env : false;`,
+        `export function f(process) { return process.env.LOCAL; }`,
+        `export const detected = typeof process;`,
+      ].join('\n'),
+    }),
+  );
+  assertEquals(violations, []);
+});

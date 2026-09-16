@@ -2,7 +2,7 @@
  * Assert the #1233 (B2.11) validation-library boundary: published package
  * source stays validation-agnostic. zod and valibot are confined to the
  * request-time interop fixture and its docs recipe — see
- * docs/architecture/packages-and-distribution.md.
+ * docs/integrations/validation.md.
  */
 
 import { walkSync } from '@std/fs/walk';

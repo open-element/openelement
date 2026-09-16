@@ -1,15 +1,23 @@
 {
   "version": "5",
   "specifiers": {
-    "npm:@playwright/test@1.59.1": "1.59.1"
+    "npm:@openelement/url-pattern-list@0.6.0": "0.6.0",
+    "npm:@playwright/test@1.59.1": "1.59.1",
+    "npm:@preact/signals-core@^1.12.1": "1.14.4"
   },
   "npm": {
+    "@openelement/url-pattern-list@0.6.0": {
+      "integrity": "sha512-djz6c4tih8BL1lonjr41iuoWGGF5pOgldEE0wOB/hzLLB4rS1MQHRQ2X3zM2XxnB6SX5Fphxx7uwTN/+ZDH//g=="
+    },
     "@playwright/test@1.59.1": {
       "integrity": "sha512-PG6q63nQg5c9rIi4/Z5lR5IVF7yU5MqmKaPOe0HSc0O2cX1fPi96sUQu5j7eo4gKCkB2AnNGoWt7y4/Xx3Kcqg==",
       "dependencies": [
         "playwright"
       ],
       "bin": true
+    },
+    "@preact/signals-core@1.14.4": {
+      "integrity": "sha512-HNB6HYeYKhQbJ1aKl+YRjrS4+QWHLKX6qKoUsfS/m0vqzsVaEBiZiaKbG/e+NKk2ch5ALQr/ihWaMHxiCuuWHA=="
     },
     "fsevents@2.3.2": {
       "integrity": "sha512-xiqMQR4xAeHTuB9uWm+fFRcIOgKBMiOBP+eXiyT7jsgVCq1bkVygt00oASowB7EdtpOHaaPgKt812P9ab+DDKA==",

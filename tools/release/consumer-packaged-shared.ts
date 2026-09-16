@@ -73,6 +73,7 @@ import { formatJson } from '@openelement/element/build-utils';
 import { formatError } from '@openelement/element';
 import ts from 'typescript';
 import { PACKAGE_VERSION, RETAINED_PACKAGE_NAMES } from '../repo/project-constants.ts';
+import { VITE_DEV_PIN } from '../repo/deps-vite-check.ts';
 import { readPackages } from '../lib/package-graph.ts';
 import { tarballPath } from '../lib/npm-tarball.ts';
 
@@ -1130,7 +1131,7 @@ function consumerDenoJson(spec: PackedAppLegSpec): Record<string, unknown> {
         `npm:@openelement/element@${PACKAGE_VERSION}/jsx-dev-runtime`,
       ...spec.importMapExtras,
       'hono': 'npm:hono@4.12.0',
-      'vite': 'npm:vite@8.0.16',
+      'vite': `npm:vite@${VITE_DEV_PIN}`,
     },
     nodeModulesDir: 'manual',
     minimumDependencyAge: 0,
@@ -1139,7 +1140,7 @@ function consumerDenoJson(spec: PackedAppLegSpec): Record<string, unknown> {
       // scoped permissions with the Vite native binding allowed (build/dev
       // host) and prompts off.
       dev:
-        `deno run --config deno.json --allow-read --allow-write --allow-env --allow-net --allow-run --allow-sys --allow-ffi --no-prompt npm:vite@8.0.16 dev`,
+        `deno run --config deno.json --allow-read --allow-write --allow-env --allow-net --allow-run --allow-sys --allow-ffi --no-prompt npm:vite@${VITE_DEV_PIN} dev`,
       build:
         `deno run --config deno.json --allow-read --allow-write --allow-env --allow-net --allow-run --allow-sys --allow-ffi --no-prompt npm:@openelement/router@${PACKAGE_VERSION}/cli/build`,
       start:
@@ -1179,7 +1180,7 @@ export async function qualifyPackedAppLeg(spec: PackedAppLegSpec): Promise<void>
       // the dev-exercising consumer pins it explicitly (same contract the
       // create starter template declares).
       const dependencies: Record<string, string> = {
-        'vite': '8.0.16',
+        'vite': VITE_DEV_PIN,
         'hono': '4.12.0',
         '@hono/vite-dev-server': '^0.25.3',
         ...spec.externals,

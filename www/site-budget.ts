@@ -18,12 +18,13 @@
  *     KiB); the prior 200 KiB default and 600/700 KiB soft values contradicted
  *     each other, so this file is now the only budget.
  *
- * Exceeding any value fails the official-Site build test; the build manifest
- * reports against the same numbers. Lowering these values is the only way to
- * tighten the SLO.
+ * Exceeding either value fails the official-Site build test; the build
+ * manifest reports against the same numbers. Lowering these values is the
+ * only way to tighten the SLO. A pageKB dimension exists in the framework's
+ * manifestBudget contract but is advisory-only there (build-manifest warnings
+ * that never fail), so it is not part of this enforced SLO.
  */
 export const SITE_BUDGET = {
   islandKB: 100,
   totalJsKB: 300,
-  pageKB: 210,
 } as const;

@@ -1,4 +1,4 @@
-import { CREATE_VERSION } from './version.ts';
+import { CREATE_VERSION, VITE_STARTER_PIN } from './version.ts';
 
 // npm package-name ceiling (validate-npm-package-name); a generated project
 // directory must stay a legal package name so `npm init`-style flows and
@@ -109,7 +109,13 @@ export async function buildTemplates(
   const invalid = validateProjectName(projectName);
   if (invalid) throw new Error(`Invalid project name "${projectName}". ${invalid}`);
   const templatesBase = new URL('../templates/', import.meta.url);
-  const tokens = { ...versionTokens(v), ['$' + '{name}']: projectName };
+  // The starter's Vite pin comes from the workspace-anchored VITE_STARTER_PIN
+  // (deps:vite-check), not from the product release version.
+  const tokens = {
+    ...versionTokens(v),
+    ['$' + '{v.vite}']: VITE_STARTER_PIN,
+    ['$' + '{name}']: projectName,
+  };
   const entries = await Promise.all(TEMPLATE_FILES.map(async ([source, target]) => {
     let content = await Deno.readTextFile(new URL(source, templatesBase));
     for (const [token, value] of Object.entries(tokens)) {

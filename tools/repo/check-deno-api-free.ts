@@ -4,10 +4,13 @@
  * host files keeps its host APIs.
  *
  * Policies (section 17):
- * - product roots (package src trees, create templates, apps, fixture
- *   app/server sources): no `node:*`, `process`, `Buffer`, `require`,
+ * - product roots (package src trees discovered from the workspace via
+ *   readPackages, plus create templates, apps, fixture app/server sources):
+ *   no `node:*`, `process`, `Buffer`, `require`,
  *   `module.exports`; runtime-free package surfaces additionally bar Deno
- *   APIs and unchartered `npm:` specifiers.
+ *   APIs and unchartered `npm:` specifiers. A newly added package is covered
+ *   automatically: without a reviewed PACKAGE_POLICIES entry it scans under
+ *   the strictest policy and fails the gate.
  * - Deno-run host roots (tests, benchmarks, tools, package `__tests__`): no
  *   `node:*` and no Node globals; Deno APIs are the host API.
  * - Node host files (Playwright/WTR configs, the e2e Node test servers, the
@@ -26,6 +29,7 @@ import {
   extractNodeGlobalAccesses,
   extractStaticModuleSpecifiers,
 } from '../lib/typescript-ast.ts';
+import { readPackages } from '../lib/package-graph.ts';
 
 export interface HostFileEntry {
   /** Repository-relative exact file path or directory prefix ending in '/'. */
@@ -129,18 +133,60 @@ interface ProductRoot {
   npm: 'chartered' | 'allow';
 }
 
-/** Shipped product and browser/Workers-facing fixture sources. */
-export const PRODUCT_ROOTS: readonly ProductRoot[] = [
-  { root: 'packages/element/src', denoApis: 'ban', npm: 'chartered' },
-  { root: 'packages/router/src', denoApis: 'ban', npm: 'chartered' },
-  { root: 'packages/ui/src', denoApis: 'ban', npm: 'allow' },
-  { root: 'packages/create/src', denoApis: 'allow', npm: 'allow' },
+type PackagePolicy = Omit<ProductRoot, 'root'>;
+
+/**
+ * Per-package runtime policy, keyed by the workspace package name. The src
+ * roots themselves are discovered from the workspace (readPackages), so a new
+ * package cannot escape the gate by missing from a hardcoded list: an
+ * unlisted package is scanned under STRICTEST_PACKAGE_POLICY and reported by
+ * packagePolicyFailures below.
+ */
+const PACKAGE_POLICIES: Readonly<Record<string, PackagePolicy>> = {
+  '@openelement/element': { denoApis: 'ban', npm: 'chartered' },
+  '@openelement/router': { denoApis: 'ban', npm: 'chartered' },
+  '@openelement/ui': { denoApis: 'ban', npm: 'allow' },
+  '@openelement/create': { denoApis: 'allow', npm: 'allow' },
+};
+
+/** Fail-closed default for src trees of packages with no reviewed policy yet. */
+const STRICTEST_PACKAGE_POLICY: PackagePolicy = { denoApis: 'ban', npm: 'chartered' };
+
+/** Product roots outside the workspace package src trees. */
+const EXTRA_PRODUCT_ROOTS: readonly ProductRoot[] = [
   { root: 'packages/create/templates', denoApis: 'allow', npm: 'allow' },
   { root: 'www/app', denoApis: 'allow', npm: 'allow' },
   { root: 'www/lib', denoApis: 'allow', npm: 'allow' },
   { root: 'apps/saas/app', denoApis: 'allow', npm: 'allow' },
   { root: 'apps/saas/lib', denoApis: 'allow', npm: 'allow' },
 ];
+
+const workspacePackages = await readPackages();
+
+/** Shipped product and browser/Workers-facing fixture sources. */
+export const PRODUCT_ROOTS: readonly ProductRoot[] = [
+  ...workspacePackages.map((pkg) => ({
+    root: `${pkg.dir}/src`,
+    ...(PACKAGE_POLICIES[pkg.name] ?? STRICTEST_PACKAGE_POLICY),
+  })),
+  ...EXTRA_PRODUCT_ROOTS,
+];
+
+/**
+ * Every discovered workspace package must carry an explicit PACKAGE_POLICIES
+ * entry: a missing entry means nobody reviewed the package's runtime
+ * boundary, and the strictest-policy scan alone would not say so.
+ */
+export function packagePolicyFailures(
+  packages: readonly { name: string; dir: string }[],
+): string[] {
+  return packages
+    .filter((pkg) => PACKAGE_POLICIES[pkg.name] === undefined)
+    .map((pkg) =>
+      `${pkg.dir}: no PACKAGE_POLICIES entry for ${pkg.name}; ` +
+      'review the package runtime boundary and add an explicit policy'
+    );
+}
 
 const WALK_ROOTS = ['packages', 'www', 'apps', 'tests', 'tools', 'benchmarks'];
 const EXTENSIONS = new Set(['.ts', '.tsx']);
@@ -207,6 +253,12 @@ export function policyFor(rawPath: string): Policy {
   if (/^packages\/element\/__wtr__\//.test(path)) return { kind: 'deno-host' };
   // App host config and helper modules (cloudflare entry, nitro config, ...).
   if (/^apps\//.test(path)) return { kind: 'deno-host' };
+  // A package src tree the discovery above did not cover (e.g. a brand-new
+  // package this process has not re-read yet) must never fall open: scan it
+  // under the strictest policy.
+  if (/^packages\/[^/]+\/src\//.test(path)) {
+    return { kind: 'product', ...STRICTEST_PACKAGE_POLICY };
+  }
   return { kind: 'skip' };
 }
 
@@ -372,6 +424,7 @@ async function main(): Promise<void> {
   const result = scanTree(files);
   const violations = [
     ...result.violations,
+    ...packagePolicyFailures(workspacePackages),
     ...allowlistCoverageFailures(NODE_HOST_ALLOWLIST, (path) => {
       try {
         Deno.statSync(path);
