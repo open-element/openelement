@@ -412,6 +412,67 @@ Deno.test('renderEntry: route meta layout can select named layouts', () => {
   assertStringIncludes(code, 'module: $pageIndex');
 });
 
+// Behavior-level proof for the named-layout wiring: execute the generated
+// __routeMeta/__resolveAppShell helpers instead of asserting their source.
+interface LayoutHarness {
+  routeMeta(module: unknown): Record<string, unknown>;
+  resolveAppShell(routeMeta?: Record<string, unknown>): unknown;
+}
+
+async function loadLayoutHarness(): Promise<LayoutHarness> {
+  const { renderRuntimeHelpers } = await import(
+    '../src/vite/internal/ssg/entry-render-runtime.ts'
+  );
+  const defaultShell = { tagName: 'main-shell' };
+  const postShell = { tagName: 'post-layout' };
+  const helpers = renderRuntimeHelpers(
+    { default: defaultShell, layouts: { post: postShell } } as never,
+    [],
+  );
+  const harness = `
+const customElements = { get() { return undefined; } };
+const escapeHtml = (value) => String(value);
+const __locales = ["en"];
+const __getDefaultLocale = () => "en";
+const __navSections = [];
+const __headerNav = [];
+function renderDsd() { return { html: "" }; }
+${helpers}
+export function routeMeta(module) { return __routeMeta(module); }
+export function resolveAppShell(routeMeta) { return __resolveAppShell(routeMeta); }
+`;
+  const mod = await import('data:text/javascript;charset=utf-8,' + encodeURIComponent(harness));
+  return mod as LayoutHarness;
+}
+
+function pageModule(layout: string | false | undefined): unknown {
+  return {
+    default: {
+      openElementPage: layout === undefined ? {} : { route: { layout } },
+    },
+  };
+}
+
+Deno.test('__routeMeta surfaces route.layout and __resolveAppShell selects the named layout', async () => {
+  const harness = await loadLayoutHarness();
+  const meta = harness.routeMeta(pageModule('post'));
+  assertEquals(meta.layout, 'post');
+  assertEquals(harness.resolveAppShell(meta), { tagName: 'post-layout' });
+});
+
+Deno.test('__resolveAppShell: layout false disables the shell, unknown names fall back to default', async () => {
+  const harness = await loadLayoutHarness();
+  assertEquals(harness.resolveAppShell(harness.routeMeta(pageModule(false))), false);
+  assertEquals(
+    harness.resolveAppShell(harness.routeMeta(pageModule('no-such-layout'))),
+    { tagName: 'main-shell' },
+  );
+  // Unset layout: no layout key in the meta, default shell applies.
+  const meta = harness.routeMeta(pageModule(undefined));
+  assertEquals('layout' in meta, false);
+  assertEquals(harness.resolveAppShell(meta), { tagName: 'main-shell' });
+});
+
 Deno.test('renderEntry: definePage descriptor feeds load and metadata wiring', () => {
   const desc = buildEntryDescriptor(basicRoutes, { ssg: true });
   const code = renderEntry(desc);
@@ -442,7 +503,12 @@ Deno.test('renderEntry: definePage descriptor feeds load and metadata wiring', (
   );
   assertFalse(code.includes('__openElementData'));
   assertEquals(code.includes('module?.meta'), false);
-  assertEquals(code.includes('page.layout'), false);
+  // Named layouts (ADR-0123): the descriptor's route.layout is the producer
+  // for the routeMeta.layout the app-shell resolver reads.
+  assertStringIncludes(
+    code,
+    '...(page.route?.layout !== undefined ? { layout: page.route.layout } : {}),',
+  );
   assertStringIncludes(code, 'title: __doc.title || "openElement"');
   assertStringIncludes(
     code,

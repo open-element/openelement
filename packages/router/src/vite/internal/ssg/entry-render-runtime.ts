@@ -222,6 +222,9 @@ export function renderRuntimeHelpers(
   lines.push('  const page = __pageDefinition(module);');
   lines.push('  return {');
   lines.push('    ...(page.route !== undefined ? { route: page.route } : {}),');
+  lines.push(
+    '    ...(page.route?.layout !== undefined ? { layout: page.route.layout } : {}),',
+  );
   lines.push('    ...(page.head?.title !== undefined ? { title: page.head.title } : {}),');
   lines.push(
     '    ...(page.head?.description !== undefined ? { description: page.head.description } : {}),',

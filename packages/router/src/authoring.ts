@@ -40,6 +40,13 @@ export type PageMeta = Record<string, unknown>;
 interface PageRouteIntent {
   id?: string;
   params?: readonly string[];
+  /**
+   * Named layout selection (ADR-0123): a string picks one of the
+   * `openElement({ layouts })` entries by name (unknown names fall back to
+   * the default shell); `false` renders the page without any app shell.
+   * Unset means the default shell.
+   */
+  layout?: string | false;
 }
 
 interface PageRenderIntent {
@@ -380,6 +387,18 @@ export function definePage<
     if (descriptor.route && Object.hasOwn(descriptor.route, 'path')) {
       throw new Error(
         `${ERROR_PREFIX} definePage route.path is not supported; the route file owns its URL path.`,
+      );
+    }
+    // Fail fast on a mistyped layout selector — a truthy non-string (or
+    // `true`) would otherwise silently fall back to the default shell.
+    if (
+      descriptor.route?.layout !== undefined &&
+      typeof descriptor.route.layout !== 'string' &&
+      descriptor.route.layout !== false
+    ) {
+      throw new Error(
+        `${ERROR_PREFIX} definePage route.layout must be a layout name string or false ` +
+          `(got ${JSON.stringify(descriptor.route.layout)}).`,
       );
     }
     if (descriptor.props !== undefined && typeof descriptor.props !== 'function') {

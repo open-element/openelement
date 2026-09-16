@@ -208,6 +208,21 @@ Deno.test("definePage() rejects the collapsed 'auto' mode and invalid modes (#60
   }
 });
 
+Deno.test('definePage() admits route.layout (string | false) and rejects other types', () => {
+  const Page = makeCompiledPageClass('layout-page', 'ok');
+  definePage(Page, { route: { layout: 'post' } });
+  definePage(Page, { route: { layout: false } });
+  for (const layout of [true, 0, {}, ['post']]) {
+    assertThrows(
+      () => {
+        definePage(Page, { route: { layout: layout as never } });
+      },
+      Error,
+      'route.layout must be a layout name string or false',
+    );
+  }
+});
+
 Deno.test('projectPageProps() defaults to params + loader-data record entries', () => {
   assertEquals(
     projectPageProps({ params: { id: '42' }, data: { title: 'Hello', n: 1 } }),
