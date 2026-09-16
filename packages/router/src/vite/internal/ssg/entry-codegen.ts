@@ -30,7 +30,7 @@ import { renderActionProtocol } from './entry-action-runtime.ts';
  */
 function problemJsonLine(status: number, title: string, detailExpr: string): string {
   return `c.json({ type: 'about:blank', title: ${
-    JSON.stringify(title)
+    quoteGeneratedJavaScriptValue(title)
   }, status: ${status}, detail: ${detailExpr} }, ${status}, { 'Content-Type': __problemJsonMediaType })`;
 }
 
@@ -81,10 +81,16 @@ function renderRouteHandlerPreamble(lines: string[], ctx: RouteHandlerEmitContex
     // ADR-0121 (#568): conservative default body limit on action POSTs;
     // larger uploads belong on API routes with explicit limits.
     lines.push(
-      `__pageHandlers[${pathLiteral}].POST = [__bodyLimit({ maxSize: 10 * 1024 * 1024, onError: (c) => { c.header('Cache-Control', 'no-store'); c.header('Vary', __actionFetchHeader); return c.text('Payload Too Large', 413); } }), async (c) => {`,
+      `__pageHandlers[${pathLiteral}].POST = [__asFetchMiddleware(__bodyLimit({ maxSize: 10 * 1024 * 1024, onError: (c) => { c.header('Cache-Control', 'no-store'); c.header('Vary', __actionFetchHeader); if (c.req.header(__actionFetchHeader) === 'true') return ${
+        problemJsonLine(
+          413,
+          'Payload Too Large',
+          `'The request body exceeded the 10 MiB action limit.'`,
+        )
+      }; return c.text('Payload Too Large', 413); } })), __asFetchHandler(async (c, __route) => {`,
     );
   } else {
-    lines.push(`__pageHandlers[${pathLiteral}].GET = [async (c) => {`);
+    lines.push(`__pageHandlers[${pathLiteral}].GET = [__asFetchHandler(async (c, __route) => {`);
   }
   // ADR-0129: one mutable response-header channel per request, shared by the
   // loader and the action (the spread into the action context carries the
@@ -110,7 +116,9 @@ function renderRouteHandlerPreamble(lines: string[], ctx: RouteHandlerEmitContex
     lines.push(`  const __actionState = { isFetch: false };`);
   }
   lines.push(`  try {`);
-  lines.push(`    __params = c.get('routeResolution').params`);
+  // The WinterCG route middleware resolved the winner; the bridged Hono
+  // context still owns request/response mechanics inside the handler body.
+  lines.push(`    __params = __route.params`);
   lines.push(`    const __loadContext = {`);
   lines.push(`      params: __params,`);
   lines.push(`      request: c.req.raw,`);
@@ -311,7 +319,7 @@ function renderRouteResponseAndCatch(lines: string[], ctx: RouteHandlerEmitConte
   // ADR-0129: close the handler-body IIFE and merge the response-header
   // channel into whatever response the body produced.
   lines.push(`  })(), __responseHeaders);`);
-  lines.push(`}];`);
+  lines.push(`})];`);
   lines.push('');
 }
 

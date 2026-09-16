@@ -240,12 +240,17 @@ Deno.test('renderEntry: dev mode omits the /__kiss debug endpoint', () => {
   assertEquals(code.includes('/__kiss'), false);
 });
 
-Deno.test('renderEntry: API routes are registered with app.route', () => {
+Deno.test('renderEntry: API routes mount as functions or method-keyed WinterCG records', () => {
   const desc = buildEntryDescriptor(sampleRoutes);
   const code = renderEntry(desc);
 
-  // v0.21: API routes accept Hono sub-apps and direct (ctx) => Response functions.
-  assertStringIncludes(code, 'app.route("/api/hello"');
+  // API routes accept (ctx) => Response functions and method-keyed handler
+  // records joined into the shared route middleware.
+  assertStringIncludes(code, 'app.all("/api/hello"');
+  assertStringIncludes(
+    code,
+    '__apiRouteRecords.push({ id: "api/hello.ts", path: "/api/hello", handlers: $apiHello.default })',
+  );
   assertStringIncludes(code, 'request: c.req.raw');
   assertStringIncludes(code, '$apiHello');
 });
@@ -257,7 +262,8 @@ Deno.test('renderEntry: page routes use SSR helper and wrapInDocument', () => {
   assertStringIncludes(code, '__pageHandlers["/"].GET = [');
   // v0.5.0: __ssr takes route params as second arg for SSR-time data access
   assertStringIncludes(code, '__ssr(tag');
-  assertStringIncludes(code, "c.get('routeResolution').params");
+  // The WinterCG route middleware hands params to the handler directly.
+  assertStringIncludes(code, '__params = __route.params');
   // v0.3.4: SSR automatically registers page components for Shadow DOM rendering
   assertStringIncludes(code, 'customElements.define(');
   // v0.5.0: DSD renderer uses customElements.get(tag) to find component class
@@ -315,7 +321,7 @@ Deno.test('buildEntryDescriptor + renderEntry: end-to-end produces runnable code
 
   assertStringIncludes(code, "import { Hono } from 'hono'");
   assertStringIncludes(code, 'export default app');
-  assertStringIncludes(code, 'app.route("/api/hello"');
+  assertStringIncludes(code, '__apiRouteRecords.push({ id: "api/hello.ts"');
   assertStringIncludes(code, '__pageHandlers["/"].GET = [');
   assertStringIncludes(code, '__pageHandlers["/about"].GET = [');
   // No process.env call in non-comment lines

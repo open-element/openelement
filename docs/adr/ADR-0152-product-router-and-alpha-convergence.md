@@ -94,3 +94,12 @@ required reviewer or check.
 Pre-1.0 GitHub Release objects and Git tags are retained until a later explicit maintainer decision.
 This convergence work must not delete or edit them. Publication, tag creation, Release-object
 mutation, and dist-tag changes require explicit maintainer authority; this decision grants none.
+
+## Amendment (2026-09-16): Hono's role stated precisely
+
+"Hono integration is an optional HTTP adapter" is amended to describe reality: Hono is a hard
+dependency of Framework Mode as the internal composition layer of the generated server entry
+(`new Hono()`, built-in middleware mounts, `app.notFound`), while every public authoring contract
+(`@openelement/router/http`, `_middleware.ts`, API route handlers) speaks the dialect-free WinterCG
+shape `(request, next) => Promise<Response>` adapted at that internal boundary; Route Mode's
+matching core (`RouteTable`/`RouteResolution`) remains independent of Hono.

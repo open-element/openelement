@@ -89,7 +89,7 @@ if (resolved.kind === 'match') {
   const groups: Record<string, string | undefined> = resolved.patternResult.pathname.groups;
   void groups; void resolved.params;
 }
-void createRouteMiddleware([{ path: '/items/:id', handlers: { GET: (c) => c.text('ok') } }]);
+void createRouteMiddleware([{ path: '/items/:id', handlers: { GET: () => new Response('ok') } }]);
 const typedOnly: RouterInstance | undefined = undefined;
 void createRouter; void typedOnly;
 `,
@@ -98,17 +98,16 @@ void createRouter; void typedOnly;
     join(tmp, 'route-mode.mjs'),
     `import { RouteTable } from '@openelement/router/router';
 import { createRouteMiddleware } from '@openelement/router/http';
-import { Hono } from 'hono';
 const table = new RouteTable([{ id: 'item', path: '/items/:id', methods: ['GET'] }]);
 const match = table.resolve(new URL('https://example.test/items/42?view=full'), '', 'GET');
 if (match.kind !== 'match' || match.params.id !== '42' || match.searchParams.get('view') !== 'full') throw new Error('route resolution failed');
 const method = table.resolve(new URL('https://example.test/items/42'), '', 'POST');
 if (method.kind !== 'method-not-allowed' || method.allow.join(',') !== 'GET,HEAD') throw new Error('method semantics failed');
-const app = new Hono();
-app.all('*', createRouteMiddleware([{ path: '/items/:id', handlers: { GET: (c) => c.json({ id: c.get('routeResolution').params.id }) } }]));
-const ok = await app.request('/items/7');
+const routeMiddleware = createRouteMiddleware([{ path: '/items/:id', handlers: { GET: (_request, context) => Response.json({ id: context.params.id }) } }]);
+const hostNext = () => Promise.resolve(new Response('host fallthrough', { status: 404 }));
+const ok = await routeMiddleware(new Request('https://example.test/items/7'), hostNext);
 if (ok.status !== 200 || (await ok.json()).id !== '7') throw new Error('HTTP route failed');
-const wrong = await app.request('/items/7', { method: 'POST' });
+const wrong = await routeMiddleware(new Request('https://example.test/items/7', { method: 'POST' }), hostNext);
 if (wrong.status !== 405 || wrong.headers.get('allow') !== 'GET, HEAD') throw new Error('HTTP 405 failed');
 const controller = new AbortController(); controller.abort();
 if (!controller.signal.aborted) throw new Error('cancellation cleanup failed');

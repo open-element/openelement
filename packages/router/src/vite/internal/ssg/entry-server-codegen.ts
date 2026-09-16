@@ -131,16 +131,17 @@ export function renderMiddleware(lines: string[], mw: MiddlewareDecl): void {
 }
 
 /**
- * Render an API route using Hono's standard app.route().
+ * Render an API route. Two authoring forms (api.md):
+ * - a function `(ctx) => Response` receiving `{ request, params, env, platform }`
+ *   (mounted with app.all — every method reaches the function), or
+ * - method-keyed WinterCG handlers (`{ GET: (request, context) => Response, ... }`,
+ *   the HttpRouteRecord shape from @openelement/router/http), joined into the
+ *   shared route middleware with 405/Allow semantics.
  */
 export function renderApiRoute(lines: string[], route: ApiRouteDecl): void {
   const pathLiteral = quoteGeneratedJavaScriptValue(route.path);
   lines.push(`// API: ${route.path} (${route.filePath})`);
-  lines.push(
-    `if (${route.varName}.default && typeof ${route.varName}.default.fetch === 'function') {`,
-  );
-  lines.push(`  app.route(${pathLiteral}, ${route.varName}.default)`);
-  lines.push(`} else if (typeof ${route.varName}.default === 'function') {`);
+  lines.push(`if (typeof ${route.varName}.default === 'function') {`);
   lines.push(`  app.all(${pathLiteral}, async (c) => {`);
   lines.push(`    return await ${route.varName}.default({`);
   lines.push(`      request: c.req.raw,`);
@@ -151,9 +152,23 @@ export function renderApiRoute(lines: string[], route: ApiRouteDecl): void {
   );
   lines.push(`    })`);
   lines.push(`  })`);
+  lines.push(
+    `} else if (${route.varName}.default && typeof ${route.varName}.default.fetch === 'function') {`,
+  );
+  lines.push(
+    `  throw new Error('API route ' + ${pathLiteral} + ' must not default-export a Hono app (dialect form removed); default-export method-keyed WinterCG handlers or a function (ctx) => Response')`,
+  );
+  lines.push(
+    `} else if (${route.varName}.default && typeof ${route.varName}.default === 'object') {`,
+  );
+  lines.push(
+    `  __apiRouteRecords.push({ id: ${
+      quoteGeneratedJavaScriptValue(route.filePath)
+    }, path: ${pathLiteral}, handlers: ${route.varName}.default })`,
+  );
   lines.push(`} else {`);
   lines.push(
-    `  throw new Error('API route ' + ${pathLiteral} + ' must default-export a Hono app or a function (ctx) => Response')`,
+    `  throw new Error('API route ' + ${pathLiteral} + ' must default-export method-keyed WinterCG handlers or a function (ctx) => Response')`,
   );
   lines.push(`}`);
   lines.push('');

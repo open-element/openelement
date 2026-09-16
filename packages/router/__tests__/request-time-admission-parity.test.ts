@@ -249,27 +249,31 @@ function derivedAdmission(routes: CorpusRoute[], pathname: string): boolean {
 }
 
 /**
- * Hono mirror of the generated entry (entry-codegen.ts): method handlers in
- * declaration order; action routes add the defined 405 fallback (#572). The
- * handler answers its own route path plus params so the winner is observable.
+ * Hono mirror of the generated entry (entry-codegen.ts): the WinterCG route
+ * middleware mounts through the same internal adapter the entry emits; method
+ * handlers in declaration order; action routes add the defined 405 fallback
+ * (#572). The handler answers its own route path plus params so the winner is
+ * observable.
  */
 function honoEntryFor(routes: CorpusRoute[]): Hono {
   const app = new Hono();
-  app.all(
-    '*',
-    createRouteMiddleware(routes.map((route) => ({
-      path: route.path,
-      handlers: Object.fromEntries(
-        (route.methods ?? ['GET']).map((
-          method,
-        ) => [
-          method,
-          (c: import('hono').Context) =>
-            c.json({ path: route.path, params: c.get('routeResolution').params }),
-        ]),
-      ),
-    }))),
-  );
+  const routeMiddleware = createRouteMiddleware(routes.map((route) => ({
+    path: route.path,
+    handlers: Object.fromEntries(
+      (route.methods ?? ['GET']).map((
+        method,
+      ) => [
+        method,
+        (_request: Request, context: { params: Record<string, string> }) =>
+          Response.json({ path: route.path, params: context.params }),
+      ]),
+    ),
+  })));
+  app.all('*', (c, next) =>
+    routeMiddleware(c.req.raw, async () => {
+      await next();
+      return c.res;
+    }));
   return app;
 }
 

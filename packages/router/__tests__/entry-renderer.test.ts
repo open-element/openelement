@@ -9,7 +9,7 @@
 // Code structure validation
  */
 
-import { assertEquals, assertExists, assertFalse, assertStringIncludes } from '@std/assert';
+import { assert, assertEquals, assertExists, assertFalse, assertStringIncludes } from '@std/assert';
 import { buildEntryDescriptor, renderEntry } from '../src/vite/internal/ssg/index.ts';
 import { resetCorsOriginWarningForTests } from '../src/vite/internal/ssg/entry-server-codegen.ts';
 import type { RouteEntry } from '../src/vite/internal/protocol/framework.ts';
@@ -170,7 +170,7 @@ Deno.test('renderEntry: _renderer.ts generates wrap call', () => {
   assertStringIncludes(code, '.default.wrap(__content, c)');
 });
 
-Deno.test('renderEntry: _middleware.ts generates app.use scope', () => {
+Deno.test('renderEntry: _middleware.ts generates an app.use scope with the WinterCG adapter', () => {
   const desc = buildEntryDescriptor(withSpecialRoutes);
   const code = renderEntry(desc);
 
@@ -179,6 +179,12 @@ Deno.test('renderEntry: _middleware.ts generates app.use scope', () => {
   // Generated code should reference middleware variable name
   assertStringIncludes(code, '$apiMiddleware');
   assertStringIncludes(code, 'app.use(');
+  // The author-facing contract is the WinterCG shape (request, next); the
+  // entry adapts it into the Hono chain in place.
+  assertStringIncludes(
+    code,
+    'app.use("/api/*", (c, next) => $apiMiddleware.default(c.req.raw, async () => { await next(); return c.res; }))',
+  );
 });
 
 Deno.test('buildEntryDescriptor: special routes are separated from page/api', () => {
@@ -305,13 +311,17 @@ Deno.test('renderEntry: no bare process.env references', () => {
   );
 });
 
-Deno.test('renderEntry: API routes support Hono apps and direct functions', () => {
+Deno.test('renderEntry: API routes support method-keyed WinterCG handlers and direct functions', () => {
   const desc = buildEntryDescriptor(basicRoutes);
   const code = renderEntry(desc);
 
-  assertStringIncludes(code, 'app.route("/api/hello"');
   assertStringIncludes(code, 'app.all("/api/hello"');
+  assertStringIncludes(
+    code,
+    '__apiRouteRecords.push({ id: "api/hello.ts", path: "/api/hello", handlers: $apiHello.default })',
+  );
   assertStringIncludes(code, 'request: c.req.raw');
+  assertEquals(code.includes('app.route("/api/hello"'), false);
   assertEquals(code.includes('app.get("/api/hello"'), false);
 });
 
@@ -994,7 +1004,37 @@ Deno.test('renderEntry: ADR-0121 hardening is present in the action codegen', ()
   // #568: action POSTs carry a default body limit.
   assertStringIncludes(code, '__bodyLimit({ maxSize: 10 * 1024 * 1024');
   // #572: non-GET/POST methods on page routes are a defined 405.
-  assertStringIncludes(code, "app.all('*', __createRouteMiddleware([");
+  assertStringIncludes(code, 'const __routeMiddleware = __createRouteMiddleware([');
+  assertStringIncludes(
+    code,
+    "app.all('*', (c, next) => { __honoContexts.set(c.req.raw, c); return __routeMiddleware(c.req.raw,",
+  );
+});
+
+Deno.test('renderEntry: the 413 body-limit channel answers fetch callers with problem+json', () => {
+  const desc = buildEntryDescriptor(basicRoutes, {});
+  const code = renderEntry(desc);
+
+  // Same fetch-status fork as the CSRF 403 (#863): fetch callers parse every
+  // action error as RFC 9457 problem+json; the native form channel keeps the
+  // plain-text 413. Runtime upgrade note: the over-limit behavior this pins
+  // at codegen level is exercised end-to-end by the 11 MiB adversarial POST
+  // step in request-time-parity.test.ts ('oversized action POST → 413, fetch
+  // channel speaks problem+json'), on both dev and build servers.
+  assertStringIncludes(
+    code,
+    `if (c.req.header(__actionFetchHeader) === 'true') return c.json({ type: 'about:blank', title: "Payload Too Large", status: 413,`,
+  );
+  assertStringIncludes(code, "return c.text('Payload Too Large', 413);");
+  // The fetch fork sits inside the bodyLimit onError, before the plain-text
+  // fallback.
+  const onErrorStart = code.indexOf('onError: (c) => {');
+  const onErrorEnd = code.indexOf('\n', onErrorStart);
+  assert(onErrorStart >= 0 && onErrorEnd > onErrorStart, 'bodyLimit onError emission found');
+  const onError = code.slice(onErrorStart, onErrorEnd);
+  const fetchFork = onError.indexOf("c.req.header(__actionFetchHeader) === 'true'");
+  const textFallback = onError.indexOf("c.text('Payload Too Large', 413)");
+  assert(fetchFork >= 0 && textFallback > fetchFork, 'fetch fork precedes the text fallback');
 });
 
 Deno.test('renderEntry: action protocol is emitted once for many routes (#1098)', () => {

@@ -630,22 +630,26 @@ Deno.test('SSG discovers static pages from route records behind the unified HTTP
   const root = await Deno.makeTempDir({ prefix: 'oe-record-ssg-' });
   const app = new Hono();
   let dynamicCalls = 0;
-  app.all(
-    '*',
-    createRouteMiddleware([
-      { id: 'index.tsx', path: '/', handlers: { GET: (c) => c.html('<main>record home</main>') } },
-      {
-        id: 'live.tsx',
-        path: '/live',
-        handlers: {
-          GET: (c) => {
-            dynamicCalls++;
-            return c.html('live');
-          },
+  const html = (body: string) =>
+    new Response(body, { headers: { 'Content-Type': 'text/html; charset=UTF-8' } });
+  const routeMiddleware = createRouteMiddleware([
+    { id: 'index.tsx', path: '/', handlers: { GET: () => html('<main>record home</main>') } },
+    {
+      id: 'live.tsx',
+      path: '/live',
+      handlers: {
+        GET: () => {
+          dynamicCalls++;
+          return html('live');
         },
       },
-    ]),
-  );
+    },
+  ]);
+  app.all('*', (c, next) =>
+    routeMiddleware(c.req.raw, async () => {
+      await next();
+      return c.res;
+    }));
   try {
     await ssgRender(
       createMockBundle({
@@ -686,17 +690,21 @@ Deno.test('SSG keeps canonical pages discoverable behind exact-path host middlew
     middlewareCalls++;
     await next();
   });
-  app.all(
-    '*',
-    createRouteMiddleware([
-      { id: 'index.tsx', path: '/', handlers: { GET: (c) => c.html('<main>home</main>') } },
-      {
-        id: 'about.tsx',
-        path: '/about',
-        handlers: { GET: (c) => c.html('<main>canonical about</main>') },
-      },
-    ]),
-  );
+  const html = (body: string) =>
+    new Response(body, { headers: { 'Content-Type': 'text/html; charset=UTF-8' } });
+  const routeMiddleware = createRouteMiddleware([
+    { id: 'index.tsx', path: '/', handlers: { GET: () => html('<main>home</main>') } },
+    {
+      id: 'about.tsx',
+      path: '/about',
+      handlers: { GET: () => html('<main>canonical about</main>') },
+    },
+  ]);
+  app.all('*', (c, next) =>
+    routeMiddleware(c.req.raw, async () => {
+      await next();
+      return c.res;
+    }));
   try {
     await ssgRender(
       createMockBundle({
@@ -725,17 +733,21 @@ Deno.test('SSG keeps canonical pages discoverable behind method-only host routes
   const app = new Hono();
   // A POST-only host route on the canonical path is not a GET page entry.
   app.post('/contact', (c) => c.json({ ok: true }));
-  app.all(
-    '*',
-    createRouteMiddleware([
-      { id: 'index.tsx', path: '/', handlers: { GET: (c) => c.html('<main>home</main>') } },
-      {
-        id: 'contact.tsx',
-        path: '/contact',
-        handlers: { GET: (c) => c.html('<main>canonical contact</main>') },
-      },
-    ]),
-  );
+  const html = (body: string) =>
+    new Response(body, { headers: { 'Content-Type': 'text/html; charset=UTF-8' } });
+  const routeMiddleware = createRouteMiddleware([
+    { id: 'index.tsx', path: '/', handlers: { GET: () => html('<main>home</main>') } },
+    {
+      id: 'contact.tsx',
+      path: '/contact',
+      handlers: { GET: () => html('<main>canonical contact</main>') },
+    },
+  ]);
+  app.all('*', (c, next) =>
+    routeMiddleware(c.req.raw, async () => {
+      await next();
+      return c.res;
+    }));
   try {
     await ssgRender(
       createMockBundle({

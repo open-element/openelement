@@ -190,10 +190,61 @@ Deno.test('tryStatic cache-control: content-hashed assets immutable, HTML rechec
     assert(html);
     assertEquals(html.headers.get('cache-control'), 'no-cache');
 
-    // Unhashed static files stay unpinned.
+    // Unhashed static files fall back to no-cache: the same URL can serve
+    // different bytes after a redeploy, so caches must revalidate.
     const icon = tryStatic(root, '/favicon.ico');
     assert(icon);
-    assertEquals(icon.headers.get('cache-control'), null);
+    assertEquals(icon.headers.get('cache-control'), 'no-cache');
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+Deno.test('tryStatic cache-control: unhashed framework client runtime revalidates', async () => {
+  // The framework-owned /client/islands/client.js is not content-hashed;
+  // without an explicit header its cache semantics were undefined.
+  const root = await Deno.makeTempDir();
+  try {
+    await Deno.mkdir(join(root, 'client', 'islands'), { recursive: true });
+    await Deno.writeTextFile(join(root, 'client', 'islands', 'client.js'), 'export {}');
+
+    const client = tryStatic(root, '/client/islands/client.js');
+    assert(client);
+    assertEquals(client.headers.get('cache-control'), 'no-cache');
+    assertEquals(client.headers.get('content-type'), 'text/javascript; charset=UTF-8');
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+Deno.test('dispatchRequest: pure-static (serverMod=null) answers mutating methods 405', async () => {
+  const root = await Deno.makeTempDir();
+  try {
+    await Deno.mkdir(join(root, 'about'));
+    await Deno.writeTextFile(join(root, 'about', 'index.html'), '<h1>about</h1>');
+
+    for (const method of ['POST', 'PUT']) {
+      const response = await dispatchRequest(
+        new Request('http://example.test/about', { method, body: 'x=1' }),
+        { distDir: root, serverMod: null },
+      );
+      assertEquals(response.status, 405, `${method} /about status`);
+      assertEquals(response.headers.get('allow'), 'GET, HEAD', `${method} /about Allow`);
+      assertEquals(await response.text(), 'Method Not Allowed');
+    }
+
+    // GET/HEAD keep the pure-static page contract.
+    const get = await dispatchRequest(new Request('http://example.test/about'), {
+      distDir: root,
+      serverMod: null,
+    });
+    assertEquals(get.status, 200);
+    assertEquals(await get.text(), '<h1>about</h1>');
+    const head = await dispatchRequest(
+      new Request('http://example.test/about', { method: 'HEAD' }),
+      { distDir: root, serverMod: null },
+    );
+    assertEquals(head.status, 200);
   } finally {
     await Deno.remove(root, { recursive: true });
   }

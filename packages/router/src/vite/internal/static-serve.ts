@@ -27,14 +27,15 @@ const CONTENT_HASHED_ASSET_RE = /(?:^|\/)assets\/[^/]*-[0-9a-zA-Z_-]{8,}\.[^/]+$
 
 /**
  * Cache-Control baseline for static output: content-hashed build assets are
- * immutable; HTML is the deployment boundary and must be rechecked.
+ * immutable; HTML is the deployment boundary and must be rechecked. Every
+ * other (unhashed) file — including the framework's own client runtime —
+ * can change across deploys under the same URL, so it must be revalidated.
  */
 export function cacheControlFor(filePath: string): string | null {
   if (CONTENT_HASHED_ASSET_RE.test(filePath.replaceAll(SEP, '/'))) {
     return 'public, max-age=31536000, immutable';
   }
-  if (extname(filePath).toLowerCase() === '.html') return 'no-cache';
-  return null;
+  return 'no-cache';
 }
 
 /**
@@ -148,6 +149,14 @@ export async function dispatchRequest(
     if (admitted || (request.method !== 'GET' && request.method !== 'HEAD')) {
       return await invokeServer();
     }
+  } else if (request.method !== 'GET' && request.method !== 'HEAD') {
+    // A pure-static deployment has no action endpoint: answer mutating
+    // methods with the defined 405 shape instead of a 200 page that would
+    // silently ignore the body.
+    return new Response('Method Not Allowed', {
+      status: 405,
+      headers: { Allow: 'GET, HEAD' },
+    });
   }
 
   const staticResponse = tryStatic(distDir, url.pathname);

@@ -9,7 +9,9 @@
  * Pure function: routes + options -> Hono entry virtual module code.
  *
  * Architecture notes:
- * - API routes use Hono standard app.route() (not app.all + fetch transform)
+ * - API routes mount either as (ctx) => Response functions (app.all) or as
+ *   method-keyed WinterCG handler records joined into the shared route
+ *   middleware below (405/Allow semantics from @openelement/router/http).
  * - Island upgrade is handled by the client entry (built by Vite in Phase 2).
  *   No inline script in SSG HTML; the client entry is a Vite-built module
  *   referenced via <script type="module" src="..."> and imports island modules
@@ -121,7 +123,7 @@ export function renderEntry(desc: EntryDescriptor): string {
     lines.push('}');
     lines.push(
       `const __devClientScriptSrc = import.meta.env.DEV && ${
-        JSON.stringify(hasClientEntry)
+        quoteGeneratedJavaScriptValue(hasClientEntry)
       } ? import.meta.env.BASE_URL + 'client/islands/client.js' : null;`,
     );
     lines.push('function __clientScriptDescriptors() {');
@@ -151,9 +153,11 @@ export function renderEntry(desc: EntryDescriptor): string {
   // the pages the build emits (see expandI18nLocales).
   lines.push('const __headerNav = [];');
   lines.push('const __navSections = [];');
-  lines.push(`const __locales = ${JSON.stringify(desc.i18n?.locales ?? [])};`);
+  lines.push(`const __locales = ${quoteGeneratedJavaScriptValue(desc.i18n?.locales ?? [])};`);
   lines.push(
-    `function __getDefaultLocale() { return ${JSON.stringify(desc.i18n?.defaultLocale ?? 'en')}; }`,
+    `function __getDefaultLocale() { return ${
+      quoteGeneratedJavaScriptValue(desc.i18n?.defaultLocale ?? 'en')
+    }; }`,
   );
   const appShellModuleList = [...appShellModules].map(([importPath, tagName], index) => ({
     importPath,
@@ -375,18 +379,39 @@ export function renderEntry(desc: EntryDescriptor): string {
   // --- App creation + Middleware ---
   lines.push('const app = new Hono()');
   lines.push('');
+  // Internal composition bridge (never user-visible): the WinterCG route
+  // middleware from @openelement/router/http is the dialect-free public
+  // contract, while the generated handlers below keep their internal Hono
+  // dialect. The per-request Hono context is bridged by request identity —
+  // one WeakMap entry per dispatch, no cross-request leakage.
+  lines.push('const __honoContexts = new WeakMap();');
+  lines.push(
+    'const __asFetchHandler = (h) => (request, route, _next) => h(__honoContexts.get(request), route);',
+  );
+  lines.push('const __asFetchMiddleware = (m) => async (request, route, next) => {');
+  lines.push('  const c = __honoContexts.get(request);');
+  lines.push('  let downstream;');
+  lines.push('  const own = await m(c, async () => { downstream = await next(); });');
+  lines.push('  return own ?? downstream ?? c.res;');
+  lines.push('};');
+  if (desc.apiRoutes.length > 0) {
+    lines.push('const __apiRouteRecords = [];');
+  }
+  lines.push('');
 
   for (const mw of desc.middleware) {
     renderMiddleware(lines, mw);
   }
 
   // --- Middleware scopes (v0.3.0: _middleware.ts files) ---
+  // Authors export the dialect-free WinterCG shape (request, next) =>
+  // Promise<Response>; the entry adapts it into the Hono chain in place.
   for (const mwScope of desc.middlewareScopes) {
     lines.push(`// Middleware scope: ${mwScope.scope} (${mwScope.importPath})`);
     lines.push(
       `app.use(${
-        JSON.stringify(mwScope.scope === '/' ? '/*' : `${mwScope.scope}/*`)
-      }, ${mwScope.varName}.default)`,
+        quoteGeneratedJavaScriptValue(mwScope.scope === '/' ? '/*' : `${mwScope.scope}/*`)
+      }, (c, next) => ${mwScope.varName}.default(c.req.raw, async () => { await next(); return c.res; }))`,
     );
     lines.push('');
   }
@@ -398,7 +423,7 @@ export function renderEntry(desc: EntryDescriptor): string {
 
   lines.push(
     `const __pageHandlers = Object.fromEntries(${
-      JSON.stringify(desc.pageRoutes.map((r) => r.path))
+      quoteGeneratedJavaScriptValue(desc.pageRoutes.map((r) => r.path))
     }.map(path => [path, {}]));`,
   );
   // --- Page routes ---
@@ -417,16 +442,24 @@ export function renderEntry(desc: EntryDescriptor): string {
     renderActionRoute(lines, route, desc.renderers, docConfig, desc.isSSG, desc.renderer);
   }
 
-  lines.push(`app.all('*', __createRouteMiddleware([`);
+  lines.push(`const __routeMiddleware = __createRouteMiddleware([`);
+  if (desc.apiRoutes.length > 0) {
+    // Method-keyed API records dispatch ahead of pages (the API section used
+    // to mount before the page catch-all; the RouteTable keeps that order).
+    lines.push(`  ...__apiRouteRecords,`);
+  }
   for (const route of desc.pageRoutes) {
     lines.push(
-      `  { id: ${JSON.stringify(route.filePath)}, path: ${
-        JSON.stringify(route.path)
-      }, handlers: __pageHandlers[${JSON.stringify(route.path)}] },`,
+      `  { id: ${quoteGeneratedJavaScriptValue(route.filePath)}, path: ${
+        quoteGeneratedJavaScriptValue(route.path)
+      }, handlers: __pageHandlers[${quoteGeneratedJavaScriptValue(route.path)}] },`,
     );
   }
   lines.push(
-    `], { methodNotAllowed: (c, allow) => { c.header('Cache-Control', 'no-store'); c.header('Vary', __actionFetchHeader); return c.text('Method Not Allowed', 405, { Allow: allow.join(', ') }); } }));`,
+    `], { methodNotAllowed: (request, allow) => { const c = __honoContexts.get(request); c.header('Cache-Control', 'no-store'); c.header('Vary', __actionFetchHeader); return c.text('Method Not Allowed', 405, { Allow: allow.join(', ') }); } });`,
+  );
+  lines.push(
+    `app.all('*', (c, next) => { __honoContexts.set(c.req.raw, c); return __routeMiddleware(c.req.raw, async () => { await next(); return c.res; }); });`,
   );
 
   // --- Styled 404 (#923): unmatched paths render the /404 page ---

@@ -4,14 +4,15 @@
  * Produces the virtual:routes module.
  *
  * Phase 1 enhancement: support for _renderer.ts (layout) and
- * _middleware.ts (Hono middleware) special files.
+ * _middleware.ts (fetch middleware) special files.
  *
  * Phase 2 enhancement: support for package islands auto-detection.
  * Packages can export an `islands` array in their main entry.
  *
  * Convention (minimal augmentation):
  * - _renderer.ts: exports a server wrapper around rendered route HTML
- * - _middleware.ts: exports a Hono middleware function applied before the route
+ * - _middleware.ts: exports a dialect-free WinterCG fetch middleware
+ *   `(request, next) => Promise<Response>` applied before the route
  * - Files starting with _ are not route handlers but are loaded by the framework
  *
  * ─── SSR import discovery ─────────────────────────────────────

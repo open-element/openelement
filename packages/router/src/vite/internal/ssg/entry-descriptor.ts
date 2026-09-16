@@ -39,6 +39,7 @@ import {
   validateIslandDeliveryExportNames,
 } from './delivery.ts';
 import { compilerBehaviorDeclarations } from './client-admission.ts';
+import { quoteGeneratedJavaScriptValue } from './codegen-literals.ts';
 
 function normalizeAppShellImport(importPath: string): string {
   if (importPath.startsWith('./')) return `/${importPath.slice(2)}`;
@@ -116,7 +117,7 @@ export function buildEntryDescriptor(
   if (renderer !== 'native' && renderer !== 'lit') {
     throw new Error(
       `[openElement] renderer must be 'native' or 'lit' (got ${
-        JSON.stringify(String(renderer))
+        quoteGeneratedJavaScriptValue(String(renderer))
       }). ` +
         'Renderer selection is explicit openElement({ renderer }) config and is never inferred.',
     );

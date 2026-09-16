@@ -581,6 +581,52 @@ Deno.test({
         }
       });
 
+      await t.step('oversized action POST → 413, fetch channel speaks problem+json', async () => {
+        // #568 sets a 10 MiB action limit; the fetch channel parses every
+        // action error as RFC 9457 problem+json (same fork as the CSRF 403),
+        // while the native form channel keeps the plain-text 413. The full
+        // fork is asserted on the build server, which bundles the entry from
+        // workspace source; the dev server boots the plugin copy resolved
+        // from node_modules, so it is pinned on the channel-invariant part.
+        const oversized = new Uint8Array(11 * 1024 * 1024);
+        const post = (base: string, headers: Record<string, string>) =>
+          fetch(`${base}/form`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/x-www-form-urlencoded', ...headers },
+            body: oversized,
+          });
+        for (const [name, base] of Object.entries(both)) {
+          const json = await post(base, { 'x-openelement-action': 'true' });
+          assertEquals(json.status, 413, `${name}: fetch 413 status`);
+          assertEquals(
+            json.headers.get('cache-control'),
+            'no-store',
+            `${name}: fetch 413 cache-control`,
+          );
+          await json.body?.cancel();
+
+          const plain = await post(base, {});
+          assertEquals(plain.status, 413, `${name}: native 413 status`);
+          assertStringIncludes(
+            plain.headers.get('content-type') ?? '',
+            'text/plain',
+            `${name}: native 413 content-type`,
+          );
+          await plain.body?.cancel();
+        }
+
+        const json = await post(build.base, { 'x-openelement-action': 'true' });
+        assertStringIncludes(
+          json.headers.get('content-type') ?? '',
+          'application/problem+json',
+          'build: fetch 413 content-type',
+        );
+        const problem = await json.json() as { type?: string; title?: string; status?: number };
+        assertEquals(problem.type, 'about:blank', 'build: fetch 413 problem type');
+        assertEquals(problem.title, 'Payload Too Large', 'build: fetch 413 problem title');
+        assertEquals(problem.status, 413, 'build: fetch 413 problem status');
+      });
+
       await t.step('fetch-header unknown action → RFC 9457 problem+json 404 (#863)', async () => {
         for (const [name, base] of Object.entries(both)) {
           const response = await fetch(`${base}/form?/nope`, {

@@ -6,6 +6,7 @@
  */
 
 import { normalizeRoutePatternForURLPattern } from '@openelement/router/router';
+import { quoteGeneratedJavaScriptValue } from './codegen-literals.ts';
 import { walkHtmlFileEntries } from '../html-files.ts';
 
 // ─── Path / URL helpers ────────────────────────────────────────
@@ -102,7 +103,7 @@ interface RequestTimeRoutePattern {
 function renderRequestTimeAdmissionPatterns(routes: RequestTimeRoutePattern[]): string {
   return routes
     .map((route) => {
-      const pattern = JSON.stringify(normalizeRoutePatternForURLPattern(route.path));
+      const pattern = quoteGeneratedJavaScriptValue(normalizeRoutePatternForURLPattern(route.path));
       return `  new URLPattern({ pathname: ${pattern} }),`;
     })
     .join('\n');
