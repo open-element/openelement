@@ -186,7 +186,7 @@ Deno.test('wrapInDocument: a valid CSP nonce reaches EVERY generated script tag'
   );
   assertEquals(out.includes('<script nonce="abc123+/=_-">window.__x = 1;</script>'), true);
   // Every <script ...> in the body carries the nonce.
-  const tags = out.match(/<script[ >][\s\S]*?<\/script>/gi) ?? [];
+  const tags = out.match(/<script\b[^>]*>[\s\S]*?<\/script\s*>/gi) ?? [];
   assertEquals(tags.length, 2);
   for (const tag of tags) assertEquals(tag.includes('nonce="abc123+/=_-"'), true, tag);
 });
