@@ -258,7 +258,7 @@ jobs:
       - uses: ./.github/actions/setup-deno-workspace
       # v7.0.0
       - name: Download job evidence
-        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
           pattern: evidence-*
           path: .artifacts/ci
