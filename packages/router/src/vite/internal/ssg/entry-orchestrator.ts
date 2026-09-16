@@ -191,6 +191,15 @@ export function renderEntry(desc: EntryDescriptor): string {
   for (const mwScope of desc.middlewareScopes) {
     lines.push(`import * as ${mwScope.varName} from '${mwScope.importPath}'`);
   }
+  // ADR-0123 item 2 (#858): middleware.use entries are MODULE PATHS — the
+  // entry imports each module and composes its default export at the handler
+  // boundary, so user middleware keeps its module graph (closures, helpers,
+  // third-party deps) instead of being serialized into the entry.
+  const fetchMiddlewareVars = (desc.fetchMiddleware ?? []).map((importPath, index) => {
+    const varName = `__mw_${index}`;
+    lines.push(`import * as ${varName} from ${quoteGeneratedJavaScriptValue(importPath)}`);
+    return varName;
+  });
   lines.push('');
 
   // --- Register page components in SSR customElements registry ---
@@ -434,8 +443,8 @@ export function renderEntry(desc: EntryDescriptor): string {
     // production entry share one composed handler.
     lines.push('// ADR-0123 (#858): fetch middleware contract (WinterCG shape)');
     lines.push('const __openElementFetchMiddleware = [');
-    for (const source of desc.fetchMiddleware) {
-      lines.push(`  ${source},`);
+    for (const varName of fetchMiddlewareVars) {
+      lines.push(`  ${varName}.default,`);
     }
     lines.push('];');
     lines.push('const __openElementBaseHandler = (request, context = {}) => {');

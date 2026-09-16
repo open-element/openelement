@@ -62,6 +62,32 @@ async function bootDevServer(): Promise<ServerHandle> {
     server = await createServer({
       root: fixtureDir,
       logLevel: 'silent',
+      // Vite's errorMiddleware in middlewareMode logs and calls plain next()
+      // (the parent app owns error responses), which would turn an out-of-app
+      // throw (a failing fetch middleware) into the wrapper's 404 instead of
+      // the 500 a real `vite dev` server answers. Register the same
+      // error-to-500 mapping a standalone dev server gets from Vite's overlay
+      // error middleware, so dev/build parity is asserted on the real
+      // semantic: a contained 500.
+      plugins: [{
+        name: 'open-test:error-to-500',
+        configureServer(errorServer) {
+          return () => {
+            errorServer.middlewares.use(
+              (
+                error: unknown,
+                _req: unknown,
+                response: { statusCode: number; end: (body: string) => void },
+                _next: unknown,
+              ) => {
+                console.error('[dev] request error:', error);
+                response.statusCode = 500;
+                response.end('Internal Server Error');
+              },
+            );
+          };
+        },
+      }],
       // Vite probes wildcard addresses before binding its standalone server,
       // even when `host` is loopback. Run the exact Hono/Vite middleware stack
       // behind our own loopback-only server so this contract remains safe in
@@ -728,9 +754,13 @@ Deno.test({
         },
       );
 
-      // ADR-0123 item 2 (#858): the fixture configures middleware.use with an
-      // outer post-processor and an inner short-circuit. Both runtimes must
-      // run the chain in onion order at the handler boundary.
+      // ADR-0123 item 2 (#858), Alpha.1 module contract: the fixture's
+      // middleware.use entries are MODULE PATHS. app/middleware/outer.ts
+      // default-exports a factory result closing over a module constant;
+      // app/middleware/inner.ts imports a local helper AND a third-party
+      // package (hono/utils/cookie), closes over module constants,
+      // short-circuits, and throws on demand. Both runtimes must run the
+      // chain with identical semantics.
       await t.step('fetch middleware: onion order + short-circuit parity (#858)', async () => {
         for (const [name, base] of Object.entries(both)) {
           const response = await fetch(`${base}/live?x=mw`);
@@ -755,6 +785,55 @@ Deno.test({
           );
         }
       });
+
+      await t.step(
+        'fetch middleware module contract: local helper + third-party dep + closures (#858, Alpha.1)',
+        async () => {
+          for (const [name, base] of Object.entries(both)) {
+            // Third-party proof: inner.ts parses the Cookie header with
+            // hono/utils/cookie — a bare package import the old toString()
+            // inlining could never resolve — and echoes the proof cookie.
+            const proof = await fetch(`${base}/live?x=mw-dep`, {
+              headers: { cookie: 'fixture-proof=hono-cookie-parser' },
+            });
+            assertEquals(proof.status, 200, `${name}: dependency proof status`);
+            assertEquals(
+              proof.headers.get('x-fixture-cookie-proof'),
+              'hono-cookie-parser',
+              `${name}: third-party package import works inside middleware`,
+            );
+            // Module-closure proof: the marker header comes from a constant
+            // and a helper in ../lib/middleware-marker.ts, and the 'outer'
+            // marker comes from a factory closure over a module constant.
+            assertEquals(
+              proof.headers.get('x-fixture-middleware'),
+              'inner, outer',
+              `${name}: module-level constants/closures captured`,
+            );
+            await proof.body?.cancel();
+          }
+        },
+      );
+
+      await t.step(
+        'fetch middleware: a throwing middleware is a contained 500, server survives',
+        async () => {
+          for (const [name, base] of Object.entries(both)) {
+            const boom = await fetch(`${base}/live?mw-boom=1`);
+            assertEquals(boom.status, 500, `${name}: throwing middleware status`);
+            await boom.body?.cancel();
+            // Contained: the runtime keeps serving afterwards.
+            const after = await fetch(`${base}/live?x=after-boom`);
+            assertEquals(after.status, 200, `${name}: server survives a middleware throw`);
+            assertEquals(
+              after.headers.get('x-fixture-middleware'),
+              'inner, outer',
+              `${name}: chain intact after a middleware throw`,
+            );
+            await after.body?.cancel();
+          }
+        },
+      );
 
       await t.step(
         'dev SSR reloads an edited imported component on the next request (#1091)',

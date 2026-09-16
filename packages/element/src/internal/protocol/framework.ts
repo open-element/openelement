@@ -123,10 +123,11 @@ export interface RouteEntry {
  * A middleware may short-circuit by returning a Response without calling
  * `next()`, or post-process the Response that `next()` returns.
  *
- * Serialization constraint: middleware sources are inlined into the generated
- * server entry (same mechanism as a function-valued `middleware.corsOrigin`),
- * so each middleware must be self-contained — it cannot close over variables
- * from the vite.config.ts module scope.
+ * Module contract: a Middleware is the DEFAULT EXPORT of a module referenced
+ * from `middleware.use` by path (e.g. './app/middleware/auth.ts'). The
+ * generated server entry imports the module, so the middleware may close over
+ * module scope and import local helpers and third-party packages — it is a
+ * real module in the server module graph, never serialized source.
  */
 export type Middleware = (request: Request, next: () => Promise<Response>) => Promise<Response>;
 
@@ -208,7 +209,20 @@ export interface FrameworkOptions {
   };
   middleware?: {
     cors?: boolean;
-    corsOrigin?: string | string[] | ((origin: string) => string | undefined);
+    /**
+     * Static CORS allowlist data, serialized into the generated entry as JSON.
+     * Mutually exclusive with {@link FrameworkOptions.middleware.corsOriginModule}.
+     */
+    corsOrigin?: string | string[];
+    /**
+     * Path to a module that default-exports
+     * `(origin: string) => string | undefined`. The generated entry imports
+     * the module — the callback is never serialized — so it may close over
+     * module scope and import dependencies. Resolved with the same idiom as
+     * `appShell.import` (e.g. './app/cors-origin.ts'). Mutually exclusive
+     * with `corsOrigin`.
+     */
+    corsOriginModule?: string;
     requestId?: boolean;
     logger?: boolean;
     securityHeaders?: boolean;
@@ -220,10 +234,13 @@ export interface FrameworkOptions {
     /**
      * Fetch middleware chain (ADR-0123 item 2, #858), composed around the
      * framework handler in onion order (`use[0]` outermost), outside all
-     * built-in middleware above. See {@link Middleware} for the contract and
-     * the self-containment constraint.
+     * built-in middleware above. Each entry is a MODULE PATH (same resolution
+     * idiom as `appShell.import`, e.g. './app/middleware/auth.ts') whose
+     * default export is a {@link Middleware}; the generated entry emits
+     * `import * as __mw_N from '<path>'` and composes `__mw_N.default` in
+     * configured order.
      */
-    use?: Middleware[];
+    use?: string[];
   };
 }
 

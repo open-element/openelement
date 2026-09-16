@@ -154,23 +154,48 @@ export const blogCollection: CollectionOptions = {
 
 ## middleware.use
 
-`middleware.use`（ADR-0123，#858）注册 WinterCG 形态的 fetch 中间件：`(request, next) => Promise<Response>`——不含任何 HTTP 框架方言。中间件链在生成的 handler 边界按洋葱序组合（`use[0]` 最外层：最先看到请求，最后看到响应），位于内置 `requestId`/`logger`/`cors`/`securityHeaders`/`csp` 中间件之外，并在 dev server、`start` CLI、e2e fixture server 与 Nitro 生产入口四个运行时中保持完全一致的语义（由 request-time parity 契约测试锁定）。中间件可以不调用 `next()` 直接返回 `Response` 来短路。一个约束：中间件源码会被内联进生成的 server entry（与函数形态的 `corsOrigin` 同一机制），因此每个中间件必须自包含——不能闭包引用 `vite.config.ts` 模块作用域的变量。路由级 `_middleware.ts` 文件保留 Hono 方言，在应用内部依然可用。
+`middleware.use`（ADR-0123，#858）注册 WinterCG 形态的 fetch 中间件：`(request, next) => Promise<Response>`——不含任何 HTTP 框架方言。中间件链在生成的 handler 边界按洋葱序组合（`use[0]` 最外层：最先看到请求，最后看到响应），位于内置 `requestId`/`logger`/`cors`/`securityHeaders`/`csp` 中间件之外，并在 dev server、`start` CLI、e2e fixture server 与 Nitro 生产入口四个运行时中保持完全一致的语义（由 request-time parity 契约测试锁定）。中间件可以不调用 `next()` 直接返回 `Response` 来短路。每一项是一个**模块路径**（解析方式与 `appShell.import` 相同）：模块默认导出中间件，生成的 server entry 直接 import 该模块——因此中间件可以闭包引用模块作用域，也可以 import 本地 helper 和第三方包。路由级 `_middleware.ts` 文件保留 Hono 方言，在应用内部依然可用。
 
 ### vite.config.ts —— middleware.use（#858）
 
 ```ts
 import { defineConfig } from 'vite';
 import { openElement } from '@openelement/router/vite';
+
+export default defineConfig({
+  plugins: [
+    ...openElement({
+      // Onion order: responseTime wraps guard wraps the app handler.
+      middleware: {
+        use: ['./app/middleware/response-time.ts', './app/middleware/guard.ts'],
+      },
+    }),
+  ],
+});
+```
+
+### app/middleware/response-time.ts
+
+```ts
 import type { Middleware } from '@openelement/element';
 
-// Self-contained: the source is inlined into the generated server entry,
-// so it cannot close over vite.config.ts module scope.
-const responseTime: Middleware = async (request, next) => {
-  const started = Date.now();
+// A real module: close over module scope, import helpers and packages.
+const started = () => performance.now();
+
+const responseTime: Middleware = async (_request, next) => {
+  const begin = started();
   const response = await next();
-  response.headers.set('x-response-time', String(Date.now() - started));
+  response.headers.set('x-response-time', String(started() - begin));
   return response;
 };
+
+export default responseTime;
+```
+
+### app/middleware/guard.ts
+
+```ts
+import type { Middleware } from '@openelement/element';
 
 const guard: Middleware = (request, next) => {
   // Short-circuit: skip next() and return a Response directly.
@@ -180,15 +205,12 @@ const guard: Middleware = (request, next) => {
   return next();
 };
 
-export default defineConfig({
-  plugins: [
-    ...openElement({
-      // Onion order: responseTime wraps guard wraps the app handler.
-      middleware: { use: [responseTime, guard] },
-    }),
-  ],
-});
+export default guard;
 ```
+
+### middleware.corsOrigin / middleware.corsOriginModule
+
+`middleware.corsOrigin` 接受静态白名单数据（`string | string[]`），以 JSON 形式序列化进生成的 entry。当白名单需要逻辑判断时，用 `middleware.corsOriginModule` 指向一个默认导出 `(origin: string) => string | undefined` 的模块——entry 会 import 该模块并引用这个回调，因此它可以像 `middleware.use` 模块一样 import 依赖、闭包引用模块作用域。两个选项互斥（同时配置会在构建期报配置错误）。
 
 ## mode: 'spa'
 

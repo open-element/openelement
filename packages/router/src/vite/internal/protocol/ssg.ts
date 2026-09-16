@@ -98,7 +98,7 @@ export interface ImportDecl {
   alias?: string;
 }
 
-export type CorsOriginConfig = string | string[] | { type: 'function'; body: string };
+export type CorsOriginConfig = string | string[];
 
 export interface CspConfig {
   policy?: string;
@@ -111,6 +111,13 @@ export interface MiddlewareDecl {
   comment?: string;
   config?: {
     corsOrigin?: CorsOriginConfig;
+    /**
+     * Normalized import path of a module default-exporting
+     * `(origin: string) => string | undefined`. The generated entry imports
+     * the module and passes its default export to `cors({ origin })` — the
+     * callback is referenced, never serialized.
+     */
+    corsOriginModule?: string;
     csp?: CspConfig;
   };
 }
@@ -229,11 +236,12 @@ export interface EntryDescriptor {
   imports: ImportDecl[];
   middleware: MiddlewareDecl[];
   /**
-   * Serialized `middleware.use` fetch middleware sources (ADR-0123 item 2,
-   * #858), in user-configured order. The entry renderer inlines them into the
-   * generated entry and composes them around the exported handler in onion
-   * order. Absent/empty when the app configures no fetch middleware, keeping
-   * the generated entry byte-identical to pre-#858 output.
+   * `middleware.use` fetch middleware module paths (ADR-0123 item 2, #858),
+   * in user-configured order. The entry renderer emits one
+   * `import * as __mw_N from '<path>'` per entry and composes each module's
+   * default export around the exported handler in onion order. Absent/empty
+   * when the app configures no fetch middleware, keeping the generated entry
+   * byte-identical to pre-#858 output.
    */
   fetchMiddleware?: string[];
   apiRoutes: ApiRouteDecl[];

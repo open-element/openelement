@@ -154,23 +154,48 @@ Custom renderer output stays within the same first-party trust boundary.
 
 ## middleware.use
 
-`middleware.use` (ADR-0123, #858) registers fetch middleware with the WinterCG shape `(request, next) => Promise<Response>` — no HTTP-framework dialect. The chain is composed around the generated handler in onion order (`use[0]` is outermost: first to see the request, last to see the response), outside the built-in `requestId`/`logger`/`cors`/`securityHeaders`/`csp` middleware, and runs with identical semantics in the dev server, the `start` CLI, the e2e fixture server, and the Nitro production entry (locked by the request-time parity contract test). A middleware may short-circuit by returning a `Response` without calling `next()`. One constraint: middleware sources are inlined into the generated server entry (same mechanism as a function-valued `corsOrigin`), so each middleware must be self-contained — no closures over the `vite.config.ts` module scope. Route-scoped `_middleware.ts` files keep the Hono dialect and remain available inside the app.
+`middleware.use` (ADR-0123, #858) registers fetch middleware with the WinterCG shape `(request, next) => Promise<Response>` — no HTTP-framework dialect. The chain is composed around the generated handler in onion order (`use[0]` is outermost: first to see the request, last to see the response), outside the built-in `requestId`/`logger`/`cors`/`securityHeaders`/`csp` middleware, and runs with identical semantics in the dev server, the `start` CLI, the e2e fixture server, and the Nitro production entry (locked by the request-time parity contract test). A middleware may short-circuit by returning a `Response` without calling `next()`. Each entry is a **module path** (resolved like `appShell.import`): the module default-exports the middleware, and the generated server entry imports it — so middleware may close over module scope and import local helpers and third-party packages. Route-scoped `_middleware.ts` files keep the Hono dialect and remain available inside the app.
 
 ### vite.config.ts — middleware.use (#858)
 
 ```ts
 import { defineConfig } from 'vite';
 import { openElement } from '@openelement/router/vite';
+
+export default defineConfig({
+  plugins: [
+    ...openElement({
+      // Onion order: responseTime wraps guard wraps the app handler.
+      middleware: {
+        use: ['./app/middleware/response-time.ts', './app/middleware/guard.ts'],
+      },
+    }),
+  ],
+});
+```
+
+### app/middleware/response-time.ts
+
+```ts
 import type { Middleware } from '@openelement/element';
 
-// Self-contained: the source is inlined into the generated server entry,
-// so it cannot close over vite.config.ts module scope.
-const responseTime: Middleware = async (request, next) => {
-  const started = Date.now();
+// A real module: close over module scope, import helpers and packages.
+const started = () => performance.now();
+
+const responseTime: Middleware = async (_request, next) => {
+  const begin = started();
   const response = await next();
-  response.headers.set('x-response-time', String(Date.now() - started));
+  response.headers.set('x-response-time', String(started() - begin));
   return response;
 };
+
+export default responseTime;
+```
+
+### app/middleware/guard.ts
+
+```ts
+import type { Middleware } from '@openelement/element';
 
 const guard: Middleware = (request, next) => {
   // Short-circuit: skip next() and return a Response directly.
@@ -180,15 +205,12 @@ const guard: Middleware = (request, next) => {
   return next();
 };
 
-export default defineConfig({
-  plugins: [
-    ...openElement({
-      // Onion order: responseTime wraps guard wraps the app handler.
-      middleware: { use: [responseTime, guard] },
-    }),
-  ],
-});
+export default guard;
 ```
+
+### middleware.corsOrigin / middleware.corsOriginModule
+
+`middleware.corsOrigin` takes static allowlist data (`string | string[]`), serialized into the generated entry as JSON. When the allowlist needs logic, point `middleware.corsOriginModule` at a module default-exporting `(origin: string) => string | undefined` — the entry imports the module and references the callback, so it can import dependencies and close over module scope just like a `middleware.use` module. The two options are mutually exclusive (configuring both is a build-time config error).
 
 ## mode: 'spa'
 

@@ -1096,16 +1096,10 @@ Deno.test('renderEntry: action catch paths answer fetch callers (redirect as Act
 
 // Fetch middleware contract (ADR-0123 item 2, #858)
 
-Deno.test('renderEntry: middleware.use composes at the handler boundary (#858)', () => {
+Deno.test('renderEntry: middleware.use composes imported module defaults at the handler boundary (#858)', () => {
   const desc = buildEntryDescriptor(basicRoutes, {
     middleware: {
-      use: [
-        async (_request, next) => {
-          const response = await next();
-          response.headers.set('x-outer', '1');
-          return response;
-        },
-      ],
+      use: ['./app/middleware/outer.ts', './app/middleware/inner.ts'],
     },
   });
   const code = renderEntry(desc);
@@ -1114,9 +1108,13 @@ Deno.test('renderEntry: middleware.use composes at the handler boundary (#858)',
     code,
     "import { composeFetchMiddleware } from '@openelement/element/build-utils';",
   );
+  // Module contract: each middleware module is imported and its default
+  // export composed — order preserved (use[0] outermost), no source inlining.
+  assertStringIncludes(code, 'import * as __mw_0 from "/app/middleware/outer.ts"');
+  assertStringIncludes(code, 'import * as __mw_1 from "/app/middleware/inner.ts"');
   assertStringIncludes(code, 'const __openElementFetchMiddleware = [');
-  // The user middleware source is inlined into the generated entry.
-  assertStringIncludes(code, "response.headers.set('x-outer', '1')");
+  assertStringIncludes(code, '__mw_0.default,');
+  assertStringIncludes(code, '__mw_1.default,');
   assertStringIncludes(
     code,
     'export const openElementHandler = composeFetchMiddleware(' +
@@ -1127,6 +1125,16 @@ Deno.test('renderEntry: middleware.use composes at the handler boundary (#858)',
   assertStringIncludes(code, 'export const openElementDevFetch = {');
   // The raw Hono app stays the default export — SSG prerender is unchanged.
   assertStringIncludes(code, 'export default app');
+});
+
+Deno.test('renderEntry: middleware.corsOriginModule is imported and referenced, never inlined', () => {
+  const desc = buildEntryDescriptor(basicRoutes, {
+    middleware: { corsOriginModule: './app/cors-origin.ts' },
+  });
+  const code = renderEntry(desc);
+
+  assertStringIncludes(code, 'import * as __cors_origin_module from "/app/cors-origin.ts";');
+  assertStringIncludes(code, "app.use('*', cors({ origin: __cors_origin_module.default,");
 });
 
 Deno.test('renderEntry: no middleware.use keeps the pre-#858 handler shape', () => {

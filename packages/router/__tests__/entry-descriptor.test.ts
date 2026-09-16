@@ -72,20 +72,40 @@ Deno.test('buildEntryDescriptor: array CORS origin is preserved', () => {
   assertEquals(corsMw?.config?.corsOrigin, ['https://a.com', 'https://b.com']);
 });
 
-Deno.test('buildEntryDescriptor: function CORS origin is serialized', () => {
+Deno.test('buildEntryDescriptor: function CORS origin fails with a migration error (Alpha.1)', () => {
   const originFn = (origin: string) => origin.endsWith('.example.com') ? origin : '';
+  assertThrows(
+    () =>
+      buildEntryDescriptor(sampleRoutes, {
+        middleware: { corsOrigin: originFn as never },
+      }),
+    Error,
+    'middleware.corsOrigin no longer accepts a function',
+  );
+});
+
+Deno.test('buildEntryDescriptor: corsOriginModule is carried as an import path', () => {
   const desc = buildEntryDescriptor(sampleRoutes, {
-    middleware: { corsOrigin: originFn },
+    middleware: { corsOriginModule: './app/cors-origin.ts' },
   });
 
   const corsMw = desc.middleware.find((m) => m.kind === 'cors');
-  const corsOrigin = corsMw?.config?.corsOrigin;
-  if (corsOrigin && typeof corsOrigin === 'object' && !Array.isArray(corsOrigin)) {
-    assertEquals(corsOrigin.type, 'function');
-    assertStringIncludes(corsOrigin.body, 'example.com');
-  } else {
-    throw new Error('Expected function-type CorsOriginConfig');
-  }
+  assertEquals(corsMw?.config?.corsOrigin, undefined);
+  assertEquals(corsMw?.config?.corsOriginModule, '/app/cors-origin.ts');
+});
+
+Deno.test('buildEntryDescriptor: corsOrigin and corsOriginModule are mutually exclusive', () => {
+  assertThrows(
+    () =>
+      buildEntryDescriptor(sampleRoutes, {
+        middleware: {
+          corsOrigin: 'https://example.com',
+          corsOriginModule: './app/cors-origin.ts',
+        },
+      }),
+    Error,
+    'mutually exclusive',
+  );
 });
 
 Deno.test('buildEntryDescriptor: custom html config is applied', () => {
@@ -380,30 +400,23 @@ Deno.test('buildEntryDescriptor: client:only is excluded from SSR admission', ()
 
 // Fetch middleware contract (ADR-0123 item 2, #858)
 
-Deno.test('buildEntryDescriptor: middleware.use functions are serialized in order (#858)', () => {
-  const first = async (_request: Request, next: () => Promise<Response>) => {
-    const response = await next();
-    response.headers.set('x-first', '1');
-    return response;
-  };
-  const second = (_request: Request, next: () => Promise<Response>) => next();
-  const desc = buildEntryDescriptor(sampleRoutes, { middleware: { use: [first, second] } });
+Deno.test('buildEntryDescriptor: middleware.use module paths are normalized in order (#858)', () => {
+  const desc = buildEntryDescriptor(sampleRoutes, {
+    middleware: { use: ['./app/middleware/outer.ts', './app/middleware/inner.ts'] },
+  });
 
-  assertEquals(desc.fetchMiddleware?.length, 2);
-  assertStringIncludes(desc.fetchMiddleware?.[0] ?? '', 'x-first');
-  // Serialized sources must evaluate back to self-contained functions.
-  const revived = (desc.fetchMiddleware ?? []).map((source) => (0, eval)(`(${source})`) as unknown);
-  assertEquals(revived.every((fn) => typeof fn === 'function'), true);
+  assertEquals(desc.fetchMiddleware, ['/app/middleware/outer.ts', '/app/middleware/inner.ts']);
 });
 
-Deno.test('buildEntryDescriptor: middleware.use rejects non-functions (#858)', () => {
+Deno.test('buildEntryDescriptor: middleware.use rejects function values with a migration error (#858)', () => {
+  const fn = (_request: Request, next: () => Promise<Response>) => next();
   assertThrows(
     () =>
       buildEntryDescriptor(sampleRoutes, {
-        middleware: { use: ['nope' as never] },
+        middleware: { use: [fn as never] },
       }),
     Error,
-    'middleware.use[0] must be a function',
+    'middleware.use[0] must be a module path (string)',
   );
 });
 

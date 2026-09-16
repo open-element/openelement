@@ -3,7 +3,6 @@ import type { ApiRouteDecl, CorsOriginConfig, MiddlewareDecl } from '../protocol
 import { quoteGeneratedJavaScriptValue } from './codegen-literals.ts';
 
 function renderCorsOrigin(origin: CorsOriginConfig): string {
-  if (typeof origin === 'object' && !Array.isArray(origin)) return origin.body;
   if (Array.isArray(origin)) {
     return `[${origin.map((o) => quoteGeneratedJavaScriptValue(o)).join(', ')}]`;
   }
@@ -39,13 +38,25 @@ export function renderMiddleware(lines: string[], mw: MiddlewareDecl): void {
 
     case 'cors': {
       const corsOrigin = mw.config?.corsOrigin;
+      const corsOriginModule = mw.config?.corsOriginModule;
       if (corsOrigin === '*' || (Array.isArray(corsOrigin) && corsOrigin.includes('*'))) {
         throw new Error(
           'CORS misconfiguration: origin "*" with credentials: true is invalid. ' +
             'Specify explicit origin(s) or set credentials: false.',
         );
       }
-      if (corsOrigin !== undefined) {
+      if (corsOriginModule !== undefined) {
+        // Module form: the entry imports the user's origin callback module and
+        // passes its default export to cors() — referenced, never serialized.
+        lines.push(
+          `import * as __cors_origin_module from ${
+            quoteGeneratedJavaScriptValue(corsOriginModule)
+          };`,
+        );
+        lines.push(
+          `app.use('*', cors({ origin: __cors_origin_module.default, ${CORS_ALLOW} }))`,
+        );
+      } else if (corsOrigin !== undefined) {
         const originStr = renderCorsOrigin(corsOrigin);
         lines.push(
           `app.use('*', cors({ origin: ${originStr}, ${CORS_ALLOW} }))`,

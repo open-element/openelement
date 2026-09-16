@@ -192,18 +192,44 @@ export function buildEntryDescriptor(
   if (mw?.cors !== false) {
     let corsOrigin: CorsOriginConfig | undefined;
     if (mw?.corsOrigin !== undefined) {
-      if (typeof mw.corsOrigin === 'string') {
-        corsOrigin = mw.corsOrigin;
-      } else if (Array.isArray(mw.corsOrigin)) {
-        corsOrigin = mw.corsOrigin;
-      } else {
-        corsOrigin = { type: 'function', body: mw.corsOrigin.toString() };
+      if (typeof mw.corsOrigin === 'function') {
+        throw new Error(
+          '[openElement] middleware.corsOrigin no longer accepts a function ' +
+            '(Alpha.1 breaking change: function config is never serialized into the generated entry). ' +
+            'Move the origin callback into a module that default-exports ' +
+            '(origin: string) => string | undefined and pass its path as middleware.corsOriginModule.',
+        );
       }
+      if (typeof mw.corsOrigin !== 'string' && !Array.isArray(mw.corsOrigin)) {
+        throw new Error(
+          `[openElement] middleware.corsOrigin must be a string or an array of strings; got ${typeof mw
+            .corsOrigin}.`,
+        );
+      }
+      corsOrigin = mw.corsOrigin;
+    }
+    let corsOriginModule: string | undefined;
+    if (mw?.corsOriginModule !== undefined) {
+      if (typeof mw.corsOriginModule !== 'string') {
+        throw new Error(
+          '[openElement] middleware.corsOriginModule must be a module path (string) to a module ' +
+            `that default-exports (origin: string) => string | undefined; got ${typeof mw
+              .corsOriginModule}.`,
+        );
+      }
+      if (corsOrigin !== undefined) {
+        throw new Error(
+          '[openElement] middleware.corsOrigin and middleware.corsOriginModule are mutually ' +
+            'exclusive: pass static origin data via corsOrigin OR a callback module via ' +
+            'corsOriginModule, not both.',
+        );
+      }
+      corsOriginModule = normalizeAppShellImport(mw.corsOriginModule);
     }
     middleware.push({
       kind: 'cors',
       comment: '3. CORS - Web Standards (no process.env)',
-      config: { corsOrigin },
+      config: { corsOrigin, corsOriginModule },
     });
   }
   if (mw?.securityHeaders !== false) {
@@ -221,17 +247,22 @@ export function buildEntryDescriptor(
   }
 
   // --- Fetch middleware (ADR-0123 item 2, #858) ---
-  // Serialized like a function-valued middleware.corsOrigin: the source is
-  // inlined into the generated entry, so each middleware must be
-  // self-contained (no closures over vite.config.ts scope).
-  const fetchMiddleware = (mw?.use ?? []).map((fn, index) => {
-    if (typeof fn !== 'function') {
+  // Module contract (Alpha.1): each entry is a path to a module that
+  // default-exports a Middleware. The generated entry imports the module, so
+  // middleware can close over module scope and import dependencies — no
+  // source serialization, no self-containment constraint.
+  const fetchMiddleware = (mw?.use ?? []).map((entry, index) => {
+    if (typeof entry !== 'string') {
       throw new Error(
-        `[openElement] middleware.use[${index}] must be a function ` +
-          `(request: Request, next: () => Promise<Response>) => Promise<Response>; got ${typeof fn}.`,
+        `[openElement] middleware.use[${index}] must be a module path (string) to a module that ` +
+          `default-exports a Middleware (request: Request, next: () => Promise<Response>) => ` +
+          `Promise<Response>; got ${typeof entry}. ` +
+          'Function values are no longer supported (Alpha.1 breaking change: function config is ' +
+          'never serialized into the generated entry). Move the middleware into its own module ' +
+          "(e.g. './app/middleware/auth.ts') and pass the module path.",
       );
     }
-    return fn.toString();
+    return normalizeAppShellImport(entry);
   });
 
   // --- Routes ---

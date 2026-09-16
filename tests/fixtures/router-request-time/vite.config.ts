@@ -26,11 +26,13 @@ export default defineConfig({
       html: {
         title: 'request-time fixture',
       },
-      // ADR-0123 item 2 (#858): fetch middleware contract proof. Both
-      // middlewares are self-contained (their sources are inlined into the
-      // generated entry). The parity contract test asserts the onion order
-      // and the short-circuit behave identically in dev and in the built
-      // server entry.
+      // ADR-0123 item 2 (#858): fetch middleware contract proof. Module
+      // form (Alpha.1): each entry is a path to a module default-exporting a
+      // WinterCG Middleware; the generated entry imports the modules, so the
+      // middleware closes over module scope and imports a local helper plus a
+      // third-party package (see app/middleware/). The parity contract test
+      // asserts the onion order, the dependency proof and the short-circuit
+      // behave identically in dev and in the built server entry.
       middleware: {
         // Strict CSP with a per-request nonce (Alpha.1 closure): every
         // framework-generated <script> must carry the response nonce or the
@@ -43,21 +45,7 @@ export default defineConfig({
           policy:
             "default-src 'self'; script-src 'strict-dynamic'; style-src 'self' 'unsafe-inline'",
         },
-        use: [
-          async (_request, next) => {
-            const response = await next();
-            response.headers.append('x-fixture-middleware', 'outer');
-            return response;
-          },
-          async (request, next) => {
-            if (new URL(request.url).searchParams.has('mw-short')) {
-              return new Response('fixture short-circuit', { status: 418 });
-            }
-            const response = await next();
-            response.headers.append('x-fixture-middleware', 'inner');
-            return response;
-          },
-        ],
+        use: ['./app/middleware/outer.ts', './app/middleware/inner.ts'],
       },
     }),
   ],

@@ -145,6 +145,39 @@ test.describe('action protocol (ADR-0120, 0.42.0-alpha.2)', () => {
   });
 });
 
+test.describe('fetch middleware module contract (ADR-0123, #858, Alpha.1)', () => {
+  test('middleware modules compose in onion order around request-time routes', async ({ request }) => {
+    const response = await request.get('/live?x=mw-e2e');
+    expect(response.ok()).toBe(true);
+    // inner.ts post-processes first; outer.ts (factory-exported) wraps it.
+    expect(response.headers()['x-fixture-middleware']).toBe('inner, outer');
+  });
+
+  test('middleware imports a third-party package and a local helper', async ({ request }) => {
+    const response = await request.get('/live?x=mw-dep', {
+      headers: { cookie: 'fixture-proof=hono-cookie-parser' },
+    });
+    expect(response.ok()).toBe(true);
+    expect(response.headers()['x-fixture-cookie-proof']).toBe('hono-cookie-parser');
+  });
+
+  test('short-circuit skips the handler, still wrapped by the outer middleware', async ({ request }) => {
+    const response = await request.get('/live?mw-short=1');
+    expect(response.status()).toBe(418);
+    expect(await response.text()).toBe('fixture short-circuit');
+    expect(response.headers()['x-fixture-middleware']).toBe('outer');
+  });
+
+  test('a throwing middleware is a contained 500 and the server survives', async ({ request }) => {
+    const boom = await request.get('/live?mw-boom=1');
+    expect(boom.status()).toBe(500);
+
+    const after = await request.get('/live?x=after-boom');
+    expect(after.ok()).toBe(true);
+    expect(after.headers()['x-fixture-middleware']).toBe('inner, outer');
+  });
+});
+
 test.describe('revalidation continuity (0.42.0-alpha.3)', () => {
   test('422 morph keeps a hydrated island alive and shows the failure echo', async ({ page }) => {
     await page.goto('/form');
