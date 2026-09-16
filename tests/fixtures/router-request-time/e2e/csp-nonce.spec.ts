@@ -25,7 +25,7 @@ function headerNonce(csp: string | undefined): string | null {
 
 /** Every opening <script ...> tag in the document. */
 function scriptTags(html: string): string[] {
-  return html.match(/<script\b[^>]*>/g) ?? [];
+  return html.match(/<script\b[^>]*>/gi) ?? [];
 }
 
 function expectEveryScriptCarriesNonce(html: string, nonce: string): void {
