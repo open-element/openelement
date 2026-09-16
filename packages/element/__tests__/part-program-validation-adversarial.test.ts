@@ -1,4 +1,4 @@
-import { assertEquals, assertNotStrictEquals, assertThrows } from '@std/assert';
+import { assertEquals, assertNotStrictEquals, assertStrictEquals, assertThrows } from '@std/assert';
 import { compileElementProgram } from '../src/internal/compiler/semantic-core/compile.ts';
 import { validatePartProgram } from '../src/internal/protocol/part-program.ts';
 import { normalizePartProgram } from '../src/internal/compiled/runtime-program.ts';
@@ -280,6 +280,21 @@ Deno.test('canonical serialized corpus normalizes to one immutable RuntimeProgra
   assertEquals(ir, golden);
   assertEquals(Object.isFrozen(ir), true);
   assertEquals(Object.isFrozen(ir.parts), true);
+  // Memoized by program object identity: re-normalizing the same program
+  // object returns the one frozen IR instead of re-running the pipeline.
+  assertStrictEquals(normalizePartProgram(golden), ir);
+});
+
+Deno.test('wire programs without compile-time sourceMap provenance validate and normalize', async () => {
+  const golden = JSON.parse(await Deno.readTextFile(GOLDEN));
+  // The serialized module payload omits sourceMap (no runtime consumer); a
+  // program that still carries it must keep passing (covered above), and one
+  // without it must pass too.
+  const { sourceMap: _provenance, ...wireGolden } = golden;
+  validatePartProgram(wireGolden);
+  const ir = normalizePartProgram(wireGolden);
+  assertEquals(ir, wireGolden);
+  assertEquals(Object.isFrozen(ir), true);
 });
 
 Deno.test('the canonical Part Program validator fails closed across the artifact surface', async () => {

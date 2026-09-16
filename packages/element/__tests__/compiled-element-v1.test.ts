@@ -6,7 +6,8 @@
  *     compiledElementPlugin() Vite transform hook
  *   - the emitted module embeds one deterministic, serializable Part Program
  *     (static structure + typed Part/Region instructions) that deep-equals the
- *     frozen expected-program.json fixture consumed by the element runtime test
+ *     frozen expected-program.json fixture consumed by the element runtime
+ *     test, minus the compile-time sourceMap provenance the wire payload omits
  *   - re-running the transform yields byte-identical output
  *   - unsupported syntax fails closed at transform time with a source-located
  *     diagnostic; no runtime fallback is emitted
@@ -98,7 +99,10 @@ Deno.test('compiled-element v1 - fixture transforms through the Vite hook', asyn
 
   await t.step('emitted program deep-equals the frozen expected program', async () => {
     const expected = JSON.parse(await readFixture('expected-program.json'));
-    assertEquals(JSON.parse(programLiteral(emitted!)), expected);
+    // The wire payload omits the compile-time sourceMap provenance; the
+    // frozen fixture keeps it for the in-memory artifact contract.
+    const { sourceMap: _provenance, ...wireExpected } = expected;
+    assertEquals(JSON.parse(programLiteral(emitted!)), wireExpected);
   });
 
   await t.step('emitted metadata preserves @property reflection decisions (R2)', () => {
@@ -432,7 +436,7 @@ Deno.test('compiled-element v1 - unsupported syntax fails closed with located di
 });
 
 Deno.test('compiled-element alpha.1 - canonical program records and decorator lowering', async () => {
-  const { compiledElementPlugin } = await loadPluginModule();
+  const { compiledElementPlugin, compileElementModule } = await loadPluginModule();
   const transform = transformOf(compiledElementPlugin());
   const source = [
     "import { element, OpenElement, property } from '@openelement/element';",
@@ -489,8 +493,11 @@ Deno.test('compiled-element alpha.1 - canonical program records and decorator lo
     },
   ]);
   assertEquals(program.metadata.observedAttributes, ['count', 'enabled']);
+  // The wire payload omits the compile-time sourceMap (no runtime consumer);
+  // provenance stays on the in-memory program artifact.
+  const compiled = compileElementModule(source, id);
   assert(
-    program.sourceMap.records.some((record: { id: string; source: { file: string } }) =>
+    compiled?.program.sourceMap.records.some((record) =>
       record.id === 'p0' && record.source.file === id
     ),
   );

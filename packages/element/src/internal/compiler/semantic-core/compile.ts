@@ -2010,7 +2010,14 @@ export function compileElementProgram(source: string, fileName: string): Compile
   assertPathSafety(program);
   validatePartProgram(program);
 
-  const programJson = JSON.stringify(program, null, 2);
+  // The serialized payload omits the compile-time sourceMap provenance: no
+  // runtime consumer reads it (claim diagnostics use numeric paths), so it
+  // must not ride the browser-bound island chunks. The in-memory `program`
+  // keeps it for compiler diagnostics and the module map's x_openElement
+  // supplementary metadata below; the validator accepts the wire program
+  // without it.
+  const { sourceMap: _provenance, ...wireProgram } = program;
+  const programJson = JSON.stringify(wireProgram, null, 2);
   const propertiesJson = JSON.stringify(metadata.properties, null, 2);
   const metadataJson = JSON.stringify(metadata, null, 2);
   const observedJson = JSON.stringify(metadata.observedAttributes, null, 2);
@@ -2138,8 +2145,7 @@ export function compileElementProgram(source: string, fileName: string): Compile
   for (const statement of passthroughStatements) pushVerbatim(statement.getText(sf), statement);
   if (passthroughStatements.length > 0) push('');
 
-  // The serialized program payload derives from the render() JSX; each source
-  // record's own serialized entry maps to its authored span below.
+  // The serialized program payload derives from the render() JSX.
   const programStartLine = codeLines.length + 1;
   pushDerivedBlock(`const __partProgram = ${programJson};`, render);
   const programJsonPosition = (offset: number): { line: number; column: number } => {
@@ -2154,22 +2160,6 @@ export function compileElementProgram(source: string, fileName: string): Compile
     // The compiled tag payload traces to the @element decorator application.
     const at = programJsonPosition(tagOffset);
     mapLineAt(at.line, at.column, decorator);
-  }
-  let recordsCursor = programJson.indexOf('"records": [');
-  if (recordsCursor >= 0) {
-    for (const record of program.sourceMap.records) {
-      const needle = `"id": ${JSON.stringify(record.id)}`;
-      const offset = programJson.indexOf(needle, recordsCursor);
-      if (offset < 0) continue; // records always serialize in order; defensive
-      recordsCursor = offset + needle.length;
-      const at = programJsonPosition(offset);
-      segments.add({
-        generatedLine: at.line,
-        generatedColumn: at.column,
-        sourceLine: record.source.start.line,
-        sourceColumn: record.source.start.column - 1,
-      });
-    }
   }
   push('');
   pushDerivedBlock(`const __compiledProperties = ${propertiesJson};`, classNode.name!);

@@ -18,7 +18,7 @@
  * @module ./security.ts
  */
 
-import { createLogger, warnOnce } from './logger.ts';
+import { createLogger } from './logger.ts';
 import { formatError, OpenElementError } from './errors.ts';
 
 /** Object prototype keys that must never be injected from untrusted props. */
@@ -96,17 +96,6 @@ export function trustedHtmlValue(value: unknown): string {
     );
   }
   return (value as TrustedHtml).html;
-}
-
-/** @deprecated Use trustedHtml(). */
-export function trustRenderHtml(html: string): TrustedHtml {
-  warnOnce(
-    'trustedHtml',
-    _securityLog,
-    'trustRenderHtml is a trust boundary, not a sanitizer. ' +
-      'Caller must ensure HTML content is safe before passing to openElement.',
-  );
-  return trustedHtml(html);
 }
 
 /**

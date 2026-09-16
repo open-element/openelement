@@ -657,6 +657,3 @@ export function serializeToHtml(
     ? serializeProgramContent(raw, host)
     : serializeCompiledProgram(raw, host, options);
 }
-
-/** Canonical explicit alias used by generated server adapters. */
-export const serializePartProgram = serializeCompiledProgram;

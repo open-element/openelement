@@ -335,6 +335,12 @@ export interface PartProgramV1 {
   regions: ProgramRegionRecord[];
   dependencies: ProgramDependencyRecord[];
   locations: ProgramLocationRecord[];
+  /**
+   * Compile-time provenance. The canonical in-memory artifact always carries
+   * it; the serialized module payload omits it (no runtime consumer reads it),
+   * so the validator accepts programs with or without it but still verifies
+   * it strictly when present.
+   */
   sourceMap: ProgramSourceMap;
   metadata: CompiledElementMetadata;
 }
@@ -1192,33 +1198,37 @@ export function validatePartProgram(raw: unknown): asserts raw is PartProgram {
     ['tag', 'className', 'sourceFile', 'properties', 'observedAttributes', 'cem'],
     'metadata',
   );
-  if (
-    !isRecord(raw.sourceMap) || raw.sourceMap.version !== 1 ||
-    raw.sourceMap.file !== metadata.sourceFile
-  ) {
-    fail('sourceMap must be version 1 and identify the metadata source file');
-  }
-  validateKeys(raw.sourceMap, ['version', 'file', 'records'], 'sourceMap');
-  if (!Array.isArray(raw.sourceMap.records)) fail('sourceMap.records must be an array');
+  // sourceMap is compile-time provenance: optional on the wire (the browser
+  // payload omits it), strictly reconciled with metadata when present.
   const sourceIds = new Set<string>();
-  for (const [position, record] of raw.sourceMap.records.entries()) {
-    if (!isRecord(record) || typeof record.id !== 'string' || sourceIds.has(record.id)) {
-      fail(`sourceMap.records[${position}] must have a unique id`);
+  if (raw.sourceMap !== undefined) {
+    if (
+      !isRecord(raw.sourceMap) || raw.sourceMap.version !== 1 ||
+      raw.sourceMap.file !== metadata.sourceFile
+    ) {
+      fail('sourceMap must be version 1 and identify the metadata source file');
     }
-    validateKeys(record, ['id', 'kind', 'source'], `sourceMap.records[${position}]`);
-    sourceIds.add(record.id);
-    const kinds = new Set<ProgramSourceKind>([
-      'root',
-      'element',
-      'part',
-      'region',
-      'property',
-      'handler',
-    ]);
-    if (typeof record.kind !== 'string' || !kinds.has(record.kind as ProgramSourceKind)) {
-      fail(`sourceMap.records[${position}].kind is invalid`);
+    validateKeys(raw.sourceMap, ['version', 'file', 'records'], 'sourceMap');
+    if (!Array.isArray(raw.sourceMap.records)) fail('sourceMap.records must be an array');
+    for (const [position, record] of raw.sourceMap.records.entries()) {
+      if (!isRecord(record) || typeof record.id !== 'string' || sourceIds.has(record.id)) {
+        fail(`sourceMap.records[${position}] must have a unique id`);
+      }
+      validateKeys(record, ['id', 'kind', 'source'], `sourceMap.records[${position}]`);
+      sourceIds.add(record.id);
+      const kinds = new Set<ProgramSourceKind>([
+        'root',
+        'element',
+        'part',
+        'region',
+        'property',
+        'handler',
+      ]);
+      if (typeof record.kind !== 'string' || !kinds.has(record.kind as ProgramSourceKind)) {
+        fail(`sourceMap.records[${position}].kind is invalid`);
+      }
+      validateSourceRange(record.source, `sourceMap.records[${position}].source`);
     }
-    validateSourceRange(record.source, `sourceMap.records[${position}].source`);
   }
 
   if (
@@ -1376,13 +1386,15 @@ export function validatePartProgram(raw: unknown): asserts raw is PartProgram {
     }
   }
 
-  const expectedSourceIds = new Set<string>([
-    'root',
-    ...metadataProperties.map((property) => `property:${property.name}`),
-    ...locations.map((location) => location.id),
-    ...regions.map((region) => region.id),
-  ]);
-  for (const sourceId of expectedSourceIds) {
-    if (!sourceIds.has(sourceId)) fail(`sourceMap is missing record ${sourceId}`);
+  if (raw.sourceMap !== undefined) {
+    const expectedSourceIds = new Set<string>([
+      'root',
+      ...metadataProperties.map((property) => `property:${property.name}`),
+      ...locations.map((location) => location.id),
+      ...regions.map((region) => region.id),
+    ]);
+    for (const sourceId of expectedSourceIds) {
+      if (!sourceIds.has(sourceId)) fail(`sourceMap is missing record ${sourceId}`);
+    }
   }
 }

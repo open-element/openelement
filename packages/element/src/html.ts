@@ -7,7 +7,7 @@
  * never has to import the package root barrel — which carries the compiled
  * runtime kernel — just to escape HTML or wrap a document. The module graph
  * reachable from here contains no compiler, no Part Program kernel, and no
- * renderer runtime (pinned by __tests__/html-leaf-graph.test.ts).
+ * renderer runtime.
  */
 export {
   escapeAttr,

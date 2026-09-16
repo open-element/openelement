@@ -174,37 +174,16 @@ Deno.test('A10.2 compiler emits a REAL Source Map v3 (VLQ line+column segments)'
   assert(decoded.length >= 30, `expected a dense segment table, decoded ${decoded.length}`);
 });
 
-Deno.test('A10.2 standard consumer resolves every program source record to its authored span', () => {
+Deno.test('A10.2 the serialized payload omits the compile-time sourceMap provenance', () => {
   const { code, map, program } = compileElementProgram(SOURCE, FILE);
-  const trace = traceOf(map);
 
-  // Locate each record's serialized entry inside the embedded program JSON
-  // (records serialize in order under the "records" key) and resolve that
-  // generated position through the generic consumer. This sweeps decorators'
-  // program payload, properties, JSX elements, text parts, attribute sinks,
-  // boolean/property sinks, handlers, conditional and keyed regions at nested
-  // tree paths — everything the compiler records provenance for.
-  let cursor = code.indexOf('"records": [');
-  assert(cursor >= 0, 'generated code must embed the program source records');
-  for (const record of program.sourceMap.records) {
-    const idNeedle = `"id": ${JSON.stringify(record.id)}`;
-    const offset = code.indexOf(idNeedle, cursor);
-    assert(offset >= 0, `generated program JSON must carry record ${record.id}`);
-    cursor = offset + idNeedle.length;
-    const before = code.slice(0, offset);
-    const line = before.split('\n').length;
-    const column = offset - (before.lastIndexOf('\n') + 1);
-    const resolved = originalPositionFor(trace, { line, column });
-    assertEquals(
-      { source: resolved.source, line: resolved.line, column: resolved.column },
-      {
-        source: FILE,
-        line: record.source.start.line,
-        column: record.source.start.column - 1,
-      },
-      `record ${record.id} must resolve to its authored source span start`,
-    );
-  }
+  // Provenance stays on the in-memory program and the map's supplementary
+  // x_openElement metadata; the browser-bound module payload carries no
+  // sourceMap block at all (no runtime consumer reads it).
+  assert(program.sourceMap.records.length > 0);
+  assertEquals(map.x_openElement, program.sourceMap);
+  assertEquals(code.includes('"sourceMap"'), false);
+  assertEquals(code.includes('"records"'), false);
 });
 
 Deno.test('A10.2 module scaffolding resolves to authored constructs', () => {

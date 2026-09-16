@@ -18,6 +18,10 @@ import { escapeAttr, VOID_TAGS } from '../core/html-escape.ts';
 // Canonical text-node escape contract (#1272) — shared with the server
 // serializer; do not reintroduce a private copy.
 import { escapeText } from './escape-text.ts';
+// Canonical attr/class/style value coercions — single source of truth,
+// shared with the server serializer (server/shared.ts) so all three
+// execution modes stay byte-identical; do not reintroduce private copies.
+import { attributeValueOf, classValueOf, styleValueOf } from './server/shared.ts';
 import {
   DATA_OE_LIGHT,
   partAnchorEndMarker,
@@ -261,50 +265,6 @@ function isElement(node: Node): node is Element {
 
 function displayValue(value: unknown): string {
   return value === null || value === undefined ? '' : String(value);
-}
-
-function attributeValue(value: unknown): string | null {
-  return value === null || value === undefined ? null : String(value);
-}
-
-function classValue(value: unknown): string {
-  if (value === null || value === undefined || value === false) return '';
-  if (typeof value === 'string' || typeof value === 'number') return String(value);
-  if (Array.isArray(value)) return value.map(classValue).filter(Boolean).join(' ');
-  if (typeof value === 'object') {
-    return Object.keys(value as Record<string, unknown>)
-      .sort()
-      .filter((key) => Boolean((value as Record<string, unknown>)[key]))
-      .join(' ');
-  }
-  throw new Error('[compiled-runtime] class Part expects a string, array, or record');
-}
-
-function cssName(name: string): string {
-  if (name.startsWith('--')) return name;
-  const vendor = /^(Webkit|Moz|ms|O)([A-Z].*)$/.exec(name);
-  const kebab = (value: string): string =>
-    value[0].toLowerCase() +
-    value.slice(1).replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`);
-  if (vendor) return `-${vendor[1].toLowerCase()}-${kebab(vendor[2])}`;
-  return kebab(name);
-}
-
-function styleValue(value: unknown): string {
-  if (value === null || value === undefined || value === false) return '';
-  if (typeof value === 'string' || typeof value === 'number') return String(value);
-  if (Array.isArray(value)) return value.map(styleValue).filter(Boolean).join(';');
-  if (typeof value === 'object') {
-    return Object.keys(value as Record<string, unknown>)
-      .sort()
-      .filter((key) => {
-        const item = (value as Record<string, unknown>)[key];
-        return item !== null && item !== undefined && item !== false;
-      })
-      .map((key) => `${cssName(key)}:${String((value as Record<string, unknown>)[key])}`)
-      .join(';');
-  }
-  throw new Error('[compiled-runtime] style Part expects CSS text or a declaration record');
 }
 
 function removeNodes(nodes: readonly Node[]): void {
@@ -921,7 +881,7 @@ function propertySink(element: Element): PropertySink {
 function applyProperty(element: Element, name: string, value: unknown, initial: boolean): void {
   const sink = propertySink(element);
   if (initial) {
-    const serialized = attributeValue(value);
+    const serialized = attributeValueOf(value);
     if (serialized === null) element.removeAttribute(name);
     else element.setAttribute(name, serialized);
   }
@@ -969,10 +929,10 @@ function installValuePart(
   }
 
   if (part.k === 'attr') {
-    let current = attributeValue(initial);
+    let current = attributeValueOf(initial);
     if (mode === 'fresh') applyAttribute(element, part.name, current);
     subscribeWrites(ctx, scope, part.signal, (value) => {
-      const next = attributeValue(value);
+      const next = attributeValueOf(value);
       if (Object.is(next, current)) return;
       applyAttribute(element, part.name, next);
       current = next;
@@ -1004,10 +964,10 @@ function installValuePart(
   }
 
   if (part.k === 'class') {
-    let current = classValue(initial);
+    let current = classValueOf(initial);
     if (mode === 'fresh') applyAttribute(element, 'class', current || null);
     subscribeWrites(ctx, scope, part.signal, (value) => {
-      const next = classValue(value);
+      const next = classValueOf(value);
       if (Object.is(next, current)) return;
       applyAttribute(element, 'class', next || null);
       current = next;
@@ -1015,10 +975,10 @@ function installValuePart(
     return;
   }
 
-  let current = styleValue(initial);
+  let current = styleValueOf(initial);
   if (mode === 'fresh') applyAttribute(element, 'style', current || null);
   subscribeWrites(ctx, scope, part.signal, (value) => {
-    const next = styleValue(value);
+    const next = styleValueOf(value);
     if (Object.is(next, current)) return;
     applyAttribute(element, 'style', next || null);
     current = next;
@@ -1146,7 +1106,7 @@ function serializedFixedAttributes(
   for (const part of fixedPartsAtPath(ctx, path)) {
     if (part.k === 'attr' || part.k === 'prop') {
       const value = signalOf(ctx, part.signal).value;
-      const next = attributeValue(value);
+      const next = attributeValueOf(value);
       if (next === null) attrs.delete(part.name);
       else attrs.set(part.name, next);
     } else if (part.k === 'bool') {
@@ -1155,12 +1115,12 @@ function serializedFixedAttributes(
       else attrs.delete(part.name);
     } else if (part.k === 'class') {
       const value = signalOf(ctx, part.signal).value;
-      const next = classValue(value);
+      const next = classValueOf(value);
       if (next) attrs.set('class', next);
       else attrs.delete('class');
     } else if (part.k === 'style') {
       const value = signalOf(ctx, part.signal).value;
-      const next = styleValue(value);
+      const next = styleValueOf(value);
       if (next) attrs.set('style', next);
       else attrs.delete('style');
     }
@@ -2467,8 +2427,3 @@ export function claimExistingDom(
     }
   }
 }
-
-/** Canonical entry-point aliases. */
-export const createPartProgram = createFreshDom;
-export const serializePartProgram = serializeToHtml;
-export const claimPartProgram = claimExistingDom;

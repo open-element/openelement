@@ -20,8 +20,20 @@ function freezeDeep(value: unknown, seen = new Set<object>()): void {
   Object.freeze(value);
 }
 
+/**
+ * Normalization is memoized by program object identity: a compiled module
+ * evaluates its `__partProgram` literal once, so every connect of every
+ * instance of that element reuses the one validated, frozen IR instead of
+ * paying validate -> JSON round trip -> revalidate -> freeze per connect.
+ */
+const normalizedByProgram = new WeakMap<object, RuntimeProgramIR>();
+
 /** Validate, serialize, re-validate, and freeze one canonical wire program. */
 export function normalizePartProgram(raw: unknown): RuntimeProgramIR {
+  if (typeof raw === 'object' && raw !== null) {
+    const cached = normalizedByProgram.get(raw);
+    if (cached !== undefined) return cached;
+  }
   validatePartProgram(raw);
   const serialized = JSON.stringify(raw);
   if (serialized === undefined) {
@@ -30,5 +42,7 @@ export function normalizePartProgram(raw: unknown): RuntimeProgramIR {
   const normalized: unknown = JSON.parse(serialized);
   validatePartProgram(normalized);
   freezeDeep(normalized);
-  return normalized as RuntimeProgramIR;
+  const ir = normalized as RuntimeProgramIR;
+  if (typeof raw === 'object' && raw !== null) normalizedByProgram.set(raw, ir);
+  return ir;
 }
