@@ -9,7 +9,7 @@ The repository publishes four public packages for two core products:
   peers, so a Route Mode install pulls no Vite, Nitro, Element, or Node host dependencies.
   `nitro` is deliberately not declared even as an optional peer: npm auto-places optional
   peers when they resolve — applications that deploy through `./nitro-mount` install
-  `nitro` themselves (pinned line: `tools/nitro-compatibility.ts`, Vite 8 compatible).
+  `nitro` themselves (pinned line: `tools/release/nitro-compatibility.ts`, Vite 8 compatible).
 - `@openelement/create` — thin consumer scaffolding.
 - `@openelement/ui` — experimental UI primitives, maintained in this repository outside the
   1.0 stable promise.

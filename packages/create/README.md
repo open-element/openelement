@@ -2,9 +2,10 @@
 
 Project scaffolding CLI for openElement applications.
 
-> 1.0 Alpha line: the supported creation entry for Element and Router. The npm
-> `alpha` dist-tag tracks the `1.0.0-alpha.1` prerelease line; `latest` stays
-> on the stable 0.43 line until a separately admitted stable release.
+> 1.0 Alpha line: the supported creation entry for Element and Router. The
+> published npm versions and dist-tags are registered in
+> `docs/release/release-state.json` (registry-verified); `latest` stays on the
+> stable 0.43 line until a separately admitted stable release.
 
 `@openelement/create` generates a new openElement project with the recommended
 directory structure, Deno configuration, Vite setup, and starter pages.
@@ -17,8 +18,9 @@ cd my-app
 deno task dev
 ```
 
-`@alpha` tracks the 1.0 prerelease line; pin the exact version with
-`npm:@openelement/create@1.0.0-alpha.1` when reproducibility matters.
+The version `@alpha` resolves to is registered in
+`docs/release/release-state.json`; pin that exact version with
+`npm:@openelement/create@<version>` when reproducibility matters.
 `--minimum-dependency-age 0` is needed because Deno's default
 minimumDependencyAge (~24h) refuses packages published within the last day.
 
@@ -48,8 +50,8 @@ claimed or tested.
 - `deno.json` - starter authoring imports and build tasks
 - `vite.config.ts` - Vite build configuration with the openElement plugin
 - `app/` - application directory with starter pages and islands
-- `content/blog/` - a sample markdown post wired into the generated blog-data
-  module
+- `app/routes/blog/` - the sample blog as compiled page routes (`index` list
+  and `welcome` post), prerendered at build time
 - `public/` - static assets
 - `README.md` and `.gitignore` - starter docs and ignore rules
 

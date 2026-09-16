@@ -42,8 +42,11 @@ the page.
 ## Import map notes
 
 `deno.json` maps `@openelement/router/nitro-mount` and `hono` even
-though no source file imports them: the production build output (`dist/`)
-imports them at runtime. Do not remove them.
+though no source file imports them: the dev server and the production
+build resolve `hono` when loading the generated server entry (the
+bundled `dist/` output inlines it), and Nitro deployments bridge the
+built handler through `@openelement/router/nitro-mount`. Do not remove
+them.
 
 ## Brand assets
 

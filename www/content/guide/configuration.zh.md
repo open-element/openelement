@@ -17,7 +17,7 @@ import { openPipeline } from '@openelement/router/vite';
 export default defineConfig({
   plugins: [
     openPipeline({
-      mode: 'ssg', // default; 'spa' produces a client-only app
+      mode: 'ssg', // default
       routes: { dir: 'app/routes' },
       island: { dir: 'app/islands', upgradeStrategy: 'visible' },
       output: { outDir: 'dist' },
@@ -33,10 +33,10 @@ export default defineConfig({
 
 ## 内容 collection 归站点所有
 
-1.0 的 router 提供路由、locale/渲染上下文、SSG descriptor 与 Document 归属——不是 CMS，也不是内容数据库。站点的 Markdown 管线由站点自己拥有。本仓库的参考站点用声明式 schema 校验 frontmatter、用 `marked` 渲染、把渲染结果视为第一方可信内容（`www/lib/content.ts` 的 `trustCollectionHtml`，`trustedHtml` 信任级别——非可信来源请先在你自己的边界消毒），在 `www/lib/blog.ts` 中定义 collection，并用 `tools/generate-site-content-data.ts` 写出带类型的数据模块：
+1.0 的 router 提供路由、locale/渲染上下文、SSG descriptor 与 Document 归属——不是 CMS，也不是内容数据库。站点的 Markdown 管线由站点自己拥有。本仓库的参考站点用声明式 schema 校验 frontmatter、用 `marked` 渲染、把渲染结果视为第一方可信内容（`www/lib/content.ts` 的 `trustCollectionHtml`，`trustedHtml` 信任级别——非可信来源请先在你自己的边界消毒），在 `www/lib/blog.ts` 中定义 collection，并用 `tools/repo/generate-site-content-data.ts` 写出带类型的数据模块：
 
 ```sh
-deno task generate:site-content-data   # site:build 会在 router 构建前先运行
+deno task --cwd tools/repo generate:site-content-data   # site:build 会在 router 构建前先运行
 ```
 
 生成模块通过站点自己的 import-map 别名消费——不存在框架虚拟模块：
@@ -154,7 +154,7 @@ export const blogCollection: CollectionOptions = {
 
 ## middleware.use
 
-`middleware.use`（ADR-0123，#858）注册 WinterCG 形态的 fetch 中间件：`(request, next) => Promise<Response>`——不含任何 HTTP 框架方言。中间件链在生成的 handler 边界按洋葱序组合（`use[0]` 最外层：最先看到请求，最后看到响应），位于内置 `requestId`/`logger`/`cors`/`securityHeaders`/`csp` 中间件之外，并在 dev server、`start` CLI、e2e fixture server 与 Nitro 生产入口四个运行时中保持完全一致的语义（由 request-time parity 契约测试锁定）。中间件可以不调用 `next()` 直接返回 `Response` 来短路。每一项是一个**模块路径**（解析方式与 `appShell.import` 相同）：模块默认导出中间件，生成的 server entry 直接 import 该模块——因此中间件可以闭包引用模块作用域，也可以 import 本地 helper 和第三方包。路由级 `_middleware.ts` 文件保留 Hono 方言，在应用内部依然可用。
+`middleware.use`（ADR-0123，#858）注册 WinterCG 形态的 fetch 中间件：`(request, next) => Promise<Response>`——不含任何 HTTP 框架方言。中间件链在生成的 handler 边界按洋葱序组合（`use[0]` 最外层：最先看到请求，最后看到响应），位于内置 `requestId`/`logger`/`cors`/`securityHeaders`/`csp` 中间件之外。中间件语义仅作用于请求时路径：静态 GET/HEAD 由构建产物直接给出（`tryStatic`），不经过 `middleware.use` 链与内置中间件，因此不要用中间件守卫预渲染页面。在请求时派发路径（dynamic 路由、POST 与非静态回退）上，dev server、`start` CLI、e2e fixture server 与 Nitro 生产入口运行同一条中间件链（由 request-time parity 契约测试锁定）。中间件可以不调用 `next()` 直接返回 `Response` 来短路。每一项是一个**模块路径**（解析方式与 `appShell.import` 相同）：模块默认导出中间件，生成的 server entry 直接 import 该模块——因此中间件可以闭包引用模块作用域，也可以 import 本地 helper 和第三方包。路由级 `_middleware.ts` 文件使用同一 WinterCG 形态：根级或嵌套的 `_middleware.ts` 默认导出 `(request, next) => Promise<Response>`，作用于其路由子树。
 
 ### vite.config.ts —— middleware.use（#858）
 
@@ -211,52 +211,3 @@ export default guard;
 ### middleware.corsOrigin / middleware.corsOriginModule
 
 `middleware.corsOrigin` 接受静态白名单数据（`string | string[]`），以 JSON 形式序列化进生成的 entry。当白名单需要逻辑判断时，用 `middleware.corsOriginModule` 指向一个默认导出 `(origin: string) => string | undefined` 的模块——entry 会 import 该模块并引用这个回调，因此它可以像 `middleware.use` 模块一样 import 依赖、闭包引用模块作用域。两个选项互斥（同时配置会在构建期报配置错误）。
-
-## mode: 'spa'
-
-`openPipeline({ mode: 'spa' })` 产出纯客户端应用（无 SSR）。用 `@openelement/router` 的 `defineApp({ mode: 'spa', routes })` 启动：每条路由是 `{ path, tagName, loader?, action?, guard? }`，路径支持 `:id` 参数与 `:path{.+}` 多段 catch-all（Hono 风格）。`mount(selector)` 挂载 client router。页面类是编译的 `@element` 类，loader 数据由其 `@property` 字段承载；bootstrap 需导入每个页面模块，使其类在 `mount` 前完成注册。
-
-### app/main.ts —— SPA 启动
-
-```tsx
-// app/components/page-home.tsx —— 由 open:compiled-element transform 编译
-import { element, OpenElement, property } from '@openelement/element';
-
-@element('page-home', { root: 'shadow-open' })
-export default class HomePage extends OpenElement {
-  @property({ reflect: false, attribute: false })
-  now = '';
-
-  render() {
-    return <main><h1>home</h1><p>{this.now}</p></main>;
-  }
-}
-```
-
-```ts
-// app/main.ts
-import { defineApp } from '@openelement/router';
-import './components/page-home.tsx';
-// 'page-doc' 以同样方式导入
-
-const app = defineApp({
-  mode: 'spa',
-  routes: [
-    {
-      path: '/',
-      tagName: 'page-home',
-      loader: async () => ({ now: new Date().toISOString() }),
-    },
-    // multi-segment catch-all (Hono-style)
-    { path: '/docs/:path{.+}', tagName: 'page-doc' },
-  ],
-});
-
-app.mount('#app');
-```
-
-SPA 链上 `redirect()`/`notFound()` 仍然有效：redirect 交给 client router 导航，notFound 走页面 error 投影器；其余 throw 会被规整为 action 数据。
-
-## SPA 与 SSG 两链
-
-SPA 的 loader/action 运行在客户端，上下文只有 `{ params }`（action 另有 `formData`），通过抛出异常表达失败；SSG/request-time 链运行在服务端，使用 Web 标准上下文与 `fail()`/`redirect()` 协议。两者命名刻意平行，上下文并不相同（ADR-0119 已冻结的 SPA 语义）。

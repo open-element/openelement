@@ -1,7 +1,7 @@
 import { assert, assertEquals, assertFalse, assertThrows } from '@std/assert';
 import { existsSync } from '@std/fs';
 import { join } from '@std/path';
-import { CREATE_VERSION } from '../src/version.ts';
+import { CREATE_VERSION, VITE_STARTER_PIN } from '../src/version.ts';
 import {
   assertUnifiedProductVersions,
   buildTemplates,
@@ -109,9 +109,21 @@ Deno.test('Alpha README never emits an untagged create install command', () => {
     readme.includes('npm:@openelement/create@alpha my-app'),
     'the primary Alpha install path must use the @alpha dist-tag',
   );
+  // The exact-version pin is bound to registry truth (release-state.json), not
+  // to the source-tree version: before the release is published the README must
+  // not advertise it; once release-state registers it, the README must.
+  const releaseState = JSON.parse(
+    Deno.readTextFileSync(join(packageDir, '..', '..', 'docs', 'release', 'release-state.json')),
+  );
+  const createRegistry = releaseState.packages.find(
+    (p: { name: string }) => p.name === '@openelement/create',
+  ).registry;
+  const isPublished = Object.values(createRegistry).includes(CREATE_VERSION);
   assert(
-    readme.includes(`npm:@openelement/create@${CREATE_VERSION}`),
-    `README must document the exact Alpha version @${CREATE_VERSION}`,
+    readme.includes(`npm:@openelement/create@${CREATE_VERSION}`) === isPublished,
+    isPublished
+      ? `README must document the exact Alpha version @${CREATE_VERSION}`
+      : `README must not pin the unpublished version @${CREATE_VERSION}`,
   );
 });
 
@@ -195,23 +207,30 @@ Deno.test('generated starter pins every OpenElement import to the exact release'
   );
 });
 
-Deno.test('starter pins vite exactly and type-checks app-shell', () => {
-  const denoJson = JSON.parse(readTemplate('deno.json.tmpl'));
+Deno.test('starter pins vite exactly and type-checks app-shell', async () => {
+  const raw = JSON.parse(readTemplate('deno.json.tmpl'));
   assertFalse(
-    '@deno/vite-plugin' in denoJson.imports,
+    '@deno/vite-plugin' in raw.imports,
     'starter must not depend on @deno/vite-plugin',
+  );
+  // The raw template injects the pin through the ${v.vite} token (deps:vite-check
+  // owns the raw-template token rule and the VITE_STARTER_PIN anchor); the
+  // generated starter is what must carry the exact pin.
+  const generated = JSON.parse(
+    (await buildTemplates(resolveVersions(), 'sample-app'))['deno.json'],
   );
   // #681: starter vite version must stay aligned with packages/router.
   const routerImports = JSON.parse(
     Deno.readTextFileSync(join(packageDir, '..', 'router', 'deno.json')),
   ).imports;
-  assertEquals(denoJson.imports.vite, routerImports.vite);
-  assert(/^npm:vite@\d+\.\d+\.\d+$/.test(String(denoJson.imports.vite)), denoJson.imports.vite);
+  assertEquals(generated.imports.vite, routerImports.vite);
+  assertEquals(generated.imports.vite, `npm:vite@${VITE_STARTER_PIN}`);
+  assert(/^npm:vite@\d+\.\d+\.\d+$/.test(String(generated.imports.vite)), generated.imports.vite);
   // #927: the dev task must pin the same exact vite version as the import
   // map — a bare npm:vite resolves to latest independently of import maps,
   // which would run a second vite copy next to the pinned one.
-  const devTask = String(denoJson.tasks.dev || '');
-  const pinnedVite = String(denoJson.imports.vite).match(/@([^@]+)$/)?.[1] ?? '';
+  const devTask = String(generated.tasks.dev || '');
+  const pinnedVite = String(generated.imports.vite).match(/@([^@]+)$/)?.[1] ?? '';
   assert(devTask.includes(`npm:vite@${pinnedVite}`), devTask);
   // #679: the check task must cover the app-shell layout island template —
   // and every other shipped TypeScript file — by checking the app/ directory
@@ -219,7 +238,7 @@ Deno.test('starter pins vite exactly and type-checks app-shell', () => {
   // files the user adds later) are type-checked without manual registration.
   // Deno 2.9 resolves a directory argument to all modules beneath it; the
   // markdown post route is compiled at build time and is not a check entry.
-  const checkTask = String(denoJson.tasks.check || '');
+  const checkTask = String(raw.tasks.check || '');
   assert(checkTask.includes('app/'), checkTask);
   assert(checkTask.includes('vite.config.ts'), checkTask);
   assertFalse(checkTask.includes('app/routes/404.tsx'), checkTask);

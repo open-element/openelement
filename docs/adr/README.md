@@ -2,6 +2,8 @@
 
 Only decisions that still govern hard-to-reverse Element or Router contracts remain here. Retired decisions — including completed bug-fix amendments whose behavior is now pinned by tests — are preserved in Git history; this repository keeps no separate historical decision index.
 
+Evidence cited by an active ADR follows the same policy: ADR-0120's commissioned six-framework application-loop research (`docs/audit/2026-07-27-application-loop-framework-research/`) was retired into Git history in `3b5c7a9a` and remains recoverable there (`git show 3b5c7a9a^:docs/audit/2026-07-27-application-loop-framework-research/README.md`).
+
 - [ADR-0108-deno-native-npm-distribution.md](./ADR-0108-deno-native-npm-distribution.md)
 - [ADR-0110-two-product-doctrine-and-package-truth.md](./ADR-0110-two-product-doctrine-and-package-truth.md)
 - [ADR-0111-router-package-ownership-boundary.md](./ADR-0111-router-package-ownership-boundary.md)

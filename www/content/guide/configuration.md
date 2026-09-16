@@ -17,7 +17,7 @@ import { openPipeline } from '@openelement/router/vite';
 export default defineConfig({
   plugins: [
     openPipeline({
-      mode: 'ssg', // default; 'spa' produces a client-only app
+      mode: 'ssg', // default
       routes: { dir: 'app/routes' },
       island: { dir: 'app/islands', upgradeStrategy: 'visible' },
       output: { outDir: 'dist' },
@@ -33,10 +33,10 @@ export default defineConfig({
 
 ## Content collections are site-owned
 
-The 1.0 router ships routing, locale/render context, the SSG descriptor and Document ownership — not a CMS or content database. A site owns its Markdown pipeline. This repository's reference site validates frontmatter against declarative schemas, renders with `marked`, treats the rendered HTML as first-party trusted content (`trustCollectionHtml` in `www/lib/content.ts`, `trustedHtml` trust level — untrusted sources must be sanitized at your own boundary first), defines collections in `www/lib/blog.ts`, and writes typed data modules with `tools/generate-site-content-data.ts`:
+The 1.0 router ships routing, locale/render context, the SSG descriptor and Document ownership — not a CMS or content database. A site owns its Markdown pipeline. This repository's reference site validates frontmatter against declarative schemas, renders with `marked`, treats the rendered HTML as first-party trusted content (`trustCollectionHtml` in `www/lib/content.ts`, `trustedHtml` trust level — untrusted sources must be sanitized at your own boundary first), defines collections in `www/lib/blog.ts`, and writes typed data modules with `tools/repo/generate-site-content-data.ts`:
 
 ```sh
-deno task generate:site-content-data   # site:build runs this before the router build
+deno task --cwd tools/repo generate:site-content-data   # site:build runs this before the router build
 ```
 
 Generated modules are consumed through the site's own import-map alias — there is no framework virtual module:
@@ -154,7 +154,7 @@ Custom renderer output stays within the same first-party trust boundary.
 
 ## middleware.use
 
-`middleware.use` (ADR-0123, #858) registers fetch middleware with the WinterCG shape `(request, next) => Promise<Response>` — no HTTP-framework dialect. The chain is composed around the generated handler in onion order (`use[0]` is outermost: first to see the request, last to see the response), outside the built-in `requestId`/`logger`/`cors`/`securityHeaders`/`csp` middleware, and runs with identical semantics in the dev server, the `start` CLI, the e2e fixture server, and the Nitro production entry (locked by the request-time parity contract test). A middleware may short-circuit by returning a `Response` without calling `next()`. Each entry is a **module path** (resolved like `appShell.import`): the module default-exports the middleware, and the generated server entry imports it — so middleware may close over module scope and import local helpers and third-party packages. Route-scoped `_middleware.ts` files keep the Hono dialect and remain available inside the app.
+`middleware.use` (ADR-0123, #858) registers fetch middleware with the WinterCG shape `(request, next) => Promise<Response>` — no HTTP-framework dialect. The chain is composed around the generated handler in onion order (`use[0]` is outermost: first to see the request, last to see the response), outside the built-in `requestId`/`logger`/`cors`/`securityHeaders`/`csp` middleware. Middleware semantics are request-time only: a static GET/HEAD is served straight from the built artifacts (`tryStatic`) and never passes through the `middleware.use` chain or the built-in middleware, so do not rely on middleware to guard prerendered pages. On the request-time dispatch path (dynamic routes, POSTs, and non-static fallbacks) the same chain runs in the dev server, the `start` CLI, the e2e fixture server, and the Nitro production entry (locked by the request-time parity contract test). A middleware may short-circuit by returning a `Response` without calling `next()`. Each entry is a **module path** (resolved like `appShell.import`): the module default-exports the middleware, and the generated server entry imports it — so middleware may close over module scope and import local helpers and third-party packages. Route-scoped `_middleware.ts` files use the same WinterCG shape: a root or nested `_middleware.ts` default-exports `(request, next) => Promise<Response>`, applied to its route subtree.
 
 ### vite.config.ts — middleware.use (#858)
 
@@ -211,52 +211,3 @@ export default guard;
 ### middleware.corsOrigin / middleware.corsOriginModule
 
 `middleware.corsOrigin` takes static allowlist data (`string | string[]`), serialized into the generated entry as JSON. When the allowlist needs logic, point `middleware.corsOriginModule` at a module default-exporting `(origin: string) => string | undefined` — the entry imports the module and references the callback, so it can import dependencies and close over module scope just like a `middleware.use` module. The two options are mutually exclusive (configuring both is a build-time config error).
-
-## mode: 'spa'
-
-`openPipeline({ mode: 'spa' })` produces a client-only app (no SSR). Bootstrap with `defineApp({ mode: 'spa', routes })` from `@openelement/router`: each route is `{ path, tagName, loader?, action?, guard? }`, paths take `:id` params and the `:path{.+}` multi-segment catch-all (Hono-style). `mount(selector)` attaches the client router. Page classes are compiled `@element` classes whose `@property` fields carry the loader data; the bootstrap imports each page module so its class is registered before `mount`.
-
-### app/main.ts — SPA bootstrap
-
-```tsx
-// app/components/page-home.tsx — compiled by the open:compiled-element transform
-import { element, OpenElement, property } from '@openelement/element';
-
-@element('page-home', { root: 'shadow-open' })
-export default class HomePage extends OpenElement {
-  @property({ reflect: false, attribute: false })
-  now = '';
-
-  render() {
-    return <main><h1>home</h1><p>{this.now}</p></main>;
-  }
-}
-```
-
-```ts
-// app/main.ts
-import { defineApp } from '@openelement/router';
-import './components/page-home.tsx';
-// import 'page-doc' the same way
-
-const app = defineApp({
-  mode: 'spa',
-  routes: [
-    {
-      path: '/',
-      tagName: 'page-home',
-      loader: async () => ({ now: new Date().toISOString() }),
-    },
-    // multi-segment catch-all (Hono-style)
-    { path: '/docs/:path{.+}', tagName: 'page-doc' },
-  ],
-});
-
-app.mount('#app');
-```
-
-`redirect()`/`notFound()` still work on the SPA chain: a redirect navigates the client router, a notFound rides the page error projector; any other throw is normalized into action data.
-
-## SPA vs SSG chains
-
-SPA loaders/actions run client-side with only `{ params }` (actions also get `formData`) and signal failure by throwing; the SSG/request-time chain runs on the server with the Web-standard context and the `fail()`/`redirect()` protocol. The names are intentionally parallel, the contexts are not (ADR-0119 frozen SPA semantics).
