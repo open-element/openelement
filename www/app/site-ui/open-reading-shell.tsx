@@ -48,12 +48,17 @@ export default class OpenReadingShell extends OpenElement {
      "> slot > .pager" keeps custom footer slot content (changelog, roadmap)
      untouched. */
   :host([footer]) .footer:has(> slot > .pager):not(:has(> slot > .pager a:not([hidden]))),:host([navigation]) .footer:has(> slot > .pager):not(:has(> slot > .pager a:not([hidden]))){margin-block-start:0;padding-block-start:0;border-block-start:0}
-  .pager{display:flex;justify-content:space-between;gap:var(--size-4)}
-  .pager a{color:var(--text-muted);font-family:var(--font-mono);font-size:var(--font-size-00);letter-spacing:.04em;text-decoration:none}
-  .pager a:hover{color:var(--brand)}
-  .pager a:last-child{color:var(--brand);font-weight:var(--font-weight-8);text-align:end}
+  .pager{display:grid;grid-template-columns:1fr 1fr;gap:var(--size-4)}
+  .pager-card{display:block;padding:var(--size-4) var(--size-5);border:var(--border-size-1) solid var(--border);border-radius:var(--radius-2);color:var(--text-primary);text-decoration:none}
+  .pager-card[hidden]{display:none}
+  .pager-card:hover{border-color:var(--brand)}
+  .pager-card.next{grid-column:2;text-align:end}
+  .pager-kicker{display:block;margin-block-end:var(--size-1);color:var(--text-muted);font-family:var(--font-mono);font-size:var(--font-size-00);letter-spacing:.08em;text-transform:uppercase}
+  .pager-title{display:block;font-weight:var(--font-weight-7)}
   @media(max-width:900px){
     .shell,:host([rail]) .shell{grid-template-columns:1fr;width:min(100% - 2rem,760px);padding-block:var(--size-8)}
+    .pager{grid-template-columns:1fr}
+    .pager-card.next{grid-column:auto}
     .main{max-width:none}
     .title{font-size:clamp(1.8rem,8vw,2.4rem)}
     .rail{position:static;margin-block-start:var(--size-6)}
@@ -76,9 +81,9 @@ export default class OpenReadingShell extends OpenElement {
   @property({ reflect: false })
   next = '';
   @property({ reflect: false })
-  previousLabel = 'Previous';
+  previousLabel = '';
   @property({ reflect: false })
-  nextLabel = 'Next';
+  nextLabel = '';
 
   // Same base-field redeclaration as open-layout: the compiled @property
   // shadows OpenElementConfiguration.locale (SSR injection or the `locale`
@@ -119,6 +124,12 @@ export default class OpenReadingShell extends OpenElement {
   previousText = computed(() => this.navigation?.previous?.label ?? this.previousLabel);
   @property({ reflect: false, attribute: false })
   nextText = computed(() => this.navigation?.next?.label ?? this.nextLabel);
+  // No route sets the kicker props; fall back to the locale chrome copy so
+  // zh pages never show an English Previous/Next.
+  @property({ reflect: false, attribute: false })
+  previousKicker = computed(() => this.previousLabel || readingChromeStrings(this.locale).previous);
+  @property({ reflect: false, attribute: false })
+  nextKicker = computed(() => this.nextLabel || readingChromeStrings(this.locale).next);
   @property({ reflect: false, attribute: false })
   hidePrevious = computed(() => !(this.navigation?.previous?.href ?? this.previous));
   @property({ reflect: false, attribute: false })
@@ -158,8 +169,14 @@ export default class OpenReadingShell extends OpenElement {
           <footer class='footer'>
             <slot name='footer'>
               <nav class='pager' aria-label={this.pageNavigationLabel}>
-                <a href={this.previousHref} hidden={this.hidePrevious}>← {this.previousText}</a>
-                <a href={this.nextHref} hidden={this.hideNext}>{this.nextText} →</a>
+                <a class='pager-card' href={this.previousHref} hidden={this.hidePrevious}>
+                  <span class='pager-kicker'>← {this.previousKicker}</span>
+                  <span class='pager-title'>{this.previousText}</span>
+                </a>
+                <a class='pager-card next' href={this.nextHref} hidden={this.hideNext}>
+                  <span class='pager-kicker'>{this.nextKicker} →</span>
+                  <span class='pager-title'>{this.nextText}</span>
+                </a>
               </nav>
             </slot>
           </footer>

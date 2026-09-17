@@ -235,6 +235,8 @@ Deno.test('readingChromeStrings carries the bilingual reading chrome copy', () =
     pageNavigation: 'Page navigation',
     breadcrumb: 'Breadcrumb',
     sectionAnchor: 'Link to this section',
+    previous: 'Previous',
+    next: 'Next',
   });
   assertEquals(readingChromeStrings('zh'), {
     onThisPage: '本页目录',
@@ -242,6 +244,8 @@ Deno.test('readingChromeStrings carries the bilingual reading chrome copy', () =
     pageNavigation: '页面导航',
     breadcrumb: '面包屑',
     sectionAnchor: '链接到本节',
+    previous: '上一篇',
+    next: '下一篇',
   });
 });
 
