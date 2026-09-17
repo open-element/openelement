@@ -119,7 +119,10 @@ Deno.test('open-search keeps its view compiler-owned and its browser state exter
       'emptyMessage',
       'message',
       'hasHits',
+      'searching',
       'hits',
+      'hideSkeleton',
+      'hideEmpty',
     ],
   );
   assertEquals(result.program.parts.filter((part) => part.k === 'event').length, 4);

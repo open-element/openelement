@@ -39,6 +39,7 @@ type SearchHost = HTMLElement & {
   message: string;
   hasHits: boolean;
   hits: SearchHit[];
+  searching: boolean;
 };
 
 const states = new WeakMap<SearchHost, SearchState>();
@@ -97,7 +98,10 @@ function input(host: SearchHost): HTMLInputElement | null {
 function showMessage(host: SearchHost, message: string): void {
   host.hits = [];
   host.hasHits = false;
-  host.message = message;
+  host.searching = false;
+  // :empty guard: the empty box must never render blank — fall back to the
+  // idle copy when a caller passes nothing.
+  host.message = message || copy().empty;
 }
 
 function plainExcerpt(excerpt: string): string {
@@ -137,6 +141,12 @@ async function runSearch(host: SearchHost): Promise<void> {
     showMessage(host, searchChromeStrings(searchLocale()).emptyMessage);
     return;
   }
+  // Loading skeleton: the index loads once, asynchronously. When no results
+  // are on screen, mark the round searching so the view holds a skeleton
+  // instead of stale content; a re-search over visible hits keeps them until
+  // the new round lands (no skeleton flash). The sequence guard keeps a slow
+  // round from overwriting a newer one.
+  if (!host.hasHits) host.searching = true;
   if (!state.pagefind) return;
 
   const sequence = ++state.searchSequence;
@@ -144,6 +154,7 @@ async function runSearch(host: SearchHost): Promise<void> {
     const response = await state.pagefind.search(query);
     const hits = await Promise.all(response.results.slice(0, 10).map((result) => result.data()));
     if (sequence !== state.searchSequence) return;
+    host.searching = false;
     if (hits.length === 0) {
       showMessage(host, copy().noResults(query));
       return;
@@ -152,6 +163,7 @@ async function runSearch(host: SearchHost): Promise<void> {
     host.hasHits = true;
   } catch {
     // Keep the previous result list when an individual Pagefind chunk fails.
+    host.searching = false;
   }
 }
 

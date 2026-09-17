@@ -123,4 +123,24 @@ export const openSearchStyles = [compiledStyle(`
     color: var(--text-muted);
     font-size: var(--font-size-0);
   }
+  /* A blank message must never leave a padded empty box behind. */
+  .empty:empty {
+    display: none;
+  }
+  /* Loading skeleton: static bars (no shimmer — motion-safe by
+     construction), shaped like result rows. */
+  .skeleton {
+    display: grid;
+    gap: var(--size-3);
+    padding: var(--size-3);
+  }
+  .skeleton[hidden] {
+    display: none;
+  }
+  .skeleton span {
+    display: block;
+    height: var(--size-8);
+    border-radius: var(--radius-1);
+    background: var(--bg-muted);
+  }
 `)];

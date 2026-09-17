@@ -1,7 +1,7 @@
 /** Compiler-owned search view; browser behavior lives in open-search-controller.ts. */
 
 import { defineIslandConfig } from '@openelement/router';
-import { element, OpenElement, property } from '@openelement/element';
+import { computed, element, OpenElement, property } from '@openelement/element';
 import {
   closeSearchFromResults,
   closeSearchOnBackdrop,
@@ -43,7 +43,16 @@ export default class OpenSearch extends OpenElement {
   @property({ reflect: false, attribute: false })
   hasHits = false;
   @property({ reflect: false, attribute: false })
+  searching = false;
+  @property({ reflect: false, attribute: false })
   hits: SearchHit[] = [];
+  // Skeleton shows only over an empty result area (first search / index
+  // load); the idle message hides while it is up. Both toggle through
+  // `hidden` — Region branches must stay static (OEC9012).
+  @property({ reflect: false, attribute: false })
+  hideSkeleton = computed(() => !this.searching || this.hasHits);
+  @property({ reflect: false, attribute: false })
+  hideEmpty = computed(() => this.hasHits || this.searching);
 
   override connectedCallback(): void {
     super.connectedCallback();
@@ -113,7 +122,12 @@ export default class OpenSearch extends OpenElement {
               aria-live='polite'
               onClick={this.closeSearchFromResults}
             >
-              <div class='empty' hidden={this.hasHits}>{this.message}</div>
+              <div class='empty' hidden={this.hideEmpty}>{this.message}</div>
+            <div class='skeleton' hidden={this.hideSkeleton} aria-hidden='true'>
+              <span></span>
+              <span></span>
+              <span></span>
+            </div>
               {this.hits.map((hit) => (
                 <a class='result item' href={hit.href} key={hit.key}>
                   <div class='item-section'>{hit.section}</div>
