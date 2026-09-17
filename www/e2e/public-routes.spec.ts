@@ -6,7 +6,7 @@
  * new public route is covered the moment the build emits it, and a missing
  * or empty sitemap fails the suite closed. A second fail-closed cross-check
  * requires every guide/architecture article route from the generated content
- * content sources (www/content/{guide,architecture}/*.md, paired en/zh)
+ * sources (www/content/docs/{guide,architecture}/*.md, paired en/zh)
  * to appear in the sitemap in both locales, so a source-level route that
  * never reached the built public surface is a CI failure here as well. Blog
  * post URLs are slug-rewritten by the blog plugin at build time, so the
@@ -26,7 +26,7 @@ import { fileURLToPath } from 'node:url';
 
 const SITE_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const SITEMAP_PATH = join(SITE_ROOT, 'dist', 'sitemap.xml');
-const CONTENT_DIR = join(SITE_ROOT, 'content');
+const CONTENT_DIR = join(SITE_ROOT, 'content', 'docs');
 
 /** Public routes enumerated from the built sitemap; throws fail-closed. */
 function readSitemapRoutes(): string[] {

@@ -1,6 +1,7 @@
 ---
 title: 'How OpenElement compares'
 lede: 'The short orientation: what openElement optimizes for, and where the full reviewed comparison lives.'
+navLabel: 'Comparison'
 order: 25
 ---
 

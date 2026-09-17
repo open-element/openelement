@@ -74,7 +74,7 @@
     "proseWrap": "preserve",
     "exclude": [
       "www/content/blog/",
-      "www/content/guide/",
+      "www/content/docs/guide/",
       "www/app/data/",
       "www/public/assets/",
       "custom-dist/",
@@ -97,7 +97,7 @@
     },
     "exclude": [
       "www/content/blog/",
-      "www/content/guide/",
+      "www/content/docs/guide/",
       "www/app/data/",
       "www/public/assets/vendor/",
       "custom-dist/",

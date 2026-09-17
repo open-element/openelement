@@ -39,7 +39,7 @@ import { readPackages } from '../lib/package-graph.ts';
 import { apiReference } from '../../www/app/data/_generated-api-reference.ts';
 
 /** The maintained authoring surface; blog is excluded deliberately (header). */
-const CHECKED_CONTENT_DIRS = ['www/content/guide', 'www/content/architecture'];
+const CHECKED_CONTENT_DIRS = ['www/content/docs/guide', 'www/content/docs/architecture'];
 
 /** Every documented framework export + custom-element class name. */
 function frameworkExportNames(): ReadonlySet<string> {

@@ -1,6 +1,7 @@
 ---
 title: 'openElement 对比主流框架'
 lede: '一份保守的产品方向对比。本页描述每个框架的优化目标，不编造 benchmark 数据。用它判断适配度，而不是给速度排名。'
+navLabel: '框架对比'
 order: 20
 ---
 

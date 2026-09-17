@@ -22,8 +22,8 @@ const RETIRED = [
 ];
 
 const SCAN_DIRS = [
-  'www/content/guide',
-  'www/content/architecture',
+  'www/content/docs/guide',
+  'www/content/docs/architecture',
   'www/app',
   'www/lib',
   'packages/ui',

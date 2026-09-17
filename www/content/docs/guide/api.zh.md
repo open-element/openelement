@@ -2,6 +2,7 @@
 title: 'API 路由'
 lede: 'API routes 使用平台 request 与 response 原语。Route handlers 保持显式、有类型，并贴近应用边界。'
 order: 60
+section: 'Core'
 ---
 
 ## Request 边界

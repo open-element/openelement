@@ -1,22 +1,26 @@
 /**
- * Generate the site navigation data module from the route `meta` exports.
+ * Generate the site navigation data module.
  *
  * Router 1.0 deliberately does not synthesize app-shell nav data (the
- * generated entry carries empty defaults); the Site owns its own navigation.
- * Route files are the single source of truth via
- * `export const meta = { section, label, order }`, and this generator projects
- * them into `www/app/data/_generated-nav-data.ts` for the app shell:
+ * generated entry carries empty defaults); the Site owns its own navigation,
+ * and this generator projects the two nav sources into
+ * `www/app/data/_generated-nav-data.ts` for the app shell:
  *
  *   navSections — grouped sidebar tree consumed by the open-layout sidebar
  *   headerNav   — the curated top-level header links, filtered to real routes
  *
+ * One source per route kind, no duplication:
+ *
+ *   article routes (/guide/*, /architecture/*) — content frontmatter via the
+ *     same loader/schema as `_generated-guide-data.ts`: `order` sorts within
+ *     the section, `section` groups the entry (defaulted per collection) and
+ *     `navLabel` (falling back to `title`) labels it. zh entries supply
+ *     `labelZh` from the same fields.
+ *   the remaining static routes (/docs, /blog, …) — `export const meta =
+ *     { section, label, order }` in the route module.
+ *
  * `--check` regenerates in memory and fails on drift. The module is generated
  * (gitignored) and rebuilt before the site build.
- *
- * zh labels ride along: guide/architecture items take `labelZh` from the
- * content collection frontmatter title (same loader as
- * generate-site-content-data.ts); routes without a content entry and the
- * section/header group names use the small static maps below.
  */
 import { walk } from '@std/fs/walk';
 import { fromFileUrl, join } from '@std/path';
@@ -50,24 +54,25 @@ const SECTION_ZH: Readonly<Record<string, string>> = {
   '': '项目',
 };
 
-/** Curated header links; each must resolve to a scanned static route. */
+/**
+ * Curated header links; each must resolve to a scanned static route.
+ *
+ * Alpha keeps the smallest possible top bar: the Docs hub (/docs) is the
+ * single entrance to the guide and architecture trees, and Blog is the one
+ * separate stream. API reference, roadmap and changelog are reachable from
+ * the docs hub and the footer. A Playground entry is planned for a later
+ * release (mature framework sites run two to four top-level links; see
+ * lit.dev and svelte.dev).
+ */
 const HEADER_NAV: ReadonlyArray<{ path: string; label: string }> = [
-  // The Docs hub (/docs) is the single entrance to the guide and
-  // architecture trees — they are not separate top-level destinations.
   { path: '/docs', label: 'Docs' },
-  { path: '/apilist', label: 'API' },
   { path: '/blog', label: 'Blog' },
-  { path: '/roadmap', label: 'Roadmap' },
-  { path: '/changelog', label: 'Changelog' },
 ];
 
 /** zh header labels keyed by path (they name sections, not page titles). */
 const HEADER_NAV_ZH: Readonly<Record<string, string>> = {
   '/docs': '文档',
-  '/apilist': 'API',
   '/blog': '博客',
-  '/roadmap': '路线图',
-  '/changelog': '更新日志',
 };
 
 /**
@@ -88,6 +93,17 @@ interface RouteMeta {
   section: string;
   label: string;
   order: number;
+}
+
+interface ContentNavMeta extends RouteMeta {
+  labelZh?: string;
+}
+
+/** Label shown in the sidebar: explicit short label, else the page title. */
+function navLabel(frontmatter: Record<string, unknown>): string {
+  return typeof frontmatter.navLabel === 'string'
+    ? frontmatter.navLabel
+    : String(frontmatter.title ?? '');
 }
 
 function fileToRoutePath(relativePath: string): string | undefined {
@@ -120,14 +136,15 @@ interface NavItem {
 }
 
 /**
- * zh nav labels from the content collections: the same loader, schema and
+ * Nav metadata from the content collections: the same loader, schema and
  * locale-suffix transform that produce `_generated-guide-data.ts` /
  * `_generated-architecture-data.ts`, so the sidebar can never drift from the
- * page's own zh title. Markdown rendering is skipped (only frontmatter
- * titles are consumed here).
+ * page's own frontmatter. Markdown rendering is skipped (only frontmatter is
+ * consumed here).
  */
-async function collectZhTitles(): Promise<Map<string, string>> {
-  const titles = new Map<string, string>();
+async function collectContentNav(): Promise<Map<string, ContentNavMeta>> {
+  const nav = new Map<string, ContentNavMeta>();
+  const labelsZh = new Map<string, string>();
   for (const name of ['guide', 'architecture'] as const) {
     const collection = articleCollections[name];
     const entries = await loadCollectionData(name, {
@@ -136,21 +153,28 @@ async function collectZhTitles(): Promise<Map<string, string>> {
       markdown: (content: string) => content,
     });
     for (const entry of entries) {
-      const title = entry.frontmatter.title;
-      if (entry.locale === 'zh' && typeof title === 'string') {
-        titles.set(`${collection.basePath}/${entry.slug}`, title);
+      const path = `${collection.basePath}/${entry.slug}`;
+      const label = navLabel(entry.frontmatter);
+      if (entry.locale === 'zh') {
+        labelsZh.set(path, label);
+        continue;
       }
+      nav.set(path, {
+        section: String(entry.frontmatter.section ?? ''),
+        label,
+        order: Number(entry.frontmatter.order ?? 0),
+      });
     }
   }
-  return titles;
-}
-
-function zhLabelFor(path: string, titles: Map<string, string>): string | undefined {
-  return titles.get(path) ?? ROUTE_LABEL_ZH[path];
+  for (const [path, labelZh] of labelsZh) {
+    const item = nav.get(path);
+    if (item) item.labelZh = labelZh;
+  }
+  return nav;
 }
 
 async function collect(
-  titles: Map<string, string>,
+  contentNav: Map<string, ContentNavMeta>,
 ): Promise<{ routes: string[]; sections: Map<string, NavItem[]> }> {
   const routes: string[] = [];
   const sections = new Map<string, NavItem[]>();
@@ -159,10 +183,11 @@ async function collect(
     const path = fileToRoutePath(relativePath);
     if (!path) continue;
     routes.push(path);
-    const meta = parseMeta(await Deno.readTextFile(entry.path));
+    const fromContent = contentNav.get(path);
+    const meta = fromContent ?? parseMeta(await Deno.readTextFile(entry.path));
     if (!meta) continue;
+    const labelZh = fromContent ? fromContent.labelZh : ROUTE_LABEL_ZH[path];
     const list = sections.get(meta.section) ?? [];
-    const labelZh = zhLabelFor(path, titles);
     list.push({ path, label: meta.label, ...(labelZh ? { labelZh } : {}), order: meta.order });
     sections.set(meta.section, list);
   }
@@ -221,8 +246,8 @@ export const headerNav: HeaderNavLink[] = ${JSON.stringify(headerNav, null, 2)};
 `;
 }
 
-const titles = await collectZhTitles();
-const { routes, sections } = await collect(titles);
+const contentNav = await collectContentNav();
+const { routes, sections } = await collect(contentNav);
 
 // Static-map drift guard: a zh label for a route that left the nav (renamed
 // or removed) must fail here, not silently stop applying.

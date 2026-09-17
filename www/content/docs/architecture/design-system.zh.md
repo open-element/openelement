@@ -2,6 +2,7 @@
 title: '设计体系'
 lede: '站点当前生效的 dogfood 契约：经过审计的 Open Props token、沿用的 UI 原语、产品化图示，以及完整的暗色模式对等。它不是框架的强制要求。'
 order: 15
+section: 'Reference'
 ---
 
 - 只使用严格的 Open Props 与语义化 token。

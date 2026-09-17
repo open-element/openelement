@@ -2,6 +2,8 @@
 title: 'Performance & Benchmarks'
 lede: 'Zero-noise. What we actually measure.'
 order: 100
+navLabel: 'Performance'
+section: 'Reference'
 ---
 
 ## Build Performance

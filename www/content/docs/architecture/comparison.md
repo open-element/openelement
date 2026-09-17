@@ -1,6 +1,7 @@
 ---
 title: 'openElement vs Alternatives'
 lede: 'A conservative comparison of product direction. This page describes what each framework optimizes for; it does not invent benchmark claims. Use it to understand fit, not to rank speed.'
+navLabel: 'Comparison'
 order: 20
 ---
 

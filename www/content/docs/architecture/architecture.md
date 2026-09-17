@@ -1,6 +1,7 @@
 ---
 title: 'Current Architecture'
 lede: 'OpenElement is a Web Components-native, static-first application framework. Custom Elements are the durable component contract; JSX and Basic Element are authoring modes; Vite and Nitro are the official build and output path.'
+navLabel: 'Architecture'
 order: 10
 ---
 

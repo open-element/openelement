@@ -1,6 +1,7 @@
 ---
 title: 'Architecture Guide'
 lede: 'The short orientation: how OpenElement is organized, and where the full architecture page lives.'
+navLabel: 'Architecture'
 order: 20
 ---
 

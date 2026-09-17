@@ -2,6 +2,8 @@
 title: '性能与基准测试'
 lede: '零噪音。只列我们实际测量的数据。'
 order: 100
+navLabel: '性能'
+section: 'Reference'
 ---
 
 ## 构建性能

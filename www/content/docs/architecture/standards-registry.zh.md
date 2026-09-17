@@ -2,6 +2,7 @@
 title: 'WC 标准契约'
 lede: 'OpenElement 依赖 Web 平台契约，而非自研的注册表产品。Custom Elements、DSD、CEM、Request/Response 与 FormData 定义了公开应用模型的方向。'
 order: 80
+section: 'Reference'
 ---
 
 ## Elements + DSD

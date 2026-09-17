@@ -2,6 +2,7 @@
 title: 'Design System'
 lede: 'The active site dogfood contract: audited Open Props tokens, retained UI primitives, product-art diagrams and full dark-mode parity. It is not a framework requirement.'
 order: 15
+section: 'Reference'
 ---
 
 - Strict Open Props and semantic tokens only.

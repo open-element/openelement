@@ -8,7 +8,14 @@ type ArticleCollection = keyof typeof articleCollections;
 type ArticleContentPage = {
   slug: string;
   locale?: string;
-  frontmatter: { title: string; lede?: string; order: number; locale: string };
+  frontmatter: {
+    title: string;
+    lede?: string;
+    order: number;
+    locale: string;
+    section: string;
+    navLabel?: string;
+  };
   content: string;
   html: string;
 };
@@ -20,8 +27,10 @@ const loadContentPages = (collection: ArticleCollection) =>
   }) as Promise<ArticleContentPage[]>;
 
 // The content routes share the site-ui article shell: each route module is a
-// thin binding — meta (the nav contract) plus a content slug; the body lives
-// in www/content/<collection>/<slug>[.<locale>].md (#1087, ADR-0136).
+// thin binding — a content slug — and the nav contract (section / order /
+// navLabel) lives in the article frontmatter
+// (www/content/docs/<collection>/<slug>[.<locale>].md), the single source of
+// truth that tools/repo/generate-site-nav.ts projects (#1087, ADR-0136).
 const articleRoutes = [
   ['guide', 'api', 'GuideApiPage', 60],
   ['guide', 'architecture', 'GuideArchitecturePage', 20],
@@ -48,7 +57,7 @@ const articleRoutes = [
   ['architecture', 'standards-registry', 'StandardsRegistryPage', 80],
 ] as const;
 
-for (const [collection, route, className, order] of articleRoutes) {
+for (const [collection, route, className] of articleRoutes) {
   Deno.test(`${collection}/${route} is a thin article shell`, async () => {
     const routeSource = await Deno.readTextFile(
       new URL(`../app/routes/${collection}/${route}.tsx`, import.meta.url),
@@ -61,7 +70,10 @@ for (const [collection, route, className, order] of articleRoutes) {
       routeSource,
       `projectArticlePage('${collection}', '${route}', locale)`,
     );
-    assertStringIncludes(routeSource, `order: ${order}`);
+    assert(
+      !routeSource.includes('export const meta'),
+      `${collection}/${route} must not duplicate nav metadata; declare it in the frontmatter`,
+    );
     assertStringIncludes(adapterSource, `@element('${collection}-${route}')`);
     assertStringIncludes(adapterSource, `class ${className} extends OpenElement`);
     assertStringIncludes(
@@ -97,6 +109,10 @@ Deno.test('content covers every route in both locales', async () => {
         assert(
           page.frontmatter.title.length > 0,
           `${collection}/${route} (${locale}) title must not be empty`,
+        );
+        assert(
+          typeof page.frontmatter.section === 'string' && page.frontmatter.section.length > 0,
+          `${collection}/${route} (${locale}) must declare a nav section`,
         );
         assertStringIncludes(
           page.html,

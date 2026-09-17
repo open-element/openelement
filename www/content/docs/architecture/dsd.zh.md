@@ -1,6 +1,7 @@
 ---
 title: 'Declarative Shadow DOM 渲染'
 lede: 'openElement 把 Declarative Shadow DOM 作为 Web Components 的服务端渲染边界，然后只升级那些必须在浏览器中运行的行为。'
+navLabel: 'DSD 渲染'
 order: 30
 ---
 

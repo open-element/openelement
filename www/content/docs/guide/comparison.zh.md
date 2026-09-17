@@ -1,6 +1,7 @@
 ---
 title: 'OpenElement 与其他工具的对比'
 lede: '导读：openElement 优化的方向，以及完整对比页的位置。'
+navLabel: '对比'
 order: 25
 ---
 

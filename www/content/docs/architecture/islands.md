@@ -1,6 +1,7 @@
 ---
 title: 'Island Hydration'
 lede: 'openElement keeps documents and Web Components server-rendered by default. Islands are reserved for client components that need runtime state or framework interop.'
+navLabel: 'Islands'
 order: 40
 ---
 

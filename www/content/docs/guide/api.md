@@ -2,6 +2,7 @@
 title: 'API Routes'
 lede: 'API routes use platform request and response primitives. Keep route handlers explicit, typed, and close to the app boundary.'
 order: 60
+section: 'Core'
 ---
 
 ## Request boundary

@@ -2,6 +2,7 @@
 title: 'WC Standards Contract'
 lede: 'OpenElement relies on web-platform contracts rather than a proprietary registry product. Custom Elements, DSD, CEM, Request/Response and FormData define the direction of the public application model.'
 order: 80
+section: 'Reference'
 ---
 
 ## Elements + DSD

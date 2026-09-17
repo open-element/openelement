@@ -1,6 +1,7 @@
 ---
 title: 'Declarative Shadow DOM Rendering'
 lede: 'openElement treats Declarative Shadow DOM as the server-rendered boundary for Web Components, then upgrades only the behavior that must run in the browser.'
+navLabel: 'DSD Rendering'
 order: 30
 ---
 

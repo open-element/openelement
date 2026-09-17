@@ -2,6 +2,7 @@
 title: 'Package 兼容性'
 lede: 'openElement 把第三方 Custom Elements 视为基于标准的依赖。当前构建通过显式的 package island 配置与可用的 Custom Elements Manifest metadata 完成 SSR 准入。'
 order: 90
+section: 'Reference'
 ---
 
 ## 当前契约

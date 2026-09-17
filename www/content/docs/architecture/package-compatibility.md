@@ -2,6 +2,7 @@
 title: 'Package Compatibility'
 lede: 'OpenElement treats third-party Custom Elements as standards-based dependencies. Current builds use explicit package-island configuration and available Custom Elements Manifest metadata for SSR admission.'
 order: 90
+section: 'Reference'
 ---
 
 ## Current contract
