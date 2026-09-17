@@ -65,6 +65,10 @@ export const pageHomeStyles = [compiledStyle(`
   /* ── scene framework: outlined index anchors ── */
   .scene { position:relative; padding:clamp(4rem,10vh,8rem) clamp(1.5rem,5vw,4.5rem); }
   .scene-index { color:var(--brand); font-size:var(--font-size-00); font-weight:var(--font-weight-8); letter-spacing:.24em; text-transform:uppercase; }
+  /* CJK variants stay subject-side (:lang) — @scope'd sheets cannot match the
+     html[lang] ancestor, but language inherits across the scope boundary. */
+  .eyebrow:lang(zh), .scene-index:lang(zh) { text-transform:none; letter-spacing:.08em; }
+  p:lang(zh), li:lang(zh) { line-height:1.9; }
   .scene h2 { font-size:clamp(2.2rem,3.6vw,3.2rem); font-weight:800; line-height:1; letter-spacing:-.03em; }
   .scene h2 .accent { display:block; font-family:var(--font-serif); font-style:italic; font-weight:400; font-size:calc(1em * 1.15); color:var(--violet-8); }
   .scene-copy { max-width:34rem; color:var(--text-secondary); line-height:1.75; }

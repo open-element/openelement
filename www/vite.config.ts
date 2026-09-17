@@ -89,13 +89,7 @@ body {
 ::selection {
   background: var(--brand-subtle);
   color: var(--text-primary);
-}
-/* CJK typographic rules must live in this document-level sheet: component
-   sheets are @scope'd to the page element, so [lang] ancestors (html) are
-   unreachable from there. */
-[lang='zh'] { letter-spacing: normal; }
-[lang='zh'] .eyebrow, [lang='zh'] .scene-index { text-transform: none; letter-spacing: 0.08em; }
-[lang='zh'] p, [lang='zh'] li { line-height: 1.9; }`;
+}`;
 const colorTokensStyle =
   `<style>@font-face{font-family:'JetBrains Mono';font-style:normal;font-weight:100 800;font-display:swap;src:url('/assets/fonts/jetbrains-mono-latin-variable.woff2') format('woff2')}@font-face{font-family:'Instrument Serif';font-style:normal;font-weight:400;font-display:swap;src:url('/assets/fonts/instrument-serif-latin-regular.woff2') format('woff2')}@font-face{font-family:'Instrument Serif';font-style:italic;font-weight:400;font-display:swap;src:url('/assets/fonts/instrument-serif-latin-italic.woff2') format('woff2')}@font-face{font-family:'Inter Variable';font-style:normal;font-weight:100 900;font-display:swap;src:url('/assets/fonts/inter-latin-variable.woff2') format('woff2')}${rootCSS}body{font-family:var(--font-sans);-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}${siteCSS}</style>`;
 

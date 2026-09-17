@@ -33,6 +33,11 @@ export const pageBlogIndexStyles = [compiledStyle(`
     letter-spacing: 0.29em;
     text-transform: uppercase;
   }
+  /* Subject-side :lang — @scope'd sheets cannot match the html[lang] ancestor. */
+  .eyebrow:lang(zh) {
+    text-transform: none;
+    letter-spacing: 0.08em;
+  }
 
   .eyebrow::before {
     content: "";

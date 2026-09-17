@@ -130,6 +130,12 @@ export const pageStyles = `
     font-size: var(--font-size-1);
   }
 
+  /* Subject-side :lang — @scope'd sheets cannot match the html[lang] ancestor. */
+  p:lang(zh),
+  li:lang(zh) {
+    line-height: 1.9;
+  }
+
   strong {
     color: var(--text-primary);
     font-weight: var(--font-weight-7);
