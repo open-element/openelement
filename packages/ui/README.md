@@ -83,11 +83,35 @@ button (and retries briefly while deferred scripts load).
 The reference site wires the same scripts through the `inject` option in
 `www/vite.config.ts`.
 
-The package vendors an audited subset of Open Props scales at build time —
-dead scales are deleted, so only tokens with a live consumer survive. The
-token gates require `--surface-glass`, `--ui-control-bg`, `--focus-ring` and
-`--motion-standard`. `daisyClassSheet`, modal and step-card are retired and
-must not reappear in exports, manifests, docs or packed artifacts.
+## Design tokens
+
+`src/open-props-tokens.css` and its CSSOM mirror `src/open-props-tokens.ts`
+are **generated — do not edit**. Regenerate with:
+
+```bash
+deno task --cwd tools/repo ui:tokens
+```
+
+Sources:
+
+- Upstream [open-props](https://open-props.style) `1.7.23` (**MIT**,
+  © Adam Argyle) — only the tokens we carry verbatim: the gray ramp,
+  `--indigo-6`, two border sizes, font weights, and two line-heights, read
+  from the package's per-topic `src/props.*.js` files. The generator fails if
+  upstream renames one of them, so drift surfaces at generation time.
+- `src/semantic-tokens.css` (**ours**, hand-maintained) — everything else:
+  re-tuned scales (violet/green/red/orange, px spacing, radii, type sizes,
+  easings, shadows), semantic roles, both themes, the `:host` fallback, and
+  the CJK font stacks. Each divergence from upstream is commented where it
+  lives; do not "fix" tuned values by copying upstream.
+
+`openPropsTokenSheet` (`:host` form, adopt into a shadow root) and
+`openPropsRootSheet` (`:root` form, document-level adoption — the `:host`
+→ `:root` transform lives in the generated module) are the only token
+entry points. The token gates require `--surface-glass`,
+`--ui-control-bg`, `--focus-ring` and `--motion-standard`.
+`daisyClassSheet`, modal and step-card are retired and must not reappear in
+exports, manifests, docs or packed artifacts.
 
 Existing per-component imports remain stable across this layering change.
 
