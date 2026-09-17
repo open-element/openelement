@@ -98,12 +98,13 @@ export default class OpenLayout extends OpenElement {
   .locale-switch {
     display: inline-flex;
     align-items: center;
-    min-height: var(--size-10);
-    padding: var(--size-2) var(--size-4);
-    border: var(--border-size-1) solid var(--border);
+    justify-content: center;
+    height: var(--size-9);
+    padding: 0 var(--size-2);
+    border: 0;
     border-radius: var(--radius-round);
-    background: color-mix(in srgb, var(--bg-elevated) 74%, transparent);
-    color: var(--text-secondary);
+    background: transparent;
+    color: var(--text-primary);
     font-family: var(--font-mono);
     font-size: var(--font-size-00);
     letter-spacing: .02em;
@@ -112,9 +113,8 @@ export default class OpenLayout extends OpenElement {
     transition: all 0.15s ease;
   }
   .locale-switch:hover {
-    color: var(--text-primary);
-    border-color: var(--border-hover);
-    background: var(--bg-hover);
+    color: var(--brand);
+    background: color-mix(in srgb, var(--brand-pale) 34%, transparent);
   }
   .locale-switch:focus-visible {
     outline: var(--focus-size) solid var(--focus-ring);
@@ -254,6 +254,10 @@ export default class OpenLayout extends OpenElement {
     white-space: nowrap;
     transition: transform var(--duration-2) var(--ease-2);
     view-transition-name: open-brand-mark;
+  }
+
+  .logo-slash {
+    color: var(--brand);
   }
 
   .logo:focus-visible {
@@ -609,11 +613,15 @@ export default class OpenLayout extends OpenElement {
   render() {
     return (
       <div class='app-layout' part='container'>
-        <a class='skip-link' href='#main-content'>{this.skipToMain}</a>
-        <header class='app-header' part='header'>
+        <a class='skip-link' href='#main-content' data-pagefind-ignore>{this.skipToMain}</a>
+        <header class='app-header' part='header' data-pagefind-ignore>
           <div class='header-inner'>
             <a class='logo' href={this.homeHref} aria-label={this.siteName}>
-              <span class='logo-glyph' aria-hidden='true'>OE</span>
+              <span class='logo-glyph' aria-hidden='true'>
+                {'<open'}
+                <span class='logo-slash'>/</span>
+                {'>'}
+              </span>
             </a>
             <nav class='header-nav' part='nav' aria-label={this.primaryNavLabel}>
               {this.headerNavItems.map((link) => (
@@ -661,6 +669,7 @@ export default class OpenLayout extends OpenElement {
             part='sidebar'
             aria-label={this.sidebarLabel}
             hidden={this.sidebarHidden}
+            data-pagefind-ignore
           >
             {this.sidebarRows.map((row) => (
               <div key={row.key} class='nav-row' data-kind={row.kind}>
@@ -677,7 +686,7 @@ export default class OpenLayout extends OpenElement {
             ))}
           </nav>
           <main class='layout-main' part='main' id='main-content' tabindex='-1'>
-            <details class='sidebar-mobile' hidden={this.sidebarHidden}>
+            <details class='sidebar-mobile' hidden={this.sidebarHidden} data-pagefind-ignore>
               <summary class='sidebar-mobile-toggle'>{this.sidebarToggle}</summary>
               <nav class='sidebar-mobile-panel' aria-label={this.sidebarLabel}>
                 {this.sidebarRows.map((row) => (
@@ -698,7 +707,7 @@ export default class OpenLayout extends OpenElement {
             <slot></slot>
           </main>
         </div>
-        <footer class='app-footer' part='footer'>
+        <footer class='app-footer' part='footer' data-pagefind-ignore>
           <div class='footer-inner'>
             <nav class='footer-column' aria-label={this.footerProductLabel}>
               <span class='footer-heading'>{this.footerProductLabel}</span>

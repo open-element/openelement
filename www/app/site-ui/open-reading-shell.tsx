@@ -118,7 +118,7 @@ export default class OpenReadingShell extends OpenElement {
                   <span class='crumb-sep'>/</span>
                   <span class='crumb-current'>{this.pageTitle}</span>
                 </p>
-                <h1 class='title'>
+                <h1 class='title' data-pagefind-meta='title'>
                   {this.pageTitle}
                   <span class='title-accent'>{this.accent}</span>
                 </h1>

@@ -3,7 +3,7 @@ import { siteHead } from '@openelement/site-ui/head.ts';
 import { contentLocale } from '@openelement/site-ui/locale.ts';
 import { localizePath } from '@openelement/site-ui/link.ts';
 import PageHome from '../../components/page-home.tsx';
-import { COMMON_PUBLISHED_NOTE, REGISTRY_NOTE } from '../../data/version.ts';
+import { alphaLineNote, COMMON_PUBLISHED_NOTE, REGISTRY_NOTE } from '../../data/version.ts';
 
 const content = {
   en: {
@@ -38,8 +38,9 @@ const content = {
     specDeps: 'Framework deps',
     specOutput: 'Server output',
     begin: 'Begin.',
-    beginNote:
-      `The @alpha dist-tag currently resolves to 0.43.0-alpha.2 (the previous 0.43 line); 1.0.0-alpha.1 is the repository baseline, not yet on npm. --minimum-dependency-age 0 keeps same-day compatible patches installable despite Deno's default ~24h minimumDependencyAge.`,
+    beginNote: `${
+      alphaLineNote('en')
+    } --minimum-dependency-age 0 keeps same-day compatible patches installable despite Deno's default ~24h minimumDependencyAge.`,
     facts: 'Facts behind the feeling',
     continueComposition: 'Continue the composition.',
     referenceCopy:
@@ -74,8 +75,9 @@ const content = {
     specDeps: '框架依赖',
     specOutput: '服务端输出',
     begin: '开始。',
-    beginNote:
-      `@alpha dist-tag 当前解析到 0.43.0-alpha.2（此前的 0.43 线）；1.0.0-alpha.1 是仓库基线，尚未发布到 npm。--minimum-dependency-age 0 可绕过 Deno 默认约 24 小时的 minimumDependencyAge，使当天发布的兼容补丁仍可安装。`,
+    beginNote: `${
+      alphaLineNote('zh')
+    } --minimum-dependency-age 0 可绕过 Deno 默认约 24 小时的 minimumDependencyAge，使当天发布的兼容补丁仍可安装。`,
     facts: '感觉背后的事实',
     continueComposition: '继续这场组合。',
     referenceCopy: '每一个场景都立足于公开产品面、架构与发布真相——不是装饰性的虚构。',

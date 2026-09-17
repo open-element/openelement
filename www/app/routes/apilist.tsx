@@ -2,7 +2,7 @@
 import { definePage } from '@openelement/router';
 import { siteHead } from '@openelement/site-ui/head.ts';
 import { contentLocale } from '@openelement/site-ui/locale.ts';
-import { OPENELEMENT_VERSION } from '../data/version.ts';
+import { OPENELEMENT_VERSION, sourceLineStamp } from '../data/version.ts';
 import { apiReference } from '../data/_generated-api-reference.ts';
 import ApiCorePage, {
   type ApiElementItem,
@@ -237,7 +237,7 @@ const content = {
       `The supported openElement API surface: ${packageCount} consumer packages, every documented export and every custom element, generated from repository truth.`,
     pageTitle: 'API Reference',
     lede: (v: string) =>
-      `The ${v} repository baseline documents only the ${packageCount} consumer packages. Retired alpha packages and internal subpaths are not authoring surfaces.`,
+      `The ${v} surface covers only the ${packageCount} consumer packages. Retired alpha packages and internal subpaths are not authoring surfaces.`,
     s1Index: '01 / interface rule',
     s1Title: 'Authoring starts at product packages.',
     s1Copy:
@@ -277,7 +277,7 @@ const content = {
       `openElement 受支持的 API 面：${packageCount} 个面向使用者的包、全部记录在案的导出与 Custom Element，由仓库真值生成。`,
     pageTitle: 'API 参考',
     lede: (v: string) =>
-      `${v} 仓库基线只记录 ${packageCount} 个面向使用者的包。已退役的 alpha 包与内部子路径都不是创作面。`,
+      `${v} 的创作面只覆盖 ${packageCount} 个面向使用者的包。已退役的 alpha 包与内部子路径都不是创作面。`,
     s1Index: '01 / 接口规则',
     s1Title: '创作从产品包开始。',
     s1Copy:
@@ -357,7 +357,7 @@ export default definePage(ApiCorePage, {
       metadata: {
         breadcrumb: 'Reference',
         title: t.pageTitle,
-        lede: t.lede(OPENELEMENT_VERSION),
+        lede: t.lede(sourceLineStamp(resolved)),
       },
       railItems: [
         ...packages.map((pkg) => ({

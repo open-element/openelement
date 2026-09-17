@@ -46,11 +46,11 @@ export default class OpenArticleView extends OpenElement {
   render() {
     return (
       <main>
-        <div class={this.notFoundClass}>
+        <div class={this.notFoundClass} data-pagefind-ignore>
           <h1>404</h1>
           <p>{this.notFoundMessage}: {this.slug}</p>
         </div>
-        <div class={this.articleClass}>
+        <div class={this.articleClass} data-pagefind-body>
           <open-reading-shell
             rail
             footer

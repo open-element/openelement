@@ -83,13 +83,13 @@ export default class PageBlogPost extends OpenElement {
   render() {
     return (
       <main>
-        <div class={this.notFoundClass}>
+        <div class={this.notFoundClass} data-pagefind-ignore>
           <h1>404</h1>
           <p>{this.notFoundMessage}: {this.slug}</p>
           <a href={this.blogHref}>← {this.backLabel}</a>
         </div>
 
-        <div class={this.articleClass}>
+        <div class={this.articleClass} data-pagefind-body>
           <open-reading-shell meta rail footer navigation={this.navigation} locale={this.locale}>
             <div slot='meta'>
               <p class='crumb'>
@@ -97,7 +97,7 @@ export default class PageBlogPost extends OpenElement {
                 <span class='crumb-sep'>/</span>
                 <span class='crumb-current'>{this.crumbCurrent}</span>
               </p>
-              <h1 class='post-title'>{this.postTitle}</h1>
+              <h1 class='post-title' data-pagefind-meta='title'>{this.postTitle}</h1>
               <p class='post-lede'>{this.lede}</p>
               <p class='post-meta'>
                 <time>{this.date}</time>

@@ -91,7 +91,7 @@ export default class OpenSearch extends OpenElement {
           <kbd part='shortcut'>⌘K</kbd>
         </button>
 
-        <div class='overlay' hidden onClick={this.closeSearchOnBackdrop}>
+        <div class='overlay' hidden data-pagefind-ignore onClick={this.closeSearchOnBackdrop}>
           <div class='panel' role='dialog' aria-modal='true' aria-label={this.dialogLabel}>
             <input
               type='text'

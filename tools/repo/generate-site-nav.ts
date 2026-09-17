@@ -52,9 +52,9 @@ const SECTION_ZH: Readonly<Record<string, string>> = {
 
 /** Curated header links; each must resolve to a scanned static route. */
 const HEADER_NAV: ReadonlyArray<{ path: string; label: string }> = [
+  // The Docs hub (/docs) is the single entrance to the guide and
+  // architecture trees — they are not separate top-level destinations.
   { path: '/docs', label: 'Docs' },
-  { path: '/guide/core-concepts', label: 'Guide' },
-  { path: '/architecture/architecture', label: 'Architecture' },
   { path: '/apilist', label: 'API' },
   { path: '/blog', label: 'Blog' },
   { path: '/roadmap', label: 'Roadmap' },
@@ -64,8 +64,6 @@ const HEADER_NAV: ReadonlyArray<{ path: string; label: string }> = [
 /** zh header labels keyed by path (they name sections, not page titles). */
 const HEADER_NAV_ZH: Readonly<Record<string, string>> = {
   '/docs': '文档',
-  '/guide/core-concepts': '指南',
-  '/architecture/architecture': '架构',
   '/apilist': 'API',
   '/blog': '博客',
   '/roadmap': '路线图',

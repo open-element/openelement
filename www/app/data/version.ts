@@ -53,3 +53,60 @@ export const PUBLISHED_PACKAGE_VERSIONS: Readonly<Record<string, string | null>>
   '@openelement/create': 'v0.44.0-beta.2.2',
   '@openelement/ui': 'v0.44.0-beta.2.2',
 };
+
+// ---------------------------------------------------------------------------
+// Source-line wording, derived from release-state truth (generated module).
+// When the release train publishes the source line to @alpha for every
+// package, SOURCE_LINE_PUBLISHED flips and every consumer below rewrites
+// itself on the next site:build — no manual wording sweep.
+import {
+  ALPHA_RESOLVES_TO,
+  SOURCE_LINE_PUBLISHED,
+  SOURCE_VERSION,
+} from './_generated-release-line.ts';
+
+type ReleaseLocale = 'en' | 'zh';
+
+/** Docs-page stamp: "vX · repository baseline" until publish, then plain. */
+export function sourceLineStamp(locale: ReleaseLocale): string {
+  if (SOURCE_LINE_PUBLISHED) return `v${SOURCE_VERSION}`;
+  return locale === 'en'
+    ? `v${SOURCE_VERSION} · repository baseline`
+    : `v${SOURCE_VERSION} · 仓库基线`;
+}
+
+/** "Applies to …" label injected for {{OPENELEMENT_VERSION}} in content. */
+export function sourceLineAppliesLabel(locale: ReleaseLocale): string {
+  if (SOURCE_LINE_PUBLISHED) return `v${SOURCE_VERSION}`;
+  return locale === 'en'
+    ? `the v${SOURCE_VERSION} repository baseline`
+    : `v${SOURCE_VERSION} 仓库基线`;
+}
+
+/**
+ * One-sentence install-command caveat for getting-started and the home
+ * "Begin." note: what @alpha resolves to today, in plain text (no markdown —
+ * this string is also substituted into rendered HTML).
+ */
+export function alphaLineNote(locale: ReleaseLocale): string {
+  if (SOURCE_LINE_PUBLISHED) {
+    return locale === 'en'
+      ? `The @alpha dist-tag resolves to ${SOURCE_VERSION} — the current baseline.`
+      : `@alpha dist-tag 解析到 ${SOURCE_VERSION}——即当前基线。`;
+  }
+  return locale === 'en'
+    ? `The @alpha dist-tag currently resolves to ${ALPHA_RESOLVES_TO} (the previous 0.43 line); ${SOURCE_VERSION} is the repository baseline, not yet on npm.`
+    : `@alpha dist-tag 当前解析到 ${ALPHA_RESOLVES_TO}（此前的 0.43 线）；${SOURCE_VERSION} 是仓库基线，尚未发布到 npm。`;
+}
+
+/** Getting-started lead-in note ({{SOURCE_LINE_NOTE}} placeholder). */
+export function sourceLineNote(locale: ReleaseLocale): string {
+  if (SOURCE_LINE_PUBLISHED) {
+    return locale === 'en'
+      ? `${SOURCE_VERSION} is the current baseline for Element and Router, published to npm under the @alpha dist-tag.`
+      : `${SOURCE_VERSION} 是 Element 与 Router 的当前基线，已通过 @alpha dist-tag 发布到 npm。`;
+  }
+  return locale === 'en'
+    ? `${SOURCE_VERSION} is the repository baseline for Element and Router and is not yet published to npm. The @alpha dist-tag currently resolves to ${ALPHA_RESOLVES_TO} — the previous 0.43 line with the retired functional authoring model.`
+    : `${SOURCE_VERSION} 是 Element 与 Router 的仓库基线，尚未发布到 npm。@alpha dist-tag 当前解析到 ${ALPHA_RESOLVES_TO}——即旧的 0.43 线，采用已退役的函数式创作模型。`;
+}

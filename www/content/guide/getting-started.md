@@ -4,7 +4,7 @@ lede: 'OpenElement is a Web Components-native, static-first application framewor
 order: 1
 ---
 
-> `1.0.0-alpha.1` is the repository baseline for Element and Router and is not yet published to npm. The `@alpha` dist-tag currently resolves to `0.43.0-alpha.2` — the previous 0.43 line with the retired functional authoring model. The registry truth lives in `docs/release/release-state.json`. There is no supported migration from 0.x — start new projects from `@openelement/create`.
+> {{SOURCE_LINE_NOTE}} The registry truth lives in `docs/release/release-state.json`. There is no supported migration from 0.x — start new projects from `@openelement/create`.
 
 ## Install
 

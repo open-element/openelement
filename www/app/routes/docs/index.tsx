@@ -3,7 +3,7 @@ import { siteHead } from '@openelement/site-ui/head.ts';
 import { contentLocale } from '@openelement/site-ui/locale.ts';
 import { localizePath } from '@openelement/site-ui/link.ts';
 import PageDocs from '../../components/page-docs.tsx';
-import { OPENELEMENT_VERSION } from '../../data/version.ts';
+import { sourceLineStamp } from '../../data/version.ts';
 
 export const meta = { section: 'Quick Start', label: 'Docs', order: 0 };
 
@@ -63,12 +63,9 @@ export default definePage(PageDocs, {
     const items = entrances[resolved];
     return {
       ...text,
-      // OPENELEMENT_VERSION is the repository source line, not a published
-      // release — label the stamp as the repository baseline so the docs
-      // index never reads as a published-version claim.
-      version: resolved === 'en'
-        ? `${OPENELEMENT_VERSION} · repository baseline`
-        : `${OPENELEMENT_VERSION} · 仓库基线`,
+      // Derived from release-state truth: "repository baseline" until the
+      // source line ships to @alpha, then the plain version (data/version.ts).
+      version: sourceLineStamp(resolved),
       entrance1Title: items[0][0],
       entrance1Copy: items[0][1],
       entrance1Href: localizePath(items[0][2], resolved),

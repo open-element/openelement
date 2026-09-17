@@ -4,7 +4,7 @@ lede: 'OpenElement 是以 Web Components 为原生契约、static-first 的应�
 order: 1
 ---
 
-> `1.0.0-alpha.1` 是 Element 与 Router 的仓库基线，尚未发布到 npm。`@alpha` dist-tag 当前解析到 `0.43.0-alpha.2`——即旧的 0.43 线，采用已退役的函数式创作模型。registry 真值以 `docs/release/release-state.json` 为准。不提供从 0.x 的受支持迁移路径——新项目请从 `@openelement/create` 开始。
+> {{SOURCE_LINE_NOTE}} registry 真值以 `docs/release/release-state.json` 为准。不提供从 0.x 的受支持迁移路径——新项目请从 `@openelement/create` 开始。
 
 ## 安装
 

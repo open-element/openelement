@@ -8,7 +8,7 @@ import {
   getPage as getArchitecturePage,
   pages as architecturePages,
 } from '../data/_generated-architecture-data.ts';
-import { OPENELEMENT_VERSION } from '../data/version.ts';
+import { sourceLineAppliesLabel, sourceLineNote } from '../data/version.ts';
 
 export type ArticleCollection = 'guide' | 'architecture';
 
@@ -90,15 +90,12 @@ export function projectArticlePage(
   }
 
   const article = prepareArticle(
-    // OPENELEMENT_VERSION is the repository source line (see data/version.ts),
-    // not a published release: inject it with repository-baseline wording so
-    // "Applies to …" never reads as a published-version claim.
-    page.html.replaceAll(
-      '{{OPENELEMENT_VERSION}}',
-      locale === 'en'
-        ? `the ${OPENELEMENT_VERSION} repository baseline`
-        : `${OPENELEMENT_VERSION} 仓库基线`,
-    ),
+    // Version wording derives from release-state truth (data/version.ts):
+    // stamps read "repository baseline" until the source line is published
+    // to @alpha for every package, then rewrite themselves on the next build.
+    page.html
+      .replaceAll('{{OPENELEMENT_VERSION}}', sourceLineAppliesLabel(locale))
+      .replaceAll('{{SOURCE_LINE_NOTE}}', sourceLineNote(locale)),
   );
   const ordered = data.pages
     .filter((candidate) => candidate.locale === 'en')
