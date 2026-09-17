@@ -4,6 +4,7 @@
     "assets:check-provenance": "deno run --allow-run ./run-in.ts --root ../.. -- deno run --allow-read tools/repo/check-assets-provenance.ts",
     "generate:api-reference": "deno run --allow-run ./run-in.ts --root ../.. -- deno run --allow-read --allow-write --allow-env tools/repo/generate-api-reference.ts",
     "generate:ui-manifest": "deno run --allow-run ./run-in.ts --root ../.. -- deno run --allow-read --allow-write --allow-env tools/repo/generate-ui-manifest.ts",
+    "ui:tokens": "deno run --allow-run ./run-in.ts --root ../.. -- deno run --allow-read --allow-write --allow-env --allow-net tools/repo/generate-ui-tokens.ts",
     "ui-manifest:check": "deno run --allow-run ./run-in.ts --root ../.. -- deno run --allow-read --allow-write --allow-env tools/repo/generate-ui-manifest.ts --check",
     "census": "deno run --allow-run ./run-in.ts --root ../.. -- deno run --allow-read --allow-write --allow-run --allow-env tools/repo/tracked-census.ts",
     "content-examples:check": "deno run --allow-run ./run-in.ts --root ../.. -- deno run --allow-read --allow-env --allow-write tools/repo/check-content-examples.ts",

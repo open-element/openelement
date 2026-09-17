@@ -1,9 +1,4 @@
 /**
- * GENERATED — do not edit; source: open-props@1.7.23 (MIT) + semantic-tokens.css.
- * Regenerate with: deno task --cwd tools/repo ui:tokens
- */
-
-/**
  * @openelement/ui - semantic token layer (hand-maintained single source).
  *
  * Everything here is OURS: tuned primitives, semantic roles, light/dark
@@ -29,37 +24,7 @@
   min-height: 1px;
   contain: layout style;
 
-  /* src/props.colors.js (Gray) — open-props@1.7.23 (MIT), verbatim */
-  --gray-0: #f8f9fa;
-  --gray-1: #f1f3f5;
-  --gray-2: #e9ecef;
-  --gray-3: #dee2e6;
-  --gray-4: #ced4da;
-  --gray-5: #adb5bd;
-  --gray-6: #868e96;
-  --gray-7: #495057;
-  --gray-8: #343a40;
-  --gray-9: #212529;
-  --gray-10: #16191d;
-  --gray-11: #0d0f12;
-  --gray-12: #030507;
-
-  /* src/props.colors.js (Indigo) — open-props@1.7.23 (MIT), verbatim */
-  --indigo-6: #4c6ef5;
-
-  /* src/props.borders.js — open-props@1.7.23 (MIT), verbatim */
-  --border-size-1: 1px;
-  --border-size-2: 2px;
-
-  /* src/props.fonts.js — open-props@1.7.23 (MIT), verbatim */
-  --font-weight-4: 400;
-  --font-weight-5: 500;
-  --font-weight-6: 600;
-  --font-weight-7: 700;
-  --font-weight-8: 800;
-  --font-weight-9: 900;
-  --font-lineheight-3: 1.5;
-  --font-lineheight-4: 1.75;
+  /* @upstream-tokens */
 
   /* ═══════════════════════════════════════════════
      Spacing scale (tuned px steps — not upstream rem sizes)
