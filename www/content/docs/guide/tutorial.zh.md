@@ -61,7 +61,7 @@ my-app/
   public/           静态资源，原样拷进 dist/
 ```
 
-`deno task check` 只检查写在 `deno.json` 里的那批文件；新增路由时，把路径也加进那份列表。
+`deno task check` 会类型检查 starter 的 `app/` 目录与 `vite.config.ts`；新增的路由会被自动纳入。
 
 ## 第 2 步：加第一个页面
 

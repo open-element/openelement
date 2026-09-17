@@ -11,8 +11,8 @@ type TimelineEntry = {
   version: string;
   theme: string;
   copy: string;
-  state: 'stable' | 'next' | 'planned';
-  stamp?: 'CURRENT' | 'NEXT';
+  state: 'stable' | 'baseline' | 'next' | 'planned';
+  stamp?: 'CURRENT' | 'BASELINE' | 'NEXT';
   status?: string;
 };
 
@@ -39,9 +39,9 @@ const entries: Record<'en' | 'zh', TimelineEntry[]> = {
       'theme': 'Public Alpha admission',
       'copy':
         'Start real application use with the public baseline: independently consumable Element and Router with Native/Lit application flows. Element and Router are the public core, Create is the supported entry, UI is experimental. 1.0 Alpha is a fresh baseline with no supported migration from 0.x.',
-      'state': 'next',
-      'stamp': 'NEXT',
-      'status': 'prerelease',
+      'state': 'baseline',
+      'stamp': 'BASELINE',
+      'status': 'repository baseline — not yet on npm',
     },
     {
       'version': 'v1.0 RC / Stable',
@@ -58,9 +58,9 @@ const entries: Record<'en' | 'zh', TimelineEntry[]> = {
       'theme': '公开 Alpha 准入',
       'copy':
         '从公开基线开始在真实应用中使用可独立消费的 Element 与 Router，验证 Native/Lit 应用流程。Element 与 Router 是公共核心，Create 是正式入口，UI 为实验性能力。1.0 Alpha 是新基线，不提供从 0.x 的受支持迁移。',
-      'state': 'next',
-      'stamp': 'NEXT',
-      'status': '预发布',
+      'state': 'baseline',
+      'stamp': 'BASELINE',
+      'status': '仓库基线——尚未发布到 npm',
     },
     {
       'version': 'v1.0 RC / Stable',
@@ -93,7 +93,11 @@ const content = {
     releaseLineCopy:
       'The line is deliberately narrow: only claims that can survive docs, package exports and build validation stay visible.',
     timelineAria: 'Roadmap release line',
-    stamps: { CURRENT: 'CURRENT', NEXT: 'NEXT' } as Record<'CURRENT' | 'NEXT', string>,
+    stamps: {
+      CURRENT: 'CURRENT',
+      BASELINE: 'BASELINE',
+      NEXT: 'NEXT',
+    } as Record<'CURRENT' | 'BASELINE' | 'NEXT', string>,
     designRuleTitle: 'Design rule',
     designRuleText:
       'No new package is created by default. Auth, ORM and storage remain recipes — openElement owns the application contract, not service products.',
@@ -125,7 +129,7 @@ const content = {
     siteRuleLabel: 'design rule',
     siteRuleTitle: 'Design rule',
     siteRuleText:
-      'The public website should read like a Web Standards Lab: dark-first, diagrammatic, useful, and grounded in artifacts users can inspect.',
+      'The public site is a working demonstration of the framework\u2019s static-first output.',
     matrixIndex: '03 / decision matrix',
     matrixTitle: 'Roadmap language stays inside the product boundary.',
     matrixCopy: 'Ship, prove and freeze are evidence states rather than marketing labels.',
@@ -173,7 +177,11 @@ const content = {
     releaseLineTitle: '从已交付证据，到 v1.0 冻结。',
     releaseLineCopy: '这条线刻意收窄：只有经得起文档、包导出与构建验证检验的表述，才会留在这里。',
     timelineAria: 'Roadmap 发布线',
-    stamps: { CURRENT: '当前', NEXT: '下一个' } as Record<'CURRENT' | 'NEXT', string>,
+    stamps: {
+      CURRENT: '当前',
+      BASELINE: '基线',
+      NEXT: '下一个',
+    } as Record<'CURRENT' | 'BASELINE' | 'NEXT', string>,
     designRuleTitle: '设计规则',
     designRuleText:
       '默认不新增包。Auth、ORM 与存储保持为配方——openElement 拥有的是应用契约，不是服务产品。',
@@ -203,8 +211,7 @@ const content = {
     ],
     siteRuleLabel: '设计规则',
     siteRuleTitle: '设计规则',
-    siteRuleText:
-      '公开网站应读起来像一间 Web Standards Lab：深色优先、图示化、有用，并立足于用户可以检查的真实产物。',
+    siteRuleText: '官网即框架 static-first 产出的活体示范。',
     matrixIndex: '03 / 决策矩阵',
     matrixTitle: 'Roadmap 语言不越过产品边界。',
     matrixCopy: 'Ship、prove 与 freeze 是证据状态，不是营销标签。',

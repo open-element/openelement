@@ -21,11 +21,11 @@ const content = {
     sceneDsdLead: 'The server writes HTML.',
     sceneDsdAccent: 'The browser upgrades it.',
     sceneDsdCopy:
-      'DSD is the default server output. No client re-render, no double payload — the markup is the application.',
+      'DSD is a first-class server output — no client re-render, no double payload. The compiled default root is light DOM today; the markup is the application either way.',
     sceneIslandsLead: 'Upgrade',
     sceneIslandsAccent: 'selectively.',
     sceneIslandsCopy:
-      'Interactive regions hydrate on your schedule. The rest of the page never ships a byte of JavaScript.',
+      'Interactive regions hydrate on your schedule. Non-interactive regions ship no JavaScript of their own.',
     sceneOutputLead: 'Static first.',
     sceneOutputAccent: 'Deployable anywhere.',
     startBuilding: 'Start building',
@@ -44,7 +44,7 @@ const content = {
     facts: 'Facts behind the feeling',
     continueComposition: 'Continue the composition.',
     referenceCopy:
-      'Every scene is grounded in the public product surface, architecture and release truth — not a decorative fiction.',
+      'Every number and claim on this page is sourced from the repository\u2019s release and benchmark truth.',
   },
   zh: {
     headTitle: 'openElement — 组合而生的 Web。',
@@ -59,10 +59,10 @@ const content = {
       'Custom Elements 是应用组件契约——不是渲染器集成，也不是叶子组件格式。元素只写一次：在服务端渲染，在浏览器中升级。',
     sceneDsdLead: '服务端写出 HTML。',
     sceneDsdAccent: '浏览器就地升级。',
-    sceneDsdCopy: 'DSD 是默认的服务端输出。没有客户端重渲染，没有双份载荷——标记即应用。',
+    sceneDsdCopy: 'DSD 是一等服务端输出——无客户端重渲染、无双重载荷。当前编译默认 root 为 light DOM；两种模式下标记即应用。',
     sceneIslandsLead: '按需',
     sceneIslandsAccent: '升级。',
-    sceneIslandsCopy: '交互区域按你的节奏 hydrate；页面其余部分不发出一字节 JavaScript。',
+    sceneIslandsCopy: '交互区域按你的节奏水合；非交互区域自身不携带任何 JavaScript。',
     sceneOutputLead: '静态优先。',
     sceneOutputAccent: '随处可部署。',
     startBuilding: '开始构建',
@@ -80,7 +80,7 @@ const content = {
     } --minimum-dependency-age 0 可绕过 Deno 默认约 24 小时的 minimumDependencyAge，使当天发布的兼容补丁仍可安装。`,
     facts: '感觉背后的事实',
     continueComposition: '继续这场组合。',
-    referenceCopy: '每一个场景都立足于公开产品面、架构与发布真相——不是装饰性的虚构。',
+    referenceCopy: '本页每个数字与声称都取自仓库的发布与基准真值。',
   },
 } as const;
 
@@ -238,7 +238,7 @@ const references = {
 } as const;
 
 const marquee =
-  'CUSTOM ELEMENTS ✳ SHADOW DOM ✳ DECLARATIVE SHADOW DOM ✳ ES MODULES ✳ SIGNALS ✳ HTML FIRST ✳ ';
+  'CUSTOM ELEMENTS ✳ DECLARATIVE SHADOW DOM ✳ ES MODULES ✳ SIGNALS ✳ HTML FIRST ✳ ';
 
 export default definePage(PageHome, {
   head({ locale }) {

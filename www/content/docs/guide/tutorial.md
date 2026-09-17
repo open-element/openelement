@@ -61,7 +61,7 @@ my-app/
   public/           static assets, copied into dist/ as-is
 ```
 
-`deno task check` type-checks the files named in `deno.json`; when you add a route, add its path to that list too.
+`deno task check` type-checks the starter's `app/` directory and `vite.config.ts`; new routes are picked up automatically.
 
 ## Step 2: Add your first page
 

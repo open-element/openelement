@@ -152,11 +152,11 @@ export default class PageHome extends OpenElement {
             </div>
             <div class='spec-cell'>
               <small>{this.specDeps}</small>
-              <strong class='accent'>zero</strong>
+              <strong class='accent'>zero in element</strong>
             </div>
             <div class='spec-cell'>
               <small>{this.specOutput}</small>
-              <strong>DSD default</strong>
+              <strong>DSD first-class</strong>
             </div>
           </div>
           <div class='marquee' aria-hidden='true'>
@@ -176,7 +176,7 @@ export default class PageHome extends OpenElement {
               {this.sceneElementCopy}
             </p>
             <div class='badges'>
-              <span class='badge'>ZERO RUNTIME</span>
+              <span class='badge'>NO FRAMEWORK RUNTIME</span>
               <span class='badge'>JSX + BASIC</span>
             </div>
           </div>

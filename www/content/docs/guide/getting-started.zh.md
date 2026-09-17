@@ -4,7 +4,7 @@ lede: 'OpenElement 是以 Web Components 为原生契约、static-first 的应�
 order: 1
 ---
 
-> {{SOURCE_LINE_NOTE}} registry 真值以 `docs/release/release-state.json` 为准。不提供从 0.x 的受支持迁移路径——新项目请从 `@openelement/create` 开始。
+> {{SOURCE_LINE_NOTE}} registry 真值以 [`docs/release/release-state.json`](https://github.com/open-element/openelement/blob/main/docs/release/release-state.json) 为准，不提供从 0.x 的受支持迁移路径。
 
 ## 安装
 
@@ -16,9 +16,9 @@ cd my-app
 deno task dev
 ```
 
-`@openelement/*` 各包已发布的 npm 版本与 dist-tag——包括安装命令实际解析到的版本——登记在 `docs/release/release-state.json`（仓库的 registry 核验真值）中。`--minimum-dependency-age 0` 让新兼容补丁发布后的首日仍可正常创建项目；否则 Deno 默认的 `minimumDependencyAge` 会拒绝发布未满约 24 小时的包。
+安装命令解析到的版本登记在 [`docs/release/release-state.json`](https://github.com/open-element/openelement/blob/main/docs/release/release-state.json)（仓库的 registry 核验真值）中；`--minimum-dependency-age 0` 让新兼容补丁发布后的首日仍可正常创建项目。
 
-> 需要 Deno 2.9+：Deno 2.9 是经过验证的下限（仓库锁定并在 CI 中运行的工具链；未声明也未测试更早的版本）。生成的 starter 会写入 `minimumDependencyAge` 配置键，该键自 Deno 2.5.5 起存在。
+> 需要 Deno 2.9+：这是仓库锁定并在 CI 中运行、经过验证的下限。
 
 ## 探索
 

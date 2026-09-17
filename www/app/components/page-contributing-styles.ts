@@ -147,6 +147,10 @@ export const pageContributingStyles = [compiledStyle(`
     padding: 0.125rem 0.375rem;
   }
 
+  .release .inline-code:empty {
+    display: none;
+  }
+
   .checklist {
     display: grid;
     gap: var(--size-4);

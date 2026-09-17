@@ -4,7 +4,7 @@ lede: 'OpenElement is a Web Components-native, static-first application framewor
 order: 1
 ---
 
-> {{SOURCE_LINE_NOTE}} The registry truth lives in `docs/release/release-state.json`. There is no supported migration from 0.x — start new projects from `@openelement/create`.
+> {{SOURCE_LINE_NOTE}} Registry truth lives in [`docs/release/release-state.json`](https://github.com/open-element/openelement/blob/main/docs/release/release-state.json) — there is no supported migration from 0.x.
 
 ## Install
 
@@ -16,9 +16,9 @@ cd my-app
 deno task dev
 ```
 
-The published npm versions and dist-tags of the `@openelement/*` packages — including the version the install command above resolves — are registered in `docs/release/release-state.json`, the repository's registry-verified source of truth. `--minimum-dependency-age 0` keeps the bootstrap usable during the first day after a compatible patch is published, when Deno's default `minimumDependencyAge` would otherwise refuse it.
+The version the install command resolves is registered in [`docs/release/release-state.json`](https://github.com/open-element/openelement/blob/main/docs/release/release-state.json), the repository's registry-verified source of truth; `--minimum-dependency-age 0` keeps the bootstrap installable during the first day after a compatible patch ships.
 
-> Deno 2.9+ is required: Deno 2.9 is the verified floor (the toolchain this repository pins and exercises in CI; no earlier version is claimed or tested). The generated starter writes the `minimumDependencyAge` config key, which exists since Deno 2.5.5.
+> Deno 2.9+ is required: it is the verified floor this repository pins and exercises in CI.
 
 ## Explore
 
