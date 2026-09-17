@@ -25,6 +25,15 @@ export default class Page404 extends OpenElement {
   docsHref = '/docs';
 
   @property({ reflect: false, attribute: false })
+  searchHint = '';
+
+  @property({ reflect: false, attribute: false })
+  popularLabel = '';
+
+  @property({ reflect: false, attribute: false })
+  popular: Array<{ href: string; label: string }> = [];
+
+  @property({ reflect: false, attribute: false })
   marqueeText = '';
 
   render() {
@@ -46,6 +55,13 @@ export default class Page404 extends OpenElement {
               {this.readDocs}
             </open-button>
           </div>
+          <p class='search-hint'>{this.searchHint}</p>
+          <nav class='popular' aria-label={this.popularLabel}>
+            <p class='popular-label'>{this.popularLabel}</p>
+            {this.popular.map((link) => (
+              <a key={link.href} href={link.href}>{link.label}</a>
+            ))}
+          </nav>
         </section>
         <div class='marquee' aria-hidden='true'>
           <span>{this.marqueeText}</span>

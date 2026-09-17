@@ -85,6 +85,44 @@ export const page404Styles = [compiledStyle(`
     margin-block-start: var(--size-3);
   }
 
+  /* Search entry: the header search listens globally, so a hint is the
+     honest control here — the error document ships no island JS of its own
+     (special routes are outside client reachability). */
+  .search-hint {
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    font-size: var(--font-size-00);
+  }
+
+  .popular {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    align-items: baseline;
+    gap: var(--size-2) var(--size-4);
+    margin-block-start: var(--size-2);
+  }
+
+  .popular-label {
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    font-size: var(--font-size-00);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+
+  .popular a {
+    color: var(--text-secondary);
+    font-family: var(--font-mono);
+    font-size: var(--font-size-0);
+    text-decoration: none;
+  }
+
+  .popular a:hover {
+    color: var(--brand);
+    text-decoration: underline;
+  }
+
   .marquee {
     overflow: hidden;
     white-space: nowrap;

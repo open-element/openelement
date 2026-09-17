@@ -16,6 +16,14 @@ const content = {
     lede: 'This route never mounted. The page you want is probably one declarative template away.',
     backHome: 'Back home',
     readDocs: 'Read the docs',
+    searchHint: 'Tip: press ⌘K (Ctrl+K) to search the whole site',
+    popularLabel: 'Popular right now',
+    popular: [
+      ['Get started', '/guide/getting-started'],
+      ['Tutorial', '/guide/tutorial'],
+      ['API reference', '/reference'],
+      ['Architecture', '/architecture'],
+    ],
   },
   zh: {
     headTitle: '404 — 页面未找到',
@@ -24,6 +32,14 @@ const content = {
     lede: '这个路由从未被挂载。你要找的页面，也许只差一个 declarative template。',
     backHome: '回到首页',
     readDocs: '阅读文档',
+    searchHint: '小提示：按 ⌘K（Ctrl+K）全站搜索',
+    popularLabel: '热门直达',
+    popular: [
+      ['快速开始', '/guide/getting-started'],
+      ['教程', '/guide/tutorial'],
+      ['API 参考', '/reference'],
+      ['架构', '/architecture'],
+    ],
   },
 } as const;
 
@@ -50,6 +66,12 @@ export default definePage(Page404, {
       lede: text.lede,
       backHome: text.backHome,
       readDocs: text.readDocs,
+      searchHint: text.searchHint,
+      popularLabel: text.popularLabel,
+      popular: text.popular.map(([label, href]) => ({
+        label,
+        href: localizePath(href, resolved),
+      })),
       homeHref: localizePath('/', resolved),
       docsHref: localizePath('/docs', resolved),
       marqueeText: marquee + marquee,
