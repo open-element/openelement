@@ -417,7 +417,7 @@ export default class OpenLayout extends OpenElement {
     background: color-mix(in srgb, var(--bg-elevated) 58%, transparent);
   }
   .footer-inner {
-    max-width: 1240px;
+    max-width: var(--site-container-wide);
     margin: 0 auto;
     padding: var(--size-16) var(--size-8);
     display: grid;
@@ -445,7 +445,7 @@ export default class OpenLayout extends OpenElement {
   .footer-bottom {
     border-top: var(--border-size-1) solid var(--border);
     padding: var(--size-4) var(--size-8);
-    max-width: 1240px;
+    max-width: var(--site-container-wide);
     margin: 0 auto;
     display: flex;
     justify-content: space-between;

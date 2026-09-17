@@ -77,7 +77,13 @@ const OPEN_PROPS_TOKEN_CSS = `/**
   /* ═══════════════════════════════════════════════
      Shadows
      ═══════════════════════════════════════════════ */
+  /* Shadows read as ink, so the color must flip per theme: gray-12 is a dark
+     ink in light mode but flips to near-white in dark mode, which turned every
+     large shadow into a white glow. --shadow-color carries the theme-aware
+     ink; --shadow-2 is the elevation-2 ambient built on it. */
   --shadow-1: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
+  --shadow-color: var(--violet-12);
+  --shadow-2: 0 20px 60px color-mix(in srgb, var(--shadow-color) 20%, transparent);
 
   /* ═══════════════════════════════════════════════
      Typography
@@ -101,10 +107,7 @@ const OPEN_PROPS_TOKEN_CSS = `/**
   --font-weight-7: 700;
   --font-weight-8: 800;
   --font-weight-9: 900;
-  --font-letterspacing-0: 0;
-  --font-letterspacing-1: 0;
   --font-letterspacing-2: 0;
-  --font-letterspacing-3: 0;
   --font-letterspacing-4: 0.04em;
   --font-letterspacing-5: 0.08em;
   --font-lineheight-1: 0.95;
@@ -197,8 +200,8 @@ const OPEN_PROPS_TOKEN_CSS = `/**
   --surface-radius: var(--radius-2);
   --overlay-radius: var(--radius-3);
   --surface-highlight: inset 0 1px 0 color-mix(in srgb, white 8%, transparent);
-  --surface-shadow: 0 20px 60px color-mix(in srgb, var(--gray-12) 20%, transparent);
-  --overlay-shadow: 0 28px 90px color-mix(in srgb, var(--gray-12) 48%, transparent);
+  --surface-shadow: var(--shadow-2);
+  --overlay-shadow: 0 28px 90px color-mix(in srgb, var(--shadow-color) 48%, transparent);
 
   /* ═══════════════════════════════════════════════
      UI Semantic Tokens (light defaults)
@@ -221,17 +224,20 @@ const OPEN_PROPS_TOKEN_CSS = `/**
   --code-text: var(--gray-2);
   --border: var(--gray-3);
   --border-hover: var(--gray-4);
-  --error: #dc3545;
-  --error-subtle: rgba(220, 53, 69, 0.1);
-  --success: #16a34a;
-  --success-subtle: rgba(22, 163, 74, 0.1);
-  --warning: #d97706;
-  --warning-subtle: rgba(217, 119, 6, 0.1);
+  /* Status colors clear the 4.5:1 AA floor on --bg-base (measured):
+     success #237032 is 5.8:1, warning #9a6700 is 4.6:1 (GitHub's light
+     attention color), error #c92a2a is 5.2:1. */
+  --error: #c92a2a;
+  --error-subtle: rgba(201, 42, 42, 0.1);
+  --success: #237032;
+  --success-subtle: rgba(35, 112, 50, 0.1);
+  --warning: #9a6700;
+  --warning-subtle: rgba(154, 103, 0, 0.1);
   --info: #2563eb;
   --info-subtle: rgba(37, 99, 235, 0.1);
   --overlay: rgba(0, 0, 0, 0.4);
   --nav-bg: color-mix(in srgb, var(--bg-base) 86%, transparent);
-  --nav-height: 72px;
+  --nav-height: var(--size-16);
   --nav-link-color: var(--text-primary);
   --nav-link-hover: var(--brand);
   --nav-link-size: var(--font-size-0);
@@ -329,6 +335,10 @@ const OPEN_PROPS_TOKEN_CSS = `/**
   --brand-deep: var(--violet-12);
   --brand-subtle: color-mix(in srgb, var(--brand) 16%, transparent);
   --brand-glow: color-mix(in srgb, var(--brand) 22%, transparent);
+  /* Pale wash stays a translucent brand tint in dark: violet-1's dark-ramp
+     entry is a deep violet, which inverted the hover-wash semantics. */
+  --brand-pale: color-mix(in srgb, var(--brand) 18%, transparent);
+  --shadow-color: rgb(0 0 0);
   --on-brand: var(--gray-0);
   --text-primary: var(--gray-10);
   --text-secondary: var(--gray-8);

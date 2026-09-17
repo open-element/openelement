@@ -36,11 +36,10 @@ export const mastheadStyles = `
 export const pageStyles = `
   :host {
     display: block;
-    --content-width: 760px;
-    --content-max-width: 1120px;
+    --content-width: var(--site-container-reading);
+    --content-max-width: var(--site-container);
     --toc-width: 228px;
     --underline-offset: 3px;
-    --border-hairline: 1px;
     color: var(--text-primary);
   }
 
@@ -86,7 +85,7 @@ export const pageStyles = `
     margin: var(--size-10) 0 var(--size-4);
     color: var(--text-primary);
     padding-bottom: var(--size-2);
-    border-bottom: var(--border-hairline) solid var(--border);
+    border-bottom: var(--border-size-1) solid var(--border);
     line-height: 1.12;
   }
 
@@ -179,7 +178,7 @@ export const pageStyles = `
     font-size: var(--font-size-0);
     line-height: 1.7;
     margin: var(--size-4) 0;
-    border: var(--border-hairline) solid var(--code-border);
+    border: var(--border-size-1) solid var(--code-border);
     box-shadow: none;
   }
 
@@ -195,7 +194,7 @@ export const pageStyles = `
     border-radius: var(--radius-1);
     font-size: var(--font-size-00);
     color: var(--brand);
-    border: var(--border-hairline) solid color-mix(in srgb, var(--brand) 18%, var(--border));
+    border: var(--border-size-1) solid color-mix(in srgb, var(--brand) 18%, var(--border));
   }
 
   table {
@@ -208,7 +207,7 @@ export const pageStyles = `
 
   th,
   td {
-    border: var(--border-hairline) solid var(--border);
+    border: var(--border-size-1) solid var(--border);
     padding: var(--size-2) var(--size-3);
     text-align: left;
     vertical-align: top;
@@ -232,7 +231,7 @@ export const pageStyles = `
   .pillar {
     padding: var(--size-4) var(--size-5);
     margin: var(--size-4) 0;
-    border: var(--border-hairline) solid var(--border);
+    border: var(--border-size-1) solid var(--border);
     border-left: var(--border-size-3) solid var(--brand);
     background: var(--bg-card);
     border-radius: var(--radius-2);
@@ -262,7 +261,7 @@ export const pageStyles = `
   .hard-constraint {
     display: inline-block;
     background: var(--brand-subtle);
-    border: var(--border-hairline) solid color-mix(in srgb, var(--brand) 18%, var(--border));
+    border: var(--border-size-1) solid color-mix(in srgb, var(--brand) 18%, var(--border));
     color: var(--brand);
     padding: var(--size-1) var(--size-2);
     border-radius: var(--radius-1);
@@ -285,7 +284,7 @@ export const pageStyles = `
   .nav-row {
     margin-top: var(--size-10);
     padding-top: var(--size-4);
-    border-top: var(--border-hairline) solid var(--border);
+    border-top: var(--border-size-1) solid var(--border);
     display: flex;
     justify-content: space-between;
     gap: var(--size-3);

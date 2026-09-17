@@ -26,29 +26,10 @@ const siteCSS = `
 html[data-theme="light"],
 :host([data-theme="light"]),
 :root[data-theme="light"] {
-  --bg-canvas: var(--bg-base);
   --surface-1: var(--bg-elevated);
-  --surface-2: var(--bg-surface);
-  --surface-3: var(--bg-hover);
   --surface-code: var(--bg-code);
-  --color-text-primary: var(--text-primary);
-  --color-text-secondary: var(--text-secondary);
-  --color-text-muted: var(--text-muted);
-  --color-brand: var(--brand);
-  --color-brand-hover: var(--brand-hover);
-  --color-brand-light: var(--brand-light);
-  --color-success: var(--success);
-  --color-warning: var(--warning);
-  --color-error: var(--error);
-  --color-info: var(--info);
-  --color-border: var(--border);
-  --color-border-hover: var(--border-hover);
-  --color-border-strong: color-mix(in srgb, var(--border) 68%, var(--text-primary));
   --edge-highlight: color-mix(in srgb, var(--text-primary) 10%, transparent);
-  --color-edge-highlight: var(--edge-highlight);
-  --color-overlay: var(--overlay);
-  --shadow-elevated: var(--shadow-1);
-  --border-strong: var(--color-border-strong);
+  --border-strong: color-mix(in srgb, var(--border) 68%, var(--text-primary));
   --nav-bg: var(--bg-base);
   --nav-height: var(--size-16);
   --nav-link-color: var(--text-primary);
@@ -83,28 +64,10 @@ html[data-theme="light"],
 html[data-theme="dark"],
 :host([data-theme="dark"]),
 :root[data-theme="dark"] {
-  --bg-canvas: var(--bg-base);
   --surface-1: var(--bg-elevated);
-  --surface-2: var(--bg-surface);
-  --surface-3: var(--bg-hover);
   --surface-code: var(--bg-code);
-  --color-text-primary: var(--text-primary);
-  --color-text-secondary: var(--text-secondary);
-  --color-text-muted: var(--text-muted);
-  --color-brand: var(--brand);
-  --color-brand-hover: var(--brand-hover);
-  --color-brand-light: var(--brand-light);
-  --color-success: var(--success);
-  --color-warning: var(--warning);
-  --color-error: var(--error);
-  --color-info: var(--info);
-  --color-border: var(--border);
-  --color-border-hover: var(--border-hover);
-  --color-border-strong: color-mix(in srgb, var(--border) 72%, var(--text-primary));
   --edge-highlight: color-mix(in srgb, var(--text-primary) 14%, transparent);
-  --color-edge-highlight: var(--edge-highlight);
-  --color-overlay: var(--overlay);
-  --border-strong: var(--color-border-strong);
+  --border-strong: color-mix(in srgb, var(--border) 72%, var(--text-primary));
   --nav-bg: var(--bg-base);
   --nav-height: var(--size-16);
 }
@@ -115,7 +78,7 @@ body {
     linear-gradient(115deg, color-mix(in srgb, var(--violet-1) 38%, transparent), transparent 46%),
     linear-gradient(color-mix(in srgb, var(--border) 34%, transparent) var(--border-size-1), transparent var(--border-size-1)),
     linear-gradient(90deg, color-mix(in srgb, var(--border) 30%, transparent) var(--border-size-1), transparent var(--border-size-1)),
-    var(--bg-canvas);
+    var(--bg-base);
   background-size: auto, auto, 220px 128px, 220px 128px, auto;
   color: var(--text-primary);
   font-family: var(--font-sans);

@@ -19,7 +19,7 @@ export const pageBlogPostStyles = [compiledStyle(
     .lang-notice { max-width: 640px; margin: var(--size-4) 0 0; padding: var(--size-2) var(--size-3); border-inline-start: var(--border-size-2) solid var(--violet-5); color: var(--text-secondary); font-size: var(--font-size-0); line-height: 1.65; }
     .lang-notice:empty { display: none; }
     .post-meta { display: flex; flex-wrap: wrap; gap: var(--size-2); margin: var(--size-4) 0 0; color: var(--text-muted); font-family: var(--font-mono); font-size: var(--font-size-00); letter-spacing: 0.06em; text-transform: uppercase; }
-    .next-dispatch { display: grid; gap: var(--size-3); margin-top: var(--size-11); padding-top: var(--size-6); border-top: 1px solid var(--border); }
+    .next-dispatch { display: grid; gap: var(--size-3); margin-top: var(--size-10); padding-top: var(--size-6); border-top: 1px solid var(--border); }
     .next-label { color: var(--text-muted); font-family: var(--font-mono); font-size: var(--font-size-00); font-weight: var(--font-weight-8); letter-spacing: 0.16em; text-transform: uppercase; }
     .next-dispatch a { color: var(--text-primary); font-family: var(--font-serif); font-size: clamp(1.7rem, 3.2vw, 2.6rem); line-height: 1.05; text-decoration: none; }
     .next-dispatch a:hover { color: var(--violet-8); }
