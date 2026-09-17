@@ -54,7 +54,7 @@ export default class OpenReadingShell extends OpenElement {
     .shell,:host([rail]) .shell{grid-template-columns:1fr;width:min(100% - 2rem,760px);padding-block:var(--size-8)}
     .main{max-width:none}
     .title{font-size:clamp(1.8rem,8vw,2.4rem)}
-    .rail{position:static;order:-1}
+    .rail{position:static;margin-block-start:var(--size-6)}
     .rail-label{display:none}
   }
 `)];

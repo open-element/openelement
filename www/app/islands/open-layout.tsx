@@ -482,10 +482,6 @@ export default class OpenLayout extends OpenElement {
     .sidebar-mobile {
       display: block;
       margin: var(--size-4) var(--size-4) 0;
-      padding: var(--size-3);
-      border: var(--border-size-1) solid var(--border);
-      border-radius: var(--radius-2);
-      background: var(--bg-surface);
     }
     .sidebar-mobile[hidden] { display: none; }
     .sidebar-mobile-toggle {
@@ -496,6 +492,10 @@ export default class OpenLayout extends OpenElement {
       font-weight: var(--font-weight-8);
       letter-spacing: .12em;
       text-transform: uppercase;
+      border: var(--border-size-1) solid var(--border);
+      border-radius: var(--radius-2);
+      padding: var(--size-3) var(--size-4);
+      background: var(--surface-1);
     }
     .sidebar-mobile-panel { padding-block-start: var(--size-3); }
     .sidebar-mobile .nav-row[data-kind="section"] { margin: 0.5rem 0 0; }
@@ -767,6 +767,7 @@ export default class OpenLayout extends OpenElement {
             ))}
           </nav>
           <main class='layout-main' part='main' id='main-content' tabindex='-1'>
+            <slot></slot>
             <details class='sidebar-mobile' hidden={this.sidebarHidden} data-pagefind-ignore>
               <summary class='sidebar-mobile-toggle'>{this.sidebarToggle}</summary>
               <nav class='sidebar-mobile-panel' aria-label={this.sidebarLabel}>
@@ -785,7 +786,6 @@ export default class OpenLayout extends OpenElement {
                 ))}
               </nav>
             </details>
-            <slot></slot>
           </main>
         </div>
         <footer class='app-footer' part='footer' data-pagefind-ignore>
