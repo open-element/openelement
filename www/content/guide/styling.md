@@ -1,12 +1,12 @@
 ---
 title: 'Styling'
-lede: 'Every page renders inside a custom element with declarative shadow DOM — a global stylesheet alone will not reach it.'
+lede: 'Pages that opt into an explicit shadow root render inside a custom element with declarative shadow DOM — a global stylesheet alone will not reach them. The compiled default is a light root.'
 order: 5
 ---
 
 ## The shadow boundary
 
-Route pages render inside per-page custom elements (for example `<page-blog-post>`), and the server sends their content inside declarative shadow DOM. The page's own `<style>` and `StyleSheet` rules live in the shadow root. A document-level rule like `.card { ... }` or `h1 { ... }` is scoped to the light DOM and never reaches page content — silently: no console warning, no build error.
+Route pages render inside per-page custom elements (for example `<blog-post-page>`). When a page class opts into `root: 'shadow-open'`, the server sends its content inside declarative shadow DOM and the page's own `<style>` and `StyleSheet` rules live in the shadow root. A document-level rule like `.card { ... }` or `h1 { ... }` is scoped to the light DOM and never reaches shadow page content — silently: no console warning, no build error. (The compiled default is a light root, where document styles do apply.)
 
 ## What crosses the boundary
 

@@ -1,12 +1,12 @@
 ---
 title: '样式'
-lede: '每个页面都渲染在带 declarative shadow DOM 的 custom element 内部——单靠全局样式表无法触及页面内容。'
+lede: '显式选择 shadow root 的页面渲染在带 declarative shadow DOM 的 custom element 内部——单靠全局样式表无法触及它们。编译默认是 light root。'
 order: 5
 ---
 
 ## shadow 边界
 
-路由页面渲染在每页一个的 custom element 内（例如 `<page-blog-post>`），服务端以 declarative shadow DOM 输出其内容。页面自己的 `<style>` 与 `StyleSheet` 规则位于 shadow root 中。文档级规则如 `.card { ... }` 或 `h1 { ... }` 被限定在 light DOM，永远到不了页面内容——而且是静默的：没有 console 警告，也没有构建错误。
+路由页面渲染在每页一个的 custom element 内（例如 `<blog-post-page>`）。当页面类显式选择 `root: 'shadow-open'` 时，服务端以 declarative shadow DOM 输出其内容，页面自己的 `<style>` 与 `StyleSheet` 规则位于 shadow root 中。文档级规则如 `.card { ... }` 或 `h1 { ... }` 被限定在 light DOM，永远到不了 shadow 页面内容——而且是静默的：没有 console 警告，也没有构建错误。（编译默认是 light root，此时文档样式是生效的。）
 
 ## 什么能穿过边界
 

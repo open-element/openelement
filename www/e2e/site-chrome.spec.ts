@@ -81,20 +81,23 @@ test.describe('Site chrome: docs sidebar', () => {
     await expect(page.getByRole('navigation', { name: 'Documentation navigation' })).toBeHidden();
   });
 
-  test('zh guide pages localize the sidebar landmark and link targets', async ({ page }) => {
+  test('zh guide pages localize the sidebar landmark, labels, and link targets', async ({ page }) => {
     await page.setViewportSize(DESKTOP);
     await page.goto('/zh/guide/getting-started');
     await page.waitForLoadState('networkidle');
 
     const sidebar = page.getByRole('navigation', { name: '文档导航' });
     await expect(sidebar).toBeVisible();
-    const current = sidebar.getByRole('link', { name: 'Getting Started' });
+    // Sidebar labels follow the zh content titles (快速开始 / API 路由).
+    // Integration review: confirm final zh nav copy with the content agent.
+    const current = sidebar.getByRole('link', { name: '快速开始' });
     await expect(current).toHaveAttribute('href', '/zh/guide/getting-started');
     await expect(current).toHaveAttribute('aria-current', 'page');
-    await expect(sidebar.getByRole('link', { name: 'API Routes' })).toHaveAttribute(
+    await expect(sidebar.getByRole('link', { name: 'API 路由' })).toHaveAttribute(
       'href',
       '/zh/guide/api',
     );
+    await expect(sidebar.getByRole('link', { name: 'Getting Started' })).toHaveCount(0);
   });
 
   test('mobile reading layouts expose the sidebar through a native disclosure', async ({ page }) => {
@@ -173,5 +176,40 @@ test.describe('Site chrome: footer', () => {
     for (const column of FOOTER_COLUMNS_EN) {
       await expect(footer.getByRole('navigation', { name: column })).toBeVisible();
     }
+  });
+});
+
+test.describe('Site chrome: skip link and language switcher', () => {
+  // Integration review: the skip link and the header language switcher land
+  // with the parallel open-layout header work; selectors here pin the
+  // contract (href targets), not the final visible copy.
+  for (const route of ['/', '/guide/getting-started', '/zh/guide/getting-started']) {
+    test(`skip link on ${route} targets #main-content`, async ({ page }) => {
+      await page.goto(route);
+      await page.waitForLoadState('networkidle');
+
+      const skip = page.locator('a[href="#main-content"]').first();
+      await expect(skip).toBeAttached();
+      // The href is meaningless without its anchor target.
+      await expect(page.locator('#main-content')).toHaveCount(1);
+    });
+  }
+
+  test('zh pages link to the English twin from the header switcher', async ({ page }) => {
+    await page.setViewportSize(DESKTOP);
+    await page.goto('/zh/guide/getting-started');
+    await page.waitForLoadState('networkidle');
+
+    const banner = page.getByRole('banner');
+    await expect(banner.locator('a[href="/guide/getting-started"]')).toHaveCount(1);
+  });
+
+  test('en pages link to the zh twin from the header switcher', async ({ page }) => {
+    await page.setViewportSize(DESKTOP);
+    await page.goto('/guide/getting-started');
+    await page.waitForLoadState('networkidle');
+
+    const banner = page.getByRole('banner');
+    await expect(banner.locator('a[href="/zh/guide/getting-started"]')).toHaveCount(1);
   });
 });

@@ -69,6 +69,32 @@ export default class PageHome extends OpenElement {
   @property({ reflect: false, attribute: false })
   marqueeText = '';
   @property({ reflect: false, attribute: false })
+  heroMono = '';
+  @property({ reflect: false, attribute: false })
+  heroSerif = '';
+  @property({ reflect: false, attribute: false })
+  sceneElementLead = '';
+  @property({ reflect: false, attribute: false })
+  sceneElementAccent = '';
+  @property({ reflect: false, attribute: false })
+  sceneElementCopy = '';
+  @property({ reflect: false, attribute: false })
+  sceneDsdLead = '';
+  @property({ reflect: false, attribute: false })
+  sceneDsdAccent = '';
+  @property({ reflect: false, attribute: false })
+  sceneDsdCopy = '';
+  @property({ reflect: false, attribute: false })
+  sceneIslandsLead = '';
+  @property({ reflect: false, attribute: false })
+  sceneIslandsAccent = '';
+  @property({ reflect: false, attribute: false })
+  sceneIslandsCopy = '';
+  @property({ reflect: false, attribute: false })
+  sceneOutputLead = '';
+  @property({ reflect: false, attribute: false })
+  sceneOutputAccent = '';
+  @property({ reflect: false, attribute: false })
   startBuildingHref = '';
   @property({ reflect: false, attribute: false })
   getStartedHref = '';
@@ -93,8 +119,8 @@ export default class PageHome extends OpenElement {
             <div class='hero-copy'>
               <p class='eyebrow'>OpenElement — Web Standards Lab</p>
               <h1>
-                <span class='mono-line'>THE WEB,</span>
-                <span class='serif-line'>composed.</span>
+                <span class='mono-line'>{this.heroMono}</span>
+                <span class='serif-line'>{this.heroSerif}</span>
               </h1>
             </div>
             <div class='hero-stage'>
@@ -143,13 +169,11 @@ export default class PageHome extends OpenElement {
           <div class='scene-copy'>
             <p class='scene-index'>§1 — Element</p>
             <h2>
-              One durable
-              <span class='accent'>contract.</span>
+              {this.sceneElementLead}
+              <span class='accent'>{this.sceneElementAccent}</span>
             </h2>
             <p>
-              Custom Elements are the application component contract — not a renderer integration,
-              not a leaf-widget format. Write the element once; it renders on the server and
-              upgrades in the browser.
+              {this.sceneElementCopy}
             </p>
             <div class='badges'>
               <span class='badge'>ZERO RUNTIME</span>
@@ -181,13 +205,12 @@ export class OpenCounter extends OpenElement {
         <section class='scene flood'>
           <p class='scene-index'>§2 — Declarative Shadow DOM</p>
           <h2>
-            The server writes HTML.
-            <span class='accent'>The browser upgrades it.</span>
+            {this.sceneDsdLead}
+            <span class='accent'>{this.sceneDsdAccent}</span>
           </h2>
           <div class='scene-copy'>
             <p>
-              DSD is the default server output. No client re-render, no double payload — the markup
-              is the application.
+              {this.sceneDsdCopy}
             </p>
           </div>
           <div class='flood-panels'>
@@ -215,13 +238,12 @@ export class OpenCounter extends OpenElement {
         <section class='scene'>
           <p class='scene-index'>§3 — Islands</p>
           <h2>
-            Upgrade
-            <span class='accent'>selectively.</span>
+            {this.sceneIslandsLead}
+            <span class='accent'>{this.sceneIslandsAccent}</span>
           </h2>
           <div class='scene-copy'>
             <p>
-              Interactive regions hydrate on your schedule. The rest of the page never ships a byte
-              of JavaScript.
+              {this.sceneIslandsCopy}
             </p>
           </div>
           <div class='strategies'>
@@ -242,8 +264,8 @@ export class OpenCounter extends OpenElement {
         <section class='scene'>
           <p class='scene-index'>§4 — Output</p>
           <h2>
-            Static first.
-            <span class='accent'>Deployable anywhere.</span>
+            {this.sceneOutputLead}
+            <span class='accent'>{this.sceneOutputAccent}</span>
           </h2>
           <div class='output-rows'>
             {this.outputs.map((output) => (

@@ -2,6 +2,7 @@
 /** Private WWW long-form reading shell. */
 
 import { computed, element, OpenElement, property } from '@openelement/element';
+import { readingChromeStrings } from './chrome-strings.ts';
 import { compiledStyle } from './compiled-style.ts';
 import type { ReadingMetadata, ReadingNavigation } from './page-contract.ts';
 
@@ -66,6 +67,13 @@ export default class OpenReadingShell extends OpenElement {
   @property({ reflect: false })
   nextLabel = 'Next';
 
+  // Same base-field redeclaration as open-layout: the compiled @property
+  // shadows OpenElementConfiguration.locale (SSR injection or the `locale`
+  // attribute); tsc's `override` demand is rejected by the compiled grammar.
+  @property({ reflect: false })
+  // @ts-expect-error compiled @property shadows the optional base field
+  locale = 'en';
+
   @property({ reflect: false, attribute: false })
   breadcrumb = computed(() => this.metadata?.breadcrumb ?? '');
   @property({ reflect: false, attribute: false })
@@ -92,6 +100,10 @@ export default class OpenReadingShell extends OpenElement {
   hidePrevious = computed(() => !(this.navigation?.previous?.href ?? this.previous));
   @property({ reflect: false, attribute: false })
   hideNext = computed(() => !(this.navigation?.next?.href ?? this.next));
+  @property({ reflect: false, attribute: false })
+  onThisPage = computed(() => readingChromeStrings(this.locale).onThisPage);
+  @property({ reflect: false, attribute: false })
+  pageNavigationLabel = computed(() => readingChromeStrings(this.locale).pageNavigation);
 
   render() {
     return (
@@ -121,15 +133,15 @@ export default class OpenReadingShell extends OpenElement {
           <slot></slot>
           <footer class='footer'>
             <slot name='footer'>
-              <nav class='pager' aria-label='Page navigation'>
+              <nav class='pager' aria-label={this.pageNavigationLabel}>
                 <a href={this.previousHref} hidden={this.hidePrevious}>← {this.previousText}</a>
                 <a href={this.nextHref} hidden={this.hideNext}>{this.nextText} →</a>
               </nav>
             </slot>
           </footer>
         </article>
-        <aside class='rail' aria-label='On this page'>
-          <p class='rail-label'>On this page</p>
+        <aside class='rail' aria-label={this.onThisPage}>
+          <p class='rail-label'>{this.onThisPage}</p>
           <slot name='rail'></slot>
         </aside>
       </div>

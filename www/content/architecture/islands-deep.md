@@ -8,7 +8,7 @@ order: 50
 
 openElement uses the browser Custom Element upgrade mechanism. SSG writes HTML first, then the generated client entry imports only the island modules used by the current page and registers their compiled classes.
 
-## Three Layers
+## Four Layers
 
 ### Layer 1 — `dsd-static` — No client JavaScript
 
@@ -21,6 +21,10 @@ The server serializes the island's compiled Part Program as DSD. On upgrade, the
 ### Layer 3 — `pure-island` — Client-owned shadow root
 
 Browser-only components can opt out of SSR with the `only` strategy. The server emits the host tag and its serialized props; the client owns rendering.
+
+### Layer 4 — `light-dom` — No shadow boundary
+
+The compiled default root is light: the element's content renders into light DOM with no DSD encapsulation, so document-level styles apply directly. Hydration strategies still apply to such islands.
 
 ## Strategies
 

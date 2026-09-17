@@ -10,7 +10,7 @@ order: 80
 
 ## Request 语义
 
-`Request`、`Response` 与 `FormData` 是 0.42 loader/action 面的基础——应用交互无需私有传输层。
+`Request`、`Response` 与 `FormData` 是当前 loader/action 面的基础——应用交互无需私有传输层。
 
 ## 四包归属
 

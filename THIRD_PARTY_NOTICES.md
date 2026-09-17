@@ -21,6 +21,10 @@ documentation site (license text included in the distribution at
   <https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/>
 - License: MIT
 - Copyright: Copyright (c) 2012 Lea Verou
+- Retirement condition: once `open-code-block` ships built-in highlighting or
+  the site migrates to build-time highlighting (e.g. Shiki), delete the entire
+  `www/public/assets/vendor/prism/` tree, `www/public/prism-init.js`, and the
+  corresponding script injections in `www/vite.config.ts`.
 
 ```text
 MIT LICENSE

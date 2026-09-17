@@ -6,7 +6,7 @@ import { compiledStyle } from '../site-ui/compiled-style.ts';
 import { readIslandState, writeIslandState } from '../site-ui/island-state.ts';
 import { defineIslandConfig } from '@openelement/router';
 
-export const openElement = defineIslandConfig({ hydrate: 'load', ssr: true, dsd: true });
+export const openElement = defineIslandConfig({ hydrate: 'load', ssr: true });
 
 @element('open-cinematic-scroll')
 export default class CinematicScroll extends OpenElement {

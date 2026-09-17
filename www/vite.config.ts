@@ -192,7 +192,6 @@ const openElementPlugins = openElement({
     // networks, cost a console error + best-practices points on every page).
     scripts: [
       { src: '/theme-init.js' },
-      { src: '/logo-home.js', defer: true },
       { src: '/assets/vendor/prism/prism.min.js', defer: true },
       { src: '/assets/vendor/prism/prism-javascript.min.js', defer: true },
       { src: '/assets/vendor/prism/prism-typescript.min.js', defer: true },

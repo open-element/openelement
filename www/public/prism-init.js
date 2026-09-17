@@ -3,18 +3,15 @@
  *
  * Primary highlighting is handled by <open-code-block> components via
  * connectedCallback. This script is a fallback that handles any bare
- * <pre><code> in the light DOM that isn't inside a <open-code-block>.
+ * <pre><code> in the light DOM that isn't inside a <open-code-block>
+ * (the changelog page relies on it).
+ *
+ * The vendored Prism scripts are injected as defer scripts ahead of this
+ * one (vite.config.ts), and defer scripts execute in order — Prism is
+ * guaranteed to be defined by the time this runs, so no polling is needed.
  */
 (function () {
-  // Cap the Prism re-poll: on CDN failure we give up after ~5s instead of
-  // polling forever — bare <pre><code> simply stays unhighlighted.
-  const MAX_RETRIES = 100;
-  let retries = 0;
   const init = function () {
-    if (typeof Prism === 'undefined') {
-      if (retries++ < MAX_RETRIES) setTimeout(init, 50);
-      return;
-    }
     // Add default language class + highlight bare <pre><code> in light DOM
     document.querySelectorAll('pre code').forEach(function (el) {
       let hasLang = false;

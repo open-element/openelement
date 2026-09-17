@@ -6,7 +6,7 @@ order: 40
 
 ## 文件路由
 
-Routes 应当能从仓库目录树中被发现。`definePage` 路由默认导出由 `definePage(PageClass, { ... })` 包装的编译页面元素类；页面类位于非路由模块（例如 `app/components/`），其标记即编译后的 render 程序。路由仍可导出 `tagName` 为内容元素命名（#960），但在 `definePage` 路由上该导出只为内容元素命名，不参与页面注册：页面本身始终注册在路由路径派生的标签下（`app/routes/index.tsx` 对应 `index-page`）。生成的构建入口会注册所有被准入的路由与 island 类——路由模块从不自行注册。
+Routes 应当能从仓库目录树中被发现。`definePage` 路由默认导出由 `definePage(PageClass, { ... })` 包装的编译页面元素类；页面类位于非路由模块（例如 `app/components/`），其标记即编译后的 render 程序。路由仍可导出 `tagName` 为内容元素命名（#960），但在 `definePage` 路由上该导出只为内容元素命名，不参与页面注册：页面本身注册在其编译类的 `@element(tag)` 下——SSR 从编译 Part Program 解析该标签（#1276）——路由路径派生的标签（`app/routes/index.tsx` → `index-page`）仅作 fallback。生成的构建入口会注册所有被准入的路由与 island 类——路由模块从不自行注册。
 
 ## 元数据
 
@@ -126,7 +126,7 @@ export default definePage(GuestbookPage, {
 
 ## 两条 loader/action 链
 
-request-time(`'dynamic'`)loader/action 运行在服务端,上下文是 Web 标准的 `{ request, params, env, platform, route, responseHeaders }`,并使用 `fail()`/`redirect()` 协议。`responseHeaders`(ADR-0129)是可变的 `Headers` 通道,会被合并进该请求的所有响应——渲染、重定向、422 重渲染与 fetch 通道 JSON——配方借此写入会话 cookie;冲突时框架协议头永远优先。SPA 模式的 loader/action 运行在客户端,上下文只有 `{ params }`(action 另有 `formData`),通过抛出异常来表达失败——throw 会被规整为 action 数据。两者命名刻意保持一致,但上下文不同:针对其中一条链编写的代码不能假设另一条链的上下文(#570,ADR-0119（已退役，可从 Git 历史恢复）已冻结的 SPA 语义)。
+request-time(`'dynamic'`)loader/action 运行在服务端,上下文是 Web 标准的 `{ request, params, env, platform, route, responseHeaders }`,并使用 `fail()`/`redirect()` 协议。`responseHeaders`(ADR-0129)是可变的 `Headers` 通道,会被合并进该请求的所有响应——渲染、重定向、422 重渲染与 fetch 通道 JSON——配方借此写入会话 cookie;冲突时框架协议头永远优先。SPA 模式的 loader/action 运行在客户端,上下文为 `{ params, searchParams, signal }`（一个 `URLSearchParams` 与一个 `AbortSignal`,action 另有 `formData`）,通过抛出异常来表达失败——throw 会被规整为 action 数据。两者命名刻意保持一致,但上下文不同:针对其中一条链编写的代码不能假设另一条链的上下文(#570,ADR-0119（已退役，可从 Git 历史恢复）已冻结的 SPA 语义)。
 
 ### 集成配方
 

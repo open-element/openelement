@@ -73,6 +73,13 @@ export default class PageBlogPost extends OpenElement {
   @property({ reflect: false, attribute: false })
   nextDispatchText = '';
 
+  // Same base-field redeclaration as open-layout: the compiled @property
+  // shadows OpenElementConfiguration.locale (SSR injection or the `locale`
+  // attribute); tsc's `override` demand is rejected by the compiled grammar.
+  @property({ reflect: false })
+  // @ts-expect-error compiled @property shadows the optional base field
+  locale = 'en';
+
   render() {
     return (
       <main>
@@ -83,7 +90,7 @@ export default class PageBlogPost extends OpenElement {
         </div>
 
         <div class={this.articleClass}>
-          <open-reading-shell meta rail footer navigation={this.navigation}>
+          <open-reading-shell meta rail footer navigation={this.navigation} locale={this.locale}>
             <div slot='meta'>
               <p class='crumb'>
                 <a href={this.blogHref}>{this.breadcrumbLabel}</a>
@@ -99,7 +106,7 @@ export default class PageBlogPost extends OpenElement {
               <p class='lang-notice' role='note'>{this.langNotice}</p>
             </div>
             <div slot='rail'>
-              <open-page-rail items={this.railItems}></open-page-rail>
+              <open-page-rail items={this.railItems} locale={this.locale}></open-page-rail>
             </div>
             <div
               class='blog-content'

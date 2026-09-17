@@ -10,7 +10,7 @@ order: 20
 
 | 方面     | 描述                                                                                                                                                                                      |
 | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 架构     | Custom Elements + Declarative Shadow DOM 是一等公民；标准 Custom Elements 即应用契约；App 掌管路由与渲染；Vite 和 Nitro 是官方构建路径。                                                  |
+| 架构     | Custom Elements + Declarative Shadow DOM 是一等公民；标准 Custom Elements 即应用契约；Router 掌管路由与渲染；Vite 和 Nitro 是官方构建路径。                                               |
 | 渲染     | 默认 SSG；DSD/shadow 为显式选择的一等模式（当前编译默认 light DOM），按需升级元素；无需交互时输出不含任何框架 JavaScript 的纯静态内容。                                                   |
 | DX       | JSX + 编译型 Custom Element 类，`@element` / `definePage` / `buildApp`。                                                                                                                  |
 | 适用     | 以 Web Components 为原生组件契约、static-first 的应用框架，用于以标准 Custom Element 契约交付 DSD-first 应用；当前范围是 static-first，而非与 Next.js、Nuxt 或 SvelteKit 的泛全栈对齐。   |

@@ -14,10 +14,11 @@ const content = {
   en: {
     headTitle: 'Changelog',
     headDescription:
-      'Published, candidate, withdrawn and historical release evidence for openElement — every line evidenced.',
+      'The openElement release register — current per-package npm dist-tags — plus the repository CHANGELOG.md historical archive. Machine-checked release truth lives in docs/release/release-state.json.',
     eyebrow: 'Changelog',
-    pageTitle: 'Every line, evidenced.',
-    lede: 'Published, candidate, withdrawn and historical release evidence for OpenElement.',
+    pageTitle: 'The register, then the archive.',
+    lede:
+      'The register reflects the current per-package npm dist-tags. The archive below renders the repository CHANGELOG.md unchanged; machine-checked release truth lives in docs/release/release-state.json.',
     metaPrefix: 'Current per-package npm latest:',
     metaSuffix: '.',
     railLabels: ['Published', 'Stable line', 'Withdrawn', 'Historical archive'],
@@ -38,15 +39,20 @@ const content = {
       '※ The withdrawn 0.41.0-era npm beta.1–beta.3 partial artifacts stay withdrawn from the active release story. History is kept, not rewritten.',
     loadError:
       '<p>Unable to load the changelog. Read it on <a href="https://github.com/open-element/openelement/blob/main/CHANGELOG.md">GitHub</a>.</p>',
+    archiveSource:
+      'Rendered unchanged from the repository <a href="https://github.com/open-element/openelement/blob/main/CHANGELOG.md">CHANGELOG.md</a>. Current release truth is machine-checked in <a href="https://github.com/open-element/openelement/blob/main/docs/release/release-state.json">docs/release/release-state.json</a>; the register above summarizes the current npm dist-tags.',
+    langNotice: '',
     navRoadmap: 'Roadmap',
     navGettingStarted: 'Getting Started',
   },
   zh: {
     headTitle: '更新日志',
-    headDescription: 'openElement 已发布、候选、已撤回与历史版本的发布证据——每一行皆有证据。',
+    headDescription:
+      'openElement 发布登记表——当前各包 npm dist-tags——以及仓库 CHANGELOG.md 历史归档。机器校验的发布真值见 docs/release/release-state.json。',
     eyebrow: 'Changelog',
-    pageTitle: '每一行，皆有证据。',
-    lede: 'openElement 已发布、候选、已撤回与历史版本的发布证据。',
+    pageTitle: '先登记表，再归档。',
+    lede:
+      '登记表反映当前各包的 npm dist-tags。下方归档原样渲染仓库 CHANGELOG.md；机器校验的发布真值见 docs/release/release-state.json。',
     metaPrefix: '当前各包的 npm latest 分别为：',
     metaSuffix: '。',
     railLabels: ['已发布', '稳定线', '已撤回', '历史归档'],
@@ -67,12 +73,17 @@ const content = {
       '※ 已撤回的 0.41.0 时代 npm beta.1–beta.3 残缺产物在活跃发布叙事中保持撤回状态。历史被保留，不被改写。',
     loadError:
       '<p>无法加载 changelog。请到 <a href="https://github.com/open-element/openelement/blob/main/CHANGELOG.md">GitHub</a> 阅读。</p>',
+    archiveSource:
+      '以下内容原样渲染自仓库 <a href="https://github.com/open-element/openelement/blob/main/CHANGELOG.md">CHANGELOG.md</a>。当前发布真值由 <a href="https://github.com/open-element/openelement/blob/main/docs/release/release-state.json">docs/release/release-state.json</a> 机器校验；当前 npm dist-tags 摘要见上方登记表。',
+    langNotice: '归档正文以英文原文发布（English original）。',
     navRoadmap: 'Roadmap',
     navGettingStarted: '快速开始',
   },
 } as const;
 
-function loadChangelogHtml(loadError: string): string {
+function loadChangelogHtml(
+  copy: { loadError: string; archiveSource: string; langNotice: string },
+): string {
   let changelogPath: URL | undefined;
   let cursor = new URL('.', import.meta.url);
   for (let depth = 0; depth < 8 && !changelogPath; depth++) {
@@ -97,9 +108,17 @@ function loadChangelogHtml(loadError: string): string {
       );
     // CHANGELOG.md is a first-party repository file: trustedHtml trust level.
     // Do not feed untrusted Markdown here without sanitizing it first.
-    return marked.parse(markdown, { async: false }) as string;
+    const archive = marked.parse(markdown, { async: false }) as string;
+    // The archive body is the English original on every locale: disclose that
+    // with the same lang-notice pattern the blog uses (page-blog-post.tsx),
+    // and carry the content language on the wrapper since page-changelog.tsx
+    // owns the outer container.
+    const notice = copy.langNotice === ''
+      ? ''
+      : `<p class="lang-notice" role="note" style="max-width:640px;margin:0 0 var(--size-4);padding:var(--size-2) var(--size-3);border-inline-start:var(--border-size-2) solid var(--violet-5);color:var(--text-secondary);font-size:var(--font-size-0);line-height:1.65;">${copy.langNotice}</p>`;
+    return `<p class="archive-source">${copy.archiveSource}</p>${notice}<div lang="en">${archive}</div>`;
   } catch {
-    return loadError;
+    return copy.loadError;
   }
 }
 
@@ -142,7 +161,7 @@ export default definePage(PageChangelog, {
         label: text.railLabels[index] ?? id,
         depth: '2',
       })),
-      changelogHtml: trustedHtml(loadChangelogHtml(text.loadError)),
+      changelogHtml: trustedHtml(loadChangelogHtml(text)),
       roadmapHref: localizePath('/roadmap', resolved),
       roadmapLabel: text.navRoadmap,
       gettingStartedHref: localizePath('/guide/getting-started', resolved),

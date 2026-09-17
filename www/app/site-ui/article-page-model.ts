@@ -90,7 +90,15 @@ export function projectArticlePage(
   }
 
   const article = prepareArticle(
-    page.html.replaceAll('{{OPENELEMENT_VERSION}}', OPENELEMENT_VERSION),
+    // OPENELEMENT_VERSION is the repository source line (see data/version.ts),
+    // not a published release: inject it with repository-baseline wording so
+    // "Applies to …" never reads as a published-version claim.
+    page.html.replaceAll(
+      '{{OPENELEMENT_VERSION}}',
+      locale === 'en'
+        ? `the ${OPENELEMENT_VERSION} repository baseline`
+        : `${OPENELEMENT_VERSION} 仓库基线`,
+    ),
   );
   const ordered = data.pages
     .filter((candidate) => candidate.locale === 'en')

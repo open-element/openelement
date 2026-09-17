@@ -120,7 +120,7 @@ export default definePage(BlogPostPage, {
 
 ## Code-block highlighting (optional)
 
-The site-owned collection loader renders fenced blocks as `<pre><code class="language-x">` with no token-level colors. A collection's `markdown` option replaces the renderer; its output is still first-party trusted content, and hljs spans only add `class` attributes. For code blocks in routes/pages, wrap them in `<open-code-block>` (`@openelement/ui`) — it highlights via a global Prism that your page must load (core + language grammars, e.g. the CDN scripts this site injects in `www/vite.config.ts`); without Prism you get the copy button but no token spans.
+The site-owned collection loader renders fenced blocks as `<pre><code class="language-x">` with no token-level colors. A collection's `markdown` option replaces the renderer; its output is still first-party trusted content, and hljs spans only add `class` attributes. For code blocks in routes/pages, wrap them in `<open-code-block>` (`@openelement/ui`) — it highlights via a global Prism that your page must load (core + language grammars, e.g. the vendored same-origin scripts this site injects from `public/assets/vendor/prism/` in `www/vite.config.ts`); without Prism you get the copy button but no token spans.
 
 ### lib/blog.ts — syntax highlighting recipe (optional, #930)
 

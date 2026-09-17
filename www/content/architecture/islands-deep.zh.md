@@ -8,7 +8,7 @@ order: 50
 
 openElement 使用浏览器的 Custom Element upgrade 机制。SSG 先写出 HTML，然后生成的客户端入口只导入当前页面用到的 island 模块并注册其编译类。
 
-## 三个层次
+## 四个层次
 
 ### 第 1 层 — `dsd-static` — 无客户端 JavaScript
 
@@ -21,6 +21,10 @@ openElement 使用浏览器的 Custom Element upgrade 机制。SSG 先写出 HTM
 ### 第 3 层 — `pure-island` — 客户端拥有的 shadow root
 
 纯浏览器组件可以用 `only` 策略退出 SSR。服务端只输出宿主标签和序列化 props；渲染由客户端全权负责。
+
+### 第 4 层 — `light-dom` — 无 shadow 边界
+
+编译默认的 root 是 light：元素内容渲染进 light DOM，没有 DSD 封装，因此文档级样式直接生效。这类 island 仍适用 hydration 策略。
 
 ## 策略
 

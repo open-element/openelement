@@ -57,14 +57,12 @@ test.describe('Unified page structure', () => {
 
   test('changelog renders content-first with a railed reading surface', async ({ page }) => {
     await page.goto('/changelog');
-    await expect(page.locator('open-page-hero')).toHaveCount(0);
     await expect(page.locator('open-reading-shell[rail]')).toHaveCount(1);
     await expect(page.locator('open-reading-shell h1:visible')).toHaveCount(1);
   });
 
   test('404 remains a compact recovery scene without WebGL', async ({ page }) => {
     await page.goto('/404');
-    await expect(page.locator('open-cinematic-atmosphere')).toHaveCount(0);
     const scene = page.locator('el-404');
     await expect(scene.locator('h1')).toHaveText('404');
     await expect(scene).toContainText('Lost in the shadow DOM.');
@@ -119,7 +117,6 @@ test.describe('Unified page structure', () => {
       ]
     ) {
       await page.goto(route);
-      await expect(page.locator('open-page-hero')).toHaveCount(0);
       await expect(page.locator('h1:visible')).toHaveCount(1);
     }
   });
@@ -181,8 +178,9 @@ test.describe('Unified page structure', () => {
     await expect(page.locator('body')).not.toContainText(/鏂|鈫|鍗|杩|鏈/);
     // The pager is deterministic: it is visible exactly when the post has
     // prev/next neighbors. The baseline ships a single dispatch, so no
-    // neighbors means the pager renders hidden.
-    const pager = page.getByRole('navigation', { name: 'Page navigation' });
+    // neighbors means the pager renders hidden. The label follows the page
+    // locale (zh here).
+    const pager = page.getByRole('navigation', { name: '页面导航' });
     await expect(pager).toHaveCount(1);
     if (await pager.locator('a:visible').count() > 0) {
       await expect(pager).toBeVisible();
@@ -249,24 +247,6 @@ test.describe('Unified page structure', () => {
       .locator('a[href^="#"]:not(details a)');
     await expect(outlineLinks).toHaveCount(4);
     await expect(outlineLinks.first()).toHaveAttribute('href', '#start');
-  });
-
-  test('non-home routes never load the WebGL atmosphere layer', async ({ page }) => {
-    for (
-      const route of [
-        '/docs',
-        '/apilist',
-        '/roadmap',
-        '/architecture/dsd',
-        '/guide/getting-started',
-        '/blog',
-        '/changelog',
-        '/404',
-      ]
-    ) {
-      await page.goto(route);
-      await expect(page.locator('open-cinematic-atmosphere')).toHaveCount(0);
-    }
   });
 
   test('reading shell remains usable at 200 percent zoom', async ({ page }) => {

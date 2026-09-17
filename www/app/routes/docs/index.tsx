@@ -63,7 +63,12 @@ export default definePage(PageDocs, {
     const items = entrances[resolved];
     return {
       ...text,
-      version: OPENELEMENT_VERSION,
+      // OPENELEMENT_VERSION is the repository source line, not a published
+      // release — label the stamp as the repository baseline so the docs
+      // index never reads as a published-version claim.
+      version: resolved === 'en'
+        ? `${OPENELEMENT_VERSION} · repository baseline`
+        : `${OPENELEMENT_VERSION} · 仓库基线`,
       entrance1Title: items[0][0],
       entrance1Copy: items[0][1],
       entrance1Href: localizePath(items[0][2], resolved),

@@ -64,7 +64,10 @@ for (const [collection, route, className, order] of articleRoutes) {
     assertStringIncludes(routeSource, `order: ${order}`);
     assertStringIncludes(adapterSource, `@element('${collection}-${route}')`);
     assertStringIncludes(adapterSource, `class ${className} extends OpenElement`);
-    assertStringIncludes(adapterSource, '<open-article-view model={this.model}>');
+    assertStringIncludes(
+      adapterSource,
+      '<open-article-view model={this.model} locale={this.locale}>',
+    );
 
     const model = projectArticlePage(collection, route, 'en');
     assertEquals(model.slug, route);

@@ -120,7 +120,7 @@ export default definePage(BlogPostPage, {
 
 ## 代码块语法高亮（可选）
 
-站点自有的 collection loader 把围栏代码块渲染为 `<pre><code class="language-x">`，无 token 级着色。collection 的 `markdown` 选项可以替换 renderer；其输出仍是第一方可信内容，hljs span 只追加 `class` 属性。路由/页面里的代码块则用 `<open-code-block>`（`@openelement/ui`）包裹——它通过全局 Prism 高亮，页面必须自行加载 Prism（core + 语言 grammar，参考本站在 `www/vite.config.ts` 注入的 CDN script）；不加载 Prism 就只有 copy 按钮、没有 token 着色。
+站点自有的 collection loader 把围栏代码块渲染为 `<pre><code class="language-x">`，无 token 级着色。collection 的 `markdown` 选项可以替换 renderer；其输出仍是第一方可信内容，hljs span 只追加 `class` 属性。路由/页面里的代码块则用 `<open-code-block>`（`@openelement/ui`）包裹——它通过全局 Prism 高亮，页面必须自行加载 Prism（core + 语言 grammar，参考本站在 `www/vite.config.ts` 注入的 vendored 同源 script，来自 `public/assets/vendor/prism/`）；不加载 Prism 就只有 copy 按钮、没有 token 着色。
 
 ### lib/blog.ts —— 语法高亮配方（可选，#930）
 

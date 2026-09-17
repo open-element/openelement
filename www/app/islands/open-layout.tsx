@@ -12,6 +12,9 @@ import {
   type FooterLink,
   type HeaderNavLink,
   layoutChromeStrings,
+  localeSwitchLabel,
+  localeSwitchPath,
+  localeSwitchScopeNote,
   type NavSection,
   type SidebarRow,
 } from '../site-ui/open-layout-navigation.ts';
@@ -19,7 +22,7 @@ import './open-search.tsx';
 
 type CompiledComputed<T> = ReturnType<typeof computed<T>> & T;
 
-export const openElement = defineIslandConfig({ hydrate: 'load', ssr: true, dsd: true });
+export const openElement = defineIslandConfig({ hydrate: 'load', ssr: true });
 
 @element('open-layout')
 export default class OpenLayout extends OpenElement {
@@ -58,6 +61,64 @@ export default class OpenLayout extends OpenElement {
     min-width: 0;
     width: 100%;
     isolation: isolate;
+  }
+
+  /* Skip link: visually hidden until keyboard focus (#D-8). */
+  .skip-link {
+    position: absolute;
+    inset-block-start: var(--size-2);
+    inset-inline-start: var(--size-4);
+    z-index: 200;
+    padding: var(--size-2) var(--size-4);
+    border: var(--border-size-1) solid var(--border);
+    border-radius: var(--radius-2);
+    background: var(--bg-elevated);
+    color: var(--text-primary);
+    font-family: var(--font-mono);
+    font-size: var(--font-size-00);
+    text-decoration: none;
+  }
+  .skip-link:focus-visible {
+    outline: var(--focus-size) solid var(--focus-ring);
+    outline-offset: var(--focus-offset);
+  }
+  .skip-link:not(:focus-visible),
+  .visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  .locale-switch {
+    display: inline-flex;
+    align-items: center;
+    min-height: var(--size-10);
+    padding: var(--size-2) var(--size-4);
+    border: var(--border-size-1) solid var(--border);
+    border-radius: var(--radius-round);
+    background: color-mix(in srgb, var(--bg-elevated) 74%, transparent);
+    color: var(--text-secondary);
+    font-family: var(--font-mono);
+    font-size: var(--font-size-00);
+    letter-spacing: .02em;
+    text-decoration: none;
+    white-space: nowrap;
+    transition: all 0.15s ease;
+  }
+  .locale-switch:hover {
+    color: var(--text-primary);
+    border-color: var(--border-hover);
+    background: var(--bg-hover);
+  }
+  .locale-switch:focus-visible {
+    outline: var(--focus-size) solid var(--focus-ring);
+    outline-offset: var(--focus-offset);
   }
 
   /* Header */
@@ -482,6 +543,31 @@ export default class OpenLayout extends OpenElement {
   sidebarToggle = computed(() => layoutChromeStrings(this.locale).sidebarToggle);
 
   @property({ reflect: false, attribute: false })
+  skipToMain = computed(() => layoutChromeStrings(this.locale).skipToMain);
+
+  @property({ reflect: false, attribute: false })
+  menuOpen = computed(() => layoutChromeStrings(this.locale).menuOpen);
+
+  @property({ reflect: false, attribute: false })
+  primaryNavLabel = computed(() => layoutChromeStrings(this.locale).primaryNavLabel);
+
+  @property({ reflect: false, attribute: false })
+  mobileNavLabel = computed(() => layoutChromeStrings(this.locale).mobileNavLabel);
+
+  // Locale switcher: localeSwitchPath degrades route patterns (/:slug) to
+  // their static ancestor, so dynamic routes never emit a literal param href.
+  @property({ reflect: false, attribute: false })
+  switchLocaleHref = computed(() =>
+    localeSwitchPath(this.currentPath || '/', this.locale, this.locales, this.locales[0] || 'en')
+  );
+
+  @property({ reflect: false, attribute: false })
+  switchLocaleLabel = computed(() => localeSwitchLabel(this.locale));
+
+  @property({ reflect: false, attribute: false })
+  switchLocaleNote = computed(() => localeSwitchScopeNote(this.locale));
+
+  @property({ reflect: false, attribute: false })
   sidebarRows = computed(() =>
     buildSidebarRows(this.navItems, this.currentPath, this.locale, this.locales)
   ) as CompiledComputed<SidebarRow[]>;
@@ -523,12 +609,13 @@ export default class OpenLayout extends OpenElement {
   render() {
     return (
       <div class='app-layout' part='container'>
+        <a class='skip-link' href='#main-content'>{this.skipToMain}</a>
         <header class='app-header' part='header'>
           <div class='header-inner'>
             <a class='logo' href={this.homeHref} aria-label={this.siteName}>
               <span class='logo-glyph' aria-hidden='true'>OE</span>
             </a>
-            <nav class='header-nav' part='nav' aria-label='Primary navigation'>
+            <nav class='header-nav' part='nav' aria-label={this.primaryNavLabel}>
               {this.headerNavItems.map((link) => (
                 <a
                   key={link.key}
@@ -541,14 +628,18 @@ export default class OpenLayout extends OpenElement {
               ))}
             </nav>
             <div class='header-right'>
+              <a class='locale-switch' href={this.switchLocaleHref}>
+                {this.switchLocaleLabel}
+                <span class='visually-hidden'>{this.switchLocaleNote}</span>
+              </a>
               <open-search></open-search>
               <open-theme-toggle></open-theme-toggle>
               <details class='mobile-menu'>
                 <summary class='mobile-menu-btn'>
-                  <span class='mobile-menu-label'>Open navigation</span>
+                  <span class='mobile-menu-label'>{this.menuOpen}</span>
                   <span class='mobile-menu-icon' aria-hidden='true'>☰</span>
                 </summary>
-                <nav class='mobile-menu-panel' aria-label='Mobile navigation'>
+                <nav class='mobile-menu-panel' aria-label={this.mobileNavLabel}>
                   {this.headerNavItems.map((link) => (
                     <a
                       key={link.key}
@@ -585,7 +676,7 @@ export default class OpenLayout extends OpenElement {
               </div>
             ))}
           </nav>
-          <main class='layout-main' part='main'>
+          <main class='layout-main' part='main' id='main-content' tabindex='-1'>
             <details class='sidebar-mobile' hidden={this.sidebarHidden}>
               <summary class='sidebar-mobile-toggle'>{this.sidebarToggle}</summary>
               <nav class='sidebar-mobile-panel' aria-label={this.sidebarLabel}>

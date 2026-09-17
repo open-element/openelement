@@ -16,7 +16,14 @@ export default class PackageCompatibilityPage extends OpenElement {
     articleHtml: '',
   };
 
+  // Same base-field redeclaration as open-layout: the compiled @property
+  // shadows OpenElementConfiguration.locale (SSR injection or the `locale`
+  // attribute); tsc's `override` demand is rejected by the compiled grammar.
+  @property({ reflect: false })
+  // @ts-expect-error compiled @property shadows the optional base field
+  locale = 'en';
+
   render() {
-    return <open-article-view model={this.model}></open-article-view>;
+    return <open-article-view model={this.model} locale={this.locale}></open-article-view>;
   }
 }

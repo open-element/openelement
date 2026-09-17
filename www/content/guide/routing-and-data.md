@@ -6,7 +6,7 @@ order: 40
 
 ## File routes
 
-Routes should be discoverable from the repository tree. A `definePage` route default-exports the compiled page element class wrapped in `definePage(PageClass, { ... })`; the page class lives in a non-route module (for example `app/components/`) and owns the markup as its compiled render program. A route may still export `tagName` to name a content element (#960), but on a `definePage` route that export names the content element only and never drives page registration: the page itself always registers under the route-path tag (`app/routes/index.tsx` becomes `index-page`). Generated build entries register every admitted route and island class — route modules never self-register.
+Routes should be discoverable from the repository tree. A `definePage` route default-exports the compiled page element class wrapped in `definePage(PageClass, { ... })`; the page class lives in a non-route module (for example `app/components/`) and owns the markup as its compiled render program. A route may still export `tagName` to name a content element (#960), but on a `definePage` route that export names the content element only and never drives page registration: the page itself registers under its compiled class's `@element(tag)` — SSR resolves the tag from the compiled Part Program (#1276) — with the route-path-derived tag (`app/routes/index.tsx` → `index-page`) only as a fallback. Generated build entries register every admitted route and island class — route modules never self-register.
 
 ## Metadata
 
@@ -127,7 +127,7 @@ Fetch-based action posts are recognized by the `x-openelement-action` header (ex
 
 ## Two loader/action chains
 
-Request-time (`'dynamic'`) loaders/actions run on the server with the Web-standard context `{ request, params, env, platform, route, responseHeaders }` and the `fail()`/`redirect()` protocol. `responseHeaders` (ADR-0129) is a mutable `Headers` channel merged into every response of the request — renders, redirects, 422 re-renders and fetch-channel JSON alike — so recipes can write session cookies; framework protocol headers always win on conflict. SPA-mode loaders/actions run client-side with only `{ params }` (plus `formData` for actions) and signal failure by throwing — a throw is normalized into action data. The names are intentionally parallel, but the contexts differ: code written against one chain cannot assume the other's context (#570, ADR-0119 (retired; recoverable from Git history) frozen SPA semantics).
+Request-time (`'dynamic'`) loaders/actions run on the server with the Web-standard context `{ request, params, env, platform, route, responseHeaders }` and the `fail()`/`redirect()` protocol. `responseHeaders` (ADR-0129) is a mutable `Headers` channel merged into every response of the request — renders, redirects, 422 re-renders and fetch-channel JSON alike — so recipes can write session cookies; framework protocol headers always win on conflict. SPA-mode loaders/actions run client-side with `{ params, searchParams, signal }` (a `URLSearchParams` and an `AbortSignal`, plus `formData` for actions) and signal failure by throwing — a throw is normalized into action data. The names are intentionally parallel, but the contexts differ: code written against one chain cannot assume the other's context (#570, ADR-0119 (retired; recoverable from Git history) frozen SPA semantics).
 
 ### Integration recipes
 

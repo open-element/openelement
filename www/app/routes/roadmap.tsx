@@ -40,7 +40,7 @@ const entries: Record<'en' | 'zh', TimelineEntry[]> = {
       'copy':
         'Start real application use with the public baseline: independently consumable Element and Router with Native/Lit application flows. Element and Router are the public core, Create is the supported entry, UI is experimental. 1.0 Alpha is a fresh baseline with no supported migration from 0.x.',
       'state': 'next',
-      'stamp': 'CURRENT',
+      'stamp': 'NEXT',
       'status': 'prerelease',
     },
     {
@@ -59,7 +59,7 @@ const entries: Record<'en' | 'zh', TimelineEntry[]> = {
       'copy':
         '从公开基线开始在真实应用中使用可独立消费的 Element 与 Router，验证 Native/Lit 应用流程。Element 与 Router 是公共核心，Create 是正式入口，UI 为实验性能力。1.0 Alpha 是新基线，不提供从 0.x 的受支持迁移。',
       'state': 'next',
-      'stamp': 'CURRENT',
+      'stamp': 'NEXT',
       'status': '预发布',
     },
     {

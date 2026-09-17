@@ -11,10 +11,9 @@ const REPO_ROOT = fromFileUrl(new URL('../..', import.meta.url));
 const SITE_ISLANDS_DIR = join(REPO_ROOT, 'www', 'app', 'islands');
 
 const REQUIRED_LOCAL_ISLANDS = {
-  'open-cinematic-atmosphere': { hydrate: 'idle', ssr: true, dsd: true },
-  'open-cinematic-scroll': { hydrate: 'load', ssr: true, dsd: true },
-  'open-dragon-live-gaze': { hydrate: 'idle', ssr: true, dsd: true },
-  'open-search': { hydrate: 'load', ssr: true, dsd: true },
+  'open-cinematic-scroll': { hydrate: 'load', ssr: true },
+  'open-dragon-live-gaze': { hydrate: 'idle', ssr: true },
+  'open-search': { hydrate: 'load', ssr: true },
 } as const;
 
 async function scanWwwIslandMetadata() {
@@ -43,7 +42,6 @@ Deno.test('site local islands expose explicit island metadata', async () => {
       `${tagName} hydrate strategy drifted`,
     );
     assertEquals(actual.ssr, expected.ssr, `${tagName} SSR flag drifted`);
-    assertEquals(actual.dsd, expected.dsd, `${tagName} DSD flag drifted`);
   }
 
   const missingMetadata = [...scannedTags].filter((tagName) => meta[tagName] === undefined);

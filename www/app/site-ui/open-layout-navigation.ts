@@ -19,16 +19,26 @@ export interface NavItem {
   path?: string;
   href?: string;
   label: string;
+  /** zh label from the content collection frontmatter (or the static map). */
+  labelZh?: string;
 }
 
 export interface NavSection {
   section: string;
+  /** zh group heading; falls back to `section` when absent. */
+  sectionZh?: string;
   items: NavItem[];
 }
 
 export interface HeaderNavLink {
   href: string;
   label: string;
+  labelZh?: string;
+}
+
+/** Project a bilingual label pair onto the render locale (en default). */
+function localizedLabel(label: string, labelZh: string | undefined, locale: string): string {
+  return locale === 'zh' ? labelZh ?? label : label;
 }
 
 export function isSafeLayoutUrl(url: string): boolean {
@@ -80,7 +90,21 @@ export function localeSwitchPath(
 ): string {
   const other = locales.find((locale) => locale !== currentLocale) || currentLocale;
   const bare = normalizeLocalePath(currentPath, { locales, defaultLocale }).path;
-  return localizeLayoutPath(bare, other, locales, defaultLocale);
+  // A route pattern (/:slug) can arrive when the resolved request path is
+  // unavailable; a literal ":slug" must never land in an href, so the switch
+  // target degrades to the deepest static ancestor (/blog/:slug -> /blog).
+  const segments = bare.split('/').filter(Boolean);
+  const staticSegments: string[] = [];
+  for (const segment of segments) {
+    if (segment.startsWith(':') || segment.startsWith('[')) break;
+    staticSegments.push(segment);
+  }
+  const safeBare = staticSegments.length === segments.length
+    ? bare
+    : staticSegments.length > 0
+    ? `/${staticSegments.join('/')}`
+    : '/';
+  return localizeLayoutPath(safeBare, other, locales, defaultLocale);
 }
 
 export function localeSwitchLabel(currentLocale: string): string {
@@ -183,7 +207,7 @@ export function decorateHeaderNav(
     return {
       key: href || link.label,
       href,
-      label: link.label,
+      label: localizedLabel(link.label, link.labelZh, locale),
       current: isCurrent ? 'page' : false,
     };
   });
@@ -216,7 +240,7 @@ export function buildSidebarRows(
     rows.push({
       key: `section:${section.section}`,
       kind: 'section',
-      heading: section.section,
+      heading: localizedLabel(section.section, section.sectionZh, locale),
       href: false,
       label: '',
       current: false,
@@ -236,7 +260,7 @@ export function buildSidebarRows(
         kind: 'link',
         heading: '',
         href,
-        label: item.label,
+        label: localizedLabel(item.label, item.labelZh, locale),
         current: !external && href !== false && href === localizedCurrent ? 'page' : false,
         rel: external ? EXTERNAL_REL : false,
       });
@@ -321,17 +345,29 @@ export function layoutChromeStrings(locale: string): {
   sidebarLabel: string;
   sidebarToggle: string;
   footerTagline: string;
+  skipToMain: string;
+  menuOpen: string;
+  primaryNavLabel: string;
+  mobileNavLabel: string;
 } {
   if (locale === 'zh') {
     return {
       sidebarLabel: '文档导航',
       sidebarToggle: '文档',
       footerTagline: '基于 OpenElement 构建 —— Web Components 原生应用框架',
+      skipToMain: '跳到主要内容',
+      menuOpen: '打开导航',
+      primaryNavLabel: '主导航',
+      mobileNavLabel: '移动端导航',
     };
   }
   return {
     sidebarLabel: 'Documentation navigation',
     sidebarToggle: 'Documentation',
     footerTagline: '',
+    skipToMain: 'Skip to main content',
+    menuOpen: 'Open navigation',
+    primaryNavLabel: 'Primary navigation',
+    mobileNavLabel: 'Mobile navigation',
   };
 }

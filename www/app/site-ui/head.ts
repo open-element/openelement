@@ -16,6 +16,7 @@
  * before either serializer runs; there is no post-build head rewrite anymore.
  */
 import type { PageHead } from '@openelement/router';
+import { getPostBySlug } from '@openelement/generated/blog-data';
 import { contentLocale } from './locale.ts';
 import { localizePath, SITE_LOCALES } from './link.ts';
 
@@ -55,6 +56,30 @@ export function siteHead(input: SiteHeadInput): PageHead {
       { property: 'og:url', content: canonical },
     ],
   };
+  // Blog dispatches are articles (D-9): derive og:type and the article
+  // fields from the same generated blog truth the route body projects, so the
+  // head cannot drift from the post. Route meta serializes BEFORE the
+  // site-wide vite.config.ts inject.headFragments (wrapInDocument emits
+  // metaBlock ahead of headExtras), so on dispatch pages og:type=article
+  // precedes the static og:type=website boilerplate — OG consumers honor the
+  // first og:type, and non-article pages keep only the website tag.
+  //
+  // BlogPosting/WebSite JSON-LD is deliberately NOT emitted here: the router
+  // head seam rejects every <script> tag in dangerouslyHeadFragments
+  // (assertNoScriptTags, packages/router/src/vite/head-injection.ts, enforced
+  // at resolvePageDocument), so structured data needs a router-level
+  // application/ld+json channel first.
+  const blogMatch = /^\/blog\/([^/]+)$/.exec(input.route);
+  if (blogMatch && !input.error) {
+    const post = getPostBySlug(blogMatch[1]);
+    if (post) {
+      head.meta?.push(
+        { property: 'og:type', content: 'article' },
+        { property: 'article:published_time', content: post.frontmatter.date },
+        { property: 'article:author', content: BRAND },
+      );
+    }
+  }
   if (!input.error) {
     head.canonical = canonical;
     head.alternates = [

@@ -60,9 +60,9 @@ remain unassigned and require a future ADR.
 Package surface, docs truth, artifacts, critical paths and browser tests reject
 a return to the retired product graph.
 
-| Gate         | Requirement                                                                     |
-| ------------ | ------------------------------------------------------------------------------- |
-| 4 packages   | Current consumer surface, starter and docs agree.                               |
-| ADR-0122     | 0.42.0 frozen (ACCEPTED); the 0.41.x static freeze under ADR-0119 is untouched. |
-| 3 browsers   | Candidate releases require Chromium, Firefox and WebKit proof.                  |
-| packed proof | Consumers build from public artifacts, not workspace aliases.                   |
+| Gate         | Requirement                                                                                                            |
+| ------------ | ---------------------------------------------------------------------------------------------------------------------- |
+| 4 packages   | Current consumer surface, starter and docs agree.                                                                      |
+| ADR-0122     | 0.42.0 frozen (ACCEPTED, retired; recoverable from Git history); the 0.41.x static freeze under ADR-0119 is untouched. |
+| 3 browsers   | Candidate releases require Chromium, Firefox and WebKit proof.                                                         |
+| packed proof | Consumers build from public artifacts, not workspace aliases.                                                          |

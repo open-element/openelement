@@ -2,10 +2,7 @@ import { assertEquals, assertStringIncludes } from '@std/assert';
 import { compileElementProgram } from '@openelement/element/compiler';
 
 const siteModules = [
-  ['open-lab-panel', '../app/site-ui/open-lab-panel.tsx'],
-  ['open-lab-stage', '../app/site-ui/open-lab-stage.tsx'],
   ['open-standards-visual', '../app/site-ui/open-standards-visual.tsx'],
-  ['open-page-hero', '../app/site-ui/open-page-hero.tsx'],
   ['open-page-rail', '../app/site-ui/open-page-rail.tsx'],
   ['open-reading-shell', '../app/site-ui/open-reading-shell.tsx'],
   ['open-article-view', '../app/site-ui/open-article-view.tsx'],
@@ -24,7 +21,7 @@ Deno.test('open-layout is an explicitly hydrated compiled app-shell island', asy
   const source = await Deno.readTextFile(url);
   assertStringIncludes(
     source,
-    "defineIslandConfig({ hydrate: 'load', ssr: true, dsd: true })",
+    "defineIslandConfig({ hydrate: 'load', ssr: true })",
   );
   assertStringIncludes(source, "@element('open-layout')");
   assertStringIncludes(source, 'export default class OpenLayout extends OpenElement');
@@ -52,6 +49,13 @@ Deno.test('open-layout is an explicitly hydrated compiled app-shell island', asy
       'headerNavItems',
       'sidebarLabel',
       'sidebarToggle',
+      'skipToMain',
+      'menuOpen',
+      'primaryNavLabel',
+      'mobileNavLabel',
+      'switchLocaleHref',
+      'switchLocaleLabel',
+      'switchLocaleNote',
       'sidebarRows',
       'sidebarHidden',
       'footerTagline',
@@ -76,12 +80,28 @@ Deno.test('open-search keeps its view compiler-owned and its browser state exter
   const source = await Deno.readTextFile(url);
   assertStringIncludes(
     source,
-    "defineIslandConfig({ hydrate: 'load', ssr: true, dsd: true })",
+    "defineIslandConfig({ hydrate: 'load', ssr: true })",
   );
   assertStringIncludes(source, "@element('open-search')");
   assertStringIncludes(source, "from '../site-ui/open-search-controller.ts'");
   const result = compileElementProgram(source, url.pathname);
   assertEquals(result.program.tag, 'open-search');
-  assertEquals(result.program.metadata.properties, []);
-  assertEquals(result.program.parts.filter((part) => part.k === 'event').length, 3);
+  // The view is property-driven (C-5): chrome copy (bilingual, English SSR
+  // defaults pinned by e2e), the empty/error message and the hit list are
+  // compiled properties the controller writes; hits render through one list
+  // Region with container-delegated click dismissal.
+  assertEquals(
+    result.program.metadata.properties.map((property) => property.name),
+    [
+      'triggerLabel',
+      'dialogLabel',
+      'inputLabel',
+      'placeholder',
+      'resultsLabel',
+      'message',
+      'hasHits',
+      'hits',
+    ],
+  );
+  assertEquals(result.program.parts.filter((part) => part.k === 'event').length, 4);
 });

@@ -68,10 +68,17 @@ export default class PageChangelog extends OpenElement {
   @property({ reflect: false, attribute: false })
   gettingStartedLabel = '';
 
+  // Same base-field redeclaration as open-layout: the compiled @property
+  // shadows OpenElementConfiguration.locale (SSR injection or the `locale`
+  // attribute); tsc's `override` demand is rejected by the compiled grammar.
+  @property({ reflect: false })
+  // @ts-expect-error compiled @property shadows the optional base field
+  locale = 'en';
+
   render() {
     return (
       <main>
-        <open-reading-shell meta rail footer>
+        <open-reading-shell meta rail footer locale={this.locale}>
           <div slot='meta'>
             <p class='crumb'>
               <span>Project</span>
@@ -86,7 +93,7 @@ export default class PageChangelog extends OpenElement {
             </p>
           </div>
           <div slot='rail'>
-            <open-page-rail items={this.railItems}></open-page-rail>
+            <open-page-rail items={this.railItems} locale={this.locale}></open-page-rail>
           </div>
           <p id='published'>{this.publishedIntro}</p>
           <div class='register' aria-label='Release register'>

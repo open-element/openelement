@@ -1,4 +1,5 @@
 import { assert, assertEquals, assertFalse } from '@std/assert';
+import { readingChromeStrings } from '../app/site-ui/chrome-strings.ts';
 import {
   buildSidebarRows,
   decorateHeaderNav,
@@ -9,6 +10,7 @@ import {
   layoutChromeStrings,
   localeSwitchLabel,
   localeSwitchPath,
+  localeSwitchScopeNote,
   localizeLayoutPath,
   mobileSectionRoot,
 } from '../app/site-ui/open-layout-navigation.ts';
@@ -27,6 +29,15 @@ Deno.test('open-layout navigation localizes and switches canonical paths', () =>
   assertEquals(localizeLayoutPath('/guide', 'en', ['en', 'zh'], 'en'), '/guide');
   assertEquals(localeSwitchPath('/zh/guide', 'zh', ['en', 'zh'], 'en'), '/guide');
   assertEquals(localeSwitchLabel('en'), '中文');
+});
+
+Deno.test('localeSwitchPath degrades unresolved route params to the static ancestor', () => {
+  // A pattern path must never put a literal ":slug" into the switcher href.
+  assertEquals(localeSwitchPath('/blog/:slug', 'en', ['en', 'zh'], 'en'), '/zh/blog');
+  assertEquals(localeSwitchPath('/zh/blog/:slug', 'zh', ['en', 'zh'], 'en'), '/blog');
+  // A leading param collapses to the locale home.
+  assertEquals(localeSwitchPath('/:slug', 'en', ['en', 'zh'], 'en'), '/zh');
+  assertEquals(localeSwitchScopeNote('zh'), 'Switch to English');
 });
 
 Deno.test('open-layout navigation filters only the active section family', () => {
@@ -202,4 +213,63 @@ Deno.test('layoutChromeStrings carries the bilingual shell chrome copy', () => {
   assertEquals(layoutChromeStrings('en').sidebarToggle, 'Documentation');
   assertEquals(layoutChromeStrings('zh').sidebarToggle, '文档');
   assertEquals(typeof layoutChromeStrings('zh').footerTagline, 'string');
+  // Skip link and header chrome; the English literals are e2e landmark pins.
+  assertEquals(layoutChromeStrings('en').skipToMain, 'Skip to main content');
+  assertEquals(layoutChromeStrings('zh').skipToMain, '跳到主要内容');
+  assertEquals(layoutChromeStrings('en').menuOpen, 'Open navigation');
+  assertEquals(layoutChromeStrings('zh').menuOpen, '打开导航');
+  assertEquals(layoutChromeStrings('en').primaryNavLabel, 'Primary navigation');
+  assertEquals(layoutChromeStrings('zh').primaryNavLabel, '主导航');
+  assertEquals(layoutChromeStrings('en').mobileNavLabel, 'Mobile navigation');
+  assertEquals(layoutChromeStrings('zh').mobileNavLabel, '移动端导航');
+});
+
+Deno.test('readingChromeStrings carries the bilingual reading chrome copy', () => {
+  // The English literals are e2e landmark pins ('On this page' complementary).
+  assertEquals(readingChromeStrings('en'), {
+    onThisPage: 'On this page',
+    overview: 'Overview',
+    pageNavigation: 'Page navigation',
+  });
+  assertEquals(readingChromeStrings('zh'), {
+    onThisPage: '本页目录',
+    overview: '概览',
+    pageNavigation: '页面导航',
+  });
+});
+
+Deno.test('decorateHeaderNav projects zh labels and keeps the en default', () => {
+  const links = [
+    { href: '/docs', label: 'Docs', labelZh: '文档' },
+    { href: '/blog', label: 'Blog' },
+  ];
+  assertEquals(decorateHeaderNav(links, '/docs', 'zh', ['en', 'zh']).map((link) => link.label), [
+    '文档',
+    'Blog', // no labelZh: falls back to the English label
+  ]);
+  assertEquals(decorateHeaderNav(links, '/docs', 'en', ['en', 'zh']).map((link) => link.label), [
+    'Docs',
+    'Blog',
+  ]);
+});
+
+Deno.test('buildSidebarRows projects zh item labels and section headings', () => {
+  const sections = [{
+    section: 'Guide',
+    sectionZh: '指南',
+    items: [
+      { path: '/guide/getting-started', label: 'Getting Started', labelZh: '快速开始' },
+      { path: '/guide/api', label: 'API Routes', labelZh: 'API 路由' },
+    ],
+  }];
+  const zhRows = buildSidebarRows(sections, '/zh/guide/api', 'zh', ['en', 'zh']);
+  assertEquals(zhRows[0].heading, '指南');
+  assertEquals(
+    zhRows.filter((row) => row.kind === 'link').map((row) => row.label),
+    ['快速开始', 'API 路由'],
+  );
+  assertEquals(zhRows.find((row) => row.current === 'page')?.label, 'API 路由');
+  const enRows = buildSidebarRows(sections, '/guide/api', 'en', ['en', 'zh']);
+  assertEquals(enRows[0].heading, 'Guide');
+  assertEquals(enRows[1].label, 'Getting Started');
 });

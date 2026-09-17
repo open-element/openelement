@@ -10,7 +10,7 @@ Standard Custom Elements and Declarative Shadow DOM define the durable component
 
 ## Request semantics
 
-`Request`, `Response` and `FormData` are the basis of the 0.42 loader/action surfaces — application interaction without a proprietary transport.
+`Request`, `Response` and `FormData` are the basis of the current loader/action surfaces — application interaction without a proprietary transport.
 
 ## Four-package ownership
 

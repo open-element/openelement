@@ -98,4 +98,4 @@ export default definePage(PostPage, {
 });
 ```
 
-`redirect()` also takes an explicit status (301/302/303/307/308); any other status is rejected at call time. The same guards work on the SPA chain, but SPA loaders/actions receive only `{ params }` (plus `formData` for actions).
+`redirect()` also takes an explicit status (301/302/303/307/308); any other status is rejected at call time. The same guards work on the SPA chain, but SPA loaders/actions receive `{ params, searchParams, signal }` (plus `formData` for actions).

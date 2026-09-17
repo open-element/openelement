@@ -98,4 +98,4 @@ export default definePage(PostPage, {
 });
 ```
 
-`redirect()` 也可显式指定状态码（301/302/303/307/308）；其他状态码在调用时即被拒绝。同样的守卫在 SPA 链上可用，但 SPA 的 loader/action 只拿到 `{ params }`（action 另有 `formData`）。
+`redirect()` 也可显式指定状态码（301/302/303/307/308）；其他状态码在调用时即被拒绝。同样的守卫在 SPA 链上可用，但 SPA 的 loader/action 拿到的是 `{ params, searchParams, signal }`（action 另有 `formData`）。

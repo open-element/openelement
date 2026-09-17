@@ -237,7 +237,7 @@ const content = {
       `The supported openElement API surface: ${packageCount} consumer packages, every documented export and every custom element, generated from repository truth.`,
     pageTitle: 'API Reference',
     lede: (v: string) =>
-      `The ${v} current line documents only the ${packageCount} consumer packages. Retired alpha packages and internal subpaths are not authoring surfaces.`,
+      `The ${v} repository baseline documents only the ${packageCount} consumer packages. Retired alpha packages and internal subpaths are not authoring surfaces.`,
     s1Index: '01 / interface rule',
     s1Title: 'Authoring starts at product packages.',
     s1Copy:
@@ -277,7 +277,7 @@ const content = {
       `openElement 受支持的 API 面：${packageCount} 个面向使用者的包、全部记录在案的导出与 Custom Element，由仓库真值生成。`,
     pageTitle: 'API 参考',
     lede: (v: string) =>
-      `${v} 当前线只记录 ${packageCount} 个面向使用者的包。已退役的 alpha 包与内部子路径都不是创作面。`,
+      `${v} 仓库基线只记录 ${packageCount} 个面向使用者的包。已退役的 alpha 包与内部子路径都不是创作面。`,
     s1Index: '01 / 接口规则',
     s1Title: '创作从产品包开始。',
     s1Copy:
