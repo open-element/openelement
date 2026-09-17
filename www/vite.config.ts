@@ -2,6 +2,7 @@ import { openElement } from '@openelement/router/vite';
 import { openPropsTokenSheet, registerOpenUi } from '@openelement/ui';
 import { defineConfig } from 'vite';
 import { SITE_BUDGET } from './site-budget.ts';
+import { siteCSS } from './site-css.ts';
 import { headerNav, navSections } from './app/data/_generated-nav-data.ts';
 
 // www is an npm-first consumer; local workspace resolution during dev,
@@ -21,75 +22,6 @@ const rootCSS = _rawCSS
     'html[data-theme="dark"], :root[data-theme="dark"], :host([data-theme="dark"]) {',
   );
 
-const siteCSS = `
-:root,
-html[data-theme="light"],
-:host([data-theme="light"]),
-:root[data-theme="light"] {
-  --surface-1: var(--bg-elevated);
-  --surface-code: var(--bg-code);
-  --edge-highlight: color-mix(in srgb, var(--text-primary) 10%, transparent);
-  --border-strong: color-mix(in srgb, var(--border) 68%, var(--text-primary));
-  --nav-bg: var(--bg-base);
-  --nav-height: var(--size-16);
-  --nav-link-color: var(--text-primary);
-  --nav-link-hover: var(--brand-deep);
-  --font-size-button: var(--font-size-0);
-  --font-size-body-sm: var(--font-size-0);
-  --font-size-caption: var(--font-size-00);
-  --font-size-micro: 0.625rem;
-  --font-size-tiny: 0.85rem;
-  --font-size-lede: 1.1rem;
-  --font-size-overline: 0.6875rem;
-  --font-size-article-title: 1.125rem;
-  --font-size-display-sm: 1.75rem;
-  --font-size-display-md: 2.125rem;
-  --font-size-display-lg: 2.625rem;
-  --font-weight-medium: var(--font-weight-5);
-  --font-weight-semibold: var(--font-weight-7);
-  /* Cinematic hero palette: the homepage hero is always dark, independent of
-     the site theme. Defined once here (the alias layer) so components never
-     carry raw hex literals (site theme-token gate). */
-  --hero-ink: #000;
-  --hero-paper: #f4f1ea;
-  --hero-gold: #e3cf9f;
-  --hero-gold-muted: #b9ad93;
-  --hero-gold-line: #d8c49a;
-  /* Site override: real sans for prose. The shared token sheet maps
-     --font-sans to JetBrains Mono (brand choice for the component layer);
-     long-form reading on this site needs a true sans. Mono stays on
-     --font-mono (code, labels, eyebrows, nav) — nothing else changes. */
-  --font-sans: 'Inter Variable', 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
-}
-html[data-theme="dark"],
-:host([data-theme="dark"]),
-:root[data-theme="dark"] {
-  --surface-1: var(--bg-elevated);
-  --surface-code: var(--bg-code);
-  --edge-highlight: color-mix(in srgb, var(--text-primary) 14%, transparent);
-  --border-strong: color-mix(in srgb, var(--border) 72%, var(--text-primary));
-  --nav-bg: var(--bg-base);
-  --nav-height: var(--size-16);
-}
-body {
-  margin: 0;
-  background:
-    radial-gradient(circle at 50% -12%, color-mix(in srgb, var(--violet-5) 24%, transparent), transparent 42%),
-    linear-gradient(115deg, color-mix(in srgb, var(--violet-1) 38%, transparent), transparent 46%),
-    linear-gradient(color-mix(in srgb, var(--border) 34%, transparent) var(--border-size-1), transparent var(--border-size-1)),
-    linear-gradient(90deg, color-mix(in srgb, var(--border) 30%, transparent) var(--border-size-1), transparent var(--border-size-1)),
-    var(--bg-base);
-  background-size: auto, auto, 220px 128px, 220px 128px, auto;
-  color: var(--text-primary);
-  font-family: var(--font-sans);
-  line-height: 1.7;
-}
-::view-transition-old(open-brand-mark),
-::view-transition-new(open-brand-mark) { animation-duration: 320ms; animation-timing-function: var(--motion-standard); }
-::selection {
-  background: var(--brand-subtle);
-  color: var(--text-primary);
-}`;
 const colorTokensStyle =
   `<style>@font-face{font-family:'JetBrains Mono';font-style:normal;font-weight:100 800;font-display:swap;src:url('/assets/fonts/jetbrains-mono-latin-variable.woff2') format('woff2')}@font-face{font-family:'Instrument Serif';font-style:normal;font-weight:400;font-display:swap;src:url('/assets/fonts/instrument-serif-latin-regular.woff2') format('woff2')}@font-face{font-family:'Instrument Serif';font-style:italic;font-weight:400;font-display:swap;src:url('/assets/fonts/instrument-serif-latin-italic.woff2') format('woff2')}@font-face{font-family:'Inter Variable';font-style:normal;font-weight:100 900;font-display:swap;src:url('/assets/fonts/inter-latin-variable.woff2') format('woff2')}${rootCSS}body{font-family:var(--font-sans);-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}${siteCSS}</style>`;
 
