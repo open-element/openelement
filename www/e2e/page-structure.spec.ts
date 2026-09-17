@@ -11,8 +11,6 @@ const readingRoutes = [
 const guideRoutes = [
   '/guide/getting-started',
   '/guide/core-concepts',
-  '/guide/architecture',
-  '/guide/comparison',
   '/guide/routing-and-data',
   '/guide/mdx',
   '/guide/api',
@@ -25,6 +23,7 @@ const guideRoutes = [
 ];
 
 const architectureRoutes = [
+  '/architecture/architecture',
   '/architecture/dsd',
   '/architecture/comparison',
   '/architecture/islands',
@@ -70,12 +69,14 @@ test.describe('Unified page structure', () => {
     await expect(scene.locator('open-button[href="/docs"]')).toHaveCount(1);
   });
 
-  test('docs landing is a v4 manual index with four entrances', async ({ page }) => {
+  test('docs landing is a v4 manual index with five entrances', async ({ page }) => {
     await page.goto('/docs');
     await expect(page.locator('docs-index h1')).toContainText('MANUAL.');
     const entrances = page.locator('docs-index').getByRole('link');
-    await expect(entrances).toHaveCount(4);
+    await expect(entrances).toHaveCount(5);
     await expect(entrances.first()).toHaveAttribute('href', '/guide/getting-started');
+    // The tutorial is the guided second step, not just a sidebar entry.
+    await expect(entrances.nth(1)).toHaveAttribute('href', '/guide/tutorial');
   });
 
   test('blog index is a v4 dispatch journal with a featured band', async ({ page, request }) => {
@@ -245,7 +246,11 @@ test.describe('Unified page structure', () => {
     // viewports).
     const outlineLinks = page.getByRole('complementary', { name: 'On this page' })
       .locator('a[href^="#"]:not(details a)');
-    await expect(outlineLinks).toHaveCount(4);
+    // #start plus this page's four h2 sections, all present in the SSR
+    // payload — the outline does not wait for a client observer. The count is
+    // pinned so a content change that silently truncates the outline fails
+    // here rather than shipping.
+    await expect(outlineLinks).toHaveCount(5);
     await expect(outlineLinks.first()).toHaveAttribute('href', '#start');
   });
 

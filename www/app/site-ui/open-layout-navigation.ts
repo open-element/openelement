@@ -6,18 +6,28 @@ const SAFE_URL_SCHEMES = new Set(['http:', 'https:', 'mailto:', 'tel:', 'sms:'])
 export const REPOSITORY_URL = 'https://github.com/open-element/openelement';
 
 const LOCALE_LABELS: Record<string, string> = { en: '中文', zh: 'English' };
-const SECTION_MAP: Readonly<Record<string, readonly string[]>> = {
-  '/guide': ['Quick Start', 'Guide', 'Core', 'Production'],
+
+/**
+ * The section family each URL subtree owns: a page's sidebar shows exactly the
+ * families of its own basePath (and nothing else). Keys are basePaths, so a
+ * generated section name missing from its basePath's list would vanish
+ * silently from that page — tools/repo/generate-site-nav.ts fails the build
+ * instead. A basePath with no entry is unfiltered (the Docs hub shows the
+ * whole manual). The project-links group is listed under `FALLBACK_SECTION`
+ * ("Project"), the name the consumer gives the nameless generated group.
+ */
+export const SECTION_MAP: Readonly<Record<string, readonly string[]>> = {
+  '/guide': ['Guide', 'Core'],
   '/architecture': ['Principles', 'Reference'],
-  '/blog': ['History'],
   '/apilist': ['Reference'],
-  '/roadmap': ['History', 'Project'],
-  '/changelog': ['History', 'Project'],
-  '/contributing': ['History', 'Project'],
+  '/blog': ['Project'],
+  '/roadmap': ['Project'],
+  '/changelog': ['Project'],
+  '/contributing': ['Project'],
 };
 
 /** Generated nav data leaves the project-links group nameless; label it. */
-const FALLBACK_SECTION = 'Project';
+export const FALLBACK_SECTION = 'Project';
 
 export interface NavItem {
   path?: string;

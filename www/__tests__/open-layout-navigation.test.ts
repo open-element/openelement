@@ -43,50 +43,44 @@ Deno.test('localeSwitchPath degrades unresolved route params to the static ances
 
 Deno.test('open-layout navigation filters only the active section family', () => {
   const sections = [
-    { section: 'Quick Start', items: [] },
     { section: 'Guide', items: [] },
     { section: 'Core', items: [] },
     { section: 'Principles', items: [] },
     { section: 'Reference', items: [] },
-    { section: 'History', items: [] },
+    { section: 'Project', items: [] },
   ];
-  // Guide pages see the full guide tree (14 pages must stay reachable).
-  assertEquals(filterNavSections(sections, '/guide/api'), [sections[0], sections[1], sections[2]]);
-  assertEquals(filterNavSections(sections, '/architecture/dsd'), [sections[3], sections[4]]);
-  assertEquals(filterNavSections(sections, '/blog'), [sections[5]]);
+  // A guide page sees the manual (the docs hub's group) and nothing else.
+  assertEquals(filterNavSections(sections, '/guide/api'), [sections[0], sections[1]]);
+  assertEquals(filterNavSections(sections, '/architecture/dsd'), [sections[2], sections[3]]);
+  assertEquals(filterNavSections(sections, '/blog'), [sections[4]]);
   assertEquals(mobileSectionRoot('/zh/guide/api', ['en', 'zh']), '/guide');
 });
 
 Deno.test('open-layout navigation labels the nameless generated group as Project', () => {
   const sections = [
-    { section: 'History', items: [] },
-    { section: 'Project', items: [{ label: 'Roadmap', path: '/roadmap' }] },
     { section: 'Reference', items: [] },
+    { section: 'Project', items: [{ label: 'Roadmap', path: '/roadmap' }] },
   ];
   const generated = [
-    { section: 'History', items: [] as never[] },
-    { section: '', items: [{ label: 'Roadmap', path: '/roadmap' }] },
     { section: 'Reference', items: [] as never[] },
+    { section: '', items: [{ label: 'Roadmap', path: '/roadmap' }] },
   ];
   // Unfiltered paths keep every group, with the empty one renamed.
   assertEquals(filterNavSections(generated, '/docs').map((s) => s.section), [
-    'History',
-    'Project',
     'Reference',
-  ]);
-  assertEquals(filterNavSections(sections, '/roadmap').map((s) => s.section), [
-    'History',
     'Project',
   ]);
-  assertEquals(filterNavSections(sections, '/blog').map((s) => s.section), ['History']);
+  assertEquals(filterNavSections(sections, '/roadmap').map((s) => s.section), ['Project']);
+  // The blog is a project page, not a stream of its own.
+  assertEquals(filterNavSections(sections, '/blog').map((s) => s.section), ['Project']);
   assertEquals(filterNavSections(sections, '/apilist').map((s) => s.section), ['Reference']);
 });
 
 const GENERATED_LIKE_SECTIONS = [
-  { section: 'Quick Start', items: [{ path: '/docs', label: 'Docs' }] },
   {
     section: 'Guide',
     items: [
+      { path: '/docs', label: 'Docs' },
       { path: '/guide/getting-started', label: 'Getting Started' },
       { path: '/guide/api', label: 'API Routes' },
     ],
@@ -101,19 +95,18 @@ Deno.test('buildSidebarRows flattens the filtered section tree into heading and 
   assertEquals(rows.map((row) => row.kind), [
     'section',
     'link',
-    'section',
     'link',
     'link',
     'section',
     'link',
   ]);
-  assertEquals(rows[0].heading, 'Quick Start');
-  assertEquals(rows[3].label, 'Getting Started');
+  assertEquals(rows[0].heading, 'Guide');
+  assertEquals(rows[2].label, 'Getting Started');
   // The active page is marked exactly once, on the exact-match link.
   assertEquals(rows.filter((row) => row.current === 'page').map((row) => row.href), ['/guide/api']);
   // Heading rows carry no link affordance; link rows carry no heading.
   assertEquals(rows[0].href, false);
-  assertEquals(rows[3].heading, '');
+  assertEquals(rows[2].heading, '');
   // Row keys are unique and stable for the keyed Region.
   assertEquals(new Set(rows.map((row) => row.key)).size, rows.length);
 });

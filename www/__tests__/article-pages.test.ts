@@ -33,8 +33,6 @@ const loadContentPages = (collection: ArticleCollection) =>
 // truth that tools/repo/generate-site-nav.ts projects (#1087, ADR-0136).
 const articleRoutes = [
   ['guide', 'api', 'GuideApiPage', 60],
-  ['guide', 'architecture', 'GuideArchitecturePage', 20],
-  ['guide', 'comparison', 'GuideComparisonPage', 25],
   ['guide', 'configuration', 'GuideConfigurationPage', 70],
   ['guide', 'core-concepts', 'GuideCoreConceptsPage', 10],
   ['guide', 'deployment', 'GuideDeploymentPage', 100],
@@ -46,6 +44,7 @@ const articleRoutes = [
   ['guide', 'security', 'GuideSecurityPage', 95],
   ['guide', 'styling', 'GuideStylingPage', 5],
   ['guide', 'testing', 'GuideTestingPage', 110],
+  ['guide', 'tutorial', 'GuideTutorialPage', 2],
   ['architecture', 'architecture', 'ArchitecturePage', 10],
   ['architecture', 'benchmark', 'Benchmark', 100],
   ['architecture', 'comparison', 'ComparisonPage', 20],
@@ -149,20 +148,6 @@ Deno.test('getting-started leads with copyable commands', async () => {
   // The page's primary job: a fenced, copyable install command — not prose.
   assertStringIncludes(en.html, '<pre><code class="language-bash">');
   assertStringIncludes(en.html, 'npm:@openelement/create');
-});
-
-// #749: guide/architecture and guide/comparison are orientation pages that
-// point at the full Architecture pages instead of maintaining a second copy.
-Deno.test('architecture and comparison guide pages point at the full pages', async () => {
-  const pages = await loadContentPages('guide');
-  for (const slug of ['architecture', 'comparison'] as const) {
-    const en = pages.find((p) => p.slug === slug && p.locale === 'en');
-    const zh = pages.find((p) => p.slug === slug && p.locale === 'zh');
-    assertExists(en);
-    assertExists(zh);
-    assertStringIncludes(en.html, `href="/architecture/${slug}"`);
-    assertStringIncludes(zh.html, `href="/zh/architecture/${slug}"`);
-  }
 });
 
 // The security page deep-links the configuration anchor; the configuration

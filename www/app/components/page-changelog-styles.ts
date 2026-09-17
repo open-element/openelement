@@ -5,7 +5,9 @@ export const pageChangelogStyles = [compiledStyle(
   pageStyles + `
   :host { display: block; }
   .crumb { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--size-2); margin: 0 0 var(--size-4); color: var(--text-muted); font-family: var(--font-mono); font-size: var(--font-size-00); font-weight: var(--font-weight-8); letter-spacing: 0.1em; text-transform: uppercase; }
-  .crumb .crumb-sep { color: color-mix(in srgb, var(--text-muted) 55%, transparent); }
+  /* No .crumb-sep ink: the 55% tint of --text-muted measured 2.62:1 on the
+     light base (2.52:1 dark); the separator carries the .crumb --text-muted
+     (7.74:1 light, 6.09:1 dark) instead. */
   .crumb .crumb-current { color: var(--violet-8); }
   .page-title { margin: 0; color: var(--text-primary); font-family: var(--font-sans); font-size: clamp(2.1rem, 4.6vw, 3.4rem); font-weight: var(--font-weight-8); letter-spacing: -.035em; line-height: 1.05; overflow-wrap: break-word; text-wrap: balance; }
   .lede { max-width: 640px; margin: var(--size-4) 0 0; color: var(--text-secondary); font-size: clamp(var(--font-size-1), 1.4vw, var(--font-size-2)); line-height: 1.65; }

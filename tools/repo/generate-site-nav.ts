@@ -19,6 +19,15 @@
  *   the remaining static routes (/docs, /blog, …) — `export const meta =
  *     { section, label, order }` in the route module.
  *
+ * Two generation-time guards, both fail-closed:
+ *
+ *   headerNav targets — a curated header link whose route left the tree;
+ *   section coverage  — every generated section must be listed for its own
+ *     basePath in SECTION_MAP (www/app/site-ui/open-layout-navigation.ts).
+ *     The sidebar filters sections per basePath, so an unsynced frontmatter
+ *     `section` value would otherwise drop that group from the page's sidebar
+ *     with no error at all.
+ *
  * `--check` regenerates in memory and fails on drift. The module is generated
  * (gitignored) and rebuilt before the site build.
  */
@@ -26,31 +35,34 @@ import { walk } from '@std/fs/walk';
 import { fromFileUrl, join } from '@std/path';
 import { loadCollectionData } from '../../www/lib/content.ts';
 import { articleCollections } from '../../www/content-collections.ts';
+import { FALLBACK_SECTION, SECTION_MAP } from '../../www/app/site-ui/open-layout-navigation.ts';
 
 const siteRoot = fromFileUrl(new URL('../../www/', import.meta.url));
 const routesDir = join(siteRoot, 'app/routes');
 const outFile = join(siteRoot, 'app/data/_generated-nav-data.ts');
 
+/**
+ * Sidebar group order, aligned with the URL tree: Guide covers the manual
+ * (/docs hub + /guide/*), Core the guide's framework-api page, Principles and
+ * Reference the architecture notes and the api list, and the nameless group
+ * ('', rendered as FALLBACK_SECTION "Project") the project's own pages
+ * (blog/changelog/roadmap/contributing). Any section missing here is appended
+ * deterministically by `render`, so a new section cannot silently disappear.
+ */
 const SECTION_ORDER = [
-  'Quick Start',
   'Guide',
   'Core',
-  'Production',
   'Principles',
   'Reference',
-  'History',
-  'Project',
+  '',
 ];
 
 /** zh group headings; '' is the nameless group the consumer labels "Project". */
 const SECTION_ZH: Readonly<Record<string, string>> = {
-  'Quick Start': '快速开始',
   'Guide': '指南',
   'Core': '核心',
-  'Production': '生产',
   'Principles': '原则',
   'Reference': '参考',
-  'History': '历史',
   '': '项目',
 };
 
@@ -248,6 +260,34 @@ export const headerNav: HeaderNavLink[] = ${JSON.stringify(headerNav, null, 2)};
 
 const contentNav = await collectContentNav();
 const { routes, sections } = await collect(contentNav);
+
+/**
+ * Section-coverage guard. The sidebar (filterNavSections) keeps only the
+ * sections a page's own basePath lists in SECTION_MAP, so a frontmatter
+ * `section` name that was never synced there hides the whole group on those
+ * pages — silently. Fail the build instead, naming section and basePath.
+ * A basePath without a SECTION_MAP entry is unfiltered (the Docs hub shows the
+ * whole manual), so any section is reachable there and needs no allow-list.
+ */
+const uncovered = new Set<string>();
+for (const [section, items] of sections) {
+  const name = section || FALLBACK_SECTION;
+  for (const item of items) {
+    const basePath = `/${item.path.split('/').filter(Boolean)[0] ?? ''}`;
+    const allowed = SECTION_MAP[basePath];
+    if (allowed && !allowed.includes(name)) {
+      uncovered.add(`section '${name}' in basePath '${basePath}' (${item.path})`);
+    }
+  }
+}
+if (uncovered.size > 0) {
+  console.error(
+    'site nav sections missing from SECTION_MAP (www/app/site-ui/open-layout-navigation.ts):',
+  );
+  for (const entry of [...uncovered].sort()) console.error(`  ${entry}`);
+  console.error('add the section to its basePath list, or the page sidebar drops it.');
+  Deno.exit(1);
+}
 
 // Static-map drift guard: a zh label for a route that left the nav (renamed
 // or removed) must fail here, not silently stop applying.

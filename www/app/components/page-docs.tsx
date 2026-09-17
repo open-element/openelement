@@ -43,6 +43,12 @@ export default class PageDocs extends OpenElement {
   entrance4Copy = '';
   @property({ reflect: false, attribute: false })
   entrance4Href = '';
+  @property({ reflect: false, attribute: false })
+  entrance5Title = '';
+  @property({ reflect: false, attribute: false })
+  entrance5Copy = '';
+  @property({ reflect: false, attribute: false })
+  entrance5Href = '';
 
   render() {
     return (
@@ -89,6 +95,14 @@ export default class PageDocs extends OpenElement {
             <div>
               <span class='entrance-title'>{this.entrance4Title}</span>
               <p class='entrance-copy'>{this.entrance4Copy}</p>
+            </div>
+            <span class='entrance-arrow' aria-hidden='true'>→</span>
+          </a>
+          <a class='entrance' href={this.entrance5Href}>
+            <span class='entrance-index' aria-hidden='true'>05</span>
+            <div>
+              <span class='entrance-title'>{this.entrance5Title}</span>
+              <p class='entrance-copy'>{this.entrance5Copy}</p>
             </div>
             <span class='entrance-arrow' aria-hidden='true'>→</span>
           </a>

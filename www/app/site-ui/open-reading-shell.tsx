@@ -23,7 +23,9 @@ export default class OpenReadingShell extends OpenElement {
   .meta{display:none;margin-block-end:var(--size-7);padding-block-end:var(--size-5);border-block-end:1px solid var(--border)}
   :host([meta]) .meta,:host([metadata]) .meta{display:block}
   .breadcrumb{display:flex;flex-wrap:wrap;align-items:baseline;gap:var(--size-2);margin:0 0 var(--size-4);color:var(--text-muted);font-family:var(--font-mono);font-size:var(--font-size-00);font-weight:var(--font-weight-8);letter-spacing:.1em;text-transform:uppercase}
-  .breadcrumb .crumb-sep{color:color-mix(in srgb,var(--text-muted) 55%,transparent)}
+  /* No .crumb-sep ink: the 55% tint of --text-muted measured 2.62:1 on the
+     light base (2.52:1 dark); the separator carries the breadcrumb's own
+     --text-muted (7.74:1 light, 6.09:1 dark) instead. */
   .breadcrumb .crumb-current{color:var(--violet-8)}
   .title{margin:0;color:var(--text-primary);font-family:var(--font-sans);font-size:clamp(2.1rem,4.6vw,3.4rem);font-weight:var(--font-weight-8);letter-spacing:-.035em;line-height:1.05;overflow-wrap:break-word;text-wrap:balance}
   .title-accent{display:block;color:var(--violet-8);font-family:var(--font-serif);font-style:italic;font-weight:400;font-size:calc(1em * 1.08);letter-spacing:-.01em}

@@ -34,8 +34,8 @@ test.describe('Site chrome: docs sidebar', () => {
     await expect(sidebar).toBeVisible();
 
     // Section headings come from the generated navSections tree.
-    await expect(sidebar.getByText('Quick Start', { exact: true })).toBeVisible();
     await expect(sidebar.getByText('Guide', { exact: true })).toBeVisible();
+    await expect(sidebar.getByText('Core', { exact: true })).toBeVisible();
 
     // The current page is marked exactly once, on its own link.
     const current = sidebar.getByRole('link', { name: 'Getting Started' });

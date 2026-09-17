@@ -18,7 +18,7 @@ test.describe('Direct URL Access', () => {
   const routes = [
     { path: '/', titleContains: 'openElement' },
     { path: '/guide/getting-started', titleContains: 'openElement' },
-    { path: '/guide/architecture', titleContains: 'openElement' },
+    { path: '/architecture/architecture', titleContains: 'openElement' },
     { path: '/guide/islands-and-ssr', titleContains: 'openElement' },
     { path: '/architecture/dsd', titleContains: 'openElement' },
     { path: '/guide/routing-and-data', titleContains: 'openElement' },
@@ -101,13 +101,14 @@ test.describe('Link Navigation', () => {
     await page.waitForLoadState('networkidle');
 
     // Navigate to another guide page
-    await page.goto('/guide/architecture');
+    await page.goto('/guide/islands-and-ssr');
     await page.waitForLoadState('networkidle');
 
     // The app shell landmarks survive the navigation (nested mains: shell +
     // page body — the first is the shell's).
     await expect(page.locator('open-layout')).toHaveCount(1);
     await expect(page.getByRole('main').first()).toBeVisible();
+    await expect(page.locator('guide-islands-and-ssr')).toHaveCount(1);
   });
 });
 
