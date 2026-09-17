@@ -66,7 +66,13 @@ export function articleContentStyles(scope: string): string {
     ${scope} pre { background: var(--surface-code); border: 0.5px solid var(--border); border-radius: var(--radius-2); padding: var(--size-4); overflow-x: auto; margin: var(--size-4) 0; }
     ${scope} pre code { background: none; color: var(--code-text); padding: 0; font-size: var(--font-size-0); line-height: 1.6; }
     ${scope} open-code-block { margin: var(--size-5) 0; }
-    ${scope} table { width: 100%; border-collapse: collapse; margin: var(--size-4) 0; font-size: var(--font-size-1); }
+    /* Tables carry their own scroll container: a comparison table's min-content
+       (706px on /architecture/comparison) exceeds the reading column below
+       ~1280px, and at 390px it pushed the document to 722px. overflow is
+       ignored on a display:table box, so the table becomes a block that
+       scrolls only when its content actually needs the room — desktop output
+       is byte-identical. */
+    ${scope} table { display: block; width: 100%; max-width: 100%; overflow-x: auto; border-collapse: collapse; margin: var(--size-4) 0; font-size: var(--font-size-1); }
     ${scope} th, ${scope} td { padding: var(--size-2) var(--size-3); text-align: left; border-bottom: 0.5px solid var(--border); }
     ${scope} th { background: var(--bg-surface); color: var(--text-secondary); font-weight: var(--font-weight-6); font-size: var(--font-size-overline); text-transform: uppercase; letter-spacing: var(--font-letterspacing-2); }
     ${scope} a { color: var(--brand); text-decoration: none; }

@@ -69,13 +69,19 @@ export const pageApiListStyles = [compiledStyle(`
   /* generated reference: hairline rows, one per export / custom element */
   .ref-row, .ce-row {
     display: grid;
-    grid-template-columns: minmax(0, .9fr) minmax(0, 1fr) auto;
+    /* Every track is flexible. An auto-width third track sized itself to the
+       max-content of the 540px source path and starved the first two tracks
+       down to ~80px, so the mono identifier painted over the summary. */
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.45fr) minmax(0, 1.2fr);
     gap: clamp(1rem, 4vw, 3rem);
     align-items: start;
     padding-block: var(--size-4);
     border-block-end: var(--border-size-1) solid var(--border);
   }
   .ce-row { grid-template-columns: minmax(0, .9fr) minmax(0, 1fr); }
+  /* Source paths and identifiers carry no break opportunity, so they set the
+     min-content floor of whichever track holds them. */
+  .ref-name, .ref-container, .ref-source, .ce-tag, .ce-class, .ce-module, .ce-detail { overflow-wrap: anywhere; }
   .ref-name {
     display: inline;
     color: var(--violet-8);
@@ -107,10 +113,17 @@ export const pageApiListStyles = [compiledStyle(`
     text-transform: uppercase;
   }
 
+  /* Three columns cannot hold a 540px source path, an identifier and a summary
+     once the reading column drops below ~1100px, so the reference rows stack
+     there (and the reference header goes with them). */
+  @media (max-width: 1100px) {
+    #api-reference .registry-head { display: none; }
+    .ref-row, .ce-row { grid-template-columns: minmax(0, 1fr); gap: var(--size-2); }
+  }
+
   @media (max-width: 860px) {
     .registry-head { display: none; }
-    .pkg-row { grid-template-columns: 1fr; gap: var(--size-3); }
+    .pkg-row { grid-template-columns: minmax(0, 1fr); gap: var(--size-3); }
     .kind { justify-self: start; }
-    .ref-row, .ce-row { grid-template-columns: 1fr; gap: var(--size-2); }
   }
 `)];

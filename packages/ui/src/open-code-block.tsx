@@ -40,6 +40,9 @@ export class OpenCodeBlock extends OpenElement {
     pre {
       margin: 0;
       padding: var(--size-5);
+      /* Clear the copy chip (top var(--size-2) + ~25px tall) so the first line
+         never runs underneath it. */
+      padding-block-start: calc(var(--size-5) + var(--size-4));
       background: var(--bg-code);
       border: var(--border-size-1) solid var(--code-border);
       border-radius: var(--radius-2);
@@ -47,7 +50,7 @@ export class OpenCodeBlock extends OpenElement {
       font-family: var(--font-mono);
       font-size: var(--font-size-0);
       line-height: var(--font-lineheight-4);
-      color: var(--text-secondary);
+      color: var(--code-text);
       scrollbar-width: thin;
       scrollbar-color: var(--brand-subtle) transparent;
       white-space: pre-wrap;
@@ -57,6 +60,7 @@ export class OpenCodeBlock extends OpenElement {
     ::slotted(pre) {
       margin: 0;
       padding: var(--size-5);
+      padding-block-start: calc(var(--size-5) + var(--size-4));
       background: var(--bg-code);
       border: var(--border-size-1) solid var(--code-border);
       border-radius: var(--radius-2);
@@ -64,7 +68,7 @@ export class OpenCodeBlock extends OpenElement {
       font-family: var(--font-mono);
       font-size: var(--font-size-0);
       line-height: var(--font-lineheight-4);
-      color: var(--text-secondary);
+      color: var(--code-text);
       scrollbar-width: thin;
       scrollbar-color: var(--brand-subtle) transparent;
     }
@@ -77,7 +81,7 @@ export class OpenCodeBlock extends OpenElement {
       font-weight: var(--font-weight-7);
       text-transform: uppercase;
       letter-spacing: var(--font-letterspacing-5);
-      color: var(--text-muted);
+      color: var(--code-text);
       pointer-events: none;
     }
 
@@ -86,7 +90,7 @@ export class OpenCodeBlock extends OpenElement {
       top: var(--size-2);
       right: var(--size-2);
       background: var(--brand-subtle);
-      color: var(--text-muted);
+      color: var(--code-text);
       padding: var(--size-1) var(--size-3);
       font-size: var(--font-size-00);
       font-family: var(--font-sans);
@@ -100,7 +104,7 @@ export class OpenCodeBlock extends OpenElement {
     }
 
     .copy-btn:hover {
-      color: var(--text-primary);
+      color: var(--on-brand);
       background: var(--brand-glow);
       border-color: var(--brand);
     }

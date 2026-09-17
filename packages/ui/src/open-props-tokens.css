@@ -114,8 +114,10 @@
   /* ═══════════════════════════════════════════════
      Brand tokens
      ═══════════════════════════════════════════════ */
-  --brand: var(--violet-6);
-  --brand-hover: var(--violet-7);
+  /* Light brand = violet-7: violet-6 (#8262db) put --on-brand at 4.22:1 and the
+     12px brand text at 4.21:1 on white — both under the 4.5:1 AA floor. */
+  --brand: var(--violet-7);
+  --brand-hover: var(--violet-8);
   --brand-light: var(--violet-4);
   --brand-pale: var(--violet-1);
   --brand-deep: var(--violet-11);
@@ -191,7 +193,10 @@
      ═══════════════════════════════════════════════ */
   --text-primary: var(--gray-9);
   --text-secondary: var(--gray-8);
-  --text-muted: var(--gray-5);
+  /* Muted copy must clear the 4.5:1 AA floor on --bg-base/#f9f8fc: gray-5 is
+     1.97:1. gray-7 is the lightest gray that clears it (7.74:1) and stays muted
+     against --text-secondary. Dark keeps gray-6 (5.6:1 on the dark base). */
+  --text-muted: var(--gray-7);
   --bg-base: color-mix(in srgb, var(--violet-0) 42%, var(--gray-0));
   --bg-surface: color-mix(in srgb, var(--violet-0) 32%, var(--gray-1));
   --bg-card: color-mix(in srgb, var(--violet-0) 18%, var(--gray-0));
