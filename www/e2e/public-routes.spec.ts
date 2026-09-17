@@ -72,7 +72,10 @@ function contentSourceDrift(sitemapRoutes: Set<string>): string[] {
       else slugs.add(file.slice(0, -'.md'.length));
     }
     for (const slug of slugs) {
-      const route = `/${collection}/${slug}`;
+      // The collection overview article (slug == collection) is served at
+      // the collection root (/architecture, route index.tsx) — same mapping
+      // as articleRoutePath in www/app/site-ui/article-page-model.ts.
+      const route = slug === collection ? `/${collection}` : `/${collection}/${slug}`;
       if (!sitemapRoutes.has(route)) {
         failures.push(`article route '${route}' is missing from the built sitemap`);
       }
