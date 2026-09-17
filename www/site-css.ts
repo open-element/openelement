@@ -89,4 +89,39 @@ body {
 @media (prefers-contrast: more) {
   /* Collapse the muted step onto secondary ink (theme-aware both ways). */
   :root { --text-muted: var(--text-secondary); }
+}
+/* Reading-page print: chrome goes away, ink goes black on white, and content
+   links carry their target so the paper copy stays navigable. */
+@media print {
+  .app-header,
+  .docs-sidebar,
+  .sidebar-mobile-panel,
+  .mobile-menu-panel,
+  aside.rail,
+  nav.breadcrumb,
+  nav.pager,
+  .app-footer,
+  open-search {
+    display: none !important;
+  }
+  body {
+    background: #fff !important;
+    color: #000 !important;
+  }
+  .main,
+  .article-content,
+  .article-content p,
+  .article-content li,
+  .title,
+  .lede {
+    color: #000 !important;
+  }
+  .article-content a[href]::after {
+    content: " (" attr(href) ")";
+    font-size: 0.85em;
+    word-break: break-all;
+  }
+  .article-content a[href^="#"]::after {
+    content: none;
+  }
 }`;
