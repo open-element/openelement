@@ -149,7 +149,7 @@ const content = {
     headDescription:
       '面向 openElement Web Standards Lab 的精确、Deno 优先的贡献者工作流：环境设置、PR 清单与入手方向。',
     eyebrow: '贡献 — 加入实验室',
-    monoLine: 'BUILD IT',
+    monoLine: '构建它',
     serifLine: '与我们一起。',
     lede: '面向 Web Standards Lab 的精确、Deno 优先的贡献者工作流。',
     setupAriaLabel: '开发环境设置',

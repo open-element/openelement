@@ -62,6 +62,13 @@ Deno.test('open-layout is an explicitly hydrated compiled app-shell island', asy
       'sidebarRows',
       'sidebarHidden',
       'footerTagline',
+      'footerCopyright',
+      'searchTriggerLabel',
+      'searchDialogLabel',
+      'searchInputLabel',
+      'searchPlaceholder',
+      'searchResultsLabel',
+      'searchEmptyMessage',
       'footerProductLabel',
       'footerProductLinks',
       'footerResourcesLabel',
@@ -96,18 +103,20 @@ Deno.test('open-search keeps its view compiler-owned and its browser state exter
   assertStringIncludes(source, "from '../site-ui/open-search-controller.ts'");
   const result = compileElementProgram(source, url.pathname);
   assertEquals(result.program.tag, 'open-search');
-  // The view is property-driven (C-5): chrome copy (bilingual, English SSR
-  // defaults pinned by e2e), the empty/error message and the hit list are
-  // compiled properties the controller writes; hits render through one list
-  // Region with container-delegated click dismissal.
+  // The view is property-driven (C-5): the shell passes the page-locale chrome
+  // copy as attributes (searchChromeStrings), while the empty/error message
+  // and the hit list are compiled properties the controller writes; hits
+  // render through one list Region with container-delegated click dismissal.
   assertEquals(
     result.program.metadata.properties.map((property) => property.name),
     [
+      'locale',
       'triggerLabel',
       'dialogLabel',
       'inputLabel',
       'placeholder',
       'resultsLabel',
+      'emptyMessage',
       'message',
       'hasHits',
       'hits',

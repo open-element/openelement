@@ -359,6 +359,7 @@ export function layoutChromeStrings(locale: string): {
   sidebarLabel: string;
   sidebarToggle: string;
   footerTagline: string;
+  footerCopyright: string;
   skipToMain: string;
   menuOpen: string;
   primaryNavLabel: string;
@@ -370,6 +371,7 @@ export function layoutChromeStrings(locale: string): {
       sidebarLabel: '文档导航',
       sidebarToggle: '文档',
       footerTagline: '基于 OpenElement 构建 —— Web Components 原生应用框架',
+      footerCopyright: '(c) 2026 openElement。MIT 许可证。',
       skipToMain: '跳到主要内容',
       menuOpen: '打开导航',
       primaryNavLabel: '主导航',
@@ -381,6 +383,7 @@ export function layoutChromeStrings(locale: string): {
     sidebarLabel: 'Documentation navigation',
     sidebarToggle: 'Documentation',
     footerTagline: '',
+    footerCopyright: '(c) 2026 openElement. MIT License.',
     skipToMain: 'Skip to main content',
     menuOpen: 'Open navigation',
     primaryNavLabel: 'Primary navigation',

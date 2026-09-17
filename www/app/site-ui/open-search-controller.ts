@@ -1,5 +1,6 @@
 /** Browser-only behavior used by the open-search island. */
 import { stripLocalePrefix } from '@openelement/site-ui/link.ts';
+import { searchChromeStrings } from './chrome-strings.ts';
 
 interface PagefindResultData {
   url: string;
@@ -34,11 +35,7 @@ interface SearchState {
 
 /** The island element with its compiled property surface (open-search.tsx). */
 type SearchHost = HTMLElement & {
-  triggerLabel: string;
-  dialogLabel: string;
-  inputLabel: string;
-  placeholder: string;
-  resultsLabel: string;
+  locale: string;
   message: string;
   hasHits: boolean;
   hits: SearchHit[];
@@ -47,40 +44,23 @@ type SearchHost = HTMLElement & {
 const states = new WeakMap<SearchHost, SearchState>();
 
 /**
- * Bilingual chrome copy. The island SSRs the English defaults; on zh pages
- * installSearch rewrites the properties from document.documentElement.lang.
+ * Dynamic search-time messages. Chrome copy (trigger label, placeholder, …)
+ * is server-rendered by the island in the page locale via
+ * searchChromeStrings — nothing here rewrites it at runtime.
  * English strings are pinned verbatim by www/e2e/search.spec.ts — do not
  * reword them without updating that spec.
  */
 interface SearchCopy {
-  triggerLabel: string;
-  dialogLabel: string;
-  inputLabel: string;
-  placeholder: string;
-  resultsLabel: string;
-  empty: string;
   noResults: (query: string) => string;
   indexMissing: string;
 }
 
 const COPY: Record<'en' | 'zh', SearchCopy> = {
   en: {
-    triggerLabel: 'Search',
-    dialogLabel: 'Search',
-    inputLabel: 'Search documentation',
-    placeholder: 'Search documentation...',
-    resultsLabel: 'Search results',
-    empty: 'Type at least 2 characters to search',
     noResults: (query: string) => `No results found for “${query}”`,
     indexMissing: 'Search index not found — run deno task build to generate it',
   },
   zh: {
-    triggerLabel: '搜索',
-    dialogLabel: '搜索',
-    inputLabel: '搜索文档',
-    placeholder: '搜索文档…',
-    resultsLabel: '搜索结果',
-    empty: '输入至少 2 个字符以搜索',
     noResults: (query: string) => `未找到“${query}”的相关结果`,
     indexMissing: '未找到搜索索引——请运行 deno task build 生成',
   },
@@ -154,7 +134,7 @@ async function runSearch(host: SearchHost): Promise<void> {
   const state = states.get(host);
   const query = input(host)?.value.trim() ?? '';
   if (!state || query.length < 2) {
-    showMessage(host, copy().empty);
+    showMessage(host, searchChromeStrings(searchLocale()).emptyMessage);
     return;
   }
   if (!state.pagefind) return;
@@ -197,17 +177,6 @@ async function loadPagefind(host: SearchHost): Promise<void> {
 
 export function installSearch(host: SearchHost): void {
   if (states.has(host)) return;
-  // Post-claim localization: the DSD render ships English defaults, so on zh
-  // pages rewrite the chrome copy properties once at install.
-  if (searchLocale() === 'zh') {
-    const zh = COPY.zh;
-    host.triggerLabel = zh.triggerLabel;
-    host.dialogLabel = zh.dialogLabel;
-    host.inputLabel = zh.inputLabel;
-    host.placeholder = zh.placeholder;
-    host.resultsLabel = zh.resultsLabel;
-    host.message = zh.empty;
-  }
   const keydown = (event: KeyboardEvent): void => {
     if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
       event.preventDefault();

@@ -19,21 +19,27 @@ export const openElement = defineIslandConfig({ hydrate: 'load', ssr: true });
 export default class OpenSearch extends OpenElement {
   static override styles = openSearchStyles;
 
-  // English defaults are the SSR contract (the island renders locale-agnostic
-  // DSD); installSearch rewrites these from document.documentElement.lang on
-  // zh pages after claim.
-  @property({ reflect: false, attribute: false })
+  // Chrome copy is finalized at SSR in the page locale: the shell passes the
+  // strings as attributes (see open-layout.tsx); the English field defaults
+  // are the standalone fallback and are pinned verbatim by e2e/search.spec.
+  // Dynamic search-time messages (no-results, index-missing) still come from
+  // open-search-controller.ts.
+  @property({ reflect: true, attribute: 'locale' })
+  locale = 'en';
+  @property({ reflect: false, attribute: 'trigger' })
   triggerLabel = 'Search';
-  @property({ reflect: false, attribute: false })
+  @property({ reflect: false, attribute: 'dialog' })
   dialogLabel = 'Search';
-  @property({ reflect: false, attribute: false })
+  @property({ reflect: false, attribute: 'input' })
   inputLabel = 'Search documentation';
-  @property({ reflect: false, attribute: false })
+  @property({ reflect: false, attribute: 'placeholder' })
   placeholder = 'Search documentation...';
-  @property({ reflect: false, attribute: false })
+  @property({ reflect: false, attribute: 'results' })
   resultsLabel = 'Search results';
-  @property({ reflect: false, attribute: false })
-  message = 'Type at least 2 characters to search';
+  @property({ reflect: false, attribute: 'empty' })
+  emptyMessage = 'Type at least 2 characters to search';
+  @property({ reflect: false, attribute: 'message' })
+  message = '';
   @property({ reflect: false, attribute: false })
   hasHits = false;
   @property({ reflect: false, attribute: false })

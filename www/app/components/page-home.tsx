@@ -35,6 +35,36 @@ export default class PageHome extends OpenElement {
   @property({ reflect: false, attribute: false })
   lede = '';
   @property({ reflect: false, attribute: false })
+  eyebrow = '';
+  @property({ reflect: false, attribute: false })
+  registryPrefix = '';
+  @property({ reflect: false, attribute: false })
+  packagesValue = '';
+  @property({ reflect: false, attribute: false })
+  enginesValue = '';
+  @property({ reflect: false, attribute: false })
+  depsValue = '';
+  @property({ reflect: false, attribute: false })
+  outputValue = '';
+  @property({ reflect: false, attribute: false })
+  badgeRuntime = '';
+  @property({ reflect: false, attribute: false })
+  badgeAuthoring = '';
+  @property({ reflect: false, attribute: false })
+  sceneElementIndex = '';
+  @property({ reflect: false, attribute: false })
+  sceneDsdIndex = '';
+  @property({ reflect: false, attribute: false })
+  sceneIslandsIndex = '';
+  @property({ reflect: false, attribute: false })
+  sceneOutputIndex = '';
+  @property({ reflect: false, attribute: false })
+  sceneBeginIndex = '';
+  @property({ reflect: false, attribute: false })
+  floodServer = '';
+  @property({ reflect: false, attribute: false })
+  floodBrowser = '';
+  @property({ reflect: false, attribute: false })
   startBuilding = '';
   @property({ reflect: false, attribute: false })
   watchUnfold = '';
@@ -114,9 +144,8 @@ export default class PageHome extends OpenElement {
         <open-hero-polish></open-hero-polish>
         <section class='hero'>
           <div class='hero-main'>
-            <span class='hero-stamp'>EST. 2026 / SPEC-042</span>
             <div class='hero-copy'>
-              <p class='eyebrow'>OpenElement — Web Standards Lab</p>
+              <p class='eyebrow'>{this.eyebrow}</p>
               <h1>
                 <span class='mono-line'>{this.heroMono}</span>{' '}
                 <span class='serif-line'>{this.heroSerif}</span>
@@ -139,24 +168,24 @@ export default class PageHome extends OpenElement {
           <div class='spec-strip'>
             <div class='spec-cell'>
               <small>{this.specVersion}</small>
-              <strong>public registry — {this.registryNote}</strong>
+              <strong>{this.registryPrefix}{this.registryNote}</strong>
               <small>{this.commonVersionNote}</small>
             </div>
             <div class='spec-cell'>
               <small>{this.specGraph}</small>
-              <strong>four packages</strong>
+              <strong>{this.packagesValue}</strong>
             </div>
             <div class='spec-cell'>
               <small>{this.specEngines}</small>
-              <strong>3 in CI</strong>
+              <strong>{this.enginesValue}</strong>
             </div>
             <div class='spec-cell'>
               <small>{this.specDeps}</small>
-              <strong class='accent'>zero in element</strong>
+              <strong class='accent'>{this.depsValue}</strong>
             </div>
             <div class='spec-cell'>
               <small>{this.specOutput}</small>
-              <strong>DSD first-class</strong>
+              <strong>{this.outputValue}</strong>
             </div>
           </div>
           <div class='marquee' aria-hidden='true'>
@@ -167,7 +196,7 @@ export default class PageHome extends OpenElement {
         <section class='scene scene-split' id='element'>
           <span class='scene-outlined' aria-hidden='true'>01</span>
           <div class='scene-copy'>
-            <p class='scene-index'>§1 — Element</p>
+            <p class='scene-index'>{this.sceneElementIndex}</p>
             <h2>
               {this.sceneElementLead}
               <span class='accent'>{this.sceneElementAccent}</span>
@@ -176,8 +205,8 @@ export default class PageHome extends OpenElement {
               {this.sceneElementCopy}
             </p>
             <div class='badges'>
-              <span class='badge'>NO FRAMEWORK RUNTIME</span>
-              <span class='badge'>JSX + BASIC</span>
+              <span class='badge'>{this.badgeRuntime}</span>
+              <span class='badge'>{this.badgeAuthoring}</span>
             </div>
           </div>
           <div class='scene-art'>
@@ -203,7 +232,7 @@ export class OpenCounter extends OpenElement {
         </section>
 
         <section class='scene flood'>
-          <p class='scene-index'>§2 — Declarative Shadow DOM</p>
+          <p class='scene-index'>{this.sceneDsdIndex}</p>
           <h2>
             {this.sceneDsdLead}
             <span class='accent'>{this.sceneDsdAccent}</span>
@@ -215,7 +244,7 @@ export class OpenCounter extends OpenElement {
           </div>
           <div class='flood-panels'>
             <div class='flood-panel'>
-              <small>Server · text/html</small>
+              <small>{this.floodServer}</small>
               <code>
                 {`<open-counter count="0">
   <template shadowrootmode="open">
@@ -225,7 +254,7 @@ export class OpenCounter extends OpenElement {
             </div>
             <span class='flood-arrow' aria-hidden='true'>⟶</span>
             <div class='flood-panel solid'>
-              <small>Browser · upgrades in place</small>
+              <small>{this.floodBrowser}</small>
               <span class='shadow-outline'>#shadow-root (open)</span>
               <code>
                 {`└─ <button> → signal bound
@@ -236,7 +265,7 @@ export class OpenCounter extends OpenElement {
         </section>
 
         <section class='scene'>
-          <p class='scene-index'>§3 — Islands</p>
+          <p class='scene-index'>{this.sceneIslandsIndex}</p>
           <h2>
             {this.sceneIslandsLead}
             <span class='accent'>{this.sceneIslandsAccent}</span>
@@ -262,7 +291,7 @@ export class OpenCounter extends OpenElement {
         </section>
 
         <section class='scene'>
-          <p class='scene-index'>§4 — Output</p>
+          <p class='scene-index'>{this.sceneOutputIndex}</p>
           <h2>
             {this.sceneOutputLead}
             <span class='accent'>{this.sceneOutputAccent}</span>
@@ -279,7 +308,7 @@ export class OpenCounter extends OpenElement {
         </section>
 
         <section class='scene begin'>
-          <p class='scene-index'>§5 — Begin</p>
+          <p class='scene-index'>{this.sceneBeginIndex}</p>
           <h2>{this.begin}</h2>
           <div class='command'>
             <code>$</code>

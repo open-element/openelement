@@ -47,7 +47,7 @@ const content = {
     headTitle: '更新日志',
     headDescription:
       'openElement 发布登记表——当前各包 npm dist-tags——以及仓库 CHANGELOG.md 历史归档。机器校验的发布真值见 docs/release/release-state.json。',
-    eyebrow: 'Changelog',
+    eyebrow: '更新日志',
     pageTitle: '先登记表，再归档。',
     lede:
       '登记表反映当前各包的 npm dist-tags。下方归档原样渲染仓库 CHANGELOG.md；机器校验的发布真值见 docs/release/release-state.json。',

@@ -23,10 +23,18 @@ export const PUBLISHED_LATEST: Readonly<Record<string, string>> = {
 // from any package.
 export const COMMON_PUBLISHED_VERSION: string | null = null;
 
-// Human-readable note for the (absent) common complete version.
-export const COMMON_PUBLISHED_NOTE = COMMON_PUBLISHED_VERSION === null
-  ? 'no single stable version is published for all four packages'
-  : `${COMMON_PUBLISHED_VERSION} — published for all four packages`;
+// Human-readable note for the (absent) common complete version, in the page
+// locale — chrome copy is finalized at SSR, never rewritten at runtime.
+export function COMMON_PUBLISHED_NOTE(locale: ReleaseLocale): string {
+  if (COMMON_PUBLISHED_VERSION !== null) {
+    return locale === 'zh'
+      ? `${COMMON_PUBLISHED_VERSION} — 已发布到全部四个包`
+      : `${COMMON_PUBLISHED_VERSION} — published for all four packages`;
+  }
+  return locale === 'zh'
+    ? '四个包尚无统一已发布的稳定版本'
+    : 'no single stable version is published for all four packages';
+}
 
 // Short label for that version in UI chrome: no number until one exists for
 // all four packages, so chrome never fabricates a shared line.

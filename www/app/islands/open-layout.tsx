@@ -18,6 +18,7 @@ import {
   type NavSection,
   type SidebarRow,
 } from '../site-ui/open-layout-navigation.ts';
+import { searchChromeStrings } from '../site-ui/chrome-strings.ts';
 import './open-search.tsx';
 
 type CompiledComputed<T> = ReturnType<typeof computed<T>> & T;
@@ -624,6 +625,24 @@ export default class OpenLayout extends OpenElement {
   footerTagline = computed(() => layoutChromeStrings(this.locale).footerTagline || this.footerText);
 
   @property({ reflect: false, attribute: false })
+  footerCopyright = computed(() => layoutChromeStrings(this.locale).footerCopyright);
+
+  // Search chrome copy, finalized at SSR and passed to the island as
+  // attributes so nothing rewrites it after hydration.
+  @property({ reflect: false, attribute: false })
+  searchTriggerLabel = computed(() => searchChromeStrings(this.locale).triggerLabel);
+  @property({ reflect: false, attribute: false })
+  searchDialogLabel = computed(() => searchChromeStrings(this.locale).dialogLabel);
+  @property({ reflect: false, attribute: false })
+  searchInputLabel = computed(() => searchChromeStrings(this.locale).inputLabel);
+  @property({ reflect: false, attribute: false })
+  searchPlaceholder = computed(() => searchChromeStrings(this.locale).placeholder);
+  @property({ reflect: false, attribute: false })
+  searchResultsLabel = computed(() => searchChromeStrings(this.locale).resultsLabel);
+  @property({ reflect: false, attribute: false })
+  searchEmptyMessage = computed(() => searchChromeStrings(this.locale).emptyMessage);
+
+  @property({ reflect: false, attribute: false })
   footerProductLabel = computed(() => footerColumn(this.locale, this.locales, 'product').label);
   @property({ reflect: false, attribute: false })
   footerProductLinks = computed(() =>
@@ -678,7 +697,16 @@ export default class OpenLayout extends OpenElement {
                 {this.switchLocaleLabel}
                 <span class='visually-hidden'>{this.switchLocaleNote}</span>
               </a>
-              <open-search></open-search>
+              <open-search
+                locale={this.locale}
+                trigger={this.searchTriggerLabel}
+                dialog={this.searchDialogLabel}
+                input={this.searchInputLabel}
+                placeholder={this.searchPlaceholder}
+                results={this.searchResultsLabel}
+                empty={this.searchEmptyMessage}
+                message={this.searchEmptyMessage}
+              ></open-search>
               <open-theme-toggle></open-theme-toggle>
               <a
                 class='repository-link'
@@ -789,7 +817,7 @@ export default class OpenLayout extends OpenElement {
           </div>
           <div class='footer-bottom'>
             <span>{this.footerTagline}</span>
-            <span class='footer-copyright'>(c) 2026 openElement. MIT License.</span>
+            <span class='footer-copyright'>{this.footerCopyright}</span>
           </div>
         </footer>
       </div>

@@ -3,6 +3,7 @@ import { siteHead } from '@openelement/site-ui/head.ts';
 import { contentLocale } from '@openelement/site-ui/locale.ts';
 import { localizePath } from '@openelement/site-ui/link.ts';
 import PageHome from '../../components/page-home.tsx';
+import { homeStrings } from '../../site-ui/chrome-strings.ts';
 import { alphaLineNote, COMMON_PUBLISHED_NOTE, REGISTRY_NOTE } from '../../data/version.ts';
 
 const content = {
@@ -34,7 +35,7 @@ const content = {
     readGuide: 'Read the guide',
     specVersion: 'Version',
     specGraph: 'Graph',
-    specEngines: 'Engines',
+    specEngines: 'CI engines',
     specDeps: 'Framework deps',
     specOutput: 'Server output',
     begin: 'Begin.',
@@ -71,7 +72,7 @@ const content = {
     readGuide: '阅读指南',
     specVersion: '版本',
     specGraph: '包图',
-    specEngines: '浏览器引擎',
+    specEngines: 'CI 引擎',
     specDeps: '框架依赖',
     specOutput: '服务端输出',
     begin: '开始。',
@@ -256,8 +257,9 @@ export default definePage(PageHome, {
     const { headTitle: _headTitle, headDescription: _headDescription, ...copy } = content[resolved];
     return {
       ...copy,
+      ...homeStrings(resolved),
       registryNote: REGISTRY_NOTE,
-      commonVersionNote: COMMON_PUBLISHED_NOTE,
+      commonVersionNote: COMMON_PUBLISHED_NOTE(resolved),
       marqueeText: marquee + marquee,
       startBuildingHref: localizePath('/guide/getting-started', resolved),
       getStartedHref: localizePath('/guide/getting-started', resolved),

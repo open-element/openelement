@@ -25,7 +25,7 @@ const content = {
     headTitle: '文档',
     headDescription: 'openElement 文档：指南、架构说明，以及四个面向使用者包的受支持公开面。',
     sidenote: '文档索引',
-    eyebrow: 'Docs — 手册',
+    eyebrow: '手册',
     serifLine: '通读',
     monoLine: '手册。',
     lede: '五个入口覆盖全部手册。',
