@@ -24,6 +24,7 @@ export type {
   PageHeadResolver,
   PagePropsContext,
   PagePropsProjector,
+  StructuredDataEntry,
 } from './authoring.ts';
 
 // Re-export route data types from protocol for convenience

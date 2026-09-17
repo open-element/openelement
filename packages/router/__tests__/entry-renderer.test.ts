@@ -525,6 +525,7 @@ Deno.test('renderEntry: definePage descriptor feeds load and metadata wiring', (
     'meta: { description: __doc.description, tags: __doc.meta },',
   );
   assertStringIncludes(code, 'links: __doc.links,');
+  assertStringIncludes(code, 'structuredData: __doc.structuredData || [],');
   assertStringIncludes(
     code,
     'dangerouslyHeadFragments: __doc.dangerouslyHeadFragments || [],',

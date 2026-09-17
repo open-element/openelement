@@ -4,8 +4,9 @@
  * Page meaning is resolved exactly once per render, before either serializer
  * runs: the page descriptor's head — a static object or a resolver function —
  * plus the request-scoped context become a ResolvedDocument: title,
- * description, meta, canonical, alternates/hreflang, locale, and the
- * normalized link collection the Native and Lit serializers emit into <head>.
+ * description, meta, canonical, alternates/hreflang, locale, the normalized
+ * link collection, and the structured-data (JSON-LD) documents the Native and
+ * Lit serializers emit into <head>.
  *
  * Boundaries of this seam:
  * - Pure resolution only. It never fetches, caches, reads a global request,
@@ -17,7 +18,12 @@
  *   the two serializers and must stay loadable in either dependency graph.
  */
 
-import type { PageHead, PageHeadResolver, PagePropsContext } from './authoring.ts';
+import type {
+  PageHead,
+  PageHeadResolver,
+  PagePropsContext,
+  StructuredDataEntry,
+} from './authoring.ts';
 import { assertNoScriptTags, assertTrustedHeadHtml } from './vite/head-injection.ts';
 
 /** One <link rel="alternate"> record, typically carrying an hreflang. */
@@ -43,6 +49,12 @@ export interface ResolvedDocument {
   title?: string;
   description?: string;
   meta?: Array<Record<string, string | number | boolean>>;
+  /**
+   * Structured data (JSON-LD), one serialized `<script type=
+   * "application/ld+json">` element per entry. Normalized here to plain JSON
+   * data so the serializer only has to escape, never interpret.
+   */
+  structuredData?: StructuredDataEntry[];
   dangerouslyHeadFragments?: string[];
   /** Document language: the resolved application locale for this render. */
   lang?: string;
@@ -54,6 +66,89 @@ export interface ResolvedDocument {
 
 function fail(message: string): never {
   throw new Error(`[openElement] resolvePageDocument: ${message}`);
+}
+
+/**
+ * Copy one structured-data value into the JSON data model, fail-closed: only
+ * strings, finite numbers, booleans, null, arrays and plain objects survive,
+ * and the copy owns no prototype. That matters twice over — JSON.stringify
+ * silently DROPS function- and undefined-valued properties and turns NaN into
+ * `null`, so a permissive pass would ship a different document than the one
+ * the page declared; and a null-prototype copy keeps a `__proto__` key inert
+ * data instead of a prototype write on the way to the serializer.
+ */
+function normalizeStructuredDataValue(
+  value: unknown,
+  path: string,
+  ancestors: Set<object>,
+): unknown {
+  if (value === null) return null;
+  switch (typeof value) {
+    case 'string':
+    case 'boolean':
+      return value;
+    case 'number':
+      if (!Number.isFinite(value)) {
+        fail(`${path} must be a finite number; JSON has no NaN or Infinity.`);
+      }
+      return value;
+    case 'object':
+      break;
+    default:
+      fail(
+        `${path} must be JSON data (string, number, boolean, null, array, or plain object); ` +
+          `got ${typeof value}.`,
+      );
+  }
+  const container = value as object;
+  if (ancestors.has(container)) fail(`${path} must not contain a circular reference.`);
+  ancestors.add(container);
+  try {
+    if (Array.isArray(container)) {
+      return container.map((entry, index) =>
+        normalizeStructuredDataValue(entry, `${path}[${index}]`, ancestors)
+      );
+    }
+    const prototype = Object.getPrototypeOf(container);
+    if (prototype !== null && prototype !== Object.prototype) {
+      fail(
+        `${path} must be a plain object or array; class instances, Date, Map and Set ` +
+          'do not survive JSON serialization.',
+      );
+    }
+    const copy: Record<string, unknown> = Object.create(null);
+    for (const [key, entry] of Object.entries(container)) {
+      copy[key] = normalizeStructuredDataValue(entry, `${path}.${key}`, ancestors);
+    }
+    return copy;
+  } finally {
+    ancestors.delete(container);
+  }
+}
+
+/**
+ * Normalize `head.structuredData` into the JSON-LD documents the serializer
+ * emits. A string entry is rejected rather than escaped: this channel carries
+ * data, and the raw-markup channel (`dangerouslyHeadFragments`) keeps its own,
+ * stricter rules.
+ */
+function normalizeStructuredData(structuredData: unknown): StructuredDataEntry[] {
+  if (!Array.isArray(structuredData)) {
+    fail('head.structuredData must be an array of JSON-LD documents.');
+  }
+  return structuredData.map((entry, index) => {
+    if (entry === null || typeof entry !== 'object' || Array.isArray(entry)) {
+      fail(
+        `head.structuredData[${index}] must be a JSON-LD document (a plain object); ` +
+          `got ${entry === null ? 'null' : Array.isArray(entry) ? 'an array' : typeof entry}.`,
+      );
+    }
+    return normalizeStructuredDataValue(
+      entry,
+      `head.structuredData[${index}]`,
+      new Set(),
+    ) as StructuredDataEntry;
+  });
 }
 
 /**
@@ -76,12 +171,23 @@ export function resolvePageDocument(
   if (resolved === null || typeof resolved !== 'object' || Array.isArray(resolved)) {
     fail('head must be an object, or a resolver returning one.');
   }
-  const { title, description, meta, dangerouslyHeadFragments, canonical, alternates } = resolved;
+  const {
+    title,
+    description,
+    meta,
+    structuredData,
+    dangerouslyHeadFragments,
+    canonical,
+    alternates,
+  } = resolved;
   if (title !== undefined && typeof title !== 'string') fail('head.title must be a string.');
   if (description !== undefined && typeof description !== 'string') {
     fail('head.description must be a string.');
   }
   if (meta !== undefined && !Array.isArray(meta)) fail('head.meta must be an array.');
+  const normalizedStructuredData = structuredData !== undefined
+    ? normalizeStructuredData(structuredData)
+    : undefined;
   if (
     dangerouslyHeadFragments !== undefined &&
     (!Array.isArray(dangerouslyHeadFragments) ||
@@ -133,6 +239,9 @@ export function resolvePageDocument(
     ...(title !== undefined ? { title } : {}),
     ...(description !== undefined ? { description } : {}),
     ...(meta !== undefined ? { meta } : {}),
+    ...(normalizedStructuredData !== undefined && normalizedStructuredData.length > 0
+      ? { structuredData: normalizedStructuredData }
+      : {}),
     ...(dangerouslyHeadFragments !== undefined ? { dangerouslyHeadFragments } : {}),
     ...(lang !== undefined ? { lang } : {}),
     ...(canonical !== undefined ? { canonical } : {}),

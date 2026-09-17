@@ -114,6 +114,23 @@ export function wrapInDocument(
      * resolution lives in @openelement/router/document.
      */
     links?: Array<{ rel: string; href: string; hreflang?: string }>;
+    /**
+     * Structured data (JSON-LD) documents for this page, one per
+     * `<script type="application/ld+json">` element in <head>.
+     *
+     * Trust boundary: entries are DATA, never markup. The body is produced by
+     * `JSON.stringify` and then `<`-escaped, so an entry cannot close the
+     * element early or open an HTML comment. A caller that wants to hand the
+     * framework raw <head> markup must use `dangerouslyHeadFragments`; a
+     * string here is not a fragment channel, it is malformed data.
+     *
+     * Meaning-level validation (fail-closed on values JSON cannot represent)
+     * belongs to the caller's seam — @openelement/router/document's
+     * structured-data channel. This serializer guards the shape and what
+     * `JSON.stringify` itself rejects, so an unrepresentable document throws
+     * instead of disappearing from the output.
+     */
+    structuredData?: ReadonlyArray<Record<string, unknown>>;
     /** CSP nonce, if provided, added to all generated <script> tags. */
     cspNonce?: string;
   } = {},
@@ -133,6 +150,7 @@ export function wrapInDocument(
     dangerouslyHeadFragments = [],
     allowHeadExtrasScripts = false,
     links = [],
+    structuredData = [],
     cspNonce,
   } = options;
   // v0.14.5: CSP nonce format validation per CSP spec (base64 value)
@@ -147,6 +165,10 @@ export function wrapInDocument(
   const metaBlock = metaTags.length > 0 ? '\n' + metaTags.join('\n') + '\n' : '';
   const linkTags = buildLinkTags(links);
   const linkBlock = linkTags.length > 0 ? '\n' + linkTags.join('\n') : '';
+  const structuredDataTags = buildStructuredDataTags(structuredData, validNonce);
+  const structuredDataBlock = structuredDataTags.length > 0
+    ? '\n' + structuredDataTags.join('\n') + '\n'
+    : '';
   const dangerousHeadBlock = dangerouslyHeadFragments.length > 0
     ? '\n  ' + dangerouslyHeadFragments.join('\n  ')
     : '';
@@ -160,7 +182,7 @@ export function wrapInDocument(
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${safeTitle}</title>${metaBlock}${linkBlock}
+  <title>${safeTitle}</title>${metaBlock}${linkBlock}${structuredDataBlock}
   ${safeHeadExtras}${dangerousHeadBlock}
 </head>
 <body>
@@ -195,6 +217,54 @@ function buildScriptTags(
     tags.push(`${open}${body}</script>`);
   }
   return tags.join('\n  ');
+}
+
+/**
+ * Serialize structured-data documents into `application/ld+json` script
+ * elements (THE escaping point of the channel).
+ *
+ * The body is `JSON.stringify` output with every `<` replaced by `\u003C`.
+ * `JSON.stringify` already escapes quotes and backslashes, so `<` is the only
+ * byte that could leave the script raw-text element; escaping all of them
+ * removes `</script`, `<!--` and `<script` in one pass. JSON parsers decode
+ * the escape back to `<`, so a consumer reads the original text — the
+ * serialization is lossless, it is only the markup that cannot be formed.
+ *
+ * A valid CSP nonce reaches this tag too (a strict `script-src` would
+ * otherwise block the data block); with no valid nonce the tag carries no
+ * attribute. Entries the serializer cannot turn into JSON throw instead of
+ * being dropped from the document.
+ */
+function buildStructuredDataTags(
+  entries: ReadonlyArray<Record<string, unknown>>,
+  nonce: string | undefined,
+): string[] {
+  const tags: string[] = [];
+  for (const entry of entries) {
+    if (entry === null || typeof entry !== 'object' || Array.isArray(entry)) {
+      throw new TypeError(
+        'wrapInDocument: every structuredData entry must be a JSON-LD document (a plain object).',
+      );
+    }
+    let json: string | undefined;
+    try {
+      json = JSON.stringify(entry);
+    } catch (cause) {
+      throw new TypeError(
+        `wrapInDocument: structuredData entry is not JSON-serializable: ${
+          cause instanceof Error ? cause.message : String(cause)
+        }`,
+      );
+    }
+    if (typeof json !== 'string') {
+      throw new TypeError('wrapInDocument: structuredData entry is not JSON-serializable.');
+    }
+    const nonceAttr = nonce ? ` nonce="${nonce}"` : '';
+    tags.push(
+      `  <script type="application/ld+json"${nonceAttr}>${json.replace(/</g, '\\u003C')}</script>`,
+    );
+  }
+  return tags;
 }
 
 /**

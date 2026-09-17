@@ -10,7 +10,7 @@
  */
 
 import { assertEquals, assertThrows } from '@std/assert';
-import { OpenElementError } from '@openelement/element';
+import { OpenElementError, wrapInDocument } from '@openelement/element';
 import { resolvePageDocument } from '../src/document.ts';
 import type { PageHead, PagePropsContext } from '../src/index.ts';
 
@@ -191,4 +191,112 @@ Deno.test('resolvePageDocument: dangerouslyHeadFragments accepts benign meta and
     ctx(),
   );
   assertEquals(document.dangerouslyHeadFragments?.length, 2);
+});
+
+Deno.test('resolvePageDocument: the JSON-LD channel does not relax the <script> ban on raw fragments', () => {
+  // The structured channel is an ADDITIONAL path; the rejected raw channel
+  // keeps rejecting every <script> tag, including a well-formed ld+json one.
+  assertThrows(
+    () =>
+      resolvePageDocument(
+        {
+          dangerouslyHeadFragments: [
+            '<script type="application/ld+json">{"@type":"WebSite"}</script>',
+          ],
+        },
+        ctx(),
+      ),
+    OpenElementError,
+    'must not contain <script>',
+  );
+});
+
+Deno.test('resolvePageDocument: structured data resolves into normalized JSON-LD documents', () => {
+  const head: PageHead = {
+    structuredData: [
+      {
+        '@context': 'https://schema.org',
+        '@type': 'BlogPosting',
+        headline: 'Notes',
+        author: { '@type': 'Organization', name: 'openElement' },
+        keywords: ['release', 'notes'],
+      },
+    ],
+  };
+  const snapshot = structuredClone(head);
+  const document = resolvePageDocument(head, ctx());
+  assertEquals(document.structuredData, head.structuredData);
+  assertEquals(head, snapshot);
+  // The resolved value is an inert copy: a null-prototype tree, so no
+  // `__proto__` key can rewrite a prototype on the way to the serializer.
+  assertEquals(Object.getPrototypeOf(document.structuredData?.[0]), null);
+  assertEquals(Object.getPrototypeOf(document.structuredData?.[0].author), null);
+});
+
+Deno.test('resolvePageDocument: malformed structured data fails loudly', () => {
+  const circular: Record<string, unknown> = {};
+  circular.self = circular;
+  const cases: Array<[string, unknown]> = [
+    ['non-array structured data', {}],
+    [
+      'a string entry (an HTML fragment is not a JSON-LD document)',
+      '<script type="application/ld+json">{}</script>',
+    ],
+    ['an array entry', [[{ '@type': 'WebSite' }]]],
+    ['a null entry', [null]],
+    ['a function value', [{ '@type': 'WebSite', run: () => 1 }]],
+    ['an undefined value', [{ '@type': 'WebSite', name: undefined }]],
+    ['a bigint value', [{ '@type': 'WebSite', count: 1n }]],
+    ['a non-finite number', [{ '@type': 'WebSite', width: Number.NaN }]],
+    ['a Date instance', [{ '@type': 'WebSite', datePublished: new Date(0) }]],
+    ['a Map instance', [{ '@type': 'WebSite', extra: new Map() }]],
+    ['a circular document', [circular]],
+  ];
+  for (const [name, structuredData] of cases) {
+    assertThrows(
+      () => resolvePageDocument({ structuredData } as unknown as PageHead, ctx()),
+      Error,
+      '[openElement] resolvePageDocument:',
+      name,
+    );
+  }
+});
+
+Deno.test('resolvePageDocument + wrapInDocument: the resolved JSON-LD reaches <head> escaped', () => {
+  // Composition proof for both serialization paths (the SSG entry and the
+  // request-time entry both feed raw values into the same call).
+  const document = resolvePageDocument(
+    {
+      title: 'Notes',
+      canonical: 'https://example.com/notes',
+      structuredData: [
+        {
+          '@context': 'https://schema.org',
+          '@type': 'BlogPosting',
+          headline: 'Notes</script><script>alert(1)</script>',
+        },
+      ],
+    },
+    ctx(),
+  );
+  const html = wrapInDocument('<p>ok</p>', {
+    title: document.title,
+    links: document.links,
+    structuredData: document.structuredData,
+  });
+  const head = html.slice(html.indexOf('<head>'), html.indexOf('</head>'));
+  const open = '<script type="application/ld+json">';
+  const start = head.indexOf(open);
+  assertEquals(start > 0, true, head);
+  // Exactly one end tag in the whole document — the framework's own — and no
+  // raw script sequence from the payload reaches the markup.
+  assertEquals((html.match(/<\/script>/g) ?? []).length, 1);
+  assertEquals(head.includes('<script>alert(1)'), false);
+  assertEquals(head.includes('</script><script'), false);
+  const body = head.slice(start + open.length, head.indexOf('</script>', start));
+  assertEquals(JSON.parse(body), {
+    '@context': 'https://schema.org',
+    '@type': 'BlogPosting',
+    headline: 'Notes</script><script>alert(1)</script>',
+  });
 });

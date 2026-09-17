@@ -211,11 +211,19 @@ export function classifyActionResult<Data>(result: Data): ActionOutcome<Data> {
 }
 
 /**
+ * One structured-data document — a JSON-LD node such as a schema.org
+ * BlogPosting or WebSite. Its values are JSON data (string, finite number,
+ * boolean, null, array, plain object) and nothing else: the serializer emits
+ * the document as data, so an HTML string is not a document here.
+ */
+export type StructuredDataEntry = Record<string, unknown>;
+
+/**
  * Page <head> meaning declared by a route descriptor (v0.44, ADR-0143;
- * canonical/alternates added in Beta.2.2, #1326). Either a static object or —
- * via PageHeadResolver — resolved per render from the request-scoped context
- * by resolvePageDocument (@openelement/router/document) before either serializer
- * runs.
+ * canonical/alternates added in Beta.2.2, #1326; structured data added in
+ * Beta.2.3). Either a static object or — via PageHeadResolver — resolved per
+ * render from the request-scoped context by resolvePageDocument
+ * (@openelement/router/document) before either serializer runs.
  */
 export interface PageHead {
   title?: string;
@@ -231,6 +239,18 @@ export interface PageHead {
    * <link rel="alternate" hreflang="..."> entries in author order.
    */
   alternates?: Array<{ href: string; hreflang?: string }>;
+  /**
+   * Structured data (JSON-LD) for this page, resolved into one
+   * `<script type="application/ld+json">` element per document in <head>.
+   *
+   * This is a DATA channel, not a markup channel: entries must be JSON data,
+   * and resolvePageDocument fails closed on anything JSON cannot represent
+   * (functions, undefined, non-finite numbers, non-plain objects, cycles).
+   * It is deliberately NOT reachable through `dangerouslyHeadFragments`, which
+   * keeps rejecting every `<script>` tag — including a well-formed ld+json
+   * string — so structured data can never smuggle raw markup into <head>.
+   */
+  structuredData?: StructuredDataEntry[];
   dangerouslyHeadFragments?: string[];
 }
 
