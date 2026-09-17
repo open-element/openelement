@@ -160,7 +160,7 @@ export default class PageHome extends OpenElement {
               </p>
               <div class='actions'>
                 <a class='action primary' href={this.startBuildingHref}>{this.startBuilding}</a>
-                <a class='action' href='#element'>{this.watchUnfold}</a>
+                <a class='action link' href='#element'>{this.watchUnfold}</a>
               </div>
               <span class='scroll-cue' aria-hidden='true'>Scroll</span>
             </div>

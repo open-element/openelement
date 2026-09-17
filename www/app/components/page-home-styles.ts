@@ -46,6 +46,10 @@ export const pageHomeStyles = [compiledStyle(`
   .hero-foot .action:hover { border-color:var(--hero-gold); }
   .hero-foot .action.primary { background:var(--brand); border-color:var(--brand); color:var(--on-brand); }
   .hero-foot .action.primary:hover { background:var(--brand-hover); border-color:var(--brand-hover); }
+  /* Single primary CTA: the secondary action is a quiet text link, never a
+     second button. Copy stays bilingual; only the chrome steps down. */
+  .hero-foot .action.link { border-color:transparent; padding-inline:var(--size-1); color:var(--hero-gold-muted); text-decoration:underline; text-decoration-color:color-mix(in srgb,currentColor 45%,transparent); text-underline-offset:var(--size-1); }
+  .hero-foot .action.link:hover { border-color:transparent; color:var(--hero-gold); text-decoration-color:currentColor; }
   .lede { max-width:36rem; margin:0; color:rgba(244,241,234,.92); font-size:clamp(1rem,1.2vw,1.1rem); line-height:1.75; text-shadow:0 1px 18px rgba(0,0,0,.6); }
   .actions { display:flex; flex-wrap:wrap; gap:var(--size-3); margin:var(--size-6) 0 clamp(2rem,6vh,4rem); }
   .action { display:inline-flex; align-items:center; padding:var(--size-2) var(--size-5); border:var(--border-size-1) solid var(--border-strong); border-radius:var(--btn-radius); color:var(--text-primary); font-weight:var(--font-weight-7); text-decoration:none; transition:border-color .15s ease,background .15s ease; }
