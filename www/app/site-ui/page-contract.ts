@@ -8,6 +8,8 @@ export type PageOutlineItem = Readonly<{
 
 export type ReadingMetadata = Readonly<{
   breadcrumb: string;
+  /** Section root the breadcrumb label links to; absent keeps plain text. */
+  breadcrumbHref?: string;
   title: string;
   lede?: string;
   date?: string;

@@ -233,11 +233,15 @@ Deno.test('readingChromeStrings carries the bilingual reading chrome copy', () =
     onThisPage: 'On this page',
     overview: 'Overview',
     pageNavigation: 'Page navigation',
+    breadcrumb: 'Breadcrumb',
+    sectionAnchor: 'Link to this section',
   });
   assertEquals(readingChromeStrings('zh'), {
     onThisPage: '本页目录',
     overview: '概览',
     pageNavigation: '页面导航',
+    breadcrumb: '面包屑',
+    sectionAnchor: '链接到本节',
   });
 });
 

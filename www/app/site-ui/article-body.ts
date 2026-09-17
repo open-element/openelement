@@ -12,9 +12,15 @@
  * '.article-content' with its own additions on top.
  */
 
+import { readingChromeStrings } from './chrome-strings.ts';
+
 export type ArticleOutlineItem = Readonly<{ id: string; label: string; level: 2 | 3 }>;
 
-export function prepareArticle(html: string): { html: string; outline: ArticleOutlineItem[] } {
+export function prepareArticle(
+  html: string,
+  locale: string = 'en',
+): { html: string; outline: ArticleOutlineItem[] } {
+  const anchorLabel = readingChromeStrings(locale).sectionAnchor;
   const outline: ArticleOutlineItem[] = [];
   const seen = new Map<string, number>();
   const withIds = html.replace(
@@ -40,7 +46,9 @@ export function prepareArticle(html: string): { html: string; outline: ArticleOu
       const id = count ? `${stem}-${count + 1}` : stem;
       outline.push({ id, label, level: Number(depth) as 2 | 3 });
       const cleanAttrs = String(attrs).replace(/\s+id=(?:"[^"]*"|'[^']*')/i, '');
-      return `<h${depth}${cleanAttrs} id="${id}">${body}</h${depth}>`;
+      // Hover/focus anchor: a real same-page link (keyboard-reachable, and the
+      // fragment gate proves the id exists), revealed by CSS on hover/focus.
+      return `<h${depth}${cleanAttrs} id="${id}">${body}<a class="heading-anchor" href="#${id}" aria-label="${anchorLabel}">#</a></h${depth}>`;
     },
   );
   // Code display goes through open-code-block (copy button + highlighting).
@@ -58,6 +66,8 @@ export function articleContentStyles(scope: string): string {
     ${scope} h2, ${scope} h3 { scroll-margin-top: calc(var(--nav-height) + var(--size-4)); }
     ${scope} h2 { margin-top: var(--size-10); color: var(--text-primary); font-family: var(--font-sans); font-size: var(--font-size-4); font-weight: var(--font-weight-8); letter-spacing: -0.02em; text-wrap: balance; }
     ${scope} h3 { margin-top: var(--size-8); color: var(--text-primary); font-family: var(--font-sans); font-size: var(--font-size-2); font-weight: var(--font-weight-8); text-wrap: balance; }
+    ${scope} .heading-anchor { margin-inline-start: var(--size-2); color: var(--text-muted); font-weight: var(--font-weight-4); text-decoration: none; opacity: 0; }
+    ${scope} h2:hover .heading-anchor, ${scope} h3:hover .heading-anchor, ${scope} .heading-anchor:focus-visible { opacity: 1; color: var(--brand); }
     ${scope} p { margin: var(--size-4) 0; }
     ${scope} ul, ${scope} ol { padding-left: var(--size-6); margin: var(--size-4) 0; }
     ${scope} li { margin: 0.375rem 0; }

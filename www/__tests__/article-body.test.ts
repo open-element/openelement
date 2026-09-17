@@ -25,4 +25,12 @@ Deno.test('prepareArticle: ordinary heading labels keep their text', () => {
   assertEquals(outline[0].label, 'Getting started now');
   assertEquals(outline[0].id, 'getting-started-now');
   assertEquals(html.includes('id="getting-started-now"'), true);
+  assertEquals(
+    html.includes(
+      '<a class="heading-anchor" href="#getting-started-now" aria-label="Link to this section">#</a>',
+    ),
+    true,
+  );
+  const { html: zhHtml } = prepareArticle('<h2>开始</h2>', 'zh');
+  assertEquals(zhHtml.includes('aria-label="链接到本节"'), true);
 });

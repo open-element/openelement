@@ -23,6 +23,8 @@ export default class OpenReadingShell extends OpenElement {
   .meta{display:none;margin-block-end:var(--size-7);padding-block-end:var(--size-5);border-block-end:1px solid var(--border)}
   :host([meta]) .meta,:host([metadata]) .meta{display:block}
   .breadcrumb{display:flex;flex-wrap:wrap;align-items:baseline;gap:var(--size-2);margin:0 0 var(--size-4);color:var(--text-muted);font-family:var(--font-mono);font-size:var(--font-size-00);font-weight:var(--font-weight-8);letter-spacing:.1em;text-transform:uppercase}
+  .breadcrumb a{color:inherit;text-decoration:none}
+  .breadcrumb a:hover{color:var(--brand);text-decoration:underline}
   /* No .crumb-sep ink: the 55% tint of --text-muted measured 2.62:1 on the
      light base (2.52:1 dark); the separator carries the breadcrumb's own
      --text-muted (7.74:1 light, 6.09:1 dark) instead. */
@@ -88,6 +90,16 @@ export default class OpenReadingShell extends OpenElement {
   @property({ reflect: false, attribute: false })
   breadcrumb = computed(() => this.metadata?.breadcrumb ?? '');
   @property({ reflect: false, attribute: false })
+  breadcrumbHref = computed(() => this.metadata?.breadcrumbHref ?? '');
+  // Region branches must be fully static (OEC9012), so both breadcrumb forms
+  // stay in the tree and toggle through `hidden` like the pager links below.
+  @property({ reflect: false, attribute: false })
+  hideBreadcrumbLink = computed(() => !(this.metadata?.breadcrumbHref));
+  @property({ reflect: false, attribute: false })
+  hideBreadcrumbText = computed(() => !!(this.metadata?.breadcrumbHref));
+  @property({ reflect: false, attribute: false })
+  breadcrumbLabel = computed(() => readingChromeStrings(this.locale).breadcrumb);
+  @property({ reflect: false, attribute: false })
   pageTitle = computed(() => this.metadata?.title ?? '');
   @property({ reflect: false, attribute: false })
   accent = computed(() => this.metadata?.accent ?? '');
@@ -124,11 +136,12 @@ export default class OpenReadingShell extends OpenElement {
           <header class='meta'>
             <slot name='meta'>
               <div>
-                <p class='breadcrumb'>
-                  <span>{this.breadcrumb}</span>
-                  <span class='crumb-sep'>/</span>
-                  <span class='crumb-current'>{this.pageTitle}</span>
-                </p>
+                <nav class='breadcrumb' aria-label={this.breadcrumbLabel}>
+                  <a href={this.breadcrumbHref} hidden={this.hideBreadcrumbLink}>{this.breadcrumb}</a>
+                  <span hidden={this.hideBreadcrumbText}>{this.breadcrumb}</span>
+                  <span class='crumb-sep' aria-hidden='true'>/</span>
+                  <span class='crumb-current' aria-current='page'>{this.pageTitle}</span>
+                </nav>
                 <h1 class='title' data-pagefind-meta='title'>
                   {this.pageTitle}
                   <span class='title-accent'>{this.accent}</span>

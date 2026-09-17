@@ -17,7 +17,7 @@ export interface ArticlePageModel {
   articleClass: string;
   slug: string;
   notFoundMessage: string;
-  metadata: { breadcrumb: string; title: string; lede: string };
+  metadata: { breadcrumb: string; breadcrumbHref?: string; title: string; lede: string };
   navigation: {
     previous?: { href: string; label: string };
     next?: { href: string; label: string };
@@ -27,8 +27,8 @@ export interface ArticlePageModel {
 }
 
 const collectionShell = {
-  guide: { breadcrumb: { en: 'Guide', zh: '指南' }, basePath: '/guide' },
-  architecture: { breadcrumb: { en: 'Architecture', zh: '架构' }, basePath: '/architecture' },
+  guide: { breadcrumb: { en: 'Guide', zh: '指南' }, basePath: '/guide', root: '/docs' },
+  architecture: { breadcrumb: { en: 'Architecture', zh: '架构' }, basePath: '/architecture', root: '/architecture' },
 } as const;
 
 const collectionData = {
@@ -106,6 +106,7 @@ export function projectArticlePage(
     page.html
       .replaceAll('{{OPENELEMENT_VERSION}}', sourceLineAppliesLabel(locale))
       .replaceAll('{{SOURCE_LINE_NOTE}}', sourceLineNote(locale)),
+    locale,
   );
   const ordered = data.pages
     .filter((candidate) => candidate.locale === 'en')
@@ -131,6 +132,7 @@ export function projectArticlePage(
     notFoundMessage: '',
     metadata: {
       breadcrumb: shell.breadcrumb[locale],
+      breadcrumbHref: localizePath(shell.root, locale),
       title: page.frontmatter.title,
       lede: page.frontmatter.lede ?? '',
     },

@@ -2,6 +2,7 @@
 /** Compiler-owned WWW table of contents. */
 import { computed, element, OpenElement, property } from '@openelement/element';
 import { readingChromeStrings } from './chrome-strings.ts';
+import { installRailScrollspy, uninstallRailScrollspy } from './open-page-rail-controller.ts';
 import { compiledStyle } from './compiled-style.ts';
 
 interface RailItem {
@@ -32,6 +33,16 @@ export default class OpenPageRail extends OpenElement {
 
   @property({ reflect: false, attribute: false })
   overview = computed(() => readingChromeStrings(this.locale).overview);
+
+  override connectedCallback(): void {
+    super.connectedCallback();
+    installRailScrollspy(this);
+  }
+
+  override disconnectedCallback(): void {
+    uninstallRailScrollspy(this);
+    super.disconnectedCallback();
+  }
 
   render() {
     return (

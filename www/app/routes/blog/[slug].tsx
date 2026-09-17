@@ -84,7 +84,7 @@ export default definePage(PageBlogPost, {
       : resolved === 'en'
       ? 'This dispatch is published in Chinese (中文原文).'
       : '本文以英文原文发布（English original）。';
-    const article = prepareArticle(post.html);
+    const article = prepareArticle(post.html, resolved);
     const visiblePosts = posts
       .filter((candidate) => candidate.frontmatter.type !== 'adr')
       .sort((a, b) => b.frontmatter.date.localeCompare(a.frontmatter.date));
