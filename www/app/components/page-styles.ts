@@ -136,6 +136,7 @@ export const pageStyles = `
   }
 
   em {
+    font-family: var(--font-serif);
     font-style: italic;
   }
 

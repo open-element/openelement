@@ -89,8 +89,11 @@ const OPEN_PROPS_TOKEN_CSS = `/**
      Typography
      ═══════════════════════════════════════════════ */
   --font-sans: 'JetBrains Mono', monospace;
-  --font-mono: 'JetBrains Mono', monospace;
-  --font-serif: 'Instrument Serif', serif;
+  /* CJK fallbacks: the Latin-only faces render CJK glyphs as tofu/system
+     substitution with mismatched metrics. Serif gets Songti/Noto Serif CJK so
+     zh italic accents stay serif, not synthetic-slanted sans. */
+  --font-mono: 'JetBrains Mono', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', monospace;
+  --font-serif: 'Instrument Serif', 'Songti SC', 'Noto Serif CJK SC', serif;
   --font-size-00: 0.75rem;
   --font-size-0: 0.875rem;
   --font-size-1: 1rem;
