@@ -57,7 +57,6 @@ OpenElement × Supabase × Cloudflare 是经过验证的全栈交付路径，所
 最初随 0.43 线与 Universal WC SSR 一同交付，并由当前编译型版本线继承。框架自有的生产运行时恢复与缓存语义仍在当前契约之外，尚未分配发布版本。
 
 - [已验证的 SaaS 消费方](https://github.com/open-element/openelement/tree/main/apps/saas)
-- [ADR-0129 响应头通道](https://github.com/open-element/openelement/blob/main/docs/adr/ADR-0129-response-header-channel.md)
 
 ## 定位背后的证据
 
@@ -77,3 +76,9 @@ OpenElement × Supabase × Cloudflare 是经过验证的全栈交付路径，所
 - [Astro islands 文档](https://docs.astro.build/en/concepts/islands/)
 - [Fresh 文档](https://docs.deno.com/runtime/frameworks/fresh/)
 - [Web Awesome 文档](https://webawesome.com/docs/)
+
+## 另见
+
+- [当前架构](/zh/architecture/architecture)——这份对比所引用的包依赖图。
+- [Package 兼容性](/zh/architecture/package-compatibility)——当前契约准入什么。
+- [核心概念](/zh/guide/core-concepts)——这一立场背后的创作模型。

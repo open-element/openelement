@@ -46,6 +46,8 @@ export default {
 
 同一默认导出契约适用于任意深度：`app/routes/api/items/[id].ts` 伺服 `/api/items/:id`，`params` 从路径中解析填充。
 
-## 运行时适配
+## 另见
 
-使用 Deno-first 的 tasks，文档示例避免仅 Node 的假设。
+- [路由与数据](/zh/guide/routing-and-data)——这些 handler 旁边的页面侧契约。
+- [安全](/zh/guide/security)——自定义路由周围的 CSRF、CORS 与 CSP 默认值。
+- [测试](/zh/guide/testing)——在 `deno test` 中直接调用 handler。

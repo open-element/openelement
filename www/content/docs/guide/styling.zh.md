@@ -65,3 +65,9 @@ export default class ExamplePage extends OpenElement {
 ## 自定义属性实战
 
 starter 在 `:root` 上定义了一层设计令牌（颜色、字体、间距），正是为了让页面可以完全通过自定义属性来主题化。优先用令牌做主题；组件自身的布局与排版再交给 `StyleSheet`。
+
+## 另见
+
+- [设计体系](/zh/architecture/design-system)——这些令牌与语义角色如何组织。
+- [核心概念](/zh/guide/core-concepts)——这里引用的 root 模式与 `static styles`。
+- [Islands 与 SSR](/zh/guide/islands-and-ssr)——组件什么时候才需要 shadow root。

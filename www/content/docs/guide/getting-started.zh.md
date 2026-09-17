@@ -27,3 +27,9 @@ deno task dev
 ## 构建
 
 发布前运行 build、package、docs truth 与 visual smoke 门禁。
+
+## 另见
+
+- [核心概念](/zh/guide/core-concepts)——starter 文件背后的组件模型。
+- [路由与数据](/zh/guide/routing-and-data)——页面、loader 与 action。
+- [部署](/zh/guide/deployment)——`deno task build` 产出什么，以及如何验证。

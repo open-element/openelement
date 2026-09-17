@@ -6,7 +6,7 @@ order: 70
 
 ## openPipeline()
 
-The lean Vite plugin entry, configured in `vite.config.ts`: `openPipeline({ mode, routes: { dir }, island: { dir, upgradeStrategy }, output: { outDir }, viewTransition, headExtras })`. Defaults: routes `app/routes`, islands `app/islands`, components `app/components`, `viewTransition` on. `headExtras` is developer-trusted input passed through verbatim at the `trustedHtml` trust level — the framework does not sanitize it. `<script>` tags are rejected outright (use `inject.scripts` for scripts), and `<style>` blocks must not carry executable CSS; anything else, including `base` and `meta http-equiv`, is the fragment author's responsibility (#931).
+The lean Vite plugin entry, configured in `vite.config.ts`: `openPipeline({ mode, routes: { dir }, island: { dir, upgradeStrategy }, output: { outDir }, viewTransition, headExtras })`. Defaults: routes `app/routes`, islands `app/islands`, components `app/components`, `viewTransition` on. `headExtras` is developer-trusted input passed through verbatim at the `trustedHtml` trust level — the framework does not sanitize it. `<script>` tags are rejected outright (use `inject.scripts` for scripts), and `<style>` blocks must not carry executable CSS; anything else, including `base` and `meta http-equiv`, is the fragment author's responsibility.
 
 ### vite.config.ts
 
@@ -70,7 +70,7 @@ export const blogCollection: CollectionOptions = {
 };
 ```
 
-### app/routes/blog/[slug].tsx — usage pattern (#924)
+### app/routes/blog/[slug].tsx — usage pattern
 
 ```tsx
 // app/components/page-blog-post.tsx — compiled by the open:compiled-element transform
@@ -122,7 +122,7 @@ export default definePage(BlogPostPage, {
 
 The site-owned collection loader renders fenced blocks as `<pre><code class="language-x">` with no token-level colors. A collection's `markdown` option replaces the renderer; its output is still first-party trusted content, and hljs spans only add `class` attributes. For code blocks in routes/pages, wrap them in `<open-code-block>` (`@openelement/ui`) — it highlights via a global Prism that your page must load (core + language grammars, e.g. the vendored same-origin scripts this site injects from `public/assets/vendor/prism/` in `www/vite.config.ts`); without Prism you get the copy button but no token spans.
 
-### lib/blog.ts — syntax highlighting recipe (optional, #930)
+### lib/blog.ts — syntax highlighting recipe (optional)
 
 ```ts
 import { marked } from 'npm:marked@^15';
@@ -154,9 +154,9 @@ Custom renderer output stays within the same first-party trust boundary.
 
 ## middleware.use
 
-`middleware.use` (ADR-0123 (retired; recoverable from Git history), #858) registers fetch middleware with the WinterCG shape `(request, next) => Promise<Response>` — no HTTP-framework dialect. The chain is composed around the generated handler in onion order (`use[0]` is outermost: first to see the request, last to see the response), outside the built-in `requestId`/`logger`/`cors`/`securityHeaders`/`csp` middleware. Middleware semantics are request-time only: a static GET/HEAD is served straight from the built artifacts (`tryStatic`) and never passes through the `middleware.use` chain or the built-in middleware, so do not rely on middleware to guard prerendered pages. On the request-time dispatch path (dynamic routes, POSTs, and non-static fallbacks) the same chain runs in the dev server, the `start` CLI, the e2e fixture server, and the Nitro production entry (locked by the request-time parity contract test). A middleware may short-circuit by returning a `Response` without calling `next()`. Each entry is a **module path** (resolved like `appShell.import`): the module default-exports the middleware, and the generated server entry imports it — so middleware may close over module scope and import local helpers and third-party packages. Route-scoped `_middleware.ts` files use the same WinterCG shape: a root or nested `_middleware.ts` default-exports `(request, next) => Promise<Response>`, applied to its route subtree.
+`middleware.use` registers fetch middleware with the WinterCG shape `(request, next) => Promise<Response>` — no HTTP-framework dialect. The chain is composed around the generated handler in onion order (`use[0]` is outermost: first to see the request, last to see the response), outside the built-in `requestId`/`logger`/`cors`/`securityHeaders`/`csp` middleware. Middleware semantics are request-time only: a static GET/HEAD is served straight from the built artifacts (`tryStatic`) and never passes through the `middleware.use` chain or the built-in middleware, so do not rely on middleware to guard prerendered pages. On the request-time dispatch path (dynamic routes, POSTs, and non-static fallbacks) the same chain runs in the dev server, the `start` CLI, the e2e fixture server, and the Nitro production entry (locked by the request-time parity contract test). A middleware may short-circuit by returning a `Response` without calling `next()`. Each entry is a **module path** (resolved like `appShell.import`): the module default-exports the middleware, and the generated server entry imports it — so middleware may close over module scope and import local helpers and third-party packages. Route-scoped `_middleware.ts` files use the same WinterCG shape: a root or nested `_middleware.ts` default-exports `(request, next) => Promise<Response>`, applied to its route subtree.
 
-### vite.config.ts — middleware.use (#858)
+### vite.config.ts — middleware.use
 
 ```ts
 import { defineConfig } from 'vite';
@@ -211,3 +211,9 @@ export default guard;
 ### middleware.corsOrigin / middleware.corsOriginModule
 
 `middleware.corsOrigin` takes static allowlist data (`string | string[]`), serialized into the generated entry as JSON. When the allowlist needs logic, point `middleware.corsOriginModule` at a module default-exporting `(origin: string) => string | undefined` — the entry imports the module and references the callback, so it can import dependencies and close over module scope just like a `middleware.use` module. The two options are mutually exclusive (configuring both is a build-time config error).
+
+## See also
+
+- [Deployment](/guide/deployment) — how the configured output is emitted and served.
+- [Security](/guide/security) — the middleware, CORS and CSP options in context.
+- [Routing and Data](/guide/routing-and-data) — routes, rendering modes and data boundaries.

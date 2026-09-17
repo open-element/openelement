@@ -35,3 +35,9 @@ The browser parses shadow roots from HTML. Custom Elements then upgrade existing
 - Static DSD components for content, layout, and documentation.
 - Interactive elements for local browser behavior.
 - Islands for client components that need framework runtimes.
+
+## See also
+
+- [Island Hydration](/architecture/islands) — when a component crosses into client delivery.
+- [Island Deep Dive](/architecture/islands-deep) — the layers and hydration strategies.
+- [Core Concepts](/guide/core-concepts) — declaring a component's root mode.

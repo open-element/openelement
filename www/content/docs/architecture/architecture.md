@@ -54,16 +54,22 @@ deep App interface rather than separate shallow packages.
 
 Node and Workers output is verified from packed public artifacts. Provider-owned
 recovery is proven in the reference stack; framework-owned cache/recovery APIs
-remain unassigned and require a future ADR.
+remain unassigned and require a future decision record.
 
 ## Current truth is checked mechanically.
 
 Package surface, docs truth, artifacts, critical paths and browser tests reject
 a return to the retired product graph.
 
-| Gate         | Requirement                                                                                                            |
-| ------------ | ---------------------------------------------------------------------------------------------------------------------- |
-| 4 packages   | Current consumer surface, starter and docs agree.                                                                      |
-| ADR-0122     | 0.42.0 frozen (ACCEPTED, retired; recoverable from Git history); the 0.41.x static freeze under ADR-0119 is untouched. |
-| 3 browsers   | Candidate releases require Chromium, Firefox and WebKit proof.                                                         |
-| packed proof | Consumers build from public artifacts, not workspace aliases.                                                          |
+| Gate         | Requirement                                                                            |
+| ------------ | -------------------------------------------------------------------------------------- |
+| 4 packages   | Current consumer surface, starter and docs agree.                                      |
+| output split | The static/request-time output split is frozen; the 0.41.x static freeze is untouched. |
+| 3 browsers   | Candidate releases require Chromium, Firefox and WebKit proof.                         |
+| packed proof | Consumers build from public artifacts, not workspace aliases.                          |
+
+## See also
+
+- [openElement vs Alternatives](/architecture/comparison) — how this architecture is positioned.
+- [Package Compatibility](/architecture/package-compatibility) — which packages are in the current contract.
+- [Core Concepts](/guide/core-concepts) — the same model from an author's side.

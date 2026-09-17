@@ -6,7 +6,7 @@ order: 80
 
 ## fail(): the return channel
 
-Expected action failures return, never throw: `fail(status, data)` requires a 4xx status and produces an `OpenElementActionFailure`. The server answers with the `fail()` status (conventionally 422), the page re-rendered and the submitted values echoed; the page descriptor's `props` projector reads the failure from its context's `actionData` and maps it onto the compiled page properties. `isActionFailure()` is the duck-typed guard (ADR-0120). Enhanced forms morph only 200/422 responses (#973): a non-422 4xx fails over to a full navigation — the failure echo is lost on that path, so keep validation failures at 422.
+Expected action failures return, never throw: `fail(status, data)` requires a 4xx status and produces an `OpenElementActionFailure`. The server answers with the `fail()` status (conventionally 422), the page re-rendered and the submitted values echoed; the page descriptor's `props` projector reads the failure from its context's `actionData` and maps it onto the compiled page properties. `isActionFailure()` is the duck-typed guard. Enhanced forms morph only 200/422 responses: a non-422 4xx fails over to a full navigation — the failure echo is lost on that path, so keep validation failures at 422.
 
 ## redirect() and notFound()
 
@@ -14,7 +14,7 @@ Control flow throws: `redirect(location, status)` throws `OpenElementRedirect` �
 
 ## The error projector
 
-`definePage(PageClass, { error })` declares the page-level error projector: it receives the caught `error` plus the render context and returns the error variant of the page's compiled properties (the generated entry re-renders the page with those props and status 500 — the ADR-0121 §7 (retired; recoverable from Git history) channel); without it the generic status page answers. `notFound()` and unexpected loader/action throws land here; on the SPA chain a throw is normalized into the same channel instead of silently replacing loader data. On the programmatic action channel (`x-openelement-action: true`), error outcomes answer RFC 9457 Problem Details (`application/problem+json` with `type`/`title`/`status`/`detail`) instead of a bespoke JSON envelope (#863, ADR-0123 (retired; recoverable from Git history)); ADR-0122 (retired; recoverable from Git history) freezes this wire shape.
+`definePage(PageClass, { error })` declares the page-level error projector: it receives the caught `error` plus the render context and returns the error variant of the page's compiled properties (the generated entry re-renders the page with those props and status 500); without it the generic status page answers. `notFound()` and unexpected loader/action throws land here; on the SPA chain a throw is normalized into the same channel instead of silently replacing loader data. On the programmatic action channel (`x-openelement-action: true`), error outcomes answer RFC 9457 Problem Details (`application/problem+json` with `type`/`title`/`status`/`detail`) instead of a bespoke JSON envelope; this wire shape is frozen.
 
 ### app/components/page-post.tsx
 
@@ -99,3 +99,9 @@ export default definePage(PostPage, {
 ```
 
 `redirect()` also takes an explicit status (301/302/303/307/308); any other status is rejected at call time. The same guards work on the SPA chain, but SPA loaders/actions receive `{ params, searchParams, signal }` (plus `formData` for actions).
+
+## See also
+
+- [Routing and Data](/guide/routing-and-data) — where `fail()`, `redirect()` and actions are introduced.
+- [Security](/guide/security) — the status codes and headers the generated handlers send.
+- [API Routes](/guide/api) — the same response primitives for non-page routes.

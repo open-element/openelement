@@ -35,3 +35,9 @@ Declarative Shadow DOM 通过带 `shadowrootmode` 的 template，让 HTML 在客
 - 静态 DSD 组件，用于内容、布局与文档。
 - 交互元素，承担浏览器内的局部行为。
 - islands，用于需要框架运行时的客户端组件。
+
+## 另见
+
+- [Island Hydration](/zh/architecture/islands)——组件何时进入客户端投递。
+- [Island 深入解析](/zh/architecture/islands-deep)——分层与 hydration 策略。
+- [核心概念](/zh/guide/core-concepts)——声明组件的 root 模式。

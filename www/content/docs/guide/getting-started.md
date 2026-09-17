@@ -27,3 +27,9 @@ Read the [docs](/docs), [API reference](/apilist), and [roadmap](/roadmap) as th
 ## Build
 
 Run build, package, docs truth, and visual smoke gates before release.
+
+## See also
+
+- [Core Concepts](/guide/core-concepts) — the component model behind the starter's files.
+- [Routing and Data](/guide/routing-and-data) — pages, loaders and actions.
+- [Deployment](/guide/deployment) — what `deno task build` emits and how to verify it.

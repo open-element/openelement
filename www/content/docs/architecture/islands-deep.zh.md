@@ -40,3 +40,9 @@ openElement 使用浏览器的 Custom Element upgrade 机制。SSG 先写出 HTM
 ## 动态内容
 
 动态 island 内容来自编译模板内由 signal 驱动的 `@property` 状态。HTML 注入只保留在显式的 `trustedHtml` 边界之内，且仅用于已消毒、非交互的内容。
+
+## 另见
+
+- [Island Hydration](/zh/architecture/islands)——分层与构建期边界。
+- [Islands 与 SSR](/zh/guide/islands-and-ssr)——在应用中声明策略。
+- [DSD 渲染](/zh/architecture/dsd)——服务端的平台契约。

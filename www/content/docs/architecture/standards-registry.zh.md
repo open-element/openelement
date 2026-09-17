@@ -16,3 +16,9 @@ section: 'Reference'
 ## 四包归属
 
 `Element`、`Router`、`Create` 与实验性的 `UI` 包是当前的对外消费界面；内部契约保持内部。
+
+## 另见
+
+- [Package 兼容性](/zh/architecture/package-compatibility)——第三方元素如何被准入。
+- [DSD 渲染](/zh/architecture/dsd)——这些标准所产出的渲染契约。
+- [当前架构](/zh/architecture/architecture)——每个包在图中的位置。

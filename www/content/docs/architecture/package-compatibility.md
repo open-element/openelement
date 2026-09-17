@@ -20,3 +20,9 @@ hydration-mismatch diagnostics and the tracked third-party WC SSR corpus —
 first shipped on the 0.43 line and kept green by CI on the compiled line.
 Admission still depends on explicit package-island configuration and observed
 metadata; it is not a blanket certification of every third-party component.
+
+## See also
+
+- [WC Standards Contract](/architecture/standards-registry) — the standards surface an admitted element must meet.
+- [Current Architecture](/architecture/architecture) — the package graph this contract belongs to.
+- [openElement vs Alternatives](/architecture/comparison) — how the admitted set compares.

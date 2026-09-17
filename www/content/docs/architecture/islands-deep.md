@@ -40,3 +40,9 @@ Host attributes and serialized props restore into the island's compiled `@proper
 ## Dynamic Content
 
 Dynamic island content comes from signal-driven `@property` state inside the compiled template. HTML injection stays behind the explicit `trustedHtml` boundary for pre-sanitized, non-interactive content only.
+
+## See also
+
+- [Island Hydration](/architecture/islands) — the layers and the build-time boundary.
+- [Islands and SSR](/guide/islands-and-ssr) — declaring strategies in an application.
+- [DSD Rendering](/architecture/dsd) — the server-side platform contract.

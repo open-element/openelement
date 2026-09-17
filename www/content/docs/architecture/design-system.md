@@ -73,3 +73,9 @@ Each page begins with a product object, preserves dark/light parity and keeps mo
 1. **Lead with the product object.** Show routes, package graphs, code, browser contracts, or docs structure in the first viewport.
 2. **Use components as the site system.** The website dogfoods retained `@openelement/ui` primitives; UI remains optional for application authors.
 3. **Treat dark mode as parity.** Every page and shadow component must resolve through the same semantic tokens.
+
+## See also
+
+- [Styling](/guide/styling) — how an application consumes these tokens.
+- [DSD Rendering](/architecture/dsd) — the boundary the site's components are built on.
+- [Performance & Benchmarks](/architecture/benchmark) — the measured cost of the site that dogfoods them.

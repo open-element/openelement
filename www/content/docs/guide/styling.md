@@ -65,3 +65,9 @@ export default class ExamplePage extends OpenElement {
 ## Custom properties in practice
 
 The starter defines a design-token layer on `:root` (colors, fonts, spacing) precisely so pages can be themed entirely through custom properties. Theme with tokens first; use the component `StyleSheet` for the page-internal layout and typography.
+
+## See also
+
+- [Design System](/architecture/design-system) — how those tokens and semantic roles are organized.
+- [Core Concepts](/guide/core-concepts) — the root modes and `static styles` referenced here.
+- [Islands and SSR](/guide/islands-and-ssr) — when a component needs a shadow root at all.

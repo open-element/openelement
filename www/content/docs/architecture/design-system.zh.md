@@ -73,3 +73,9 @@ section: 'Reference'
 1. **以产品对象开场。** 在第一个视口展示路由、包图、代码、浏览器契约或文档结构。
 2. **把组件当作站点体系。** 本站 dogfood 沿用的 `@openelement/ui` 原语；对应用作者而言 UI 始终是可选的。
 3. **把暗色模式当作对等。** 每个页面与每个 shadow 组件都必须经由同一套语义 token 解析。
+
+## 另见
+
+- [样式](/zh/guide/styling)——应用如何使用这些令牌。
+- [DSD 渲染](/zh/architecture/dsd)——站点组件所依赖的边界。
+- [性能与基准测试](/zh/architecture/benchmark)——dogfood 这套体系的站点的实测成本。

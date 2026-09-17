@@ -6,7 +6,7 @@ order: 80
 
 ## fail()：返回通道
 
-预期内的 action 失败走返回而不是抛出：`fail(status, data)` 要求 4xx 状态码，产出 `OpenElementActionFailure`。服务器以 `fail()` 的状态码（惯例为 422）应答并重渲染页面、回显已提交的值；页面描述符的 `props` 投影器从上下文的 `actionData` 读取失败，并映射到编译页面属性。`isActionFailure()` 是鸭子类型守卫（ADR-0120）。增强表单只 morph 200/422 响应(#973)：非 422 的 4xx 会退化为整页导航——该路径上失败回显丢失,因此校验失败请保持在 422。
+预期内的 action 失败走返回而不是抛出：`fail(status, data)` 要求 4xx 状态码，产出 `OpenElementActionFailure`。服务器以 `fail()` 的状态码（惯例为 422）应答并重渲染页面、回显已提交的值；页面描述符的 `props` 投影器从上下文的 `actionData` 读取失败，并映射到编译页面属性。`isActionFailure()` 是鸭子类型守卫。增强表单只 morph 200/422 响应：非 422 的 4xx 会退化为整页导航——该路径上失败回显丢失,因此校验失败请保持在 422。
 
 ## redirect() 与 notFound()
 
@@ -14,7 +14,7 @@ order: 80
 
 ## error 投影器
 
-`definePage(PageClass, { error })` 声明页面级 error 投影器：它接收被捕获的 `error` 与渲染上下文，返回页面编译属性的错误变体（生成的入口用这些 props 以 500 状态码重渲染页面——即 ADR-0121 §7（已退役，可从 Git 历史恢复）通道）；未声明时由通用状态页应答。`notFound()` 与意外的 loader/action 抛出都会落到这里；SPA 链上 throw 会被规整进同一通道，而不是悄悄替换 loader 数据。在程序化 action 通道（`x-openelement-action: true`）上，错误结果以 RFC 9457 Problem Details 应答（`application/problem+json`，字段 `type`/`title`/`status`/`detail`），取代此前的自定义 JSON 封装（#863，ADR-0123（已退役，可从 Git 历史恢复））；ADR-0122（已退役，可从 Git 历史恢复）已冻结该线格式。
+`definePage(PageClass, { error })` 声明页面级 error 投影器：它接收被捕获的 `error` 与渲染上下文，返回页面编译属性的错误变体（生成的入口用这些 props 以 500 状态码重渲染页面）；未声明时由通用状态页应答。`notFound()` 与意外的 loader/action 抛出都会落到这里；SPA 链上 throw 会被规整进同一通道，而不是悄悄替换 loader 数据。在程序化 action 通道（`x-openelement-action: true`）上，错误结果以 RFC 9457 Problem Details 应答（`application/problem+json`，字段 `type`/`title`/`status`/`detail`），取代此前的自定义 JSON 封装；该线格式已冻结。
 
 ### app/components/page-post.tsx
 
@@ -99,3 +99,9 @@ export default definePage(PostPage, {
 ```
 
 `redirect()` 也可显式指定状态码（301/302/303/307/308）；其他状态码在调用时即被拒绝。同样的守卫在 SPA 链上可用，但 SPA 的 loader/action 拿到的是 `{ params, searchParams, signal }`（action 另有 `formData`）。
+
+## 另见
+
+- [路由与数据](/zh/guide/routing-and-data)——`fail()`、`redirect()` 与 action 的出处。
+- [安全](/zh/guide/security)——生成的 handler 会发出的状态码与响应头。
+- [API 路由](/zh/guide/api)——非页面路由使用的同一组响应原语。

@@ -46,6 +46,8 @@ export default {
 
 The same default-export contract applies at every depth: `app/routes/api/items/[id].ts` serves `/api/items/:id` with `params` populated from the path.
 
-## Runtime fit
+## See also
 
-Use Deno-first tasks and avoid Node-only assumptions in docs examples.
+- [Routing and Data](/guide/routing-and-data) — the page-side contract these handlers sit beside.
+- [Security](/guide/security) — CSRF, CORS and CSP defaults around custom routes.
+- [Testing](/guide/testing) — calling handlers directly from `deno test`.

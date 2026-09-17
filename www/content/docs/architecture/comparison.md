@@ -59,7 +59,6 @@ production-runtime recovery and cache semantics remain outside the current
 contract and have no assigned release version.
 
 - [Verified SaaS consumer](https://github.com/open-element/openelement/tree/main/apps/saas)
-- [ADR-0129 response-header channel](https://github.com/open-element/openelement/blob/main/docs/adr/ADR-0129-response-header-channel.md)
 
 ## Evidence behind the position
 
@@ -79,3 +78,9 @@ Reviewed 2026-08-16 against primary project documentation. This is a decision gu
 - [Astro islands documentation](https://docs.astro.build/en/concepts/islands/)
 - [Fresh documentation](https://docs.deno.com/runtime/frameworks/fresh/)
 - [Web Awesome documentation](https://webawesome.com/docs/)
+
+## See also
+
+- [Current Architecture](/architecture/architecture) — the package graph this comparison refers to.
+- [Package Compatibility](/architecture/package-compatibility) — what the current contract admits.
+- [Core Concepts](/guide/core-concepts) — the authoring model behind the position.

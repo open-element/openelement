@@ -6,7 +6,7 @@ order: 40
 
 ## File routes
 
-Routes should be discoverable from the repository tree. A `definePage` route default-exports the compiled page element class wrapped in `definePage(PageClass, { ... })`; the page class lives in a non-route module (for example `app/components/`) and owns the markup as its compiled render program. A route may still export `tagName` to name a content element (#960), but on a `definePage` route that export names the content element only and never drives page registration: the page itself registers under its compiled class's `@element(tag)` — SSR resolves the tag from the compiled Part Program (#1276) — with the route-path-derived tag (`app/routes/index.tsx` → `index-page`) only as a fallback. Generated build entries register every admitted route and island class — route modules never self-register.
+Routes should be discoverable from the repository tree. A `definePage` route default-exports the compiled page element class wrapped in `definePage(PageClass, { ... })`; the page class lives in a non-route module (for example `app/components/`) and owns the markup as its compiled render program. A route may still export `tagName` to name a content element, but on a `definePage` route that export names the content element only and never drives page registration: the page itself registers under its compiled class's `@element(tag)` — SSR resolves the tag from the compiled Part Program — with the route-path-derived tag (`app/routes/index.tsx` → `index-page`) only as a fallback. Generated build entries register every admitted route and island class — route modules never self-register.
 
 ## Metadata
 
@@ -18,11 +18,11 @@ Keep data loading separate from presentation markup.
 
 ## Rendering modes
 
-`renderIntent.mode` selects where a page renders: `'static'` (default) prerenders at build; `'dynamic'` skips prerendering and renders per request through the generated `dist/server` entry, running the route loader on every request. A page that exports an action may stay `'static'` — a hybrid page: its GET is prerendered and served from the static artifact, while its action POST is dispatched to the generated server entry at request time. Choose `'dynamic'` when the GET itself must run per request (per-request loaders, response headers, non-repeatable content). This behavior is frozen under ADR-0122 (retired; recoverable from Git history) as amended by ADR-0120 (2026-09-16).
+`renderIntent.mode` selects where a page renders: `'static'` (default) prerenders at build; `'dynamic'` skips prerendering and renders per request through the generated `dist/server` entry, running the route loader on every request. A page that exports an action may stay `'static'` — a hybrid page: its GET is prerendered and served from the static artifact, while its action POST is dispatched to the generated server entry at request time. Choose `'dynamic'` when the GET itself must run per request (per-request loaders, response headers, non-repeatable content). This behavior is frozen.
 
 ## Form actions
 
-A route may export an `action({ formData })` — plain HTML forms work without JavaScript: validation failures return `fail(4xx, data)` and re-render with the echo at `fail()`'s status (conventionally 422), successes answer 303 (PRG). Named actions dispatch via `formaction='?/name'`. Forms marked `data-open-enhance` submit via fetch and morph the returned document into place: hydrated islands whose light DOM did not change keep their state, `data-open-preserve` exempts a subtree, and the URL follows the PRG target. An action must be safe to re-run after a failed validation; these application-loop semantics are frozen under ADR-0122 (retired; recoverable from Git history).
+A route may export an `action({ formData })` — plain HTML forms work without JavaScript: validation failures return `fail(4xx, data)` and re-render with the echo at `fail()`'s status (conventionally 422), successes answer 303 (PRG). Named actions dispatch via `formaction='?/name'`. Forms marked `data-open-enhance` submit via fetch and morph the returned document into place: hydrated islands whose light DOM did not change keep their state, `data-open-preserve` exempts a subtree, and the URL follows the PRG target. An action must be safe to re-run after a failed validation; these application-loop semantics are frozen.
 
 ### app/components/page-guestbook.tsx
 
@@ -123,11 +123,11 @@ export default definePage(GuestbookPage, {
 
 ## Action fetch negotiation
 
-Fetch-based action posts are recognized by the `x-openelement-action` header (exported as `ACTION_FETCH_HEADER` from `@openelement/router`): the built-in morph enhancement sends `enhance` and receives the same full-HTML responses as the no-JS path; a programmatic caller sends `true` and receives the serialized `ActionResult` union — `success` / `failure` / `redirect` with `status` and `data` — while error outcomes answer RFC 9457 `problem+json` (`type`/`title`/`status`/`detail`, #863). No header means a plain browser form post.
+Fetch-based action posts are recognized by the `x-openelement-action` header (exported as `ACTION_FETCH_HEADER` from `@openelement/router`): the built-in morph enhancement sends `enhance` and receives the same full-HTML responses as the no-JS path; a programmatic caller sends `true` and receives the serialized `ActionResult` union — `success` / `failure` / `redirect` with `status` and `data` — while error outcomes answer RFC 9457 `problem+json` (`type`/`title`/`status`/`detail`). No header means a plain browser form post.
 
 ## Two loader/action chains
 
-Request-time (`'dynamic'`) loaders/actions run on the server with the Web-standard context `{ request, params, env, platform, route, responseHeaders }` and the `fail()`/`redirect()` protocol. `responseHeaders` (ADR-0129) is a mutable `Headers` channel merged into every response of the request — renders, redirects, 422 re-renders and fetch-channel JSON alike — so recipes can write session cookies; framework protocol headers always win on conflict. SPA-mode loaders/actions run client-side with `{ params, searchParams, signal }` (a `URLSearchParams` and an `AbortSignal`, plus `formData` for actions) and signal failure by throwing — a throw is normalized into action data. The names are intentionally parallel, but the contexts differ: code written against one chain cannot assume the other's context (#570, ADR-0119 (retired; recoverable from Git history) frozen SPA semantics).
+Request-time (`'dynamic'`) loaders/actions run on the server with the Web-standard context `{ request, params, env, platform, route, responseHeaders }` and the `fail()`/`redirect()` protocol. `responseHeaders` is a mutable `Headers` channel merged into every response of the request — renders, redirects, 422 re-renders and fetch-channel JSON alike — so recipes can write session cookies; framework protocol headers always win on conflict. SPA-mode loaders/actions run client-side with `{ params, searchParams, signal }` (a `URLSearchParams` and an `AbortSignal`, plus `formData` for actions) and signal failure by throwing — a throw is normalized into action data. The names are intentionally parallel, but the contexts differ: code written against one chain cannot assume the other's context.
 
 ### Integration recipes
 
@@ -135,4 +135,10 @@ Request-time (`'dynamic'`) loaders/actions run on the server with the Web-standa
 
 [Rate limit (fetch middleware)](https://github.com/open-element/openelement/tree/main/apps/saas#status-working-product) — fixed-window per-IP limiting (`apps/saas/lib/rate-limit.ts`), scoped to action POSTs, 429 `problem+json` over the limit; covered by the SaaS test suite.
 
-[Supabase (first-party SaaS)](https://github.com/open-element/openelement/tree/main/apps/saas) — `@supabase/ssr` server client writing session cookies over the ADR-0129 response-header channel, authorization re-checked in loaders/actions, RLS-first notes / Storage / Realtime; implemented in `apps/saas` and covered by its test suite.
+[Supabase (first-party SaaS)](https://github.com/open-element/openelement/tree/main/apps/saas) — `@supabase/ssr` server client writing session cookies over the response-header channel, authorization re-checked in loaders/actions, RLS-first notes / Storage / Realtime; implemented in `apps/saas` and covered by its test suite.
+
+## See also
+
+- [Core Concepts](/guide/core-concepts) — the elements and islands these routes compose.
+- [Error Handling](/guide/error-handling) — the failure channels an action's return value feeds.
+- [API Routes](/guide/api) — routes that answer requests without pages.
