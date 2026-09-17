@@ -56,18 +56,35 @@ export const pageHomeStyles = [compiledStyle(`
   .action:hover { border-color:var(--brand); }
   .action.primary { background:var(--brand); border-color:var(--brand); color:var(--on-brand); }
   .action.primary:hover { background:var(--brand-hover); }
-  .spec-strip { display:grid; grid-template-columns:repeat(5,1fr); border-block-start:1px solid var(--border); }
-  .spec-cell { padding:var(--size-4) clamp(1rem,2.5vw,2rem); border-inline-start:1px solid var(--border); }
+  .spec-strip { display:grid; grid-template-columns:repeat(5,1fr); border-block-start:1px solid var(--border); }  .spec-cell { padding:var(--size-4) clamp(1rem,2.5vw,2rem); border-inline-start:1px solid var(--border); }
   .spec-cell:first-child { border-inline-start:0; }
   .spec-cell small { display:block; color:var(--text-muted); font-size:var(--font-size-micro); letter-spacing:.16em; text-transform:uppercase; }
   .spec-cell strong { display:block; margin-block-start:var(--size-1); font-size:var(--font-size-1); font-weight:var(--font-weight-8); }
   .spec-cell strong.accent { color:var(--violet-8); }
+  @container band (max-width:1080px) {
+    .spec-strip { grid-template-columns:1fr 1fr; }
+    .spec-cell:nth-child(odd) { border-inline-start:0; }
+    /* Five cells in two columns leave the last row single: span it, but only
+       when the count is actually odd. */
+    .spec-cell:last-child:nth-child(odd) { grid-column:1/-1; }
+  }
+  @container band (max-width:640px) {
+    .spec-strip { grid-template-columns:1fr; }
+    .spec-cell { border-inline-start:0; }
+    .spec-cell:nth-child(n+2) { border-block-start:1px solid var(--border); }
+  }
   .marquee { overflow:hidden; white-space:nowrap; border-block:1px solid var(--border); background:var(--surface-1); }
   .marquee span { display:inline-block; padding:var(--size-3) 0; color:var(--brand); font-size:var(--font-size-0); font-weight:var(--font-weight-5); letter-spacing:.12em; animation:marquee 36s linear infinite; }
   @keyframes marquee { to { transform:translateX(-50%); } }
 
   /* ── scene framework: outlined index anchors ── */
   .scene { position:relative; padding:clamp(4rem,10vh,8rem) clamp(1.5rem,5vw,4.5rem); }
+  /* Container queries let the card grids answer to their own width (zoom,
+     narrow embeds) instead of the viewport. inline-size containment keeps
+     the block axis — and the view-timeline reveals — untouched. Both the
+     hero (spec strip) and the scenes share the band container name. */
+  .hero { container-type:inline-size; container-name:band; }
+  .scene { container-type:inline-size; container-name:band; }
   .scene-index { color:var(--brand); font-size:var(--font-size-00); font-weight:var(--font-weight-8); letter-spacing:.24em; text-transform:uppercase; }
   /* CJK variants stay subject-side (:lang) — @scope'd sheets cannot match the
      html[lang] ancestor, but language inherits across the scope boundary. */
@@ -121,6 +138,15 @@ export const pageHomeStyles = [compiledStyle(`
   .strategy .tag-default { display:inline-block; margin-inline-start:var(--size-2); padding:1px var(--size-2); border-radius:var(--badge-radius); background:var(--brand); color:var(--on-brand); font-size:var(--font-size-micro); font-weight:var(--font-weight-7); letter-spacing:.1em; vertical-align:middle; }
   .strategy p { margin-block-start:var(--size-2); color:var(--text-secondary); font-size:var(--font-size-00); line-height:1.6; }
   .strategy footer { margin-block-start:var(--size-3); color:var(--text-muted); font-size:var(--font-size-micro); }
+  @container band (max-width:1080px) {
+    .strategies { grid-template-columns:1fr 1fr; }
+    .strategy:nth-child(3) { border-inline-start:0; }
+  }
+  @container band (max-width:640px) {
+    .strategies { grid-template-columns:1fr; }
+    .strategy { border-inline-start:0; }
+    .strategy:nth-child(n+2) { border-block-start:1px solid var(--border); }
+  }
 
   /* ── §4 output: typographic rows ── */
   .output-rows { margin-block-start:clamp(2rem,5vh,3rem); border-block-start:1px solid var(--border); }
@@ -177,18 +203,21 @@ export const pageHomeStyles = [compiledStyle(`
 
   @media (max-width:900px) {
     .scene-split { grid-template-columns:1fr; }
-    .strategies { grid-template-columns:1fr 1fr; }
-    .strategy:nth-child(3) { border-inline-start:0; }
-    .spec-strip { grid-template-columns:1fr 1fr; }
-    .spec-cell:nth-child(odd) { border-inline-start:0; }
     .flood-panels { grid-template-columns:1fr; }
     .flood-arrow { transform:rotate(90deg); justify-self:center; }
+  }
+  /* Mid tiers: reference cards relax to two columns at laptop widths; output
+     rows stack before their three-column grid squeezes at tablet widths. */
+  @media (max-width:1200px) {
     .links { grid-template-columns:1fr 1fr; }
-    .links a:nth-child(2) { border-inline-end:0; }
+    .links a:nth-child(2n) { border-inline-end:0; }
+  }
+  @media (max-width:768px) {
+    .output-row { grid-template-columns:1fr; gap:var(--size-2); }
+    .output-row .arrow { display:none; }
   }
   @media (max-width:520px) {
     .eyebrow { letter-spacing:.16em; }
-    .output-row { grid-template-columns:1fr; gap:var(--size-2); }
     .links { grid-template-columns:1fr; }
     .links a { border-inline-end:0; border-block-end:1px solid var(--border); }
     .links a:last-child { border-block-end:0; }
