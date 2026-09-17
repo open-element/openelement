@@ -208,12 +208,15 @@
   --code-text: var(--gray-2);
   --border: var(--gray-3);
   --border-hover: var(--gray-4);
-  --error: #dc3545;
-  --error-subtle: rgba(220, 53, 69, 0.1);
-  --success: #16a34a;
-  --success-subtle: rgba(22, 163, 74, 0.1);
-  --warning: #d97706;
-  --warning-subtle: rgba(217, 119, 6, 0.1);
+  /* Status colors clear the 4.5:1 AA floor on --bg-base (measured):
+     success #237032 is 5.8:1, warning #9a6700 is 4.6:1 (GitHub's light
+     attention color), error #c92a2a is 5.2:1. */
+  --error: #c92a2a;
+  --error-subtle: rgba(201, 42, 42, 0.1);
+  --success: #237032;
+  --success-subtle: rgba(35, 112, 50, 0.1);
+  --warning: #9a6700;
+  --warning-subtle: rgba(154, 103, 0, 0.1);
   --info: #2563eb;
   --info-subtle: rgba(37, 99, 235, 0.1);
   --overlay: rgba(0, 0, 0, 0.4);

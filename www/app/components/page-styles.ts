@@ -375,8 +375,8 @@ export const pageStyles = `
   }
 
   :focus-visible {
-    outline: 2px solid var(--brand);
-    outline-offset: 2px;
+    outline: var(--focus-size) solid var(--focus-ring);
+    outline-offset: var(--focus-offset);
   }
 
   @media (prefers-reduced-motion: reduce) {

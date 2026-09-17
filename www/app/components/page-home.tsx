@@ -115,7 +115,6 @@ export default class PageHome extends OpenElement {
         <section class='hero'>
           <div class='hero-main'>
             <span class='hero-stamp'>EST. 2026 / SPEC-042</span>
-            <span class='scroll-cue' aria-hidden='true'>Scroll</span>
             <div class='hero-copy'>
               <p class='eyebrow'>OpenElement — Web Standards Lab</p>
               <h1>
@@ -134,6 +133,7 @@ export default class PageHome extends OpenElement {
                 <a class='action primary' href={this.startBuildingHref}>{this.startBuilding}</a>
                 <a class='action' href='#element'>{this.watchUnfold}</a>
               </div>
+              <span class='scroll-cue' aria-hidden='true'>Scroll</span>
             </div>
           </div>
           <div class='spec-strip'>

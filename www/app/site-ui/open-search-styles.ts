@@ -82,7 +82,6 @@ export const openSearchStyles = [compiledStyle(`
     background: transparent;
     color: var(--gray-10);
     font-size: var(--font-size-1);
-    outline: none;
     box-sizing: border-box;
     font-family: inherit;
   }
@@ -100,7 +99,7 @@ export const openSearchStyles = [compiledStyle(`
     font-size: var(--font-size-00);
     text-transform: uppercase;
     letter-spacing: var(--font-letterspacing-5);
-    color: var(--gray-6);
+    color: var(--text-secondary);
     margin-bottom: var(--size-1);
   }
   .item-title {
@@ -121,7 +120,7 @@ export const openSearchStyles = [compiledStyle(`
   .empty {
     padding: var(--size-9) var(--size-3);
     text-align: center;
-    color: var(--gray-5);
+    color: var(--text-muted);
     font-size: var(--font-size-0);
   }
 `)];

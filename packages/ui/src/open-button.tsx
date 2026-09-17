@@ -148,8 +148,8 @@ export class OpenButton extends OpenElement {
     }
 
     .btn:focus-visible {
-      outline: 2px solid var(--brand, var(--indigo-6));
-      outline-offset: 2px;
+      outline: var(--focus-size, 2px) solid var(--focus-ring, var(--brand, var(--indigo-6)));
+      outline-offset: var(--focus-offset, 2px);
     }
 
     :host(:state(disabled)) .btn {

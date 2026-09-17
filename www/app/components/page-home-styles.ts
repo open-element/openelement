@@ -11,7 +11,7 @@ export const pageHomeStyles = [compiledStyle(`
   .hero-main { position:relative; min-height:calc(100svh - var(--nav-height)); display:grid; grid-template-rows:auto minmax(0,1fr) auto; justify-items:center; text-align:center; background:var(--hero-ink); color:var(--hero-paper); }
   /* Scrim: the lede/actions band (73–88% of the hero) is where the mascot
      photograph runs brightest, so the lower third is held at 0.66–0.88 black. */
-  .hero-main::before { content:""; position:absolute; inset:0; z-index:1; background:linear-gradient(to bottom, rgba(0,0,0,.6), transparent 30%, transparent 46%, rgba(0,0,0,.66) 64%, rgba(0,0,0,.76) 78%, rgba(0,0,0,.88)), radial-gradient(115% 88% at 50% 44%, transparent 56%, rgba(0,0,0,.52)); pointer-events:none; }
+  .hero-main::before { content:""; position:absolute; inset:0; z-index:1; background:radial-gradient(60% 60% at 50% 42%, rgba(6,6,12,.55), transparent 70%), linear-gradient(to bottom, rgba(0,0,0,.6), transparent 30%, transparent 46%, rgba(0,0,0,.66) 64%, rgba(0,0,0,.76) 78%, rgba(0,0,0,.88)), radial-gradient(115% 88% at 50% 44%, transparent 56%, rgba(0,0,0,.52)); pointer-events:none; }
   /* Film grain over the whole hero — monochrome, ~4%, steps() so it crackles
      like film rather than sliding like noise. Overscanned so the jitter
      never reveals an edge. */
@@ -20,7 +20,7 @@ export const pageHomeStyles = [compiledStyle(`
   @media (prefers-reduced-motion: reduce) { .hero-main::after { animation:none; } }
   .eyebrow { display:flex; align-items:center; justify-content:center; gap:.75rem; color:var(--hero-gold-muted); font-family:var(--font-mono); font-size:var(--font-size-00); font-weight:var(--font-weight-8); letter-spacing:.29em; text-transform:uppercase; text-shadow:0 1px 18px rgba(0,0,0,.6); }
   .eyebrow::before { content:""; width:2rem; height:2px; background:var(--hero-gold-line); }
-  .hero-stamp { position:absolute; z-index:2; top:clamp(1.75rem,5vh,3rem); right:clamp(1.5rem,5vw,4.5rem); color:rgba(244,241,234,.35); font-size:var(--font-size-caption); letter-spacing:.08em; opacity:calc(1 - var(--hero-exit, 0) * 1.4); animation:hero-rise 1.1s .2s ease both; }
+  .hero-stamp { position:absolute; z-index:2; top:clamp(1.75rem,5vh,3rem); right:clamp(1.5rem,5vw,4.5rem); color:rgba(244,241,234,.62); font-size:var(--font-size-caption); letter-spacing:.08em; opacity:calc(1 - var(--hero-exit, 0) * 1.4); animation:hero-rise 1.1s .2s ease both; }
   h1 { margin:clamp(1rem,2.5vh,1.75rem) 0 0; font-weight:800; line-height:.92; letter-spacing:-.045em; text-shadow:0 2px 40px rgba(0,0,0,.65); }
   h1 .mono-line { display:block; font-family:var(--font-mono); font-size:clamp(2.6rem,6.4vw,5.6rem); color:var(--hero-paper); animation:line-mask 1.05s .45s cubic-bezier(.16,.84,.3,1) both; }
   h1 .serif-line { display:block; margin-block-start:-.04em; font-family:var(--font-serif); font-style:italic; font-weight:400; font-size:clamp(3.2rem,8.8vw,7.4rem); letter-spacing:-.02em; color:var(--hero-gold); animation:line-mask 1.05s .62s cubic-bezier(.16,.84,.3,1) both; }
@@ -32,8 +32,9 @@ export const pageHomeStyles = [compiledStyle(`
   .hero-foot .lede { animation:hero-rise 1s .95s ease both; }
   .hero-foot .actions { animation:hero-rise 1s 1.1s ease both; }
   @keyframes hero-rise { from { opacity:0; transform:translateY(14px); } }
-  /* Scroll cue — a hairline drip under the fold, almost subliminal. */
-  .scroll-cue { position:absolute; left:50%; bottom:clamp(.85rem,2.2vh,1.5rem); z-index:2; display:grid; justify-items:center; gap:.5rem; color:rgba(244,241,234,.42); font-family:var(--font-mono); font-size:var(--font-size-micro); letter-spacing:.34em; text-transform:uppercase; text-indent:.34em; animation:hero-rise 1.2s 1.6s ease both; }
+  /* Scroll cue — a hairline drip under the CTA row, almost subliminal. It
+     lives in the hero-foot flow so it can never collide with the buttons. */
+  .scroll-cue { display:grid; justify-items:center; gap:.5rem; margin-block-start:var(--size-2); color:rgba(244,241,234,.62); font-family:var(--font-mono); font-size:var(--font-size-micro); letter-spacing:.34em; text-transform:uppercase; text-indent:.34em; animation:hero-rise 1.2s 1.6s ease both; }
   .scroll-cue::after { content:""; width:1px; height:2.4rem; background:linear-gradient(rgba(227,207,159,.8), transparent); transform-origin:top; animation:cue-drip 2.2s ease-in-out infinite; }
   @keyframes cue-drip { 0% { transform:scaleY(0); opacity:1; } 48% { transform:scaleY(1); opacity:1; } 100% { transform:scaleY(1); opacity:0; } }
   @media (max-height:760px), (max-width:520px) { .scroll-cue { display:none; } }
