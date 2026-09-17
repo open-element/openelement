@@ -74,4 +74,19 @@ body {
 ::selection {
   background: var(--brand-subtle);
   color: var(--text-primary);
+}
+/* User-preference adaptations (document-level: custom properties inherit
+   into every shadow tree, so one rule covers components too). */
+@media (forced-colors: active) {
+  /* Links distinguished by color alone collapse into surrounding text when
+     the palette flattens: underline every link. !important outranks the
+     scoped prose rules that otherwise remove underlines. Borders keep their
+     width and map to system colors on their own; the outline focus ring
+     remaps. */
+  a { text-decoration: underline !important; }
+  :focus-visible { outline: 2px solid Highlight; }
+}
+@media (prefers-contrast: more) {
+  /* Collapse the muted step onto secondary ink (theme-aware both ways). */
+  :root { --text-muted: var(--text-secondary); }
 }`;
