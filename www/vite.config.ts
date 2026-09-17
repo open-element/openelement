@@ -212,8 +212,11 @@ const openElementPlugins = openElement({
       // boilerplate og:title/description would duplicate the page's own.
       '<meta property="og:site_name" content="OpenElement">',
       '<meta property="og:type" content="website">',
-      '<meta property="og:image" content="https://openelement.org/assets/og-image.svg">',
+      '<meta property="og:image" content="https://openelement.org/assets/og-image.jpg">',
+      '<meta property="og:image:width" content="1200">',
+      '<meta property="og:image:height" content="630">',
       '<meta name="twitter:card" content="summary_large_image">',
+      '<meta name="twitter:image" content="https://openelement.org/assets/og-image.jpg">',
       '<style>html{visibility:visible!important;}body{background:var(--bg-base);color:var(--text-primary);}</style>',
       fontPreloads,
       '<link rel="icon" type="image/svg+xml" href="/assets/open-favicon.svg" />',

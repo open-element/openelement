@@ -47,7 +47,7 @@ export default class OpenArticleView extends OpenElement {
     return (
       <div>
         <div class={this.notFoundClass} data-pagefind-ignore>
-          <h1>404</h1>
+          <p class='nf-code'>404</p>
           <p>{this.notFoundMessage}: {this.slug}</p>
         </div>
         <div class={this.articleClass} data-pagefind-body>

@@ -63,6 +63,10 @@ export function siteHead(input: SiteHeadInput): PageHead {
       { property: 'og:title', content: title },
       { property: 'og:description', content: input.description },
       { property: 'og:url', content: canonical },
+      {
+        property: 'og:image:alt',
+        content: locale === 'zh' ? 'openElement —— 组合而生的 Web。' : 'openElement — The Web, composed.',
+      },
     ],
   };
   // Blog dispatches are articles (D-9): derive og:type and the article
