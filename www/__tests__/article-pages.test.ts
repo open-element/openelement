@@ -45,7 +45,7 @@ const articleRoutes = [
   ['guide', 'styling', 'GuideStylingPage', 5],
   ['guide', 'testing', 'GuideTestingPage', 110],
   ['guide', 'tutorial', 'GuideTutorialPage', 2],
-  ['architecture', 'architecture', 'ArchitecturePage', 10],
+  ['architecture', 'architecture', 'ArchitecturePage', 10, 'index'],
   ['architecture', 'benchmark', 'Benchmark', 100],
   ['architecture', 'comparison', 'ComparisonPage', 20],
   ['architecture', 'design-system', 'DesignSystemPage', 15],
@@ -56,10 +56,10 @@ const articleRoutes = [
   ['architecture', 'standards-registry', 'StandardsRegistryPage', 80],
 ] as const;
 
-for (const [collection, route, className] of articleRoutes) {
+for (const [collection, route, className, , routeFile] of articleRoutes) {
   Deno.test(`${collection}/${route} is a thin article shell`, async () => {
     const routeSource = await Deno.readTextFile(
-      new URL(`../app/routes/${collection}/${route}.tsx`, import.meta.url),
+      new URL(`../app/routes/${collection}/${routeFile ?? route}.tsx`, import.meta.url),
     );
     const adapterSource = await Deno.readTextFile(
       new URL(`../app/components/article-routes/${collection}-${route}.tsx`, import.meta.url),

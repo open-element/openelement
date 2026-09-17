@@ -22,7 +22,7 @@ The version the install command resolves is registered in [`docs/release/release
 
 ## Explore
 
-Read the [docs](/docs), [API reference](/apilist), and [roadmap](/roadmap) as the current product map.
+Read the [docs](/docs), [API reference](/reference), and [roadmap](/roadmap) as the current product map.
 
 ## Build
 

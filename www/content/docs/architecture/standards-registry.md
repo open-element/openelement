@@ -21,4 +21,4 @@ Standard Custom Elements and Declarative Shadow DOM define the durable component
 
 - [Package Compatibility](/architecture/package-compatibility) — how third-party elements are admitted.
 - [DSD Rendering](/architecture/dsd) — the rendering contract these standards produce.
-- [Current Architecture](/architecture/architecture) — where each package sits in the graph.
+- [Current Architecture](/architecture) — where each package sits in the graph.

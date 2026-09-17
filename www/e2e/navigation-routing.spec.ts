@@ -18,7 +18,7 @@ test.describe('Direct URL Access', () => {
   const routes = [
     { path: '/', titleContains: 'openElement' },
     { path: '/guide/getting-started', titleContains: 'openElement' },
-    { path: '/architecture/architecture', titleContains: 'openElement' },
+    { path: '/architecture', titleContains: 'openElement' },
     { path: '/guide/islands-and-ssr', titleContains: 'openElement' },
     { path: '/architecture/dsd', titleContains: 'openElement' },
     { path: '/guide/routing-and-data', titleContains: 'openElement' },
@@ -26,7 +26,7 @@ test.describe('Direct URL Access', () => {
     { path: '/roadmap', titleContains: 'openElement' },
     { path: '/docs', titleContains: 'openElement' },
     { path: '/contributing', titleContains: 'openElement' },
-    { path: '/apilist', titleContains: 'openElement' },
+    { path: '/reference', titleContains: 'openElement' },
     { path: '/blog', titleContains: 'openElement' },
   ];
 

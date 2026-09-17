@@ -219,21 +219,21 @@ const references = {
     [
       '02',
       'API reference',
-      '/apilist',
+      '/reference',
       'Inspect the four-package surface and optional primitives.',
     ],
     [
       '03',
       'Architecture',
-      '/architecture/architecture',
+      '/architecture',
       'Follow the element, app and build contracts.',
     ],
     ['04', 'Roadmap', '/roadmap', 'See current truth and the next product boundary.'],
   ],
   zh: [
     ['01', '快速开始', '/guide/getting-started', '从受支持的公开接口创建一个真实应用。'],
-    ['02', 'API 参考', '/apilist', '检视四包表面与可选原语。'],
-    ['03', '架构', '/architecture/architecture', '沿 element、app 与 build 三层契约走一遍。'],
+    ['02', 'API 参考', '/reference', '检视四包表面与可选原语。'],
+    ['03', '架构', '/architecture', '沿 element、app 与 build 三层契约走一遍。'],
     ['04', '路线图', '/roadmap', '查看当前事实与下一个产品边界。'],
   ],
 } as const;

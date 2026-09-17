@@ -75,7 +75,7 @@ interface ApiMetadata {
   lede: string;
 }
 
-// definePage routes are registered by path-derived tag (apilist.tsx ->
+// definePage routes are registered by path-derived tag (reference.tsx ->
 // `apilist-page`); keeping the compiled program tag aligned lets renderDsd
 // fail closed only for genuine mismatches.
 @element('apilist-page')

@@ -73,7 +73,7 @@ Deno.test('open-layout navigation labels the nameless generated group as Project
   assertEquals(filterNavSections(sections, '/roadmap').map((s) => s.section), ['Project']);
   // The blog is a project page, not a stream of its own.
   assertEquals(filterNavSections(sections, '/blog').map((s) => s.section), ['Project']);
-  assertEquals(filterNavSections(sections, '/apilist').map((s) => s.section), ['Reference']);
+  assertEquals(filterNavSections(sections, '/reference').map((s) => s.section), ['Reference']);
 });
 
 const GENERATED_LIKE_SECTIONS = [
@@ -87,7 +87,7 @@ const GENERATED_LIKE_SECTIONS = [
   },
   { section: 'Core', items: [{ path: '/guide/deployment', label: 'Deployment' }] },
   { section: 'Principles', items: [{ path: '/architecture/dsd', label: 'DSD Rendering' }] },
-  { section: 'Reference', items: [{ path: '/apilist', label: 'API Reference' }] },
+  { section: 'Reference', items: [{ path: '/reference', label: 'API Reference' }] },
 ];
 
 Deno.test('buildSidebarRows flattens the filtered section tree into heading and link rows', () => {
@@ -185,7 +185,7 @@ Deno.test('footerColumn restores the four-column link structure with localized t
     [
       '/guide/core-concepts',
       '/architecture/design-system',
-      '/architecture/architecture',
+      '/architecture',
       '/architecture/standards-registry',
     ],
   );

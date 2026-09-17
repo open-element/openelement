@@ -24,5 +24,5 @@ metadata; it is not a blanket certification of every third-party component.
 ## See also
 
 - [WC Standards Contract](/architecture/standards-registry) — the standards surface an admitted element must meet.
-- [Current Architecture](/architecture/architecture) — the package graph this contract belongs to.
+- [Current Architecture](/architecture) — the package graph this contract belongs to.
 - [openElement vs Alternatives](/architecture/comparison) — how the admitted set compares.

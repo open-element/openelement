@@ -36,6 +36,17 @@ const collectionData = {
   architecture: { pages: architecturePages, getPage: getArchitecturePage },
 };
 
+/**
+ * The route path serving an article: the collection overview article lives at
+ * the collection root (`/architecture`, route index.tsx), every other article
+ * at `basePath/slug`. One home for the mapping so head canonicals and the
+ * pager can never point at a renamed-away URL.
+ */
+export function articleRoutePath(collection: ArticleCollection, slug: string): string {
+  const basePath = collectionShell[collection].basePath;
+  return slug === collection ? basePath : `${basePath}/${slug}`;
+}
+
 export function emptyArticlePageModel(): ArticlePageModel {
   return {
     notFoundClass: 'container',
@@ -61,11 +72,10 @@ export function articlePageHead(
   localeInput: string | undefined,
 ): PageHead {
   const locale = contentLocale(localeInput ?? 'en');
-  const shell = collectionShell[collection];
   const data = collectionData[collection];
   const page = data.getPage(slug, locale) ?? data.getPage(slug, 'en');
   return siteHead({
-    route: `${shell.basePath}/${slug}`,
+    route: articleRoutePath(collection, slug),
     locale,
     title: page?.frontmatter.title ?? slug,
     description: page?.frontmatter.lede ?? '',
@@ -109,7 +119,7 @@ export function projectArticlePage(
   const navigationItem = (candidate: typeof previous) =>
     candidate
       ? {
-        href: localizePath(`${shell.basePath}/${candidate.slug}`, locale),
+        href: localizePath(articleRoutePath(collection, candidate.slug), locale),
         label: localizedTitle(candidate.slug),
       }
       : undefined;

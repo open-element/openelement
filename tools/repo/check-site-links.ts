@@ -10,9 +10,9 @@
  * Pagefind skip (#1307 adjudication): the walk skips pagefind/ because those
  * files are generated search-index artifacts (hashed fragment/index chunks),
  * not served documents — no page links into them and they carry no authored
- * anchors. The apilist search-record anchors that Pagefind surfaces are
+ * anchors. The reference search-record anchors that Pagefind surfaces are
  * covered directly instead: every generated searchRecord anchor must exist as
- * an id in the built /apilist documents (both locales) below.
+ * an id in the built /reference documents (both locales) below.
  */
 import { walk } from '@std/fs/walk';
 import { join } from '@std/path';
@@ -103,11 +103,11 @@ export async function checkBuiltLinks(dist = SITE_DIST): Promise<LinkFailure[]> 
   failures.push(...findCrossPageSeoFailures(pages));
 
   // Generated reference anchors (#1307): every generated searchRecord anchor
-  // must exist in the built apilist documents, in every built locale — the
-  // search/surface promise is that /apilist#<anchor> resolves.
-  for (const page of ['apilist/index.html', 'zh/apilist/index.html']) {
+  // must exist in the built reference documents, in every built locale — the
+  // search/surface promise is that /reference#<anchor> resolves.
+  for (const page of ['reference/index.html', 'zh/reference/index.html']) {
     if (!exists(page)) {
-      failures.push({ file: page, message: 'built apilist page is missing' });
+      failures.push({ file: page, message: 'built reference page is missing' });
       continue;
     }
     const html = await readHtml(page);

@@ -79,6 +79,6 @@ OpenElement × Supabase × Cloudflare 是经过验证的全栈交付路径，所
 
 ## 另见
 
-- [当前架构](/zh/architecture/architecture)——这份对比所引用的包依赖图。
+- [当前架构](/zh/architecture)——这份对比所引用的包依赖图。
 - [Package 兼容性](/zh/architecture/package-compatibility)——当前契约准入什么。
 - [核心概念](/zh/guide/core-concepts)——这一立场背后的创作模型。

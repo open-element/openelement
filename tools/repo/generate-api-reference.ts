@@ -263,7 +263,7 @@ function searchRecords(build: ApiReferenceBuild): Record<string, string>[] {
     for (const subpath of pkg.subpaths) {
       for (const exported of subpath.exports) {
         records.push({
-          route: '/apilist',
+          route: '/reference',
           anchor: exported.anchor,
           title: `${exported.name} (${pkg.name}/${subpath.label})`,
           kind: 'api',
@@ -273,7 +273,7 @@ function searchRecords(build: ApiReferenceBuild): Record<string, string>[] {
   }
   for (const element of build.elements) {
     records.push({
-      route: '/apilist',
+      route: '/reference',
       anchor: element.anchor,
       title: `<${element.tag}> (${element.className})`,
       kind: 'custom-element',

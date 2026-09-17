@@ -19,7 +19,7 @@ const LOCALE_LABELS: Record<string, string> = { en: '中文', zh: 'English' };
 export const SECTION_MAP: Readonly<Record<string, readonly string[]>> = {
   '/guide': ['Guide', 'Core'],
   '/architecture': ['Principles', 'Reference'],
-  '/apilist': ['Reference'],
+  '/reference': ['Reference'],
   '/blog': ['Project'],
   '/roadmap': ['Project'],
   '/changelog': ['Project'],
@@ -294,7 +294,7 @@ const FOOTER_COLUMNS: Record<FooterColumnId, FooterColumnSource> = {
     links: [
       { path: '/guide/core-concepts', en: 'Elements', zh: '元素' },
       { path: '/architecture/design-system', en: 'UI', zh: '设计体系' },
-      { path: '/architecture/architecture', en: 'Framework', zh: '框架' },
+      { path: '/architecture', en: 'Framework', zh: '框架' },
       { path: '/architecture/standards-registry', en: 'Protocols', zh: '协议' },
     ],
   },
@@ -303,7 +303,7 @@ const FOOTER_COLUMNS: Record<FooterColumnId, FooterColumnSource> = {
     links: [
       { path: '/guide/getting-started', en: 'Guide', zh: '指南' },
       { path: '/guide/api', en: 'API', zh: 'API' },
-      { path: '/architecture/architecture', en: 'Architecture', zh: '架构' },
+      { path: '/architecture', en: 'Architecture', zh: '架构' },
       { path: '/blog', en: 'Blog', zh: '博客' },
     ],
   },

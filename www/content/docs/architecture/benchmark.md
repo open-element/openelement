@@ -76,6 +76,6 @@ A project with no islands and no enhanced forms emits no client entry at all: DS
 
 ## See also
 
-- [Current Architecture](/architecture/architecture) — the layers these numbers come from.
+- [Current Architecture](/architecture) — the layers these numbers come from.
 - [Island Deep Dive](/architecture/islands-deep) — the four component layers and their strategies.
 - [Design System](/architecture/design-system) — how the site's own styles and tokens are composed.

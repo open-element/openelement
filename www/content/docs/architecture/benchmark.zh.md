@@ -76,6 +76,6 @@ python3 -c "import json,glob,collections; print(collections.Counter(t for f in g
 
 ## 另见
 
-- [当前架构](/zh/architecture/architecture)——这些数字所对应的分层。
+- [当前架构](/zh/architecture)——这些数字所对应的分层。
 - [Island 深入解析](/zh/architecture/islands-deep)——四层组件模型及其策略。
 - [设计体系](/zh/architecture/design-system)——站点自身样式与 token 的组合方式。

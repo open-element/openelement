@@ -23,7 +23,7 @@ const guideRoutes = [
 ];
 
 const architectureRoutes = [
-  '/architecture/architecture',
+  '/architecture',
   '/architecture/dsd',
   '/architecture/comparison',
   '/architecture/islands',
@@ -111,9 +111,9 @@ test.describe('Unified page structure', () => {
     // now lead with the compact reading-shell/article header (#1087 cleanup).
     for (
       const route of [
-        '/apilist',
+        '/reference',
         '/roadmap',
-        '/architecture/architecture',
+        '/architecture',
         '/architecture/design-system',
       ]
     ) {
@@ -125,7 +125,7 @@ test.describe('Unified page structure', () => {
   test('data-driven entry pages compose their body with shared section frames', async ({ page }) => {
     for (
       const route of [
-        '/apilist',
+        '/reference',
         '/roadmap',
       ]
     ) {
@@ -135,7 +135,7 @@ test.describe('Unified page structure', () => {
   });
 
   test('compiled light section frames project named and default content in place', async ({ page }) => {
-    await page.goto('/apilist');
+    await page.goto('/reference');
     const frames = page.locator('apilist-page open-section-frame[data-oe-light]');
     await expect(frames).toHaveCount(4);
     await expect(frames.first().locator('.frame .title')).toContainText(
@@ -144,8 +144,8 @@ test.describe('Unified page structure', () => {
     await expect(frames.nth(1).locator('.frame .body .registry')).toBeVisible();
   });
 
-  test('apilist renders the generated export and element reference with stable anchors (#1307)', async ({ page }) => {
-    await page.goto('/apilist');
+  test('reference renders the generated export and element reference with stable anchors (#1307)', async ({ page }) => {
+    await page.goto('/reference');
     // Every generated searchRecord anchor resolves to a rendered entry.
     // (adapter-vite anchors retired with the package; use a current export.)
     const exportRow = page.locator('#api-element-root-Action');
@@ -157,7 +157,7 @@ test.describe('Unified page structure', () => {
     expect(await page.locator('.ref-row').count()).toBeGreaterThan(150);
     expect(await page.locator('.ce-row').count()).toBe(10);
     // zh renders the same generated anchors with zh chrome.
-    await page.goto('/zh/apilist');
+    await page.goto('/zh/reference');
     await expect(page.locator('#ce-open-badge')).toBeVisible();
     await expect(page.locator('.ref-row').first()).toBeVisible();
   });

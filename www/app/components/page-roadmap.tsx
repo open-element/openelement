@@ -282,7 +282,7 @@ export default class RoadmapPage extends OpenElement {
           </section>
 
           <nav class='nav-row' slot='footer'>
-            <open-button href='/architecture/architecture'>{this.architecture}</open-button>
+            <open-button href='/architecture'>{this.architecture}</open-button>
             <open-button href='/changelog'>{this.changelog}</open-button>
             <open-button href='/guide/deployment'>{this.deployment}</open-button>
           </nav>

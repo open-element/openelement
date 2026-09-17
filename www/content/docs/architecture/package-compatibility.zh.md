@@ -20,5 +20,5 @@ section: 'Reference'
 ## 另见
 
 - [WC 标准契约](/zh/architecture/standards-registry)——被准入元素需要满足的标准表面。
-- [当前架构](/zh/architecture/architecture)——该契约所属的包依赖图。
+- [当前架构](/zh/architecture)——该契约所属的包依赖图。
 - [openElement 对比主流框架](/zh/architecture/comparison)——准入集合的横向对比。

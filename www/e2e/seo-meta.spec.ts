@@ -64,25 +64,25 @@ test.describe('SEO Meta Tags', () => {
   // #1307: per-route metadata replaces the boilerplate era (identical title,
   // description and og:title on every page).
   test('per-route title/description replace the boilerplate (#1307)', async ({ page }) => {
-    await page.goto('/apilist');
+    await page.goto('/reference');
     expect(await page.title()).toBe('API Reference — openElement');
-    const apilistDescription = await page.locator('meta[name="description"]').getAttribute(
+    const referenceDescription = await page.locator('meta[name="description"]').getAttribute(
       'content',
     );
-    expect(apilistDescription).toContain('supported openElement API surface');
+    expect(referenceDescription).toContain('supported openElement API surface');
     const canonical = await page.locator('link[rel="canonical"]').getAttribute('href');
-    expect(canonical).toBe('https://openelement.org/apilist');
+    expect(canonical).toBe('https://openelement.org/reference');
     const hreflangZh = await page.locator('link[rel="alternate"][hreflang="zh"]').getAttribute(
       'href',
     );
-    expect(hreflangZh).toBe('https://openelement.org/zh/apilist');
+    expect(hreflangZh).toBe('https://openelement.org/zh/reference');
 
-    await page.goto('/zh/apilist');
+    await page.goto('/zh/reference');
     expect(await page.title()).toBe('API 参考 — openElement');
     const zhDescription = await page.locator('meta[name="description"]').getAttribute('content');
     expect(zhDescription).toContain('openElement 受支持的 API 面');
     const zhCanonical = await page.locator('link[rel="canonical"]').getAttribute('href');
-    expect(zhCanonical).toBe('https://openelement.org/zh/apilist');
+    expect(zhCanonical).toBe('https://openelement.org/zh/reference');
   });
 });
 

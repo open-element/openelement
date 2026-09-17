@@ -125,7 +125,7 @@ function projectPackages(): Array<{
     const authored = authoredCopy[pkg.id];
     if (!authored) {
       throw new Error(
-        `apilist: generated package '${pkg.id}' has no authored bilingual copy in www/app/routes/apilist.tsx`,
+        `reference: generated package '${pkg.id}' has no authored bilingual copy in www/app/routes/reference.tsx`,
       );
     }
     return {
@@ -140,7 +140,7 @@ function projectPackages(): Array<{
   for (const id of Object.keys(authoredCopy)) {
     if (!generatedIds.has(id)) {
       throw new Error(
-        `apilist: authored copy for '${id}' has no generated package — remove the stale entry`,
+        `reference: authored copy for '${id}' has no generated package — remove the stale entry`,
       );
     }
   }
@@ -317,7 +317,7 @@ export default definePage(ApiCorePage, {
     const resolved = contentLocale(locale ?? 'en');
     const copy = content[resolved];
     return siteHead({
-      route: '/apilist',
+      route: '/reference',
       locale: resolved,
       title: copy.headTitle,
       description: copy.headDescription,

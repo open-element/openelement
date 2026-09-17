@@ -22,7 +22,7 @@ deno task dev
 
 ## 探索
 
-阅读 [文档](/zh/docs)、[API 参考](/zh/apilist) 与 [路线图](/zh/roadmap)，了解当前产品全貌。
+阅读 [文档](/zh/docs)、[API 参考](/zh/reference) 与 [路线图](/zh/roadmap)，了解当前产品全貌。
 
 ## 构建
 

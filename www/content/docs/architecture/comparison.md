@@ -81,6 +81,6 @@ Reviewed 2026-08-16 against primary project documentation. This is a decision gu
 
 ## See also
 
-- [Current Architecture](/architecture/architecture) — the package graph this comparison refers to.
+- [Current Architecture](/architecture) — the package graph this comparison refers to.
 - [Package Compatibility](/architecture/package-compatibility) — what the current contract admits.
 - [Core Concepts](/guide/core-concepts) — the authoring model behind the position.

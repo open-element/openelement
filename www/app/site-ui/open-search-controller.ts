@@ -72,7 +72,7 @@ const ZH_SECTIONS: Record<string, string> = {
   architecture: '架构',
   blog: '博客',
   docs: '文档',
-  apilist: 'API 参考',
+  reference: 'API 参考',
   roadmap: '路线图',
   changelog: '更新日志',
 };
