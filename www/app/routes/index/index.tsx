@@ -4,6 +4,12 @@ import { contentLocale } from '@openelement/site-ui/locale.ts';
 import { localizePath } from '@openelement/site-ui/link.ts';
 import PageHome from '../../components/page-home.tsx';
 import { homeStrings } from '../../site-ui/chrome-strings.ts';
+import {
+  diagramDsd,
+  diagramElement,
+  diagramIslands,
+  diagramOutput,
+} from '../../site-ui/diagrams.ts';
 import { alphaLineNote, COMMON_PUBLISHED_NOTE, REGISTRY_NOTE } from '../../data/version.ts';
 
 const content = {
@@ -266,6 +272,12 @@ export default definePage(PageHome, {
       docsHref: localizePath('/docs', resolved),
       strategies: [...strategies[resolved]],
       outputs: [...outputs[resolved]],
+      diagrams: {
+        element: diagramElement,
+        dsd: diagramDsd,
+        islands: diagramIslands,
+        output: diagramOutput,
+      },
       references: references[resolved].map(([index, title, href, copy]) => ({
         index,
         title,

@@ -10,6 +10,8 @@ order: 10
 
 依赖方向——使用方指向其依赖。
 
+<figure class="diagram" aria-hidden="true"><svg viewBox="0 0 144 88" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="22" cy="20" r="9"/><circle cx="122" cy="20" r="9"/><circle cx="72" cy="74" r="9"/><path d="M31 26l29 9"/><path d="M113 26l-29 9"/><path d="M72 52v13"/><g style="color:var(--brand)"><circle cx="72" cy="40" r="12"/><circle cx="72" cy="40" r="3.5" fill="currentColor" stroke="none"/></g></svg></figure>
+
 | 包                     | 角色                | 依赖                        |
 | ---------------------- | ------------------- | --------------------------- |
 | `@openelement/element` | 运行时 · 零框架依赖 | —                           |

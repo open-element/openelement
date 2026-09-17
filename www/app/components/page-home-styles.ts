@@ -77,6 +77,10 @@ export const pageHomeStyles = [compiledStyle(`
   .scene h2 .accent { display:block; font-family:var(--font-serif); font-style:italic; font-weight:400; font-size:calc(1em * 1.15); color:var(--violet-8); }
   .scene-copy { max-width:34rem; color:var(--text-secondary); line-height:1.75; }
   .scene-copy p + p { margin-block-start:var(--size-3); }
+  /* Line-art scene figures: static by construction (never join the
+     scroll-timeline reveal list), ink from currentColor, one brand accent. */
+  .scene-figure { margin:var(--size-5) 0 var(--size-4); color:var(--text-muted); }
+  .scene-figure svg { display:block; height:88px; width:auto; }
   .scene-outlined { position:absolute; top:clamp(1rem,4vh,3rem); left:clamp(-.5rem,-.4vw,0rem); z-index:-1; font-family:var(--font-mono); font-size:clamp(9rem,18vw,16rem); font-weight:800; line-height:1; color:transparent; -webkit-text-stroke:1.5px color-mix(in srgb,var(--violet-5) 55%,transparent); user-select:none; pointer-events:none; }
   .scene-split { display:grid; grid-template-columns:minmax(0,.9fr) minmax(320px,1.1fr); gap:clamp(2rem,6vw,6rem); align-items:center; }
   .badges { display:flex; gap:var(--size-2); margin-block-start:var(--size-5); }

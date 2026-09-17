@@ -1,5 +1,5 @@
 /** @jsxImportSource @openelement/element */
-import { element, OpenElement, property } from '@openelement/element';
+import { computed, element, OpenElement, property, trustedHtml } from '@openelement/element';
 import '@openelement/ui/open-code-block';
 import '../islands/open-cinematic-scroll.tsx';
 import '../islands/open-dragon-live-gaze.tsx';
@@ -26,6 +26,12 @@ interface ReferenceItem {
   title: string;
   href: string;
   copy: string;
+}
+interface DiagramSet {
+  element: string;
+  dsd: string;
+  islands: string;
+  output: string;
 }
 
 @element('index-index')
@@ -136,6 +142,16 @@ export default class PageHome extends OpenElement {
   outputs: OutputItem[] = [];
   @property({ reflect: false, attribute: false })
   references: ReferenceItem[] = [];
+  @property({ reflect: false, attribute: false })
+  diagrams: DiagramSet = { element: '', dsd: '', islands: '', output: '' };
+  @property({ type: Object, reflect: false, attribute: false })
+  diagramElement = computed(() => trustedHtml(this.diagrams.element));
+  @property({ type: Object, reflect: false, attribute: false })
+  diagramDsd = computed(() => trustedHtml(this.diagrams.dsd));
+  @property({ type: Object, reflect: false, attribute: false })
+  diagramIslands = computed(() => trustedHtml(this.diagrams.islands));
+  @property({ type: Object, reflect: false, attribute: false })
+  diagramOutput = computed(() => trustedHtml(this.diagrams.output));
 
   render() {
     return (
@@ -197,6 +213,9 @@ export default class PageHome extends OpenElement {
           <span class='scene-outlined' aria-hidden='true'>01</span>
           <div class='scene-copy'>
             <p class='scene-index'>{this.sceneElementIndex}</p>
+            <figure class='scene-figure' aria-hidden='true'>
+              <div innerHTML={this.diagramElement} trustedHtml />
+            </figure>
             <h2>
               {this.sceneElementLead}
               <span class='accent'>{this.sceneElementAccent}</span>
@@ -233,6 +252,9 @@ export class OpenCounter extends OpenElement {
 
         <section class='scene flood'>
           <p class='scene-index'>{this.sceneDsdIndex}</p>
+          <figure class='scene-figure' aria-hidden='true'>
+            <div innerHTML={this.diagramDsd} trustedHtml />
+          </figure>
           <h2>
             {this.sceneDsdLead}
             <span class='accent'>{this.sceneDsdAccent}</span>
@@ -266,6 +288,9 @@ export class OpenCounter extends OpenElement {
 
         <section class='scene'>
           <p class='scene-index'>{this.sceneIslandsIndex}</p>
+          <figure class='scene-figure' aria-hidden='true'>
+            <div innerHTML={this.diagramIslands} trustedHtml />
+          </figure>
           <h2>
             {this.sceneIslandsLead}
             <span class='accent'>{this.sceneIslandsAccent}</span>
@@ -292,6 +317,9 @@ export class OpenCounter extends OpenElement {
 
         <section class='scene'>
           <p class='scene-index'>{this.sceneOutputIndex}</p>
+          <figure class='scene-figure' aria-hidden='true'>
+            <div innerHTML={this.diagramOutput} trustedHtml />
+          </figure>
           <h2>
             {this.sceneOutputLead}
             <span class='accent'>{this.sceneOutputAccent}</span>

@@ -66,6 +66,10 @@ export function articleContentStyles(scope: string): string {
     ${scope} h2, ${scope} h3 { scroll-margin-top: calc(var(--nav-height) + var(--size-4)); }
     ${scope} h2 { margin-top: var(--size-10); color: var(--text-primary); font-family: var(--font-sans); font-size: var(--font-size-4); font-weight: var(--font-weight-8); letter-spacing: -0.02em; text-wrap: balance; }
     ${scope} h3 { margin-top: var(--size-8); color: var(--text-primary); font-family: var(--font-sans); font-size: var(--font-size-2); font-weight: var(--font-weight-8); text-wrap: balance; }
+    /* Line-art diagrams (locale-free, static): ink from currentColor, one
+       brand accent carried by the markup itself. */
+    ${scope} figure.diagram { margin: var(--size-6) 0; color: var(--text-muted); }
+    ${scope} figure.diagram svg { display: block; height: 120px; width: auto; }
     ${scope} .heading-anchor { margin-inline-start: var(--size-2); color: var(--text-muted); font-weight: var(--font-weight-4); text-decoration: none; opacity: 0; }
     ${scope} h2:hover .heading-anchor, ${scope} h3:hover .heading-anchor, ${scope} .heading-anchor:focus-visible { opacity: 1; color: var(--brand); }
     ${scope} p { margin: var(--size-4) 0; }
