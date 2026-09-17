@@ -1,4 +1,4 @@
-import { assert, assertEquals, assertFalse } from '@std/assert';
+import { assert, assertEquals, assertFalse, assertStringIncludes } from '@std/assert';
 import { readingChromeStrings } from '../app/site-ui/chrome-strings.ts';
 import {
   buildSidebarRows,
@@ -13,6 +13,7 @@ import {
   localeSwitchScopeNote,
   localizeLayoutPath,
   mobileSectionRoot,
+  REPOSITORY_URL,
 } from '../app/site-ui/open-layout-navigation.ts';
 
 Deno.test('open-layout navigation rejects executable and protocol-relative URLs', () => {
@@ -222,6 +223,15 @@ Deno.test('layoutChromeStrings carries the bilingual shell chrome copy', () => {
   assertEquals(layoutChromeStrings('zh').primaryNavLabel, '主导航');
   assertEquals(layoutChromeStrings('en').mobileNavLabel, 'Mobile navigation');
   assertEquals(layoutChromeStrings('zh').mobileNavLabel, '移动端导航');
+  // Repository link: labeled because the control is icon-only.
+  assertStringIncludes(layoutChromeStrings('en').repositoryLabel, 'GitHub repository');
+  assertStringIncludes(layoutChromeStrings('zh').repositoryLabel, 'GitHub 仓库');
+});
+
+Deno.test('the header repository link targets the public repository', () => {
+  assertEquals(REPOSITORY_URL, 'https://github.com/open-element/openelement');
+  assert(isSafeLayoutUrl(REPOSITORY_URL));
+  assert(isExternalLayoutUrl(REPOSITORY_URL));
 });
 
 Deno.test('readingChromeStrings carries the bilingual reading chrome copy', () => {

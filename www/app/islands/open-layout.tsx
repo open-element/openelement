@@ -121,6 +121,34 @@ export default class OpenLayout extends OpenElement {
     outline-offset: var(--focus-offset);
   }
 
+  /* Repository link: same 36px round target as the search trigger beside it. */
+  .repository-link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: var(--size-9);
+    height: var(--size-9);
+    padding: 0;
+    border: 0;
+    border-radius: var(--radius-round);
+    background: transparent;
+    color: var(--text-primary);
+    transition: all var(--ease-2) var(--duration-2);
+  }
+  .repository-link:hover {
+    color: var(--brand);
+    background: color-mix(in srgb, var(--brand-pale) 34%, transparent);
+  }
+  .repository-link:focus-visible {
+    outline: var(--focus-size) solid var(--focus-ring);
+    outline-offset: var(--focus-offset);
+  }
+  .repository-link svg {
+    width: var(--size-5);
+    height: var(--size-5);
+    fill: currentColor;
+  }
+
   /* Header */
   .app-header {
     position: sticky;
@@ -558,6 +586,16 @@ export default class OpenLayout extends OpenElement {
   @property({ reflect: false, attribute: false })
   mobileNavLabel = computed(() => layoutChromeStrings(this.locale).mobileNavLabel);
 
+  // Repository link in the header cluster: constant target, bilingual label.
+  // Plain literal default — the compiler rejects module-scope identifiers in
+  // property defaults; www/__tests__/site-ui.test.ts pins it to REPOSITORY_URL
+  // so the header and the footer link cannot drift apart.
+  @property({ reflect: false, attribute: false })
+  repositoryHref = 'https://github.com/open-element/openelement';
+
+  @property({ reflect: false, attribute: false })
+  repositoryLabel = computed(() => layoutChromeStrings(this.locale).repositoryLabel);
+
   // Locale switcher: localeSwitchPath degrades route patterns (/:slug) to
   // their static ancestor, so dynamic routes never emit a literal param href.
   @property({ reflect: false, attribute: false })
@@ -642,6 +680,21 @@ export default class OpenLayout extends OpenElement {
               </a>
               <open-search></open-search>
               <open-theme-toggle></open-theme-toggle>
+              <a
+                class='repository-link'
+                href={this.repositoryHref}
+                target='_blank'
+                rel='noopener noreferrer'
+                aria-label={this.repositoryLabel}
+              >
+                <svg
+                  viewBox='0 0 16 16'
+                  aria-hidden='true'
+                  focusable='false'
+                >
+                  <path d='M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z' />
+                </svg>
+              </a>
               <details class='mobile-menu'>
                 <summary class='mobile-menu-btn'>
                   <span class='mobile-menu-label'>{this.menuOpen}</span>

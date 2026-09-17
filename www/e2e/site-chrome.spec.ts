@@ -213,3 +213,45 @@ test.describe('Site chrome: skip link and language switcher', () => {
     await expect(banner.locator('a[href="/zh/guide/getting-started"]')).toHaveCount(1);
   });
 });
+
+test.describe('Site chrome: header repository link', () => {
+  const REPOSITORY = 'https://github.com/open-element/openelement';
+
+  test('the header exposes one labeled repository link beside the theme toggle', async ({ page }) => {
+    await page.setViewportSize(DESKTOP);
+    await page.goto('/guide/getting-started');
+    await page.waitForLoadState('networkidle');
+
+    const banner = page.getByRole('banner');
+    const link = banner.getByRole('link', { name: 'GitHub repository' });
+    await expect(link).toBeVisible();
+    await expect(link).toHaveAttribute('href', REPOSITORY);
+    // External target: new tab plus the rel that strips the opener handle.
+    await expect(link).toHaveAttribute('target', '_blank');
+    await expect(link).toHaveAttribute('rel', /noopener/);
+    // Icon-only control: the accessible name must come from aria-label, and
+    // the mark itself must stay out of the accessibility tree.
+    await expect(link.locator('svg[aria-hidden="true"]')).toHaveCount(1);
+    // The header carries exactly one repository link (the footer has its own).
+    await expect(banner.locator(`a[href="${REPOSITORY}"]`)).toHaveCount(1);
+  });
+
+  test('zh pages localize the repository link label', async ({ page }) => {
+    await page.setViewportSize(DESKTOP);
+    await page.goto('/zh/guide/getting-started');
+    await page.waitForLoadState('networkidle');
+
+    const banner = page.getByRole('banner');
+    await expect(banner.getByRole('link', { name: 'GitHub 仓库（在新标签页打开）' })).toBeVisible();
+  });
+
+  test('mobile viewports keep the repository link in the header cluster', async ({ page }) => {
+    await page.setViewportSize(MOBILE);
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+
+    await expect(
+      page.getByRole('banner').getByRole('link', { name: 'GitHub repository' }),
+    ).toBeVisible();
+  });
+});

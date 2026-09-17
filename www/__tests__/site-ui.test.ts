@@ -1,5 +1,6 @@
 import { assertEquals, assertStringIncludes } from '@std/assert';
 import { compileElementProgram } from '@openelement/element/compiler';
+import { REPOSITORY_URL } from '../app/site-ui/open-layout-navigation.ts';
 
 const siteModules = [
   ['open-standards-visual', '../app/site-ui/open-standards-visual.tsx'],
@@ -53,6 +54,8 @@ Deno.test('open-layout is an explicitly hydrated compiled app-shell island', asy
       'menuOpen',
       'primaryNavLabel',
       'mobileNavLabel',
+      'repositoryHref',
+      'repositoryLabel',
       'switchLocaleHref',
       'switchLocaleLabel',
       'switchLocaleNote',
@@ -72,6 +75,13 @@ Deno.test('open-layout is an explicitly hydrated compiled app-shell island', asy
   assertEquals(
     result.program.metadata.properties.find((property) => property.name === 'headerNav')?.attribute,
     'header-nav',
+  );
+  // The header repository link is a literal default (module-scope identifiers
+  // are not allowed there), so pin it to the shared constant the footer uses.
+  assertEquals(
+    result.program.metadata.properties.find((property) => property.name === 'repositoryHref')
+      ?.default,
+    REPOSITORY_URL,
   );
 });
 

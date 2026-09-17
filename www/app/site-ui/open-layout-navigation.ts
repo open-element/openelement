@@ -1,6 +1,10 @@
 import { normalizeLocalePath } from './i18n.ts';
 
 const SAFE_URL_SCHEMES = new Set(['http:', 'https:', 'mailto:', 'tel:', 'sms:']);
+
+/** The public repository behind every page of this Site (footer + header link). */
+export const REPOSITORY_URL = 'https://github.com/open-element/openelement';
+
 const LOCALE_LABELS: Record<string, string> = { en: '中文', zh: 'English' };
 const SECTION_MAP: Readonly<Record<string, readonly string[]>> = {
   '/guide': ['Quick Start', 'Guide', 'Core', 'Production'],
@@ -296,7 +300,7 @@ const FOOTER_COLUMNS: Record<FooterColumnId, FooterColumnSource> = {
   company: {
     labels: { en: 'Company', zh: '项目' },
     links: [
-      { path: 'https://github.com/open-element/openelement', en: 'GitHub', zh: 'GitHub' },
+      { path: REPOSITORY_URL, en: 'GitHub', zh: 'GitHub' },
       { path: '/roadmap', en: 'Roadmap', zh: '路线图' },
       { path: '/changelog', en: 'Changelog', zh: '更新日志' },
     ],
@@ -349,6 +353,7 @@ export function layoutChromeStrings(locale: string): {
   menuOpen: string;
   primaryNavLabel: string;
   mobileNavLabel: string;
+  repositoryLabel: string;
 } {
   if (locale === 'zh') {
     return {
@@ -359,6 +364,7 @@ export function layoutChromeStrings(locale: string): {
       menuOpen: '打开导航',
       primaryNavLabel: '主导航',
       mobileNavLabel: '移动端导航',
+      repositoryLabel: 'GitHub 仓库（在新标签页打开）',
     };
   }
   return {
@@ -369,5 +375,6 @@ export function layoutChromeStrings(locale: string): {
     menuOpen: 'Open navigation',
     primaryNavLabel: 'Primary navigation',
     mobileNavLabel: 'Mobile navigation',
+    repositoryLabel: 'GitHub repository (opens in a new tab)',
   };
 }
