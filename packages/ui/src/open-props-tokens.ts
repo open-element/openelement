@@ -314,13 +314,22 @@ const OPEN_PROPS_TOKEN_CSS = `/**
   --gray-10: #e9ecef;
   --gray-11: #f1f3f5;
   --gray-12: #f8f9fa;
-  --brand: var(--violet-6);
-  --brand-hover: var(--violet-7);
-  --brand-light: var(--violet-4);
+  /* Dark brand = violet-7: violet-6 (#8262db) cleared AA only on the page base
+     (4.54:1) and failed as text on the raised surfaces (4.31:1 on elevated,
+     3.92:1 on cards). violet-7 clears all three (6.38 / 6.06 / 5.51) and still
+     seats the near-black --on-brand ink (6.44:1). --on-brand flips per theme to
+     the ramp extreme — the only ink that clears AA against the fill. */
+  --brand: var(--violet-7);
+  --brand-hover: var(--violet-8);
+  /* --brand-light is a light brand tint in both themes; the dark ramp is
+     mirrored, so violet-4 (#58399e) would be a *dark* violet here. violet-8 is
+     the dark entry carrying the light theme's #b59cff. It stays a tint: never
+     an ink over a light surface (see open-button.tsx). */
+  --brand-light: var(--violet-8);
   --brand-deep: var(--violet-12);
   --brand-subtle: color-mix(in srgb, var(--brand) 16%, transparent);
   --brand-glow: color-mix(in srgb, var(--brand) 22%, transparent);
-  --on-brand: var(--gray-12);
+  --on-brand: var(--gray-0);
   --text-primary: var(--gray-10);
   --text-secondary: var(--gray-8);
   --text-muted: var(--gray-6);

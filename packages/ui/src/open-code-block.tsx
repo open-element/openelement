@@ -103,8 +103,10 @@ export class OpenCodeBlock extends OpenElement {
       letter-spacing: var(--font-letterspacing-4);
     }
 
+    /* No ink override on hover: --on-brand is the ink for a brand *fill*, and
+       this chip's hover surface is a translucent brand tint instead, so the
+       chip keeps the code surface's --code-text ink. */
     .copy-btn:hover {
-      color: var(--on-brand);
       background: var(--brand-glow);
       border-color: var(--brand);
     }
@@ -120,8 +122,11 @@ export class OpenCodeBlock extends OpenElement {
       border-color: var(--error);
     }
 
-    /* Prism token colors (dark theme) */
-    .token.cdata, .token.comment, .token.doctype, .token.prolog { color: #6a737d; }
+    /* Prism token colors (dark theme). The comment gray was #6a737d — 3.99:1
+       on --bg-code, under AA; #7d8590 is the dimmest step that clears it and
+       stays quieter than the punctuation gray below. The vendored light-DOM
+       theme (public/assets/vendor/prism) already clears AA at #708090. */
+    .token.cdata, .token.comment, .token.doctype, .token.prolog { color: #7d8590; }
     .token.punctuation { color: #8b949e; }
     .token.namespace { opacity: 0.7; }
     .token.boolean, .token.constant, .token.deleted, .token.number, .token.property, .token.symbol, .token.tag { color: #79c0ff; }

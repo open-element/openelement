@@ -98,15 +98,19 @@ export class OpenButton extends OpenElement {
       background: color-mix(in srgb, var(--brand-pale) 52%, var(--bg-elevated));
     }
 
+    /* Flat brand fill, not a light-swept gradient: the gradient's --brand-light
+       end carried white ink at 2.17:1 in light mode (and the dark mirror would
+       have needed a dark ink on a light tint). --brand/--brand-hover are the
+       two steps that clear AA against --on-brand in both themes. */
     :host([variant='primary']) .btn {
-      background: linear-gradient(135deg, var(--brand), var(--brand-light));
+      background: var(--brand);
       color: var(--on-brand);
       border-color: transparent;
       box-shadow: 0 var(--size-2) var(--size-5) color-mix(in srgb, var(--brand) 22%, transparent);
     }
 
     :host([variant='primary']) .btn:hover {
-      background: linear-gradient(135deg, var(--brand-hover), var(--brand-light));
+      background: var(--brand-hover);
       border-color: transparent;
       transform: translateY(calc(var(--border-size-1) * -1));
       box-shadow: 0 var(--size-3) var(--size-6) color-mix(in srgb, var(--brand) 28%, transparent);

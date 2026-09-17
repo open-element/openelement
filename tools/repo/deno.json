@@ -20,6 +20,7 @@
     "retired-api:check": "deno run --allow-run ./run-in.ts --root ../.. -- deno run --allow-read tools/repo/check-retired-api-refs.ts",
     "signals:check-protocol-boundary": "deno run --allow-run ./run-in.ts --root ../.. -- deno run --allow-read --allow-env tools/repo/check-signal-protocol-boundary.ts",
     "site:sitemap": "deno run --allow-run ./run-in.ts --root ../.. -- deno run --allow-read --allow-write --allow-env tools/repo/generate-site-sitemap.ts",
+    "site:rss": "deno run --allow-run ./run-in.ts --root ../.. -- deno run --allow-read --allow-write tools/repo/generate-site-rss.ts",
     "site:check-links": "deno run --allow-run ./run-in.ts --root ../.. -- deno run --allow-read tools/repo/check-site-links.ts",
     "site:check-theme-tokens": "deno run --allow-run ./run-in.ts --root ../.. -- deno run --allow-read tools/repo/check-site-theme-tokens.ts",
     "site:routes-typecheck": "deno run --allow-run ./run-in.ts --root ../.. -- deno run --allow-read --allow-env --allow-run tools/repo/check-www-routes-types.ts",

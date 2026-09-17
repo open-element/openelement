@@ -134,9 +134,11 @@ const colorTokensStyle =
 // - The two text fonts (prose Inter, code JetBrains Mono) are preloaded so the
 //   swap resolves before first paint — measured CLS 0.195 → ~0. Serif accents
 //   are intentionally not preloaded (not used above the fold on most pages).
-// - theme-init.js stays an external sync script: the framework deliberately
-//   rejects <script> in headFragments (H-04) and has no inline-script channel
-//   — tracked as a framework gap in #1088.
+// - theme-init.js stays an external sync script: raw head fragments reject
+//   <script> outright (H-04) and the framework ships no raw inline-script
+//   channel. Structured data does not need one: it goes through
+//   `structuredData`, which the framework serializes (with `<` escaped) into
+//   its own application/ld+json element.
 // - The Prism theme CSS is inlined: it was a render-blocking stylesheet on a
 //   third-party origin (cdnjs) — a slow-network FCP stall and a SPOF.
 const fontPreloads = [
@@ -216,6 +218,13 @@ const openElementPlugins = openElement({
       fontPreloads,
       '<link rel="icon" type="image/svg+xml" href="/assets/open-favicon.svg" />',
       '<link rel="apple-touch-icon" href="/assets/open-avatar.svg" />',
+      // One feed for the whole site: dispatches are single-language originals
+      // (the blog collection's `lang` field names the original), so /zh/blog
+      // lists the same posts and a per-locale feed would be an empty duplicate.
+      // title must match the feed's channel <title> (tools/lib/site-rss.ts
+      // SITE_FEED_TITLE); the href is site-root-relative like every other
+      // asset fragment here, and resolves the same on locale-prefixed pages.
+      '<link rel="alternate" type="application/rss+xml" title="openElement Blog" href="/blog/rss.xml" />',
       colorTokensStyle,
       prismThemeStyle,
     ],
