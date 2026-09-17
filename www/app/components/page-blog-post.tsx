@@ -82,7 +82,7 @@ export default class PageBlogPost extends OpenElement {
 
   render() {
     return (
-      <main>
+      <div>
         <div class={this.notFoundClass} data-pagefind-ignore>
           <h1>404</h1>
           <p>{this.notFoundMessage}: {this.slug}</p>
@@ -120,7 +120,7 @@ export default class PageBlogPost extends OpenElement {
             </nav>
           </open-reading-shell>
         </div>
-      </main>
+      </div>
     );
   }
 }

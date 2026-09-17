@@ -38,7 +38,7 @@ export interface SiteHeadInput {
   title: string;
   /** Page-specific, locale-appropriate meta/og description. */
   description: string;
-  /** Error documents carry og fields but no canonical/hreflang. */
+  /** Error documents carry og fields, a robots noindex, and no canonical/hreflang. */
   error?: boolean;
 }
 
@@ -92,6 +92,11 @@ export function siteHead(input: SiteHeadInput): PageHead {
         hreflang: 'x-default',
       },
     ];
+  } else {
+    // Error documents answer 404: keep them out of search results. The tag is
+    // metadata, not a head fragment, so the router's <script>-only head
+    // predicate stays untouched.
+    head.meta?.push({ name: 'robots', content: 'noindex' });
   }
   return head;
 }

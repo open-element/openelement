@@ -35,6 +35,15 @@ export default class OpenReadingShell extends OpenElement {
   .rail-label{margin:0 0 var(--size-3);color:var(--text-muted);font-family:var(--font-mono);font-size:var(--font-size-00);font-weight:var(--font-weight-8);letter-spacing:.14em;text-transform:uppercase}
   .footer{display:none;margin-block-start:var(--size-10);padding-block-start:var(--size-5);border-block-start:1px solid var(--border)}
   :host([footer]) .footer,:host([navigation]) .footer{display:block}
+  /* The footer is a rule plus padding, so a pager with no visible link would
+     leave an empty 21px bar. Collapse the chrome (not the footer box): the
+     pager nav must stay in the accessibility tree, zero-height, exactly as it
+     already renders with its links hidden (#page-structure pins this). Both
+     :has() forms must stay single-level — nesting :not(:has()) inside :has()
+     is an invalid selector and Chromium drops the whole rule. Scoping to
+     "> slot > .pager" keeps custom footer slot content (changelog, roadmap)
+     untouched. */
+  :host([footer]) .footer:has(> slot > .pager):not(:has(> slot > .pager a:not([hidden]))),:host([navigation]) .footer:has(> slot > .pager):not(:has(> slot > .pager a:not([hidden]))){margin-block-start:0;padding-block-start:0;border-block-start:0}
   .pager{display:flex;justify-content:space-between;gap:var(--size-4)}
   .pager a{color:var(--text-muted);font-family:var(--font-mono);font-size:var(--font-size-00);letter-spacing:.04em;text-decoration:none}
   .pager a:hover{color:var(--brand)}
@@ -140,7 +149,7 @@ export default class OpenReadingShell extends OpenElement {
             </slot>
           </footer>
         </article>
-        <aside class='rail' aria-label={this.onThisPage}>
+        <aside class='rail' aria-label={this.onThisPage} data-pagefind-ignore>
           <p class='rail-label'>{this.onThisPage}</p>
           <slot name='rail'></slot>
         </aside>

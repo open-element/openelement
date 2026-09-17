@@ -29,7 +29,7 @@ export default class Page404 extends OpenElement {
 
   render() {
     return (
-      <main class='notfound'>
+      <div class='notfound' data-pagefind-ignore>
         <section class='stage'>
           <h1 class='code' aria-label='404'>
             <span aria-hidden='true'>4</span>
@@ -50,7 +50,7 @@ export default class Page404 extends OpenElement {
         <div class='marquee' aria-hidden='true'>
           <span>{this.marqueeText}</span>
         </div>
-      </main>
+      </div>
     );
   }
 }

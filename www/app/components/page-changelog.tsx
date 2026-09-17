@@ -42,10 +42,6 @@ export default class PageChangelog extends OpenElement {
   @property({ reflect: false, attribute: false })
   regCurrentSummary = '';
   @property({ reflect: false, attribute: false })
-  regArchiveNote = '';
-  @property({ reflect: false, attribute: false })
-  regGhostSummary = '';
-  @property({ reflect: false, attribute: false })
   stableHeading = '';
   @property({ reflect: false, attribute: false })
   commonVersionLabel = '';
@@ -77,7 +73,7 @@ export default class PageChangelog extends OpenElement {
 
   render() {
     return (
-      <main>
+      <div data-pagefind-body>
         <open-reading-shell meta rail footer locale={this.locale}>
           <div slot='meta'>
             <p class='crumb'>
@@ -104,19 +100,10 @@ export default class PageChangelog extends OpenElement {
               </div>
               <p class='reg-summary'>{this.regCurrentSummary}</p>
             </div>
-            <div class='reg-row reg-ghost'>
-              <div class='reg-head'>
-                <span class='reg-version'>0.40.x</span>
-                <span class='reg-note'>{this.regArchiveNote}</span>
-              </div>
-              <p class='reg-summary'>{this.regGhostSummary}</p>
-            </div>
           </div>
           <section id='candidate'>
             <h2>{this.stableHeading}</h2>
-            <p>
-              <code>{this.commonVersionLabel}</code> {this.stableBody}
-            </p>
+            <p>{this.stableBody}</p>
           </section>
           <section id='withdrawn'>
             <h2>{this.withdrawnHeading}</h2>
@@ -138,7 +125,7 @@ export default class PageChangelog extends OpenElement {
             </open-button>
           </div>
         </open-reading-shell>
-      </main>
+      </div>
     );
   }
 }

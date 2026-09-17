@@ -35,7 +35,7 @@ export default class OpenPageRail extends OpenElement {
 
   render() {
     return (
-      <div class='outline-root'>
+      <div class='outline-root' data-pagefind-ignore>
         <div class='desktop-outline'>
           <nav class='links' aria-label={this.onThisPage}>
             <a href='#start'>{this.overview}</a>

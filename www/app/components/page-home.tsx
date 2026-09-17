@@ -109,7 +109,7 @@ export default class PageHome extends OpenElement {
 
   render() {
     return (
-      <main class='home'>
+      <div class='home' data-pagefind-body>
         <open-cinematic-scroll></open-cinematic-scroll>
         <open-hero-polish></open-hero-polish>
         <section class='hero'>
@@ -119,7 +119,7 @@ export default class PageHome extends OpenElement {
             <div class='hero-copy'>
               <p class='eyebrow'>OpenElement — Web Standards Lab</p>
               <h1>
-                <span class='mono-line'>{this.heroMono}</span>
+                <span class='mono-line'>{this.heroMono}</span>{' '}
                 <span class='serif-line'>{this.heroSerif}</span>
               </h1>
             </div>
@@ -313,7 +313,7 @@ export class OpenCounter extends OpenElement {
             ))}
           </div>
         </section>
-      </main>
+      </div>
     );
   }
 }

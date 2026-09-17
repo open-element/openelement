@@ -28,8 +28,9 @@ const content = {
 } as const;
 
 export default definePage(Page404, {
-  // Error document: og fields but deliberately no canonical/hreflang — the
-  // page is not indexable and stays out of the sitemap.
+  // Error document: og fields plus the siteHead robots noindex, and
+  // deliberately no canonical/hreflang — the page is not indexable and stays
+  // out of the sitemap.
   head({ locale }) {
     const resolved = contentLocale(locale ?? 'en');
     const copy = content[resolved];

@@ -46,7 +46,7 @@ export default class PageDocs extends OpenElement {
 
   render() {
     return (
-      <main class='manual'>
+      <div class='manual' data-pagefind-body>
         <header class='masthead'>
           <span class='sidenote' aria-hidden='true'>{this.sidenote}</span>
           <div class='masthead-top'>
@@ -54,7 +54,7 @@ export default class PageDocs extends OpenElement {
             <span class='stamp'>{this.version}</span>
           </div>
           <h1>
-            <span class='serif-line'>{this.serifLine}</span>
+            <span class='serif-line'>{this.serifLine}</span>{' '}
             <span class='mono-line'>{this.monoLine}</span>
           </h1>
           <p class='lede'>{this.lede}</p>
@@ -93,7 +93,7 @@ export default class PageDocs extends OpenElement {
             <span class='entrance-arrow' aria-hidden='true'>→</span>
           </a>
         </nav>
-      </main>
+      </div>
     );
   }
 }

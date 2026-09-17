@@ -93,6 +93,42 @@ function resolveAlias(checker: ts.TypeChecker, symbol: ts.Symbol): ts.Symbol {
   return current;
 }
 
+function repoRelativePath(file: string, repoRoot: string): string {
+  return resolve(file).startsWith(`${resolve(repoRoot)}/`)
+    ? resolve(file).slice(resolve(repoRoot).length + 1)
+    : file;
+}
+
+/**
+ * A declared entry that exports nothing is a command entry, not a library
+ * surface: packages/create declares its single entry with a bare-string
+ * exports (`./src/cli.ts`), so there is no subpath map to enumerate. Record
+ * the entry itself — name, source and the module's own leading JSDoc — instead
+ * of leaving the package with an empty export set.
+ */
+function entryRecord(entryFile: string, repoRoot: string): ExportRecord {
+  const resolvedEntry = resolve(entryFile);
+  const text = Deno.readTextFileSync(resolvedEntry);
+  const leading = ts.getLeadingCommentRanges(text, 0)?.find((range) =>
+    range.kind === ts.SyntaxKind.MultiLineCommentTrivia
+  );
+  const summary = leading
+    ? text.slice(leading.pos, leading.end)
+      .split('\n')
+      .map((line) => line.trim().replace(/^\/?\*+\/?/, '').trim())
+      .find((line) => line !== '') ?? ''
+    : '';
+  const name = resolvedEntry.slice(resolvedEntry.lastIndexOf('/') + 1).replace(/\.[^.]+$/, '');
+  return {
+    name,
+    kind: 'entry',
+    summary,
+    source: { path: repoRelativePath(resolvedEntry, repoRoot), line: 1 },
+    stability: 'public',
+    anchor: '',
+  };
+}
+
 function enumerateExports(entryFile: string, repoRoot: string): ExportRecord[] {
   const resolvedEntry = resolve(entryFile);
   const program = ts.createProgram([resolvedEntry], {
@@ -115,9 +151,6 @@ function enumerateExports(entryFile: string, repoRoot: string): ExportRecord[] {
     const target = resolveAlias(checker, exportSymbol);
     const declaration = target.valueDeclaration ?? target.declarations?.[0] ?? source;
     const file = declaration.getSourceFile().fileName;
-    const relative = resolve(file).startsWith(`${resolve(repoRoot)}/`)
-      ? resolve(file).slice(resolve(repoRoot).length + 1)
-      : file;
     const line = declaration.getSourceFile().getLineAndCharacterOfPosition(
       declaration.getStart(),
     ).line + 1;
@@ -127,7 +160,7 @@ function enumerateExports(entryFile: string, repoRoot: string): ExportRecord[] {
       name: exportSymbol.getName(),
       kind: exportKind(target.flags),
       summary,
-      source: { path: relative, line },
+      source: { path: repoRelativePath(file, repoRoot), line },
       stability: 'public',
       anchor: '',
     };
@@ -165,12 +198,13 @@ export async function buildApiReference(): Promise<ApiReferenceBuild> {
         failures.push(`${info.name}: subpath '${subpath}' has no exports target`);
         continue;
       }
+      const entryFile = `${info.dir}/${target.replace(/^\.\//, '')}`;
       let enumerated: ExportRecord[];
       try {
-        enumerated = enumerateExports(
-          `${info.dir}/${target.replace(/^\.\//, '')}`,
-          repoRoot,
-        );
+        enumerated = enumerateExports(entryFile, repoRoot);
+        if (enumerated.length === 0 && typeof info.exports === 'string') {
+          enumerated = [entryRecord(entryFile, repoRoot)];
+        }
       } catch (error) {
         failures.push(`${info.name}/${subpathLabel(subpath)}: enumeration failed: ${error}`);
         continue;

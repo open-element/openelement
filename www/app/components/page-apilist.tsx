@@ -169,7 +169,10 @@ export default class ApiCorePage extends OpenElement {
 
   render() {
     return (
-      <main>
+      // Without data-pagefind-body the page is absent from the index entirely:
+      // pagefind stops indexing every page that lacks the attribute. The shell
+      // already renders the one <main> landmark (#main-content).
+      <div data-pagefind-body>
         <open-reading-shell
           rail
           footer
@@ -286,7 +289,7 @@ export default class ApiCorePage extends OpenElement {
             </div>
           </open-section-frame>
         </open-reading-shell>
-      </main>
+      </div>
     );
   }
 }

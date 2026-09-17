@@ -155,7 +155,7 @@ export default class RoadmapPage extends OpenElement {
 
   render() {
     return (
-      <main>
+      <div data-pagefind-body>
         <open-reading-shell rail footer metadata={this.metadata} locale={this.locale}>
           <div slot='rail'>
             <open-page-rail items={this.railItems} locale={this.locale}></open-page-rail>
@@ -287,7 +287,7 @@ export default class RoadmapPage extends OpenElement {
             <open-button href='/guide/deployment'>{this.deployment}</open-button>
           </nav>
         </open-reading-shell>
-      </main>
+      </div>
     );
   }
 }

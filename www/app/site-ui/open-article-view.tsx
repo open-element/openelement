@@ -45,7 +45,7 @@ export default class OpenArticleView extends OpenElement {
 
   render() {
     return (
-      <main>
+      <div>
         <div class={this.notFoundClass} data-pagefind-ignore>
           <h1>404</h1>
           <p>{this.notFoundMessage}: {this.slug}</p>
@@ -64,7 +64,7 @@ export default class OpenArticleView extends OpenElement {
             <div class='article-content' innerHTML={this.articleHtml} trustedHtml />
           </open-reading-shell>
         </div>
-      </main>
+      </div>
     );
   }
 }

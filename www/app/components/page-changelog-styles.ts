@@ -17,11 +17,9 @@ export const pageChangelogStyles = [compiledStyle(
   .reg-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--size-3); }
   .reg-version { color: var(--text-secondary); font-size: clamp(1.4rem, 2.4vw, 2rem); font-weight: 800; line-height: 1; letter-spacing: -.02em; }
   .reg-current .reg-version { color: var(--text-primary); font-size: clamp(1.9rem, 3.4vw, 2.8rem); }
-  .reg-ghost .reg-version { color: transparent; -webkit-text-stroke: 1.5px color-mix(in srgb, var(--violet-5) 55%, transparent); }
   .reg-stamp { padding: var(--size-1) var(--size-3); border-radius: var(--radius-1); background: var(--brand); color: var(--on-brand); font-size: var(--font-size-00); font-weight: var(--font-weight-7); letter-spacing: .08em; text-transform: uppercase; }
   .reg-note { color: var(--text-muted); font-size: var(--font-size-00); }
   .reg-summary { margin: var(--size-2) 0 0; max-width: 640px; overflow: hidden; color: var(--text-secondary); font-size: var(--font-size-00); line-height: var(--font-lineheight-3); text-overflow: ellipsis; white-space: nowrap; }
-  .reg-ghost .reg-summary { color: var(--text-muted); }
   .changelog-content { font-size: var(--font-size-1); line-height: var(--font-lineheight-4); color: var(--text-primary); }
   .changelog-content h2 { position:relative; font-size: var(--font-size-5); margin: var(--size-10) 0 var(--size-4); border-bottom: 0.5px solid var(--border); padding:0 0 var(--size-4) var(--size-6); }
   .changelog-content h2::before { content:""; position:absolute; inset:0 auto 0 0; width:2px; background:var(--brand); }

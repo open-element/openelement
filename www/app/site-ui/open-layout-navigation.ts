@@ -118,7 +118,7 @@ export function localeSwitchLabel(currentLocale: string): string {
 export function localeSwitchScopeNote(currentLocale: string): string {
   return currentLocale === 'zh'
     ? 'Switch to English'
-    : '中文翻译目前覆盖 Guide 层；其他层的页面仍为英文。';
+    : '中文版本覆盖全站页面；博文与 CHANGELOG 归档以英文原文发布。';
 }
 
 export function filterNavSections(items: NavSection[], currentPath: string): NavSection[] {
