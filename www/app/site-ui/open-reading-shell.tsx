@@ -118,12 +118,11 @@ export default class OpenReadingShell extends OpenElement {
   @property({ reflect: false, attribute: false })
   hideMetaRow = computed(() => !(this.metadata?.version && this.metadata?.updated));
   @property({ reflect: false, attribute: false })
-  freshnessLine = computed(() => {
-    const s = readingChromeStrings(this.locale);
-    return `${s.appliesTo} ${this.metadata?.version ?? ''}${s.freshnessSeparator}${s.updated} ${
-      this.metadata?.updated ?? ''
-    }`;
-  });
+  freshnessLine = computed(() =>
+    `${readingChromeStrings(this.locale).appliesTo} ${this.metadata?.version ?? ''}${
+      readingChromeStrings(this.locale).freshnessSeparator
+    }${readingChromeStrings(this.locale).updated} ${this.metadata?.updated ?? ''}`
+  );
   @property({ reflect: false, attribute: false })
   date = computed(() => this.metadata?.date ?? '');
   @property({ reflect: false, attribute: false, type: Array })
