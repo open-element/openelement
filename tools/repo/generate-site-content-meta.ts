@@ -9,8 +9,9 @@
  * date: the render layer hides the freshness row for it, so a machine/CI
  * date difference can never false-red the drift check.
  *
- * Shallow clones collapse history and would flatten every stamp onto one
- * date — fail closed instead of generating misleading data.
+ * Shallow clones would collapse history and flatten every stamp onto one
+ * date, so generation deepens the clone in place first (hosting builders
+ * have network); only an unreachable history still fails, loudly.
  *
  * Output `www/app/data/_generated-content-meta.ts` (gitignored) maps
  * `<collection>/<slug>` to `{ en, zh }` ISO dates; the article page model
@@ -41,10 +42,40 @@ async function gitDate(args: string[]): Promise<string> {
 const headDate = await gitDate(['log', '-1', '--format=%cs']);
 if (!headDate) throw new Error('git HEAD date unavailable — run inside the repository checkout');
 
-const shallow = await gitDate(['rev-parse', '--is-shallow-repository']);
-if (shallow === 'true') {
+await ensureFullHistory();
+
+/**
+ * Shallow clones (Cloudflare Pages, single-ref CI checkouts) collapse
+ * history, which would flatten every stamp onto one date. Deepen the clone
+ * in place instead of failing: hosting builders have network (they just
+ * cloned), and full history is required — a bounded --depth could still
+ * cut off an ancient file's last touch. Only an offline or refusing remote
+ * still fails, loudly.
+ */
+async function ensureFullHistory(): Promise<void> {
+  if ((await gitDate(['rev-parse', '--is-shallow-repository'])) !== 'true') return;
+  const head = await gitDate(['rev-parse', 'HEAD']);
+  const branch = await gitDate(['rev-parse', '--abbrev-ref', 'HEAD']);
+  const candidates = [
+    head || null,
+    Deno.env.get('CF_PAGES_BRANCH'),
+    Deno.env.get('GITHUB_REF_NAME'),
+    branch && branch !== 'HEAD' ? branch : null,
+  ];
+  for (const ref of candidates) {
+    if (!ref) continue;
+    const deepened = new Deno.Command('git', {
+      args: ['fetch', '--unshallow', 'origin', ref],
+      cwd: repoRoot,
+      stdin: 'null',
+      stdout: 'null',
+      stderr: 'null',
+    });
+    if ((await deepened.output()).code !== 0) continue;
+    if ((await gitDate(['rev-parse', '--is-shallow-repository'])) !== 'true') return;
+  }
   throw new Error(
-    'generate-site-content-meta: shallow clone collapses history — every stamp would flatten onto one date. Use a full clone.',
+    'generate-site-content-meta: shallow clone with no reachable history — every stamp would flatten onto one date. Use a full clone.',
   );
 }
 
