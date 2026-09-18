@@ -92,18 +92,18 @@ Deno.test('task wiring: release:check invokes the registry task, not an internal
 Deno.test('task wiring: gate:source generates site data before typecheck', async () => {
   const gateSource = (await tasks('tools/repo/deno.json'))['gate:source'];
   assert(gateSource, 'gate:source must exist');
-  const generate = gateSource.indexOf('tools/repo#generate:api-reference');
+  // generate:all enumerates every generate:* task (including the API
+  // reference and site content data the typecheck imports); pinning the
+  // individual task names here would re-introduce the hand-maintained
+  // coupling generate:all exists to delete.
+  const generate = gateSource.indexOf('tools/repo#generate:all');
   const typecheck = gateSource.indexOf('tools/repo#typecheck');
-  assert(generate !== -1, 'gate:source must generate the API reference');
+  assert(generate !== -1, 'gate:source must run the generators (generate:all)');
   assert(typecheck !== -1, 'gate:source must typecheck');
   assert(
     generate < typecheck,
     'gate:source must generate site data before the typecheck that imports it ' +
       '(check-content-examples.ts imports _generated-api-reference.ts)',
-  );
-  assert(
-    gateSource.includes('tools/repo#generate:site-content-data'),
-    'gate:source must generate the site content data on a clean clone',
   );
 });
 
