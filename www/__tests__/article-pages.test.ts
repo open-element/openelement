@@ -38,6 +38,7 @@ const articleRoutes = [
   ['guide', 'deployment', 'GuideDeploymentPage', 100],
   ['guide', 'error-handling', 'GuideErrorHandlingPage', 80],
   ['guide', 'getting-started', 'GuideGettingStartedPage', 1],
+  ['guide', 'glossary', 'GuideGlossaryPage', 65],
   ['guide', 'islands-and-ssr', 'GuideIslandsAndSsrPage', 90],
   ['guide', 'mdx', 'GuideMdxPage', 50],
   ['guide', 'routing-and-data', 'GuideRoutingAndDataPage', 40],
