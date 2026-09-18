@@ -169,3 +169,22 @@ Deno.test('site feed: the real blog collection renders one item per published po
   }
   assertEquals(SITE_FEED_PATH, '/blog/rss.xml');
 });
+
+Deno.test('feedFailures: calendar dates round-trip and impossible days fail closed', () => {
+  const failureFor = (date: string): string[] =>
+    feedFailures([
+      { slug: 'dated-post', frontmatter: { title: 'Dated', date }, content: '', html: '' },
+    ]);
+
+  for (
+    const date of ['2026-02-29', '2025-02-29', '1900-02-29', '2026-04-31', '2026-13-45', 'someday']
+  ) {
+    assert(
+      failureFor(date).some((failure) => failure.includes(`no publishable date (got '${date}')`)),
+      `calendar-impossible date must fail closed: ${date}`,
+    );
+  }
+  for (const date of ['2028-02-29', '2000-02-29', '2026-04-30', '2026-09-14']) {
+    assertEquals(failureFor(date), [], `real calendar date must be accepted: ${date}`);
+  }
+});

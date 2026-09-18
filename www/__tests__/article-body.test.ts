@@ -47,3 +47,54 @@ Deno.test('prepareArticle: reserved and existing ids are never re-issued', () =>
   ]);
   assertEquals(outline.map((item) => item.id), ['start-2', 'kept-2']);
 });
+
+/** Every id attribute in the prepared document, for uniqueness assertions. */
+function allIds(html: string): string[] {
+  return [...html.matchAll(/\sid="([^"]+)"/g)].map((match) => match[1]);
+}
+
+function assertIdsUnique(html: string): void {
+  const ids = allIds(html);
+  const duplicates = ids.filter((id, index) => ids.indexOf(id) !== index);
+  assertEquals(duplicates, [], `duplicate DOM ids: ${duplicates.join(', ')}`);
+}
+
+Deno.test('prepareArticle: suffixed ids already in the document are never re-issued', () => {
+  const { html, outline } = prepareArticle('<h2>Foo</h2><p id="foo-2">existing</p><h2>Foo</h2>');
+  assertEquals(outline.map((item) => item.id), ['foo', 'foo-3']);
+  assertIdsUnique(html);
+});
+
+Deno.test('prepareArticle: a taken stem still advances past its occupied suffix', () => {
+  const { html, outline } = prepareArticle('<p id="foo">a</p><h2>Foo</h2>');
+  assertEquals(outline.map((item) => item.id), ['foo-2']);
+  assertIdsUnique(html);
+
+  const run = prepareArticle('<p id="foo">a</p><p id="foo-2">b</p><p id="foo-3">c</p><h2>Foo</h2>');
+  assertEquals(run.outline.map((item) => item.id), ['foo-4']);
+  assertIdsUnique(run.html);
+});
+
+Deno.test('prepareArticle: reserved ids participate in suffix collision checks', () => {
+  const { html, outline } = prepareArticle('<h2>Foo</h2><h2>Foo</h2>', 'en', ['foo-2']);
+  assertEquals(outline.map((item) => item.id), ['foo', 'foo-3']);
+  assertIdsUnique(html);
+});
+
+Deno.test('prepareArticle: authored heading ids are stripped and never collide', () => {
+  const { html, outline } = prepareArticle(
+    '<h2 id="foo-2">Other</h2><h2>Foo</h2><h2>Foo</h2>',
+  );
+  assertEquals(outline.map((item) => item.id), ['other', 'foo', 'foo-3']);
+  assertIdsUnique(html);
+});
+
+Deno.test('prepareArticle: repeated and empty headings allocate unique ids', () => {
+  const repeated = prepareArticle('<h2>Foo</h2><h2>Foo</h2><h2>Foo</h2>');
+  assertEquals(repeated.outline.map((item) => item.id), ['foo', 'foo-2', 'foo-3']);
+  assertIdsUnique(repeated.html);
+
+  const empty = prepareArticle('<h2></h2><p id="section-2">x</p><h2></h2>');
+  assertEquals(empty.outline.map((item) => item.id), ['section', 'section-3']);
+  assertIdsUnique(empty.html);
+});

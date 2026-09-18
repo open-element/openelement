@@ -99,7 +99,7 @@ export function stableModuleId(file: string, root: string | undefined): string {
   }
   // No root (or outside it): drop the machine prefix by anchoring on the
   // nearest known workspace segment.
-  const match = /\/(?:packages|apps|tests)\//u.exec(clean);
+  const match = /\/(?:packages|apps|tests|www)\//u.exec(clean);
   return match ? clean.slice(match.index + 1) : clean;
 }
 

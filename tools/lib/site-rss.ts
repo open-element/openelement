@@ -16,7 +16,7 @@
  * lastBuildDate is deliberately omitted: the two reference feeds omit it too,
  * and a build-date field would make the artifact differ on every build.
  *
- * Pure functions only; IO lives in ../repo/generate-site-rss.ts.
+ * Pure functions only; IO lives in ../repo/emit-site-rss.ts.
  */
 
 import { SITE_ORIGIN } from '../../www/app/site-ui/head.ts';
@@ -43,12 +43,29 @@ function escapeXml(text: string): string {
 }
 
 /**
- * Collection dates are `YYYY-MM-DD`; RSS pubDate is RFC 822 in GMT. Parsing the
- * date at UTC midnight keeps the rendered timestamp stable across machines.
+ * Collection dates are `YYYY-MM-DD`; RSS pubDate is RFC 822 in GMT. Parsing
+ * the date at UTC midnight keeps the rendered timestamp stable across
+ * machines. Calendar validation is a UTC round-trip, not a NaN check:
+ * `new Date` normalizes impossible days (2026-02-29 becomes 2026-03-01),
+ * so a NaN-only guard would emit a pubDate that disagrees with the source
+ * frontmatter. The failure gate (feedFailures) and the serializer share
+ * this one function.
  */
 function rssPubDate(date: string): string | undefined {
-  const parsed = /^\d{4}-\d{2}-\d{2}$/.test(date) ? new Date(`${date}T00:00:00Z`) : undefined;
-  return parsed && !Number.isNaN(parsed.getTime()) ? parsed.toUTCString() : undefined;
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
+  if (!match) return undefined;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const parsed = new Date(Date.UTC(year, month - 1, day));
+  if (
+    parsed.getUTCFullYear() !== year ||
+    parsed.getUTCMonth() + 1 !== month ||
+    parsed.getUTCDate() !== day
+  ) {
+    return undefined;
+  }
+  return parsed.toUTCString();
 }
 
 /** Absolute URL for a site path (the sitemap's loc math, one host ahead). */

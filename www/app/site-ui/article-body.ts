@@ -35,17 +35,28 @@ export function stripHtmlToText(html: string): string {
 
 /**
  * Heading-id allocator shared by prepareArticle and the retired-URL gate:
- * same stem rule and same per-document duplicate suffixes, so an anchor
+ * same stem rule and same per-document collision handling, so an anchor
  * verified here is the anchor the article actually renders.
+ *
+ * `usedIds` carries every id already claimed (reserved page ids, ids
+ * present in the document, ids handed out by earlier headings). A stem's
+ * counter is not tracked separately: the next free suffix is found by
+ * probing candidates, so an existing `foo-2` can never be re-issued to a
+ * later `Foo` heading.
  */
-export function slugifyHeadingId(label: string, seen: Map<string, number>): string {
+export function slugifyHeadingId(label: string, usedIds: Set<string>): string {
   const stem = label.toLowerCase().normalize('NFKD').replace(/[^\p{L}\p{N}]+/gu, '-').replace(
     /(^-|-$)/g,
     '',
   ) || 'section';
-  const count = seen.get(stem) ?? 0;
-  seen.set(stem, count + 1);
-  return count ? `${stem}-${count + 1}` : stem;
+  let candidate = stem;
+  let suffix = 2;
+  while (usedIds.has(candidate)) {
+    candidate = `${stem}-${suffix}`;
+    suffix += 1;
+  }
+  usedIds.add(candidate);
+  return candidate;
 }
 
 export function prepareArticle(
@@ -55,15 +66,14 @@ export function prepareArticle(
 ): { html: string; outline: ArticleOutlineItem[] } {
   const anchorLabel = readingChromeStrings(locale).sectionAnchor;
   const outline: ArticleOutlineItem[] = [];
-  const seen = new Map<string, number>();
+  const usedIds = new Set<string>();
   // Occupy ids the allocator must not hand out: the caller's known page
   // ids plus every id already present in this document (.pkg-row rows,
-  // authored anchors). A heading colliding with one takes the next suffix
-  // instead of emitting a duplicate DOM id.
-  for (const id of reservedIds) seen.set(id, 1);
+  // authored anchors). A heading colliding with one takes the next free
+  // suffix instead of emitting a duplicate DOM id.
+  for (const id of reservedIds) usedIds.add(id);
   for (const match of html.matchAll(/\sid="([^"]+)"/gi)) {
-    const id = match[1];
-    seen.set(id, (seen.get(id) ?? 0) + 1);
+    usedIds.add(match[1]);
   }
   // Headings inside <pre> are literal code samples, not sections: process
   // only non-pre segments so fenced `<h2>` can never gain an id/anchor or
@@ -86,7 +96,7 @@ export function prepareArticle(
             label = stripped;
           }
           label = label.replace(/[<>]/g, '').replace(/&[^;]+;/g, ' ').trim();
-          const id = slugifyHeadingId(label, seen);
+          const id = slugifyHeadingId(label, usedIds);
           outline.push({ id, label, level: Number(depth) as 2 | 3 });
           const cleanAttrs = String(attrs).replace(/\s+id=(?:"[^"]*"|'[^']*')/i, '');
           // Hover/focus anchor: a real same-page link (keyboard-reachable, and the
