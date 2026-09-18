@@ -5,6 +5,4 @@ export type {
   RouteConfig,
   RouterInstance,
   RouterMode,
-  SpaActionContext,
-  SpaLoaderContext,
 } from './internal/router/client-router.ts';

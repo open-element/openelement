@@ -76,10 +76,6 @@ export type {
   LoaderContext,
   ServerRouteContext,
   ServerRouteMetadata,
-  SpaAction,
-  SpaActionContext,
-  SpaLoader,
-  SpaLoaderContext,
 } from '../protocol/data.ts';
 
 export {
