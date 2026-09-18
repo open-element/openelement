@@ -101,10 +101,6 @@ export type {
   ProblemDetails,
   ServerRouteContext,
   ServerRouteMetadata,
-  SpaAction,
-  SpaActionContext,
-  SpaLoader,
-  SpaLoaderContext,
 } from './public-contracts.ts';
 export { ACTION_FETCH_HEADER, PROBLEM_JSON_MEDIA_TYPE } from './public-contracts.ts';
 export type {

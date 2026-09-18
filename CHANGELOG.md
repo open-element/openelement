@@ -30,7 +30,11 @@ lines and no migration path from 0.x is offered: new projects start from
 - **Router**: Route Mode (explicit route records) and Framework Mode (file
   routes, loaders/actions/forms, SSR/SSG, Vite integration, Nitro mount) ship
   from `@openelement/router`, `./vite`, `./nitro-mount`, and `./cli/*`. Route
-  Mode installs without Element.
+  Mode installs without Element. The unimplemented client-side
+  `RouteConfig.loader`/`action` fields and the public `SpaLoader*`/`SpaAction*`
+  types are removed: the client router never ran them, so the public API no
+  longer promises it. Data fetching stays on the route modules' server
+  `loader`/`action`.
 - **Breaks from 0.x**: package names and import paths changed with the new
   baseline; `@openelement/element/sanitize` is gone and `trustedHtml` is the
   trust boundary; raw head fragments are passed through verbatim with only

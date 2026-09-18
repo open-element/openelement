@@ -8,10 +8,6 @@
  * Alpha.9 removes client-local route grammars and compatibility matchers so
  * browser navigation and the other route consumers share one semantic owner.
  */
-// SPA loader/action contexts are deliberately narrower than the request-time
-// LoaderContext/ActionContext: the client-side chain supplies only params
-// (+ formData for actions) and signals failure by throwing (#570, ADR-0119
-// frozen semantics — types clarified, runtime unchanged).
 import { type RouteMatch, type RouteRecord, RouteTable } from './route-table.ts';
 
 const ERROR_PREFIX = '[openElement]';
@@ -19,27 +15,11 @@ const log = {
   error: (...args: unknown[]) => console.error('[router]', ...args),
 };
 
-export interface SpaLoaderContext {
-  params: Record<string, string>;
-}
-
-export interface SpaActionContext extends SpaLoaderContext {
-  formData?: FormData;
-}
-
 export type RouterMode = 'history' | 'hash' | 'auto';
 
 export interface RouteConfig extends RouteRecord {
   /** Custom element tag to instantiate directly in SPA mode. */
   tagName: string;
-  /** Client-side loader — runs before component render. Receives matched route params. */
-  loader?: (
-    ctx: SpaLoaderContext & { searchParams: URLSearchParams; signal: AbortSignal },
-  ) => Promise<unknown>;
-  /** Client-side action — runs on form submit. Receives matched route params and form data. */
-  action?: (
-    ctx: SpaActionContext & { searchParams: URLSearchParams; signal: AbortSignal },
-  ) => Promise<unknown>;
   guard?: () => Promise<boolean | string>;
 }
 
@@ -425,7 +405,7 @@ export function createRouter(options: RouterOptions): RouterInstance {
       const navigationType = (event as NavigateEvent & { navigationType?: string }).navigationType;
       if (navigationType === 'reload') return;
       // Fragment-only in history mode: preserve native scroll, don't cancel
-      // unrelated loaders or run guard/loader/render. Hash-router semantics
+      // unrelated navigations or run guard. Hash-router semantics
       // are separate (nativeNavigation is history-only).
       try {
         const probe = new URL(event.destination.url);
@@ -497,9 +477,9 @@ export function createRouter(options: RouterOptions): RouterInstance {
       return currentRoute;
     },
     get searchParams(): URLSearchParams {
-      // Mutable interface over an immutable snapshot: every reader (and each
-      // loader/action context) gets its own copy, so user code can never
-      // rewrite the router's canonical state behind the address bar.
+      // Mutable interface over an immutable snapshot: every reader gets its
+      // own copy, so user code can never rewrite the router's canonical
+      // state behind the address bar.
       return new URLSearchParams(currentSearchParams);
     },
     get params(): Record<string, string> {

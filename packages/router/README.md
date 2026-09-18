@@ -159,13 +159,6 @@ interfaces, including Queue, KV, Service Binding, and Rate Limit objects. Write
 response metadata only through `responseHeaders`, which the generated server
 merges into its final `Response`.
 
-Client-router loaders and actions (`@openelement/router/router/client`) are a
-separate browser execution chain. Use `SpaLoaderContext`
-and `SpaActionContext`; they intentionally expose only route params (and
-action form data). A server loader cannot be reused unchanged in the browser,
-because browsers do not receive server `Request`, environment, platform,
-response-header, or route-metadata capabilities.
-
 `OpenElement` remains the runtime primitive in `@openelement/element`, but application
 authors should start from this package.
 
