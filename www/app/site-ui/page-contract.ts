@@ -13,6 +13,12 @@ export type ReadingMetadata = Readonly<{
   title: string;
   lede?: string;
   date?: string;
+  /** Machine-derived source-file stamp; absent hides the freshness row. */
+  updated?: string;
+  /** Version mark the article applies to; absent hides the freshness row. */
+  version?: string;
+  /** Optional editorial accent rendered in Instrument Serif after the title. */
+  accent?: string;
   tags?: readonly string[];
 }>;
 

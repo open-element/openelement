@@ -6,8 +6,6 @@ import { readingChromeStrings } from './chrome-strings.ts';
 import { compiledStyle } from './compiled-style.ts';
 import type { ReadingMetadata, ReadingNavigation } from './page-contract.ts';
 
-/** Optional v4 editorial accent rendered in Instrument Serif after the title. */
-type ReadingMetadataV4 = ReadingMetadata & { accent?: string };
 type ReadingTag = { key: string; label: string };
 type CompiledComputed<T> = ReturnType<typeof computed<T>> & T;
 
@@ -75,7 +73,7 @@ export default class OpenReadingShell extends OpenElement {
   @property({ reflect: true })
   meta = false;
   @property({ reflect: false })
-  metadata: ReadingMetadataV4 = { breadcrumb: '', title: '' };
+  metadata: ReadingMetadata = { breadcrumb: '', title: '' };
   @property({ reflect: false })
   navigation: ReadingNavigation = {};
   @property({ reflect: false })

@@ -3,6 +3,7 @@ import { prepareArticle } from './article-body.ts';
 import { siteHead } from './head.ts';
 import { contentLocale } from './locale.ts';
 import { localizePath } from './link.ts';
+import type { ReadingMetadata } from './page-contract.ts';
 import { getPage as getGuidePage, pages as guidePages } from '../data/_generated-guide-data.ts';
 import {
   getPage as getArchitecturePage,
@@ -18,10 +19,9 @@ export interface ArticlePageModel {
   articleClass: string;
   slug: string;
   notFoundMessage: string;
-  // updated/version are optional: only collection articles carry source
-  // freshness (projectArticlePage fills them from generated content meta);
-  // the shell hides the meta row when either is absent.
-  metadata: { breadcrumb: string; breadcrumbHref?: string; title: string; lede: string; updated?: string; version?: string };
+  // The contract type is the single source (page-contract.ts); lede stays
+  // required here because projectArticlePage always projects one.
+  metadata: ReadingMetadata & { lede: string };
   navigation: {
     previous?: { href: string; label: string };
     next?: { href: string; label: string };
