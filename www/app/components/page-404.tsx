@@ -53,11 +53,13 @@ export default class Page404 extends OpenElement {
           </h1>
           <p class='serif-line'>{this.serifLine}</p>
           <p class='lede'>{this.lede}</p>
-          {/* Static component, deliberately not an island: a 404-only
+          {
+            /* Static component, deliberately not an island: a 404-only
               island chunk homed shared framework modules and got imported
               by every page's chunks (measured +22KB on /) — the header
               search and ⌘K already hydrate here, so a dedicated control
-              is not worth a site-wide tax. */}
+              is not worth a site-wide tax. */
+          }
           <div class='actions'>
             <open-button variant='primary' href={this.homeHref}>
               {this.backHome}
