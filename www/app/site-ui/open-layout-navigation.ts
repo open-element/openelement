@@ -17,7 +17,7 @@ const LOCALE_LABELS: Record<string, string> = { en: '中文', zh: 'English' };
  * ("Project"), the name the consumer gives the nameless generated group.
  */
 export const SECTION_MAP: Readonly<Record<string, readonly string[]>> = {
-  '/guide': ['Guide', 'Core'],
+  '/guide': ['Guide', 'Core', 'Recipes'],
   '/architecture': ['Principles', 'Reference'],
   '/reference': ['Reference'],
   '/blog': ['Project'],

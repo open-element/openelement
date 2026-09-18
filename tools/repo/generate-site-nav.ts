@@ -52,6 +52,7 @@ const outFile = join(siteRoot, 'app/data/_generated-nav-data.ts');
 const SECTION_ORDER = [
   'Guide',
   'Core',
+  'Recipes',
   'Principles',
   'Reference',
   '',
@@ -61,6 +62,7 @@ const SECTION_ORDER = [
 const SECTION_ZH: Readonly<Record<string, string>> = {
   'Guide': '指南',
   'Core': '核心',
+  'Recipes': '实战',
   'Principles': '原则',
   'Reference': '参考',
   '': '项目',
