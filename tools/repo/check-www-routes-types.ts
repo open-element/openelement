@@ -10,9 +10,9 @@
  * against). Derivation means a new route file joins the gate automatically.
  *
  * Fail-closed invariants:
- *   - the generated data modules the route graph imports must already exist
- *     (run `deno task --cwd tools/repo generate:site-content-data` and
- *     `generate:api-reference` first; gate:source orders this step after both);
+ *   - generated modules are produced by `generate:all`, which `gate:source`
+ *     runs first; a missing one is diagnosed from the compiler's own TS2307
+ *     output (see below), so the hint can never go stale;
  *   - a zero-entry scan is an error, never a vacuous pass;
  *   - any per-module `deno check` failure fails the gate.
  *
@@ -20,37 +20,11 @@
  *   deno run --allow-read --allow-env --allow-run tools/repo/check-www-routes-types.ts
  */
 
-import { fromFileUrl, join, relative } from '@std/path';
+import { fromFileUrl, join, relative, resolve, dirname } from '@std/path';
 import { scanRoutes } from '../../packages/router/src/vite/internal/ssg/route-scanner.ts';
 
 const repoRoot = fromFileUrl(new URL('../..', import.meta.url));
 const routesDir = join(repoRoot, 'www/app/routes');
-
-/** Untracked modules the route import graph needs (generated earlier in gate:source). */
-const GENERATED_PREREQUISITES = [
-  'www/app/data/_generated-blog-data.ts',
-  'www/app/data/_generated-guide-data.ts',
-  'www/app/data/_generated-architecture-data.ts',
-  'www/app/data/_generated-api-reference.ts',
-];
-
-const missing: string[] = [];
-for (const path of GENERATED_PREREQUISITES) {
-  try {
-    await Deno.stat(join(repoRoot, path));
-  } catch {
-    missing.push(path);
-  }
-}
-if (missing.length > 0) {
-  console.error(
-    'routes typecheck: generated data modules are missing:\n' +
-      missing.map((path) => `  ${path}`).join('\n') +
-      '\nrun `deno task --cwd tools/repo generate:site-content-data` and ' +
-      '`deno task --cwd tools/repo generate:api-reference` first.',
-  );
-  Deno.exit(1);
-}
 
 const entries = await scanRoutes(routesDir);
 const files = [...new Set(entries.map((entry) => join(routesDir, entry.filePath)))]
@@ -65,6 +39,39 @@ if (files.length === 0) {
   Deno.exit(1);
 }
 
+/**
+ * A missing generated module surfaces as TS2307. Deno reports the culprit
+ * as an absolute file:// URL (or, rarely, the source-relative specifier);
+ * normalize either to an absolute path. When git ignores it, it is a
+ * generated module that was never produced — say so, naming generate:all.
+ * Returns the repo-relative path when that diagnosis fires, else null.
+ */
+async function generatedModuleHint(
+  output: string,
+  importerFile: string,
+): Promise<string | null> {
+  if (!output.includes('TS2307')) return null;
+  for (const match of output.matchAll(/Cannot find module '([^']+)'/g)) {
+    const specifier = match[1];
+    const abs = specifier.startsWith('file://')
+      ? fromFileUrl(specifier)
+      : specifier.startsWith('.')
+      ? resolve(dirname(importerFile), specifier)
+      : null;
+    if (!abs) continue;
+    const check = new Deno.Command('git', {
+      args: ['check-ignore', '-q', abs],
+      cwd: repoRoot,
+      stdin: 'null',
+      stdout: 'null',
+      stderr: 'null',
+    });
+    const { code } = await check.output();
+    if (code === 0) return relative(repoRoot, abs);
+  }
+  return null;
+}
+
 let failures = 0;
 for (const file of files) {
   const child = new Deno.Command(Deno.execPath(), {
@@ -72,14 +79,24 @@ for (const file of files) {
     cwd: repoRoot,
     // Fail closed on a permission prompt rather than hanging (gate invariant).
     stdin: 'null',
-    stdout: 'inherit',
-    stderr: 'inherit',
+    stdout: 'piped',
+    stderr: 'piped',
   }).spawn();
-  const { code } = await child.status;
+  const { code, stdout, stderr } = await child.output();
+  const text = new TextDecoder().decode(stdout) + new TextDecoder().decode(stderr);
+  // Preserve the historical pass-through log shape.
+  await Deno.stdout.write(new TextEncoder().encode(text));
   if (code === 0) {
     console.log(`PASS ${relative(repoRoot, file)}`);
   } else {
     console.error(`FAIL ${relative(repoRoot, file)} (deno check exited ${code})`);
+    const hinted = await generatedModuleHint(text, file);
+    if (hinted) {
+      console.error(
+        `hint: ${hinted} is a generated module (gitignored). Run ` +
+          '`deno task --cwd tools/repo generate:all` first.',
+      );
+    }
     failures++;
   }
 }
