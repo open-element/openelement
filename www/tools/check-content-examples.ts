@@ -1,5 +1,16 @@
 /**
- * Content example type-check gate (#1159, B2.4; hardened #1307): TypeScript
+ * Content gate: one discovery pass over the authored Markdown, two
+ * invariants. Every fenced `@openelement/*` named import must resolve
+ * against the generated export inventory (no broken teaching imports), and
+ * every TypeScript/JavaScript fence in the maintained authoring surface
+ * must type-check against the real framework sources (#1159, B2.4;
+ * hardened #1307). Merging the import inventory into this entry keeps the
+ * fence parser, the content walk, and the diagnostics in one place; the
+ * former standalone content-imports checker is retired.
+ *
+ * Type-check scope and suppression: see below.
+ *
+ * (Original) Content example type-check gate: TypeScript
  * fenced code blocks in the authored bilingual guides that import
  * `@openelement/*` must type-check against the real v0.44 framework sources.
  * zh duplicates of an en block are deduped by content. Fails closed with
@@ -34,9 +45,12 @@
  * fails the gate.
  */
 import ts from 'typescript';
+import { fromFileUrl, join } from '@std/path';
 import { walk } from '@std/fs/walk';
-import { readPackages } from '../lib/package-graph.ts';
-import { apiReference } from '../../www/app/data/_generated-api-reference.ts';
+import { readPackages } from '../../tools/lib/package-graph.ts';
+import { apiReference } from '../app/data/_generated-api-reference.ts';
+
+const repoRoot = fromFileUrl(new URL('../../', import.meta.url));
 
 /** The maintained authoring surface; blog is excluded deliberately (header). */
 const CHECKED_CONTENT_DIRS = ['www/content/docs/guide', 'www/content/docs/architecture'];
@@ -67,6 +81,54 @@ export interface ContentExample {
 }
 
 const FENCE_PATTERN = /```(ts|tsx|typescript|javascript|js)\n([\s\S]*?)```/g;
+
+/** Fence discovery for import validation; language label is optional. */
+const ANY_FENCE = /```(?:ts|tsx|js|javascript|typescript)?[^\S\n]*\n([\s\S]*?)```/g;
+
+const NAMED_IMPORT =
+  /import\s+(?:type\s+)?(?:[A-Za-z_$][\w$]*\s*,\s*)?\{([^}]*)\}\s*from\s*['"](@openelement\/[^'"]+)['"]/g;
+
+/** Every `@openelement/*` specifier the generated inventory knows. */
+function frameworkImportInventory(): Map<string, Set<string>> {
+  const inventory = new Map<string, Set<string>>();
+  for (const pkg of apiReference.packages) {
+    for (const subpath of pkg.subpaths) {
+      const specifier = subpath.subpath === '.'
+        ? pkg.name
+        : `${pkg.name}/${subpath.subpath.replace(/^\.\//, '')}`;
+      inventory.set(specifier, new Set(subpath.exports.map((item) => item.name)));
+    }
+  }
+  return inventory;
+}
+
+/** Validate every named framework import in the document's fences. */
+export function validateFrameworkImports(
+  file: string,
+  markdown: string,
+  inventory: Map<string, Set<string>> = frameworkImportInventory(),
+): ExampleFailure[] {
+  const failures: ExampleFailure[] = [];
+  for (const fence of markdown.matchAll(ANY_FENCE)) {
+    for (const statement of fence[1].matchAll(NAMED_IMPORT)) {
+      const specifier = statement[2];
+      const known = inventory.get(specifier);
+      if (!known) {
+        failures.push({ file, message: `unknown @openelement subpath '${specifier}'` });
+        continue;
+      }
+      for (const raw of statement[1].split(',')) {
+        // `type X` inline modifiers and `X as Y` aliases resolve to X.
+        const name = raw.replace(/^\s*type\s+/, '').split(/\s+as\s+/)[0].trim();
+        if (!name) continue;
+        if (!known.has(name)) {
+          failures.push({ file, message: `'${name}' is not exported from '${specifier}'` });
+        }
+      }
+    }
+  }
+  return failures;
+}
 
 /** Normalize fence aliases; js/javascript are checked as TypeScript (header). */
 function normalizeFenceLang(lang: string): string {
@@ -112,8 +174,9 @@ export async function typeCheckExamples(examples: ContentExample[]): Promise<Exa
   // The temp dir must live inside the workspace so node_modules resolution
   // (vite, preact, ...) walks up to the repo's dependencies; `.tmp` is
   // gitignored, so create it first (clean CI checkouts do not carry it).
-  await Deno.mkdir('.tmp', { recursive: true });
-  const dir = await Deno.makeTempDir({ dir: '.tmp', prefix: 'content-examples-' });
+  const tmpRoot = join(repoRoot, '.tmp');
+  await Deno.mkdir(tmpRoot, { recursive: true });
+  const dir = await Deno.makeTempDir({ dir: tmpRoot, prefix: 'content-examples-' });
   try {
     // Project-shape side-effect imports (`import './components/x.tsx'`) name
     // files of the reader's project, not the docs tree: retarget them at an
@@ -143,7 +206,7 @@ export async function typeCheckExamples(examples: ContentExample[]): Promise<Exa
       skipLibCheck: true,
       strict: true,
       target: ts.ScriptTarget.ESNext,
-      baseUrl: Deno.cwd(),
+      baseUrl: repoRoot,
       paths,
       // Doc snippets are teaching material, not shippable modules: unused
       // locals and missing return-type annotations are not defects there.
@@ -209,31 +272,52 @@ export function suppressElidedDiagnostic(
   return false;
 }
 
-export async function checkContentExamples(): Promise<ExampleFailure[]> {
+export interface ContentGateResult {
+  importFailures: ExampleFailure[];
+  exampleFailures: ExampleFailure[];
+}
+
+export async function checkContent(): Promise<ContentGateResult> {
+  const inventory = frameworkImportInventory();
+  const importFailures: ExampleFailure[] = [];
   const seen = new Set<string>();
   const examples: ContentExample[] = [];
-  for (const dir of CHECKED_CONTENT_DIRS) {
-    for await (const entry of walk(dir, { includeDirs: false, exts: ['.md'] })) {
-      const markdown = await Deno.readTextFile(entry.path);
-      for (const example of extractExamples(entry.path, markdown)) {
-        // en/zh translations carry identical code — check each block once.
-        if (seen.has(example.code)) continue;
-        seen.add(example.code);
-        examples.push(example);
-      }
+  // One walk over the whole content tree: import validation applies to every
+  // fence anywhere under www/content; type-checking applies to the
+  // maintained authoring surface only.
+  for await (
+    const entry of walk(join(repoRoot, 'www/content'), {
+      includeDirs: false,
+      exts: ['.md', '.mdx'],
+    })
+  ) {
+    const markdown = await Deno.readTextFile(entry.path);
+    importFailures.push(...validateFrameworkImports(entry.path, markdown, inventory));
+    if (!CHECKED_CONTENT_DIRS.some((dir) => entry.path.startsWith(join(repoRoot, dir)))) continue;
+    for (const example of extractExamples(entry.path, markdown)) {
+      // en/zh translations carry identical code — check each block once.
+      if (seen.has(example.code)) continue;
+      seen.add(example.code);
+      examples.push(example);
     }
   }
-  return await typeCheckExamples(examples);
+  return { importFailures, exampleFailures: await typeCheckExamples(examples) };
 }
 
 if (import.meta.main) {
-  const failures = await checkContentExamples();
-  if (failures.length > 0) {
-    console.error('Content example type-check failed:');
-    for (const failure of failures) {
+  const { importFailures, exampleFailures } = await checkContent();
+  if (importFailures.length > 0) {
+    console.error('Content import check failed:');
+    for (const failure of importFailures) {
       console.error(`- ${failure.file}: ${failure.message}`);
     }
-    Deno.exit(1);
   }
-  console.log('Content example type-check passed.');
+  if (exampleFailures.length > 0) {
+    console.error('Content example type-check failed:');
+    for (const failure of exampleFailures) {
+      console.error(`- ${failure.file}: ${failure.message}`);
+    }
+  }
+  if (importFailures.length > 0 || exampleFailures.length > 0) Deno.exit(1);
+  console.log('Content gate passed (imports resolved, examples type-checked).');
 }

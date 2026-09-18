@@ -1,115 +1,113 @@
 /**
  * Fail closed on generator/emitter drift discipline.
  *
- * The repository has two classes of code-producing scripts, and they have
- * opposite obligations. Everything is derived from the filesystem and each
- * workspace's task graph — the only fixed input is the workspace list (repo
- * structure, not a generator list):
+ * Two classes of code-producing scripts with opposite obligations, derived
+ * from the canonical workspace + task graph (tools/repo/workspace-tasks.ts) —
+ * no workspace list or generator list lives here:
  *
  *   generate-*.ts — committed-output generators. Must carry a real --check
- *     task (a task in the owning workspace whose command runs the script
- *     with --check) and that task must be wired into gate:source as
- *     `<workspace>#<task>`. No vacuous checks.
- *   emit-*.ts — build-artifact emitters (www/dist only). Must NOT pretend a
- *     drift check exists and must NOT appear in gate:source; their output is
- *     verified by the build/integration tests that consume the artifact.
+ *     task (a task in the owning workspace whose command runs the same
+ *     script with --check) wired into gate:source as `<workspace>#<key>`.
+ *   emit-*.ts — build-artifact emitters (www/dist only). Must NOT declare a
+ *     --check task and must NOT appear in gate:source; their output is
+ *     verified by the build/integration gates that consume the artifact.
  *
- * Any failure prints class / script / check task / gate-wiring rows and
- * exits non-zero. Zero scripts of either class is an error, never a vacuous
- * pass.
+ * Orphan detection: every generate- or emit- script physically present in a
+ * workspace's script locations must be referenced by some task; an
+ * unreferenced script is an unowned mechanism.
  */
 import { fromFileUrl, join } from '@std/path';
+import {
+  discoverScriptFiles,
+  emitterEntries,
+  generatorEntries,
+  readWorkspaces,
+} from './workspace-tasks.ts';
 
 const repoRoot = fromFileUrl(new URL('../../', import.meta.url));
-/** Workspaces with generator/emitter scripts and their script locations. */
-const WORKSPACES = [
-  { workspace: 'tools/repo', scriptsDir: 'tools/repo' },
-  { workspace: 'packages/ui', scriptsDir: 'packages/ui/tools' },
-] as const;
-
+const workspaces = await readWorkspaces(repoRoot);
 const gateSteps = new Set(
-  (JSON.parse(await Deno.readTextFile(join(repoRoot, 'tools/repo/deno.json'))) as {
-    tasks?: Record<string, string>;
-  }).tasks?.['gate:source']?.split(/\s+/) ?? [],
+  (
+    JSON.parse(await Deno.readTextFile(join(repoRoot, 'tools/repo/deno.json'))) as {
+      tasks?: Record<string, string>;
+    }
+  ).tasks?.['gate:source']?.split(/\s+/) ?? [],
 );
 
-interface Row {
-  kind: 'generate' | 'emit';
-  workspace: string;
-  script: string;
-  checkTask: string;
-  inGate: boolean;
-}
-
-const rows: Row[] = [];
 const failures: string[] = [];
+const rows: string[] = [];
 
-for (const { workspace, scriptsDir } of WORKSPACES) {
-  const tasks = (JSON.parse(await Deno.readTextFile(join(repoRoot, workspace, 'deno.json'))) as {
-    tasks?: Record<string, string>;
-  }).tasks ?? {};
-
-  const generators: string[] = [];
-  const emitters: string[] = [];
-  for await (const entry of Deno.readDir(join(repoRoot, scriptsDir))) {
-    if (!entry.isFile) continue;
-    if (!entry.name.endsWith('.ts') || entry.name.endsWith('.test.ts')) continue;
-    if (entry.name === 'generate-all.ts') continue;
-    if (entry.name.startsWith('generate-')) generators.push(entry.name);
-    else if (entry.name.startsWith('emit-')) emitters.push(entry.name);
-  }
-  generators.sort();
-  emitters.sort();
-
-  for (const script of generators) {
-    const checkTask = Object.keys(tasks).find((key) =>
-      tasks[key].includes(script) && tasks[key].includes('--check')
+for (const ws of workspaces) {
+  const generators = generatorEntries([ws]);
+  for (const entry of generators) {
+    const checkTask = Object.keys(ws.tasks).find((key) =>
+      ws.tasks[key].includes(entry.script) && ws.tasks[key].includes('--check')
     ) ?? '(none)';
-    const inGate = gateSteps.has(`${workspace}#${checkTask}`);
-    rows.push({ kind: 'generate', workspace, script, checkTask, inGate });
+    const inGate = checkTask !== '(none)' && gateSteps.has(`${ws.workspace}#${checkTask}`);
+    rows.push(
+      `generate | ${ws.workspace} | ${entry.script} | ${checkTask} | ${inGate ? 'yes' : 'no'}`,
+    );
     if (checkTask === '(none)') {
-      failures.push(`${workspace}/${script}: no --check task wired`);
+      failures.push(`${ws.workspace}/${entry.script}: no --check task wired`);
     } else if (!inGate) {
-      failures.push(`${workspace}/${script}: --check task ${checkTask} not in gate:source`);
+      failures.push(
+        `${ws.workspace}/${entry.script}: --check task ${checkTask} not in gate:source`,
+      );
     }
   }
 
-  for (const script of emitters) {
-    const checkTask = Object.keys(tasks).find((key) =>
-      tasks[key].includes(script) && tasks[key].includes('--check')
+  for (const entry of emitterEntries([ws])) {
+    const declaresCheck = ws.tasks[entry.taskKey].includes('--check');
+    const inGate = gateSteps.has(`${ws.workspace}#${entry.taskKey}`);
+    rows.push(
+      `emit | ${ws.workspace} | ${entry.script} | ${declaresCheck ? 'has --check' : '(none)'} | ${
+        inGate ? 'YES' : 'no'
+      }`,
     );
-    const inGateTask = Object.entries(tasks).find(([, command]) => command.includes(script));
-    const inGate = inGateTask !== undefined && gateSteps.has(`${workspace}#${inGateTask[0]}`);
-    rows.push({
-      kind: 'emit',
-      workspace,
-      script,
-      checkTask: checkTask ?? '(none)',
-      inGate,
-    });
-    if (checkTask) {
-      failures.push(`${workspace}/${script}: artifact emitter must not declare a --check task`);
+    if (declaresCheck) {
+      failures.push(`${ws.workspace}/${entry.script}: artifact emitter must not declare a --check`);
     }
     if (inGate) {
-      failures.push(`${workspace}/${script}: artifact emitter must not be wired into gate:source`);
+      failures.push(`${ws.workspace}/${entry.script}: artifact emitter must not be in gate:source`);
     }
+  }
+}
+
+// Orphans: a generate- or emit- script that no task references. Task script
+// paths are resolved against the workspace dir first and the repo root
+// second (tools/repo tasks route through run-in with --root ../.., so their
+// paths are repo-relative; www and package tasks are workspace-relative).
+async function resolveScript(workspace: string, script: string): Promise<string> {
+  const wsDir = workspaces.find((ws) => ws.workspace === workspace)!.dir;
+  for (const candidate of [join(wsDir, script), join(repoRoot, script)]) {
+    try {
+      await Deno.stat(candidate);
+      return candidate;
+    } catch {
+      // try the next base
+    }
+  }
+  return join(wsDir, script);
+}
+const referenced = new Set<string>();
+for (const entry of [...generatorEntries(workspaces), ...emitterEntries(workspaces)]) {
+  referenced.add(await resolveScript(entry.workspace, entry.script));
+}
+for (const file of await discoverScriptFiles(workspaces)) {
+  if (!referenced.has(file.abs)) {
+    failures.push(`${file.workspace}/${file.script}: no task references this script`);
   }
 }
 
 console.log('class | workspace | script | check task | in gate:source');
-for (const row of rows) {
-  console.log(
-    `${row.kind} | ${row.workspace} | ${row.script} | ${row.checkTask} | ${
-      row.inGate ? 'yes' : 'no'
-    }`,
-  );
-}
-const generatorCount = rows.filter((row) => row.kind === 'generate').length;
-const emitterCount = rows.filter((row) => row.kind === 'emit').length;
+for (const row of rows.sort()) console.log(row);
+
+const generatorCount = rows.filter((row) => row.startsWith('generate')).length;
+const emitterCount = rows.filter((row) => row.startsWith('emit')).length;
 if (generatorCount === 0 || emitterCount === 0) {
   console.error(
-    `generator-gates: expected both generate-*.ts and emit-*.ts scripts, found ` +
-      `${generatorCount} and ${emitterCount} — refusing to vacuously pass.`,
+    `generator-gates: expected both generators and emitters, found ${generatorCount} and ` +
+      `${emitterCount} — refusing to vacuously pass.`,
   );
   Deno.exit(1);
 }

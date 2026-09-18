@@ -24,11 +24,11 @@ import type {
 } from '@openelement/element';
 import ts from 'typescript';
 import { formatJson } from '@openelement/element/build-utils';
-import { parseTypeScript } from '../lib/typescript-ast.ts';
+import { parseTypeScript } from '../../../tools/lib/typescript-ast.ts';
 
-const UI_SRC_DIR = new URL('../../packages/ui/src/', import.meta.url);
-const UI_DENO_JSON = new URL('../../packages/ui/deno.json', import.meta.url);
-const OUT_FILE = new URL('../../packages/ui/src/generated-manifest.json', import.meta.url);
+const UI_SRC_DIR = new URL('../src/', import.meta.url);
+const UI_DENO_JSON = new URL('../deno.json', import.meta.url);
+const OUT_FILE = new URL('../src/generated-manifest.json', import.meta.url);
 
 const pkgVersion = JSON.parse(Deno.readTextFileSync(UI_DENO_JSON)).version;
 

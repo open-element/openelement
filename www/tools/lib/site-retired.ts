@@ -1,33 +1,37 @@
 /**
- * Fail closed on retired public URLs with no redirect mapping.
+ * Neutral site retired-URL domain library (no process exits, no diagnostics).
  *
  * The retired set is DERIVED, not listed. `site-baseline-routes.json` is a
  * committed snapshot of the public route tree at the last released baseline,
  * and retired = baseline routes minus the routes the current tree serves.
- * The normal check is deterministic and offline: it reads that manifest and
+ * The normal path is deterministic and offline: it reads that manifest and
  * scans the filesystem; it never resolves a ref, fetches a remote, or needs
  * `.git` to exist. Refreshing the snapshot is a deliberate, separate action
- * (`--refresh --base <ref>`, Git-based) run when a release baseline moves.
+ * (`refreshBaseline`, Git-based) run when a release baseline moves.
  *
  * `site-redirects.json` maps each retired path to its successor and is
  * validated in both directions — an unmapped retirement and a stale mapping
- * entry are both errors — with locale prefixes expanded from SITE_LOCALES
- * (never written in the table) and fragment targets verified against the
- * real slugified heading ids via the shared slugifyHeadingId (not a second
- * implementation).
+ * entry are both errors — with locale prefixes expanded by the callers from
+ * SITE_LOCALES and fragment targets verified against the real slugified
+ * heading ids via the shared slugifyHeadingId (not a second implementation).
  *
- * The table loader is importable (emit-site-redirects.ts reuses it); only
- * the main guard exits.
+ * Consumers: the check shell (diagnostics + exit status), the redirects
+ * emitter, and the built-output link checker. This file must not import any
+ * check-* module or exit the process.
  */
 import { fromFileUrl, join } from '@std/path';
-import { scanRoutes } from '../../packages/router/src/vite/internal/ssg/route-scanner.ts';
-import { fileToRoutePath } from '../../www/lib/route-path.ts';
-import { slugifyHeadingId, stripHtmlToText } from '../../www/app/site-ui/article-body.ts';
+import { scanRoutes } from '../../../packages/router/src/vite/internal/ssg/route-scanner.ts';
+import { fileToRoutePath } from '../../lib/route-path.ts';
+import { slugifyHeadingId, stripHtmlToText } from '../../app/site-ui/article-body.ts';
+import { SITE_LOCALES } from '../../app/site-ui/link.ts';
 
-const repoRoot = fromFileUrl(new URL('../../', import.meta.url));
+const repoRoot = fromFileUrl(new URL('../../../', import.meta.url));
 const routesRel = 'www/app/routes';
-const tablePath = join(repoRoot, 'tools/repo/site-redirects.json');
-const baselinePath = join(repoRoot, 'tools/repo/site-baseline-routes.json');
+const tablePath = join(repoRoot, 'www/tools/site-redirects.json');
+const baselinePath = join(repoRoot, 'www/tools/site-baseline-routes.json');
+
+/** Locales the site serves, typed for content-file resolution. */
+const CONTENT_LOCALES = SITE_LOCALES as readonly ('en' | 'zh')[];
 
 export interface RedirectMapping {
   from: string;
@@ -44,11 +48,6 @@ export interface BaselineManifest {
   routes: string[];
   /** title/navLabel strings the retired routes carried, for label gates. */
   retiredTitles: string[];
-}
-
-function fail(message: string): never {
-  console.error(`retired-url:check: ${message}`);
-  Deno.exit(1);
 }
 
 async function git(args: string[]): Promise<{ code: number; out: string; err: string }> {
@@ -78,7 +77,7 @@ export async function loadBaselineManifest(): Promise<BaselineManifest> {
   try {
     parsed = JSON.parse(await Deno.readTextFile(baselinePath));
   } catch {
-    fail(`cannot read ${baselinePath}; refresh it with --refresh --base <ref>`);
+    throw new Error(`cannot read ${baselinePath}; refresh it with --refresh --base <ref>`);
   }
   const manifest = parsed as Partial<BaselineManifest>;
   if (
@@ -89,7 +88,7 @@ export async function loadBaselineManifest(): Promise<BaselineManifest> {
     !Array.isArray(manifest.retiredTitles) ||
     !manifest.retiredTitles.every((title) => typeof title === 'string')
   ) {
-    fail(`${baselinePath} is malformed`);
+    throw new Error(`${baselinePath} is malformed`);
   }
   return manifest as BaselineManifest;
 }
@@ -109,10 +108,10 @@ export async function loadRedirectTable(): Promise<RedirectMapping[]> {
   try {
     parsed = JSON.parse(await Deno.readTextFile(tablePath));
   } catch {
-    fail(`cannot read ${tablePath}`);
+    throw new Error(`cannot read ${tablePath}`);
   }
   const list = (parsed as { redirects?: unknown }).redirects;
-  if (!Array.isArray(list)) fail(`${tablePath} must hold { redirects: [...] }`);
+  if (!Array.isArray(list)) throw new Error(`${tablePath} must hold { redirects: [...] }`);
   const mappings: RedirectMapping[] = [];
   for (const entry of list as unknown[]) {
     const { from, to, toZh, status } = entry as Partial<RedirectMapping>;
@@ -123,7 +122,9 @@ export async function loadRedirectTable(): Promise<RedirectMapping[]> {
         (typeof toZh !== 'string' || !toZh.startsWith('/') || toZh.startsWith('/zh/'))) ||
       status !== 301
     ) {
-      fail(`bad mapping (want unprefixed from/to/toZh and status 301): ${JSON.stringify(entry)}`);
+      throw new Error(
+        `bad mapping (want unprefixed from/to/toZh and status 301): ${JSON.stringify(entry)}`,
+      );
     }
     mappings.push(toZh === undefined ? { from, to, status } : { from, to, toZh, status });
   }
@@ -225,7 +226,10 @@ export async function currentContentTitles(): Promise<Set<string>> {
   return titles;
 }
 
-export async function checkRetiredUrls(): Promise<void> {
+/** Validate the baseline snapshot against the redirect table and fragments. */
+export async function collectRetiredUrlFailures(): Promise<
+  { failures: string[]; baselineSha: string; retiredCount: number }
+> {
   const { manifest, retired } = await retiredRoutes();
   const mappings = await loadRedirectTable();
   const mappedFrom = new Set(mappings.map((mapping) => mapping.from));
@@ -242,10 +246,10 @@ export async function checkRetiredUrls(): Promise<void> {
     // locale-expanded `to` unless toZh overrides it (translated heading ids
     // differ — e.g. #measured-output vs #实测输出 — so one shape cannot
     // serve both locales). Both sides validate independently.
-    const targets = [
-      { locale: 'en' as const, raw: mapping.to },
-      { locale: 'zh' as const, raw: mapping.toZh ?? mapping.to },
-    ];
+    const targets = CONTENT_LOCALES.map((locale) => ({
+      locale,
+      raw: locale === 'zh' ? mapping.toZh ?? mapping.to : mapping.to,
+    }));
     for (const { locale, raw } of targets) {
       const { route, fragment } = stripFragment(raw);
       if (!head.has(route)) {
@@ -271,17 +275,7 @@ export async function checkRetiredUrls(): Promise<void> {
       `baseline snapshot (${manifest.baseline.sha.slice(0, 12)}) has no retired titles recorded`,
     );
   }
-  if (failures.length > 0) {
-    for (const failure of failures) console.error(`- ${failure}`);
-    Deno.exit(1);
-  }
-  console.log(
-    retired.size === 0
-      ? 'no retired urls'
-      : `retired urls ok: ${retired.size} retired, all mapped (baseline ${
-        manifest.baseline.sha.slice(0, 12)
-      }).`,
-  );
+  return { failures, baselineSha: manifest.baseline.sha, retiredCount: retired.size };
 }
 
 /**
@@ -292,7 +286,9 @@ export async function checkRetiredUrls(): Promise<void> {
 export async function refreshBaseline(ref: string): Promise<void> {
   const resolved = await git(['rev-parse', '--verify', '--quiet', `${ref}^{commit}`]);
   if (resolved.code !== 0 || !resolved.out) {
-    fail(`cannot resolve baseline ref ${ref}; fetch it first or pass an explicit revision`);
+    throw new Error(
+      `cannot resolve baseline ref ${ref}; fetch it first or pass an explicit revision`,
+    );
   }
   const sha = resolved.out;
   const tmp = await Deno.makeTempDir({ prefix: 'retired-urls-base-' });
@@ -305,7 +301,7 @@ export async function refreshBaseline(ref: string): Promise<void> {
       stderr: 'null',
     });
     const { code, stdout } = await archive.output();
-    if (code !== 0) fail(`git archive of ${sha} failed`);
+    if (code !== 0) throw new Error(`git archive of ${sha} failed`);
     await Deno.writeFile(join(tmp, 'routes.tar'), stdout);
     const untar = new Deno.Command('tar', {
       args: ['-x', '-f', join(tmp, 'routes.tar'), '-C', tmp],
@@ -314,7 +310,7 @@ export async function refreshBaseline(ref: string): Promise<void> {
       stderr: 'null',
     });
     const untarred = await untar.output();
-    if (untarred.code !== 0) fail('could not unpack the baseline route tree');
+    if (untarred.code !== 0) throw new Error('could not unpack the baseline route tree');
     baseline = await routePathsIn(join(tmp, routesRel));
   } finally {
     await Deno.remove(tmp, { recursive: true });
@@ -323,8 +319,8 @@ export async function refreshBaseline(ref: string): Promise<void> {
   const retired = [...baseline].filter((route) => !head.has(route)).sort();
   const titles = new Set<string>();
   for (const route of retired) {
-    for (const locale of ['en', 'zh'] as const) {
-      // Probe every historical layout; the baseline tree predates the
+    for (const locale of CONTENT_LOCALES) {
+      // Probe every historical layout; old baselines predate the
       // content/docs/ move, so a single hardcoded path would silently
       // contribute zero titles (a dead label gate).
       let shown: { code: number; out: string } = { code: 1, out: '' };
@@ -349,18 +345,4 @@ export async function refreshBaseline(ref: string): Promise<void> {
     `baseline snapshot refreshed from ${ref} (${sha.slice(0, 12)}): ` +
       `${manifest.routes.length} routes, ${retired.length} retired, ${manifest.retiredTitles.length} titles.`,
   );
-}
-
-function argValue(args: string[], flag: string): string | undefined {
-  const index = args.indexOf(flag);
-  return index >= 0 ? args[index + 1] : undefined;
-}
-
-if (import.meta.main) {
-  const base = argValue(Deno.args, '--base') ?? 'origin/main';
-  if (Deno.args.includes('--refresh')) {
-    await refreshBaseline(base);
-  } else {
-    await checkRetiredUrls();
-  }
 }

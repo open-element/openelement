@@ -7,23 +7,26 @@
  * Fails closed: an unenumerable dynamic route or a duplicate fails the build.
  */
 import { fromFileUrl, join } from '@std/path';
-import { loadCollectionData } from '../../www/lib/content.ts';
-import { blogCollection, prepareBlogPosts } from '../../www/lib/blog.ts';
-import { scanSiteRoutes } from '../lib/site-route-scan.ts';
-import { enumeratePublicRoutes, renderRobotsTxt, renderSitemapXml } from '../lib/site-sitemap.ts';
+import { SITE_LOCALES } from '../app/site-ui/link.ts';
+import { loadCollectionData } from '../lib/content.ts';
+import { blogCollection, prepareBlogPosts } from '../lib/blog.ts';
+import { scanSiteRoutes } from './lib/site-route-scan.ts';
+import { enumeratePublicRoutes, renderRobotsTxt, renderSitemapXml } from './lib/site-sitemap.ts';
 
 export const SITE_DIST = 'www/dist';
 const SITE_ROUTES = 'www/app/routes';
-const SITE_LOCALES = ['en', 'zh'] as const;
 
-const siteRoot = fromFileUrl(new URL('../../www/', import.meta.url));
+const repoRoot = fromFileUrl(new URL('../../', import.meta.url));
+const siteRoot = join(repoRoot, 'www', '');
 
-export async function generateSiteSitemap(dist = SITE_DIST): Promise<string[]> {
+export async function generateSiteSitemap(
+  dist = join(repoRoot, SITE_DIST),
+): Promise<string[]> {
   const blogOptions = { ...blogCollection, contentDir: join(siteRoot, blogCollection.contentDir) };
   const blogPostRoutes = prepareBlogPosts(await loadCollectionData('blog', blogOptions)).map(
     (post) => `/blog/${post.slug}`,
   );
-  const routes = await scanSiteRoutes(SITE_ROUTES);
+  const routes = await scanSiteRoutes(join(repoRoot, SITE_ROUTES));
   const { routes: publicRoutes, failures } = enumeratePublicRoutes({
     routes,
     blogPostRoutes,

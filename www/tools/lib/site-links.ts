@@ -7,6 +7,8 @@
  * checker is deferred to Beta.3 (#1156, workflow-cap ruling).
  */
 
+import { SITE_LOCALES } from '../../app/site-ui/link.ts';
+
 export interface LinkFailure {
   file: string;
   message: string;
@@ -47,7 +49,7 @@ export function findSeoFailures(html: string, file: string): LinkFailure[] {
     // Attribute order is the serializer's own (rel/href/hreflang since #1326);
     // the invariant is that the page declares an alternate carrying an href
     // for each locale, not the byte order of its attributes.
-    for (const locale of ['en', 'zh']) {
+    for (const locale of SITE_LOCALES) {
       const alternate = html.match(
         new RegExp(`<link rel="alternate"[^>]*hreflang="${locale}"[^>]*>`),
       );

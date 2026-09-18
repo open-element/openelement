@@ -20,7 +20,7 @@
  * Pure functions only; IO lives in ../repo/emit-site-sitemap.ts.
  */
 
-import { SITE_ORIGIN } from '../../www/app/site-ui/head.ts';
+import { SITE_ORIGIN } from '../../app/site-ui/head.ts';
 
 export interface SitemapUrlEntry {
   loc: string;

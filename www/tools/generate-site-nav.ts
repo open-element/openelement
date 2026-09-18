@@ -33,10 +33,10 @@
  */
 import { walk } from '@std/fs/walk';
 import { fromFileUrl, join } from '@std/path';
-import { loadCollectionData } from '../../www/lib/content.ts';
-import { fileToRoutePath } from '../../www/lib/route-path.ts';
-import { articleCollections } from '../../www/content-collections.ts';
-import { FALLBACK_SECTION, SECTION_MAP } from '../../www/app/site-ui/open-layout-navigation.ts';
+import { loadCollectionData } from '../lib/content.ts';
+import { fileToRoutePath } from '../lib/route-path.ts';
+import { articleCollections } from '../content-collections.ts';
+import { FALLBACK_SECTION, SECTION_MAP } from '../app/site-ui/open-layout-navigation.ts';
 
 const siteRoot = fromFileUrl(new URL('../../www/', import.meta.url));
 const routesDir = join(siteRoot, 'app/routes');

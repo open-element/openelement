@@ -9,11 +9,12 @@
  * byte-identical output — the CI drift gate.
  */
 import { formatJson } from '@openelement/element/build-utils';
-import { resolve } from '@std/path';
+import { fromFileUrl, join, resolve } from '@std/path';
 import ts from 'typescript';
-import { readPackages, releasePublishOrder } from '../lib/package-graph.ts';
+import { readPackages, releasePublishOrder } from '../../tools/lib/package-graph.ts';
 
 export const API_REFERENCE_ARTIFACT = 'www/app/data/_generated-api-reference.ts';
+const repoRoot = fromFileUrl(new URL('../../', import.meta.url));
 const UI_MANIFEST = 'packages/ui/src/generated-manifest.json';
 
 interface ExportRecord {
@@ -168,9 +169,8 @@ function enumerateExports(entryFile: string, repoRoot: string): ExportRecord[] {
 }
 
 export async function buildApiReference(): Promise<ApiReferenceBuild> {
-  const repoRoot = Deno.cwd();
   const failures: string[] = [];
-  const manifest = JSON.parse(await Deno.readTextFile(UI_MANIFEST)) as {
+  const manifest = JSON.parse(await Deno.readTextFile(join(repoRoot, UI_MANIFEST))) as {
     declarations?: Array<Record<string, unknown>>;
   };
   const manifestDescriptionByClass = new Map<string, string>();
@@ -308,7 +308,7 @@ if (import.meta.main) {
   if (check) {
     let existing: string;
     try {
-      existing = await Deno.readTextFile(API_REFERENCE_ARTIFACT);
+      existing = await Deno.readTextFile(join(repoRoot, API_REFERENCE_ARTIFACT));
     } catch {
       console.error(
         `${API_REFERENCE_ARTIFACT} is missing; run deno task --cwd tools/repo generate:api-reference`,
@@ -323,7 +323,7 @@ if (import.meta.main) {
     }
     console.log(`API reference check passed (${API_REFERENCE_ARTIFACT} is byte-identical).`);
   } else {
-    await Deno.writeTextFile(API_REFERENCE_ARTIFACT, module);
+    await Deno.writeTextFile(join(repoRoot, API_REFERENCE_ARTIFACT), module);
     const exportCount = build.packages.reduce(
       (sum, pkg) => sum + pkg.subpaths.reduce((inner, sub) => inner + sub.exports.length, 0),
       0,

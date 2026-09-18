@@ -19,8 +19,8 @@
  * Pure functions only; IO lives in ../repo/emit-site-rss.ts.
  */
 
-import { SITE_ORIGIN } from '../../www/app/site-ui/head.ts';
-import type { BlogPost } from '../../www/lib/content.ts';
+import { SITE_ORIGIN } from '../../app/site-ui/head.ts';
+import type { BlogPost } from '../../lib/content.ts';
 
 /** Public feed path, relative to the site root (dist artifact and head href). */
 export const SITE_FEED_PATH = '/blog/rss.xml';

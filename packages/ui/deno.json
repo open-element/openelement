@@ -43,6 +43,8 @@
     "lint": "deno lint src/ __tests__/",
     "typecheck": "deno check src/index.ts",
     "generate:ui-tokens": "deno run --allow-read --allow-write --allow-env --allow-net tools/generate-ui-tokens.ts",
-    "ui-tokens:check": "deno run --allow-read --allow-write --allow-env --allow-net tools/generate-ui-tokens.ts --check"
+    "ui-tokens:check": "deno run --allow-read --allow-write --allow-env --allow-net tools/generate-ui-tokens.ts --check",
+    "generate:ui-manifest": "deno run --allow-read --allow-write --allow-env tools/generate-ui-manifest.ts",
+    "ui-manifest:check": "deno run --allow-read --allow-write --allow-env tools/generate-ui-manifest.ts --check"
   }
 }

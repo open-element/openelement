@@ -15,7 +15,8 @@
  * an id in the built /reference documents (both locales) below.
  */
 import { walk } from '@std/fs/walk';
-import { join } from '@std/path';
+import { fromFileUrl, join } from '@std/path';
+import { SITE_LOCALES } from '../app/site-ui/link.ts';
 import { normalize as posixNormalize } from '@std/path/posix';
 import {
   anchorsFragment,
@@ -25,15 +26,18 @@ import {
   type LinkFailure,
   pageSeo,
   resolveBuiltPath,
-} from '../lib/site-links.ts';
-import { apiReference } from '../../www/app/data/_generated-api-reference.ts';
-import { stripHtmlToText } from '../../www/app/site-ui/article-body.ts';
-import { currentContentTitles, retiredContentTitles } from './check-retired-urls.ts';
+} from './lib/site-links.ts';
+import { apiReference } from '../app/data/_generated-api-reference.ts';
+import { stripHtmlToText } from '../app/site-ui/article-body.ts';
+import { currentContentTitles, retiredContentTitles } from './lib/site-retired.ts';
 
 export const SITE_DIST = 'www/dist';
-const SITE_LOCALES = ['en', 'zh'] as const;
 
-export async function checkBuiltLinks(dist = SITE_DIST): Promise<LinkFailure[]> {
+const repoRoot = fromFileUrl(new URL('../../', import.meta.url));
+
+export async function checkBuiltLinks(
+  dist = join(repoRoot, SITE_DIST),
+): Promise<LinkFailure[]> {
   const failures: LinkFailure[] = [];
   const files = new Set<string>();
   const htmlFiles: string[] = [];

@@ -78,7 +78,7 @@ lines and no migration path from 0.x is offered: new projects start from
   adoption; the structural fallback stays `:host`-only.
 - **Build**: the production Site build is hermetic — source dates come from
   the committed `www/lib/content-dates.json` manifest and the retired-URL
-  baseline from `tools/repo/site-baseline-routes.json`, so `site:build` needs
+  baseline from `www/tools/site-baseline-routes.json`, so `site:build` needs
   no network, no remote and no `.git`. Git-based refresh/verify tasks
   (`content-dates:*`, `retired-url:check --refresh`) run in CI, not in the
   build.

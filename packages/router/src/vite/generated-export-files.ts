@@ -1,5 +1,5 @@
 // GENERATED FILE — do not edit by hand.
-// Regenerate with: deno task export-files:generate
+// Regenerate with: deno task --cwd tools/repo generate:export-files
 // Source of truth: the "exports" field of each packages/*/deno.json.
 export const OPENELEMENT_EXPORT_FILES: Record<string, Record<string, string>> = {
   'create': {

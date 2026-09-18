@@ -33,7 +33,7 @@ export default defineConfig({
 
 ## 内容 collection 归站点所有
 
-1.0 的 router 提供路由、locale/渲染上下文、SSG descriptor 与 Document 归属——不是 CMS，也不是内容数据库。站点的 Markdown 管线由站点自己拥有。本仓库的参考站点用声明式 schema 校验 frontmatter、用 `marked` 渲染、把渲染结果视为第一方可信内容（`www/lib/content.ts` 的 `trustCollectionHtml`，`trustedHtml` 信任级别——非可信来源请先在你自己的边界消毒），在 `www/lib/blog.ts` 中定义 collection，并用 `tools/repo/generate-site-content-data.ts` 写出带类型的数据模块：
+1.0 的 router 提供路由、locale/渲染上下文、SSG descriptor 与 Document 归属——不是 CMS，也不是内容数据库。站点的 Markdown 管线由站点自己拥有。本仓库的参考站点用声明式 schema 校验 frontmatter、用 `marked` 渲染、把渲染结果视为第一方可信内容（`www/lib/content.ts` 的 `trustCollectionHtml`，`trustedHtml` 信任级别——非可信来源请先在你自己的边界消毒），在 `www/lib/blog.ts` 中定义 collection，并用 `www/tools/generate-site-content-data.ts` 写出带类型的数据模块：
 
 ```sh
 deno task --cwd tools/repo generate:site-content-data   # site:build 会在 router 构建前先运行

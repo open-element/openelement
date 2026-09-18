@@ -16,9 +16,11 @@
  */
 
 import { walk } from '@std/fs/walk';
-import { SITE_BREAKPOINT_TIERS } from '../../www/site-css.ts';
+import { fromFileUrl, join } from '@std/path';
+import { SITE_BREAKPOINT_TIERS } from '../site-css.ts';
 
-const SCAN_ROOTS = ['www/app'];
+const repoRoot = fromFileUrl(new URL('../../', import.meta.url));
+const SCAN_ROOTS = [join(repoRoot, 'www/app')];
 const SOURCE = /\.(ts|tsx)$/;
 const HEX_LONG = /#(?:[0-9a-fA-F]{6}|[0-9a-fA-F]{8})\b/;
 const HEX_SHORT = /#(?:[0-9a-fA-F]{3,4})\b/;

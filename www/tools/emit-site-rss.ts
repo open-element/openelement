@@ -8,15 +8,18 @@
  * the build instead of dropping out of the feed.
  */
 import { fromFileUrl, join } from '@std/path';
-import { loadCollectionData } from '../../www/lib/content.ts';
-import { blogCollection, prepareBlogPosts } from '../../www/lib/blog.ts';
-import { feedFailures, renderBlogFeedXml, SITE_FEED_PATH } from '../lib/site-rss.ts';
+import { loadCollectionData } from '../lib/content.ts';
+import { blogCollection, prepareBlogPosts } from '../lib/blog.ts';
+import { feedFailures, renderBlogFeedXml, SITE_FEED_PATH } from './lib/site-rss.ts';
 
 export const SITE_DIST = 'www/dist';
 
-const siteRoot = fromFileUrl(new URL('../../www/', import.meta.url));
+const repoRoot = fromFileUrl(new URL('../../', import.meta.url));
+const siteRoot = join(repoRoot, 'www', '');
 
-export async function generateSiteRss(dist = SITE_DIST): Promise<string> {
+export async function generateSiteRss(
+  dist = join(repoRoot, SITE_DIST),
+): Promise<string> {
   const blogOptions = { ...blogCollection, contentDir: join(siteRoot, blogCollection.contentDir) };
   const posts = prepareBlogPosts(await loadCollectionData('blog', blogOptions));
   const failures = feedFailures(posts);

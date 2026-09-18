@@ -1,12 +1,12 @@
 /** Blog feed render unit tests (#1441). */
 import { assert, assertEquals, assertThrows } from '@std/assert';
 import { fromFileUrl } from '@std/path';
-import { blogCollection, blogCollectionSchema, prepareBlogPosts } from '../../www/lib/blog.ts';
+import { blogCollection, blogCollectionSchema, prepareBlogPosts } from '../../lib/blog.ts';
 import {
   type CollectionEntry,
   loadCollectionData,
   validateCollectionFrontmatter,
-} from '../../www/lib/content.ts';
+} from '../../lib/content.ts';
 import { blogPostUrl, feedFailures, renderBlogFeedXml, SITE_FEED_PATH } from './site-rss.ts';
 
 /** Build a collection entry exactly as the loader does (filename date prefix and all). */
@@ -154,7 +154,7 @@ Deno.test('feedFailures: unpublishable dates, duplicate and empty slugs fail clo
 });
 
 Deno.test('site feed: the real blog collection renders one item per published post', async () => {
-  const contentDir = fromFileUrl(new URL('../../www/content/blog', import.meta.url));
+  const contentDir = fromFileUrl(new URL('../../content/blog', import.meta.url));
   const posts = prepareBlogPosts(
     await loadCollectionData('blog', { ...blogCollection, contentDir }),
   );
