@@ -1,6 +1,6 @@
 /**
  * site theme-token gate: theme values in the site must come from open-props
- * tokens (packages/ui/src/open-props-tokens.css) and the site alias layer
+ * tokens (packages/ui/src/semantic-tokens.css + its generated module) and the site alias layer
  * (www/vite.config.ts), never from hardcoded literals.
  *
  * Rules for sources under www/app/ and www/islands/:
@@ -12,7 +12,7 @@
  *     typography is allowed.
  *
  * Token definitions belong in www/vite.config.ts (site aliases) or
- * packages/ui/src/open-props-tokens.css (source of truth).
+ * packages/ui/src/semantic-tokens.css (source of truth) as carried by the generated module.
  */
 
 import { walk } from '@std/fs/walk';

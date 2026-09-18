@@ -31,13 +31,8 @@ export async function generateSiteRss(dist = SITE_DIST): Promise<string> {
 }
 
 if (import.meta.main) {
-  // No committed output to drift (writes www/dist only, rebuilt every
-  // site:build): --check passes vacuously so the generator-gates rule —
-  // every generate-*.ts carries a wired drift check — stays branch-free.
-  if (Deno.args.includes('--check')) {
-    console.log('site rss has no committed output to drift (writes www/dist only).');
-  } else {
-    const written = await generateSiteRss();
-    console.log(`site rss written (${written}).`);
-  }
+  // Build-artifact emitter (writes www/dist only, rebuilt every site:build):
+  // no committed output, so no drift check exists or is pretended.
+  const written = await generateSiteRss();
+  console.log(`site rss written (${written}).`);
 }

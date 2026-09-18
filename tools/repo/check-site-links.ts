@@ -28,7 +28,7 @@ import {
 } from '../lib/site-links.ts';
 import { apiReference } from '../../www/app/data/_generated-api-reference.ts';
 import { stripHtmlToText } from '../../www/app/site-ui/article-body.ts';
-import { retiredContentTitles } from './check-retired-urls.ts';
+import { currentContentTitles, retiredContentTitles } from './check-retired-urls.ts';
 
 export const SITE_DIST = 'www/dist';
 const SITE_LOCALES = ['en', 'zh'] as const;
@@ -141,7 +141,12 @@ export async function checkBuiltLinks(dist = SITE_DIST): Promise<LinkFailure[]> 
   // h2 or at the first chrome landmark after it (pager/footer/rail live
   // past the article tail and must never count), so site chrome can never
   // false-positive.
-  const retiredTitles = await retiredContentTitles();
+  // A label equal to a surviving page's own title is correct pointing; only
+  // labels that exist solely on retired pages are forbidden.
+  const survivingTitles = await currentContentTitles();
+  const retiredTitles = new Set(
+    [...(await retiredContentTitles())].filter((title) => !survivingTitles.has(title)),
+  );
   const seeAlsoHeading = /<h2[^>]*id="(see-also|另见)"[^>]*>/;
   const sectionEnd = /<h2[\s>]|<footer[\s>]|<nav[\s>]|<aside[\s>]/;
   for (const htmlFile of htmlFiles.sort()) {

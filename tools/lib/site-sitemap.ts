@@ -17,7 +17,7 @@
  * lastmod semantics are unchanged from the previous generator: the build
  * date for every URL. Pagefind consumes dist independently of this file.
  *
- * Pure functions only; IO lives in ../generate-site-sitemap.ts.
+ * Pure functions only; IO lives in ../repo/emit-site-sitemap.ts.
  */
 
 import { SITE_ORIGIN } from '../../www/app/site-ui/head.ts';

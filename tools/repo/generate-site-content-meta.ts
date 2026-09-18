@@ -1,111 +1,65 @@
 /**
- * Generate the per-article source-freshness map.
+ * Generate the per-article source-freshness map from the committed manifest.
  *
- * For every guide/architecture article slug, records the last-commit date
- * (`git log --follow -1 --format=%cs`) of its en and zh Markdown sources
- * separately — a zh-only edit must not refresh the en stamp, and --follow
- * keeps the stamp across pure moves. Untracked sources (a new article not
- * yet committed) record the explicit sentinel 'uncommitted' instead of a
- * date: the render layer hides the freshness row for it, so a machine/CI
- * date difference can never false-red the drift check.
- *
- * Shallow clones would collapse history and flatten every stamp onto one
- * date, so generation deepens the clone in place first (hosting builders
- * have network); only an unreachable history still fails, loudly.
+ * The build is hermetic: dates come from `www/lib/content-dates.json`, never
+ * from Git, so the same source tree and lockfile produce the same output with
+ * no network, no remote and no `.git` present. The manifest itself is
+ * refreshed deliberately by `check-content-dates.ts --write` when sources
+ * move; this generator only projects it into the module the app imports.
  *
  * Output `www/app/data/_generated-content-meta.ts` (gitignored) maps
- * `<collection>/<slug>` to `{ en, zh }` ISO dates; the article page model
- * projects the render locale's stamp into the reading-shell meta row.
- *
- * `--check` regenerates in memory and fails on drift.
+ * `<collection>/<slug>` to `{ en, zh }` ISO dates; `--check` regenerates in
+ * memory and fails on drift.
  */
 import { fromFileUrl, join } from '@std/path';
 
 const repoRoot = fromFileUrl(new URL('../../', import.meta.url));
-const contentRoot = join(repoRoot, 'www/content/docs');
+const manifestFile = join(repoRoot, 'www/lib/content-dates.json');
 const outFile = join(repoRoot, 'www/app/data/_generated-content-meta.ts');
 
-const COLLECTIONS = ['guide', 'architecture'] as const;
-
-async function gitDate(args: string[]): Promise<string> {
-  const command = new Deno.Command('git', {
-    args,
-    cwd: repoRoot,
-    stdout: 'piped',
-    stderr: 'null',
-  });
-  const { code, stdout } = await command.output();
-  if (code !== 0) return '';
-  return new TextDecoder().decode(stdout).trim();
+interface ContentDatesManifest {
+  generatedFrom: string;
+  articles: Record<string, { en: string; zh: string }>;
 }
 
-const headDate = await gitDate(['log', '-1', '--format=%cs']);
-if (!headDate) throw new Error('git HEAD date unavailable — run inside the repository checkout');
-
-await ensureFullHistory();
-
-/**
- * Shallow clones (Cloudflare Pages, single-ref CI checkouts) collapse
- * history, which would flatten every stamp onto one date. Deepen the clone
- * in place instead of failing: hosting builders have network (they just
- * cloned), and full history is required — a bounded --depth could still
- * cut off an ancient file's last touch. Only an offline or refusing remote
- * still fails, loudly.
- */
-async function ensureFullHistory(): Promise<void> {
-  if ((await gitDate(['rev-parse', '--is-shallow-repository'])) !== 'true') return;
-  const head = await gitDate(['rev-parse', 'HEAD']);
-  const branch = await gitDate(['rev-parse', '--abbrev-ref', 'HEAD']);
-  const candidates = [
-    head || null,
-    Deno.env.get('CF_PAGES_BRANCH'),
-    Deno.env.get('GITHUB_REF_NAME'),
-    branch && branch !== 'HEAD' ? branch : null,
-  ];
-  for (const ref of candidates) {
-    if (!ref) continue;
-    const deepened = new Deno.Command('git', {
-      args: ['fetch', '--unshallow', 'origin', ref],
-      cwd: repoRoot,
-      stdin: 'null',
-      stdout: 'null',
-      stderr: 'null',
-    });
-    if ((await deepened.output()).code !== 0) continue;
-    if ((await gitDate(['rev-parse', '--is-shallow-repository'])) !== 'true') return;
-  }
+let manifest: ContentDatesManifest;
+try {
+  manifest = JSON.parse(await Deno.readTextFile(manifestFile)) as ContentDatesManifest;
+} catch {
   throw new Error(
-    'generate-site-content-meta: shallow clone with no reachable history — every stamp would flatten onto one date. Use a full clone.',
+    `generate-site-content-meta: cannot read ${manifestFile}; ` +
+      'refresh it with deno task --cwd tools/repo content-dates:refresh',
   );
 }
+if (
+  typeof manifest.generatedFrom !== 'string' ||
+  manifest.articles === null ||
+  typeof manifest.articles !== 'object'
+) {
+  throw new Error(`generate-site-content-meta: ${manifestFile} is malformed`);
+}
 
-/** Sentinel for sources git does not track yet; the render layer hides the row for it. */
-const UNCOMMITTED = 'uncommitted';
+/** ISO date or the explicit 'uncommitted' sentinel (render layer hides it). */
+const STAMP = /^(?:\d{4}-\d{2}-\d{2}|uncommitted)$/;
+for (const [slug, stamps] of Object.entries(manifest.articles)) {
+  if (
+    stamps === null || typeof stamps !== 'object' ||
+    !STAMP.test(stamps.en) || !STAMP.test(stamps.zh)
+  ) {
+    throw new Error(
+      `generate-site-content-meta: bad stamps for ${slug}: ${JSON.stringify(stamps)}`,
+    );
+  }
+}
 
 const meta: Record<string, { en: string; zh: string }> = {};
-for (const collection of COLLECTIONS) {
-  const slugs = new Set<string>();
-  for await (const entry of Deno.readDir(join(contentRoot, collection))) {
-    if (!entry.isFile || !entry.name.endsWith('.md')) continue;
-    slugs.add(entry.name.replace(/\.zh\.md$/, '').replace(/\.md$/, ''));
-  }
-  for (const slug of [...slugs].sort()) {
-    const rel = `www/content/docs/${collection}`;
-    const en = await gitDate(['log', '--follow', '-1', '--format=%cs', '--', `${rel}/${slug}.md`]);
-    const zh = await gitDate([
-      'log',
-      '--follow',
-      '-1',
-      '--format=%cs',
-      '--',
-      `${rel}/${slug}.zh.md`,
-    ]);
-    meta[`${collection}/${slug}`] = { en: en || UNCOMMITTED, zh: zh || en || UNCOMMITTED };
-  }
+for (const slug of Object.keys(manifest.articles).sort()) {
+  const { en, zh } = manifest.articles[slug];
+  meta[slug] = { en, zh };
 }
 
 const generated =
-  `// Auto-generated by tools/repo/generate-site-content-meta.ts from git log dates - do not edit.
+  `// Auto-generated by tools/repo/generate-site-content-meta.ts from www/lib/content-dates.json - do not edit.
 
 /** Last-commit ISO date per article source, keyed by \`<collection>/<slug>\`. */
 export const contentMeta: Record<string, { en: string; zh: string }> = ${
