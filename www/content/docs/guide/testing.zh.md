@@ -35,7 +35,7 @@ Deno.test('空消息在校验阶段失败', () => {
 成功不返回——它抛出携带目标与状态的 `OpenElementRedirect`（默认 302 在 POST 分派时被收敛为 303，即 PRG），所以测试断言的是抛出，而不是值：
 
 ```ts
-import { assertEquals, assertInstanceOf } from '@std/assert';
+import { assertEquals } from '@std/assert';
 import { OpenElementRedirect } from '@openelement/router';
 import { action } from '../app/routes/guestbook.tsx';
 
@@ -48,7 +48,9 @@ Deno.test('合法消息跳转到回显', () => {
   } catch (error) {
     thrown = error;
   }
-  assertInstanceOf(thrown, OpenElementRedirect);
+  if (!(thrown instanceof OpenElementRedirect)) {
+    throw new Error('合法消息必须跳转');
+  }
   assertEquals(thrown.location, '/guestbook?echoed=hello');
 });
 ```

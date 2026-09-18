@@ -35,7 +35,7 @@ Nothing in that path needs a server, a DOM or the framework runtime: the validat
 Success does not return — it throws an `OpenElementRedirect` carrying the target and status (the default 302 is coerced to 303 at POST dispatch, PRG), so the test asserts the throw, not a value:
 
 ```ts
-import { assertEquals, assertInstanceOf } from '@std/assert';
+import { assertEquals } from '@std/assert';
 import { OpenElementRedirect } from '@openelement/router';
 import { action } from '../app/routes/guestbook.tsx';
 
@@ -48,7 +48,9 @@ Deno.test('a valid message redirects to the echo', () => {
   } catch (error) {
     thrown = error;
   }
-  assertInstanceOf(thrown, OpenElementRedirect);
+  if (!(thrown instanceof OpenElementRedirect)) {
+    throw new Error('a valid message must redirect');
+  }
   assertEquals(thrown.location, '/guestbook?echoed=hello');
 });
 ```
