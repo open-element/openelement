@@ -1,6 +1,6 @@
 import { compiledStyle } from '../site-ui/compiled-style.ts';
 
-export const pageApiListStyles = [compiledStyle(`
+export const pageReferenceStyles = [compiledStyle(`
   :host { display: block; color: var(--text-primary); }
   * { box-sizing: border-box; }
   p { margin: 0; }

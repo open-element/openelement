@@ -10,7 +10,7 @@ import { element, OpenElement, property } from '@openelement/element';
 import '@openelement/site-ui/open-reading-shell.tsx';
 import '../site-ui/open-section-frame.tsx';
 import '../islands/open-page-rail.tsx';
-import { pageApiListStyles } from './page-apilist-styles.ts';
+import { pageReferenceStyles } from './page-reference-styles.ts';
 
 export interface ApiPackageItem {
   id: string;
@@ -75,12 +75,12 @@ interface ApiMetadata {
   lede: string;
 }
 
-// definePage routes are registered by path-derived tag (reference.tsx ->
-// `apilist-page`); keeping the compiled program tag aligned lets renderDsd
-// fail closed only for genuine mismatches.
-@element('apilist-page')
-export default class ApiCorePage extends OpenElement {
-  static override styles = pageApiListStyles;
+// The route->program tag binding reads this module's own @element tag
+// (route-scanner semantics.exportedTagName); the path-derived tag is only
+// the fallback for classes without one.
+@element('reference-page')
+export default class ReferencePage extends OpenElement {
+  static override styles = pageReferenceStyles;
 
   @property({ reflect: false, attribute: false })
   metadata: ApiMetadata = { breadcrumb: '', title: '', lede: '' };

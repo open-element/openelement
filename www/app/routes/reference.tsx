@@ -4,11 +4,11 @@ import { siteHead } from '@openelement/site-ui/head.ts';
 import { contentLocale } from '@openelement/site-ui/locale.ts';
 import { OPENELEMENT_VERSION, sourceLineStamp } from '../data/version.ts';
 import { apiReference } from '../data/_generated-api-reference.ts';
-import ApiCorePage, {
+import ReferencePage, {
   type ApiElementItem,
   type ApiPackageItem,
   type ApiReferenceItem,
-} from '../components/page-apilist.tsx';
+} from '../components/page-reference.tsx';
 
 export const meta = { section: 'Reference', label: 'API Reference', order: 5 };
 
@@ -312,7 +312,7 @@ const content = {
   },
 } as const;
 
-export default definePage(ApiCorePage, {
+export default definePage(ReferencePage, {
   head({ locale }) {
     const resolved = contentLocale(locale ?? 'en');
     const copy = content[resolved];

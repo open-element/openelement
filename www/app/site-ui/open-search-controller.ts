@@ -138,6 +138,9 @@ async function runSearch(host: SearchHost): Promise<void> {
   const state = states.get(host);
   const query = input(host)?.value.trim() ?? '';
   if (!state || query.length < 2) {
+    // Bump the sequence even on this early return: an in-flight request
+    // must not land afterwards and re-fill the results.
+    if (state) state.searchSequence++;
     showMessage(host, searchChromeStrings(searchLocale()).emptyMessage);
     return;
   }

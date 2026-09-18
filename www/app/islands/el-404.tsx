@@ -68,10 +68,12 @@ export default class Page404 extends OpenElement {
           <p class='serif-line'>{this.serifLine}</p>
           <p class='lede'>{this.lede}</p>
           <div class='actions'>
-            {/* Native anchors, not open-button: importing the ui primitive
+            {
+              /* Native anchors, not open-button: importing the ui primitive
                 would bundle its runtime into this 404-only island chunk and
                 blow the per-island budget. The action-link styles below carry
-                the same primary/ghost voice. */}
+                the same primary/ghost voice. */
+            }
             <a class='action-link primary' href={this.homeHref}>
               {this.backHome}
             </a>
@@ -83,12 +85,12 @@ export default class Page404 extends OpenElement {
             </button>
           </div>
           <p class='search-hint'>{this.searchHint}</p>
-          <nav class='popular' aria-label={this.popularLabel}>
-            <p class='popular-label'>{this.popularLabel}</p>
+          <nav class='popular' aria-labelledby='popular-heading'>
+            <p class='popular-label' id='popular-heading'>{this.popularLabel}</p>
             {this.popular.map((link) => <a key={link.href} href={link.href}>{link.label}</a>)}
           </nav>
-          <nav class='popular suggestions' aria-label={this.suggestionsLabel}>
-            <p class='popular-label'>{this.suggestionsLabel}</p>
+          <nav class='popular suggestions' aria-labelledby='suggestions-heading'>
+            <p class='popular-label' id='suggestions-heading'>{this.suggestionsLabel}</p>
             {this.suggestions.map((link) => <a key={link.href} href={link.href}>{link.label}</a>)}
           </nav>
         </section>

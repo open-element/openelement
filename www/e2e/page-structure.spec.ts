@@ -132,7 +132,7 @@ test.describe('Unified page structure', () => {
 
   test('compiled light section frames project named and default content in place', async ({ page }) => {
     await page.goto('/reference');
-    const frames = page.locator('apilist-page open-section-frame[data-oe-light]');
+    const frames = page.locator('reference-page open-section-frame[data-oe-light]');
     await expect(frames).toHaveCount(4);
     await expect(frames.first().locator('.frame .title')).toContainText(
       'Authoring starts at product packages.',

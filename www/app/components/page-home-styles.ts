@@ -82,7 +82,10 @@ export const pageHomeStyles = [compiledStyle(`
   /* Container queries let the card grids answer to their own width (zoom,
      narrow embeds) instead of the viewport. inline-size containment keeps
      the block axis — and the view-timeline reveals — untouched. Both the
-     hero (spec strip) and the scenes share the band container name. */
+     hero (spec strip) and the scenes share the band container name. No
+     @supports fallback: the constitution promises 3 current engines, all of
+     which ship container queries; older engines keep the base single-column
+     cascade. */
   .hero { container-type:inline-size; container-name:band; }
   .scene { container-type:inline-size; container-name:band; }
   .scene-index { color:var(--brand); font-size:var(--font-size-00); font-weight:var(--font-weight-8); letter-spacing:.24em; text-transform:uppercase; }

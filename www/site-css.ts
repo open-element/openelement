@@ -6,6 +6,32 @@
  * component sheets. Component-local concerns (including language variants via
  * subject-side `:lang(zh)`) belong in the component sheets instead.
  */
+
+/**
+ * Central viewport tier scale (px). Every bare-number @media width/height
+ * breakpoint in www/app and www/site-css.ts must be one of these —
+ * check-site-theme-tokens.ts enforces it, so a new tier is a deliberate
+ * edit here, not a scattered literal. rem/ch/% layout measures and
+ * element-relative @container widths are not viewport tiers and stay out
+ * of this list. 901 is the 900 desktop complement (min-width side).
+ */
+export const SITE_BREAKPOINT_TIERS = [
+  480,
+  520,
+  640,
+  700,
+  720,
+  760,
+  768,
+  860,
+  900,
+  901,
+  940,
+  1040,
+  1100,
+  1120,
+  1200,
+] as const;
 export const siteCSS = `
 :root,
 html[data-theme="light"],

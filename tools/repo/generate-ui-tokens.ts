@@ -11,11 +11,12 @@
  *
  * The `:host` -> `:root` document transform lives in the generated .ts
  * (toRootCss); consumers needing document-level tokens (www/vite.config.ts)
- * use the成品 openPropsRootSheet — no consumer keeps its own regex copy.
+ * use the finished openPropsRootSheet — no consumer keeps its own regex copy.
  *
  * `--check` regenerates in memory and fails on drift.
  */
 
+import { fromFileUrl } from '@std/path';
 import { Gray, Indigo } from 'open-props/src/props.colors.js';
 import borders from 'open-props/src/props.borders.js';
 import fonts from 'open-props/src/props.fonts.js';
@@ -23,7 +24,8 @@ import fonts from 'open-props/src/props.fonts.js';
 const OPEN_PROPS_VERSION = '1.7.23';
 const ANCHOR = '/* @upstream-tokens */';
 
-const repoRoot = new URL('../../', import.meta.url).pathname;
+// fromFileUrl, not .pathname: paths with spaces or %-escapes break otherwise.
+const repoRoot = fromFileUrl(new URL('../../', import.meta.url));
 const semanticFile = `${repoRoot}packages/ui/src/semantic-tokens.css`;
 const outCssFile = `${repoRoot}packages/ui/src/open-props-tokens.css`;
 const outTsFile = `${repoRoot}packages/ui/src/open-props-tokens.ts`;
@@ -76,7 +78,12 @@ for (const { file, module, vars } of UPSTREAM) {
 }
 
 const semantic = await Deno.readTextFile(semanticFile);
-if (!semantic.includes(ANCHOR)) throw new Error(`anchor ${ANCHOR} missing in semantic-tokens.css`);
+const anchorCount = semantic.split(ANCHOR).length - 1;
+if (anchorCount !== 1) {
+  throw new Error(
+    `anchor ${ANCHOR} must appear exactly once in semantic-tokens.css (found ${anchorCount})`,
+  );
+}
 // Fail-closed: the semantic light layer must never shadow an
 // upstream-verbatim token. (The dark block is our own inversion ramp, so it
 // legitimately redefines the same names for the dark theme.)
@@ -89,11 +96,13 @@ for (const name of wanted) {
   }
 }
 
-const cssBody = semantic.replace(ANCHOR, upstreamBlock.trim());
+// Replacer function, not a replacement string: upstream values flow through
+// untouched even if one ever contains a $-pattern.
+const cssBody = semantic.replace(ANCHOR, () => upstreamBlock.trim());
 const generatedCss =
   `/**\n * GENERATED — do not edit; source: open-props@${OPEN_PROPS_VERSION} (MIT) + semantic-tokens.css.\n * Regenerate with: deno task --cwd tools/repo generate:ui-tokens\n */\n\n${cssBody}`;
 
-if (generatedCss.includes('`') || generatedCss.includes('${')) {
+if (generatedCss.includes('`') || generatedCss.includes('${') || generatedCss.includes('\\')) {
   throw new Error('generated CSS must stay free of template-literal metacharacters');
 }
 

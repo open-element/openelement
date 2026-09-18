@@ -16,6 +16,7 @@
  */
 
 import { walk } from '@std/fs/walk';
+import { SITE_BREAKPOINT_TIERS } from '../../www/site-css.ts';
 
 const SCAN_ROOTS = ['www/app'];
 const SOURCE = /\.(ts|tsx)$/;
@@ -24,6 +25,13 @@ const HEX_SHORT = /#(?:[0-9a-fA-F]{3,4})\b/;
 const CSS_KEYWORD = /\b(?:color|background|border|shadow|fill|stroke|gradient|outline)\b/i;
 const FONT_FAMILY = /font-family\s*:\s*([^;]+);/;
 const FONT_SIZE_LITERAL = /font-size\s*:\s*[0-9.]+(?:px|rem|em)\b/;
+// Bare-number @media viewport tiers, both axes (rem/ch/% layout measures
+// and element-relative @container widths are not tiers and never match).
+// Multi-query lines (@media (max-height:760px), (max-width:520px)) match
+// every value: the @media presence is tested per line, values per match.
+const MEDIA_LINE = /@media/;
+const TIER_VALUE = /(?:max-width|max-height|min-width):\s*(\d+)(?![\d.])/g;
+const TIERS = new Set<number>(SITE_BREAKPOINT_TIERS);
 
 export interface ThemeTokenFailure {
   file: string;
@@ -53,6 +61,28 @@ export function findThemeTokenFailures(
   return failures;
 }
 
+export function findBreakpointFailures(
+  file: string,
+  lines: string[],
+): ThemeTokenFailure[] {
+  const failures: ThemeTokenFailure[] = [];
+  for (let i = 0; i < lines.length; i++) {
+    if (!MEDIA_LINE.test(lines[i])) continue;
+    for (const match of lines[i].matchAll(TIER_VALUE)) {
+      const value = Number(match[1]);
+      if (value >= 400 && !TIERS.has(value)) {
+        failures.push({
+          file,
+          line: i + 1,
+          rule: 'breakpoint-tier',
+          text: `${value}px is outside SITE_BREAKPOINT_TIERS (www/site-css.ts)`,
+        });
+      }
+    }
+  }
+  return failures;
+}
+
 async function main(): Promise<void> {
   const failures: ThemeTokenFailure[] = [];
   for (const root of SCAN_ROOTS) {
@@ -61,6 +91,7 @@ async function main(): Promise<void> {
       if (entry.path.includes('/data/_generated-')) continue;
       const text = await Deno.readTextFile(entry.path);
       failures.push(...findThemeTokenFailures(entry.path, text.split('\n')));
+      failures.push(...findBreakpointFailures(entry.path, text.split('\n')));
     }
   }
   if (failures.length > 0) {

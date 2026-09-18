@@ -6,7 +6,7 @@ const articleExtras = `
   .is-hidden { display: none; }
   .nf-code {
     font-family: var(--font-mono);
-    font-size: 3rem;
+    font-size: var(--font-size-6);
     color: var(--text-muted);
   }
   .article-content blockquote {

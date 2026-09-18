@@ -11,7 +11,7 @@ import { headerNav, navSections } from './app/data/_generated-nav-data.ts';
 // Make token variables available to document-level elements while shadow trees
 // continue to inherit them from the document root. The :host -> :root
 // transform is owned by the token codegen (tools/repo/generate-ui-tokens.ts,
-// toRootCss in the generated module); this file only consumes the成品 sheet.
+// toRootCss in the generated module); this file only consumes the finished sheet.
 const rootCSS = [...openPropsRootSheet.cssRules].map((r) => r.cssText).join('\n');
 
 const colorTokensStyle =
