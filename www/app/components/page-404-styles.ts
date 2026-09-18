@@ -85,55 +85,9 @@ export const page404Styles = [compiledStyle(`
     margin-block-start: var(--size-3);
   }
 
-  /* Native action links (see the el-404 note on the ui import): primary and
-     ghost voices matching the site's button roles. */
-  .action-link {
-    padding: var(--size-2) var(--size-4);
-    border: var(--border-size-1) solid var(--border);
-    border-radius: var(--radius-1);
-    color: var(--text-primary);
-    font-family: var(--font-mono);
-    font-size: var(--font-size-0);
-    text-decoration: none;
-  }
-
-  .action-link:hover {
-    border-color: var(--brand);
-    color: var(--brand);
-    text-decoration: none;
-  }
-
-  .action-link.primary {
-    border-color: var(--brand);
-    background: var(--brand);
-    color: var(--on-brand);
-  }
-
-  .action-link.primary:hover {
-    background: var(--brand-hover);
-    border-color: var(--brand-hover);
-    color: var(--on-brand);
-  }
-
-  /* Search entry: a native button (custom-element hosts may not carry
-     event handlers) borrowing the ghost-button voice. It opens the
-     hydrated header search overlay via the el-404 island. */
-  .search-entry {
-    padding: var(--size-2) var(--size-4);
-    border: var(--border-size-1) solid var(--border);
-    border-radius: var(--radius-1);
-    background: transparent;
-    color: var(--text-primary);
-    font-family: var(--font-mono);
-    font-size: var(--font-size-0);
-    cursor: pointer;
-  }
-
-  .search-entry:hover {
-    border-color: var(--brand);
-    color: var(--brand);
-  }
-
+  /* Search hint: the header search listens globally and hydrates on this
+     page, so the hint plus the curated links are the honest controls — a
+     dedicated search island would tax every page's chunks (see page-404). */
   .search-hint {
     color: var(--text-muted);
     font-family: var(--font-mono);

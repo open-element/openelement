@@ -1,13 +1,6 @@
-import { defineIslandConfig } from '@openelement/router';
 import { element, OpenElement, property } from '@openelement/element';
-import { page404Styles } from '../components/page-404-styles.ts';
-
-export const openElement = defineIslandConfig({ hydrate: 'idle', ssr: true });
-
-/** Minimal surface of the hydrated header search island this page opens. */
-interface SearchOpener extends HTMLElement {
-  openSearch?: () => void;
-}
+import '@openelement/ui/open-button';
+import { page404Styles } from './page-404-styles.ts';
 
 @element('el-404')
 export default class Page404 extends OpenElement {
@@ -35,13 +28,6 @@ export default class Page404 extends OpenElement {
   searchHint = '';
 
   @property({ reflect: false })
-  searchLabel = '';
-
-  openSiteSearch(): void {
-    document.querySelector<SearchOpener>('open-search')?.openSearch?.();
-  }
-
-  @property({ reflect: false })
   popularLabel = '';
 
   @property({ reflect: false })
@@ -67,22 +53,18 @@ export default class Page404 extends OpenElement {
           </h1>
           <p class='serif-line'>{this.serifLine}</p>
           <p class='lede'>{this.lede}</p>
+          {/* Static component, deliberately not an island: a 404-only
+              island chunk homed shared framework modules and got imported
+              by every page's chunks (measured +22KB on /) — the header
+              search and ⌘K already hydrate here, so a dedicated control
+              is not worth a site-wide tax. */}
           <div class='actions'>
-            {
-              /* Native anchors, not open-button: importing the ui primitive
-                would bundle its runtime into this 404-only island chunk and
-                blow the per-island budget. The action-link styles below carry
-                the same primary/ghost voice. */
-            }
-            <a class='action-link primary' href={this.homeHref}>
+            <open-button variant='primary' href={this.homeHref}>
               {this.backHome}
-            </a>
-            <a class='action-link' href={this.docsHref}>
+            </open-button>
+            <open-button href={this.docsHref}>
               {this.readDocs}
-            </a>
-            <button type='button' class='search-entry' onClick={this.openSiteSearch}>
-              {this.searchLabel}
-            </button>
+            </open-button>
           </div>
           <p class='search-hint'>{this.searchHint}</p>
           <nav class='popular' aria-labelledby='popular-heading'>

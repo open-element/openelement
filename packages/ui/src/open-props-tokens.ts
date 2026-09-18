@@ -17,7 +17,7 @@ export function toRootCss(hostCss: string): string {
   );
   if (/:host-/.test(darked)) {
     throw new Error(
-      'toRootCss: unhandled :host-* variant (e.g. :host-context) — extend the transform, do not ship a silent rewrite',
+      "toRootCss: unhandled :host-* variant (e.g. :host-context) — extend the transform, do not ship a silent rewrite",
     );
   }
   const rooted = darked.replace(/:host/g, ':root');
@@ -27,13 +27,9 @@ export function toRootCss(hostCss: string): string {
   const inputDarkDecls = countDarkDecls(hostCss, '[data-theme=');
   const outputDarkDecls = countDarkDecls(rooted, ':root[data-theme=');
   if (/:host/.test(rooted)) throw new Error('toRootCss: residual :host in output');
-  if (!rooted.includes(':root[data-theme=')) {
-    throw new Error('toRootCss: dark block missing in output');
-  }
+  if (!rooted.includes(':root[data-theme=')) throw new Error('toRootCss: dark block missing in output');
   if (inputDarkDecls === 0 || outputDarkDecls !== inputDarkDecls) {
-    throw new Error(
-      'toRootCss: dark declarations changed ' + inputDarkDecls + ' -> ' + outputDarkDecls,
-    );
+    throw new Error('toRootCss: dark declarations changed ' + inputDarkDecls + ' -> ' + outputDarkDecls);
   }
   return rooted;
 }

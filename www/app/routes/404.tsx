@@ -3,7 +3,7 @@ import { siteHead } from '@openelement/site-ui/head.ts';
 import { contentLocale } from '@openelement/site-ui/locale.ts';
 import { localizePath } from '@openelement/site-ui/link.ts';
 import redirectTableJson from '../../../tools/repo/site-redirects.json' with { type: 'json' };
-import Page404 from '../islands/el-404.tsx';
+import Page404 from '../components/page-404.tsx';
 
 const redirectTable = redirectTableJson as {
   redirects: Array<{ from: string; to: string; toZh?: string; status: number }>;
@@ -45,7 +45,6 @@ const content = {
     readDocs: 'Read the docs',
     searchHint: 'Tip: use the search button up top, or press ⌘K (Ctrl+K)',
     popularLabel: 'Popular right now',
-    searchLabel: 'Search the docs',
     suggestionsLabel: 'You may be looking for',
     popular: [
       ['Get started', '/guide/getting-started'],
@@ -63,7 +62,6 @@ const content = {
     readDocs: '阅读文档',
     searchHint: '小提示：点右上角搜索，或按 ⌘K（Ctrl+K）',
     popularLabel: '热门直达',
-    searchLabel: '搜索文档',
     suggestionsLabel: '你可能在找',
     popular: [
       ['快速开始', '/guide/getting-started'],
@@ -102,7 +100,6 @@ export default definePage(Page404, {
       backHome: text.backHome,
       readDocs: text.readDocs,
       searchHint: text.searchHint,
-      searchLabel: text.searchLabel,
       popularLabel: text.popularLabel,
       popular,
       suggestionsLabel: text.suggestionsLabel,
