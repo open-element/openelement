@@ -239,6 +239,7 @@ Deno.test('readingChromeStrings carries the bilingual reading chrome copy', () =
     next: 'Next',
     appliesTo: 'Applies to',
     updated: 'Updated',
+    freshnessSeparator: ' · ',
   });
   assertEquals(readingChromeStrings('zh'), {
     onThisPage: '本页目录',
@@ -250,6 +251,7 @@ Deno.test('readingChromeStrings carries the bilingual reading chrome copy', () =
     next: '下一篇',
     appliesTo: '适用于',
     updated: '更新于',
+    freshnessSeparator: ' · ',
   });
 });
 

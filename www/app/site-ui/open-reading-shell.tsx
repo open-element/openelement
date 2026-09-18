@@ -110,19 +110,20 @@ export default class OpenReadingShell extends OpenElement {
   accent = computed(() => this.metadata?.accent ?? '');
   @property({ reflect: false, attribute: false })
   lede = computed(() => this.metadata?.lede ?? '');
-  // Source-freshness meta row (T4.2): version mark + machine-derived update
-  // date, both from metadata; hidden unless both are present so slot-driven
-  // pages (blog/changelog/roadmap) keep their own meta.
-  @property({ reflect: false, attribute: false })
-  metaVersion = computed(() => this.metadata?.version ?? '');
-  @property({ reflect: false, attribute: false })
-  metaUpdated = computed(() => this.metadata?.updated ?? '');
+  // Source-freshness meta row: version mark + machine-derived update date,
+  // both from metadata, folded into one string so fmt and jsx-curly-braces
+  // stop fighting over the separator children. Hidden unless both are
+  // present so slot-driven pages (blog/changelog/roadmap) keep their own
+  // meta.
   @property({ reflect: false, attribute: false })
   hideMetaRow = computed(() => !(this.metadata?.version && this.metadata?.updated));
   @property({ reflect: false, attribute: false })
-  appliesToLabel = computed(() => readingChromeStrings(this.locale).appliesTo);
-  @property({ reflect: false, attribute: false })
-  updatedLabel = computed(() => readingChromeStrings(this.locale).updated);
+  freshnessLine = computed(() => {
+    const s = readingChromeStrings(this.locale);
+    return `${s.appliesTo} ${this.metadata?.version ?? ''}${s.freshnessSeparator}${s.updated} ${
+      this.metadata?.updated ?? ''
+    }`;
+  });
   @property({ reflect: false, attribute: false })
   date = computed(() => this.metadata?.date ?? '');
   @property({ reflect: false, attribute: false, type: Array })
@@ -161,7 +162,9 @@ export default class OpenReadingShell extends OpenElement {
             <slot name='meta'>
               <div>
                 <nav class='breadcrumb' aria-label={this.breadcrumbLabel}>
-                  <a href={this.breadcrumbHref} hidden={this.hideBreadcrumbLink}>{this.breadcrumb}</a>
+                  <a href={this.breadcrumbHref} hidden={this.hideBreadcrumbLink}>
+                    {this.breadcrumb}
+                  </a>
                   <span hidden={this.hideBreadcrumbText}>{this.breadcrumb}</span>
                   <span class='crumb-sep' aria-hidden='true'>/</span>
                   <span class='crumb-current' aria-current='page'>{this.pageTitle}</span>
@@ -171,9 +174,7 @@ export default class OpenReadingShell extends OpenElement {
                   <span class='title-accent'>{this.accent}</span>
                 </h1>
                 <p class='lede'>{this.lede}</p>
-                <p class='freshness-row' hidden={this.hideMetaRow}>
-                  {this.appliesToLabel}{' '}{this.metaVersion}{' · '}{this.updatedLabel}{' '}{this.metaUpdated}
-                </p>
+                <p class='freshness-row' hidden={this.hideMetaRow}>{this.freshnessLine}</p>
                 <p class='meta-row'>
                   <time>{this.date}</time>
                   {this.tags.map((tag) => <span key={tag.key}>{tag.label}</span>)}

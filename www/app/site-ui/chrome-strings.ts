@@ -15,6 +15,7 @@ export function readingChromeStrings(locale: string): {
   next: string;
   appliesTo: string;
   updated: string;
+  freshnessSeparator: string;
 } {
   if (locale === 'zh') {
     return {
@@ -27,6 +28,7 @@ export function readingChromeStrings(locale: string): {
       next: '下一篇',
       appliesTo: '适用于',
       updated: '更新于',
+      freshnessSeparator: ' · ',
     };
   }
   return {
@@ -39,6 +41,7 @@ export function readingChromeStrings(locale: string): {
     next: 'Next',
     appliesTo: 'Applies to',
     updated: 'Updated',
+    freshnessSeparator: ' · ',
   };
 }
 
