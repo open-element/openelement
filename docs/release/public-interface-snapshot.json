@@ -448,17 +448,19 @@
           ]
         },
         "./open-props-tokens": {
-          "publicShapeSha256": "0e1ae34ba6182ea82a5ece72df64c9d7f41dde70455d493d934da4de364dedb0",
+          "publicShapeSha256": "f244bca2306826fbd7c66a30df9d4a75898e878a2a1bd20240910af64608a446",
           "publicSymbols": [
             "openPropsRootSheet=value:StyleSheetLike",
-            "openPropsTokenSheet=value:StyleSheetLike"
+            "openPropsTokenSheet=value:StyleSheetLike",
+            "toRootCss=value:{call:(hostCss:string)=>string}"
           ]
         },
         "./open-props-tokens.js": {
-          "publicShapeSha256": "0e1ae34ba6182ea82a5ece72df64c9d7f41dde70455d493d934da4de364dedb0",
+          "publicShapeSha256": "f244bca2306826fbd7c66a30df9d4a75898e878a2a1bd20240910af64608a446",
           "publicSymbols": [
             "openPropsRootSheet=value:StyleSheetLike",
-            "openPropsTokenSheet=value:StyleSheetLike"
+            "openPropsTokenSheet=value:StyleSheetLike",
+            "toRootCss=value:{call:(hostCss:string)=>string}"
           ]
         },
         "./open-tabs": {
