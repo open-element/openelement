@@ -255,3 +255,39 @@ test.describe('Site chrome: header repository link', () => {
     ).toBeVisible();
   });
 });
+
+test.describe('Site chrome: reading rail scrollspy', () => {
+  test('marks Overview at rest and follows the scroll', async ({ page }) => {
+    await page.setViewportSize(DESKTOP);
+    await page.goto('/guide/getting-started');
+    await page.waitForLoadState('networkidle');
+
+    // open-page-rail renders the same links twice (.desktop-outline and
+    // .mobile-outline) and markCurrent marks both copies, so every
+    // assertion here is scoped to one outline.
+    const rail = page.locator('open-reading-shell[rail] open-page-rail');
+    const desktop = rail.locator('.desktop-outline');
+    await expect(desktop).toBeVisible();
+
+    // At rest the first rail link (#start / Overview) must already be
+    // current. Without the install-time seed nothing was marked until the
+    // observer fired, and #start never enters the -15%/-70% band.
+    const overview = desktop.locator('nav.links a[href="#start"]');
+    await expect(overview).toHaveAttribute('aria-current', 'location');
+    await expect(desktop.locator('[aria-current="location"]')).toHaveCount(1);
+
+    // The observer still drives updates: park the next heading inside the
+    // band (15%-30% of viewport height) and the mark must move exclusively.
+    const second = desktop.locator('nav.links a[href^="#"]').nth(1);
+    const href = (await second.getAttribute('href'))!;
+    await page.evaluate((selector) => {
+      const el = document.querySelector(selector);
+      if (!el) throw new Error(`missing scrollspy target ${selector}`);
+      const top = el.getBoundingClientRect().top + window.scrollY;
+      window.scrollTo(0, top - window.innerHeight * 0.2);
+    }, href);
+    await expect(second).toHaveAttribute('aria-current', 'location');
+    await expect(overview).not.toHaveAttribute('aria-current', 'location');
+    await expect(desktop.locator('[aria-current="location"]')).toHaveCount(1);
+  });
+});
