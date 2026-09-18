@@ -4,8 +4,7 @@ const readingRoutes = [
   '/guide/getting-started',
   '/guide/routing-and-data',
   '/architecture/dsd',
-  '/architecture/islands-deep',
-  '/architecture/package-compatibility',
+  '/architecture/islands',
 ];
 
 const guideRoutes = [
@@ -27,10 +26,7 @@ const architectureRoutes = [
   '/architecture/dsd',
   '/architecture/comparison',
   '/architecture/islands',
-  '/architecture/islands-deep',
-  '/architecture/package-compatibility',
-  '/architecture/benchmark',
-  '/architecture/standards-registry',
+  '/architecture/design-system',
 ];
 
 test.describe('Unified page structure', () => {

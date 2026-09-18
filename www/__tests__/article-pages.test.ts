@@ -46,14 +46,10 @@ const articleRoutes = [
   ['guide', 'testing', 'GuideTestingPage', 110],
   ['guide', 'tutorial', 'GuideTutorialPage', 2],
   ['architecture', 'architecture', 'ArchitecturePage', 10, 'index'],
-  ['architecture', 'benchmark', 'Benchmark', 100],
   ['architecture', 'comparison', 'ComparisonPage', 20],
   ['architecture', 'design-system', 'DesignSystemPage', 15],
   ['architecture', 'dsd', 'DsdGuidePage', 30],
   ['architecture', 'islands', 'IslandsPage', 40],
-  ['architecture', 'islands-deep', 'IslandsDeepGuidePage', 50],
-  ['architecture', 'package-compatibility', 'PackageCompatibilityPage', 90],
-  ['architecture', 'standards-registry', 'StandardsRegistryPage', 80],
 ] as const;
 
 for (const [collection, route, className, , routeFile] of articleRoutes) {

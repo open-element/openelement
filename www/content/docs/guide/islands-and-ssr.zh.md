@@ -32,6 +32,6 @@ upgrade 本身是浏览器的 Custom Element 机制。服务端把编译后的 P
 
 ## 另见
 
-- [Island 深入解析](/zh/architecture/islands-deep)——四层组件模型与 claim 的工作原理。
+- [Island 深入解析](/zh/architecture/islands)——四层组件模型与 claim 的工作原理。
 - [DSD 渲染](/zh/architecture/dsd)——服务端输出背后的平台契约。
 - [Island Hydration](/zh/architecture/islands)——同一套边界在组件模型上的描述。

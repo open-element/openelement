@@ -70,8 +70,27 @@ a return to the retired product graph.
 | 3 browsers   | Candidate releases require Chromium, Firefox and WebKit proof.                         |
 | packed proof | Consumers build from public artifacts, not workspace aliases.                          |
 
+## Package compatibility
+
+OpenElement treats third-party Custom Elements as standards-based dependencies. Current builds use explicit package-island configuration and available Custom Elements Manifest metadata for SSR admission.
+
+### Current contract
+
+`@openelement/element` owns authoring; the `router` package keeps application and build behavior behind one boundary.
+
+### Explicit admission
+
+Known packages can be configured as package islands and use available CEM metadata without importing retired package surfaces.
+
+### Current diagnostics
+
+The current line ships Universal DSD/light/client-only classification,
+hydration-mismatch diagnostics and the tracked third-party WC SSR corpus —
+first shipped on the 0.43 line and kept green by CI on the compiled line.
+Admission still depends on explicit package-island configuration and observed
+metadata; it is not a blanket certification of every third-party component.
+
 ## See also
 
 - [openElement vs Alternatives](/architecture/comparison) — how this architecture is positioned.
-- [Package Compatibility](/architecture/package-compatibility) — which packages are in the current contract.
 - [Core Concepts](/guide/core-concepts) — the same model from an author's side.

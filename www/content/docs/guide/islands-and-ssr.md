@@ -32,6 +32,6 @@ That budget is the reason the static surface matters. Anything that can be expre
 
 ## See also
 
-- [Island Deep Dive](/architecture/islands-deep) — the four component layers and how claim works.
+- [Island Deep Dive](/architecture/islands) — the four component layers and how claim works.
 - [DSD Rendering](/architecture/dsd) — the platform contract behind the server output.
 - [Island Hydration](/architecture/islands) — the same boundary described for the component model.

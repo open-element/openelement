@@ -295,7 +295,7 @@ const FOOTER_COLUMNS: Record<FooterColumnId, FooterColumnSource> = {
       { path: '/guide/core-concepts', en: 'Elements', zh: '元素' },
       { path: '/architecture/design-system', en: 'UI', zh: '设计体系' },
       { path: '/architecture', en: 'Framework', zh: '框架' },
-      { path: '/architecture/standards-registry', en: 'Protocols', zh: '协议' },
+      { path: '/architecture/dsd', en: 'Protocols', zh: '协议' },
     ],
   },
   resources: {

@@ -36,8 +36,25 @@ The browser parses shadow roots from HTML. Custom Elements then upgrade existing
 - Interactive elements for local browser behavior.
 - Islands for client components that need framework runtimes.
 
+## Platform standards
+
+OpenElement relies on web-platform contracts rather than a proprietary registry product. Custom Elements, DSD, CEM, Request/Response and FormData define the direction of the public application model.
+
+### Elements + DSD
+
+Standard Custom Elements and Declarative Shadow DOM define the durable component boundary.
+
+### Request semantics
+
+`Request`, `Response` and `FormData` are the basis of the current loader/action surfaces — application interaction without a proprietary transport.
+
+### Four-package ownership
+
+`Element`, `Router`, `Create` and the experimental `UI` package are the current consumer surface; internal contracts stay internal.
+
 ## See also
 
 - [Island Hydration](/architecture/islands) — when a component crosses into client delivery.
-- [Island Deep Dive](/architecture/islands-deep) — the layers and hydration strategies.
+- [Island Deep Dive](/architecture/islands) — the layers and hydration strategies.
 - [Core Concepts](/guide/core-concepts) — declaring a component's root mode.
+- [Current Architecture](/architecture) — where each package sits in the graph.

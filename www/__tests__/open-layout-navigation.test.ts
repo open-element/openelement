@@ -186,7 +186,7 @@ Deno.test('footerColumn restores the four-column link structure with localized t
       '/guide/core-concepts',
       '/architecture/design-system',
       '/architecture',
-      '/architecture/standards-registry',
+      '/architecture/dsd',
     ],
   );
   const zhProduct = footerColumn('zh', ['en', 'zh'], 'product');

@@ -78,4 +78,4 @@ section: 'Reference'
 
 - [样式](/zh/guide/styling)——应用如何使用这些令牌。
 - [DSD 渲染](/zh/architecture/dsd)——站点组件所依赖的边界。
-- [性能与基准测试](/zh/architecture/benchmark)——dogfood 这套体系的站点的实测成本。
+- [实测输出](/zh/architecture/comparison)——dogfood 这套体系的站点的实测成本。

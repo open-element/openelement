@@ -78,4 +78,4 @@ Each page begins with a product object, preserves dark/light parity and keeps mo
 
 - [Styling](/guide/styling) — how an application consumes these tokens.
 - [DSD Rendering](/architecture/dsd) — the boundary the site's components are built on.
-- [Performance & Benchmarks](/architecture/benchmark) — the measured cost of the site that dogfoods them.
+- [Measured output](/architecture/comparison) — the measured cost of the site that dogfoods them.
