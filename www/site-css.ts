@@ -94,8 +94,15 @@ body {
   :root, :root[data-theme='dark'] { --text-muted: var(--text-secondary); }
 }
 /* Reading-page print: chrome goes away, ink goes black on white, and content
-   links carry their target so the paper copy stays navigable. */
+   links carry their target so the paper copy stays navigable. Token
+   remapping (not selector enumeration) carries the whole prose surface —
+   h2/h3, code, strong, tables — including dark mode, where near-white ink
+   would otherwise vanish on paper. */
 @media print {
+  :root, :root[data-theme='dark'] {
+    --text-primary: #000; --text-secondary: #000; --text-muted: #000;
+    --bg-base: #fff; --bg-muted: #fff; --bg-card: #fff; --bg-elevated: #fff;
+  }
   .app-header,
   .docs-sidebar,
   .sidebar-mobile-panel,
@@ -119,12 +126,19 @@ body {
   .lede {
     color: #000 !important;
   }
-  .article-content a[href]::after {
+  /* Keep code blocks, figures and tables whole across page breaks. */
+  pre,
+  figure,
+  table,
+  open-code-block {
+    break-inside: avoid;
+  }
+  /* attr(href) prints relative paths, useless on paper: expand only
+     absolute URLs and say so. */
+  .article-content a[href^="http"]::after,
+  .article-content a[href^="https://"]::after {
     content: " (" attr(href) ")";
     font-size: 0.85em;
     word-break: break-all;
-  }
-  .article-content a[href^="#"]::after {
-    content: none;
   }
 }`;
