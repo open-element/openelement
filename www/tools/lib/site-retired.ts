@@ -72,14 +72,9 @@ async function routePathsIn(dir: string): Promise<Set<string>> {
   return paths;
 }
 
-export async function loadBaselineManifest(): Promise<BaselineManifest> {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(await Deno.readTextFile(baselinePath));
-  } catch {
-    throw new Error(`cannot read ${baselinePath}; refresh it with --refresh --base <ref>`);
-  }
-  const manifest = parsed as Partial<BaselineManifest>;
+/** Validate a parsed baseline manifest (pure; the loader only adds file IO). */
+export function parseBaselineManifest(parsed: unknown, sourceLabel: string): BaselineManifest {
+  const manifest = (parsed ?? {}) as Partial<BaselineManifest>;
   if (
     typeof manifest.baseline?.ref !== 'string' ||
     typeof manifest.baseline?.sha !== 'string' ||
@@ -88,9 +83,19 @@ export async function loadBaselineManifest(): Promise<BaselineManifest> {
     !Array.isArray(manifest.retiredTitles) ||
     !manifest.retiredTitles.every((title) => typeof title === 'string')
   ) {
-    throw new Error(`${baselinePath} is malformed`);
+    throw new Error(`${sourceLabel} is malformed`);
   }
   return manifest as BaselineManifest;
+}
+
+export async function loadBaselineManifest(): Promise<BaselineManifest> {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(await Deno.readTextFile(baselinePath));
+  } catch {
+    throw new Error(`cannot read ${baselinePath}; refresh it with --refresh --base <ref>`);
+  }
+  return parseBaselineManifest(parsed, baselinePath);
 }
 
 /** Retired routes for the current tree, from the committed baseline snapshot. */
@@ -103,15 +108,10 @@ export async function retiredRoutes(): Promise<
   return { manifest, retired };
 }
 
-export async function loadRedirectTable(): Promise<RedirectMapping[]> {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(await Deno.readTextFile(tablePath));
-  } catch {
-    throw new Error(`cannot read ${tablePath}`);
-  }
-  const list = (parsed as { redirects?: unknown }).redirects;
-  if (!Array.isArray(list)) throw new Error(`${tablePath} must hold { redirects: [...] }`);
+/** Validate a parsed redirect table (pure; the loader only adds file IO). */
+export function parseRedirectTable(parsed: unknown, sourceLabel: string): RedirectMapping[] {
+  const list = (parsed as { redirects?: unknown } | null | undefined)?.redirects;
+  if (!Array.isArray(list)) throw new Error(`${sourceLabel} must hold { redirects: [...] }`);
   const mappings: RedirectMapping[] = [];
   for (const entry of list as unknown[]) {
     const { from, to, toZh, status } = entry as Partial<RedirectMapping>;
@@ -123,12 +123,24 @@ export async function loadRedirectTable(): Promise<RedirectMapping[]> {
       status !== 301
     ) {
       throw new Error(
-        `bad mapping (want unprefixed from/to/toZh and status 301): ${JSON.stringify(entry)}`,
+        `${sourceLabel}: bad mapping (want unprefixed from/to/toZh and status 301): ${
+          JSON.stringify(entry)
+        }`,
       );
     }
     mappings.push(toZh === undefined ? { from, to, status } : { from, to, toZh, status });
   }
   return mappings;
+}
+
+export async function loadRedirectTable(): Promise<RedirectMapping[]> {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(await Deno.readTextFile(tablePath));
+  } catch {
+    throw new Error(`cannot read ${tablePath}`);
+  }
+  return parseRedirectTable(parsed, tablePath);
 }
 
 function stripFragment(path: string): { route: string; fragment: string } {
