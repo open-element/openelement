@@ -87,6 +87,20 @@ Verify the artifact, not the log. After `deno task build`:
 4. `curl -i -X POST -H 'x-openelement-action: true' --data 'message=' http://localhost:4173/your-form-route` must reach the action: a validation failure answers `422` with `application/problem+json`, a success answers `303` with a `Location` header.
 5. Request a `'dynamic'` route twice and confirm the response body differs from the file on disk in `dist/` — that is the request-time path working.
 
+### Smoke script
+
+Steps 3–4 as one copyable block (substitute your form route). It fails on the first wrong status, so it doubles as a deploy gate:
+
+```bash
+set -e
+BASE=http://localhost:4173
+test "$(curl -s -o /dev/null -w '%{http_code}' "$BASE/")" = 200
+test "$(curl -s -o /dev/null -w '%{http_code}' -X POST \
+  -H 'x-openelement-action: true' --data 'message=' \
+  "$BASE/your-form-route")" = 422
+echo 'artifact answers: static 200, action 422'
+```
+
 ## See also
 
 - [Build and configuration](/guide/configuration) — the build, routes and middleware options that shape the output.

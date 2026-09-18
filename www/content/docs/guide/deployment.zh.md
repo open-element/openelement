@@ -87,6 +87,20 @@ export default defineNitroConfig({
 4. `curl -i -X POST -H 'x-openelement-action: true' --data 'message=' http://localhost:4173/你的表单路由` 必须到达 action：校验失败以 `422` 与 `application/problem+json` 应答，成功以 `303` 与 `Location` 头应答。
 5. 连续请求同一个 `'dynamic'` 路由两次，确认响应体与 `dist/` 中磁盘上的文件不同——那说明请求时路径在工作。
 
+### 冒烟脚本
+
+第 3–4 步合为一块可复制的脚本（把表单路由换成你的）。第一个错误状态即失败，可直接做部署门禁：
+
+```bash
+set -e
+BASE=http://localhost:4173
+test "$(curl -s -o /dev/null -w '%{http_code}' "$BASE/")" = 200
+test "$(curl -s -o /dev/null -w '%{http_code}' -X POST \
+  -H 'x-openelement-action: true' --data 'message=' \
+  "$BASE/你的表单路由")" = 422
+echo 'artifact answers: static 200, action 422'
+```
+
 ## 另见
 
 - [构建与配置](/zh/guide/configuration)——决定产物形态的构建、路由与中间件选项。

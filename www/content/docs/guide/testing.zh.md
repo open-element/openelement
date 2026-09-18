@@ -30,6 +30,42 @@ Deno.test('空消息在校验阶段失败', () => {
 
 这条路径不需要服务器、DOM 或框架运行时：校验、回显与 PRG 目标全部由函数的返回值决定。
 
+### 重定向是抛出来的
+
+成功不返回——它抛出携带目标与状态的 `OpenElementRedirect`（默认 302 在 POST 分派时被收敛为 303，即 PRG），所以测试断言的是抛出，而不是值：
+
+```ts
+import { assertEquals, assertInstanceOf } from '@std/assert';
+import { action, OpenElementRedirect } from '../app/routes/guestbook.tsx';
+
+Deno.test('合法消息跳转到回显', () => {
+  const formData = new FormData();
+  formData.set('message', 'hello');
+  let thrown: unknown;
+  try {
+    action({ formData });
+  } catch (error) {
+    thrown = error;
+  }
+  assertInstanceOf(thrown, OpenElementRedirect);
+  assertEquals(thrown.location, '/guestbook?echoed=hello');
+});
+```
+
+### Loader 返回数据
+
+loader 同理——普通异步函数，直接调用：
+
+```ts
+import { assertEquals } from '@std/assert';
+import { loader } from '../app/routes/guestbook.tsx';
+
+Deno.test('loader 返回条目列表', async () => {
+  const data = await loader();
+  assertEquals(Array.isArray(data.entries), true);
+});
+```
+
 ## 构建检查
 
 构建是第二道门禁，也是某些契约唯一能检查的地方——预渲染、路由发现、静态路径展开与请求时输出都只在这里发生：
@@ -46,6 +82,20 @@ deno task start   # 伺服 dist/；dist/server 存在时向它分派
 布局、DSD 层与 hydration 都是浏览器事实。伺服一次构建（`deno task start`），让浏览器自动化跑在它上面——Playwright 与 Web Test Runner 都能直接驱动构建产物——然后断言渲染后的 DOM，而不是 HTML 源码：shadow root 的内容只有页面解析之后才能查询，upgrade 也只有 island 的 chunk 加载之后才会发生。
 
 任何交互组件都值得有的两条断言：在 island 的模块运行之前文档已完整且已样式化（static-first 契约）；upgrade 之后组件仍能响应真实的用户输入。本仓库自己的站点测试套件就是这种形态——端到端用例针对构建产物覆盖 DSD 层、hydration 行为、island 响应性与导航。
+
+### 第一个浏览器冒烟测试
+
+挡住客户端 bundle，页面必须照样绘制——static-first 契约浓缩为一个测试：
+
+```ts
+import { expect, test } from '@playwright/test';
+
+test('挡住 island chunk 页面照样绘制', async ({ page }) => {
+  await page.route('**/client/**', (route) => route.abort());
+  await page.goto('http://localhost:4173/');
+  await expect(page.getByRole('heading', { level: 1 }).first()).toBeVisible();
+});
+```
 
 ## 另见
 

@@ -30,6 +30,42 @@ Deno.test('an empty message fails validation', () => {
 
 Nothing in that path needs a server, a DOM or the framework runtime: the validation, the echo and the PRG target are all decided by the function's return value.
 
+### Redirects throw
+
+Success does not return — it throws an `OpenElementRedirect` carrying the target and status (the default 302 is coerced to 303 at POST dispatch, PRG), so the test asserts the throw, not a value:
+
+```ts
+import { assertEquals, assertInstanceOf } from '@std/assert';
+import { action, OpenElementRedirect } from '../app/routes/guestbook.tsx';
+
+Deno.test('a valid message redirects to the echo', () => {
+  const formData = new FormData();
+  formData.set('message', 'hello');
+  let thrown: unknown;
+  try {
+    action({ formData });
+  } catch (error) {
+    thrown = error;
+  }
+  assertInstanceOf(thrown, OpenElementRedirect);
+  assertEquals(thrown.location, '/guestbook?echoed=hello');
+});
+```
+
+### Loaders return data
+
+A loader is the same shape — a plain async function, called directly:
+
+```ts
+import { assertEquals } from '@std/assert';
+import { loader } from '../app/routes/guestbook.tsx';
+
+Deno.test('the loader returns the entry list', async () => {
+  const data = await loader();
+  assertEquals(Array.isArray(data.entries), true);
+});
+```
+
 ## Build checks
 
 The build is the second gate, and it is the only place some contracts can be checked — prerendering, route discovery, static-path expansion and the request-time output all happen there:
@@ -46,6 +82,20 @@ Inspect the output rather than trusting the log. A pure-static project should pr
 Layout, DSD layers and hydration are browser facts. Serve a build (`deno task start`) and point a browser automation run at it — Playwright and Web Test Runner both drive the built output directly — then assert on the rendered DOM instead of the HTML source: a shadow root's contents are only queryable once the page has parsed, and an upgrade only happens once the island's chunk has loaded.
 
 Two assertions are worth having for any interactive component: the document is complete and styled before the island's module runs (the static-first contract), and after upgrade the component still responds to real user input. The repository's own site suite follows that shape — its end-to-end specs cover DSD layers, hydration behavior, island reactivity and navigation against the built output.
+
+### A first browser smoke
+
+Block the client bundle and the page must still paint — that is the static-first contract in one test:
+
+```ts
+import { expect, test } from '@playwright/test';
+
+test('the page paints with its island chunks blocked', async ({ page }) => {
+  await page.route('**/client/**', (route) => route.abort());
+  await page.goto('http://localhost:4173/');
+  await expect(page.getByRole('heading', { level: 1 }).first()).toBeVisible();
+});
+```
 
 ## See also
 
