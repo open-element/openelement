@@ -91,7 +91,7 @@ for (const name of wanted) {
 
 const cssBody = semantic.replace(ANCHOR, upstreamBlock.trim());
 const generatedCss =
-  `/**\n * GENERATED — do not edit; source: open-props@${OPEN_PROPS_VERSION} (MIT) + semantic-tokens.css.\n * Regenerate with: deno task --cwd tools/repo ui:tokens\n */\n\n${cssBody}`;
+  `/**\n * GENERATED — do not edit; source: open-props@${OPEN_PROPS_VERSION} (MIT) + semantic-tokens.css.\n * Regenerate with: deno task --cwd tools/repo generate:ui-tokens\n */\n\n${cssBody}`;
 
 if (generatedCss.includes('`') || generatedCss.includes('${')) {
   throw new Error('generated CSS must stay free of template-literal metacharacters');
@@ -99,7 +99,7 @@ if (generatedCss.includes('`') || generatedCss.includes('${')) {
 
 const generatedTs = `/**
  * GENERATED — do not edit; source: open-props@${OPEN_PROPS_VERSION} (MIT) + semantic-tokens.css.
- * Regenerate with: deno task --cwd tools/repo ui:tokens
+ * Regenerate with: deno task --cwd tools/repo generate:ui-tokens
  */
 
 import { StyleSheet, type StyleSheetLike } from '@openelement/element';
@@ -128,7 +128,7 @@ if (Deno.args.includes('--check')) {
     Deno.readTextFile(outTsFile).catch(() => ''),
   ]);
   if (currentCss !== generatedCss || currentTs !== generatedTs) {
-    console.error('ui tokens drift: regenerate with deno task --cwd tools/repo ui:tokens');
+    console.error('ui tokens drift: regenerate with deno task --cwd tools/repo generate:ui-tokens');
     Deno.exit(1);
   }
   console.log('ui tokens check passed.');

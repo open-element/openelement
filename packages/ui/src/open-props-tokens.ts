@@ -1,6 +1,6 @@
 /**
  * GENERATED — do not edit; source: open-props@1.7.23 (MIT) + semantic-tokens.css.
- * Regenerate with: deno task --cwd tools/repo ui:tokens
+ * Regenerate with: deno task --cwd tools/repo generate:ui-tokens
  */
 
 import { StyleSheet, type StyleSheetLike } from '@openelement/element';
@@ -13,7 +13,7 @@ function toRootCss(hostCss: string): string {
 
 const OPEN_PROPS_TOKEN_CSS = `/**
  * GENERATED — do not edit; source: open-props@1.7.23 (MIT) + semantic-tokens.css.
- * Regenerate with: deno task --cwd tools/repo ui:tokens
+ * Regenerate with: deno task --cwd tools/repo generate:ui-tokens
  */
 
 /**
@@ -24,7 +24,7 @@ const OPEN_PROPS_TOKEN_CSS = `/**
  * match upstream open-props verbatim (gray ramp, indigo-6, border sizes,
  * font weights, two line-heights) are NOT listed here — they are injected at
  * the @upstream-tokens anchor below by tools/repo/generate-ui-tokens.ts
- * (deno task --cwd tools/repo ui:tokens), which reads them from the real
+ * (deno task --cwd tools/repo generate:ui-tokens), which reads them from the real
  * open-props npm dependency. Do not re-add them here: the generator fails on
  * any duplication.
  *

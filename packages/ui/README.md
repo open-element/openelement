@@ -89,7 +89,7 @@ The reference site wires the same scripts through the `inject` option in
 are **generated — do not edit**. Regenerate with:
 
 ```bash
-deno task --cwd tools/repo ui:tokens
+deno task --cwd tools/repo generate:ui-tokens
 ```
 
 Sources:
