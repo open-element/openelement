@@ -72,8 +72,12 @@ for (const [rel, abs] of distFiles) {
   }
 }
 function chunkStem(docName: string): string {
-  const hits = [...chunkSize.keys()].filter((stem) => stem === docName || stem.startsWith(`${docName}-`));
-  if (hits.length !== 1) failures.push(`chunk ${docName}: want exactly one dist file, found ${hits.length}`);
+  const hits = [...chunkSize.keys()].filter((stem) =>
+    stem === docName || stem.startsWith(`${docName}-`)
+  );
+  if (hits.length !== 1) {
+    failures.push(`chunk ${docName}: want exactly one dist file, found ${hits.length}`);
+  }
   return hits[0] ?? docName;
 }
 function routePayload(route: string): { bytes: number; chunks: number } {
@@ -109,8 +113,18 @@ for (const docPath of docs) {
     }
     return Number(match[1].replaceAll(',', ''));
   };
-  check(scope + 'html files', num(zh ? /\|\s*预渲染文档\s*\|\s*(\d+)/ : /\|\s*Pre-rendered documents\s*\|\s*(\d+)/), distHtml.length);
-  check(scope + 'sitemap locs', num(zh ? /\|\s*`sitemap\.xml` URL 数\s*\|\s*(\d+)/ : /\|\s*URLs in `sitemap\.xml`\s*\|\s*(\d+)/), sitemapLocs);
+  check(
+    scope + 'html files',
+    num(zh ? /\|\s*预渲染文档\s*\|\s*(\d+)/ : /\|\s*Pre-rendered documents\s*\|\s*(\d+)/),
+    distHtml.length,
+  );
+  check(
+    scope + 'sitemap locs',
+    num(
+      zh ? /\|\s*`sitemap\.xml` URL 数\s*\|\s*(\d+)/ : /\|\s*URLs in `sitemap\.xml`\s*\|\s*(\d+)/,
+    ),
+    sitemapLocs,
+  );
   check(
     scope + 'manifests',
     num(zh ? /\|\s*island manifest\s*\|\s*(\d+)/ : /\|\s*Island manifests\s*\|\s*(\d+)/),
@@ -121,7 +135,11 @@ for (const docPath of docs) {
     num(zh ? /每个语言 (\d+) 页/ : /(\d+) pages per locale/),
     entryJson.languages.en.page_count,
   );
-  check(scope + 'fragments', num(zh ? /，(\d+) 个 fragment/ : /, (\d+) fragments/), fragmentFiles.length);
+  check(
+    scope + 'fragments',
+    num(zh ? /，(\d+) 个 fragment/ : /, (\d+) fragments/),
+    fragmentFiles.length,
+  );
   const pair = zh
     ? /(\d+) 个 island 标签、(\d+) 条记录/.exec(text)
     : /(\d+) island tags in (\d+) entries/.exec(text);
@@ -130,13 +148,23 @@ for (const docPath of docs) {
     check(scope + 'island tags', Number(pair[1]), tagCounts.size);
     check(scope + 'manifest entries', Number(pair[2]), manifestEntries);
   }
-  const railOrder = [...text.matchAll(/open-page-rail[`\s]+(?:on|出现在)\s*(\d+)/g)].map((m) => Number(m[1]));
-  const codeOrder = [...text.matchAll(/open-code-block[`\s]+(?:on|出现在)\s*(\d+)/g)].map((m) => Number(m[1]));
-  if (railOrder.length > 0) check(scope + 'rail pages', railOrder[0], tagCounts.get('open-page-rail') ?? -2);
+  const railOrder = [...text.matchAll(/open-page-rail[`\s]+(?:on|出现在)\s*(\d+)/g)].map((m) =>
+    Number(m[1])
+  );
+  const codeOrder = [...text.matchAll(/open-code-block[`\s]+(?:on|出现在)\s*(\d+)/g)].map((m) =>
+    Number(m[1])
+  );
+  if (railOrder.length > 0) {
+    check(scope + 'rail pages', railOrder[0], tagCounts.get('open-page-rail') ?? -2);
+  }
   if (codeOrder.length > 0) {
     check(scope + 'code-block pages', codeOrder[0], tagCounts.get('open-code-block') ?? -2);
   }
-  for (const row of text.matchAll(/\|\s*`([^`(|]+?)`(?:\([^)]*\))?\s*\|\s*([\d,]+)\s*\|\s*([\d,]+)\s*\|/g)) {
+  for (
+    const row of text.matchAll(
+      /\|\s*`([^`(|]+?)`(?:\([^)]*\))?\s*\|\s*([\d,]+)\s*\|\s*([\d,]+)\s*\|/g,
+    )
+  ) {
     const name = row[1].trim();
     if (!/^(client\.js|island-|open-)/.test(name)) continue;
     const stem = name === 'client.js' ? 'client' : name;

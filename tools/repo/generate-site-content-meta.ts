@@ -61,7 +61,14 @@ for (const collection of COLLECTIONS) {
   for (const slug of [...slugs].sort()) {
     const rel = `www/content/docs/${collection}`;
     const en = await gitDate(['log', '--follow', '-1', '--format=%cs', '--', `${rel}/${slug}.md`]);
-    const zh = await gitDate(['log', '--follow', '-1', '--format=%cs', '--', `${rel}/${slug}.zh.md`]);
+    const zh = await gitDate([
+      'log',
+      '--follow',
+      '-1',
+      '--format=%cs',
+      '--',
+      `${rel}/${slug}.zh.md`,
+    ]);
     meta[`${collection}/${slug}`] = { en: en || UNCOMMITTED, zh: zh || en || UNCOMMITTED };
   }
 }

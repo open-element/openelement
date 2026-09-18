@@ -27,7 +27,7 @@ function markCurrent(state: RailState, hash: string): void {
 /** Deep-link-aware seed: the last rail target at or above the band top wins. */
 function seedCurrent(state: RailState, targets: Map<string, Element>, firstHash: string): void {
   // Same band the observer watches: top = 15% of viewport height.
-  const bandTop = window.innerHeight * 0.15;
+  const bandTop = globalThis.innerHeight * 0.15;
   let current = firstHash;
   for (const [hash, target] of targets) {
     // Map insertion order is rail order is document order: stop at the

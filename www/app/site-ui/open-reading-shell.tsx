@@ -119,7 +119,9 @@ export default class OpenReadingShell extends OpenElement {
   hideMetaRow = computed(() => !(this.metadata?.version && this.metadata?.updated));
   @property({ reflect: false, attribute: false })
   freshnessPrefix = computed(() =>
-    `${readingChromeStrings(this.locale).appliesTo} ${this.metadata?.version ?? ''}${readingChromeStrings(this.locale).freshnessSeparator}${readingChromeStrings(this.locale).updated} `
+    `${readingChromeStrings(this.locale).appliesTo} ${this.metadata?.version ?? ''}${
+      readingChromeStrings(this.locale).freshnessSeparator
+    }${readingChromeStrings(this.locale).updated} `
   );
   @property({ reflect: false, attribute: false })
   metaUpdated = computed(() => this.metadata?.updated ?? '');
@@ -175,7 +177,10 @@ export default class OpenReadingShell extends OpenElement {
                   <span class='title-accent'>{this.accent}</span>
                 </h1>
                 <p class='lede'>{this.lede}</p>
-                <p class='freshness-row' hidden={this.hideMetaRow}><span>{this.freshnessPrefix}</span><time datetime={this.metaUpdated}>{this.metaUpdatedLabel}</time></p>
+                <p class='freshness-row' hidden={this.hideMetaRow}>
+                  <span>{this.freshnessPrefix}</span>
+                  <time datetime={this.metaUpdated}>{this.metaUpdatedLabel}</time>
+                </p>
                 <p class='meta-row'>
                   <time>{this.date}</time>
                   {this.tags.map((tag) => <span key={tag.key}>{tag.label}</span>)}

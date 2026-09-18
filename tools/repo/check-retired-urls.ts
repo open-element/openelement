@@ -13,7 +13,7 @@
  * The table loader is importable (emit-site-redirects.ts reuses it); only
  * the main guard exits.
  */
-import { fromFileUrl, join, resolve } from '@std/path';
+import { fromFileUrl, join } from '@std/path';
 import { scanRoutes } from '../../packages/router/src/vite/internal/ssg/route-scanner.ts';
 import { fileToRoutePath } from '../../www/lib/route-path.ts';
 import { slugifyHeadingId } from '../../www/app/site-ui/article-body.ts';
@@ -116,7 +116,8 @@ export async function loadRedirectTable(): Promise<RedirectMapping[]> {
     if (
       typeof from !== 'string' || !from.startsWith('/') || from.startsWith('/zh/') ||
       typeof to !== 'string' || !to.startsWith('/') || to.startsWith('/zh/') ||
-      (toZh !== undefined && (typeof toZh !== 'string' || !toZh.startsWith('/') || toZh.startsWith('/zh/'))) ||
+      (toZh !== undefined &&
+        (typeof toZh !== 'string' || !toZh.startsWith('/') || toZh.startsWith('/zh/'))) ||
       status !== 301
     ) {
       fail(`bad mapping (want unprefixed from/to/toZh and status 301): ${JSON.stringify(entry)}`);
@@ -128,13 +129,17 @@ export async function loadRedirectTable(): Promise<RedirectMapping[]> {
 
 function stripFragment(path: string): { route: string; fragment: string } {
   const hash = path.indexOf('#');
-  return hash < 0 ? { route: path, fragment: '' } : { route: path.slice(0, hash), fragment: path.slice(hash + 1) };
+  return hash < 0
+    ? { route: path, fragment: '' }
+    : { route: path.slice(0, hash), fragment: path.slice(hash + 1) };
 }
 
 /** Content file backing a collection route, for fragment verification. */
 function contentFileFor(route: string, locale: 'en' | 'zh'): string | null {
   const suffix = locale === 'zh' ? '.zh.md' : '.md';
-  if (route === '/architecture') return join(repoRoot, `www/content/docs/architecture/architecture${suffix}`);
+  if (route === '/architecture') {
+    return join(repoRoot, `www/content/docs/architecture/architecture${suffix}`);
+  }
   const guide = /^\/guide\/([a-z0-9-]+)$/.exec(route);
   if (guide) return join(repoRoot, `www/content/docs/guide/${guide[1]}${suffix}`);
   const arch = /^\/architecture\/([a-z0-9-]+)$/.exec(route);
@@ -232,7 +237,9 @@ export async function checkRetiredUrls(baseRef: string): Promise<void> {
     Deno.exit(1);
   }
   console.log(
-    retired.size === 0 ? 'no retired urls' : `retired urls ok: ${retired.size} retired, all mapped.`,
+    retired.size === 0
+      ? 'no retired urls'
+      : `retired urls ok: ${retired.size} retired, all mapped.`,
   );
 }
 

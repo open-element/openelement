@@ -283,8 +283,8 @@ test.describe('Site chrome: reading rail scrollspy', () => {
     await page.evaluate((selector) => {
       const el = document.querySelector(selector);
       if (!el) throw new Error(`missing scrollspy target ${selector}`);
-      const top = el.getBoundingClientRect().top + window.scrollY;
-      window.scrollTo(0, top - window.innerHeight * 0.2);
+      const top = el.getBoundingClientRect().top + globalThis.scrollY;
+      globalThis.scrollTo(0, top - globalThis.innerHeight * 0.2);
     }, href);
     await expect(second).toHaveAttribute('aria-current', 'location');
     await expect(overview).not.toHaveAttribute('aria-current', 'location');

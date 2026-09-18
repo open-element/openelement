@@ -42,6 +42,8 @@ Deno.test('prepareArticle: headings inside pre stay literal', () => {
 });
 
 Deno.test('prepareArticle: reserved and existing ids are never re-issued', () => {
-  const { outline } = prepareArticle('<h2>Start</h2><p id="kept">x</p><h2>Kept</h2>', 'en', ['start']);
+  const { outline } = prepareArticle('<h2>Start</h2><p id="kept">x</p><h2>Kept</h2>', 'en', [
+    'start',
+  ]);
   assertEquals(outline.map((item) => item.id), ['start-2', 'kept-2']);
 });

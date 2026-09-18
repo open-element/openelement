@@ -119,7 +119,10 @@ export async function checkBuiltLinks(dist = SITE_DIST): Promise<LinkFailure[]> 
       const fragment = hash < 0 ? '' : to.slice(hash + 1);
       const target = resolveBuiltPath(path, exists);
       if (target === null) {
-        failures.push({ file: `_redirects:${index + 1}`, message: `redirect target does not resolve: '${to}'` });
+        failures.push({
+          file: `_redirects:${index + 1}`,
+          message: `redirect target does not resolve: '${to}'`,
+        });
         continue;
       }
       if (fragment !== '' && !anchorsFragment(await readHtml(target), fragment)) {
