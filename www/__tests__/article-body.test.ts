@@ -98,3 +98,20 @@ Deno.test('prepareArticle: repeated and empty headings allocate unique ids', () 
   assertEquals(empty.outline.map((item) => item.id), ['section', 'section-3']);
   assertIdsUnique(empty.html);
 });
+
+Deno.test('prepareArticle: existing ids are seeded in every HTML quote style', () => {
+  const single = prepareArticle("<h2>Foo</h2><p id='foo'>x</p><p id='foo-2'>y</p>");
+  assertEquals(single.outline.map((item) => item.id), ['foo-3']);
+  assertIdsUnique(single.html);
+
+  const unquoted = prepareArticle('<h2>Foo</h2><p id=foo>x</p><p id=foo-2>y</p>');
+  assertEquals(unquoted.outline.map((item) => item.id), ['foo-3']);
+  assertIdsUnique(unquoted.html);
+
+  const mixed = prepareArticle('<h2>Foo</h2><p id="foo">a</p><p id=foo-2>b</p><h2>Foo</h2>');
+  assertEquals(
+    mixed.outline.map((item) => item.id),
+    ['foo-3', 'foo-4'].slice(0, 1).concat(['foo-4']),
+  );
+  assertIdsUnique(mixed.html);
+});

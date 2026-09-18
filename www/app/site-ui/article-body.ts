@@ -72,8 +72,12 @@ export function prepareArticle(
   // authored anchors). A heading colliding with one takes the next free
   // suffix instead of emitting a duplicate DOM id.
   for (const id of reservedIds) usedIds.add(id);
-  for (const match of html.matchAll(/\sid="([^"]+)"/gi)) {
-    usedIds.add(match[1]);
+  // Seed every id the document already carries, in all three legal HTML
+  // spellings (double-quoted, single-quoted, unquoted). Compiled-markdown
+  // output uses double quotes, but authored raw HTML inside markdown may
+  // legally use the others; an unseeded id is a duplicate waiting to happen.
+  for (const match of html.matchAll(/\sid=(?:"([^"]+)"|'([^']+)'|([^\s"'<>`=]+))/gi)) {
+    usedIds.add(match[1] ?? match[2] ?? match[3]);
   }
   // Headings inside <pre> are literal code samples, not sections: process
   // only non-pre segments so fenced `<h2>` can never gain an id/anchor or
