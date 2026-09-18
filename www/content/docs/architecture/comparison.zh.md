@@ -108,7 +108,6 @@ docs 站点就是一个普通的 openElement 应用（同样有 island），所�
 
 | Chunk                          | 原始字节 | gzip -9 |
 | ------------------------------ | -------- | ------- |
-| `client.js`（共享入口）        | 7,105    | 1,849   |
 | `island-open-layout`           | 102,034  | 17,692  |
 | `island-open-cinematic-scroll` | 78,176   | 23,894  |
 | `open-button`                  | 16,320   | 3,131   |
@@ -122,6 +121,8 @@ docs 站点就是一个普通的 openElement 应用（同样有 island），所�
 ls -l www/dist/client/islands/*.js
 gzip -9 -c www/dist/client/islands/client.js | wc -c
 ```
+
+共享入口（`client.js`，约 7 KB）有意不定死：它在错误串里内嵌了 checkout 绝对路径，字节随 checkout 深度变化。下面的路由载荷同理容忍 ±1%；逐 chunk 行保持精确。
 
 页面实际下载什么，由它自己的 island manifest 决定，而不是由总量决定：
 

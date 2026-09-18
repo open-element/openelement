@@ -110,7 +110,6 @@ The docs site is a normal openElement app, islands included, so its client outpu
 
 | Chunk                          | Raw bytes | gzip -9 |
 | ------------------------------ | --------- | ------- |
-| `client.js` (shared entry)     | 7,105     | 1,849   |
 | `island-open-layout`           | 102,034   | 17,692  |
 | `island-open-cinematic-scroll` | 78,176    | 23,894  |
 | `open-button`                  | 16,320    | 3,131   |
@@ -124,6 +123,8 @@ The docs site is a normal openElement app, islands included, so its client outpu
 ls -l www/dist/client/islands/*.js
 gzip -9 -c www/dist/client/islands/client.js | wc -c
 ```
+
+The shared entry (`client.js`, ~7 KB) is deliberately not pinned: it embeds checkout-absolute island paths in error strings, so its bytes vary by checkout depth. Route payloads below tolerate ±1% for the same reason; per-chunk rows stay exact.
 
 What a page actually downloads follows from its island manifest, not from the total:
 
