@@ -20,7 +20,7 @@
  *   deno run --allow-read --allow-env --allow-run tools/repo/check-www-routes-types.ts
  */
 
-import { fromFileUrl, join, relative, resolve, dirname } from '@std/path';
+import { dirname, fromFileUrl, join, relative, resolve } from '@std/path';
 import { scanRoutes } from '../../packages/router/src/vite/internal/ssg/route-scanner.ts';
 
 const repoRoot = fromFileUrl(new URL('../..', import.meta.url));

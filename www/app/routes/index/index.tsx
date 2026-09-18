@@ -66,7 +66,8 @@ const content = {
       'Custom Elements 是应用组件契约——不是渲染器集成，也不是叶子组件格式。元素只写一次：在服务端渲染，在浏览器中升级。',
     sceneDsdLead: '服务端写出 HTML。',
     sceneDsdAccent: '浏览器就地升级。',
-    sceneDsdCopy: 'DSD 是一等服务端输出——无客户端重渲染、无双重载荷。当前编译默认 root 为 light DOM；两种模式下标记即应用。',
+    sceneDsdCopy:
+      'DSD 是一等服务端输出——无客户端重渲染、无双重载荷。当前编译默认 root 为 light DOM；两种模式下标记即应用。',
     sceneIslandsLead: '按需',
     sceneIslandsAccent: '升级。',
     sceneIslandsCopy: '交互区域按你的节奏水合；非交互区域自身不携带任何 JavaScript。',
@@ -244,8 +245,7 @@ const references = {
   ],
 } as const;
 
-const marquee =
-  'CUSTOM ELEMENTS ✳ DECLARATIVE SHADOW DOM ✳ ES MODULES ✳ SIGNALS ✳ HTML FIRST ✳ ';
+const marquee = 'CUSTOM ELEMENTS ✳ DECLARATIVE SHADOW DOM ✳ ES MODULES ✳ SIGNALS ✳ HTML FIRST ✳ ';
 
 export default definePage(PageHome, {
   head({ locale }) {

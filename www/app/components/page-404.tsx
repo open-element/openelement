@@ -58,9 +58,7 @@ export default class Page404 extends OpenElement {
           <p class='search-hint'>{this.searchHint}</p>
           <nav class='popular' aria-label={this.popularLabel}>
             <p class='popular-label'>{this.popularLabel}</p>
-            {this.popular.map((link) => (
-              <a key={link.href} href={link.href}>{link.label}</a>
-            ))}
+            {this.popular.map((link) => <a key={link.href} href={link.href}>{link.label}</a>)}
           </nav>
         </section>
         <div class='marquee' aria-hidden='true'>

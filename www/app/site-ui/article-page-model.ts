@@ -32,7 +32,11 @@ export interface ArticlePageModel {
 
 const collectionShell = {
   guide: { breadcrumb: { en: 'Guide', zh: '指南' }, basePath: '/guide', root: '/docs' },
-  architecture: { breadcrumb: { en: 'Architecture', zh: '架构' }, basePath: '/architecture', root: '/architecture' },
+  architecture: {
+    breadcrumb: { en: 'Architecture', zh: '架构' },
+    basePath: '/architecture',
+    root: '/architecture',
+  },
 } as const;
 
 const collectionData = {

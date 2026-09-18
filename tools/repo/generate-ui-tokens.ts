@@ -80,10 +80,12 @@ if (!semantic.includes(ANCHOR)) throw new Error(`anchor ${ANCHOR} missing in sem
 // Fail-closed: the semantic light layer must never shadow an
 // upstream-verbatim token. (The dark block is our own inversion ramp, so it
 // legitimately redefines the same names for the dark theme.)
-const lightPart = semantic.slice(0, semantic.indexOf(":host([data-theme"));
+const lightPart = semantic.slice(0, semantic.indexOf(':host([data-theme'));
 for (const name of wanted) {
   if (new RegExp(`${escReg(name)}\\s*:`, 'g').test(lightPart)) {
-    throw new Error(`${name} is upstream-verbatim and must not be redefined in the semantic light layer`);
+    throw new Error(
+      `${name} is upstream-verbatim and must not be redefined in the semantic light layer`,
+    );
   }
 }
 

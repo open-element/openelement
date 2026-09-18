@@ -123,11 +123,11 @@ export default class OpenSearch extends OpenElement {
               onClick={this.closeSearchFromResults}
             >
               <div class='empty' hidden={this.hideEmpty}>{this.message}</div>
-            <div class='skeleton' hidden={this.hideSkeleton} aria-hidden='true'>
-              <span></span>
-              <span></span>
-              <span></span>
-            </div>
+              <div class='skeleton' hidden={this.hideSkeleton} aria-hidden='true'>
+                <span></span>
+                <span></span>
+                <span></span>
+              </div>
               {this.hits.map((hit) => (
                 <a class='result item' href={hit.href} key={hit.key}>
                   <div class='item-section'>{hit.section}</div>

@@ -706,7 +706,8 @@ export default class OpenLayout extends OpenElement {
                 results={this.searchResultsLabel}
                 empty={this.searchEmptyMessage}
                 message={this.searchEmptyMessage}
-              ></open-search>
+              >
+              </open-search>
               <open-theme-toggle></open-theme-toggle>
               <a
                 class='repository-link'

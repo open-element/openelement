@@ -15,7 +15,9 @@ const tasks = Object.keys(denoJson.tasks ?? {})
   .sort();
 
 if (tasks.length === 0) {
-  console.error('generate:all: no generate:* tasks found in tools/repo/deno.json — refusing to vacuously pass.');
+  console.error(
+    'generate:all: no generate:* tasks found in tools/repo/deno.json — refusing to vacuously pass.',
+  );
   Deno.exit(1);
 }
 
