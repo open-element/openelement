@@ -49,6 +49,8 @@
     "release:registry-check": "deno run --allow-run ./run-in.ts --root ../.. -- deno run --allow-read --allow-run=git,npm tools/repo/check-release-state-machine.ts",
     "generate:site-nav": "deno run --allow-run ./run-in.ts --root ../.. -- deno run --allow-read --allow-write tools/repo/generate-site-nav.ts",
     "site-nav:check": "deno run --allow-run ./run-in.ts --root ../.. -- deno run --allow-read --allow-write tools/repo/generate-site-nav.ts --check",
+    "generate:site-content-meta": "deno run --allow-run ./run-in.ts --root ../.. -- deno run --allow-read --allow-write --allow-run=git tools/repo/generate-site-content-meta.ts",
+    "site-content-meta:check": "deno run --allow-run ./run-in.ts --root ../.. -- deno run --allow-read --allow-write --allow-run=git tools/repo/generate-site-content-meta.ts --check",
     "product:classification:check": "deno run --allow-run ./run-in.ts --root ../.. -- deno run --allow-read tools/repo/check-product-classification.ts",
     "deno-floor:check": "deno run --allow-run ./run-in.ts --root ../.. -- deno run --allow-read tools/repo/check-deno-floor.ts"
   }

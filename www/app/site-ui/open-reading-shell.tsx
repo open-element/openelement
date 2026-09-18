@@ -32,6 +32,8 @@ export default class OpenReadingShell extends OpenElement {
   .title{margin:0;color:var(--text-primary);font-family:var(--font-sans);font-size:clamp(2.1rem,4.6vw,3.4rem);font-weight:var(--font-weight-8);letter-spacing:-.035em;line-height:1.05;overflow-wrap:break-word;text-wrap:balance}
   .title-accent{display:block;color:var(--violet-8);font-family:var(--font-serif);font-style:italic;font-weight:400;font-size:calc(1em * 1.08);letter-spacing:-.01em}
   .lede{max-width:640px;margin:var(--size-4) 0 0;color:var(--text-secondary);font-size:clamp(var(--font-size-1),1.4vw,var(--font-size-2));line-height:1.65}
+  .freshness-row{margin:var(--size-3) 0 0;color:var(--text-muted);font-family:var(--font-mono);font-size:var(--font-size-00)}
+  .freshness-row[hidden]{display:none}
   .meta-row{display:flex;flex-wrap:wrap;gap:var(--size-2);margin:var(--size-4) 0 0;color:var(--text-muted);font-family:var(--font-mono);font-size:var(--font-size-00)}
   .meta-row span{padding:var(--size-1) var(--size-2);border:1px solid var(--border);border-radius:var(--radius-1)}
   .rail{display:none;position:sticky;top:calc(var(--nav-height) + var(--size-6));align-self:start}
@@ -110,6 +112,19 @@ export default class OpenReadingShell extends OpenElement {
   accent = computed(() => this.metadata?.accent ?? '');
   @property({ reflect: false, attribute: false })
   lede = computed(() => this.metadata?.lede ?? '');
+  // Source-freshness meta row (T4.2): version mark + machine-derived update
+  // date, both from metadata; hidden unless both are present so slot-driven
+  // pages (blog/changelog/roadmap) keep their own meta.
+  @property({ reflect: false, attribute: false })
+  metaVersion = computed(() => this.metadata?.version ?? '');
+  @property({ reflect: false, attribute: false })
+  metaUpdated = computed(() => this.metadata?.updated ?? '');
+  @property({ reflect: false, attribute: false })
+  hideMetaRow = computed(() => !(this.metadata?.version && this.metadata?.updated));
+  @property({ reflect: false, attribute: false })
+  appliesToLabel = computed(() => readingChromeStrings(this.locale).appliesTo);
+  @property({ reflect: false, attribute: false })
+  updatedLabel = computed(() => readingChromeStrings(this.locale).updated);
   @property({ reflect: false, attribute: false })
   date = computed(() => this.metadata?.date ?? '');
   @property({ reflect: false, attribute: false, type: Array })
@@ -158,6 +173,9 @@ export default class OpenReadingShell extends OpenElement {
                   <span class='title-accent'>{this.accent}</span>
                 </h1>
                 <p class='lede'>{this.lede}</p>
+                <p class='freshness-row' hidden={this.hideMetaRow}>
+                  {this.appliesToLabel}{' '}{this.metaVersion}{' · '}{this.updatedLabel}{' '}{this.metaUpdated}
+                </p>
                 <p class='meta-row'>
                   <time>{this.date}</time>
                   {this.tags.map((tag) => <span key={tag.key}>{tag.label}</span>)}

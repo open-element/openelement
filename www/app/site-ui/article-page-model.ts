@@ -8,7 +8,8 @@ import {
   getPage as getArchitecturePage,
   pages as architecturePages,
 } from '../data/_generated-architecture-data.ts';
-import { sourceLineAppliesLabel, sourceLineNote } from '../data/version.ts';
+import { contentMeta } from '../data/_generated-content-meta.ts';
+import { OPENELEMENT_VERSION, sourceLineAppliesLabel, sourceLineNote } from '../data/version.ts';
 
 export type ArticleCollection = 'guide' | 'architecture';
 
@@ -17,7 +18,10 @@ export interface ArticlePageModel {
   articleClass: string;
   slug: string;
   notFoundMessage: string;
-  metadata: { breadcrumb: string; breadcrumbHref?: string; title: string; lede: string };
+  // updated/version are optional: only collection articles carry source
+  // freshness (projectArticlePage fills them from generated content meta);
+  // the shell hides the meta row when either is absent.
+  metadata: { breadcrumb: string; breadcrumbHref?: string; title: string; lede: string; updated?: string; version?: string };
   navigation: {
     previous?: { href: string; label: string };
     next?: { href: string; label: string };
@@ -135,6 +139,10 @@ export function projectArticlePage(
       breadcrumbHref: localizePath(shell.root, locale),
       title: page.frontmatter.title,
       lede: page.frontmatter.lede ?? '',
+      // Machine-derived freshness: the render locale's source-file stamp
+      // from generated content meta; the version mark is the repo baseline.
+      updated: contentMeta[`${collection}/${slug}`]?.[locale] ?? '',
+      version: OPENELEMENT_VERSION,
     },
     navigation: {
       previous: navigationItem(previous),

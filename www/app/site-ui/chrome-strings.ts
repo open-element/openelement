@@ -13,6 +13,8 @@ export function readingChromeStrings(locale: string): {
   sectionAnchor: string;
   previous: string;
   next: string;
+  appliesTo: string;
+  updated: string;
 } {
   if (locale === 'zh') {
     return {
@@ -23,6 +25,8 @@ export function readingChromeStrings(locale: string): {
       sectionAnchor: '链接到本节',
       previous: '上一篇',
       next: '下一篇',
+      appliesTo: '适用于',
+      updated: '更新于',
     };
   }
   return {
@@ -33,6 +37,8 @@ export function readingChromeStrings(locale: string): {
     sectionAnchor: 'Link to this section',
     previous: 'Previous',
     next: 'Next',
+    appliesTo: 'Applies to',
+    updated: 'Updated',
   };
 }
 
