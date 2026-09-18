@@ -68,7 +68,7 @@ export default defineNitroConfig({
 
 1. `deno task build`
 2. 把 `dist/` 下除 `server/` 之外的一切拷进 `nitro-public/`。`dist/server` 是服务端代码，不是公开资源，绝不能作为公开资源发布。
-3. 构建宿主：`deno run -A npm:nitro@3.0.260610-beta build`——本仓库 Nitro 证明锁定的版本；`preset` 选择 `node-server` 或 `cloudflare_module`。
+3. 构建宿主：`deno run --allow-read --allow-write --allow-run --allow-env --allow-net npm:nitro@3.0.260610-beta build`——本仓库 Nitro 证明锁定的版本（`NITRO_VERSION`）；`preset` 选择 `node-server` 或 `cloudflare_module`。
 4. 运行产物（`node-server` 为 `.output/server/index.mjs`），并按平台要求设置 `PORT` 与 `HOST`。
 
 两个预设都对真实 Nitro 产物做过验证：预渲染文件、dynamic 路由、action、重定向、404 与一条 Nitro 缓存路由规则。

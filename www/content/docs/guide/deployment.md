@@ -68,7 +68,7 @@ The deploy sequence is:
 
 1. `deno task build`
 2. Copy everything in `dist/` **except** `server/` into `nitro-public/`. `dist/server` is server code, not a public asset, and must never be published as one.
-3. Build the host: `deno run -A npm:nitro@3.0.260610-beta build` — the version this repository's Nitro proofs pin; `preset` selects `node-server` or `cloudflare_module`.
+3. Build the host: `deno run --allow-read --allow-write --allow-run --allow-env --allow-net npm:nitro@3.0.260610-beta build` — the version this repository's Nitro proofs pin (`NITRO_VERSION`); `preset` selects `node-server` or `cloudflare_module`.
 4. Run the output (`.output/server/index.mjs` for `node-server`) with `PORT` and `HOST` set as your platform requires.
 
 Both presets are proven against real Nitro output: prerendered files, dynamic routes, actions, redirects, 404s and a Nitro cache route rule.
