@@ -101,7 +101,7 @@ function showMessage(host: SearchHost, message: string): void {
   host.searching = false;
   // :empty guard: the empty box must never render blank — fall back to the
   // idle copy when a caller passes nothing.
-  host.message = message || copy().empty;
+  host.message = message || searchChromeStrings(searchLocale()).emptyMessage;
 }
 
 function plainExcerpt(excerpt: string): string {
@@ -223,7 +223,7 @@ export function closeSearch(host: SearchHost): void {
   if (field) field.value = '';
   const state = states.get(host);
   if (state) state.searchSequence++;
-  showMessage(host, copy().empty);
+  showMessage(host, searchChromeStrings(searchLocale()).emptyMessage);
 }
 
 export function closeSearchOnBackdrop(host: SearchHost, event: Event): void {
