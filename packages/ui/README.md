@@ -85,11 +85,10 @@ The reference site wires the same scripts through the `inject` option in
 
 ## Design tokens
 
-`src/open-props-tokens.css` and its CSSOM mirror `src/open-props-tokens.ts`
-are **generated — do not edit**. Regenerate with:
+`src/open-props-tokens.ts` is **generated — do not edit**. Regenerate with:
 
 ```bash
-deno task --cwd tools/repo generate:ui-tokens
+deno task --cwd packages/ui generate:ui-tokens
 ```
 
 Sources:
@@ -105,10 +104,10 @@ Sources:
   the CJK font stacks. Each divergence from upstream is commented where it
   lives; do not "fix" tuned values by copying upstream.
 
-`openPropsTokenSheet` (`:host` form, adopt into a shadow root) and
-`openPropsRootSheet` (`:root` form, document-level adoption — the `:host`
-→ `:root` transform lives in the generated module) are the only token
-entry points. The token gates require `--surface-glass`,
+`openPropsTokenSheet` is the only token entry point: its token block
+selects `:root, :host`, so the same sheet serves document-level adoption
+and shadow-root adoption (only the structural fallback is `:host`-only).
+The token gates require `--surface-glass`,
 `--ui-control-bg`, `--focus-ring` and `--motion-standard`.
 `daisyClassSheet`, modal and step-card are retired and must not reappear in
 exports, manifests, docs or packed artifacts.

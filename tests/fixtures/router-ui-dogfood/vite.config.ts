@@ -8,13 +8,13 @@
  * serve -> hydrate path; interactive evidence lives in e2e/*.spec.ts.
  */
 import { openElement } from '@openelement/router/vite';
-import { openPropsRootSheet } from '@openelement/ui';
+import { openPropsTokenSheet } from '@openelement/ui';
 import { defineConfig } from 'vite';
 
 // Token sheet as document CSS so the ui recipes resolve their variables on
 // first paint (same pattern www uses; shadow trees inherit from :root).
 // The :host -> :root transform is owned by the token codegen.
-const tokenCSS = [...openPropsRootSheet.cssRules]
+const tokenCSS = [...openPropsTokenSheet.cssRules]
   .map((rule) => rule.cssText)
   .join('\n');
 

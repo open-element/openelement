@@ -1,46 +1,13 @@
 /**
  * GENERATED — do not edit; source: open-props@1.7.23 (MIT) + semantic-tokens.css.
- * Regenerate with: deno task --cwd tools/repo generate:ui-tokens
+ * Regenerate with: deno task --cwd packages/ui generate:ui-tokens
  */
 
 import { StyleSheet, type StyleSheetLike } from '@openelement/element';
 
-function countDarkDecls(css: string, marker: string): number {
-  const tail = css.split(marker)[1] ?? '';
-  return (tail.match(/--[a-z0-9-]+\s*:/g) ?? []).length;
-}
-
-export function toRootCss(hostCss: string): string {
-  const darked = hostCss.replace(
-    /:host\(\[data-theme=(['"])dark\1\]\)/g,
-    ":root[data-theme='dark']",
-  );
-  if (/:host-/.test(darked)) {
-    throw new Error(
-      'toRootCss: unhandled :host-* variant (e.g. :host-context) — extend the transform, do not ship a silent rewrite',
-    );
-  }
-  const rooted = darked.replace(/:host/g, ':root');
-  // Output assertions: replaceSync drops invalid selectors without
-  // throwing, so a broken transform would silently delete tokens instead
-  // of failing the build.
-  const inputDarkDecls = countDarkDecls(hostCss, '[data-theme=');
-  const outputDarkDecls = countDarkDecls(rooted, ':root[data-theme=');
-  if (/:host/.test(rooted)) throw new Error('toRootCss: residual :host in output');
-  if (!rooted.includes(':root[data-theme=')) {
-    throw new Error('toRootCss: dark block missing in output');
-  }
-  if (inputDarkDecls === 0 || outputDarkDecls !== inputDarkDecls) {
-    throw new Error(
-      'toRootCss: dark declarations changed ' + inputDarkDecls + ' -> ' + outputDarkDecls,
-    );
-  }
-  return rooted;
-}
-
 const OPEN_PROPS_TOKEN_CSS = `/**
  * GENERATED — do not edit; source: open-props@1.7.23 (MIT) + semantic-tokens.css.
- * Regenerate with: deno task --cwd tools/repo generate:ui-tokens
+ * Regenerate with: deno task --cwd packages/ui generate:ui-tokens
  */
 
 /**
@@ -50,8 +17,8 @@ const OPEN_PROPS_TOKEN_CSS = `/**
  * themes, the :host structural fallback, and the CJK font stacks. Tokens that
  * match upstream open-props verbatim (gray ramp, indigo-6, border sizes,
  * font weights, two line-heights) are NOT listed here — they are injected at
- * the @upstream-tokens anchor below by tools/repo/generate-ui-tokens.ts
- * (deno task --cwd tools/repo generate:ui-tokens), which reads them from the real
+ * the @upstream-tokens anchor below by packages/ui/tools/generate-ui-tokens.ts
+ * (deno task --cwd packages/ui generate:ui-tokens), which reads them from the real
  * open-props npm dependency. Do not re-add them here: the generator fails on
  * any duplication.
  *
@@ -62,13 +29,20 @@ const OPEN_PROPS_TOKEN_CSS = `/**
  * - --radius-*, --font-size-*, --font-letterspacing-*, --ease-*, --shadow-*
  *   are tuned for the component layer (upstream values differ).
  * - dark ramps are our own inversion (open-props ships no dark mode).
+ *
+ * The token block selects :root, :host so one generated sheet serves both
+ * the document root and shadow adoption; only the structural fallback is
+ * :host-exclusive (display/containment must never land on <html>).
  */
 
 :host {
   display: block;
   min-height: 1px;
   contain: layout style;
+}
 
+:root,
+:host {
   /* src/props.colors.js (Gray) — open-props@1.7.23 (MIT), verbatim */
   --gray-0: #f8f9fa;
   --gray-1: #f1f3f5;
@@ -349,11 +323,11 @@ const OPEN_PROPS_TOKEN_CSS = `/**
 }
 
 /* ═══════════════════════════════════════════════
-   Dark Mode — matches hosts with data-theme="dark".
-   Document-level overrides live in openPropsRootSheet
-   (:root[data-theme="dark"]) so all shadow DOMs inherit.
+   Dark Mode — matches the document root or a host carrying
+   data-theme="dark" (one sheet serves both), so all shadow DOMs inherit.
    Our own inversion (open-props ships no dark mode).
    ═══════════════════════════════════════════════ */
+:root[data-theme='dark'],
 :host([data-theme='dark']) {
   --gray-0: #030507;
   --gray-1: #0d0f12;
@@ -471,11 +445,10 @@ const OPEN_PROPS_TOKEN_CSS = `/**
 }
 `;
 
-const sheet: StyleSheetLike = new StyleSheet();
-sheet.replaceSync(OPEN_PROPS_TOKEN_CSS);
-/** Pre-built stylesheet carrying the full Open Props token set (adopt into a shadow root). */
-export const openPropsTokenSheet: StyleSheetLike = sheet;
-
-/** Pre-built stylesheet exposing the Open Props tokens on `:root` (document-level adoption). */
-export const openPropsRootSheet: StyleSheetLike = new StyleSheet();
-openPropsRootSheet.replaceSync(toRootCss(OPEN_PROPS_TOKEN_CSS));
+/**
+ * The full token set as one constructable sheet. The token block selects
+ * `:root, :host`, so the same sheet serves a document-level adoption and a
+ * shadow-root adoption; only the structural fallback is :host-exclusive.
+ */
+export const openPropsTokenSheet: StyleSheetLike = new StyleSheet();
+openPropsTokenSheet.replaceSync(OPEN_PROPS_TOKEN_CSS);

@@ -50,44 +50,14 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ```
 
-## open-props 1.7.23
+## Package-level notices
 
-Design tokens carried verbatim into `@openelement/ui` by
-`tools/repo/generate-ui-tokens.ts` (task `generate:ui-tokens`), which reads
-the pinned npm dependency at generation time. Only these declarations ship:
-the gray ramp, `--indigo-6`, two border sizes, the font weights, and two
-line-heights — everything else in the token layer is first-party. The
-generated mirror (`packages/ui/src/open-props-tokens.css` / `.ts`) and the
-`packages/ui/README.md` attribution name this source.
-
-- Upstream: <https://github.com/argyleink/open-props> (tag `1.7.23`,
-  <https://open-props.style>)
-- License: MIT
-- Copyright: Copyright (c) 2021 Adam Argyle
-
-```text
-MIT License
-
-Copyright (c) 2021 Adam Argyle
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
-```
+Dependencies redistributed inside a published package carry their notices in
+that package (a tarball cannot reach repository-root files). The full open-props
+MIT text lives in
+[`packages/ui/THIRD_PARTY_NOTICES.md`](./packages/ui/THIRD_PARTY_NOTICES.md)
+and ships inside the `@openelement/ui` tarball; a packed-artifact test keeps
+that true.
 
 ## Fonts
 

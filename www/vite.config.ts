@@ -1,5 +1,5 @@
 import { openElement } from '@openelement/router/vite';
-import { openPropsRootSheet, registerOpenUi } from '@openelement/ui';
+import { openPropsTokenSheet, registerOpenUi } from '@openelement/ui';
 import { defineConfig } from 'vite';
 import { SITE_BUDGET } from './site-budget.ts';
 import { siteCSS } from './site-css.ts';
@@ -9,10 +9,10 @@ import { headerNav, navSections } from './app/data/_generated-nav-data.ts';
 // npm tarballs in production. No resolve.alias needed.
 
 // Make token variables available to document-level elements while shadow trees
-// continue to inherit them from the document root. The :host -> :root
-// transform is owned by the token codegen (tools/repo/generate-ui-tokens.ts,
-// toRootCss in the generated module); this file only consumes the finished sheet.
-const rootCSS = [...openPropsRootSheet.cssRules].map((r) => r.cssText).join('\n');
+// continue to inherit them from the document root. The sheet's token block
+// selects `:root, :host` (packages/ui/tools/generate-ui-tokens.ts), so this
+// file only consumes the finished sheet — there is no transform.
+const rootCSS = [...openPropsTokenSheet.cssRules].map((r) => r.cssText).join('\n');
 
 const colorTokensStyle =
   `<style>@font-face{font-family:'JetBrains Mono';font-style:normal;font-weight:100 800;font-display:swap;src:url('/assets/fonts/jetbrains-mono-latin-variable.woff2') format('woff2')}@font-face{font-family:'Instrument Serif';font-style:normal;font-weight:400;font-display:swap;src:url('/assets/fonts/instrument-serif-latin-regular.woff2') format('woff2')}@font-face{font-family:'Instrument Serif';font-style:italic;font-weight:400;font-display:swap;src:url('/assets/fonts/instrument-serif-latin-italic.woff2') format('woff2')}@font-face{font-family:'Inter Variable';font-style:normal;font-weight:100 900;font-display:swap;src:url('/assets/fonts/inter-latin-variable.woff2') format('woff2')}${rootCSS}body{font-family:var(--font-sans);-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}${siteCSS}</style>`;
