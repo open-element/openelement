@@ -102,6 +102,34 @@ export async function checkBuiltLinks(dist = SITE_DIST): Promise<LinkFailure[]> 
   // so there is nothing left to reconcile page output against.
   failures.push(...findCrossPageSeoFailures(pages));
 
+  // Redirect targets (#1358 fixes): every same-origin target of the
+  // deployment-boundary redirect table must resolve to a built document,
+  // and any #fragment must anchor there — a redirect to a 404 is a second
+  // broken link wearing a 301.
+  if (exists('_redirects')) {
+    const redirects = await Deno.readTextFile(join(dist, '_redirects'));
+    for (const [index, line] of redirects.split('\n').entries()) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith('#')) continue;
+      const [, to] = trimmed.split(/\s+/);
+      if (!to || !to.startsWith('/')) continue;
+      const hash = to.indexOf('#');
+      const path = hash < 0 ? to : to.slice(0, hash);
+      const fragment = hash < 0 ? '' : to.slice(hash + 1);
+      const target = resolveBuiltPath(path, exists);
+      if (target === null) {
+        failures.push({ file: `_redirects:${index + 1}`, message: `redirect target does not resolve: '${to}'` });
+        continue;
+      }
+      if (fragment !== '' && !anchorsFragment(await readHtml(target), fragment)) {
+        failures.push({
+          file: `_redirects:${index + 1}`,
+          message: `redirect fragment '#${fragment}' missing in '${to}'`,
+        });
+      }
+    }
+  }
+
   // Generated reference anchors (#1307): every generated searchRecord anchor
   // must exist in the built reference documents, in every built locale — the
   // search/surface promise is that /reference#<anchor> resolves.

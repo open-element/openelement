@@ -1,0 +1,13 @@
+{
+  "$schema": "./site-redirects.schema.json",
+  "redirects": [
+    { "from": "/apilist", "to": "/reference", "status": 301 },
+    { "from": "/architecture/architecture", "to": "/architecture", "status": 301 },
+    { "from": "/architecture/benchmark", "to": "/architecture/comparison#measured-output", "toZh": "/architecture/comparison#实测输出", "status": 301 },
+    { "from": "/architecture/islands-deep", "to": "/architecture/islands", "status": 301 },
+    { "from": "/architecture/package-compatibility", "to": "/architecture", "status": 301 },
+    { "from": "/architecture/standards-registry", "to": "/architecture/dsd", "status": 301 },
+    { "from": "/guide/architecture", "to": "/architecture", "status": 301 },
+    { "from": "/guide/comparison", "to": "/architecture/comparison", "status": 301 }
+  ]
+}

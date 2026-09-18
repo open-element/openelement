@@ -16,6 +16,21 @@ import { readingChromeStrings } from './chrome-strings.ts';
 
 export type ArticleOutlineItem = Readonly<{ id: string; label: string; level: 2 | 3 }>;
 
+/**
+ * Heading-id allocator shared by prepareArticle and the retired-URL gate:
+ * same stem rule and same per-document duplicate suffixes, so an anchor
+ * verified here is the anchor the article actually renders.
+ */
+export function slugifyHeadingId(label: string, seen: Map<string, number>): string {
+  const stem = label.toLowerCase().normalize('NFKD').replace(/[^\p{L}\p{N}]+/gu, '-').replace(
+    /(^-|-$)/g,
+    '',
+  ) || 'section';
+  const count = seen.get(stem) ?? 0;
+  seen.set(stem, count + 1);
+  return count ? `${stem}-${count + 1}` : stem;
+}
+
 export function prepareArticle(
   html: string,
   locale: string = 'en',
@@ -37,13 +52,7 @@ export function prepareArticle(
         label = stripped;
       }
       label = label.replace(/[<>]/g, '').replace(/&[^;]+;/g, ' ').trim();
-      const stem = label.toLowerCase().normalize('NFKD').replace(/[^\p{L}\p{N}]+/gu, '-').replace(
-        /(^-|-$)/g,
-        '',
-      ) || 'section';
-      const count = seen.get(stem) ?? 0;
-      seen.set(stem, count + 1);
-      const id = count ? `${stem}-${count + 1}` : stem;
+      const id = slugifyHeadingId(label, seen);
       outline.push({ id, label, level: Number(depth) as 2 | 3 });
       const cleanAttrs = String(attrs).replace(/\s+id=(?:"[^"]*"|'[^']*')/i, '');
       // Hover/focus anchor: a real same-page link (keyboard-reachable, and the

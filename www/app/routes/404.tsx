@@ -2,7 +2,34 @@ import { definePage } from '@openelement/router';
 import { siteHead } from '@openelement/site-ui/head.ts';
 import { contentLocale } from '@openelement/site-ui/locale.ts';
 import { localizePath } from '@openelement/site-ui/link.ts';
+import redirectTableJson from '../../../tools/repo/site-redirects.json' with { type: 'json' };
 import Page404 from '../components/page-404.tsx';
+
+const redirectTable = redirectTableJson as {
+  redirects: Array<{ from: string; to: string; toZh?: string; status: number }>;
+};
+
+/**
+ * "You may be looking for" suggestions derived from the retired-URL table
+ * (same data as _redirects), minus anything the curated popular list
+ * already covers. A stale 404 that a cache lands on still heals itself.
+ * The zh target honors toZh: translated heading ids differ per locale.
+ */
+function redirectSuggestions(locale: 'en' | 'zh', popularHrefs: Set<string>) {
+  const seen = new Set<string>();
+  const suggestions: Array<{ label: string; href: string }> = [];
+  for (const mapping of redirectTable.redirects) {
+    const raw = locale === 'zh' ? mapping.toZh ?? mapping.to : mapping.to;
+    const hash = raw.indexOf('#');
+    const toPath = hash < 0 ? raw : raw.slice(0, hash);
+    const fragment = hash < 0 ? '' : raw.slice(hash);
+    const href = localizePath(toPath, locale) + fragment;
+    if (popularHrefs.has(href) || seen.has(href)) continue;
+    seen.add(href);
+    suggestions.push({ label: href, href });
+  }
+  return suggestions;
+}
 
 const marquee =
   'CUSTOM ELEMENTS ✳ SHADOW DOM ✳ DECLARATIVE SHADOW DOM ✳ ES MODULES ✳ SIGNALS ✳ HTML FIRST ✳ 404 ✳ ';
@@ -18,6 +45,7 @@ const content = {
     readDocs: 'Read the docs',
     searchHint: 'Tip: press ⌘K (Ctrl+K) to search the whole site',
     popularLabel: 'Popular right now',
+    suggestionsLabel: 'You may be looking for',
     popular: [
       ['Get started', '/guide/getting-started'],
       ['Tutorial', '/guide/tutorial'],
@@ -34,6 +62,7 @@ const content = {
     readDocs: '阅读文档',
     searchHint: '小提示：按 ⌘K（Ctrl+K）全站搜索',
     popularLabel: '热门直达',
+    suggestionsLabel: '你可能在找',
     popular: [
       ['快速开始', '/guide/getting-started'],
       ['教程', '/guide/tutorial'],
@@ -61,6 +90,10 @@ export default definePage(Page404, {
   props({ locale }) {
     const resolved = contentLocale(locale ?? 'en');
     const text = content[resolved];
+    const popular = text.popular.map(([label, href]) => ({
+      label,
+      href: localizePath(href, resolved),
+    }));
     return {
       serifLine: text.serifLine,
       lede: text.lede,
@@ -68,10 +101,9 @@ export default definePage(Page404, {
       readDocs: text.readDocs,
       searchHint: text.searchHint,
       popularLabel: text.popularLabel,
-      popular: text.popular.map(([label, href]) => ({
-        label,
-        href: localizePath(href, resolved),
-      })),
+      popular,
+      suggestionsLabel: text.suggestionsLabel,
+      suggestions: redirectSuggestions(resolved, new Set(popular.map((link) => link.href))),
       homeHref: localizePath('/', resolved),
       docsHref: localizePath('/docs', resolved),
       marqueeText: marquee + marquee,

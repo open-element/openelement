@@ -1,0 +1,38 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "site-redirects",
+  "description": "Retired public URL -> successor mapping. Locale prefixes are derived, never written here.",
+  "type": "object",
+  "required": ["redirects"],
+  "properties": {
+    "redirects": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["from", "to", "status"],
+        "properties": {
+          "from": {
+            "type": "string",
+            "pattern": "^/(?!zh/)[^#?]*$",
+            "description": "Retired unprefixed route path. No locale prefix, no fragment."
+          },
+          "to": {
+            "type": "string",
+            "pattern": "^/(?!zh/).*$",
+            "description": "Successor unprefixed route path, optionally with #fragment (verified against the en document)."
+          },
+          "toZh": {
+            "type": "string",
+            "pattern": "^/(?!zh/).*$",
+            "description": "Optional zh successor when the translated heading id differs (verified against the zh document). Absent means the locale-expanded `to`."
+          },
+          "status": {
+            "type": "integer",
+            "const": 301,
+            "description": "Retired public URLs move permanently."
+          }
+        }
+      }
+    }
+  }
+}

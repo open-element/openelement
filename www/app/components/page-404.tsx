@@ -34,6 +34,12 @@ export default class Page404 extends OpenElement {
   popular: Array<{ href: string; label: string }> = [];
 
   @property({ reflect: false, attribute: false })
+  suggestionsLabel = '';
+
+  @property({ reflect: false, attribute: false })
+  suggestions: Array<{ href: string; label: string }> = [];
+
+  @property({ reflect: false, attribute: false })
   marqueeText = '';
 
   render() {
@@ -59,6 +65,10 @@ export default class Page404 extends OpenElement {
           <nav class='popular' aria-label={this.popularLabel}>
             <p class='popular-label'>{this.popularLabel}</p>
             {this.popular.map((link) => <a key={link.href} href={link.href}>{link.label}</a>)}
+          </nav>
+          <nav class='popular suggestions' aria-label={this.suggestionsLabel}>
+            <p class='popular-label'>{this.suggestionsLabel}</p>
+            {this.suggestions.map((link) => <a key={link.href} href={link.href}>{link.label}</a>)}
           </nav>
         </section>
         <div class='marquee' aria-hidden='true'>

@@ -34,6 +34,7 @@
 import { walk } from '@std/fs/walk';
 import { fromFileUrl, join } from '@std/path';
 import { loadCollectionData } from '../../www/lib/content.ts';
+import { fileToRoutePath } from '../../www/lib/route-path.ts';
 import { articleCollections } from '../../www/content-collections.ts';
 import { FALLBACK_SECTION, SECTION_MAP } from '../../www/app/site-ui/open-layout-navigation.ts';
 
@@ -118,18 +119,6 @@ function navLabel(frontmatter: Record<string, unknown>): string {
   return typeof frontmatter.navLabel === 'string'
     ? frontmatter.navLabel
     : String(frontmatter.title ?? '');
-}
-
-function fileToRoutePath(relativePath: string): string | undefined {
-  const withoutExtension = relativePath.replace(/\.tsx?$/, '');
-  const segments = withoutExtension.split('/');
-  const mapped: string[] = [];
-  for (const segment of segments) {
-    if (segment === 'index') continue;
-    if (segment.startsWith('[')) return undefined; // dynamic routes are not nav
-    mapped.push(segment);
-  }
-  return `/${mapped.join('/')}`;
 }
 
 function parseMeta(source: string): RouteMeta | undefined {
