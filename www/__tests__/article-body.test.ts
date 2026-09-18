@@ -27,10 +27,21 @@ Deno.test('prepareArticle: ordinary heading labels keep their text', () => {
   assertEquals(html.includes('id="getting-started-now"'), true);
   assertEquals(
     html.includes(
-      '<a class="heading-anchor" href="#getting-started-now" aria-label="Link to this section">#</a>',
+      '<a class="heading-anchor" href="#getting-started-now" aria-label="Link to this section"></a>',
     ),
     true,
   );
   const { html: zhHtml } = prepareArticle('<h2>开始</h2>', 'zh');
   assertEquals(zhHtml.includes('aria-label="链接到本节"'), true);
+});
+
+Deno.test('prepareArticle: headings inside pre stay literal', () => {
+  const { outline, html } = prepareArticle('<h2>Real</h2><pre><h2>Fake</h2></pre>');
+  assertEquals(outline.map((item) => item.id), ['real']);
+  assertEquals(html.includes('href="#fake"'), false);
+});
+
+Deno.test('prepareArticle: reserved and existing ids are never re-issued', () => {
+  const { outline } = prepareArticle('<h2>Start</h2><p id="kept">x</p><h2>Kept</h2>', 'en', ['start']);
+  assertEquals(outline.map((item) => item.id), ['start-2', 'kept-2']);
 });

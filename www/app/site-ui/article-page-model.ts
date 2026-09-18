@@ -31,7 +31,9 @@ export interface ArticlePageModel {
 }
 
 const collectionShell = {
-  guide: { breadcrumb: { en: 'Guide', zh: '指南' }, basePath: '/guide', root: '/docs' },
+  // The guide breadcrumb names its landing page (/docs, the Docs hub —
+  // headerNav agrees), not the /guide URL prefix.
+  guide: { breadcrumb: { en: 'Docs', zh: '文档' }, basePath: '/guide', root: '/docs' },
   architecture: {
     breadcrumb: { en: 'Architecture', zh: '架构' },
     basePath: '/architecture',
@@ -46,13 +48,15 @@ const collectionData = {
 
 /**
  * The route path serving an article: the collection overview article lives at
- * the collection root (`/architecture`, route index.tsx), every other article
- * at `basePath/slug`. One home for the mapping so head canonicals and the
- * pager can never point at a renamed-away URL.
+ * the collection root (`/architecture`, `/docs` — the shell root, not the
+ * article basePath, so a future guide overview can never canonicalize to the
+ * 404ing `/guide`), every other article at `basePath/slug`. One home for the
+ * mapping so head canonicals and the pager can never point at a renamed-away
+ * URL.
  */
 export function articleRoutePath(collection: ArticleCollection, slug: string): string {
-  const basePath = collectionShell[collection].basePath;
-  return slug === collection ? basePath : `${basePath}/${slug}`;
+  const shell = collectionShell[collection];
+  return slug === collection ? shell.root : `${shell.basePath}/${slug}`;
 }
 
 export function emptyArticlePageModel(): ArticlePageModel {
@@ -115,6 +119,9 @@ export function projectArticlePage(
       .replaceAll('{{OPENELEMENT_VERSION}}', sourceLineAppliesLabel(locale))
       .replaceAll('{{SOURCE_LINE_NOTE}}', sourceLineNote(locale)),
     locale,
+    // The reading shell owns <span id="start"> (open-reading-shell.tsx):
+    // keep the allocator from handing that id to a "Start" heading.
+    ['start'],
   );
   const ordered = data.pages
     .filter((candidate) => candidate.locale === 'en')

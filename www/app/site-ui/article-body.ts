@@ -34,32 +34,52 @@ export function slugifyHeadingId(label: string, seen: Map<string, number>): stri
 export function prepareArticle(
   html: string,
   locale: string = 'en',
+  reservedIds: readonly string[] = [],
 ): { html: string; outline: ArticleOutlineItem[] } {
   const anchorLabel = readingChromeStrings(locale).sectionAnchor;
   const outline: ArticleOutlineItem[] = [];
   const seen = new Map<string, number>();
-  const withIds = html.replace(
-    /<h([23])([^>]*)>([\s\S]*?)<\/h\1>/gi,
-    (_match, depth, attrs, body) => {
-      // Strip tags to a fixed point, then any angle bracket the tag pattern
-      // could not match (e.g. a `<script` fragment with no closing `>`), so
-      // the plain-text label can never carry a partial tag into the rail
-      // outline (issue 1281).
-      let label = String(body);
-      for (;;) {
-        const stripped = label.replace(/<[^>]+>/g, '');
-        if (stripped === label) break;
-        label = stripped;
-      }
-      label = label.replace(/[<>]/g, '').replace(/&[^;]+;/g, ' ').trim();
-      const id = slugifyHeadingId(label, seen);
-      outline.push({ id, label, level: Number(depth) as 2 | 3 });
-      const cleanAttrs = String(attrs).replace(/\s+id=(?:"[^"]*"|'[^']*')/i, '');
-      // Hover/focus anchor: a real same-page link (keyboard-reachable, and the
-      // fragment gate proves the id exists), revealed by CSS on hover/focus.
-      return `<h${depth}${cleanAttrs} id="${id}">${body}<a class="heading-anchor" href="#${id}" aria-label="${anchorLabel}">#</a></h${depth}>`;
-    },
-  );
+  // Occupy ids the allocator must not hand out: the caller's known page
+  // ids plus every id already present in this document (.pkg-row rows,
+  // authored anchors). A heading colliding with one takes the next suffix
+  // instead of emitting a duplicate DOM id.
+  for (const id of reservedIds) seen.set(id, 1);
+  for (const match of html.matchAll(/\sid="([^"]+)"/gi)) {
+    const id = match[1];
+    seen.set(id, (seen.get(id) ?? 0) + 1);
+  }
+  // Headings inside <pre> are literal code samples, not sections: process
+  // only non-pre segments so fenced `<h2>` can never gain an id/anchor or
+  // a phantom rail entry.
+  const withIds = html
+    .split(/(<pre[\s\S]*?<\/pre>)/gi)
+    .map((segment, index) => {
+      if (index % 2 === 1) return segment;
+      return segment.replace(
+        /<h([23])([^>]*)>([\s\S]*?)<\/h\1>/gi,
+        (_match, depth, attrs, body) => {
+          // Strip tags to a fixed point, then any angle bracket the tag pattern
+          // could not match (e.g. a `<script` fragment with no closing `>`), so
+          // the plain-text label can never carry a partial tag into the rail
+          // outline (issue 1281).
+          let label = String(body);
+          for (;;) {
+            const stripped = label.replace(/<[^>]+>/g, '');
+            if (stripped === label) break;
+            label = stripped;
+          }
+          label = label.replace(/[<>]/g, '').replace(/&[^;]+;/g, ' ').trim();
+          const id = slugifyHeadingId(label, seen);
+          outline.push({ id, label, level: Number(depth) as 2 | 3 });
+          const cleanAttrs = String(attrs).replace(/\s+id=(?:"[^"]*"|'[^']*')/i, '');
+          // Hover/focus anchor: a real same-page link (keyboard-reachable, and the
+          // fragment gate proves the id exists), revealed by CSS on hover/focus.
+          // The "#" glyph lives in ::after so screen readers hear the bare title.
+          return `<h${depth}${cleanAttrs} id="${id}">${body}<a class="heading-anchor" href="#${id}" aria-label="${anchorLabel}"></a></h${depth}>`;
+        },
+      );
+    })
+    .join('');
   // Code display goes through open-code-block (copy button + highlighting).
   const withCodeBlocks = withIds.replace(
     /(<pre[\s\S]*?<\/pre>)/gi,
@@ -80,6 +100,7 @@ export function articleContentStyles(scope: string): string {
     ${scope} figure.diagram { margin: var(--size-6) 0; color: var(--text-muted); }
     ${scope} figure.diagram svg { display: block; height: 120px; width: auto; }
     ${scope} .heading-anchor { margin-inline-start: var(--size-2); color: var(--text-muted); font-weight: var(--font-weight-4); text-decoration: none; opacity: 0; }
+    ${scope} .heading-anchor::after { content: "#"; }
     ${scope} h2:hover .heading-anchor, ${scope} h3:hover .heading-anchor, ${scope} .heading-anchor:focus-visible { opacity: 1; color: var(--brand); }
     ${scope} p { margin: var(--size-4) 0; }
     ${scope} ul, ${scope} ol { padding-left: var(--size-6); margin: var(--size-4) 0; }
