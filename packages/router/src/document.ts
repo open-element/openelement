@@ -24,7 +24,7 @@ import type {
   PagePropsContext,
   StructuredDataEntry,
 } from './authoring.ts';
-import { assertNoScriptTags, assertTrustedHeadHtml } from './vite/head-injection.ts';
+import { assertNoScriptTags, assertTrustedHeadHtml } from './internal/head-safety.ts';
 
 /** One <link rel="alternate"> record, typically carrying an hreflang. */
 export interface PageHeadAlternate {

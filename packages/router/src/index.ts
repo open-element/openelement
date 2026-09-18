@@ -17,6 +17,7 @@ export type {
   ActionOutcome,
   IslandConfig,
   IslandDeliveryStrategy,
+  JsonValue,
   OpenElementPageDescriptor,
   PageComponentConstructor,
   PageErrorProjector,

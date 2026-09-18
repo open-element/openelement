@@ -6,11 +6,8 @@
  */
 import { assertEquals, assertStringIncludes, assertThrows } from '@std/assert';
 import { OpenElementError } from '@openelement/element';
-import {
-  assertNoScriptTags,
-  buildHeadExtras,
-  validateSafeUrl,
-} from '../src/vite/head-injection.ts';
+import { assertNoScriptTags } from '../src/internal/head-safety.ts';
+import { buildHeadExtras, validateSafeUrl } from '../src/vite/head-injection.ts';
 import { buildCriticalHeadExtras } from '../src/vite/internal/ssg/critical-assets.ts';
 
 // ─── assertNoScriptTags ───────────────────────────────────────

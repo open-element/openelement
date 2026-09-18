@@ -211,12 +211,27 @@ export function classifyActionResult<Data>(result: Data): ActionOutcome<Data> {
 }
 
 /**
+ * A JSON value: the complete set of shapes the structured-data channel
+ * admits (JSON primitives, arrays and plain objects, all readonly).
+ * Functions, `undefined`, bigint, symbols, class instances, Date, Map and
+ * Set are rejected by the runtime normalizer and by this type, so an
+ * author cannot write a document the serializer would refuse.
+ */
+export type JsonValue =
+  | null
+  | boolean
+  | number
+  | string
+  | readonly JsonValue[]
+  | { readonly [key: string]: JsonValue };
+
+/**
  * One structured-data document — a JSON-LD node such as a schema.org
  * BlogPosting or WebSite. Its values are JSON data (string, finite number,
  * boolean, null, array, plain object) and nothing else: the serializer emits
  * the document as data, so an HTML string is not a document here.
  */
-export type StructuredDataEntry = Record<string, unknown>;
+export type StructuredDataEntry = { readonly [key: string]: JsonValue };
 
 /**
  * Page <head> meaning declared by a route descriptor (v0.44, ADR-0143;

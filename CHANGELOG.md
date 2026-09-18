@@ -60,6 +60,35 @@ lines and no migration path from 0.x is offered: new projects start from
   qualification, production SMTP, and real scan-engine qualification are
   external pending.
 
+### Review-round corrections (post-baseline, this branch)
+
+- **Correctness**: the reading-page heading-id allocator now probes for the
+  first free suffix against every id already in the document (a page with an
+  element `id="foo-2"` plus two `Foo` headings no longer emits a duplicate
+  DOM id); RSS `pubDate` validation is a UTC calendar round-trip, so
+  impossible dates (`2026-02-29`, `2026-04-31`) fail closed instead of being
+  silently normalized by `Date`.
+- **Public API (Router)**: `head.structuredData` entries and values are typed
+  as a recursive `JsonValue` (`StructuredDataEntry = { readonly [key: string]:
+  JsonValue }`) instead of `Record<string, unknown>`; `JsonValue` is exported.
+  Runtime validation is unchanged.
+- **Public API (UI)**: `openPropsRootSheet` and the `toRootCss` transform are
+  removed. The remaining `openPropsTokenSheet` token block selects
+  `:root, :host`, so one generated sheet serves document and shadow
+  adoption; the structural fallback stays `:host`-only.
+- **Build**: the production Site build is hermetic — source dates come from
+  the committed `www/lib/content-dates.json` manifest and the retired-URL
+  baseline from `tools/repo/site-baseline-routes.json`, so `site:build` needs
+  no network, no remote and no `.git`. Git-based refresh/verify tasks
+  (`content-dates:*`, `retired-url:check --refresh`) run in CI, not in the
+  build.
+- **Release**: `@openelement/ui` now ships `THIRD_PARTY_NOTICES.md` inside
+  its tarball (open-props MIT text), asserted by the packed-artifact gate.
+- **Tokens**: the open-props adapter lives at
+  `packages/ui/tools/generate-ui-tokens.ts` (task
+  `deno task --cwd packages/ui generate:ui-tokens`); build-artifact emitters
+  are named `emit-*` and no longer fake `--check` tasks.
+
 ## 0.44.0-beta.1
 
 **First public v0.44 prerelease (dist-tag `beta`; npm `latest` stays on the

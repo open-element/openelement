@@ -19,7 +19,7 @@
  * Resolved once per render by resolvePageDocument (@openelement/router/document)
  * before either serializer runs; there is no post-build head rewrite anymore.
  */
-import type { PageHead } from '@openelement/router';
+import type { PageHead, StructuredDataEntry } from '@openelement/router';
 import { getPostBySlug } from '@openelement/generated/blog-data';
 import { contentLocale } from './locale.ts';
 import { localizePath, SITE_LOCALES } from './link.ts';
@@ -29,7 +29,7 @@ export const SITE_ORIGIN = 'https://openelement.org';
 const BRAND = 'openElement';
 
 /** The one organization node the site's structured data points at. */
-function organizationNode(): Record<string, unknown> {
+function organizationNode(): StructuredDataEntry {
   return { '@type': 'Organization', name: BRAND, url: SITE_ORIGIN };
 }
 
