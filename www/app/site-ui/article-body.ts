@@ -17,6 +17,23 @@ import { readingChromeStrings } from './chrome-strings.ts';
 export type ArticleOutlineItem = Readonly<{ id: string; label: string; level: 2 | 3 }>;
 
 /**
+ * Strip HTML to plain text, completely: tags to a fixed point, then any
+ * leftover angle bracket. A single `<[^>]+>` pass can leave a `<script`
+ * fragment with no closing `>` behind (CodeQL
+ * js/incomplete-multi-character-sanitization); the trailing bracket strip
+ * closes that hole the same way prepareArticle's label pipeline does.
+ */
+export function stripHtmlToText(html: string): string {
+  let out = html;
+  for (;;) {
+    const stripped = out.replace(/<[^>]+>/g, '');
+    if (stripped === out) break;
+    out = stripped;
+  }
+  return out.replace(/[<>]/g, '');
+}
+
+/**
  * Heading-id allocator shared by prepareArticle and the retired-URL gate:
  * same stem rule and same per-document duplicate suffixes, so an anchor
  * verified here is the anchor the article actually renders.

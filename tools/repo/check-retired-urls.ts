@@ -16,7 +16,7 @@
 import { fromFileUrl, join } from '@std/path';
 import { scanRoutes } from '../../packages/router/src/vite/internal/ssg/route-scanner.ts';
 import { fileToRoutePath } from '../../www/lib/route-path.ts';
-import { slugifyHeadingId } from '../../www/app/site-ui/article-body.ts';
+import { slugifyHeadingId, stripHtmlToText } from '../../www/app/site-ui/article-body.ts';
 
 const repoRoot = fromFileUrl(new URL('../../', import.meta.url));
 const routesRel = 'www/app/routes';
@@ -163,12 +163,12 @@ function contentFileFor(route: string, locale: 'en' | 'zh'): string | null {
 }
 
 function stripMarkdownInline(text: string): string {
-  return text
+  const dequoted = text
     .replace(/`([^`]*)`/g, '$1')
     .replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1')
     .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
-    .replace(/[*_~]+/g, '')
-    .replace(/<[^>]+>/g, '');
+    .replace(/[*_~]+/g, '');
+  return stripHtmlToText(dequoted);
 }
 
 /** All h2/h3 ids a document renders, via the shared allocator. */

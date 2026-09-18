@@ -27,6 +27,7 @@ import {
   resolveBuiltPath,
 } from '../lib/site-links.ts';
 import { apiReference } from '../../www/app/data/_generated-api-reference.ts';
+import { stripHtmlToText } from '../../www/app/site-ui/article-body.ts';
 import { retiredContentTitles } from './check-retired-urls.ts';
 
 export const SITE_DIST = 'www/dist';
@@ -154,7 +155,7 @@ export async function checkBuiltLinks(dist = SITE_DIST): Promise<LinkFailure[]> 
     const seenHrefs = new Set<string>();
     for (const anchor of section.matchAll(/<a[^>]*href="([^"]*)"[^>]*>([\s\S]*?)<\/a>/g)) {
       const href = anchor[1];
-      const label = anchor[2].replace(/<[^>]+>/g, '').trim();
+      const label = stripHtmlToText(anchor[2]).trim();
       if (seenHrefs.has(href)) {
         failures.push({ file: relative, message: `see-also links '${href}' twice` });
       }
