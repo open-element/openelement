@@ -52,23 +52,26 @@ export async function resolveBase(ref: string): Promise<string> {
   const direct = await git(['rev-parse', '--verify', '--quiet', `${ref}^{commit}`]);
   if (direct.code === 0 && direct.out) return direct.out;
   if (ref.startsWith('origin/')) {
-    // Explicit refspec: single-branch clones (CI fresh-clone) do not track
-    // other branches, and a bare `git fetch origin <branch>` leaves
-    // FETCH_HEAD only. Depth 1 suffices — the baseline is only archived
-    // and shown, never merged.
+    // Explicit full refspecs: single-branch clones (CI fresh-clone, a local
+    // clone of the detached CI workspace) track nothing, and a bare `git
+    // fetch origin <branch>` only matches refs/heads/<branch> on the remote
+    // — never its refs/remotes/origin/<branch>. Depth 1 suffices: the
+    // baseline is only archived and shown, never merged.
     const branch = ref.slice('origin/'.length);
-    const fetched = await git([
-      'fetch',
-      '--depth',
-      '1',
-      'origin',
-      `${branch}:refs/remotes/origin/${branch}`,
-    ]);
-    if (fetched.code === 0) {
-      const retry = await git(['rev-parse', '--verify', '--quiet', `${ref}^{commit}`]);
-      if (retry.code === 0 && retry.out) return retry.out;
+    const candidates = [
+      `refs/remotes/origin/${branch}:refs/remotes/origin/${branch}`,
+      `refs/heads/${branch}:refs/remotes/origin/${branch}`,
+    ];
+    let lastErr = '';
+    for (const refspec of candidates) {
+      const fetched = await git(['fetch', '--depth', '1', 'origin', refspec]);
+      if (fetched.code === 0) {
+        const retry = await git(['rev-parse', '--verify', '--quiet', `${ref}^{commit}`]);
+        if (retry.code === 0 && retry.out) return retry.out;
+      }
+      lastErr = fetched.err;
     }
-    fail(`cannot resolve baseline ref ${ref} (fetch it first or pass --base): ${fetched.err}`);
+    fail(`cannot resolve baseline ref ${ref} (fetch it first or pass --base): ${lastErr}`);
   }
   fail(`cannot resolve baseline ref ${ref} (fetch it first or pass --base)`);
 }
