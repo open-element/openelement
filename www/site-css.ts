@@ -87,8 +87,11 @@ body {
   :focus-visible { outline: 2px solid Highlight; }
 }
 @media (prefers-contrast: more) {
-  /* Collapse the muted step onto secondary ink (theme-aware both ways). */
-  :root { --text-muted: var(--text-secondary); }
+  /* Collapse the muted step onto secondary ink. The dark token sets its own
+     --text-muted on :root[data-theme='dark'] (specificity 0,2,0), so the
+     plain :root rule (0,1,0) is a light-mode no-op fix in dark — repeat the
+     assignment at equal specificity to stay theme-aware both ways. */
+  :root, :root[data-theme='dark'] { --text-muted: var(--text-secondary); }
 }
 /* Reading-page print: chrome goes away, ink goes black on white, and content
    links carry their target so the paper copy stays navigable. */
