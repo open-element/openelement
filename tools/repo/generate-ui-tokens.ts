@@ -104,10 +104,33 @@ const generatedTs = `/**
 
 import { StyleSheet, type StyleSheetLike } from '@openelement/element';
 
-function toRootCss(hostCss: string): string {
-  return hostCss
-    .replace(/:host\\(\\[data-theme='dark'\\]\\)/g, ":root[data-theme='dark']")
-    .replace(/:host/g, ':root');
+function countDarkDecls(css: string, marker: string): number {
+  const tail = css.split(marker)[1] ?? '';
+  return (tail.match(/--[a-z0-9-]+\\s*:/g) ?? []).length;
+}
+
+export function toRootCss(hostCss: string): string {
+  const darked = hostCss.replace(
+    /:host\\(\\[data-theme=(['"])dark\\1\\]\\)/g,
+    ":root[data-theme='dark']",
+  );
+  if (/:host-/.test(darked)) {
+    throw new Error(
+      "toRootCss: unhandled :host-* variant (e.g. :host-context) — extend the transform, do not ship a silent rewrite",
+    );
+  }
+  const rooted = darked.replace(/:host/g, ':root');
+  // Output assertions: replaceSync drops invalid selectors without
+  // throwing, so a broken transform would silently delete tokens instead
+  // of failing the build.
+  const inputDarkDecls = countDarkDecls(hostCss, '[data-theme=');
+  const outputDarkDecls = countDarkDecls(rooted, ':root[data-theme=');
+  if (/:host/.test(rooted)) throw new Error('toRootCss: residual :host in output');
+  if (!rooted.includes(':root[data-theme=')) throw new Error('toRootCss: dark block missing in output');
+  if (inputDarkDecls === 0 || outputDarkDecls !== inputDarkDecls) {
+    throw new Error('toRootCss: dark declarations changed ' + inputDarkDecls + ' -> ' + outputDarkDecls);
+  }
+  return rooted;
 }
 
 const OPEN_PROPS_TOKEN_CSS = \`${generatedCss}\`;
