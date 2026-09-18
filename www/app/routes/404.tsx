@@ -3,7 +3,7 @@ import { siteHead } from '@openelement/site-ui/head.ts';
 import { contentLocale } from '@openelement/site-ui/locale.ts';
 import { localizePath } from '@openelement/site-ui/link.ts';
 import redirectTableJson from '../../../tools/repo/site-redirects.json' with { type: 'json' };
-import Page404 from '../components/page-404.tsx';
+import Page404 from '../islands/el-404.tsx';
 
 const redirectTable = redirectTableJson as {
   redirects: Array<{ from: string; to: string; toZh?: string; status: number }>;
@@ -43,8 +43,9 @@ const content = {
     lede: 'This route never mounted. The page you want is probably one declarative template away.',
     backHome: 'Back home',
     readDocs: 'Read the docs',
-    searchHint: 'Tip: press ⌘K (Ctrl+K) to search the whole site',
+    searchHint: 'Tip: use the search button up top, or press ⌘K (Ctrl+K)',
     popularLabel: 'Popular right now',
+    searchLabel: 'Search the docs',
     suggestionsLabel: 'You may be looking for',
     popular: [
       ['Get started', '/guide/getting-started'],
@@ -60,8 +61,9 @@ const content = {
     lede: '这个路由从未被挂载。你要找的页面，也许只差一个 declarative template。',
     backHome: '回到首页',
     readDocs: '阅读文档',
-    searchHint: '小提示：按 ⌘K（Ctrl+K）全站搜索',
+    searchHint: '小提示：点右上角搜索，或按 ⌘K（Ctrl+K）',
     popularLabel: '热门直达',
+    searchLabel: '搜索文档',
     suggestionsLabel: '你可能在找',
     popular: [
       ['快速开始', '/guide/getting-started'],
@@ -100,6 +102,7 @@ export default definePage(Page404, {
       backHome: text.backHome,
       readDocs: text.readDocs,
       searchHint: text.searchHint,
+      searchLabel: text.searchLabel,
       popularLabel: text.popularLabel,
       popular,
       suggestionsLabel: text.suggestionsLabel,

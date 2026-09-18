@@ -1,45 +1,59 @@
+import { defineIslandConfig } from '@openelement/router';
 import { element, OpenElement, property } from '@openelement/element';
-import '@openelement/ui/open-button';
-import { page404Styles } from './page-404-styles.ts';
+import { page404Styles } from '../components/page-404-styles.ts';
+
+export const openElement = defineIslandConfig({ hydrate: 'idle', ssr: true });
+
+/** Minimal surface of the hydrated header search island this page opens. */
+interface SearchOpener extends HTMLElement {
+  openSearch?: () => void;
+}
 
 @element('el-404')
 export default class Page404 extends OpenElement {
   static override styles = page404Styles;
 
-  @property({ reflect: false, attribute: false })
+  @property({ reflect: false })
   serifLine = '';
 
-  @property({ reflect: false, attribute: false })
+  @property({ reflect: false })
   lede = '';
 
-  @property({ reflect: false, attribute: false })
+  @property({ reflect: false })
   backHome = '';
 
-  @property({ reflect: false, attribute: false })
+  @property({ reflect: false })
   readDocs = '';
 
-  @property({ reflect: false, attribute: false })
+  @property({ reflect: false })
   homeHref = '/';
 
-  @property({ reflect: false, attribute: false })
+  @property({ reflect: false })
   docsHref = '/docs';
 
-  @property({ reflect: false, attribute: false })
+  @property({ reflect: false })
   searchHint = '';
 
-  @property({ reflect: false, attribute: false })
+  @property({ reflect: false })
+  searchLabel = '';
+
+  openSiteSearch(): void {
+    document.querySelector<SearchOpener>('open-search')?.openSearch?.();
+  }
+
+  @property({ reflect: false })
   popularLabel = '';
 
-  @property({ reflect: false, attribute: false })
+  @property({ reflect: false })
   popular: Array<{ href: string; label: string }> = [];
 
-  @property({ reflect: false, attribute: false })
+  @property({ reflect: false })
   suggestionsLabel = '';
 
-  @property({ reflect: false, attribute: false })
+  @property({ reflect: false })
   suggestions: Array<{ href: string; label: string }> = [];
 
-  @property({ reflect: false, attribute: false })
+  @property({ reflect: false })
   marqueeText = '';
 
   render() {
@@ -54,12 +68,19 @@ export default class Page404 extends OpenElement {
           <p class='serif-line'>{this.serifLine}</p>
           <p class='lede'>{this.lede}</p>
           <div class='actions'>
-            <open-button variant='primary' href={this.homeHref}>
+            {/* Native anchors, not open-button: importing the ui primitive
+                would bundle its runtime into this 404-only island chunk and
+                blow the per-island budget. The action-link styles below carry
+                the same primary/ghost voice. */}
+            <a class='action-link primary' href={this.homeHref}>
               {this.backHome}
-            </open-button>
-            <open-button href={this.docsHref}>
+            </a>
+            <a class='action-link' href={this.docsHref}>
               {this.readDocs}
-            </open-button>
+            </a>
+            <button type='button' class='search-entry' onClick={this.openSiteSearch}>
+              {this.searchLabel}
+            </button>
           </div>
           <p class='search-hint'>{this.searchHint}</p>
           <nav class='popular' aria-label={this.popularLabel}>
