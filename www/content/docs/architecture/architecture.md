@@ -93,4 +93,5 @@ metadata; it is not a blanket certification of every third-party component.
 ## See also
 
 - [openElement vs Alternatives](/architecture/comparison) — how this architecture is positioned.
+- [DSD Rendering](/architecture/dsd) — the platform standards contract this graph builds on.
 - [Core Concepts](/guide/core-concepts) — the same model from an author's side.

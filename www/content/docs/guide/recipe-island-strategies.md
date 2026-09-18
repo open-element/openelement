@@ -1,6 +1,6 @@
 ---
 title: 'Pick an island strategy'
-lede: 'Four strategies, one decision per component: when its JavaScript may load, and what the reader gets before it does.'
+lede: 'Five strategies, one decision per component: when its JavaScript may load, and what the reader gets before it does.'
 navLabel: 'Island strategies'
 order: 122
 section: 'Recipes'
@@ -10,7 +10,7 @@ section: 'Recipes'
 
 A component that renders content, layout or documentation stays `dsd-static`: serialized as DSD, no client module, ever. Only promote a component to an island when it needs runtime state or framework interop. The decision below assumes promotion already earned its keep.
 
-## The four options
+## The five options
 
 ```tsx
 import { defineIslandConfig } from '@openelement/router';
@@ -21,6 +21,7 @@ export const openElement = defineIslandConfig({ hydrate: 'visible', ssr: true, d
 - `load` — first-paint controls: navigation, search, theme. Imported immediately after parse; blocking paint is the point.
 - `idle` — everything interactive but non-critical: counters, forms, tabs. Upgrades when the browser is idle and never blocks paint.
 - `visible` — below-the-fold weight: comments, charts, embeds. An IntersectionObserver gates the fetch until scroll-in.
+- `media` — capability-gated weight: declare the media query in the island's `media` field and the chunk loads only while it matches.
 - `only` — browser-only components that cannot produce reliable DSD (canvas, media, WebGL). The server emits the host tag and serialized props; SSR is skipped.
 
 ## Worked choices

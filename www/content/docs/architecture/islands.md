@@ -32,6 +32,8 @@ The strategy decides when the chunk is fetched — `load`, `idle`, `visible` or 
 
 ## Upgrade Model
 
+Islands are the only client JavaScript units in openElement. The public model is the compiled element class: server serialization, fresh DOM and existing-DOM claim share one Part Program.
+
 openElement uses the browser Custom Element upgrade mechanism. SSG writes HTML first, then the generated client entry imports only the island modules used by the current page and registers their compiled classes.
 
 ## Four Layers
@@ -50,7 +52,7 @@ Browser-only components can opt out of SSR with the `only` strategy. The server 
 
 ### Layer 4 — `light-dom` — No shadow boundary
 
-The compiled default root is light: the element's content renders into light DOM with no DSD encapsulation, so document-level styles apply directly. Hydration strategies still apply to such islands.
+A component that declares a light root renders its content into light DOM with no DSD encapsulation, so document-level styles apply directly. The compiled default stays shadow-open; light DOM is opt-in per component. Hydration strategies still apply to such islands.
 
 ## Strategies
 

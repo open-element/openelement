@@ -86,4 +86,5 @@ openElement 把第三方 Custom Elements 视为基于标准的依赖。当前构
 ## 另见
 
 - [openElement 对比主流框架](/zh/architecture/comparison)——这套架构的定位。
+- [DSD 渲染](/zh/architecture/dsd)——这张图所依赖的平台标准契约。
 - [核心概念](/zh/guide/core-concepts)——同一套模型在作者视角下的表述。

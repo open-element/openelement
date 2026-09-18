@@ -10,7 +10,7 @@ import {
   pages as architecturePages,
 } from '../data/_generated-architecture-data.ts';
 import { contentMeta } from '../data/_generated-content-meta.ts';
-import { OPENELEMENT_VERSION, sourceLineAppliesLabel, sourceLineNote } from '../data/version.ts';
+import { sourceLineAppliesLabel, sourceLineNote, sourceLineStamp } from '../data/version.ts';
 
 export type ArticleCollection = 'guide' | 'architecture';
 
@@ -132,6 +132,10 @@ export function projectArticlePage(
         label: localizedTitle(candidate.slug),
       }
       : undefined;
+  // Machine-derived freshness: the render locale's source-file stamp
+  // from generated content meta. The 'uncommitted' sentinel hides the row
+  // instead of showing a date that differs per machine.
+  const stamp = contentMeta[`${collection}/${slug}`]?.[locale] ?? '';
 
   return {
     notFoundClass: 'container is-hidden',
@@ -143,10 +147,11 @@ export function projectArticlePage(
       breadcrumbHref: localizePath(shell.root, locale),
       title: page.frontmatter.title,
       lede: page.frontmatter.lede ?? '',
-      // Machine-derived freshness: the render locale's source-file stamp
-      // from generated content meta; the version mark is the repo baseline.
-      updated: contentMeta[`${collection}/${slug}`]?.[locale] ?? '',
-      version: OPENELEMENT_VERSION,
+      // The version mark is the source-line stamp (never the bare
+      // constant — version.ts:1-3 forbids claiming a published line while
+      // SOURCE_LINE_PUBLISHED is false).
+      updated: stamp === 'uncommitted' ? '' : stamp,
+      version: sourceLineStamp(locale),
     },
     navigation: {
       previous: navigationItem(previous),

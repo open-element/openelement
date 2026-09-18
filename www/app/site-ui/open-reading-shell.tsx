@@ -2,7 +2,7 @@
 /** Private WWW long-form reading shell. */
 
 import { computed, element, OpenElement, property } from '@openelement/element';
-import { readingChromeStrings } from './chrome-strings.ts';
+import { formatFreshnessDate, readingChromeStrings } from './chrome-strings.ts';
 import { compiledStyle } from './compiled-style.ts';
 import type { ReadingMetadata, ReadingNavigation } from './page-contract.ts';
 
@@ -118,11 +118,13 @@ export default class OpenReadingShell extends OpenElement {
   @property({ reflect: false, attribute: false })
   hideMetaRow = computed(() => !(this.metadata?.version && this.metadata?.updated));
   @property({ reflect: false, attribute: false })
-  freshnessLine = computed(() =>
-    `${readingChromeStrings(this.locale).appliesTo} ${this.metadata?.version ?? ''}${
-      readingChromeStrings(this.locale).freshnessSeparator
-    }${readingChromeStrings(this.locale).updated} ${this.metadata?.updated ?? ''}`
+  freshnessPrefix = computed(() =>
+    `${readingChromeStrings(this.locale).appliesTo} ${this.metadata?.version ?? ''}${readingChromeStrings(this.locale).freshnessSeparator}${readingChromeStrings(this.locale).updated} `
   );
+  @property({ reflect: false, attribute: false })
+  metaUpdated = computed(() => this.metadata?.updated ?? '');
+  @property({ reflect: false, attribute: false })
+  metaUpdatedLabel = computed(() => formatFreshnessDate(this.metadata?.updated ?? '', this.locale));
   @property({ reflect: false, attribute: false })
   date = computed(() => this.metadata?.date ?? '');
   @property({ reflect: false, attribute: false, type: Array })
@@ -173,7 +175,7 @@ export default class OpenReadingShell extends OpenElement {
                   <span class='title-accent'>{this.accent}</span>
                 </h1>
                 <p class='lede'>{this.lede}</p>
-                <p class='freshness-row' hidden={this.hideMetaRow}>{this.freshnessLine}</p>
+                <p class='freshness-row' hidden={this.hideMetaRow}><span>{this.freshnessPrefix}</span><time datetime={this.metaUpdated}>{this.metaUpdatedLabel}</time></p>
                 <p class='meta-row'>
                   <time>{this.date}</time>
                   {this.tags.map((tag) => <span key={tag.key}>{tag.label}</span>)}

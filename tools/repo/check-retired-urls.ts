@@ -47,7 +47,7 @@ async function git(args: string[]): Promise<{ code: number; out: string }> {
 }
 
 /** Resolve the baseline ref to a commit, fetching it first when absent. */
-async function resolveBase(ref: string): Promise<string> {
+export async function resolveBase(ref: string): Promise<string> {
   const direct = await git(['rev-parse', '--verify', '--quiet', `${ref}^{commit}`]);
   if (direct.code === 0 && direct.out) return direct.out;
   if (ref.startsWith('origin/')) {
@@ -162,6 +162,31 @@ async function documentHeadingIds(contentFile: string): Promise<Set<string>> {
     ids.add(slugifyHeadingId(stripMarkdownInline(heading[2]).trim(), seen));
   }
   return ids;
+}
+
+/**
+ * Titles (and navLabels) the retired routes carried on the baseline, for
+ * gates that must not resurrect them as link labels. Route-only pages
+ * (no content file) contribute nothing.
+ */
+export async function retiredContentTitles(baseRef = 'origin/main'): Promise<Set<string>> {
+  const sha = await resolveBase(baseRef);
+  const retired = await deriveRetiredUrls(baseRef);
+  const titles = new Set<string>();
+  for (const route of retired) {
+    for (const locale of ['en', 'zh'] as const) {
+      const abs = contentFileFor(route, locale);
+      if (!abs) continue;
+      const rel = abs.slice(repoRoot.length + 1);
+      const shown = await git(['show', `${sha}:${rel}`]);
+      if (shown.code !== 0) continue;
+      for (const field of ['title', 'navLabel']) {
+        const match = new RegExp(`^${field}:\\s*'([^']*)'`, 'm').exec(shown.out);
+        if (match) titles.add(match[1]);
+      }
+    }
+  }
+  return titles;
 }
 
 export async function checkRetiredUrls(baseRef: string): Promise<void> {

@@ -107,6 +107,17 @@ export function homeStrings(locale: string): {
 }
 
 /**
+ * Freshness-row date display: en keeps the ISO stamp, zh renders
+ * 2026年9月18日. Malformed input falls back to the raw string — a display
+ * helper must never throw the page.
+ */
+export function formatFreshnessDate(iso: string, locale: string): string {
+  const parts = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+  if (!parts) return iso;
+  if (locale === 'zh') return `${parts[1]}年${Number(parts[2])}月${Number(parts[3])}日`;
+  return iso;
+}
+/**
  * Search chrome copy, server-rendered by the open-search island in the page
  * locale (html lang contract). English strings are pinned verbatim by
  * www/e2e/search.spec.ts — do not reword them without updating that spec.

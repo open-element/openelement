@@ -1,6 +1,6 @@
 ---
 title: '选 island 策略'
-lede: '四个策略，每个组件做一次决策：它的 JavaScript 何时可以加载，在此之前读者得到什么。'
+lede: '五个策略，每个组件做一次决策：它的 JavaScript 何时可以加载，在此之前读者得到什么。'
 navLabel: 'Island 策略选型'
 order: 122
 section: 'Recipes'
@@ -10,7 +10,7 @@ section: 'Recipes'
 
 渲染内容、布局或文档的组件保持 `dsd-static`：序列化为 DSD，永远没有客户端模块。只有需要运行时状态或框架互操作的组件才晋升为 island。下面的决策假设晋升已经物有所值。
 
-## 四个选项
+## 五个选项
 
 ```tsx
 import { defineIslandConfig } from '@openelement/router';
@@ -21,6 +21,7 @@ export const openElement = defineIslandConfig({ hydrate: 'visible', ssr: true, d
 - `load`——首屏控件：导航、搜索、主题。解析后立即导入；阻塞绘制就是它的工作。
 - `idle`——交互但非关键：计数器、表单、选项卡。浏览器空闲时升级，永不阻塞绘制。
 - `visible`——首屏之下的分量：评论、图表、嵌入。IntersectionObserver 到视口附近才放行拉取。
+- `media`——按能力开关的分量：在 island 的 `media` 字段声明媒体查询，查询命中时才拉取。
 - `only`——无法产出可靠 DSD 的纯浏览器组件（canvas、媒体、WebGL）。服务端只输出宿主标签与序列化 props；跳过 SSR。
 
 ## 实例决策

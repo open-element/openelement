@@ -31,6 +31,8 @@ claim 对已经存在的 DOM 重放编译后的 Part Program：模板声明过�
 
 ## 升级模型
 
+island 是 openElement 中唯一的客户端 JavaScript 单元。公开模型是编译后的元素类：服务端序列化、新建 DOM 与已有 DOM 的 claim 共享同一份 Part Program。
+
 openElement 使用浏览器的 Custom Element upgrade 机制。SSG 先写出 HTML，然后生成的客户端入口只导入当前页面用到的 island 模块并注册其编译类。
 
 ## 四个层次
@@ -49,7 +51,7 @@ openElement 使用浏览器的 Custom Element upgrade 机制。SSG 先写出 HTM
 
 ### 第 4 层 — `light-dom` — 无 shadow 边界
 
-编译默认的 root 是 light：元素内容渲染进 light DOM，没有 DSD 封装，因此文档级样式直接生效。这类 island 仍适用 hydration 策略。
+声明了 light root 的组件把内容渲染进 light DOM，没有 DSD 封装，因此文档级样式直接生效。编译默认值保持 shadow-open；light DOM 按组件选择进入。这类 island 仍适用 hydration 策略。
 
 ## 策略
 

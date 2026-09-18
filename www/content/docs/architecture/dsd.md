@@ -54,7 +54,6 @@ Standard Custom Elements and Declarative Shadow DOM define the durable component
 
 ## See also
 
-- [Island Hydration](/architecture/islands) — when a component crosses into client delivery.
-- [Island Deep Dive](/architecture/islands) — the layers and hydration strategies.
+- [Island Hydration](/architecture/islands) — when a component crosses into client delivery: the layers and hydration strategies.
 - [Core Concepts](/guide/core-concepts) — declaring a component's root mode.
 - [Current Architecture](/architecture) — where each package sits in the graph.

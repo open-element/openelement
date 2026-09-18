@@ -85,13 +85,13 @@ What we measure, and the commands that reproduce each row.
 
 ### Output size
 
-Numbers measured on 2026-09-17 from the docs site's own build (`www/dist`, built with `deno task site:build` on this repository at commit `7f3616ac`). The commands below reproduce each row on that commit; page and URL counts follow the route set, so re-run them after content changes.
+Numbers measured on 2026-09-18 from the docs site's own build (`www/dist`, built with `deno task site:build` on this repository at commit `213d4fda`). The commands below reproduce each row on that commit; page and URL counts follow the route set, so re-run them after content changes.
 
 | Metric                 | Value                                              |
 | ---------------------- | -------------------------------------------------- |
 | Pre-rendered documents | 62 HTML files                                      |
 | URLs in `sitemap.xml`  | 60                                                 |
-| Total static output    | 7.2 MB                                             |
+| Total static output    | 7.5 MB                                             |
 | Island manifests       | 62 — one per page                                  |
 | Search index           | 30 pages per locale (en, zh), 60 fragments, 1.2 MB |
 
@@ -99,7 +99,7 @@ Numbers measured on 2026-09-17 from the docs site's own build (`www/dist`, built
 deno task site:build                        # regenerate everything below first
 find www/dist -name '*.html' | wc -l        # 62
 grep -c '<loc>' www/dist/sitemap.xml        # 60
-du -sh www/dist                             # 7.2M
+du -sh www/dist                             # 7.5M
 ls www/dist/island-manifests | wc -l        # 62
 cat www/dist/pagefind/pagefind-entry.json   # page_count 30 per language
 ```
@@ -110,15 +110,15 @@ The docs site is a normal openElement app, islands included, so its client outpu
 
 | Chunk                          | Raw bytes | gzip -9 |
 | ------------------------------ | --------- | ------- |
-| `client.js` (shared entry)     | 7,103     | 1,850   |
-| `island-open-layout`           | 88,280    | 16,161  |
+| `client.js` (shared entry)     | 7,105     | 1,849   |
+| `island-open-layout`           | 102,012   | 17,688  |
 | `island-open-cinematic-scroll` | 78,176    | 23,894  |
-| `open-button`                  | 16,261    | 3,116   |
+| `open-button`                  | 16,320    | 3,129   |
 | `island-open-dragon-live-gaze` | 14,161    | 5,169   |
-| `island-open-page-rail`        | 8,250     | 2,120   |
-| `open-code-block`              | 8,705     | 2,940   |
+| `island-open-page-rail`        | 9,012     | 2,449   |
+| `open-code-block`              | 8,705     | 2,935   |
 | `island-open-hero-polish`      | 4,436     | 1,848   |
-| `open-badge`                   | 4,010     | 1,138   |
+| `open-badge`                   | 4,010     | 1,137   |
 
 ```bash
 ls -l www/dist/client/islands/*.js
@@ -129,11 +129,11 @@ What a page actually downloads follows from its island manifest, not from the to
 
 | Route                    | Client payload (raw) | Distinct chunks |
 | ------------------------ | -------------------- | --------------- |
-| `/guide/mdx`             | 112,338 B            | 4               |
-| `/guide/getting-started` | 112,338 B            | 4               |
-| `/`                      | 200,861 B            | 6               |
+| `/guide/mdx`             | 126,834 B            | 4               |
+| `/guide/getting-started` | 126,834 B            | 4               |
+| `/`                      | 214,595 B            | 6               |
 
-Across all 62 page manifests the site declares 10 island tags in 290 entries: the chrome islands (`open-layout`, `open-search`, `open-theme-toggle`) on every page, `open-page-rail` on 52, `open-code-block` on 36, and the remaining tags on a handful of pages each.
+Across all 62 page manifests the site declares 10 island tags in 296 entries: the chrome islands (`open-layout`, `open-search`, `open-theme-toggle`) on every page, `open-page-rail` on 52, `open-code-block` on 42, and the remaining tags on a handful of pages each.
 
 ```bash
 cat www/dist/island-manifests/page-<hash>.json   # one page's island set: tag, chunk, strategy, layer
@@ -153,8 +153,7 @@ A project with no islands and no enhanced forms emits no client entry at all: DS
 
 ## See also
 
-- [Current Architecture](/architecture) — the package graph this comparison refers to.
-- [Package Compatibility](/architecture) — what the current contract admits.
+- [Current Architecture](/architecture) — the package graph this comparison refers to, and the package-compatibility contract it admits.
 - [Core Concepts](/guide/core-concepts) — the authoring model behind the position.
 - [Island Hydration](/architecture/islands) — the four component layers and their strategies.
 - [Design System](/architecture/design-system) — how the site’s own styles and tokens are composed.

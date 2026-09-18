@@ -36,7 +36,8 @@ Success does not return — it throws an `OpenElementRedirect` carrying the targ
 
 ```ts
 import { assertEquals, assertInstanceOf } from '@std/assert';
-import { action, OpenElementRedirect } from '../app/routes/guestbook.tsx';
+import { OpenElementRedirect } from '@openelement/router';
+import { action } from '../app/routes/guestbook.tsx';
 
 Deno.test('a valid message redirects to the echo', () => {
   const formData = new FormData();

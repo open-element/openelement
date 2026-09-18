@@ -36,7 +36,8 @@ Deno.test('空消息在校验阶段失败', () => {
 
 ```ts
 import { assertEquals, assertInstanceOf } from '@std/assert';
-import { action, OpenElementRedirect } from '../app/routes/guestbook.tsx';
+import { OpenElementRedirect } from '@openelement/router';
+import { action } from '../app/routes/guestbook.tsx';
 
 Deno.test('合法消息跳转到回显', () => {
   const formData = new FormData();

@@ -27,6 +27,7 @@ import {
   resolveBuiltPath,
 } from '../lib/site-links.ts';
 import { apiReference } from '../../www/app/data/_generated-api-reference.ts';
+import { retiredContentTitles } from './check-retired-urls.ts';
 
 export const SITE_DIST = 'www/dist';
 const SITE_LOCALES = ['en', 'zh'] as const;
@@ -125,6 +126,40 @@ export async function checkBuiltLinks(dist = SITE_DIST): Promise<LinkFailure[]> 
         failures.push({
           file: `_redirects:${index + 1}`,
           message: `redirect fragment '#${fragment}' missing in '${to}'`,
+        });
+      }
+    }
+  }
+
+  // See-also hygiene: within one See-also section no href may repeat (a
+  // repeated href with a stale label is the merge-leftover shape), and no
+  // label may equal a retired page's title. The section ends at the next
+  // h2 or at the first chrome landmark after it (pager/footer/rail live
+  // past the article tail and must never count), so site chrome can never
+  // false-positive.
+  const retiredTitles = await retiredContentTitles();
+  const seeAlsoHeading = /<h2[^>]*id="(see-also|另见)"[^>]*>/;
+  const sectionEnd = /<h2[\s>]|<footer[\s>]|<nav[\s>]|<aside[\s>]/;
+  for (const htmlFile of htmlFiles.sort()) {
+    const relative = htmlFile.slice(dist.length + 1);
+    const html = await readHtml(relative);
+    const heading = seeAlsoHeading.exec(html);
+    if (!heading) continue;
+    const afterHeading = html.slice(heading.index + heading[0].length);
+    const boundary = afterHeading.search(sectionEnd);
+    const section = boundary < 0 ? afterHeading : afterHeading.slice(0, boundary);
+    const seenHrefs = new Set<string>();
+    for (const anchor of section.matchAll(/<a[^>]*href="([^"]*)"[^>]*>([\s\S]*?)<\/a>/g)) {
+      const href = anchor[1];
+      const label = anchor[2].replace(/<[^>]+>/g, '').trim();
+      if (seenHrefs.has(href)) {
+        failures.push({ file: relative, message: `see-also links '${href}' twice` });
+      }
+      seenHrefs.add(href);
+      if (retiredTitles.has(label)) {
+        failures.push({
+          file: relative,
+          message: `see-also label '${label}' names a retired page`,
         });
       }
     }

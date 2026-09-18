@@ -2,10 +2,15 @@
  * Generate the per-article source-freshness map.
  *
  * For every guide/architecture article slug, records the last-commit date
- * (`git log -1 --format=%cs`) of its en and zh Markdown sources separately —
- * a zh-only edit must not refresh the en stamp. Untracked sources (a new
- * article not yet committed) fall back to the HEAD date so generation stays
- * deterministic and needs no manual step.
+ * (`git log --follow -1 --format=%cs`) of its en and zh Markdown sources
+ * separately — a zh-only edit must not refresh the en stamp, and --follow
+ * keeps the stamp across pure moves. Untracked sources (a new article not
+ * yet committed) record the explicit sentinel 'uncommitted' instead of a
+ * date: the render layer hides the freshness row for it, so a machine/CI
+ * date difference can never false-red the drift check.
+ *
+ * Shallow clones collapse history and would flatten every stamp onto one
+ * date — fail closed instead of generating misleading data.
  *
  * Output `www/app/data/_generated-content-meta.ts` (gitignored) maps
  * `<collection>/<slug>` to `{ en, zh }` ISO dates; the article page model
@@ -36,6 +41,16 @@ async function gitDate(args: string[]): Promise<string> {
 const headDate = await gitDate(['log', '-1', '--format=%cs']);
 if (!headDate) throw new Error('git HEAD date unavailable — run inside the repository checkout');
 
+const shallow = await gitDate(['rev-parse', '--is-shallow-repository']);
+if (shallow === 'true') {
+  throw new Error(
+    'generate-site-content-meta: shallow clone collapses history — every stamp would flatten onto one date. Use a full clone.',
+  );
+}
+
+/** Sentinel for sources git does not track yet; the render layer hides the row for it. */
+const UNCOMMITTED = 'uncommitted';
+
 const meta: Record<string, { en: string; zh: string }> = {};
 for (const collection of COLLECTIONS) {
   const slugs = new Set<string>();
@@ -45,9 +60,9 @@ for (const collection of COLLECTIONS) {
   }
   for (const slug of [...slugs].sort()) {
     const rel = `www/content/docs/${collection}`;
-    const en = await gitDate(['log', '-1', '--format=%cs', '--', `${rel}/${slug}.md`]);
-    const zh = await gitDate(['log', '-1', '--format=%cs', '--', `${rel}/${slug}.zh.md`]);
-    meta[`${collection}/${slug}`] = { en: en || headDate, zh: zh || en || headDate };
+    const en = await gitDate(['log', '--follow', '-1', '--format=%cs', '--', `${rel}/${slug}.md`]);
+    const zh = await gitDate(['log', '--follow', '-1', '--format=%cs', '--', `${rel}/${slug}.zh.md`]);
+    meta[`${collection}/${slug}`] = { en: en || UNCOMMITTED, zh: zh || en || UNCOMMITTED };
   }
 }
 

@@ -54,7 +54,6 @@ OpenElement 依赖 Web 平台契约，而非自研的注册表产品。Custom El
 
 ## 另见
 
-- [Island Hydration](/zh/architecture/islands)——组件何时进入客户端投递。
-- [Island 深入解析](/zh/architecture/islands)——分层与 hydration 策略。
+- [Island Hydration](/zh/architecture/islands)——组件何时进入客户端投递：分层与 hydration 策略。
 - [核心概念](/zh/guide/core-concepts)——声明组件的 root 模式。
 - [当前架构](/zh/architecture)——每个包在图中的位置。
