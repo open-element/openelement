@@ -35,15 +35,16 @@ function fail(message: string): never {
   Deno.exit(1);
 }
 
-async function git(args: string[]): Promise<{ code: number; out: string }> {
+async function git(args: string[]): Promise<{ code: number; out: string; err: string }> {
   const command = new Deno.Command('git', {
     args,
     cwd: repoRoot,
     stdout: 'piped',
-    stderr: 'null',
+    stderr: 'piped',
   });
-  const { code, stdout } = await command.output();
-  return { code, out: new TextDecoder().decode(stdout).trim() };
+  const { code, stdout, stderr } = await command.output();
+  const decode = new TextDecoder().decode.bind(new TextDecoder());
+  return { code, out: decode(stdout).trim(), err: decode(stderr).trim() };
 }
 
 /** Resolve the baseline ref to a commit, fetching it first when absent. */
@@ -51,12 +52,23 @@ export async function resolveBase(ref: string): Promise<string> {
   const direct = await git(['rev-parse', '--verify', '--quiet', `${ref}^{commit}`]);
   if (direct.code === 0 && direct.out) return direct.out;
   if (ref.startsWith('origin/')) {
+    // Explicit refspec: single-branch clones (CI fresh-clone) do not track
+    // other branches, and a bare `git fetch origin <branch>` leaves
+    // FETCH_HEAD only. Depth 1 suffices — the baseline is only archived
+    // and shown, never merged.
     const branch = ref.slice('origin/'.length);
-    const fetched = await git(['fetch', 'origin', branch]);
+    const fetched = await git([
+      'fetch',
+      '--depth',
+      '1',
+      'origin',
+      `${branch}:refs/remotes/origin/${branch}`,
+    ]);
     if (fetched.code === 0) {
       const retry = await git(['rev-parse', '--verify', '--quiet', `${ref}^{commit}`]);
       if (retry.code === 0 && retry.out) return retry.out;
     }
+    fail(`cannot resolve baseline ref ${ref} (fetch it first or pass --base): ${fetched.err}`);
   }
   fail(`cannot resolve baseline ref ${ref} (fetch it first or pass --base)`);
 }
