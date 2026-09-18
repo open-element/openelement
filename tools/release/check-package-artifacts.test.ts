@@ -484,8 +484,7 @@ Deno.test('package artifacts: rejects a types target missing from the tarball', 
   );
 });
 
-const UI_NOTICE_FIXTURE =
-  '## open-props 1.7.23\n\nCopyright (c) 2021 Adam Argyle\n\nMIT License\n';
+const UI_NOTICE_FIXTURE = '## open-props 1.7.23\n\nCopyright (c) 2021 Adam Argyle\n\nMIT License\n';
 
 Deno.test('package artifacts: accepts an export with a matching declaration', async () => {
   await withExportsPackage(
