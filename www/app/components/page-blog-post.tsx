@@ -114,7 +114,7 @@ export default class PageBlogPost extends OpenElement {
               innerHTML={this.articleHtml}
               trustedHtml
             />
-            <nav class='next-dispatch' aria-label='Next dispatch'>
+            <nav class='next-dispatch' aria-label={this.nextDispatchLabel}>
               <span class='next-label'>{this.nextDispatchLabel}</span>
               <a href={this.nextDispatchHref}>{this.nextDispatchText}</a>
             </nav>
