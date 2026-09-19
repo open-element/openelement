@@ -13,7 +13,7 @@
  * check-generator-gates.ts (enforces the per-class wiring rules). This
  * module is neutral: it reads files, never exits.
  */
-import { join } from '@std/path';
+import { join, resolve } from '@std/path';
 import { walk } from '@std/fs/walk';
 
 export interface WorkspaceTasks {
@@ -31,23 +31,88 @@ export interface ScriptEntry {
   script: string;
 }
 
-/** Read every workspace's task graph from the canonical workspace list. */
+/** Read every workspace's task graph from the canonical workspace list.
+ *
+ * Strict by design: this discovery feeds generate-all AND the generator
+ * gate, so a silently skipped workspace would let both miss the same
+ * generators. Every malformed shape throws with the offending path and
+ * failure category instead of degrading to an empty or partial list.
+ */
 export async function readWorkspaces(repoRoot: string): Promise<WorkspaceTasks[]> {
-  const root = JSON.parse(await Deno.readTextFile(join(repoRoot, 'deno.json'))) as {
-    workspace?: string[];
-  };
+  // Callers pass repoRoot from fromFileUrl (trailing slash) or makeTempDir;
+  // normalize so the containment check compares like with like.
+  const rootDir = resolve(repoRoot);
+  const rootPath = join(rootDir, 'deno.json');
+  const root = await readConfigObject(rootPath, 'root workspace configuration');
+  const members = root.workspace;
+  if (!Array.isArray(members)) {
+    throw new Error(`${rootPath}: 'workspace' must be an array of workspace paths`);
+  }
+  const seen = new Set<string>();
   const out: WorkspaceTasks[] = [];
-  for (const member of root.workspace ?? []) {
-    const dir = join(repoRoot, member);
-    let parsed: { tasks?: Record<string, string> };
-    try {
-      parsed = JSON.parse(await Deno.readTextFile(join(dir, 'deno.json')));
-    } catch {
-      continue;
+  for (const member of members) {
+    if (typeof member !== 'string' || member.trim() === '') {
+      throw new Error(
+        `${rootPath}: workspace entries must be non-empty strings (got ${JSON.stringify(member)})`,
+      );
     }
-    out.push({ workspace: member.replace(/^\.\//, ''), dir, tasks: parsed.tasks ?? {} });
+    if (seen.has(member)) throw new Error(`${rootPath}: duplicate workspace entry '${member}'`);
+    seen.add(member);
+    const dir = resolve(rootDir, member);
+    if (dir !== rootDir && !dir.startsWith(`${rootDir}/`)) {
+      throw new Error(`${rootPath}: workspace '${member}' escapes the repository root`);
+    }
+    try {
+      if (!(await Deno.stat(dir)).isDirectory) {
+        throw new Error('not a directory');
+      }
+    } catch (cause) {
+      throw new Error(`workspace '${member}': directory ${dir} is missing or unreadable`, {
+        cause,
+      });
+    }
+    const configPath = join(dir, 'deno.json');
+    const config = await readConfigObject(configPath, `workspace '${member}'`);
+    const tasks = config.tasks ?? {};
+    if (tasks === null || typeof tasks !== 'object' || Array.isArray(tasks)) {
+      throw new Error(`${configPath}: 'tasks' must be an object when present`);
+    }
+    for (const [name, command] of Object.entries(tasks as Record<string, unknown>)) {
+      if (name.trim() === '') throw new Error(`${configPath}: task names must be non-empty`);
+      if (typeof command !== 'string') {
+        throw new Error(`${configPath}: task '${name}' must map to a string command`);
+      }
+    }
+    out.push({
+      workspace: member.replace(/^\.\//, ''),
+      dir,
+      tasks: tasks as Record<string, string>,
+    });
   }
   return out;
+}
+
+/** Read a deno.json as a JSON object, failing closed with path + category. */
+async function readConfigObject(
+  path: string,
+  label: string,
+): Promise<Record<string, unknown>> {
+  let text: string;
+  try {
+    text = await Deno.readTextFile(path);
+  } catch (cause) {
+    throw new Error(`${label}: ${path} is missing or unreadable`, { cause });
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch (cause) {
+    throw new Error(`${label}: ${path} is not valid JSON`, { cause });
+  }
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error(`${label}: ${path} must contain a JSON object`);
+  }
+  return parsed as Record<string, unknown>;
 }
 
 /** The first `.ts` path a task command references, if any. */
