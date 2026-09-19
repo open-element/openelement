@@ -16,23 +16,187 @@ import { readingChromeStrings } from './chrome-strings.ts';
 
 export type ArticleOutlineItem = Readonly<{ id: string; label: string; level: 2 | 3 }>;
 
-/**
- * One `id=` attribute in any legal HTML quote style (double, single,
- * unquoted). Seeding and removal both consume this single source so the two
- * can never disagree about which attributes exist: a form the seeder sees
- * but the remover misses would leave a duplicated id on the rewritten
- * heading (and vice versa).
- */
-const ID_ATTRIBUTE_SOURCE = String.raw`\s+id=(?:"([^"]*)"|'([^']*)'|([^\s"'<>` + '`' +
-  String.raw`=]+))`;
-
-/** Fresh pattern per call: no shared lastIndex state across uses. */
-function idAttributePattern(flags: string): RegExp {
-  return new RegExp(ID_ATTRIBUTE_SOURCE, flags);
+/** One attribute parsed from a start tag, with its exact byte span. */
+interface AttributeSpan {
+  name: string;
+  value: string | undefined;
+  /** First byte of the attribute name. */
+  start: number;
+  /** One past the last byte of the attribute (name plus optional value). */
+  end: number;
 }
 
-function idAttributeValue(match: RegExpMatchArray): string {
-  return match[1] ?? match[2] ?? match[3];
+/** A real start tag: lowercased name and the span through its terminating '>'. */
+interface StartTag {
+  name: string;
+  /** Index of the opening '<'. */
+  start: number;
+  /** One past the last tag-name byte. */
+  nameEnd: number;
+  /** Index of the terminating '>'. */
+  tagEnd: number;
+}
+
+/** Elements whose bodies are raw text: never scanned for tags or ids. */
+const RAW_TEXT_ELEMENTS = new Set(['script', 'style', 'pre']);
+
+/**
+ * Quote-aware scanner for the attributes inside a start tag. This is the one
+ * grammar shared by existing-id collection and authored-id removal; it is a
+ * local start-tag scanner, not an HTML parser. Quoted values are skipped
+ * wholesale (so `data-note="x id=foo"` never yields an `id`), unquoted
+ * values run to ASCII whitespace or '>' with '/' belonging to the value, and
+ * self-closing solidi are ignored.
+ */
+function scanAttributeSpans(source: string, start: number, end: number): AttributeSpan[] {
+  const spans: AttributeSpan[] = [];
+  let index = start;
+  while (index < end) {
+    const char = source[index];
+    if (/\s/.test(char) || char === '/') {
+      index += 1;
+      continue;
+    }
+    const attrStart = index;
+    while (index < end && !/[\s=/>]/.test(source[index])) index += 1;
+    const name = source.slice(attrStart, index);
+    if (name === '') {
+      index += 1;
+      continue;
+    }
+    let cursor = index;
+    while (cursor < end && /\s/.test(source[cursor])) cursor += 1;
+    let value: string | undefined;
+    if (cursor < end && source[cursor] === '=') {
+      cursor += 1;
+      while (cursor < end && /\s/.test(source[cursor])) cursor += 1;
+      if (cursor < end && (source[cursor] === '"' || source[cursor] === "'")) {
+        const quote = source[cursor];
+        cursor += 1;
+        const valueStart = cursor;
+        while (cursor < end && source[cursor] !== quote) cursor += 1;
+        value = source.slice(valueStart, cursor);
+        if (cursor < end) cursor += 1;
+      } else {
+        const valueStart = cursor;
+        while (cursor < end && !/[\s>]/.test(source[cursor])) cursor += 1;
+        value = source.slice(valueStart, cursor);
+      }
+      index = cursor;
+    }
+    spans.push({ name, value, start: attrStart, end: index });
+  }
+  return spans;
+}
+
+/**
+ * Walk every real start tag, skipping comments, doctypes, processing
+ * instructions, closing tags, and literal text `<`. Raw-text bodies are
+ * yielded through (the generator stays simple); callers skip them by span.
+ */
+function* startTags(html: string): Generator<StartTag> {
+  let index = 0;
+  while (index < html.length) {
+    const lt = html.indexOf('<', index);
+    if (lt === -1) return;
+    if (html.startsWith('<!--', lt)) {
+      const end = html.indexOf('-->', lt + 4);
+      index = end === -1 ? html.length : end + 3;
+      continue;
+    }
+    const next = html[lt + 1];
+    if (next === '!' || next === '?' || next === '/') {
+      const end = html.indexOf('>', lt + 1);
+      index = end === -1 ? html.length : end + 1;
+      continue;
+    }
+    if (next === undefined || !/[A-Za-z]/.test(next)) {
+      index = lt + 1;
+      continue;
+    }
+    let cursor = lt + 1;
+    while (cursor < html.length && !/[\s/>]/.test(html[cursor])) cursor += 1;
+    const nameEnd = cursor;
+    let quote = '';
+    while (cursor < html.length) {
+      const char = html[cursor];
+      if (quote) {
+        if (char === quote) quote = '';
+        cursor += 1;
+        continue;
+      }
+      if (char === '"' || char === "'") {
+        quote = char;
+        cursor += 1;
+        continue;
+      }
+      if (char === '>') break;
+      cursor += 1;
+    }
+    if (cursor >= html.length) return;
+    yield { name: html.slice(lt + 1, nameEnd).toLowerCase(), start: lt, nameEnd, tagEnd: cursor };
+    index = cursor + 1;
+  }
+}
+
+/**
+ * Every real `id` attribute value in document order: start-tag attributes
+ * only, never text, and never inside raw-text element bodies (a code sample
+ * or CSS string that spells `<p id=foo>` is content, not an element).
+ */
+function collectElementIds(html: string): string[] {
+  const ids: string[] = [];
+  const lower = html.toLowerCase();
+  let rawUntil = -1;
+  for (const tag of startTags(html)) {
+    if (tag.start < rawUntil) continue;
+    for (const span of scanAttributeSpans(html, tag.nameEnd, tag.tagEnd)) {
+      if (span.name.toLowerCase() === 'id' && span.value !== undefined) ids.push(span.value);
+    }
+    if (RAW_TEXT_ELEMENTS.has(tag.name)) {
+      const close = lower.indexOf(`</${tag.name}`, tag.tagEnd + 1);
+      rawUntil = close === -1 ? html.length : close;
+    }
+  }
+  return ids;
+}
+
+/**
+ * Split the document into strictly alternating [normal, raw, normal, ...]
+ * segments whose concatenation is byte-identical to the input. Raw segments
+ * carry complete raw-text elements; heading rewriting only runs on normal
+ * segments, so a `<h2>` inside a code sample or CSS string stays literal.
+ */
+function headingSegments(html: string): string[] {
+  const lower = html.toLowerCase();
+  const segments: string[] = [];
+  let cursor = 0;
+  for (const tag of startTags(html)) {
+    if (tag.start < cursor || !RAW_TEXT_ELEMENTS.has(tag.name)) continue;
+    const close = lower.indexOf(`</${tag.name}`, tag.tagEnd + 1);
+    if (close === -1) {
+      // Malformed fragment (an opening tag with no matching close) is not a
+      // raw-text element; keep scanning so legitimate headings that merely
+      // spell a partial tag in their text stay processable.
+      continue;
+    }
+    const gt = html.indexOf('>', close);
+    const end = gt === -1 ? html.length : gt + 1;
+    segments.push(html.slice(cursor, tag.start), html.slice(tag.start, end));
+    cursor = end;
+  }
+  segments.push(html.slice(cursor));
+  return segments;
+}
+
+/** Remove exactly the real `id` attribute span, preserving every other byte. */
+function removeIdAttribute(attrs: string): string {
+  const spans = scanAttributeSpans(attrs, 0, attrs.length);
+  const idSpan = spans.find((span) => span.name.toLowerCase() === 'id');
+  if (!idSpan) return attrs;
+  let removeStart = idSpan.start;
+  while (removeStart > 0 && /\s/.test(attrs[removeStart - 1])) removeStart -= 1;
+  return attrs.slice(0, removeStart) + attrs.slice(idSpan.end);
 }
 
 /**
@@ -91,22 +255,18 @@ export function prepareArticle(
   // authored anchors). A heading colliding with one takes the next free
   // suffix instead of emitting a duplicate DOM id.
   for (const id of reservedIds) usedIds.add(id);
-  // Seed every id the document already carries, in all three legal HTML
-  // spellings. Compiled-markdown output uses double quotes, but authored
-  // raw HTML inside markdown may legally use the others; an unseeded id is
-  // a duplicate waiting to happen. Same grammar as the removal below.
-  for (const match of html.matchAll(idAttributePattern('gi'))) {
-    usedIds.add(idAttributeValue(match));
-  }
-  // Headings inside <pre> are literal code samples, not sections: process
-  // only non-pre segments so fenced `<h2>` can never gain an id/anchor or
-  // a phantom rail entry.
-  const withIds = html
-    .split(/(<pre[\s\S]*?<\/pre>)/gi)
+  // Seed every id the document already carries, parsed from real start-tag
+  // attributes in every legal quote style; text and raw-text bodies never
+  // contribute (a code sample spelling `id=foo` is not an id). Same grammar
+  // as the removal below.
+  for (const id of collectElementIds(html)) usedIds.add(id);
+  // Headings inside raw-text elements (fenced code, script strings, CSS)
+  // are literal content, not sections: only normal segments are rewritten.
+  const withIds = headingSegments(html)
     .map((segment, index) => {
       if (index % 2 === 1) return segment;
       return segment.replace(
-        /<h([23])([^>]*)>([\s\S]*?)<\/h\1>/gi,
+        /<h([23])((?:"[^"]*"|'[^']*'|[^>])*)>([\s\S]*?)<\/h\1>/gi,
         (_match, depth, attrs, body) => {
           // Strip tags to a fixed point, then any angle bracket the tag pattern
           // could not match (e.g. a `<script` fragment with no closing `>`), so
@@ -121,7 +281,7 @@ export function prepareArticle(
           label = label.replace(/[<>]/g, '').replace(/&[^;]+;/g, ' ').trim();
           const id = slugifyHeadingId(label, usedIds);
           outline.push({ id, label, level: Number(depth) as 2 | 3 });
-          const cleanAttrs = String(attrs).replace(idAttributePattern('gi'), '');
+          const cleanAttrs = removeIdAttribute(String(attrs));
           // Hover/focus anchor: a real same-page link (keyboard-reachable, and the
           // fragment gate proves the id exists), revealed by CSS on hover/focus.
           // The "#" glyph lives in ::after so screen readers hear the bare title.

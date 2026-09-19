@@ -144,3 +144,51 @@ Deno.test('prepareArticle: unquoted element ids participate in collision checks'
   assertEquals(outline.map((item) => item.id), ['foo', 'foo-3']);
   assertIdsUnique(html);
 });
+
+Deno.test('prepareArticle: id-like text inside quoted attribute values is not an id', () => {
+  const cases: Array<[string, string]> = [
+    ['double', '<h2 data-note="x id=foo">Bar</h2>'],
+    ['single', "<h2 title='x id=foo'>Bar</h2>"],
+    ['nested double', `<h2 data-note="id='foo'">Bar</h2>`],
+    ['nested single', `<h2 data-note='id="foo"'>Bar</h2>`],
+    ['unquoted value', '<h2 data-note=id=foo>Bar</h2>'],
+  ];
+  for (const [label, html] of cases) {
+    const { html: out, outline } = prepareArticle(html);
+    // The authored attribute survives byte-intact.
+    const authored = /\s(data-note|title)=("[^"]*"|'[^']*'|[^\s>]+)/.exec(out)?.[0] ?? '';
+    const original = /\s(data-note|title)=("[^"]*"|'[^']*'|[^\s>]+)/.exec(html)?.[0] ?? '';
+    assertEquals(authored, original, `${label}: authored attribute must be preserved`);
+    assertEquals(
+      outline.map((item) => item.id),
+      ['bar'],
+      `${label}: outline must be the heading stem`,
+    );
+    assertIdsUnique(out);
+  }
+  // The fake id must not occupy the stem either: a later Foo heading still
+  // receives plain 'foo'.
+  const later = prepareArticle('<h2 data-note="x id=foo">Bar</h2><h2>Foo</h2>');
+  assertEquals(later.outline.map((item) => item.id), ['bar', 'foo']);
+});
+
+Deno.test('prepareArticle: heading-like text inside raw-text elements is not a heading', () => {
+  const style = prepareArticle(
+    '<style>.x::before { content: "<h2 id=foo>Fake</h2>" }</style><h2>Bar</h2>',
+  );
+  assertEquals(style.outline.map((item) => item.id), ['bar']);
+  assertEquals(style.html.includes('id="bar"'), true);
+  assertEquals(style.html.includes('id="foo"'), false);
+  assertEquals(style.html.includes('content: "<h2 id=foo>Fake</h2>"'), true);
+
+  const script = prepareArticle(
+    '<script>const tpl = "<h2 id=foo>Fake</h2>";</script><h2>Bar</h2>',
+  );
+  assertEquals(script.outline.map((item) => item.id), ['bar']);
+  assertEquals(script.html.includes('id="foo"'), false);
+  assertEquals(script.html.includes('const tpl = "<h2 id=foo>Fake</h2>";'), true);
+
+  // A real id inside raw text must not seed the document allocator.
+  const seeded = prepareArticle('<style>.a { content: "<p id=foo></p>" }</style><h2>Foo</h2>');
+  assertEquals(seeded.outline.map((item) => item.id), ['foo']);
+});
