@@ -134,11 +134,18 @@ Deno.test('findCrossPageSeoFailures: per-locale title uniqueness', () => {
 Deno.test('pageSeo extracts title/description and resolves locale from path', () => {
   const html = '<head><title>T — openElement</title>' +
     '<meta name="description" content="D for the page, long enough."/></head>';
-  assertEquals(pageSeo(html, 'zh/apilist/index.html', ['en', 'zh']), {
+  assertEquals(pageSeo(html, 'zh/apilist/index.html', ['en', 'zh'], 'en'), {
     file: 'zh/apilist/index.html',
     title: 'T — openElement',
     description: 'D for the page, long enough.',
     locale: 'zh',
   });
-  assertEquals(pageSeo(html, 'apilist/index.html', ['en', 'zh']).locale, 'en');
+  assertEquals(pageSeo(html, 'apilist/index.html', ['en', 'zh'], 'en').locale, 'en');
+});
+
+Deno.test('pageSeo: locale detection follows the explicit default, not array order', () => {
+  const seo = pageSeo('<title>x</title>', 'guide/install/index.html', ['zh', 'en'], 'en');
+  assertEquals(seo.locale, 'en');
+  const zh = pageSeo('<title>x</title>', 'zh/guide/install/index.html', ['zh', 'en'], 'en');
+  assertEquals(zh.locale, 'zh');
 });

@@ -69,9 +69,14 @@ export interface BuiltPageSeo {
 }
 
 /** Extract the comparable SEO fields from one built page. */
-export function pageSeo(html: string, file: string, locales: readonly string[]): BuiltPageSeo {
+export function pageSeo(
+  html: string,
+  file: string,
+  locales: readonly string[],
+  defaultLocale: string,
+): BuiltPageSeo {
   const first = file.split('/').filter(Boolean)[0];
-  const locale = locales.includes(first) && first !== locales[0] ? first : locales[0];
+  const locale = locales.includes(first) && first !== defaultLocale ? first : defaultLocale;
   return {
     file,
     title: html.match(/<title>([^<]*)<\/title>/)?.[1] ?? '',

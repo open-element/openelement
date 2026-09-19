@@ -22,7 +22,7 @@
 import type { PageHead, StructuredDataEntry } from '@openelement/router';
 import { getPostBySlug } from '@openelement/generated/blog-data';
 import { contentLocale } from './locale.ts';
-import { SITE_LOCALES } from '../../site-config.ts';
+import { SITE_DEFAULT_LOCALE, SITE_LOCALES } from '../../site-config.ts';
 import { localizePath } from './link.ts';
 
 export const SITE_ORIGIN = 'https://openelement.org';
@@ -138,7 +138,7 @@ export function siteHead(input: SiteHeadInput): PageHead {
         hreflang: candidate,
       })),
       {
-        href: `${SITE_ORIGIN}${localizePath(input.route, SITE_LOCALES[0])}`,
+        href: `${SITE_ORIGIN}${localizePath(input.route, SITE_DEFAULT_LOCALE)}`,
         hreflang: 'x-default',
       },
     ];

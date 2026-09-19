@@ -294,6 +294,7 @@ export function renderRuntimeHelpers(
   lines.push('    currentPath: routePath,');
   lines.push('    locale,');
   lines.push('    locales: __locales,');
+  lines.push('    defaultLocale,');
   lines.push('    navItems: __navSections,');
   lines.push(
     '    headerNav: __headerNav.map((link) => ({ ...link, href: __localizeShellHref(link.href, locale, defaultLocale) })),',

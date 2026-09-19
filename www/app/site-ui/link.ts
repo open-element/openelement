@@ -31,9 +31,10 @@ export function localizePath(path: string, locale: string): string {
 export function stripLocalePrefix(
   path: string,
   locales: readonly string[] = SITE_LOCALES,
+  defaultLocale: string = SITE_DEFAULT_LOCALE,
 ): string {
   return normalizeLocalePath(path, {
     locales: [...locales],
-    defaultLocale: locales[0] ?? SITE_DEFAULT_LOCALE,
+    defaultLocale,
   }).path;
 }

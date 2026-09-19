@@ -16,7 +16,7 @@
  */
 import { walk } from '@std/fs/walk';
 import { fromFileUrl, join } from '@std/path';
-import { SITE_LOCALES } from '../site-config.ts';
+import { SITE_DEFAULT_LOCALE, SITE_LOCALES } from '../site-config.ts';
 import { normalize as posixNormalize } from '@std/path/posix';
 import {
   anchorsFragment,
@@ -62,7 +62,7 @@ export async function checkBuiltLinks(
     const relative = htmlFile.slice(dist.length + 1);
     const html = await readHtml(relative);
     failures.push(...findSeoFailures(html, relative));
-    pages.push(pageSeo(html, relative, SITE_LOCALES));
+    pages.push(pageSeo(html, relative, SITE_LOCALES, SITE_DEFAULT_LOCALE));
     for (const link of extractBuiltLinks(relative, html)) {
       let target: string | null;
       if (link.path === '') {

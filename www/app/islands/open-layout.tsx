@@ -552,6 +552,9 @@ export default class OpenLayout extends OpenElement {
   @property({ reflect: false })
   locales: string[] = ['en'];
 
+  @property({ reflect: false })
+  defaultLocale = 'en';
+
   @property({ reflect: true })
   home = false;
 
@@ -601,7 +604,7 @@ export default class OpenLayout extends OpenElement {
   // their static ancestor, so dynamic routes never emit a literal param href.
   @property({ reflect: false, attribute: false })
   switchLocaleHref = computed(() =>
-    localeSwitchPath(this.currentPath || '/', this.locale, this.locales, this.locales[0] || 'en')
+    localeSwitchPath(this.currentPath || '/', this.locale, this.locales, this.defaultLocale)
   );
 
   @property({ reflect: false, attribute: false })
