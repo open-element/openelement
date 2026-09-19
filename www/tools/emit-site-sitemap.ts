@@ -7,7 +7,7 @@
  * Fails closed: an unenumerable dynamic route or a duplicate fails the build.
  */
 import { fromFileUrl, join } from '@std/path';
-import { SITE_LOCALES } from '../app/site-ui/link.ts';
+import { SITE_LOCALES } from '../site-config.ts';
 import { loadCollectionData } from '../lib/content.ts';
 import { blogCollection, prepareBlogPosts } from '../lib/blog.ts';
 import { scanSiteRoutes } from './lib/site-route-scan.ts';

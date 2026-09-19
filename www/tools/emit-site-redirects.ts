@@ -8,7 +8,7 @@
  * prefixes expand from SITE_LOCALES (never written in the table).
  */
 import { fromFileUrl, join } from '@std/path';
-import { SITE_LOCALES } from '../app/site-ui/link.ts';
+import { SITE_LOCALES } from '../site-config.ts';
 import { loadRedirectTable } from './lib/site-retired.ts';
 
 const repoRoot = fromFileUrl(new URL('../../', import.meta.url));

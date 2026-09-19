@@ -22,7 +22,8 @@
 import type { PageHead, StructuredDataEntry } from '@openelement/router';
 import { getPostBySlug } from '@openelement/generated/blog-data';
 import { contentLocale } from './locale.ts';
-import { localizePath, SITE_LOCALES } from './link.ts';
+import { SITE_LOCALES } from '../../site-config.ts';
+import { localizePath } from './link.ts';
 
 export const SITE_ORIGIN = 'https://openelement.org';
 

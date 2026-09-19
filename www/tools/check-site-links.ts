@@ -16,7 +16,7 @@
  */
 import { walk } from '@std/fs/walk';
 import { fromFileUrl, join } from '@std/path';
-import { SITE_LOCALES } from '../app/site-ui/link.ts';
+import { SITE_LOCALES } from '../site-config.ts';
 import { normalize as posixNormalize } from '@std/path/posix';
 import {
   anchorsFragment,

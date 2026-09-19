@@ -23,7 +23,7 @@ import { fromFileUrl, join } from '@std/path';
 import { scanRoutes } from '../../../packages/router/src/vite/internal/ssg/route-scanner.ts';
 import { fileToRoutePath } from '../../lib/route-path.ts';
 import { slugifyHeadingId, stripHtmlToText } from '../../app/site-ui/article-body.ts';
-import { SITE_LOCALES } from '../../app/site-ui/link.ts';
+import { SITE_LOCALES } from '../../site-config.ts';
 
 const repoRoot = fromFileUrl(new URL('../../../', import.meta.url));
 const routesRel = 'www/app/routes';
@@ -31,7 +31,7 @@ const tablePath = join(repoRoot, 'www/tools/site-redirects.json');
 const baselinePath = join(repoRoot, 'www/tools/site-baseline-routes.json');
 
 /** Locales the site serves, typed for content-file resolution. */
-const CONTENT_LOCALES = SITE_LOCALES as readonly ('en' | 'zh')[];
+// SiteLocale already is the content-locale union; no cast needed.
 
 export interface RedirectMapping {
   from: string;
@@ -258,7 +258,7 @@ export async function collectRetiredUrlFailures(): Promise<
     // locale-expanded `to` unless toZh overrides it (translated heading ids
     // differ — e.g. #measured-output vs #实测输出 — so one shape cannot
     // serve both locales). Both sides validate independently.
-    const targets = CONTENT_LOCALES.map((locale) => ({
+    const targets = SITE_LOCALES.map((locale) => ({
       locale,
       raw: locale === 'zh' ? mapping.toZh ?? mapping.to : mapping.to,
     }));
@@ -331,7 +331,7 @@ export async function refreshBaseline(ref: string): Promise<void> {
   const retired = [...baseline].filter((route) => !head.has(route)).sort();
   const titles = new Set<string>();
   for (const route of retired) {
-    for (const locale of CONTENT_LOCALES) {
+    for (const locale of SITE_LOCALES) {
       // Probe every historical layout; old baselines predate the
       // content/docs/ move, so a single hardcoded path would silently
       // contribute zero titles (a dead label gate).

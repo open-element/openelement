@@ -7,13 +7,8 @@
  * localizePath so a zh page never drops the reader back into the English
  * tree (#1031). Locale math delegates to ./i18n.ts.
  */
+import { isSiteLocale, SITE_DEFAULT_LOCALE, SITE_LOCALES } from '../../site-config.ts';
 import { normalizeLocalePath } from './i18n.ts';
-
-/** Locales emitted by the site build (www/vite.config.ts `locales`). */
-export const SITE_LOCALES: readonly string[] = ['en', 'zh'];
-// Internal default-locale anchor for the two helpers below; not part of the
-// module's public surface.
-const SITE_DEFAULT_LOCALE: string = SITE_LOCALES[0];
 
 /**
  * Prefix an internal absolute path with the locale unless it is the default
@@ -21,7 +16,7 @@ const SITE_DEFAULT_LOCALE: string = SITE_LOCALES[0];
  */
 export function localizePath(path: string, locale: string): string {
   if (!path.startsWith('/')) return path;
-  if (!SITE_LOCALES.includes(locale)) return path;
+  if (!isSiteLocale(locale)) return path;
   return normalizeLocalePath(`/${locale}${path === '/' ? '' : path}`, {
     locales: [...SITE_LOCALES],
     defaultLocale: SITE_DEFAULT_LOCALE,

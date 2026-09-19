@@ -7,7 +7,7 @@
  * checker is deferred to Beta.3 (#1156, workflow-cap ruling).
  */
 
-import { SITE_LOCALES } from '../../app/site-ui/link.ts';
+import { SITE_LOCALES } from '../../site-config.ts';
 
 export interface LinkFailure {
   file: string;

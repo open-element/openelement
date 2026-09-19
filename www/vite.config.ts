@@ -3,6 +3,7 @@ import { openPropsTokenSheet, registerOpenUi } from '@openelement/ui';
 import { defineConfig } from 'vite';
 import { SITE_BUDGET } from './site-budget.ts';
 import { siteCSS } from './site-css.ts';
+import { SITE_DEFAULT_LOCALE, SITE_LOCALES } from './site-config.ts';
 import { headerNav, navSections } from './app/data/_generated-nav-data.ts';
 
 // www is an npm-first consumer; local workspace resolution during dev,
@@ -124,8 +125,8 @@ const openElementPlugins = openElement({
   // generate:site-content-data` (article collections and blog) and
   // `generate:api-reference` from www/lib/content.ts + lib/blog.ts.
   i18n: {
-    locales: ['en', 'zh'],
-    defaultLocale: 'en',
+    locales: [...SITE_LOCALES],
+    defaultLocale: SITE_DEFAULT_LOCALE,
   },
 });
 
