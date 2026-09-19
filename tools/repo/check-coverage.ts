@@ -208,9 +208,12 @@ async function main(): Promise<void> {
       label: 'www/tools/lib',
       include: isWwwToolsSource,
       thresholds: {
-        lines: getNumberArg('--site-tools-threshold', 60),
-        branches: getNumberArg('--site-tools-branch-threshold', 82),
-        functions: getNumberArg('--site-tools-function-threshold', 61),
+        // Floors sit one point under the measured values (62.16 / 96.70 /
+        // 63.41 at the 1.0.0-alpha.1 candidate); raise them when the measured
+        // values rise, never lower them to make a red run pass.
+        lines: getNumberArg('--site-tools-threshold', 61),
+        branches: getNumberArg('--site-tools-branch-threshold', 95),
+        functions: getNumberArg('--site-tools-function-threshold', 62),
       },
     },
   ];
