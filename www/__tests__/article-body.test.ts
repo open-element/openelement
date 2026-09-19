@@ -192,3 +192,16 @@ Deno.test('prepareArticle: heading-like text inside raw-text elements is not a h
   const seeded = prepareArticle('<style>.a { content: "<p id=foo></p>" }</style><h2>Foo</h2>');
   assertEquals(seeded.outline.map((item) => item.id), ['foo']);
 });
+
+Deno.test('prepareArticle: adversarial quote runs cannot cause regex blowup', () => {
+  // The heading matcher's attribute part keeps its alternatives disjoint
+  // (`"..."` / `'...'` / `[^>"']`), so a partial tag followed by thousands of
+  // quotes stays linear (CodeQL js/redos). The budget is loose on purpose:
+  // the fixed scanner needs single-digit milliseconds for this input.
+  for (const evil of ['<h2' + '""'.repeat(5000), '<h2' + "''".repeat(5000)]) {
+    const started = performance.now();
+    prepareArticle(evil);
+    const elapsed = performance.now() - started;
+    assertEquals(elapsed < 1000, true, `adversarial input took ${Math.round(elapsed)}ms`);
+  }
+});

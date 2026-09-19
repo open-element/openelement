@@ -266,7 +266,7 @@ export function prepareArticle(
     .map((segment, index) => {
       if (index % 2 === 1) return segment;
       return segment.replace(
-        /<h([23])((?:"[^"]*"|'[^']*'|[^>])*)>([\s\S]*?)<\/h\1>/gi,
+        /<h([23])((?:"[^"]*"|'[^']*'|[^>"'])*)>([\s\S]*?)<\/h\1>/gi,
         (_match, depth, attrs, body) => {
           // Strip tags to a fixed point, then any angle bracket the tag pattern
           // could not match (e.g. a `<script` fragment with no closing `>`), so
