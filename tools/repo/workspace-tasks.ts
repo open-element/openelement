@@ -13,7 +13,7 @@
  * check-generator-gates.ts (enforces the per-class wiring rules). This
  * module is neutral: it reads files, never exits.
  */
-import { join, resolve } from '@std/path';
+import { join, relative, resolve } from '@std/path';
 import { walk } from '@std/fs/walk';
 
 export interface WorkspaceTasks {
@@ -48,7 +48,7 @@ export async function readWorkspaces(repoRoot: string): Promise<WorkspaceTasks[]
   if (!Array.isArray(members)) {
     throw new Error(`${rootPath}: 'workspace' must be an array of workspace paths`);
   }
-  const seen = new Set<string>();
+  const seen = new Map<string, string>();
   const out: WorkspaceTasks[] = [];
   for (const member of members) {
     if (typeof member !== 'string' || member.trim() === '') {
@@ -56,12 +56,21 @@ export async function readWorkspaces(repoRoot: string): Promise<WorkspaceTasks[]
         `${rootPath}: workspace entries must be non-empty strings (got ${JSON.stringify(member)})`,
       );
     }
-    if (seen.has(member)) throw new Error(`${rootPath}: duplicate workspace entry '${member}'`);
-    seen.add(member);
     const dir = resolve(rootDir, member);
     if (dir !== rootDir && !dir.startsWith(`${rootDir}/`)) {
       throw new Error(`${rootPath}: workspace '${member}' escapes the repository root`);
     }
+    // Duplicate detection runs on the canonical repository-relative identity,
+    // so 'alpha', './alpha' and 'foo/../alpha' cannot describe the same
+    // workspace twice (raw-string dedupe let them through).
+    const identity = dir === rootDir ? '.' : relative(rootDir, dir);
+    const previous = seen.get(identity);
+    if (previous !== undefined) {
+      throw new Error(
+        `${rootPath}: duplicate workspace identity '${identity}' (raw entries '${previous}' and '${member}')`,
+      );
+    }
+    seen.set(identity, member);
     try {
       if (!(await Deno.stat(dir)).isDirectory) {
         throw new Error('not a directory');
@@ -84,7 +93,7 @@ export async function readWorkspaces(repoRoot: string): Promise<WorkspaceTasks[]
       }
     }
     out.push({
-      workspace: member.replace(/^\.\//, ''),
+      workspace: identity,
       dir,
       tasks: tasks as Record<string, string>,
     });

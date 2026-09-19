@@ -106,6 +106,38 @@ Deno.test('readWorkspaces: broken workspaces fail closed with their path', async
   }
 });
 
+Deno.test('readWorkspaces: duplicate detection uses canonical workspace identity', async () => {
+  const duplicateCases: string[][] = [
+    ['./alpha', 'alpha'],
+    ['alpha', './alpha'],
+    ['alpha', 'foo/../alpha'],
+    ['./alpha', 'foo/../alpha'],
+  ];
+  for (const members of duplicateCases) {
+    await withFixture({
+      'deno.json': rootConfig(members),
+      'alpha/deno.json': workspaceConfig({}),
+    }, async (root) => {
+      await assertRejects(
+        () => readWorkspaces(root),
+        Error,
+        'duplicate workspace identity',
+        JSON.stringify(members),
+      );
+    });
+  }
+  // Distinct identities still read normally, and the returned label is the
+  // canonical repository-relative form.
+  await withFixture({
+    'deno.json': rootConfig(['./alpha', 'beta']),
+    'alpha/deno.json': workspaceConfig({}),
+    'beta/deno.json': workspaceConfig({}),
+  }, async (root) => {
+    const workspaces = await readWorkspaces(root);
+    assertEquals(workspaces.map((ws) => ws.workspace), ['alpha', 'beta']);
+  });
+});
+
 Deno.test('readWorkspaces: failure never degrades into a partial list', async () => {
   await withFixture({
     'deno.json': rootConfig(['./good', './broken']),
