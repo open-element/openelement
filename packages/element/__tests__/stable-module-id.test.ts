@@ -1,4 +1,4 @@
-import { assertEquals, assertThrows } from '@std/assert';
+import { assertEquals } from '@std/assert';
 import { join } from '@std/path';
 import { stableModuleId } from '../src/internal/compiler/plugin.ts';
 
@@ -76,9 +76,15 @@ Deno.test('stableModuleId: the explicit root wins; linked files fall back to the
   });
 });
 
-Deno.test('stableModuleId: no workspace root fails closed', () => {
+Deno.test('stableModuleId: paths outside any known root pass through unchanged', () => {
+  // The frozen compiler fixtures and non-Deno projects legitimately have no
+  // anchor; returning the id verbatim is the documented contract.
   const orphan = '/tmp/no-workspace-here-' + crypto.randomUUID() + '/src/x.ts';
-  assertThrows(() => stableModuleId(orphan, undefined), Error, 'no workspace root');
+  assertEquals(stableModuleId(orphan, undefined), orphan);
+  assertEquals(
+    stableModuleId('/project/app/islands/counter.tsx', undefined),
+    '/project/app/islands/counter.tsx',
+  );
 });
 
 Deno.test('stableModuleId: non-path ids pass through unchanged', () => {

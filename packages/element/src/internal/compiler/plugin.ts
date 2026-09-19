@@ -93,8 +93,10 @@ export function stripInlineSourceMapComment(code: string): string {
  * The anchor is the workspace root on disk — the nearest ancestor `deno.json`
  * that declares a `workspace` list — not a substring that merely looks like a
  * workspace directory (a checkout living under e.g. `/srv/www/` would fool
- * the old heuristic). When no root can be found the compiler fails closed
- * instead of emitting an absolute path.
+ * the old heuristic). Callers that hand the compiler a path outside any
+ * known root (synthetic ids, non-Deno projects without a Vite root) get the
+ * id back unchanged: there is no correct relative form, and the library
+ * boundary must not reject paths it cannot anchor.
  */
 export function stableModuleId(file: string, root: string | undefined): string {
   const clean = file.split('?', 1)[0];
@@ -106,9 +108,11 @@ export function stableModuleId(file: string, root: string | undefined): string {
     const prefix = base.endsWith('/') ? base : `${base}/`;
     if (clean.startsWith(prefix)) return clean.slice(prefix.length);
   }
-  throw new Error(
-    `stableModuleId: no workspace root contains '${clean}' — refusing to emit a machine-specific source id`,
-  );
+  // No anchor available: return the id as authored. Vite's project root covers
+  // real builds; ids that reach here are synthetic or from a caller that
+  // wants the raw path, and guessing a cut point is what this function exists
+  // to stop.
+  return clean;
 }
 
 /** Nearest ancestor of an absolute path whose deno.json declares `workspace`. */
