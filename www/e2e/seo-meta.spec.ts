@@ -61,6 +61,26 @@ test.describe('SEO Meta Tags', () => {
     expect(content).toContain('Web Components-native');
   });
 
+  // The structured-data channel had no end-to-end coverage: unit assertions
+  // only pinned the renderer's string include, while five emission points
+  // (SSG/request-time) and the JSON escaping were untested. The homepage
+  // declares WebSite + Organization by design (www/app/site-ui/head.ts).
+  test('homepage ships parseable schema.org JSON-LD with escaped markup', async ({ page }) => {
+    const scripts = page.locator('script[type="application/ld+json"]');
+    const count = await scripts.count();
+    expect(count).toBeGreaterThan(0);
+    const types: unknown[] = [];
+    for (let index = 0; index < count; index += 1) {
+      const raw = (await scripts.nth(index).textContent()) ?? '';
+      // A bare "<" would let authored data close the script element early.
+      expect(raw).not.toContain('<');
+      const parsed = JSON.parse(raw) as { '@context'?: unknown; '@type'?: unknown };
+      expect(parsed['@context']).toBe('https://schema.org');
+      types.push(parsed['@type']);
+    }
+    expect(new Set(types).size).toBe(types.length);
+  });
+
   // #1307: per-route metadata replaces the boilerplate era (identical title,
   // description and og:title on every page).
   test('per-route title/description replace the boilerplate (#1307)', async ({ page }) => {
