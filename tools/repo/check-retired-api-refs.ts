@@ -1,10 +1,18 @@
 /**
  * Current-doc retired-API scan (1.0.0-alpha.1): fail when current guides,
  * architecture pages, maintainer docs, package READMEs, starter templates,
- * or site chrome teach a retired package or subpath. History stays allowed
- * only where it is explicitly labeled as history: the migration archive and
- * version-titled blog posts. docs/adr stays out of scope on purpose: ADRs
- * are the historical record and may name retired decisions.
+ * or site chrome teach a retired package, subpath, or public symbol.
+ * History stays allowed only where it is explicitly labeled as history: the
+ * migration archive and version-titled blog posts. docs/adr stays out of
+ * scope on purpose: ADRs are the historical record and may name retired
+ * decisions.
+ *
+ * Symbol entries are DERIVED, not hand-listed: the public interface snapshot
+ * at the newest release tag that ships one is diffed against the current
+ * snapshot, and names that disappeared (and never moved to another package)
+ * are caught when a file imports them from @openelement/*. The hand list
+ * stays only for packages/subpaths and for symbols that never reached a
+ * release tag (e.g. toRootCss, added and removed inside this PR).
  */
 import { walk } from '@std/fs';
 
@@ -56,6 +64,84 @@ for await (const entry of walk('packages', { maxDepth: 2, exts: ['.md'] })) {
   if (entry.path.endsWith('/README.md')) collect(entry.path);
 }
 
+// ─── Derived retired symbols (release snapshot diff) ────────────────────
+
+const ADDITIONAL_RETIRED_SYMBOLS = ['toRootCss'];
+
+interface SnapshotLike {
+  packages: Array<{ declarations?: Record<string, { publicSymbols?: string[] }> }>;
+}
+
+function symbolNames(snapshot: SnapshotLike): Set<string> {
+  const names = new Set<string>();
+  for (const pkg of snapshot.packages) {
+    for (const declaration of Object.values(pkg.declarations ?? {})) {
+      for (const symbol of declaration.publicSymbols ?? []) names.add(symbol.split('=')[0]);
+    }
+  }
+  return names;
+}
+
+async function gitShow(ref: string): Promise<string | undefined> {
+  try {
+    const output = await new Deno.Command('git', {
+      args: ['show', `${ref}:docs/release/public-interface-snapshot.json`],
+      stdin: 'null',
+      stdout: 'piped',
+      stderr: 'null',
+    }).output();
+    if (output.code !== 0) return undefined;
+    return new TextDecoder().decode(output.stdout);
+  } catch {
+    return undefined;
+  }
+}
+
+/** Names present at the newest tagged release snapshot but gone today. */
+async function deriveRetiredSymbols(): Promise<Set<string>> {
+  const retired = new Set<string>(ADDITIONAL_RETIRED_SYMBOLS);
+  const tags = await new Deno.Command('git', {
+    args: ['tag', '--list', 'v*', '--sort=-creatordate'],
+    stdin: 'null',
+    stdout: 'piped',
+    stderr: 'null',
+  }).output().catch(() => undefined);
+  if (!tags || tags.code !== 0) return retired;
+  let base: SnapshotLike | undefined;
+  for (const tag of new TextDecoder().decode(tags.stdout).split('\n').map((t) => t.trim())) {
+    if (!tag) continue;
+    const raw = await gitShow(tag);
+    if (!raw) continue;
+    try {
+      base = JSON.parse(raw) as SnapshotLike;
+    } catch {
+      continue;
+    }
+    break;
+  }
+  if (!base) {
+    console.log(
+      'retired-symbol derivation: no tagged release snapshot reachable — hand list only.',
+    );
+    return retired;
+  }
+  const current = JSON.parse(
+    await Deno.readTextFile('docs/release/public-interface-snapshot.json'),
+  ) as SnapshotLike;
+  const currentNames = symbolNames(current);
+  for (const name of symbolNames(base)) {
+    // Identifiers only; short or all-lowercase names collide with prose.
+    if (name.length < 6 || !/^[A-Za-z][A-Za-z0-9]*$/.test(name)) continue;
+    if (!(/[A-Z]/.test(name))) continue;
+    if (!currentNames.has(name)) retired.add(name);
+  }
+  return retired;
+}
+
+const RETIRED_SYMBOLS = await deriveRetiredSymbols();
+const NAMED_IMPORT =
+  /import\s+(?:type\s+)?(?:[A-Za-z_$][\w$]*\s*,\s*)?\{([^}]*)\}\s*from\s*['"](@openelement\/[^'"]+)['"]/g;
+
 let failures = 0;
 for (const file of files) {
   if (HISTORY_ALLOWLIST.some((allowed) => file.endsWith(allowed))) continue;
@@ -88,6 +174,16 @@ for (const file of files) {
       );
       if (offending.length > 0) {
         console.error(`${file}: retired reference '${token}' (${offending.length} line(s))`);
+        failures += 1;
+      }
+    }
+  }
+  for (const statement of text.matchAll(NAMED_IMPORT)) {
+    const specifier = statement[2];
+    for (const raw of statement[1].split(',')) {
+      const name = raw.replace(/^\s*type\s+/, '').split(/\s+as\s+/)[0].trim();
+      if (name && RETIRED_SYMBOLS.has(name)) {
+        console.error(`${file}: retired symbol '${name}' imported from '${specifier}'`);
         failures += 1;
       }
     }
