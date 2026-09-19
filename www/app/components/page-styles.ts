@@ -176,7 +176,11 @@ export const pageStyles = `
     margin: var(--size-10) 0;
   }
 
-  pre {
+  pre,
+  /* The vendored Prism sheet ships a light pre[class*=language-] background
+     that would win on specificity if a fence ever put the language class on
+     pre; pin the real code surface here so that pairing cannot render. */
+  pre[class*=language-] {
     background: var(--bg-code);
     color: var(--code-text);
     padding: var(--size-5) var(--size-6);

@@ -253,17 +253,20 @@ const OPEN_PROPS_TOKEN_CSS = `/**
   --code-text: var(--gray-2);
   --border: var(--gray-3);
   --border-hover: var(--gray-4);
-  /* Status colors clear the 4.5:1 AA floor on --bg-base (measured):
-     success #237032 is 5.8:1, warning #9a6700 is 4.6:1 (GitHub's light
-     attention color), error #c92a2a is 5.2:1. */
-  --error: #c92a2a;
-  --error-subtle: rgba(201, 42, 42, 0.1);
+  /* Status colors clear the 4.5:1 AA floor on --bg-base/#f9f8fc (measured):
+     success #237032 5.8:1, warning #885b00 5.6:1, error #b12525 6.3:1,
+     info #2157cf 6.0:1. Badges paint the ink on a 10% wash of itself, which
+     lowers the ratio, so the floor is verified against that wash too (the
+     dimmest pair, warning, measures 4.9:1). The dark overrides below are
+     measured at >=4.9:1 on their wash in both themes. */
+  --error: #b12525;
+  --error-subtle: rgba(177, 37, 37, 0.1);
   --success: #237032;
   --success-subtle: rgba(35, 112, 50, 0.1);
-  --warning: #9a6700;
-  --warning-subtle: rgba(154, 103, 0, 0.1);
-  --info: #2563eb;
-  --info-subtle: rgba(37, 99, 235, 0.1);
+  --warning: #885b00;
+  --warning-subtle: rgba(136, 91, 0, 0.1);
+  --info: #2157cf;
+  --info-subtle: rgba(33, 87, 207, 0.1);
   --overlay: rgba(0, 0, 0, 0.4);
   --nav-bg: color-mix(in srgb, var(--bg-base) 86%, transparent);
   --nav-height: var(--size-16);

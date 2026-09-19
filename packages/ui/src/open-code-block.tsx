@@ -125,7 +125,12 @@ export class OpenCodeBlock extends OpenElement {
     /* Prism token colors (dark theme). The comment gray was #6a737d — 3.99:1
        on --bg-code, under AA; #7d8590 is the dimmest step that clears it and
        stays quieter than the punctuation gray below. The vendored light-DOM
-       theme (public/assets/vendor/prism) already clears AA at #708090. */
+       theme's comment gray #708090 is 3.6:1 on its own #f5f2f0 background
+       (under AA), but that pairing never renders: the vendor only paints it
+       through pre[class*=language-], and site fences carry the language
+       class on code, not pre. The site pins the code background to
+       --bg-code/#0d0f12 (see the pre rule in www/app/components/page-styles),
+       where #708090 measures 4.7:1. */
     .token.cdata, .token.comment, .token.doctype, .token.prolog { color: #7d8590; }
     .token.punctuation { color: #8b949e; }
     .token.namespace { opacity: 0.7; }

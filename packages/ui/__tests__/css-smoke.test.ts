@@ -110,3 +110,32 @@ Deno.test('focus ring clears the WCAG 1.4.11 3:1 floor in both themes', async ()
     `dark ring ${darkRing} vs ${darkBase} = ${contrast(darkRing, darkBase).toFixed(2)}:1`,
   );
 });
+
+Deno.test('state inks clear the 4.5:1 AA floor on --bg-base and their badge wash', async () => {
+  const source = await Deno.readTextFile(new URL('../src/open-props-tokens.ts', import.meta.url));
+  const declaration = (name: string): string | undefined =>
+    new RegExp(`${name}:\\s*([^;]+);`).exec(source)?.[1]?.trim();
+  // The light block's base is color-mix(violet-0 42%, gray-0) = #f9f8fc; the
+  // value is pinned in the semantic-tokens comment this test recomputes.
+  const BASE = '#f9f8fc';
+  const composite = (rgba: string, over: string): string => {
+    const match = /rgba\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*([\d.]+)\s*\)/.exec(rgba);
+    assertEquals(match !== null, true, `expected an rgba() subtle wash, got ${rgba}`);
+    const [, r, g, b, a] = match!;
+    const alpha = Number(a);
+    const base = [1, 3, 5].map((i) => Number.parseInt(over.slice(i, i + 2), 16));
+    const ink = [r, g, b].map(Number);
+    const mixed = base.map((channel, i) => Math.round(ink[i] * alpha + channel * (1 - alpha)));
+    return `#${mixed.map((c) => c.toString(16).padStart(2, '0')).join('')}`;
+  };
+  for (const tone of ['success', 'warning', 'error', 'info']) {
+    const ink = declaration(`--${tone}`) ?? '';
+    const subtle = declaration(`--${tone}-subtle`) ?? '';
+    assertEquals(/^#[0-9a-f]{6}$/i.test(ink), true, `${tone} ink resolves to ${ink}`);
+    const onBase = contrast(ink, BASE);
+    assertEquals(onBase >= 4.5, true, `${tone} on base = ${onBase.toFixed(2)}:1`);
+    const wash = composite(subtle, BASE);
+    const onWash = contrast(ink, wash);
+    assertEquals(onWash >= 4.5, true, `${tone} on its wash ${wash} = ${onWash.toFixed(2)}:1`);
+  }
+});
