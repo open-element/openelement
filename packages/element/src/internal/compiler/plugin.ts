@@ -89,18 +89,58 @@ export function stripInlineSourceMapComment(code: string): string {
  * to project-relative POSIX paths so Part Program `metadata.sourceFile` and
  * `sourceMap.file` never embed the build machine's path. Module resolution,
  * diagnostics, and HMR keys keep using the caller's own id.
+ *
+ * The anchor is the workspace root on disk — the nearest ancestor `deno.json`
+ * that declares a `workspace` list — not a substring that merely looks like a
+ * workspace directory (a checkout living under e.g. `/srv/www/` would fool
+ * the old heuristic). When no root can be found the compiler fails closed
+ * instead of emitting an absolute path.
  */
 export function stableModuleId(file: string, root: string | undefined): string {
   const clean = file.split('?', 1)[0];
   if (!clean.startsWith('/')) return clean;
-  if (root) {
-    const prefix = root.endsWith('/') ? root : `${root}/`;
+  // Prefer the caller's root (the Vite project root); a module outside it is
+  // a linked workspace package, so fall back to the workspace root on disk.
+  for (const base of [root, workspaceRootFor(clean)]) {
+    if (!base) continue;
+    const prefix = base.endsWith('/') ? base : `${base}/`;
     if (clean.startsWith(prefix)) return clean.slice(prefix.length);
   }
-  // No root (or outside it): drop the machine prefix by anchoring on the
-  // nearest known workspace segment.
-  const match = /\/(?:packages|apps|tests|www)\//u.exec(clean);
-  return match ? clean.slice(match.index + 1) : clean;
+  throw new Error(
+    `stableModuleId: no workspace root contains '${clean}' — refusing to emit a machine-specific source id`,
+  );
+}
+
+/** Nearest ancestor of an absolute path whose deno.json declares `workspace`. */
+const workspaceRootCache = new Map<string, string | undefined>();
+function workspaceRootFor(file: string): string | undefined {
+  let dir = file.slice(0, file.lastIndexOf('/')) || '/';
+  const trail: string[] = [];
+  for (;;) {
+    if (workspaceRootCache.has(dir)) {
+      const found = workspaceRootCache.get(dir);
+      for (const visited of trail) workspaceRootCache.set(visited, found);
+      return found;
+    }
+    trail.push(dir);
+    const candidate = `${dir}/deno.json`;
+    try {
+      // Synchronous read keeps this usable from the synchronous compiler hook;
+      // the file set is tiny and cached per directory.
+      const parsed = JSON.parse(Deno.readTextFileSync(candidate)) as { workspace?: unknown };
+      if (Array.isArray(parsed.workspace)) {
+        for (const visited of trail) workspaceRootCache.set(visited, dir);
+        return dir;
+      }
+    } catch {
+      // No readable deno.json here; keep walking up.
+    }
+    if (dir === '/') {
+      for (const visited of trail) workspaceRootCache.set(visited, undefined);
+      return undefined;
+    }
+    dir = dir.slice(0, dir.lastIndexOf('/')) || '/';
+  }
 }
 
 export function compiledElementPlugin(): Plugin {
