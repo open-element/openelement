@@ -16,6 +16,7 @@ Deno.test('enumeratePublicRoutes: static catalog + blog enumeration, both locale
     ],
     blogPostRoutes: ['/blog/a', '/blog/b'],
     locales: LOCALES,
+    defaultLocale: 'en',
   });
   assertEquals(failures, []);
   assertEquals(routes, [
@@ -35,6 +36,7 @@ Deno.test('enumeratePublicRoutes: unenumerated dynamic route fails closed', () =
     routes: [{ path: '/shop/:id', type: 'page' }],
     blogPostRoutes: [],
     locales: LOCALES,
+    defaultLocale: 'en',
   });
   assertEquals(routes, []);
   assertEquals(failures.length, 1);
@@ -49,6 +51,7 @@ Deno.test('enumeratePublicRoutes: duplicate localized route fails closed', () =>
     ],
     blogPostRoutes: [],
     locales: LOCALES,
+    defaultLocale: 'en',
   });
   assert(failures.some((failure) => failure.includes("duplicate sitemap route '/docs'")));
 });
@@ -69,4 +72,34 @@ Deno.test('renderRobotsTxt: allow all plus sitemap pointer', () => {
     renderRobotsTxt(),
     'User-agent: *\nAllow: /\n\nSitemap: https://openelement.org/sitemap.xml\n',
   );
+});
+
+Deno.test('enumeratePublicRoutes: the default locale is explicit, not array order', () => {
+  // 'zh' first but 'en' default: unprefixed paths stay English, and the
+  // Chinese tree gets the /zh prefix.
+  const { routes, failures } = enumeratePublicRoutes({
+    routes: [
+      { type: 'page', path: '/' },
+      { type: 'page', path: '/guide' },
+    ],
+    blogPostRoutes: [],
+    locales: ['zh', 'en'],
+    defaultLocale: 'en',
+  });
+  assertEquals(failures, []);
+  assertEquals(routes, ['/', '/guide', '/zh', '/zh/guide']);
+});
+
+Deno.test('enumeratePublicRoutes: invalid locale configuration fails closed', () => {
+  const base = { routes: [], blogPostRoutes: [] } as const;
+  const cases: Array<[string, { locales: string[]; defaultLocale: string }]> = [
+    ['no locales', { locales: [], defaultLocale: 'en' }],
+    ['duplicate locales', { locales: ['en', 'en'], defaultLocale: 'en' }],
+    ['default not in locales', { locales: ['en', 'zh'], defaultLocale: 'fr' }],
+  ];
+  for (const [label, config] of cases) {
+    const { routes, failures } = enumeratePublicRoutes({ ...base, ...config });
+    assertEquals(failures.length > 0, true, `${label}: must fail closed`);
+    assertEquals(routes, [], label);
+  }
 });

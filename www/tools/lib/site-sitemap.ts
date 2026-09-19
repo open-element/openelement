@@ -39,8 +39,10 @@ export interface EnumeratePublicRoutesOptions {
   routes: readonly SiteRouteCatalogEntry[];
   /** Blog-post routes enumerated from the source-loaded blog collection. */
   blogPostRoutes: readonly string[];
-  /** Site locales; the first is the default (unprefixed) locale. */
+  /** Site locales (canonical: www/site-config.ts). */
   locales: readonly string[];
+  /** Default locale whose paths stay unprefixed (canonical: site-config). */
+  defaultLocale: string;
 }
 
 /**
@@ -66,9 +68,16 @@ function dynamicRouteEnumeration(
 export function enumeratePublicRoutes(
   options: EnumeratePublicRoutesOptions,
 ): { routes: string[]; failures: string[] } {
-  const { routes, blogPostRoutes, locales } = options;
-  const defaultLocale = locales[0];
+  const { routes, blogPostRoutes, locales, defaultLocale } = options;
   const failures: string[] = [];
+  // The default locale is an explicit input, never derived from array order:
+  // reordering SITE_LOCALES must not silently move the unprefixed tree.
+  if (locales.length === 0) failures.push('no site locales configured');
+  if (new Set(locales).size !== locales.length) failures.push('duplicate site locale entry');
+  if (!locales.includes(defaultLocale)) {
+    failures.push(`default locale '${defaultLocale}' is not one of the site locales`);
+  }
+  if (failures.length > 0) return { routes: [], failures };
 
   const canonical: string[] = [];
   for (const entry of routes) {
