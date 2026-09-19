@@ -70,6 +70,10 @@ export async function readWorkspaces(repoRoot: string): Promise<WorkspaceTasks[]
     // workspace twice (raw-string dedupe let them through).
     const identity = dir === rootDir ? '.' : relative(rootDir, dir);
     // Symlinked members that resolve to the same directory are one workspace.
+    // The physical key is registered even when it equals the raw identity:
+    // on a canonical filesystem the first member only stores its raw key, and
+    // a later alias would then find `real:<target>` unclaimed (the Linux CI
+    // failure this test pins).
     let physicalIdentity: string | undefined;
     try {
       physicalIdentity = relative(rootDir, await Deno.realPath(dir)) || '.';
@@ -77,7 +81,7 @@ export async function readWorkspaces(repoRoot: string): Promise<WorkspaceTasks[]
       // Missing directories are diagnosed below with a clear message.
     }
     for (
-      const key of physicalIdentity && physicalIdentity !== identity
+      const key of physicalIdentity !== undefined
         ? [identity, `real:${physicalIdentity}`]
         : [identity]
     ) {

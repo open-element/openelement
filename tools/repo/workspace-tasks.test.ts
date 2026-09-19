@@ -11,7 +11,10 @@ import { dirname, join } from '@std/path';
 import { emitterEntries, generatorEntries, readWorkspaces } from './workspace-tasks.ts';
 
 async function fixture(files: Record<string, string>): Promise<string> {
-  const root = await Deno.makeTempDir({ prefix: 'workspace-tasks-fixture-' });
+  // Canonicalize the root so the tests exercise the duplicate logic itself,
+  // not a platform accident (macOS /var is a symlink to /private/var; Linux
+  // /tmp is canonical — the symlink test passed for the wrong reason there).
+  const root = await Deno.realPath(await Deno.makeTempDir({ prefix: 'workspace-tasks-fixture-' }));
   for (const [relative, content] of Object.entries(files)) {
     const path = join(root, relative);
     await Deno.mkdir(dirname(path), { recursive: true });
