@@ -6,7 +6,7 @@
  */
 import { assertEquals, assertStringIncludes, assertThrows } from '@std/assert';
 import { OpenElementError } from '@openelement/element';
-import { assertNoScriptTags } from '../src/internal/head-safety.ts';
+import { assertNoScriptTags, assertTrustedHeadHtml } from '../src/internal/head-safety.ts';
 import { buildHeadExtras, validateSafeUrl } from '../src/vite/head-injection.ts';
 import { buildCriticalHeadExtras } from '../src/vite/internal/ssg/critical-assets.ts';
 
@@ -692,4 +692,73 @@ Deno.test('buildHeadExtras: headExtras takes precedence over inject', () => {
   });
   assertEquals(result.headExtras, '<meta name="override" />');
   assertEquals(result.allowHeadExtrasScripts, false);
+});
+
+// ─── assertTrustedHeadHtml: structural fail-closed ──────────────
+
+Deno.test('assertTrustedHeadHtml: accepts complete safe style elements', () => {
+  assertTrustedHeadHtml('<style>body { color: red; }</style>', 'test-input');
+  assertTrustedHeadHtml('<style nonce="abc">body { color: red; }</style>', 'test-input');
+  assertTrustedHeadHtml('<STYLE>body { color: red; }</STYLE>', 'test-input');
+  assertTrustedHeadHtml('<style media="print" title="x">p { margin: 0 }</style>', 'test-input');
+});
+
+Deno.test('assertTrustedHeadHtml: rejects an unterminated style element', () => {
+  // The unclosed element would otherwise escape the CSS blacklist entirely:
+  // the old complete-tag regex never matched, so @import passed unchecked.
+  for (
+    const input of [
+      '<style>@import url("https://evil.example/x.css");',
+      '<style>body { color: red }',
+      '<style>safe</style><style>unsafe',
+      '<STYLE>body { color: red }',
+    ]
+  ) {
+    assertThrows(() => assertTrustedHeadHtml(input, 'test-input'), Error, '', input);
+  }
+});
+
+Deno.test('assertTrustedHeadHtml: rejects unterminated or malformed opening tags', () => {
+  for (
+    const input of [
+      '<style',
+      '<style nonce="',
+      // A quoted '>' inside the opening tag still ends at the real close
+      // bracket; without a closing tag the element is rejected.
+      '<style nonce=">">body { color: red }',
+    ]
+  ) {
+    assertThrows(() => assertTrustedHeadHtml(input, 'test-input'), Error, '', input);
+  }
+});
+
+Deno.test('assertTrustedHeadHtml: still enforces the CSS blacklist on complete tags', () => {
+  assertThrows(
+    () => assertTrustedHeadHtml('<style>@import url("x.css");</style>', 'test-input'),
+    OpenElementError,
+    'Unsafe CSS',
+  );
+  assertThrows(
+    () =>
+      assertTrustedHeadHtml(
+        '<style>body { background: url(javascript:alert(1)) }</style>',
+        'test-input',
+      ),
+    OpenElementError,
+    'Unsafe CSS',
+  );
+  assertThrows(
+    () => assertTrustedHeadHtml('<style onclick="x">body {}</style>', 'test-input'),
+    OpenElementError,
+    'Unsafe style attribute',
+  );
+});
+
+Deno.test('assertTrustedHeadHtml: unrelated tags around styles are untouched', () => {
+  assertTrustedHeadHtml(
+    '<meta charset="utf-8"><style>body { color: red }</style><link rel="icon" href="/i.png">',
+    'test-input',
+  );
+  // A tag merely starting with the same letters is not a style element.
+  assertTrustedHeadHtml('<stylesheet-import data-x="y">', 'test-input');
 });

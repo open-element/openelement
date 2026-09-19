@@ -127,15 +127,85 @@ function assertStyleTag(attributes: string, css: string, context: string): strin
 }
 
 /**
- * Assert that every `<style>` tag in a trusted head fragment passes the CSS
- * blacklist (assertStyleTag). The assertion is the whole contract — it throws
- * on the first unsafe tag and returns nothing.
+ * Assert that every `<style>` element in a trusted head fragment passes the
+ * CSS blacklist (assertStyleTag). The assertion is the whole contract — it
+ * throws on the first unsafe or malformed element and returns nothing.
+ *
+ * Structure discovery is deliberately local and strict: the previous
+ * complete-tag regex silently skipped unterminated `<style ...` openings,
+ * which let an unclosed element carry `@import` past the blacklist. This
+ * scanner owns ONLY raw-text boundary detection (quote-aware opening tag,
+ * real `>`/`</style>` boundaries, EOF). CSS policy stays in the one
+ * canonical validator below.
  */
 export function assertTrustedHeadHtml(html: string, context: string): void {
-  html.replace(
-    /<style\b([^>]*)>([\s\S]*?)<\/style\s*>/gi,
-    (_, attrs, css) => assertStyleTag(attrs, css, context),
-  );
+  const lower = html.toLowerCase();
+  let index = 0;
+  for (;;) {
+    const open = lower.indexOf('<style', index);
+    if (open === -1) return;
+    const boundary = html[open + 6];
+    if (boundary !== undefined && !/[\s>]/.test(boundary)) {
+      // A different tag that merely shares the prefix (e.g. <stylesheet-x>).
+      index = open + 6;
+      continue;
+    }
+    // Quote-aware scan for the real end of the opening tag.
+    let cursor = open + 6;
+    let quote = '';
+    let tagEnd = -1;
+    while (cursor < html.length) {
+      const char = html[cursor];
+      if (quote) {
+        if (char === quote) quote = '';
+        cursor += 1;
+        continue;
+      }
+      if (char === '"' || char === "'") {
+        quote = char;
+        cursor += 1;
+        continue;
+      }
+      if (char === '>') {
+        tagEnd = cursor;
+        break;
+      }
+      cursor += 1;
+    }
+    if (tagEnd === -1) {
+      throw new OpenElementError(`Unterminated <style ... in ${context}`, {
+        code: 'UNSAFE_HEAD_INJECTION',
+        statusCode: 400,
+        recoverable: false,
+      });
+    }
+    // The next real closing boundary (skip lookalikes such as </styles>).
+    let close = -1;
+    let searchFrom = tagEnd + 1;
+    for (;;) {
+      const candidate = lower.indexOf('</style', searchFrom);
+      if (candidate === -1) break;
+      let after = candidate + 7;
+      while (after < html.length && /\s/.test(html[after])) after += 1;
+      if (html[after] === '>') {
+        close = candidate;
+        cursor = after;
+        break;
+      }
+      searchFrom = candidate + 7;
+    }
+    if (close === -1) {
+      throw new OpenElementError(`Unclosed <style> element in ${context}`, {
+        code: 'UNSAFE_HEAD_INJECTION',
+        statusCode: 400,
+        recoverable: false,
+      });
+    }
+    const attrs = html.slice(open + 6, tagEnd);
+    const css = html.slice(tagEnd + 1, close);
+    assertStyleTag(attrs, css, context);
+    index = cursor + 1;
+  }
 }
 
 /**
