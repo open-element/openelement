@@ -189,14 +189,22 @@ function headingSegments(html: string): string[] {
   return segments;
 }
 
-/** Remove exactly the real `id` attribute span, preserving every other byte. */
+/**
+ * Remove every real `id` attribute span (duplicate authored ids included),
+ * preserving every other byte. Removal runs back to front so earlier spans
+ * keep their offsets; a heading with `id="a" id="b"` would otherwise keep
+ * one id next to the generated one and render two.
+ */
 function removeIdAttribute(attrs: string): string {
-  const spans = scanAttributeSpans(attrs, 0, attrs.length);
-  const idSpan = spans.find((span) => span.name.toLowerCase() === 'id');
-  if (!idSpan) return attrs;
-  let removeStart = idSpan.start;
-  while (removeStart > 0 && /\s/.test(attrs[removeStart - 1])) removeStart -= 1;
-  return attrs.slice(0, removeStart) + attrs.slice(idSpan.end);
+  const spans = scanAttributeSpans(attrs, 0, attrs.length)
+    .filter((span) => span.name.toLowerCase() === 'id');
+  let out = attrs;
+  for (const idSpan of spans.reverse()) {
+    let removeStart = idSpan.start;
+    while (removeStart > 0 && /\s/.test(out[removeStart - 1])) removeStart -= 1;
+    out = out.slice(0, removeStart) + out.slice(idSpan.end);
+  }
+  return out;
 }
 
 /**

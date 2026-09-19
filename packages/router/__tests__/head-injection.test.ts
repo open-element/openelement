@@ -797,3 +797,23 @@ Deno.test('assertTrustedHeadHtml: unrelated tags around styles are untouched', (
   // A tag merely starting with the same letters is not a style element.
   assertTrustedHeadHtml('<stylesheet-import data-x="y">', 'test-input');
 });
+
+Deno.test('assertTrustedHeadHtml: escaped whitespace cannot split the CSS blacklist', () => {
+  // `\9` and `\a` decode to whitespace; the URL validator strips the same
+  // set, so the CSS fold must too or `java\9 script:` slips through.
+  for (
+    const input of [
+      '<style>body { background: url("java\\9 script:alert(1)") }</style>',
+      '<style>body { background: url("da\\9 ta:text/html,x") }</style>',
+      '<style>body { background: url("java\\a script:alert(1)") }</style>',
+      '<style>body { background: url("jav\\61 script:alert(1)") }</style>',
+    ]
+  ) {
+    assertThrows(() => assertTrustedHeadHtml(input, 'test-input'), OpenElementError, 'Unsafe CSS');
+  }
+  // Legitimate inline CSS still passes.
+  assertTrustedHeadHtml(
+    '<style>@font-face { font-family: X; src: url("/assets/fonts/x.woff2") format("woff2") }</style>',
+    'test-input',
+  );
+});

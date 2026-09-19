@@ -83,7 +83,11 @@ export function foldCssForCheck(css: string, context: string, code: string): str
       const parsed = Number.parseInt(hex, 16);
       return parsed === 0 || parsed > 0x10FFFF ? '\uFFFD' : String.fromCodePoint(parsed);
     })
-    .replace(/\\(.)/g, '$1');
+    .replace(/\\(.)/g, '$1')
+    // Escape sequences can decode to whitespace (`java\9 script`, `java\a script`),
+    // which would otherwise split a blacklisted keyword; the URL validator
+    // strips the same set (WHATWG URL), so the fold must too.
+    .replace(/[\t\n\r\f]/g, '');
 }
 
 /**

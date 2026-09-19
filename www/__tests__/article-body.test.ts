@@ -205,3 +205,12 @@ Deno.test('prepareArticle: adversarial quote runs cannot cause regex blowup', ()
     assertEquals(elapsed < 1000, true, `adversarial input took ${Math.round(elapsed)}ms`);
   }
 });
+
+Deno.test('prepareArticle: duplicate authored ids are all removed', () => {
+  const { html: out, outline } = prepareArticle('<h2 id="a" id="b">Title</h2>');
+  const heading = /<h2[^>]*>/.exec(out)?.[0] ?? '';
+  assertEquals((heading.match(/\bid=/g) ?? []).length, 1, heading);
+  const generated = outline[0].id;
+  assertEquals(generated === 'a' || generated === 'b', false);
+  assertEquals(heading.includes(`id="${generated}"`), true);
+});
