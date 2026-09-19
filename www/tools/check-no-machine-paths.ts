@@ -49,31 +49,43 @@ export function findMachinePath(text: string): { label: string; match: string } 
   return null;
 }
 
-const failures: string[] = [];
-let scanned = 0;
-let skippedBinary = 0;
-for await (const entry of walk(dist, { includeDirs: false })) {
-  const bytes = await Deno.readFile(entry.path);
-  // Cheap pre-filter: decoding megabytes of media wastes the gate budget.
-  if (bytes.length > 4_000_000) {
-    skippedBinary++;
-    continue;
+async function main(): Promise<void> {
+  try {
+    await Deno.stat(dist);
+  } catch {
+    console.error(
+      `machine-path check: ${dist} is missing — run the site build first (deno task site:build).`,
+    );
+    Deno.exit(1);
   }
-  if (!isTextArtifact(bytes)) {
-    skippedBinary++;
-    continue;
+  const failures: string[] = [];
+  let scanned = 0;
+  let skippedBinary = 0;
+  for await (const entry of walk(dist, { includeDirs: false })) {
+    const bytes = await Deno.readFile(entry.path);
+    // Cheap pre-filter: decoding megabytes of media wastes the gate budget.
+    if (bytes.length > 4_000_000) {
+      skippedBinary++;
+      continue;
+    }
+    if (!isTextArtifact(bytes)) {
+      skippedBinary++;
+      continue;
+    }
+    scanned++;
+    const hit = findMachinePath(new TextDecoder().decode(bytes));
+    if (hit) failures.push(`${entry.path.slice(dist.length + 1)}: ${hit.label} '${hit.match}'`);
   }
-  scanned++;
-  const hit = findMachinePath(new TextDecoder().decode(bytes));
-  if (hit) failures.push(`${entry.path.slice(dist.length + 1)}: ${hit.label} '${hit.match}'`);
+
+  if (failures.length > 0) {
+    console.error('machine-path check failed (artifacts must not carry build-machine paths):');
+    for (const failure of failures.slice(0, 20)) console.error(`- ${failure}`);
+    if (failures.length > 20) console.error(`... and ${failures.length - 20} more`);
+    Deno.exit(1);
+  }
+  console.log(
+    `machine-path check passed (${scanned} text files scanned, ${skippedBinary} binary/oversize skipped).`,
+  );
 }
 
-if (failures.length > 0) {
-  console.error('machine-path check failed (artifacts must not carry build-machine paths):');
-  for (const failure of failures.slice(0, 20)) console.error(`- ${failure}`);
-  if (failures.length > 20) console.error(`... and ${failures.length - 20} more`);
-  Deno.exit(1);
-}
-console.log(
-  `machine-path check passed (${scanned} text files scanned, ${skippedBinary} binary/oversize skipped).`,
-);
+if (import.meta.main) await main();
