@@ -371,7 +371,7 @@ export function buildManifest(): GeneratedUiManifest {
 
   return {
     $comment:
-      'GENERATED FILE - do not edit. Regenerate with: deno task --cwd tools/repo generate:ui-manifest (drift gate: ui-manifest:check).',
+      'GENERATED FILE - do not edit. Regenerate with: deno task --cwd packages/ui generate:ui-manifest (drift gate: ui-manifest:check).',
     schemaVersion: '1.0.0',
     packageName: '@openelement/ui',
     version: pkgVersion,
@@ -393,12 +393,12 @@ if (import.meta.main) {
     try {
       existing = await Deno.readTextFile(OUT_FILE);
     } catch {
-      console.error(`${target} is missing; run deno task --cwd tools/repo generate:ui-manifest`);
+      console.error(`${target} is missing; run deno task --cwd packages/ui generate:ui-manifest`);
       Deno.exit(1);
     }
     if (existing !== text) {
       console.error(
-        `${target} is stale; run deno task --cwd tools/repo generate:ui-manifest`,
+        `${target} is stale; run deno task --cwd packages/ui generate:ui-manifest`,
       );
       Deno.exit(1);
     }
