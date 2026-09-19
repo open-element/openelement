@@ -20,16 +20,24 @@
  * `--check` regenerates in memory and fails on drift.
  */
 
-import { fromFileUrl } from '@std/path';
+import { fromFileUrl, join } from '@std/path';
 import { Gray, Indigo } from 'open-props/src/props.colors.js';
 import borders from 'open-props/src/props.borders.js';
 import fonts from 'open-props/src/props.fonts.js';
+import { parseOpenPropsVersion } from './open-props-version.ts';
 
-const OPEN_PROPS_VERSION = '1.7.23';
 const ANCHOR = '/* @upstream-tokens */';
 
 // fromFileUrl, not .pathname: paths with spaces or %-escapes break otherwise.
 const repoRoot = fromFileUrl(new URL('../../../', import.meta.url));
+
+// The root import map is the canonical dependency declaration; the generated
+// provenance header must never disagree with what the build actually pins.
+const rootConfigPath = join(repoRoot, 'deno.json');
+const rootConfig = JSON.parse(await Deno.readTextFile(rootConfigPath)) as {
+  imports?: unknown;
+};
+const OPEN_PROPS_VERSION = parseOpenPropsVersion(rootConfig.imports, rootConfigPath);
 const semanticFile = `${repoRoot}packages/ui/src/semantic-tokens.css`;
 const outTsFile = `${repoRoot}packages/ui/src/open-props-tokens.ts`;
 
