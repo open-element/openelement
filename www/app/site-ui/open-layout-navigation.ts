@@ -11,7 +11,7 @@ const LOCALE_LABELS: Record<string, string> = { en: '中文', zh: 'English' };
  * The section family each URL subtree owns: a page's sidebar shows exactly the
  * families of its own basePath (and nothing else). Keys are basePaths, so a
  * generated section name missing from its basePath's list would vanish
- * silently from that page — tools/repo/generate-site-nav.ts fails the build
+ * silently from that page — www/tools/generate-site-nav.ts fails the build
  * instead. A basePath with no entry is unfiltered (the Docs hub shows the
  * whole manual). The project-links group is listed under `FALLBACK_SECTION`
  * ("Project"), the name the consumer gives the nameless generated group.

@@ -16,7 +16,7 @@
  * lastBuildDate is deliberately omitted: the two reference feeds omit it too,
  * and a build-date field would make the artifact differ on every build.
  *
- * Pure functions only; IO lives in ../repo/emit-site-rss.ts.
+ * Pure functions only; IO lives in ../emit-site-rss.ts.
  */
 
 import { SITE_ORIGIN } from '../../app/site-ui/head.ts';

@@ -12,7 +12,11 @@ Vite, Nitro, Element, or Node host dependencies into its module graph.
 Framework Mode authoring — the package root (`definePage`,
 `defineIslandConfig`, the action protocol) and the Element route-data types it
 re-exports — is built on compiled element classes (ADR-0143) and therefore
-requires `@openelement/element` to be installed. Element is declared as an
+requires `@openelement/element` to be installed. The `./document`
+subpath (the resolved-page seam used by the Native and Lit serializers) is
+Framework Mode surface too: it depends on Element's trusted-HTML contract
+through the shared head-safety predicates, so it is not part of the
+Element-free Route Mode closure. Element is declared as an
 optional peer so a Route Mode install stays lean; install it explicitly when
 you import from the package root or use Framework Mode. The declarations are
 checked against that contract by a strict, isolated npm consumer

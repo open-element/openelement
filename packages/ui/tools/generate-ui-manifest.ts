@@ -6,9 +6,9 @@
  * runtime-free packages free of Deno.readDirSync/Deno.readFileSync.
  *
  * Usage:
- *   deno run --allow-read --allow-write tools/repo/generate-ui-manifest.ts
+ *   deno run --allow-read --allow-write tools/generate-ui-manifest.ts
  *     -> (re)write the manifest.
- *   deno run --allow-read --allow-write tools/repo/generate-ui-manifest.ts --check
+ *   deno run --allow-read --allow-write tools/generate-ui-manifest.ts --check
  *     -> regenerate in memory and fail (exit 1) when the tracked manifest is
  *        missing or stale. Wired into `gate:source` as ui-manifest:check.
  */

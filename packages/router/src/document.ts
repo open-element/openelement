@@ -14,8 +14,11 @@
  *   and no cross-request data can flow through it.
  * - Response plumbing (status, headers, redirects) stays in the loader/action
  *   outcome channel; this module resolves document *meaning* only.
- * - No runtime imports: the resolved Document is the shared contract between
- *   the two serializers and must stay loadable in either dependency graph.
+ * - No Vite or build-tool imports. Framework Mode surface: the module's only
+ *   dependencies are the router authoring types and the neutral head-safety
+ *   predicates, and those use @openelement/element's trusted-HTML contract
+ *   (escape/attribute rules) rather than a second copy of it. The resolved
+ *   Document is the shared contract between the two serializers.
  */
 
 import type {

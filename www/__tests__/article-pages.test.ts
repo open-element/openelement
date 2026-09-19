@@ -30,7 +30,7 @@ const loadContentPages = (collection: ArticleCollection) =>
 // thin binding — a content slug — and the nav contract (section / order /
 // navLabel) lives in the article frontmatter
 // (www/content/docs/<collection>/<slug>[.<locale>].md), the single source of
-// truth that tools/repo/generate-site-nav.ts projects (#1087, ADR-0136).
+// truth that www/tools/generate-site-nav.ts projects (#1087, ADR-0136).
 const articleRoutes = [
   ['guide', 'api', 'GuideApiPage', 60],
   ['guide', 'configuration', 'GuideConfigurationPage', 70],

@@ -110,7 +110,7 @@ The docs site is a normal openElement app, islands included, so its client outpu
 
 | Chunk                          | Raw bytes | gzip -9 |
 | ------------------------------ | --------- | ------- |
-| `island-open-layout`           | 102,034   | 17,692  |
+| `island-open-layout`           | 102,028   | 17,683  |
 | `island-open-cinematic-scroll` | 78,176    | 23,894  |
 | `open-button`                  | 16,320    | 3,131   |
 | `island-open-dragon-live-gaze` | 14,161    | 5,169   |

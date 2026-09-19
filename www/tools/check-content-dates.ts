@@ -79,7 +79,7 @@ if (Deno.args.includes('--write')) {
   if (current !== generated) {
     console.error(
       'content-dates drift: the committed manifest no longer matches Git history; ' +
-        'regenerate with deno task --cwd tools/repo content-dates:write',
+        'regenerate with deno task --cwd www write:content-dates',
     );
     Deno.exit(1);
   }

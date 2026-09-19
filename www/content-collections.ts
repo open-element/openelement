@@ -5,7 +5,7 @@ import type { CollectionOptions, CollectionSchema } from './lib/content.ts';
  * `order` sorts within the section, `section` groups the entry (defaulted
  * per collection), and `navLabel` is the short sidebar label when the full
  * `title` is too long. Route modules no longer duplicate this in a `meta`
- * export; tools/repo/generate-site-nav.ts reads it from here.
+ * export; www/tools/generate-site-nav.ts reads it from here.
  */
 function articleSchema(defaultSection: string): CollectionSchema {
   return {

@@ -2,7 +2,7 @@
  * @openelement/ui - Generated Package Manifest
  *
  * Imports the tracked, generated manifest JSON (a reviewed package contract,
- * not a build cache). Generator: tools/repo/generate-ui-manifest.ts; regenerate
+ * not a build cache). Generator: packages/ui/tools/generate-ui-manifest.ts; regenerate
  * with `deno task --cwd tools/repo generate:ui-manifest`, drift gate with
  * `deno task --cwd tools/repo ui-manifest:check` (wired into gate:source).
  */
