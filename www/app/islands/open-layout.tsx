@@ -3,6 +3,7 @@
 import { defineIslandConfig } from '@openelement/router';
 import { computed, element, OpenElement, property } from '@openelement/element';
 import '@openelement/ui/open-theme-toggle';
+import { SITE_DEFAULT_LOCALE } from '../../site-config.ts';
 import { compiledStyle } from '../site-ui/compiled-style.ts';
 import {
   buildSidebarRows,
@@ -12,14 +13,18 @@ import {
   type FooterLink,
   type HeaderNavLink,
   layoutChromeStrings,
+  localeSwitchLabel,
+  localeSwitchPath,
+  localeSwitchScopeNote,
   type NavSection,
   type SidebarRow,
 } from '../site-ui/open-layout-navigation.ts';
+import { searchChromeStrings } from '../site-ui/chrome-strings.ts';
 import './open-search.tsx';
 
 type CompiledComputed<T> = ReturnType<typeof computed<T>> & T;
 
-export const openElement = defineIslandConfig({ hydrate: 'load', ssr: true, dsd: true });
+export const openElement = defineIslandConfig({ hydrate: 'load', ssr: true });
 
 @element('open-layout')
 export default class OpenLayout extends OpenElement {
@@ -58,6 +63,92 @@ export default class OpenLayout extends OpenElement {
     min-width: 0;
     width: 100%;
     isolation: isolate;
+  }
+
+  /* Skip link: visually hidden until keyboard focus (#D-8). */
+  .skip-link {
+    position: absolute;
+    inset-block-start: var(--size-2);
+    inset-inline-start: var(--size-4);
+    z-index: 200;
+    padding: var(--size-2) var(--size-4);
+    border: var(--border-size-1) solid var(--border);
+    border-radius: var(--radius-2);
+    background: var(--bg-elevated);
+    color: var(--text-primary);
+    font-family: var(--font-mono);
+    font-size: var(--font-size-00);
+    text-decoration: none;
+  }
+  .skip-link:focus-visible {
+    outline: var(--focus-size) solid var(--focus-ring);
+    outline-offset: var(--focus-offset);
+  }
+  .skip-link:not(:focus-visible),
+  .visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  .locale-switch {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: var(--size-9);
+    padding: 0 var(--size-2);
+    border: 0;
+    border-radius: var(--radius-round);
+    background: transparent;
+    color: var(--text-primary);
+    font-family: var(--font-mono);
+    font-size: var(--font-size-00);
+    letter-spacing: .02em;
+    text-decoration: none;
+    white-space: nowrap;
+    transition: all 0.15s ease;
+  }
+  .locale-switch:hover {
+    color: var(--brand);
+    background: color-mix(in srgb, var(--brand-pale) 34%, transparent);
+  }
+  .locale-switch:focus-visible {
+    outline: var(--focus-size) solid var(--focus-ring);
+    outline-offset: var(--focus-offset);
+  }
+
+  /* Repository link: same 36px round target as the search trigger beside it. */
+  .repository-link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: var(--size-9);
+    height: var(--size-9);
+    padding: 0;
+    border: 0;
+    border-radius: var(--radius-round);
+    background: transparent;
+    color: var(--text-primary);
+    transition: all var(--ease-2) var(--duration-2);
+  }
+  .repository-link:hover {
+    color: var(--brand);
+    background: color-mix(in srgb, var(--brand-pale) 34%, transparent);
+  }
+  .repository-link:focus-visible {
+    outline: var(--focus-size) solid var(--focus-ring);
+    outline-offset: var(--focus-offset);
+  }
+  .repository-link svg {
+    width: var(--size-5);
+    height: var(--size-5);
+    fill: currentColor;
   }
 
   /* Header */
@@ -195,6 +286,10 @@ export default class OpenLayout extends OpenElement {
     view-transition-name: open-brand-mark;
   }
 
+  .logo-slash {
+    color: var(--brand);
+  }
+
   .logo:focus-visible {
     outline: var(--focus-size) solid var(--focus-ring);
     outline-offset: var(--focus-offset);
@@ -324,7 +419,7 @@ export default class OpenLayout extends OpenElement {
     background: color-mix(in srgb, var(--bg-elevated) 58%, transparent);
   }
   .footer-inner {
-    max-width: 1240px;
+    max-width: var(--site-container-wide);
     margin: 0 auto;
     padding: var(--size-16) var(--size-8);
     display: grid;
@@ -352,7 +447,7 @@ export default class OpenLayout extends OpenElement {
   .footer-bottom {
     border-top: var(--border-size-1) solid var(--border);
     padding: var(--size-4) var(--size-8);
-    max-width: 1240px;
+    max-width: var(--site-container-wide);
     margin: 0 auto;
     display: flex;
     justify-content: space-between;
@@ -388,10 +483,6 @@ export default class OpenLayout extends OpenElement {
     .sidebar-mobile {
       display: block;
       margin: var(--size-4) var(--size-4) 0;
-      padding: var(--size-3);
-      border: var(--border-size-1) solid var(--border);
-      border-radius: var(--radius-2);
-      background: var(--bg-surface);
     }
     .sidebar-mobile[hidden] { display: none; }
     .sidebar-mobile-toggle {
@@ -402,6 +493,10 @@ export default class OpenLayout extends OpenElement {
       font-weight: var(--font-weight-8);
       letter-spacing: .12em;
       text-transform: uppercase;
+      border: var(--border-size-1) solid var(--border);
+      border-radius: var(--radius-2);
+      padding: var(--size-3) var(--size-4);
+      background: var(--surface-1);
     }
     .sidebar-mobile-panel { padding-block-start: var(--size-3); }
     .sidebar-mobile .nav-row[data-kind="section"] { margin: 0.5rem 0 0; }
@@ -482,6 +577,41 @@ export default class OpenLayout extends OpenElement {
   sidebarToggle = computed(() => layoutChromeStrings(this.locale).sidebarToggle);
 
   @property({ reflect: false, attribute: false })
+  skipToMain = computed(() => layoutChromeStrings(this.locale).skipToMain);
+
+  @property({ reflect: false, attribute: false })
+  menuOpen = computed(() => layoutChromeStrings(this.locale).menuOpen);
+
+  @property({ reflect: false, attribute: false })
+  primaryNavLabel = computed(() => layoutChromeStrings(this.locale).primaryNavLabel);
+
+  @property({ reflect: false, attribute: false })
+  mobileNavLabel = computed(() => layoutChromeStrings(this.locale).mobileNavLabel);
+
+  // Repository link in the header cluster: constant target, bilingual label.
+  // Plain literal default — the compiler rejects module-scope identifiers in
+  // property defaults; www/__tests__/site-ui.test.ts pins it to REPOSITORY_URL
+  // so the header and the footer link cannot drift apart.
+  @property({ reflect: false, attribute: false })
+  repositoryHref = 'https://github.com/open-element/openelement';
+
+  @property({ reflect: false, attribute: false })
+  repositoryLabel = computed(() => layoutChromeStrings(this.locale).repositoryLabel);
+
+  // Locale switcher: localeSwitchPath degrades route patterns (/:slug) to
+  // their static ancestor, so dynamic routes never emit a literal param href.
+  @property({ reflect: false, attribute: false })
+  switchLocaleHref = computed(() =>
+    localeSwitchPath(this.currentPath || '/', this.locale, this.locales, SITE_DEFAULT_LOCALE)
+  );
+
+  @property({ reflect: false, attribute: false })
+  switchLocaleLabel = computed(() => localeSwitchLabel(this.locale));
+
+  @property({ reflect: false, attribute: false })
+  switchLocaleNote = computed(() => localeSwitchScopeNote(this.locale));
+
+  @property({ reflect: false, attribute: false })
   sidebarRows = computed(() =>
     buildSidebarRows(this.navItems, this.currentPath, this.locale, this.locales)
   ) as CompiledComputed<SidebarRow[]>;
@@ -494,6 +624,24 @@ export default class OpenLayout extends OpenElement {
 
   @property({ reflect: false, attribute: false })
   footerTagline = computed(() => layoutChromeStrings(this.locale).footerTagline || this.footerText);
+
+  @property({ reflect: false, attribute: false })
+  footerCopyright = computed(() => layoutChromeStrings(this.locale).footerCopyright);
+
+  // Search chrome copy, finalized at SSR and passed to the island as
+  // attributes so nothing rewrites it after hydration.
+  @property({ reflect: false, attribute: false })
+  searchTriggerLabel = computed(() => searchChromeStrings(this.locale).triggerLabel);
+  @property({ reflect: false, attribute: false })
+  searchDialogLabel = computed(() => searchChromeStrings(this.locale).dialogLabel);
+  @property({ reflect: false, attribute: false })
+  searchInputLabel = computed(() => searchChromeStrings(this.locale).inputLabel);
+  @property({ reflect: false, attribute: false })
+  searchPlaceholder = computed(() => searchChromeStrings(this.locale).placeholder);
+  @property({ reflect: false, attribute: false })
+  searchResultsLabel = computed(() => searchChromeStrings(this.locale).resultsLabel);
+  @property({ reflect: false, attribute: false })
+  searchEmptyMessage = computed(() => searchChromeStrings(this.locale).emptyMessage);
 
   @property({ reflect: false, attribute: false })
   footerProductLabel = computed(() => footerColumn(this.locale, this.locales, 'product').label);
@@ -523,12 +671,17 @@ export default class OpenLayout extends OpenElement {
   render() {
     return (
       <div class='app-layout' part='container'>
-        <header class='app-header' part='header'>
+        <a class='skip-link' href='#main-content' data-pagefind-ignore>{this.skipToMain}</a>
+        <header class='app-header' part='header' data-pagefind-ignore>
           <div class='header-inner'>
             <a class='logo' href={this.homeHref} aria-label={this.siteName}>
-              <span class='logo-glyph' aria-hidden='true'>OE</span>
+              <span class='logo-glyph' aria-hidden='true'>
+                {'<open'}
+                <span class='logo-slash'>/</span>
+                {'>'}
+              </span>
             </a>
-            <nav class='header-nav' part='nav' aria-label='Primary navigation'>
+            <nav class='header-nav' part='nav' aria-label={this.primaryNavLabel}>
               {this.headerNavItems.map((link) => (
                 <a
                   key={link.key}
@@ -541,14 +694,43 @@ export default class OpenLayout extends OpenElement {
               ))}
             </nav>
             <div class='header-right'>
-              <open-search></open-search>
+              <a class='locale-switch' href={this.switchLocaleHref}>
+                {this.switchLocaleLabel}
+                <span class='visually-hidden'>{this.switchLocaleNote}</span>
+              </a>
+              <open-search
+                locale={this.locale}
+                trigger={this.searchTriggerLabel}
+                dialog={this.searchDialogLabel}
+                input={this.searchInputLabel}
+                placeholder={this.searchPlaceholder}
+                results={this.searchResultsLabel}
+                empty={this.searchEmptyMessage}
+                message={this.searchEmptyMessage}
+              >
+              </open-search>
               <open-theme-toggle></open-theme-toggle>
+              <a
+                class='repository-link'
+                href={this.repositoryHref}
+                target='_blank'
+                rel='noopener noreferrer'
+                aria-label={this.repositoryLabel}
+              >
+                <svg
+                  viewBox='0 0 16 16'
+                  aria-hidden='true'
+                  focusable='false'
+                >
+                  <path d='M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z' />
+                </svg>
+              </a>
               <details class='mobile-menu'>
                 <summary class='mobile-menu-btn'>
-                  <span class='mobile-menu-label'>Open navigation</span>
+                  <span class='mobile-menu-label'>{this.menuOpen}</span>
                   <span class='mobile-menu-icon' aria-hidden='true'>☰</span>
                 </summary>
-                <nav class='mobile-menu-panel' aria-label='Mobile navigation'>
+                <nav class='mobile-menu-panel' aria-label={this.mobileNavLabel}>
                   {this.headerNavItems.map((link) => (
                     <a
                       key={link.key}
@@ -570,6 +752,7 @@ export default class OpenLayout extends OpenElement {
             part='sidebar'
             aria-label={this.sidebarLabel}
             hidden={this.sidebarHidden}
+            data-pagefind-ignore
           >
             {this.sidebarRows.map((row) => (
               <div key={row.key} class='nav-row' data-kind={row.kind}>
@@ -585,8 +768,9 @@ export default class OpenLayout extends OpenElement {
               </div>
             ))}
           </nav>
-          <main class='layout-main' part='main'>
-            <details class='sidebar-mobile' hidden={this.sidebarHidden}>
+          <main class='layout-main' part='main' id='main-content' tabindex='-1'>
+            <slot></slot>
+            <details class='sidebar-mobile' hidden={this.sidebarHidden} data-pagefind-ignore>
               <summary class='sidebar-mobile-toggle'>{this.sidebarToggle}</summary>
               <nav class='sidebar-mobile-panel' aria-label={this.sidebarLabel}>
                 {this.sidebarRows.map((row) => (
@@ -604,10 +788,9 @@ export default class OpenLayout extends OpenElement {
                 ))}
               </nav>
             </details>
-            <slot></slot>
           </main>
         </div>
-        <footer class='app-footer' part='footer'>
+        <footer class='app-footer' part='footer' data-pagefind-ignore>
           <div class='footer-inner'>
             <nav class='footer-column' aria-label={this.footerProductLabel}>
               <span class='footer-heading'>{this.footerProductLabel}</span>
@@ -636,7 +819,7 @@ export default class OpenLayout extends OpenElement {
           </div>
           <div class='footer-bottom'>
             <span>{this.footerTagline}</span>
-            <span class='footer-copyright'>(c) 2026 openElement. MIT License.</span>
+            <span class='footer-copyright'>{this.footerCopyright}</span>
           </div>
         </footer>
       </div>

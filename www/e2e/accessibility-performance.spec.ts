@@ -65,7 +65,10 @@ test.describe('Accessibility', () => {
       const fg = luminance(getComputedStyle(summary).color);
       const details = summary.closest('details');
       if (!details) throw new Error('mobile page rail summary must belong to details');
-      const bg = luminance(getComputedStyle(details).backgroundColor);
+      // The disclosure surface lives on the summary itself now; the details
+      // box is transparent by design, so the pairing to verify is summary
+      // text against summary background.
+      const bg = luminance(getComputedStyle(summary).backgroundColor);
       return (Math.max(fg, bg) + 0.05) / (Math.min(fg, bg) + 0.05);
     });
     expect(codeRatio).toBeGreaterThanOrEqual(4.5);

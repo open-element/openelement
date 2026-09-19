@@ -73,24 +73,31 @@ export default class PageBlogPost extends OpenElement {
   @property({ reflect: false, attribute: false })
   nextDispatchText = '';
 
+  // Same base-field redeclaration as open-layout: the compiled @property
+  // shadows OpenElementConfiguration.locale (SSR injection or the `locale`
+  // attribute); tsc's `override` demand is rejected by the compiled grammar.
+  @property({ reflect: false })
+  // @ts-expect-error compiled @property shadows the optional base field
+  locale = 'en';
+
   render() {
     return (
-      <main>
-        <div class={this.notFoundClass}>
+      <div>
+        <div class={this.notFoundClass} data-pagefind-ignore>
           <h1>404</h1>
           <p>{this.notFoundMessage}: {this.slug}</p>
           <a href={this.blogHref}>← {this.backLabel}</a>
         </div>
 
-        <div class={this.articleClass}>
-          <open-reading-shell meta rail footer navigation={this.navigation}>
+        <div class={this.articleClass} data-pagefind-body>
+          <open-reading-shell meta rail footer navigation={this.navigation} locale={this.locale}>
             <div slot='meta'>
               <p class='crumb'>
                 <a href={this.blogHref}>{this.breadcrumbLabel}</a>
                 <span class='crumb-sep'>/</span>
                 <span class='crumb-current'>{this.crumbCurrent}</span>
               </p>
-              <h1 class='post-title'>{this.postTitle}</h1>
+              <h1 class='post-title' data-pagefind-meta='title'>{this.postTitle}</h1>
               <p class='post-lede'>{this.lede}</p>
               <p class='post-meta'>
                 <time>{this.date}</time>
@@ -99,7 +106,7 @@ export default class PageBlogPost extends OpenElement {
               <p class='lang-notice' role='note'>{this.langNotice}</p>
             </div>
             <div slot='rail'>
-              <open-page-rail items={this.railItems}></open-page-rail>
+              <open-page-rail items={this.railItems} locale={this.locale}></open-page-rail>
             </div>
             <div
               class='blog-content'
@@ -107,13 +114,13 @@ export default class PageBlogPost extends OpenElement {
               innerHTML={this.articleHtml}
               trustedHtml
             />
-            <nav class='next-dispatch' aria-label='Next dispatch'>
+            <nav class='next-dispatch' aria-label={this.nextDispatchLabel}>
               <span class='next-label'>{this.nextDispatchLabel}</span>
               <a href={this.nextDispatchHref}>{this.nextDispatchText}</a>
             </nav>
           </open-reading-shell>
         </div>
-      </main>
+      </div>
     );
   }
 }

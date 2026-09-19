@@ -106,6 +106,7 @@ export function documentWrapOptionsLines(options: {
     `lang: ${options.langExpr},`,
     `meta: { description: __doc.description, tags: __doc.meta },`,
     `links: __doc.links,`,
+    `structuredData: __doc.structuredData || [],`,
     `headExtras: ${options.headExtrasExpr},`,
     `dangerouslyHeadFragments: __doc.dangerouslyHeadFragments || [],`,
     `allowHeadExtrasScripts: ${JSON.stringify(options.allowHeadExtrasScripts)},`,

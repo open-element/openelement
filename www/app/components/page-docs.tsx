@@ -43,10 +43,16 @@ export default class PageDocs extends OpenElement {
   entrance4Copy = '';
   @property({ reflect: false, attribute: false })
   entrance4Href = '';
+  @property({ reflect: false, attribute: false })
+  entrance5Title = '';
+  @property({ reflect: false, attribute: false })
+  entrance5Copy = '';
+  @property({ reflect: false, attribute: false })
+  entrance5Href = '';
 
   render() {
     return (
-      <main class='manual'>
+      <div class='manual' data-pagefind-body>
         <header class='masthead'>
           <span class='sidenote' aria-hidden='true'>{this.sidenote}</span>
           <div class='masthead-top'>
@@ -54,7 +60,7 @@ export default class PageDocs extends OpenElement {
             <span class='stamp'>{this.version}</span>
           </div>
           <h1>
-            <span class='serif-line'>{this.serifLine}</span>
+            <span class='serif-line'>{this.serifLine}</span>{' '}
             <span class='mono-line'>{this.monoLine}</span>
           </h1>
           <p class='lede'>{this.lede}</p>
@@ -92,8 +98,16 @@ export default class PageDocs extends OpenElement {
             </div>
             <span class='entrance-arrow' aria-hidden='true'>→</span>
           </a>
+          <a class='entrance' href={this.entrance5Href}>
+            <span class='entrance-index' aria-hidden='true'>05</span>
+            <div>
+              <span class='entrance-title'>{this.entrance5Title}</span>
+              <p class='entrance-copy'>{this.entrance5Copy}</p>
+            </div>
+            <span class='entrance-arrow' aria-hidden='true'>→</span>
+          </a>
         </nav>
-      </main>
+      </div>
     );
   }
 }

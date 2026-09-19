@@ -3,7 +3,7 @@ import { expect, test } from '@playwright/test';
 test.describe('open-layout behavior boundaries', () => {
   test('mobile menu uses the native details disclosure', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
-    await page.goto('/architecture/islands-deep');
+    await page.goto('/architecture/islands');
 
     // The disclosure is identified by its user-visible summary text; the
     // panel is the 'Mobile navigation' landmark, which only enters the
@@ -20,7 +20,7 @@ test.describe('open-layout behavior boundaries', () => {
   });
 
   test('scrolling does not install the removed imperative shell state', async ({ page }) => {
-    await page.goto('/architecture/islands-deep');
+    await page.goto('/architecture/islands');
     const layout = page.locator('open-layout');
     await page.mouse.wheel(0, 500);
     await expect.poll(() => page.evaluate(() => scrollY)).toBeGreaterThan(0);

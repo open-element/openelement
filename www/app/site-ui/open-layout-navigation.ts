@@ -1,34 +1,58 @@
 import { normalizeLocalePath } from './i18n.ts';
 
 const SAFE_URL_SCHEMES = new Set(['http:', 'https:', 'mailto:', 'tel:', 'sms:']);
+
+/** The public repository behind every page of this Site (footer + header link). */
+export const REPOSITORY_URL = 'https://github.com/open-element/openelement';
+
 const LOCALE_LABELS: Record<string, string> = { en: '中文', zh: 'English' };
-const SECTION_MAP: Readonly<Record<string, readonly string[]>> = {
-  '/guide': ['Quick Start', 'Guide', 'Core', 'Production'],
+
+/**
+ * The section family each URL subtree owns: a page's sidebar shows exactly the
+ * families of its own basePath (and nothing else). Keys are basePaths, so a
+ * generated section name missing from its basePath's list would vanish
+ * silently from that page — www/tools/generate-site-nav.ts fails the build
+ * instead. A basePath with no entry is unfiltered (the Docs hub shows the
+ * whole manual). The project-links group is listed under `FALLBACK_SECTION`
+ * ("Project"), the name the consumer gives the nameless generated group.
+ */
+export const SECTION_MAP: Readonly<Record<string, readonly string[]>> = {
+  '/guide': ['Guide', 'Core', 'Recipes'],
   '/architecture': ['Principles', 'Reference'],
-  '/blog': ['History'],
-  '/apilist': ['Reference'],
-  '/roadmap': ['History', 'Project'],
-  '/changelog': ['History', 'Project'],
-  '/contributing': ['History', 'Project'],
+  '/reference': ['Reference'],
+  '/blog': ['Project'],
+  '/roadmap': ['Project'],
+  '/changelog': ['Project'],
+  '/contributing': ['Project'],
 };
 
 /** Generated nav data leaves the project-links group nameless; label it. */
-const FALLBACK_SECTION = 'Project';
+export const FALLBACK_SECTION = 'Project';
 
 export interface NavItem {
   path?: string;
   href?: string;
   label: string;
+  /** zh label from the content collection frontmatter (or the static map). */
+  labelZh?: string;
 }
 
 export interface NavSection {
   section: string;
+  /** zh group heading; falls back to `section` when absent. */
+  sectionZh?: string;
   items: NavItem[];
 }
 
 export interface HeaderNavLink {
   href: string;
   label: string;
+  labelZh?: string;
+}
+
+/** Project a bilingual label pair onto the render locale (en default). */
+function localizedLabel(label: string, labelZh: string | undefined, locale: string): string {
+  return locale === 'zh' ? labelZh ?? label : label;
 }
 
 export function isSafeLayoutUrl(url: string): boolean {
@@ -80,7 +104,21 @@ export function localeSwitchPath(
 ): string {
   const other = locales.find((locale) => locale !== currentLocale) || currentLocale;
   const bare = normalizeLocalePath(currentPath, { locales, defaultLocale }).path;
-  return localizeLayoutPath(bare, other, locales, defaultLocale);
+  // A route pattern (/:slug) can arrive when the resolved request path is
+  // unavailable; a literal ":slug" must never land in an href, so the switch
+  // target degrades to the deepest static ancestor (/blog/:slug -> /blog).
+  const segments = bare.split('/').filter(Boolean);
+  const staticSegments: string[] = [];
+  for (const segment of segments) {
+    if (segment.startsWith(':') || segment.startsWith('[')) break;
+    staticSegments.push(segment);
+  }
+  const safeBare = staticSegments.length === segments.length
+    ? bare
+    : staticSegments.length > 0
+    ? `/${staticSegments.join('/')}`
+    : '/';
+  return localizeLayoutPath(safeBare, other, locales, defaultLocale);
 }
 
 export function localeSwitchLabel(currentLocale: string): string {
@@ -90,7 +128,7 @@ export function localeSwitchLabel(currentLocale: string): string {
 export function localeSwitchScopeNote(currentLocale: string): string {
   return currentLocale === 'zh'
     ? 'Switch to English'
-    : '中文翻译目前覆盖 Guide 层；其他层的页面仍为英文。';
+    : '中文版本覆盖全站页面；博文与 CHANGELOG 归档以英文原文发布。';
 }
 
 export function filterNavSections(items: NavSection[], currentPath: string): NavSection[] {
@@ -183,7 +221,7 @@ export function decorateHeaderNav(
     return {
       key: href || link.label,
       href,
-      label: link.label,
+      label: localizedLabel(link.label, link.labelZh, locale),
       current: isCurrent ? 'page' : false,
     };
   });
@@ -216,7 +254,7 @@ export function buildSidebarRows(
     rows.push({
       key: `section:${section.section}`,
       kind: 'section',
-      heading: section.section,
+      heading: localizedLabel(section.section, section.sectionZh, locale),
       href: false,
       label: '',
       current: false,
@@ -236,7 +274,7 @@ export function buildSidebarRows(
         kind: 'link',
         heading: '',
         href,
-        label: item.label,
+        label: localizedLabel(item.label, item.labelZh, locale),
         current: !external && href !== false && href === localizedCurrent ? 'page' : false,
         rel: external ? EXTERNAL_REL : false,
       });
@@ -256,8 +294,8 @@ const FOOTER_COLUMNS: Record<FooterColumnId, FooterColumnSource> = {
     links: [
       { path: '/guide/core-concepts', en: 'Elements', zh: '元素' },
       { path: '/architecture/design-system', en: 'UI', zh: '设计体系' },
-      { path: '/architecture/architecture', en: 'Framework', zh: '框架' },
-      { path: '/architecture/standards-registry', en: 'Protocols', zh: '协议' },
+      { path: '/architecture', en: 'Framework', zh: '框架' },
+      { path: '/architecture/dsd', en: 'Protocols', zh: '协议' },
     ],
   },
   resources: {
@@ -265,14 +303,14 @@ const FOOTER_COLUMNS: Record<FooterColumnId, FooterColumnSource> = {
     links: [
       { path: '/guide/getting-started', en: 'Guide', zh: '指南' },
       { path: '/guide/api', en: 'API', zh: 'API' },
-      { path: '/architecture/architecture', en: 'Architecture', zh: '架构' },
+      { path: '/architecture', en: 'Architecture', zh: '架构' },
       { path: '/blog', en: 'Blog', zh: '博客' },
     ],
   },
   company: {
     labels: { en: 'Company', zh: '项目' },
     links: [
-      { path: 'https://github.com/open-element/openelement', en: 'GitHub', zh: 'GitHub' },
+      { path: REPOSITORY_URL, en: 'GitHub', zh: 'GitHub' },
       { path: '/roadmap', en: 'Roadmap', zh: '路线图' },
       { path: '/changelog', en: 'Changelog', zh: '更新日志' },
     ],
@@ -321,17 +359,35 @@ export function layoutChromeStrings(locale: string): {
   sidebarLabel: string;
   sidebarToggle: string;
   footerTagline: string;
+  footerCopyright: string;
+  skipToMain: string;
+  menuOpen: string;
+  primaryNavLabel: string;
+  mobileNavLabel: string;
+  repositoryLabel: string;
 } {
   if (locale === 'zh') {
     return {
       sidebarLabel: '文档导航',
       sidebarToggle: '文档',
       footerTagline: '基于 OpenElement 构建 —— Web Components 原生应用框架',
+      footerCopyright: '(c) 2026 openElement。MIT 许可证。',
+      skipToMain: '跳到主要内容',
+      menuOpen: '打开导航',
+      primaryNavLabel: '主导航',
+      mobileNavLabel: '移动端导航',
+      repositoryLabel: 'GitHub 仓库（在新标签页打开）',
     };
   }
   return {
     sidebarLabel: 'Documentation navigation',
     sidebarToggle: 'Documentation',
     footerTagline: '',
+    footerCopyright: '(c) 2026 openElement. MIT License.',
+    skipToMain: 'Skip to main content',
+    menuOpen: 'Open navigation',
+    primaryNavLabel: 'Primary navigation',
+    mobileNavLabel: 'Mobile navigation',
+    repositoryLabel: 'GitHub repository (opens in a new tab)',
   };
 }

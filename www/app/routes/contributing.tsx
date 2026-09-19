@@ -22,7 +22,7 @@ const content = {
     setupAriaLabel: 'Development setup',
     setupLabel: '§1 — Setup',
     setupCopyBefore:
-      'openElement core CLI, SSG, serverless API, tests, publishing, and docs site tasks all use Deno 2.8+ as the default runtime. Vite runs via ',
+      'openElement core CLI, SSG, serverless API, tests, publishing, and docs site tasks all use Deno 2.9+ as the default runtime. Vite runs via ',
     setupCopyVite:
       'deno run --allow-read --allow-write --allow-env --allow-net --allow-run --allow-sys --allow-ffi --no-prompt npm:vite',
     setupCopyBetween: ' — no ',
@@ -149,13 +149,13 @@ const content = {
     headDescription:
       '面向 openElement Web Standards Lab 的精确、Deno 优先的贡献者工作流：环境设置、PR 清单与入手方向。',
     eyebrow: '贡献 — 加入实验室',
-    monoLine: 'BUILD IT',
+    monoLine: '构建它',
     serifLine: '与我们一起。',
     lede: '面向 Web Standards Lab 的精确、Deno 优先的贡献者工作流。',
     setupAriaLabel: '开发环境设置',
     setupLabel: '§1 — 环境设置',
     setupCopyBefore:
-      'openElement 核心 CLI、SSG、serverless API、测试、发布与文档站任务都以 Deno 2.8+ 作为默认运行时。Vite 通过 ',
+      'openElement 核心 CLI、SSG、serverless API、测试、发布与文档站任务都以 Deno 2.9+ 作为默认运行时。Vite 通过 ',
     setupCopyVite:
       'deno run --allow-read --allow-write --allow-env --allow-net --allow-run --allow-sys --allow-ffi --no-prompt npm:vite',
     setupCopyBetween: ' 运行——主工作流不需要 ',

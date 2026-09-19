@@ -54,6 +54,11 @@ export class OpenThemeToggle extends OpenElement {
       background: color-mix(in srgb, var(--brand-pale) 42%, var(--bg-elevated));
     }
 
+    .theme-toggle:focus-visible {
+      outline: var(--focus-size, 2px) solid var(--focus-ring, var(--brand-light));
+      outline-offset: var(--focus-offset, 2px);
+    }
+
     .theme-toggle svg {
       width: 16px;
       height: 16px;

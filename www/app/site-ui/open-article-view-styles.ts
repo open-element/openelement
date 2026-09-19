@@ -4,6 +4,11 @@ import { compiledStyle } from './compiled-style.ts';
 
 const articleExtras = `
   .is-hidden { display: none; }
+  .nf-code {
+    font-family: var(--font-mono);
+    font-size: var(--font-size-6);
+    color: var(--text-muted);
+  }
   .article-content blockquote {
     margin: var(--size-4) 0;
     padding: var(--size-1) var(--size-4);

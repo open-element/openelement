@@ -106,6 +106,10 @@ export const pageRoadmapStyles = [compiledStyle(`
     background: var(--bg-base);
   }
 
+  .tl-baseline .tl-node {
+    background: var(--brand);
+  }
+
   .tl-next .tl-node::after {
     content: "";
     position: absolute;
@@ -175,6 +179,11 @@ export const pageRoadmapStyles = [compiledStyle(`
   .stamp-next {
     border: var(--border-size-1) solid var(--violet-8);
     color: var(--violet-8);
+  }
+
+  .stamp-baseline {
+    background: var(--brand);
+    color: var(--on-brand);
   }
 
   .tl-status {

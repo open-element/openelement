@@ -23,9 +23,10 @@ export function normalizeLocalePath(
   options: { locales: string[]; defaultLocale: string },
 ): LocalePath {
   const locales = options.locales.length > 0 ? options.locales : [options.defaultLocale];
-  const defaultLocale = locales.includes(options.defaultLocale)
-    ? options.defaultLocale
-    : locales[0];
+  // The default locale is the caller's explicit input, never array order;
+  // a caller passing a default outside the list is a configuration bug that
+  // should stay visible rather than silently switching the default.
+  const defaultLocale = options.defaultLocale;
   const cleanPath = pathname.startsWith('/') ? pathname : `/${pathname}`;
   const parts = cleanPath.split('/').filter(Boolean);
   const first = parts[0];

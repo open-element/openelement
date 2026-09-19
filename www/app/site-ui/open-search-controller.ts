@@ -1,5 +1,6 @@
 /** Browser-only behavior used by the open-search island. */
 import { stripLocalePrefix } from '@openelement/site-ui/link.ts';
+import { searchChromeStrings } from './chrome-strings.ts';
 
 interface PagefindResultData {
   url: string;
@@ -16,6 +17,15 @@ interface PagefindModule {
   search: (query: string) => Promise<{ results: PagefindSearchResult[] }>;
 }
 
+/** One rendered search hit; the island view maps this array declaratively. */
+export interface SearchHit {
+  key: string;
+  href: string;
+  section: string;
+  title: string;
+  text: string;
+}
+
 interface SearchState {
   pagefind: PagefindModule | null;
   loaded: boolean;
@@ -23,9 +33,59 @@ interface SearchState {
   keydown: (event: KeyboardEvent) => void;
 }
 
-type SearchHost = HTMLElement;
+/** The island element with its compiled property surface (open-search.tsx). */
+type SearchHost = HTMLElement & {
+  locale: string;
+  message: string;
+  hasHits: boolean;
+  hits: SearchHit[];
+  searching: boolean;
+};
 
 const states = new WeakMap<SearchHost, SearchState>();
+
+/**
+ * Dynamic search-time messages. Chrome copy (trigger label, placeholder, …)
+ * is server-rendered by the island in the page locale via
+ * searchChromeStrings — nothing here rewrites it at runtime.
+ * English strings are pinned verbatim by www/e2e/search.spec.ts — do not
+ * reword them without updating that spec.
+ */
+interface SearchCopy {
+  noResults: (query: string) => string;
+  indexMissing: string;
+}
+
+const COPY: Record<'en' | 'zh', SearchCopy> = {
+  en: {
+    noResults: (query: string) => `No results found for “${query}”`,
+    indexMissing: 'Search index not found — run deno task build to generate it',
+  },
+  zh: {
+    noResults: (query: string) => `未找到“${query}”的相关结果`,
+    indexMissing: '未找到搜索索引——请运行 deno task build 生成',
+  },
+};
+
+/** zh display names for the known first path segments; unknown segments pass through. */
+const ZH_SECTIONS: Record<string, string> = {
+  guide: '指南',
+  architecture: '架构',
+  blog: '博客',
+  docs: '文档',
+  reference: 'API 参考',
+  roadmap: '路线图',
+  changelog: '更新日志',
+};
+
+/** The page locale is the <html lang> contract (seo-meta.spec.ts pins it). */
+function searchLocale(): 'en' | 'zh' {
+  return document.documentElement.lang.toLowerCase().startsWith('zh') ? 'zh' : 'en';
+}
+
+function copy(): SearchCopy {
+  return COPY[searchLocale()];
+}
 
 function overlay(host: SearchHost): HTMLElement | null {
   return host.querySelector<HTMLElement>('.overlay');
@@ -35,19 +95,13 @@ function input(host: SearchHost): HTMLInputElement | null {
   return host.querySelector<HTMLInputElement>('.search-input');
 }
 
-function results(host: SearchHost): HTMLElement | null {
-  return host.querySelector<HTMLElement>('.results');
-}
-
-function emptyResult(message: string): HTMLElement {
-  const node = document.createElement('div');
-  node.className = 'empty';
-  node.textContent = message;
-  return node;
-}
-
 function showMessage(host: SearchHost, message: string): void {
-  results(host)?.replaceChildren(emptyResult(message));
+  host.hits = [];
+  host.hasHits = false;
+  host.searching = false;
+  // :empty guard: the empty box must never render blank — fall back to the
+  // idle copy when a caller passes nothing.
+  host.message = message || searchChromeStrings(searchLocale()).emptyMessage;
 }
 
 function plainExcerpt(excerpt: string): string {
@@ -65,42 +119,37 @@ function plainExcerpt(excerpt: string): string {
 
 function sectionFor(url: string): string {
   const first = stripLocalePrefix(url).split('/').filter(Boolean)[0] ?? '';
+  if (searchLocale() === 'zh') return ZH_SECTIONS[first] ?? (first === '' ? '首页' : first);
   return first ? first.charAt(0).toUpperCase() + first.slice(1) : 'Home';
 }
 
-function renderHits(host: SearchHost, hits: PagefindResultData[]): void {
-  const container = results(host);
-  if (!container) return;
-  const fragment = document.createDocumentFragment();
-  for (const hit of hits) {
-    const link = document.createElement('a');
-    link.className = 'result item';
-    link.href = hit.url;
-    link.addEventListener('click', () => closeSearch(host), { once: true });
-
-    const section = document.createElement('div');
-    section.className = 'item-section';
-    section.textContent = sectionFor(hit.url);
-    const title = document.createElement('div');
-    title.className = 'item-title';
-    title.textContent = hit.meta?.title || hit.url;
-    const text = document.createElement('div');
-    text.className = 'item-text';
-    text.textContent = plainExcerpt(hit.excerpt ?? '');
-
-    link.append(section, title, text);
-    fragment.append(link);
-  }
-  container.replaceChildren(fragment);
+/** Project raw Pagefind data into the declarative hit view-models. */
+function toHit(hit: PagefindResultData): SearchHit {
+  return {
+    key: hit.url,
+    href: hit.url,
+    section: sectionFor(hit.url),
+    title: hit.meta?.title || hit.url,
+    text: plainExcerpt(hit.excerpt ?? ''),
+  };
 }
 
 async function runSearch(host: SearchHost): Promise<void> {
   const state = states.get(host);
   const query = input(host)?.value.trim() ?? '';
   if (!state || query.length < 2) {
-    showMessage(host, 'Type at least 2 characters to search');
+    // Bump the sequence even on this early return: an in-flight request
+    // must not land afterwards and re-fill the results.
+    if (state) state.searchSequence++;
+    showMessage(host, searchChromeStrings(searchLocale()).emptyMessage);
     return;
   }
+  // Loading skeleton: the index loads once, asynchronously. When no results
+  // are on screen, mark the round searching so the view holds a skeleton
+  // instead of stale content; a re-search over visible hits keeps them until
+  // the new round lands (no skeleton flash). The sequence guard keeps a slow
+  // round from overwriting a newer one.
+  if (!host.hasHits) host.searching = true;
   if (!state.pagefind) return;
 
   const sequence = ++state.searchSequence;
@@ -108,13 +157,16 @@ async function runSearch(host: SearchHost): Promise<void> {
     const response = await state.pagefind.search(query);
     const hits = await Promise.all(response.results.slice(0, 10).map((result) => result.data()));
     if (sequence !== state.searchSequence) return;
+    host.searching = false;
     if (hits.length === 0) {
-      showMessage(host, `No results found for “${query}”`);
+      showMessage(host, copy().noResults(query));
       return;
     }
-    renderHits(host, hits);
+    host.hits = hits.map(toHit);
+    host.hasHits = true;
   } catch {
     // Keep the previous result list when an individual Pagefind chunk fails.
+    host.searching = false;
   }
 }
 
@@ -125,12 +177,16 @@ async function loadPagefind(host: SearchHost): Promise<void> {
   try {
     const pagefindUrl = '/pagefind/pagefind.js';
     const module = (await import(/* @vite-ignore */ pagefindUrl)) as PagefindModule;
+    // The index is segmented per language (pagefind-entry.json lists en and
+    // zh separately). Pagefind's init() selects the segment from
+    // document.documentElement.lang — the same source the copy above uses —
+    // so a zh page searches the zh segment with no extra filtering here.
     await module.init?.();
     state.pagefind = module;
     await runSearch(host);
   } catch {
     state.loaded = false;
-    showMessage(host, 'Search index not found — run deno task build to generate it');
+    showMessage(host, copy().indexMissing);
   }
 }
 
@@ -170,7 +226,7 @@ export function closeSearch(host: SearchHost): void {
   if (field) field.value = '';
   const state = states.get(host);
   if (state) state.searchSequence++;
-  showMessage(host, 'Type at least 2 characters to search');
+  showMessage(host, searchChromeStrings(searchLocale()).emptyMessage);
 }
 
 export function closeSearchOnBackdrop(host: SearchHost, event: Event): void {
@@ -178,6 +234,19 @@ export function closeSearchOnBackdrop(host: SearchHost, event: Event): void {
     node instanceof Element && node.classList.contains('panel')
   );
   if (!inPanel) closeSearch(host);
+}
+
+/**
+ * Result-click dismissal, delegated from the results container: the compiled
+ * list Region cannot carry per-item event handlers, so the view binds one
+ * onClick on `.results` and this handler closes the search when the click
+ * lands on a result link (the old per-link once-listener's contract).
+ */
+export function closeSearchFromResults(host: SearchHost, event: Event): void {
+  const onResult = event.composedPath().some((node) =>
+    node instanceof Element && node.classList.contains('result')
+  );
+  if (onResult) closeSearch(host);
 }
 
 export function searchFromInput(host: SearchHost): void {

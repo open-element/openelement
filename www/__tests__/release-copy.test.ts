@@ -16,7 +16,11 @@ const APP_ROOT = new URL('../app/', import.meta.url);
 
 Deno.test('release copy: there is no common complete version', () => {
   assertEquals(COMMON_PUBLISHED_VERSION, null);
-  assertEquals(COMMON_PUBLISHED_NOTE.includes('no single stable version'), true);
+  assertEquals(
+    COMMON_PUBLISHED_NOTE('en').includes('no single stable version'),
+    true,
+  );
+  assertEquals(COMMON_PUBLISHED_NOTE('zh').includes('稳定版本'), true);
   assertEquals(PUBLISHED_LATEST['@openelement/router'], 'v0.41.0-alpha.6');
   assertEquals(PUBLISHED_LATEST['@openelement/element'], 'v0.43.3');
 });

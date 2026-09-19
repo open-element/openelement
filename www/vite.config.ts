@@ -2,131 +2,19 @@ import { openElement } from '@openelement/router/vite';
 import { openPropsTokenSheet, registerOpenUi } from '@openelement/ui';
 import { defineConfig } from 'vite';
 import { SITE_BUDGET } from './site-budget.ts';
+import { siteCSS } from './site-css.ts';
+import { SITE_DEFAULT_LOCALE, SITE_LOCALES } from './site-config.ts';
 import { headerNav, navSections } from './app/data/_generated-nav-data.ts';
 
 // www is an npm-first consumer; local workspace resolution during dev,
 // npm tarballs in production. No resolve.alias needed.
 
 // Make token variables available to document-level elements while shadow trees
-// continue to inherit them from the document root.
-const _rawCSS = [...openPropsTokenSheet.cssRules].map((r) => r.cssText).join('\n');
-const rootCSS = _rawCSS
-  .replace(/:host\s*\{/g, ':root, :host {')
-  .replace(
-    /:host\(\[data-theme=["']dark["']\]\),\s*:host-context\(\[data-theme=["']dark["']\]\)\s*\{/g,
-    'html[data-theme="dark"], :root[data-theme="dark"], :host([data-theme="dark"]), :host-context([data-theme="dark"]) {',
-  )
-  .replace(
-    /:host\(\[data-theme=["']dark["']\]\)\s*\{/g,
-    'html[data-theme="dark"], :root[data-theme="dark"], :host([data-theme="dark"]) {',
-  );
+// continue to inherit them from the document root. The sheet's token block
+// selects `:root, :host` (packages/ui/tools/generate-ui-tokens.ts), so this
+// file only consumes the finished sheet — there is no transform.
+const rootCSS = [...openPropsTokenSheet.cssRules].map((r) => r.cssText).join('\n');
 
-const siteCSS = `
-:root,
-html[data-theme="light"],
-:host([data-theme="light"]),
-:root[data-theme="light"] {
-  --bg-canvas: var(--bg-base);
-  --surface-1: var(--bg-elevated);
-  --surface-2: var(--bg-surface);
-  --surface-3: var(--bg-hover);
-  --surface-code: var(--bg-code);
-  --color-text-primary: var(--text-primary);
-  --color-text-secondary: var(--text-secondary);
-  --color-text-muted: var(--text-muted);
-  --color-brand: var(--brand);
-  --color-brand-hover: var(--brand-hover);
-  --color-brand-light: var(--brand-light);
-  --color-success: var(--success);
-  --color-warning: var(--warning);
-  --color-error: var(--error);
-  --color-info: var(--info);
-  --color-border: var(--border);
-  --color-border-hover: var(--border-hover);
-  --color-border-strong: color-mix(in srgb, var(--border) 68%, var(--text-primary));
-  --edge-highlight: color-mix(in srgb, var(--text-primary) 10%, transparent);
-  --color-edge-highlight: var(--edge-highlight);
-  --color-overlay: var(--overlay);
-  --shadow-elevated: var(--shadow-1);
-  --border-strong: var(--color-border-strong);
-  --nav-bg: var(--bg-base);
-  --nav-height: var(--size-16);
-  --nav-link-color: var(--text-primary);
-  --nav-link-hover: var(--brand-deep);
-  --font-size-button: var(--font-size-0);
-  --font-size-body-sm: var(--font-size-0);
-  --font-size-caption: var(--font-size-00);
-  --font-size-micro: 0.625rem;
-  --font-size-tiny: 0.85rem;
-  --font-size-lede: 1.1rem;
-  --font-size-overline: 0.6875rem;
-  --font-size-article-title: 1.125rem;
-  --font-size-display-sm: 1.75rem;
-  --font-size-display-md: 2.125rem;
-  --font-size-display-lg: 2.625rem;
-  --font-weight-medium: var(--font-weight-5);
-  --font-weight-semibold: var(--font-weight-7);
-  /* Cinematic hero palette: the homepage hero is always dark, independent of
-     the site theme. Defined once here (the alias layer) so components never
-     carry raw hex literals (site theme-token gate). */
-  --hero-ink: #000;
-  --hero-paper: #f4f1ea;
-  --hero-gold: #e3cf9f;
-  --hero-gold-muted: #b9ad93;
-  --hero-gold-line: #d8c49a;
-  /* Site override: real sans for prose. The shared token sheet maps
-     --font-sans to JetBrains Mono (brand choice for the component layer);
-     long-form reading on this site needs a true sans. Mono stays on
-     --font-mono (code, labels, eyebrows, nav) — nothing else changes. */
-  --font-sans: 'Inter Variable', 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
-}
-html[data-theme="dark"],
-:host([data-theme="dark"]),
-:root[data-theme="dark"] {
-  --bg-canvas: var(--bg-base);
-  --surface-1: var(--bg-elevated);
-  --surface-2: var(--bg-surface);
-  --surface-3: var(--bg-hover);
-  --surface-code: var(--bg-code);
-  --color-text-primary: var(--text-primary);
-  --color-text-secondary: var(--text-secondary);
-  --color-text-muted: var(--text-muted);
-  --color-brand: var(--brand);
-  --color-brand-hover: var(--brand-hover);
-  --color-brand-light: var(--brand-light);
-  --color-success: var(--success);
-  --color-warning: var(--warning);
-  --color-error: var(--error);
-  --color-info: var(--info);
-  --color-border: var(--border);
-  --color-border-hover: var(--border-hover);
-  --color-border-strong: color-mix(in srgb, var(--border) 72%, var(--text-primary));
-  --edge-highlight: color-mix(in srgb, var(--text-primary) 14%, transparent);
-  --color-edge-highlight: var(--edge-highlight);
-  --color-overlay: var(--overlay);
-  --border-strong: var(--color-border-strong);
-  --nav-bg: var(--bg-base);
-  --nav-height: var(--size-16);
-}
-body {
-  margin: 0;
-  background:
-    radial-gradient(circle at 50% -12%, color-mix(in srgb, var(--violet-5) 24%, transparent), transparent 42%),
-    linear-gradient(115deg, color-mix(in srgb, var(--violet-1) 38%, transparent), transparent 46%),
-    linear-gradient(color-mix(in srgb, var(--border) 34%, transparent) var(--border-size-1), transparent var(--border-size-1)),
-    linear-gradient(90deg, color-mix(in srgb, var(--border) 30%, transparent) var(--border-size-1), transparent var(--border-size-1)),
-    var(--bg-canvas);
-  background-size: auto, auto, 220px 128px, 220px 128px, auto;
-  color: var(--text-primary);
-  font-family: var(--font-sans);
-  line-height: 1.7;
-}
-::view-transition-old(open-brand-mark),
-::view-transition-new(open-brand-mark) { animation-duration: 320ms; animation-timing-function: var(--motion-standard); }
-::selection {
-  background: var(--brand-subtle);
-  color: var(--text-primary);
-}`;
 const colorTokensStyle =
   `<style>@font-face{font-family:'JetBrains Mono';font-style:normal;font-weight:100 800;font-display:swap;src:url('/assets/fonts/jetbrains-mono-latin-variable.woff2') format('woff2')}@font-face{font-family:'Instrument Serif';font-style:normal;font-weight:400;font-display:swap;src:url('/assets/fonts/instrument-serif-latin-regular.woff2') format('woff2')}@font-face{font-family:'Instrument Serif';font-style:italic;font-weight:400;font-display:swap;src:url('/assets/fonts/instrument-serif-latin-italic.woff2') format('woff2')}@font-face{font-family:'Inter Variable';font-style:normal;font-weight:100 900;font-display:swap;src:url('/assets/fonts/inter-latin-variable.woff2') format('woff2')}${rootCSS}body{font-family:var(--font-sans);-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}${siteCSS}</style>`;
 
@@ -134,9 +22,11 @@ const colorTokensStyle =
 // - The two text fonts (prose Inter, code JetBrains Mono) are preloaded so the
 //   swap resolves before first paint — measured CLS 0.195 → ~0. Serif accents
 //   are intentionally not preloaded (not used above the fold on most pages).
-// - theme-init.js stays an external sync script: the framework deliberately
-//   rejects <script> in headFragments (H-04) and has no inline-script channel
-//   — tracked as a framework gap in #1088.
+// - theme-init.js stays an external sync script: raw head fragments reject
+//   <script> outright (H-04) and the framework ships no raw inline-script
+//   channel. Structured data does not need one: it goes through
+//   `structuredData`, which the framework serializes (with `<` escaped) into
+//   its own application/ld+json element.
 // - The Prism theme CSS is inlined: it was a render-blocking stylesheet on a
 //   third-party origin (cdnjs) — a slow-network FCP stall and a SPOF.
 const fontPreloads = [
@@ -192,7 +82,6 @@ const openElementPlugins = openElement({
     // networks, cost a console error + best-practices points on every page).
     scripts: [
       { src: '/theme-init.js' },
-      { src: '/logo-home.js', defer: true },
       { src: '/assets/vendor/prism/prism.min.js', defer: true },
       { src: '/assets/vendor/prism/prism-javascript.min.js', defer: true },
       { src: '/assets/vendor/prism/prism-typescript.min.js', defer: true },
@@ -211,23 +100,33 @@ const openElementPlugins = openElement({
       // boilerplate og:title/description would duplicate the page's own.
       '<meta property="og:site_name" content="OpenElement">',
       '<meta property="og:type" content="website">',
-      '<meta property="og:image" content="https://openelement.org/assets/og-image.svg">',
+      '<meta property="og:image" content="https://openelement.org/assets/og-image.jpg">',
+      '<meta property="og:image:width" content="1200">',
+      '<meta property="og:image:height" content="630">',
       '<meta name="twitter:card" content="summary_large_image">',
+      '<meta name="twitter:image" content="https://openelement.org/assets/og-image.jpg">',
       '<style>html{visibility:visible!important;}body{background:var(--bg-base);color:var(--text-primary);}</style>',
       fontPreloads,
       '<link rel="icon" type="image/svg+xml" href="/assets/open-favicon.svg" />',
       '<link rel="apple-touch-icon" href="/assets/open-avatar.svg" />',
+      // One feed for the whole site: dispatches are single-language originals
+      // (the blog collection's `lang` field names the original), so /zh/blog
+      // lists the same posts and a per-locale feed would be an empty duplicate.
+      // title must match the feed's channel <title> (tools/lib/site-rss.ts
+      // SITE_FEED_TITLE); the href is site-root-relative like every other
+      // asset fragment here, and resolves the same on locale-prefixed pages.
+      '<link rel="alternate" type="application/rss+xml" title="openElement Blog" href="/blog/rss.xml" />',
       colorTokensStyle,
       prismThemeStyle,
     ],
   },
   // The site's generated data modules (app/data/_generated-*) are untracked
-  // build inputs, regenerated by `deno task --cwd tools/repo
-  // generate:site-content-data` (article collections and blog) and
-  // `generate:api-reference` from www/lib/content.ts + lib/blog.ts.
+  // build inputs, regenerated by `deno task --cwd www generate:content`
+  // (article collections and blog) and `deno task --cwd www
+  // generate:api-reference` from www/lib/content.ts + lib/blog.ts.
   i18n: {
-    locales: ['en', 'zh'],
-    defaultLocale: 'en',
+    locales: [...SITE_LOCALES],
+    defaultLocale: SITE_DEFAULT_LOCALE,
   },
 });
 

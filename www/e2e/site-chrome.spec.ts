@@ -34,8 +34,8 @@ test.describe('Site chrome: docs sidebar', () => {
     await expect(sidebar).toBeVisible();
 
     // Section headings come from the generated navSections tree.
-    await expect(sidebar.getByText('Quick Start', { exact: true })).toBeVisible();
     await expect(sidebar.getByText('Guide', { exact: true })).toBeVisible();
+    await expect(sidebar.getByText('Core', { exact: true })).toBeVisible();
 
     // The current page is marked exactly once, on its own link.
     const current = sidebar.getByRole('link', { name: 'Getting Started' });
@@ -81,20 +81,23 @@ test.describe('Site chrome: docs sidebar', () => {
     await expect(page.getByRole('navigation', { name: 'Documentation navigation' })).toBeHidden();
   });
 
-  test('zh guide pages localize the sidebar landmark and link targets', async ({ page }) => {
+  test('zh guide pages localize the sidebar landmark, labels, and link targets', async ({ page }) => {
     await page.setViewportSize(DESKTOP);
     await page.goto('/zh/guide/getting-started');
     await page.waitForLoadState('networkidle');
 
     const sidebar = page.getByRole('navigation', { name: '文档导航' });
     await expect(sidebar).toBeVisible();
-    const current = sidebar.getByRole('link', { name: 'Getting Started' });
+    // Sidebar labels follow the zh content titles (快速开始 / API 路由).
+    // Integration review: confirm final zh nav copy with the content agent.
+    const current = sidebar.getByRole('link', { name: '快速开始' });
     await expect(current).toHaveAttribute('href', '/zh/guide/getting-started');
     await expect(current).toHaveAttribute('aria-current', 'page');
-    await expect(sidebar.getByRole('link', { name: 'API Routes' })).toHaveAttribute(
+    await expect(sidebar.getByRole('link', { name: 'API 路由' })).toHaveAttribute(
       'href',
       '/zh/guide/api',
     );
+    await expect(sidebar.getByRole('link', { name: 'Getting Started' })).toHaveCount(0);
   });
 
   test('mobile reading layouts expose the sidebar through a native disclosure', async ({ page }) => {
@@ -173,5 +176,127 @@ test.describe('Site chrome: footer', () => {
     for (const column of FOOTER_COLUMNS_EN) {
       await expect(footer.getByRole('navigation', { name: column })).toBeVisible();
     }
+  });
+});
+
+test.describe('Site chrome: skip link and language switcher', () => {
+  // Integration review: the skip link and the header language switcher land
+  // with the parallel open-layout header work; selectors here pin the
+  // contract (href targets), not the final visible copy.
+  for (const route of ['/', '/guide/getting-started', '/zh/guide/getting-started']) {
+    test(`skip link on ${route} targets #main-content`, async ({ page }) => {
+      await page.goto(route);
+      await page.waitForLoadState('networkidle');
+
+      const skip = page.locator('a[href="#main-content"]').first();
+      await expect(skip).toBeAttached();
+      // The href is meaningless without its anchor target.
+      await expect(page.locator('#main-content')).toHaveCount(1);
+    });
+  }
+
+  test('zh pages link to the English twin from the header switcher', async ({ page }) => {
+    await page.setViewportSize(DESKTOP);
+    await page.goto('/zh/guide/getting-started');
+    await page.waitForLoadState('networkidle');
+
+    const banner = page.getByRole('banner');
+    await expect(banner.locator('a[href="/guide/getting-started"]')).toHaveCount(1);
+  });
+
+  test('en pages link to the zh twin from the header switcher', async ({ page }) => {
+    await page.setViewportSize(DESKTOP);
+    await page.goto('/guide/getting-started');
+    await page.waitForLoadState('networkidle');
+
+    const banner = page.getByRole('banner');
+    await expect(banner.locator('a[href="/zh/guide/getting-started"]')).toHaveCount(1);
+  });
+});
+
+test.describe('Site chrome: header repository link', () => {
+  const REPOSITORY = 'https://github.com/open-element/openelement';
+
+  test('the header exposes one labeled repository link beside the theme toggle', async ({ page }) => {
+    await page.setViewportSize(DESKTOP);
+    await page.goto('/guide/getting-started');
+    await page.waitForLoadState('networkidle');
+
+    const banner = page.getByRole('banner');
+    const link = banner.getByRole('link', { name: 'GitHub repository' });
+    await expect(link).toBeVisible();
+    await expect(link).toHaveAttribute('href', REPOSITORY);
+    // External target: new tab plus the rel that strips the opener handle.
+    await expect(link).toHaveAttribute('target', '_blank');
+    await expect(link).toHaveAttribute('rel', /noopener/);
+    // Icon-only control: the accessible name must come from aria-label, and
+    // the mark itself must stay out of the accessibility tree.
+    await expect(link.locator('svg[aria-hidden="true"]')).toHaveCount(1);
+    // The header carries exactly one repository link (the footer has its own).
+    await expect(banner.locator(`a[href="${REPOSITORY}"]`)).toHaveCount(1);
+  });
+
+  test('zh pages localize the repository link label', async ({ page }) => {
+    await page.setViewportSize(DESKTOP);
+    await page.goto('/zh/guide/getting-started');
+    await page.waitForLoadState('networkidle');
+
+    const banner = page.getByRole('banner');
+    await expect(banner.getByRole('link', { name: 'GitHub 仓库（在新标签页打开）' })).toBeVisible();
+  });
+
+  test('mobile viewports keep the repository link in the header cluster', async ({ page }) => {
+    await page.setViewportSize(MOBILE);
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+
+    await expect(
+      page.getByRole('banner').getByRole('link', { name: 'GitHub repository' }),
+    ).toBeVisible();
+  });
+});
+
+test.describe('Site chrome: reading rail scrollspy', () => {
+  test('marks Overview at rest and follows the scroll', async ({ page }) => {
+    await page.setViewportSize(DESKTOP);
+    await page.goto('/guide/getting-started');
+    await page.waitForLoadState('networkidle');
+
+    // open-page-rail renders the same links twice (.desktop-outline and
+    // .mobile-outline) and markCurrent marks both copies, so every
+    // assertion here is scoped to one outline.
+    const rail = page.locator('open-reading-shell[rail] open-page-rail');
+    const desktop = rail.locator('.desktop-outline');
+    await expect(desktop).toBeVisible();
+
+    // At rest the first rail link (#start / Overview) must already be
+    // current. Without the install-time seed nothing was marked until the
+    // observer fired, and #start never enters the -15%/-70% band.
+    const overview = desktop.locator('nav.links a[href="#start"]');
+    await expect(overview).toHaveAttribute('aria-current', 'location');
+    await expect(desktop.locator('[aria-current="location"]')).toHaveCount(1);
+
+    // The observer still drives updates: park the next heading inside the
+    // band (15%-30% of viewport height) and the mark must move exclusively.
+    // DOM-level outline contract: every rail target must resolve through
+    // document.getElementById to the real heading the anchor names.
+    const unresolved = await page.evaluate(() =>
+      [...document.querySelectorAll('open-page-rail .desktop-outline nav.links a[href^="#"]')]
+        .map((a) => a.getAttribute('href')!.slice(1))
+        .filter((id) => document.getElementById(id) === null)
+    );
+    expect(unresolved).toEqual([]);
+
+    const second = desktop.locator('nav.links a[href^="#"]').nth(1);
+    const href = (await second.getAttribute('href'))!;
+    await page.evaluate((selector) => {
+      const el = document.querySelector(selector);
+      if (!el) throw new Error(`missing scrollspy target ${selector}`);
+      const top = el.getBoundingClientRect().top + globalThis.scrollY;
+      globalThis.scrollTo(0, top - globalThis.innerHeight * 0.2);
+    }, href);
+    await expect(second).toHaveAttribute('aria-current', 'location');
+    await expect(overview).not.toHaveAttribute('aria-current', 'location');
+    await expect(desktop.locator('[aria-current="location"]')).toHaveCount(1);
   });
 });

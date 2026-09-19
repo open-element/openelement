@@ -7,11 +7,15 @@
  * Pagefind cannot index Declarative Shadow DOM: `<template shadowrootmode>`
  * content is inert per the HTML spec, and this site's SSG output places
  * page prose inside DSD templates. So the built HTML is staged through a
- * lossy transform before indexing:
- *   1. drop the app shell's own DSD template — header/sidebar/footer chrome
- *      is identical on every page and would otherwise flood the index;
- *   2. unwrap every remaining `<template>` tag so page prose becomes
- *      indexable light-DOM text.
+ * lossy transform before indexing: unwrap every `<template>` tag so page
+ * prose becomes indexable light-DOM text.
+ *
+ * Chrome exclusion is NOT done by string surgery here: the app shell renders
+ * light-DOM (there is no shell DSD template to drop), so repeated chrome —
+ * header/sidebar/footer, skip link, search overlay, the hidden 404 blocks —
+ * carries `data-pagefind-ignore` in the source components, and article/blog
+ * prose is scoped with `data-pagefind-body` (which also makes pagefind take
+ * the page title from the real h1 instead of the hidden not-found h1).
  * The transform only touches the throwaway staging copy; www/dist itself
  * is untouched apart from the emitted /pagefind directory.
  *
@@ -27,24 +31,7 @@ const DIST_DIR = join(WWW_ROOT, 'dist');
 const STAGE_DIR = join(WWW_ROOT, '.openElement', 'pagefind-stage');
 const OUTPUT_DIR = join(DIST_DIR, 'pagefind');
 
-/** Remove the first `<template>` block following `<hostTag` (depth-aware). */
-function removeShellTemplate(html: string, hostTag: string): string {
-  const hostIdx = html.indexOf(`<${hostTag}`);
-  if (hostIdx === -1) return html;
-  const openIdx = html.indexOf('<template', hostIdx);
-  if (openIdx === -1) return html;
-  const tagRe = /<template|<\/template>/g;
-  tagRe.lastIndex = html.indexOf('>', openIdx) + 1;
-  let depth = 1;
-  let match;
-  while ((match = tagRe.exec(html)) !== null) {
-    depth += match[0] === '<template' ? 1 : -1;
-    if (depth === 0) return html.slice(0, openIdx) + html.slice(tagRe.lastIndex);
-  }
-  return html;
-}
-
-/** Unwrap every remaining `<template>` so DSD prose becomes indexable text. */
+/** Unwrap every `<template>` so DSD prose becomes indexable text. */
 function unwrapTemplates(html: string): string {
   return html.replace(/<\/?template[^>]*>/g, '');
 }
@@ -54,7 +41,7 @@ async function stageDist(): Promise<number> {
   let count = 0;
   for await (const entry of walk(DIST_DIR, { exts: ['.html'], includeDirs: false })) {
     const html = await Deno.readTextFile(entry.path);
-    const staged = unwrapTemplates(removeShellTemplate(html, 'open-layout'));
+    const staged = unwrapTemplates(html);
     const outPath = join(STAGE_DIR, relative(DIST_DIR, entry.path));
     await Deno.mkdir(join(outPath, '..'), { recursive: true });
     await Deno.writeTextFile(outPath, staged);

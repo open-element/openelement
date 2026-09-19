@@ -34,6 +34,11 @@ export const pageContributingStyles = [compiledStyle(`
     letter-spacing: 0.29em;
     text-transform: uppercase;
   }
+  /* Subject-side :lang — @scope'd sheets cannot match the html[lang] ancestor. */
+  .eyebrow:lang(zh) {
+    text-transform: none;
+    letter-spacing: 0.08em;
+  }
 
   .eyebrow::before {
     content: "";
@@ -145,6 +150,10 @@ export const pageContributingStyles = [compiledStyle(`
     border: 0.5px solid var(--border);
     border-radius: var(--radius-1);
     padding: 0.125rem 0.375rem;
+  }
+
+  .release .inline-code:empty {
+    display: none;
   }
 
   .checklist {

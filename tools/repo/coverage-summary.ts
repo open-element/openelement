@@ -33,9 +33,15 @@ export function isPackageSource(path: string): boolean {
   return /\/packages\/[^/]+\/src\//.test(path);
 }
 
-/** Shared release tooling library under tools/lib. */
+/** Shared release tooling library under the repository-root tools/lib. */
 export function isToolsLibSource(path: string): boolean {
-  return /\/tools\/lib\//.test(path);
+  return /\/tools\/lib\//.test(path) && !/\/www\/tools\/lib\//.test(path);
+}
+
+/** Site-owned shared libraries under www/tools/lib (the testable layer;
+ * CLI entry scripts are exercised by gate runs, not unit coverage). */
+export function isWwwToolsSource(path: string): boolean {
+  return /\/www\/tools\/lib\//.test(path);
 }
 
 export function parseLcov(

@@ -1,5 +1,5 @@
 /** @jsxImportSource @openelement/element */
-import { element, OpenElement, property } from '@openelement/element';
+import { computed, element, OpenElement, property, trustedHtml } from '@openelement/element';
 import '@openelement/ui/open-code-block';
 import '../islands/open-cinematic-scroll.tsx';
 import '../islands/open-dragon-live-gaze.tsx';
@@ -27,6 +27,12 @@ interface ReferenceItem {
   href: string;
   copy: string;
 }
+interface DiagramSet {
+  element: string;
+  dsd: string;
+  islands: string;
+  output: string;
+}
 
 @element('index-index')
 export default class PageHome extends OpenElement {
@@ -34,6 +40,36 @@ export default class PageHome extends OpenElement {
 
   @property({ reflect: false, attribute: false })
   lede = '';
+  @property({ reflect: false, attribute: false })
+  eyebrow = '';
+  @property({ reflect: false, attribute: false })
+  registryPrefix = '';
+  @property({ reflect: false, attribute: false })
+  packagesValue = '';
+  @property({ reflect: false, attribute: false })
+  enginesValue = '';
+  @property({ reflect: false, attribute: false })
+  depsValue = '';
+  @property({ reflect: false, attribute: false })
+  outputValue = '';
+  @property({ reflect: false, attribute: false })
+  badgeRuntime = '';
+  @property({ reflect: false, attribute: false })
+  badgeAuthoring = '';
+  @property({ reflect: false, attribute: false })
+  sceneElementIndex = '';
+  @property({ reflect: false, attribute: false })
+  sceneDsdIndex = '';
+  @property({ reflect: false, attribute: false })
+  sceneIslandsIndex = '';
+  @property({ reflect: false, attribute: false })
+  sceneOutputIndex = '';
+  @property({ reflect: false, attribute: false })
+  sceneBeginIndex = '';
+  @property({ reflect: false, attribute: false })
+  floodServer = '';
+  @property({ reflect: false, attribute: false })
+  floodBrowser = '';
   @property({ reflect: false, attribute: false })
   startBuilding = '';
   @property({ reflect: false, attribute: false })
@@ -69,6 +105,32 @@ export default class PageHome extends OpenElement {
   @property({ reflect: false, attribute: false })
   marqueeText = '';
   @property({ reflect: false, attribute: false })
+  heroMono = '';
+  @property({ reflect: false, attribute: false })
+  heroSerif = '';
+  @property({ reflect: false, attribute: false })
+  sceneElementLead = '';
+  @property({ reflect: false, attribute: false })
+  sceneElementAccent = '';
+  @property({ reflect: false, attribute: false })
+  sceneElementCopy = '';
+  @property({ reflect: false, attribute: false })
+  sceneDsdLead = '';
+  @property({ reflect: false, attribute: false })
+  sceneDsdAccent = '';
+  @property({ reflect: false, attribute: false })
+  sceneDsdCopy = '';
+  @property({ reflect: false, attribute: false })
+  sceneIslandsLead = '';
+  @property({ reflect: false, attribute: false })
+  sceneIslandsAccent = '';
+  @property({ reflect: false, attribute: false })
+  sceneIslandsCopy = '';
+  @property({ reflect: false, attribute: false })
+  sceneOutputLead = '';
+  @property({ reflect: false, attribute: false })
+  sceneOutputAccent = '';
+  @property({ reflect: false, attribute: false })
   startBuildingHref = '';
   @property({ reflect: false, attribute: false })
   getStartedHref = '';
@@ -80,21 +142,29 @@ export default class PageHome extends OpenElement {
   outputs: OutputItem[] = [];
   @property({ reflect: false, attribute: false })
   references: ReferenceItem[] = [];
+  @property({ reflect: false, attribute: false })
+  diagrams: DiagramSet = { element: '', dsd: '', islands: '', output: '' };
+  @property({ type: Object, reflect: false, attribute: false })
+  diagramElement = computed(() => trustedHtml(this.diagrams.element));
+  @property({ type: Object, reflect: false, attribute: false })
+  diagramDsd = computed(() => trustedHtml(this.diagrams.dsd));
+  @property({ type: Object, reflect: false, attribute: false })
+  diagramIslands = computed(() => trustedHtml(this.diagrams.islands));
+  @property({ type: Object, reflect: false, attribute: false })
+  diagramOutput = computed(() => trustedHtml(this.diagrams.output));
 
   render() {
     return (
-      <main class='home'>
+      <div class='home' data-pagefind-body>
         <open-cinematic-scroll></open-cinematic-scroll>
         <open-hero-polish></open-hero-polish>
         <section class='hero'>
           <div class='hero-main'>
-            <span class='hero-stamp'>EST. 2026 / SPEC-042</span>
-            <span class='scroll-cue' aria-hidden='true'>Scroll</span>
             <div class='hero-copy'>
-              <p class='eyebrow'>OpenElement — Web Standards Lab</p>
+              <p class='eyebrow'>{this.eyebrow}</p>
               <h1>
-                <span class='mono-line'>THE WEB,</span>
-                <span class='serif-line'>composed.</span>
+                <span class='mono-line'>{this.heroMono}</span>{' '}
+                <span class='serif-line'>{this.heroSerif}</span>
               </h1>
             </div>
             <div class='hero-stage'>
@@ -106,31 +176,32 @@ export default class PageHome extends OpenElement {
               </p>
               <div class='actions'>
                 <a class='action primary' href={this.startBuildingHref}>{this.startBuilding}</a>
-                <a class='action' href='#element'>{this.watchUnfold}</a>
+                <a class='action link' href='#element'>{this.watchUnfold}</a>
               </div>
+              <span class='scroll-cue' aria-hidden='true'>Scroll</span>
             </div>
           </div>
           <div class='spec-strip'>
             <div class='spec-cell'>
               <small>{this.specVersion}</small>
-              <strong>public registry — {this.registryNote}</strong>
+              <strong>{this.registryPrefix}{this.registryNote}</strong>
               <small>{this.commonVersionNote}</small>
             </div>
             <div class='spec-cell'>
               <small>{this.specGraph}</small>
-              <strong>four packages</strong>
+              <strong>{this.packagesValue}</strong>
             </div>
             <div class='spec-cell'>
               <small>{this.specEngines}</small>
-              <strong>3 in CI</strong>
+              <strong>{this.enginesValue}</strong>
             </div>
             <div class='spec-cell'>
               <small>{this.specDeps}</small>
-              <strong class='accent'>zero</strong>
+              <strong class='accent'>{this.depsValue}</strong>
             </div>
             <div class='spec-cell'>
               <small>{this.specOutput}</small>
-              <strong>DSD default</strong>
+              <strong>{this.outputValue}</strong>
             </div>
           </div>
           <div class='marquee' aria-hidden='true'>
@@ -141,19 +212,20 @@ export default class PageHome extends OpenElement {
         <section class='scene scene-split' id='element'>
           <span class='scene-outlined' aria-hidden='true'>01</span>
           <div class='scene-copy'>
-            <p class='scene-index'>§1 — Element</p>
+            <p class='scene-index'>{this.sceneElementIndex}</p>
+            <figure class='scene-figure' aria-hidden='true'>
+              <div innerHTML={this.diagramElement} trustedHtml />
+            </figure>
             <h2>
-              One durable
-              <span class='accent'>contract.</span>
+              {this.sceneElementLead}
+              <span class='accent'>{this.sceneElementAccent}</span>
             </h2>
             <p>
-              Custom Elements are the application component contract — not a renderer integration,
-              not a leaf-widget format. Write the element once; it renders on the server and
-              upgrades in the browser.
+              {this.sceneElementCopy}
             </p>
             <div class='badges'>
-              <span class='badge'>ZERO RUNTIME</span>
-              <span class='badge'>JSX + BASIC</span>
+              <span class='badge'>{this.badgeRuntime}</span>
+              <span class='badge'>{this.badgeAuthoring}</span>
             </div>
           </div>
           <div class='scene-art'>
@@ -179,20 +251,22 @@ export class OpenCounter extends OpenElement {
         </section>
 
         <section class='scene flood'>
-          <p class='scene-index'>§2 — Declarative Shadow DOM</p>
+          <p class='scene-index'>{this.sceneDsdIndex}</p>
+          <figure class='scene-figure' aria-hidden='true'>
+            <div innerHTML={this.diagramDsd} trustedHtml />
+          </figure>
           <h2>
-            The server writes HTML.
-            <span class='accent'>The browser upgrades it.</span>
+            {this.sceneDsdLead}
+            <span class='accent'>{this.sceneDsdAccent}</span>
           </h2>
           <div class='scene-copy'>
             <p>
-              DSD is the default server output. No client re-render, no double payload — the markup
-              is the application.
+              {this.sceneDsdCopy}
             </p>
           </div>
           <div class='flood-panels'>
             <div class='flood-panel'>
-              <small>Server · text/html</small>
+              <small>{this.floodServer}</small>
               <code>
                 {`<open-counter count="0">
   <template shadowrootmode="open">
@@ -202,7 +276,7 @@ export class OpenCounter extends OpenElement {
             </div>
             <span class='flood-arrow' aria-hidden='true'>⟶</span>
             <div class='flood-panel solid'>
-              <small>Browser · upgrades in place</small>
+              <small>{this.floodBrowser}</small>
               <span class='shadow-outline'>#shadow-root (open)</span>
               <code>
                 {`└─ <button> → signal bound
@@ -213,15 +287,17 @@ export class OpenCounter extends OpenElement {
         </section>
 
         <section class='scene'>
-          <p class='scene-index'>§3 — Islands</p>
+          <p class='scene-index'>{this.sceneIslandsIndex}</p>
+          <figure class='scene-figure' aria-hidden='true'>
+            <div innerHTML={this.diagramIslands} trustedHtml />
+          </figure>
           <h2>
-            Upgrade
-            <span class='accent'>selectively.</span>
+            {this.sceneIslandsLead}
+            <span class='accent'>{this.sceneIslandsAccent}</span>
           </h2>
           <div class='scene-copy'>
             <p>
-              Interactive regions hydrate on your schedule. The rest of the page never ships a byte
-              of JavaScript.
+              {this.sceneIslandsCopy}
             </p>
           </div>
           <div class='strategies'>
@@ -240,10 +316,13 @@ export class OpenCounter extends OpenElement {
         </section>
 
         <section class='scene'>
-          <p class='scene-index'>§4 — Output</p>
+          <p class='scene-index'>{this.sceneOutputIndex}</p>
+          <figure class='scene-figure' aria-hidden='true'>
+            <div innerHTML={this.diagramOutput} trustedHtml />
+          </figure>
           <h2>
-            Static first.
-            <span class='accent'>Deployable anywhere.</span>
+            {this.sceneOutputLead}
+            <span class='accent'>{this.sceneOutputAccent}</span>
           </h2>
           <div class='output-rows'>
             {this.outputs.map((output) => (
@@ -257,7 +336,7 @@ export class OpenCounter extends OpenElement {
         </section>
 
         <section class='scene begin'>
-          <p class='scene-index'>§5 — Begin</p>
+          <p class='scene-index'>{this.sceneBeginIndex}</p>
           <h2>{this.begin}</h2>
           <div class='command'>
             <code>$</code>
@@ -291,7 +370,7 @@ export class OpenCounter extends OpenElement {
             ))}
           </div>
         </section>
-      </main>
+      </div>
     );
   }
 }

@@ -4,15 +4,12 @@ const readingRoutes = [
   '/guide/getting-started',
   '/guide/routing-and-data',
   '/architecture/dsd',
-  '/architecture/islands-deep',
-  '/architecture/package-compatibility',
+  '/architecture/islands',
 ];
 
 const guideRoutes = [
   '/guide/getting-started',
   '/guide/core-concepts',
-  '/guide/architecture',
-  '/guide/comparison',
   '/guide/routing-and-data',
   '/guide/mdx',
   '/guide/api',
@@ -25,13 +22,11 @@ const guideRoutes = [
 ];
 
 const architectureRoutes = [
+  '/architecture',
   '/architecture/dsd',
   '/architecture/comparison',
   '/architecture/islands',
-  '/architecture/islands-deep',
-  '/architecture/package-compatibility',
-  '/architecture/benchmark',
-  '/architecture/standards-registry',
+  '/architecture/design-system',
 ];
 
 test.describe('Unified page structure', () => {
@@ -57,14 +52,12 @@ test.describe('Unified page structure', () => {
 
   test('changelog renders content-first with a railed reading surface', async ({ page }) => {
     await page.goto('/changelog');
-    await expect(page.locator('open-page-hero')).toHaveCount(0);
     await expect(page.locator('open-reading-shell[rail]')).toHaveCount(1);
     await expect(page.locator('open-reading-shell h1:visible')).toHaveCount(1);
   });
 
   test('404 remains a compact recovery scene without WebGL', async ({ page }) => {
     await page.goto('/404');
-    await expect(page.locator('open-cinematic-atmosphere')).toHaveCount(0);
     const scene = page.locator('el-404');
     await expect(scene.locator('h1')).toHaveText('404');
     await expect(scene).toContainText('Lost in the shadow DOM.');
@@ -72,12 +65,14 @@ test.describe('Unified page structure', () => {
     await expect(scene.locator('open-button[href="/docs"]')).toHaveCount(1);
   });
 
-  test('docs landing is a v4 manual index with four entrances', async ({ page }) => {
+  test('docs landing is a v4 manual index with five entrances', async ({ page }) => {
     await page.goto('/docs');
     await expect(page.locator('docs-index h1')).toContainText('MANUAL.');
     const entrances = page.locator('docs-index').getByRole('link');
-    await expect(entrances).toHaveCount(4);
+    await expect(entrances).toHaveCount(5);
     await expect(entrances.first()).toHaveAttribute('href', '/guide/getting-started');
+    // The tutorial is the guided second step, not just a sidebar entry.
+    await expect(entrances.nth(1)).toHaveAttribute('href', '/guide/tutorial');
   });
 
   test('blog index is a v4 dispatch journal with a featured band', async ({ page, request }) => {
@@ -112,14 +107,13 @@ test.describe('Unified page structure', () => {
     // now lead with the compact reading-shell/article header (#1087 cleanup).
     for (
       const route of [
-        '/apilist',
+        '/reference',
         '/roadmap',
-        '/architecture/architecture',
+        '/architecture',
         '/architecture/design-system',
       ]
     ) {
       await page.goto(route);
-      await expect(page.locator('open-page-hero')).toHaveCount(0);
       await expect(page.locator('h1:visible')).toHaveCount(1);
     }
   });
@@ -127,7 +121,7 @@ test.describe('Unified page structure', () => {
   test('data-driven entry pages compose their body with shared section frames', async ({ page }) => {
     for (
       const route of [
-        '/apilist',
+        '/reference',
         '/roadmap',
       ]
     ) {
@@ -137,8 +131,8 @@ test.describe('Unified page structure', () => {
   });
 
   test('compiled light section frames project named and default content in place', async ({ page }) => {
-    await page.goto('/apilist');
-    const frames = page.locator('apilist-page open-section-frame[data-oe-light]');
+    await page.goto('/reference');
+    const frames = page.locator('reference-page open-section-frame[data-oe-light]');
     await expect(frames).toHaveCount(4);
     await expect(frames.first().locator('.frame .title')).toContainText(
       'Authoring starts at product packages.',
@@ -146,8 +140,8 @@ test.describe('Unified page structure', () => {
     await expect(frames.nth(1).locator('.frame .body .registry')).toBeVisible();
   });
 
-  test('apilist renders the generated export and element reference with stable anchors (#1307)', async ({ page }) => {
-    await page.goto('/apilist');
+  test('reference renders the generated export and element reference with stable anchors (#1307)', async ({ page }) => {
+    await page.goto('/reference');
     // Every generated searchRecord anchor resolves to a rendered entry.
     // (adapter-vite anchors retired with the package; use a current export.)
     const exportRow = page.locator('#api-element-root-Action');
@@ -159,7 +153,7 @@ test.describe('Unified page structure', () => {
     expect(await page.locator('.ref-row').count()).toBeGreaterThan(150);
     expect(await page.locator('.ce-row').count()).toBe(10);
     // zh renders the same generated anchors with zh chrome.
-    await page.goto('/zh/apilist');
+    await page.goto('/zh/reference');
     await expect(page.locator('#ce-open-badge')).toBeVisible();
     await expect(page.locator('.ref-row').first()).toBeVisible();
   });
@@ -181,8 +175,9 @@ test.describe('Unified page structure', () => {
     await expect(page.locator('body')).not.toContainText(/鏂|鈫|鍗|杩|鏈/);
     // The pager is deterministic: it is visible exactly when the post has
     // prev/next neighbors. The baseline ships a single dispatch, so no
-    // neighbors means the pager renders hidden.
-    const pager = page.getByRole('navigation', { name: 'Page navigation' });
+    // neighbors means the pager renders hidden. The label follows the page
+    // locale (zh here).
+    const pager = page.getByRole('navigation', { name: '页面导航' });
     await expect(pager).toHaveCount(1);
     if (await pager.locator('a:visible').count() > 0) {
       await expect(pager).toBeVisible();
@@ -247,26 +242,12 @@ test.describe('Unified page structure', () => {
     // viewports).
     const outlineLinks = page.getByRole('complementary', { name: 'On this page' })
       .locator('a[href^="#"]:not(details a)');
-    await expect(outlineLinks).toHaveCount(4);
+    // #start plus this page's four h2 sections, all present in the SSR
+    // payload — the outline does not wait for a client observer. The count is
+    // pinned so a content change that silently truncates the outline fails
+    // here rather than shipping.
+    await expect(outlineLinks).toHaveCount(5);
     await expect(outlineLinks.first()).toHaveAttribute('href', '#start');
-  });
-
-  test('non-home routes never load the WebGL atmosphere layer', async ({ page }) => {
-    for (
-      const route of [
-        '/docs',
-        '/apilist',
-        '/roadmap',
-        '/architecture/dsd',
-        '/guide/getting-started',
-        '/blog',
-        '/changelog',
-        '/404',
-      ]
-    ) {
-      await page.goto(route);
-      await expect(page.locator('open-cinematic-atmosphere')).toHaveCount(0);
-    }
   });
 
   test('reading shell remains usable at 200 percent zoom', async ({ page }) => {

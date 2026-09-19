@@ -103,11 +103,11 @@ export default class PageContributing extends OpenElement {
 
   render() {
     return (
-      <main class='contribute'>
+      <div class='contribute' data-pagefind-body>
         <header class='masthead'>
           <p class='eyebrow'>{this.eyebrow}</p>
           <h1>
-            <span class='mono-line'>{this.monoLine}</span>
+            <span class='mono-line'>{this.monoLine}</span>{' '}
             <span class='serif-line'>{this.serifLine}</span>
           </h1>
           <p class='lede'>{this.lede}</p>
@@ -194,7 +194,7 @@ deno task dev`}</code></pre>
             {this.roadmapLabel}
           </open-button>
         </div>
-      </main>
+      </div>
     );
   }
 }

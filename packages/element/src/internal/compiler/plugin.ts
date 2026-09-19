@@ -89,22 +89,45 @@ export function stripInlineSourceMapComment(code: string): string {
  * to project-relative POSIX paths so Part Program `metadata.sourceFile` and
  * `sourceMap.file` never embed the build machine's path. Module resolution,
  * diagnostics, and HMR keys keep using the caller's own id.
+ *
+ * Anchors are explicit, never guessed from path substrings (a checkout living
+ * under e.g. `/srv/www/` must not fool the cut): the Vite project root first,
+ * then the workspace root when the caller knows it (a module outside the
+ * project root is typically a linked workspace package). Callers that hand
+ * the compiler a path outside every known root (synthetic ids, non-Deno
+ * projects without a Vite root) get the id back unchanged — there is no
+ * correct relative form to invent, and the library boundary must not reject
+ * paths it cannot anchor. This module stays runtime-neutral: resolving a
+ * workspace root from disk is the caller's job.
  */
-export function stableModuleId(file: string, root: string | undefined): string {
+export function stableModuleId(
+  file: string,
+  root: string | undefined,
+  workspaceRoot?: string,
+): string {
   const clean = file.split('?', 1)[0];
   if (!clean.startsWith('/')) return clean;
-  if (root) {
-    const prefix = root.endsWith('/') ? root : `${root}/`;
+  for (const base of [root, workspaceRoot]) {
+    if (!base) continue;
+    const prefix = base.endsWith('/') ? base : `${base}/`;
     if (clean.startsWith(prefix)) return clean.slice(prefix.length);
   }
-  // No root (or outside it): drop the machine prefix by anchoring on the
-  // nearest known workspace segment.
-  const match = /\/(?:packages|apps|tests)\//u.exec(clean);
-  return match ? clean.slice(match.index + 1) : clean;
+  return clean;
 }
 
-export function compiledElementPlugin(): Plugin {
+export interface CompiledElementPluginOptions {
+  /**
+   * Workspace root used as the second identity anchor: Vite ids outside the
+   * project root are typically linked workspace packages, and anchoring them
+   * on the workspace keeps machine paths out of emitted source maps. Callers
+   * that do not know a workspace root omit it and get ids passed through.
+   */
+  workspaceRoot?: string;
+}
+
+export function compiledElementPlugin(options: CompiledElementPluginOptions = {}): Plugin {
   let viteRoot: string | undefined;
+  const workspaceRoot = options.workspaceRoot;
   return {
     name: 'open:compiled-element',
     configResolved(config) {
@@ -118,7 +141,8 @@ export function compiledElementPlugin(): Plugin {
 
     transform(code, id) {
       try {
-        return compileElementModule(code, stableModuleId(id, viteRoot))?.code ?? null;
+        return compileElementModule(code, stableModuleId(id, viteRoot, workspaceRoot))?.code ??
+          null;
       } catch (error) {
         if (error instanceof CompiledElementError) {
           this.error(error.message);

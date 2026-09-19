@@ -85,6 +85,44 @@ export const page404Styles = [compiledStyle(`
     margin-block-start: var(--size-3);
   }
 
+  /* Search hint: the header search listens globally and hydrates on this
+     page, so the hint plus the curated links are the honest controls — a
+     dedicated search island would tax every page's chunks (see page-404). */
+  .search-hint {
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    font-size: var(--font-size-00);
+  }
+
+  .popular {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    align-items: baseline;
+    gap: var(--size-2) var(--size-4);
+    margin-block-start: var(--size-2);
+  }
+
+  .popular-label {
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    font-size: var(--font-size-00);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+
+  .popular a {
+    color: var(--text-secondary);
+    font-family: var(--font-mono);
+    font-size: var(--font-size-0);
+    text-decoration: none;
+  }
+
+  .popular a:hover {
+    color: var(--brand);
+    text-decoration: underline;
+  }
+
   .marquee {
     overflow: hidden;
     white-space: nowrap;

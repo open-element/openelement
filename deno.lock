@@ -29,6 +29,7 @@
     "npm:lit@3.3.3": "3.3.3",
     "npm:marked@15": "15.0.12",
     "npm:mime@^4.1.0": "4.1.0",
+    "npm:open-props@1.7.23": "1.7.23",
     "npm:pagefind@^1.4.0": "1.5.2",
     "npm:pathe@^2.0.3": "2.0.3",
     "npm:typescript@6.0.3": "6.0.3",
@@ -885,6 +886,9 @@
         "formdata-polyfill"
       ]
     },
+    "open-props@1.7.23": {
+      "integrity": "sha512-+xyrJmxV9QUBFbSwPROYhOg/FLXry+uuPr4R+B5EaE4556Oc18/8ZC/fL5A+/lbRSwNvA0Alh+C0KpyFWLmLZg=="
+    },
     "pagefind@1.5.2": {
       "integrity": "sha512-XTUaK0hXMCu2jszWE584JGQT7y284TmMV9l/HX3rnG5uo3rHI/uHU56XTyyyPFjeWEBxECbAi0CaFDJOONtG0Q==",
       "optionalDependencies": [
@@ -1063,6 +1067,7 @@
       "npm:hono@^4.12.0",
       "npm:lit@3.3.3",
       "npm:marked@15",
+      "npm:open-props@1.7.23",
       "npm:pagefind@^1.4.0",
       "npm:typescript@6.0.3",
       "npm:valibot@^1.1.0",

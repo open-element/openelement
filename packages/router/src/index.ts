@@ -17,6 +17,7 @@ export type {
   ActionOutcome,
   IslandConfig,
   IslandDeliveryStrategy,
+  JsonValue,
   OpenElementPageDescriptor,
   PageComponentConstructor,
   PageErrorProjector,
@@ -24,6 +25,7 @@ export type {
   PageHeadResolver,
   PagePropsContext,
   PagePropsProjector,
+  StructuredDataEntry,
 } from './authoring.ts';
 
 // Re-export route data types from protocol for convenience
@@ -36,10 +38,6 @@ export type {
   ProblemDetails,
   ServerRouteContext,
   ServerRouteMetadata,
-  SpaAction,
-  SpaActionContext,
-  SpaLoader,
-  SpaLoaderContext,
 } from '@openelement/element';
 export { ACTION_FETCH_HEADER, PROBLEM_JSON_MEDIA_TYPE } from '@openelement/element/authoring';
 

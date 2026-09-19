@@ -153,10 +153,19 @@
       "path": "og-image.svg",
       "kind": "first-party",
       "name": "OpenElement",
-      "role": "Open Graph social card used in site head metadata",
+      "role": "Open Graph social card source vector",
       "source": "OpenElement project brand assets (repository history)",
       "license": "MIT",
-      "sha256": "92f181c3092dcc375b2fb815c541f0122da5bf1e37f6ae85ea00f0e36f016bf6"
+      "sha256": "a93a3fb5eafe387a5eedb1399bbfe3b8b5242728fbd0a936bd4b89ba6b326a2c"
+    },
+    {
+      "path": "og-image.jpg",
+      "kind": "first-party",
+      "name": "OpenElement",
+      "role": "Open Graph social card raster (1200x630), rendered from og-image.svg",
+      "source": "OpenElement project brand assets (repository history)",
+      "license": "MIT",
+      "sha256": "609b615bb7102b217ec2d581f4d14a2bd72768f1783ff4d770738f9710d346c3"
     },
     {
       "path": "open-avatar.svg",

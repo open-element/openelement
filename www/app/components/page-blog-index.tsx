@@ -43,7 +43,7 @@ export default class BlogIndexPage extends OpenElement {
 
   render() {
     return (
-      <main class='journal'>
+      <div class='journal' data-pagefind-body>
         <header class='masthead'>
           <p class='eyebrow'>{this.mastheadEyebrow}</p>
           <h1>{this.mastheadTitle}</h1>
@@ -76,7 +76,7 @@ export default class BlogIndexPage extends OpenElement {
             </a>
           ))}
         </section>
-      </main>
+      </div>
     );
   }
 }
