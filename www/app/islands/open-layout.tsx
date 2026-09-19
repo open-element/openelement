@@ -3,6 +3,7 @@
 import { defineIslandConfig } from '@openelement/router';
 import { computed, element, OpenElement, property } from '@openelement/element';
 import '@openelement/ui/open-theme-toggle';
+import { SITE_DEFAULT_LOCALE } from '../../site-config.ts';
 import { compiledStyle } from '../site-ui/compiled-style.ts';
 import {
   buildSidebarRows,
@@ -552,9 +553,6 @@ export default class OpenLayout extends OpenElement {
   @property({ reflect: false })
   locales: string[] = ['en'];
 
-  @property({ reflect: false })
-  defaultLocale = 'en';
-
   @property({ reflect: true })
   home = false;
 
@@ -604,7 +602,7 @@ export default class OpenLayout extends OpenElement {
   // their static ancestor, so dynamic routes never emit a literal param href.
   @property({ reflect: false, attribute: false })
   switchLocaleHref = computed(() =>
-    localeSwitchPath(this.currentPath || '/', this.locale, this.locales, this.defaultLocale)
+    localeSwitchPath(this.currentPath || '/', this.locale, this.locales, SITE_DEFAULT_LOCALE)
   );
 
   @property({ reflect: false, attribute: false })
