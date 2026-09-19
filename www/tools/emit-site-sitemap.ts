@@ -12,6 +12,7 @@ import { loadCollectionData } from '../lib/content.ts';
 import { blogCollection, prepareBlogPosts } from '../lib/blog.ts';
 import { scanSiteRoutes } from './lib/site-route-scan.ts';
 import { enumeratePublicRoutes, renderRobotsTxt, renderSitemapXml } from './lib/site-sitemap.ts';
+import { articleLastmodByRoute } from './lib/site-lastmod.ts';
 
 export const SITE_DIST = 'www/dist';
 const SITE_ROUTES = 'www/app/routes';
@@ -38,10 +39,13 @@ export async function generateSiteSitemap(
     for (const failure of failures) console.error(`- ${failure}`);
     Deno.exit(1);
   }
-  const today = new Date().toISOString().split('T')[0];
+  // Real source dates, not the build clock: routes without a known content
+  // date omit <lastmod> entirely, and the artifact stays byte-stable across
+  // UTC days (matching the RSS feed's deliberate no-build-date policy).
+  const lastmod = await articleLastmodByRoute(publicRoutes);
   const sitemapPath = join(dist, 'sitemap.xml');
   const robotsPath = join(dist, 'robots.txt');
-  await Deno.writeTextFile(sitemapPath, renderSitemapXml(publicRoutes, { today }));
+  await Deno.writeTextFile(sitemapPath, renderSitemapXml(publicRoutes, { lastmod }));
   await Deno.writeTextFile(robotsPath, renderRobotsTxt());
   return [sitemapPath, robotsPath];
 }

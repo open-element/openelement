@@ -14,8 +14,11 @@
  *   - every public route expands to one URL per site locale: the default
  *     locale keeps the canonical unprefixed path, other locales prefix.
  *
- * lastmod semantics are unchanged from the previous generator: the build
- * date for every URL. Pagefind consumes dist independently of this file.
+ * lastmod carries the source date of the page's content when one is known
+ * (the committed content-dates manifest), and is omitted otherwise — a
+ * build-date lastmod would claim every page changed on every deploy and
+ * would make the artifact differ across UTC days, defeating byte
+ * reproducibility. Pagefind consumes dist independently of this file.
  *
  * Pure functions only; IO lives in ../emit-site-sitemap.ts.
  */
@@ -24,7 +27,8 @@ import { SITE_ORIGIN } from '../../app/site-ui/head.ts';
 
 export interface SitemapUrlEntry {
   loc: string;
-  lastmod: string;
+  /** ISO date of the page's source content, when known. */
+  lastmod?: string;
   changefreq: string;
   priority: number;
 }
@@ -133,19 +137,18 @@ function escapeXml(text: string): string {
 /** Render sitemap.xml from enumerated public routes (deterministic order). */
 export function renderSitemapXml(
   routes: readonly string[],
-  options: { today: string; hostname?: string },
+  options: { lastmod?: ReadonlyMap<string, string>; hostname?: string } = {},
 ): string {
   const hostname = (options.hostname ?? SITE_ORIGIN).replace(/\/$/, '');
   const urls: SitemapUrlEntry[] = routes.map((path) => ({
     loc: `${hostname}${path}`,
-    lastmod: options.today,
+    lastmod: options.lastmod?.get(path),
     changefreq: 'weekly',
     priority: path === '/' ? 1.0 : 0.7,
   }));
   const urlsXml = urls.map((url) =>
-    `  <url>\n    <loc>${escapeXml(url.loc)}</loc>\n    <lastmod>${
-      escapeXml(url.lastmod)
-    }</lastmod>\n` +
+    `  <url>\n    <loc>${escapeXml(url.loc)}</loc>\n` +
+    (url.lastmod ? `    <lastmod>${escapeXml(url.lastmod)}</lastmod>\n` : '') +
     `    <changefreq>${escapeXml(url.changefreq)}</changefreq>\n` +
     `    <priority>${url.priority.toFixed(1)}</priority>\n  </url>`
   ).join('\n');

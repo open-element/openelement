@@ -1,6 +1,8 @@
 /** Route-catalog sitemap enumeration unit tests (Beta.2.2, #1327). */
 import { assert, assertEquals } from '@std/assert';
+import { join } from '@std/path';
 import { enumeratePublicRoutes, renderRobotsTxt, renderSitemapXml } from './site-sitemap.ts';
+import { articleLastmodByRoute } from './site-lastmod.ts';
 
 const LOCALES = ['en', 'zh'] as const;
 
@@ -56,15 +58,22 @@ Deno.test('enumeratePublicRoutes: duplicate localized route fails closed', () =>
   assert(failures.some((failure) => failure.includes("duplicate sitemap route '/docs'")));
 });
 
-Deno.test('renderSitemapXml: stable schema, home priority, build-date lastmod', () => {
-  const xml = renderSitemapXml(['/', '/docs'], { today: '2026-09-10' });
+Deno.test('renderSitemapXml: stable schema, home priority, per-route lastmod', () => {
+  const xml = renderSitemapXml(['/', '/docs', '/guide/getting-started'], {
+    lastmod: new Map([['/guide/getting-started', '2026-09-18']]),
+  });
   assert(xml.startsWith('<?xml version="1.0" encoding="UTF-8"?>'));
   assert(xml.includes('<loc>https://openelement.org/</loc>'));
-  assert(xml.includes('<lastmod>2026-09-10</lastmod>'));
+  assert(xml.includes('<lastmod>2026-09-18</lastmod>'));
   assert(xml.includes('<priority>1.0</priority>'));
   assert(xml.includes('<loc>https://openelement.org/docs</loc>'));
   assert(xml.includes('<priority>0.7</priority>'));
   assert(xml.includes('<changefreq>weekly</changefreq>'));
+  // Routes without a known source date omit <lastmod> entirely instead of
+  // falling back to the build clock.
+  const docsBlock = xml.split('<loc>https://openelement.org/docs</loc>')[1].split('</url>')[0];
+  assertEquals(docsBlock.includes('<lastmod>'), false);
+  assertEquals(xml.match(/<lastmod>/g)?.length, 1);
 });
 
 Deno.test('renderRobotsTxt: allow all plus sitemap pointer', () => {
@@ -101,5 +110,37 @@ Deno.test('enumeratePublicRoutes: invalid locale configuration fails closed', ()
     const { routes, failures } = enumeratePublicRoutes({ ...base, ...config });
     assertEquals(failures.length > 0, true, `${label}: must fail closed`);
     assertEquals(routes, [], label);
+  }
+});
+
+Deno.test('articleLastmodByRoute: source dates per locale, unknown routes omitted', async () => {
+  const dir = await Deno.makeTempDir({ prefix: 'site-lastmod-fixture-' });
+  try {
+    const manifest = join(dir, 'content-dates.json');
+    await Deno.writeTextFile(
+      manifest,
+      JSON.stringify({
+        articles: {
+          'guide/getting-started': { en: '2026-09-18', zh: '2026-09-17' },
+          'architecture/architecture': { en: '2026-09-16', zh: 'uncommitted' },
+        },
+      }),
+    );
+    const map = await articleLastmodByRoute([
+      '/',
+      '/guide/getting-started',
+      '/zh/guide/getting-started',
+      '/architecture',
+      '/zh/architecture',
+      '/blog/hello',
+    ], manifest);
+    assertEquals(map.get('/guide/getting-started'), '2026-09-18');
+    assertEquals(map.get('/zh/guide/getting-started'), '2026-09-17');
+    assertEquals(map.get('/architecture'), '2026-09-16');
+    assertEquals(map.has('/zh/architecture'), false); // 'uncommitted' is hidden
+    assertEquals(map.has('/'), false);
+    assertEquals(map.has('/blog/hello'), false);
+  } finally {
+    await Deno.remove(dir, { recursive: true });
   }
 });
