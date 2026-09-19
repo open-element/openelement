@@ -30,7 +30,7 @@
  */
 
 // Design tokens (CSSStyleSheet, zero Lit dependency)
-export { openPropsRootSheet, openPropsTokenSheet } from './open-props-tokens.ts';
+export { openPropsTokenSheet } from './open-props-tokens.ts';
 
 // Components
 export { OpenButton } from './open-button.tsx';

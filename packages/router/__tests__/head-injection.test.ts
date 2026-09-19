@@ -6,11 +6,8 @@
  */
 import { assertEquals, assertStringIncludes, assertThrows } from '@std/assert';
 import { OpenElementError } from '@openelement/element';
-import {
-  assertNoScriptTags,
-  buildHeadExtras,
-  validateSafeUrl,
-} from '../src/vite/head-injection.ts';
+import { assertNoScriptTags, assertTrustedHeadHtml } from '../src/internal/head-safety.ts';
+import { buildHeadExtras, validateSafeUrl } from '../src/vite/head-injection.ts';
 import { buildCriticalHeadExtras } from '../src/vite/internal/ssg/critical-assets.ts';
 
 // ─── assertNoScriptTags ───────────────────────────────────────
@@ -695,4 +692,128 @@ Deno.test('buildHeadExtras: headExtras takes precedence over inject', () => {
   });
   assertEquals(result.headExtras, '<meta name="override" />');
   assertEquals(result.allowHeadExtrasScripts, false);
+});
+
+// ─── assertTrustedHeadHtml: structural fail-closed ──────────────
+
+Deno.test('assertTrustedHeadHtml: accepts complete safe style elements', () => {
+  assertTrustedHeadHtml('<style>body { color: red; }</style>', 'test-input');
+  assertTrustedHeadHtml('<style nonce="abc">body { color: red; }</style>', 'test-input');
+  assertTrustedHeadHtml('<STYLE>body { color: red; }</STYLE>', 'test-input');
+  assertTrustedHeadHtml('<style media="print" title="x">p { margin: 0 }</style>', 'test-input');
+});
+
+Deno.test('assertTrustedHeadHtml: rejects an unterminated style element', () => {
+  // The unclosed element would otherwise escape the CSS blacklist entirely:
+  // the old complete-tag regex never matched, so @import passed unchecked.
+  for (
+    const input of [
+      '<style>@import url("https://evil.example/x.css");',
+      '<style>body { color: red }',
+      '<style>safe</style><style>unsafe',
+      '<STYLE>body { color: red }',
+    ]
+  ) {
+    assertThrows(() => assertTrustedHeadHtml(input, 'test-input'), Error, '', input);
+  }
+});
+
+Deno.test('assertTrustedHeadHtml: rejects unterminated or malformed opening tags', () => {
+  for (
+    const input of [
+      '<style',
+      '<style nonce="',
+      // A quoted '>' inside the opening tag still ends at the real close
+      // bracket; without a closing tag the element is rejected.
+      '<style nonce=">">body { color: red }',
+    ]
+  ) {
+    assertThrows(() => assertTrustedHeadHtml(input, 'test-input'), Error, '', input);
+  }
+});
+
+Deno.test('assertTrustedHeadHtml: still enforces the CSS blacklist on complete tags', () => {
+  assertThrows(
+    () => assertTrustedHeadHtml('<style>@import url("x.css");</style>', 'test-input'),
+    OpenElementError,
+    'Unsafe CSS',
+  );
+  assertThrows(
+    () =>
+      assertTrustedHeadHtml(
+        '<style>body { background: url(javascript:alert(1)) }</style>',
+        'test-input',
+      ),
+    OpenElementError,
+    'Unsafe CSS',
+  );
+  assertThrows(
+    () => assertTrustedHeadHtml('<style onclick="x">body {}</style>', 'test-input'),
+    OpenElementError,
+    'Unsafe style attribute',
+  );
+});
+
+Deno.test('assertTrustedHeadHtml: rejects self-closing style syntax', () => {
+  // <style/> is not a void element in HTML: the raw-text element still
+  // swallows the rest of the fragment, so accepting it would let the
+  // payload below run past the CSS blacklist.
+  for (
+    const input of [
+      '<style/>@import url("https://evil.example/x.css");',
+      '<STYLE/>@import url("https://evil.example/x.css");',
+      '<style />@import url("https://evil.example/x.css");',
+      '<style/>safe',
+      '<style />safe',
+      '<style/><style>safe</style>',
+      '<style>safe</style><style/>',
+      '<style title="x"/>safe',
+      '<style title="x" />safe',
+    ]
+  ) {
+    assertThrows(() => assertTrustedHeadHtml(input, 'test-input'), Error, '', input);
+  }
+});
+
+Deno.test('assertTrustedHeadHtml: quoted and unquoted slashes stay value bytes', () => {
+  // Slashes inside quoted values are content, not self-closing markers.
+  assertTrustedHeadHtml('<style title="x/y">body { color: red }</style>', 'test-input');
+  assertTrustedHeadHtml('<style title=">">body { color: red }</style>', 'test-input');
+  // An unquoted value ends at whitespace or '>': foo/bar is one value, so
+  // the tag is not self-closing (the attribute policy rejects data-x later,
+  // but the failure must not be a self-closing misclassification).
+  assertThrows(
+    () => assertTrustedHeadHtml('<style data-x=foo/bar>body { color: red }</style>', 'test-input'),
+    OpenElementError,
+    'Unsafe style attribute',
+  );
+});
+
+Deno.test('assertTrustedHeadHtml: unrelated tags around styles are untouched', () => {
+  assertTrustedHeadHtml(
+    '<meta charset="utf-8"><style>body { color: red }</style><link rel="icon" href="/i.png">',
+    'test-input',
+  );
+  // A tag merely starting with the same letters is not a style element.
+  assertTrustedHeadHtml('<stylesheet-import data-x="y">', 'test-input');
+});
+
+Deno.test('assertTrustedHeadHtml: escaped whitespace cannot split the CSS blacklist', () => {
+  // `\9` and `\a` decode to whitespace; the URL validator strips the same
+  // set, so the CSS fold must too or `java\9 script:` slips through.
+  for (
+    const input of [
+      '<style>body { background: url("java\\9 script:alert(1)") }</style>',
+      '<style>body { background: url("da\\9 ta:text/html,x") }</style>',
+      '<style>body { background: url("java\\a script:alert(1)") }</style>',
+      '<style>body { background: url("jav\\61 script:alert(1)") }</style>',
+    ]
+  ) {
+    assertThrows(() => assertTrustedHeadHtml(input, 'test-input'), OpenElementError, 'Unsafe CSS');
+  }
+  // Legitimate inline CSS still passes.
+  assertTrustedHeadHtml(
+    '<style>@font-face { font-family: X; src: url("/assets/fonts/x.woff2") format("woff2") }</style>',
+    'test-input',
+  );
 });

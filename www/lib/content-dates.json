@@ -1,0 +1,93 @@
+{
+  "generatedFrom": "git log --follow --format=%cs per source file",
+  "articles": {
+    "architecture/architecture": {
+      "en": "2026-09-18",
+      "zh": "2026-09-18"
+    },
+    "architecture/comparison": {
+      "en": "2026-09-19",
+      "zh": "2026-09-19"
+    },
+    "architecture/design-system": {
+      "en": "2026-09-18",
+      "zh": "2026-09-18"
+    },
+    "architecture/dsd": {
+      "en": "2026-09-18",
+      "zh": "2026-09-18"
+    },
+    "architecture/islands": {
+      "en": "2026-09-18",
+      "zh": "2026-09-18"
+    },
+    "guide/api": {
+      "en": "2026-09-17",
+      "zh": "2026-09-17"
+    },
+    "guide/configuration": {
+      "en": "2026-09-19",
+      "zh": "2026-09-19"
+    },
+    "guide/core-concepts": {
+      "en": "2026-09-17",
+      "zh": "2026-09-17"
+    },
+    "guide/deployment": {
+      "en": "2026-09-18",
+      "zh": "2026-09-18"
+    },
+    "guide/error-handling": {
+      "en": "2026-09-17",
+      "zh": "2026-09-17"
+    },
+    "guide/getting-started": {
+      "en": "2026-09-18",
+      "zh": "2026-09-18"
+    },
+    "guide/glossary": {
+      "en": "2026-09-18",
+      "zh": "2026-09-18"
+    },
+    "guide/islands-and-ssr": {
+      "en": "2026-09-18",
+      "zh": "2026-09-18"
+    },
+    "guide/mdx": {
+      "en": "2026-09-17",
+      "zh": "2026-09-17"
+    },
+    "guide/recipe-form-actions": {
+      "en": "2026-09-18",
+      "zh": "2026-09-18"
+    },
+    "guide/recipe-island-strategies": {
+      "en": "2026-09-18",
+      "zh": "2026-09-18"
+    },
+    "guide/recipe-theming": {
+      "en": "2026-09-18",
+      "zh": "2026-09-18"
+    },
+    "guide/routing-and-data": {
+      "en": "2026-09-17",
+      "zh": "2026-09-17"
+    },
+    "guide/security": {
+      "en": "2026-09-17",
+      "zh": "2026-09-17"
+    },
+    "guide/styling": {
+      "en": "2026-09-17",
+      "zh": "2026-09-17"
+    },
+    "guide/testing": {
+      "en": "2026-09-18",
+      "zh": "2026-09-18"
+    },
+    "guide/tutorial": {
+      "en": "2026-09-17",
+      "zh": "2026-09-17"
+    }
+  }
+}

@@ -14,7 +14,7 @@ test.describe('View Transitions (v0.9.2)', () => {
   const pages = [
     '/',
     '/guide/getting-started',
-    '/guide/architecture',
+    '/architecture',
     '/blog',
     '/changelog',
   ];

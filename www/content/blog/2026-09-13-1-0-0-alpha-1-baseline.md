@@ -10,7 +10,8 @@ excerpt: 'Element and Router converge on a fresh 1.0 Alpha baseline: public core
 
 `1.0.0-alpha.1` is a new baseline for Element and Router, not an upgrade of the
 0.x lines. There is no supported migration path from 0.x: new projects start
-from `@openelement/create`.
+from `@openelement/create`. It is the repository baseline; npm publication
+follows the release train.
 
 ## Product surface
 

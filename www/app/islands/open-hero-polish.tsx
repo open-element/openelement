@@ -22,7 +22,7 @@ import { defineIslandConfig } from '@openelement/router';
 import { compiledStyle, HERO_CURSOR_CSS } from '../site-ui/compiled-style.ts';
 import { readIslandState, writeIslandState } from '../site-ui/island-state.ts';
 
-export const openElement = defineIslandConfig({ hydrate: 'idle', ssr: true, dsd: true });
+export const openElement = defineIslandConfig({ hydrate: 'idle', ssr: true });
 
 @element('open-hero-polish')
 export default class HeroPolish extends OpenElement {
@@ -68,13 +68,20 @@ export default class HeroPolish extends OpenElement {
 
     // ── cursor + magnetism: fine pointers, full motion only ──
     if (!reduced && fine) {
+      // compiledStyle only scopes rules to this element's shadow root; the
+      // cursor must track across the hero in the light parent scope, so the
+      // stylesheet has to be injected there at runtime instead.
       const styleEl = document.createElement('style');
       styleEl.textContent = HERO_CURSOR_CSS;
       scope.appendChild(styleEl);
       const cursor = document.createElement('div');
       cursor.className = 'hero-cursor';
       cursor.setAttribute('aria-hidden', 'true');
-      cursor.innerHTML = '<i class="dot"></i><i class="ring"></i>';
+      const dot = document.createElement('i');
+      dot.className = 'dot';
+      const ring = document.createElement('i');
+      ring.className = 'ring';
+      cursor.append(dot, ring);
       scope.appendChild(cursor);
 
       let tx = -100;

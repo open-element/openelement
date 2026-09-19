@@ -8,7 +8,7 @@ import {
   uninstallDragonLiveGaze,
 } from '../site-ui/open-dragon-live-gaze-controller.ts';
 
-export const openElement = defineIslandConfig({ hydrate: 'idle', ssr: true, dsd: true });
+export const openElement = defineIslandConfig({ hydrate: 'idle', ssr: true });
 
 @element('open-dragon-live-gaze')
 export default class DragonLiveGaze extends OpenElement {

@@ -146,12 +146,19 @@ export default class RoadmapPage extends OpenElement {
   @property({ reflect: false, attribute: false })
   deployment = '';
 
+  // Same base-field redeclaration as open-layout: the compiled @property
+  // shadows OpenElementConfiguration.locale (SSR injection or the `locale`
+  // attribute); tsc's `override` demand is rejected by the compiled grammar.
+  @property({ reflect: false })
+  // @ts-expect-error compiled @property shadows the optional base field
+  locale = 'en';
+
   render() {
     return (
-      <main>
-        <open-reading-shell rail footer metadata={this.metadata}>
+      <div data-pagefind-body>
+        <open-reading-shell rail footer metadata={this.metadata} locale={this.locale}>
           <div slot='rail'>
-            <open-page-rail items={this.railItems}></open-page-rail>
+            <open-page-rail items={this.railItems} locale={this.locale}></open-page-rail>
           </div>
 
           <section id='release-line'>
@@ -275,12 +282,12 @@ export default class RoadmapPage extends OpenElement {
           </section>
 
           <nav class='nav-row' slot='footer'>
-            <open-button href='/architecture/architecture'>{this.architecture}</open-button>
+            <open-button href='/architecture'>{this.architecture}</open-button>
             <open-button href='/changelog'>{this.changelog}</open-button>
             <open-button href='/guide/deployment'>{this.deployment}</open-button>
           </nav>
         </open-reading-shell>
-      </main>
+      </div>
     );
   }
 }

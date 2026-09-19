@@ -144,26 +144,18 @@ Deno.test({
   sanitizeResources: false,
   fn: async (t) => {
     // The fixture dist is not committed, and the coverage/test gates run
-    // before any build gate — build it on demand (a no-op when it exists,
-    // which is the common local case).
-    let fixtureBuilt = true;
-    try {
-      await Deno.stat(serverEntryPath);
-    } catch {
-      fixtureBuilt = false;
-    }
-    if (!fixtureBuilt) {
-      // The fixture owns its build task; on a clean clone the dist is absent
-      // and this on-demand build is the only path (the coverage gate runs
-      // before the fixture build gate).
-      const build = await new Deno.Command(Deno.execPath(), {
-        args: ['task', '--cwd', 'tests/fixtures/router-request-time', 'build'],
-        cwd: join(fixtureDir, '../../..'),
-        stdout: 'inherit',
-        stderr: 'inherit',
-      }).output();
-      if (!build.success) throw new Error('fixture build failed');
-    }
+    // before any build gate, so this builds it on demand. It builds
+    // unconditionally: "the entry exists" is not evidence that it matches the
+    // sources around it, and a stale entry makes the suite assert a past build
+    // while reporting on the working tree (2026-09-17: a fixture dist and a
+    // shadowing node_modules copy each hid the same stale codegen).
+    const fixtureBuild = await new Deno.Command(Deno.execPath(), {
+      args: ['task', '--cwd', 'tests/fixtures/router-request-time', 'build'],
+      cwd: join(fixtureDir, '../../..'),
+      stdout: 'inherit',
+      stderr: 'inherit',
+    }).output();
+    if (!fixtureBuild.success) throw new Error('fixture build failed');
 
     const build = await bootBuildServer();
     const dev = await bootDevServer();

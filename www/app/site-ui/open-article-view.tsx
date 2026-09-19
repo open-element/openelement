@@ -36,27 +36,35 @@ export default class OpenArticleView extends OpenElement {
   @property({ type: Object, reflect: false, attribute: false })
   articleHtml = computed(() => trustedHtml(this.model.articleHtml));
 
+  // Same base-field redeclaration as open-layout: the compiled @property
+  // shadows OpenElementConfiguration.locale (SSR injection or the `locale`
+  // attribute); tsc's `override` demand is rejected by the compiled grammar.
+  @property({ reflect: false })
+  // @ts-expect-error compiled @property shadows the optional base field
+  locale = 'en';
+
   render() {
     return (
-      <main>
-        <div class={this.notFoundClass}>
-          <h1>404</h1>
+      <div>
+        <div class={this.notFoundClass} data-pagefind-ignore>
+          <p class='nf-code'>404</p>
           <p>{this.notFoundMessage}: {this.slug}</p>
         </div>
-        <div class={this.articleClass}>
+        <div class={this.articleClass} data-pagefind-body>
           <open-reading-shell
             rail
             footer
             metadata={this.metadata}
             navigation={this.navigation}
+            locale={this.locale}
           >
             <div slot='rail'>
-              <open-page-rail items={this.railItems}></open-page-rail>
+              <open-page-rail items={this.railItems} locale={this.locale}></open-page-rail>
             </div>
             <div class='article-content' innerHTML={this.articleHtml} trustedHtml />
           </open-reading-shell>
         </div>
-      </main>
+      </div>
     );
   }
 }

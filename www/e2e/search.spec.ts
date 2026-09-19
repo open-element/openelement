@@ -154,4 +154,17 @@ test.describe('Search', () => {
     await expect(backdrop).toBeHidden();
     await expect(dialog).toBeHidden();
   });
+
+  test('zh locale renders localized search chrome', async ({ page }) => {
+    await page.goto('/zh/guide/getting-started');
+    await page.waitForLoadState('networkidle');
+    await page.waitForFunction(() => customElements.get('open-search'));
+
+    // Integration review: the zh chrome copy is finalized by the content
+    // agent; this pins the trigger label 搜索 and a working dialog.
+    const trigger = page.getByRole('button', { name: '搜索' });
+    await expect(trigger).toBeVisible();
+    await trigger.click();
+    await expect(page.getByRole('dialog').first()).toBeVisible();
+  });
 });

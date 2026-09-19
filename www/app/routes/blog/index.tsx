@@ -12,7 +12,10 @@ import { contentLocale } from '@openelement/site-ui/locale.ts';
 import { localizePath } from '@openelement/site-ui/link.ts';
 import BlogIndexPage from '../../components/page-blog-index.tsx';
 
-export const meta = { section: 'History', label: 'Blog', order: 10 };
+// Blog, changelog, roadmap and contributing are the project's own pages, not
+// documentation chapters: they share the nameless group the sidebar labels
+// "Project" (FALLBACK_SECTION in site-ui/open-layout-navigation.ts).
+export const meta = { section: '', label: 'Blog', order: 5 };
 
 interface BlogIndexRow {
   slug: string;

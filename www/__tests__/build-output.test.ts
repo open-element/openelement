@@ -136,6 +136,10 @@ Deno.test('build output: zh pages keep in-content links inside the zh tree (#103
       // Layout chrome links carry data-nav and are localized client-side by
       // open-layout (#816); only in-content links are asserted here.
       if (tag.includes('data-nav')) continue;
+      // The locale switcher deliberately points at the *other* locale tree;
+      // it must not carry data-nav or the client-side localization would
+      // rewrite it back into the current locale.
+      if (tag.includes('locale-switch')) continue;
       if (href === '/zh' || href.startsWith('/zh/')) continue;
       failures.push(`${file}: ${href}`);
     }

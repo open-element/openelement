@@ -42,10 +42,6 @@ export default class PageChangelog extends OpenElement {
   @property({ reflect: false, attribute: false })
   regCurrentSummary = '';
   @property({ reflect: false, attribute: false })
-  regArchiveNote = '';
-  @property({ reflect: false, attribute: false })
-  regGhostSummary = '';
-  @property({ reflect: false, attribute: false })
   stableHeading = '';
   @property({ reflect: false, attribute: false })
   commonVersionLabel = '';
@@ -68,10 +64,17 @@ export default class PageChangelog extends OpenElement {
   @property({ reflect: false, attribute: false })
   gettingStartedLabel = '';
 
+  // Same base-field redeclaration as open-layout: the compiled @property
+  // shadows OpenElementConfiguration.locale (SSR injection or the `locale`
+  // attribute); tsc's `override` demand is rejected by the compiled grammar.
+  @property({ reflect: false })
+  // @ts-expect-error compiled @property shadows the optional base field
+  locale = 'en';
+
   render() {
     return (
-      <main>
-        <open-reading-shell meta rail footer>
+      <div data-pagefind-body>
+        <open-reading-shell meta rail footer locale={this.locale}>
           <div slot='meta'>
             <p class='crumb'>
               <span>Project</span>
@@ -86,7 +89,7 @@ export default class PageChangelog extends OpenElement {
             </p>
           </div>
           <div slot='rail'>
-            <open-page-rail items={this.railItems}></open-page-rail>
+            <open-page-rail items={this.railItems} locale={this.locale}></open-page-rail>
           </div>
           <p id='published'>{this.publishedIntro}</p>
           <div class='register' aria-label='Release register'>
@@ -97,19 +100,10 @@ export default class PageChangelog extends OpenElement {
               </div>
               <p class='reg-summary'>{this.regCurrentSummary}</p>
             </div>
-            <div class='reg-row reg-ghost'>
-              <div class='reg-head'>
-                <span class='reg-version'>0.40.x</span>
-                <span class='reg-note'>{this.regArchiveNote}</span>
-              </div>
-              <p class='reg-summary'>{this.regGhostSummary}</p>
-            </div>
           </div>
           <section id='candidate'>
             <h2>{this.stableHeading}</h2>
-            <p>
-              <code>{this.commonVersionLabel}</code> {this.stableBody}
-            </p>
+            <p>{this.stableBody}</p>
           </section>
           <section id='withdrawn'>
             <h2>{this.withdrawnHeading}</h2>
@@ -131,7 +125,7 @@ export default class PageChangelog extends OpenElement {
             </open-button>
           </div>
         </open-reading-shell>
-      </main>
+      </div>
     );
   }
 }

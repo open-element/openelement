@@ -61,28 +61,48 @@ test.describe('SEO Meta Tags', () => {
     expect(content).toContain('Web Components-native');
   });
 
+  // The structured-data channel had no end-to-end coverage: unit assertions
+  // only pinned the renderer's string include, while five emission points
+  // (SSG/request-time) and the JSON escaping were untested. The homepage
+  // declares WebSite + Organization by design (www/app/site-ui/head.ts).
+  test('homepage ships parseable schema.org JSON-LD with escaped markup', async ({ page }) => {
+    const scripts = page.locator('script[type="application/ld+json"]');
+    const count = await scripts.count();
+    expect(count).toBeGreaterThan(0);
+    const types: unknown[] = [];
+    for (let index = 0; index < count; index += 1) {
+      const raw = (await scripts.nth(index).textContent()) ?? '';
+      // A bare "<" would let authored data close the script element early.
+      expect(raw).not.toContain('<');
+      const parsed = JSON.parse(raw) as { '@context'?: unknown; '@type'?: unknown };
+      expect(parsed['@context']).toBe('https://schema.org');
+      types.push(parsed['@type']);
+    }
+    expect(new Set(types).size).toBe(types.length);
+  });
+
   // #1307: per-route metadata replaces the boilerplate era (identical title,
   // description and og:title on every page).
   test('per-route title/description replace the boilerplate (#1307)', async ({ page }) => {
-    await page.goto('/apilist');
+    await page.goto('/reference');
     expect(await page.title()).toBe('API Reference — openElement');
-    const apilistDescription = await page.locator('meta[name="description"]').getAttribute(
+    const referenceDescription = await page.locator('meta[name="description"]').getAttribute(
       'content',
     );
-    expect(apilistDescription).toContain('supported openElement API surface');
+    expect(referenceDescription).toContain('supported openElement API surface');
     const canonical = await page.locator('link[rel="canonical"]').getAttribute('href');
-    expect(canonical).toBe('https://openelement.org/apilist');
+    expect(canonical).toBe('https://openelement.org/reference');
     const hreflangZh = await page.locator('link[rel="alternate"][hreflang="zh"]').getAttribute(
       'href',
     );
-    expect(hreflangZh).toBe('https://openelement.org/zh/apilist');
+    expect(hreflangZh).toBe('https://openelement.org/zh/reference');
 
-    await page.goto('/zh/apilist');
+    await page.goto('/zh/reference');
     expect(await page.title()).toBe('API 参考 — openElement');
     const zhDescription = await page.locator('meta[name="description"]').getAttribute('content');
     expect(zhDescription).toContain('openElement 受支持的 API 面');
     const zhCanonical = await page.locator('link[rel="canonical"]').getAttribute('href');
-    expect(zhCanonical).toBe('https://openelement.org/zh/apilist');
+    expect(zhCanonical).toBe('https://openelement.org/zh/reference');
   });
 });
 

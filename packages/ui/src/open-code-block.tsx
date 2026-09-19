@@ -29,6 +29,15 @@ import { element, OpenElement, property, type StyleSheetLike } from '@openelemen
 import { CODE_BLOCK_CONSTANTS, log, recipe } from './component-recipes.ts';
 import { readInstanceState, writeInstanceState } from './instance-state.ts';
 
+/**
+ * Token-color rationale (the styles below ship to clients, so this note stays
+ * out of the template): the vendored light-DOM Prism theme's comment gray
+ * #708090 is 3.6:1 on its own #f5f2f0 background (under AA), but that pairing
+ * never renders — the vendor only paints it through pre[class*=language-] and
+ * site fences carry the language class on code, not pre. The site pins its
+ * code surface to --bg-code/#0d0f12 (pre[class*=language-] override in
+ * www/app/components/page-styles.ts), where #708090 measures 4.7:1.
+ */
 @element('open-code-block', { root: 'shadow-open' })
 export class OpenCodeBlock extends OpenElement {
   static override styles: StyleSheetLike[] = [recipe(`
@@ -40,6 +49,9 @@ export class OpenCodeBlock extends OpenElement {
     pre {
       margin: 0;
       padding: var(--size-5);
+      /* Clear the copy chip (top var(--size-2) + ~25px tall) so the first line
+         never runs underneath it. */
+      padding-block-start: calc(var(--size-5) + var(--size-4));
       background: var(--bg-code);
       border: var(--border-size-1) solid var(--code-border);
       border-radius: var(--radius-2);
@@ -47,7 +59,7 @@ export class OpenCodeBlock extends OpenElement {
       font-family: var(--font-mono);
       font-size: var(--font-size-0);
       line-height: var(--font-lineheight-4);
-      color: var(--text-secondary);
+      color: var(--code-text);
       scrollbar-width: thin;
       scrollbar-color: var(--brand-subtle) transparent;
       white-space: pre-wrap;
@@ -57,6 +69,7 @@ export class OpenCodeBlock extends OpenElement {
     ::slotted(pre) {
       margin: 0;
       padding: var(--size-5);
+      padding-block-start: calc(var(--size-5) + var(--size-4));
       background: var(--bg-code);
       border: var(--border-size-1) solid var(--code-border);
       border-radius: var(--radius-2);
@@ -64,7 +77,7 @@ export class OpenCodeBlock extends OpenElement {
       font-family: var(--font-mono);
       font-size: var(--font-size-0);
       line-height: var(--font-lineheight-4);
-      color: var(--text-secondary);
+      color: var(--code-text);
       scrollbar-width: thin;
       scrollbar-color: var(--brand-subtle) transparent;
     }
@@ -77,7 +90,7 @@ export class OpenCodeBlock extends OpenElement {
       font-weight: var(--font-weight-7);
       text-transform: uppercase;
       letter-spacing: var(--font-letterspacing-5);
-      color: var(--text-muted);
+      color: var(--code-text);
       pointer-events: none;
     }
 
@@ -86,7 +99,7 @@ export class OpenCodeBlock extends OpenElement {
       top: var(--size-2);
       right: var(--size-2);
       background: var(--brand-subtle);
-      color: var(--text-muted);
+      color: var(--code-text);
       padding: var(--size-1) var(--size-3);
       font-size: var(--font-size-00);
       font-family: var(--font-sans);
@@ -99,8 +112,10 @@ export class OpenCodeBlock extends OpenElement {
       letter-spacing: var(--font-letterspacing-4);
     }
 
+    /* No ink override on hover: --on-brand is the ink for a brand *fill*, and
+       this chip's hover surface is a translucent brand tint instead, so the
+       chip keeps the code surface's --code-text ink. */
     .copy-btn:hover {
-      color: var(--text-primary);
       background: var(--brand-glow);
       border-color: var(--brand);
     }
@@ -116,8 +131,8 @@ export class OpenCodeBlock extends OpenElement {
       border-color: var(--error);
     }
 
-    /* Prism token colors (dark theme) */
-    .token.cdata, .token.comment, .token.doctype, .token.prolog { color: #6a737d; }
+    /* Comment gray: #7d8590 (5.2:1 on --bg-code) — #6a737d was 4.0:1. */
+    .token.cdata, .token.comment, .token.doctype, .token.prolog { color: #7d8590; }
     .token.punctuation { color: #8b949e; }
     .token.namespace { opacity: 0.7; }
     .token.boolean, .token.constant, .token.deleted, .token.number, .token.property, .token.symbol, .token.tag { color: #79c0ff; }

@@ -9,7 +9,9 @@ export const pageHomeStyles = [compiledStyle(`
   /* ── hero: mascot-first — the dragon is the interface ── */
   .hero { position:relative; overflow:clip; background:var(--bg-base); isolation:isolate; }
   .hero-main { position:relative; min-height:calc(100svh - var(--nav-height)); display:grid; grid-template-rows:auto minmax(0,1fr) auto; justify-items:center; text-align:center; background:var(--hero-ink); color:var(--hero-paper); }
-  .hero-main::before { content:""; position:absolute; inset:0; z-index:1; background:linear-gradient(to bottom, rgba(0,0,0,.6), transparent 30%, transparent 52%, rgba(0,0,0,.78)), radial-gradient(115% 88% at 50% 44%, transparent 56%, rgba(0,0,0,.52)); pointer-events:none; }
+  /* Scrim: the lede/actions band (73–88% of the hero) is where the mascot
+     photograph runs brightest, so the lower third is held at 0.66–0.88 black. */
+  .hero-main::before { content:""; position:absolute; inset:0; z-index:1; background:radial-gradient(60% 60% at 50% 42%, rgba(6,6,12,.55), transparent 70%), linear-gradient(to bottom, rgba(0,0,0,.6), transparent 30%, transparent 46%, rgba(0,0,0,.66) 64%, rgba(0,0,0,.76) 78%, rgba(0,0,0,.88)), radial-gradient(115% 88% at 50% 44%, transparent 56%, rgba(0,0,0,.52)); pointer-events:none; }
   /* Film grain over the whole hero — monochrome, ~4%, steps() so it crackles
      like film rather than sliding like noise. Overscanned so the jitter
      never reveals an edge. */
@@ -18,7 +20,6 @@ export const pageHomeStyles = [compiledStyle(`
   @media (prefers-reduced-motion: reduce) { .hero-main::after { animation:none; } }
   .eyebrow { display:flex; align-items:center; justify-content:center; gap:.75rem; color:var(--hero-gold-muted); font-family:var(--font-mono); font-size:var(--font-size-00); font-weight:var(--font-weight-8); letter-spacing:.29em; text-transform:uppercase; text-shadow:0 1px 18px rgba(0,0,0,.6); }
   .eyebrow::before { content:""; width:2rem; height:2px; background:var(--hero-gold-line); }
-  .hero-stamp { position:absolute; z-index:2; top:clamp(1.75rem,5vh,3rem); right:clamp(1.5rem,5vw,4.5rem); color:rgba(244,241,234,.35); font-size:var(--font-size-caption); letter-spacing:.08em; opacity:calc(1 - var(--hero-exit, 0) * 1.4); animation:hero-rise 1.1s .2s ease both; }
   h1 { margin:clamp(1rem,2.5vh,1.75rem) 0 0; font-weight:800; line-height:.92; letter-spacing:-.045em; text-shadow:0 2px 40px rgba(0,0,0,.65); }
   h1 .mono-line { display:block; font-family:var(--font-mono); font-size:clamp(2.6rem,6.4vw,5.6rem); color:var(--hero-paper); animation:line-mask 1.05s .45s cubic-bezier(.16,.84,.3,1) both; }
   h1 .serif-line { display:block; margin-block-start:-.04em; font-family:var(--font-serif); font-style:italic; font-weight:400; font-size:clamp(3.2rem,8.8vw,7.4rem); letter-spacing:-.02em; color:var(--hero-gold); animation:line-mask 1.05s .62s cubic-bezier(.16,.84,.3,1) both; }
@@ -30,8 +31,9 @@ export const pageHomeStyles = [compiledStyle(`
   .hero-foot .lede { animation:hero-rise 1s .95s ease both; }
   .hero-foot .actions { animation:hero-rise 1s 1.1s ease both; }
   @keyframes hero-rise { from { opacity:0; transform:translateY(14px); } }
-  /* Scroll cue — a hairline drip under the fold, almost subliminal. */
-  .scroll-cue { position:absolute; left:50%; bottom:clamp(.85rem,2.2vh,1.5rem); z-index:2; display:grid; justify-items:center; gap:.5rem; color:rgba(244,241,234,.42); font-family:var(--font-mono); font-size:var(--font-size-micro); letter-spacing:.34em; text-transform:uppercase; text-indent:.34em; animation:hero-rise 1.2s 1.6s ease both; }
+  /* Scroll cue — a hairline drip under the CTA row, almost subliminal. It
+     lives in the hero-foot flow so it can never collide with the buttons. */
+  .scroll-cue { display:grid; justify-items:center; gap:.5rem; margin-block-start:var(--size-2); color:rgba(244,241,234,.62); font-family:var(--font-mono); font-size:var(--font-size-micro); letter-spacing:.34em; text-transform:uppercase; text-indent:.34em; animation:hero-rise 1.2s 1.6s ease both; }
   .scroll-cue::after { content:""; width:1px; height:2.4rem; background:linear-gradient(rgba(227,207,159,.8), transparent); transform-origin:top; animation:cue-drip 2.2s ease-in-out infinite; }
   @keyframes cue-drip { 0% { transform:scaleY(0); opacity:1; } 48% { transform:scaleY(1); opacity:1; } 100% { transform:scaleY(1); opacity:0; } }
   @media (max-height:760px), (max-width:520px) { .scroll-cue { display:none; } }
@@ -44,49 +46,86 @@ export const pageHomeStyles = [compiledStyle(`
   .hero-foot .action:hover { border-color:var(--hero-gold); }
   .hero-foot .action.primary { background:var(--brand); border-color:var(--brand); color:var(--on-brand); }
   .hero-foot .action.primary:hover { background:var(--brand-hover); border-color:var(--brand-hover); }
-  .lede { max-width:36rem; margin:0; color:rgba(244,241,234,.6); font-size:clamp(1rem,1.2vw,1.1rem); line-height:1.75; text-shadow:0 1px 18px rgba(0,0,0,.6); }
+  /* Single primary CTA: the secondary action is a quiet text link, never a
+     second button. Copy stays bilingual; only the chrome steps down. */
+  .hero-foot .action.link { border-color:transparent; padding-inline:var(--size-1); color:var(--hero-gold-muted); text-decoration:underline; text-decoration-color:color-mix(in srgb,currentColor 45%,transparent); text-underline-offset:var(--size-1); }
+  .hero-foot .action.link:hover { border-color:transparent; color:var(--hero-gold); text-decoration-color:currentColor; }
+  .lede { max-width:36rem; margin:0; color:rgba(244,241,234,.92); font-size:clamp(1rem,1.2vw,1.1rem); line-height:1.75; text-shadow:0 1px 18px rgba(0,0,0,.6); }
   .actions { display:flex; flex-wrap:wrap; gap:var(--size-3); margin:var(--size-6) 0 clamp(2rem,6vh,4rem); }
   .action { display:inline-flex; align-items:center; padding:var(--size-2) var(--size-5); border:var(--border-size-1) solid var(--border-strong); border-radius:var(--btn-radius); color:var(--text-primary); font-weight:var(--font-weight-7); text-decoration:none; transition:border-color .15s ease,background .15s ease; }
   .action:hover { border-color:var(--brand); }
   .action.primary { background:var(--brand); border-color:var(--brand); color:var(--on-brand); }
   .action.primary:hover { background:var(--brand-hover); }
-  .spec-strip { display:grid; grid-template-columns:repeat(5,1fr); border-block-start:1px solid var(--border); }
-  .spec-cell { padding:var(--size-4) clamp(1rem,2.5vw,2rem); border-inline-start:1px solid var(--border); }
+  .spec-strip { display:grid; grid-template-columns:repeat(5,1fr); border-block-start:1px solid var(--border); }  .spec-cell { padding:var(--size-4) clamp(1rem,2.5vw,2rem); border-inline-start:1px solid var(--border); }
   .spec-cell:first-child { border-inline-start:0; }
   .spec-cell small { display:block; color:var(--text-muted); font-size:var(--font-size-micro); letter-spacing:.16em; text-transform:uppercase; }
   .spec-cell strong { display:block; margin-block-start:var(--size-1); font-size:var(--font-size-1); font-weight:var(--font-weight-8); }
   .spec-cell strong.accent { color:var(--violet-8); }
+  @container band (max-width:1080px) {
+    .spec-strip { grid-template-columns:1fr 1fr; }
+    .spec-cell:nth-child(odd) { border-inline-start:0; }
+    /* Five cells in two columns leave the last row single: span it, but only
+       when the count is actually odd. */
+    .spec-cell:last-child:nth-child(odd) { grid-column:1/-1; }
+  }
+  @container band (max-width:640px) {
+    .spec-strip { grid-template-columns:1fr; }
+    .spec-cell { border-inline-start:0; }
+    .spec-cell:nth-child(n+2) { border-block-start:1px solid var(--border); }
+  }
   .marquee { overflow:hidden; white-space:nowrap; border-block:1px solid var(--border); background:var(--surface-1); }
   .marquee span { display:inline-block; padding:var(--size-3) 0; color:var(--brand); font-size:var(--font-size-0); font-weight:var(--font-weight-5); letter-spacing:.12em; animation:marquee 36s linear infinite; }
   @keyframes marquee { to { transform:translateX(-50%); } }
 
   /* ── scene framework: outlined index anchors ── */
   .scene { position:relative; padding:clamp(4rem,10vh,8rem) clamp(1.5rem,5vw,4.5rem); }
+  /* Container queries let the card grids answer to their own width (zoom,
+     narrow embeds) instead of the viewport. inline-size containment keeps
+     the block axis — and the view-timeline reveals — untouched. Both the
+     hero (spec strip) and the scenes share the band container name. No
+     @supports fallback: the constitution promises 3 current engines, all of
+     which ship container queries; older engines keep the base single-column
+     cascade. */
+  .hero { container-type:inline-size; container-name:band; }
+  .scene { container-type:inline-size; container-name:band; }
   .scene-index { color:var(--brand); font-size:var(--font-size-00); font-weight:var(--font-weight-8); letter-spacing:.24em; text-transform:uppercase; }
+  /* CJK variants stay subject-side (:lang) — @scope'd sheets cannot match the
+     html[lang] ancestor, but language inherits across the scope boundary. */
+  .eyebrow:lang(zh), .scene-index:lang(zh) { text-transform:none; letter-spacing:.08em; }
+  p:lang(zh), li:lang(zh) { line-height:1.9; }
   .scene h2 { font-size:clamp(2.2rem,3.6vw,3.2rem); font-weight:800; line-height:1; letter-spacing:-.03em; }
   .scene h2 .accent { display:block; font-family:var(--font-serif); font-style:italic; font-weight:400; font-size:calc(1em * 1.15); color:var(--violet-8); }
   .scene-copy { max-width:34rem; color:var(--text-secondary); line-height:1.75; }
   .scene-copy p + p { margin-block-start:var(--size-3); }
+  /* Line-art scene figures: static by construction (never join the
+     scroll-timeline reveal list), ink from currentColor, one brand accent. */
+  .scene-figure { margin:var(--size-5) 0 var(--size-4); color:var(--text-muted); }
+  .scene-figure svg { display:block; height:88px; width:auto; }
   .scene-outlined { position:absolute; top:clamp(1rem,4vh,3rem); left:clamp(-.5rem,-.4vw,0rem); z-index:-1; font-family:var(--font-mono); font-size:clamp(9rem,18vw,16rem); font-weight:800; line-height:1; color:transparent; -webkit-text-stroke:1.5px color-mix(in srgb,var(--violet-5) 55%,transparent); user-select:none; pointer-events:none; }
   .scene-split { display:grid; grid-template-columns:minmax(0,.9fr) minmax(320px,1.1fr); gap:clamp(2rem,6vw,6rem); align-items:center; }
   .badges { display:flex; gap:var(--size-2); margin-block-start:var(--size-5); }
   .badge { padding:2px var(--size-2); border:var(--border-size-1) solid var(--border-strong); border-radius:var(--badge-radius); color:var(--violet-8); font-size:var(--font-size-00); font-weight:var(--font-weight-7); letter-spacing:.06em; }
 
-  /* ── §2 DSD: violet flood ── */
-  .flood { position:relative; isolation:isolate; overflow:clip; background:linear-gradient(135deg,var(--violet-5),var(--violet-6)); color:var(--violet-0); }
+  /* ── §2 DSD: violet flood ──
+     The flood inverts with the violet scale (light = deep field/light ink,
+     dark = pale field/dark ink), so the gradient sits at the high end of the
+     scale and every foreground is the matching low end. violet-5→6 put the
+     12px copy at 2.72:1; violet-8→10 clears 4.5:1 in both themes. */
+  .flood { position:relative; isolation:isolate; overflow:clip; background:linear-gradient(135deg,var(--violet-8),var(--violet-10)); color:var(--violet-0); }
   /* Light theater: a soft bloom sweeps down-stage as you scroll while a
-     counter-shadow rises to meet it — the flood feels lit, not painted. */
+     counter-shadow rises to meet it — the flood feels lit, not painted. The
+     bloom is held at .10 so it cannot lift the ground out from under the copy. */
   .flood::before, .flood::after { content:""; position:absolute; inset:-32%; z-index:-1; pointer-events:none; }
-  .flood::before { background:radial-gradient(42% 55% at 24% 18%, rgba(255,255,255,.17), transparent 70%); }
+  .flood::before { background:radial-gradient(42% 55% at 24% 18%, rgba(255,255,255,.1), transparent 70%); }
   .flood::after { background:radial-gradient(38% 50% at 78% 86%, rgba(23,10,64,.38), transparent 72%); }
   .flood .scene-index { color:var(--violet-1); }
   .flood h2 { color:var(--violet-0); }
-  .flood h2 .accent { color:var(--violet-11); }
+  .flood h2 .accent { color:var(--violet-3); }
   .flood .scene-copy { color:var(--violet-1); }
   .flood-panels { display:grid; grid-template-columns:1fr auto 1fr; gap:clamp(1rem,3vw,2.5rem); align-items:center; margin-block-start:clamp(2rem,5vh,3.5rem); }
   .flood-panel { padding:var(--size-5); border:1.5px solid color-mix(in srgb,var(--violet-0) 70%,transparent); border-radius:var(--radius-2); background:color-mix(in srgb,var(--violet-0) 8%,transparent); }
   .flood-panel.solid { background:var(--violet-0); color:var(--violet-11); border-color:var(--violet-0); }
-  .flood-panel small { display:block; margin-block-end:var(--size-3); font-size:var(--font-size-micro); font-weight:var(--font-weight-7); letter-spacing:.14em; text-transform:uppercase; opacity:.75; }
+  .flood-panel small { display:block; margin-block-end:var(--size-3); font-size:var(--font-size-micro); font-weight:var(--font-weight-7); letter-spacing:.14em; text-transform:uppercase; }
   .flood-panel code { display:block; font-size:var(--font-size-00); line-height:1.8; white-space:pre; }
   .flood-arrow { font-size:var(--font-size-5); color:var(--violet-0); }
   .shadow-outline { display:inline-block; margin-block-end:var(--size-2); padding:var(--size-1) var(--size-3); border:1.5px dashed var(--violet-8); border-radius:var(--radius-1); color:var(--violet-8); font-size:var(--font-size-00); }
@@ -102,6 +141,15 @@ export const pageHomeStyles = [compiledStyle(`
   .strategy .tag-default { display:inline-block; margin-inline-start:var(--size-2); padding:1px var(--size-2); border-radius:var(--badge-radius); background:var(--brand); color:var(--on-brand); font-size:var(--font-size-micro); font-weight:var(--font-weight-7); letter-spacing:.1em; vertical-align:middle; }
   .strategy p { margin-block-start:var(--size-2); color:var(--text-secondary); font-size:var(--font-size-00); line-height:1.6; }
   .strategy footer { margin-block-start:var(--size-3); color:var(--text-muted); font-size:var(--font-size-micro); }
+  @container band (max-width:1080px) {
+    .strategies { grid-template-columns:1fr 1fr; }
+    .strategy:nth-child(3) { border-inline-start:0; }
+  }
+  @container band (max-width:640px) {
+    .strategies { grid-template-columns:1fr; }
+    .strategy { border-inline-start:0; }
+    .strategy:nth-child(n+2) { border-block-start:1px solid var(--border); }
+  }
 
   /* ── §4 output: typographic rows ── */
   .output-rows { margin-block-start:clamp(2rem,5vh,3rem); border-block-start:1px solid var(--border); }
@@ -109,14 +157,19 @@ export const pageHomeStyles = [compiledStyle(`
   .output-row.active { background:var(--brand); color:var(--on-brand); }
   .output-row .name { font-size:clamp(2.2rem,4vw,3.5rem); font-weight:800; letter-spacing:-.02em; line-height:1; }
   .output-row .desc { max-width:22rem; color:var(--text-secondary); font-size:var(--font-size-00); line-height:1.6; }
-  .output-row.active .desc { color:var(--violet-9); }
+  /* --violet-9 on --brand (violet-7) was 1.96:1; the active row's copy uses the
+     same on-brand ink as its heading. */
+  .output-row.active .desc { color:var(--on-brand); }
   .output-row .arrow { font-size:var(--font-size-6); color:var(--violet-5); }
   .output-row.active .arrow { color:var(--violet-0); }
 
   /* ── §5 begin ── */
   .begin { text-align:center; padding-block:clamp(5rem,12vh,9rem); }
   .begin h2 { font-family:var(--font-serif); font-style:italic; font-weight:400; font-size:clamp(4rem,8vw,7rem); color:var(--violet-8); }
-  .begin .command { display:inline-flex; align-items:center; gap:var(--size-4); margin-block-start:var(--size-6); padding:var(--size-3) var(--size-5); border:var(--border-size-1) solid var(--border); border-radius:var(--radius-2); background:var(--surface-code); color:var(--text-primary); font-size:var(--font-size-0); }
+  /* The command box paints --surface-code (= --bg-code, dark in both themes),
+     so its text must use the theme-stable --code-text: light --text-primary is
+     near-black, i.e. 1.24:1 on that surface. */
+  .begin .command { display:inline-flex; align-items:center; gap:var(--size-4); margin-block-start:var(--size-6); padding:var(--size-3) var(--size-5); border:var(--border-size-1) solid var(--border); border-radius:var(--radius-2); background:var(--surface-code); color:var(--code-text); font-size:var(--font-size-0); }
   .begin .command code { color:var(--success); }
   .begin .command-note { max-width:32rem; margin:var(--size-3) auto 0; color:var(--text-muted); font-size:var(--font-size-00); line-height:1.6; }
   .begin .actions { justify-content:center; margin-block-end:0; }
@@ -153,19 +206,21 @@ export const pageHomeStyles = [compiledStyle(`
 
   @media (max-width:900px) {
     .scene-split { grid-template-columns:1fr; }
-    .strategies { grid-template-columns:1fr 1fr; }
-    .strategy:nth-child(3) { border-inline-start:0; }
-    .spec-strip { grid-template-columns:1fr 1fr; }
-    .spec-cell:nth-child(odd) { border-inline-start:0; }
     .flood-panels { grid-template-columns:1fr; }
     .flood-arrow { transform:rotate(90deg); justify-self:center; }
+  }
+  /* Mid tiers: reference cards relax to two columns at laptop widths; output
+     rows stack before their three-column grid squeezes at tablet widths. */
+  @media (max-width:1200px) {
     .links { grid-template-columns:1fr 1fr; }
-    .links a:nth-child(2) { border-inline-end:0; }
+    .links a:nth-child(2n) { border-inline-end:0; }
+  }
+  @media (max-width:768px) {
+    .output-row { grid-template-columns:1fr; gap:var(--size-2); }
+    .output-row .arrow { display:none; }
   }
   @media (max-width:520px) {
     .eyebrow { letter-spacing:.16em; }
-    .hero-stamp { display:none; }
-    .output-row { grid-template-columns:1fr; gap:var(--size-2); }
     .links { grid-template-columns:1fr; }
     .links a { border-inline-end:0; border-block-end:1px solid var(--border); }
     .links a:last-child { border-block-end:0; }

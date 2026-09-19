@@ -34,8 +34,8 @@
 export const SITE_E2E_PROJECTS = ['chromium', 'firefox', 'webkit'] as const;
 
 /**
- * Minimum passed tests per browser. The real suite is currently 231 per
- * browser (693 total); 200 is deliberately conservative. Raise this when the
+ * Minimum passed tests per browser. The real suite is currently 234 per
+ * browser (702 total); 200 is deliberately conservative. Raise this when the
  * suite grows — see the header contract.
  */
 export const SITE_E2E_MIN_PASSED_PER_PROJECT = 200;

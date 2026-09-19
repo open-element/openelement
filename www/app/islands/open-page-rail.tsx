@@ -3,4 +3,4 @@ import { defineIslandConfig } from '@openelement/router';
 export { default } from '../site-ui/open-page-rail.tsx';
 
 export const tagName = 'open-page-rail';
-export const openElement = defineIslandConfig({ hydrate: 'idle', ssr: true, dsd: true });
+export const openElement = defineIslandConfig({ hydrate: 'idle', ssr: true });

@@ -1,4 +1,4 @@
-import { assertEquals } from '@std/assert';
+import { assertEquals, assertThrows } from '@std/assert';
 import {
   escapeAttr,
   escapeAttrValue,
@@ -229,4 +229,93 @@ Deno.test('wrapInDocument: script descriptor attributes are escaped; inline </sc
 Deno.test('wrapInDocument: descriptors without src or code are skipped', () => {
   const out = wrapInDocument('x', { scripts: [{ type: 'module' }] });
   assertEquals(out.includes('<script'), false);
+});
+
+// ─── Structured data channel (JSON-LD) ─────────────────────────────────
+
+Deno.test('wrapInDocument: structured data serializes into <head> as application/ld+json', () => {
+  const out = wrapInDocument('x', {
+    title: 'Notes',
+    meta: { description: 'All notes' },
+    links: [{ rel: 'canonical', href: 'https://example.com/notes' }],
+    structuredData: [
+      { '@context': 'https://schema.org', '@type': 'WebSite', name: 'Example' },
+    ],
+  });
+  const tag = '  <script type="application/ld+json">' +
+    '{"@context":"https://schema.org","@type":"WebSite","name":"Example"}</script>';
+  assertEquals(out.includes(tag), true);
+  // Inside <head>, after the link collection, before any raw head extras.
+  const head = out.slice(out.indexOf('<head>'), out.indexOf('</head>'));
+  const tagIndex = head.indexOf(tag);
+  assertEquals(tagIndex > head.indexOf('<link rel="canonical"'), true);
+  assertEquals(head.includes(tag), true);
+  // The payload is data, not markup: nothing is HTML-escaped or re-encoded.
+  assertEquals(tag.includes('&quot;'), false);
+  // No structured data (or an empty list) changes nothing.
+  assertEquals(
+    wrapInDocument('x', { title: 'T' }),
+    wrapInDocument('x', { title: 'T', structuredData: [] }),
+  );
+});
+
+Deno.test('wrapInDocument: structured data cannot close its script element or open a comment', () => {
+  const payload = 'Notes</script><img src=x onerror=alert(1)><!--<script>alert(2)</script>';
+  const open = '<script type="application/ld+json">';
+  const out = wrapInDocument('x', {
+    structuredData: [{ '@type': 'Article', headline: payload }],
+  });
+  // Exactly one end tag: the framework's own. Nothing in the payload can
+  // close the element, open a comment or start a nested script.
+  assertEquals((out.match(/<\/script>/g) ?? []).length, 1);
+  for (const forbidden of ['<!--', '<img', '<script>alert(2)']) {
+    assertEquals(out.includes(forbidden), false, `${forbidden} must not survive in the document`);
+  }
+  assertEquals(out.includes('\\u003C/script>\\u003Cimg'), true);
+  // The JSON still round-trips to the original text: escaping is a markup
+  // constraint, not a change of meaning.
+  assertEquals(
+    JSON.parse(out.slice(out.indexOf(open) + open.length, out.indexOf('</script>'))),
+    { '@type': 'Article', headline: payload },
+  );
+});
+
+Deno.test('wrapInDocument: a valid CSP nonce also reaches the structured data tag', () => {
+  const out = wrapInDocument('x', {
+    cspNonce: 'nonce-1_ok=',
+    structuredData: [{ '@type': 'WebSite' }],
+  });
+  assertEquals(
+    out.includes(
+      '<script type="application/ld+json" nonce="nonce-1_ok=">{"@type":"WebSite"}</script>',
+    ),
+    true,
+  );
+});
+
+Deno.test('wrapInDocument: non-JSON structured data entries fail closed', () => {
+  // Values JSON itself cannot represent (a function- or undefined-valued
+  // property is silently DROPPED by JSON.stringify) are rejected a layer up,
+  // by the structured-data channel in @openelement/router/document; this
+  // serializer throws for every input it cannot faithfully serialize.
+  const circular: Record<string, unknown> = {};
+  circular.self = circular;
+  const cases: Array<[string, unknown[]]> = [
+    ['a string entry', ['<script type="application/ld+json">{}</script>']],
+    ['an array entry', [[{ '@type': 'WebSite' }]]],
+    ['a null entry', [null]],
+    ['a bigint value', [{ '@type': 'WebSite', count: 1n }]],
+    ['a circular value', [circular]],
+  ];
+  for (const [name, structuredData] of cases) {
+    assertThrows(
+      () =>
+        wrapInDocument('x', {
+          structuredData: structuredData as Array<Record<string, unknown>>,
+        }),
+      TypeError,
+      'structuredData',
+      name,
+    );
+  }
 });

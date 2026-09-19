@@ -31,6 +31,7 @@ import type {
   StaticComponentDecl,
 } from '../vite/internal/protocol/ssg.ts';
 import type { OpenElementBuildContext } from '../vite/build-context.ts';
+import { findWorkspaceRoot } from '../vite/workspace-alias.ts';
 import {
   buildEntryDescriptor,
   fileToTagName,
@@ -412,7 +413,11 @@ async function buildSSG(
         ...(renderer === 'lit' ? [litSsrDataUrlStubPlugin()] : []),
         // Keep SSR lowering identical to the outer Vite and client builds;
         // this inline build has its own plugin list.
-        compiledElementPlugin(),
+        compiledElementPlugin({
+          // Linked workspace packages sit outside the project root; without the
+          // workspace anchor their absolute ids would land in the source maps.
+          workspaceRoot: findWorkspaceRoot(Deno.cwd()) ?? undefined,
+        }),
         // ADR 0010: Virtual SSG entry module
         // Replaces .openElement/.openElement-ssg-entry.ts file write
         {

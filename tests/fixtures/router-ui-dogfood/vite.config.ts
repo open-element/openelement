@@ -13,10 +13,10 @@ import { defineConfig } from 'vite';
 
 // Token sheet as document CSS so the ui recipes resolve their variables on
 // first paint (same pattern www uses; shadow trees inherit from :root).
+// The :host -> :root transform is owned by the token codegen.
 const tokenCSS = [...openPropsTokenSheet.cssRules]
   .map((rule) => rule.cssText)
-  .join('\n')
-  .replace(/:host\s*\{/g, ':root, :host {');
+  .join('\n');
 
 export default defineConfig({
   base: '/',

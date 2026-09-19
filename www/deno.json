@@ -27,9 +27,27 @@
   ],
   "tasks": {
     "build": "deno run --config ../deno.json --allow-read --allow-write --allow-net --allow-env --allow-ffi --allow-sys --allow-run ../packages/router/src/cli/build.ts",
-    "check": "deno check --config ../deno.json __tests__/article-body.test.ts __tests__/article-pages.test.ts __tests__/build-output.test.ts __tests__/island-metadata.test.ts __tests__/open-layout-navigation.test.ts __tests__/site-ui.test.ts __tests__/v0.27.0-regression.test.ts",
     "test": "deno test --config ../deno.json --allow-read --allow-write --allow-env --allow-net --allow-run --allow-ffi --allow-sys __tests__/",
     "pagefind": "deno run --config ../deno.json --allow-read --allow-write --allow-env --allow-run --allow-net build-pagefind.ts",
-    "e2e:browsers": "deno run --config ../deno.json --allow-read --allow-write --allow-env --allow-net --allow-run --allow-sys ../tools/repo/site-e2e-run.ts"
+    "e2e:browsers": "deno run --config ../deno.json --allow-read --allow-write --allow-env --allow-net --allow-run --allow-sys ../tools/repo/site-e2e-run.ts",
+    "generate:content": "deno run --allow-run ../tools/repo/run-in.ts --root .. -- deno run --allow-read --allow-write --allow-env www/tools/generate-site-content-data.ts",
+    "check:content-data": "deno run --allow-run ../tools/repo/run-in.ts --root .. -- deno run --allow-read --allow-write --allow-env www/tools/generate-site-content-data.ts --check",
+    "generate:nav": "deno run --allow-run ../tools/repo/run-in.ts --root .. -- deno run --allow-read --allow-write --allow-env www/tools/generate-site-nav.ts",
+    "check:nav": "deno run --allow-run ../tools/repo/run-in.ts --root .. -- deno run --allow-read --allow-write --allow-env www/tools/generate-site-nav.ts --check",
+    "generate:api-reference": "deno run --allow-run ../tools/repo/run-in.ts --root .. -- deno run --allow-read --allow-write --allow-env www/tools/generate-api-reference.ts",
+    "check:api-reference": "deno run --allow-run ../tools/repo/run-in.ts --root .. -- deno run --allow-read --allow-write --allow-env www/tools/generate-api-reference.ts --check",
+    "emit:redirects": "deno run --allow-run ../tools/repo/run-in.ts --root .. -- deno run --allow-read --allow-write --allow-run --allow-env www/tools/emit-site-redirects.ts",
+    "emit:sitemap": "deno run --allow-run ../tools/repo/run-in.ts --root .. -- deno run --allow-read --allow-write --allow-env www/tools/emit-site-sitemap.ts",
+    "emit:rss": "deno run --allow-run ../tools/repo/run-in.ts --root .. -- deno run --allow-read --allow-write www/tools/emit-site-rss.ts",
+    "check:content": "deno run --allow-run ../tools/repo/run-in.ts --root .. -- deno run --allow-read --allow-write --allow-env --allow-net --allow-run --allow-sys www/tools/check-content-examples.ts",
+    "check:content-dates": "deno run --allow-run ../tools/repo/run-in.ts --root .. -- deno run --allow-read --allow-write --allow-run=git www/tools/check-content-dates.ts",
+    "write:content-dates": "deno run --allow-run ../tools/repo/run-in.ts --root .. -- deno run --allow-read --allow-write --allow-run=git www/tools/check-content-dates.ts --write",
+    "check:doc-figures": "deno run --allow-run ../tools/repo/run-in.ts --root .. -- deno run --allow-read --allow-run=gzip www/tools/check-doc-figures.ts",
+    "check:retired-url": "deno run --allow-run ../tools/repo/run-in.ts --root .. -- deno run --allow-read --allow-write --allow-env --allow-run=git,tar www/tools/check-retired-urls.ts",
+    "refresh:retired-url": "deno run --allow-run ../tools/repo/run-in.ts --root .. -- deno run --allow-read --allow-write --allow-env --allow-run=git,tar www/tools/check-retired-urls.ts --refresh",
+    "check:links": "deno run --allow-run ../tools/repo/run-in.ts --root .. -- deno run --allow-read --allow-write --allow-env www/tools/check-site-links.ts",
+    "check:theme-tokens": "deno run --allow-run ../tools/repo/run-in.ts --root .. -- deno run --allow-read www/tools/check-site-theme-tokens.ts",
+    "check:machine-paths": "deno run --allow-run ../tools/repo/run-in.ts --root .. -- deno run --allow-read www/tools/check-no-machine-paths.ts",
+    "check:routes-types": "deno run --allow-run ../tools/repo/run-in.ts --root .. -- deno run --allow-read --allow-env --allow-run www/tools/check-www-routes-types.ts"
   }
 }

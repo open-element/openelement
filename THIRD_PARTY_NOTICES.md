@@ -21,6 +21,10 @@ documentation site (license text included in the distribution at
   <https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/>
 - License: MIT
 - Copyright: Copyright (c) 2012 Lea Verou
+- Retirement condition: once `open-code-block` ships built-in highlighting or
+  the site migrates to build-time highlighting (e.g. Shiki), delete the entire
+  `www/public/assets/vendor/prism/` tree, `www/public/prism-init.js`, and the
+  corresponding script injections in `www/vite.config.ts`.
 
 ```text
 MIT LICENSE
@@ -45,6 +49,15 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ```
+
+## Package-level notices
+
+Dependencies redistributed inside a published package carry their notices in
+that package (a tarball cannot reach repository-root files). The full open-props
+MIT text lives in
+[`packages/ui/THIRD_PARTY_NOTICES.md`](./packages/ui/THIRD_PARTY_NOTICES.md)
+and ships inside the `@openelement/ui` tarball; a packed-artifact test keeps
+that true.
 
 ## Fonts
 

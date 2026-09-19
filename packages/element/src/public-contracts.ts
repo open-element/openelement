@@ -8,10 +8,6 @@ export type {
   ProblemDetails,
   ServerRouteContext,
   ServerRouteMetadata,
-  SpaAction,
-  SpaActionContext,
-  SpaLoader,
-  SpaLoaderContext,
 } from './internal/protocol/data.ts';
 export { ACTION_FETCH_HEADER, PROBLEM_JSON_MEDIA_TYPE } from './internal/protocol/data.ts';
 export type {

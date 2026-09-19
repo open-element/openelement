@@ -70,12 +70,12 @@
     font-family="'JetBrains Mono', 'SFMono-Regular', Consolas, monospace"
     font-size="28"
     fill="#ced4da"
-  >Web Components Fullstack Framework + Basic Element</text>
+  >Web Components fullstack framework</text>
   <text
     x="462"
     y="426"
     font-family="'JetBrains Mono', 'SFMono-Regular', Consolas, monospace"
     font-size="24"
     fill="#adb5bd"
-  >Declarative Shadow DOM, route graphs, island hydration, package contracts.</text>
+  >Declarative Shadow DOM · islands · route graphs.</text>
 </svg>

@@ -100,3 +100,36 @@ stripping as last-resort defense. Two corrections, landed post-merge of #1353:
    document serializer's script/event-handler stripping is disabled by design
    (`html-escape.ts`), and enforcement lives entirely in the two predicates
    above plus URL validation on `inject.scripts`.
+
+## Amendment (2026-09-17): structured data (JSON-LD) is a data channel, not a fourth raw channel
+
+The channel taxonomy above is complete for _raw_ markup; structured data now
+has a channel of its own, deliberately outside that enumeration:
+
+1. `PageHead.structuredData` (`packages/router/src/authoring.ts`) resolves
+   through the same Document seam (ADR-0153 §1) into
+   `ResolvedDocument.structuredData`. `resolvePageDocument` fails closed on
+   anything JSON cannot represent — a string entry, a function- or
+   `undefined`-valued property, `NaN`/`Infinity`, a `Date`/`Map`/`Set`/class
+   instance, a circular reference — and normalizes the survivors into a
+   null-prototype copy (`packages/router/src/document.ts`). Callers hand the
+   framework DATA; there is no path from this field to markup.
+2. The single serialization point is `wrapInDocument`
+   (`packages/element/src/internal/core/html-escape.ts`): one
+   `<script type="application/ld+json">` per document in `<head>`, body =
+   `JSON.stringify` output with every `<` escaped as `\u003C`, so a payload can
+   neither close the element early nor open an HTML comment; a valid CSP nonce
+   reaches the tag like every other framework-generated script.
+3. The `<script>` ban on the raw channels is UNCHANGED: `assertNoScriptTags`
+   still rejects a well-formed `application/ld+json` string passed through
+   `dangerouslyHeadFragments` — the string form is a fail-closed error on the
+   data channel too, so the two cannot be confused
+   (`packages/router/__tests__/document.test.ts`).
+
+Frozen paths touched: `authoring.ts` (§1) gains the field;
+`packages/router/src/vite/internal/ssg/entry-route-helpers.ts` feeds
+`__doc.structuredData` into the shared `wrapInDocument` option block used by
+both the request-time handlers and the SSG render route; the public interface
+snapshot is regenerated. First consumer: the product site emits `BlogPosting`
+on blog dispatches and `WebSite` + `Organization` on the front page, from site
+truth only (no invented logo, `sameAs`, or social profiles).

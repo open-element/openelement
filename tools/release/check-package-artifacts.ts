@@ -362,6 +362,25 @@ export function scanExtractedPackage(packageName: string, packageRoot: string): 
     }
   }
 
+  // @openelement/ui redistributes open-props declarations verbatim, so the
+  // packed tarball itself — not just the repository root — must carry the
+  // upstream copyright and permission notice.
+  if (packageName === '@openelement/ui') {
+    const notice = files.has('THIRD_PARTY_NOTICES.md')
+      ? Deno.readTextFileSync(`${packageRoot}/THIRD_PARTY_NOTICES.md`)
+      : '';
+    for (
+      const required of ['open-props 1.7.23', 'Copyright (c) 2021 Adam Argyle', 'MIT License']
+    ) {
+      if (!notice.includes(required)) {
+        violations.push({
+          path: `${packageName}/THIRD_PARTY_NOTICES.md`,
+          message: `packed third-party notice must include '${required}'`,
+        });
+      }
+    }
+  }
+
   // Every object-form export that serves JavaScript must serve a matching
   // declaration file: publint/attw catch most of this, but an explicit
   // violation names the subpath instead of burying it in tool output.

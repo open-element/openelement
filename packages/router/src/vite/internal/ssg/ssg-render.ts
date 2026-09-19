@@ -268,29 +268,11 @@ export async function ssgRender(
 
   // ── Post-processing ─────────────────────────────────────────
 
-  // Rename 404/index.html -> 404.html for GitHub Pages
-  const _404Dir = join(outputDir, '404');
-  const _404Html = join(outputDir, '404.html');
-  const _404Index = join(_404Dir, 'index.html');
-  if (existsSync(_404Index)) {
-    if (existsSync(_404Html)) {
-      log.warn(
-        '404.html already exists in output dir - removing before rename',
-      );
-      Deno.removeSync(_404Html);
-    }
-    Deno.renameSync(_404Index, _404Html);
-    if (existsSync(_404Dir)) {
-      Deno.removeSync(_404Dir, { recursive: true });
-    }
-    log.info('404 page -> dist/404.html (GitHub Pages)');
-  }
-
   // Convert flat HTML files to clean URLs: about.html -> about/index.html
   const allHtmlFiles = findHtmlFiles(outputDir);
   for (const filePath of allHtmlFiles) {
     const rel = relative(outputDir, filePath);
-    if (rel.endsWith('index.html') || rel === '404.html') continue;
+    if (rel.endsWith('index.html') || rel === '404.html' || rel.endsWith('/404.html')) continue;
     const baseName = rel.replace(/\.html$/, '');
     const urlBaseName = normalizeSeparators(baseName);
     const dirPath = join(outputDir, baseName);
@@ -319,6 +301,32 @@ export async function ssgRender(
     root,
     outDir,
   );
+
+  // Rename 404/index.html -> 404.html for GitHub Pages — at the root and for
+  // every locale-prefixed copy (i18n expansion writes those after the static
+  // pass), so a locale error document is never served as a 200 directory page
+  // (status fidelity).
+  const rename404Dir = (dir: string, label: string) => {
+    const index = join(dir, '404', 'index.html');
+    if (!existsSync(index)) return;
+    const html = join(dir, '404.html');
+    if (existsSync(html)) {
+      log.warn('404.html already exists in output dir - removing before rename');
+      Deno.removeSync(html);
+    }
+    Deno.renameSync(index, html);
+    const dir404 = join(dir, '404');
+    if (existsSync(dir404)) {
+      Deno.removeSync(dir404, { recursive: true });
+    }
+    log.info(`404 page -> ${label}404.html (GitHub Pages)`);
+  };
+  rename404Dir(outputDir, 'dist/');
+  for (const entry of Deno.readDirSync(outputDir)) {
+    if (entry.isDirectory) {
+      rename404Dir(join(outputDir, entry.name), `dist/${entry.name}/`);
+    }
+  }
 
   // ── Post-processing modules ─────────────────────────────────
   const {

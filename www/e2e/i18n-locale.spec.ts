@@ -18,7 +18,7 @@ async function readShellState(page: Page) {
   const homeHref = await page.getByRole('banner')
     .getByRole('link', { name: 'openElement' })
     .getAttribute('href');
-  const navHrefs = await page.getByRole('navigation', { name: 'Primary navigation' })
+  const navHrefs = await page.getByRole('navigation', { name: /Primary navigation|主导航/ })
     .getByRole('link')
     .evaluateAll((links) => links.map((link) => link.getAttribute('href')));
   return {
@@ -145,11 +145,12 @@ test.describe('i18n SSG Output', () => {
     await page.waitForLoadState('networkidle');
 
     // getByRole('link') pierces open shadow roots and matches every anchored
-    // link; no hand-rolled shadow walk needed.
-    const hrefs = await page.getByRole('link')
+    // link; no hand-rolled shadow walk needed. The query is scoped to the
+    // main landmark: the header language switcher legitimately links to the
+    // zh twin, while the regression was post content/navigation linking into
+    // /zh/blog.
+    const hrefs = await page.getByRole('main').first().getByRole('link')
       .evaluateAll((links) => links.map((link) => link.getAttribute('href')));
-    // The header language switcher legitimately links to the zh locale;
-    // the regression was post content/navigation linking into /zh/blog.
     const zhHrefs = hrefs.filter((href) => href?.startsWith('/zh/blog'));
     expect(zhHrefs).toEqual([]);
   });

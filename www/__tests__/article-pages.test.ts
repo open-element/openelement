@@ -8,7 +8,14 @@ type ArticleCollection = keyof typeof articleCollections;
 type ArticleContentPage = {
   slug: string;
   locale?: string;
-  frontmatter: { title: string; lede?: string; order: number; locale: string };
+  frontmatter: {
+    title: string;
+    lede?: string;
+    order: number;
+    locale: string;
+    section: string;
+    navLabel?: string;
+  };
   content: string;
   html: string;
 };
@@ -20,38 +27,39 @@ const loadContentPages = (collection: ArticleCollection) =>
   }) as Promise<ArticleContentPage[]>;
 
 // The content routes share the site-ui article shell: each route module is a
-// thin binding — meta (the nav contract) plus a content slug; the body lives
-// in www/content/<collection>/<slug>[.<locale>].md (#1087, ADR-0136).
+// thin binding — a content slug — and the nav contract (section / order /
+// navLabel) lives in the article frontmatter
+// (www/content/docs/<collection>/<slug>[.<locale>].md), the single source of
+// truth that www/tools/generate-site-nav.ts projects (#1087, ADR-0136).
 const articleRoutes = [
   ['guide', 'api', 'GuideApiPage', 60],
-  ['guide', 'architecture', 'GuideArchitecturePage', 20],
-  ['guide', 'comparison', 'GuideComparisonPage', 25],
   ['guide', 'configuration', 'GuideConfigurationPage', 70],
   ['guide', 'core-concepts', 'GuideCoreConceptsPage', 10],
   ['guide', 'deployment', 'GuideDeploymentPage', 100],
   ['guide', 'error-handling', 'GuideErrorHandlingPage', 80],
   ['guide', 'getting-started', 'GuideGettingStartedPage', 1],
+  ['guide', 'glossary', 'GuideGlossaryPage', 65],
+  ['guide', 'recipe-form-actions', 'GuideRecipeFormActionsPage', 120],
+  ['guide', 'recipe-theming', 'GuideRecipeThemingPage', 121],
+  ['guide', 'recipe-island-strategies', 'GuideRecipeIslandStrategiesPage', 122],
   ['guide', 'islands-and-ssr', 'GuideIslandsAndSsrPage', 90],
   ['guide', 'mdx', 'GuideMdxPage', 50],
   ['guide', 'routing-and-data', 'GuideRoutingAndDataPage', 40],
   ['guide', 'security', 'GuideSecurityPage', 95],
   ['guide', 'styling', 'GuideStylingPage', 5],
   ['guide', 'testing', 'GuideTestingPage', 110],
-  ['architecture', 'architecture', 'ArchitecturePage', 10],
-  ['architecture', 'benchmark', 'Benchmark', 100],
+  ['guide', 'tutorial', 'GuideTutorialPage', 2],
+  ['architecture', 'architecture', 'ArchitecturePage', 10, 'index'],
   ['architecture', 'comparison', 'ComparisonPage', 20],
   ['architecture', 'design-system', 'DesignSystemPage', 15],
   ['architecture', 'dsd', 'DsdGuidePage', 30],
   ['architecture', 'islands', 'IslandsPage', 40],
-  ['architecture', 'islands-deep', 'IslandsDeepGuidePage', 50],
-  ['architecture', 'package-compatibility', 'PackageCompatibilityPage', 90],
-  ['architecture', 'standards-registry', 'StandardsRegistryPage', 80],
 ] as const;
 
-for (const [collection, route, className, order] of articleRoutes) {
+for (const [collection, route, className, , routeFile] of articleRoutes) {
   Deno.test(`${collection}/${route} is a thin article shell`, async () => {
     const routeSource = await Deno.readTextFile(
-      new URL(`../app/routes/${collection}/${route}.tsx`, import.meta.url),
+      new URL(`../app/routes/${collection}/${routeFile ?? route}.tsx`, import.meta.url),
     );
     const adapterSource = await Deno.readTextFile(
       new URL(`../app/components/article-routes/${collection}-${route}.tsx`, import.meta.url),
@@ -61,10 +69,16 @@ for (const [collection, route, className, order] of articleRoutes) {
       routeSource,
       `projectArticlePage('${collection}', '${route}', locale)`,
     );
-    assertStringIncludes(routeSource, `order: ${order}`);
+    assert(
+      !routeSource.includes('export const meta'),
+      `${collection}/${route} must not duplicate nav metadata; declare it in the frontmatter`,
+    );
     assertStringIncludes(adapterSource, `@element('${collection}-${route}')`);
     assertStringIncludes(adapterSource, `class ${className} extends OpenElement`);
-    assertStringIncludes(adapterSource, '<open-article-view model={this.model}>');
+    assertStringIncludes(
+      adapterSource,
+      '<open-article-view model={this.model} locale={this.locale}>',
+    );
 
     const model = projectArticlePage(collection, route, 'en');
     assertEquals(model.slug, route);
@@ -94,6 +108,10 @@ Deno.test('content covers every route in both locales', async () => {
         assert(
           page.frontmatter.title.length > 0,
           `${collection}/${route} (${locale}) title must not be empty`,
+        );
+        assert(
+          typeof page.frontmatter.section === 'string' && page.frontmatter.section.length > 0,
+          `${collection}/${route} (${locale}) must declare a nav section`,
         );
         assertStringIncludes(
           page.html,
@@ -130,20 +148,6 @@ Deno.test('getting-started leads with copyable commands', async () => {
   // The page's primary job: a fenced, copyable install command — not prose.
   assertStringIncludes(en.html, '<pre><code class="language-bash">');
   assertStringIncludes(en.html, 'npm:@openelement/create');
-});
-
-// #749: guide/architecture and guide/comparison are orientation pages that
-// point at the full Architecture pages instead of maintaining a second copy.
-Deno.test('architecture and comparison guide pages point at the full pages', async () => {
-  const pages = await loadContentPages('guide');
-  for (const slug of ['architecture', 'comparison'] as const) {
-    const en = pages.find((p) => p.slug === slug && p.locale === 'en');
-    const zh = pages.find((p) => p.slug === slug && p.locale === 'zh');
-    assertExists(en);
-    assertExists(zh);
-    assertStringIncludes(en.html, `href="/architecture/${slug}"`);
-    assertStringIncludes(zh.html, `href="/zh/architecture/${slug}"`);
-  }
 });
 
 // The security page deep-links the configuration anchor; the configuration

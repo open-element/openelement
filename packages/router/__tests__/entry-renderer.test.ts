@@ -78,9 +78,10 @@ Deno.test('renderEntry: CSP without nonce generates header middleware', () => {
 Deno.test('renderEntry: does not emit the retired duplicate /_data loader protocol (#987)', () => {
   const code = renderEntry(buildEntryDescriptor(basicRoutes, {}));
 
-  // SPA mode executes its RouteConfig loader with decoded router params;
-  // request-time navigation uses the canonical page route. A second generated
-  // loader endpoint had no consumer and lost params/headers/control flow.
+  // No second generated loader endpoint (/_data, __dataRouteMap): it had no
+  // consumer and lost params/headers/control flow (#987). Request-time
+  // navigation uses the canonical page route; RouteConfig carries no loader —
+  // client-side data fetching is not a second loader protocol.
   assertFalse(code.includes('/_data'));
   assertFalse(code.includes('__dataRouteMap'));
 });
@@ -525,6 +526,7 @@ Deno.test('renderEntry: definePage descriptor feeds load and metadata wiring', (
     'meta: { description: __doc.description, tags: __doc.meta },',
   );
   assertStringIncludes(code, 'links: __doc.links,');
+  assertStringIncludes(code, 'structuredData: __doc.structuredData || [],');
   assertStringIncludes(
     code,
     'dangerouslyHeadFragments: __doc.dangerouslyHeadFragments || [],',

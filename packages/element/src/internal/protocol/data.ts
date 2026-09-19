@@ -15,9 +15,6 @@
  * server contract: the loader runs on the server with the Web-standard
  * request, matched route params, the host environment and the platform
  * object, and signals validation failure via fail()/redirect() (ADR-0120).
- *
- * SPA-mode loaders are a different chain — see SpaLoaderContext. The names
- * are intentionally parallel; the contexts are not interchangeable (#570).
  */
 export interface ServerRouteMetadata {
   path: string;
@@ -70,31 +67,6 @@ export type Action<
   Platform = unknown,
   Route extends ServerRouteMetadata = ServerRouteMetadata,
 > = (ctx: ActionContext<Env, Platform, Route>) => T | Promise<T>;
-
-// ─── SPA route data types (ADR-0119 frozen semantics) ──────────────
-
-/**
- * Context passed to an SPA-mode route loader (#570). The SPA chain runs
- * client-side and supplies only the matched route params — no request, env
- * or platform — and signals failure by throwing (a throw is normalized to
- * action data by the SPA submit handler). These semantics are frozen under
- * ADR-0119; this type names the existing narrowing without changing any
- * runtime behavior.
- */
-export interface SpaLoaderContext {
-  params: Record<string, string>;
-}
-
-/** Context passed to an SPA-mode route action (client-side). */
-export interface SpaActionContext extends SpaLoaderContext {
-  formData?: FormData;
-}
-
-/** SPA route loader: client-side data fetch receiving route params only. */
-export type SpaLoader<T = unknown> = (ctx: SpaLoaderContext) => T | Promise<T>;
-
-/** SPA route action: client-side submit handler; signal failure by throwing. */
-export type SpaAction<T = unknown> = (ctx: SpaActionContext) => T | Promise<T>;
 
 /**
  * Wire shape returned to the JavaScript form-enhancement path (0.42.0-alpha.2,

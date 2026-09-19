@@ -6,7 +6,7 @@
  * new public route is covered the moment the build emits it, and a missing
  * or empty sitemap fails the suite closed. A second fail-closed cross-check
  * requires every guide/architecture article route from the generated content
- * content sources (www/content/{guide,architecture}/*.md, paired en/zh)
+ * sources (www/content/docs/{guide,architecture}/*.md, paired en/zh)
  * to appear in the sitemap in both locales, so a source-level route that
  * never reached the built public surface is a CI failure here as well. Blog
  * post URLs are slug-rewritten by the blog plugin at build time, so the
@@ -26,7 +26,7 @@ import { fileURLToPath } from 'node:url';
 
 const SITE_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const SITEMAP_PATH = join(SITE_ROOT, 'dist', 'sitemap.xml');
-const CONTENT_DIR = join(SITE_ROOT, 'content');
+const CONTENT_DIR = join(SITE_ROOT, 'content', 'docs');
 
 /** Public routes enumerated from the built sitemap; throws fail-closed. */
 function readSitemapRoutes(): string[] {
@@ -72,7 +72,10 @@ function contentSourceDrift(sitemapRoutes: Set<string>): string[] {
       else slugs.add(file.slice(0, -'.md'.length));
     }
     for (const slug of slugs) {
-      const route = `/${collection}/${slug}`;
+      // The collection overview article (slug == collection) is served at
+      // the collection root (/architecture, route index.tsx) — same mapping
+      // as articleRoutePath in www/app/site-ui/article-page-model.ts.
+      const route = slug === collection ? `/${collection}` : `/${collection}/${slug}`;
       if (!sitemapRoutes.has(route)) {
         failures.push(`article route '${route}' is missing from the built sitemap`);
       }

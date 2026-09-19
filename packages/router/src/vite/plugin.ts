@@ -147,6 +147,7 @@ export function createOpenPlugin(
   // bytes depend on the checkout location. Use a project-relative POSIX id
   // instead, matching the packed staging compiler's basename identity.
   let viteRoot: string | undefined;
+  let workspaceRoot: string | undefined;
   const programShape = (program: unknown): string => {
     const { sourceMap: _sourceMap, ...shape } = program as Record<string, unknown>;
     return JSON.stringify(shape);
@@ -157,6 +158,7 @@ export function createOpenPlugin(
   // all read ctx.phase1.userResolveAlias - zero redundant generation.
   try {
     const wsRoot = findWorkspaceRoot(Deno.cwd());
+    workspaceRoot = wsRoot ?? undefined;
     if (wsRoot) {
       ctx.phase1.userResolveAlias = generateWorkspaceAliases(wsRoot);
       log.info(
@@ -354,7 +356,7 @@ export function createOpenPlugin(
 
     transform(code, id) {
       try {
-        const result = compileElementModule(code, stableModuleId(id, viteRoot));
+        const result = compileElementModule(code, stableModuleId(id, viteRoot, workspaceRoot));
         if (!result) return null;
         const key = id.split('?', 1)[0];
         compiledProgramShapes.set(key, programShape(result.program));
@@ -382,7 +384,10 @@ export function createOpenPlugin(
         return;
       }
       try {
-        const result = compileElementModule(source, stableModuleId(hmr.file, viteRoot));
+        const result = compileElementModule(
+          source,
+          stableModuleId(hmr.file, viteRoot, workspaceRoot),
+        );
         if (!result) {
           compiledProgramShapes.delete(hmr.file);
           return;

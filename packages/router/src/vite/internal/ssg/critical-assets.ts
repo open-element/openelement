@@ -8,7 +8,8 @@
  */
 
 import { escapeAttr, OpenElementError } from '@openelement/element';
-import { foldCssForCheck, stripCssComments, validateSafeUrl } from '../../head-injection.ts';
+import { foldCssForCheck, stripCssComments } from '../../../internal/head-safety.ts';
+import { validateSafeUrl } from '../../head-injection.ts';
 
 function hasControlCharacters(value: string): boolean {
   for (let index = 0; index < value.length; index++) {
