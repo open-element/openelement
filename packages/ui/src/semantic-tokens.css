@@ -166,7 +166,14 @@
   --tab-radius: var(--radius-1);
 
   /* Shared component recipes: primitives consume these semantic roles only. */
-  --focus-ring: color-mix(in srgb, var(--brand-light) 84%, white);
+  /* Focus ring ink: --brand. The previous mix of --brand-light with white
+     resolved to #c1acff in light mode — 1.98:1 on white, 1.88:1 on gray-0,
+     1.81:1 on the surface tint — all below the WCAG 1.4.11 non-text floor of
+     3:1, while --brand measures 6.03:1 on white. The same declaration serves
+     dark mode, where --brand flips to violet-7 (#9c7df2, 6.22:1 on the dark
+     base). Keep it on --brand so the ring and its hover/border siblings stay
+     one source (open-input.tsx already focuses with --brand). */
+  --focus-ring: var(--brand);
   --ui-control-text: var(--text-primary);
   --ui-control-bg: color-mix(in srgb, var(--bg-elevated) 78%, transparent);
   --ui-control-border: color-mix(in srgb, var(--border) 72%, var(--brand));
