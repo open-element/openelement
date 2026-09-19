@@ -1,6 +1,7 @@
 /** Client island entry emission; browser runtime wiring only. */
 import { ACTION_FETCH_HEADER } from '@openelement/element';
 import { stableModuleId } from '@openelement/element/compiler';
+import { findWorkspaceRoot } from '../../workspace-alias.ts';
 import { quoteGeneratedJavaScriptValue } from './codegen-literals.ts';
 import {
   type AdmittedClientIslandEntry,
@@ -9,6 +10,10 @@ import {
   VIRTUAL_RUNTIME_SPECIFIERS,
 } from './entry-generators.ts';
 import type { ClientIslandDeliveryEntry, ClientIslandDeliveryInput } from './delivery.ts';
+
+// Machine-independent identity for the generated error copy: the workspace
+// anchor keeps absolute build paths out of the shipped client bundle.
+const WORKSPACE_ROOT = findWorkspaceRoot(Deno.cwd()) ?? undefined;
 
 function islandImportFactory(
   modulePath: AdmittedIslandModuleSpecifier,
@@ -22,7 +27,7 @@ function islandImportFactory(
   // specifier above stays absolute for the bundler.
   const errorLiteral = quoteGeneratedJavaScriptValue(
     `[openElement] Capability module ${
-      stableModuleId(modulePath, undefined)
+      stableModuleId(modulePath, undefined, WORKSPACE_ROOT)
     } did not export a constructor for ${tagName}`,
   );
   // #1339 lit: after definition the island is a hydration ROOT — its page
@@ -121,7 +126,7 @@ function sharedActivationFactory(
       : 'mod.default';
     const errorLiteral = quoteGeneratedJavaScriptValue(
       `[openElement] Capability module ${
-        stableModuleId(group.modulePath, undefined)
+        stableModuleId(group.modulePath, undefined, WORKSPACE_ROOT)
       } did not export a constructor for ${entry.tagName}`,
     );
     lines.push(`    var ${ctor} = ${value};`);
