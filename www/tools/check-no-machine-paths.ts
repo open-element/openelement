@@ -23,12 +23,44 @@ export const MACHINE_PATH_MARKERS: Array<[RegExp, string]> = [
   [/\/home\/[A-Za-z0-9._-]+\//, 'Linux home path'],
   [/\/private\/tmp\//, 'private temp path'],
   [/\/var\/folders\//, 'macOS temp path'],
+  // Linux CI roots: /tmp/<dir>/, /builds/<org>/, /root/<dir>/ and the
+  // hosted-toolcache prefix. The trailing segment keeps prose mentions of a
+  // bare '/tmp/' out of the gate while still catching build-root leaks.
+  [/\/tmp\/[A-Za-z0-9._-]+\//, 'Linux temp path'],
+  [/\/builds\/[A-Za-z0-9._-]+\//, 'CI builds path'],
+  [/\/root\/[A-Za-z0-9._-]+\//, 'Linux root home path'],
+  [/\/opt\/hostedtoolcache\//, 'hosted toolcache path'],
   // Realistic Windows machine paths only: a backslash path with at least two
   // segments, or a forward-slash path with at least three — minified code and
   // prose routinely contain short lookalikes like 'e:/p4--'.
   [/[A-Za-z]:\\[A-Za-z0-9._-]+(?:\\[A-Za-z0-9._-]+)+/, 'Windows drive path'],
   [/[A-Za-z]:\/(?:[A-Za-z0-9._-]+\/){2,}[A-Za-z0-9._-]+/, 'Windows drive path'],
 ];
+
+/**
+ * Directories whose text artifacts ship to consumers: the site output plus
+ * any package build output that exists in this checkout (derived, so a new
+ * package dist is covered without editing a list).
+ */
+export async function scanRoots(repoRoot: string): Promise<string[]> {
+  const roots: string[] = [];
+  const siteDist = join(repoRoot, 'www/dist');
+  try {
+    if ((await Deno.stat(siteDist)).isDirectory) roots.push(siteDist);
+  } catch {
+    // Missing site build is handled by the caller's error message.
+  }
+  for await (const entry of Deno.readDir(join(repoRoot, 'packages'))) {
+    if (!entry.isDirectory) continue;
+    const dist = join(repoRoot, 'packages', entry.name, 'dist');
+    try {
+      if ((await Deno.stat(dist)).isDirectory) roots.push(dist);
+    } catch {
+      // No build output for this package.
+    }
+  }
+  return roots;
+}
 
 /** Whether the bytes decode as UTF-8 text (no replacement characters). */
 export function isTextArtifact(bytes: Uint8Array): boolean {
@@ -50,31 +82,34 @@ export function findMachinePath(text: string): { label: string; match: string } 
 }
 
 async function main(): Promise<void> {
-  try {
-    await Deno.stat(dist);
-  } catch {
+  const roots = await scanRoots(repoRoot);
+  if (roots.length === 0) {
     console.error(
-      `machine-path check: ${dist} is missing — run the site build first (deno task site:build).`,
+      `machine-path check: no build output found (expected ${dist}) — run the site build first (deno task site:build).`,
     );
     Deno.exit(1);
   }
   const failures: string[] = [];
+  const oversize: string[] = [];
   let scanned = 0;
   let skippedBinary = 0;
-  for await (const entry of walk(dist, { includeDirs: false })) {
-    const bytes = await Deno.readFile(entry.path);
-    // Cheap pre-filter: decoding megabytes of media wastes the gate budget.
-    if (bytes.length > 4_000_000) {
-      skippedBinary++;
-      continue;
+  for (const root of roots) {
+    for await (const entry of walk(root, { includeDirs: false })) {
+      const bytes = await Deno.readFile(entry.path);
+      // Cheap pre-filter: decoding megabytes of media wastes the gate budget.
+      // Oversize files are listed, never silently skipped.
+      if (bytes.length > 4_000_000) {
+        oversize.push(`${entry.path.slice(root.length + 1)} (${bytes.length}B)`);
+        continue;
+      }
+      if (!isTextArtifact(bytes)) {
+        skippedBinary++;
+        continue;
+      }
+      scanned++;
+      const hit = findMachinePath(new TextDecoder().decode(bytes));
+      if (hit) failures.push(`${entry.path.slice(root.length + 1)}: ${hit.label} '${hit.match}'`);
     }
-    if (!isTextArtifact(bytes)) {
-      skippedBinary++;
-      continue;
-    }
-    scanned++;
-    const hit = findMachinePath(new TextDecoder().decode(bytes));
-    if (hit) failures.push(`${entry.path.slice(dist.length + 1)}: ${hit.label} '${hit.match}'`);
   }
 
   if (failures.length > 0) {
@@ -83,8 +118,11 @@ async function main(): Promise<void> {
     if (failures.length > 20) console.error(`... and ${failures.length - 20} more`);
     Deno.exit(1);
   }
+  if (oversize.length > 0) {
+    console.log(`oversize files not scanned (${oversize.length}): ${oversize.join(', ')}`);
+  }
   console.log(
-    `machine-path check passed (${scanned} text files scanned, ${skippedBinary} binary/oversize skipped).`,
+    `machine-path check passed (${scanned} text files scanned across ${roots.length} root(s), ${skippedBinary} binary skipped).`,
   );
 }
 

@@ -25,6 +25,22 @@ Deno.test('findMachinePath: real machine paths are found', () => {
   }
 });
 
+Deno.test('findMachinePath: Linux CI roots are caught', () => {
+  for (
+    const [input, label] of [
+      ['/tmp/oe-build/checkout/openelement/www/dist/x.js', 'Linux temp path'],
+      ['/builds/org/repo/www/dist/x.js', 'CI builds path'],
+      ['/root/repo/www/dist/x.js', 'Linux root home path'],
+      ['/opt/hostedtoolcache/node/20.11.0/x64/bin/node', 'hosted toolcache path'],
+    ] as const
+  ) {
+    const hit = findMachinePath(input);
+    assertEquals(hit?.label, label, input);
+  }
+  // A bare prose mention of a temp directory is not a machine path.
+  assertEquals(findMachinePath('write the file under /tmp/ before moving it'), null);
+});
+
 Deno.test('findMachinePath: short drive-letter lookalikes and clean text do not trip', () => {
   assertEquals(findMachinePath('U:w'), null);
   assertEquals(findMachinePath('U:\\w'), null);
