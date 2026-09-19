@@ -754,6 +754,41 @@ Deno.test('assertTrustedHeadHtml: still enforces the CSS blacklist on complete t
   );
 });
 
+Deno.test('assertTrustedHeadHtml: rejects self-closing style syntax', () => {
+  // <style/> is not a void element in HTML: the raw-text element still
+  // swallows the rest of the fragment, so accepting it would let the
+  // payload below run past the CSS blacklist.
+  for (
+    const input of [
+      '<style/>@import url("https://evil.example/x.css");',
+      '<STYLE/>@import url("https://evil.example/x.css");',
+      '<style />@import url("https://evil.example/x.css");',
+      '<style/>safe',
+      '<style />safe',
+      '<style/><style>safe</style>',
+      '<style>safe</style><style/>',
+      '<style title="x"/>safe',
+      '<style title="x" />safe',
+    ]
+  ) {
+    assertThrows(() => assertTrustedHeadHtml(input, 'test-input'), Error, '', input);
+  }
+});
+
+Deno.test('assertTrustedHeadHtml: quoted and unquoted slashes stay value bytes', () => {
+  // Slashes inside quoted values are content, not self-closing markers.
+  assertTrustedHeadHtml('<style title="x/y">body { color: red }</style>', 'test-input');
+  assertTrustedHeadHtml('<style title=">">body { color: red }</style>', 'test-input');
+  // An unquoted value ends at whitespace or '>': foo/bar is one value, so
+  // the tag is not self-closing (the attribute policy rejects data-x later,
+  // but the failure must not be a self-closing misclassification).
+  assertThrows(
+    () => assertTrustedHeadHtml('<style data-x=foo/bar>body { color: red }</style>', 'test-input'),
+    OpenElementError,
+    'Unsafe style attribute',
+  );
+});
+
 Deno.test('assertTrustedHeadHtml: unrelated tags around styles are untouched', () => {
   assertTrustedHeadHtml(
     '<meta charset="utf-8"><style>body { color: red }</style><link rel="icon" href="/i.png">',

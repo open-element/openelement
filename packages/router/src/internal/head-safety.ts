@@ -86,6 +86,41 @@ export function foldCssForCheck(css: string, context: string, code: string): str
     .replace(/\\(.)/g, '$1');
 }
 
+/**
+ * Whether a start tag's attribute text ends in a real self-closing solidus.
+ *
+ * A minimal subset of the HTML tokenizer's start-tag rules, scoped to this
+ * decision only (it is not an HTML parser and makes no policy calls):
+ * quoted values are skipped wholesale, unquoted values run to ASCII
+ * whitespace or '>' with '/' belonging to the value, and a '/' is a
+ * self-closing marker only at a token boundary whose only remaining byte is
+ * the terminating '>'.
+ */
+function hasSelfClosingSolidus(attrs: string): boolean {
+  let inUnquotedValue = false;
+  for (let index = 0; index < attrs.length; index += 1) {
+    const char = attrs[index];
+    if (char === '"' || char === "'") {
+      const quote = char;
+      index += 1;
+      while (index < attrs.length && attrs[index] !== quote) index += 1;
+      inUnquotedValue = false;
+      continue;
+    }
+    if (/\s/.test(char) || char === '=') {
+      inUnquotedValue = false;
+      continue;
+    }
+    if (char === '/') {
+      if (!inUnquotedValue && attrs.slice(index + 1).trim() === '') return true;
+      inUnquotedValue = true;
+      continue;
+    }
+    inUnquotedValue = true;
+  }
+  return false;
+}
+
 function assertStyleTag(attributes: string, css: string, context: string): string {
   if (
     /(?:@import|expression\s*\(|url\s*\(\s*["']?\s*(?:javascript|data|vbscript|file)\s*:)/i.test(
@@ -145,8 +180,11 @@ export function assertTrustedHeadHtml(html: string, context: string): void {
     const open = lower.indexOf('<style', index);
     if (open === -1) return;
     const boundary = html[open + 6];
-    if (boundary !== undefined && !/[\s>]/.test(boundary)) {
+    if (boundary !== undefined && /[\w-]/.test(boundary)) {
       // A different tag that merely shares the prefix (e.g. <stylesheet-x>).
+      // A '/' after the name is NOT a lookalike: <style/> is style start-tag
+      // syntax and must go through the parser (and be rejected as
+      // self-closing below).
       index = open + 6;
       continue;
     }
@@ -202,6 +240,16 @@ export function assertTrustedHeadHtml(html: string, context: string): void {
       });
     }
     const attrs = html.slice(open + 6, tagEnd);
+    if (hasSelfClosingSolidus(attrs)) {
+      throw new OpenElementError(
+        `Self-closing <style/> is not valid in ${context}; style is a raw-text element and would swallow the rest of the fragment`,
+        {
+          code: 'UNSAFE_HEAD_INJECTION',
+          statusCode: 400,
+          recoverable: false,
+        },
+      );
+    }
     const css = html.slice(tagEnd + 1, close);
     assertStyleTag(attrs, css, context);
     index = cursor + 1;
