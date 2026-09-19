@@ -108,12 +108,12 @@ docs 站点就是一个普通的 openElement 应用（同样有 island），所�
 
 | Chunk                          | 原始字节 | gzip -9 |
 | ------------------------------ | -------- | ------- |
-| `island-open-layout`           | 102,028  | 17,683  |
+| `island-open-layout`           | 101,969  | 17,683  |
 | `island-open-cinematic-scroll` | 78,176   | 23,894  |
 | `open-button`                  | 16,320   | 3,131   |
 | `island-open-dragon-live-gaze` | 14,161   | 5,169   |
 | `island-open-page-rail`        | 9,684    | 2,746   |
-| `open-code-block`              | 8,705    | 2,937   |
+| `open-code-block`              | 8,471    | 2,811   |
 | `island-open-hero-polish`      | 4,436    | 1,848   |
 | `open-badge`                   | 4,010    | 1,137   |
 
