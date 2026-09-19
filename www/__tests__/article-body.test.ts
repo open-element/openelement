@@ -115,3 +115,32 @@ Deno.test('prepareArticle: existing ids are seeded in every HTML quote style', (
   );
   assertIdsUnique(mixed.html);
 });
+
+Deno.test('prepareArticle: authored heading ids of every quote style are replaced, never duplicated', () => {
+  for (
+    const [label, html, expectedId] of [
+      ['double', '<h2 id="foo">Bar</h2>', 'bar'],
+      ['single', "<h2 id='foo'>Bar</h2>", 'bar'],
+      ['unquoted', '<h2 id=foo>Bar</h2>', 'bar'],
+      // Authored id colliding with the heading stem: the seed must push the
+      // replacement past it, and removal must clear the original attribute.
+      ['double collision', '<h2 id="bar">Bar</h2>', 'bar-2'],
+      ['single collision', "<h2 id='bar'>Bar</h2>", 'bar-2'],
+      ['unquoted collision', '<h2 id=bar>Bar</h2>', 'bar-2'],
+    ] as const
+  ) {
+    const { html: out, outline } = prepareArticle(html);
+    const heading = /<h2[^>]*>/.exec(out)?.[0] ?? '';
+    const ids = [...heading.matchAll(/\sid=(?:"([^"]*)"|'([^']*)'|([^\s"'>]+))/g)]
+      .map((match) => match[1] ?? match[2] ?? match[3]);
+    assertEquals(ids, [expectedId], `${label}: the heading must carry exactly one id`);
+    assertEquals(outline.map((item) => item.id), [expectedId], `${label}: outline must match`);
+    assertIdsUnique(out);
+  }
+});
+
+Deno.test('prepareArticle: unquoted element ids participate in collision checks', () => {
+  const { html, outline } = prepareArticle('<h2>Foo</h2><p id=foo-2>x</p><h2>Foo</h2>');
+  assertEquals(outline.map((item) => item.id), ['foo', 'foo-3']);
+  assertIdsUnique(html);
+});

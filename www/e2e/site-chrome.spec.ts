@@ -278,6 +278,15 @@ test.describe('Site chrome: reading rail scrollspy', () => {
 
     // The observer still drives updates: park the next heading inside the
     // band (15%-30% of viewport height) and the mark must move exclusively.
+    // DOM-level outline contract: every rail target must resolve through
+    // document.getElementById to the real heading the anchor names.
+    const unresolved = await page.evaluate(() =>
+      [...document.querySelectorAll('open-page-rail .desktop-outline nav.links a[href^="#"]')]
+        .map((a) => a.getAttribute('href')!.slice(1))
+        .filter((id) => document.getElementById(id) === null)
+    );
+    expect(unresolved).toEqual([]);
+
     const second = desktop.locator('nav.links a[href^="#"]').nth(1);
     const href = (await second.getAttribute('href'))!;
     await page.evaluate((selector) => {

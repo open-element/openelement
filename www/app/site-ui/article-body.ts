@@ -17,6 +17,25 @@ import { readingChromeStrings } from './chrome-strings.ts';
 export type ArticleOutlineItem = Readonly<{ id: string; label: string; level: 2 | 3 }>;
 
 /**
+ * One `id=` attribute in any legal HTML quote style (double, single,
+ * unquoted). Seeding and removal both consume this single source so the two
+ * can never disagree about which attributes exist: a form the seeder sees
+ * but the remover misses would leave a duplicated id on the rewritten
+ * heading (and vice versa).
+ */
+const ID_ATTRIBUTE_SOURCE = String.raw`\s+id=(?:"([^"]*)"|'([^']*)'|([^\s"'<>` + '`' +
+  String.raw`=]+))`;
+
+/** Fresh pattern per call: no shared lastIndex state across uses. */
+function idAttributePattern(flags: string): RegExp {
+  return new RegExp(ID_ATTRIBUTE_SOURCE, flags);
+}
+
+function idAttributeValue(match: RegExpMatchArray): string {
+  return match[1] ?? match[2] ?? match[3];
+}
+
+/**
  * Strip HTML to plain text, completely: tags to a fixed point, then any
  * leftover angle bracket. A single `<[^>]+>` pass can leave a `<script`
  * fragment with no closing `>` behind (CodeQL
@@ -73,11 +92,11 @@ export function prepareArticle(
   // suffix instead of emitting a duplicate DOM id.
   for (const id of reservedIds) usedIds.add(id);
   // Seed every id the document already carries, in all three legal HTML
-  // spellings (double-quoted, single-quoted, unquoted). Compiled-markdown
-  // output uses double quotes, but authored raw HTML inside markdown may
-  // legally use the others; an unseeded id is a duplicate waiting to happen.
-  for (const match of html.matchAll(/\sid=(?:"([^"]+)"|'([^']+)'|([^\s"'<>`=]+))/gi)) {
-    usedIds.add(match[1] ?? match[2] ?? match[3]);
+  // spellings. Compiled-markdown output uses double quotes, but authored
+  // raw HTML inside markdown may legally use the others; an unseeded id is
+  // a duplicate waiting to happen. Same grammar as the removal below.
+  for (const match of html.matchAll(idAttributePattern('gi'))) {
+    usedIds.add(idAttributeValue(match));
   }
   // Headings inside <pre> are literal code samples, not sections: process
   // only non-pre segments so fenced `<h2>` can never gain an id/anchor or
@@ -102,7 +121,7 @@ export function prepareArticle(
           label = label.replace(/[<>]/g, '').replace(/&[^;]+;/g, ' ').trim();
           const id = slugifyHeadingId(label, usedIds);
           outline.push({ id, label, level: Number(depth) as 2 | 3 });
-          const cleanAttrs = String(attrs).replace(/\s+id=(?:"[^"]*"|'[^']*')/i, '');
+          const cleanAttrs = String(attrs).replace(idAttributePattern('gi'), '');
           // Hover/focus anchor: a real same-page link (keyboard-reachable, and the
           // fragment gate proves the id exists), revealed by CSS on hover/focus.
           // The "#" glyph lives in ::after so screen readers hear the bare title.
