@@ -9,11 +9,14 @@
  * `.git` to exist. Refreshing the snapshot is a deliberate, separate action
  * (`refreshBaseline`, Git-based) run when a release baseline moves.
  *
- * `site-redirects.json` maps each retired path to its successor and is
- * validated in both directions — an unmapped retirement and a stale mapping
- * entry are both errors — with locale prefixes expanded by the callers from
- * SITE_LOCALES and fragment targets verified against the real slugified
- * heading ids via the shared slugifyHeadingId (not a second implementation).
+ * `site-redirects.json` maps each retired path to its successor. Every newly
+ * retired path (baseline minus head) must carry a mapping, and every mapping
+ * must name a source that is no longer live yet was a real public route at
+ * the baseline or at some published release tag — so the ledger survives
+ * baseline refreshes instead of expiring after one release. Locale prefixes
+ * are expanded by the callers from SITE_LOCALES and fragment targets are
+ * verified against the real slugified heading ids via the shared
+ * slugifyHeadingId (not a second implementation).
  *
  * Consumers: the check shell (diagnostics + exit status), the redirects
  * emitter, and the built-output link checker. This file must not import any
@@ -238,21 +241,81 @@ export async function currentContentTitles(): Promise<Set<string>> {
   return titles;
 }
 
+/**
+ * Pure ledger policy for the redirect table.
+ *
+ * A mapping is valid when its source is NOT a live route, WAS a real public
+ * route at the baseline or at any published release tag, and (checked by the
+ * caller) its target resolves. The previous policy required the source to be
+ * in `baseline - head`, which made every mapping expire one baseline refresh
+ * after the URL moved — the 301s would die a release later. Retired-URL
+ * ledgers are long-lived by design (astro.build and svelte.dev keep them),
+ * so the check anchors on "was real, is not live" instead.
+ */
+export function redirectLedgerFailures(options: {
+  headRoutes: ReadonlySet<string>;
+  historicalRoutes: ReadonlySet<string>;
+  retired: ReadonlySet<string>;
+  mappings: readonly RedirectMapping[];
+}): string[] {
+  const { headRoutes, historicalRoutes, retired, mappings } = options;
+  const failures: string[] = [];
+  const mappedFrom = new Set(mappings.map((mapping) => mapping.from));
+  for (const path of [...retired].sort()) {
+    if (!mappedFrom.has(path)) failures.push(`retired with no mapping: ${path}`);
+  }
+  for (const mapping of mappings) {
+    if (headRoutes.has(mapping.from)) {
+      failures.push(`mapping source is a live route: ${mapping.from}`);
+    }
+    if (!historicalRoutes.has(mapping.from)) {
+      failures.push(`mapping source was never a public route: ${mapping.from}`);
+    }
+  }
+  return failures;
+}
+
+/**
+ * Route paths that ever shipped publicly, derived from the release tags:
+ * every `v*` tag's route trees are listed with git ls-tree (cheap, no
+ * checkout) and mapped through the same fileToRoutePath rule. A missing or
+ * offline tag contributes nothing; callers add the committed baseline
+ * snapshot on top.
+ */
+export async function historicalRoutePaths(): Promise<Set<string>> {
+  const tags = await git(['tag', '--list', 'v*']);
+  const routes = new Set<string>();
+  if (tags.code !== 0) return routes;
+  for (const tag of tags.out.split('\n').map((line) => line.trim()).filter(Boolean)) {
+    for (const dir of ['www/app/routes', 'apps/site/app/routes']) {
+      const listed = await git(['ls-tree', '-r', '--name-only', tag, '--', dir]);
+      if (listed.code !== 0) continue;
+      for (const file of listed.out.split('\n')) {
+        const prefix = `${dir}/`;
+        if (!file.startsWith(prefix)) continue;
+        const path = fileToRoutePath(file.slice(prefix.length));
+        if (path) routes.add(path);
+      }
+    }
+  }
+  return routes;
+}
+
 /** Validate the baseline snapshot against the redirect table and fragments. */
 export async function collectRetiredUrlFailures(): Promise<
   { failures: string[]; baselineSha: string; retiredCount: number }
 > {
   const { manifest, retired } = await retiredRoutes();
   const mappings = await loadRedirectTable();
-  const mappedFrom = new Set(mappings.map((mapping) => mapping.from));
-  const failures: string[] = [];
-  for (const path of [...retired].sort()) {
-    if (!mappedFrom.has(path)) failures.push(`retired with no mapping: ${path}`);
-  }
-  for (const mapping of mappings) {
-    if (!retired.has(mapping.from)) failures.push(`stale mapping (not retired): ${mapping.from}`);
-  }
   const head = await routePathsIn(join(repoRoot, routesRel));
+  const historical = await historicalRoutePaths();
+  for (const route of manifest.routes) historical.add(route);
+  const failures: string[] = redirectLedgerFailures({
+    headRoutes: head,
+    historicalRoutes: historical,
+    retired,
+    mappings,
+  });
   for (const mapping of mappings) {
     // The en target is the table literal; the zh target defaults to the
     // locale-expanded `to` unless toZh overrides it (translated heading ids

@@ -1,6 +1,10 @@
 /** Redirect-table and baseline-manifest contract tests (pure parsers). */
 import { assertEquals, assertThrows } from '@std/assert';
-import { parseBaselineManifest, parseRedirectTable } from './site-retired.ts';
+import {
+  parseBaselineManifest,
+  parseRedirectTable,
+  redirectLedgerFailures,
+} from './site-retired.ts';
 
 Deno.test('parseRedirectTable: accepts the canonical table shape', () => {
   const mappings = parseRedirectTable({
@@ -61,4 +65,44 @@ Deno.test('parseBaselineManifest: rejects every malformed shape', () => {
   for (const entry of bad) {
     assertThrows(() => parseBaselineManifest(entry, 'fixture'), Error, 'fixture');
   }
+});
+
+Deno.test('redirectLedgerFailures: mappings survive a baseline refresh', () => {
+  // Baseline advanced past /apilist: no longer in `retired`, but it was a
+  // real route at the old baseline, so the mapping stays valid.
+  const failures = redirectLedgerFailures({
+    headRoutes: new Set(['/', '/reference']),
+    historicalRoutes: new Set(['/', '/apilist', '/reference']),
+    retired: new Set(),
+    mappings: [{ from: '/apilist', to: '/reference', status: 301 }],
+  });
+  assertEquals(failures, []);
+});
+
+Deno.test('redirectLedgerFailures: newly retired paths still need mappings', () => {
+  const failures = redirectLedgerFailures({
+    headRoutes: new Set(['/']),
+    historicalRoutes: new Set(['/', '/old']),
+    retired: new Set(['/old']),
+    mappings: [],
+  });
+  assertEquals(failures, ['retired with no mapping: /old']);
+});
+
+Deno.test('redirectLedgerFailures: rejects live sources and never-shipped sources', () => {
+  const live = redirectLedgerFailures({
+    headRoutes: new Set(['/reference']),
+    historicalRoutes: new Set(['/reference']),
+    retired: new Set(),
+    mappings: [{ from: '/reference', to: '/guide', status: 301 }],
+  });
+  assertEquals(live, ['mapping source is a live route: /reference']);
+
+  const typo = redirectLedgerFailures({
+    headRoutes: new Set(['/']),
+    historicalRoutes: new Set(['/']),
+    retired: new Set(),
+    mappings: [{ from: '/apilistt', to: '/reference', status: 301 }],
+  });
+  assertEquals(typo, ['mapping source was never a public route: /apilistt']);
 });
