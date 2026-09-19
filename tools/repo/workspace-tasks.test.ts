@@ -6,7 +6,7 @@
  * shape must therefore throw with the offending path, never degrade to an
  * empty or partial workspace list.
  */
-import { assertEquals, assertRejects } from '@std/assert';
+import { assert, assertEquals, assertRejects } from '@std/assert';
 import { dirname, join } from '@std/path';
 import { emitterEntries, generatorEntries, readWorkspaces } from './workspace-tasks.ts';
 
@@ -180,4 +180,25 @@ Deno.test('generate-all and generator-gates share the canonical discovery', asyn
       throw new Error(`${name} must consume ./workspace-tasks.ts, not a private workspace list`);
     }
   }
+});
+
+Deno.test('readWorkspaces: symlinked members resolving to one directory are duplicates', async () => {
+  await withFixture({
+    'deno.json': rootConfig(['alpha', 'alias']),
+    'alpha/deno.json': workspaceConfig({}),
+  }, async (root) => {
+    await Deno.symlink(join(root, 'alpha'), join(root, 'alias'), { type: 'dir' });
+    await assertRejects(() => readWorkspaces(root), Error, 'duplicate workspace identity');
+  });
+});
+
+Deno.test('readWorkspaces: diagnostics use repository-relative paths', async () => {
+  await withFixture({
+    'deno.json': rootConfig(['alpha']),
+  }, async (root) => {
+    const error = await assertRejects(() => readWorkspaces(root), Error);
+    const message = (error as Error).message;
+    assertEquals(message.includes(root), false, `message leaks the checkout path: ${message}`);
+    assert(message.includes('alpha'), `message lacks the member path: ${message}`);
+  });
 });

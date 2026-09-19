@@ -17,8 +17,10 @@ import { join, relative, resolve } from '@std/path';
 import { walk } from '@std/fs/walk';
 
 export interface WorkspaceTasks {
-  /** Workspace path as written in the root `workspace` list (e.g. 'www'). */
+  /** Canonical repository-relative workspace path (e.g. 'www'). */
   workspace: string;
+  /** Package name declared by the workspace manifest, when present. */
+  name?: string;
   dir: string;
   tasks: Record<string, string>;
 }
@@ -42,8 +44,9 @@ export async function readWorkspaces(repoRoot: string): Promise<WorkspaceTasks[]
   // Callers pass repoRoot from fromFileUrl (trailing slash) or makeTempDir;
   // normalize so the containment check compares like with like.
   const rootDir = resolve(repoRoot);
+  const display = (path: string) => relative(rootDir, path) || '.';
   const rootPath = join(rootDir, 'deno.json');
-  const root = await readConfigObject(rootPath, 'root workspace configuration');
+  const root = await readConfigObject(rootPath, 'root workspace configuration', rootDir);
   const members = root.workspace;
   if (!Array.isArray(members)) {
     throw new Error(`${rootPath}: 'workspace' must be an array of workspace paths`);
@@ -53,47 +56,67 @@ export async function readWorkspaces(repoRoot: string): Promise<WorkspaceTasks[]
   for (const member of members) {
     if (typeof member !== 'string' || member.trim() === '') {
       throw new Error(
-        `${rootPath}: workspace entries must be non-empty strings (got ${JSON.stringify(member)})`,
+        `${display(rootPath)}: workspace entries must be non-empty strings (got ${
+          JSON.stringify(member)
+        })`,
       );
     }
     const dir = resolve(rootDir, member);
     if (dir !== rootDir && !dir.startsWith(`${rootDir}/`)) {
-      throw new Error(`${rootPath}: workspace '${member}' escapes the repository root`);
+      throw new Error(`${display(rootPath)}: workspace '${member}' escapes the repository root`);
     }
     // Duplicate detection runs on the canonical repository-relative identity,
     // so 'alpha', './alpha' and 'foo/../alpha' cannot describe the same
     // workspace twice (raw-string dedupe let them through).
     const identity = dir === rootDir ? '.' : relative(rootDir, dir);
-    const previous = seen.get(identity);
-    if (previous !== undefined) {
-      throw new Error(
-        `${rootPath}: duplicate workspace identity '${identity}' (raw entries '${previous}' and '${member}')`,
-      );
+    // Symlinked members that resolve to the same directory are one workspace.
+    let physicalIdentity: string | undefined;
+    try {
+      physicalIdentity = relative(rootDir, await Deno.realPath(dir)) || '.';
+    } catch {
+      // Missing directories are diagnosed below with a clear message.
     }
-    seen.set(identity, member);
+    for (
+      const key of physicalIdentity && physicalIdentity !== identity
+        ? [identity, `real:${physicalIdentity}`]
+        : [identity]
+    ) {
+      const previous = seen.get(key);
+      if (previous !== undefined) {
+        throw new Error(
+          `${
+            display(rootPath)
+          }: duplicate workspace identity '${identity}' (raw entries '${previous}' and '${member}')`,
+        );
+      }
+      seen.set(key, member);
+    }
     try {
       if (!(await Deno.stat(dir)).isDirectory) {
         throw new Error('not a directory');
       }
     } catch (cause) {
-      throw new Error(`workspace '${member}': directory ${dir} is missing or unreadable`, {
+      throw new Error(`workspace '${member}': directory ${display(dir)} is missing or unreadable`, {
         cause,
       });
     }
     const configPath = join(dir, 'deno.json');
-    const config = await readConfigObject(configPath, `workspace '${member}'`);
+    const config = await readConfigObject(configPath, `workspace '${member}'`, rootDir);
     const tasks = config.tasks ?? {};
     if (tasks === null || typeof tasks !== 'object' || Array.isArray(tasks)) {
       throw new Error(`${configPath}: 'tasks' must be an object when present`);
     }
     for (const [name, command] of Object.entries(tasks as Record<string, unknown>)) {
-      if (name.trim() === '') throw new Error(`${configPath}: task names must be non-empty`);
+      if (name.trim() === '') {
+        throw new Error(`${display(configPath)}: task names must be non-empty`);
+      }
       if (typeof command !== 'string') {
-        throw new Error(`${configPath}: task '${name}' must map to a string command`);
+        throw new Error(`${display(configPath)}: task '${name}' must map to a string command`);
       }
     }
     out.push({
       workspace: identity,
+      name: typeof config.name === 'string' && config.name !== '' ? config.name : undefined,
       dir,
       tasks: tasks as Record<string, string>,
     });
@@ -105,21 +128,23 @@ export async function readWorkspaces(repoRoot: string): Promise<WorkspaceTasks[]
 async function readConfigObject(
   path: string,
   label: string,
+  repoRoot: string,
 ): Promise<Record<string, unknown>> {
+  const shown = relative(repoRoot, path) || '.';
   let text: string;
   try {
     text = await Deno.readTextFile(path);
   } catch (cause) {
-    throw new Error(`${label}: ${path} is missing or unreadable`, { cause });
+    throw new Error(`${label}: ${shown} is missing or unreadable`, { cause });
   }
   let parsed: unknown;
   try {
     parsed = JSON.parse(text);
   } catch (cause) {
-    throw new Error(`${label}: ${path} is not valid JSON`, { cause });
+    throw new Error(`${label}: ${shown} is not valid JSON`, { cause });
   }
   if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
-    throw new Error(`${label}: ${path} must contain a JSON object`);
+    throw new Error(`${label}: ${shown} must contain a JSON object`);
   }
   return parsed as Record<string, unknown>;
 }

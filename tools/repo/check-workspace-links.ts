@@ -23,6 +23,7 @@
  */
 
 import { isAbsolute, relative, resolve } from '@std/path';
+import { readWorkspaces } from './workspace-tasks.ts';
 
 export const NODE_MODULES_DIR = 'node_modules';
 export const WORKSPACE_MANIFEST = 'deno.json';
@@ -85,28 +86,16 @@ export function findWorkspaceShadowFailures(
   return failures;
 }
 
-/** Read the workspace member list from the repository manifests. */
+/**
+ * Read the workspace member list via the canonical discovery
+ * (workspace-tasks.ts owns workspace parsing); members without a declared
+ * package name are not node_modules residents and are skipped here.
+ */
 export async function readWorkspaceMembers(root = '.'): Promise<WorkspaceMember[]> {
-  const rootConfig = JSON.parse(await Deno.readTextFile(resolve(root, WORKSPACE_MANIFEST)));
-  const dirs: string[] = Array.isArray(rootConfig.workspace) ? rootConfig.workspace : [];
-  const members: WorkspaceMember[] = [];
-  for (const rawDir of dirs) {
-    // The workspace list is written as `./packages/element`; normalize so the
-    // reported paths read like repository paths.
-    const dir = rawDir.replace(/^\.\//, '').replace(/\/$/, '');
-    for (const manifest of ['deno.json', 'package.json']) {
-      try {
-        const config = JSON.parse(await Deno.readTextFile(resolve(root, dir, manifest)));
-        if (typeof config.name === 'string' && config.name !== '') {
-          members.push({ name: config.name, dir });
-          break;
-        }
-      } catch (error) {
-        if (!(error instanceof Deno.errors.NotFound)) throw error;
-      }
-    }
-  }
-  return members;
+  const workspaces = await readWorkspaces(root);
+  return workspaces
+    .filter((workspace) => workspace.name !== undefined)
+    .map((workspace) => ({ name: workspace.name!, dir: workspace.workspace }));
 }
 
 /** Inspect what node_modules holds for one member name. */
