@@ -17,6 +17,7 @@ import { build as viteBuild, type InlineConfig } from 'vite';
 import { dirname, isAbsolute, join, relative, resolve } from '../internal/host-path.ts';
 import { fromFileUrl } from '../internal/host-path.ts';
 import { extractCustomElementTags, generateClientEntry } from '../vite/internal/ssg/index.ts';
+import { findWorkspaceRoot } from '../vite/workspace-alias.ts';
 import { buildClientIslandEntries } from '../vite/internal/ssg/client-island-entries.ts';
 import {
   type ClientIslandDeliveryEntry,
@@ -464,7 +465,11 @@ async function buildClient(ctx: OpenElementBuildContext): Promise<void> {
       // The compiler is part of the official client build path. The outer
       // open:core hook covers normal Vite transforms; this inline build owns
       // its own plugin list and must use the same transform exactly once.
-      compiledElementPlugin(),
+      compiledElementPlugin({
+        // Linked workspace packages sit outside the project root; without the
+        // workspace anchor their absolute ids would land in the source maps.
+        workspaceRoot: findWorkspaceRoot(Deno.cwd()) ?? undefined,
+      }),
       createNpmSpecifierPlugin(),
       {
         name: 'open:exclude-preact-rts',
