@@ -21,8 +21,13 @@ const docs = [
 const failures: string[] = [];
 function check(name: string, expected: number, actual: number, tolerance = 0): void {
   // gzip bytes vary across platforms (header OS byte, mtime) for identical
-  // input, so gzip rows carry a ±3% tolerance. This loses nothing: any
-  // content change already moves the exact raw-bytes assertion beside it.
+  // input, so gzip rows carry a ±3% tolerance. Raw chunk bytes have the
+  // same class of variance across runner images (2026-09-20: identical
+  // tree recorded at 78176, measured 78243 and 78412 on two CI runners),
+  // so chunk-raw rows carry the ±1% tolerance the summed payload rows
+  // below already use. Content changes still move the exact html-count,
+  // locs, and manifest rows. Retirement condition: when the island build
+  // is deterministic across runner images again, restore the exact compare.
   const ok = tolerance > 0
     ? Math.abs(expected - actual) <= Math.ceil(expected * tolerance)
     : expected === actual;
@@ -108,7 +113,7 @@ function routePayload(route: string): { bytes: number; chunks: number } {
 
 for (const docPath of docs) {
   const text = await Deno.readTextFile(docPath);
-  const short = docPath.slice(repoRoot.length + 1);
+  const short = docPath.slice(repoRoot.length).replace(/^\//, '');
   const scope = `${short}: `;
   const zh = docPath.endsWith('.zh.md');
   const num = (pattern: RegExp): number => {
@@ -179,7 +184,7 @@ for (const docPath of docs) {
     if (name === 'client.js') continue;
     const sizes = chunkSize.get(chunkStem(name));
     if (!sizes) continue;
-    check(scope + `chunk ${name} raw`, Number(row[2].replaceAll(',', '')), sizes.raw);
+    check(scope + `chunk ${name} raw`, Number(row[2].replaceAll(',', '')), sizes.raw, 0.01);
     check(scope + `chunk ${name} gzip`, Number(row[3].replaceAll(',', '')), sizes.gzip, 0.03);
   }
   for (const row of text.matchAll(/\|\s*`([^`]+)`\s*\|\s*([\d,]+) B\s*\|\s*(\d+)\s*\|/g)) {
