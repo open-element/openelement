@@ -1,3 +1,12 @@
+/**
+ * Signal protocol boundary: `@preact/signals-core` is the current sole
+ * signal implementation, kept in the packed npm `dependencies` (see
+ * tools/release/npm-manifest.ts). This gate does not remove it — it hides it:
+ * product source outside `internal/signal/` must not import it directly, and
+ * the two core packages must not list it in their `deno.json` import maps, so
+ * a future implementation can replace the engine without touching product
+ * source.
+ */
 import { walkSync } from '@std/fs/walk';
 import { extractStaticModuleSpecifiers } from '../lib/typescript-ast.ts';
 

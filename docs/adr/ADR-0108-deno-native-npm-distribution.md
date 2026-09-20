@@ -10,13 +10,16 @@ ordinary npm artifacts usable by browser, Node, Bun, and edge toolchains.
 ## Decision
 
 - Deno remains the repository toolchain; it is not a runtime requirement of
-  browser-facing artifacts.
+  browser-facing artifacts. The build toolchain itself is Deno-only by
+  decision (a future migration to vite-plus is possible but not planned), so
+  Framework Mode consumers need Deno 2.9+ installed to develop and build even
+  though the shipped browser bundles never execute Deno.
 - `deno pack` produces npm tarballs for all retained packages.
 - Packed artifacts are checked for export completeness, declarations, pure ESM,
   dependency ranges, and runtime-boundary violations before publication.
 - npm publication uses GitHub Actions Trusted Publishing/OIDC and provenance.
 - Packages publish in dependency order.
-- JSR is not a release gate.
+- JSR is not a publish channel: `jsr:@std/*` remains a dependency source only, never a release target.
 
 ## Consequences
 

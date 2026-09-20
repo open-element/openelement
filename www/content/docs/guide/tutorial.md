@@ -5,7 +5,7 @@ lede: 'Build one small application from an empty directory: create the project, 
 order: 2
 ---
 
-> {{SOURCE_LINE_NOTE}} A project created from `@alpha` today therefore comes with that older starter; the steps below teach the baseline authoring surface, the one this guide documents throughout.
+> {{SOURCE_LINE_NOTE}} The steps below teach the baseline authoring surface, the one this guide documents throughout.
 
 ## Before you start
 
