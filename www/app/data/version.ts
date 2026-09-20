@@ -112,6 +112,25 @@ export function alphaLineNote(locale: ReleaseLocale): string {
     : `@alpha dist-tag 当前解析到 ${ALPHA_RESOLVES_TO}（此前的 0.43 线）；${SOURCE_VERSION} 是仓库基线，尚未发布到 npm。`;
 }
 
+/**
+ * Roadmap alpha-train publish-state (routes/roadmap.tsx timeline), derived
+ * from the same release-state truth: the row reads as published once the
+ * train is on npm under @alpha, and as a repository baseline before that —
+ * the route must never hand-write this status beside
+ * docs/release/release-state.json (one source of truth, guarded by the
+ * www check:content-data drift check).
+ */
+export function prereleasePublishStatus(locale: ReleaseLocale): string {
+  if (SOURCE_LINE_PUBLISHED) {
+    return locale === 'zh'
+      ? '已通过 @alpha dist-tag 发布到 npm'
+      : 'published to npm under the @alpha dist-tag';
+  }
+  return locale === 'zh'
+    ? '仓库基线——尚未发布到 npm'
+    : 'repository baseline — not yet on npm';
+}
+
 /** Getting-started lead-in note ({{SOURCE_LINE_NOTE}} placeholder). */
 export function sourceLineNote(locale: ReleaseLocale): string {
   if (SOURCE_LINE_PUBLISHED) {

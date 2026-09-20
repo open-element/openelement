@@ -18,6 +18,9 @@ import { escapeAttr, VOID_TAGS } from '../core/html-escape.ts';
 // Canonical text-node escape contract (#1272) — shared with the server
 // serializer; do not reintroduce a private copy.
 import { escapeText } from './escape-text.ts';
+// Canonical each-Region item-key derivation (#1374) — single source shared
+// with the server serializer; do not reintroduce a private copy.
+import { eachItemKey } from './each-key.ts';
 // Canonical attr/class/style value coercions — single source of truth,
 // shared with the server serializer (server/shared.ts) so all three
 // execution modes stay byte-identical; do not reintroduce private copies.
@@ -96,6 +99,20 @@ export interface CompiledRuntimeHost {
   signals: Record<string, SignalLike<unknown>>;
   handlers: Record<string, CompiledEventHandler>;
   refs?: Record<string, CompiledRefHandler>;
+  /**
+   * Update-phase error sink (#1375): when a signal-driven Region update
+   * (when/each) throws after activation, the runtime reports the error here
+   * instead of letting it escape into the signal writer's stack, and leaves
+   * the subscription live so a later write can retry. No rollback is
+   * attempted — DOM mutation is not transactional — but the guarded failure
+   * modes leave the Region's owned DOM either untouched (each pre-validates
+   * the whole array before mutating) or explicitly emptied (when disposes the
+   * old branch before rebuilding), never a half-committed mix. The compiled
+   * kernel routes this into the element's CompiledErrorBoundary: the nearest
+   * boundary owning those subscriptions. A host without a sink keeps the
+   * propagating behavior.
+   */
+  onUpdateError?: (error: unknown) => void;
 }
 
 export interface CompiledProgramInstance {
@@ -239,6 +256,27 @@ function subscribeWrites(
   scope.add(unsub);
 }
 
+/**
+ * Wrap one Region's update callback with the update-phase isolation contract
+ * (#1375): a throw is reported to the host's update-error sink (the kernel's
+ * CompiledErrorBoundary) and not rethrown, so the failing write never escapes
+ * into the signal writer's stack and the subscription stays live for the
+ * next write. A host without a sink keeps the propagating behavior.
+ */
+function guardedUpdate(
+  ctx: MountContext,
+  fn: (value: unknown) => void,
+): (value: unknown) => void {
+  return (value) => {
+    try {
+      fn(value);
+    } catch (error) {
+      if (!ctx.host.onUpdateError) throw error;
+      ctx.host.onUpdateError(error);
+    }
+  };
+}
+
 function isFixedPart(part: PartProgramV1['parts'][number]): part is ProgramFixedPart {
   return (
     part.k === 'attr' || part.k === 'prop' || part.k === 'bool' || part.k === 'class' ||
@@ -289,20 +327,6 @@ function itemAttrValue(item: unknown, field: string): string | null {
   if (value === true) return '';
   if (value === false || value === null || value === undefined) return null;
   return String(value);
-}
-
-function itemKey(part: ProgramEachPart, item: unknown, _index: number): string {
-  if (typeof item !== 'object' || item === null) {
-    throw new Error(`[compiled-runtime] each part ${part.index} keyed items must be records`);
-  }
-  const value = (item as Record<string, unknown>)[part.key];
-  if (
-    (value !== null && typeof value === 'object') || typeof value === 'function' ||
-    typeof value === 'symbol'
-  ) {
-    throw new Error(`[compiled-runtime] each part ${part.index} keys must be serializable values`);
-  }
-  return `${typeof value}:${String(value)}`;
 }
 
 interface WhenRegion {
@@ -508,7 +532,12 @@ function buildWhen(
     undefined,
     parent,
   );
-  subscribeWrites(ctx, scope, part.signal, (value) => updateWhen(region, value));
+  subscribeWrites(
+    ctx,
+    scope,
+    part.signal,
+    guardedUpdate(ctx, (value) => updateWhen(region, value)),
+  );
   return [anchor, ...region.nodes, end];
 }
 
@@ -629,7 +658,7 @@ function buildEach(
   const nodes: Node[] = [];
   const seen = new Set<string>();
   for (let index = 0; index < value.length; index++) {
-    const key = itemKey(part, value[index], index);
+    const key = eachItemKey(part, value[index]);
     if (seen.has(key)) {
       throw new Error(`[compiled-runtime] each part ${part.index} has duplicate key`);
     }
@@ -646,7 +675,7 @@ function buildEach(
     region.byKey.set(key, stored);
     nodes.push(...entry.nodes);
   }
-  subscribeWrites(ctx, scope, part.signal, (next) => updateEach(region, next));
+  subscribeWrites(ctx, scope, part.signal, guardedUpdate(ctx, (next) => updateEach(region, next)));
   return [anchor, ...nodes, end];
 }
 
@@ -773,7 +802,7 @@ function updateEach(region: EachRegion, value: unknown): void {
   const seen = new Set<string>();
   for (let index = 0; index < value.length; index++) {
     const item = value[index];
-    const key = itemKey(region.part, item, index);
+    const key = eachItemKey(region.part, item);
     if (seen.has(key)) {
       throw new Error(`[compiled-runtime] each part ${region.part.index} has duplicate key`);
     }
@@ -1346,7 +1375,7 @@ function claimItemRecords(
         claimFailure(itemPath, `item needs ${JSON.stringify(field)}`, owner);
       }
     }
-    const key = itemKey(part, item, index);
+    const key = eachItemKey(part, item);
     if (seen.has(key)) {
       claimFailure(path, `duplicate key ${JSON.stringify(item[part.key])}`, owner);
     }
@@ -1589,7 +1618,7 @@ function claimNodes(
       });
       for (let itemIndex = 0; itemIndex < items.length; itemIndex++) {
         const currentItem = items[itemIndex];
-        const key = itemKey(part, currentItem, itemIndex);
+        const key = eachItemKey(part, currentItem);
         const itemScope = partScope.child();
         const itemSlots: ItemValueSlot[] = [];
         const itemAttrs: ItemAttrSlot[] = [];

@@ -117,11 +117,18 @@ export class CompiledElementKernel {
       const styles = this.#options.styles;
       const styleCount = Array.isArray(styles) ? styles.length : styles ? 1 : 0;
       const mode: CompiledActivationMode = root.childNodes.length > 0 ? 'claim' : 'fresh';
+      // Update-phase failures (#1375) land in the same element-local boundary
+      // as connect failures: this element owns the Region subscriptions, so it
+      // is the nearest boundary for their update errors.
+      const host: CompiledRuntimeHost = {
+        ...this.#options,
+        onUpdateError: (error) => this.errors.capture(error, this.#element),
+      };
       this.#instance = mode === 'claim'
-        ? claimExistingDom(this.#program, this.#options, root, {
+        ? claimExistingDom(this.#program, host, root, {
           expectStaticStyle: styleCount > 0,
         })
-        : createFreshDom(this.#program, this.#options, root);
+        : createFreshDom(this.#program, host, root);
       this.context.connect();
       if (this.errors.hasError) this.errors.reset();
       this.#activation = { mode, root };
