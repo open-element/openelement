@@ -99,6 +99,20 @@ export interface CompiledRuntimeHost {
   signals: Record<string, SignalLike<unknown>>;
   handlers: Record<string, CompiledEventHandler>;
   refs?: Record<string, CompiledRefHandler>;
+  /**
+   * Update-phase error sink (#1375): when a signal-driven Region update
+   * (when/each) throws after activation, the runtime reports the error here
+   * instead of letting it escape into the signal writer's stack, and leaves
+   * the subscription live so a later write can retry. No rollback is
+   * attempted — DOM mutation is not transactional — but the guarded failure
+   * modes leave the Region's owned DOM either untouched (each pre-validates
+   * the whole array before mutating) or explicitly emptied (when disposes the
+   * old branch before rebuilding), never a half-committed mix. The compiled
+   * kernel routes this into the element's CompiledErrorBoundary: the nearest
+   * boundary owning those subscriptions. A host without a sink keeps the
+   * propagating behavior.
+   */
+  onUpdateError?: (error: unknown) => void;
 }
 
 export interface CompiledProgramInstance {
@@ -240,6 +254,27 @@ function subscribeWrites(
     throw new Error(`[compiled-runtime] signal "${name}" returned an invalid unsubscribe`);
   }
   scope.add(unsub);
+}
+
+/**
+ * Wrap one Region's update callback with the update-phase isolation contract
+ * (#1375): a throw is reported to the host's update-error sink (the kernel's
+ * CompiledErrorBoundary) and not rethrown, so the failing write never escapes
+ * into the signal writer's stack and the subscription stays live for the
+ * next write. A host without a sink keeps the propagating behavior.
+ */
+function guardedUpdate(
+  ctx: MountContext,
+  fn: (value: unknown) => void,
+): (value: unknown) => void {
+  return (value) => {
+    try {
+      fn(value);
+    } catch (error) {
+      if (!ctx.host.onUpdateError) throw error;
+      ctx.host.onUpdateError(error);
+    }
+  };
 }
 
 function isFixedPart(part: PartProgramV1['parts'][number]): part is ProgramFixedPart {
@@ -497,7 +532,12 @@ function buildWhen(
     undefined,
     parent,
   );
-  subscribeWrites(ctx, scope, part.signal, (value) => updateWhen(region, value));
+  subscribeWrites(
+    ctx,
+    scope,
+    part.signal,
+    guardedUpdate(ctx, (value) => updateWhen(region, value)),
+  );
   return [anchor, ...region.nodes, end];
 }
 
@@ -635,7 +675,7 @@ function buildEach(
     region.byKey.set(key, stored);
     nodes.push(...entry.nodes);
   }
-  subscribeWrites(ctx, scope, part.signal, (next) => updateEach(region, next));
+  subscribeWrites(ctx, scope, part.signal, guardedUpdate(ctx, (next) => updateEach(region, next)));
   return [anchor, ...nodes, end];
 }
 
