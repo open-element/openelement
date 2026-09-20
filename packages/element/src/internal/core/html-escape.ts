@@ -13,6 +13,9 @@
 import { createLogger, createWarnScope, warnOnce } from './logger.ts';
 import type { WarnScope } from './logger.ts';
 
+import { OpenElementError } from './errors.ts';
+import { isSafeAttributeName } from './security.ts';
+
 const log = createLogger('html-escape');
 
 import type { SafeHtml, UnsafeHtml } from '../protocol/framework.ts';
@@ -344,7 +347,18 @@ function validateHeadExtrasBalance(headExtras: string): void {
   }
 }
 
-/** Serialize the meta description and arbitrary meta tags. */
+/**
+ * Serialize the meta description and arbitrary meta tags.
+ *
+ * Tag keys are attribute *names*, not values: `escapeAttr` neutralizes value
+ * characters (`&<>"'`) but not name grammar (spaces, `=`), so a key like
+ * `"foo onload=alert(1)"` would otherwise inject attributes into the emitted
+ * `<meta>` element. Every key is therefore validated against the canonical
+ * `isSafeAttributeName` (#1033) — the same predicate the server serializer and
+ * head-injection paths enforce — and a violation throws (P4 fail-closed):
+ * `meta.tags` is not a documented dangerous channel, so CMS-fed metadata must
+ * fail the render instead of being skipped (#1373).
+ */
 function buildMetaTags(
   meta?: { description?: string; tags?: Array<Record<string, string | number | boolean>> },
 ): string[] {
@@ -356,7 +370,17 @@ function buildMetaTags(
   if (Array.isArray(meta?.tags)) {
     for (const tag of meta.tags) {
       const attrs = Object.entries(tag)
-        .map(([key, value]) => `${escapeAttr(key)}="${escapeAttrValue(value)}"`)
+        .map(([key, value]) => {
+          if (!isSafeAttributeName(key)) {
+            throw new OpenElementError(
+              `wrapInDocument: unsafe meta attribute name: ${
+                JSON.stringify(key)
+              }. Meta tag keys must be valid HTML attribute names and must not be event handlers.`,
+              { code: 'UNSAFE_META_ATTR_NAME', statusCode: 400, recoverable: false },
+            );
+          }
+          return `${escapeAttr(key)}="${escapeAttrValue(value)}"`;
+        })
         .join(' ');
       if (attrs) metaTags.push(`  <meta ${attrs}>`);
     }
