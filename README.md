@@ -48,6 +48,8 @@ export default definePage(HelloPage, {
 
 Re-run `deno task dev`, open the URL Vite prints plus `/hello`, and `deno task build` emits the static-first `dist/` output. Full walkthrough: <https://openelement.org/guide/getting-started>.
 
+**Build-time host note:** the `@openelement/router` tooling subpaths (`./vite`, `./cli/*`) call Deno APIs directly and require a Deno host at **build time** — invoking them from a plain Node `vite.config.ts` fails with `Deno is not defined`. The request-time output stays WinterCG-pure and deploys to any target. This is an interim constraint: the portable-host tooling migration that removes it is a deferred roadmap item ([#1387](https://github.com/open-element/openelement/issues/1387)).
+
 ## Features
 
 - Declarative Shadow DOM plus SSR, existing-DOM claim, and islands that hydrate only where needed.
@@ -58,12 +60,12 @@ Re-run `deno task dev`, open the URL Vite prints plus `/hello`, and `deno task b
 
 ## Comparison
 
-| Framework | Difference from OpenElement                                                                                                                                                 |
-| --------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Astro     | Island architecture for content sites with framework-agnostic components; OpenElement compiles its own Custom Elements and owns routing and SSR/SSG in the same repository. |
-| Fresh     | Deno-native Preact islands framework; OpenElement is Deno-native too but compiles Custom Elements (Native/Lit renderers) instead of Preact components.                      |
-| Lit       | A Web Component rendering library, not an application framework; OpenElement can render through Lit as one renderer option rather than replacing it.                        |
-| Next.js   | A React-centered full-stack framework; OpenElement covers the static-first Element/Router core and leaves full-stack parity out of scope.                                   |
+| Framework | Difference from OpenElement                                                                                                                                                                                                                                                                                                                                                                     |
+| --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Astro     | Island architecture for content sites with framework-agnostic components; OpenElement compiles its own Custom Elements and owns routing and SSR/SSG in the same repository.                                                                                                                                                                                                                     |
+| Fresh     | Deno-native Preact islands framework whose development has stalled: last code commit 2026-05-27, last release 2.3.3 (2026-04-28), 157 open issues unaddressed (verified as of 2026-09-20). That leaves the Deno-native islands slot open, and OpenElement is positioned to occupy it — compiled Custom Elements (Native/Lit renderers), static-first output, and routing/SSR in one repository. |
+| Lit       | A Web Component rendering library, not an application framework; OpenElement can render through Lit as one renderer option rather than replacing it.                                                                                                                                                                                                                                            |
+| Next.js   | A React-centered full-stack framework; OpenElement covers the static-first Element/Router core and leaves full-stack parity out of scope.                                                                                                                                                                                                                                                       |
 
 ## Repository shape
 
