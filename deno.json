@@ -84,6 +84,7 @@
       "custom-dist/",
       "dist-test-ssg-render/",
       ".tmp*",
+      ".mimosa",
       "**/.nitro/"
     ]
   },
