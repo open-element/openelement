@@ -133,5 +133,11 @@ hub-submission.json
 # Release workflow (autoflow-release.yml) PR-CI evidence download dir: CI scratch, never a release input
 /.artifacts/
 
+# Local agent-tool caches and workspace evidence (user-local, never release inputs)
+/.superpowers/
+/.v2c/
+/.mimosa/
+/evidence/
+
 # Nitro build output in www/examples (generated, never a release input)
 **/.nitro/
