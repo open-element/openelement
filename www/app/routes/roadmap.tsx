@@ -1,5 +1,9 @@
 import { definePage } from '@openelement/router';
-import { COMMON_PUBLISHED_VERSION, REGISTRY_NOTE } from '../data/version.ts';
+import {
+  COMMON_PUBLISHED_VERSION,
+  prereleasePublishStatus,
+  REGISTRY_NOTE,
+} from '../data/version.ts';
 import { siteHead } from '@openelement/site-ui/head.ts';
 import { contentLocale } from '@openelement/site-ui/locale.ts';
 import RoadmapPage from '../components/page-roadmap.tsx';
@@ -41,7 +45,6 @@ const entries: Record<'en' | 'zh', TimelineEntry[]> = {
         'Start real application use with the public baseline: independently consumable Element and Router with Native/Lit application flows. Element and Router are the public core, Create is the supported entry, UI is experimental. 1.0 Alpha is a fresh baseline with no supported migration from 0.x.',
       'state': 'baseline',
       'stamp': 'BASELINE',
-      'status': 'repository baseline — not yet on npm',
     },
     {
       'version': 'v1.0 RC / Stable',
@@ -60,7 +63,6 @@ const entries: Record<'en' | 'zh', TimelineEntry[]> = {
         '从公开基线开始在真实应用中使用可独立消费的 Element 与 Router，验证 Native/Lit 应用流程。Element 与 Router 是公共核心，Create 是正式入口，UI 为实验性能力。1.0 Alpha 是新基线，不提供从 0.x 的受支持迁移。',
       'state': 'baseline',
       'stamp': 'BASELINE',
-      'status': '仓库基线——尚未发布到 npm',
     },
     {
       'version': 'v1.0 RC / Stable',
@@ -268,7 +270,12 @@ export default definePage(RoadmapPage, {
         stampClass: stamp ? `stamp stamp-${stamp.toLowerCase()}` : 'stamp',
         stampLabel: stamp ? t.stamps[stamp] : '',
         copy: phase.copy,
-        status: phase.status ?? '',
+        // The alpha-train row carries no hand-written status: its publish-
+        // state derives from release-state truth via app/data/version.ts so
+        // the roadmap cannot contradict the registry (www check:content-data
+        // fails on any literal claim here). Hand-written status remains only
+        // for rows registry state cannot know, e.g. the unscheduled RC row.
+        status: phase.status ?? prereleasePublishStatus(resolved),
       };
     });
     const listItems = (items: string[]): RoadmapListItem[] =>
