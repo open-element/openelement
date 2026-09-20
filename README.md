@@ -7,6 +7,64 @@ Element compiles JSX-authored Custom Elements into a Part Program used by server
 
 The source tree is `1.0.0-alpha.1`, a new public baseline for Element and Router. It is not a compatibility migration from historic 0.x snapshots. npm `latest` is per package: element, create, and ui remain on the 0.43 stable line, while Router's `latest` is the 0.41.0-alpha.6 prerelease. No single version is published for all four packages until a separately admitted release.
 
+## Quick Start
+
+Requires **Deno 2.9+**. Create, run, and build:
+
+```bash
+deno run --allow-read --allow-write --allow-env --allow-net --deny-ffi --no-prompt --minimum-dependency-age 0 npm:@openelement/create@alpha my-app
+cd my-app
+deno task dev
+deno task build
+```
+
+Add a page — one compiled element plus one route record:
+
+```tsx
+// app/components/page-hello.tsx
+import { element, OpenElement } from '@openelement/element';
+
+@element('hello-page', { root: 'shadow-open' })
+export default class HelloPage extends OpenElement {
+  render() {
+    return (
+      <main>
+        <h1>Hello from OpenElement</h1>
+      </main>
+    );
+  }
+}
+```
+
+```tsx
+// app/routes/hello.tsx
+import { definePage } from '@openelement/router';
+import HelloPage from '../components/page-hello.tsx';
+
+export default definePage(HelloPage, {
+  head: { title: 'Hello' },
+});
+```
+
+Re-run `deno task dev`, open the URL Vite prints plus `/hello`, and `deno task build` emits the static-first `dist/` output. Full walkthrough: <https://openelement.org/guide/getting-started>.
+
+## Features
+
+- Declarative Shadow DOM plus SSR, existing-DOM claim, and islands that hydrate only where needed.
+- Authoring JSX is compiled to a Part Program at build time; there is no runtime virtual-DOM contract.
+- Route Mode for explicit route records and Framework Mode for file routes, loaders, actions, and forms.
+- Native and Lit renderers behind one application contract; renderer integrations stay explicit.
+- Compiled output tree-shakes so server-only modules never leak into the client bundle.
+
+## Comparison
+
+| Framework | Difference from OpenElement                                                                                                                                                 |
+| --------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Astro     | Island architecture for content sites with framework-agnostic components; OpenElement compiles its own Custom Elements and owns routing and SSR/SSG in the same repository. |
+| Fresh     | Deno-native Preact islands framework; OpenElement is Deno-native too but compiles Custom Elements (Native/Lit renderers) instead of Preact components.                      |
+| Lit       | A Web Component rendering library, not an application framework; OpenElement can render through Lit as one renderer option rather than replacing it.                        |
+| Next.js   | A React-centered full-stack framework; OpenElement covers the static-first Element/Router core and leaves full-stack parity out of scope.                                   |
+
 ## Repository shape
 
 - `packages/element` — the Element core product.

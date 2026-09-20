@@ -11,9 +11,9 @@ lives in:
 
 ## 1.0.0-alpha.1
 
-**New repository baseline for Element and Router (not yet published to npm;
-the `@alpha` dist-tag currently resolves to 0.43.0-alpha.2 on the previous
-0.43 line; npm `latest` stays on the stable 0.43 line).** This is not an
+**New repository baseline for Element and Router, published to npm as
+`1.0.0-alpha.1` under the `@alpha` dist-tag (npm `latest` stays on the
+stable 0.43 line).** This is not an
 upgrade of the 0.x
 lines and no migration path from 0.x is offered: new projects start from
 `@openelement/create`.

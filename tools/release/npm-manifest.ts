@@ -241,7 +241,10 @@ export function deriveDependencies(
 
   // Workspace packages inherit the root import map. npm package.json files do
   // not, so every root-mapped bare specifier used by package source must be
-  // materialized as a dependency in the packed artifact.
+  // materialized as a dependency in the packed artifact. This includes
+  // `@preact/signals-core`: it is the current sole signal implementation and
+  // stays in `dependencies` (replaceable in the future — product source never
+  // imports it directly, see tools/repo/check-signal-protocol-boundary.ts).
   for (const specifier of sourceSpecifiers) {
     const value = rootImports[specifier];
     if (typeof value !== 'string') continue;

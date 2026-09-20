@@ -52,19 +52,19 @@ export const REGISTRY_NOTE = Object.entries(PUBLISHED_LATEST)
   .map(([name, version]) => `${name.replace('@openelement/', '')} ${version}`)
   .join(' · ');
 
-// The newest prerelease train. It was a PARTIAL publish: element/create/ui
-// published at this version, Router never did. Registry-line copy must use
-// this constant with the missing-package fact, never as a four-package line.
-export const LATEST_PRERELEASE_VERSION = 'v0.44.0-beta.2.2';
+// The newest prerelease train. It is a COMPLETE publish: all four packages
+// shipped at this version under the @alpha dist-tag. Keep in sync with
+// docs/release/release-state.json.
+export const LATEST_PRERELEASE_VERSION = 'v1.0.0-alpha.1';
 
 // Per-package registry truth at LATEST_PRERELEASE_VERSION. `null` means the
 // package was never published at that version. Keep in sync with
 // docs/release/release-state.json (checked by release:state-machine:check).
 export const PUBLISHED_PACKAGE_VERSIONS: Readonly<Record<string, string | null>> = {
-  '@openelement/element': 'v0.44.0-beta.2.2',
-  '@openelement/router': null,
-  '@openelement/create': 'v0.44.0-beta.2.2',
-  '@openelement/ui': 'v0.44.0-beta.2.2',
+  '@openelement/element': 'v1.0.0-alpha.1',
+  '@openelement/router': 'v1.0.0-alpha.1',
+  '@openelement/create': 'v1.0.0-alpha.1',
+  '@openelement/ui': 'v1.0.0-alpha.1',
 };
 
 // ---------------------------------------------------------------------------
