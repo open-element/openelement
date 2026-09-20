@@ -29,6 +29,14 @@ deployment subpath instead expects the deploying application to install
 `nitro@3.0.0`, whose own `vite@^7` peer conflicts with the tooling's
 `vite@^8` requirement and breaks a bare `npm install`.
 
+The `./vite` and `./cli/*` tooling subpaths call Deno APIs directly and
+require a Deno host at **build time** — invoking `openElement()` from a
+plain Node `vite.config.ts` fails with `Deno is not defined`. The
+request-time output is WinterCG-pure and deploys to any target. This is an
+interim constraint: the portable-host tooling migration that removes it is
+a deferred roadmap item
+([#1387](https://github.com/open-element/openelement/issues/1387)).
+
 > The 1.0 baseline uses compiled element classes for page authoring
 > (ADR-0143). Route Mode stays independently consumable without Element;
 > Framework Mode installs Element alongside Router.
@@ -183,6 +191,11 @@ Route Mode only uses these subpaths and needs nothing else. Framework Mode
 ```bash
 npm install @openelement/router @openelement/element
 ```
+
+Note that the `./vite` and `./cli/*` tooling subpaths additionally require a
+Deno host at **build time** — run builds through the Deno-hosted CLI
+(`deno run npm:@openelement/router/cli/build`) or the Vite CLI under Deno.
+The request-time output is host-free and deploys to any WinterCG target.
 
 ## License
 

@@ -48,6 +48,8 @@ export default definePage(HelloPage, {
 
 重新跑 `deno task dev`，打开 Vite 打印的 URL 并加上 `/hello`，`deno task build` 会产出 static-first 的 `dist/`。完整教程：<https://openelement.org/zh/guide/getting-started>。
 
+**构建期宿主说明：** `@openelement/router` 的工具子路径（`./vite`、`./cli/*`）直接调用 Deno API，因此在**构建期**需要 Deno 宿主——在纯 Node 的 `vite.config.ts` 中调用会以 `Deno is not defined` 报错。请求期产物保持 WinterCG 纯净，可部署到任意目标。这是一条临时性约束：移除它的 portable-host 工具迁移是 deferred 路线图项（[#1387](https://github.com/open-element/openelement/issues/1387)）。
+
 ## 特性
 
 - Declarative Shadow DOM，外加 SSR、复用现有 DOM 的 claim，以及只在需要处水合的 island。
@@ -58,12 +60,12 @@ export default definePage(HelloPage, {
 
 ## 对比
 
-| 框架    | 与 OpenElement 的差异                                                                                                          |
-| ------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| Astro   | 面向内容站点的 island 架构，组件与框架无关；OpenElement 自己编译 Custom Element，路由与 SSR/SSG 在同一仓库内。                 |
-| Fresh   | Deno 原生的 Preact island 框架；OpenElement 同样 Deno 原生，但编译的是 Custom Element（Native/Lit 渲染器），不是 Preact 组件。 |
-| Lit     | Web Component 渲染库，不是应用框架；OpenElement 可以把 Lit 当作一种渲染器选项，而不是替代它。                                  |
-| Next.js | 以 React 为中心的全栈框架；OpenElement 只做 static-first 的 Element/Router 核心，不追全栈对等。                                |
+| 框架    | 与 OpenElement 的差异                                                                                                                                                                                                                                                                                                       |
+| ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Astro   | 面向内容站点的 island 架构，组件与框架无关；OpenElement 自己编译 Custom Element，路由与 SSR/SSG 在同一仓库内。                                                                                                                                                                                                              |
+| Fresh   | Deno 原生的 Preact island 框架，开发已停滞：最后一次代码提交为 2026-05-27，最后一次发布为 2.3.3（2026-04-28），157 个 open issue 无人处理（verified as of 2026-09-20）。Deno 原生 island 这个生态位正在空出，OpenElement 有条件接住它——编译式 Custom Element（Native/Lit 渲染器）、static-first 输出、路由与 SSR 同仓一体。 |
+| Lit     | Web Component 渲染库，不是应用框架；OpenElement 可以把 Lit 当作一种渲染器选项，而不是替代它。                                                                                                                                                                                                                               |
+| Next.js | 以 React 为中心的全栈框架；OpenElement 只做 static-first 的 Element/Router 核心，不追全栈对等。                                                                                                                                                                                                                             |
 
 ## 仓库结构
 
