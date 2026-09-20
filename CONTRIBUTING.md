@@ -27,6 +27,14 @@ npm: specifiers resolve only from a local install:
 deno install
 ```
 
+Then install the shared git hooks — `core.hooksPath` is unset in a fresh
+clone, so the `fmt`/`lint` pre-commit and fuller pre-push gates stay
+inactive until you run:
+
+```sh
+deno task --cwd tools/repo hooks:install
+```
+
 ```sh
 deno task fmt:check
 deno task lint
