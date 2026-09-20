@@ -5,9 +5,11 @@
  * docs/release/release-state.json; this test keeps the shipped copy honest.
  */
 import { assert, assertEquals } from '@std/assert';
+import { SOURCE_LINE_PUBLISHED } from '../app/data/_generated-release-line.ts';
 import {
   COMMON_PUBLISHED_NOTE,
   COMMON_PUBLISHED_VERSION,
+  prereleasePublishStatus,
   PUBLISHED_LATEST,
   REGISTRY_NOTE,
 } from '../app/data/version.ts';
@@ -31,6 +33,23 @@ Deno.test('release copy: registry note is per package', () => {
       REGISTRY_NOTE.includes(`${name.replace('@openelement/', '')} ${version}`),
       `REGISTRY_NOTE must name ${name} ${version}`,
     );
+  }
+});
+
+Deno.test('release copy: roadmap publish-state derives from release-state truth', () => {
+  // The roadmap alpha-train status is derived from the generated
+  // release-state fact, never hand-written in the route (see the
+  // check:content-data drift guard in generate-site-content-data.ts).
+  const en = prereleasePublishStatus('en');
+  const zh = prereleasePublishStatus('zh');
+  if (SOURCE_LINE_PUBLISHED) {
+    assert(!en.includes('not yet on npm'), `stale unpublished copy: ${en}`);
+    assert(!zh.includes('尚未发布到 npm'), `stale unpublished copy: ${zh}`);
+    assert(en.includes('@alpha'), `published copy must name the dist-tag: ${en}`);
+    assert(zh.includes('@alpha'), `published copy must name the dist-tag: ${zh}`);
+  } else {
+    assert(en.includes('not yet on npm'), `unpublished copy expected: ${en}`);
+    assert(zh.includes('尚未发布到 npm'), `unpublished copy expected: ${zh}`);
   }
 });
 
