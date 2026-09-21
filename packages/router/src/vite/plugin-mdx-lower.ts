@@ -7,7 +7,7 @@
  * the fail-closed install guidance).
  *
  * MDX/static content is lowered to a compiled page program at build time —
- * there is no runtime VNode path (ADR-0143). The 0.44 MDX contract is the
+ * there is no runtime VNode path. The MDX contract is the
  * STATIC MARKDOWN subset (headings, paragraphs, emphasis/strong/delete,
  * links, images, lists, code, blockquotes, hr): raw HTML blocks, JSX
  * expressions, ESM import/export and component usage inside .mdx fail closed
@@ -27,8 +27,8 @@ function jsxText(value: string): string {
 function failMdx(filePath: string, reason: string): never {
   throw new Error(
     `[openElement] MDX page ${filePath}: ${reason}. ` +
-      'The 0.44 MDX contract is the static Markdown subset — raw HTML, JSX ' +
-      'expressions and ESM statements are outside it (ADR-0143); move ' +
+      'The MDX contract is the static Markdown subset — raw HTML, JSX ' +
+      'expressions and ESM statements are outside it; move ' +
       'interactive content into a compiled element.',
   );
 }

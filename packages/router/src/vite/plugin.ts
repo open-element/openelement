@@ -175,7 +175,7 @@ export function createOpenPlugin(
   const RESOLVED_ENTRY_ID = '\0' + VIRTUAL_ENTRY_ID;
   const VIRTUAL_BUILD_TRIGGER_ID = 'virtual:open-build-trigger';
   const RESOLVED_BUILD_TRIGGER_ID = '\0' + VIRTUAL_BUILD_TRIGGER_ID;
-  // Dev SSR polyfill (ADR-0044): route modules call customElements.define()
+  // Dev SSR polyfill: route modules call customElements.define()
   // at module top level, so the dev SSR entry imports the polyfill as its
   // first module — ESM evaluates it before every other import. The build
   // path ships the same stub as the Rollup banner (build-ssg.ts).
@@ -750,7 +750,7 @@ export function createOpenPlugin(
   plugins.push(
     lazyHonoDevServer((honoDevServer) => ({
       entry: VIRTUAL_ENTRY_ID,
-      // ADR-0123 item 2 (#858): with middleware.use configured, the entry
+      // with middleware.use configured, the entry
       // exposes openElementDevFetch — the dev-server-shaped adapter over the
       // same composed fetch-middleware handler that the start CLI, the e2e
       // fixture server, and the Nitro entry use. Without it, keep the

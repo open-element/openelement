@@ -4,7 +4,7 @@
  * Minimal card container with optional header and footer.
  * Swiss International Style: borders are whispers, not shouts.
  *
- * v0.44: compiled authoring (ADR-0143). The `variant` attribute styles the
+ * Compiled authoring. The `variant` attribute styles the
  * host directly (:host([variant=...])) — the card's render is fully static.
  *
  * @csspart container - The article wrapper

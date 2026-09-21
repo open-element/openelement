@@ -345,7 +345,7 @@ ${
 
 ${
     options.enhancedForms === true
-      ? `// Form enhancement (ADR-0120, hardened by ADR-0121 in 0.42.0-alpha.5):
+      ? `// Form enhancement (hardened in 0.42.0-alpha.5):
 // forms marked data-open-enhance submit via fetch and the returned document
 // is morphed into the live tree — INSIDE the page element's shadow root,
 // which is where page content lives under DSD. Without JavaScript the same

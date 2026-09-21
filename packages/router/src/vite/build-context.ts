@@ -211,7 +211,7 @@ export class OpenElementBuildContext {
   /** Mark a phase as complete, enforcing ordering constraints. */
   markComplete(phase: Phase): void {
     // Phase 2 (client build) requires Phase 1 (route scanning) only.
-    // Phase 2 runs after Phase 3 (SSG) per ADR 0023; it does NOT require Phase 3.
+    // Phase 2 runs after Phase 3 (SSG); it does NOT require Phase 3.
     if (phase === 2 && !this.completed.has(1)) {
       throw new Error('Phase 2 requires Phase 1 to be completed first');
     }

@@ -30,7 +30,7 @@ export function renderSsgSection(desc: EntryDescriptor): string {
 
   lines.push('');
   lines.push(
-    '// - ADR 0014: DSD-first rendering API -',
+    '// - DSD-first rendering API -',
   );
   lines.push(
     '// build-ssg.ts calls these - never touches customElements directly.',
@@ -70,7 +70,7 @@ export function renderSsgSection(desc: EntryDescriptor): string {
 
   // --- renderRoute ---
   lines.push('/**');
-  lines.push(' * Render a route to structured output with diagnostics (ADR 0014, v0.15.3).');
+  lines.push(' * Render a route to structured output with diagnostics (v0.15.3).');
   lines.push(
     ' * Returns { html, errors, componentCount, renderTimeMs } on success.',
   );
@@ -93,7 +93,7 @@ export function renderSsgSection(desc: EntryDescriptor): string {
   lines.push('  const loadContext = {');
   lines.push('    params,');
   lines.push('    request: options.request,');
-  // ADR-0129: at build time there is no per-request response to merge into;
+  // At build time there is no per-request response to merge into;
   // the channel exists so loader code can write to it without crashing.
   lines.push('    responseHeaders: new Headers(),');
   lines.push('    env: options.env || {},');
@@ -260,7 +260,7 @@ export function renderSsgSection(desc: EntryDescriptor): string {
 
   // --- getStaticPaths ---
   lines.push('/**');
-  lines.push(' * Get static paths for a dynamic route (ADR 0014).');
+  lines.push(' * Get static paths for a dynamic route.');
   lines.push(' * Returns [] for non-dynamic routes.');
   lines.push(' */');
   lines.push('export async function getStaticPaths(routePath) {');

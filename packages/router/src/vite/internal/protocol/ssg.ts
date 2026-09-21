@@ -236,7 +236,7 @@ export interface EntryDescriptor {
   imports: ImportDecl[];
   middleware: MiddlewareDecl[];
   /**
-   * `middleware.use` fetch middleware module paths (ADR-0123 item 2, #858),
+   * `middleware.use` fetch middleware module paths (#858),
    * in user-configured order. The entry renderer emits one
    * `import * as __mw_N from '<path>'` per entry and composes each module's
    * default export around the exported handler in onion order. Absent/empty
@@ -458,8 +458,8 @@ export interface BuildManifestArtifact {
   routes: Array<{ kind: 'page' | 'api'; path: string; tagName?: string; isDynamic: boolean }>;
   islands: BuildIslandInput[];
   /**
-   * Paths served at request time (renderIntent mode 'dynamic', 0.42.0-alpha.1
-   * / ADR-0120). Absent for pure-static builds.
+   * Paths served at request time (renderIntent mode 'dynamic', 0.42.0-alpha.1).
+   * Absent for pure-static builds.
    */
   requestTimeRoutes?: string[];
 }

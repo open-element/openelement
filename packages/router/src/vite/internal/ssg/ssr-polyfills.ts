@@ -1,11 +1,12 @@
 /**
  * SSR Polyfills for browser-only APIs.
  *
- * Polyfill 分层策略（ADR-0044）:
+ * Polyfill layering:
  * - Entry code body (this module): CSSStyleSheet — needs `import { StyleSheet } from @openelement/element`
  * - Output banner (build-ssg.ts): HTMLElement + customElements — no import, runs before module evaluation
  *
- * ADR-0044: SSR polyfill strategy — browser globals in Deno SSR runtime.
+ * Browser globals are provided for the Deno SSR runtime; the shipped
+ * request-time output never depends on them being absent.
  */
 
 import { SSR_REGISTRY_STUB_MARKER } from '../protocol/registry-markers.ts';
@@ -30,7 +31,7 @@ if (typeof globalThis.CSSStyleSheet === 'undefined') {
 }
 
 /**
- * customElements registry stub (ADR-0044). Must run before any route module
+ * customElements registry stub. Must run before any route module
  * evaluates: route modules call customElements.define() at module top level.
  * At build time this ships as the Rollup output banner (build-ssg.ts); in
  * dev the virtual SSR entry imports it as its first module (plugin.ts), which

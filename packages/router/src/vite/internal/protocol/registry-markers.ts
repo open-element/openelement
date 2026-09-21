@@ -25,7 +25,7 @@ export const SSR_REGISTRY_STUB_MARKER = '__openElementSsrStub';
  * Property on the stub holding the generated entry's registration-ownership
  * map (tag -> class it registered): a route module that self-registers its
  * tag wins over the entry's registration, and on dev re-evaluation a fresh
- * self-registered class must still win (#952/ADR-0128).
+ * self-registered class must still win (#952).
  */
 export const ENTRY_REGISTRATION_OWNERS = '__openEntryDefined';
 

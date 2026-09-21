@@ -88,7 +88,7 @@ export async function stableHash(str: string): Promise<string> {
     .join('');
 }
 
-// ─── Request-time server entry module (0.42.0-alpha.1, ADR-0120) ──────────
+// ─── Request-time server entry module (0.42.0-alpha.1) ────────────────────
 
 /** One request-time route as recorded in server-manifest.json. */
 interface RequestTimeRoutePattern {
@@ -131,7 +131,7 @@ function renderRequestTimeAdmissionPatterns(routes: RequestTimeRoutePattern[]): 
  * precedence, params, method semantics, query merging, basePath, or trailing
  * slash — those stay with the canonical path (the entry's Hono app, same
  * declaration order as the app RouteTable). The predicate is a conservative
- * superset: a plain OR over the request-time URLPatterns (#856, ADR-0123),
+ * superset: a plain OR over the request-time URLPatterns (#856),
  * so a pathname the canonical table would route request-time is never
  * excluded, and a false positive is harmless (the server entry re-validates
  * and answers its styled 404).
@@ -150,7 +150,7 @@ if (typeof globalThis.URLPattern === 'undefined') {
 import { openElementHandler, __setRequestTimeClientScript } from './entry.js';
 import { clientScriptSrc } from './client-script.js';
 
-// ADR-0123 item 2 (#858): the entry's openElementHandler export already
+// The entry's openElementHandler export already
 // carries the composed middleware.use fetch middleware chain when configured,
 // so the start CLI, the e2e fixture server, and Nitro run the same middleware
 // semantics as the dev server.
@@ -173,7 +173,7 @@ const nitroHandler = async (event) => {
 __setRequestTimeClientScript(clientScriptSrc);
 
 // Request-time admission predicate (#1215): DERIVED from the request-time
-// route table — a boolean OR over the route URLPatterns (#856, ADR-0123).
+// route table — a boolean OR over the route URLPatterns (#856).
 // Admission only: winner selection, precedence, params, methods, query
 // merging, basePath and trailing slash belong to the canonical path (the
 // entry's Hono app / app RouteTable). The predicate is a conservative

@@ -6,7 +6,7 @@
  * then imports it to render all pages to static HTML, and post-processes
  * island paths.
  *
- * ADR 0011: This module exports buildSSG() only - it is called from
+ * This module exports buildSSG() only - it is called from
  * closeBundle() in open:build plugin. No longer a standalone CLI entry.
  * ctx parameter is required (no globalThis fallback).
  *
@@ -231,7 +231,7 @@ async function buildSSG(
   const layouts = options.layouts ?? ctx.phase3.layouts;
   const renderer = options.renderer ?? ctx.options.renderer ?? 'native';
 
-  // Read island metadata from ctx (ADR 0010: no .openElement/ fallback)
+  // Read island metadata from ctx (no .openElement/ fallback)
   const islandTagNames = options.islandTagNames || ctx.phase1.islandTagNames || [];
   const islandMeta = options.islandMeta || ctx.phase1.islandMeta || {};
   const packageManifests = options.packageManifests || ctx.phase1.packageManifests || [];
@@ -313,7 +313,7 @@ async function buildSSG(
     const alias = metadataResolveAlias;
     const viteResolveAlias = normalizeViteAliases(alias, root);
 
-    // Build the self-contained SSR bundle (ADR 0008 Phase C)
+    // Build the self-contained SSR bundle (Phase C)
     // Replaces createServer() + ssrLoadModule() with viteBuild + import().
     // noExternal ensures all dependencies are inlined into a single bundle,
     // so module-level variables (Phase B) are shared across the entire graph.
@@ -369,10 +369,10 @@ async function buildSSG(
           },
           output: {
             format: 'esm',
-            // ADR-0044: customElements polyfill must run before ESM imports.
+            // customElements polyfill must run before ESM imports.
             // Uses Map-backed define()/get(); renderDsdByName() looks up
             // components via customElements.get(tagName) during SSG rendering.
-            // SOP-016: HTMLElement stub is self-contained in @openelement/element/dsd-element.ts.
+            // The HTMLElement stub is self-contained in @openelement/element.
             // #1339: the lit renderer installs the @lit-labs/ssr DOM shim as
             // the entry's first import instead; the Map stub must not exist
             // (the shim's installWindowOnGlobal only fills missing globals).
@@ -384,7 +384,7 @@ async function buildSSG(
       // runtime dependencies so Node, Deno, Workers and Nitro never inherit
       // the build machine's import map or `npm:` URL semantics.
       ssr: { noExternal: true },
-      // ADR 0008 Phase A: Inject headExtras via define instead of .openElement/head-extras.html
+      // Phase A: Inject headExtras via define instead of .openElement/head-extras.html
       // The generated entry code uses __HEAD_EXTRAS__ which gets replaced
       // at build time. This avoids the Vite SSR AsyncFunction syntax errors
       // that large inline strings (with backticks/${}) cause.
@@ -392,7 +392,7 @@ async function buildSSG(
         ? { __HEAD_EXTRAS__: JSON.stringify(options.headExtras) }
         : { __HEAD_EXTRAS__: '""' },
       esbuild: {
-        // ADR-0057: JSX automatic runtime, same reason as build-client.ts.
+        // JSX automatic runtime, same reason as build-client.ts.
         // SSG build also processes .tsx island files for SSR rendering.
         jsx: 'automatic',
         jsxImportSource: '@openelement/element',
@@ -418,7 +418,7 @@ async function buildSSG(
           // workspace anchor their absolute ids would land in the source maps.
           workspaceRoot: findWorkspaceRoot(Deno.cwd()) ?? undefined,
         }),
-        // ADR 0010: Virtual SSG entry module
+        // Virtual SSG entry module
         // Replaces .openElement/.openElement-ssg-entry.ts file write
         {
           name: 'open:virtual-ssg-entry',

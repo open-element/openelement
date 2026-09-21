@@ -4,7 +4,7 @@
  * The canonical exchange artifact shared by the compiler semantic core, the
  * server serializer, fresh DOM creation, and existing-DOM claim. Its only
  * imports are the import-free, host-free canonical VOID_TAGS and forbidden
- * sink owners (ADR-0148 keeps the artifact free of runtime/host edges;
+ * sink owners (keeps the artifact free of runtime/host edges;
  * void-tags and forbidden-sinks are neither). The
  * generated JSON is the seam, and both the runtime and the compiler import
  * this one module instead of keeping mirrored copies. Every dynamic location
@@ -178,7 +178,7 @@ export interface ProgramStylePart {
 }
 
 /**
- * Trusted-HTML content sink (ADR-0150 alpha.9). The signal value must carry
+ * Trusted-HTML content sink (alpha.9). The signal value must carry
  * the runtime TrustedHtml capability; its HTML replaces the target
  * element's content. The target's subtree is opaque to the claim path. The
  * compiler emits this only for an explicit `innerHTML={this.<field>}` sink on
@@ -399,7 +399,7 @@ export function partAnchorEndMarker(index: number): string {
 export const STATIC_STYLES_MARKER = 'data-oe-static-styles';
 
 /**
- * Internal SSR provenance marker on light-mode host tags (ADR-0142, #1148).
+ * Internal SSR provenance marker on light-mode host tags (#1148).
  * Present only when the host's light subtree was server-rendered under the
  * in-place activation contract: the client binds the existing DOM instead of
  * clearing it, and a parent's activation walk prunes the nested host's
