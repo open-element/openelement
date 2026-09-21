@@ -1,10 +1,10 @@
 import type { PartProgram } from '../../protocol/part-program.ts';
 import {
-  claimExistingDom,
   type CompiledProgramInstance,
   type CompiledRuntimeHost,
   createFreshDom,
 } from '../runtime.ts';
+import { claimExecutor } from './claim-seam.ts';
 import { CompiledErrorBoundary, type CompiledErrorBoundaryOptions } from './error-boundary.ts';
 import { CompiledContextService } from './context.ts';
 import { ElementFormController } from '../../../open-element-form.ts';
@@ -124,11 +124,11 @@ export class CompiledElementKernel {
         ...this.#options,
         onUpdateError: (error) => this.errors.capture(error, this.#element),
       };
-      this.#instance = mode === 'claim'
-        ? claimExistingDom(this.#program, host, root, {
-          expectStaticStyle: styleCount > 0,
-        })
-        : createFreshDom(this.#program, host, root);
+      this.#instance = mode === 'fresh' ? createFreshDom(this.#program, host, root) : this.#claim(
+        host,
+        root,
+        styleCount,
+      );
       this.context.connect();
       if (this.errors.hasError) this.errors.reset();
       this.#activation = { mode, root };
@@ -182,6 +182,31 @@ export class CompiledElementKernel {
     this.form.dispose();
     this.errors.dispose();
     this.#destroyed = true;
+  }
+
+  /**
+   * Claim the root's existing content through the executor seam (#1416). The
+   * kernel never imports the claim implementation: the full entry installs it
+   * (claim-install.ts), the client-only entry does not. An uninstalled claim
+   * is fail-closed — a connected element that finds content in its root has
+   * server-rendered (or light-mode) DOM that only the full entry can hydrate,
+   * so this throws instead of building a second tree beside it.
+   */
+  #claim(
+    host: CompiledRuntimeHost,
+    root: CompiledStyleRoot,
+    styleCount: number,
+  ): CompiledProgramInstance {
+    const executor = claimExecutor();
+    if (!executor) {
+      throw new Error(
+        '[compiled-kernel] existing DOM in the resolved root needs the claim executor: ' +
+          "the element was connected from the '@openelement/element/client-only' entry, " +
+          "which omits it. Import '@openelement/element' for any element that can " +
+          'hydrate server-rendered content.',
+      );
+    }
+    return executor(this.#program, host, root, { expectStaticStyle: styleCount > 0 });
   }
 
   #resolveRoot(): CompiledStyleRoot {

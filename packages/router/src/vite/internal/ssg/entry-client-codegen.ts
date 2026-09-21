@@ -152,6 +152,37 @@ function sharedActivationFactory(
   return lines.join('\n');
 }
 
+/**
+ * Whether any island this page can upgrade may hydrate server-rendered DOM
+ * (#1416). The generated entry imports `@openelement/element` when it can, and
+ * `@openelement/element/client-only` (same surface, no claim executor) when it
+ * cannot — a page whose every island is client-only never needs the ~9 KB of
+ * claim machinery.
+ *
+ * Deliberately conservative, per the #1416 ruling: client-only entry only when
+ * no island declares `ssr` or `dsd` true. An island that says nothing is
+ * treated as able to hydrate (the compiler's own default for a native island
+ * with DSD), and `strategy === 'only'` is the one shape that proves
+ * client-only on its own — `resolveIslandSsrDsd` forces both flags off for
+ * `hydrate: 'only'`, so those entries carry explicit `false`s. Any doubt
+ * resolves to the full entry: the cost of a wrong guess in that direction is
+ * 9 KB, and in the other direction a broken hydration.
+ */
+function pageCanHydrateServerDom(islands: readonly NormalizedClientIsland[]): boolean {
+  return islands.some((island) =>
+    island.strategy !== 'only' &&
+    (island.ssr !== false || island.dsd !== false)
+  );
+}
+
+/**
+ * The element entry a generated client bundle imports: the client-only
+ * subpath only when this page cannot hydrate server DOM (#1416).
+ */
+function elementEntrySpecifier(canHydrateServerDom: boolean): string {
+  return canHydrateServerDom ? '@openelement/element' : '@openelement/element/client-only';
+}
+
 interface GenerateClientEntryOptions {
   /**
    * True when any page route carries data-open-enhance (#569): emit the form
@@ -183,6 +214,11 @@ export function generateClientEntry(
   }
 
   const lit = options.renderer === 'lit';
+  // Lit hydration is owned by lit-element-hydrate-support, not by the compiled
+  // claim, so the element package's claim executor is never part of a lit
+  // client bundle: that entry already keeps its element imports minimal and
+  // the subpath choice below is a native-renderer concern.
+  const canHydrateServerDom = pageCanHydrateServerDom(admittedIslands);
   const groupsByKey = new Map<string, ActivationGroup>();
   for (const entry of admittedIslands) {
     const key = activationGroupKey(entry);
@@ -293,7 +329,9 @@ var __liftDeferHydration = function (root, tag) {
   };
   visit(root);
 };`
-    : `import { createLogger, ensureDeepFragmentNavigation, ensurePreHydrationClickCapture } from '@openelement/element';
+    : `import { createLogger, ensureDeepFragmentNavigation, ensurePreHydrationClickCapture } from '${
+      elementEntrySpecifier(canHydrateServerDom)
+    }';
 import { createIslandScheduler as __schedule } from '${VIRTUAL_RUNTIME_SPECIFIERS.scheduler}';
 ${
       options.enhancedForms === true
