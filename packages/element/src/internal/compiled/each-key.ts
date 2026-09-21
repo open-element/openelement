@@ -16,14 +16,14 @@ import type { ProgramEachPart } from '../protocol/part-program.ts';
 /**
  * One keyed each item cannot participate in keyed identity: the item is not
  * a record, or its key value cannot round-trip (object, function, symbol).
- * `reason` is the bare tail so each executor can frame it with its own
- * error vocabulary.
+ * `reason` is the authored explanation — no part index or runtime internal —
+ * so each executor frames it for the reader without translating again.
  */
 export class EachKeyError extends Error {
   readonly reason: string;
 
   constructor(partIndex: number, reason: string) {
-    super(`[compiled-runtime] each part ${partIndex} ${reason}`);
+    super(`${reason} (list Region ${partIndex})`);
     this.name = 'EachKeyError';
     this.reason = reason;
   }
@@ -36,14 +36,21 @@ export class EachKeyError extends Error {
  */
 export function eachItemKey(part: ProgramEachPart, item: unknown): string {
   if (typeof item !== 'object' || item === null) {
-    throw new EachKeyError(part.index, 'keyed items must be records');
+    throw new EachKeyError(
+      part.index,
+      `every item in a keyed list must be an object carrying ${JSON.stringify(part.key)}`,
+    );
   }
   const value = (item as Record<string, unknown>)[part.key];
   if (
     (value !== null && typeof value === 'object') || typeof value === 'function' ||
     typeof value === 'symbol'
   ) {
-    throw new EachKeyError(part.index, 'keys must be serializable values');
+    throw new EachKeyError(
+      part.index,
+      `the list key field ${JSON.stringify(part.key)} must be a string, number, boolean or null ` +
+        `— objects, functions and symbols have no stable identity across renders`,
+    );
   }
   return `${typeof value}:${String(value)}`;
 }

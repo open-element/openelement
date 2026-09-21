@@ -19,6 +19,7 @@ import { ERROR_PREFIX } from '@openelement/element/authoring';
 import { isDangerousKey, isValidTagName, OpenElementError } from '@openelement/element/authoring';
 import { HYDRATION_STRATEGIES } from '@openelement/element/authoring';
 import type { HydrationStrategy } from '@openelement/element/authoring';
+import { authoringError, IslandErrorCode, PageErrorCode } from './internal/error-codes.ts';
 
 /**
  * Where a page renders (#609, ADR-0123):
@@ -401,27 +402,40 @@ export function definePage<
     // element class must be one.
     !componentClass.prototype
   ) {
-    throw new Error(
+    throw authoringError(
+      PageErrorCode.NOT_COMPILED_CLASS,
       `${ERROR_PREFIX} definePage() requires the compiled page element class as its first ` +
         'argument: definePage(HomePage, { head, renderIntent, props, error }). The class is ' +
-        'produced by the open:compiled-element transform (@element(...) class extends OpenElement).',
+        'produced by the open:compiled-element transform (@element(...) class extends OpenElement). ' +
+        'Pass the imported class itself, not a call to it — write definePage(HomePage, …), ' +
+        'never definePage(HomePage(), …).',
     );
   }
   if (descriptor !== undefined) {
     if (typeof descriptor !== 'object' || descriptor === null || Array.isArray(descriptor)) {
-      throw new Error(`${ERROR_PREFIX} definePage() requires an object descriptor.`);
+      throw authoringError(
+        PageErrorCode.DESCRIPTOR_SHAPE,
+        `${ERROR_PREFIX} definePage() requires an object descriptor. ` +
+          'Pass definePage(HomePage, { route?, head?, renderIntent?, props?, error? }), or omit ' +
+          'the second argument entirely for a static page.',
+      );
     }
     for (const key of Object.keys(descriptor)) {
       if (PAGE_DESCRIPTOR_FIELDS.has(key)) continue;
-      throw new Error(
+      throw authoringError(
+        PageErrorCode.DESCRIPTOR_SHAPE,
         `${ERROR_PREFIX} definePage() does not accept top-level "${key}". ` +
           'Use only route, head, renderIntent, props, and error. Compiled pages render from ' +
-          'their Part Program — there is no render() function field (v0.44).',
+          `their Part Program — there is no render() function field (v0.44). Remove "${key}" ` +
+          'from the descriptor; to compute values, return them from props instead.',
       );
     }
     if (descriptor.route && Object.hasOwn(descriptor.route, 'path')) {
-      throw new Error(
-        `${ERROR_PREFIX} definePage route.path is not supported; the route file owns its URL path.`,
+      throw authoringError(
+        PageErrorCode.ROUTE_INTENT,
+        `${ERROR_PREFIX} definePage route.path is not supported; the route file owns its URL ` +
+          'path. Remove route.path — the path is derived from the route file location ' +
+          '(app/routes/posts/index.tsx serves /posts).',
       );
     }
     // Fail fast on a mistyped layout selector — a truthy non-string (or
@@ -431,25 +445,41 @@ export function definePage<
       typeof descriptor.route.layout !== 'string' &&
       descriptor.route.layout !== false
     ) {
-      throw new Error(
+      throw authoringError(
+        PageErrorCode.ROUTE_INTENT,
         `${ERROR_PREFIX} definePage route.layout must be a layout name string or false ` +
-          `(got ${JSON.stringify(descriptor.route.layout)}).`,
+          `(got ${JSON.stringify(descriptor.route.layout)}). ` +
+          `Write route: { layout: 'post' } to select a named layout, or ` +
+          'route: { layout: false } to render without one.',
       );
     }
     if (descriptor.props !== undefined && typeof descriptor.props !== 'function') {
-      throw new Error(`${ERROR_PREFIX} definePage() props must be a projector function.`);
+      throw authoringError(
+        PageErrorCode.PROJECTOR,
+        `${ERROR_PREFIX} definePage() props must be a projector function. ` +
+          'Write props: ({ data, params }) => ({ … }) — the returned record is projected onto ' +
+          "the page's declared properties.",
+      );
     }
     if (descriptor.error !== undefined && typeof descriptor.error !== 'function') {
-      throw new Error(`${ERROR_PREFIX} definePage() error must be an error projector function.`);
+      throw authoringError(
+        PageErrorCode.PROJECTOR,
+        `${ERROR_PREFIX} definePage() error must be an error projector function. ` +
+          'Write error: ({ error }) => ({ … }), or drop the field to keep the default ' +
+          'error projection.',
+      );
     }
   }
   // ADR-0121 (#572): validate the mode at definition time — a typo like
   // 'dynmaic' must not silently prerender a request-time page.
   const renderMode = descriptor?.renderIntent?.mode ?? 'static';
   if (renderMode !== 'static' && renderMode !== 'dynamic') {
-    throw new Error(
+    throw authoringError(
+      PageErrorCode.RENDER_MODE,
       `${ERROR_PREFIX} renderIntent.mode must be 'static' or 'dynamic' ` +
-        `(got "${String(descriptor?.renderIntent?.mode)}").`,
+        `(got "${String(descriptor?.renderIntent?.mode)}"). ` +
+        "Use 'static' for a build-time prerendered page (the default) or 'dynamic' for a " +
+        'per-request page that runs its loader on every request.',
     );
   }
   const pageDescriptor: OpenElementPageDescriptor<Data, Params> = {
@@ -540,21 +570,27 @@ const HYDRATION_STRATEGY_SET: ReadonlySet<string> = new Set(ISLAND_DELIVERY_STRA
 
 function validateIslandMedia(media: unknown): string {
   if (typeof media !== 'string' || media.trim() === '') {
-    throw new Error(
-      `${ERROR_PREFIX} defineIslandConfig() media must be a non-empty string.`,
+    throw authoringError(
+      IslandErrorCode.HYDRATE,
+      `${ERROR_PREFIX} defineIslandConfig() media must be a non-empty string. ` +
+        "Write media: '(min-width: 48rem)' — a CSS media query that gates hydration.",
     );
   }
   const value = media.trim();
   if (value.length > 512) {
-    throw new Error(
-      `${ERROR_PREFIX} defineIslandConfig() media contains an unsafe or oversized query.`,
+    throw authoringError(
+      IslandErrorCode.HYDRATE,
+      `${ERROR_PREFIX} defineIslandConfig() media contains an unsafe or oversized query. ` +
+        'Keep the query under 512 characters and free of control characters.',
     );
   }
   for (let index = 0; index < value.length; index++) {
     const code = value.charCodeAt(index);
     if (code <= 0x1f || code === 0x7f) {
-      throw new Error(
-        `${ERROR_PREFIX} defineIslandConfig() media contains an unsafe or oversized query.`,
+      throw authoringError(
+        IslandErrorCode.HYDRATE,
+        `${ERROR_PREFIX} defineIslandConfig() media contains an unsafe or oversized query. ` +
+          'Keep the query under 512 characters and free of control characters.',
       );
     }
   }
@@ -563,13 +599,21 @@ function validateIslandMedia(media: unknown): string {
 
 function validateIslandTags(value: unknown, field: 'tags' | 'tagNames'): string[] {
   if (!Array.isArray(value) || value.length === 0) {
-    throw new Error(`${ERROR_PREFIX} defineIslandConfig() ${field} must be a non-empty array.`);
+    throw authoringError(
+      IslandErrorCode.TAGS,
+      `${ERROR_PREFIX} defineIslandConfig() ${field} must be a non-empty array. ` +
+        `Write ${field}: ['my-island'] — one or more custom-element tag names, in the same ` +
+        'order as the other tag field.',
+    );
   }
   const seen = new Set<string>();
   return value.map((tag) => {
     if (typeof tag !== 'string' || !isValidTagName(tag) || seen.has(tag)) {
-      throw new Error(
-        `${ERROR_PREFIX} defineIslandConfig() ${field} contains an invalid or duplicate tag.`,
+      throw authoringError(
+        IslandErrorCode.TAGS,
+        `${ERROR_PREFIX} defineIslandConfig() ${field} contains an invalid or duplicate tag. ` +
+          `Every entry in ${field} must be a lowercase custom-element name with a hyphen ` +
+          "(e.g. 'my-island'), and no tag may appear twice.",
       );
     }
     seen.add(tag);
@@ -580,37 +624,57 @@ function validateIslandTags(value: unknown, field: 'tags' | 'tagNames'): string[
 /** Validate and register an island delivery descriptor; returns the normalized config. */
 export function defineIslandConfig(config: IslandConfig): IslandConfig {
   if (typeof config !== 'object' || config === null || Array.isArray(config)) {
-    throw new Error(`${ERROR_PREFIX} defineIslandConfig() requires an object descriptor.`);
+    throw authoringError(
+      IslandErrorCode.DESCRIPTOR_SHAPE,
+      `${ERROR_PREFIX} defineIslandConfig() requires an object descriptor. ` +
+        'Write export const openElement = defineIslandConfig({ ssr, dsd, hydrate, media, tags, ' +
+        'tagNames, exportNames }).',
+    );
   }
   for (const key of Object.keys(config)) {
     if (!ISLAND_CONFIG_FIELDS.has(key)) {
-      throw new Error(
+      throw authoringError(
+        IslandErrorCode.DESCRIPTOR_SHAPE,
         `${ERROR_PREFIX} defineIslandConfig() does not accept "${key}". ` +
-          'Use only ssr, dsd, hydrate, media, tags, tagNames, and exportNames.',
+          'Use only ssr, dsd, hydrate, media, tags, tagNames, and exportNames. ' +
+          `Remove "${key}" from the descriptor.`,
       );
     }
   }
   if (config.ssr !== undefined && typeof config.ssr !== 'boolean') {
-    throw new Error(`${ERROR_PREFIX} defineIslandConfig() ssr must be a boolean.`);
+    throw authoringError(
+      IslandErrorCode.DESCRIPTOR_SHAPE,
+      `${ERROR_PREFIX} defineIslandConfig() ssr must be a boolean. ` +
+        'Write ssr: true to server-render the island, or ssr: false to ship it client-only.',
+    );
   }
   if (config.dsd !== undefined && typeof config.dsd !== 'boolean') {
-    throw new Error(`${ERROR_PREFIX} defineIslandConfig() dsd must be a boolean.`);
+    throw authoringError(
+      IslandErrorCode.DESCRIPTOR_SHAPE,
+      `${ERROR_PREFIX} defineIslandConfig() dsd must be a boolean. ` +
+        'Write dsd: true to emit Declarative Shadow DOM markup, or dsd: false to omit it.',
+    );
   }
   if (config.hydrate !== undefined && !HYDRATION_STRATEGY_SET.has(config.hydrate)) {
-    throw new Error(
+    throw authoringError(
+      IslandErrorCode.HYDRATE,
       `${ERROR_PREFIX} Invalid island hydrate strategy "${String(config.hydrate)}". ` +
         'Use one of: load, idle, visible, media, only.',
     );
   }
   const media = config.media === undefined ? undefined : validateIslandMedia(config.media);
   if (config.hydrate === 'media' && media === undefined) {
-    throw new Error(
-      `${ERROR_PREFIX} defineIslandConfig() media is required when hydrate is "media".`,
+    throw authoringError(
+      IslandErrorCode.HYDRATE,
+      `${ERROR_PREFIX} defineIslandConfig() media is required when hydrate is "media". ` +
+        "Add media: '(min-width: 48rem)' naming the query that gates hydration.",
     );
   }
   if (config.hydrate !== 'media' && media !== undefined) {
-    throw new Error(
-      `${ERROR_PREFIX} defineIslandConfig() media is only valid with hydrate "media".`,
+    throw authoringError(
+      IslandErrorCode.HYDRATE,
+      `${ERROR_PREFIX} defineIslandConfig() media is only valid with hydrate "media". ` +
+        "Either set hydrate: 'media' or remove the media field — the two must agree.",
     );
   }
   const tags = config.tags === undefined ? undefined : validateIslandTags(config.tags, 'tags');
@@ -621,13 +685,22 @@ export function defineIslandConfig(config: IslandConfig): IslandConfig {
     tags && tagNames &&
     (tags.length !== tagNames.length || tags.some((tag, index) => tag !== tagNames[index]))
   ) {
-    throw new Error(`${ERROR_PREFIX} defineIslandConfig() tags and tagNames must agree.`);
+    throw authoringError(
+      IslandErrorCode.TAGS,
+      `${ERROR_PREFIX} defineIslandConfig() tags and tagNames must agree. ` +
+        'The two fields are positionally paired — make them identical arrays, or declare only one.',
+    );
   }
   const deliveryTags = tags ?? tagNames;
   const exportNames = config.exportNames;
   if (exportNames !== undefined) {
     if (typeof exportNames !== 'object' || exportNames === null || Array.isArray(exportNames)) {
-      throw new Error(`${ERROR_PREFIX} defineIslandConfig() exportNames must be an object.`);
+      throw authoringError(
+        IslandErrorCode.EXPORT_NAMES,
+        `${ERROR_PREFIX} defineIslandConfig() exportNames must be an object. ` +
+          "Write exportNames: { 'my-island': 'MyIslandElement' }, mapping each delivery tag to " +
+          'the export that provides it.',
+      );
     }
     const allowedTags = new Set(deliveryTags ?? []);
     for (const [tag, exportName] of Object.entries(exportNames)) {
@@ -644,8 +717,11 @@ export function defineIslandConfig(config: IslandConfig): IslandConfig {
           return false;
         })()
       ) {
-        throw new Error(
-          `${ERROR_PREFIX} defineIslandConfig() exportNames contains an invalid entry.`,
+        throw authoringError(
+          IslandErrorCode.EXPORT_NAMES,
+          `${ERROR_PREFIX} defineIslandConfig() exportNames contains an invalid entry. ` +
+            'Every key must be a custom-element tag from tags/tagNames and every value a ' +
+            "non-empty export name, e.g. exportNames: { 'my-island': 'MyIslandElement' }.",
         );
       }
     }

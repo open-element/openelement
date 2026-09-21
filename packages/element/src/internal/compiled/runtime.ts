@@ -227,9 +227,57 @@ function createContext(program: RuntimeProgramIR, host: CompiledRuntimeHost): Mo
   };
 }
 
+/**
+ * Source origin for runtime diagnostics (#1413 W3): the compiled module and
+ * tag an author can actually find. The wire Part Program deliberately omits
+ * the compile-time `sourceMap` (browser payload discipline — see
+ * semantic-core/compile.ts), so a runtime failure names the file and the
+ * authored property or Region rather than a line; line/column live on the
+ * compile-time OEC diagnostics, which run before a program can ship. These
+ * strings ride the client bundle, so each one stays as short as it can while
+ * still naming the cause and the fix.
+ */
+function origin(ctx: MountContext): string {
+  return `${ctx.program.metadata.sourceFile} <${ctx.program.tag}>`;
+}
+
+/**
+ * A list Region's authored name: the compiler's Region identity is a numeric
+ * part index, which an author cannot map back to source. The signal name is
+ * the authored `this.<property>` the Region renders.
+ */
+function regionName(part: ProgramEachPart | ProgramWhenPart): string {
+  return `this.${part.signal}`;
+}
+
+/**
+ * A list Region's signal must hold an array at every write. Naming the
+ * authored property and the received value is what makes the failure
+ * actionable; the compiler cannot reject it because the property type is an
+ * authoring decision, and the Region is re-read on every signal write.
+ */
+function expectsArrayMessage(ctx: MountContext, part: ProgramEachPart, value: unknown): string {
+  const received = value === null ? 'null' : Array.isArray(value) ? 'array' : typeof value;
+  return `${origin(ctx)}: the list Region over ${regionName(part)} expects an array, got ` +
+    `${received} — it renders ${regionName(part)}.map(...), so initialize that property to [] ` +
+    `instead of null/undefined.`;
+}
+
+/** Two items in one list Region derived the same item key. */
+function duplicateKeyMessage(ctx: MountContext, part: ProgramEachPart, key: string): string {
+  return `${origin(ctx)}: duplicate key in the list Region over ${regionName(part)} — two items ` +
+    `share ${JSON.stringify(part.key)} = ${key}. A key is the item's DOM identity and must be ` +
+    `unique within one list; give each item a unique ${part.key}.`;
+}
+
 function signalOf(ctx: MountContext, name: string): SignalLike<unknown> {
   const signal = ctx.host.signals[name];
-  if (!signal) throw new Error(`[compiled-runtime] missing host signal "${name}"`);
+  if (!signal) {
+    throw new Error(
+      `${origin(ctx)}: render() reads this.${name}, but no host signal is registered. Every ` +
+        `signal read by render() must be a declared @property on the compiled class.`,
+    );
+  }
   return signal;
 }
 
@@ -658,14 +706,14 @@ function buildEach(
   });
   const value = signalOf(ctx, part.signal).value;
   if (!Array.isArray(value)) {
-    throw new Error(`[compiled-runtime] each part ${part.index} expects an array signal`);
+    throw new Error(expectsArrayMessage(ctx, part, value));
   }
   const nodes: Node[] = [];
   const seen = new Set<string>();
   for (let index = 0; index < value.length; index++) {
     const key = eachItemKey(part, value[index]);
     if (seen.has(key)) {
-      throw new Error(`[compiled-runtime] each part ${part.index} has duplicate key`);
+      throw new Error(duplicateKeyMessage(ctx, part, key));
     }
     seen.add(key);
     const entry = buildItem(ctx, scope, doc, part, value[index], parent);
@@ -796,7 +844,7 @@ function moveEntries(region: EachRegion, parent: Node, entries: EachEntry[]): vo
 function updateEach(region: EachRegion, value: unknown): void {
   if (region.scope.disposed) return;
   if (!Array.isArray(value)) {
-    throw new Error(`[compiled-runtime] each part ${region.part.index} expects an array signal`);
+    throw new Error(expectsArrayMessage(region.ctx, region.part, value));
   }
   const parent = region.end.parentNode;
   // A detached anchor/end pair means the Region's owning boundary is gone;
@@ -809,7 +857,7 @@ function updateEach(region: EachRegion, value: unknown): void {
     const item = value[index];
     const key = eachItemKey(region.part, item);
     if (seen.has(key)) {
-      throw new Error(`[compiled-runtime] each part ${region.part.index} has duplicate key`);
+      throw new Error(duplicateKeyMessage(region.ctx, region.part, key));
     }
     seen.add(key);
     descriptors.push({ key, item, existing: region.byKey.get(key) });
@@ -1225,7 +1273,7 @@ function serializeNode(
   if (part.k === 'each') {
     const value = signalOf(ctx, part.signal).value;
     if (!Array.isArray(value)) {
-      throw new Error(`[compiled-runtime] each part ${part.index} expects an array signal`);
+      throw new Error(expectsArrayMessage(ctx, part, value));
     }
     return open + value.map((entry) =>
       part.item.map((child, index) =>

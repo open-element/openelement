@@ -409,19 +409,26 @@ Deno.test('kernel boundary captures a failing signal update (#1375)', () => {
 
   // A non-array write throws inside the update phase. The kernel boundary
   // captures it — the write site never sees the throw — and the each Region's
-  // pre-validation leaves the previous DOM untouched.
+  // pre-validation leaves the previous DOM untouched. #1413: the message names
+  // the authored property and the compiled module, never the part index.
   items.value = 'not-an-array';
   assert(kernel.errors.hasError);
-  assertStringIncludes(kernel.errors.error?.message ?? '', 'expects an array signal');
+  assertStringIncludes(kernel.errors.error?.message ?? '', 'expects an array');
+  assertStringIncludes(kernel.errors.error?.message ?? '', 'this.items');
   assertStrictEquals(kernel.errors.source, element);
-  assertEquals(reported, ['[compiled-runtime] each part 0 expects an array signal']);
+  assertEquals(reported.length, 1);
+  assertStringIncludes(reported[0], 'this.items');
+  assertStringIncludes(reported[0], KERNEL_EACH_PROGRAM.metadata.sourceFile);
   assertEquals(toHtml(list), '<ul><!--oe:p0--><li>alpha</li><!--oe:/p0--></ul>');
   assertStrictEquals(list.childNodes[1], alpha);
 
-  // Same capture for a duplicate-key write: rejected before any mutation.
+  // Same capture for a duplicate-key write: rejected before any mutation; the
+  // message names the authored key field and the colliding key value.
   items.value = [{ id: 'a', text: 'one' }, { id: 'a', text: 'two' }];
   assertEquals(reported.length, 2);
   assertStringIncludes(kernel.errors.error?.message ?? '', 'duplicate key');
+  assertStringIncludes(kernel.errors.error?.message ?? '', '"id"');
+  assertStringIncludes(kernel.errors.error?.message ?? '', 'this.items');
   assertStrictEquals(list.childNodes[1], alpha);
 
   // The subscription stays live: the next valid write applies normally.

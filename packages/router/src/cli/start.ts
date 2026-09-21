@@ -33,13 +33,14 @@ const serverEntry = join(distDir, 'server', 'index.js');
 const hostname = Deno.env.get('OPEN_ELEMENT_HOST') ?? '0.0.0.0';
 
 async function main(): Promise<void> {
-  let parsed: { mode: ServeMode; rest: string[] };
+  let parsed: { mode: ServeMode; rest: string[]; debug: boolean };
   try {
     parsed = extractServeMode(Deno.args);
   } catch (error) {
-    console.error(formatError(error));
+    console.error(renderCliFailure(error, false));
     Deno.exit(1);
   }
+  cliDebug = parsed.debug;
 
   if (!existsSync(distDir)) {
     console.error(
@@ -53,6 +54,26 @@ async function main(): Promise<void> {
     return;
   }
   await runStart();
+}
+
+/** `--debug` state for the process; set once by main() before any work runs. */
+let cliDebug = false;
+
+/**
+ * How the CLI reports a fatal error (#1413).
+ *
+ * Default: one actionable line — `Error: <message>` walk of the cause chain
+ * via the framework's own `formatError`, which already joins nested causes.
+ * A raw stack is machine detail: it buries the message under framework
+ * frames and is never what an author needs to fix a broken build or an
+ * occupied port. `--debug` opts back into the full stack (plus `cause`), so
+ * the information is one flag away rather than gone.
+ */
+function renderCliFailure(error: unknown, debug: boolean): string {
+  const message = formatError(error);
+  if (!debug) return `Start failed: ${message}`;
+  const stack = error instanceof Error ? error.stack : undefined;
+  return `Start failed: ${message}\n${stack ?? '(no stack captured)'}`;
 }
 
 /**
@@ -178,9 +199,8 @@ if (isMainModule) {
   try {
     await main();
   } catch (error) {
-    console.error(
-      `Start failed: ${error instanceof Error ? error.stack ?? error.message : String(error)}`,
-    );
+    // #1413: message (+ cause chain) by default, raw stack only under --debug.
+    console.error(renderCliFailure(error, cliDebug));
     Deno.exit(1);
   }
 }

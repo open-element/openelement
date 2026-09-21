@@ -12,8 +12,9 @@
  * covers loader/action data reaching rendered HTML end-to-end.
  */
 
-import { assertEquals, assertExists, assertInstanceOf, assertThrows } from '@std/assert';
+import { assert, assertEquals, assertExists, assertInstanceOf, assertThrows } from '@std/assert';
 import { OpenElement, OpenElementError, renderDsd } from '@openelement/element';
+import { IslandErrorCode, PageErrorCode } from '../src/internal/error-codes.ts';
 import {
   classifyActionResult,
   defineIslandConfig,
@@ -385,4 +386,79 @@ Deno.test('defineIslandConfig() rejects non-canonical island metadata', () => {
     Error,
     'ssr must be a boolean',
   );
+});
+
+/**
+ * #1413 W3: every authoring failure is classified — a stable code plus the
+ * `validation` phase and `error` severity — so a host can branch on the kind
+ * of failure instead of matching message text, and `/errors` can enumerate
+ * the code table. The remediation sentence (what to write instead) is part of
+ * the contract too: it is what makes the message actionable.
+ */
+Deno.test('#1413 authoring errors: definePage() failure modes carry codes and remediation', () => {
+  const Page = makeCompiledPageClass('classified-page', 'classified');
+  const cases: Array<[() => unknown, string]> = [
+    [() => definePage((() => null) as never), PageErrorCode.NOT_COMPILED_CLASS],
+    [() => definePage(Page, [] as never), PageErrorCode.DESCRIPTOR_SHAPE],
+    [() => definePage(Page, { render: () => null } as never), PageErrorCode.DESCRIPTOR_SHAPE],
+    [() => definePage(Page, { route: { path: '/x' } } as never), PageErrorCode.ROUTE_INTENT],
+    [() => definePage(Page, { route: { layout: true } } as never), PageErrorCode.ROUTE_INTENT],
+    [() => definePage(Page, { props: {} } as never), PageErrorCode.PROJECTOR],
+    [() => definePage(Page, { error: true } as never), PageErrorCode.PROJECTOR],
+    [
+      () => definePage(Page, { renderIntent: { mode: 'dynmaic' } } as never),
+      PageErrorCode.RENDER_MODE,
+    ],
+  ];
+  for (const [run, code] of cases) {
+    let thrown: unknown;
+    try {
+      run();
+    } catch (error) {
+      thrown = error;
+    }
+    assertInstanceOf(thrown, OpenElementError, `${code} must be an OpenElementError`);
+    assertEquals(thrown.code, code);
+    assertEquals(thrown.phase, 'validation');
+    assertEquals(thrown.severity, 'error');
+    // Remediation: the message states what to write, not only what failed.
+    assert(
+      /write|use |remove|pass |drop |omit|either|never /i.test(thrown.message),
+      `${code} must carry remediation guidance, got: ${thrown.message}`,
+    );
+  }
+});
+
+Deno.test('#1413 authoring errors: defineIslandConfig() failure modes carry codes', () => {
+  const cases: Array<[unknown, string]> = [
+    [{ mode: 'legacy' }, IslandErrorCode.DESCRIPTOR_SHAPE],
+    [{ ssr: 'yes' }, IslandErrorCode.DESCRIPTOR_SHAPE],
+    [{ dsd: 'yes' }, IslandErrorCode.DESCRIPTOR_SHAPE],
+    [{ hydrate: 'lazy' }, IslandErrorCode.HYDRATE],
+    [{ hydrate: 'media' }, IslandErrorCode.HYDRATE],
+    [{ media: '(min-width: 1px)' }, IslandErrorCode.HYDRATE],
+    [{ tags: [] }, IslandErrorCode.TAGS],
+    [{ tags: ['Bad-Tag'] }, IslandErrorCode.TAGS],
+    [{ tags: ['a-b'], tagNames: ['c-d'] }, IslandErrorCode.TAGS],
+    [{ exportNames: [] }, IslandErrorCode.EXPORT_NAMES],
+    [{ tags: ['a-b'], exportNames: { 'c-d': 'X' } }, IslandErrorCode.EXPORT_NAMES],
+  ];
+  for (const [config, code] of cases) {
+    let thrown: unknown;
+    try {
+      defineIslandConfig(config as never);
+    } catch (error) {
+      thrown = error;
+    }
+    assertInstanceOf(thrown, OpenElementError, `${JSON.stringify(config)} must classify`);
+    assertEquals(thrown.code, code);
+    assertEquals(thrown.phase, 'validation');
+    assertEquals(thrown.severity, 'error');
+    // The remediation sentence: what to change, not only what failed.
+    assert(
+      /write |add |use one of|use only|remove |either |e\.g\.|make them identical|declare only one/i
+        .test(thrown.message),
+      `${code} must carry remediation guidance, got: ${thrown.message}`,
+    );
+  }
 });

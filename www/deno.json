@@ -36,6 +36,8 @@
     "check:nav": "deno run --allow-run ../tools/repo/run-in.ts --root .. -- deno run --allow-read --allow-write --allow-env www/tools/generate-site-nav.ts --check",
     "generate:api-reference": "deno run --allow-run ../tools/repo/run-in.ts --root .. -- deno run --allow-read --allow-write --allow-env www/tools/generate-api-reference.ts",
     "check:api-reference": "deno run --allow-run ../tools/repo/run-in.ts --root .. -- deno run --allow-read --allow-write --allow-env www/tools/generate-api-reference.ts --check",
+    "generate:errors": "deno run --allow-run ../tools/repo/run-in.ts --root .. -- deno run --allow-read --allow-write --allow-env www/tools/generate-error-reference.ts",
+    "check:errors": "deno run --allow-run ../tools/repo/run-in.ts --root .. -- deno run --allow-read --allow-write --allow-env www/tools/generate-error-reference.ts --check",
     "emit:redirects": "deno run --allow-run ../tools/repo/run-in.ts --root .. -- deno run --allow-read --allow-write --allow-run --allow-env www/tools/emit-site-redirects.ts",
     "emit:sitemap": "deno run --allow-run ../tools/repo/run-in.ts --root .. -- deno run --allow-read --allow-write --allow-env www/tools/emit-site-sitemap.ts",
     "emit:rss": "deno run --allow-run ../tools/repo/run-in.ts --root .. -- deno run --allow-read --allow-write www/tools/emit-site-rss.ts",

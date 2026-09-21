@@ -217,13 +217,14 @@ Deno.test('Region update errors propagate when the host has no update-error sink
   const root = doc.createElement('host');
   const instance = createFreshDom(program, host, node(root));
   // The isolation contract is a kernel feature: a bare runtime host without
-  // onUpdateError keeps the propagating behavior.
+  // onUpdateError keeps the propagating behavior. #1413: the thrown message
+  // names the authored property, not the compiler's part index.
   assertThrows(
     () => {
       items.value = 'not-an-array';
     },
     Error,
-    'expects an array signal',
+    'expects an array',
   );
   instance.dispose();
 });

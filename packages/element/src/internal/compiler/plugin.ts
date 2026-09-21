@@ -28,6 +28,7 @@ import {
   type CompileElementResult,
 } from './semantic-core/compile.ts';
 import { analyzeModuleSemantics } from './semantic-core/module-analysis.ts';
+import { diagnosticPluginError } from './semantic-core/diagnostics/index.ts';
 
 export const COMPILED_ELEMENT_MARKER = '@element(';
 
@@ -145,7 +146,12 @@ export function compiledElementPlugin(options: CompiledElementPluginOptions = {}
           null;
       } catch (error) {
         if (error instanceof CompiledElementError) {
-          this.error(error.message);
+          // #1413: hand the build the structured diagnostic record
+          // ({id, loc, frame} plus the diagnostics array) instead of the
+          // pre-joined display string — the overlay underlines the authored
+          // line, and a programmatic consumer reads the location instead of
+          // parsing a message back apart.
+          this.error(diagnosticPluginError(error.diagnostics, code, id) ?? error.message);
         }
         throw error;
       }
