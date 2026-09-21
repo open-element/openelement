@@ -8,6 +8,12 @@ import {
 } from '@std/assert';
 import { CompiledErrorBoundary } from '../../src/error-boundary.ts';
 import { ElementFormController } from '../../src/open-element-form.ts';
+// The claim executor is installed by the package entry, not by the kernel
+// (#1416): the kernel resolves it through the claim seam. This file reaches
+// the kernel directly, so it installs it exactly as the default
+// '@openelement/element' entry does — the claim cases below are about the
+// kernel's claim path, which presupposes an installing entry.
+import '../../src/internal/compiled/runtime/claim-install.ts';
 import { CompiledElementKernel } from '../../src/internal/compiled/runtime/kernel.ts';
 import { createFreshDom } from '../../src/internal/compiled/runtime.ts';
 import { signal } from '../../src/internal/signal/framework.ts';

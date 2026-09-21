@@ -42,10 +42,18 @@ Deno.test('compile-time intrinsics: a decorated uncompiled class evaluates safel
   );
 });
 
-Deno.test('compile-time intrinsics: index.ts stays a re-export seam and carries the experimental contract', async () => {
-  const source = await Deno.readTextFile(new URL('../src/index.ts', import.meta.url));
-  assertStringIncludes(source, "export { element, property } from './public-runtime.ts';");
-  assertStringIncludes(source, '@experimental');
+Deno.test('compile-time intrinsics: the entries stay re-export seams and the contract is @experimental', async () => {
+  // #1416: the export list moved to public-surface.ts so the default entry and
+  // the claim-free client-only entry cannot drift apart. Both entries are
+  // still pure re-export seams, and the intrinsic's contract still lives
+  // beside the name it documents.
+  for (const entry of ['index.ts', 'client-only.ts']) {
+    const source = await Deno.readTextFile(new URL(`../src/${entry}`, import.meta.url));
+    assertStringIncludes(source, "export * from './public-surface.ts';");
+  }
+  const surface = await Deno.readTextFile(new URL('../src/public-surface.ts', import.meta.url));
+  assertStringIncludes(surface, "export { element, property } from './public-runtime.ts';");
+  assertStringIncludes(surface, '@experimental');
   const runtime = await Deno.readTextFile(new URL('../src/public-runtime.ts', import.meta.url));
   assertStringIncludes(
     runtime,
