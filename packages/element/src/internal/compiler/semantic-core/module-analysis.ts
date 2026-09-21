@@ -107,7 +107,7 @@ export interface ModuleIntrinsicBindings {
  * Resolve the module-scope import/declaration bindings of one source file
  * once, so decorator, heritage and factory use sites all answer provenance
  * from the same table. The semantic core analyzes a single module and stays
- * bundler-neutral (ADR-0148): it never follows re-exports across files.
+ * bundler-neutral: it never follows re-exports across files.
  */
 export function createModuleIntrinsicBindings(sourceFile: ts.SourceFile): ModuleIntrinsicBindings {
   const imports = new Map<string, ImportBinding[]>();

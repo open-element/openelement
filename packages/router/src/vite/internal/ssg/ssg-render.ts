@@ -1,5 +1,5 @@
 /**
- * Router tooling internal SSG render pipeline (ADR 0022).
+ * Router tooling internal SSG render pipeline.
  *
  * Shared SSG rendering logic used by cli/build-ssg.ts (Vite inline mode,
  * called from closeBundle).
@@ -71,11 +71,11 @@ export async function ssgRender(
     );
   }
 
-  // ── Request-time route partition (0.42.0-alpha.1, ADR-0120) ──
+  // ── Request-time route partition (0.42.0-alpha.1) ──
   // renderIntent.mode was inert metadata before this line: 'dynamic' routes
   // are no longer prerendered — they are served at request time by the
   // generated server entry and recorded in server-manifest.json.
-  // ADR-0120 amendment (2026-09-16): a page may be hybrid — static GET
+  // A page may be hybrid — static GET
   // prerendered below plus a request-time action POST. HTTP admits both on
   // one path; only 'dynamic' routes leave the prerender set.
   const requestTimeRoutes = routeInfo.filter((r) => r.rendering === 'dynamic');

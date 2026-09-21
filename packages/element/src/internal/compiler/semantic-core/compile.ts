@@ -319,7 +319,7 @@ function propertyTypeFromConstructor(
 }
 
 /**
- * Parse a computed field initializer (alpha.8, ADR-0143): `computed(() => ...)`
+ * Parse a computed field initializer (alpha.8): `computed(() => ...)`
  * behind optional `as`-casts, where the callee binds the canonical `computed`
  * import (#1209 — a same-name spelling bound to anything else fails closed
  * with OEC9025). The arrow body may read `this.<field>` of any NON-computed
@@ -2063,7 +2063,7 @@ export function compileElementProgram(source: string, fileName: string): Compile
   const metadataJson = JSON.stringify(metadata, null, 2);
   const observedJson = JSON.stringify(metadata.observedAttributes, null, 2);
 
-  // Emission provenance (#1210, ADR-0148): the semantic core owns both the
+  // Emission provenance (#1210): the semantic core owns both the
   // original source spans and where each copied/derived construct lands in the
   // generated module. Every such line records a real Source Map v3 segment
   // (VLQ line+column, names where known); pure scaffolding stays unmapped so

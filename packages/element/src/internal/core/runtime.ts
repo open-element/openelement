@@ -31,7 +31,7 @@ export function createRuntimeAdapter<
 }
 
 /**
- * Compose a fetch middleware chain (ADR-0123 item 2, #858) around a handler,
+ * Compose a fetch middleware chain (#858) around a handler,
  * in onion order: `middleware[0]` is outermost — it sees the request first
  * and the response last. A middleware may short-circuit by returning a
  * Response without calling `next()`.

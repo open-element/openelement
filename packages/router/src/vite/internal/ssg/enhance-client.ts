@@ -1,5 +1,5 @@
 /**
- * enhance-client.ts - data-open-enhance browser runtime (ADR-0120/0121).
+ * enhance-client.ts - data-open-enhance browser runtime.
  *
  * Single source of truth for the form-enhancement and morph client (#610):
  * the generated client entry imports this module through the

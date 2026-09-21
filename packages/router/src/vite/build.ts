@@ -4,7 +4,7 @@
  * Build produces only static files (K+S), Islands are the only JS (I).
  * API Routes (S - Serverless extension) deploy separately.
  *
- * ADR 0011: closeBundle writes metadata to ctx, then triggers Phase 2/3.
+ * closeBundle writes metadata to ctx, then triggers Phase 2/3.
  * No globalThis bridge - ctx stays in createOpenPlugin() closure scope throughout.
  */
 
@@ -54,7 +54,7 @@ export async function readClientEntryFromManifest(manifestPath: string): Promise
 
 /**
  * Write the island client entry URL for the request-time server entry
- * (0.42.0-alpha.1 / ADR-0120). dist/server/index.js imports this module and
+ * (0.42.0-alpha.1). dist/server/index.js imports this module and
  * hands the URL to the SSR entry (__setRequestTimeClientScript), which
  * embeds the same island client script into request-time HTML at render time
  * that the static pipeline injects post-build. No-op for pure-static builds
@@ -120,7 +120,7 @@ export function buildPlugin(
 
       log.info('Phase 1 complete - SSR bundle and metadata written to build context');
 
-      // ADR 0023: Phase 3 (SSG) runs before Phase 2 (client bundle).
+      // Phase 3 (SSG) runs before Phase 2 (client bundle).
       // SSG only needs Phase 1 - it renders HTML from the SSR bundle.
       // Phase 2 runs last because client chunks have content hashes that
       // don't affect HTML content, and injection is a post-processing step.

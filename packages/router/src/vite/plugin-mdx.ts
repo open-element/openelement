@@ -1,13 +1,13 @@
 /**
- * @openelement/router — open:mdx plugin (v0.44).
+ * @openelement/router — open:mdx plugin.
  *
  * MDX/static content is lowered to a compiled page program at build time —
- * there is no runtime VNode path (ADR-0143): a `.mdx` module resolves to a
+ * there is no runtime VNode path: a `.mdx` module resolves to a
  * virtual `.tsx` module carrying an `@element(...)` class whose render() holds
  * the page markup as a fully static compiled template, then runs through the
  * standard open:core compiled-element transform.
  *
- * The 0.44 MDX contract is the STATIC MARKDOWN subset (headings, paragraphs,
+ * The MDX contract is the STATIC MARKDOWN subset (headings, paragraphs,
  * emphasis/strong/delete, links, images, lists, code, blockquotes, hr):
  * raw HTML blocks, JSX expressions, ESM import/export and component usage
  * inside .mdx fail closed with a source-located build error. Interactive

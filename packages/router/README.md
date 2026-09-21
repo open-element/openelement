@@ -1,5 +1,7 @@
 # @openelement/router
 
+Docs and guides: <https://openelement.org>.
+
 Application authoring API and lifecycle tooling for openElement: pages,
 routes, loaders, actions, islands, and the Vite/SSG build
 pipeline (dev/build/start/preview) that ships Framework Mode applications.
@@ -11,7 +13,7 @@ Vite, Nitro, Element, or Node host dependencies into its module graph.
 
 Framework Mode authoring — the package root (`definePage`,
 `defineIslandConfig`, the action protocol) and the Element route-data types it
-re-exports — is built on compiled element classes (ADR-0143) and therefore
+re-exports — is built on compiled element classes and therefore
 requires `@openelement/element` to be installed. The `./document`
 subpath (the resolved-page seam used by the Native and Lit serializers) is
 Framework Mode surface too: it depends on Element's trusted-HTML contract
@@ -19,8 +21,7 @@ through the shared head-safety predicates, so it is not part of the
 Element-free Route Mode closure. Element is declared as an
 optional peer so a Route Mode install stays lean; install it explicitly when
 you import from the package root or use Framework Mode. The declarations are
-checked against that contract by a strict, isolated npm consumer
-(`tools/release/consumer-packaged-router.ts`).
+checked against that contract by a strict, isolated npm consumer.
 
 Host tooling lives behind explicit subpath exports (`./vite`, `./cli/build`,
 `./cli/start`) whose dependencies are optional peers. The `./nitro-mount`
@@ -37,9 +38,9 @@ interim constraint: the portable-host tooling migration that removes it is
 a deferred roadmap item
 ([#1387](https://github.com/open-element/openelement/issues/1387)).
 
-> The 1.0 baseline uses compiled element classes for page authoring
-> (ADR-0143). Route Mode stays independently consumable without Element;
-> Framework Mode installs Element alongside Router.
+> The 1.0 baseline uses compiled element classes for page authoring. Route Mode
+> stays independently consumable without Element; Framework Mode installs
+> Element alongside Router.
 
 Use the package root in route, island, and component modules. A route module
 default-exports the compiled page class wrapped in `definePage()`:
@@ -140,6 +141,40 @@ Workers fixtures. Import the mount from the explicit subpath:
 import { createOpenElementNitroHandler } from '@openelement/router/nitro-mount';
 ```
 
+## Lit renderer subpaths
+
+Framework Mode ships two renderer integrations; the default is the compiled
+Native renderer on the package root. Lit is the second qualified renderer,
+available through two subpaths:
+
+```ts
+// Lit page authoring: defineLitPage(tag, PageClass, descriptor), the Lit
+// counterpart to definePage(). No lit value import — safe in any graph.
+import { defineLitPage } from '@openelement/router/lit';
+
+// Server-only Lit page rendering to DSD HTML through @lit-labs/ssr.
+import { renderLitPageToHtml } from '@openelement/router/lit-ssr';
+```
+
+`@openelement/router/lit-ssr` installs the `@lit-labs/ssr` global DOM shim as
+an import side effect and must never reach a client bundle (it is deliberately
+absent from the package root barrel). Both subpaths are optional: they depend
+on `lit` / `@lit-labs/ssr` / `@lit-labs/ssr-client`, declared as optional
+peers, so a Native-only install never pulls them in.
+
+## Route Mode subpaths
+
+Route Mode is consumable without Element or a renderer, through three
+subpaths plus the request-context root export:
+
+```ts
+import { RouteTable } from '@openelement/router/router'; // route records + matching
+// Browser navigation entry (compiled matcher + router instance):
+import { createRouter } from '@openelement/router/router/client';
+// WinterCG fetch middleware for Route Mode, and its method policy:
+import { createRouteMiddleware } from '@openelement/router/http';
+```
+
 ## Authoring API
 
 ```tsx
@@ -155,7 +190,7 @@ import { defineIslandConfig, definePage } from '@openelement/router';
   for adapter scanning; the island itself is a single-module compiled
   `@element` class.
 - `fail(status, data)` / `redirect(location)` / `notFound(message)` implement
-  the ADR-0120 action protocol; `isActionFailure()` is the duck-typed guard.
+  the action protocol; `isActionFailure()` is the duck-typed guard.
 
 Route matching preserves declaration
 order while compiling static segments into a trie; named parameters, optional

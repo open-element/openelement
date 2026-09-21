@@ -4,7 +4,7 @@
  * Theme toggle Reactive DSD component for Dark/Light mode switching.
  * Swiss International Style: minimal, violet brand accent.
  *
- * v0.44: compiled authoring (ADR-0143). The `theme` property drives the
+ * Compiled authoring. The `theme` property drives the
  * compiled `data-theme` attribute sink on the toggle button; CSS selectors
  * ([data-theme='light']) own icon visibility. The initialization priority
  * chain and persistence stay imperative in methods; the one-time init guard

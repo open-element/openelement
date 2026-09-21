@@ -1,5 +1,5 @@
 /**
- * Canonical component-authoring facade for openElement (0.44).
+ * Canonical component-authoring facade for the OpenElement 1.0 baseline.
  *
  * This package is the single import surface for authoring compiled custom
  * elements. The public OpenElement base class runs on the compiled Part

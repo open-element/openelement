@@ -136,7 +136,7 @@ export interface RouteEntry {
 // --- Framework Options --------------------------------------------
 
 /**
- * Fetch middleware contract (ADR-0123 item 2, #858): WinterCG shape,
+ * Fetch middleware contract (#858): WinterCG shape,
  * dialect-free — no Hono/h3 context object. Composed at the handler boundary
  * in onion order (`use[0]` is outermost: it sees the request first and the
  * response last), so it runs with identical semantics in the dev server, the
@@ -242,8 +242,7 @@ export interface FrameworkOptions {
     outDir?: string;
     /**
      * Advisory only: exceeded budgets print build-manifest warnings and never
-     * fail the build; enforce in your own build-output test (see
-     * www/__tests__/build-output.test.ts).
+     * fail the build; enforce them in your own build-output test.
      */
     manifestBudget?: {
       islandKB?: number;
@@ -291,7 +290,7 @@ export interface FrameworkOptions {
       reportOnly?: boolean;
     };
     /**
-     * Fetch middleware chain (ADR-0123 item 2, #858), composed around the
+     * Fetch middleware chain (#858), composed around the
      * framework handler in onion order (`use[0]` outermost), outside all
      * built-in middleware above. Each entry is a MODULE PATH (same resolution
      * idiom as `appShell.import`, e.g. './app/middleware/auth.ts') whose

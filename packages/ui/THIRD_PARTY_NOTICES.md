@@ -9,8 +9,8 @@ exist because a package tarball cannot reach repository-root files.
 ## open-props 1.7.23
 
 Design tokens carried verbatim into the generated token module
-(`src/open-props-tokens.ts`) by the package's build-time adapter
-(`tools/generate-ui-tokens.ts`, task `generate:ui-tokens`), which reads the
+(`src/open-props-tokens.ts`) by the package's build-time adapter (task
+`generate:ui-tokens`), which reads the
 pinned npm dependency at generation time. Only these declarations ship: the
 gray ramp, `--indigo-6`, two border sizes, the font weights, and two
 line-heights — everything else in the token layer is first-party.

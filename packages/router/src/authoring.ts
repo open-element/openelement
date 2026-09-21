@@ -6,7 +6,7 @@ import { ERROR_PREFIX } from '@openelement/element/authoring';
  * import from @openelement/router without pulling Vite tooling into the runtime
  * graph.
  *
- * v0.44 (ADR-0143): a route module's default export is the COMPILED page
+ * a route module's default export is the COMPILED page
  * element class itself — `@element('page-home') export default class
  * HomePage extends OpenElement { ... }` produced by the
  * `open:compiled-element` transform. `definePage(Class, descriptor?)`
@@ -19,15 +19,13 @@ import { ERROR_PREFIX } from '@openelement/element/authoring';
 import { isDangerousKey, isValidTagName, OpenElementError } from '@openelement/element/authoring';
 import { HYDRATION_STRATEGIES } from '@openelement/element/authoring';
 import type { HydrationStrategy } from '@openelement/element/authoring';
-import { authoringError, IslandErrorCode, PageErrorCode } from './internal/error-codes.ts';
 
 /**
- * Where a page renders (#609, ADR-0123):
+ * Where a page renders (#609):
  * - `'static'` (default when renderIntent.mode is unset): prerendered at
  *   build time by SSG. A page exporting an action may stay static — a hybrid
  *   page whose prerendered GET is served from the static artifact while its
- *   action POST is dispatched to the generated server entry at request time
- *   (ADR-0120 amendment, 2026-09-16).
+ *   action POST is dispatched to the generated server entry at request time.
  * - `'dynamic'`: skipped by prerendering and rendered per request through
  *   the generated `dist/server` entry, running the route loader on every
  *   request.
@@ -42,7 +40,7 @@ interface PageRouteIntent {
   id?: string;
   params?: readonly string[];
   /**
-   * Named layout selection (ADR-0123): a string picks one of the
+   * Named layout selection: a string picks one of the
    * `openElement({ layouts })` entries by name (unknown names fall back to
    * the default shell); `false` renders the page without any app shell.
    * Unset means the default shell.
@@ -71,7 +69,7 @@ export class OpenElementRedirect extends OpenElementError {
   readonly status: number;
 
   constructor(location: string | URL, status = 302) {
-    // ADR-0121 §3: only real redirect statuses — a non-3xx "redirect" is a
+    // Only real redirect statuses — a non-3xx "redirect" is a
     // response the browser never follows, silently stranding the mutation.
     if (!REDIRECT_STATUSES.has(status)) {
       throw new OpenElementError(
@@ -128,7 +126,7 @@ export function isOpenElementRedirect(error: unknown): error is OpenElementRedir
       (error as { name?: unknown }).name === 'OpenElementRedirect' &&
       typeof (error as { location?: unknown }).location === 'string' &&
       typeof (error as { status?: unknown }).status === 'number' &&
-      // ADR-0121 (#583): the duck-typed branch honors the same whitelist —
+      // The duck-typed branch honors the same whitelist —
       // a shaped object must not smuggle an arbitrary status into the
       // redirect channel.
       REDIRECT_STATUSES.has((error as { status: number }).status)
@@ -148,7 +146,7 @@ export function isOpenElementNotFound(error: unknown): error is OpenElementNotFo
 }
 
 /**
- * Expected-failure channel for actions (0.42.0-alpha.2, ADR-0120): validation
+ * Expected-failure channel for actions (0.42.0-alpha.2): validation
  * failures RETURN `fail(status, data)` — never throw — so the server can
  * answer 422 with the form re-rendered and the submitted values echoed back.
  * Thrown values keep the exception channel (redirect/notFound/error page).
@@ -188,12 +186,6 @@ export function isActionFailure(error: unknown): error is OpenElementActionFailu
     );
 }
 
-/**
- * Application-level classification of an action return value: validation
- * failure (a `fail()` return) versus a success payload. Executors project the
- * same outcome onto their own response shape; the classification itself is
- * shared so neither may redefine it.
- */
 export type ActionOutcome<Data = unknown> =
   | { kind: 'success'; data: Data }
   | { kind: 'failure'; status: number; data: unknown };
@@ -241,8 +233,8 @@ export type JsonValue =
 export type StructuredDataEntry = { readonly [key: string]: JsonValue };
 
 /**
- * Page <head> meaning declared by a route descriptor (v0.44, ADR-0143;
- * canonical/alternates added in Beta.2.2, #1326; structured data added in
+ * Page <head> meaning declared by a route descriptor (canonical/alternates
+ * added in Beta.2.2, #1326; structured data added in
  * Beta.2.3). Either a static object or — via PageHeadResolver — resolved per
  * render from the request-scoped context by resolvePageDocument
  * (@openelement/router/document) before either serializer runs.
@@ -281,7 +273,7 @@ export interface PageHead {
  * compiled page can render must pass through here: the compiled render() only
  * reads `this.<property>`, so the projector is the single deterministic seam
  * that maps loader data, action data, params and request onto the page's
- * compiled properties (v0.44, ADR-0143).
+ * compiled properties.
  */
 export interface PagePropsContext<
   Data = unknown,
@@ -312,8 +304,8 @@ export type PagePropsProjector<
  * Maps a caught render/loader/action failure onto the error variant of the
  * page's compiled properties. Its presence declares that the page's compiled
  * markup carries an error variant (the generated entry renders the page with
- * these props and status 500 — the POST/GET error-boundary channel of
- * ADR-0121 §7); without it the generic status page answers.
+ * these props and status 500 — the POST/GET error-boundary channel); without
+ * it the generic status page answers.
  */
 export type PageErrorProjector<
   Data = unknown,
@@ -381,7 +373,7 @@ const PAGE_DESCRIPTOR_FIELDS = new Set([
 /**
  * Attach a page descriptor to a compiled page element class.
  *
- * Canonical 0.44 page authoring: the route module default-exports the
+ * Canonical page authoring: the route module default-exports the
  * compiled class (produced by the open:compiled-element transform) wrapped in
  * definePage(). The descriptor holds head/route/renderIntent metadata plus
  * the optional props/error projectors; it must NOT create classes or hold a
@@ -408,40 +400,27 @@ export function definePage<
     // element class must be one.
     !componentClass.prototype
   ) {
-    throw authoringError(
-      PageErrorCode.NOT_COMPILED_CLASS,
+    throw new Error(
       `${ERROR_PREFIX} definePage() requires the compiled page element class as its first ` +
         'argument: definePage(HomePage, { head, renderIntent, props, error }). The class is ' +
-        'produced by the open:compiled-element transform (@element(...) class extends OpenElement). ' +
-        'Pass the imported class itself, not a call to it — write definePage(HomePage, …), ' +
-        'never definePage(HomePage(), …).',
+        'produced by the open:compiled-element transform (@element(...) class extends OpenElement).',
     );
   }
   if (descriptor !== undefined) {
     if (typeof descriptor !== 'object' || descriptor === null || Array.isArray(descriptor)) {
-      throw authoringError(
-        PageErrorCode.DESCRIPTOR_SHAPE,
-        `${ERROR_PREFIX} definePage() requires an object descriptor. ` +
-          'Pass definePage(HomePage, { route?, head?, renderIntent?, props?, error? }), or omit ' +
-          'the second argument entirely for a static page.',
-      );
+      throw new Error(`${ERROR_PREFIX} definePage() requires an object descriptor.`);
     }
     for (const key of Object.keys(descriptor)) {
       if (PAGE_DESCRIPTOR_FIELDS.has(key)) continue;
-      throw authoringError(
-        PageErrorCode.DESCRIPTOR_SHAPE,
+      throw new Error(
         `${ERROR_PREFIX} definePage() does not accept top-level "${key}". ` +
           'Use only route, head, renderIntent, props, and error. Compiled pages render from ' +
-          `their Part Program — there is no render() function field (v0.44). Remove "${key}" ` +
-          'from the descriptor; to compute values, return them from props instead.',
+          'their Part Program — there is no render() function field.',
       );
     }
     if (descriptor.route && Object.hasOwn(descriptor.route, 'path')) {
-      throw authoringError(
-        PageErrorCode.ROUTE_INTENT,
-        `${ERROR_PREFIX} definePage route.path is not supported; the route file owns its URL ` +
-          'path. Remove route.path — the path is derived from the route file location ' +
-          '(app/routes/posts/index.tsx serves /posts).',
+      throw new Error(
+        `${ERROR_PREFIX} definePage route.path is not supported; the route file owns its URL path.`,
       );
     }
     // Fail fast on a mistyped layout selector — a truthy non-string (or
@@ -451,41 +430,25 @@ export function definePage<
       typeof descriptor.route.layout !== 'string' &&
       descriptor.route.layout !== false
     ) {
-      throw authoringError(
-        PageErrorCode.ROUTE_INTENT,
+      throw new Error(
         `${ERROR_PREFIX} definePage route.layout must be a layout name string or false ` +
-          `(got ${JSON.stringify(descriptor.route.layout)}). ` +
-          `Write route: { layout: 'post' } to select a named layout, or ` +
-          'route: { layout: false } to render without one.',
+          `(got ${JSON.stringify(descriptor.route.layout)}).`,
       );
     }
     if (descriptor.props !== undefined && typeof descriptor.props !== 'function') {
-      throw authoringError(
-        PageErrorCode.PROJECTOR,
-        `${ERROR_PREFIX} definePage() props must be a projector function. ` +
-          'Write props: ({ data, params }) => ({ … }) — the returned record is projected onto ' +
-          "the page's declared properties.",
-      );
+      throw new Error(`${ERROR_PREFIX} definePage() props must be a projector function.`);
     }
     if (descriptor.error !== undefined && typeof descriptor.error !== 'function') {
-      throw authoringError(
-        PageErrorCode.PROJECTOR,
-        `${ERROR_PREFIX} definePage() error must be an error projector function. ` +
-          'Write error: ({ error }) => ({ … }), or drop the field to keep the default ' +
-          'error projection.',
-      );
+      throw new Error(`${ERROR_PREFIX} definePage() error must be an error projector function.`);
     }
   }
-  // ADR-0121 (#572): validate the mode at definition time — a typo like
+  // Validate the mode at definition time — a typo like
   // 'dynmaic' must not silently prerender a request-time page.
   const renderMode = descriptor?.renderIntent?.mode ?? 'static';
   if (renderMode !== 'static' && renderMode !== 'dynamic') {
-    throw authoringError(
-      PageErrorCode.RENDER_MODE,
+    throw new Error(
       `${ERROR_PREFIX} renderIntent.mode must be 'static' or 'dynamic' ` +
-        `(got "${String(descriptor?.renderIntent?.mode)}"). ` +
-        "Use 'static' for a build-time prerendered page (the default) or 'dynamic' for a " +
-        'per-request page that runs its loader on every request.',
+        `(got "${String(descriptor?.renderIntent?.mode)}").`,
     );
   }
   const pageDescriptor: OpenElementPageDescriptor<Data, Params> = {
@@ -547,8 +510,8 @@ export interface IslandConfig {
   ssr?: boolean;
   dsd?: boolean;
   /**
-   * Hydration strategy — same values as `IslandOptions.hydrate` on the
-   * element package (`packages/element/src/internal/protocol/island.ts`):
+   * Hydration strategy — same values as `IslandOptions.hydrate` in
+   * `@openelement/element`:
    * 'load' | 'idle' | 'visible' | 'media' | 'only'.
    */
   hydrate?: IslandDeliveryStrategy;
@@ -576,27 +539,21 @@ const HYDRATION_STRATEGY_SET: ReadonlySet<string> = new Set(ISLAND_DELIVERY_STRA
 
 function validateIslandMedia(media: unknown): string {
   if (typeof media !== 'string' || media.trim() === '') {
-    throw authoringError(
-      IslandErrorCode.HYDRATE,
-      `${ERROR_PREFIX} defineIslandConfig() media must be a non-empty string. ` +
-        "Write media: '(min-width: 48rem)' — a CSS media query that gates hydration.",
+    throw new Error(
+      `${ERROR_PREFIX} defineIslandConfig() media must be a non-empty string.`,
     );
   }
   const value = media.trim();
   if (value.length > 512) {
-    throw authoringError(
-      IslandErrorCode.HYDRATE,
-      `${ERROR_PREFIX} defineIslandConfig() media contains an unsafe or oversized query. ` +
-        'Keep the query under 512 characters and free of control characters.',
+    throw new Error(
+      `${ERROR_PREFIX} defineIslandConfig() media contains an unsafe or oversized query.`,
     );
   }
   for (let index = 0; index < value.length; index++) {
     const code = value.charCodeAt(index);
     if (code <= 0x1f || code === 0x7f) {
-      throw authoringError(
-        IslandErrorCode.HYDRATE,
-        `${ERROR_PREFIX} defineIslandConfig() media contains an unsafe or oversized query. ` +
-          'Keep the query under 512 characters and free of control characters.',
+      throw new Error(
+        `${ERROR_PREFIX} defineIslandConfig() media contains an unsafe or oversized query.`,
       );
     }
   }
@@ -605,21 +562,13 @@ function validateIslandMedia(media: unknown): string {
 
 function validateIslandTags(value: unknown, field: 'tags' | 'tagNames'): string[] {
   if (!Array.isArray(value) || value.length === 0) {
-    throw authoringError(
-      IslandErrorCode.TAGS,
-      `${ERROR_PREFIX} defineIslandConfig() ${field} must be a non-empty array. ` +
-        `Write ${field}: ['my-island'] — one or more custom-element tag names, in the same ` +
-        'order as the other tag field.',
-    );
+    throw new Error(`${ERROR_PREFIX} defineIslandConfig() ${field} must be a non-empty array.`);
   }
   const seen = new Set<string>();
   return value.map((tag) => {
     if (typeof tag !== 'string' || !isValidTagName(tag) || seen.has(tag)) {
-      throw authoringError(
-        IslandErrorCode.TAGS,
-        `${ERROR_PREFIX} defineIslandConfig() ${field} contains an invalid or duplicate tag. ` +
-          `Every entry in ${field} must be a lowercase custom-element name with a hyphen ` +
-          "(e.g. 'my-island'), and no tag may appear twice.",
+      throw new Error(
+        `${ERROR_PREFIX} defineIslandConfig() ${field} contains an invalid or duplicate tag.`,
       );
     }
     seen.add(tag);
@@ -630,57 +579,37 @@ function validateIslandTags(value: unknown, field: 'tags' | 'tagNames'): string[
 /** Validate and register an island delivery descriptor; returns the normalized config. */
 export function defineIslandConfig(config: IslandConfig): IslandConfig {
   if (typeof config !== 'object' || config === null || Array.isArray(config)) {
-    throw authoringError(
-      IslandErrorCode.DESCRIPTOR_SHAPE,
-      `${ERROR_PREFIX} defineIslandConfig() requires an object descriptor. ` +
-        'Write export const openElement = defineIslandConfig({ ssr, dsd, hydrate, media, tags, ' +
-        'tagNames, exportNames }).',
-    );
+    throw new Error(`${ERROR_PREFIX} defineIslandConfig() requires an object descriptor.`);
   }
   for (const key of Object.keys(config)) {
     if (!ISLAND_CONFIG_FIELDS.has(key)) {
-      throw authoringError(
-        IslandErrorCode.DESCRIPTOR_SHAPE,
+      throw new Error(
         `${ERROR_PREFIX} defineIslandConfig() does not accept "${key}". ` +
-          'Use only ssr, dsd, hydrate, media, tags, tagNames, and exportNames. ' +
-          `Remove "${key}" from the descriptor.`,
+          'Use only ssr, dsd, hydrate, media, tags, tagNames, and exportNames.',
       );
     }
   }
   if (config.ssr !== undefined && typeof config.ssr !== 'boolean') {
-    throw authoringError(
-      IslandErrorCode.DESCRIPTOR_SHAPE,
-      `${ERROR_PREFIX} defineIslandConfig() ssr must be a boolean. ` +
-        'Write ssr: true to server-render the island, or ssr: false to ship it client-only.',
-    );
+    throw new Error(`${ERROR_PREFIX} defineIslandConfig() ssr must be a boolean.`);
   }
   if (config.dsd !== undefined && typeof config.dsd !== 'boolean') {
-    throw authoringError(
-      IslandErrorCode.DESCRIPTOR_SHAPE,
-      `${ERROR_PREFIX} defineIslandConfig() dsd must be a boolean. ` +
-        'Write dsd: true to emit Declarative Shadow DOM markup, or dsd: false to omit it.',
-    );
+    throw new Error(`${ERROR_PREFIX} defineIslandConfig() dsd must be a boolean.`);
   }
   if (config.hydrate !== undefined && !HYDRATION_STRATEGY_SET.has(config.hydrate)) {
-    throw authoringError(
-      IslandErrorCode.HYDRATE,
+    throw new Error(
       `${ERROR_PREFIX} Invalid island hydrate strategy "${String(config.hydrate)}". ` +
         'Use one of: load, idle, visible, media, only.',
     );
   }
   const media = config.media === undefined ? undefined : validateIslandMedia(config.media);
   if (config.hydrate === 'media' && media === undefined) {
-    throw authoringError(
-      IslandErrorCode.HYDRATE,
-      `${ERROR_PREFIX} defineIslandConfig() media is required when hydrate is "media". ` +
-        "Add media: '(min-width: 48rem)' naming the query that gates hydration.",
+    throw new Error(
+      `${ERROR_PREFIX} defineIslandConfig() media is required when hydrate is "media".`,
     );
   }
   if (config.hydrate !== 'media' && media !== undefined) {
-    throw authoringError(
-      IslandErrorCode.HYDRATE,
-      `${ERROR_PREFIX} defineIslandConfig() media is only valid with hydrate "media". ` +
-        "Either set hydrate: 'media' or remove the media field — the two must agree.",
+    throw new Error(
+      `${ERROR_PREFIX} defineIslandConfig() media is only valid with hydrate "media".`,
     );
   }
   const tags = config.tags === undefined ? undefined : validateIslandTags(config.tags, 'tags');
@@ -691,22 +620,13 @@ export function defineIslandConfig(config: IslandConfig): IslandConfig {
     tags && tagNames &&
     (tags.length !== tagNames.length || tags.some((tag, index) => tag !== tagNames[index]))
   ) {
-    throw authoringError(
-      IslandErrorCode.TAGS,
-      `${ERROR_PREFIX} defineIslandConfig() tags and tagNames must agree. ` +
-        'The two fields are positionally paired — make them identical arrays, or declare only one.',
-    );
+    throw new Error(`${ERROR_PREFIX} defineIslandConfig() tags and tagNames must agree.`);
   }
   const deliveryTags = tags ?? tagNames;
   const exportNames = config.exportNames;
   if (exportNames !== undefined) {
     if (typeof exportNames !== 'object' || exportNames === null || Array.isArray(exportNames)) {
-      throw authoringError(
-        IslandErrorCode.EXPORT_NAMES,
-        `${ERROR_PREFIX} defineIslandConfig() exportNames must be an object. ` +
-          "Write exportNames: { 'my-island': 'MyIslandElement' }, mapping each delivery tag to " +
-          'the export that provides it.',
-      );
+      throw new Error(`${ERROR_PREFIX} defineIslandConfig() exportNames must be an object.`);
     }
     const allowedTags = new Set(deliveryTags ?? []);
     for (const [tag, exportName] of Object.entries(exportNames)) {
@@ -723,11 +643,8 @@ export function defineIslandConfig(config: IslandConfig): IslandConfig {
           return false;
         })()
       ) {
-        throw authoringError(
-          IslandErrorCode.EXPORT_NAMES,
-          `${ERROR_PREFIX} defineIslandConfig() exportNames contains an invalid entry. ` +
-            'Every key must be a custom-element tag from tags/tagNames and every value a ' +
-            "non-empty export name, e.g. exportNames: { 'my-island': 'MyIslandElement' }.",
+        throw new Error(
+          `${ERROR_PREFIX} defineIslandConfig() exportNames contains an invalid entry.`,
         );
       }
     }

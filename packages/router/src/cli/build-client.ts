@@ -4,7 +4,7 @@
  * Client build for Island components.
  * Produces dist/client/islands/*.js + manifest for SSG post-processing.
  *
- * ADR 0011: This module exports buildClient() only - it is called from
+ * This module exports buildClient() only - it is called from
  * closeBundle() in open:build plugin. No longer a standalone CLI entry.
  * ctx parameter is required (no globalThis fallback).
  *
@@ -365,7 +365,7 @@ async function buildClient(ctx: OpenElementBuildContext): Promise<void> {
     root,
     base: `${clientBase}client/`,
     logLevel: 'warn',
-    // ADR-0057: JSX automatic runtime must be configured in the internal
+    // JSX automatic runtime must be configured in the internal
     // viteBuild() call — configFile:false means user's vite.config.ts is
     // NOT read. Without this, esbuild defaults to classic React.createElement
     // transform, producing {type, props, $$typeof} objects that OpenElement

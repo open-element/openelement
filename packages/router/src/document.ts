@@ -201,7 +201,7 @@ export function resolvePageDocument(
   // Route-resolved fragments are the only raw-head channel reachable from
   // request data (loader output, params, query), so they get the same two
   // fail-closed predicates as the config-time channels: no <script> at all,
-  // and every <style> must pass the CSS blacklist (ADR-0154 §4 amendment).
+  // and every <style> must pass the CSS blacklist.
   for (const fragment of dangerouslyHeadFragments ?? []) {
     assertNoScriptTags(fragment, 'head.dangerouslyHeadFragments');
     assertTrustedHeadHtml(fragment, 'head.dangerouslyHeadFragments');

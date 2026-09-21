@@ -1,5 +1,5 @@
 /**
- * ./errors.ts — Unified Error Architecture (ADR-0053 / SOP-011).
+ * ./errors.ts — Unified Error Architecture.
  *
  * ERROR_PREFIX and ErrorCode are re-exported from ../protocol/errors.ts.
  * They are pure string constants (no runtime side effects), so importing them
@@ -107,7 +107,7 @@ export class SsrRenderError extends OpenElementError {
   }
 }
 
-// ─── New ADR-0053 error classes ─────────────────────────────────────
+// ─── Error classes ──────────────────────────────────────────────────
 
 /** Recoverable render-phase error carrying the failing component path and tag. */
 export class RenderError extends OpenElementError implements ProtocolRenderError {
@@ -138,7 +138,7 @@ export class RenderError extends OpenElementError implements ProtocolRenderError
 
 let _telemetryHook: ErrorTelemetryHook | undefined;
 
-/** Install the process-wide error telemetry hook (replaceable for tests/HMR/multi-app pages). */
+/** Install the process-wide error telemetry hook (replaceable for tests, HMR, multi-app pages). */
 export function setErrorTelemetryHook(hook: ErrorTelemetryHook): void {
   // Reconfiguration is intentional (#1099): tests, HMR, and multi-app pages
   // must be able to replace a stale hook without restarting the process.

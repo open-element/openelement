@@ -6,7 +6,7 @@
  * - Dev server integration via @hono/vite-dev-server
  * - Island marking transform
  * - SSG build pipeline (Phase 1/2/3)
- * - Core subpath resolution (ADR 0016)
+ * - Core subpath resolution
  *
  * Runtime code (renderDsd, defineIsland, escapeHtml, etc.) lives in @openelement/element.
  * This package only contains Vite-specific build orchestration.

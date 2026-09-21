@@ -101,7 +101,7 @@ export function renderNotFoundRoute(
     }, cspNonce: c.get('cspNonce'), scripts: __clientScriptDescriptors() }), 404);`,
   );
   lines.push(`  }`);
-  // ADR-0129: close the IIFE and merge the 404-page loader's channel too.
+  // close the IIFE and merge the 404-page loader's channel too.
   lines.push(`})(), __responseHeaders);`);
   lines.push(`});`);
   lines.push('');
