@@ -73,6 +73,17 @@ export const openElement = defineIslandConfig({ hydrate: 'idle', ssr: true, dsd:
 
 其余的一切——内容、布局、文档——都不需要客户端行为，保持静态 DSD，完全不发 JavaScript。这个分界就是运行时的全部故事：浏览器代码只存在于显式声明它的模块里。
 
+## 键控列表与更新契约
+
+键控列表（`each` 区域）复用已经建好的 DOM。运行时用规范键规则——对声明的 key 字段取 `` `${typeof}:${String}` ``——推导每项的身份，并把新数组与已有条目做 diff：key 未变的保留节点，新 key 建行，消失的 key 释放。由此引出两条刻意划定的边界：
+
+- **身份由 key 决定，取值来自 item 对象。** 条目的槽位始终是它当前持有的那个 item 对象的投影；当一次更新交回**同一个对象引用**时，槽位不可能变，整段槽位遍历直接跳过。
+- **原地修改 item 在响应式契约之外。** 赋值 `rows[3].label` 改的是运行时没有任何理由重读的对象——这与「`signal()` 持有对象时按引用比较」是同一条边界。支持的写法是产生新 item（`{ ...row, label }`）或新数组，diff 正是为此而建。这是性能边界而非疏漏：正因如此，常见更新量与实际变化量成正比。
+
+## 测量更新：afterframe 地板
+
+JFB 基准（`benchmarks/jfb`）按上游口径计时——afterframe，即一次 `requestAnimationFrame` 加一次 `MessageChannel` 任务。该协议自带地板：**完全不做 DOM 工作**的 afterframe 往返在本仓 runner 上实测中位数约 **12.8 ms**，那是调度与事件循环成本，不是运行时工作。因此「swap 1000 行 ≈ 26 ms」这类数字里含这块地板；运行时真正拥有的是点击到处理函数返回之间的同步段（同一次测量约 3 ms，其中键控列表遍历占大头）。读任何基准数字时先看同步段——afterframe 总和可以在运行时一行未改的情况下上下浮动数毫秒。
+
 ## 另见
 
 - [路由与数据](/zh/guide/routing-and-data)——这些元素之上的页面、loader 与 action。

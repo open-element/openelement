@@ -73,6 +73,17 @@ Why the grammar is bounded, and what is deliberately outside it: a condition mus
 
 Everything else — content, layout, documentation — needs no client behavior and stays static DSD, shipping no JavaScript at all. That split is the whole runtime story: browser code exists only where a module declared it.
 
+## Keyed lists and the update contract
+
+A keyed list (an `each` region) reuses the DOM it already built. The runtime derives each item's identity with the canonical key rule — `` `${typeof}:${String}` `` over the declared key field — and a new array is diffed against the entries it already has: unchanged keys keep their nodes, new keys build, missing keys dispose. Two boundaries follow from that, both deliberate:
+
+- **Identity is the key, values are read from the item.** An entry is re-rendered from the item object it currently holds; when an update hands back the *same* object reference, its slots are already the projection of that object and the slot walk is skipped entirely.
+- **Mutating an item in place is outside the reactive contract.** Reassigning `rows[3].label` changes an object the runtime has no reason to re-read — the same reference-comparison boundary a `signal()` holding an object draws. The supported shape is to produce a new item (`{ ...row, label }`) or a new array, which is what the runtime diff is built to notice. This is a performance boundary, not an accident: it is what makes the common update proportional to what actually changed.
+
+## Measuring updates: the afterframe floor
+
+The JFB harness (`benchmarks/jfb`) times a click the way the upstream benchmark does — afterframe, meaning one `requestAnimationFrame` plus one `MessageChannel` task. That protocol has a floor of its own: an afterframe round-trip with **no DOM work at all** measured ~12.8 ms (median) on this repo's runner, which is scheduling and event-loop cost, not runtime work. A reported number such as "swap 1000 rows ≈ 26 ms" therefore contains that floor; the part the runtime owns is the synchronous segment between the click and the handler returning (~3 ms on the same run, with the keyed-list walk dominating it). When reading any benchmark number, compare the sync segment first — the afterframe total can move several milliseconds either way without the runtime having changed a line.
+
 ## See also
 
 - [Routing and Data](/guide/routing-and-data) — pages, loaders and actions on top of these elements.
