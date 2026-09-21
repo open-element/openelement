@@ -242,11 +242,11 @@ test.describe('Unified page structure', () => {
     // viewports).
     const outlineLinks = page.getByRole('complementary', { name: 'On this page' })
       .locator('a[href^="#"]:not(details a)');
-    // #start plus this page's four h2 sections, all present in the SSR
+    // #start plus this page's five h2 sections, all present in the SSR
     // payload — the outline does not wait for a client observer. The count is
     // pinned so a content change that silently truncates the outline fails
-    // here rather than shipping.
-    await expect(outlineLinks).toHaveCount(5);
+    // here rather than shipping. Five since the #1372 grammar-bound section.
+    await expect(outlineLinks).toHaveCount(6);
     await expect(outlineLinks.first()).toHaveAttribute('href', '#start');
   });
 
