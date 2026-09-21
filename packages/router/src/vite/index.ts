@@ -57,7 +57,10 @@ export function openPipeline(config: OpenPipelineConfig = {}): Plugin[] {
     island: config.island as FrameworkOptions['island'],
     build: config.output as FrameworkOptions['build'],
   };
-  return createOpenPlugin(options);
+  // #1411: `options` above is default-filled, so it cannot answer whether the
+  // CALLER passed framework options — `config` is the caller's own object.
+  const inlineOptionsPresent = Object.values(config).some((value) => value !== undefined);
+  return createOpenPlugin(options, undefined, { inlineOptionsPresent });
 }
 
 /**

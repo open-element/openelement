@@ -1,0 +1,23 @@
+// openelement.config.ts — framework options have exactly one home: this file.
+//
+// Every option below is OPTIONAL. With an empty object, options come from the
+// file conventions:
+//   - design tokens: app/styles/tokens.css (inlined into every document <head>)
+//   - app shell:     app/islands/app-shell.tsx (auto-registered; the file is
+//                    deletable and pages still render)
+//   - site title:    the "name" field of package.json
+//
+// Passing framework options inline to openElement() while this file carries
+// options is a hard error: framework options cannot have two homes. Unknown
+// keys are rejected with the accepted-key list.
+import { defineConfig } from '@openelement/router';
+
+export default defineConfig({
+  head: {
+    // Titles default to the package.json "name"; this overrides the document
+    // title fallback while page routes keep their own `head: { title }`.
+    title: 'My openElement App',
+    description: 'An openElement starter application.',
+    favicon: '/openelement-mark.svg',
+  },
+});

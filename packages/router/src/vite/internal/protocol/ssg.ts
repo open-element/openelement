@@ -118,6 +118,12 @@ export interface MiddlewareDecl {
      * callback is referenced, never serialized.
      */
     corsOriginModule?: string;
+    /**
+     * #1411: emit the default-CORS production advisory. Absent means "warn"
+     * (production builds); the dev server sets false so the first run is
+     * warning-free.
+     */
+    warnOnDefaultCors?: boolean;
     csp?: CspConfig;
   };
 }
