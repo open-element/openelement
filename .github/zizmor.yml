@@ -1,6 +1,6 @@
 # zizmor configuration (#1156 B2.6). Findings are fixed, not suppressed; the
 # only disabled audit is a repository-local path style preference, plus one
-# file-scoped audited exception below.
+# line-scoped audited exception below.
 rules:
   self-repository:
     # The repository standardizes on the `./.github/...` local-action form;
@@ -8,10 +8,11 @@ rules:
     disable: true
   dangerous-triggers:
     ignore:
-      # Audited 2026-09-21 (#1420, #1409): requeue-once.yml is workflow_run
-      # only (no pull_request dual-trigger), never checks out a PR head, uses
-      # no secrets, and its sole write scope is actions:write for the single
-      # rerun call — the escalation vector this audit guards against is
-      # structurally absent. Scoped to this one file; the audit stays live
-      # for every other workflow.
-      - .github/workflows/requeue-once.yml
+      # Audited 2026-09-21 (#1420, #1409): this line is requeue-once.yml's
+      # `on: workflow_run` trigger. The escalation vector the audit guards
+      # is structurally absent — no PR-head checkout, no secrets, the sole
+      # write scope is actions:write for the single rerun call, and
+      # workflow_run evaluates the default-branch copy of the file, so a
+      # pull request cannot rewrite the requeue logic. Scoped to this exact
+      # line; the audit stays live for every other workflow and line.
+      - requeue-once.yml:24
