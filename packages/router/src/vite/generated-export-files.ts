@@ -9,6 +9,7 @@ export const OPENELEMENT_EXPORT_FILES: Record<string, Record<string, string>> = 
     '.': 'src/index.ts',
     'authoring': 'src/authoring.ts',
     'build-utils': 'src/build-utils.ts',
+    'client-only': 'src/client-only.ts',
     'compiler': 'src/compiler.ts',
     'html': 'src/html.ts',
     'jsx-dev-runtime': 'src/jsx-dev-runtime.ts',
