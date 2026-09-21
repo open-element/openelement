@@ -56,7 +56,7 @@ function relativeSource(...segments: string[]): string {
  * spelling, or a stale packed artifact) fails the starter gate here, on the
  * packed CLI rather than on workspace sources.
  */
-function assertPackedCliPrintsCanonicalCommand(createCli: string): void {
+async function assertPackedCliPrintsCanonicalCommand(createCli: string): Promise<void> {
   // The canonical command comes from the create package's own source module —
   // the same module the documentation generator projects into the guides and
   // the homepage. Loading it in a subprocess keeps this check independent of
@@ -64,18 +64,19 @@ function assertPackedCliPrintsCanonicalCommand(createCli: string): void {
   const installCommandUrl = toFileUrl(
     join(repoRoot, 'packages', 'create', 'src', 'install-command.ts'),
   ).href;
-  const expected = runCapture(
-    'deno',
-    [
-      'eval',
-      '--allow-read',
-      `const { createInstallCommand } = await import(${
+  // `deno eval` accepts no permission flags; a bare `deno run -` with the
+  // script on stdin keeps the same isolation with the flags this check needs.
+  const expected = (await runCapture(
+    Deno.execPath(),
+    ['run', '--allow-read', '--no-prompt', '-'],
+    repoRoot,
+    {
+      stdin: `const { createInstallCommand } = await import(${
         JSON.stringify(installCommandUrl)
       }); console.log(createInstallCommand());`,
-    ],
-    repoRoot,
-  ).stdout.trim();
-  const stdout = runCliUsage(createCli);
+    },
+  )).stdout.trim();
+  const stdout = await runCliUsage(createCli);
   const printed = stdout.split('\n')
     .find((line) => line.includes('npm:@openelement/create@'))
     ?.replace(/^Usage \(Alpha\): /, '')
@@ -94,9 +95,9 @@ function assertPackedCliPrintsCanonicalCommand(createCli: string): void {
  * "no arguments" exit path (it prints usage and exits 1), so this reads stdout
  * without treating the exit code as a failure.
  */
-function runCliUsage(createCli: string): string {
-  return runCapture(
-    'deno',
+async function runCliUsage(createCli: string): Promise<string> {
+  return (await runCapture(
+    Deno.execPath(),
     [
       'run',
       '--minimum-dependency-age',
@@ -112,33 +113,49 @@ function runCliUsage(createCli: string): string {
     workDir,
     // The no-arguments path is the usage path; exit 1 is its documented code.
     { allowFailure: true },
-  ).stdout;
+  )).stdout;
 }
 
 /** Run a command, capturing output; a nonzero exit is reported with its logs. */
-function runCapture(
+async function runCapture(
   cmd: string,
   args: string[],
   cwd: string,
-  options: { allowFailure?: boolean } = {},
-): { stdout: string; stderr: string } {
-  const result = new Deno.Command(cmd, { args, cwd, stdout: 'piped', stderr: 'piped' })
-    .outputSync();
-  const stdout = new TextDecoder().decode(result.stdout);
-  const stderr = new TextDecoder().decode(result.stderr);
-  if (result.code !== 0 && options.allowFailure !== true) {
+  options: { allowFailure?: boolean; stdin?: string } = {},
+): Promise<{ stdout: string; stderr: string }> {
+  const child = new Deno.Command(cmd, {
+    args,
+    cwd,
+    stdout: 'piped',
+    stderr: 'piped',
+    stdin: options.stdin === undefined ? 'null' : 'piped',
+  }).spawn();
+  if (options.stdin !== undefined) {
+    const writer = child.stdin.getWriter();
+    writer.write(new TextEncoder().encode(options.stdin));
+    writer.releaseLock();
+    child.stdin.close();
+  }
+  const [status, stdoutBytes, stderrBytes] = await Promise.all([
+    child.status,
+    new Response(child.stdout).arrayBuffer(),
+    new Response(child.stderr).arrayBuffer(),
+  ]);
+  const stdout = new TextDecoder().decode(stdoutBytes);
+  const stderr = new TextDecoder().decode(stderrBytes);
+  if (!status.success && options.allowFailure !== true) {
     throw new Error(`[${cmd} ${args.join(' ')}] failed:\n${stderr || stdout}`);
   }
   return { stdout, stderr };
 }
 
-function main(): void {
+async function main(): Promise<void> {
   Deno.mkdirSync(depsDir, { recursive: true });
   if (existsSync(appDir)) Deno.removeSync(appDir, { recursive: true });
   for (const pkg of PACKAGES) packAndExtract(pkg);
 
   const createCli = join(depsDir, 'create', 'src', 'cli.js');
-  assertPackedCliPrintsCanonicalCommand(createCli);
+  await assertPackedCliPrintsCanonicalCommand(createCli);
   run(
     'deno',
     [
@@ -202,4 +219,4 @@ function main(): void {
   console.log(`starter-smoke ready at ${appDir}`);
 }
 
-main();
+await main();
