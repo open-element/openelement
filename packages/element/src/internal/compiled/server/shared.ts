@@ -11,6 +11,7 @@
  */
 
 import {
+  conditionLiteralAllowed,
   type PartProgramV1,
   type ProgramPart,
   type ProgramTreeNode,
@@ -193,7 +194,12 @@ function validatePart(part: ProgramPart, index: number): void {
       return;
     case 'when':
       if (!part.signal) fail(path, 'conditional Region needs a non-empty signal name');
-      if (!Number.isFinite(part.test.value)) fail(`${path}.test.value`, 'threshold must be finite');
+      if (!conditionLiteralAllowed(part.test.op, part.test.value)) {
+        fail(
+          `${path}.test`,
+          'condition operator/literal mismatch (see protocol conditionLiteralAllowed)',
+        );
+      }
       validateStaticNodes(part.on, `${path}.on`, false);
       validateStaticNodes(part.off, `${path}.off`, false);
       return;

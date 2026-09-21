@@ -1,4 +1,4 @@
-import { assertEquals, assertStrictEquals } from '@std/assert';
+import { assertEquals, assertStrictEquals, assertThrows } from '@std/assert';
 import {
   claimExistingDom,
   createFreshDom,
@@ -195,5 +195,35 @@ Deno.test('direct item value slots keep empty and multi-node item ranges ordered
     { id: 'b', text: 'B' },
   ];
   assertEquals(toHtml(root), '<host><div><!--oe:p0-->[][B]<!--oe:/p0--></div></host>');
+  instance.dispose();
+});
+
+Deno.test('Region update errors propagate when the host has no update-error sink (#1375)', () => {
+  const items = signal<unknown>([{ id: 'a', text: 'alpha' }]);
+  const program = testProgram({
+    tag: 'oe-unguarded-each',
+    template: [{ k: 'el', tag: 'ul', attrs: [], children: [{ k: 'part', index: 0 }] }],
+    parts: [{
+      k: 'each',
+      index: 0,
+      signal: 'items',
+      key: 'id',
+      field: 'text',
+      item: [{ k: 'el', tag: 'li', attrs: [], children: [{ k: 'ival', field: 'text' }] }],
+    }],
+  });
+  const host = { signals: { items }, handlers: {} } as unknown as CompiledRuntimeHost;
+  const doc = new TestDocument();
+  const root = doc.createElement('host');
+  const instance = createFreshDom(program, host, node(root));
+  // The isolation contract is a kernel feature: a bare runtime host without
+  // onUpdateError keeps the propagating behavior.
+  assertThrows(
+    () => {
+      items.value = 'not-an-array';
+    },
+    Error,
+    'expects an array signal',
+  );
   instance.dispose();
 });
