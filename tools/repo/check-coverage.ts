@@ -168,12 +168,22 @@ async function main(): Promise<void> {
   const lcov = await runCoverage(crashRetries);
   const profiledFiles = lcovFilePaths(lcov);
 
-  // Threshold baseline: 2026-08-04 (v0.42.0-alpha.14 cycle), measured with the
-  // full-denominator logic below on a local `deno task --cwd tools/repo test:coverage:check` run:
-  //   packages/*/src: lines 81.46%, branches 85.24%, functions 87.66%
-  //   tools/lib:      lines 72.97%, branches 83.47%, functions 70.31%
-  // Thresholds sit one point under the measured floor to absorb platform
-  // variance between local runs and CI. Raise them only after re-measuring.
+  // Threshold baselines, measured with the full-denominator logic below on a
+  // local `deno task --cwd tools/repo test:coverage:check` run. Each scope
+  // lists its last measured values, their date, and its thresholds; the three
+  // must agree. Threshold changes must be explicit in the changing PR — state
+  // the old value, the new value, and why — and must never be lowered silently
+  // to make a red run pass.
+  //   packages/*/src: measured 2026-08-04 (v0.42.0-alpha.14 cycle): lines
+  //     81.46%, branches 85.24%, functions 87.66%. Threshold history: 80/80/80
+  //     until 2026-07-15 (5bfe75d1d lowered lines to 69), 69/81/72 until
+  //     2026-07-24 (da13c4911 raised to 73/82/77). The lines threshold sits
+  //     ~8.5 points under the measured value — recorded drift, not a silent
+  //     floor: re-measure before raising.
+  //   tools/lib: measured 2026-08-04: lines 72.97%, branches 83.47%,
+  //     functions 70.31%; thresholds 72/82/69 sit about one point under the
+  //     measured values to absorb platform variance between local runs and CI.
+  //     Raise them only after re-measuring.
   const scopes: Array<{
     label: string;
     include: (path: string) => boolean;
@@ -199,12 +209,14 @@ async function main(): Promise<void> {
     },
     {
       // Site tooling moved out of tools/lib; it carries its own scope so
-      // neither directory's threshold is diluted by the other. Baseline
-      // 2026-09-18 (first measurement after the move, same
-      // full-denominator logic): lines 60.85%, branches 96.47%, functions
-      // 62.16%; thresholds one point under the floor. The IO-bound half of
-      // the site-retired library is exercised by the gate runs, not unit
-      // tests, which is why the line/function floors differ from tools/lib.
+      // neither directory's threshold is diluted by the other. Measured at
+      // the 1.0.0-alpha.1 candidate (same full-denominator logic): lines
+      // 62.16%, branches 96.70%, functions 63.41%; thresholds 61/95/62 sit
+      // one point under. (An older 2026-09-18 measurement — 60.85/96.47/62.16
+      // — is superseded and intentionally not retained here.) The IO-bound
+      // half of the site-retired library is exercised by the gate runs, not
+      // unit tests, which is why the line/function floors differ from
+      // tools/lib.
       label: 'www/tools/lib',
       include: isWwwToolsSource,
       thresholds: {

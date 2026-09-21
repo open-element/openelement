@@ -52,19 +52,19 @@ export const REGISTRY_NOTE = Object.entries(PUBLISHED_LATEST)
   .map(([name, version]) => `${name.replace('@openelement/', '')} ${version}`)
   .join(' · ');
 
-// The newest prerelease train. It was a PARTIAL publish: element/create/ui
-// published at this version, Router never did. Registry-line copy must use
-// this constant with the missing-package fact, never as a four-package line.
-export const LATEST_PRERELEASE_VERSION = 'v0.44.0-beta.2.2';
+// The newest prerelease train. It is a COMPLETE publish: all four packages
+// shipped at this version under the @alpha dist-tag. Keep in sync with
+// docs/release/release-state.json.
+export const LATEST_PRERELEASE_VERSION = 'v1.0.0-alpha.1';
 
 // Per-package registry truth at LATEST_PRERELEASE_VERSION. `null` means the
 // package was never published at that version. Keep in sync with
 // docs/release/release-state.json (checked by release:state-machine:check).
 export const PUBLISHED_PACKAGE_VERSIONS: Readonly<Record<string, string | null>> = {
-  '@openelement/element': 'v0.44.0-beta.2.2',
-  '@openelement/router': null,
-  '@openelement/create': 'v0.44.0-beta.2.2',
-  '@openelement/ui': 'v0.44.0-beta.2.2',
+  '@openelement/element': 'v1.0.0-alpha.1',
+  '@openelement/router': 'v1.0.0-alpha.1',
+  '@openelement/create': 'v1.0.0-alpha.1',
+  '@openelement/ui': 'v1.0.0-alpha.1',
 };
 
 // ---------------------------------------------------------------------------
@@ -110,6 +110,25 @@ export function alphaLineNote(locale: ReleaseLocale): string {
   return locale === 'en'
     ? `The @alpha dist-tag currently resolves to ${ALPHA_RESOLVES_TO} (the previous 0.43 line); ${SOURCE_VERSION} is the repository baseline, not yet on npm.`
     : `@alpha dist-tag 当前解析到 ${ALPHA_RESOLVES_TO}（此前的 0.43 线）；${SOURCE_VERSION} 是仓库基线，尚未发布到 npm。`;
+}
+
+/**
+ * Roadmap alpha-train publish-state (routes/roadmap.tsx timeline), derived
+ * from the same release-state truth: the row reads as published once the
+ * train is on npm under @alpha, and as a repository baseline before that —
+ * the route must never hand-write this status beside
+ * docs/release/release-state.json (one source of truth, guarded by the
+ * www check:content-data drift check).
+ */
+export function prereleasePublishStatus(locale: ReleaseLocale): string {
+  if (SOURCE_LINE_PUBLISHED) {
+    return locale === 'zh'
+      ? '已通过 @alpha dist-tag 发布到 npm'
+      : 'published to npm under the @alpha dist-tag';
+  }
+  return locale === 'zh'
+    ? '仓库基线——尚未发布到 npm'
+    : 'repository baseline — not yet on npm';
 }
 
 /** Getting-started lead-in note ({{SOURCE_LINE_NOTE}} placeholder). */

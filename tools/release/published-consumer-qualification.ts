@@ -259,16 +259,7 @@ async function qualificationMain(): Promise<void> {
           2,
         ),
       );
-      const publicSurfaceSource = [
-        "import { HYDRATION_STRATEGIES, OpenElement, renderDsd, signal } from '@openelement/element';",
-        "import { defineIslandConfig, definePage } from '@openelement/router';",
-        "import { openPipeline } from '@openelement/router/vite';",
-        'for (const value of [OpenElement, renderDsd, signal, defineIslandConfig, definePage, openPipeline]) {',
-        "  if (typeof value !== 'function') throw new Error('expected published public function');",
-        '}',
-        "if (!Array.isArray(HYDRATION_STRATEGIES)) throw new Error('expected hydration strategy list');",
-        "console.log('published public runtime imports passed');",
-      ].join('\n');
+      const publicSurfaceSource = [NODE_RUNTIME_SMOKE_SOURCE, VITE_SMOKE_SOURCE].join('\n');
       const denoRuntimeSource = [
         "import { OpenElement, signal } from '@openelement/element';",
         "import { defineIslandConfig, definePage } from '@openelement/router';",
@@ -310,7 +301,7 @@ async function qualificationMain(): Promise<void> {
           2,
         ),
       );
-      await Deno.writeTextFile(join(nodeConsumer, 'smoke.mjs'), publicSurfaceSource);
+      await Deno.writeTextFile(join(nodeConsumer, 'smoke.mjs'), NODE_RUNTIME_SMOKE_SOURCE);
       await runStep(
         'install Node ESM public runtime dependencies',
         'npm',
@@ -364,6 +355,26 @@ export function parseConsumerSmokeOptions(
 async function readJson<T = unknown>(path: string | URL): Promise<T> {
   return JSON.parse(await Deno.readTextFile(path)) as T;
 }
+
+// Post-publish smoke surfaces. The plain-Node surface is the framework core:
+// `@openelement/router/vite` is Deno-toolchain surface (module top levels
+// assume the Deno global — see the Deno-only toolchain decision in ADR-0108),
+// so only the Deno consumer imports it. The Deno run proves the same
+// published tarballs.
+export const NODE_RUNTIME_SMOKE_SOURCE = [
+  "import { HYDRATION_STRATEGIES, OpenElement, renderDsd, signal } from '@openelement/element';",
+  "import { defineIslandConfig, definePage } from '@openelement/router';",
+  'for (const value of [OpenElement, renderDsd, signal, defineIslandConfig, definePage]) {',
+  "  if (typeof value !== 'function') throw new Error('expected published public function');",
+  '}',
+  "if (!Array.isArray(HYDRATION_STRATEGIES)) throw new Error('expected hydration strategy list');",
+  "console.log('published public runtime imports passed');",
+].join('\n');
+
+export const VITE_SMOKE_SOURCE = [
+  "import { openPipeline } from '@openelement/router/vite';",
+  "if (typeof openPipeline !== 'function') throw new Error('expected published public function');",
+].join('\n');
 
 function normalizeSlashes(path: string): string {
   return path.replace(/\\/g, '/');

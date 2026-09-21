@@ -1,9 +1,10 @@
-import { assertEquals, assertThrows } from '@std/assert';
+import { assert, assertEquals, assertThrows } from '@std/assert';
 import {
   admitsRelease,
   cdnAvailabilityDecision,
   classifyRegistryResponse,
   fail,
+  NODE_RUNTIME_SMOKE_SOURCE,
   npmAvailabilityDecision,
   parseConsumerSmokeOptions,
   parseQualificationOptions,
@@ -12,6 +13,7 @@ import {
   releaseGateExitCode,
   skipAllowed,
   unknown,
+  VITE_SMOKE_SOURCE,
 } from './published-consumer-qualification.ts';
 
 Deno.test('published-consumer qualification defaults to the current published package line', () => {
@@ -295,4 +297,20 @@ Deno.test('consumer-smoke: no hostile CDN input maps to PASS or SKIP — every u
     assertEquals(cdn.verdict === 'PASS' || cdn.verdict === 'SKIP_ALLOWED', false, label);
     assertEquals(releaseGateExitCode(cdn), 1, label);
   }
+});
+
+Deno.test('node runtime smoke stays on the plain-Node core surface', () => {
+  // `@openelement/router/vite` is Deno-toolchain surface (module top levels
+  // assume the Deno global): importing it from plain node fails, so the node
+  // smoke must never reference it — only the Deno smoke may.
+  assert(!NODE_RUNTIME_SMOKE_SOURCE.includes('router/vite'), 'node smoke imports router/vite');
+  assert(!NODE_RUNTIME_SMOKE_SOURCE.includes('Deno'), 'node smoke references Deno');
+  assert(
+    NODE_RUNTIME_SMOKE_SOURCE.includes("from '@openelement/router'"),
+    'node smoke covers the router core',
+  );
+  assert(
+    VITE_SMOKE_SOURCE.includes("from '@openelement/router/vite'"),
+    'deno smoke covers the vite entry',
+  );
 });

@@ -53,7 +53,7 @@
     "test:e2e": "deno run --allow-run tools/repo/gate.ts site:build www#e2e:browsers tests/fixtures/router-native-framework#e2e tests/fixtures/router-lit-framework#e2e",
     "build": "deno task --filter @openelement/element build && deno task --filter @openelement/router build && deno task --filter @openelement/create build && deno task --filter @openelement/ui build",
     "pack": "deno task --cwd tools/release pack",
-    "verify": "deno run --allow-run tools/repo/gate.ts check test test:e2e site:verify saas:verify saas:workers tools/release#gate:packed",
+    "verify": "deno run --allow-run tools/repo/gate.ts check test tools/repo#gate:source saas:verify saas:workers tools/release#gate:packed",
     "release:check": "deno run --allow-run tools/repo/gate.ts tools/repo#release:registry-check tools/release#gate:packed tools/release#publish:npm:dry-run",
     "site:build": "deno run --allow-run tools/repo/gate.ts tools/repo#generate:all www#build www#pagefind www#emit:redirects www#emit:sitemap www#emit:rss",
     "site:verify": "deno run --allow-run tools/repo/gate.ts site:build www#check:links www#check:theme-tokens www#check:content tools/repo#retired-api:check",
@@ -84,6 +84,7 @@
       "custom-dist/",
       "dist-test-ssg-render/",
       ".tmp*",
+      ".mimosa",
       "**/.nitro/"
     ]
   },

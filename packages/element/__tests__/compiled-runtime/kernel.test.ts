@@ -1,4 +1,11 @@
-import { assert, assertEquals, assertFalse, assertStrictEquals, assertThrows } from '@std/assert';
+import {
+  assert,
+  assertEquals,
+  assertFalse,
+  assertStrictEquals,
+  assertStringIncludes,
+  assertThrows,
+} from '@std/assert';
 import { CompiledErrorBoundary } from '../../src/error-boundary.ts';
 import { ElementFormController } from '../../src/open-element-form.ts';
 import { CompiledElementKernel } from '../../src/internal/compiled/runtime/kernel.ts';
@@ -16,6 +23,19 @@ const KERNEL_PROGRAM = testProgram({
     children: [{ k: 'part', index: 0 }],
   }],
   parts: [{ k: 'text', index: 0, signal: 'message' }],
+});
+
+const KERNEL_EACH_PROGRAM = testProgram({
+  tag: 'oe-kernel-each-test',
+  template: [{ k: 'el', tag: 'ul', attrs: [], children: [{ k: 'part', index: 0 }] }],
+  parts: [{
+    k: 'each',
+    index: 0,
+    signal: 'items',
+    key: 'id',
+    field: 'text',
+    item: [{ k: 'el', tag: 'li', attrs: [], children: [{ k: 'ival', field: 'text' }] }],
+  }],
 });
 
 function elementChild(root: { childNodes: ArrayLike<unknown> }): TestElement {
@@ -363,4 +383,51 @@ Deno.test('compiled form and error controllers remain element-local', () => {
   assertFalse(boundary.hasError);
   form.dispose();
   boundary.dispose();
+});
+
+Deno.test('kernel boundary captures a failing signal update (#1375)', () => {
+  const document = new TestDocument();
+  const element = document.createElement('oe-kernel-each-test');
+  const items = signal<unknown>([{ id: 'a', text: 'alpha' }]);
+  const reported: string[] = [];
+  const kernel = new CompiledElementKernel(
+    element as unknown as HTMLElement,
+    KERNEL_EACH_PROGRAM,
+    {
+      signals: { items },
+      handlers: {},
+      rootMode: 'open',
+      errorBoundary: { onError: (error) => reported.push(error.message) },
+    },
+  );
+  kernel.connect();
+  const root = kernel.root;
+  assert(root !== undefined);
+  const list = elementChild(root);
+  const alpha = list.childNodes[1] as TestElement;
+  assertEquals(toHtml(list), '<ul><!--oe:p0--><li>alpha</li><!--oe:/p0--></ul>');
+
+  // A non-array write throws inside the update phase. The kernel boundary
+  // captures it — the write site never sees the throw — and the each Region's
+  // pre-validation leaves the previous DOM untouched.
+  items.value = 'not-an-array';
+  assert(kernel.errors.hasError);
+  assertStringIncludes(kernel.errors.error?.message ?? '', 'expects an array signal');
+  assertStrictEquals(kernel.errors.source, element);
+  assertEquals(reported, ['[compiled-runtime] each part 0 expects an array signal']);
+  assertEquals(toHtml(list), '<ul><!--oe:p0--><li>alpha</li><!--oe:/p0--></ul>');
+  assertStrictEquals(list.childNodes[1], alpha);
+
+  // Same capture for a duplicate-key write: rejected before any mutation.
+  items.value = [{ id: 'a', text: 'one' }, { id: 'a', text: 'two' }];
+  assertEquals(reported.length, 2);
+  assertStringIncludes(kernel.errors.error?.message ?? '', 'duplicate key');
+  assertStrictEquals(list.childNodes[1], alpha);
+
+  // The subscription stays live: the next valid write applies normally.
+  items.value = [{ id: 'b', text: 'beta' }];
+  assertEquals(toHtml(list), '<ul><!--oe:p0--><li>beta</li><!--oe:/p0--></ul>');
+
+  kernel.dispose();
+  assertFalse(kernel.errors.hasError);
 });

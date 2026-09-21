@@ -1,43 +1,44 @@
 {
   "schemaVersion": 3,
-  "sourceVersion": "1.0.0-alpha.1",
-  "activeTarget": "v1.0.0-alpha.1",
+  "sourceVersion": "1.0.0-alpha.2",
+  "activeTarget": "v1.0.0-alpha.2",
   "nextPlannedTrain": "not scheduled",
   "maturity": "alpha",
   "registry": {
     "source": "registry.npmjs.org",
-    "verifiedAt": "2026-09-14",
+    "verifiedAt": "2026-09-20",
     "method": "read-only npm view versions + dist-tags"
   },
   "packages": [
     {
       "name": "@openelement/element",
-      "registry": { "latest": "0.43.3", "alpha": "0.43.0-alpha.2", "beta": "0.44.0-beta.2.2" }
+      "registry": { "latest": "0.43.3", "alpha": "1.0.0-alpha.1", "beta": "0.44.0-beta.2.2" }
     },
     {
       "name": "@openelement/router",
-      "registry": { "latest": "0.41.0-alpha.6", "alpha": "0.41.0-alpha.8" }
+      "registry": { "latest": "0.41.0-alpha.6", "alpha": "1.0.0-alpha.1" }
     },
     {
       "name": "@openelement/create",
-      "registry": { "latest": "0.43.3", "alpha": "0.43.0-alpha.2", "beta": "0.44.0-beta.2.2" }
+      "registry": { "latest": "0.43.3", "alpha": "1.0.0-alpha.1", "beta": "0.44.0-beta.2.2" }
     },
     {
       "name": "@openelement/ui",
-      "registry": { "latest": "0.43.3", "alpha": "0.43.0-alpha.2", "beta": "0.44.0-beta.2.2" }
+      "registry": { "latest": "0.43.3", "alpha": "1.0.0-alpha.1", "beta": "0.44.0-beta.2.2" }
     }
   ],
   "commonCompleteVersion": null,
   "commonCompleteVersionNote": "No stable version is published for all four packages. @openelement/router has only 0.41.0 prereleases; the 0.43.3 stable line covers element, create, and ui only. Any non-null value here must be present in every package and is verified by release:registry-check.",
   "latestPrerelease": {
-    "version": "0.44.0-beta.2.2",
-    "distTag": "beta",
-    "state": "partial",
+    "version": "1.0.0-alpha.1",
+    "distTag": "alpha",
+    "state": "complete",
     "publishedPackages": [
       "@openelement/element",
+      "@openelement/router",
       "@openelement/create",
       "@openelement/ui"
     ],
-    "missingPackages": ["@openelement/router"]
+    "missingPackages": []
   }
 }

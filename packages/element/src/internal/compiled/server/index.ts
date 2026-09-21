@@ -38,6 +38,12 @@ import { escapeAttr } from '../../core/html-escape.ts';
 // Canonical text-node escape contract (#1272): shared with the runtime seed
 // serializer; do not reintroduce a private copy.
 import { escapeText } from '../escape-text.ts';
+// Canonical each-Region item-key derivation (#1374): single source shared
+// with the runtime executors; do not reintroduce a private copy.
+import { eachItemKey, EachKeyError } from '../each-key.ts';
+// Canonical when-Region condition evaluation (#1372): single source shared
+// with the runtime executors; do not reintroduce a private comparison.
+import { conditionHolds } from '../condition-holds.ts';
 
 export type { CompiledProgramHost, CompiledSignalLike } from './shared.ts';
 export { assertCompiledProgram, CompiledProgramValidationError } from './shared.ts';
@@ -314,11 +320,24 @@ function itemsFor(
         );
       }
     }
-    const key = String(item[keyField]);
+    // The canonical typed derivation (#1374): identical to the client's
+    // keyed-reuse identity, so number 1 and string "1" stay distinct here.
+    let key: string;
+    try {
+      key = eachItemKey(part, item);
+    } catch (error) {
+      if (error instanceof EachKeyError) {
+        throw new CompiledProgramValidationError(
+          `parts[${part.index}].signal[${ordinal}]`,
+          `each Region ${error.reason}`,
+        );
+      }
+      throw error;
+    }
     if (seen.has(key)) {
       throw new CompiledProgramValidationError(
         `parts[${part.index}].signal`,
-        `duplicate each Region key ${JSON.stringify(key)}`,
+        `duplicate each Region key ${JSON.stringify(item[keyField])}`,
       );
     }
     seen.add(key);
@@ -332,11 +351,13 @@ function whenIsActive(
   value: unknown,
 ): boolean {
   try {
-    return Number(value) > part.test.value;
+    // Canonical condition evaluation (#1372) — shared with the client
+    // executors; do not reintroduce a private comparison.
+    return conditionHolds(part.test, value);
   } catch {
     throw new CompiledProgramValidationError(
       `parts[${part.index}].signal`,
-      'conditional dependency cannot be converted to a number',
+      'conditional dependency cannot be evaluated',
     );
   }
 }

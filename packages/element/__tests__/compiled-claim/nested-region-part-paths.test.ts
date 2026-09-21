@@ -37,7 +37,7 @@ import {
 } from '../../src/internal/compiled/runtime.ts';
 import { serializeProgramContent } from '../../src/internal/compiled/server/index.ts';
 import { testProgram } from '../compiled-runtime/test-program.ts';
-import { parseHtml, TestDocument, TestElement } from '../compiled-runtime/test-dom.ts';
+import { parseHtml, TestDocument, TestElement, TestText } from '../compiled-runtime/test-dom.ts';
 
 /** Structural signal matching the runtime's SignalLike contract. */
 class Sig<T> {
@@ -162,6 +162,31 @@ function eachSiblingProgram(): unknown {
       },
     ],
   });
+}
+
+/** #1374 fixture: an each Region keyed by a field holding mixed value types,
+ * so server duplicate detection and client reuse must agree on identity. */
+function mixedKeyProgram(): unknown {
+  return testProgram({
+    tag: 'oe-mixed-keys',
+    template: [{ k: 'el', tag: 'ul', attrs: [], children: [{ k: 'part', index: 0 }] }],
+    parts: [{
+      k: 'each',
+      index: 0,
+      signal: 'items',
+      key: 'id',
+      field: 'label',
+      item: [{ k: 'el', tag: 'li', attrs: [], children: [{ k: 'ival', field: 'label' }] }],
+    }],
+  });
+}
+
+interface MixedKeyHost {
+  signals: { items: Sig<Array<{ id: number | string; label: string }>> };
+}
+
+function mixedKeyHost(items: Array<{ id: number | string; label: string }>): MixedKeyHost {
+  return { signals: { items: new Sig(items) } };
 }
 
 /** `element(dynamic attr) └ when └ element` — a Region nested inside the
@@ -501,4 +526,111 @@ Deno.test('A10.4: nested Region anchors (when └ each, each └ when, deeper) a
       claimExisting(raw, host, new TestDocument().createElement('host') as unknown as Node)
     );
   }
+});
+
+Deno.test('#1374: mixed number/string each keys keep distinct identity from SSR through claim', () => {
+  const program = mixedKeyProgram();
+  const items: Array<{ id: number | string; label: string }> = [
+    { id: 1, label: 'number' },
+    { id: '1', label: 'string' },
+  ];
+  const browser = mixedKeyHost(items);
+  const { html, root, instance } = receiveAndClaim(program, mixedKeyHost(items), browser);
+  assertEquals(
+    html,
+    '<ul><!--oe:p0--><li>number</li><li>string</li><!--oe:/p0--></ul>',
+  );
+
+  const list = root.childNodes[0] as TestElement;
+  const numberItem = list.childNodes[1] as TestElement;
+  const stringItem = list.childNodes[2] as TestElement;
+  assertEquals((numberItem.childNodes[0] as TestText).data, 'number');
+  assertEquals((stringItem.childNodes[0] as TestText).data, 'string');
+
+  // A reorder moves each node with its own identity: number 1 and string "1"
+  // are distinct keys, so the entries swap without collapsing into one.
+  browser.signals.items.value = [{ id: '1', label: 'STRING' }, { id: 1, label: 'NUMBER' }];
+  assertStrictEquals(list.childNodes[1], stringItem);
+  assertStrictEquals(list.childNodes[2], numberItem);
+  assertEquals((stringItem.childNodes[0] as TestText).data, 'STRING');
+  assertEquals((numberItem.childNodes[0] as TestText).data, 'NUMBER');
+
+  // Removing one identity keeps the other's node; re-adding allocates fresh.
+  browser.signals.items.value = [{ id: 1, label: 'only number' }];
+  assertStrictEquals(list.childNodes[1], numberItem);
+  assertStrictEquals(stringItem.parentNode, null);
+  browser.signals.items.value = [{ id: 1, label: 'only number' }, { id: '1', label: 'STRING' }];
+  const reattached = list.childNodes[2] as TestElement;
+  assertNotStrictEquals(reattached, stringItem);
+  assertEquals((reattached.childNodes[0] as TestText).data, 'STRING');
+  instance.dispose();
+});
+
+Deno.test('#1374: a genuine duplicate each key still fails closed on both executors', () => {
+  const program = mixedKeyProgram();
+  const duplicated = [{ id: 1, label: 'one' }, { id: 1, label: 'again' }];
+
+  // Server duplicate detection still rejects same-type collisions.
+  const serverError = assertThrows(
+    () => serializeServer(program, mixedKeyHost(duplicated)),
+    Error,
+  );
+  assertStringIncludes(serverError.message, 'duplicate each Region key 1');
+
+  // Claim still fails closed before attaching anything.
+  const doc = new TestDocument();
+  const root = parseHtml(doc, '<ul><!--oe:p0--><li>one</li><li>again</li><!--oe:/p0--></ul>');
+  const claimError = assertThrows(
+    () => claimExisting(program, mixedKeyHost(duplicated), root as unknown as Node),
+    PartProgramClaimError,
+  );
+  assertStringIncludes(claimError.message, 'duplicate key');
+});
+
+/** #1372: the widened operator set must hold across SSR/fresh/claim parity. */
+Deno.test('#1372: equals and truthy conditions hold through SSR/fresh/claim', () => {
+  function equalsProgram(): unknown {
+    return testProgram({
+      tag: 'oe-1372-equals',
+      template: [{ k: 'el', tag: 'div', attrs: [], children: [{ k: 'part', index: 0 }] }],
+      parts: [{
+        k: 'when',
+        index: 0,
+        signal: 'status',
+        test: { signal: 'status', op: 'equals', value: 'pending' },
+        on: [{ k: 'text', value: 'PENDING' }],
+        off: [{ k: 'text', value: 'SETTLED' }],
+      }],
+    });
+  }
+  function truthyProgram(): unknown {
+    return testProgram({
+      tag: 'oe-1372-truthy',
+      template: [{ k: 'el', tag: 'div', attrs: [], children: [{ k: 'part', index: 0 }] }],
+      parts: [{
+        k: 'when',
+        index: 0,
+        signal: 'ready',
+        test: { signal: 'ready', op: 'truthy', value: false },
+        on: [{ k: 'text', value: 'LOADING' }],
+        off: [{ k: 'text', value: 'READY' }],
+      }],
+    });
+  }
+
+  // Strict string equality: on while equal, off after the write flips it.
+  const status = new Sig('pending');
+  const eq = receiveAndClaim(equalsProgram(), { signals: { status } }, { signals: { status } });
+  assertStringIncludes(eq.html, 'PENDING');
+  status.value = 'done';
+  assertStringIncludes(eq.root.innerHTML, 'SETTLED');
+  eq.instance.dispose();
+
+  // Negated truthiness: Boolean(value) === false while the signal is empty.
+  const ready = new Sig('');
+  const tr = receiveAndClaim(truthyProgram(), { signals: { ready } }, { signals: { ready } });
+  assertStringIncludes(tr.html, 'LOADING');
+  ready.value = 'loaded';
+  assertStringIncludes(tr.root.innerHTML, 'READY');
+  tr.instance.dispose();
 });

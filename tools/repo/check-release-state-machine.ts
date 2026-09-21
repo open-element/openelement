@@ -50,6 +50,13 @@ export interface RegistryEvidence {
 
 const STABLE_VERSION = /^\d+\.\d+\.\d+$/u;
 
+/**
+ * The admitted active release train. Advancing it is the admission act for
+ * the next baseline: the state machine is code, so a new train enters by a
+ * reviewed change here, never by quietly editing release-state.json.
+ */
+const ADMITTED_ACTIVE_TARGET = 'v1.0.0-alpha.2';
+
 /** Offline structural + Site-copy validation. Not registry proof. */
 export function validateReleaseState(
   state: ReleaseStateV3,
@@ -73,8 +80,8 @@ export function validateReleaseState(
     }
     if (!entry.registry.latest) failures.push(`${entry.name} registry.latest is required`);
   }
-  if (state.activeTarget !== 'v1.0.0-alpha.1') {
-    failures.push('activeTarget must be the first public 1.0 prerelease baseline');
+  if (state.activeTarget !== ADMITTED_ACTIVE_TARGET) {
+    failures.push(`activeTarget must be the admitted train ${ADMITTED_ACTIVE_TARGET}`);
   }
   if (state.nextPlannedTrain !== 'not scheduled') {
     failures.push('future trains must not be invented before admission');

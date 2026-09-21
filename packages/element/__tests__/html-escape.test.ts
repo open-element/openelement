@@ -1,4 +1,5 @@
-import { assertEquals, assertThrows } from '@std/assert';
+import { assertEquals, assertInstanceOf, assertThrows } from '@std/assert';
+import { OpenElementError } from '../src/internal/core/errors.ts';
 import {
   escapeAttr,
   escapeAttrValue,
@@ -317,5 +318,54 @@ Deno.test('wrapInDocument: non-JSON structured data entries fail closed', () => 
       'structuredData',
       name,
     );
+  }
+});
+
+// ─── meta.tags attribute names fail closed (#1373, P4) ─────────────────
+
+Deno.test('wrapInDocument: well-formed meta.tags keys still serialize unchanged (#1373)', () => {
+  // Safe-input parity: the name validation only adds rejections; keys that
+  // were safe before emit the same bytes as before.
+  const out = wrapInDocument('x', {
+    meta: {
+      tags: [
+        { name: 'robots', content: 'index, follow' },
+        { 'http-equiv': 'refresh', 'data:x-tra': 1, flag: true },
+      ],
+    },
+  });
+  assertEquals(out.includes('<meta name="robots" content="index, follow">'), true);
+  assertEquals(
+    out.includes('<meta http-equiv="refresh" data:x-tra="1" flag="true">'),
+    true,
+  );
+});
+
+Deno.test('wrapInDocument: unsafe meta.tags keys throw with a structured code (#1373)', () => {
+  // `escapeAttr` escapes value characters but not NAME grammar, so a key
+  // carrying a space or `=` would inject attributes into the emitted <meta>
+  // element. The canonical isSafeAttributeName predicate rejects those keys
+  // and the violation fails the render (no skip-and-warn): a valid document
+  // is never produced for an unsafe key.
+  const cases: Array<[string, Record<string, string | number | boolean>]> = [
+    ['a space in the key', { 'foo onload=alert(1)': 'x' }],
+    ['an equals sign in the key', { 'name=description': 'x' }],
+    ['a double quote in the key', { 'na"me': 'x' }],
+    ['a single quote in the key', { "na'me": 'x' }],
+    ['an on* event-handler prefix', { onclick: 'alert(1)' }],
+    ['a case-insensitive ON* prefix', { ONLOAD: 'x' }],
+    ['an empty key', { '': 'x' }],
+  ];
+  for (const [name, tags] of cases) {
+    let thrown: unknown;
+    try {
+      wrapInDocument('x', { meta: { tags: [tags] } });
+    } catch (e) {
+      thrown = e;
+    }
+    assertInstanceOf(thrown, OpenElementError, name);
+    assertEquals(thrown.code, 'UNSAFE_META_ATTR_NAME', name);
+    assertEquals(thrown.message.includes('unsafe meta attribute name'), true, name);
+    assertEquals(thrown.recoverable, false, name);
   }
 });
