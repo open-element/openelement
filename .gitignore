@@ -142,7 +142,9 @@ hub-submission.json
 /.superpowers/
 /.v2c/
 /.mimosa/
+**/.mimosa/
 /evidence/
+.work/
 
 # Nitro build output in www/examples (generated, never a release input)
 **/.nitro/
