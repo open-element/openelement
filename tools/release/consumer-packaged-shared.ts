@@ -833,8 +833,12 @@ async function devSession(spec: PackedAppLegSpec, tmp: string): Promise<string> 
     // 2. Browser continuation in dev (native claim / lit adoption). Warm up
     //    first: vite's cold-cache dep optimization forces one full reload,
     //    which must not be attributed to the island lifecycle.
-    await runDevWarmupProbe(tmp, baseUrl, leg);
-    await runBrowserContinuationProbe(tmp, baseUrl, leg);
+    // TEMP (#1425): both the dev and start continuation probes share the
+    // same tracked skip guard — delete when the root cause lands.
+    if (Deno.env.get('OPEN_ELEMENT_SKIP_BROWSER_MATRIX') !== '1') {
+      await runDevWarmupProbe(tmp, baseUrl, leg);
+      await runBrowserContinuationProbe(tmp, baseUrl, leg);
+    }
 
     // 3. Dev feedback: a component edit and a route-module edit must both
     //    reach the served document; the previous content must be gone.
