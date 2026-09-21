@@ -12,6 +12,7 @@ node_modules/
 # pre-push hook; pure tool state, not project source). Root-anchored and
 # ignored so deno fmt/lint stay hermetic.
 /.mimosa/
+**/.mimosa/
 
 # Generated Web Components interop qualification evidence. corpus.json is the
 # canonical corpus; the qualifier regenerates both artifacts on every run.
