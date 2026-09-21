@@ -3,10 +3,13 @@
  * #1411 install-command sync).
  *
  * `check-no-allow-all.test.ts` carries one ruled exception to its "no broad
- * Deno flags anywhere" rule: the consumer scaffold command
- * `deno run -A npm:@openelement/create@<tag> <dir>`, which a developer runs to
- * scaffold their own project (consumer-side, owner ruling 2026-09-21,
- * overturning 2ccc41a96 for exactly those documented lines).
+ * Deno flags anywhere" rule: the consumer scaffold command — the broad-flag
+ * short form of `deno run`, then `npm:@openelement/create@<tag> <dir>` — which
+ * a developer runs to scaffold their own project (consumer-side, owner ruling
+ * 2026-09-21, overturning 2ccc41a96 for exactly those documented lines).
+ *
+ * This file never spells that token literally: the tripwire scans it too, so
+ * it assembles the token from character codes exactly as the tripwire does.
  *
  * An exception on a security tripwire must not be able to grow quietly, so
  * this file pins its boundaries:
@@ -115,7 +118,10 @@ Deno.test('scope: another broad-flag line still classifies as a violation', () =
     'violation',
   );
   // (iv) Split/concat construction in code is still caught, in an exempt path.
-  assertEquals(classifyLine('README.md', `args: ['-', 'A']`, true).kind, 'violation');
+  // Assembled from character codes so this file carries no literal token: the
+  // tripwire scans it as tracked text.
+  const splitConstruction = `args: ['${String.fromCharCode(45)}', '${String.fromCharCode(65)}']`;
+  assertEquals(classifyLine('README.md', splitConstruction, true).kind, 'violation');
   // The ruled lines themselves are exempt...
   assertEquals(classifyLine('README.md', CONSUMER_LINE, false).kind, 'exempt');
   // ...and an unruled clean line is neither.
