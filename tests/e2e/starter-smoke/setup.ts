@@ -14,7 +14,7 @@
  *   deno task --cwd tests/e2e/starter-smoke setup   (build everything into work/)
  */
 
-import { join, relative, resolve } from '@std/path';
+import { join, relative, resolve, toFileUrl } from '@std/path';
 import { existsSync } from '@std/fs';
 
 const repoRoot = resolve(import.meta.dirname!, '..', '..', '..');
@@ -47,12 +47,98 @@ function relativeSource(...segments: string[]): string {
   return relative(appDir, join(repoRoot, ...segments));
 }
 
+/**
+ * The documented install command must be the CLI's own output (#1414): the
+ * packed CLI is run with no arguments and its usage line is compared against
+ * the canonical string the create package exports — the very string the
+ * documentation generator projects into the guides and the homepage. A
+ * divergence (the CLI gaining or losing a flag while the docs keep the old
+ * spelling, or a stale packed artifact) fails the starter gate here, on the
+ * packed CLI rather than on workspace sources.
+ */
+function assertPackedCliPrintsCanonicalCommand(createCli: string): void {
+  // The canonical command comes from the create package's own source module —
+  // the same module the documentation generator projects into the guides and
+  // the homepage. Loading it in a subprocess keeps this check independent of
+  // the packed artifact it is comparing against.
+  const installCommandUrl = toFileUrl(
+    join(repoRoot, 'packages', 'create', 'src', 'install-command.ts'),
+  ).href;
+  const expected = runCapture(
+    'deno',
+    [
+      'eval',
+      '--allow-read',
+      `const { createInstallCommand } = await import(${
+        JSON.stringify(installCommandUrl)
+      }); console.log(createInstallCommand());`,
+    ],
+    repoRoot,
+  ).stdout.trim();
+  const stdout = runCliUsage(createCli);
+  const printed = stdout.split('\n')
+    .find((line) => line.includes('npm:@openelement/create@'))
+    ?.replace(/^Usage \(Alpha\): /, '')
+    .trim();
+  if (printed !== expected) {
+    throw new Error(
+      '[starter-smoke setup] the packed create CLI does not print the canonical install ' +
+        `command:\n    printed:   ${printed ?? '(none)'}\n    canonical: ${expected}`,
+    );
+  }
+  console.log(`[starter-smoke setup] packed create CLI prints: ${printed}`);
+}
+
+/**
+ * The packed CLI's usage text. A bare invocation is the CLI's documented
+ * "no arguments" exit path (it prints usage and exits 1), so this reads stdout
+ * without treating the exit code as a failure.
+ */
+function runCliUsage(createCli: string): string {
+  return runCapture(
+    'deno',
+    [
+      'run',
+      '--minimum-dependency-age',
+      '0',
+      '--allow-read',
+      '--allow-write',
+      '--allow-env',
+      '--allow-net',
+      '--deny-ffi',
+      '--no-prompt',
+      createCli,
+    ],
+    workDir,
+    // The no-arguments path is the usage path; exit 1 is its documented code.
+    { allowFailure: true },
+  ).stdout;
+}
+
+/** Run a command, capturing output; a nonzero exit is reported with its logs. */
+function runCapture(
+  cmd: string,
+  args: string[],
+  cwd: string,
+  options: { allowFailure?: boolean } = {},
+): { stdout: string; stderr: string } {
+  const result = new Deno.Command(cmd, { args, cwd, stdout: 'piped', stderr: 'piped' })
+    .outputSync();
+  const stdout = new TextDecoder().decode(result.stdout);
+  const stderr = new TextDecoder().decode(result.stderr);
+  if (result.code !== 0 && options.allowFailure !== true) {
+    throw new Error(`[${cmd} ${args.join(' ')}] failed:\n${stderr || stdout}`);
+  }
+  return { stdout, stderr };
+}
+
 function main(): void {
   Deno.mkdirSync(depsDir, { recursive: true });
   if (existsSync(appDir)) Deno.removeSync(appDir, { recursive: true });
   for (const pkg of PACKAGES) packAndExtract(pkg);
 
   const createCli = join(depsDir, 'create', 'src', 'cli.js');
+  assertPackedCliPrintsCanonicalCommand(createCli);
   run(
     'deno',
     [

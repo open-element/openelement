@@ -187,6 +187,12 @@ export function isActionFailure(error: unknown): error is OpenElementActionFailu
     );
 }
 
+/**
+ * Application-level classification of an action return value: validation
+ * failure (a `fail()` return) versus a success payload. Executors project the
+ * same outcome onto their own response shape; the classification itself is
+ * shared so neither may redefine it.
+ */
 export type ActionOutcome<Data = unknown> =
   | { kind: 'success'; data: Data }
   | { kind: 'failure'; status: number; data: unknown };

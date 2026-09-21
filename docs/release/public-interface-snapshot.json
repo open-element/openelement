@@ -354,12 +354,23 @@
     {
       "name": "@openelement/create",
       "exports": {
-        ".": "./src/cli.ts"
+        ".": "./src/cli.ts",
+        "./install-command": "./src/install-command.ts"
       },
       "declarations": {
         ".": {
           "publicShapeSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
           "publicSymbols": []
+        },
+        "./install-command": {
+          "publicShapeSha256": "6d75f7e85b004a1a525b6dc25a206dcc4e27b1b4c1c3c25e76f6254ee3bde021",
+          "publicSymbols": [
+            "CREATE_INSTALL_PERMISSIONS=value:array(string)",
+            "CREATE_INSTALL_TAG=value:\"alpha\"",
+            "CREATE_PACKAGE_SPECIFIER=value:\"npm:@openelement/create\"",
+            "CREATE_PROJECT_PLACEHOLDER=value:\"<project-name>\"",
+            "createInstallCommand=value:{call:(projectName:string,options:{tag?:union(string|undefined)})=>string}"
+          ]
         }
       }
     },

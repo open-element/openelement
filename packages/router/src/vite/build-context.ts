@@ -160,6 +160,12 @@ function normalizeI18nOptions(
   };
 }
 
+/**
+ * The build's shared mutable state: the resolved framework options, the
+ * phase-1/phase-3 metadata, the sub-plugin data slots, and the production plan
+ * and artifact records the release and deployment adapters read. One instance
+ * is threaded through every adapter plugin for a build.
+ */
 export class OpenElementBuildContext {
   /** Canonical production plan computed once after Phase 1 discovery. */
   buildPlan: BuildPlan | null = null;

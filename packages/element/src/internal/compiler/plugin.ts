@@ -29,6 +29,7 @@ import {
 } from './semantic-core/compile.ts';
 import { analyzeModuleSemantics } from './semantic-core/module-analysis.ts';
 
+/** The authored substring every compiled element module contains (`@element(`), used as the cheap prefilter. */
 export const COMPILED_ELEMENT_MARKER = '@element(';
 
 /**
@@ -125,6 +126,13 @@ export interface CompiledElementPluginOptions {
   workspaceRoot?: string;
 }
 
+/**
+ * The `open:compiled-element` Vite plugin: runs at `enforce: 'pre'` so the
+ * compiler sees authored TSX before Vite's own TS/JSX lowering, compiles every
+ * module with a canonically bound `@element` decorator, and leaves all other
+ * modules untouched. `workspaceRoot` anchors generated source-map ids for
+ * linked workspace packages.
+ */
 export function compiledElementPlugin(options: CompiledElementPluginOptions = {}): Plugin {
   let viteRoot: string | undefined;
   const workspaceRoot = options.workspaceRoot;

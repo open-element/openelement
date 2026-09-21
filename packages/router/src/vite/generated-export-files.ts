@@ -4,6 +4,7 @@
 export const OPENELEMENT_EXPORT_FILES: Record<string, Record<string, string>> = {
   'create': {
     '.': 'src/cli.ts',
+    'install-command': 'src/install-command.ts',
   },
   'element': {
     '.': 'src/index.ts',

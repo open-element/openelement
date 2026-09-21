@@ -24,7 +24,7 @@ order: 2
 ## 第 1 步：创建项目
 
 ```bash
-deno run --allow-read --allow-write --allow-env --allow-net --deny-ffi --no-prompt --minimum-dependency-age 0 npm:@openelement/create@alpha my-app
+{{INSTALL_COMMAND}}
 cd my-app
 deno task dev
 ```

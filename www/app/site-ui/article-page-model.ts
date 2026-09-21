@@ -115,6 +115,9 @@ export function projectArticlePage(
     // Version wording derives from release-state truth (data/version.ts):
     // stamps read "repository baseline" until the source line is published
     // to @alpha for every package, then rewrite themselves on the next build.
+    // {{INSTALL_COMMAND}} is already resolved: the content generator
+    // interpolates the create CLI's canonical string into the generated
+    // collection data (#1414), so no copy of the flags exists to go stale.
     page.html
       .replaceAll('{{OPENELEMENT_VERSION}}', sourceLineAppliesLabel(locale))
       .replaceAll('{{SOURCE_LINE_NOTE}}', sourceLineNote(locale)),

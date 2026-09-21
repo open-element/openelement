@@ -98,6 +98,7 @@ const HEADER_NAV_ZH: Readonly<Record<string, string>> = {
 const ROUTE_LABEL_ZH: Readonly<Record<string, string>> = {
   '/docs': '文档',
   '/reference': 'API 参考',
+  '/errors': '错误码',
   '/blog': '博客',
   '/roadmap': '路线图',
   '/changelog': '更新日志',
