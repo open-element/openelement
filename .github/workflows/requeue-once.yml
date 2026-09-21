@@ -1,0 +1,51 @@
+name: Requeue once
+
+# One automatic re-queue of a failed AutoFlow CI run (#1409).
+#
+# Why a companion workflow instead of a step in the failing job:
+#   - the failed run must be COMPLETED before its jobs can be re-run, and
+#   - `workflow_run` always executes the DEFAULT BRANCH's copy of this file
+#     with the base repository's token, so a pull request cannot rewrite the
+#     requeue into a privilege escalation.
+#
+# Why requeue at all: the site e2e webkit lane fails deterministically PER
+# RUNNER (alpha2: identical failure after an in-run retry, green after a
+# requeue onto another machine). A same-machine retry therefore proves nothing;
+# a fresh runner does.
+#
+# Guard rails (all asserted by tools/repo/check-ci-contracts.test.ts):
+#   - only a FAILED run is requeued;
+#   - only attempt 1 (so a second failure is a real failure, never a loop);
+#   - only AutoFlow CI (the shared gate), never the release workflow.
+on:
+  workflow_run:
+    workflows: ['AutoFlow CI']
+    types: [completed]
+
+permissions:
+  contents: read
+
+jobs:
+  requeue:
+    if: >
+      github.event.workflow_run.conclusion == 'failure' &&
+      github.event.workflow_run.run_attempt == 1
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      # The only write scope this workflow needs is the re-run call itself.
+      actions: write
+      contents: read
+    steps:
+      - name: Re-run failed jobs once, on fresh runners
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+          ATTEMPT: ${{ github.event.workflow_run.run_attempt }}
+          HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+        run: |
+          set -euo pipefail
+          echo "AutoFlow CI run ${RUN_ID} (attempt ${ATTEMPT}) failed on branch ${HEAD_BRANCH}."
+          echo "Re-running its failed jobs once; the second attempt is the verdict."
+          gh api --method POST \
+            "repos/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}/rerun-failed-jobs"

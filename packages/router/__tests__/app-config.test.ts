@@ -12,6 +12,7 @@
 import { assert, assertEquals, assertFalse } from '@std/assert';
 import { join } from '@std/path';
 import { OpenElementError } from '@openelement/element';
+import { openElement } from '../src/vite/app-vite.ts';
 import { resolveAppConfig } from '../src/vite/app-config.ts';
 import {
   defineConfig,
@@ -387,4 +388,26 @@ Deno.test('starter template: openelement.config.ts validates against the accepte
     'tokens.css must define --brand',
   );
   assert(readTemplate('app/islands/app-shell.tsx.tmpl').includes("@element('app-shell'"));
+});
+
+Deno.test('app config: a build whose head comes from inject.scripts still builds (#1411)', () => {
+  // Regression, found by gate:source on www/vite.config.ts: the plugin's
+  // serialized head channel is OUTPUT, not input. Re-validating it rejected the
+  // <script> tags the plugin itself generated from inject.scripts, so every app
+  // using the structured script API failed to build.
+  const plugins = openElement(
+    {
+      inject: { scripts: [{ src: '/assets/prism-init.js', defer: true }] },
+    } as Parameters<typeof openElement>[0],
+  );
+  assert(plugins.length >= 7, 'openElement() must not throw on structured scripts');
+  const withFragments = openElement(
+    {
+      inject: {
+        scripts: [{ src: '/assets/prism-init.js', defer: true }],
+        headFragments: ['<meta name="x" content="1">'],
+      },
+    } as Parameters<typeof openElement>[0],
+  );
+  assert(withFragments.length >= 7);
 });

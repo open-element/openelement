@@ -61,6 +61,7 @@
     "saas:verify": "deno run --allow-run tools/repo/gate.ts apps/saas#check apps/saas#test",
     "clean": "deno run --allow-read --allow-write tools/repo/clean.ts",
     "clean:deep": "deno run --allow-read --allow-write tools/repo/clean.ts --deep",
+    "bench": "deno test --no-prompt --deny-ffi --allow-read --allow-write --allow-env --allow-net --allow-run --allow-sys benchmarks/",
     "fmt": "deno fmt",
     "fmt:check": "deno fmt --check",
     "lint": "deno lint",

@@ -32,7 +32,12 @@ const log = createLogger('router-vite');
 
 import { lazyHonoDevServer } from './dev-server.ts';
 import { OpenElementBuildContext } from './build-context.ts';
-import { findWorkspaceRoot, generateWorkspaceAliases } from './workspace-alias.ts';
+import {
+  detectWorkspaceAliasHijack,
+  findWorkspaceRoot,
+  generateWorkspaceAliases,
+  workspaceAliasHijackError,
+} from './workspace-alias.ts';
 import { normalizeViteAliases } from './alias-utils.ts';
 import { buildPlugin } from './build.ts';
 import type { EntryDescriptor } from './internal/ssg/index.ts';
@@ -121,6 +126,18 @@ function computeHeadExtras(options: FrameworkOptions): {
   };
 }
 
+/**
+ * The head-input view of a resolved options object: everything the user
+ * configured, with the plugin's own serialized output replaced by the user's
+ * raw `headExtras` (see the note in createOpenPlugin).
+ */
+function paramsFromRawHead(
+  options: FrameworkOptions,
+  rawHeadExtras: string | undefined,
+): FrameworkOptions {
+  return { ...options, headExtras: rawHeadExtras };
+}
+
 /** Internal-only third argument of {@linkcode createOpenPlugin}. */
 export interface CreateOpenPluginInternalOptions {
   /**
@@ -148,7 +165,14 @@ export function createOpenPlugin(
   externalCtx?: OpenElementBuildContext,
   internal: CreateOpenPluginInternalOptions = {},
 ): Plugin[] {
-  const initialHead = computeHeadExtras(options);
+  // `resolvedOptions.headExtras` is the plugin's SERIALIZED head channel (head
+  // fragments + structured stylesheets/scripts). It is output, not input: a
+  // re-validation pass must never see it, or the `<script>` tags this plugin
+  // generates from `inject.scripts` would be rejected as raw user markup
+  // (www/vite.config.ts is exactly that shape). Keep the user's raw
+  // `headExtras` string separately as the only re-validation input.
+  let rawHeadExtras: string | undefined = options.headExtras;
+  const initialHead = computeHeadExtras(paramsFromRawHead(options, rawHeadExtras));
   let headExtrasValue = initialHead.headExtras;
   let allowHeadExtrasValue = initialHead.allowHeadExtrasScripts;
 
@@ -177,9 +201,10 @@ export function createOpenPlugin(
    * invalid fragments keep failing closed.
    */
   const applyResolvedOptions = (merged: FrameworkOptions): void => {
+    if (merged.headExtras !== undefined) rawHeadExtras = merged.headExtras;
     Object.assign(resolvedOptions, merged);
     Object.assign(ctx.options, merged);
-    const head = computeHeadExtras(resolvedOptions);
+    const head = computeHeadExtras(paramsFromRawHead(resolvedOptions, rawHeadExtras));
     headExtrasValue = head.headExtras;
     allowHeadExtrasValue = head.allowHeadExtrasScripts;
     resolvedOptions.headExtras = headExtrasValue;
@@ -258,6 +283,13 @@ export function createOpenPlugin(
     const { sourceMap: _sourceMap, ...shape } = program as Record<string, unknown>;
     return JSON.stringify(shape);
   };
+
+  // #1415 Finding A: an app scaffolded inside a framework checkout declares
+  // registry versions that the workspace aliases below would silently replace
+  // with the checkout's sources — a build that reports success while resolving
+  // a different framework version. Refuse before any alias is generated.
+  const hijack = detectWorkspaceAliasHijack(Deno.cwd());
+  if (hijack) throw workspaceAliasHijackError(hijack);
 
   // Pre-generate workspace aliases (sync, once, cached in ctx).
   // Phase 1 config, Phase 2 client build, and Phase 3 SSG build
