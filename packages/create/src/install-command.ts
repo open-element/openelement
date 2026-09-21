@@ -20,22 +20,14 @@ export const CREATE_PACKAGE_SPECIFIER = 'npm:@openelement/create';
 export const CREATE_INSTALL_TAG = 'alpha';
 
 /**
- * Deno permissions the bootstrap needs: read/write for the scaffold files,
- * environment and network for the npm fetch, `--deny-ffi` to keep the
- * bootstrap's capability surface narrow, `--no-prompt` for non-interactive
- * runs, and `--minimum-dependency-age 0` so a same-day compatible patch is
- * still installable despite Deno's default ~24h minimumDependencyAge.
+ * Deno permissions the bootstrap needs. Owner ruling 2026-09-21: the
+ * documented command uses bare `-A` — the consumer scaffolds their own
+ * project, and the scoped-permission form reads as noise (the same ruling
+ * narrowed the `check-no-allow-all` tripwire to an exact-line exemption for
+ * this command). `--minimum-dependency-age 0` is a functional footnote kept
+ * in prose where needed, not part of the documented shape.
  */
-export const CREATE_INSTALL_PERMISSIONS: readonly string[] = [
-  '--allow-read',
-  '--allow-write',
-  '--allow-env',
-  '--allow-net',
-  '--deny-ffi',
-  '--no-prompt',
-  '--minimum-dependency-age',
-  '0',
-];
+export const CREATE_INSTALL_PERMISSIONS: readonly string[] = ['-A'];
 
 /** Placeholder the usage text and the docs use in place of a project name. */
 export const CREATE_PROJECT_PLACEHOLDER = '<project-name>';

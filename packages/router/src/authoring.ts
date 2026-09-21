@@ -186,6 +186,11 @@ export function isActionFailure(error: unknown): error is OpenElementActionFailu
     );
 }
 
+/**
+ * The discriminated result an action returns: `success` carries the action's
+ * data; `failure` carries an HTTP status and payload. See `ActionResult` for
+ * the canonical classifier that produces it.
+ */
 export type ActionOutcome<Data = unknown> =
   | { kind: 'success'; data: Data }
   | { kind: 'failure'; status: number; data: unknown };

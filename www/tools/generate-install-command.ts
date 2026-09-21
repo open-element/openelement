@@ -49,7 +49,7 @@ const DISPLAY_FILES: readonly string[] = [
  * specifier agree.
  */
 const DOCUMENTED_COMMAND =
-  /deno run (?:--[a-z-]+(?: [^-\s][^\s]*)? )*npm:@openelement\/create@[^\s]+/g;
+  /deno run (?:-{1,2}[a-zA-Z][a-zA-Z-]*(?: [^-\s][^\s]*)? )*npm:@openelement\/create@[^\s]+/g;
 
 /**
  * The comparable shape of an install command: its flags and specifier, with
