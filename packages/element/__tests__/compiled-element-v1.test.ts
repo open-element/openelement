@@ -33,14 +33,18 @@ async function loadPluginModule(): Promise<PluginModule> {
 }
 
 interface TransformContext {
-  error(message: string): never;
+  // Vite's `this.error()` takes a string or a Rollup error object; since
+  // #1413 the adapter passes the structured form, so the harness mirrors that
+  // signature while the message-text assertions stay unchanged.
+  error(error: string | { message: string }): never;
 }
 
 function failingContext(): TransformContext & { messages: string[] } {
   const messages: string[] = [];
   return {
     messages,
-    error(message: string): never {
+    error(error: string | { message: string }): never {
+      const message = typeof error === 'string' ? error : error.message;
       messages.push(message);
       throw new Error(message);
     },

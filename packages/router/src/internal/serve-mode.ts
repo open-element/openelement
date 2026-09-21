@@ -6,14 +6,22 @@
  * server; its argument parsing is not public API.
  */
 
+import { authoringError, ServeErrorCode } from './error-codes.ts';
+
 export type ServeMode = 'start' | 'preview';
 
 /**
  * Splits `--mode=start|preview` (or `--mode start|preview`) off the CLI args.
+ * `--debug` is hoisted out of the pass-through args too: it selects the CLI's
+ * own raw-stack rendering (#1413), so it must not reach Vite's argument
+ * parser as an unknown flag.
  */
-export function extractServeMode(argv: string[]): { mode: ServeMode; rest: string[] } {
+export function extractServeMode(
+  argv: string[],
+): { mode: ServeMode; rest: string[]; debug: boolean } {
   const rest: string[] = [];
   let mode: ServeMode = 'start';
+  let debug = false;
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     const inline = arg.match(/^--mode=(.+)$/);
@@ -22,17 +30,25 @@ export function extractServeMode(argv: string[]): { mode: ServeMode; rest: strin
     } else if (arg === '--mode') {
       const value = argv[++i];
       if (value === undefined) {
-        throw new Error('[openElement start] --mode requires a value: start or preview.');
+        throw authoringError(
+          ServeErrorCode.MODE,
+          '[openElement start] --mode requires a value: start or preview.',
+        );
       }
       mode = parseMode(value);
+    } else if (arg === '--debug') {
+      debug = true;
     } else {
       rest.push(arg);
     }
   }
-  return { mode, rest };
+  return { mode, rest, debug };
 }
 
 function parseMode(value: string): ServeMode {
   if (value === 'start' || value === 'preview') return value;
-  throw new Error(`[openElement start] unknown --mode "${value}"; expected start or preview.`);
+  throw authoringError(
+    ServeErrorCode.MODE,
+    `[openElement start] unknown --mode "${value}"; expected start or preview.`,
+  );
 }

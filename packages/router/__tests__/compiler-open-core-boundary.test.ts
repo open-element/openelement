@@ -32,13 +32,15 @@ const SOURCE = [
 ].join('\n');
 
 interface TransformContext {
-  error(message: string): never;
+  // Vite's `this.error()` takes a string or a Rollup error object; the
+  // compiler adapter passes the structured form since #1413.
+  error(error: string | { message: string }): never;
 }
 
 function failingContext(): TransformContext {
   return {
-    error(message: string): never {
-      throw new Error(message);
+    error(error: string | { message: string }): never {
+      throw new Error(typeof error === 'string' ? error : error.message);
     },
   };
 }
