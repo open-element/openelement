@@ -90,6 +90,23 @@ Deno.test('#1413 runtime messages: an absent host signal names the property to d
   assertStringIncludes(error.message, '/app/components/message-proof.tsx');
 });
 
+Deno.test('#1413 runtime messages: a non-object list item names the key field', () => {
+  const program = eachProgram();
+  const rows = signal<unknown>(['not-a-record']);
+  const host = { signals: { rows }, handlers: {} } as unknown as CompiledRuntimeHost;
+  const document = new TestDocument();
+  const root = document.createElement('oe-message-proof');
+
+  const error = assertThrows(
+    () => createFreshDom(program, host, root as unknown as Node),
+    Error,
+  );
+  // The shared EachKeyError reason is authored text: the reader learns which
+  // field must exist, not which part index raised it.
+  assertStringIncludes(error.message, 'keyed list must be an object');
+  assertStringIncludes(error.message, '"id"');
+});
+
 Deno.test('#1413 runtime messages: fresh-DOM mount and SSR report identically', () => {
   const program = eachProgram();
   const rows = signal<unknown>('not-an-array');

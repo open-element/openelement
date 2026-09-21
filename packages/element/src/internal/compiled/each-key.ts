@@ -38,8 +38,7 @@ export function eachItemKey(part: ProgramEachPart, item: unknown): string {
   if (typeof item !== 'object' || item === null) {
     throw new EachKeyError(
       part.index,
-      `a list item must be an object so its ${JSON.stringify(part.key)} field can key it; ` +
-        `write key={(${part.signal}) => ${part.key}} over an array of records`,
+      `every item in a keyed list must be an object carrying ${JSON.stringify(part.key)}`,
     );
   }
   const value = (item as Record<string, unknown>)[part.key];
@@ -49,8 +48,8 @@ export function eachItemKey(part: ProgramEachPart, item: unknown): string {
   ) {
     throw new EachKeyError(
       part.index,
-      `the list key field ${JSON.stringify(part.key)} must hold a string, number, boolean or ` +
-        `null — objects, functions and symbols have no stable identity across renders`,
+      `the list key field ${JSON.stringify(part.key)} must be a string, number, boolean or null ` +
+        `— objects, functions and symbols have no stable identity across renders`,
     );
   }
   return `${typeof value}:${String(value)}`;

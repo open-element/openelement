@@ -233,7 +233,9 @@ function createContext(program: RuntimeProgramIR, host: CompiledRuntimeHost): Mo
  * the compile-time `sourceMap` (browser payload discipline — see
  * semantic-core/compile.ts), so a runtime failure names the file and the
  * authored property or Region rather than a line; line/column live on the
- * compile-time OEC diagnostics, which run before a program can ship.
+ * compile-time OEC diagnostics, which run before a program can ship. These
+ * strings ride the client bundle, so each one stays as short as it can while
+ * still naming the cause and the fix.
  */
 function origin(ctx: MountContext): string {
   return `${ctx.program.metadata.sourceFile} <${ctx.program.tag}>`;
@@ -257,25 +259,23 @@ function regionName(part: ProgramEachPart | ProgramWhenPart): string {
 function expectsArrayMessage(ctx: MountContext, part: ProgramEachPart, value: unknown): string {
   const received = value === null ? 'null' : Array.isArray(value) ? 'array' : typeof value;
   return `${origin(ctx)}: the list Region over ${regionName(part)} expects an array, got ` +
-    `${received}. It renders ${regionName(part)}.map(...), so the property must hold an array ` +
-    `on every write — initialize it to [] instead of null/undefined, and assign only arrays.`;
+    `${received} — it renders ${regionName(part)}.map(...), so initialize that property to [] ` +
+    `instead of null/undefined.`;
 }
 
 /** Two items in one list Region derived the same item key. */
 function duplicateKeyMessage(ctx: MountContext, part: ProgramEachPart, key: string): string {
   return `${origin(ctx)}: duplicate key in the list Region over ${regionName(part)} — two items ` +
-    `share ${JSON.stringify(part.key)} = ${key}. An item key is the item's DOM identity and must ` +
-    `be unique within one list; give each item a unique ${part.key} value, or point key={...} at ` +
-    `a field that is unique per item.`;
+    `share ${JSON.stringify(part.key)} = ${key}. A key is the item's DOM identity and must be ` +
+    `unique within one list; give each item a unique ${part.key}.`;
 }
 
 function signalOf(ctx: MountContext, name: string): SignalLike<unknown> {
   const signal = ctx.host.signals[name];
   if (!signal) {
     throw new Error(
-      `${origin(ctx)}: render() reads this.${name}, but no host signal is registered for it. ` +
-        `Every signal read by render() must be a declared @property on the compiled class; ` +
-        `add \`@property() ${name} = …\` or rebuild the component so this.${name} compiles in.`,
+      `${origin(ctx)}: render() reads this.${name}, but no host signal is registered. Every ` +
+        `signal read by render() must be a declared @property on the compiled class.`,
     );
   }
   return signal;
