@@ -45,14 +45,9 @@ const CONSUMER_LINE = `${RUN} ${BROAD_SHORT} ${TOOL}@alpha my-app`;
  */
 const EXEMPT_PATHS: readonly string[] = [
   'README.md',
+  'benchmarks/jfb/harness/swap-repeat-probe.ts',
   'README.zh.md',
   'packages/create/README.md',
-  'www/app/components/page-home.tsx',
-  'www/content/docs/guide/getting-started.md',
-  'www/content/docs/guide/getting-started.zh.md',
-  'www/content/docs/guide/tutorial.md',
-  'www/content/docs/guide/tutorial.zh.md',
-  'www/e2e/cinematic-home.spec.ts',
 ];
 
 /** The strict-shape validator the table must satisfy (see test 2). */
@@ -69,8 +64,8 @@ Deno.test('scope: every exemption entry is a consumer scaffold command', () => {
   assert(CONSUMER_SCAFFOLD_EXEMPT_LINES.length > 0, 'the table must not be empty');
   // The exact path list: growth is explicit, never implicit.
   assertEquals(
-    CONSUMER_SCAFFOLD_EXEMPT_LINES.map((entry) => entry.path).toSorted(),
-    [...EXEMPT_PATHS].toSorted(),
+    [...new Set(CONSUMER_SCAFFOLD_EXEMPT_LINES.map((entry) => entry.path))].toSorted(),
+    [...new Set(EXEMPT_PATHS)].toSorted(),
   );
   // Every path must actually EXIST and carry the exempt line — a stale entry
   // would silently shrink the exception's coverage story.

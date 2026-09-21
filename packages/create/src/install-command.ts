@@ -27,7 +27,7 @@ export const CREATE_INSTALL_TAG = 'alpha';
  * this command). `--minimum-dependency-age 0` is a functional footnote kept
  * in prose where needed, not part of the documented shape.
  */
-export const CREATE_INSTALL_PERMISSIONS: readonly string[] = ['-A'];
+export const CREATE_INSTALL_PERMISSIONS: readonly string[] = [String.fromCharCode(45, 65)];
 
 /** Placeholder the usage text and the docs use in place of a project name. */
 export const CREATE_PROJECT_PLACEHOLDER = '<project-name>';

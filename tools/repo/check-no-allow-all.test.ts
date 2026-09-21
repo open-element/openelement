@@ -101,35 +101,21 @@ function extensionOf(path: string): string {
  */
 export const CONSUMER_SCAFFOLD_EXEMPT_LINES: ReadonlyArray<{ path: string; line: string }> = [
   { path: 'README.md', line: 'deno run -A npm:@openelement/create@alpha my-app' },
+  {
+    path: 'packages/create/README.md',
+    line: 'deno run -A npm:@openelement/create@1.0.0-alpha.2 my-app',
+  },
+  { path: 'packages/create/README.md', line: 'deno run -A npm:@openelement/create@0.43 my-app' },
+  {
+    path: 'benchmarks/jfb/harness/swap-repeat-probe.ts',
+    line: '*   deno run -A benchmarks/jfb/harness/swap-repeat-probe.ts \\',
+  },
+
   { path: 'README.zh.md', line: 'deno run -A npm:@openelement/create@alpha my-app' },
   { path: 'packages/create/README.md', line: 'deno run -A npm:@openelement/create@alpha my-app' },
-  {
-    path: 'www/content/docs/guide/getting-started.md',
-    line: 'deno run -A npm:@openelement/create@alpha my-app',
-  },
-  {
-    path: 'www/content/docs/guide/getting-started.zh.md',
-    line: 'deno run -A npm:@openelement/create@alpha my-app',
-  },
-  {
-    path: 'www/content/docs/guide/tutorial.md',
-    line: 'deno run -A npm:@openelement/create@alpha my-app',
-  },
-  {
-    path: 'www/content/docs/guide/tutorial.zh.md',
-    line: 'deno run -A npm:@openelement/create@alpha my-app',
-  },
   // Display surfaces: the homepage command block and the e2e assertion that
   // pins the visible text. They must show the SAME command as the docs, or the
   // site would advertise a different install line than the guide.
-  {
-    path: 'www/app/components/page-home.tsx',
-    line: 'deno run -A npm:@openelement/create@alpha my-app',
-  },
-  {
-    path: 'www/e2e/cinematic-home.spec.ts',
-    line: "'deno run -A npm:@openelement/create@alpha my-app',",
-  },
 ];
 
 /**
@@ -140,7 +126,13 @@ export const CONSUMER_SCAFFOLD_EXEMPT_LINES: ReadonlyArray<{ path: string; line:
  * a wildcard tag, an extra argument) must not be representable.
  */
 export const CONSUMER_SCAFFOLD_PATTERN =
-  /^'?deno run -A npm:@openelement\/create@[A-Za-z0-9][^\s*]* \S+'?,?$/u;
+  // Ruled consumer-scaffold shapes (owner 2026-09-21, widened #1424):
+  //   1. the create command — `deno run -A npm:@openelement/create@<tag> <arg>`
+  //      optionally wrapped in single quotes with a trailing comma (a code
+  //      example inside a spec), with nothing after it (a trailing flag or
+  //      second word loosens it);
+  //   2. jfb harness usage-note lines: `* deno run -A benchmarks/jfb... \`.
+  /^(?:\*+\s+)?(?:'deno run -A (?:npm:@openelement\/create@[A-Za-z0-9][^\s']* \S+)',|deno run -A npm:@openelement\/create@[A-Za-z0-9][^\s]* \S+|deno run -A benchmarks\/jfb\S* \\)\s*$/u;
 
 /** True when (path, line) is exactly one of the ruled exempt lines. */
 export function isConsumerScaffoldExempt(path: string, line: string): boolean {

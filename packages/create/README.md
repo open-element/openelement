@@ -40,7 +40,7 @@ The canonical install command is exported from `@openelement/create/install-comm
 
 ## Do not run the bin under Node (`npx`)
 
-> **Use the `deno run -A npm:@openelement/create@alpha` command above. Do not use
+> **Use the bare-flag create command documented above. Do not use
 > `npx @openelement/create` / `npx create-openelement`.** The CLI is a Deno
 > program: it is written against the Deno API, and its `bin` entries and
 > shebang (`#!/usr/bin/env -S deno run --allow-read --allow-write`) both assume
@@ -49,7 +49,7 @@ The canonical install command is exported from `@openelement/create/install-comm
 >
 > A Node-executable entry point is a deferred roadmap item (portable-host
 > tooling, [#1387](https://github.com/open-element/openelement/issues/1387)).
-> Until it lands, the `deno run -A npm:@openelement/create@alpha` form is the
+> Until it lands, the bare-flag create form is the
 > supported install path.
 
 ## Stable 0.43 (maintenance line)

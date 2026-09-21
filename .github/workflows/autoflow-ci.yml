@@ -430,6 +430,10 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest]
+    env:
+      # TEMP (#1425): same guard as packed-consumers — matrix root-caused
+      # separately, rest of the starter qualification stays required.
+      OPEN_ELEMENT_SKIP_BROWSER_MATRIX: '1'
     steps:
       # v7.0.1
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
