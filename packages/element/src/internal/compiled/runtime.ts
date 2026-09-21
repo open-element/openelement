@@ -422,6 +422,16 @@ interface EachEntry {
   nodes: Node[];
   valueSlots: ItemValueSlot[];
   attrSlots: ItemAttrSlot[];
+  /**
+   * The item value this entry was last rendered from (#1416). Every slot in
+   * an entry is a pure projection of one item, so an identical reference
+   * means the projection cannot have changed and `updateEach` skips the whole
+   * slot walk for that entry. Mutating an item in place is therefore outside
+   * the reactive contract — the same object-identity boundary the canonical
+   * key derivation draws (each-key.ts): the store replaces items, it does not
+   * rewrite them.
+   */
+  item: unknown;
 }
 
 interface EachRegion {
@@ -723,6 +733,7 @@ function buildEach(
       nodes: entry.nodes,
       valueSlots: entry.valueSlots,
       attrSlots: entry.attrSlots,
+      item: value[index],
     };
     region.entries.push(stored);
     region.byKey.set(key, stored);
@@ -789,8 +800,14 @@ function updateItemValues(
   entry: EachEntry,
   item: unknown,
   regionParent: Node,
-  regionReference: Node,
+  resolveRegionReference: () => Node,
 ): void {
+  // The fallback insertion reference is a scan over the Region's later
+  // entries. It is only reachable when a slot that currently has no text must
+  // gain one, so resolve it once, on demand (#1416) — an update that only
+  // rewrites or removes existing text never pays for the scan.
+  let regionReference: Node | undefined;
+  const regionReferenceForInsert = (): Node => (regionReference ??= resolveRegionReference());
   for (const [index, slot] of entry.valueSlots.entries()) {
     const next = displayValue(itemValue(part, item, slot.field));
     if (next.length === 0) {
@@ -807,7 +824,7 @@ function updateItemValues(
     if (!document) throw new Error('[compiled-runtime] item value slot has no owner document');
     const text = document.createTextNode(next);
     slot.text = text;
-    insertItemValue(entry, index, text, regionParent, regionReference);
+    insertItemValue(entry, index, text, regionParent, regionReferenceForInsert());
   }
   for (const slot of entry.attrSlots) {
     const next = itemAttrValue(item, slot.field);
@@ -863,7 +880,12 @@ function updateEach(region: EachRegion, value: unknown): void {
     descriptors.push({ key, item, existing: region.byKey.get(key) });
   }
 
+  // Membership only: `created` exists to tell a freshly built entry (already
+  // rendered from its item by `buildItem`) from a reused one. The separate
+  // Set keeps the `updateItemValues` guard O(1) instead of an array scan
+  // (#1416) while `created` keeps its insertion order for the rollback loop.
   const created: EachEntry[] = [];
+  const createdSet = new Set<EachEntry>();
   try {
     for (const descriptor of descriptors) {
       if (descriptor.existing) continue;
@@ -875,9 +897,10 @@ function updateEach(region: EachRegion, value: unknown): void {
         descriptor.item,
         parent,
       );
-      const entry = { key: descriptor.key, ...built };
+      const entry = { key: descriptor.key, ...built, item: descriptor.item };
       descriptor.existing = entry;
       created.push(entry);
+      createdSet.add(entry);
     }
   } catch (error) {
     for (const entry of created) disposeEntry(entry);
@@ -891,17 +914,21 @@ function updateEach(region: EachRegion, value: unknown): void {
   const nextEntries = descriptors.map((descriptor) => descriptor.existing!);
   for (let descriptorIndex = 0; descriptorIndex < descriptors.length; descriptorIndex++) {
     const descriptor = descriptors[descriptorIndex];
-    if (descriptor.existing && !created.includes(descriptor.existing)) {
-      let regionReference: Node = region.end;
+    const entry = descriptor.existing;
+    if (!entry || createdSet.has(entry)) continue;
+    // Unchanged item reference: every slot value is a pure projection of the
+    // item, so re-deriving them cannot change any node. Skip the walk
+    // entirely (#1416); the reference is refreshed below for every entry that
+    // does re-render, so the next update compares against what is on screen.
+    if (entry.item === descriptor.item) continue;
+    updateItemValues(region.part, entry, descriptor.item, parent, () => {
       for (let nextIndex = descriptorIndex + 1; nextIndex < nextEntries.length; nextIndex++) {
         const nextNode = nextEntries[nextIndex].nodes.find((node) => node.parentNode === parent);
-        if (nextNode) {
-          regionReference = nextNode;
-          break;
-        }
+        if (nextNode) return nextNode;
       }
-      updateItemValues(region.part, descriptor.existing, descriptor.item, parent, regionReference);
-    }
+      return region.end;
+    });
+    entry.item = descriptor.item;
   }
   region.entries = nextEntries;
   region.byKey = new Map(nextEntries.map((entry) => [entry.key, entry]));
@@ -1700,6 +1727,7 @@ function claimNodes(
           nodes: Array.from(parent.childNodes).slice(before, cursor),
           valueSlots: itemSlots,
           attrSlots: itemAttrs,
+          item: currentItem,
         };
         region.entries.push(entry);
         region.byKey.set(key, entry);
