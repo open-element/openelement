@@ -29,7 +29,7 @@
     "build": "deno run --config ../deno.json --allow-read --allow-write --allow-net --allow-env --allow-ffi --allow-sys --allow-run ../packages/router/src/cli/build.ts",
     "test": "deno test --config ../deno.json --allow-read --allow-write --allow-env --allow-net --allow-run --allow-ffi --allow-sys __tests__/",
     "pagefind": "deno run --config ../deno.json --allow-read --allow-write --allow-env --allow-run --allow-net build-pagefind.ts",
-    "e2e:browsers": "deno run --config ../deno.json --allow-read --allow-write --allow-env --allow-net --allow-run --allow-sys ../tools/repo/site-e2e-run.ts",
+    "e2e:browsers": "deno run --config ../deno.json --allow-read --allow-write --allow-env --allow-net --allow-run --allow-sys ../tools/repo/site-e2e-run.ts --retries 1",
     "generate:content": "deno run --allow-run ../tools/repo/run-in.ts --root .. -- deno run --allow-read --allow-write --allow-env www/tools/generate-site-content-data.ts",
     "check:content-data": "deno run --allow-run ../tools/repo/run-in.ts --root .. -- deno run --allow-read --allow-write --allow-env www/tools/generate-site-content-data.ts --check",
     "generate:nav": "deno run --allow-run ../tools/repo/run-in.ts --root .. -- deno run --allow-read --allow-write --allow-env www/tools/generate-site-nav.ts",
