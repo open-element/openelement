@@ -198,6 +198,10 @@ jobs:
   fresh-clone:
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    env:
+      # TEMP (#1425): same guard as packed jobs — the fresh-clone's own
+      # gate:packed run needs it too.
+      OPEN_ELEMENT_SKIP_BROWSER_MATRIX: '1'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
