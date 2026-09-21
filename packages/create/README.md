@@ -20,11 +20,15 @@ cd my-app
 deno task dev
 ```
 
-The Alpha line is a new baseline — not a 0.x upgrade, with no migration path
-from 0.x. When reproducibility matters, pin the exact version the `alpha`
-dist-tag currently resolves to (read it from the registry, e.g.
-`npm view @openelement/create dist-tags.alpha`, and pass it as
-`npm:@openelement/create@<version>`).
+The version `@alpha` resolves to is registered in
+`docs/release/release-state.json` (currently `1.0.0-alpha.2`, a new baseline —
+not a 0.x upgrade, with no migration path from 0.x). Pin that exact version
+when reproducibility matters (verify against the live registry with
+`npm view @openelement/create dist-tags.alpha`):
+
+```bash
+deno run --allow-read --allow-write --allow-env --allow-net --deny-ffi --no-prompt --minimum-dependency-age 0 npm:@openelement/create@1.0.0-alpha.2 my-app
+```
 
 `--minimum-dependency-age 0` is needed because Deno's default
 minimumDependencyAge (~24h) refuses packages published within the last day.
