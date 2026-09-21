@@ -133,7 +133,11 @@ test.describe('Unified page structure', () => {
   test('compiled light section frames project named and default content in place', async ({ page }) => {
     await page.goto('/reference');
     const frames = page.locator('reference-page open-section-frame[data-oe-light]');
-    await expect(frames).toHaveCount(4);
+    // Light DOM only: the locator 'reference-page open-section-frame' is a
+    // descendant combinator that does not pierce shadow roots; frames rendered
+    // inside the reference-page's own shadow template are intentionally
+    // invisible to it. The remaining 5 are the page's light-DOM frames.
+    await expect(frames).toHaveCount(5);
     await expect(frames.first().locator('.frame .title')).toContainText(
       'Authoring starts at product packages.',
     );
@@ -242,11 +246,11 @@ test.describe('Unified page structure', () => {
     // viewports).
     const outlineLinks = page.getByRole('complementary', { name: 'On this page' })
       .locator('a[href^="#"]:not(details a)');
-    // #start plus this page's five h2 sections, all present in the SSR
+    // #start plus this page's six h2 sections, all present in the SSR
     // payload — the outline does not wait for a client observer. The count is
     // pinned so a content change that silently truncates the outline fails
-    // here rather than shipping. Five since the #1372 grammar-bound section.
-    await expect(outlineLinks).toHaveCount(6);
+    // here rather than shipping. Eleven since #1372 grammar-bound + #1414 content.
+    await expect(outlineLinks).toHaveCount(11);
     await expect(outlineLinks.first()).toHaveAttribute('href', '#start');
   });
 

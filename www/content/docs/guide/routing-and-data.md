@@ -10,11 +10,25 @@ Routes should be discoverable from the repository tree. A `definePage` route def
 
 ## Metadata
 
-Navigation and generated docs rely on route metadata.
+Navigation and generated docs rely on route metadata, and a route declares it in exactly one place depending on what the route *is*.
+
+A **content page** declares it in Markdown frontmatter: `title` (required), `lede`, `order` (required, sorts within its section), `section` (the sidebar group, defaulted per collection), and optional `navLabel` when the sidebar label should differ from the title. A `zh` sibling supplies its own translated values from the same fields. The site's nav generator reads frontmatter through the same loader and schema the page body uses, so the sidebar cannot describe a page differently from the page itself.
+
+A **code route** declares `export const meta = { section, label, order }` in the route module — `section` groups it in the sidebar, `label` is the short nav label, `order` sorts within the group. A section name that no basePath lists in the site's section map fails the nav generation rather than silently dropping the group from that page's sidebar. Routes with no `meta` and no frontmatter are simply absent from the sidebar; they are still routed.
+
+Document metadata — the head of the page — is separate from navigation metadata. `definePage(PageClass, { head })` declares the document title, description, canonical path and structured data, either as a static object or as a resolver receiving the same request-scoped context the props projector gets. The resolver must stay a pure function of that context: the Document seam resolves it per render and never fetches, caches, or schedules loaders on its own. For content pages, title and lede come from the render locale's frontmatter with the English original as the fallback, so a page whose translation is missing a field still answers with a complete head.
+
+Neither kind of metadata is markup: nothing here renders into the page body.
 
 ## Data boundary
 
-Keep data loading separate from presentation markup.
+Keep data loading separate from presentation markup. The boundary is explicit and narrow: a loader returns data, `definePage`'s `props` projector maps that data onto the page's compiled properties, and the page's `render()` reads only `this.<property>`.
+
+A route loader runs server-side for a `'dynamic'` page (or at build time for a `'static'` one, once per `getStaticPaths()` entry) and returns a plain value; it is never handed the element and never touches the DOM. The props projector is the single deterministic seam between request scope and the compiled page — it receives `{ data, actionData, params, request, route, meta }` (plus `locale` when i18n is configured) and returns the properties the page declared, so the same projection runs for the static artifact, the request-time server and the SPA bootstrap. Omit `props` and the default projection applies: route params first, then the loader-data record's own entries, with dangerous keys filtered so a hostile payload cannot re-prototype the projection. Extra entries are ignored, because the compiled serializer consumes only the properties the page declared.
+
+That separation is what makes the two chains interchangeable and the markup testable: a page's compiled render program depends on nothing but its properties, so it can be serialized at build time, re-rendered per request, or created in the browser from the same data. It is also the seam where the failure channels attach — an expected validation failure arrives as `actionData`, not as an exception, and `fail()`'s echo re-enters the page through the same projector.
+
+Two consequences worth writing down: never let a loader return a DOM node, a class instance or anything the serializer would have to guess at (props are projected, not serialized); and never read the request directly from `render()` (a compiled page has no request scope — everything it may render must pass through the projector).
 
 ## Rendering modes
 

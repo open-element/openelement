@@ -38,7 +38,7 @@ export interface ImportMapResolution {
   denoJsonDir: string;
 }
 
-/** Workspace root derived from this module's location (packages/router/src/vite/).
+/** Workspace root derived from this module's location.
  * Only valid in the local monorepo layout. In npm/JSR consumers, returns null. */
 const WORKSPACE_ROOT: string | null = (() => {
   if (!import.meta.url.startsWith('file:')) return null;

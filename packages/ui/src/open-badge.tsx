@@ -2,7 +2,7 @@
  * @openelement/ui - open-badge
  *
  * Compact status badge backed by Open Props semantic tokens.
- * v0.44: compiled authoring (ADR-0143). Variant styling follows the
+ * Compiled authoring. Variant styling follows the
  * reflected `tone`/`size` host attributes (:host([...]) selectors).
  *
  * @csspart badge - The badge span

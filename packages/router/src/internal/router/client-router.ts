@@ -15,8 +15,14 @@ const log = {
   error: (...args: unknown[]) => console.error('[router]', ...args),
 };
 
+/** Navigation strategy: the History API ('history'), the URL hash ('hash'), or file-protocol auto-detection ('auto'). */
 export type RouterMode = 'history' | 'hash' | 'auto';
 
+/**
+ * One client route: a {@link RouteRecord} plus the custom element `tagName`
+ * SPA mode instantiates for it and an optional `guard` that may veto the
+ * navigation by returning `false` or a redirect path.
+ */
 export interface RouteConfig extends RouteRecord {
   /** Custom element tag to instantiate directly in SPA mode. */
   tagName: string;
@@ -32,6 +38,11 @@ interface RouterOptions {
   onPending?: () => void;
 }
 
+/**
+ * A live client router: the navigation entry points, the current match
+ * (`currentPath`/`currentRoute`/`params`/`searchParams`), and `dispose()` to
+ * release its listeners.
+ */
 export interface RouterInstance {
   navigate(path: string): Promise<void>;
   replace(path: string): Promise<void>;
@@ -44,6 +55,7 @@ export interface RouterInstance {
 
 const MAX_GUARD_REDIRECTS = 10;
 
+/** The matcher surface a client route list compiles to: matching, resolution and candidate count. */
 export type CompiledRouteMatcher = Pick<
   RouteTable<RouteConfig>,
   'match' | 'resolve' | 'candidateCount'
@@ -68,6 +80,10 @@ export function matchRoute(
   return matcherFor(routes).match(pathname, search);
 }
 
+/**
+ * Compile a client route list into the canonical {@link RouteTable} matcher,
+ * with no router instance attached.
+ */
 export function compileRouteMatcher(routes: RouteConfig[]): CompiledRouteMatcher {
   return new RouteTable(routes);
 }
@@ -85,6 +101,12 @@ function matcherFor(routes: RouteConfig[]): CompiledRouteMatcher {
 
 // ─── createRouter ─────────────────────────────────────────────────
 
+/**
+ * Create the client-side SPA router for `options.mode` over `options.routes`:
+ * it matches through the shared RouteTable, owns its navigation listeners and
+ * history/hash state, and reports every committed navigation through
+ * `onChange`.
+ */
 export function createRouter(options: RouterOptions): RouterInstance {
   const mode = resolveMode(options.mode);
   const { routes } = options;

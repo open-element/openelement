@@ -68,7 +68,7 @@ export { normalizeSeparators, pathToTagName } from './path-utils.ts';
 export { transformIslandSource } from './island-transform.ts';
 export type { IslandTransformOptions, IslandTransformResult } from '../protocol/island.ts';
 
-// Data adapters — type contract surface only (ADR-0095)
+// Data adapters — type contract surface only
 export type {
   Action,
   ActionContext,

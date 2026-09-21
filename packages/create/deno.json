@@ -1,7 +1,10 @@
 {
   "name": "@openelement/create",
   "version": "1.0.0-alpha.2",
-  "exports": "./src/cli.ts",
+  "exports": {
+    ".": "./src/cli.ts",
+    "./install-command": "./src/install-command.ts"
+  },
   "imports": {},
   "tasks": {
     "run": "deno run --allow-read --allow-write --allow-run --allow-env --allow-net src/cli.ts",
@@ -13,6 +16,7 @@
   "publish": {
     "include": [
       "src/cli.ts",
+      "src/install-command.ts",
       "src/template-builder.ts",
       "src/version.ts",
       "templates",

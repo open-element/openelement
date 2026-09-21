@@ -363,3 +363,61 @@ Deno.test('ci contract: partial publish receipts are persisted as recovery recor
     'a partial/failed publish must exit non-zero',
   );
 });
+
+Deno.test('ci contract: the requeue companion re-runs a failed CI run exactly once', async () => {
+  // #1409: webkit fails deterministically PER RUNNER, so the only retry that
+  // can change the outcome is a re-run on fresh runners — and exactly one of
+  // them, or a genuine failure would be retried forever.
+  const requeue = await Deno.readTextFile(
+    join(repoRoot, '.github/workflows/requeue-once.yml'),
+  );
+  assert(
+    /workflow_run:/.test(requeue) && /workflows:\s*\['AutoFlow CI'\]/.test(requeue),
+    'the requeue must trigger on the AutoFlow CI workflow_run event',
+  );
+  assert(
+    /types:\s*\[completed\]/.test(requeue),
+    'the requeue must wait for completion: an in-progress run cannot be re-run',
+  );
+  assert(
+    /conclusion\s*==\s*'failure'/.test(requeue),
+    'only a failed run may be requeued',
+  );
+  assert(
+    /run_attempt\s*==\s*1/.test(requeue),
+    'only attempt 1 may be requeued; a second failure is the verdict',
+  );
+  assert(
+    /rerun-failed-jobs/.test(requeue),
+    'the requeue must call the rerun-failed-jobs endpoint',
+  );
+  // Scope discipline: actions: write is the whole point, and nothing else.
+  const writeScopes = [...requeue.matchAll(/^\s{4,6}([a-z-]+):\s*write\s*$/gm)].map((m) => m[1]);
+  assertEquals(writeScopes, ['actions'], 'only actions may be a write scope');
+  assert(requeue.includes('contents: read'), 'the requeue must keep contents: read');
+});
+
+Deno.test('ci contract: the nightly JFB workflow measures, never gates', async () => {
+  const nightly = await Deno.readTextFile(
+    join(repoRoot, '.github/workflows/jfb-nightly.yml'),
+  );
+  assert(
+    /continue-on-error:\s*true/.test(nightly),
+    'benchmark numbers move with the runner; a nightly measurement must not gate anything',
+  );
+  assert(nightly.includes('contents: read'), 'the nightly benchmark workflow is read-only');
+  assert(
+    /benchmarks\/jfb\/harness\/build\.ts/.test(nightly) &&
+      /benchmarks\/jfb\/harness\/run\.ts/.test(nightly),
+    'the nightly must run the real harness build and runner',
+  );
+  assert(
+    /actions\/upload-artifact@/.test(nightly) && /jfb-evidence\.json/.test(nightly),
+    'the nightly must publish the redacted evidence record as an artifact',
+  );
+  assert(
+    /playwright install[^\n]*chromium/.test(nightly),
+    'the nightly must install the browser the harness drives',
+  );
+  assert(!/pull_request/.test(nightly), 'a nightly measurement never runs on pull requests');
+});

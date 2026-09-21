@@ -15,6 +15,7 @@
 
 import matter from 'gray-matter';
 import { marked } from 'marked';
+import { createInstallCommand } from '@openelement/create/install-command';
 
 /** Primitive frontmatter field types supported by content collections. */
 export type CollectionFieldType = 'string' | 'number' | 'boolean' | 'string[]';
@@ -161,6 +162,34 @@ export function collectionFieldTypeScript(
   return { type, optional: !field.required && field.default === undefined };
 }
 
+/**
+ * Resolve the site's computed-placeholder set in authored Markdown.
+ *
+ * `{{INSTALL_COMMAND}}` is the create CLI's canonical install command (#1414):
+ * the guides interpolate it instead of copying flags, so the documented
+ * command cannot drift from the one the CLI prints. The published example uses
+ * the project name the guides' own next line (`cd my-app`) refers to.
+ *
+ * Resolution lives in the content loader — the one seam every consumer of
+ * authored content goes through (the data generator, nav/sitemap/RSS emitters,
+ * and the content tests) — so a placeholder can never reach a generated module,
+ * an emitted artifact, or a test. The string has exactly one owner
+ * (packages/create/src/install-command.ts), and
+ * www/tools/generate-install-command.ts fails the build when a display copy of
+ * the command drifts from it.
+ */
+export const CONTENT_PLACEHOLDERS: Readonly<Record<string, string>> = {
+  '{{INSTALL_COMMAND}}': createInstallCommand('my-app'),
+};
+
+function resolveContentPlaceholders(text: string): string {
+  let resolved = text;
+  for (const [token, value] of Object.entries(CONTENT_PLACEHOLDERS)) {
+    if (resolved.includes(token)) resolved = resolved.replaceAll(token, value);
+  }
+  return resolved;
+}
+
 /** Load a content collection from disk: parse frontmatter, validate the schema, render Markdown. */
 export async function loadCollectionData(
   name: string,
@@ -183,6 +212,9 @@ export async function loadCollectionData(
     const filePath = `${options.contentDir}/${fileName}`;
     const source = await Deno.readTextFile(filePath);
     const parsed = matter(source);
+    // Resolve before rendering so both the stored `content` and the rendered
+    // `html` carry the same computed text.
+    parsed.content = resolveContentPlaceholders(parsed.content);
     const initialSlug = fileName.replace(/\.mdx?$/, '');
     const result = validateCollectionFrontmatter(
       options.schema,

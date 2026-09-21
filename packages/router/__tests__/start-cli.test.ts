@@ -7,30 +7,61 @@
 
 import { assert, assertEquals, assertStringIncludes } from '@std/assert';
 import { join } from '@std/path';
+import { OpenElementError } from '@openelement/element/authoring';
 import { extractServeMode } from '../src/internal/serve-mode.ts';
+import { ServeErrorCode } from '../src/internal/error-codes.ts';
 
 const startCli = join(import.meta.dirname!, '../src/cli/start.ts');
 
 Deno.test('start cli: extractServeMode defaults to start and passes args through', () => {
-  assertEquals(extractServeMode([]), { mode: 'start', rest: [] });
-  assertEquals(extractServeMode(['--port', '5000']), { mode: 'start', rest: ['--port', '5000'] });
-  assertEquals(extractServeMode(['--mode=preview']), { mode: 'preview', rest: [] });
+  assertEquals(extractServeMode([]), { mode: 'start', rest: [], debug: false });
+  assertEquals(extractServeMode(['--port', '5000']), {
+    mode: 'start',
+    rest: ['--port', '5000'],
+    debug: false,
+  });
+  assertEquals(extractServeMode(['--mode=preview']), {
+    mode: 'preview',
+    rest: [],
+    debug: false,
+  });
   assertEquals(extractServeMode(['--mode', 'preview', '--host']), {
     mode: 'preview',
     rest: ['--host'],
+    debug: false,
   });
-  assertEquals(extractServeMode(['--mode=start']), { mode: 'start', rest: [] });
+  assertEquals(extractServeMode(['--mode=start']), { mode: 'start', rest: [], debug: false });
+});
+
+Deno.test('start cli: --debug is hoisted out of the pass-through args (#1413)', () => {
+  // The flag selects the CLI's own raw-stack rendering, so it must never
+  // reach Vite's argument parser as an unknown option.
+  assertEquals(extractServeMode(['--debug']), { mode: 'start', rest: [], debug: true });
+  assertEquals(extractServeMode(['--debug', '--mode=preview']), {
+    mode: 'preview',
+    rest: [],
+    debug: true,
+  });
+  assertEquals(extractServeMode(['--mode', 'preview', '--debug', '--host']), {
+    mode: 'preview',
+    rest: ['--host'],
+    debug: true,
+  });
 });
 
 Deno.test('start cli: extractServeMode rejects unknown or missing mode values', () => {
   for (const argv of [['--mode=bogus'], ['--mode', 'bogus'], ['--mode']]) {
-    let threw = false;
+    let thrown: unknown;
     try {
       extractServeMode(argv);
-    } catch {
-      threw = true;
+    } catch (error) {
+      thrown = error;
     }
-    assert(threw, `expected ${argv.join(' ')} to throw`);
+    // #1413: the parser's failures are classified, not bare Errors.
+    assert(thrown instanceof OpenElementError, `expected ${argv.join(' ')} to classify`);
+    assertEquals((thrown as OpenElementError).code, ServeErrorCode.MODE);
+    assertEquals((thrown as OpenElementError).phase, 'validation');
+    assertEquals((thrown as OpenElementError).severity, 'error');
   }
 });
 
@@ -107,6 +138,54 @@ Deno.test('start cli: start mode rejects an invalid port with a clear error (#10
       assertStringIncludes(output, `Invalid port "${rawPort}"`);
       assertStringIncludes(output, 'integer between 1 and 65535');
     }
+  } finally {
+    await Deno.remove(dir, { recursive: true });
+  }
+});
+
+/** A path that fails at import time: the loader throws with a real stack. */
+async function makeFailingServerEntry(dir: string): Promise<void> {
+  await Deno.mkdir(join(dir, 'dist', 'server'), { recursive: true });
+  await Deno.writeTextFile(
+    join(dir, 'dist', 'server', 'index.js'),
+    'throw new Error("server entry exploded");\n',
+  );
+}
+
+Deno.test('start cli: a fatal error prints the message without a raw stack (#1413)', async () => {
+  const dir = await Deno.makeTempDir();
+  try {
+    await Deno.mkdir(join(dir, 'dist'), { recursive: true });
+    await makeFailingServerEntry(dir);
+
+    const { code, output } = await runCli(dir, []);
+    assertEquals(code, 1);
+    assertStringIncludes(output, 'Start failed:');
+    assertStringIncludes(output, 'server entry exploded');
+    // The acceptance bar: no default raw stack. A stack would print an
+    // "at " frame line with a source location.
+    assert(
+      !/\n\s+at .*:\d+:\d+/.test(output),
+      `start must not print a raw stack by default, got:\n${output}`,
+    );
+  } finally {
+    await Deno.remove(dir, { recursive: true });
+  }
+});
+
+Deno.test('start cli: --debug expands the raw stack (#1413)', async () => {
+  const dir = await Deno.makeTempDir();
+  try {
+    await Deno.mkdir(join(dir, 'dist'), { recursive: true });
+    await makeFailingServerEntry(dir);
+
+    const { code, output } = await runCli(dir, ['--debug']);
+    assertEquals(code, 1);
+    assertStringIncludes(output, 'server entry exploded');
+    assert(
+      /\n\s+at .*:\d+:\d+/.test(output),
+      `--debug must expand a raw stack, got:\n${output}`,
+    );
   } finally {
     await Deno.remove(dir, { recursive: true });
   }

@@ -240,14 +240,16 @@ Deno.test('v0.44 compiler hook transforms once and classifies HMR shape changes'
       throw new Error('canonical compiler integration hook was not registered');
     }
     const transform = core.transform as unknown as (
-      this: { error(message: string): never },
+      // Vite's `this.error()` accepts a string or a Rollup error object; the
+      // compiler adapter passes the structured form since #1413.
+      this: { error(error: string | { message: string }): never },
       code: string,
       id: string,
     ) => { code: string; map?: unknown } | null;
     const transformed = transform.call(
       {
-        error: (message) => {
-          throw new Error(message);
+        error: (error: string | { message: string }) => {
+          throw new Error(typeof error === 'string' ? error : error.message);
         },
       },
       source,

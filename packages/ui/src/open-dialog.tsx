@@ -4,7 +4,7 @@
  * Dialog component using native <dialog> element + popover API.
  * Per WHATWG HTML Living Standard sections 4.11.4 (dialog) and 6.9.2 (popover).
  *
- * v0.44: compiled authoring (ADR-0143). The `open` boolean property drives the
+ * Compiled authoring. The `open` boolean property drives the
  * compiled bool sink on the inner <dialog>; the top-layer/modal choreography
  * (showModal/show/close) stays imperative in methods. Modal-session state lives
  * in the shared instance-state module (compiled classes carry only @property

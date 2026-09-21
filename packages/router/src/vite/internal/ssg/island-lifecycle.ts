@@ -1,7 +1,7 @@
 /**
  * island-lifecycle.ts - island preservation (data-open-preserve, islandIntact)
- * and the island scheduler re-observe hook for the morph client
- * (ADR-0120/0121). Split from enhance-client.ts (#908).
+ * and the island scheduler re-observe hook for the morph client.
+ * Split from enhance-client.ts (#908).
  */
 
 interface IslandLifecycleDeps {

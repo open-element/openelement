@@ -26,20 +26,53 @@ import {
   importRequestTimeServer,
   type RequestTimeServerModule,
 } from '../vite/internal/static-serve.ts';
+import {
+  detectAppConfigFile,
+  importAppConfigModule,
+  resolveAppConfig,
+} from '../vite/app-config.ts';
 
 const root = Deno.cwd();
 const distDir = join(root, DEFAULT_OUT_DIR);
 const serverEntry = join(distDir, 'server', 'index.js');
 const hostname = Deno.env.get('OPEN_ELEMENT_HOST') ?? '0.0.0.0';
 
-async function main(): Promise<void> {
-  let parsed: { mode: ServeMode; rest: string[] };
+/**
+ * #1411: `cli/start` is the third reader of `openelement.config.ts`. It reads
+ * the file through the host runtime (a plain dynamic import) and never through
+ * Vite, so serving a built app needs no Vite config bundling. Nothing else in
+ * this CLI consumes framework options: `dist/` already carries the built
+ * document (head, shells, middleware) from the build-time resolution.
+ */
+async function loadProductionConfig(mode: ServeMode): Promise<void> {
+  const configFile = detectAppConfigFile(root);
+  if (configFile === null) return;
   try {
-    parsed = extractServeMode(Deno.args);
+    const imported = await importAppConfigModule(configFile);
+    const resolved = resolveAppConfig({ root, configFile, importedConfig: imported });
+    // `start` is the deployment server, so an unconfigured CORS allowlist is a
+    // production concern there. `preview` is local-only: same silence as dev.
+    if (mode === 'start' && resolved.options.middleware?.corsOrigin === undefined) {
+      console.warn(
+        '[openElement start] middleware.corsOrigin is not configured: the built server only ' +
+          'reflects localhost origins. Set it in openelement.config.ts before deploying.',
+      );
+    }
   } catch (error) {
     console.error(formatError(error));
     Deno.exit(1);
   }
+}
+
+async function main(): Promise<void> {
+  let parsed: { mode: ServeMode; rest: string[]; debug: boolean };
+  try {
+    parsed = extractServeMode(Deno.args);
+  } catch (error) {
+    console.error(renderCliFailure(error, false));
+    Deno.exit(1);
+  }
+  cliDebug = parsed.debug;
 
   if (!existsSync(distDir)) {
     console.error(
@@ -48,11 +81,33 @@ async function main(): Promise<void> {
     Deno.exit(1);
   }
 
+  await loadProductionConfig(parsed.mode);
+
   if (parsed.mode === 'preview') {
     await runPreview(parsed.rest);
     return;
   }
   await runStart();
+}
+
+/** `--debug` state for the process; set once by main() before any work runs. */
+let cliDebug = false;
+
+/**
+ * How the CLI reports a fatal error (#1413).
+ *
+ * Default: one actionable line — `Error: <message>` walk of the cause chain
+ * via the framework's own `formatError`, which already joins nested causes.
+ * A raw stack is machine detail: it buries the message under framework
+ * frames and is never what an author needs to fix a broken build or an
+ * occupied port. `--debug` opts back into the full stack (plus `cause`), so
+ * the information is one flag away rather than gone.
+ */
+function renderCliFailure(error: unknown, debug: boolean): string {
+  const message = formatError(error);
+  if (!debug) return `Start failed: ${message}`;
+  const stack = error instanceof Error ? error.stack : undefined;
+  return `Start failed: ${message}\n${stack ?? '(no stack captured)'}`;
 }
 
 /**
@@ -178,9 +233,8 @@ if (isMainModule) {
   try {
     await main();
   } catch (error) {
-    console.error(
-      `Start failed: ${error instanceof Error ? error.stack ?? error.message : String(error)}`,
-    );
+    // #1413: message (+ cause chain) by default, raw stack only under --debug.
+    console.error(renderCliFailure(error, cliDebug));
     Deno.exit(1);
   }
 }

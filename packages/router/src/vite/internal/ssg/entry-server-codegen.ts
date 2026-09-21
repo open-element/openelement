@@ -62,12 +62,15 @@ export function renderMiddleware(lines: string[], mw: MiddlewareDecl): void {
           `app.use('*', cors({ origin: ${originStr}, ${CORS_ALLOW} }))`,
         );
       } else {
-        if (!corsOriginWarningShown) {
+        // #1411: the advisory is a production concern, so the dev server
+        // (warnOnDefaultCors: false) generates the same handler silently.
+        if (mw.config?.warnOnDefaultCors !== false && !corsOriginWarningShown) {
           corsOriginWarningShown = true;
           console.warn(
             '[openElement] middleware.corsOrigin is not configured. The generated server only ' +
-              'reflects localhost origins; configure middleware.corsOrigin in openElement() before ' +
-              'production deployment to avoid unintended cross-origin access.',
+              'reflects localhost origins; configure middleware.corsOrigin in ' +
+              'openelement.config.ts before production deployment to avoid unintended ' +
+              'cross-origin access.',
           );
         }
         lines.push("app.use('*', cors({ origin: (origin) => {");

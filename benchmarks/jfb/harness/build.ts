@@ -222,8 +222,17 @@ async function buildOe(buildDir: string): Promise<BuildReport['oe']> {
       'const r = (p: string) => fileURLToPath(new URL(p, import.meta.url));',
       'export default {',
       '  resolve: {',
+      '    // #1416: this harness page is client-only by construction — index.html',
+      '    // ships an empty #main, the generated component module imports the',
+      '    // canonical specifier, and the element is defined then appended on',
+      '    // connect, so there is no server-rendered DOM to claim. Resolving the',
+      '    // element entry to the claim-free subpath is the same decision the',
+      '    // router makes per page; here the sandbox config is hand-written, so',
+      '    // it states the decision directly.',
       "    alias: { '@openelement/element': " +
-      JSON.stringify(join(repoRoot, 'packages/element/src/index.ts')) + ' },',
+      JSON.stringify(join(repoRoot, 'packages/element/src/client-only.ts')) + ', ' +
+      "'@openelement/element/client-only': " +
+      JSON.stringify(join(repoRoot, 'packages/element/src/client-only.ts')) + ' },',
       '  },',
       '  build: {',
       "    outDir: r('../oe'),",

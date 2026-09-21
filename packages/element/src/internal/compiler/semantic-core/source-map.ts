@@ -2,7 +2,7 @@
  * @openelement/element — Source Map v3 segment emission (#1210, A10.2).
  *
  * The compiler semantic core owns original source spans AND generated emission
- * provenance (ADR-0148): while it emits the compiled module it records one
+ * provenance: while it emits the compiled module it records one
  * segment per copied or derived line/range, and this module turns those
  * records into a standard Source Map v3 `mappings` string (VLQ, line+column,
  * optional names). No Vite/Rollup import lives here — the Vite shell only

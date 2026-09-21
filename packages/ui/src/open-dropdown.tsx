@@ -4,7 +4,7 @@
  * The content is a native popover (top layer, built-in light dismiss and
  * focus return); placement anchors to the host, no hand-rolled fallback.
  *
- * v0.44: compiled authoring (ADR-0143). The per-instance anchor name is
+ * Compiled authoring. The per-instance anchor name is
  * assigned at activation (SSG renders every page in one process while islands
  * upgrade in arbitrary order, so server and client counters can never agree —
  * component-recipes.ts); the compiled style sink applies it to the content.

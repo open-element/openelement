@@ -14,7 +14,7 @@
  * Context passed to a request-time ('dynamic') route loader. This is the
  * server contract: the loader runs on the server with the Web-standard
  * request, matched route params, the host environment and the platform
- * object, and signals validation failure via fail()/redirect() (ADR-0120).
+ * object, and signals validation failure via fail()/redirect().
  */
 export interface ServerRouteMetadata {
   path: string;
@@ -69,14 +69,14 @@ export type Action<
 > = (ctx: ActionContext<Env, Platform, Route>) => T | Promise<T>;
 
 /**
- * Wire shape returned to the JavaScript form-enhancement path (0.42.0-alpha.2,
- * ADR-0120). The no-JS path never sees this: it gets the equivalent semantics
+ * Wire shape returned to the JavaScript form-enhancement path (0.42.0-alpha.2).
+ * The no-JS path never sees this: it gets the equivalent semantics
  * as plain HTTP (303 on success, 422 with the re-rendered form on validation
  * failure, redirect/error as status codes).
  *
  * Error outcomes (CSRF 403, unknown action 404, unparseable body 400,
- * unexpected 500) are NOT part of this union: since 0.42.0-alpha.13 (#863,
- * ADR-0123 addendum item 13) they answer RFC 9457 Problem Details with the
+ * unexpected 500) are NOT part of this union: since 0.42.0-alpha.13 (#863)
+ * they answer RFC 9457 Problem Details with the
  * PROBLEM_JSON_MEDIA_TYPE content type — see ProblemDetails.
  */
 export type ActionResult<Success = unknown, Failure = unknown> =
@@ -85,12 +85,12 @@ export type ActionResult<Success = unknown, Failure = unknown> =
   | { type: 'redirect'; status: number; location: string };
 
 /**
- * RFC 9457 Problem Details document (0.42.0-alpha.13, #863, ADR-0123 addendum
- * item 13): the action error channel answers `application/problem+json`
+ * RFC 9457 Problem Details document (0.42.0-alpha.13, #863): the action error
+ * channel answers `application/problem+json`
  * instead of the bespoke `{ type: 'error', error: { message } }` JSON, so
  * HTTP tooling recognizes failures natively. With `type: 'about:blank'`,
  * `title` is the HTTP reason phrase and `detail` carries the specific
- * explanation. The wire shape is alpha-unfrozen; ADR-0122 acceptance freezes
+ * explanation. The wire shape is alpha-unfrozen; the 1.0 acceptance freezes
  * it in this problem+json form.
  */
 export interface ProblemDetails {
@@ -108,8 +108,8 @@ export interface ProblemDetails {
 export const PROBLEM_JSON_MEDIA_TYPE = 'application/problem+json';
 
 /**
- * Request header selecting the action response channel (ADR-0121, amends
- * ADR-0120): `true` marks a programmatic caller and selects the serialized
+ * Request header selecting the action response channel: `true` marks a
+ * programmatic caller and selects the serialized
  * ActionResult union; `enhance` marks the built-in morph enhancement and
  * selects the same full-HTML responses the no-JS path receives.
  */

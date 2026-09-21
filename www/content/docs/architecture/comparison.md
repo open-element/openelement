@@ -85,23 +85,23 @@ What we measure, and the commands that reproduce each row.
 
 ### Output size
 
-Numbers measured on 2026-09-18 from the docs site's own build (`www/dist`, built with `deno task site:build` on this repository at commit `213d4fda`). The commands below reproduce each row on that commit; page and URL counts follow the route set, so re-run them after content changes.
+Numbers measured on 2026-09-21 from the docs site's own build (`www/dist`, built with `deno task site:build`). The commands below reproduce each row; page and URL counts follow the route set, so re-run them after content changes. These figures last moved when the generated `/errors` route landed (#1413): one new page per locale, plus the runtime-message wording that ships in the shared compiled-runtime chunk.
 
 | Metric                 | Value                                              |
 | ---------------------- | -------------------------------------------------- |
-| Pre-rendered documents | 62 HTML files                                      |
-| URLs in `sitemap.xml`  | 60                                                 |
-| Total static output    | 7.5 MB                                             |
-| Island manifests       | 62 — one per page                                  |
-| Search index           | 30 pages per locale (en, zh), 60 fragments, 1.2 MB |
+| Pre-rendered documents | 64 HTML files                                      |
+| URLs in `sitemap.xml`  | 62                                                 |
+| Total static output    | 7.8 MB                                             |
+| Island manifests       | 64 — one per page                                  |
+| Search index           | 31 pages per locale (en, zh), 62 fragments, 1.2 MB |
 
 ```bash
 deno task site:build                        # regenerate everything below first
-find www/dist -name '*.html' | wc -l        # 62
-grep -c '<loc>' www/dist/sitemap.xml        # 60
-du -sh www/dist                             # 7.5M
-ls www/dist/island-manifests | wc -l        # 62
-cat www/dist/pagefind/pagefind-entry.json   # page_count 30 per language
+find www/dist -name '*.html' | wc -l        # 64
+grep -c '<loc>' www/dist/sitemap.xml        # 62
+du -sh www/dist                             # 7.8M
+ls www/dist/island-manifests | wc -l        # 64
+cat www/dist/pagefind/pagefind-entry.json   # page_count 31 per language
 ```
 
 ### Island bundles
@@ -110,14 +110,14 @@ The docs site is a normal openElement app, islands included, so its client outpu
 
 | Chunk                          | Raw bytes | gzip -9 |
 | ------------------------------ | --------- | ------- |
-| `island-open-layout`           | 101,969   | 17,683  |
-| `island-open-cinematic-scroll` | 79,199    | 23,894  |
-| `open-button`                  | 16,320    | 3,131   |
-| `island-open-dragon-live-gaze` | 14,161    | 5,169   |
-| `island-open-page-rail`        | 9,684     | 2,746   |
-| `open-code-block`              | 8,471     | 2,811   |
-| `island-open-hero-polish`      | 4,436     | 1,848   |
-| `open-badge`                   | 4,010     | 1,137   |
+| `island-open-layout`           | 102,042   | 17,702  |
+| `island-open-cinematic-scroll` | 81,984    | 25,215  |
+| `open-button`                  | 16,320    | 3,132   |
+| `island-open-dragon-live-gaze` | 14,161    | 5,170   |
+| `island-open-page-rail`        | 9,684     | 2,747   |
+| `open-code-block`              | 8,471     | 2,813   |
+| `island-open-hero-polish`      | 4,436     | 1,851   |
+| `open-badge`                   | 4,010     | 1,140   |
 
 ```bash
 ls -l www/dist/client/islands/*.js
@@ -130,11 +130,11 @@ What a page actually downloads follows from its island manifest, not from the to
 
 | Route                    | Client payload (raw) | Distinct chunks |
 | ------------------------ | -------------------- | --------------- |
-| `/guide/mdx`             | 127,528 B            | 4               |
-| `/guide/getting-started` | 127,528 B            | 4               |
-| `/`                      | 214,617 B            | 6               |
+| `/guide/mdx`             | 126,948 B            | 4               |
+| `/guide/getting-started` | 126,948 B            | 4               |
+| `/`                      | 217,362 B            | 6               |
 
-Across all 62 page manifests the site declares 10 island tags in 296 entries: the chrome islands (`open-layout`, `open-search`, `open-theme-toggle`) on every page, `open-page-rail` on 52, `open-code-block` on 42, and the remaining tags on a handful of pages each.
+Across all 64 page manifests the site declares 10 island tags in 304 entries: the chrome islands (`open-layout`, `open-search`, `open-theme-toggle`) on every page, `open-page-rail` on 54, `open-code-block` on 42, and the remaining tags on a handful of pages each.
 
 ```bash
 cat www/dist/island-manifests/page-<hash>.json   # one page's island set: tag, chunk, strategy, layer

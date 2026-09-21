@@ -1,14 +1,16 @@
 // GENERATED FILE — do not edit by hand.
-// Regenerate with: deno task --cwd tools/repo generate:export-files
-// Source of truth: the "exports" field of each packages/*/deno.json.
+// Regenerate with the repository task: generate:export-files
+// Source of truth: the "exports" field of each workspace package manifest.
 export const OPENELEMENT_EXPORT_FILES: Record<string, Record<string, string>> = {
   'create': {
     '.': 'src/cli.ts',
+    'install-command': 'src/install-command.ts',
   },
   'element': {
     '.': 'src/index.ts',
     'authoring': 'src/authoring.ts',
     'build-utils': 'src/build-utils.ts',
+    'client-only': 'src/client-only.ts',
     'compiler': 'src/compiler.ts',
     'html': 'src/html.ts',
     'jsx-dev-runtime': 'src/jsx-dev-runtime.ts',

@@ -100,8 +100,13 @@ export default definePage(PostPage, {
 
 `redirect()` also takes an explicit status (301/302/303/307/308); any other status is rejected at call time. The same guards work on the SPA chain, but SPA loaders/actions receive `{ params, searchParams, signal }` (plus `formData` for actions).
 
+## Build-time diagnostics
+
+Everything above is the runtime channel. The compiler answers separately: a module outside the authoring grammar fails the build with a source-located diagnostic carrying a stable `OEC####` code — the attribute, Region, decorator and provenance rules the compiled element boundary enforces. [Error codes](/errors) lists every code with the message it raises and the exact source call sites, generated from the diagnostics themselves, so the table cannot describe a code the build no longer produces or omit one it does.
+
 ## See also
 
 - [Routing and Data](/guide/routing-and-data) — where `fail()`, `redirect()` and actions are introduced.
+- [Error codes](/errors) — the compiler diagnostics, code by code.
 - [Security](/guide/security) — the status codes and headers the generated handlers send.
 - [API Routes](/guide/api) — the same response primitives for non-page routes.
