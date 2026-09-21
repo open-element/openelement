@@ -1,84 +1,106 @@
 /**
- * `/errors` — the generated error-code reference (#1413 W3).
+ * Error-code reference route (#1414).
  *
- * The table is derived, never authored: `www/tools/generate-error-reference.ts`
- * reads every diagnostic code out of the compiler's own `fail(…, 'OEC9xxx', …)`
- * literals plus the element/router error-code maps, and the CI gate
- * (`www#check:errors`, wired into `gate:source`) fails when the generated
- * module drifts or when the source carries a code the catalog does not list.
- * This route only localizes the page chrome and projects the generated rows.
+ * The table below is a DERIVED artifact (P6): every row is projected from
+ * www/app/data/_generated-error-codes.ts, which is rendered from the OEC code
+ * literals in packages/<name>/src and the ErrorCode constants in
+ * packages/element/src/internal/protocol/errors.ts. A code the source raises
+ * therefore cannot be missing here, and the page cannot restate a code the
+ * source no longer has — `www#check:error-codes` (gate:source) fails on drift.
+ * Only the surrounding prose is authored.
  */
 import { definePage } from '@openelement/router';
 import { siteHead } from '@openelement/site-ui/head.ts';
 import { contentLocale } from '@openelement/site-ui/locale.ts';
-import { errorReference } from '../data/_generated-error-reference.ts';
+import { errorCodes } from '../data/_generated-error-codes.ts';
+import { sourceLineStamp } from '../data/version.ts';
 import ErrorsPage, { type ErrorCodeItem } from '../components/page-errors.tsx';
 
-export const meta = { section: 'Reference', label: 'Error Codes', order: 6 };
-
-/** Generated truth: the catalog's own size, never a hand-written number. */
-const codeCount = errorReference.codes.length;
+export const meta = { section: 'Reference', label: 'Error codes', order: 6 };
 
 type Locale = 'en' | 'zh';
 
+/**
+ * The OEC code families, keyed by the numeric range each occupies. A range
+ * with no codes fails the projection below, so a family cannot outlive its
+ * codes in the copy.
+ */
+const families = [
+  { prefix: 'OEC90', label: { en: 'compiler grammar', zh: '编译器语法' } },
+] as const;
+
+function familyOf(code: string, locale: Locale): string {
+  for (const family of families) {
+    if (code.startsWith(family.prefix)) return family.label[locale];
+  }
+  return locale === 'en' ? 'diagnostic' : '诊断';
+}
+
 const content = {
   en: {
-    headTitle: 'Error Codes',
+    headTitle: 'Error codes',
     headDescription:
-      `Every openElement diagnostic code — ${codeCount} codes across the compiler, the authoring API and the runtime — with its phase, severity, representative message and the source that defines it. Generated from the diagnostic definitions; a code in source but not here fails CI.`,
-    pageTitle: 'Error Codes',
-    lede:
-      'One table for every code the framework can raise. Codes are derived from the definitions, so this page cannot drift from the source without failing the build.',
+      'Every openElement error code, with the message each one raises and the exact source call sites — generated from the diagnostics themselves.',
+    pageTitle: 'Error codes',
+    lede: (v: string) =>
+      `The ${v} surface raises ${errorCodes.diagnostics.length} OEC compiler diagnostics plus ${errorCodes.runtime.length} runtime codes. Every row below is rendered from the source that raises it.`,
     s1Index: '01 / code table',
-    s1Title: 'Every code, classified.',
+    s1Title: 'The codes, and where they are raised.',
     s1Copy:
-      'Phase names where the failure happens (build, validation, render, ssr); severity separates a hard failure from a reported one. Compiler codes are extracted from the semantic core\u2019s diagnostic call sites; authoring and runtime codes come from the constant maps their throws use. Template placeholders render as \u2026, because the per-site value is data, not part of the definition.',
+      'OEC90xx codes are compiler diagnostics: each one names a grammar rule the compiled element boundary enforces, and each row lists the exact source call sites the build produced it from. Runtime codes are the ErrorCode constants an application can branch on. A code cannot appear in the source without appearing here.',
     headCode: 'Code',
-    headFamily: 'Family',
-    headPhase: 'Phase',
-    headSeverity: 'Severity',
-    headMessage: 'Representative message',
-    headSource: 'Defined at',
-    headSites: 'Sites',
-    countLabel: (count: number) => `${count} codes`,
-    s2Index: '02 / how to read this',
-    s2Title: 'The table is an artifact, not a document.',
-    s2Copy: 'Three properties make it trustworthy.',
-    footnote: [
-      'Generated, never typed. A new diagnostic code lands here first, because the catalog is built from the definitions; hand-writing a row would make the generator stale and the check red.',
-      'The enforceable direction is source → catalog. A code the compiler can raise but the catalog does not list fails CI. A catalogued code whose raising site has not landed yet is the documented-first state, and is not a failure.',
-      'Phase and severity are derived, not annotated. A code whose family cannot be classified stops the generator instead of shipping with an empty classification column.',
-    ],
+    headGloss: 'Representative message',
+    headSites: 'Raised at',
+    variantsLabel: (count: number) => `${count} distinct messages`,
+    footnote:
+      'The gloss is the message the code raises most often; a code with several call-site messages expands to the full list. Source paths are repository-relative.',
+    footnoteCheckPre: 'Generated from the diagnostics by ',
+    footnoteCheckPost: ', so a new code cannot ship unlisted and a retired one cannot stay listed.',
+    family: familyOf,
   },
   zh: {
     headTitle: '错误码',
     headDescription:
-      `openElement 的全部诊断码——编译器、创作 API 与运行时共 ${codeCount} 个——含阶段、严重级别、代表性消息与定义它的源码位置。本页由诊断定义生成；源码中有而此处没有的码会让 CI 直接失败。`,
+      'openElement 的全部错误码：每个码触发的消息，以及它精确的源码调用点——由诊断本身生成。',
     pageTitle: '错误码',
-    lede:
-      '框架能抛出的每个码都在这一张表里。表由定义派生，因此在构建失败之前，本页不可能与源码脱节。',
+    lede: (v: string) =>
+      `${v} 面共有 ${errorCodes.diagnostics.length} 个 OEC 编译器诊断与 ${errorCodes.runtime.length} 个运行时错误码。下表每一行都由触发它的源码渲染而成。`,
     s1Index: '01 / 码表',
-    s1Title: '每一个码，都有分类。',
+    s1Title: '错误码，以及它们被触发的位置。',
     s1Copy:
-      'phase 指明失败发生的阶段（build、validation、render、ssr）；severity 区分硬失败与已上报的失败。编译器码从语义核心的诊断调用点提取；创作与运行时码来自各自抛错所用的常量表。模板占位符渲染为 \u2026，因为每处的具体取值是数据，不属于定义本身。',
-    headCode: '码',
-    headFamily: '归属',
-    headPhase: '阶段',
-    headSeverity: '级别',
-    headMessage: '代表性消息',
-    headSource: '定义位置',
-    headSites: '出现处',
-    countLabel: (count: number) => `${count} 个码`,
-    s2Index: '02 / 如何阅读',
-    s2Title: '这张表是产物，不是文档。',
-    s2Copy: '三点让它值得信任。',
-    footnote: [
-      '生成，绝不手写。新的诊断码会先出现在这里，因为码表由定义构建；手写一行会让生成器过期，检查随即变红。',
-      '可执行的方向是「源码 → 码表」。编译器能抛出、而码表未列出的码会让 CI 失败；已登记但抛错点尚未落地的码属于「先文档后实现」，不算失败。',
-      'phase 与 severity 是派生的，不是注解。归属无法分类的码会让生成器直接停止，而不是带着空分类列上线。',
-    ],
+      'OEC90xx 系列是编译器诊断：每个码对应一条编译元素边界强制执行的语法规则，每一行列出构建产生它的确切源码调用点。运行时错误码是应用可以分支处理的 ErrorCode 常量。码不可能只出现在源码里而不出现在这里。',
+    headCode: '错误码',
+    headGloss: '代表性消息',
+    headSites: '触发位置',
+    variantsLabel: (count: number) => `${count} 条不同消息`,
+    footnote:
+      '摘要取该码触发次数最多的消息；调用点消息不唯一时会展开完整列表。源码路径均为仓库相对路径。',
+    footnoteCheckPre: '由 ',
+    footnoteCheckPost: ' 从诊断生成，因此新码无法不登记，退役的码也无法留在表上。',
+    family: familyOf,
   },
 } as const;
+
+/**
+ * Project the generated inventory onto the page's fixed row grammar. Row
+ * fields are strings: the compiled list Region admits `{item.<field>}` values
+ * and elements, not a nested list Region, so the multi-value columns are
+ * joined here (the generator already sorted them deterministically).
+ */
+function projectCodes(locale: Locale): ErrorCodeItem[] {
+  const t = content[locale];
+  return errorCodes.diagnostics.map((record) => ({
+    key: record.code,
+    code: record.code,
+    family: t.family(record.code, locale),
+    gloss: record.summary,
+    variants: record.messages.length > 1
+      ? `${t.variantsLabel(record.messages.length)}: ${record.messages.join(' · ')}`
+      : '',
+    sites: record.occurrences.map((site) => `${site.path}:${site.line}`).join(' · '),
+    runtime: 'false',
+  }));
+}
 
 export default definePage(ErrorsPage, {
   head({ locale }) {
@@ -94,47 +116,34 @@ export default definePage(ErrorsPage, {
   props({ locale }) {
     const resolved: Locale = contentLocale(locale ?? 'en');
     const t = content[resolved];
-    const codes: ErrorCodeItem[] = errorReference.codes.map((record) => ({
-      key: record.anchor,
-      anchor: record.anchor,
-      code: record.code,
-      family: record.family,
-      familyClass: 'family',
-      phase: record.phase,
-      severity: record.severity,
-      severityClass: `severity severity-${record.severity}`,
-      message: record.message,
-      source: record.source.line > 0
-        ? `${record.source.path}:${record.source.line}`
-        : record.source.path,
-      occurrences: String(record.occurrences),
+    // Runtime codes carry their own declared name/summary; they are projected
+    // onto the same row grammar so a reader sees one table, not two.
+    const runtimeRows: ErrorCodeItem[] = errorCodes.runtime.map((record) => ({
+      key: record.value,
+      code: record.value,
+      family: resolved === 'en' ? 'runtime' : '运行时',
+      gloss: record.summary,
+      variants: '',
+      sites: record.name,
+      runtime: 'true',
     }));
     return {
       metadata: {
         breadcrumb: 'Reference',
         title: t.pageTitle,
-        lede: t.lede,
+        lede: t.lede(sourceLineStamp(resolved)),
       },
-      railItems: [
-        { id: 'error-table', href: '#error-table', label: t.s1Title, depth: '2' },
-        { id: 'how-to-read', href: '#how-to-read', label: t.s2Title, depth: '2' },
-      ],
+      railItems: [{ id: 'error-codes', href: '#error-codes', label: t.headCode, depth: '3' }],
       s1Index: t.s1Index,
       s1Title: t.s1Title,
       s1Copy: t.s1Copy,
       headCode: t.headCode,
-      headFamily: t.headFamily,
-      headPhase: t.headPhase,
-      headSeverity: t.headSeverity,
-      headMessage: t.headMessage,
-      headSource: t.headSource,
+      headGloss: t.headGloss,
       headSites: t.headSites,
-      codeCount: t.countLabel(codeCount),
-      s2Index: t.s2Index,
-      s2Title: t.s2Title,
-      s2Copy: t.s2Copy,
-      footnote: t.footnote.map((value, index) => ({ key: `note-${index}`, value })),
-      codes,
+      codes: [...projectCodes(resolved), ...runtimeRows],
+      footnote: t.footnote,
+      footnoteCheckPre: t.footnoteCheckPre,
+      footnoteCheckPost: t.footnoteCheckPost,
     };
   },
 });

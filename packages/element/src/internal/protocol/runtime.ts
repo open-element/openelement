@@ -19,6 +19,11 @@ interface RuntimePrerenderResult {
   headers?: HeadersInit;
 }
 
+/**
+ * The host-neutral request handler every runtime adapter and generated server
+ * entry exposes: a WinterCG `(request, context?) => Response` with no server
+ * engine dialect baked in.
+ */
 export type OpenElementRequestHandler<
   Env extends Record<string, unknown> = Record<string, unknown>,
 > = (request: Request, context?: RuntimeContext<Env>) => Response | Promise<Response>;

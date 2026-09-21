@@ -2,6 +2,13 @@
 
 import ts from 'typescript';
 
+/**
+ * The bundler-neutral facts one module source yields: its relative imports, the
+ * intrinsic bindings it admits ({@link ModuleSemanticFacts.compiledElementDecorator},
+ * {@link ModuleSemanticFacts.exportedTagName}, custom-element tags it defines or
+ * references) and the interaction-event names its handlers bind. The Vite graph
+ * adapter branches on these without re-parsing the AST.
+ */
 export interface ModuleSemanticFacts {
   relativeImports: string[];
   compiledElementDecorator: boolean;
@@ -266,6 +273,12 @@ function stringArgument(call: ts.CallExpression, index = 0): string | undefined 
     : undefined;
 }
 
+/**
+ * Parse one module source and report the semantic facts the compiler boundary
+ * and the Vite graph adapters branch on. Pure: it never resolves imports from
+ * disk and never throws on foreign or invalid syntax — an unparsable module
+ * simply yields no recognized facts.
+ */
 export function analyzeModuleSemantics(source: string, fileName: string): ModuleSemanticFacts {
   const sourceFile = ts.createSourceFile(
     fileName,

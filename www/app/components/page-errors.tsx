@@ -1,15 +1,11 @@
 /**
- * Compiled error-code reference page (#1413 W3, ADR-0143/ADR-0148).
+ * Compiled error-code reference page (#1414, co-built with the W3 error
+ * experience).
  *
- * The route projects the generated catalog (www/app/data/_generated-error-reference.ts)
- * onto these plain properties; this module owns only the compiled element and
- * its markup. Code rows are a keyed list Region so server output, browser
- * creation and existing-DOM claim share one identity model — the same shape
- * the API reference uses for its export rows.
- *
- * No code list is authored here. Every row comes from the generator, which
- * reads the codes out of the compiler's own diagnostic literals; the CI gate
- * fails if a code exists in source without appearing in the catalog.
+ * The route projects the generated error-code inventory onto these plain
+ * properties; this module contains only the compiler-owned element class and
+ * its static render grammar. Code rows are a keyed list Region so server
+ * output, browser creation and existing-DOM claim share one identity model.
  */
 import { element, OpenElement, property } from '@openelement/element';
 import '@openelement/site-ui/open-reading-shell.tsx';
@@ -17,19 +13,17 @@ import '../site-ui/open-section-frame.tsx';
 import '../islands/open-page-rail.tsx';
 import { pageErrorsStyles } from './page-errors-styles.ts';
 
-/** One generated error-code record, flattened for the keyed list Region. */
+/** One diagnostic code row, projected from the generated inventory. */
 export interface ErrorCodeItem {
   key: string;
-  anchor: string;
   code: string;
   family: string;
-  familyClass: string;
-  phase: string;
-  severity: string;
-  severityClass: string;
-  message: string;
-  source: string;
-  occurrences: string;
+  gloss: string;
+  /** Every distinct normalized message the code raises, joined for display. */
+  variants: string;
+  /** `path:line` of every source call site, joined for display. */
+  sites: string;
+  runtime: string;
 }
 
 interface ErrorsRailItem {
@@ -45,12 +39,9 @@ interface ErrorsMetadata {
   lede: string;
 }
 
-/** One authored footnote line; the keyed Region needs an object with a field. */
-interface ErrorsNote {
-  key: string;
-  value: string;
-}
-
+// The route->program tag binding reads this module's own @element tag
+// (route-scanner semantics.exportedTagName); the path-derived tag is only
+// the fallback for classes without one.
 @element('errors-page')
 export default class ErrorsPage extends OpenElement {
   static override styles = pageErrorsStyles;
@@ -74,40 +65,22 @@ export default class ErrorsPage extends OpenElement {
   headCode = '';
 
   @property({ reflect: false, attribute: false })
-  headFamily = '';
-
-  @property({ reflect: false, attribute: false })
-  headPhase = '';
-
-  @property({ reflect: false, attribute: false })
-  headSeverity = '';
-
-  @property({ reflect: false, attribute: false })
-  headMessage = '';
-
-  @property({ reflect: false, attribute: false })
-  headSource = '';
+  headGloss = '';
 
   @property({ reflect: false, attribute: false })
   headSites = '';
 
   @property({ reflect: false, attribute: false })
-  codeCount = '';
-
-  @property({ reflect: false, attribute: false })
-  s2Index = '';
-
-  @property({ reflect: false, attribute: false })
-  s2Title = '';
-
-  @property({ reflect: false, attribute: false })
-  s2Copy = '';
-
-  @property({ reflect: false, attribute: false })
-  footnote: ErrorsNote[] = [];
-
-  @property({ reflect: false, attribute: false })
   codes: ErrorCodeItem[] = [];
+
+  @property({ reflect: false, attribute: false })
+  footnote = '';
+
+  @property({ reflect: false, attribute: false })
+  footnoteCheckPre = '';
+
+  @property({ reflect: false, attribute: false })
+  footnoteCheckPost = '';
 
   // Same base-field redeclaration as open-layout: the compiled @property
   // shadows OpenElementConfiguration.locale (SSR injection or the `locale`
@@ -118,13 +91,11 @@ export default class ErrorsPage extends OpenElement {
 
   render() {
     return (
+      // Without data-pagefind-body the page is absent from the index entirely:
+      // pagefind stops indexing every page that lacks the attribute. The shell
+      // already renders the one <main> landmark (#main-content).
       <div data-pagefind-body>
-        <open-reading-shell
-          rail
-          footer
-          metadata={this.metadata}
-          locale={this.locale}
-        >
+        <open-reading-shell rail footer metadata={this.metadata} locale={this.locale}>
           <div slot='rail'>
             <open-page-rail items={this.railItems} locale={this.locale}></open-page-rail>
           </div>
@@ -132,37 +103,39 @@ export default class ErrorsPage extends OpenElement {
             <span slot='index'>{this.s1Index}</span>
             <span slot='title'>{this.s1Title}</span>
             <span slot='copy'>{this.s1Copy}</span>
-            <div class='registry' id='error-table'>
-              <span class='count'>{this.codeCount}</span>
-              <div class='registry-head' aria-hidden='true'>
+            <div class='codes' id='error-codes'>
+              <div class='codes-head' aria-hidden='true'>
                 <span>{this.headCode}</span>
-                <span>{this.headFamily}</span>
-                <span>{this.headPhase}</span>
-                <span>{this.headSeverity}</span>
+                <span>{this.headGloss}</span>
+                <span>{this.headSites}</span>
               </div>
-              {this.codes.map((item) => (
-                <div class='code-row' id={item.anchor} data-severity={item.severity} key={item.key}>
-                  <div class='code-line'>
-                    <code class='code-id'>{item.code}</code>
-                    <span class={item.severityClass}>{item.severity}</span>
+              {this.codes.map((code) => (
+                <div
+                  class='code-row'
+                  id={code.code}
+                  data-runtime={code.runtime}
+                  key={code.key}
+                >
+                  <div>
+                    <span class='code-id'>{code.code}</span>
+                    <span class='code-family'>{code.family}</span>
                   </div>
-                  <span class={item.familyClass}>{item.family}</span>
-                  <span class='phase'>{item.phase}</span>
-                  <div class='detail'>
-                    <p class='message'>{item.message}</p>
-                    <span class='source'>{item.source}</span>
+                  <div>
+                    <p class='code-gloss'>{code.gloss}</p>
+                    <p class='code-variants'>{code.variants}</p>
                   </div>
+                  <span class='code-sites'>{code.sites}</span>
                 </div>
               ))}
+              <footer class='footnote'>
+                <p>{this.footnote}</p>
+                <p>
+                  {this.footnoteCheckPre}
+                  <code>deno task --cwd www check:error-codes</code>
+                  {this.footnoteCheckPost}
+                </p>
+              </footer>
             </div>
-          </open-section-frame>
-          <open-section-frame>
-            <span slot='index'>{this.s2Index}</span>
-            <span slot='title'>{this.s2Title}</span>
-            <span slot='copy'>{this.s2Copy}</span>
-            <ul class='notes' id='how-to-read'>
-              {this.footnote.map((note) => <li key={note.key}>{note.value}</li>)}
-            </ul>
           </open-section-frame>
         </open-reading-shell>
       </div>

@@ -92,6 +92,12 @@ function collectStaticStyleCss(ctor: CompiledComponentConstructor): string | und
   return css === '' ? undefined : css;
 }
 
+/**
+ * Options for one `renderDsd()` call: the compiled component class to
+ * serialize, the values projected onto its compiled properties, optional
+ * route/source diagnostics metadata, the nested compiled tags the build
+ * admitted, and trusted parent-owned light children keyed by slot name.
+ */
 export interface RenderDsdOptions {
   componentClass?: CustomElementConstructor;
   props?: Record<string, unknown>;

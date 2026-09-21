@@ -11,7 +11,7 @@ order: 1
 Three commands to a running app:
 
 ```bash
-deno run -A npm:@openelement/create@alpha my-app
+{{INSTALL_COMMAND}}
 cd my-app
 deno task dev
 ```
@@ -26,7 +26,19 @@ Read the [docs](/docs), [API reference](/reference), and [roadmap](/roadmap) as 
 
 ## Build
 
-Run build, package, docs truth, and visual smoke gates before release.
+`deno task build` produces the deployable site in `dist/` — prerendered HTML for every static route, everything under `public/` copied as-is, and, when the app has islands or request-time routes, the client chunks and the server entry beside it. That directory is the artifact: upload it to any static host, or point a Node/Workers deployment at `dist/server/index.js`.
+
+Three tasks cover the loop:
+
+```bash
+deno task build     # prerender into dist/ (+ dist/client, dist/server when needed)
+deno task start     # serve the real build, including request-time routes
+deno task preview   # static-only preview; refuses to run when dist/server exists
+```
+
+`deno task start` is the one to check a change against, because it serves the same output production does and dispatches dynamic routes and form posts to the generated server entry. `deno task preview` is deliberately narrower — it refuses a build that has a server side rather than silently hiding it, so it is only useful for an app with no request-time routes. Port comes from `OPEN_ELEMENT_PORT` (falling back to `PORT`, default 4173) and host from `OPEN_ELEMENT_HOST`.
+
+Before shipping, `deno task check` type-checks the app and `deno task test` runs its tests; both are wired into the starter's tasks and need no extra setup. The full output contract — which files the build writes and what each one answers — is documented under [Deployment](/guide/deployment).
 
 ## See also
 

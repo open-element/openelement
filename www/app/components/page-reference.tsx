@@ -39,7 +39,27 @@ export interface ApiReferenceItem {
   kind: string;
   stability: string;
   summary: string;
+  /** Declared call shape rendered from the source declaration. */
+  signature: string;
+  /**
+   * The export's option-bag members as one display line (`name: type —
+   * description`, `; `-joined): a list Region item template admits
+   * `{item.<field>}` values and nested elements, not a nested Region, so the
+   * per-export table renders as text while the config section below renders as
+   * a real table (it is a top-level Region).
+   */
+  options: string;
   source: string;
+}
+
+/** One row of the generated config-option table (an each Region item). */
+export interface ApiOptionRow {
+  key: string;
+  name: string;
+  type: string;
+  required: string;
+  defaultValue: string;
+  description: string;
 }
 
 /** One generated custom-element record with its detail lists inlined. */
@@ -149,6 +169,27 @@ export default class ReferencePage extends OpenElement {
   referenceEntries: ApiReferenceItem[] = [];
 
   @property({ reflect: false, attribute: false })
+  s5Index = '';
+
+  @property({ reflect: false, attribute: false })
+  s5Title = '';
+
+  @property({ reflect: false, attribute: false })
+  s5Copy = '';
+
+  @property({ reflect: false, attribute: false })
+  headOption = '';
+
+  @property({ reflect: false, attribute: false })
+  headOptionType = '';
+
+  @property({ reflect: false, attribute: false })
+  headOptionRequired = '';
+
+  @property({ reflect: false, attribute: false })
+  configOptions: ApiOptionRow[] = [];
+
+  @property({ reflect: false, attribute: false })
   s4Index = '';
 
   @property({ reflect: false, attribute: false })
@@ -245,8 +286,37 @@ export default class ReferencePage extends OpenElement {
                     <span class='chip'>{entry.kind}</span>
                     <span class='chip chip-stability'>{entry.stability}</span>
                   </div>
-                  <p class='ref-summary'>{entry.summary}</p>
+                  <div>
+                    <p class='ref-summary'>{entry.summary}</p>
+                    <code class='ref-signature'>{entry.signature}</code>
+                    <p class='ref-options'>{entry.options}</p>
+                  </div>
                   <span class='ref-source'>{entry.source}</span>
+                </div>
+              ))}
+            </div>
+          </open-section-frame>
+          <open-section-frame>
+            <span slot='index'>{this.s5Index}</span>
+            <span slot='title'>{this.s5Title}</span>
+            <span slot='copy'>{this.s5Copy}</span>
+            <div class='registry' id='config-options'>
+              <div class='registry-head' aria-hidden='true'>
+                <span>{this.headOption}</span>
+                <span>{this.headOptionType}</span>
+                <span>{this.headOptionRequired}</span>
+              </div>
+              {this.configOptions.map((option) => (
+                <div class='ref-row option-config-row' id={option.key} key={option.key}>
+                  <div>
+                    <span class='ref-name'>{option.name}</span>
+                    <span class='ref-container'>{option.defaultValue}</span>
+                  </div>
+                  <div>
+                    <code class='ref-signature'>{option.type}</code>
+                    <p class='ref-summary'>{option.description}</p>
+                  </div>
+                  <span class='ref-source'>{option.required}</span>
                 </div>
               ))}
             </div>

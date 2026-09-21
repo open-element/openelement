@@ -41,6 +41,18 @@ export default class MyCounter extends OpenElement {
 
 A state change re-renders only the Parts that read the changed value. Event handlers written in the template (`onClick`, `onInput`) are bound at upgrade; nothing is looked up by string at runtime. Server-side, the same compiled class is serialized to markup by `renderDsd`, so there is one program behind both outputs rather than two renderers that can drift.
 
+### Shadow root behavior: delegatesFocus
+
+`@element('my-dialog', { root: 'shadow-open', delegatesFocus: true })` emits the matching class static, so the attached shadow root is created with `delegatesFocus`. Focus moving into the host is then delegated to the first focusable element inside the shadow tree, and the host itself matches `:focus` — which is what makes a wrapper such as a dialog, a menu or a composite field keyboard-navigable without a manual focus trap. It applies to shadow roots only (a `'light'` root has no shadow root to configure) and the compiler accepts the literal only: `@element(..., { delegatesFocus: <boolean literal> })`. Anything else fails closed with `OEC9002`.
+
+### Form participation: formAssociated
+
+`@element('my-field', { root: 'shadow-open', formAssociated: true })` emits `static formAssociated = true`, and the runtime then associates the host with the surrounding form through `ElementInternals` when it connects. The host becomes a form control: it appears in `form.elements`, participates in submission and `form.reset()`, and receives `form`, `name` and `value` semantics. Because association is a platform contract rather than a framework one, put the interactive control inside the shadow root and keep the host's own attributes for the form-facing name and value; the runtime does not invent a form value for you. As with `delegatesFocus`, the option takes a boolean literal, and an unsupported `@element` option fails closed with `OEC9002`.
+
+### Attribute conversion: converter
+
+`@property({ reflect: false, type: Number })` and `@property({ reflect: false, converter: Number })` mean the same thing to the compiler: the converter names the built-in conversion the host attribute is parsed through, and it is one of `String`, `Number`, `Boolean`, `Array` or `Object` — anything else fails closed with `OEC9021`. `type` is the declaring form and reads best in a component's contract; `converter` is the same declaration under the name Lit-style code uses, accepted so a ported element does not need rewriting. `Boolean` follows the platform attribute convention: presence is `true`, absence is `false`, so a boolean property reflects as an empty attribute rather than `"true"`. When neither is given, the converter is inferred from the field's initializer (`count = 0` → `Number`, `label = ''` → `String`, `items: string[] = []` → `Array`), so a typed field with a literal default already declares its own channel.
+
 ## DSD
 
 Server output is Declarative Shadow DOM: component markup travels inside `<template shadowrootmode="open">` and the browser parses it natively, without script. The document is styled and readable on first paint — before any client module is fetched. Styles declared in a component's `static styles` are inlined; for a light root the server scopes them in a `@scope(<tag>)` block so page rules cannot leak into the rest of the document.

@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { installCommand } from '../app/data/_generated-install-command.ts';
 
 test.describe('Cinematic homepage', () => {
   test('keeps the product story and starter available without animation', async ({ page }) => {
@@ -7,11 +8,9 @@ test.describe('Cinematic homepage', () => {
     await expect(page.getByText('THE WEB,', { exact: true })).toBeVisible();
     await expect(page.getByText('Start building', { exact: true }).first()).toBeVisible();
     await expect(page.getByText('The server writes HTML.')).toBeVisible();
-    await expect(
-      page.getByText(
-        'deno run -A npm:@openelement/create@alpha my-app',
-      ),
-    ).toBeVisible();
+    // The starter command is generated truth (#1414): assert the rendered page
+    // shows the create CLI's canonical string, not a copy that could drift.
+    await expect(page.getByText(installCommand)).toBeVisible();
   });
 
   test('renders a transparent theme-aware logo linked to the current locale home', async ({ page }) => {

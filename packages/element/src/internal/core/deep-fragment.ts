@@ -12,6 +12,11 @@ function decodeFragmentId(id: string): string | null {
   }
 }
 
+/**
+ * Resolve `id` (a `#hash` or bare id) against `root` and, when the id is not
+ * in that root's own tree, recurse into every nested shadow root. Returns the
+ * first match or `null`; a malformed percent-encoded id is not an error.
+ */
 export function deepGetElementById(
   id: string,
   root: Document | ShadowRoot = document,
@@ -53,6 +58,12 @@ export interface DeepFragmentOptions {
   enabled?: boolean;
 }
 
+/**
+ * Install (once per document) framework-level fragment navigation: a
+ * same-document anchor click whose target lives inside a nested shadow root
+ * scrolls to it and pushes the hash instead of being dropped by the browser.
+ * `{ enabled: false }` opts an application out.
+ */
 export function ensureDeepFragmentNavigation(options: DeepFragmentOptions = {}): void {
   if (installed || options.enabled === false || typeof document === 'undefined') return;
   installed = true;

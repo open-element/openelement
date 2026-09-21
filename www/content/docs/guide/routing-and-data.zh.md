@@ -10,11 +10,25 @@ Routes 应当能从仓库目录树中被发现。`definePage` 路由默认导出
 
 ## 元数据
 
-导航与生成的文档依赖 route metadata。
+导航与生成的文档依赖 route metadata，而路由按自身类型只在**一个**地方声明它。
+
+**内容页**在 Markdown frontmatter 中声明：`title`（必填）、`lede`、`order`（必填，决定组内排序）、`section`（侧边栏分组，按集合取默认值），以及可选的 `navLabel`（当侧边栏标签需要不同于标题时）。`zh` 同源文件用同一组字段提供自己的译文值。站点的导航生成器通过页面正文所用的同一个 loader 与 schema 读取 frontmatter，因此侧边栏不可能以不同于页面本身的方式描述页面。
+
+**代码路由**在路由模块里声明 `export const meta = { section, label, order }`——`section` 在侧边栏中分组，`label` 是短导航标签，`order` 决定组内排序。若某个 section 名称未被对应 basePath 在站点 section map 中列出，导航生成会直接失败，而不是悄悄把该分组从该页侧边栏里去掉。既无 `meta` 也无 frontmatter 的路由不会出现在侧边栏中，但依然正常参与路由。
+
+文档元数据——页面 head——与导航元数据是两件事。`definePage(PageClass, { head })` 声明文档标题、描述、canonical 路径与结构化数据，既可以是静态对象，也可以是接收 props projector 同一份请求级上下文的 resolver。该 resolver 必须是这份上下文的纯函数：Document 接缝会按渲染解析它，自身绝不发起请求、缓存或调度 loader。对内容页而言，标题与 lede 取自渲染 locale 的 frontmatter，并以英文原文作为兜底，因此某个译文缺字段时页面仍能给出完整的 head。
+
+两类元数据都不是标记：这里没有任何东西会渲染进页面正文。
 
 ## 数据边界
 
-数据加载与展示标记保持分离。
+数据加载与展示标记保持分离。这条边界明确而狭窄：loader 返回数据，`definePage` 的 `props` projector 把数据映射到页面的编译属性上，页面 `render()` 只读 `this.<property>`。
+
+`'dynamic'` 页面的 loader 在服务端运行（`'static'` 页面则在构建期按 `getStaticPaths()` 的每个条目各运行一次）并返回普通值；它拿不到元素实例，也从不接触 DOM。props projector 是请求作用域与编译页面之间唯一的确定性接缝——它接收 `{ data, actionData, params, request, route, meta }`（配置 i18n 时还有 `locale`）并返回页面声明的那些属性，因此静态产物、请求时服务端与 SPA 引导跑的是同一套投影。省略 `props` 时使用默认投影：先路由 params，再 loader 数据记录自身的条目，并过滤危险键，使恶意载荷无法重新原型化投影结果。多余条目会被忽略，因为编译序列化器只消费页面声明过的属性。
+
+正是这层分离让两条链路可以互换、让标记可测试：页面的编译 render 程序只依赖自己的属性，因此它可以在构建期序列化、按请求重新渲染，或在浏览器里用同一份数据创建。它也是失败通道的挂载点——预期的校验失败以 `actionData` 到达而非异常，`fail()` 的回显经同一个 projector 重新进入页面。
+
+两条值得写下来的推论：绝不要让 loader 返回 DOM 节点、类实例或任何序列化器需要猜测的东西（props 是投影，不是序列化）；也绝不要在 `render()` 里直接读请求（编译页面没有请求作用域——它可能渲染的一切都必须经过 projector）。
 
 ## 渲染模式
 

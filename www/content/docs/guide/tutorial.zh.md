@@ -24,7 +24,7 @@ order: 2
 ## 第 1 步：创建项目
 
 ```bash
-deno run -A npm:@openelement/create@alpha my-app
+{{INSTALL_COMMAND}}
 cd my-app
 deno task dev
 ```

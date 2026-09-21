@@ -15,6 +15,11 @@ import type {
 import type { Middleware } from '../protocol/framework.ts';
 export type { OpenElementRequestHandler, RuntimeContext };
 
+/**
+ * Normalize a runtime adapter declaration: pass the name, fetch handler and
+ * optional prerender iterator through unchanged so a host integration only
+ * implements the {@link RuntimeAdapter} contract it needs.
+ */
 export function createRuntimeAdapter<
   Env extends Record<string, unknown> = Record<string, unknown>,
 >(options: RuntimeAdapterOptions<Env>): RuntimeAdapter<Env> {

@@ -90,6 +90,9 @@ export default class PageHome extends OpenElement {
   specOutput = '';
   @property({ reflect: false, attribute: false })
   begin = '';
+  /** The create CLI's canonical install command (#1414), rendered verbatim. */
+  @property({ reflect: false, attribute: false })
+  beginCommand = '';
   @property({ reflect: false, attribute: false })
   beginNote = '';
   @property({ reflect: false, attribute: false })
@@ -340,9 +343,7 @@ export class OpenCounter extends OpenElement {
           <h2>{this.begin}</h2>
           <div class='command'>
             <code>$</code>
-            <span>
-              deno run -A npm:@openelement/create@alpha my-app
-            </span>
+            <span>{this.beginCommand}</span>
           </div>
           <p class='command-note'>{this.beginNote}</p>
           <div class='actions'>

@@ -42,6 +42,7 @@ import {
 } from '../../protocol/part-program.ts';
 import { forbiddenSinkReason } from '../../protocol/forbidden-sinks.ts';
 
+/** A source-aware compiler diagnostic: stable OEC code, message and source range. */
 export interface ElementCompilerDiagnostic extends CompilerDiagnostic {}
 
 /** Error shape consumed by the Vite plugin and compiler tests. */
@@ -52,6 +53,11 @@ export class CompiledElementError extends CompilerDiagnosticError {
   }
 }
 
+/**
+ * The compiled module the transform emits for one authored TSX source: the
+ * generated `code`, its Source Map v3, the Part Program facts the runtime
+ * consumes, and the ordered diagnostics that did not fail the compile.
+ */
 export interface CompileElementResult {
   code: string;
   /**
@@ -1757,6 +1763,12 @@ function generatedHandlerText(handler: GeneratedHandler): string {
   return `  ${handler.name}(): void {}`;
 }
 
+/**
+ * Compile one authored TSX module into the compiled Part Program module.
+ * `fileName` is used for diagnostics and the emitted source map only —
+ * filesystem resolution is the caller's job. Fails closed with a
+ * {@link CompiledElementError} carrying the ordered OEC diagnostics.
+ */
 export function compileElementProgram(source: string, fileName: string): CompileElementResult {
   const sf = ts.createSourceFile(fileName, source, ts.ScriptTarget.ES2022, true, ts.ScriptKind.TSX);
   const syntaxDiagnostics = ts.transpileModule(source, {

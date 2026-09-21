@@ -31,6 +31,9 @@ for (const name of ['guide', 'architecture'] as const) {
     ...articleCollections[name],
     contentDir: join(siteRoot, articleCollections[name].contentDir),
   };
+  // The loader resolves the site's computed placeholders ({{INSTALL_COMMAND}}
+  // among them, #1414) before rendering, so the emitted module already carries
+  // the create CLI's canonical string.
   const entries = await loadCollectionData(name, options);
   const output = writeCollectionDataModule(name, entries, options);
   outputs.set(join(siteRoot, `app/data/_generated-${name}-data.ts`), output);

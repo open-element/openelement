@@ -6,6 +6,7 @@ import { OPENELEMENT_VERSION, sourceLineStamp } from '../data/version.ts';
 import { apiReference } from '../data/_generated-api-reference.ts';
 import ReferencePage, {
   type ApiElementItem,
+  type ApiOptionRow,
   type ApiPackageItem,
   type ApiReferenceItem,
 } from '../components/page-reference.tsx';
@@ -156,8 +157,33 @@ const kindLabels = {
  * Flatten the generated per-export reference into one render list. Anchors
  * come from the generated module unchanged, so they match the generated
  * searchRecords (and the built-output fragment gate) by construction (#1307).
+ * Signatures and option lists are rendered from the source declarations by the
+ * generator (#1414) — the page never restates either.
  */
-function projectReferenceEntries(): ApiReferenceItem[] {
+function projectReferenceEntries(labels: {
+  requiredLabel: string;
+  optionalLabel: string;
+}): ApiReferenceItem[] {
+  // A list Region item template admits `{item.<field>}` values and nested
+  // elements, not a nested Region, so an export's options render as one line
+  // while the config section below renders as a real table (top-level Region).
+  const optionLine = (
+    options: readonly {
+      name: string;
+      type: string;
+      required: boolean;
+      description: string;
+    }[],
+  ): string =>
+    options
+      .map((option) => {
+        const marker = option.required ? labels.requiredLabel : labels.optionalLabel;
+        const description = option.description === '' ? '' : ` — ${option.description}`;
+        return `${option.name}${
+          option.required ? '' : '?'
+        }: ${option.type} (${marker})${description}`;
+      })
+      .join('; ');
   return apiReference.packages.flatMap((pkg) =>
     pkg.subpaths.flatMap((subpath) =>
       subpath.exports.map((exported) => ({
@@ -168,6 +194,8 @@ function projectReferenceEntries(): ApiReferenceItem[] {
         kind: exported.kind,
         stability: exported.stability,
         summary: exported.summary,
+        signature: exported.signature,
+        options: optionLine(exported.options),
         source: `${exported.source.path}:${exported.source.line}`,
       }))
     )
@@ -179,6 +207,22 @@ interface GeneratedElementDetail {
   type?: string;
   description?: string;
   default?: string;
+}
+
+/**
+ * The application config option table (#1414 item 4), rendered from the type
+ * the config entry is checked against. Dotted names come from the generator's
+ * one-level descent into nested option bags, so a group's members are rows.
+ */
+function projectConfigOptions(requiredLabel: string, optionalLabel: string): ApiOptionRow[] {
+  return apiReference.configOptions.map((option) => ({
+    key: `config-option-${option.name}`,
+    name: option.name,
+    type: option.type,
+    required: option.required ? requiredLabel : optionalLabel,
+    defaultValue: option.default === '' ? '' : `= ${option.default}`,
+    description: option.description,
+  }));
 }
 
 /** Render one generated detail list (attributes/events/slots/CSS parts) as inline text. */
@@ -251,10 +295,11 @@ const content = {
     headKind: 'Kind',
     railExports: 'Exports',
     railElements: 'Elements',
+    railOptions: 'Config options',
     s3Index: '03 / export reference',
     s3Title: 'Every documented export, anchored.',
     s3Copy:
-      'Each entry below is enumerated from the package exports maps by the reference generator — name, kind, stability class and JSDoc summary are generated facts, never hand-copied. The anchor matches the generated search record for the same export.',
+      'Each entry below is enumerated from the package exports maps by the reference generator — name, kind, stability class, JSDoc summary, declared signature and option table are generated facts, never hand-copied. The anchor matches the generated search record for the same export.',
     headExport: 'Export',
     headSummary: 'Summary',
     headSource: 'Source',
@@ -266,6 +311,15 @@ const content = {
     eventsLabel: 'Events',
     slotsLabel: 'Slots',
     partsLabel: 'CSS parts',
+    s5Index: '05 / config options',
+    s5Title: 'The application options type, one row per member.',
+    s5Copy:
+      'Rendered from the application options type the config entry is checked against, so the table and the real config surface cannot drift. Nested option bags render with dotted names; the type column is the declared type text.',
+    headOption: 'Option',
+    headOptionType: 'Type',
+    headOptionRequired: 'Required',
+    requiredLabel: 'required',
+    optionalLabel: 'optional',
     footnote: (v: string) =>
       `※ Internal subpaths (router request pipeline, element hydration modules) stay importable for tooling but carry no compatibility promise. The public type surface is explicit — no export-star seams on the ${v} line.`,
     footnoteCheckPre: 'Generated from repository truth by ',
@@ -290,10 +344,11 @@ const content = {
     headKind: '类别',
     railExports: '导出',
     railElements: '元素',
+    railOptions: '配置选项',
     s3Index: '03 / 导出参考',
     s3Title: '每一个记录在案的导出，都有锚点。',
     s3Copy:
-      '以下条目由参考生成器从各包的 exports map 枚举——名称、类别、稳定性级别与 JSDoc 摘要均为生成事实，绝不手工复制。锚点与该导出生成的搜索记录一一对应。',
+      '以下条目由参考生成器从各包的 exports map 枚举——名称、类别、稳定性级别、JSDoc 摘要、声明的签名与选项表均为生成事实，绝不手工复制。锚点与该导出生成的搜索记录一一对应。',
     headExport: '导出',
     headSummary: '摘要',
     headSource: '来源',
@@ -305,6 +360,15 @@ const content = {
     eventsLabel: '事件',
     slotsLabel: '插槽',
     partsLabel: 'CSS parts',
+    s5Index: '05 / 配置选项',
+    s5Title: '应用选项类型，逐成员一行。',
+    s5Copy:
+      '由配置入口所校验的应用选项类型渲染而成，因此这张表与真实配置面不可能漂移。嵌套选项组以点号路径呈现；类型列是声明的类型文本。',
+    headOption: '选项',
+    headOptionType: '类型',
+    headOptionRequired: '是否必填',
+    requiredLabel: '必填',
+    optionalLabel: '可选',
     footnote: (v: string) =>
       `※ 内部子路径（router 请求管线、element hydration 模块）仍可被工具导入，但不携带兼容性承诺。公开类型面是显式的——${v} 线上没有 export-star 缝隙。`,
     footnoteCheckPre: '由 ',
@@ -367,6 +431,7 @@ export default definePage(ReferencePage, {
           depth: '3',
         })),
         { id: 'api-reference', href: '#api-reference', label: t.railExports, depth: '3' },
+        { id: 'config-options', href: '#config-options', label: t.railOptions, depth: '3' },
         { id: 'element-reference', href: '#element-reference', label: t.railElements, depth: '3' },
       ],
       s1Index: t.s1Index,
@@ -388,7 +453,17 @@ export default definePage(ReferencePage, {
       headExport: t.headExport,
       headSummary: t.headSummary,
       headSource: t.headSource,
-      referenceEntries: projectReferenceEntries(),
+      referenceEntries: projectReferenceEntries({
+        requiredLabel: t.requiredLabel,
+        optionalLabel: t.optionalLabel,
+      }),
+      s5Index: t.s5Index,
+      s5Title: t.s5Title,
+      s5Copy: t.s5Copy,
+      headOption: t.headOption,
+      headOptionType: t.headOptionType,
+      headOptionRequired: t.headOptionRequired,
+      configOptions: projectConfigOptions(t.requiredLabel, t.optionalLabel),
       s4Index: t.s4Index,
       s4Title: t.s4Title,
       s4Copy: t.s4Copy,

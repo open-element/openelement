@@ -13,6 +13,13 @@ export type UnsafeHtml = string & { readonly __unsafeHtml: unique symbol };
 
 // --- Component layer & hydration ----------------------------------
 
+/**
+ * The delivery layer a component belongs to: fully static DSD markup
+ * ('dsd-static'), DSD markup with a client island ('dsd-interactive'), a
+ * client-only island with no SSR output ('pure-island'), or a light-DOM
+ * element ('light-dom'). Recorded per component in the build manifest and
+ * consumed by the hydration scheduler.
+ */
 export type ComponentLayer = 'dsd-static' | 'dsd-interactive' | 'pure-island' | 'light-dom';
 
 /** Runtime list of supported hydration strategies; the single source of truth
@@ -67,6 +74,7 @@ export interface OpenElementBuildContextLike {
 
 // --- Routing types ------------------------------------------------
 
+/** Special file kinds the route scanner recognizes by filename: `renderer` and `middleware`. */
 export type SpecialFileType = 'renderer' | 'middleware';
 
 /** Locale-aware resolved path contract. */
@@ -77,6 +85,13 @@ export interface LocalePath {
   isDefaultLocalePath: boolean;
 }
 
+/**
+ * Application shell declaration: `false` disables the shell entirely,
+ * `'default'` uses the built-in shell, and the object form names a tag with the
+ * module path that defines it (`import`, resolved like a
+ * {@link FrameworkOptions.middleware.use} entry) plus the compiled shell
+ * properties the router injects per route.
+ */
 export type AppShellConfig = false | 'default' | {
   tagName: string;
   import: string;
@@ -84,6 +99,13 @@ export type AppShellConfig = false | 'default' | {
 };
 type LayoutsConfig = Record<string, AppShellConfig | undefined>;
 
+/**
+ * One route admitted by the scanner: URL `path`, source `filePath`, the
+ * route `type`, the generated variable name (`varName`) the entry binds it to,
+ * and the optional registration tag. {@link RouteEntry.definePage} and
+ * {@link RouteEntry.hasEnhancedForms} carry the two source-derived admission
+ * facts the generated entries branch on.
+ */
 export interface RouteEntry {
   path: string;
   filePath: string;
@@ -131,6 +153,16 @@ export interface RouteEntry {
  */
 export type Middleware = (request: Request, next: () => Promise<Response>) => Promise<Response>;
 
+/**
+ * The adapter-facing framework options: where routes, islands and components
+ * live, which renderer serializes pages, the application shell and layout
+ * declarations, the document `<html>`/head injection channels, and the
+ * request-time middleware switches.
+ *
+ * Every field is optional; the adapter applies its documented default. This is
+ * the type an application config file's default export is checked against, so
+ * the rendered option table and the actual config surface cannot drift.
+ */
 export interface FrameworkOptions {
   /**
    * Page renderer selection (Beta.2.2, #1339). EXPLICIT, never inferred:
@@ -142,21 +174,30 @@ export interface FrameworkOptions {
    * `appShell: false` (no compiled shell); the build fails closed otherwise.
    */
   renderer?: 'native' | 'lit';
+  /** Directory the route scanner walks, relative to the Vite root. Defaults to `app/routes`. */
   routesDir?: string;
+  /** Directory island modules are discovered in. Defaults to `app/islands`. */
   islandsDir?: string;
+  /** Directory non-route components live in. Defaults to `app/components`. */
   componentsDir?: string;
+  /** Extra package names whose island modules the build admits, e.g. `['@openelement/ui']`. */
   packageIslands?: string[];
+  /** Application shell declaration; `false` disables the shell, `'default'` uses the built-in one. */
   appShell?: AppShellConfig;
+  /** Per-layout shell declarations keyed by layout name. */
   layouts?: LayoutsConfig;
   /** Build mode. 'ssg' (default) generates static HTML. */
   mode?: 'ssg';
   /** @dangerous injected as-is, only use with controlled content */
   headExtras?: string;
+  /** Document `<html>` attributes: the `lang` the document declares and the default `<title>`. */
   html?: {
     lang?: string;
     title?: string;
   };
+  /** Document head/body injection channels: external stylesheets, scripts, and trusted raw head fragments. */
   inject?: {
+    /** Stylesheets linked into the document head; each entry is an href or a link record with integrity/crossorigin/attrs. */
     stylesheets?: Array<
       | string
       | {
@@ -166,6 +207,7 @@ export interface FrameworkOptions {
         attrs?: Record<string, string | number | boolean>;
       }
     >;
+    /** Scripts emitted into the document; each entry is a src or a script record with type/async/defer/integrity/crossorigin/attrs. */
     scripts?: Array<
       | string
       | {
@@ -186,13 +228,17 @@ export interface FrameworkOptions {
      */
     headFragments?: string[];
   };
+  /** SSR bundling switches; `noExternal` forces the named packages through the SSR bundle instead of an external import. */
   ssr?: {
     noExternal?: (string | RegExp)[];
   };
+  /** Island defaults applied to every island the build discovers. */
   island?: {
     upgradeStrategy?: HydrationStrategy;
   };
+  /** Build output switches: the output directory and the advisory manifest budgets. */
   build?: {
+    /** Output directory for the build artifacts. Defaults to `dist`. */
     outDir?: string;
     /**
      * Advisory only: exceeded budgets print build-manifest warnings and never
@@ -205,14 +251,18 @@ export interface FrameworkOptions {
       pageKB?: number;
     };
   };
+  /** Enable the View Transitions API for client navigations. Defaults to true. */
   viewTransition?: boolean;
+  /** Speculation Rules emission: `true` uses framework defaults, or pass prerender/prefetch URL lists, exclusions and an eagerness. */
   speculation?: boolean | {
     prerender?: string[];
     prefetch?: string[];
     exclude?: string[];
     eagerness?: 'immediate' | 'moderate' | 'conservative';
   };
+  /** Request-time middleware switches, composed outside the framework handler. */
   middleware?: {
+    /** Enable the built-in CORS middleware. */
     cors?: boolean;
     /**
      * Static CORS allowlist data, serialized into the generated entry as JSON.
@@ -228,9 +278,13 @@ export interface FrameworkOptions {
      * with `corsOrigin`.
      */
     corsOriginModule?: string;
+    /** Emit and honor a per-request id header. */
     requestId?: boolean;
+    /** Log each request through the built-in logger. */
     logger?: boolean;
+    /** Attach the built-in security response headers. */
     securityHeaders?: boolean;
+    /** Content-Security-Policy emission: the policy string, nonce generation, and report-only mode. */
     csp?: {
       policy?: string;
       nonce?: boolean;
@@ -251,8 +305,19 @@ export interface FrameworkOptions {
 
 // --- Compatibility types ------------------------------------------
 
+/**
+ * How far a discovered tag may participate in the build: 'ssr-capable' renders
+ * and hydrates, 'client-only' ships to the browser without server output,
+ * 'experimental-dom' is admitted with a downgraded guarantee, and 'rejected'
+ * fails the build.
+ */
 export type CompatibilityTier = 'ssr-capable' | 'client-only' | 'rejected' | 'experimental-dom';
 
+/**
+ * The per-tag verdict the compatibility scanner records: the tier a discovered
+ * tag was classified as, the human-readable `reason`, where the tag was found
+ * (`source`), and the SSR/DSD/hydration facts the verdict was derived from.
+ */
 export interface CompatibilityClassification {
   tagName: string;
   tier: CompatibilityTier;
