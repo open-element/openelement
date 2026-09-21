@@ -9,6 +9,45 @@ lives in:
 - [`docs/release/release-state.json`](./docs/release/release-state.json)
 - [`docs/release/public-interface-snapshot.json`](./docs/release/public-interface-snapshot.json)
 
+## 1.0.0-alpha.2
+
+**Constitutional-enforcement train: the alpha.1 review's fail-closed and
+single-source findings are fixed, and the compiled `when` grammar grows to
+the full admitted set.** Published to npm as `1.0.0-alpha.2` under the
+`@alpha` dist-tag.
+
+- **Element — conditional grammar (#1372)**: `when` regions accept `>`, `>=`,
+  `<`, `<=` against a finite numeric literal; strict `===`/`!==` against
+  number, string, or boolean literals (no cross-type coercion — `1` never
+  matches `"1"`); and bare `this.<property>` truthiness with negation.
+  Ternaries were already two-branch regions and now compose with the widened
+  operators. All three executors evaluate conditions through one shared
+  module (`condition-holds.ts`); the operator/literal space is closed by one
+  predicate shared by both wire validators; the convergence guard pins the
+  new invariant. The showcase island re-baseline is recorded honestly
+  (78,176 → 79,199 raw bytes, +1.31%).
+- **Element — security (#1373)**: `meta.tags` attribute names are validated
+  against the canonical `isSafeAttributeName` and fail the render closed
+  (`UNSAFE_META_ATTR_NAME`); CMS-fed metadata can no longer smuggle
+  attribute injection through name grammar.
+- **Element — correctness (#1374, #1375)**: the each-region item-key
+  derivation is one shared typed function (number `1` and string `"1"` keep
+  distinct identity from SSR through claim); runtime update-phase errors
+  route into the kernel error boundary instead of escaping into the signal
+  writer's stack, with retain-and-retry isolation semantics.
+- **Tooling (#1376, #1377, #1378)**: `deno task verify` is gate:ci-equivalent
+  and pinned by a contract test; local agent-workspace directories are
+  ignored and git hooks are a documented setup prerequisite; the Router
+  npm README states the build-time Deno-host requirement for `./vite` and
+  `./cli/*`.
+- **Site (#1379, #1380)**: the roadmap publish-state derives from
+  `release-state.json` (P6); the README comparison's Fresh row states the
+  niche argument with dated stall facts.
+- **CI hygiene (#1400, interim #1402)**: doc-figures chunk-raw rows carry the
+  ±1% cross-runner tolerance; site-e2e retries a single flake per test.
+  Investigations open: doc-figures determinism (#1401), job timeouts and
+  flake management (#1402), content-dates pre-push hook (#1405).
+
 ## 1.0.0-alpha.1
 
 **New repository baseline for Element and Router, published to npm as
