@@ -4,7 +4,7 @@
  * Every failure raised by the authoring surface (`definePage`,
  * `defineIslandConfig`) and the serve CLI carries a stable code, a phase and
  * a severity, exactly like the element package's `OpenElementError` contract
- * (ADR-0053). Before this module those throws were bare `Error`s, so a host
+ * (decision 0053). Before this module those throws were bare `Error`s, so a host
  * could not classify a failure, and the CLI could not decide what to show
  * without pattern-matching message text.
  *

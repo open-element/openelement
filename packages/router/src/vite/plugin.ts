@@ -169,7 +169,7 @@ export function createOpenPlugin(
   // fragments + structured stylesheets/scripts). It is output, not input: a
   // re-validation pass must never see it, or the `<script>` tags this plugin
   // generates from `inject.scripts` would be rejected as raw user markup
-  // (www/vite.config.ts is exactly that shape). Keep the user's raw
+  // (this repository's own site vite config is exactly that shape). Keep the user's raw
   // `headExtras` string separately as the only re-validation input.
   let rawHeadExtras: string | undefined = options.headExtras;
   const initialHead = computeHeadExtras(paramsFromRawHead(options, rawHeadExtras));

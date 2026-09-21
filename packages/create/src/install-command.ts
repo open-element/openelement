@@ -5,7 +5,7 @@
  * The command is data about this CLI, so it lives beside the CLI: `cli.ts`
  * prints it in its usage output, the site's documentation generator inlines it
  * into the guides and the homepage, and the install-command gate
- * (www/tools/generate-install-command.ts --check) fails when any curated copy
+ * (the site's install-command generator --check) fails when any curated copy
  * in the repository differs from this string. There is no second spelling to
  * drift.
  *

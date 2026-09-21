@@ -6,7 +6,7 @@ import { ERROR_PREFIX } from '@openelement/element/authoring';
  * import from @openelement/router without pulling Vite tooling into the runtime
  * graph.
  *
- * v0.44 (ADR-0143): a route module's default export is the COMPILED page
+ * v0.44 (decision 0143): a route module's default export is the COMPILED page
  * element class itself — `@element('page-home') export default class
  * HomePage extends OpenElement { ... }` produced by the
  * `open:compiled-element` transform. `definePage(Class, descriptor?)`
@@ -22,12 +22,12 @@ import type { HydrationStrategy } from '@openelement/element/authoring';
 import { authoringError, IslandErrorCode, PageErrorCode } from './internal/error-codes.ts';
 
 /**
- * Where a page renders (#609, ADR-0123):
+ * Where a page renders (#609, decision 0123):
  * - `'static'` (default when renderIntent.mode is unset): prerendered at
  *   build time by SSG. A page exporting an action may stay static — a hybrid
  *   page whose prerendered GET is served from the static artifact while its
  *   action POST is dispatched to the generated server entry at request time
- *   (ADR-0120 amendment, 2026-09-16).
+ *   (decision 0120 amendment, 2026-09-16).
  * - `'dynamic'`: skipped by prerendering and rendered per request through
  *   the generated `dist/server` entry, running the route loader on every
  *   request.
@@ -42,7 +42,7 @@ interface PageRouteIntent {
   id?: string;
   params?: readonly string[];
   /**
-   * Named layout selection (ADR-0123): a string picks one of the
+   * Named layout selection (decision 0123): a string picks one of the
    * `openElement({ layouts })` entries by name (unknown names fall back to
    * the default shell); `false` renders the page without any app shell.
    * Unset means the default shell.
@@ -71,7 +71,7 @@ export class OpenElementRedirect extends OpenElementError {
   readonly status: number;
 
   constructor(location: string | URL, status = 302) {
-    // ADR-0121 §3: only real redirect statuses — a non-3xx "redirect" is a
+    // decision 0121 §3: only real redirect statuses — a non-3xx "redirect" is a
     // response the browser never follows, silently stranding the mutation.
     if (!REDIRECT_STATUSES.has(status)) {
       throw new OpenElementError(
@@ -128,7 +128,7 @@ export function isOpenElementRedirect(error: unknown): error is OpenElementRedir
       (error as { name?: unknown }).name === 'OpenElementRedirect' &&
       typeof (error as { location?: unknown }).location === 'string' &&
       typeof (error as { status?: unknown }).status === 'number' &&
-      // ADR-0121 (#583): the duck-typed branch honors the same whitelist —
+      // decision 0121 (#583): the duck-typed branch honors the same whitelist —
       // a shaped object must not smuggle an arbitrary status into the
       // redirect channel.
       REDIRECT_STATUSES.has((error as { status: number }).status)
@@ -148,7 +148,7 @@ export function isOpenElementNotFound(error: unknown): error is OpenElementNotFo
 }
 
 /**
- * Expected-failure channel for actions (0.42.0-alpha.2, ADR-0120): validation
+ * Expected-failure channel for actions (0.42.0-alpha.2, decision 0120): validation
  * failures RETURN `fail(status, data)` — never throw — so the server can
  * answer 422 with the form re-rendered and the submitted values echoed back.
  * Thrown values keep the exception channel (redirect/notFound/error page).
@@ -240,7 +240,7 @@ export type JsonValue =
 export type StructuredDataEntry = { readonly [key: string]: JsonValue };
 
 /**
- * Page <head> meaning declared by a route descriptor (v0.44, ADR-0143;
+ * Page <head> meaning declared by a route descriptor (v0.44, decision 0143;
  * canonical/alternates added in Beta.2.2, #1326; structured data added in
  * Beta.2.3). Either a static object or — via PageHeadResolver — resolved per
  * render from the request-scoped context by resolvePageDocument
@@ -280,7 +280,7 @@ export interface PageHead {
  * compiled page can render must pass through here: the compiled render() only
  * reads `this.<property>`, so the projector is the single deterministic seam
  * that maps loader data, action data, params and request onto the page's
- * compiled properties (v0.44, ADR-0143).
+ * compiled properties (v0.44, decision 0143).
  */
 export interface PagePropsContext<
   Data = unknown,
@@ -312,7 +312,7 @@ export type PagePropsProjector<
  * page's compiled properties. Its presence declares that the page's compiled
  * markup carries an error variant (the generated entry renders the page with
  * these props and status 500 — the POST/GET error-boundary channel of
- * ADR-0121 §7); without it the generic status page answers.
+ * decision 0121 §7); without it the generic status page answers.
  */
 export type PageErrorProjector<
   Data = unknown,
@@ -475,7 +475,7 @@ export function definePage<
       );
     }
   }
-  // ADR-0121 (#572): validate the mode at definition time — a typo like
+  // decision 0121 (#572): validate the mode at definition time — a typo like
   // 'dynmaic' must not silently prerender a request-time page.
   const renderMode = descriptor?.renderIntent?.mode ?? 'static';
   if (renderMode !== 'static' && renderMode !== 'dynamic') {
@@ -547,7 +547,7 @@ export interface IslandConfig {
   dsd?: boolean;
   /**
    * Hydration strategy — same values as `IslandOptions.hydrate` on the
-   * element package (`packages/element/src/internal/protocol/island.ts`):
+   * element package (`the element/src/internal/protocol/island.ts`):
    * 'load' | 'idle' | 'visible' | 'media' | 'only'.
    */
   hydrate?: IslandDeliveryStrategy;

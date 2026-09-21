@@ -21,7 +21,7 @@ deno task dev
 ```
 
 The version `@alpha` resolves to is registered in
-`docs/release/release-state.json` (currently `1.0.0-alpha.2`, a new baseline —
+`the tracked release-state manifest` (currently `1.0.0-alpha.2`, a new baseline —
 not a 0.x upgrade, with no migration path from 0.x). Pin that exact version
 when reproducibility matters (verify against the live registry with
 `npm view @openelement/create dist-tags.alpha`):
@@ -35,6 +35,8 @@ minimumDependencyAge (~24h) refuses packages published within the last day.
 
 The generated starter pins the exact `@openelement/*` versions it was built
 from in its `deno.json` import map.
+
+The canonical install command is exported from `@openelement/create/install-command` (one builder, every documented copy derives from it).
 
 ## Do not run the bin under Node (`npx`)
 

@@ -62,17 +62,18 @@ The 1.0 baseline intentionally starts at the compiled class model. Historic
 The package root is the authoring surface. Every other subpath is a deliberate
 facade for one job; none of them names an `internal/` module.
 
-| Subpath                                | Import it for                                                                                                                   |
-| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| `@openelement/element`                 | Authoring: `OpenElement`, `element`/`property`, signals, `ErrorBoundary`, `StyleSheet`, HTML escaping, `trustedHtml`.           |
-| `@openelement/element/jsx-runtime`     | Automatic JSX runtime target (`jsxImportSource`); typecheck-only — compiled output never calls the factories, they fail closed. |
-| `@openelement/element/jsx-dev-runtime` | Development JSX runtime target; same typecheck-only, fail-closed contract.                                                      |
-| `@openelement/element/authoring`       | Runtime guards shared by authoring layers (tag names, dangerous keys, error class, hydration strategies, action headers).       |
-| `@openelement/element/html`            | Pure document helpers: `escapeHtml`/`escapeAttr`, `wrapInDocument`, `trustedHtml` — no runtime kernel in the graph.             |
-| `@openelement/element/logger`          | The shared structured logger (`createLogger`, `createWarnScope`, `warnOnce`) without pulling in the compiled runtime.           |
-| `@openelement/element/build-utils`     | Build orchestration for adapters: JSON formatting, tag/path helpers, `SsrRenderError`, island transforms, runtime adapters.     |
-| `@openelement/element/compiler`        | Compiler tooling **inside a build process**: the TSX-to-Part-Program semantic core plus the Vite plugin boundary.               |
-| `@openelement/element/vite`            | The standalone Element authoring plugin (`element()`), for builds that do not use Router.                                       |
+| Subpath                                | Import it for                                                                                                                                                                |
+| -------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `@openelement/element`                 | Authoring: `OpenElement`, `element`/`property`, signals, `ErrorBoundary`, `StyleSheet`, HTML escaping, `trustedHtml`.                                                        |
+| `@openelement/element/jsx-runtime`     | Automatic JSX runtime target (`jsxImportSource`); typecheck-only — compiled output never calls the factories, they fail closed.                                              |
+| `@openelement/element/jsx-dev-runtime` | Development JSX runtime target; same typecheck-only, fail-closed contract.                                                                                                   |
+| `@openelement/element/authoring`       | Runtime guards shared by authoring layers (tag names, dangerous keys, error class, hydration strategies, action headers).                                                    |
+| `@openelement/element/html`            | Pure document helpers: `escapeHtml`/`escapeAttr`, `wrapInDocument`, `trustedHtml` — no runtime kernel in the graph.                                                          |
+| `@openelement/element/logger`          | The shared structured logger (`createLogger`, `createWarnScope`, `warnOnce`) without pulling in the compiled runtime.                                                        |
+| `@openelement/element/build-utils`     | Build orchestration for adapters: JSON formatting, tag/path helpers, `SsrRenderError`, island transforms, runtime adapters.                                                  |
+| `@openelement/element/compiler`        | Compiler tooling **inside a build process**: the TSX-to-Part-Program semantic core plus the Vite plugin boundary.                                                            |
+| `@openelement/element/vite`            | The standalone Element authoring plugin (`element()`), for builds that do not use Router.                                                                                    |
+| `@openelement/element/client-only`     | The fresh-DOM runtime WITHOUT the existing-DOM claim executor — selected by the Router for pages where no island can hydrate server DOM. Same public surface, ~9 KB smaller. |
 
 `compiler` and `vite` are host-side build entries: they import the TypeScript
 compiler API (and Vite, for `vite`) and must never be reached from
