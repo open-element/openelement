@@ -586,3 +586,51 @@ Deno.test('#1374: a genuine duplicate each key still fails closed on both execut
   );
   assertStringIncludes(claimError.message, 'duplicate key');
 });
+
+/** #1372: the widened operator set must hold across SSR/fresh/claim parity. */
+Deno.test('#1372: equals and truthy conditions hold through SSR/fresh/claim', () => {
+  function equalsProgram(): unknown {
+    return testProgram({
+      tag: 'oe-1372-equals',
+      template: [{ k: 'el', tag: 'div', attrs: [], children: [{ k: 'part', index: 0 }] }],
+      parts: [{
+        k: 'when',
+        index: 0,
+        signal: 'status',
+        test: { signal: 'status', op: 'equals', value: 'pending' },
+        on: [{ k: 'text', value: 'PENDING' }],
+        off: [{ k: 'text', value: 'SETTLED' }],
+      }],
+    });
+  }
+  function truthyProgram(): unknown {
+    return testProgram({
+      tag: 'oe-1372-truthy',
+      template: [{ k: 'el', tag: 'div', attrs: [], children: [{ k: 'part', index: 0 }] }],
+      parts: [{
+        k: 'when',
+        index: 0,
+        signal: 'ready',
+        test: { signal: 'ready', op: 'truthy', value: false },
+        on: [{ k: 'text', value: 'LOADING' }],
+        off: [{ k: 'text', value: 'READY' }],
+      }],
+    });
+  }
+
+  // Strict string equality: on while equal, off after the write flips it.
+  const status = new Sig('pending');
+  const eq = receiveAndClaim(equalsProgram(), { signals: { status } }, { signals: { status } });
+  assertStringIncludes(eq.html, 'PENDING');
+  status.value = 'done';
+  assertStringIncludes(eq.root.innerHTML, 'SETTLED');
+  eq.instance.dispose();
+
+  // Negated truthiness: Boolean(value) === false while the signal is empty.
+  const ready = new Sig('');
+  const tr = receiveAndClaim(truthyProgram(), { signals: { ready } }, { signals: { ready } });
+  assertStringIncludes(tr.html, 'LOADING');
+  ready.value = 'loaded';
+  assertStringIncludes(tr.root.innerHTML, 'READY');
+  tr.instance.dispose();
+});

@@ -364,23 +364,43 @@ Deno.test('compiled-element v1 - unsupported syntax fails closed with located di
     assertStringIncludes(ctx.messages[0], 'OEC9011');
   });
 
-  await t.step('conditions outside the seed operator fail closed', () => {
-    const source = [
-      "import { element, OpenElement, property } from '@openelement/element';",
-      "@element('oe-proof-unsupported-condition')",
-      'export class UnsupportedCondition extends OpenElement {',
-      '  @property({ reflect: false }) count = 0;',
-      '  render() { return <div>{this.count === 1 ? <p>one</p> : <p>other</p>}</div>; }',
-      '}',
-    ].join('\n');
-    const ctx = failingContext();
-    assertThrows(
-      () => transform.call(ctx, source, '/project/app/islands/unsupported-condition.tsx'),
-      Error,
-      'finite numeric literal',
-    );
-    assertStringIncludes(ctx.messages[0], 'OEC9013');
-  });
+  await t.step(
+    '=== ternary conditions compile; non-literal comparisons still fail closed (#1372)',
+    () => {
+      // The old fixture (`this.count === 1 ? … : …`) failed only because `===`
+      // was outside the seed operator set; with #1372 it is a valid program.
+      const admitted = [
+        "import { element, OpenElement, property } from '@openelement/element';",
+        "@element('oe-proof-equals-ternary')",
+        'export class EqualsTernary extends OpenElement {',
+        '  @property({ reflect: false }) count = 0;',
+        '  render() { return <div>{this.count === 1 ? <p>one</p> : <p>other</p>}</div>; }',
+        '}',
+      ].join('\n');
+      const okCtx = failingContext();
+      transform.call(okCtx, admitted, '/project/app/islands/equals-ternary.tsx');
+      assertEquals(okCtx.messages.length, 0, '=== ternary condition should compile (#1372)');
+
+      // The right-hand side must stay a literal: comparing two properties is
+      // outside the grammar and fails closed.
+      const rejected = [
+        "import { element, OpenElement, property } from '@openelement/element';",
+        "@element('oe-proof-non-literal-condition')",
+        'export class NonLiteralCondition extends OpenElement {',
+        '  @property({ reflect: false }) count = 0;',
+        '  @property({ reflect: false }) limit = 10;',
+        '  render() { return <div>{this.count > this.limit && <p>over</p>}</div>; }',
+        '}',
+      ].join('\n');
+      const ctx = failingContext();
+      assertThrows(
+        () => transform.call(ctx, rejected, '/project/app/islands/non-literal-condition.tsx'),
+        Error,
+        'OEC9013',
+      );
+      assertStringIncludes(ctx.messages[0], 'OEC9013');
+    },
+  );
 
   await t.step(
     'list Regions admit multi-field item slots and fail closed on non-item expressions',

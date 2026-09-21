@@ -59,6 +59,18 @@ export const openElement = defineIslandConfig({ hydrate: 'idle', ssr: true, dsd:
 
 `hydrate` 决定浏览器何时 import 该模块——`'load'` 用于导航、主题这类首屏就需要的控件，`'idle'` 留给其余可以等待的，`'visible'` 给随着滚动进入视口才重要的组件，`'only'` 给跳过 SSR 的浏览器专用组件。构建会记录哪些 island 属于哪个页面，因此页面只引用它能用到的 chunk，永远到不了的 island 永远不会被拉取。
 
+## 条件区域与语法边界
+
+条件区域（conditional region）把 JSX 里的条件编译进 Part Program，而不是把一段比较逻辑随 JavaScript 下发。编译器恰好接受以下形式，每条都是一个 `@property` 与一个字面量的比较：
+
+- `{this.count > 5 && <p>over</p>}` —— 用 `>`、`>=`、`<`、`<=` 与有限数字比较（信号值经 `Number()` 强制转换）。
+- `{this.status === 'pending' && <Spinner />}` —— 与数字、字符串或布尔字面量做严格 `===` / `!==`。相等判断刻意保持严格：`1` 永远不等于 `"1"`。
+- `{this.ready && <Dashboard />}` 与 `{!this.ready && <Spinner />}` —— 裸真值判断，可取反，按 `Boolean(value)` 求值。
+
+三元表达式是同一个测试的双分支写法：`{this.status === 'pending' ? <Spinner /> : <Done />}`。
+
+语法为什么有界、哪些东西刻意留在界外：条件必须能降级成一个可序列化的测试，让服务端序列化器、全新挂载与既有 DOM 接管（claim）三种模式在不下发 JavaScript 的前提下得出完全一致的求值——这正是三种模式字节一致的前提。属性之间的比较（`this.count > this.limit`）、宽松相等（`==`）以及任意一侧的算术都在语法之外，构建时以 `OEC9013` fail closed；惯用做法是用一个计算好的 `@property` 或 getter 承载已经算完的布尔值，再用裸真值形式去测试它。
+
 其余的一切——内容、布局、文档——都不需要客户端行为，保持静态 DSD，完全不发 JavaScript。这个分界就是运行时的全部故事：浏览器代码只存在于显式声明它的模块里。
 
 ## 另见

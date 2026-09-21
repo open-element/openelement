@@ -23,6 +23,8 @@ import {
 import { type CompiledElementSourceMap, SourceMapSegmentBuilder } from './source-map.ts';
 import {
   type CompiledElementMetadata,
+  conditionLiteralAllowed,
+  type ConditionOperator,
   type PartProgramV1,
   type ProgramCondition,
   type ProgramDependencyRecord,
@@ -179,6 +181,20 @@ function unwrapExpression(expr: ts.Expression): ts.Expression {
 }
 
 /** Return a JSON-safe literal, or undefined when the expression is not literal. */
+/**
+ * Token→operator map for when-Region conditions (#1372). Only strict
+ * equality tokens are admitted; `==`/`!=` fail closed with OEC9013 so the
+ * coercion difference cannot ride in unnoticed.
+ */
+const CONDITION_TOKEN_OPS: Partial<Record<ts.SyntaxKind, ConditionOperator>> = {
+  [ts.SyntaxKind.GreaterThanToken]: 'greater-than',
+  [ts.SyntaxKind.GreaterThanEqualsToken]: 'greater-or-equal',
+  [ts.SyntaxKind.LessThanToken]: 'less-than',
+  [ts.SyntaxKind.LessThanEqualsToken]: 'less-or-equal',
+  [ts.SyntaxKind.EqualsEqualsEqualsToken]: 'equals',
+  [ts.SyntaxKind.ExclamationEqualsEqualsToken]: 'not-equals',
+};
+
 function literalValue(expr: ts.Expression, sf: ts.SourceFile): SerializableValue | undefined {
   const value = unwrapExpression(expr);
   if (ts.isStringLiteral(value) || ts.isNoSubstitutionTemplateLiteral(value)) return value.text;
@@ -1058,20 +1074,33 @@ class Lowering {
 
   private parseCondition(expr: ts.Expression, near: ts.Node): ProgramCondition {
     const condition = unwrapExpression(expr);
+    // Bare `this.<property>` truthiness and its negation (#1372): the only
+    // nullary forms. Everything else must be `this.<prop> <op> <literal>`.
+    const bareSignal = this.fieldAccess(condition);
+    if (bareSignal) return { signal: bareSignal, op: 'truthy', value: true };
+    if (
+      ts.isPrefixUnaryExpression(condition) &&
+      condition.operator === ts.SyntaxKind.ExclamationToken
+    ) {
+      const negatedSignal = this.fieldAccess(unwrapExpression(condition.operand));
+      if (negatedSignal) return { signal: negatedSignal, op: 'truthy', value: false };
+    }
     if (ts.isBinaryExpression(condition)) {
       const signal = this.fieldAccess(condition.left);
       const value = literalValue(condition.right, this.sf);
+      const op = CONDITION_TOKEN_OPS[condition.operatorToken.kind];
       if (
-        signal && typeof value === 'number' && Number.isFinite(value) &&
-        condition.operatorToken.kind === ts.SyntaxKind.GreaterThanToken
+        signal && op && value !== undefined &&
+        typeof value !== 'object' && value !== null && conditionLiteralAllowed(op, value)
       ) {
-        return { signal, op: 'greater-than', value };
+        return { signal, op, value };
       }
     }
     this.fail(
       near,
       'OEC9013',
-      'conditional Regions support only this.<property> > a finite numeric literal',
+      'conditional Regions support this.<property> compared with a numeric literal (>, >=, <, <=), ' +
+        'a number/string/boolean equality (===, !==), or a bare this.<property> (optionally negated) truthiness test',
     );
   }
 

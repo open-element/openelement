@@ -21,6 +21,9 @@ import { escapeText } from './escape-text.ts';
 // Canonical each-Region item-key derivation (#1374) — single source shared
 // with the server serializer; do not reintroduce a private copy.
 import { eachItemKey } from './each-key.ts';
+// Canonical when-Region condition evaluation (#1372) — single source shared
+// with the server serializer; do not reintroduce a private comparison.
+import { conditionHolds } from './condition-holds.ts';
 // Canonical attr/class/style value coercions — single source of truth,
 // shared with the server serializer (server/shared.ts) so all three
 // execution modes stay byte-identical; do not reintroduce private copies.
@@ -385,7 +388,9 @@ interface EachRegion {
 }
 
 function whenActive(part: ProgramWhenPart, value: unknown): boolean {
-  return Number(value) > part.test.value;
+  // Canonical condition evaluation (#1372) — shared with the server
+  // serializer; do not reintroduce a private comparison.
+  return conditionHolds(part.test, value);
 }
 
 function mountNodes(

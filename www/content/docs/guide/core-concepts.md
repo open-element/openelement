@@ -59,6 +59,18 @@ export const openElement = defineIslandConfig({ hydrate: 'idle', ssr: true, dsd:
 
 `hydrate` selects when the browser imports the module — `'load'` for controls needed at first paint such as navigation and theme, `'idle'` for everything else that can wait, `'visible'` for components that only matter as they scroll into view, and `'only'` for browser-only components that skip SSR. The build records which islands belong to which page, so a page references only the chunks it can use and an island that is never reached is never fetched.
 
+## Conditional regions and the grammar bound
+
+A conditional region lowers a JSX conditional into the compiled Part Program instead of shipping a comparison in JavaScript. The compiler admits exactly these forms, each comparing one `@property` against a literal:
+
+- `{this.count > 5 && <p>over</p>}` — ordering with `>`, `>=`, `<`, `<=` against a finite number (the signal value is coerced with `Number()`).
+- `{this.status === 'pending' && <Spinner />}` — strict `===` / `!==` against a number, string, or boolean literal. Equality is strict on purpose: `1` never matches `"1"`.
+- `{this.ready && <Dashboard />}` and `{!this.ready && <Spinner />}` — bare truthiness, optionally negated, via `Boolean(value)`.
+
+A ternary is the two-branch spelling of the same test: `{this.status === 'pending' ? <Spinner /> : <Done />}`.
+
+Why the grammar is bounded, and what is deliberately outside it: a condition must lower to a serializable test the server serializer, a fresh mount, and the existing-DOM claim can all evaluate identically without shipping JavaScript — that is what keeps the three modes byte-identical. Comparisons between two properties (`this.count > this.limit`), loose equality (`==`), and arithmetic on either side stay outside the grammar and fail closed at build time with `OEC9013`; the idiomatic path is a computed `@property` or getter that holds the already-computed boolean, which the bare-truthiness form then tests.
+
 Everything else — content, layout, documentation — needs no client behavior and stays static DSD, shipping no JavaScript at all. That split is the whole runtime story: browser code exists only where a module declared it.
 
 ## See also

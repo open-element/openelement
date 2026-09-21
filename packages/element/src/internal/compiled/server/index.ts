@@ -41,6 +41,9 @@ import { escapeText } from '../escape-text.ts';
 // Canonical each-Region item-key derivation (#1374): single source shared
 // with the runtime executors; do not reintroduce a private copy.
 import { eachItemKey, EachKeyError } from '../each-key.ts';
+// Canonical when-Region condition evaluation (#1372): single source shared
+// with the runtime executors; do not reintroduce a private comparison.
+import { conditionHolds } from '../condition-holds.ts';
 
 export type { CompiledProgramHost, CompiledSignalLike } from './shared.ts';
 export { assertCompiledProgram, CompiledProgramValidationError } from './shared.ts';
@@ -348,11 +351,13 @@ function whenIsActive(
   value: unknown,
 ): boolean {
   try {
-    return Number(value) > part.test.value;
+    // Canonical condition evaluation (#1372) — shared with the client
+    // executors; do not reintroduce a private comparison.
+    return conditionHolds(part.test, value);
   } catch {
     throw new CompiledProgramValidationError(
       `parts[${part.index}].signal`,
-      'conditional dependency cannot be converted to a number',
+      'conditional dependency cannot be evaluated',
     );
   }
 }

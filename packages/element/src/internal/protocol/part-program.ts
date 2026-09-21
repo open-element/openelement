@@ -219,12 +219,45 @@ export interface ProgramEventPart {
   location: ProgramLocation;
 }
 
-export type ConditionOperator = 'greater-than';
+export type ConditionOperator =
+  | 'greater-than'
+  | 'greater-or-equal'
+  | 'less-than'
+  | 'less-or-equal'
+  | 'equals'
+  | 'not-equals'
+  | 'truthy';
 
 export interface ProgramCondition {
   signal: string;
   op: ConditionOperator;
-  value: number;
+  value: number | string | boolean;
+}
+
+/**
+ * Operator/literal compatibility for when-Region tests (issue #1372). Both
+ * wire validators (this module and the server serializer's shared validator)
+ * close the space through this one predicate:
+ * - ordering operators require a finite numeric literal;
+ * - `equals`/`not-equals` admit a finite number, string, or boolean;
+ * - `truthy` admits exactly `true` or `false` (the recorded expectation).
+ */
+export function conditionLiteralAllowed(op: unknown, value: unknown): boolean {
+  switch (op) {
+    case 'greater-than':
+    case 'greater-or-equal':
+    case 'less-than':
+    case 'less-or-equal':
+      return typeof value === 'number' && Number.isFinite(value);
+    case 'equals':
+    case 'not-equals':
+      if (typeof value === 'number') return Number.isFinite(value);
+      return typeof value === 'string' || typeof value === 'boolean';
+    case 'truthy':
+      return value === true || value === false;
+    default:
+      return false;
+  }
 }
 
 export interface ProgramWhenPart {
@@ -611,10 +644,12 @@ function validateLocation(value: unknown, where: string): asserts value is Progr
 
 function validateCondition(value: unknown, where: string): asserts value is ProgramCondition {
   if (
-    !isRecord(value) || !isIdentifier(value.signal) || value.op !== 'greater-than' ||
-    typeof value.value !== 'number' || !Number.isFinite(value.value)
+    !isRecord(value) || !isIdentifier(value.signal) ||
+    !conditionLiteralAllowed(value.op, value.value)
   ) {
-    fail(`${where} supports only greater-than with a finite numeric value`);
+    fail(
+      `${where} supports this.<property> compared with a numeric literal (>, >=, <, <=), a number/string/boolean equality (===, !==), or a bare this.<property> truthiness test`,
+    );
   }
   validateKeys(value, ['signal', 'op', 'value'], where);
 }
