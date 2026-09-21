@@ -301,18 +301,24 @@ Deno.test('starter islands are single-module compiled classes (#1092, #939)', ()
 });
 
 Deno.test('starter global style block scopes tokens under :root', () => {
-  const config = readTemplate('vite.config.ts');
+  // #1411: tokens live in the app/styles/tokens.css convention file that the
+  // config loader inlines into <head>; vite.config.ts carries no CSS at all.
+  const tokens = readTemplate('app/styles/tokens.css');
   // Bare `--token:value` declarations at stylesheet top level are dropped by
   // CSS error recovery and take the following body rule down with them.
-  assert(config.includes('<style>:root{'), config);
-  assert(config.includes('--gray-0:#f8f9fa'), config);
+  assert(tokens.includes(':root {'), tokens);
+  assert(tokens.includes('--gray-0: #f8f9fa'), tokens);
+  assertFalse(
+    readTemplate('vite.config.ts').includes('headFragments'),
+    'vite.config.ts must not carry style/CSS strings (#1411)',
+  );
 });
 
 Deno.test('starter pages own their styles via static styles, not the global baseline', () => {
-  const config = readTemplate('vite.config.ts');
-  // The vite.config globalStyle keeps only true globals (design tokens +
-  // body/::selection baseline); per-page rules moved into each page's
-  // `static styles` (inlined into SSR as @scope(<page-tag>) for light roots).
+  const tokens = readTemplate('app/styles/tokens.css');
+  // The tokens file keeps only true globals (design tokens + body/::selection
+  // baseline); per-page rules live in each page's `static styles` (inlined into
+  // SSR as @scope(<page-tag>) for light roots).
   for (
     const tag of [
       'index-page',
@@ -323,11 +329,11 @@ Deno.test('starter pages own their styles via static styles, not the global base
       'contact-page',
     ]
   ) {
-    assertFalse(config.includes(`${tag}{`), `globalStyle must not scope rules under ${tag}`);
-    assertFalse(config.includes(`${tag} `), `globalStyle must not scope rules under ${tag}`);
+    assertFalse(tokens.includes(`${tag}{`), `the tokens file must not scope rules under ${tag}`);
+    assertFalse(tokens.includes(`${tag} `), `the tokens file must not scope rules under ${tag}`);
   }
-  assert(config.includes('body{margin:0;'), config);
-  assert(config.includes('::selection{'), config);
+  assert(tokens.includes('body {'), tokens);
+  assert(tokens.includes('::selection {'), tokens);
 
   const styles = readTemplate('app/components/page-styles.ts');
   for (
@@ -400,9 +406,10 @@ Deno.test('starter blog is a pair of compiled page routes', () => {
 });
 
 Deno.test('starter owns a concrete --brand token without a UI package dependency', () => {
-  const viteConfig = readTemplate('vite.config.ts');
-  const brand = viteConfig.match(/--brand:(#[0-9a-fA-F]{3,8})/)?.[1];
-  assert(brand, 'starter vite.config.ts must define a --brand token');
+  // #1411: the token sheet is the convention file the config loader inlines.
+  const tokens = readTemplate('app/styles/tokens.css');
+  const brand = tokens.match(/--brand:\s*(#[0-9a-fA-F]{3,8})/)?.[1];
+  assert(brand, 'starter app/styles/tokens.css must define a --brand token');
 });
 
 Deno.test('TypeScript starter sources are pack-safe template payloads', () => {

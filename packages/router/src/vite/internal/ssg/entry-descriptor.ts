@@ -106,6 +106,12 @@ export function buildEntryDescriptor(
     upgradeStrategy?: HydrationStrategy;
     appShell?: FrameworkOptions['appShell'];
     layouts?: FrameworkOptions['layouts'];
+    /**
+     * #1411: emit the default-CORS production advisory into the generated
+     * entry. The dev server passes false so a first `deno task dev` run is
+     * warning-free; production builds keep the warning (default true).
+     */
+    warnOnDefaultCors?: boolean;
     /** Declared project locales; absent keeps the single-locale descriptor shape. */
     i18n?: { locales: string[]; defaultLocale: string };
   } = {},
@@ -230,7 +236,11 @@ export function buildEntryDescriptor(
     middleware.push({
       kind: 'cors',
       comment: '3. CORS - Web Standards (no process.env)',
-      config: { corsOrigin, corsOriginModule },
+      config: {
+        corsOrigin,
+        corsOriginModule,
+        warnOnDefaultCors: options.warnOnDefaultCors !== false,
+      },
     });
   }
   if (mw?.securityHeaders !== false) {

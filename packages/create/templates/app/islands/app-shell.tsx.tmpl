@@ -1,12 +1,15 @@
 /**
  * app-shell — compiled layout island (v0.44, ADR-0143).
  *
- * The server entry renders this class around every page
- * (appShell: { tagName, import, props } in vite.config.ts) and injects the
- * page host before the closing tag; the static <slot> projects it. The shell
- * is also a 'load' island: the compiled style scope applies `static styles`
- * when the element activates client-side (the serializer never inlines
- * styles into DSD), so the shell chrome is styled as soon as it hydrates.
+ * The server entry renders this class around every page, registered by the
+ * `app/islands/app-shell.tsx` file convention; `openelement.config.ts`
+ * overrides it with `appShell: { import, props }`. The entry injects the page
+ * host before the closing tag and the static <slot> projects it. Deleting
+ * this file is supported: pages still render, just without the shell chrome.
+ * The shell is also a 'load' island: the compiled style scope applies
+ * `static styles` when the element activates client-side (the serializer
+ * never inlines styles into DSD), so the shell chrome is styled as soon as
+ * it hydrates.
  *
  * The compiler grammar v1 has no data-driven per-item attribute slots, so the
  * header nav is static authoring here — edit the links below directly
@@ -23,7 +26,9 @@ export default class AppShell extends OpenElement {
   static override styles = shellStyles;
 
   /**
-   * Filled from appShell.props in vite.config.ts at render time.
+   * Filled from `appShell.props` at render time; a convention app-shell
+   * carries no props, so set them in openelement.config.ts to change this
+   * (appShell: { import: './app/islands/app-shell.tsx', props: { siteName } }).
    * Attribute-backed (site-name) so the SSR'd value survives the client claim:
    * attribute: false properties reset to their compiled default on claim and
    * the drift check would fail closed.

@@ -7,7 +7,13 @@
  * Internal only: called by openPipeline() and the @openelement/router umbrella.
  */
 
-import type { Alias, Plugin, ViteDevServer } from 'vite';
+import {
+  type Alias,
+  type ConfigEnv,
+  loadConfigFromFile,
+  type Plugin,
+  type ViteDevServer,
+} from 'vite';
 import type {
   FrameworkOptions,
   OpenElementPackageManifest,
@@ -19,12 +25,19 @@ import type { IslandDecl } from './internal/protocol/ssg.ts';
 import { join, relative, resolve } from '../internal/host-path.ts';
 import { formatError, OpenElementError } from '@openelement/element';
 import { createLogger } from '@openelement/element';
+import { hasInlineFrameworkOptions } from '../config.ts';
+import { detectAppConfigFile, resolveAppConfig } from './app-config.ts';
 
 const log = createLogger('router-vite');
 
 import { lazyHonoDevServer } from './dev-server.ts';
 import { OpenElementBuildContext } from './build-context.ts';
-import { findWorkspaceRoot, generateWorkspaceAliases } from './workspace-alias.ts';
+import {
+  detectWorkspaceAliasHijack,
+  findWorkspaceRoot,
+  generateWorkspaceAliases,
+  workspaceAliasHijackError,
+} from './workspace-alias.ts';
 import { normalizeViteAliases } from './alias-utils.ts';
 import { buildPlugin } from './build.ts';
 import type { EntryDescriptor } from './internal/ssg/index.ts';
@@ -92,6 +105,50 @@ function mergeAliasOptions(
 }
 
 /**
+ * Build the validated legacy head channel, then prepend the opt-in alpha.4
+ * critical-assets channel. Both become one immutable document artifact; no
+ * runtime renderer or client fallback is introduced by the convention.
+ */
+function computeHeadExtras(options: FrameworkOptions): {
+  headExtras: string | undefined;
+  allowHeadExtrasScripts: boolean;
+} {
+  const legacyHead = buildHeadExtras(options);
+  const criticalHead = buildCriticalHeadExtras(options);
+  const headExtrasParts = [
+    criticalHead.headExtras,
+    legacyHead.headExtras ? minifyCriticalStyleBlocks(legacyHead.headExtras) : undefined,
+  ].filter((part): part is string => Boolean(part));
+  return {
+    headExtras: headExtrasParts.length > 0 ? headExtrasParts.join('\n  ') : undefined,
+    allowHeadExtrasScripts: legacyHead.allowHeadExtrasScripts ||
+      criticalHead.allowHeadExtrasScripts,
+  };
+}
+
+/**
+ * The head-input view of a resolved options object: everything the user
+ * configured, with the plugin's own serialized output replaced by the user's
+ * raw `headExtras` (see the note in createOpenPlugin).
+ */
+function paramsFromRawHead(
+  options: FrameworkOptions,
+  rawHeadExtras: string | undefined,
+): FrameworkOptions {
+  return { ...options, headExtras: rawHeadExtras };
+}
+
+/** Internal-only third argument of {@linkcode createOpenPlugin}. */
+export interface CreateOpenPluginInternalOptions {
+  /**
+   * Whether the caller supplied framework options inline. `openElement()`
+   * forwards the user object verbatim, so it can be derived; `openPipeline()`
+   * builds a full options object from its own config shape and must state it.
+   */
+  inlineOptionsPresent?: boolean;
+}
+
+/**
  * This is the core build plugin implementation. It is NOT part of the
  * public API. Use `openPipeline()` from @openelement/router instead.
  *
@@ -100,24 +157,24 @@ function mergeAliasOptions(
  *
  * @param options - Framework options
  * @param externalCtx - Optional shared OpenElementBuildContext (used by openElement() umbrella)
+ * @param internal - Internal wiring switches (never user-facing)
  * @internal
  */
 export function createOpenPlugin(
   options: FrameworkOptions & { ssg?: SsgBehaviorOptions } = {},
   externalCtx?: OpenElementBuildContext,
+  internal: CreateOpenPluginInternalOptions = {},
 ): Plugin[] {
-  // Build the validated legacy head channel, then prepend the opt-in alpha.4
-  // critical-assets channel. Both become one immutable document artifact; no
-  // runtime renderer or client fallback is introduced by the convention.
-  const legacyHead = buildHeadExtras(options);
-  const criticalHead = buildCriticalHeadExtras(options);
-  const headExtrasParts = [
-    criticalHead.headExtras,
-    legacyHead.headExtras ? minifyCriticalStyleBlocks(legacyHead.headExtras) : undefined,
-  ].filter((part): part is string => Boolean(part));
-  const headExtras = headExtrasParts.length > 0 ? headExtrasParts.join('\n  ') : undefined;
-  const allowHeadExtrasScripts = legacyHead.allowHeadExtrasScripts ||
-    criticalHead.allowHeadExtrasScripts;
+  // `resolvedOptions.headExtras` is the plugin's SERIALIZED head channel (head
+  // fragments + structured stylesheets/scripts). It is output, not input: a
+  // re-validation pass must never see it, or the `<script>` tags this plugin
+  // generates from `inject.scripts` would be rejected as raw user markup
+  // (www/vite.config.ts is exactly that shape). Keep the user's raw
+  // `headExtras` string separately as the only re-validation input.
+  let rawHeadExtras: string | undefined = options.headExtras;
+  const initialHead = computeHeadExtras(paramsFromRawHead(options, rawHeadExtras));
+  let headExtrasValue = initialHead.headExtras;
+  let allowHeadExtrasValue = initialHead.allowHeadExtrasScripts;
 
   const resolvedOptions: FrameworkOptions & {
     allowHeadExtrasScripts?: boolean;
@@ -127,11 +184,85 @@ export function createOpenPlugin(
     routesDir: options.routesDir || DEFAULT_ROUTES_DIR,
     islandsDir: options.islandsDir || DEFAULT_ISLANDS_DIR,
     componentsDir: options.componentsDir || DEFAULT_COMPONENTS_DIR,
-    headExtras,
-    allowHeadExtrasScripts,
+    headExtras: headExtrasValue,
+    allowHeadExtrasScripts: allowHeadExtrasValue,
   };
 
+  const inlineOptionsPresent = internal.inlineOptionsPresent ??
+    hasInlineFrameworkOptions(options as Record<string, unknown>);
+
   const ctx = externalCtx || new OpenElementBuildContext(resolvedOptions);
+
+  /**
+   * Apply the config-file/convention resolution on top of the inline options.
+   * Every downstream plugin captured `resolvedOptions` (and `ctx.options`) by
+   * reference, so one in-place merge reaches dev, the SSG phases and the
+   * client build; the head channel is recomputed from the merged options so
+   * invalid fragments keep failing closed.
+   */
+  const applyResolvedOptions = (merged: FrameworkOptions): void => {
+    if (merged.headExtras !== undefined) rawHeadExtras = merged.headExtras;
+    Object.assign(resolvedOptions, merged);
+    Object.assign(ctx.options, merged);
+    const head = computeHeadExtras(paramsFromRawHead(resolvedOptions, rawHeadExtras));
+    headExtrasValue = head.headExtras;
+    allowHeadExtrasValue = head.allowHeadExtrasScripts;
+    resolvedOptions.headExtras = headExtrasValue;
+    resolvedOptions.allowHeadExtrasScripts = allowHeadExtrasValue;
+  };
+
+  /**
+   * #1411: `openelement.config.ts` is the framework options' single home. The
+   * file is loaded through Vite's own TS config loader (native Deno import —
+   * zero new dependencies), so dev, `cli/build` and the SSG phases read one
+   * options object, and an edit to it re-resolves the build.
+   */
+  const appConfigPath = (root: string): string | null => detectAppConfigFile(root);
+  let resolvedConfigFile: string | null = null;
+  // Vite's command for this run ('build' | 'serve'). Drives the dev/production
+  // split of the default-CORS advisory (#1411).
+  let produceMode: 'build' | 'serve' = 'build';
+
+  const resolveAndApplyAppConfig = async (root: string, env: {
+    command: 'build' | 'serve';
+    mode: string;
+  }): Promise<void> => {
+    produceMode = env.command;
+    resolvedConfigFile = appConfigPath(root);
+    let importedConfig: unknown;
+    if (resolvedConfigFile !== null) {
+      const loaded = await loadConfigFromFile(
+        {
+          mode: env.mode,
+          command: env.command,
+          isSsrBuild: false,
+          isPreview: false,
+        } as ConfigEnv,
+        resolvedConfigFile,
+        root,
+        'silent',
+        undefined,
+        'native',
+      );
+      importedConfig = loaded?.config;
+    }
+    const resolved = resolveAppConfig({
+      root,
+      configFile: resolvedConfigFile,
+      importedConfig,
+      inlineOptions: options as Record<string, unknown>,
+      inlineOptionsPresent,
+    });
+    applyResolvedOptions(resolved.options);
+    if (resolved.conventions.length > 0) {
+      log.info(
+        `openelement.config.ts conventions: ${
+          resolved.conventions.map((use) => `${use.path} (${use.provides})`).join(', ')
+        }`,
+      );
+    }
+  };
+
   // Per-plugin-instance compiler state only. It is used to distinguish a
   // compatible behavior edit from a Part Program shape edit during HMR; no
   // module-global cache can leak a program between Vite builds. The shape
@@ -152,6 +283,13 @@ export function createOpenPlugin(
     const { sourceMap: _sourceMap, ...shape } = program as Record<string, unknown>;
     return JSON.stringify(shape);
   };
+
+  // #1415 Finding A: an app scaffolded inside a framework checkout declares
+  // registry versions that the workspace aliases below would silently replace
+  // with the checkout's sources — a build that reports success while resolving
+  // a different framework version. Refuse before any alias is generated.
+  const hijack = detectWorkspaceAliasHijack(Deno.cwd());
+  if (hijack) throw workspaceAliasHijackError(hijack);
 
   // Pre-generate workspace aliases (sync, once, cached in ctx).
   // Phase 1 config, Phase 2 client build, and Phase 3 SSG build
@@ -200,12 +338,17 @@ export function createOpenPlugin(
       packageManifests,
       cemClassifications: ctx.phase1.cemClassifications,
       foreignTags: ctx.phase1.foreignTags,
-      headExtras: resolvedOptions.headExtras,
-      allowHeadExtrasScripts,
+      headExtras: headExtrasValue,
+      allowHeadExtrasScripts: allowHeadExtrasValue,
       html: resolvedOptions.html,
       upgradeStrategy: resolvedOptions.island?.upgradeStrategy || 'idle',
       appShell: resolvedOptions.appShell,
       layouts: resolvedOptions.layouts,
+      // #1411: the default-CORS production advisory belongs to a production
+      // build. Repeating it on every dev first run trained users to ignore it,
+      // so the dev server (command 'serve') generates the same entry without
+      // the warning; `cli/build` keeps it.
+      warnOnDefaultCors: produceMode !== 'serve',
       // Same source as the SSG descriptor: the dev/SSR entry must resolve
       // locales identically or dev and build disagree about `/zh/...` paths.
       i18n: ctx.plugins.i18nOptions ?? undefined,
@@ -293,7 +436,7 @@ export function createOpenPlugin(
     // lowering (see @openelement/element/compiler).
     enforce: 'pre',
 
-    config(userConfig) {
+    async config(userConfig, env) {
       if (userConfig.resolve?.alias) {
         ctx.phase1.userResolveAlias = mergeAliasOptions(
           userConfig.resolve.alias as Record<string, string> | Alias[],
@@ -308,6 +451,25 @@ export function createOpenPlugin(
       const normalizedAliases = normalizeViteAliases(aliases, Deno.cwd());
       if (normalizedAliases) {
         ctx.phase1.userResolveAlias = normalizedAliases;
+      }
+
+      // #1411: resolve `openelement.config.ts` + the file conventions before
+      // the aliases are frozen into this hook's return value, so the resolved
+      // options are visible to every later phase (SSG, client build) and to
+      // the plugin closure itself. The project root is the process cwd — the
+      // same anchor routesDir/islandsDir use.
+      try {
+        await resolveAndApplyAppConfig(Deno.cwd(), {
+          command: env?.command === 'serve' ? 'serve' : 'build',
+          mode: env?.mode ?? 'production',
+        });
+      } catch (error) {
+        // A config-file failure is a build failure, never a warning: the
+        // resolution is fail-closed by design (P6). Unit harnesses invoke this
+        // hook directly (no Vite plugin context), so `this.error` is optional.
+        const fail = (this as { error?: (message: string) => never } | undefined)?.error;
+        if (typeof fail === 'function') fail.call(this, formatError(error));
+        throw error;
       }
 
       return {
@@ -691,6 +853,29 @@ export function createOpenPlugin(
         server.watcher.on(event, onIslandChanged);
       }
       server.watcher.on('change', onSsrSourceChanged);
+      // #1411: `openelement.config.ts` is the framework options' home, so an
+      // edit to it must restart the dev process. Re-resolving in place cannot
+      // rebuild the already-emitted virtual entries and the Vite config this
+      // plugin returned, and a half-applied options object is exactly the
+      // "two homes" state the config file removes — fail closed by restarting.
+      const onAppConfigChanged = (file: string) => {
+        if (resolvedConfigFile === null || file !== resolvedConfigFile) return;
+        log.info(
+          `openelement.config.ts changed - restarting the dev server (Vite config is frozen per run)`,
+        );
+        const restart = (server as unknown as { restart?: () => unknown }).restart;
+        if (typeof restart === 'function') {
+          void restart.call(server);
+          return;
+        }
+        // No restart hook (older Vite): surface the need instead of serving
+        // stale options.
+        log.warn(
+          'Restart `deno task dev` to apply the new openelement.config.ts options.',
+        );
+      };
+      if (resolvedConfigFile !== null) server.watcher.add(resolvedConfigFile);
+      server.watcher.on('change', onAppConfigChanged);
       server.httpServer?.on('close', () => {
         if (rescanTimer) clearTimeout(rescanTimer);
         for (const event of ['add', 'change', 'unlink'] as const) {
@@ -698,6 +883,7 @@ export function createOpenPlugin(
           server.watcher.off(event, onIslandChanged);
         }
         server.watcher.off('change', onSsrSourceChanged);
+        server.watcher.off('change', onAppConfigChanged);
       });
     },
   };

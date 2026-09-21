@@ -24,7 +24,7 @@ The TypeScript and TSX blocks on this page are not sketches: CI type-checks them
 ## Step 1: Create the project
 
 ```bash
-deno run --allow-read --allow-write --allow-env --allow-net --deny-ffi --no-prompt --minimum-dependency-age 0 npm:@openelement/create@alpha my-app
+deno run -A npm:@openelement/create@alpha my-app
 cd my-app
 deno task dev
 ```

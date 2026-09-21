@@ -26,11 +26,43 @@ import {
   importRequestTimeServer,
   type RequestTimeServerModule,
 } from '../vite/internal/static-serve.ts';
+import {
+  detectAppConfigFile,
+  importAppConfigModule,
+  resolveAppConfig,
+} from '../vite/app-config.ts';
 
 const root = Deno.cwd();
 const distDir = join(root, DEFAULT_OUT_DIR);
 const serverEntry = join(distDir, 'server', 'index.js');
 const hostname = Deno.env.get('OPEN_ELEMENT_HOST') ?? '0.0.0.0';
+
+/**
+ * #1411: `cli/start` is the third reader of `openelement.config.ts`. It reads
+ * the file through the host runtime (a plain dynamic import) and never through
+ * Vite, so serving a built app needs no Vite config bundling. Nothing else in
+ * this CLI consumes framework options: `dist/` already carries the built
+ * document (head, shells, middleware) from the build-time resolution.
+ */
+async function loadProductionConfig(mode: ServeMode): Promise<void> {
+  const configFile = detectAppConfigFile(root);
+  if (configFile === null) return;
+  try {
+    const imported = await importAppConfigModule(configFile);
+    const resolved = resolveAppConfig({ root, configFile, importedConfig: imported });
+    // `start` is the deployment server, so an unconfigured CORS allowlist is a
+    // production concern there. `preview` is local-only: same silence as dev.
+    if (mode === 'start' && resolved.options.middleware?.corsOrigin === undefined) {
+      console.warn(
+        '[openElement start] middleware.corsOrigin is not configured: the built server only ' +
+          'reflects localhost origins. Set it in openelement.config.ts before deploying.',
+      );
+    }
+  } catch (error) {
+    console.error(formatError(error));
+    Deno.exit(1);
+  }
+}
 
 async function main(): Promise<void> {
   let parsed: { mode: ServeMode; rest: string[]; debug: boolean };
@@ -48,6 +80,8 @@ async function main(): Promise<void> {
     );
     Deno.exit(1);
   }
+
+  await loadProductionConfig(parsed.mode);
 
   if (parsed.mode === 'preview') {
     await runPreview(parsed.rest);

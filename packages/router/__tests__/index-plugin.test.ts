@@ -160,11 +160,12 @@ Deno.test('createOpenPlugin() allows scripts through structured inject.scripts',
 
 // ─── createOpenPlugin() config hook (captures userConfig.resolve.alias) ───
 
-Deno.test('createOpenPlugin() corePlugin.config captures resolve.alias', () => {
+Deno.test('createOpenPlugin() corePlugin.config captures resolve.alias', async () => {
   const plugins = createOpenPlugin();
   const corePlugin = plugins.find((p) => p.name === 'open:core')!;
   assertExists(corePlugin.config);
-  const result = (corePlugin.config as Function)({
+  // #1411: the hook is async (it loads openelement.config.ts).
+  const result = await (corePlugin.config as Function)({
     resolve: { alias: { '@/*': '/src/*' } },
   } as never);
   assertExists(result);
@@ -176,10 +177,10 @@ Deno.test('createOpenPlugin() corePlugin.config captures resolve.alias', () => {
   assertArrayIncludes(input, ['virtual:open-build-trigger']);
 });
 
-Deno.test('createOpenPlugin() corePlugin.config returns rollupOptions with build trigger input', () => {
+Deno.test('createOpenPlugin() corePlugin.config returns rollupOptions with build trigger input', async () => {
   const plugins = createOpenPlugin();
   const corePlugin = plugins.find((p) => p.name === 'open:core')!;
-  const result = (corePlugin.config as Function)({} as never) as Record<string, unknown>;
+  const result = await (corePlugin.config as Function)({} as never) as Record<string, unknown>;
   const build = result.build as Record<string, unknown>;
   const rollupOptions = build.rollupOptions as Record<string, unknown>;
   const input = rollupOptions.input as string[];
@@ -443,10 +444,10 @@ Deno.test('createOpenPlugin() inject.scripts escapes special chars in URLs', () 
 
 // ─── createOpenPlugin() config hook without resolve ──────────
 
-Deno.test('createOpenPlugin() corePlugin.config handles config without resolve', () => {
+Deno.test('createOpenPlugin() corePlugin.config handles config without resolve', async () => {
   const plugins = createOpenPlugin();
   const corePlugin = plugins.find((p) => p.name === 'open:core')!;
-  const result = (corePlugin.config as Function)({} as never);
+  const result = await (corePlugin.config as Function)({} as never);
   assertExists(result);
   assertExists((result as Record<string, unknown>).build);
 });
