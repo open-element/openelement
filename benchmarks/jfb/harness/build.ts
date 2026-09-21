@@ -73,10 +73,11 @@ export const COMPARATOR_SANDBOXES: ComparatorSandboxSpec[] = [
  */
 const SANDBOX_BUILD_SCRIPT = String.raw`
 import * as esbuild from 'esbuild';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 
 
 const impl = process.argv[2];
-Deno.mkdirSync('dist', { recursive: true });
+mkdirSync('dist', { recursive: true });
 
 async function bundle(entry, extra = {}) {
   await esbuild.build({
@@ -125,13 +126,13 @@ if (impl === 'preact-signals') {
     babelrc: false,
     configFile: false,
   });
-  Deno.writeTextFileSync('src/main.compiled.js', result.code);
+  writeFileSync('src/main.compiled.js', result.code);
   await bundle(['src/main.compiled.js']);
 } else if (impl === 'vue') {
   // Stock: vite + @vitejs/plugin-vue. Compile the SFC with the official
   // compiler-sfc and bundle; stock src/main.js mounts #app unchanged.
   const sfc = await import('@vue/compiler-sfc');
-  const source = Deno.readTextFileSync('src/App.vue');
+  const source = readFileSync('src/App.vue', 'utf8');
   const { descriptor, errors } = sfc.parse(source, { filename: 'App.vue' });
   if (errors.length) throw new Error('SFC parse failed: ' + errors.join('; '));
   const script = sfc.compileScript(descriptor, { id: 'jfb' });
@@ -144,18 +145,18 @@ if (impl === 'preact-signals') {
   if (template.errors.length) throw new Error('template compile failed: ' + template.errors.join('; '));
   const scriptCode = script.content.replace('export default', 'const __sfc__ =');
   const renderCode = template.code.replace('export function render', 'function render');
-  Deno.writeTextFileSync('src/App.compiled.js', scriptCode + '\n' + renderCode + '\n__sfc__.render = render;\nexport default __sfc__;\n');
-  const main = Deno.readTextFileSync('src/main.js').replace("'./App.vue'", "'./App.compiled.js'");
-  Deno.writeTextFileSync('src/main.bundled.js', main);
+  writeFileSync('src/App.compiled.js', scriptCode + '\n' + renderCode + '\n__sfc__.render = render;\nexport default __sfc__;\n');
+  const main = readFileSync('src/main.js', 'utf8').replace("'./App.vue'", "'./App.compiled.js'");
+  writeFileSync('src/main.bundled.js', main);
   await bundle(['src/main.bundled.js']);
 } else if (impl === 'svelte') {
   // Stock: rollup + rollup-plugin-svelte.
   const { compile } = await import('svelte/compiler');
-  const source = Deno.readTextFileSync('src/Main.svelte');
+  const source = readFileSync('src/Main.svelte', 'utf8');
   const compiled = compile(source, { filename: 'Main.svelte', css: 'injected' });
-  Deno.writeTextFileSync('src/Main.compiled.js', compiled.js.code);
-  const main = Deno.readTextFileSync('src/main.js').replace('"./Main.svelte"', '"./Main.compiled.js"');
-  Deno.writeTextFileSync('src/main.bundled.js', main);
+  writeFileSync('src/Main.compiled.js', compiled.js.code);
+  const main = readFileSync('src/main.js', 'utf8').replace('"./Main.svelte"', '"./Main.compiled.js"');
+  writeFileSync('src/main.bundled.js', main);
   await bundle(['src/main.bundled.js']);
 } else {
   throw new Error('unknown comparator ' + impl);

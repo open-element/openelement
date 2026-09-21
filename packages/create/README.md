@@ -19,12 +19,12 @@ deno task dev
 ```
 
 The version `@alpha` resolves to is registered in
-`docs/release/release-state.json` (currently `1.0.0-alpha.1`, a new baseline —
+`docs/release/release-state.json` (currently `1.0.0-alpha.2`, a new baseline —
 not a 0.x upgrade, with no migration path from 0.x). Pin that exact version
 when reproducibility matters:
 
 ```bash
-deno run --allow-read --allow-write --allow-env --allow-net --deny-ffi --no-prompt --minimum-dependency-age 0 npm:@openelement/create@1.0.0-alpha.1 my-app
+deno run --allow-read --allow-write --allow-env --allow-net --deny-ffi --no-prompt --minimum-dependency-age 0 npm:@openelement/create@1.0.0-alpha.2 my-app
 ```
 
 `--minimum-dependency-age 0` is needed because Deno's default
