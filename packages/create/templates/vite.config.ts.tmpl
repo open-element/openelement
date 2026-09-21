@@ -3,12 +3,9 @@ import { defineConfig } from 'vite';
 
 // Vite configuration only. Framework options live in openelement.config.ts —
 // the plugin reads that file itself, so this stays `plugins: [openElement()]`.
+// The JSX transform is owned by the plugin's compiler pass (TSX → Part
+// Program); nothing JSX-related needs configuring here.
 export default defineConfig({
   base: '/',
-  // Keep Vite's automatic JSX transform aligned with the workspace compiler.
-  esbuild: {
-    jsx: 'automatic',
-    jsxImportSource: '@openelement/element',
-  },
   plugins: [...openElement()],
 });

@@ -417,6 +417,10 @@ export const PACKED_PROBE_PERMISSIONS = [
   '--allow-net',
   '--allow-run',
   '--allow-sys',
+  // Playwright's Node-side polyfills assign Object.prototype.__proto__,
+  // which Deno disables by default (the probe hangs in waitForFunction
+  // without this; required for every Playwright-under-Deno probe).
+  '--unsafe-proto',
   '--deny-ffi',
   '--no-prompt',
 ] as const;
