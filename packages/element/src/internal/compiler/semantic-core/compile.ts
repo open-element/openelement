@@ -1091,7 +1091,7 @@ class Lowering {
       const op = CONDITION_TOKEN_OPS[condition.operatorToken.kind];
       if (
         signal && op && value !== undefined &&
-        typeof value !== 'object' && value !== null && conditionLiteralAllowed(op, value)
+        typeof value !== 'object' && conditionLiteralAllowed(op, value)
       ) {
         return { signal, op, value };
       }
