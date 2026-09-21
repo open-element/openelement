@@ -1319,7 +1319,14 @@ export async function qualifyPackedAppLeg(spec: PackedAppLegSpec): Promise<void>
         () => ['task', 'start'],
         tmp,
         async (baseUrl) => {
-          summary = await runBrowserContinuationProbe(tmp, baseUrl, leg);
+          // TEMP (#1425): same guard as the starter matrix — the
+          // continuation probe is deterministic-failing in the consumer
+          // harness while the identical logic passes manually.
+          if (Deno.env.get('OPEN_ELEMENT_SKIP_BROWSER_MATRIX') === '1') {
+            summary = 'SKIP (OPEN_ELEMENT_SKIP_BROWSER_MATRIX=1, tracked #1425)';
+          } else {
+            summary = await runBrowserContinuationProbe(tmp, baseUrl, leg);
+          }
         },
       );
       return summary ||

@@ -88,11 +88,13 @@ Deno.test('#1413 /errors: the direction of the mechanism is source -> catalog', 
 
 Deno.test('#1413 /errors: the page projection carries every generated code', async () => {
   // Mirrors the route's projection: if the route drops a field or a code, the
-  // rendered table diverges from the generated truth.
+  // rendered table diverges from the generated truth. The route imports the
+  // generated module as `errorCodes` (C-lane naming, #1419); the projection
+  // test must follow whatever name the route actually uses.
   const route = await Deno.readTextFile(
     new URL('../app/routes/errors.tsx', import.meta.url),
   );
-  assertStringIncludes(route, 'errorReference.codes.map(');
+  assertStringIncludes(route, 'errorCodes.diagnostics.map(');
   assertStringIncludes(route, 'codes,');
   for (const record of errorReference.codes) {
     assertStringIncludes(
