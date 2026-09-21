@@ -17,6 +17,11 @@ name: Requeue once
 #   - only a FAILED run is requeued;
 #   - only attempt 1 (so a second failure is a real failure, never a loop);
 #   - only AutoFlow CI (the shared gate), never the release workflow.
+# zizmor: ignore[dangerous-triggers] — audited 2026-09-21. The trigger class
+# is what the audit guards, but the escalation vector is structurally absent:
+# no checkout of the PR head, no secrets, `contents: read` + `actions: write`
+# scoped to the single re-run call, and workflow_run always evaluates this
+# DEFAULT-BRANCH copy, so a PR cannot rewrite the requeue logic (above).
 on:
   workflow_run:
     workflows: ['AutoFlow CI']
