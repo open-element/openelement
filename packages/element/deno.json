@@ -13,6 +13,7 @@
     "./client-only": "./src/client-only.ts",
     "./vite": "./src/vite.ts"
   },
+  "//": "ADR-0155 (docs/adr/ADR-0155-client-only-entry-subpath.md) governs the \"./client-only\" export above: it is the full public surface minus the compiled claim executor, pinned to the same publicShapeSha256 as \".\", and is deletable as one unit when its written retirement condition is met. Recorded as a JSON annotation key rather than a `//` comment because this manifest must stay strict JSON (tools/lib/package-graph.ts:122 fails loud on JSONC).",
   "imports": {
     "typescript": "npm:typescript@6.0.3"
   },
