@@ -12,7 +12,7 @@ The source tree is `1.0.0-alpha.1`, a new public baseline for Element and Router
 Requires **Deno 2.9+**. Create, run, and build:
 
 ```bash
-deno run --allow-read --allow-write --allow-env --allow-net --deny-ffi --no-prompt --minimum-dependency-age 0 npm:@openelement/create@alpha my-app
+deno run -A npm:@openelement/create@alpha my-app
 cd my-app
 deno task dev
 deno task build

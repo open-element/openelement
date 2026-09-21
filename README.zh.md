@@ -12,7 +12,7 @@ Element 将 JSX 编写的 Custom Element 编译为 Part Program，并统一用�
 需要 **Deno 2.9+**。创建、运行、构建：
 
 ```bash
-deno run --allow-read --allow-write --allow-env --allow-net --deny-ffi --no-prompt --minimum-dependency-age 0 npm:@openelement/create@alpha my-app
+deno run -A npm:@openelement/create@alpha my-app
 cd my-app
 deno task dev
 deno task build
