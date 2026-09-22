@@ -23,6 +23,59 @@ function fail(code: string, message: string): never {
   throw frameworkError(code, message, { phase: 'csr' });
 }
 
+/**
+ * The character data of a text-like node.
+ *
+ * `data` is the canonical accessor for `CharacterData` (`Text`, `Comment`,
+ * CDATA) and is what every DOM implementation — including the minimal facade
+ * the tests run against — exposes. `textContent` is the fallback for a node
+ * that only carries the newer accessor. Reading only `textContent` would treat
+ * a text node as empty wherever the property is absent, which is how a
+ * content test silently becomes a "strip it" decision.
+ */
+function characterData(node: Node): string {
+  const data = (node as { data?: unknown }).data;
+  if (typeof data === 'string') return data;
+  const text = (node as { textContent?: unknown }).textContent;
+  return typeof text === 'string' ? text : '';
+}
+
+/**
+ * True when a child node can only have come from rendered output.
+ *
+ * `childNodes.length > 0` was the original content test, and it counted
+ * formatting whitespace as content (#1381): a light-root element written as
+ * `<my-el>\n</my-el>`, or a parsed HTML file that puts the closing tag on its
+ * own line, carries a whitespace-only text node — which no compiled template
+ * begins with, so the claim walked straight into a mismatch and threw. A
+ * whitespace-only text node is not content: it is the author's (or the HTML
+ * formatter's) line break, and it is invisible either way.
+ *
+ * Everything else IS content and keeps the fail-closed path: an element, a
+ * comment (the serializer's dynamic anchors are comments), or a text node
+ * carrying visible characters — including a template that genuinely starts
+ * with authored text, which the claim must be given the chance to match.
+ */
+function isClaimableNode(node: Node): boolean {
+  if (node.nodeType !== 3) return true;
+  return characterData(node).trim() !== '';
+}
+
+/**
+ * Remove the formatting whitespace a fresh mount must not inherit.
+ *
+ * Called only after {@linkcode isClaimableNode} has established that the root
+ * holds no content, so every node being removed is whitespace-only. The
+ * runtime's own `createFreshDom` guard stays strict — a root with real content
+ * must never reach fresh creation — so the normalization belongs here, in the
+ * component that chose `fresh` after reading the root.
+ */
+function clearFormattingWhitespace(root: CompiledStyleRoot): void {
+  for (const node of [...root.childNodes]) {
+    if (!isClaimableNode(node)) root.removeChild(node);
+  }
+}
+
 export type CompiledRootMode = 'light' | 'open' | 'closed';
 
 /**
@@ -124,7 +177,14 @@ export class CompiledElementKernel {
       themeConnected = true;
       const styles = this.#options.styles;
       const styleCount = Array.isArray(styles) ? styles.length : styles ? 1 : 0;
-      const mode: CompiledActivationMode = root.childNodes.length > 0 ? 'claim' : 'fresh';
+      // Content decides, not a non-zero child count (#1381): formatting
+      // whitespace is not content, so a light root whose authored line breaks
+      // survived parsing still mounts fresh instead of failing a claim that
+      // could not match. Real content — an element, an anchor comment, or
+      // visible text — keeps the fail-closed claim path.
+      const hasContent = Array.from(root.childNodes).some(isClaimableNode);
+      const mode: CompiledActivationMode = hasContent ? 'claim' : 'fresh';
+      if (!hasContent && root.childNodes.length > 0) clearFormattingWhitespace(root);
       // Update-phase failures (#1375) land in the same element-local boundary
       // as connect failures: this element owns the Region subscriptions, so it
       // is the nearest boundary for their update errors.
