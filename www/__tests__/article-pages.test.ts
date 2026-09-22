@@ -39,6 +39,7 @@ const articleRoutes = [
   ['guide', 'error-handling', 'GuideErrorHandlingPage', 80],
   ['guide', 'getting-started', 'GuideGettingStartedPage', 1],
   ['guide', 'glossary', 'GuideGlossaryPage', 65],
+  ['guide', 'i18n', 'GuideI18nPage', 55],
   ['guide', 'recipe-form-actions', 'GuideRecipeFormActionsPage', 120],
   ['guide', 'recipe-theming', 'GuideRecipeThemingPage', 121],
   ['guide', 'recipe-island-strategies', 'GuideRecipeIslandStrategiesPage', 122],
