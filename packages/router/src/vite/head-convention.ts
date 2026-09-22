@@ -7,18 +7,22 @@
  * HTML in the config file.
  *
  * It is compiled INTO THE APP'S MODULE GRAPH, not read as text: the module may
- * import CSS with Vite's `?inline` suffix, import local helpers, and import
- * first-party packages (the tokens stylesheet of `@openelement/ui`, a site's own
- * stylesheet). The host's config loader cannot do that — `loadConfigFromFile`
+ * import CSS with Vite's `?inline` suffix and import local helpers and data
+ * modules. The host's config loader cannot do that — `loadConfigFromFile`
  * refuses a `?inline` CSS import (`Expected a JavaScript or TypeScript module,
  * but identified a Css module`), which is exactly why the head convention is a
- * module in the build graph rather than a config-file value.
+ * module compiled by Vite rather than a value read by the config loader.
+ *
+ * Resolution boundary: project-local files are compiled and inlined, while
+ * BARE specifiers are externalized and left to the host import map — the same
+ * contract the config file itself has (it imports `@openelement/router` by its
+ * bare name). Bundling package sources would drag decompiled-without-compiler
+ * component code into a data module, so the nested build deliberately does not
+ * inherit the app's workspace aliases.
  *
  * The module must not use host APIs (no Deno, no Node): it is evaluated during
  * the build and its output is data, so a runtime read would make the document
- * depend on the machine that built it. The nested build below runs with
- * `ssr.noExternal` so the emitted bundle is self-contained and importable in
- * the host process.
+ * depend on the machine that built it.
  *
  * The emitted value is validated and serialized by head-channel.ts: attribute
  * names, URL protocols and inline CSS all pass the same fail-closed checks as
@@ -26,6 +30,7 @@
  */
 
 import { existsSync } from '../internal/host-path.ts';
+import { isAbsolute } from '../internal/host-path.ts';
 import { join } from '../internal/host-path.ts';
 import { toFileUrl } from '../internal/host-path.ts';
 import { OpenElementError } from '@openelement/element/authoring';
@@ -40,12 +45,6 @@ export interface HeadConventionInput {
   root: string;
   /** Project-relative path of the head module. */
   relativePath: string;
-  /**
-   * The build's resolved alias list, so the head module resolves the app's own
-   * specifiers (the `@openelement/site-ui`-style aliases in vite.config.ts)
-   * exactly as the rest of the app does.
-   */
-  alias?: unknown;
 }
 
 /**
@@ -68,11 +67,6 @@ export async function resolveHeadConvention(
 
   const outDir = join(root, HEAD_CONVENTION_BUILD_DIR);
   const { build: viteBuild } = await import('vite');
-  // Vite's own alias shape, or null when the app has none.
-  const alias = (input.alias ?? null) as
-    | Array<{ find: string | RegExp; replacement: string }>
-    | Record<string, string>
-    | null;
   try {
     await viteBuild({
       configFile: false,
@@ -81,19 +75,24 @@ export async function resolveHeadConvention(
       // The head bundle is a build-time artifact: copying public/ would
       // duplicate every static asset next to it.
       publicDir: false,
-      resolve: alias ? { alias } : undefined,
       build: {
         ssr: true,
         outDir,
         emptyOutDir: true,
         rollupOptions: {
           input: { head: file },
+          // Bare specifiers stay EXTERNAL (the host import map resolves them,
+          // exactly as it resolves the config file's own `@openelement/router`
+          // import); project-local files and Vite's own virtual/`?inline`
+          // modules are compiled and inlined. Bundling a package's sources
+          // would drag component code — which needs the compiled-element
+          // transform — into a data module.
+          external: (id: string) =>
+            !id.startsWith('.') && !id.startsWith('/') &&
+            !id.startsWith('\0') && !isAbsolute(id),
           output: { format: 'esm', entryFileNames: '[name].js' },
         },
       },
-      // Bundle everything: the emitted file must import in the host process
-      // without inheriting this machine's import map.
-      ssr: { noExternal: true },
       esbuild: {
         jsx: 'automatic',
         jsxImportSource: '@openelement/element',

@@ -205,6 +205,11 @@ export function createOpenPlugin(
     if (merged.headExtras !== undefined) rawHeadExtras = merged.headExtras;
     Object.assign(resolvedOptions, merged);
     Object.assign(ctx.options, merged);
+    // Options that PROJECT into plugin state (the locale declaration) must be
+    // re-derived here: the context was constructed before the config file
+    // resolved, so its constructor-time derivation would keep the pre-file
+    // value and the build would emit a single-locale site.
+    ctx.refreshDerivedState();
     const head = computeHeadExtras(paramsFromRawHead(resolvedOptions, rawHeadExtras));
     headExtrasValue = head.headExtras;
     allowHeadExtrasValue = head.allowHeadExtrasScripts;
@@ -264,7 +269,6 @@ export function createOpenPlugin(
       const fragments = await resolveHeadConvention({
         root,
         relativePath: resolved.headConventionFile,
-        alias: ctx.phase1.userResolveAlias,
       });
       applyResolvedOptions({
         inject: {
