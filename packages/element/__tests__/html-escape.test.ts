@@ -1,4 +1,4 @@
-import { assertEquals, assertInstanceOf, assertThrows } from '@std/assert';
+import { assertEquals, assertInstanceOf } from '@std/assert';
 import { OpenElementError } from '../src/internal/core/errors.ts';
 import {
   escapeAttr,
@@ -299,6 +299,12 @@ Deno.test('wrapInDocument: non-JSON structured data entries fail closed', () => 
   // property is silently DROPPED by JSON.stringify) are rejected a layer up,
   // by the structured-data channel in @openelement/router/document; this
   // serializer throws for every input it cannot faithfully serialize.
+  //
+  // #1386 item 3: the rejection is an OpenElementError carrying
+  // OE_INVALID_STRUCTURED_DATA, not a bare TypeError — an argument-shape
+  // failure is classifiable by code like every other failure this package
+  // raises, so a caller correlates it with telemetry instead of testing the
+  // JavaScript error class.
   const circular: Record<string, unknown> = {};
   circular.self = circular;
   const cases: Array<[string, unknown[]]> = [
@@ -309,15 +315,18 @@ Deno.test('wrapInDocument: non-JSON structured data entries fail closed', () => 
     ['a circular value', [circular]],
   ];
   for (const [name, structuredData] of cases) {
-    assertThrows(
-      () =>
-        wrapInDocument('x', {
-          structuredData: structuredData as Array<Record<string, unknown>>,
-        }),
-      TypeError,
-      'structuredData',
-      name,
-    );
+    let thrown: unknown;
+    try {
+      wrapInDocument('x', {
+        structuredData: structuredData as Array<Record<string, unknown>>,
+      });
+    } catch (error) {
+      thrown = error;
+    }
+    assertInstanceOf(thrown, OpenElementError, name);
+    assertEquals(thrown.code, 'OE_INVALID_STRUCTURED_DATA', name);
+    assertEquals(thrown.phase, 'build', name);
+    assertEquals(thrown.message.includes('structuredData'), true, name);
   }
 });
 
@@ -364,7 +373,7 @@ Deno.test('wrapInDocument: unsafe meta.tags keys throw with a structured code (#
       thrown = e;
     }
     assertInstanceOf(thrown, OpenElementError, name);
-    assertEquals(thrown.code, 'UNSAFE_META_ATTR_NAME', name);
+    assertEquals(thrown.code, 'OE_UNSAFE_META_ATTRIBUTE', name);
     assertEquals(thrown.message.includes('unsafe meta attribute name'), true, name);
     assertEquals(thrown.recoverable, false, name);
   }

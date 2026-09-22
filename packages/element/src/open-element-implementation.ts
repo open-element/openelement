@@ -38,7 +38,7 @@
  * @module @openelement/element/open-element
  */
 
-import { OpenElementError } from './internal/core/errors.ts';
+import { FacadeErrorCode, OpenElementError } from './internal/core/errors.ts';
 import {
   applyPendingOwnValues,
   bindProgramHandlers,
@@ -160,7 +160,7 @@ function failMissingProgram(ctor: object): never {
       'In 0.44 every OpenElement component must pass through the OpenElement ' +
       'compiler (the @openelement/element/compiler open:compiled-element transform); ' +
       'the runtime JSX render path was removed.',
-    { code: 'OE_PROGRAM_MISSING', phase: 'csr' },
+    { code: FacadeErrorCode.PROGRAM_MISSING, phase: 'csr' },
   );
 }
 

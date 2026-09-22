@@ -10,6 +10,7 @@ import {
   assertExists,
   assertRejects,
   assertStringIncludes,
+  assertThrows,
 } from '@std/assert';
 import { join } from '@std/path';
 import { openElement } from '../src/vite/app-vite.ts';
@@ -92,9 +93,9 @@ async function renderUmbrellaEntry(
   }
 }
 
-Deno.test('openElement() html config reaches the generated entry document', async () => {
+Deno.test('openElement() head config reaches the generated entry document', async () => {
   // The document title/lang are only rendered once at least one route exists.
-  const code = await renderUmbrellaEntry({ html: { title: 'Test', lang: 'ja' } }, (tmp) => {
+  const code = await renderUmbrellaEntry({ head: { title: 'Test', lang: 'ja' } }, (tmp) => {
     Deno.mkdirSync(join(tmp, 'app', 'routes'), { recursive: true });
     Deno.writeTextFileSync(
       join(tmp, 'app', 'routes', 'index.ts'),
@@ -103,6 +104,17 @@ Deno.test('openElement() html config reaches the generated entry document', asyn
   });
   assertStringIncludes(code, '"Test"');
   assertStringIncludes(code, '"ja"');
+});
+
+Deno.test('openElement() rejects the retired inline html key (renamed to head)', () => {
+  // The inline face spells the head channel `head`; `html` was the pre-alpha.4
+  // spelling and is not carried by OpenElementOptions. It must fail closed
+  // instead of being silently dropped, which would ship a default document head.
+  assertThrows(
+    () => openElement({ html: { title: 'silently ignored' } } as Parameters<typeof openElement>[0]),
+    Error,
+    'head',
+  );
 });
 
 Deno.test('openElement() middleware.corsOrigin reaches the generated entry', async () => {

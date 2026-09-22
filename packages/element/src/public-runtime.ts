@@ -15,7 +15,7 @@ import type {
   CompiledPropertyMetadata,
   PartProgram,
 } from './internal/protocol/part-program.ts';
-import { OpenElementError } from './internal/core/errors.ts';
+import { FacadeErrorCode, OpenElementError } from './internal/core/errors.ts';
 import { signal } from './internal/signal/index.ts';
 import type { CompiledProgramHost } from './internal/compiled/server/index.ts';
 import type { RenderOutput } from './internal/protocol/render.ts';
@@ -123,7 +123,7 @@ function failUncompiled(ctor: object, tag: string): never {
     `[openElement] <${tag}> (${classNameOf(ctor)}) has no compiled Part Program. ` +
       'renderDsd only serializes classes produced by the 0.44 compiler ' +
       '(@openelement/element/compiler open:compiled-element transform).',
-    { code: 'OE_PROGRAM_MISSING', phase: 'ssr' },
+    { code: FacadeErrorCode.PROGRAM_MISSING, phase: 'ssr' },
   );
 }
 
@@ -187,7 +187,7 @@ function renderDsdAtDepth(
   if (depth > 8) {
     throw new OpenElementError(
       '[openElement] nested element expansion exceeded the depth bound; cyclic component composition is not renderable.',
-      { code: 'OE_SSR_COMPOSITION_DEPTH', phase: 'ssr' },
+      { code: FacadeErrorCode.COMPOSITION_DEPTH, phase: 'ssr' },
     );
   }
   const resolvedClass = (options.componentClass ??
@@ -201,7 +201,7 @@ function renderDsdAtDepth(
       }) found no compiled class: pass options.componentClass or register the tag. ` +
         'The 0.44 serializer reads the compiled statics from the class and fails ' +
         'closed for unregistered components.',
-      { code: 'OE_PROGRAM_MISSING', phase: 'ssr' },
+      { code: FacadeErrorCode.PROGRAM_MISSING, phase: 'ssr' },
     );
   }
   const program = resolvedClass.__partProgram;
@@ -210,7 +210,7 @@ function renderDsdAtDepth(
   if (typeof input === 'string' && input !== tag) {
     throw new OpenElementError(
       `[openElement] renderDsd tag "${input}" does not match the compiled program tag "${tag}".`,
-      { code: 'OE_PROGRAM_MISSING', phase: 'ssr' },
+      { code: FacadeErrorCode.PROGRAM_MISSING, phase: 'ssr' },
     );
   }
 
@@ -244,7 +244,7 @@ function renderDsdAtDepth(
       throw new OpenElementError(
         `[openElement] <${tag}> computed property "${record.name}" has no generated factory. ` +
           'Rebuild the component through the 0.44 compiler.',
-        { code: 'OE_COMPUTED_FACTORY_MISSING', phase: 'ssr' },
+        { code: FacadeErrorCode.COMPUTED_FACTORY_MISSING, phase: 'ssr' },
       );
     }
     signals[record.name] = factory(signals);
@@ -278,7 +278,7 @@ function renderDsdAtDepth(
       if (!nestedClass?.__partProgram) {
         throw new OpenElementError(
           `[openElement] admitted nested component <${nested.tag}> is not registered with a compiled Part Program.`,
-          { code: 'OE_PROGRAM_MISSING', phase: 'ssr' },
+          { code: FacadeErrorCode.PROGRAM_MISSING, phase: 'ssr' },
         );
       }
       const nestedProperties = Array.isArray(nestedClass.__compiledProperties)

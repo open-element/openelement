@@ -202,8 +202,22 @@ export class OpenElementBuildContext {
   constructor(options: FrameworkOptions) {
     this.options = options;
     // Locale declaration is user configuration, not build state: it is
-    // resolved once here so reset() (watch mode) cannot drop it.
+    // resolved once here so reset() (watch mode) cannot drop it, and refreshed
+    // by refreshDerivedState() when a config file resolves later (#1411).
     this.plugins.i18nOptions = normalizeI18nOptions(options.i18n);
+  }
+
+  /**
+   * Re-derive the plugin data that is a PROJECTION of the framework options.
+   *
+   * `openelement.config.ts` resolves after this context is constructed (the
+   * plugin applies it in its `config` hook), so any state derived in the
+   * constructor from `options` would otherwise keep the pre-file value and the
+   * build would render with the wrong locale set. Called by the plugin's
+   * `applyResolvedOptions` right after the merge.
+   */
+  refreshDerivedState(): void {
+    this.plugins.i18nOptions = normalizeI18nOptions(this.options.i18n);
   }
 
   /** Register plugin data by name. */

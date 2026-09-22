@@ -54,14 +54,15 @@ openElement project created at ./my-app/
 ```text
 my-app/
   deno.json         import map 与任务：dev、check、test、build、start、preview
-  vite.config.ts    设计 token 与 openElement Vite 插件
+  openelement.config.ts  框架选项（token、head、shell 约定）
+  vite.config.ts    Vite 配置；插件调用不接受参数
   app/routes/       一个文件对应一个 URL
   app/components/   页面元素及其样式表
   app/islands/      选择进入客户端投递的模块
   public/           静态资源，原样拷进 dist/
 ```
 
-`deno task check` 会类型检查 starter 的 `app/` 目录与 `vite.config.ts`；新增的路由会被自动纳入。
+`deno task check` 会类型检查 starter 的 `app/` 目录以及 `vite.config.ts` 与 `openelement.config.ts`；新增的路由会被自动纳入。
 
 ## 第 2 步：加第一个页面
 

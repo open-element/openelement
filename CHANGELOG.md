@@ -9,6 +9,213 @@ lives in:
 - [`docs/release/release-state.json`](./docs/release/release-state.json)
 - [`docs/release/public-interface-snapshot.json`](./docs/release/public-interface-snapshot.json)
 
+## 1.0.0-alpha.4
+
+**Self-consistency train: the shipped package manifest stops lying about a
+module that installs itself, the candidate gate stops re-proving content it has
+already proved, and the config, error and navigation surfaces are converged.**
+The source line is `1.0.0-alpha.4`; npm publication is a separate, gated step,
+so `docs/release/release-state.json` records registry truth (`@alpha` =
+`1.0.0-alpha.3`) and this train's own version stays a repository baseline until
+a post-publish sync. **No migration steps** beyond one retired spelling noted
+below, so an alpha.3 consumer upgrades with no action.
+
+- **Release — the packed Element entry declares its claim seam (#1425)**: the
+  published `sideEffects: false` on `@openelement/element` was wrong, and it
+  shipped a real defect. The default entry installs the compiled claim executor
+  through an import-time seam (`src/index.ts` bare-imports
+  `internal/compiled/runtime/claim-install.ts`, which calls
+  `installClaimExecutor(...)` at module scope), so a consumer's own bundle
+  dropped both halves: the bare import reads as an unused statement in a
+  side-effect-free module and the installer body has no used exports. Every
+  island that had to adopt server-rendered DOM then threw
+  `[compiled-kernel] existing DOM in the resolved root needs the claim
+  executor` — the packed-starter browser matrix failed 3/3 browsers, and the
+  failure was reproduced in the consumer's own client bundle
+  (`island-app-shell-*.js`), not inferred. The manifest now names both sides of
+  the edge (`./src/index.js` and
+  `./src/internal/compiled/runtime/claim-install.js`; naming only one still
+  drops the other, pinned by test), and `pack-surface.ts` gained the
+  fail-closed `findUndeclaredSeamInstalls` rule: a module-scope `installX(...)`
+  in a package whose `sideEffects` does not name that module is exactly the
+  shape that ships looking correct and breaks at runtime. The client-only
+  reduction from #1416 is unaffected — that entry imports neither module.
+  **This is the one item here that changes what a consumer downloads, and it
+  takes effect only at the next publish**: every `1.0.0-alpha.3` already on npm
+  still carries the wrong manifest, so a starter installed from it today
+  silently does not hydrate.
+- **Release — the browser-matrix skip is gone (#1425)**: with the root cause
+  fixed, `OPEN_ELEMENT_SKIP_BROWSER_MATRIX` and every workflow injection of it
+  are deleted. The packed-starter matrix, the dev continuation probe and the
+  start continuation probe are unconditionally required again, so the
+  qualification that caught this defect runs on every candidate. No tracked
+  file mentions the variable any more (the alpha.3 entry above and ADR-0155
+  keep their historical narration, which is a record, not a guard).
+- **CI — tree-SHA evidence reuse (#1425 follow-up, ADR-0156)**: a green
+  evidence package proves a TREE, not a commit — every record carries `sha`
+  and `tree`, every log is bound to the tree by its clean-proof line, and every
+  tarball is byte-hashed. Two commits with the same tree have byte-identical
+  content, so a merge that stales `dev` no longer forces ~1–2 hours of runner
+  time re-measuring content the suite has already measured. A new read-only
+  `reuse` job (with exactly `contents: read` and `actions: read`) resolves the
+  newest in-window successful run whose API-computed commit tree equals the
+  candidate's and that carries every lane's artifact; the four lanes `needs:
+  reuse` and, when it resolves, replay a verified no-op that downloads the
+  source run's evidence and stamps `reused: {runId, sha}`. Reuse is strictly
+  tree equality, and the paths out are fail-closed and total: no match, any API
+  error, no token, or a run outside the retention window all resolve to
+  `reused=false` and every lane then runs its full gate. The aggregate does not
+  trust the resolver — it still requires each record's `tree` to equal the
+  checked-out tree and additionally rejects a stamp naming the candidate's own
+  commit, a stamp disagreeing with the record's `sha`, and a bundle whose
+  reused jobs name more than one source run; the clean-proof lines, step argv
+  and the Site E2E `candidateSha` are all bound to the record's own `sha`. A
+  resolver job failure fails the aggregate rather than degrading silently. The
+  decision record is `docs/adr/ADR-0156-tree-sha-evidence-reuse.md`, including
+  its P7 four-question review and the rejected alternatives (message-scoped
+  reuse, per-lane resolution, a checked-in tree→run index).
+- **CI — every remaining lane is bounded, and a red Site E2E run now stages its
+  evidence (#1402, #1409)**: `dependency-review`, `codeql#analyze` and both
+  `published-consumers` jobs had no ceiling, so a stalled extractor or a hung
+  published-starter qualification could hold a runner for the platform default
+  (six hours for CodeQL); each now carries one sized to its real work. The
+  fresh-clone lane used to run its Site E2E suite before staging the report, so
+  a failing suite threw past the staging step and its bundle carried logs but
+  no report — the failing test's name was then unrecoverable without a live
+  repro, which is exactly the class the alpha.2 closeout could not diagnose. A
+  red run is now recorded before it is raised: the raw report plus sidecar are
+  staged whenever the runner managed to write them, `ran: false` when it did
+  not, and the failure is re-raised after `result.json` so the exit status and
+  the validator's verdict are unchanged. A red run still cannot smuggle a pass
+  — the aggregate fails closed on a red or absent sidecar and rebinds the
+  report bytes to the candidate commit.
+- **Router — the accepted config surface grows to eleven keys, and head becomes
+  structured (#1411 follow-up)**: `dirs: { routes, islands, components }` moves
+  the source roots (the tokens / app-shell / head conventions follow the three
+  roots' shared base, so a full `src/*` move carries them); `packageIslands`
+  additionally derives `ssr.noExternal` so a listed package's islands are
+  bundled, with no public `ssr.noExternal` key; `head.scripts` and
+  `head.stylesheets` join the config file, so a config entry and an inline
+  `inject.scripts` entry emit the same bytes through one serializer;
+  `speculation`, `viewTransition`, `build.manifestBudget` and `i18n` validate
+  as data. Raw markup stays out on purpose — `inject` is deliberately not a
+  config key. The new `app/head.tsx` convention carries the structural head a
+  URL list cannot express (preloads, icons, feed links, inline CSS); it is
+  compiled into the app's module graph, not read as text, because
+  `loadConfigFromFile` refuses a `?inline` CSS import. Entries are validated at
+  the boundary — unsafe attribute names, non-string values, `javascript:`
+  URLs, `@import` and unclosed `<style>` all fail the build instead of being
+  silently dropped. An accepted head key that no code reads fails closed too.
+  Two latent build-context bugs surfaced and are fixed: config-file i18n
+  options never reached the integration (the context derived them before the
+  config resolved, so the SSG emitted a single-locale site with `locales="[]"`),
+  and the head compile now keeps bare specifiers external instead of bundling
+  package sources into a data module.
+- **Retired — inline `openElement({ html })` (#1411 follow-up)**: the flat
+  `html` option is gone and fails closed with `CONFIG_RENAMED_KEY` naming
+  `head`. This is the one authored-spelling change in this train: six fixtures,
+  three packed-consumer harnesses, `apps/saas` and the Site itself are migrated
+  in the same train. `middleware.use` deliberately stays inline-only (the
+  config file's `middleware` block carries `corsOrigin`), and
+  `/guide/configuration` now says the two are either/or rather than mixing
+  them, which remains a hard error.
+- **Element — one error dialect, mechanically enforced (#1386)**: the package
+  used to raise failures through four conventions (OEC diagnostics,
+  `OpenElementError` with codes, ~40 bare `Error`s carrying `[compiled-*]`
+  prefixes, and three dedicated exception classes), so a consumer could not
+  catch a failure by code without importing every class and pattern-matching
+  the rest. `OpenElementError` and its per-surface code catalogue now live in
+  `internal/protocol/errors.ts` — import-free, so the ADR-0148 semantic core
+  and the Part Program protocol raise framework errors without gaining host
+  state — and every throw in `packages/element/src` speaks it. The released
+  values (`OPEN_ELEMENT_COMPILED_CLAIM_MISMATCH`,
+  `OPEN_ELEMENT_COMPILED_PROGRAM_INVALID`, `OE_PROGRAM_MISSING`,
+  `SSR_DOM_ACCESS_UNSUPPORTED`) are pinned so a later cleanup cannot rename
+  them; new codes use the `OE_` prefix. The dialect is proved by an AST walk
+  over every module under `src/` that fails on any bare `throw` or leftover
+  `TypeError`, plus a duplicate/off-namespace catalogue check.
+- **Element — the emitted module is type-checked at build time (#1386)**:
+  the compiler emits the compiled module as TypeScript text and the bundler
+  lowers it, but nothing checked that text, so a compiler change could emit a
+  program that fails `deno check` or a consumer's `tsgo` run and the first
+  evidence was a consumer's build. `typeCheckEmittedModule()` compiles the
+  emitted text as a real program and returns a checker's diagnostics for it;
+  the Vite adapter gains an opt-in `typeCheckEmitted` build gate (off by
+  default, because it runs a program per emitted module — a dev-server
+  transform must not pay that). It is a pure function of its inputs and only
+  reports diagnostics belonging to the emitted files, so a caller's incomplete
+  resolution map cannot masquerade as an emitted-module defect.
+- **Element — claim-vs-fresh is decided from content, not a child count
+  (#1381)**: the kernel chose claim by `root.childNodes.length > 0`, so a
+  compiled light-root element carrying a whitespace-only text node — the shape
+  an HTML formatter or a parsed file produces — threw `PartProgramClaimError`
+  on upgrade for a node that is invisible in the rendered page. Formatting
+  whitespace is now normalized before a fresh mount. The fail-closed direction
+  is pinned as hard as the fix, because widening it would be the correctness
+  regression: a real element, a serializer anchor comment, visible authored
+  text and whitespace preceding real content all still throw the structured,
+  catchable mismatch, and a serialized light host still claims in place so
+  server node identity survives.
+- **Router — navigation state has one owner (#1385)**: the client router's
+  three pieces of shared mutable state (the monotonic latest-wins ticket, the
+  dedup key of the last browser-landed URL, and the one-shot marker of the
+  router's own guard-veto restore) lived across four functions. They now live
+  in `internal/router/navigation-state.ts` behind three questions — issue/owns,
+  isDuplicateLanding/recordLanding, armRestore/consumeRestore — so cancelled
+  pending execution is a side effect of owning intent, never of attempting a
+  navigation; a guard veto, a stale ticket, an aborted traversal or a disposal
+  all leave the current route's in-flight render alone. The machine is DOM-free,
+  so its transitions are pinned without a browser, and the four interaction
+  cases that motivated the extraction are pinned in the router suite.
+- **Router — browser-shaped action POSTs must present an Origin (#1382)**: the
+  generated action POST floor let a `multipart/form-data` or
+  `application/x-www-form-urlencoded` body through when it carried neither
+  Origin nor Fetch Metadata, because that allowance exists for non-browser
+  callers. A browser-shaped body can present the same absent headers, so such a
+  body is now rejected with the same 403 and RFC 9457 problem document when it
+  also carries browser navigation evidence (`Upgrade-Insecure-Requests: 1`, or
+  the `text/html` Accept a form navigation sends). A scripted client sends
+  neither marker and is unaffected; `Origin: null` is untouched, since null is
+  an origin the browser did send. The residual window is written down rather
+  than implied: `Origin: null` without Fetch Metadata, `text/plain` form
+  bodies, custom API routes and ambient-auth apps, and the
+  `OPEN_ELEMENT_DISABLE_CSRF=1` opt-out, which disables this rule too.
+- **Docs — how i18n actually works (#1383)**: `/guide/i18n` (plus its `zh`
+  twin) states the boundary that had no page: catalogs are application code.
+  It covers the two file conventions — declarative locales resolved through
+  `PagePropsContext.locale`, and a loader's file-suffix scheme over the content
+  tree — and the three rules that keep them honest (one link helper, never
+  infer a locale from a two-letter segment, the default locale stays
+  unprefixed). For catalogs it names the boring standards and when each fits
+  (ICU MessageFormat for tooling compatibility; paraglide once volume grows),
+  both build-time because a static-first framework prerenders its pages. What
+  stays out is explicit: no message format, no Accept-Language negotiation, no
+  content translation inside the framework.
+- **Repo — the docs figures and the release bookkeeping follow the tree**:
+  `www#check:doc-figures` pins `comparison.md`/`.zh.md` against a fresh
+  measurement of `www/dist`, so this train re-baselines them (one page per
+  locale from `/guide/i18n`, plus the runtime growth from the Element error
+  dialect: html 64→66, sitemap locs 62→64, manifests 64→66, per-locale pages
+  31→32, fragments 62→64, manifest entries 304→314, rail pages 54→56,
+  code-block pages 42→44, `island-open-cinematic-scroll` 81,984→85,765 raw and
+  25,215→26,855 gzip, `/` payload 217,362→221,626 B). The six version points
+  move through `deno task version-bump` rather than by hand, the state machine
+  admits `v1.0.0-alpha.4`, and the README, the Site version source and the
+  registry-truth constants follow.
+- **Tracked, not fixed**: `typeCheckEmitted` is implemented and tested but not
+  yet enabled in the Router build CLI
+  (`packages/router/src/cli/{build-ssg,build-client}.ts`), because that tree
+  belonged to another lane in this run; enabling it there is a follow-up. The
+  `#1387` portable-host migration (moving the build-time `Deno.*` calls in
+  `packages/router/src/{vite,cli}` and `packages/create/src` to `node:*`, and
+  retiring the `existsSync` seam) is still a deferred roadmap item, not part of
+  this train — the build-time Deno-host requirement documented in the READMEs
+  therefore still stands. The `www/tools/generate-api-reference.ts` config-type
+  anchor still points at `OpenElementOptions` (which no longer carries the
+  config-file keys); the API reference covers the config surface through
+  `/guide/configuration` and the interface snapshot, and re-pointing the anchor
+  at `OpenElementUserConfig` is a follow-up.
+
 ## 1.0.0-alpha.3
 
 **Door-handle train: the surfaces a consumer actually touches — the config

@@ -80,6 +80,10 @@ const TEMPLATE_FILES: readonly (readonly [string, string])[] = [
   // overrides one.
   ['openelement.config.ts.tmpl', 'openelement.config.ts'],
   ['app/styles/tokens.css', 'app/styles/tokens.css'],
+  // alpha.4: the structural document-head convention. The config file carries
+  // the structured `head` channel (title/description/favicon/scripts); this
+  // module carries what a URL list cannot express (meta tags, preloads).
+  ['app/head.tsx.tmpl', 'app/head.tsx'],
   ['app/islands/app-shell.tsx.tmpl', 'app/islands/app-shell.tsx'],
   ['app/components/page-styles.ts.tmpl', 'app/components/page-styles.ts'],
   ['app/components/page-home.tsx.tmpl', 'app/components/page-home.tsx'],

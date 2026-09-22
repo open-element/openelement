@@ -25,7 +25,7 @@ export default defineConfig({
       componentsDir: 'app/components',
       // No app shell: the fixture stays minimal and does not pull @acme/components.
       appShell: false,
-      html: {
+      head: {
         title: 'app-flow-native fixture',
       },
     }),

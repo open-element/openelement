@@ -21,6 +21,7 @@ import {
   forbiddenSinkReason,
   RAW_TEXT_TAGS,
 } from '../../protocol/forbidden-sinks.ts';
+import { OpenElementError, ServerErrorCode } from '../../protocol/errors.ts';
 import { normalizePartProgram, type RuntimeProgramIR } from '../runtime-program.ts';
 // Canonical void-element set (issue #1220, M4) — single source of truth.
 import { VOID_TAGS } from '../../core/html-escape.ts';
@@ -36,12 +37,23 @@ export interface CompiledProgramHost {
   handlers?: Record<string, (event: unknown) => void>;
 }
 
-export class CompiledProgramValidationError extends Error {
-  readonly code = 'OPEN_ELEMENT_COMPILED_PROGRAM_INVALID';
+/**
+ * One compiled server/claim validation failure (#1386 item 3): an
+ * `OpenElementError` carrying the caller's code, so the whole server/claim
+ * grammar boundary is catchable as one type. `path` names the program record
+ * that failed; it stays a field rather than moving into the code, because the
+ * path is per-site data and the code is the contract.
+ */
+export class CompiledProgramValidationError extends OpenElementError {
   readonly path: string;
 
-  constructor(path: string, message: string) {
-    super(`[compiled-program] ${path}: ${message}`);
+  constructor(path: string, message: string, code: string = ServerErrorCode.PROGRAM_INVALID) {
+    super(`[compiled-program] ${path}: ${message}`, {
+      code,
+      severity: 'error',
+      phase: 'validation',
+      recoverable: false,
+    });
     this.name = 'CompiledProgramValidationError';
     this.path = path;
   }

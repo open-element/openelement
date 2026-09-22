@@ -22,6 +22,10 @@ jobs:
   analyze:
     name: Analyze TypeScript
     runs-on: ubuntu-latest
+    # Explicit ceiling (#1402): the platform default is six hours, so an
+    # extractor stall would occupy a runner for a working day before failing.
+    # security-extended over this source tree analyzes in a few minutes.
+    timeout-minutes: 60
     permissions:
       actions: read
       contents: read

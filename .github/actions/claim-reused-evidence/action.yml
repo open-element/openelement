@@ -1,0 +1,47 @@
+name: Claim Reused Evidence
+description: >-
+  Download a tree-identical run's evidence for one lane and stamp it as reused
+  (#1425 follow-up). Callers must guard this with
+  `if: needs.reuse.outputs.reused == 'true'` so a lane that is really running
+  its gate keeps its own, freshly-produced evidence.
+
+inputs:
+  job:
+    description: Candidate job name (fast-checks, source-matrix, packed, fresh-clone).
+    required: true
+  source-run-id:
+    description: Run that proved the same tree.
+    required: true
+  source-sha:
+    description: Commit that run was on.
+    required: true
+  token:
+    description: Token with actions:read on this repository.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Download the source lane's evidence
+      # v4.1.1
+      uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131
+      with:
+        name: evidence-${{ inputs.job }}
+        path: .artifacts/ci
+        github-token: ${{ inputs.token }}
+        run-id: ${{ inputs.source-run-id }}
+    # The claim is the safety gate: it refuses to stamp a record that does not
+    # already bind the checked-out tree and the resolved source commit, so a
+    # mismatched or foreign artifact fails the lane here instead of becoming
+    # evidence the aggregate would have to reject.
+    - name: Stamp the reused record for this tree
+      shell: bash
+      env:
+        REUSE_JOB: ${{ inputs.job }}
+        REUSE_RUN_ID: ${{ inputs.source-run-id }}
+        REUSE_SHA: ${{ inputs.source-sha }}
+      run: |
+        deno task --cwd tools/repo candidate:evidence:reuse:claim \
+          --job "$REUSE_JOB" \
+          --source-run-id "$REUSE_RUN_ID" \
+          --source-sha "$REUSE_SHA"

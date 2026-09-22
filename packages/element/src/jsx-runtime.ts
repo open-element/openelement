@@ -14,14 +14,14 @@
  * jsx-runtime module's emitted declarations — a `/// <reference>` indirection
  * does not survive `deno pack` declaration emit (consumer:packaged gate).
  */
-import { OpenElementError } from './internal/core/errors.ts';
+import { FacadeErrorCode, OpenElementError } from './internal/core/errors.ts';
 
 function jsxOutsideCompiler(): never {
   throw new OpenElementError(
     '[openElement] JSX executed outside the 0.44 compiler pipeline. ' +
       'The runtime JSX factory was removed; run the OpenElement Vite adapter ' +
       'so the component is compiled to a Part Program.',
-    { code: 'OE_JSX_OUTSIDE_COMPILER', phase: 'build' },
+    { code: FacadeErrorCode.JSX_OUTSIDE_COMPILER, phase: 'build' },
   );
 }
 

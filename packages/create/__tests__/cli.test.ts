@@ -1,6 +1,7 @@
 import { assert, assertEquals, assertFalse, assertThrows } from '@std/assert';
 import { existsSync } from '@std/fs';
 import { join } from '@std/path';
+import { OPEN_ELEMENT_CONFIG_KEYS } from '../../router/src/config.ts';
 import { CREATE_VERSION, VITE_STARTER_PIN } from '../src/version.ts';
 import {
   assertUnifiedProductVersions,
@@ -416,6 +417,7 @@ Deno.test('TypeScript starter sources are pack-safe template payloads', () => {
   for (
     const path of [
       'vite.config.ts',
+      'app/head.tsx',
       'app/islands/app-shell.tsx',
       'app/components/page-home.tsx',
       'app/routes/api/health.ts',
@@ -425,6 +427,38 @@ Deno.test('TypeScript starter sources are pack-safe template payloads', () => {
     assertFalse(existsSync(logicalPath), `raw TypeScript source must not be packed: ${path}`);
     assert(existsSync(`${logicalPath}.tmpl`), `missing template payload: ${path}.tmpl`);
   }
+});
+
+Deno.test('starter app/head.tsx is the structural head convention (alpha.4)', () => {
+  const source = readTemplate('app/head.tsx');
+  // Data entries only: the framework serializes them, the file never writes
+  // markup. Two of the three accepted shapes are exercised.
+  assert(source.includes('export default ['), source);
+  assert(/\{\s*link:\s*\{/.test(source), source);
+  assert(/\{\s*meta:\s*\{/.test(source), source);
+  // A raw HTML string is not a head entry: the convention is structured.
+  assertFalse(source.includes('<meta '), source);
+  assertFalse(source.includes('<link '), source);
+  // No host APIs: the module is a build artifact, not a runtime read.
+  assertFalse(source.includes('Deno.'), source);
+  assertFalse(source.includes('readFileSync'), source);
+});
+
+Deno.test('starter openelement.config.ts keeps framework options in one home', () => {
+  const source = readTemplate('openelement.config.ts');
+  const written = [...source.matchAll(/^\s{2}([a-zA-Z]+):/gm)].map((match) => match[1]);
+  for (const key of written) {
+    assert(
+      OPEN_ELEMENT_CONFIG_KEYS.includes(key),
+      `starter config writes unknown key "${key}"; accepted: ${
+        OPEN_ELEMENT_CONFIG_KEYS.join(', ')
+      }`,
+    );
+  }
+  // The raw-head channel has no home in the config file, and the retired inline
+  // spelling must not reappear.
+  assertFalse(source.includes('inject'), source);
+  assertFalse(source.includes('html:'), source);
 });
 
 Deno.test('source CLI generates a complete, token-free starter', async () => {
