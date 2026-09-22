@@ -54,14 +54,15 @@ That page is the starter's home route. Its layout is the whole architecture:
 ```text
 my-app/
   deno.json         import map + tasks: dev, check, test, build, start, preview
-  vite.config.ts    design tokens and the openElement Vite plugin
+  openelement.config.ts  framework options (tokens, head, shell conventions)
+  vite.config.ts    Vite configuration; the plugin call takes no arguments
   app/routes/       one file per URL
   app/components/   page elements and their style sheets
   app/islands/      modules that opt into client delivery
   public/           static assets, copied into dist/ as-is
 ```
 
-`deno task check` type-checks the starter's `app/` directory and `vite.config.ts`; new routes are picked up automatically.
+`deno task check` type-checks the starter's `app/` directory together with `vite.config.ts` and `openelement.config.ts`; new routes are picked up automatically.
 
 ## Step 2: Add your first page
 

@@ -56,9 +56,13 @@ import { OpenElementError } from '@openelement/element/authoring';
 /** Canonical config-file name, resolved in the project root. */
 export const OPEN_ELEMENT_CONFIG_FILE = 'openelement.config.ts';
 
-/** Default source roots; the same defaults the build pipeline applies. */
+/** Default route directory (`app/routes`), the `dirs.routes` default. */
 export const CONVENTION_ROUTES_DIR = 'app/routes';
+
+/** Default island directory (`app/islands`), the `dirs.islands` default. */
 export const CONVENTION_ISLANDS_DIR = 'app/islands';
+
+/** Default component directory (`app/components`), the `dirs.components` default. */
 export const CONVENTION_COMPONENTS_DIR = 'app/components';
 
 /**
@@ -67,9 +71,13 @@ export const CONVENTION_COMPONENTS_DIR = 'app/components';
  */
 export const CONVENTION_BASE_DIR = 'app';
 
-/** Convention-relative suffixes for the file conventions. */
+/** Convention-relative suffix of the design-token stylesheet. */
 export const CONVENTION_STYLES_SUFFIX = 'styles/tokens.css';
+
+/** Convention-relative suffix of the auto-registered application shell. */
 export const CONVENTION_APP_SHELL_SUFFIX = 'islands/app-shell.tsx';
+
+/** Convention-relative suffix of the structural document-head module. */
 export const CONVENTION_HEAD_SUFFIX = 'head.tsx';
 
 /** Convention path for the design-token stylesheet. */
