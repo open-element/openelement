@@ -140,28 +140,48 @@ jobs:
           tar -xzf /tmp/gitleaks.tar.gz -C /tmp gitleaks
           /tmp/gitleaks git --redact --verbose .
       - uses: ./.github/actions/setup-deno-workspace
-      - name: Install Playwright browsers for evidence metadata
-        # Every evidence producer records the exact three browser revisions.
-        # Fast checks do not launch them, so system dependencies are unnecessary.
-        run: ./node_modules/.bin/playwright install chromium firefox webkit
-      # ADR-0144 (retired; preserved in Git history) / #1229 (B2.7): generic
-      # toolchain gates are pinned OSS tool steps, not AutoFlow gates.
-      - name: Fast checks (fmt, lint, markdown, typecheck)
-        if: needs.reuse.outputs.reused != 'true'
-        env:
-          CANDIDATE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-        run: deno task --cwd tools/repo candidate:evidence:fast
       # Tree-identical reuse (#1425): this lane's proof already exists for the
-      # tree we are on, so replay it instead of re-running the gate. The claim
-      # refuses a record that does not bind this tree.
+      # tree we are on, so replay it instead of re-running the gate.
+      #
+      # The claim runs FIRST, and its failure is NOT fatal: a refused claim
+      # means "this package cannot be honestly replayed here", which is a
+      # reason to run the gate, not a reason to fail the lane (#1439 — a
+      # legitimate chain was refused and all four lanes went red with no
+      # fallback). The gate below is skipped only when the decision said reuse
+      # AND the claim actually stamped a record for this tree, so the lane is
+      # still proven either way.
       - name: Reuse tree-identical fast-checks evidence
+        id: claim
         if: needs.reuse.outputs.reused == 'true'
+        continue-on-error: true
         uses: ./.github/actions/claim-reused-evidence
         with:
           job: fast-checks
           source-run-id: ${{ needs.reuse.outputs.source_run_id }}
           source-sha: ${{ needs.reuse.outputs.source_sha }}
           token: ${{ secrets.GITHUB_TOKEN }}
+      # A refused claim may still have downloaded the source artifact (the
+      # stamp is what fails, not the download). Leaving it in place would mix
+      # another run's files into this lane's evidence — or, worse, let a stale
+      # file survive the real run — so the download is discarded before the
+      # fallback gate starts.
+      - name: Fall back to a full run (claim refused or unusable)
+        if: needs.reuse.outputs.reused == 'true' && steps.claim.outcome != 'success'
+        run: |
+          echo "::warning::tree-identical reuse was resolved, but the claim did not stamp this lane's record; running the full gate instead"
+          rm -rf .artifacts/ci
+      - name: Install Playwright browsers for evidence metadata
+        # Every evidence producer records the exact three browser revisions.
+        # Fast checks do not launch them, so system dependencies are unnecessary.
+        if: needs.reuse.outputs.reused != 'true' || steps.claim.outcome != 'success'
+        run: ./node_modules/.bin/playwright install chromium firefox webkit
+      # ADR-0144 (retired; preserved in Git history) / #1229 (B2.7): generic
+      # toolchain gates are pinned OSS tool steps, not AutoFlow gates.
+      - name: Fast checks (fmt, lint, markdown, typecheck)
+        if: needs.reuse.outputs.reused != 'true' || steps.claim.outcome != 'success'
+        env:
+          CANDIDATE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: deno task --cwd tools/repo candidate:evidence:fast
       # The site's media lives on the R2 custom domain, so the runner's view of
       # that edge is part of the candidate surface. Non-blocking: this only
       # prints what the runner's egress POP actually sees (the e2e suite is the
@@ -223,33 +243,45 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
       - uses: ./.github/actions/setup-deno-workspace
-      # v7.0.0 — the gate:source packed leg installs and loads the packed
-      # Router, which requires the Web Standard URLPattern global: ADR-0154
-      # pins the Alpha node runtime to Node 24, and the runner default (22)
-      # cannot load it ("requires the Web Standard URLPattern API").
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
-        if: needs.reuse.outputs.reused != 'true'
-        with:
-          node-version: '24'
-      - name: Install Playwright browsers
-        # The gate's element browser leg launches Chromium; the recorded
-        # toolchain metadata names all three engines.
-        if: needs.reuse.outputs.reused != 'true'
-        run: ./node_modules/.bin/playwright install --with-deps chromium firefox webkit
-      - name: Source matrix (PR-layer source gate, unit tests, browsers)
-        if: needs.reuse.outputs.reused != 'true'
-        env:
-          CANDIDATE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-        run: deno task --cwd tools/repo candidate:evidence:source
       # Tree-identical reuse (#1425): the proof for this tree already exists.
+      # The claim runs first and is non-fatal — a refusal means the lane runs
+      # the real gate below, never that the lane fails (#1439).
       - name: Reuse tree-identical source-matrix evidence
+        id: claim
         if: needs.reuse.outputs.reused == 'true'
+        continue-on-error: true
         uses: ./.github/actions/claim-reused-evidence
         with:
           job: source-matrix
           source-run-id: ${{ needs.reuse.outputs.source_run_id }}
           source-sha: ${{ needs.reuse.outputs.source_sha }}
           token: ${{ secrets.GITHUB_TOKEN }}
+      # Discard the unclaimable download before any fallback step runs: a stale
+      # tarball or log left behind would otherwise leak into this lane's
+      # evidence (or survive the fresh run).
+      - name: Fall back to a full run (claim refused or unusable)
+        if: needs.reuse.outputs.reused == 'true' && steps.claim.outcome != 'success'
+        run: |
+          echo "::warning::tree-identical reuse was resolved, but the claim did not stamp this lane's record; running the full gate instead"
+          rm -rf .artifacts/ci
+      # v7.0.0 — the gate:source packed leg installs and loads the packed
+      # Router, which requires the Web Standard URLPattern global: ADR-0154
+      # pins the Alpha node runtime to Node 24, and the runner default (22)
+      # cannot load it ("requires the Web Standard URLPattern API").
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        if: needs.reuse.outputs.reused != 'true' || steps.claim.outcome != 'success'
+        with:
+          node-version: '24'
+      - name: Install Playwright browsers
+        # The gate's element browser leg launches Chromium; the recorded
+        # toolchain metadata names all three engines.
+        if: needs.reuse.outputs.reused != 'true' || steps.claim.outcome != 'success'
+        run: ./node_modules/.bin/playwright install --with-deps chromium firefox webkit
+      - name: Source matrix (PR-layer source gate, unit tests, browsers)
+        if: needs.reuse.outputs.reused != 'true' || steps.claim.outcome != 'success'
+        env:
+          CANDIDATE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: deno task --cwd tools/repo candidate:evidence:source
       - name: Upload source-matrix evidence
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
@@ -270,31 +302,43 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
       - uses: ./.github/actions/setup-deno-workspace
-      # v7.0.0 — ADR-0154 pins the Alpha node runtime to Node 24 (native
-      # URLPattern). The runner default (22) cannot load the packed router.
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
-        if: needs.reuse.outputs.reused != 'true'
-        with:
-          node-version: '24'
-      - name: Install Playwright browsers
-        # Packed Native/Lit/Starter/Create/UI consumers assert hydration on
-        # all three engines.
-        if: needs.reuse.outputs.reused != 'true'
-        run: ./node_modules/.bin/playwright install --with-deps chromium firefox webkit
-      - name: Packed consumers (pack, artifact scan, all packed gates, publish dry-run)
-        if: needs.reuse.outputs.reused != 'true'
-        env:
-          CANDIDATE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-        run: deno task --cwd tools/repo candidate:evidence:packed
       # Tree-identical reuse (#1425): the proof for this tree already exists.
+      # The claim runs first and is non-fatal — a refusal means the lane runs
+      # the real gate below, never that the lane fails (#1439).
       - name: Reuse tree-identical packed evidence
+        id: claim
         if: needs.reuse.outputs.reused == 'true'
+        continue-on-error: true
         uses: ./.github/actions/claim-reused-evidence
         with:
           job: packed
           source-run-id: ${{ needs.reuse.outputs.source_run_id }}
           source-sha: ${{ needs.reuse.outputs.source_sha }}
           token: ${{ secrets.GITHUB_TOKEN }}
+      # Discard the unclaimable download before any fallback step runs: a stale
+      # tarball or log left behind would otherwise leak into this lane's
+      # evidence (or survive the fresh run).
+      - name: Fall back to a full run (claim refused or unusable)
+        if: needs.reuse.outputs.reused == 'true' && steps.claim.outcome != 'success'
+        run: |
+          echo "::warning::tree-identical reuse was resolved, but the claim did not stamp this lane's record; running the full gate instead"
+          rm -rf .artifacts/ci
+      # v7.0.0 — ADR-0154 pins the Alpha node runtime to Node 24 (native
+      # URLPattern). The runner default (22) cannot load the packed router.
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        if: needs.reuse.outputs.reused != 'true' || steps.claim.outcome != 'success'
+        with:
+          node-version: '24'
+      - name: Install Playwright browsers
+        # Packed Native/Lit/Starter/Create/UI consumers assert hydration on
+        # all three engines.
+        if: needs.reuse.outputs.reused != 'true' || steps.claim.outcome != 'success'
+        run: ./node_modules/.bin/playwright install --with-deps chromium firefox webkit
+      - name: Packed consumers (pack, artifact scan, all packed gates, publish dry-run)
+        if: needs.reuse.outputs.reused != 'true' || steps.claim.outcome != 'success'
+        env:
+          CANDIDATE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: deno task --cwd tools/repo candidate:evidence:packed
       - name: Upload packed evidence
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
@@ -315,10 +359,32 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
       - uses: ./.github/actions/setup-deno-workspace
+      # Tree-identical reuse (#1425): the clone's proof (including the Site E2E
+      # sidecar it owns) already exists for this tree. The claim runs first and
+      # is non-fatal — a refusal means the lane runs the real gate below, never
+      # that the lane fails (#1439).
+      - name: Reuse tree-identical fresh-clone evidence
+        id: claim
+        if: needs.reuse.outputs.reused == 'true'
+        continue-on-error: true
+        uses: ./.github/actions/claim-reused-evidence
+        with:
+          job: fresh-clone
+          source-run-id: ${{ needs.reuse.outputs.source_run_id }}
+          source-sha: ${{ needs.reuse.outputs.source_sha }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+      # Discard the unclaimable download before any fallback step runs: a stale
+      # tarball, log or Site E2E sidecar left behind would otherwise leak into
+      # this lane's evidence (or survive the fresh run).
+      - name: Fall back to a full run (claim refused or unusable)
+        if: needs.reuse.outputs.reused == 'true' && steps.claim.outcome != 'success'
+        run: |
+          echo "::warning::tree-identical reuse was resolved, but the claim did not stamp this lane's record; running the full gate instead"
+          rm -rf .artifacts/ci
       # v7.0.0 — the clone's own packed gate runs the same Node 24 consumers
       # (ADR-0154); the runner default (22) lacks native URLPattern.
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
-        if: needs.reuse.outputs.reused != 'true'
+        if: needs.reuse.outputs.reused != 'true' || steps.claim.outcome != 'success'
         with:
           node-version: '24'
       - name: Install Playwright browsers
@@ -327,23 +393,13 @@ jobs:
         # Site proof); the browser binaries are reused from the preinstalled
         # HOME cache (disclosed in the fresh-clone manifest), while the clone's
         # DENO_DIR and npm cache start empty.
-        if: needs.reuse.outputs.reused != 'true'
+        if: needs.reuse.outputs.reused != 'true' || steps.claim.outcome != 'success'
         run: ./node_modules/.bin/playwright install --with-deps chromium firefox webkit
       - name: Fresh clone (install, check, source gate, packed gate, Site E2E)
-        if: needs.reuse.outputs.reused != 'true'
+        if: needs.reuse.outputs.reused != 'true' || steps.claim.outcome != 'success'
         env:
           CANDIDATE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: deno task --cwd tools/repo candidate:evidence:fresh
-      # Tree-identical reuse (#1425): the clone's proof (including the Site E2E
-      # sidecar it owns) already exists for this tree.
-      - name: Reuse tree-identical fresh-clone evidence
-        if: needs.reuse.outputs.reused == 'true'
-        uses: ./.github/actions/claim-reused-evidence
-        with:
-          job: fresh-clone
-          source-run-id: ${{ needs.reuse.outputs.source_run_id }}
-          source-sha: ${{ needs.reuse.outputs.source_sha }}
-          token: ${{ secrets.GITHUB_TOKEN }}
       - name: Upload fresh-clone evidence
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
