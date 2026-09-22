@@ -48,7 +48,58 @@ jobs:
         with:
           fail-on-severity: high
 
+  # Tree-SHA evidence reuse (#1425 follow-up). A green evidence package proves
+  # a TREE, not a commit: every record carries `tree`, every log is bound to it
+  # by the clean-proof line, and every tarball is byte-hashed. Two commits with
+  # the same tree have byte-identical content — a squash sync, a rebase, or an
+  # amend that touched only the commit message — so the package that proved
+  # tree T is valid proof for any commit whose tree is T.
+  #
+  # This job decides once, for all four producer lanes, whether such a package
+  # exists. It is the ONLY thing that reads another run's artifacts; the lanes
+  # themselves either run the real gate or replay a verified no-op, and the
+  # aggregation job re-derives the tree match from the claimed records.
+  #
+  # Fail-closed by construction: any error, missing permission, absent run, or
+  # unresolvable tree resolves to `reused=false`, and every lane then runs its
+  # full gate. Nothing downstream trusts a reuse claim that the aggregate's own
+  # tree check does not corroborate.
+  reuse:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      # Listing this workflow's runs, reading their commit trees, and listing
+      # their artifacts. Read-only: the resolver never writes to another run.
+      actions: read
+    outputs:
+      reused: ${{ steps.resolve.outputs.reused }}
+      source_run_id: ${{ steps.resolve.outputs.source_run_id }}
+      source_sha: ${{ steps.resolve.outputs.source_sha }}
+      tree: ${{ steps.resolve.outputs.tree }}
+    steps:
+      # v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: ./.github/actions/setup-deno-workspace
+      - name: Resolve tree-SHA evidence reuse
+        id: resolve
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        # One resolve decides for all four lanes: they share the tree, and a
+        # package is only reusable when ONE source run carries every lane's
+        # evidence artifact (a bundle spliced from two runs would be caught by
+        # the aggregate's single-tree identity check, but refusing it here is
+        # the honest reading of "the same evidence package").
+        run: |
+          deno task --cwd tools/repo candidate:evidence:reuse:resolve \
+            --github-output "$GITHUB_OUTPUT"
+
   fast-checks:
+    needs: reuse
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -96,9 +147,21 @@ jobs:
       # ADR-0144 (retired; preserved in Git history) / #1229 (B2.7): generic
       # toolchain gates are pinned OSS tool steps, not AutoFlow gates.
       - name: Fast checks (fmt, lint, markdown, typecheck)
+        if: needs.reuse.outputs.reused != 'true'
         env:
           CANDIDATE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: deno task --cwd tools/repo candidate:evidence:fast
+      # Tree-identical reuse (#1425): this lane's proof already exists for the
+      # tree we are on, so replay it instead of re-running the gate. The claim
+      # refuses a record that does not bind this tree.
+      - name: Reuse tree-identical fast-checks evidence
+        if: needs.reuse.outputs.reused == 'true'
+        uses: ./.github/actions/claim-reused-evidence
+        with:
+          job: fast-checks
+          source-run-id: ${{ needs.reuse.outputs.source_run_id }}
+          source-sha: ${{ needs.reuse.outputs.source_sha }}
+          token: ${{ secrets.GITHUB_TOKEN }}
       # The site's media lives on the R2 custom domain, so the runner's view of
       # that edge is part of the candidate surface. Non-blocking: this only
       # prints what the runner's egress POP actually sees (the e2e suite is the
@@ -150,6 +213,7 @@ jobs:
   # are the separate, non-blocking saas-optional job below. Router Nitro
   # Node/Workers fixtures remain the core deploy proof (gate:release).
   source-matrix:
+    needs: reuse
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
@@ -164,16 +228,28 @@ jobs:
       # pins the Alpha node runtime to Node 24, and the runner default (22)
       # cannot load it ("requires the Web Standard URLPattern API").
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        if: needs.reuse.outputs.reused != 'true'
         with:
           node-version: '24'
       - name: Install Playwright browsers
         # The gate's element browser leg launches Chromium; the recorded
         # toolchain metadata names all three engines.
+        if: needs.reuse.outputs.reused != 'true'
         run: ./node_modules/.bin/playwright install --with-deps chromium firefox webkit
       - name: Source matrix (PR-layer source gate, unit tests, browsers)
+        if: needs.reuse.outputs.reused != 'true'
         env:
           CANDIDATE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: deno task --cwd tools/repo candidate:evidence:source
+      # Tree-identical reuse (#1425): the proof for this tree already exists.
+      - name: Reuse tree-identical source-matrix evidence
+        if: needs.reuse.outputs.reused == 'true'
+        uses: ./.github/actions/claim-reused-evidence
+        with:
+          job: source-matrix
+          source-run-id: ${{ needs.reuse.outputs.source_run_id }}
+          source-sha: ${{ needs.reuse.outputs.source_sha }}
+          token: ${{ secrets.GITHUB_TOKEN }}
       - name: Upload source-matrix evidence
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
@@ -184,6 +260,7 @@ jobs:
           retention-days: 14
 
   packed-consumers:
+    needs: reuse
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
@@ -196,16 +273,28 @@ jobs:
       # v7.0.0 — ADR-0154 pins the Alpha node runtime to Node 24 (native
       # URLPattern). The runner default (22) cannot load the packed router.
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        if: needs.reuse.outputs.reused != 'true'
         with:
           node-version: '24'
       - name: Install Playwright browsers
         # Packed Native/Lit/Starter/Create/UI consumers assert hydration on
         # all three engines.
+        if: needs.reuse.outputs.reused != 'true'
         run: ./node_modules/.bin/playwright install --with-deps chromium firefox webkit
       - name: Packed consumers (pack, artifact scan, all packed gates, publish dry-run)
+        if: needs.reuse.outputs.reused != 'true'
         env:
           CANDIDATE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: deno task --cwd tools/repo candidate:evidence:packed
+      # Tree-identical reuse (#1425): the proof for this tree already exists.
+      - name: Reuse tree-identical packed evidence
+        if: needs.reuse.outputs.reused == 'true'
+        uses: ./.github/actions/claim-reused-evidence
+        with:
+          job: packed
+          source-run-id: ${{ needs.reuse.outputs.source_run_id }}
+          source-sha: ${{ needs.reuse.outputs.source_sha }}
+          token: ${{ secrets.GITHUB_TOKEN }}
       - name: Upload packed evidence
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
@@ -216,6 +305,7 @@ jobs:
           retention-days: 14
 
   fresh-clone:
+    needs: reuse
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
@@ -228,6 +318,7 @@ jobs:
       # v7.0.0 — the clone's own packed gate runs the same Node 24 consumers
       # (ADR-0154); the runner default (22) lacks native URLPattern.
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        if: needs.reuse.outputs.reused != 'true'
         with:
           node-version: '24'
       - name: Install Playwright browsers
@@ -236,11 +327,23 @@ jobs:
         # Site proof); the browser binaries are reused from the preinstalled
         # HOME cache (disclosed in the fresh-clone manifest), while the clone's
         # DENO_DIR and npm cache start empty.
+        if: needs.reuse.outputs.reused != 'true'
         run: ./node_modules/.bin/playwright install --with-deps chromium firefox webkit
       - name: Fresh clone (install, check, source gate, packed gate, Site E2E)
+        if: needs.reuse.outputs.reused != 'true'
         env:
           CANDIDATE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: deno task --cwd tools/repo candidate:evidence:fresh
+      # Tree-identical reuse (#1425): the clone's proof (including the Site E2E
+      # sidecar it owns) already exists for this tree.
+      - name: Reuse tree-identical fresh-clone evidence
+        if: needs.reuse.outputs.reused == 'true'
+        uses: ./.github/actions/claim-reused-evidence
+        with:
+          job: fresh-clone
+          source-run-id: ${{ needs.reuse.outputs.source_run_id }}
+          source-sha: ${{ needs.reuse.outputs.source_sha }}
+          token: ${{ secrets.GITHUB_TOKEN }}
       - name: Upload fresh-clone evidence
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
@@ -258,20 +361,28 @@ jobs:
   # producer would leave this job skipped, which GitHub reports as Success.
   autoflow-ci:
     name: AutoFlow CI
-    needs: [fast-checks, source-matrix, packed-consumers, fresh-clone]
+    needs: [reuse, fast-checks, source-matrix, packed-consumers, fresh-clone]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       # With `if: always()` this job runs even when a producer failed or was
       # cancelled; assert every producer result explicitly so the required
-      # check fails instead of aggregating partial evidence.
+      # check fails instead of aggregating partial evidence. The reuse job is
+      # asserted too: its failure means the lanes ran their full gates, which
+      # is correct, but a failed RESOLVER must not silently look like "no
+      # source found".
       - name: Assert producer job results
+        env:
+          REUSE_RESULT: ${{ needs.reuse.result }}
+          REUSE_REUSED: ${{ needs.reuse.outputs.reused }}
         run: |
+          echo "reuse: ${REUSE_RESULT} (reused=${REUSE_REUSED:-unknown})"
           echo "fast-checks: ${{ needs.fast-checks.result }}"
           echo "source-matrix: ${{ needs.source-matrix.result }}"
           echo "packed-consumers: ${{ needs.packed-consumers.result }}"
           echo "fresh-clone: ${{ needs.fresh-clone.result }}"
+          test "${REUSE_RESULT}" = success
           test "${{ needs.fast-checks.result }}" = success
           test "${{ needs.source-matrix.result }}" = success
           test "${{ needs.packed-consumers.result }}" = success
@@ -292,7 +403,23 @@ jobs:
       - name: Aggregate candidate evidence
         env:
           CANDIDATE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          # Reuse disclosure (#1425): a bundle that replayed a tree-identical
+          # package says so on the run, with the source run and commit. The
+          # per-job `reused` stamps are what the validator acts on; the
+          # aggregate independently requires every reused record's tree to
+          # equal the checked-out tree and every stamp to name one source run.
+          # Passed through the environment (never interpolated into the script)
+          # so a job output can never be read as shell syntax.
+          REUSE_REUSED: ${{ needs.reuse.outputs.reused }}
+          REUSE_RUN_ID: ${{ needs.reuse.outputs.source_run_id }}
+          REUSE_SHA: ${{ needs.reuse.outputs.source_sha }}
+          REUSE_TREE: ${{ needs.reuse.outputs.tree }}
         run: |
+          echo "tree-SHA reuse: ${REUSE_REUSED:-unknown}"
+          if [ "${REUSE_REUSED}" = "true" ]; then
+            echo "  replayed from run ${REUSE_RUN_ID} (commit ${REUSE_SHA})"
+            echo "  checked-out tree: ${REUSE_TREE}"
+          fi
           deno task --cwd tools/repo candidate:evidence:aggregate
           deno task --cwd tools/repo candidate:evidence:validate
       - name: Upload candidate evidence

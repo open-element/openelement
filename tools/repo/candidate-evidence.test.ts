@@ -1098,6 +1098,184 @@ Deno.test('job-name, SHA/tree, and duplicate/unknown jobs are rejected', async (
   assert((await failuresFor(wrongSha, f)).some((x) => x.includes('evidence sha')));
 });
 
+/** The source commit a reuse test replays from (never the candidate SHA). */
+const SOURCE_SHA = 'e'.repeat(40);
+
+/**
+ * Rewrite a bundle job into EXACTLY the shape a tree-identical reuse
+ * produces: the record keeps its own (source) commit, its steps still carry
+ * the source commit in argv, its clean-proof log lines name the source commit
+ * (they were written by the run that executed the gate), it gains the
+ * `reused` stamp, and — for fresh-clone, which owns the Site E2E proof — the
+ * staged sidecar follows the same commit. The tree is untouched: that is the
+ * reuse key.
+ *
+ * Rewritten log bytes are returned as `ci/<job>/logs/<name>.log` overlays
+ * rather than written into the shared fixture, so one test's replay cannot
+ * change what another test reads.
+ */
+async function reuseJob(
+  bundle: Record<string, unknown>,
+  job: string,
+  options: { runId?: number; withLogs?: boolean } = {},
+): Promise<{ overlays: Record<string, string> }> {
+  const withLogs = options.withLogs ?? true;
+  const overlays: Record<string, string> = {};
+  const record = bundleJob(bundle, job);
+  record.sha = SOURCE_SHA;
+  record.reused = { runId: options.runId ?? 42, sha: SOURCE_SHA };
+  for (const step of record.steps as Array<Record<string, unknown>>) {
+    step.command = (step.command as string[]).map((element) =>
+      element === SHA ? SOURCE_SHA : element
+    );
+    const name = step.name as string;
+    if (!name.startsWith('workspace-clean-') || !withLogs) continue;
+    // The staged log is the source run's log, so its clean-proof line names
+    // the source commit. Re-hash it: the validator recomputes from bytes.
+    const phase = name.endsWith('before') ? 'before' : 'after';
+    const text = `${cleanProofLine(SOURCE_SHA, TREE, phase as 'before' | 'after')}\n`;
+    step.logSha256 = await sha256(text);
+    overlays[`ci/${job}/logs/${name}.log`] = text;
+  }
+  // A reused fresh-clone package also carries the sidecar the source run
+  // wrote, which is bound to that run's commit.
+  if (job === 'fresh-clone') rollupSiteE2e(bundle).candidateSha = SOURCE_SHA;
+  return { overlays };
+}
+
+/** `failuresFor` with per-path log overlays layered over the fixture bytes. */
+async function failuresWith(
+  bundle: Record<string, unknown>,
+  f: Fixture,
+  overlays: Record<string, string>,
+) {
+  return await collectBundleFailures(bundle, {
+    expectedSha: SHA,
+    expectedTree: TREE,
+    read: (path) =>
+      path in overlays ? Promise.resolve(encoder.encode(overlays[path])) : f.read(path),
+  });
+}
+
+Deno.test('reuse: a stamped tree-identical bundle is accepted by the aggregate', async () => {
+  const f = await shared();
+  const bundle = clone(f.bundle);
+  // Reuse EVERY lane from one source run: that is what the resolver decides,
+  // and it is the only shape the aggregate accepts.
+  const overlays: Record<string, string> = {};
+  for (const job of JOB_NAMES) {
+    Object.assign(overlays, (await reuseJob(bundle, job, { runId: 42 })).overlays);
+  }
+  assertEquals(await failuresWith(bundle, f, overlays), []);
+});
+
+Deno.test('reuse: a bundle spliced from two source runs is rejected', async () => {
+  const f = await shared();
+  const bundle = clone(f.bundle);
+  const overlays = {
+    ...(await reuseJob(bundle, 'fast-checks', { runId: 42 })).overlays,
+    ...(await reuseJob(bundle, 'packed', { runId: 43 })).overlays,
+  };
+  const failures = await failuresWith(bundle, f, overlays);
+  assert(
+    failures.some((x) => x.includes('different runs')),
+    `two source runs must be rejected, got: ${failures.join(' | ')}`,
+  );
+});
+
+Deno.test('reuse: the site E2E sidecar and logs follow the source commit', async () => {
+  const f = await shared();
+  // Reused fresh-clone: the sidecar and the clean-proof lines name the source
+  // commit, and the bundle is accepted.
+  const replayed = clone(f.bundle);
+  const { overlays } = await reuseJob(replayed, 'fresh-clone', { runId: 42 });
+  assertEquals(await failuresWith(replayed, f, overlays), []);
+
+  // The same reused record with the sidecar left at the candidate commit is
+  // refused: the sidecar must describe the run that produced it.
+  const stale = clone(f.bundle);
+  const replayedStale = await reuseJob(stale, 'fresh-clone', { runId: 42 });
+  rollupSiteE2e(stale).candidateSha = SHA;
+  assert(
+    (await failuresWith(stale, f, replayedStale.overlays)).some((x) => x.includes('candidateSha')),
+    'a sidecar bound to the wrong commit must be rejected',
+  );
+
+  // And a reused record whose clean-proof log still names the candidate
+  // commit is refused: the logs are the audit trail of the run that ran.
+  const wrongLog = clone(f.bundle);
+  const replayedWrongLog = await reuseJob(wrongLog, 'fresh-clone', { runId: 42 });
+  replayedWrongLog.overlays['ci/fresh-clone/logs/workspace-clean-before.log'] = `${
+    cleanProofLine(SHA, TREE, 'before')
+  }\n`;
+  assert(
+    (await failuresWith(wrongLog, f, replayedWrongLog.overlays)).some((x) =>
+      x.includes('clean-proof')
+    ),
+    'a reused job must be audited against ITS OWN commit for log lines',
+  );
+});
+
+Deno.test('reuse: a reused job claiming the candidate commit is rejected', async () => {
+  const f = await shared();
+  const bundle = clone(f.bundle);
+  // Stamped, but still claiming to be this commit: that is the shape a lane
+  // would produce to skip its gate without a real source.
+  bundleJob(bundle, 'fast-checks').reused = { runId: 42, sha: SHA };
+  const failures = await failuresFor(bundle, f);
+  assert(
+    failures.some((x) => x.includes('claims reused proof for its own commit')),
+    failures.join(' | '),
+  );
+});
+
+Deno.test('reuse: a malformed or disagreeing stamp is rejected', async () => {
+  const f = await shared();
+  for (
+    const [label, stamp, expected] of [
+      ['not-an-object', 'yes', 'reused must be an object'],
+      ['bad-runId', { runId: 0, sha: SOURCE_SHA }, 'reused.runId'],
+      ['bad-sha', { runId: 42, sha: 'nope' }, 'reused.sha'],
+      ['extra-field', { runId: 42, sha: SOURCE_SHA, extra: 1 }, 'unknown fields'],
+      // A stamp naming a different commit than the record cannot be traced.
+      ['disagreeing-sha', { runId: 42, sha: '9'.repeat(40) }, '!= job sha'],
+    ] as const
+  ) {
+    const bundle = clone(f.bundle);
+    const job = bundleJob(bundle, 'fast-checks');
+    job.sha = SOURCE_SHA;
+    job.reused = stamp;
+    const failures = await failuresFor(bundle, f);
+    assert(
+      failures.some((x) => x.includes(expected)),
+      `${label}: expected a failure mentioning ${JSON.stringify(expected)}, got ${
+        failures.join(' | ')
+      }`,
+    );
+  }
+});
+
+Deno.test('reuse: an unstamped job with a foreign commit is still rejected', async () => {
+  const f = await shared();
+  const bundle = clone(f.bundle);
+  // No `reused` stamp at all: the differing sha is the pre-reuse violation.
+  bundleJob(bundle, 'fast-checks').sha = SOURCE_SHA;
+  assert((await failuresFor(bundle, f)).some((x) => x.includes('sha')));
+});
+
+Deno.test('reuse: a stamp for the right run on a DIFFERENT tree is rejected', async () => {
+  const f = await shared();
+  const bundle = clone(f.bundle);
+  // No log overlays: the tree check must reject before any log binding.
+  const { overlays } = await reuseJob(bundle, 'fast-checks', { withLogs: false });
+  bundleJob(bundle, 'fast-checks').tree = 'f'.repeat(40);
+  const failures = await failuresWith(bundle, f, overlays);
+  assert(
+    failures.some((x) => x.includes('tree')),
+    `the tree is the reuse key and must still match: ${failures.join(' | ')}`,
+  );
+});
+
 Deno.test('collectJobFailures rejects old-style and decoy fresh clones', async () => {
   const f = await shared();
   const cloneJobs = () =>

@@ -20,3 +20,4 @@ Evidence cited by an active ADR follows the same policy: ADR-0120's commissioned
 - [ADR-0153-beta2-2-document-seam-and-submission-tuple.md](./ADR-0153-beta2-2-document-seam-and-submission-tuple.md)
 - [ADR-0154-alpha-baseline-removals.md](./ADR-0154-alpha-baseline-removals.md)
 - [ADR-0155-client-only-entry-subpath.md](./ADR-0155-client-only-entry-subpath.md)
+- [ADR-0156-tree-sha-evidence-reuse.md](./ADR-0156-tree-sha-evidence-reuse.md)

@@ -37,6 +37,8 @@
     "candidate:evidence:fresh": "deno run --allow-run ./run-in.ts --root ../.. -- deno run --allow-read --allow-write --allow-run --allow-env --allow-net --deny-ffi --no-prompt tools/repo/candidate-evidence.ts --job fresh-clone --out .artifacts/ci/fresh-clone",
     "candidate:evidence:aggregate": "deno run --allow-run ./run-in.ts --root ../.. -- deno run --allow-read --allow-write --allow-run --allow-env --allow-net --deny-ffi --no-prompt tools/repo/candidate-evidence.ts --aggregate --input-dir .artifacts/ci --output .artifacts/candidate-evidence.json",
     "candidate:evidence:validate": "deno run --allow-run ./run-in.ts --root ../.. -- deno run --allow-read --allow-write --allow-run --allow-env --allow-net --deny-ffi --no-prompt tools/repo/candidate-evidence.ts --validate .artifacts/candidate-evidence.json --max-age-days 14",
+    "candidate:evidence:reuse:resolve": "deno run --allow-run ./run-in.ts --root ../.. -- deno run --allow-read --allow-write --allow-run=git,gh --allow-env --deny-ffi --no-prompt tools/repo/evidence-reuse.ts --resolve",
+    "candidate:evidence:reuse:claim": "deno run --allow-run ./run-in.ts --root ../.. -- deno run --allow-read --allow-write --allow-run=git --allow-env --deny-ffi --no-prompt tools/repo/evidence-reuse.ts --claim",
     "release:registry-check": "deno run --allow-run ./run-in.ts --root ../.. -- deno run --allow-read --allow-run=git,npm tools/repo/check-release-state-machine.ts",
     "product:classification:check": "deno run --allow-run ./run-in.ts --root ../.. -- deno run --allow-read tools/repo/check-product-classification.ts",
     "deno-floor:check": "deno run --allow-run ./run-in.ts --root ../.. -- deno run --allow-read tools/repo/check-deno-floor.ts",
