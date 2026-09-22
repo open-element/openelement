@@ -10,7 +10,9 @@ import {
   findInternalReferences,
   findMetadataViolations,
   findModuleScopeGlobalWrites,
+  findModuleScopeSeamInstalls,
   findUndocumentedSubpaths,
+  type PackSurfaceViolation,
   scanPackedPackage,
 } from './pack-surface.ts';
 import { packedMetadata } from './npm-manifest.ts';
@@ -199,11 +201,13 @@ Deno.test('pack surface: module-scope global writes are found, nested ones are n
 
 Deno.test('pack surface: a side-effect-free package with a module-scope write fails', () => {
   const files = new Map<string, string>([
-    ['package/package.json', JSON.stringify(manifest('@openelement/element'))],
+    // Element declares an array (#1425), so this case uses a package that still
+    // declares a flat `false`: the rule it pins is the flat claim's.
+    ['package/package.json', JSON.stringify(manifest('@openelement/ui'))],
     ['package/README.md', ''],
     ['package/src/index.js', 'globalThis.__openElementBootstrap = true;'],
   ]);
-  const violations = scanPackedPackage('@openelement/element', files);
+  const violations = scanPackedPackage('@openelement/ui', files);
   assertEquals(violations.length, 1);
   assertStringIncludes(violations[0].message, 'sideEffects');
   assertStringIncludes(violations[0].path, 'src/index.js');
@@ -217,4 +221,88 @@ Deno.test('pack surface: create keeps its side-effectful cli out of the scan', (
   ]);
   // Create declares sideEffects: ['./src/cli.js'], so the write is expected.
   assertEquals(scanPackedPackage('@openelement/create', files), []);
+});
+
+Deno.test('pack surface: module-scope seam installs are found, deferred ones are not', () => {
+  const offending = [
+    'installClaimExecutor(claimExistingDom);',
+    'installSeamThing(other);',
+  ];
+  for (const line of offending) {
+    const found = findModuleScopeSeamInstalls(line);
+    assertEquals(found.length, 1, `must fail: ${line}`);
+  }
+
+  const accepted = [
+    // Inside a function or a block: not an import-time install.
+    'function wire() {\n  installClaimExecutor(claimExistingDom);\n}',
+    'if (ready) {\n  installClaimExecutor(claimExistingDom);\n}',
+    // An indented call is not a module-scope statement head.
+    '  installClaimExecutor(claimExistingDom);',
+    // A factory call is not an install: it has no seam naming convention, and
+    // Router's pure reachability imports must stay unflagged (#1425 scope).
+    'createIslandScheduler({ log, win, doc });',
+    'export { installClaimExecutor } from "./claim-seam.js";',
+  ];
+  for (const source of accepted) {
+    assertEquals(
+      findModuleScopeSeamInstalls(source),
+      [],
+      `must pass: ${JSON.stringify(source)}`,
+    );
+  }
+});
+
+Deno.test('pack surface: an undeclared seam install fails, a declared one passes', () => {
+  // The installer path in the fixture is the one the shipped element manifest
+  // declares, so "declared" below means the real declaration actually covers
+  // the real module — not a coincidental match on a test-only name.
+  const INSTALLER_PATH = 'src/internal/compiled/runtime/claim-install.js';
+  const packaged = (sideEffects: unknown): Map<string, string> =>
+    new Map<string, string>([
+      [
+        'package/package.json',
+        JSON.stringify(manifest('@openelement/element', { sideEffects })),
+      ],
+      ['package/README.md', ''],
+      ['package/src/index.js', "import './internal/compiled/runtime/claim-install.js';"],
+      [`package/${INSTALLER_PATH}`, 'installClaimExecutor(claimExistingDom);'],
+    ]);
+  // Only the seam rule's findings: a fixture whose sideEffects differs from
+  // packedMetadata() also trips the parity rule, which is not under test here.
+  const seam = (sideEffects: unknown): PackSurfaceViolation[] =>
+    scanPackedPackage('@openelement/element', packaged(sideEffects))
+      .filter((violation) => violation.message.includes('tree-shaken'));
+
+  // The #1425 shape: `false` lets a bundler drop the installer AND the bare
+  // import that reaches it, so the packaged entry silently loses the seam.
+  const undeclared = seam(false);
+  assertEquals(undeclared.length, 1);
+  assertStringIncludes(undeclared[0].path, INSTALLER_PATH);
+
+  // The shipped declaration clears it, and clears every other rule too.
+  assertEquals(
+    scanPackedPackage(
+      '@openelement/element',
+      packaged(packedMetadata('@openelement/element').sideEffects),
+    ),
+    [],
+  );
+
+  // Wildcards and a flat `true` are honoured the way npm reads them.
+  for (const declared of [['./src/**'], true] as const) {
+    assertEquals(seam(declared), [], `must pass with sideEffects=${JSON.stringify(declared)}`);
+  }
+
+  // Naming only the importer is NOT enough: the installer body is still
+  // side-effect-free on its own, which is exactly the half-dropped bundle.
+  const importerOnly = seam(['./src/index.js']);
+  assertEquals(importerOnly.length, 1);
+  assertStringIncludes(importerOnly[0].path, INSTALLER_PATH);
+
+  // And the shipped element manifest must not regress to the flat claim.
+  assertEquals(packedMetadata('@openelement/element').sideEffects, [
+    './src/index.js',
+    './src/internal/compiled/runtime/claim-install.js',
+  ]);
 });

@@ -62,6 +62,7 @@ import {
   STATIC_JOB_STEPS,
 } from './candidate-steps.ts';
 import { auditTarballPackage } from './tarball-inspect.ts';
+import { auditReusedStamp, type ReusedStamp } from './evidence-reuse.ts';
 
 export { JOB_NAMES, REQUIRED_STEPS } from './candidate-steps.ts';
 
@@ -115,6 +116,12 @@ interface JobResult {
   tree: string;
   trackedClean: true;
   result: 'PASS' | 'FAIL';
+  /**
+   * Present only on a job whose proof was replayed from a tree-identical run
+   * (#1425 follow-up, tools/repo/evidence-reuse.ts). It is what licenses `sha`
+   * to differ from the candidate commit.
+   */
+  reused?: ReusedStamp;
   steps: StepResult[];
   toolVersions: EvidenceToolVersions;
   extras?: Record<string, unknown>;
@@ -689,13 +696,31 @@ async function packExtras(
  * result.json so aggregation and validation recompute the sidecar instead of
  * trusting it. A lazy probe cannot fake the proof: a lane that exits 0
  * without a reportable sidecar fails closed here.
+ *
+ * #1409: the raw report is also staged when the suite FAILED. A red run is
+ * precisely the case whose per-test names are otherwise unrecoverable — the
+ * sidecar's counts alone cannot say which test broke, and the runner emits no
+ * per-test annotations by design. `options.required` separates the two
+ * callers: a green run must yield recordable evidence (missing or unrecordable
+ * bytes are a hard error), while a red run stages whatever the runner managed
+ * to write. A red run that produced no sidecar at all still records
+ * `ran: false`, which the aggregate fails closed on.
+ *
+ * Exported for tests: the red/green branches are the #1409 contract, and they
+ * are pure filesystem staging, so they are worth pinning without a clone.
  */
-async function stageCloneSiteE2e(
+export async function stageCloneSiteE2e(
   cloneDir: string,
   outDir: string,
   expectedCommit: string,
+  options: { required?: boolean } = {},
 ): Promise<SiteE2eRollup> {
+  const required = options.required ?? true;
   const artifacts = join(cloneDir, '.artifacts');
+  const unrecordable = (cause: unknown): SiteE2eRollup => {
+    console.warn(`[evidence] failed Site E2E produced no recordable report: ${String(cause)}`);
+    return { ran: false } as SiteE2eRollup;
+  };
   let result: SiteE2eRollup;
   let reportBytes: Uint8Array;
   try {
@@ -704,14 +729,28 @@ async function stageCloneSiteE2e(
     ) as SiteE2eRollup;
     reportBytes = await Deno.readFile(join(artifacts, SITE_E2E_REPORT_FILE));
   } catch (cause) {
+    if (!required) return unrecordable(cause);
     throw new Error(
       `fresh clone did not produce the Site E2E sidecar and raw report the candidate proof requires: ${
         String(cause)
       }`,
     );
   }
-  // Fail closed at record time: a sidecar that does not recompute from the
-  // raw report bytes, or that belongs to another commit, is never recorded.
+  // The runner removes the previous report before every run, so the bytes
+  // cannot be stale; the sidecar must still describe this candidate.
+  if (result.candidateSha !== expectedCommit) {
+    if (!required) return unrecordable(`sidecar candidateSha=${result.candidateSha}`);
+    throw new Error(
+      `Site E2E sidecar candidateSha=${JSON.stringify(result.candidateSha)} != ${expectedCommit}`,
+    );
+  }
+  await Deno.writeFile(join(outDir, SITE_E2E_REPORT_FILE), reportBytes);
+  // A red run's evidence travels as-is: the report bytes are what a human
+  // needs, and the validator's auditSiteE2e is what fails the aggregate.
+  if (!required) return result;
+  // Fail closed at record time on a green run: a sidecar that does not
+  // recompute from the raw report bytes, or that belongs to another commit, is
+  // never recorded.
   const failures = [
     ...auditSiteE2e(result),
     ...await collectSiteE2eRecomputeFailures(result, {
@@ -722,7 +761,6 @@ async function stageCloneSiteE2e(
   if (failures.length > 0) {
     throw new Error(`Site E2E evidence is not recordable:\n${failures.join('\n')}`);
   }
-  await Deno.writeFile(join(outDir, SITE_E2E_REPORT_FILE), reportBytes);
   return result;
 }
 
@@ -812,6 +850,9 @@ async function recordFreshClone(outDir: string): Promise<void> {
   // Staged from inside the clone before it is deleted; the sidecar is the
   // candidate's Site proof and this lane is where it is produced.
   let siteE2e: SiteE2eRollup | undefined;
+  // #1409: a red Site E2E step must not skip the evidence staging below, so it
+  // is captured here and re-raised after `result.json` is written.
+  let siteE2eFailure: Error | undefined;
   const run = async (
     name: string,
     roleArgv: string[],
@@ -880,9 +921,20 @@ async function recordFreshClone(outDir: string): Promise<void> {
     // and drive the official Playwright suite there, so the recorded sidecar
     // describes the same exact SHA/tree as every other job.
     await run('task-site-build', freshCloneCommands.siteBuild(denoExe), cloneDir, isolatedEnv);
-    await run('task-site-e2e', freshCloneCommands.siteE2e(denoExe), cloneDir, isolatedEnv);
+    // #1409: the Site E2E step must not throw past the evidence staging below.
+    // A failing suite is exactly the case whose per-test names are unrecoverable
+    // without a live runner, so the raw report is staged on failure too — then
+    // the failure is re-raised, unchanged, after the record is written.
+    try {
+      await run('task-site-e2e', freshCloneCommands.siteE2e(denoExe), cloneDir, isolatedEnv);
+    } catch (cause) {
+      siteE2eFailure = cause instanceof Error ? cause : new Error(String(cause));
+    }
     await runCleanProof('after');
-    siteE2e = await stageCloneSiteE2e(cloneDir, outDir, sha);
+    // Staged whenever the runner wrote a recordable sidecar (green or red);
+    // a lane that produced no sidecar at all records `ran: false` and the
+    // validator fails closed on it.
+    siteE2e = await stageCloneSiteE2e(cloneDir, outDir, sha, { required: !siteE2eFailure });
   } finally {
     await Deno.remove(tmpRoot, { recursive: true }).catch(() => undefined);
   }
@@ -909,6 +961,7 @@ async function recordFreshClone(outDir: string): Promise<void> {
     generatedAt: new Date().toISOString(),
   };
   await Deno.writeTextFile(join(outDir, 'result.json'), JSON.stringify(result, null, 2) + '\n');
+  if (siteE2eFailure) throw siteE2eFailure;
   if (result.result !== 'PASS') Deno.exit(1);
 }
 
@@ -983,6 +1036,9 @@ const JOB_KEYS = [
   'toolVersions',
   'steps',
   'extras',
+  // Present only on a job whose proof was reused from a tree-identical run
+  // (tools/repo/evidence-reuse.ts); it is what licenses `sha` to differ.
+  'reused',
 ] as const;
 
 const STEP_KEYS = [
@@ -1030,9 +1086,39 @@ async function auditJob(
     );
   }
   if (rawJob.job !== job) failures.push(`${job}: job field must be ${JSON.stringify(job)}`);
-  if (rawJob.sha !== context.sha) {
-    failures.push(`${job}: sha ${JSON.stringify(rawJob.sha)} != ${context.sha}`);
+  // Reuse (#1425 follow-up): a job carrying `reused` proved a TREE, not this
+  // commit, so its `sha` legitimately differs. `tree` must still match — that
+  // is the reuse key — and the stamp is audited on its own.
+  const reusedStamp = rawJob.reused;
+  if (reusedStamp === undefined) {
+    if (rawJob.sha !== context.sha) {
+      failures.push(`${job}: sha ${JSON.stringify(rawJob.sha)} != ${context.sha}`);
+    }
+  } else {
+    failures.push(...auditReusedStamp(reusedStamp).map((failure) => `${job}: ${failure}`));
+    if (rawJob.sha === context.sha) {
+      failures.push(
+        `${job}: claims reused proof for its own commit ${context.sha}; a reused job must ` +
+          `record the source commit it was replayed from`,
+      );
+    }
+    // The stamp and the record must agree on the source commit: a stamp that
+    // names a different commit than the record ran at cannot be traced back to
+    // a tree-identical run.
+    if (isRecord(reusedStamp) && reusedStamp.sha !== rawJob.sha) {
+      failures.push(
+        `${job}: reused.sha ${JSON.stringify(reusedStamp.sha)} != job sha ${
+          JSON.stringify(rawJob.sha)
+        }`,
+      );
+    }
   }
+  // Everything a reused record's steps were produced against is the SOURCE
+  // commit (its argv, its clean-proof lines), so the step audit binds to the
+  // record's own sha whenever the proof was replayed.
+  const proofSha = reusedStamp !== undefined && typeof rawJob.sha === 'string'
+    ? rawJob.sha
+    : context.sha;
   if (rawJob.tree !== context.tree) {
     failures.push(`${job}: tree ${JSON.stringify(rawJob.tree)} != ${context.tree}`);
   }
@@ -1101,7 +1187,7 @@ async function auditJob(
     if (!step) continue;
     const label = `${job}/${name}`;
     failures.push(
-      ...auditStep(job, name, step.command, step.cwd, { sha: context.sha, tree: context.tree })
+      ...auditStep(job, name, step.command, step.cwd, { sha: proofSha, tree: context.tree })
         .map((failure) => `${label}: ${failure}`),
     );
     const startedAt = step.startedAt;
@@ -1173,7 +1259,7 @@ async function auditJob(
       const phase = name.endsWith('before') ? 'before' : 'after';
       if (
         logText !== undefined && !logText.includes(
-          cleanProofLine(context.sha, context.tree, phase),
+          cleanProofLine(proofSha, context.tree, phase),
         )
       ) {
         failures.push(`${label}: log is missing the canonical clean-proof PASS line`);
@@ -1245,7 +1331,40 @@ export async function collectJobFailures(
   for (const name of byName.keys()) {
     if (!JOB_NAMES.includes(name as JobName)) failures.push(`unknown job result: ${name}`);
   }
+  failures.push(
+    ...auditReuseConsistency(
+      [...byName].map(([name, entry]) => ({
+        name,
+        reused: isRecord(entry.job) ? entry.job.reused : undefined,
+      })),
+    ),
+  );
   return failures;
+}
+
+/**
+ * Cross-job reuse consistency (#1425 follow-up). The per-job audit already
+ * proved every record's `tree` equals the checked-out tree, so a reused
+ * record's differing `sha` is licensed. What can still be checked locally is
+ * that the bundle was not spliced: every reused job must name the SAME source
+ * run, because that one run's tree match is what makes them all valid. Two
+ * source runs would mean the resolver's single decision was bypassed.
+ */
+function auditReuseConsistency(
+  jobs: ReadonlyArray<{ name: string; reused: unknown }>,
+): string[] {
+  const sourceRuns = new Map<number, string[]>();
+  for (const { name, reused } of jobs) {
+    if (!isRecord(reused) || !Number.isSafeInteger(reused.runId)) continue;
+    const runId = reused.runId as number;
+    sourceRuns.set(runId, [...(sourceRuns.get(runId) ?? []), name]);
+  }
+  if (sourceRuns.size <= 1) return [];
+  return [
+    `reused evidence comes from ${sourceRuns.size} different runs (` +
+    [...sourceRuns].map(([runId, names]) => `${runId}: ${names.join('+')}`).join(', ') +
+    `); one reused tree must be replayed from one source run`,
+  ];
 }
 
 /** Pure checks for the packed artifact/consumer and Site E2E rollup. */
@@ -1580,6 +1699,16 @@ export async function collectBundleFailures(
     for (const name of seen) {
       if (!JOB_NAMES.includes(name as JobName)) failures.push(`unknown job result: ${name}`);
     }
+    // The bundle path audits each job in place, so the cross-job reuse check
+    // has to run here too — a spliced bundle must fail in both modes.
+    failures.push(
+      ...auditReuseConsistency(
+        rawJobs.filter(isRecord).map((job) => ({
+          name: typeof job.job === 'string' ? job.job : '<unknown>',
+          reused: job.reused,
+        })),
+      ),
+    );
   }
 
   const aggregate = evidence.aggregate;
@@ -1642,13 +1771,36 @@ export async function collectBundleFailures(
 
   const rollup = isRecord(evidence.rollup) ? evidence.rollup as Rollup : undefined;
   failures.push(...collectRollupFailures(rollup));
+  // A reused fresh-clone job proves a tree, not a commit: bind its Site E2E
+  // sidecar to the commit the suite actually ran at (#1425). The candidate
+  // identity the caller supplied applies first, then the job's own sha wins
+  // when the proof was replayed.
+  const bundleSha = options.expectedSha ?? (isCommit(sha) ? sha : undefined);
+  const freshJob = Array.isArray(evidence.jobs)
+    ? (evidence.jobs as unknown[]).find((job) => isRecord(job) && job.job === 'fresh-clone') as
+      | Pick<JobResult, 'sha' | 'reused'>
+      | undefined
+    : undefined;
+  const siteE2eSha = freshJob !== undefined && bundleSha !== undefined
+    ? jobProofSha(freshJob, bundleSha)
+    : bundleSha;
   failures.push(
     ...await collectSiteE2eRecomputeFailures(rollup?.siteE2e, {
       readReport: () => options.read(SITE_E2E_REPORT_BUNDLE_PATH),
-      expectedSha: options.expectedSha ?? (isCommit(sha) ? sha : undefined),
+      expectedSha: siteE2eSha,
     }),
   );
   return failures;
+}
+
+/**
+ * The commit a job's proof actually ran at. A reused record (#1425) carries
+ * the SOURCE commit, so anything derived from its bytes — the Site E2E
+ * sidecar's `candidateSha` — is bound to that, while the tree binding stays
+ * the reuse key.
+ */
+function jobProofSha(job: Pick<JobResult, 'sha' | 'reused'>, expected: string): string {
+  return job.reused !== undefined && typeof job.sha === 'string' ? job.sha : expected;
 }
 
 async function loadJobs(inputDir: string): Promise<LoadedJob[]> {
@@ -1698,7 +1850,10 @@ async function aggregate(inputDir: string, output: string): Promise<void> {
   rollupFailures.push(
     ...await collectSiteE2eRecomputeFailures(rollup.siteE2e, {
       readReport: () => fresh.read(SITE_E2E_REPORT_FILE),
-      expectedSha: expected,
+      // The sidecar is bound to the commit that RAN the suite. When the
+      // fresh-clone lane reused a tree-identical package, that is the source
+      // commit, and the tree binding above is what licenses it (#1425).
+      expectedSha: jobProofSha(fresh.job, expected),
     }),
   );
   if (rollupFailures.length > 0) {

@@ -3,7 +3,7 @@
  *
  * `deno pack` produces the artifact; tools/release/npm-manifest.ts owns the
  * metadata the coordinator writes into it. This check reads the REAL tarball
- * bytes (run tools/release#pack:dry-run first) and fails closed on four
+ * bytes (run tools/release#pack:dry-run first) and fails closed on five
  * things a consumer would otherwise see:
  *
  *   1. facade metadata (`homepage`, `keywords`, `engines`, `sideEffects`)
@@ -15,7 +15,13 @@
  *      and an ADR id is maintainer vocabulary;
  *   3. a packed export subpath that the shipped README never names;
  *   4. a module-scope write to a well-known global in a package declared
- *      `sideEffects: false`, which would make the tree-shaking claim false.
+ *      `sideEffects: false`, which would make the tree-shaking claim false;
+ *   5. a module-scope install call (`installX(...)`) in a package declared
+ *      `sideEffects: false` without naming that module — the install can be
+ *      removed along with the bare import that reaches it, without changing
+ *      what the artifact looks like. This is the #1425 class: the default
+ *      entry's claim-executor install was declared tree-shakeable, so consumer
+ *      bundles shipped without it and island hydration threw at runtime.
  *
  * Bytes are parsed in-process with the repository's standards-only tar reader
  * (tools/repo/tarball-inspect.ts), so the check inspects exactly what npm
@@ -42,6 +48,18 @@ const ADR_PATTERN = /\bADRs?\b|ADR[- ]\d{4}/;
 /** A write to a well-known global at the head of a module-scope statement. */
 const GLOBAL_WRITE_PATTERN =
   /^(?:globalThis|window|document|customElements|self)\s*(?:\.\s*[A-Za-z_$][\w$]*\s*=|\[)|^Object\.defineProperty\(\s*(?:globalThis|window|document|customElements)\b/;
+
+/**
+ * A seam install at module scope: an `install<Something>(...)` call. The
+ * naming is the codebase's install convention (`installClaimExecutor` in
+ * claim-seam.ts), and it is the shape a tree-shaking bundler silently drops
+ * (#1425): the call has no used export to keep it, so a package that declares
+ * the module side-effect-free loses the install while still shipping. Narrow
+ * on purpose — a module-scope factory call (`createLogger()`) is not an
+ * install and stays out of this class, so Router's pure reachability imports
+ * are not flagged.
+ */
+const SEAM_INSTALL_PATTERN = /^install[A-Z][A-Za-z0-9_$]*\s*\(/;
 
 /** Text members worth scanning: shipped code, declarations, docs, styles. */
 const SCAN_EXTENSIONS = ['.js', '.mjs', '.cjs', '.d.ts', '.json', '.md', '.css', '.tmpl', '.txt'];
@@ -157,18 +175,22 @@ export function findUndocumentedSubpaths(
 }
 
 /**
- * Module-scope writes to a well-known global in one module. Returns the
+ * Module-scope statements in one module matching `pattern`. Returns the
  * offending source lines.
  *
- * `sideEffects: false` tells a bundler it may drop an unused import, so a
- * write that runs merely because the module was imported would make the claim
- * a lie. Only writes at brace depth 0 AND outside every string/template/regex
- * position are reported: the polyfill banners in `ssr-polyfills.ts` carry
+ * Used with GLOBAL_WRITE_PATTERN for `sideEffects: false`: a write that runs
+ * merely because the module was imported would make the claim a lie. Used with
+ * SEAM_INSTALL_PATTERN for the same claim on install calls (#1425). Only
+ * statements at brace depth 0 AND outside every string/template/regex position
+ * are reported: the polyfill banners in `ssr-polyfills.ts` carry
  * `globalThis.customElements = …` inside emitted template literals, which run
  * in a generated entry the consumer opts into, never on importing the shipped
  * module.
  */
-export function findModuleScopeGlobalWrites(text: string): string[] {
+export function findModuleScopeGlobalWrites(
+  text: string,
+  pattern: RegExp = GLOBAL_WRITE_PATTERN,
+): string[] {
   const hits: string[] = [];
   let braceDepth = 0;
   let mode: 'code' | 'single' | 'double' | 'template' | 'line' | 'block' = 'code';
@@ -184,7 +206,7 @@ export function findModuleScopeGlobalWrites(text: string): string[] {
   const consider = (lineEnd: number): void => {
     if (!lineStartedAtModuleScope || braceDepth !== 0) return;
     const code = lineText.trim();
-    if (code !== '' && GLOBAL_WRITE_PATTERN.test(code)) {
+    if (code !== '' && pattern.test(code)) {
       // Report the real source line so quoted fragments survive.
       hits.push(text.slice(lineStart, lineEnd).trim().slice(0, 140));
     }
@@ -288,6 +310,7 @@ export function scanPackedPackage(
       files.get('package/README.md') ?? '',
     ),
   );
+  violations.push(...findUndeclaredSeamInstalls(packageName, packageJson.sideEffects, files));
   for (const [archivePath, text] of files) {
     const path = archivePath.replace(/^package\//, '');
     if (!isScannable(path)) continue;
@@ -303,6 +326,88 @@ export function scanPackedPackage(
     }
   }
   return violations;
+}
+
+/**
+ * Module-scope seam installs in one module, reported with the module-scope
+ * line that performs them. Reuses the module-scope walker's limits: only calls
+ * at brace depth 0 and outside string positions count, so an install written
+ * inside a generated template literal (a consumer's emitted entry) is not
+ * mistaken for the shipped module's own import-time effect.
+ */
+export function findModuleScopeSeamInstalls(text: string): string[] {
+  return findModuleScopeGlobalWrites(text, SEAM_INSTALL_PATTERN);
+}
+
+/**
+ * Modules a package ships while declaring them without side effects, yet whose
+ * module scope installs a seam (#1425). `sideEffects: false` lets a bundler
+ * remove the module body — and the bare import that reaches it — so the
+ * install never runs at runtime while the artifact still looks correct. The
+ * declaration must name every such module (or the package must declare
+ * `sideEffects: true`).
+ */
+export function findUndeclaredSeamInstalls(
+  packageName: string,
+  sideEffects: unknown,
+  files: ReadonlyMap<string, string>,
+): PackSurfaceViolation[] {
+  if (sideEffects === true || sideEffects === undefined) return [];
+  const declared = Array.isArray(sideEffects)
+    ? (sideEffects as unknown[]).filter((entry): entry is string => typeof entry === 'string')
+    : [];
+  const violations: PackSurfaceViolation[] = [];
+  for (const [archivePath, text] of files) {
+    const path = archivePath.replace(/^package\//, '');
+    if (!path.endsWith('.js')) continue;
+    for (const install of findModuleScopeSeamInstalls(text)) {
+      if (declared.some((entry) => matchesDeclaredPath(entry, path))) continue;
+      violations.push({
+        packageName,
+        path,
+        message: `module-scope seam install is declared side-effect-free and would be ` +
+          `tree-shaken away: ${install} (declare '${path}' in sideEffects)`,
+      });
+    }
+  }
+  return violations;
+}
+
+/**
+ * Whether one `sideEffects` array entry covers one shipped path. Entries are
+ * package-relative (`./src/index.js`); npm matches them as globs, so `*` spans
+ * one path segment (`./src/*.js`) and `**` spans any number of them
+ * (`./src/**`). The leading `./` is optional in npm's own reading, so it is
+ * stripped before matching.
+ */
+function matchesDeclaredPath(entry: string, path: string): boolean {
+  return globToRegExp(entry.replace(/^\.\//, '')).test(path);
+}
+
+/** npm-style glob -> anchored RegExp for package-relative paths. */
+function globToRegExp(pattern: string): RegExp {
+  let source = '';
+  for (let index = 0; index < pattern.length; index++) {
+    const char = pattern[index];
+    if (char === '*' && pattern[index + 1] === '*') {
+      source += '.*';
+      index++;
+      // A globstar directly before a separator also consumes that separator,
+      // so `src/**` covers `src/a.js` (which has no separator after `src`).
+      if (pattern[index + 1] === '/') index++;
+      continue;
+    }
+    if (char === '*') {
+      source += '[^/]*';
+      continue;
+    }
+    source += escapeRegExp(char);
+  }
+  return new RegExp(`^${source}$`);
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 /** Decode one archive member as UTF-8 text, or null when it is binary. */
