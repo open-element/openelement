@@ -689,13 +689,31 @@ async function packExtras(
  * result.json so aggregation and validation recompute the sidecar instead of
  * trusting it. A lazy probe cannot fake the proof: a lane that exits 0
  * without a reportable sidecar fails closed here.
+ *
+ * #1409: the raw report is also staged when the suite FAILED. A red run is
+ * precisely the case whose per-test names are otherwise unrecoverable — the
+ * sidecar's counts alone cannot say which test broke, and the runner emits no
+ * per-test annotations by design. `options.required` separates the two
+ * callers: a green run must yield recordable evidence (missing or unrecordable
+ * bytes are a hard error), while a red run stages whatever the runner managed
+ * to write. A red run that produced no sidecar at all still records
+ * `ran: false`, which the aggregate fails closed on.
+ *
+ * Exported for tests: the red/green branches are the #1409 contract, and they
+ * are pure filesystem staging, so they are worth pinning without a clone.
  */
-async function stageCloneSiteE2e(
+export async function stageCloneSiteE2e(
   cloneDir: string,
   outDir: string,
   expectedCommit: string,
+  options: { required?: boolean } = {},
 ): Promise<SiteE2eRollup> {
+  const required = options.required ?? true;
   const artifacts = join(cloneDir, '.artifacts');
+  const unrecordable = (cause: unknown): SiteE2eRollup => {
+    console.warn(`[evidence] failed Site E2E produced no recordable report: ${String(cause)}`);
+    return { ran: false } as SiteE2eRollup;
+  };
   let result: SiteE2eRollup;
   let reportBytes: Uint8Array;
   try {
@@ -704,14 +722,28 @@ async function stageCloneSiteE2e(
     ) as SiteE2eRollup;
     reportBytes = await Deno.readFile(join(artifacts, SITE_E2E_REPORT_FILE));
   } catch (cause) {
+    if (!required) return unrecordable(cause);
     throw new Error(
       `fresh clone did not produce the Site E2E sidecar and raw report the candidate proof requires: ${
         String(cause)
       }`,
     );
   }
-  // Fail closed at record time: a sidecar that does not recompute from the
-  // raw report bytes, or that belongs to another commit, is never recorded.
+  // The runner removes the previous report before every run, so the bytes
+  // cannot be stale; the sidecar must still describe this candidate.
+  if (result.candidateSha !== expectedCommit) {
+    if (!required) return unrecordable(`sidecar candidateSha=${result.candidateSha}`);
+    throw new Error(
+      `Site E2E sidecar candidateSha=${JSON.stringify(result.candidateSha)} != ${expectedCommit}`,
+    );
+  }
+  await Deno.writeFile(join(outDir, SITE_E2E_REPORT_FILE), reportBytes);
+  // A red run's evidence travels as-is: the report bytes are what a human
+  // needs, and the validator's auditSiteE2e is what fails the aggregate.
+  if (!required) return result;
+  // Fail closed at record time on a green run: a sidecar that does not
+  // recompute from the raw report bytes, or that belongs to another commit, is
+  // never recorded.
   const failures = [
     ...auditSiteE2e(result),
     ...await collectSiteE2eRecomputeFailures(result, {
@@ -722,7 +754,6 @@ async function stageCloneSiteE2e(
   if (failures.length > 0) {
     throw new Error(`Site E2E evidence is not recordable:\n${failures.join('\n')}`);
   }
-  await Deno.writeFile(join(outDir, SITE_E2E_REPORT_FILE), reportBytes);
   return result;
 }
 
@@ -812,6 +843,9 @@ async function recordFreshClone(outDir: string): Promise<void> {
   // Staged from inside the clone before it is deleted; the sidecar is the
   // candidate's Site proof and this lane is where it is produced.
   let siteE2e: SiteE2eRollup | undefined;
+  // #1409: a red Site E2E step must not skip the evidence staging below, so it
+  // is captured here and re-raised after `result.json` is written.
+  let siteE2eFailure: Error | undefined;
   const run = async (
     name: string,
     roleArgv: string[],
@@ -880,9 +914,20 @@ async function recordFreshClone(outDir: string): Promise<void> {
     // and drive the official Playwright suite there, so the recorded sidecar
     // describes the same exact SHA/tree as every other job.
     await run('task-site-build', freshCloneCommands.siteBuild(denoExe), cloneDir, isolatedEnv);
-    await run('task-site-e2e', freshCloneCommands.siteE2e(denoExe), cloneDir, isolatedEnv);
+    // #1409: the Site E2E step must not throw past the evidence staging below.
+    // A failing suite is exactly the case whose per-test names are unrecoverable
+    // without a live runner, so the raw report is staged on failure too — then
+    // the failure is re-raised, unchanged, after the record is written.
+    try {
+      await run('task-site-e2e', freshCloneCommands.siteE2e(denoExe), cloneDir, isolatedEnv);
+    } catch (cause) {
+      siteE2eFailure = cause instanceof Error ? cause : new Error(String(cause));
+    }
     await runCleanProof('after');
-    siteE2e = await stageCloneSiteE2e(cloneDir, outDir, sha);
+    // Staged whenever the runner wrote a recordable sidecar (green or red);
+    // a lane that produced no sidecar at all records `ran: false` and the
+    // validator fails closed on it.
+    siteE2e = await stageCloneSiteE2e(cloneDir, outDir, sha, { required: !siteE2eFailure });
   } finally {
     await Deno.remove(tmpRoot, { recursive: true }).catch(() => undefined);
   }
@@ -909,6 +954,7 @@ async function recordFreshClone(outDir: string): Promise<void> {
     generatedAt: new Date().toISOString(),
   };
   await Deno.writeTextFile(join(outDir, 'result.json'), JSON.stringify(result, null, 2) + '\n');
+  if (siteE2eFailure) throw siteE2eFailure;
   if (result.result !== 'PASS') Deno.exit(1);
 }
 

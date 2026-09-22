@@ -23,6 +23,10 @@ jobs:
   starter:
     name: Starter (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
+    # Every job carries a wall-clock ceiling (#1402): a hung consumer
+    # qualification must not hold a runner slot indefinitely. This leg
+    # scaffolds, installs, builds, and browser-probes a starter on three OSes.
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
@@ -52,6 +56,7 @@ jobs:
   runtime:
     name: Published runtimes and deployment boundaries
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     steps:
       # v7.0.1
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1

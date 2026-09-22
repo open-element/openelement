@@ -9,6 +9,7 @@
  * reported by the round-2 review is a regression here.
  */
 import { assert, assertEquals, assertRejects } from '@std/assert';
+import { join } from '@std/path';
 import {
   carryPackedTarballs,
   collectBundleFailures,
@@ -23,6 +24,7 @@ import {
   REQUIRED_STEPS,
   SITE_E2E_REPORT_BUNDLE_PATH,
   SITE_E2E_REPORT_FILE,
+  stageCloneSiteE2e,
   stageTarballEvidence,
 } from './candidate-evidence.ts';
 import {
@@ -1234,6 +1236,50 @@ function tinySiteReport(configFile: string) {
   };
 }
 
+/**
+ * A Site E2E report at the real suite's shape: `perBrowser` passing tests in
+ * every project, so `auditSiteE2e`'s per-project floor and the executed-count
+ * binding are both satisfied. Used by the tests that exercise the full
+ * staging + audit path rather than the recompute guard alone.
+ */
+function fullSiteReport(
+  perBrowser: number,
+  configFile = '/agent/checkout/www/e2e/playwright.config.ts',
+) {
+  return {
+    config: { configFile, grep: {} },
+    suites: REQUIRED_SITE_BROWSERS.map((browser) => ({
+      specs: Array.from({ length: perBrowser }, (_, index) => ({
+        title: `${browser} test ${index}`,
+        tests: [{ projectName: browser, status: 'expected', results: [{ status: 'passed' }] }],
+      })),
+    })),
+    stats: { expected: perBrowser * REQUIRED_SITE_BROWSERS.length },
+  };
+}
+
+/** The sidecar a green run writes for `reportText`, plus the report bytes. */
+async function fullSiteE2e(report: unknown, reportText: string) {
+  const bytes = encoder.encode(reportText);
+  const projects = summarizePlaywrightReport(report as never);
+  const totals = { passed: 0, failed: 0, skipped: 0 };
+  for (const summary of Object.values(projects)) {
+    totals.passed += summary.passed;
+    totals.failed += summary.failed;
+    totals.skipped += summary.skipped;
+  }
+  return {
+    ran: true,
+    projects,
+    ...totals,
+    expected: (report as { stats: { expected: number } }).stats.expected,
+    configFile: SITE_E2E_CONFIG_FILE,
+    grep: {},
+    reportSha256: (await sha256BytesLocal(bytes)).slice('sha256:'.length),
+    candidateSha: SHA,
+  };
+}
+
 async function tinySiteE2e(reportBytes: Uint8Array, report: unknown) {
   return {
     projects: summarizePlaywrightReport(report as never),
@@ -1358,4 +1404,131 @@ Deno.test('packedRollupFromLog derives the artifact scan and consumers from the 
   assertEquals(parsed.artifactCheck, true);
   assertEquals(parsed.consumers.length, REQUIRED_PACKED_CONSUMERS.length);
   assertEquals(packedRollupFromLog('PASS tools/release#pack:dry-run').artifactCheck, false);
+});
+
+/**
+ * Run `stageCloneSiteE2e` against a scratch clone and out dir, both of which
+ * this helper creates and removes. Nothing is returned by path, so the caller
+ * never has to clean up after itself.
+ */
+async function stageScratchSiteE2e(
+  files: { sidecar?: unknown; reportText?: string },
+  options: { required: boolean },
+): Promise<{ rollup: Awaited<ReturnType<typeof stageCloneSiteE2e>>; stagedText: string | null }> {
+  const cloneDir = await Deno.makeTempDir({ prefix: 'oe-stage-clone-' });
+  const outDir = await Deno.makeTempDir({ prefix: 'oe-stage-out-' });
+  try {
+    if (files.sidecar !== undefined || files.reportText !== undefined) {
+      await Deno.mkdir(join(cloneDir, '.artifacts'), { recursive: true });
+    }
+    if (files.sidecar !== undefined) {
+      await Deno.writeTextFile(
+        join(cloneDir, '.artifacts', 'site-e2e-result.json'),
+        JSON.stringify(files.sidecar),
+      );
+    }
+    if (files.reportText !== undefined) {
+      await Deno.writeTextFile(
+        join(cloneDir, '.artifacts', SITE_E2E_REPORT_FILE),
+        files.reportText,
+      );
+    }
+    const rollup = await stageCloneSiteE2e(cloneDir, outDir, SHA, options);
+    const stagedText = await Deno.readTextFile(join(outDir, SITE_E2E_REPORT_FILE)).catch(() =>
+      null
+    );
+    return { rollup, stagedText };
+  } finally {
+    await Deno.remove(cloneDir, { recursive: true }).catch(() => undefined);
+    await Deno.remove(outDir, { recursive: true }).catch(() => undefined);
+  }
+}
+
+/** A sidecar whose one failed browser test still recomputes from the report. */
+function redSidecarFixture(sidecar: Record<string, unknown>): Record<string, unknown> {
+  return { ...sidecar, failed: 1, passed: (sidecar.passed as number) - 1 };
+}
+
+Deno.test('stageCloneSiteE2e: a green run must produce recordable evidence', async () => {
+  const report = fullSiteReport(SITE_E2E_MIN_PASSED_PER_PROJECT);
+  const reportText = JSON.stringify(report);
+  const sidecar = await fullSiteE2e(report, reportText);
+
+  // Green + recordable stages the raw report bytes next to result.json.
+  const green = await stageScratchSiteE2e({ sidecar, reportText }, { required: true });
+  assertEquals(green.rollup.candidateSha, SHA);
+  assertEquals(green.stagedText, reportText);
+  // The staged sidecar is exactly what the aggregate accepts.
+  assertEquals(
+    await collectSiteE2eRecomputeFailures(green.rollup, {
+      readReport: () => Promise.resolve(encoder.encode(reportText)),
+      expectedSha: SHA,
+    }),
+    [],
+  );
+
+  // Green with no report at all is still a hard error (unchanged contract).
+  await assertRejects(
+    () => stageScratchSiteE2e({ sidecar }, { required: true }),
+    Error,
+    'did not produce the Site E2E sidecar',
+  );
+  // Green with a red sidecar (a failed test) is not recordable.
+  await assertRejects(
+    () =>
+      stageScratchSiteE2e(
+        { sidecar: redSidecarFixture(sidecar as Record<string, unknown>), reportText },
+        { required: true },
+      ),
+    Error,
+    'not recordable',
+  );
+});
+
+Deno.test('stageCloneSiteE2e: a red run stages the report and never fakes a pass', async () => {
+  // A genuinely red report: one webkit test failed, so the recompute agrees
+  // with the sidecar's `failed: 1` and only the audit rejects it.
+  const report = fullSiteReport(SITE_E2E_MIN_PASSED_PER_PROJECT);
+  const failing = report.suites.at(-1)!;
+  failing.specs[0] = {
+    title: 'webkit test 0',
+    tests: [{ projectName: 'webkit', status: 'unexpected', results: [{ status: 'failed' }] }],
+  };
+  const reportText = JSON.stringify(report);
+  const red = await fullSiteE2e(report, reportText);
+
+  // Red + report present: staged as-is, so the per-test names are readable
+  // from the evidence tree (#1409), and the rollup still fails the aggregate.
+  const staged = await stageScratchSiteE2e({ sidecar: red, reportText }, { required: false });
+  assertEquals(staged.rollup.failed, 1);
+  assertEquals(staged.stagedText, reportText);
+  // The red sidecar recomputes cleanly (it is honest) — auditSiteE2e is what
+  // rejects it, which is the fail-closed path the aggregate takes.
+  assertEquals(
+    await collectSiteE2eRecomputeFailures(staged.rollup, {
+      readReport: () => Promise.resolve(encoder.encode(reportText)),
+      expectedSha: SHA,
+    }),
+    [],
+  );
+  assert(
+    (await collectRollupFailures({
+      artifactCheck: true,
+      consumers: REQUIRED_PACKED_CONSUMERS as unknown as string[],
+      siteE2e: staged.rollup,
+    })).some((failure) => failure.includes('Site E2E')),
+    'a red Site E2E rollup must not validate',
+  );
+
+  // Red + nothing written: records ran:false instead of throwing, so the lane
+  // still writes result.json and the aggregate fails closed on the sidecar.
+  const empty = await stageScratchSiteE2e({}, { required: false });
+  assertEquals(empty.rollup.ran, false);
+
+  // Red + a sidecar belonging to another candidate is not recorded as ours.
+  const foreign = await stageScratchSiteE2e(
+    { sidecar: { ...red, candidateSha: 'c'.repeat(40) }, reportText },
+    { required: false },
+  );
+  assertEquals(foreign.rollup.ran, false);
 });
