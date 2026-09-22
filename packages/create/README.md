@@ -21,13 +21,13 @@ deno task dev
 ```
 
 The version `@alpha` resolves to is registered in
-`the tracked release-state manifest` (currently `1.0.0-alpha.2`, a new baseline —
+`the tracked release-state manifest` (currently `1.0.0-alpha.3`, a new baseline —
 not a 0.x upgrade, with no migration path from 0.x). Pin that exact version
 when reproducibility matters (verify against the live registry with
 `npm view @openelement/create dist-tags.alpha`):
 
 ```bash
-deno run -A npm:@openelement/create@1.0.0-alpha.2 my-app
+deno run -A npm:@openelement/create@1.0.0-alpha.3 my-app
 ```
 
 `--minimum-dependency-age 0` is needed because Deno's default
