@@ -189,12 +189,13 @@ async function fixture(): Promise<Fixture> {
     projects: Object.fromEntries(
       REQUIRED_SITE_BROWSERS.map((browser) => [
         browser,
-        { passed: sitePassed, failed: 0, skipped: 0 },
+        { passed: sitePassed, failed: 0, skipped: 0, flaky: 0 },
       ]),
     ),
     passed: siteTotal,
     failed: 0,
     skipped: 0,
+    flaky: 0,
     expected: siteTotal,
     configFile: SITE_E2E_CONFIG_FILE,
     grep: {},
@@ -1379,6 +1380,7 @@ Deno.test('rollup checks are unchanged and strict', () => {
       passed: floor * REQUIRED_SITE_BROWSERS.length,
       failed: 0,
       skipped: 0,
+      flaky: 0,
       expected: floor * REQUIRED_SITE_BROWSERS.length,
       configFile: SITE_E2E_CONFIG_FILE,
       grep: {},
@@ -1387,7 +1389,7 @@ Deno.test('rollup checks are unchanged and strict', () => {
       projects: Object.fromEntries(
         REQUIRED_SITE_BROWSERS.map((
           browser,
-        ) => [browser, { passed: floor, failed: 0, skipped: 0 }]),
+        ) => [browser, { passed: floor, failed: 0, skipped: 0, flaky: 0 }]),
       ),
     },
   };
@@ -1397,7 +1399,9 @@ Deno.test('rollup checks are unchanged and strict', () => {
   skipped.siteE2e.passed = 0;
   skipped.siteE2e.expected = 3;
   skipped.siteE2e.projects = Object.fromEntries(
-    REQUIRED_SITE_BROWSERS.map((browser) => [browser, { passed: 0, failed: 0, skipped: 1 }]),
+    REQUIRED_SITE_BROWSERS.map((
+      browser,
+    ) => [browser, { passed: 0, failed: 0, skipped: 1, flaky: 0 }]),
   );
   assert(collectRollupFailures(skipped).some((x) => x.includes('skipped=1')));
 });
@@ -1440,11 +1444,12 @@ function fullSiteReport(
 async function fullSiteE2e(report: unknown, reportText: string) {
   const bytes = encoder.encode(reportText);
   const projects = summarizePlaywrightReport(report as never);
-  const totals = { passed: 0, failed: 0, skipped: 0 };
+  const totals = { passed: 0, failed: 0, skipped: 0, flaky: 0 };
   for (const summary of Object.values(projects)) {
     totals.passed += summary.passed;
     totals.failed += summary.failed;
     totals.skipped += summary.skipped;
+    totals.flaky += summary.flaky;
   }
   return {
     ran: true,
@@ -1464,6 +1469,7 @@ async function tinySiteE2e(reportBytes: Uint8Array, report: unknown) {
     passed: REQUIRED_SITE_BROWSERS.length,
     failed: 0,
     skipped: 0,
+    flaky: 0,
     expected: REQUIRED_SITE_BROWSERS.length,
     configFile: SITE_E2E_CONFIG_FILE,
     grep: {},

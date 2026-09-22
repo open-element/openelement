@@ -362,13 +362,14 @@ export async function collectSiteE2eRecomputeFailures(
   if (!deepEqualUnordered(projects, siteE2e?.projects ?? null)) {
     failures.push('Site E2E sidecar projects do not match the recomputed report summary');
   }
-  const totals = { passed: 0, failed: 0, skipped: 0 };
+  const totals = { passed: 0, failed: 0, skipped: 0, flaky: 0 };
   for (const summary of Object.values(projects)) {
     totals.passed += summary.passed;
     totals.failed += summary.failed;
     totals.skipped += summary.skipped;
+    totals.flaky += summary.flaky;
   }
-  for (const field of ['passed', 'failed', 'skipped'] as const) {
+  for (const field of ['passed', 'failed', 'skipped', 'flaky'] as const) {
     if (siteE2e?.[field] !== totals[field]) {
       failures.push(
         `Site E2E sidecar ${field}=${JSON.stringify(siteE2e?.[field])} != recomputed ${
@@ -381,6 +382,16 @@ export async function collectSiteE2eRecomputeFailures(
     failures.push(
       `Site E2E sidecar expected=${JSON.stringify(siteE2e?.expected)} != report stats.expected ${
         JSON.stringify(report.stats?.expected ?? null)
+      }`,
+    );
+  }
+  // The retry count is a fact the report states itself, so bind it too: a
+  // sidecar cannot claim retries the raw bytes do not record, nor hide the
+  // ones they do.
+  if (totals.flaky !== (report.stats?.flaky ?? 0)) {
+    failures.push(
+      `Site E2E recomputed flaky=${totals.flaky} != report stats.flaky ${
+        JSON.stringify(report.stats?.flaky ?? null)
       }`,
     );
   }

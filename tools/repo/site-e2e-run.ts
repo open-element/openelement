@@ -148,11 +148,12 @@ async function main(): Promise<void> {
     const reportBytes = await Deno.readFile(reportPath);
     const report = JSON.parse(new TextDecoder().decode(reportBytes)) as PlaywrightReport;
     const projects = summarizePlaywrightReport(report);
-    const totals = { passed: 0, failed: 0, skipped: 0 };
+    const totals = { passed: 0, failed: 0, skipped: 0, flaky: 0 };
     for (const summary of Object.values(projects)) {
       totals.passed += summary.passed;
       totals.failed += summary.failed;
       totals.skipped += summary.skipped;
+      totals.flaky += summary.flaky;
     }
     result = {
       ran: SITE_E2E_PROJECTS.every((project) => projects[project] !== undefined),
@@ -165,6 +166,19 @@ async function main(): Promise<void> {
       candidateSha,
       generatedAt: new Date().toISOString(),
     };
+    // The report's own `stats.flaky` and our retry-cleared count are two
+    // independent readings of the same fact; a disagreement means the
+    // summary is not derived from these bytes, so fail closed instead of
+    // writing a sidecar the recompute would accept.
+    if (
+      result.expected + result.flaky !== (report.stats?.expected ?? 0) + (report.stats?.flaky ?? 0)
+    ) {
+      throw new Error(
+        `flaky accounting diverges from the raw report stats: sidecar expected=${result.expected}+flaky=${result.flaky}, report expected=${
+          report.stats?.expected ?? 0
+        }+flaky=${report.stats?.flaky ?? 0}`,
+      );
+    }
   } catch (error) {
     console.error(`site-e2e: no usable Playwright report: ${error}`);
     result = {
@@ -173,6 +187,7 @@ async function main(): Promise<void> {
       passed: 0,
       failed: 0,
       skipped: 0,
+      flaky: 0,
       expected: 0,
       configFile: '',
       grep: {},
