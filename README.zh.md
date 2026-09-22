@@ -58,15 +58,6 @@ export default definePage(HelloPage, {
 - Native 与 Lit 双渲染器共用一套应用协议；渲染器集成保持显式。
 - 编译产物可 tree-shake，纯服务端模块不会漏进客户端 bundle。
 
-## 对比
-
-| 框架    | 与 OpenElement 的差异                                                                                                                                                                                                                                                                                                       |
-| ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Astro   | 面向内容站点的 island 架构，组件与框架无关；OpenElement 自己编译 Custom Element，路由与 SSR/SSG 在同一仓库内。                                                                                                                                                                                                              |
-| Fresh   | Deno 原生的 Preact island 框架，开发已停滞：最后一次代码提交为 2026-05-27，最后一次发布为 2.3.3（2026-04-28），157 个 open issue 无人处理（verified as of 2026-09-20）。Deno 原生 island 这个生态位正在空出，OpenElement 有条件接住它——编译式 Custom Element（Native/Lit 渲染器）、static-first 输出、路由与 SSR 同仓一体。 |
-| Lit     | Web Component 渲染库，不是应用框架；OpenElement 可以把 Lit 当作一种渲染器选项，而不是替代它。                                                                                                                                                                                                                               |
-| Next.js | 以 React 为中心的全栈框架；OpenElement 只做 static-first 的 Element/Router 核心，不追全栈对等。                                                                                                                                                                                                                             |
-
 ## 仓库结构
 
 - `packages/element`：Element 核心产品。
