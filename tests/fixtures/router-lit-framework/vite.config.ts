@@ -27,7 +27,7 @@ export default defineConfig({
       islandsDir: 'app/islands',
       componentsDir: 'app/components',
       appShell: false,
-      html: {
+      head: {
         title: 'app-flow-lit fixture',
       },
     }),

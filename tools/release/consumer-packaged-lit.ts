@@ -456,7 +456,7 @@ export default defineConfig({
       // renderer: 'lit' supports appShell: false only; the packed consumer
       // stays minimal and shell-free.
       appShell: false,
-      html: {
+      head: {
         title: 'packed-app-lit',
       },
     }),

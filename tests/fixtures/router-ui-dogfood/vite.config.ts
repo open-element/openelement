@@ -32,10 +32,7 @@ export default defineConfig({
       // No app shell: the fixture isolates the ui primitives.
       appShell: false,
       packageIslands: ['@openelement/ui'],
-      ssr: {
-        noExternal: ['@openelement/ui'],
-      },
-      html: {
+      head: {
         title: 'ui dogfood fixture',
       },
       inject: {

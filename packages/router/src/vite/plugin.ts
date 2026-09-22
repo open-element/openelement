@@ -27,6 +27,7 @@ import { formatError, OpenElementError } from '@openelement/element';
 import { createLogger } from '@openelement/element';
 import { hasInlineFrameworkOptions } from '../config.ts';
 import { detectAppConfigFile, resolveAppConfig } from './app-config.ts';
+import { resolveHeadConvention } from './head-convention.ts';
 
 const log = createLogger('router-vite');
 
@@ -254,6 +255,24 @@ export function createOpenPlugin(
       inlineOptionsPresent,
     });
     applyResolvedOptions(resolved.options);
+    // The `app/head.tsx` convention is structural head content: it is compiled
+    // through the app's own module graph (a `?inline` CSS import cannot load
+    // through the config-file loader) and appended to the head channel AFTER
+    // the resolved options are in place, so its fragments land in the same
+    // serialized artifact as every other head entry.
+    if (resolved.headConventionFile !== null) {
+      const fragments = await resolveHeadConvention({
+        root,
+        relativePath: resolved.headConventionFile,
+        alias: ctx.phase1.userResolveAlias,
+      });
+      applyResolvedOptions({
+        inject: {
+          ...resolvedOptions.inject,
+          headFragments: [...(resolvedOptions.inject?.headFragments ?? []), ...fragments],
+        },
+      });
+    }
     if (resolved.conventions.length > 0) {
       log.info(
         `openelement.config.ts conventions: ${
