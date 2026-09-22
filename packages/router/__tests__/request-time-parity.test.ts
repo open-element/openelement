@@ -521,6 +521,159 @@ Deno.test({
         }
       });
 
+      // #1382: the residual window for browser-shaped form bodies. A client
+      // that omits Origin AND Fetch Metadata is allowed only when it does not
+      // look like a browser form navigation; with browser evidence
+      // (Upgrade-Insecure-Requests or a text/html Accept) the missing Origin
+      // is fail-closed, in the same dialect as the #921 forged-header rule.
+      //
+      // Non-vacuity (differential pair): the trailing
+      // 'non-browser POST without Origin stays allowed' step sends the SAME
+      // urlencoded body with the SAME absent Origin and Fetch Metadata, and
+      // only differs by omitting the browser-evidence header — it must be
+      // allowed (303). Since no other rule reads anything but Origin and
+      // Sec-Fetch-Site, a 403 in this step can only come from the #1382
+      // branch; the previous rule set allowed this shape (see #938/#921 E2E).
+      await t.step('browser-shaped POST without Origin → 403, both channels (#1382)', async () => {
+        for (const [name, base] of Object.entries(both)) {
+          for (
+            const browserEvidence of [
+              { 'upgrade-insecure-requests': '1' },
+              { accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8' },
+            ] as Array<Record<string, string>>
+          ) {
+            // Native (no-JS) multipart form navigation.
+            const multipart = new FormData();
+            multipart.set('message', 'cross-site-probe');
+            const html = await fetch(`${base}/form`, {
+              method: 'POST',
+              headers: browserEvidence,
+              body: multipart,
+              redirect: 'manual',
+            });
+            assertEquals(
+              html.status,
+              403,
+              `${name}: multipart without Origin status for ${Object.keys(browserEvidence)[0]}`,
+            );
+            assertEquals(
+              await html.text(),
+              'Forbidden',
+              `${name}: native channel answers plain Forbidden`,
+            );
+
+            // Same shape on the fetch channel speaks RFC 9457 problem+json.
+            const form = new FormData();
+            form.set('message', 'cross-site-probe');
+            const json = await fetch(`${base}/form`, {
+              method: 'POST',
+              headers: { ...browserEvidence, 'x-openelement-action': 'true' },
+              body: form,
+              redirect: 'manual',
+            });
+            assertEquals(json.status, 403, `${name}: fetch channel 403 status`);
+            assertStringIncludes(
+              json.headers.get('content-type') ?? '',
+              'application/problem+json',
+              `${name}: fetch channel 403 content-type`,
+            );
+            const problem = await json.json() as { status?: number; detail?: string };
+            assertEquals(problem.status, 403, `${name}: fetch channel problem status`);
+            assertEquals(
+              problem.detail,
+              'Cross-site form submission rejected',
+              `${name}: fetch channel problem detail`,
+            );
+
+            // The urlencoded shape is covered by the same rule.
+            const urlencoded = await fetch(`${base}/form`, {
+              method: 'POST',
+              headers: {
+                ...browserEvidence,
+                'content-type': 'application/x-www-form-urlencoded',
+              },
+              body: 'message=cross-site-probe',
+              redirect: 'manual',
+            });
+            assertEquals(urlencoded.status, 403, `${name}: urlencoded without Origin status`);
+            await urlencoded.body?.cancel();
+          }
+        }
+      });
+
+      await t.step(
+        'browser-shaped POST with a same-origin Origin still commits (#1382)',
+        async () => {
+          for (const [name, base] of Object.entries(both)) {
+            const multipart = new FormData();
+            multipart.set('message', 'same-origin-upload');
+            const response = await fetch(`${base}/form`, {
+              method: 'POST',
+              headers: {
+                origin: new URL(base).origin,
+                'upgrade-insecure-requests': '1',
+                accept: 'text/html',
+              },
+              body: multipart,
+              redirect: 'manual',
+            });
+            assertEquals(response.status, 303, `${name}: same-origin multipart status`);
+            assertEquals(
+              response.headers.get('location'),
+              '/form?echoed=same-origin-upload',
+              `${name}: same-origin multipart location`,
+            );
+            await response.body?.cancel();
+
+            // Origin: null + Fetch Metadata same-origin is the #938
+            // no-referrer case. It must keep passing: an opaque origin is
+            // still an Origin the browser sent (the residual-window rule
+            // above deliberately only fires when the header is absent).
+            const opaque = new FormData();
+            opaque.set('message', 'no-referrer-upload');
+            const opaqueResponse = await fetch(`${base}/form`, {
+              method: 'POST',
+              headers: {
+                origin: 'null',
+                'sec-fetch-site': 'same-origin',
+                'upgrade-insecure-requests': '1',
+                accept: 'text/html',
+              },
+              body: opaque,
+              redirect: 'manual',
+            });
+            assertEquals(opaqueResponse.status, 303, `${name}: #938 opaque-origin status`);
+            await opaqueResponse.body?.cancel();
+          }
+        },
+      );
+
+      await t.step('non-browser POST without Origin stays allowed (#1382 trade-off)', async () => {
+        // The allowance this rule deliberately preserves: a client that omits
+        // browser navigation evidence (curl, health probes, API tooling) is
+        // not a browser-shaped form post, so it is still let through even
+        // with a urlencoded body and no Origin. Pinned so the compatibility
+        // promise documented in docs/architecture keeps holding.
+        for (const [name, base] of Object.entries(both)) {
+          const response = await fetch(`${base}/form`, {
+            method: 'POST',
+            headers: {
+              'content-type': 'application/x-www-form-urlencoded',
+              accept: '*/*',
+            },
+            body: 'message=scripted-client',
+            redirect: 'manual',
+          });
+          assertEquals(response.status, 303, `${name}: tool-shaped POST status`);
+          assertEquals(
+            response.headers.get('location'),
+            '/form?echoed=scripted-client',
+            `${name}: tool-shaped POST location`,
+          );
+          await response.body?.cancel();
+        }
+      });
+
       await t.step('POST /live (no action) → 404', async () => {
         for (const [name, base] of Object.entries(both)) {
           const response = await fetch(`${base}/live`, formBody({ x: '1' }));
