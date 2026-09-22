@@ -37,6 +37,18 @@ export const ErrorCode = {
   UNKNOWN: 'UNKNOWN',
 } as const;
 
+/**
+ * Default code for {@linkcode RenderError}. Deliberately NOT a member of
+ * {@linkcode ErrorCode}: that object is the scan target of the www error
+ * catalog (`www/tools/generate-error-codes.ts`), which requires every member
+ * to carry a phase/severity family rule. `RENDER_ERROR` is the pre-dialect
+ * value `RenderError` has always defaulted to — kept verbatim so callers that
+ * observe it keep working, and kept out of the catalogue because it is not a
+ * failure this package classifies, only a constructor default a caller may
+ * override.
+ */
+export const DEFAULT_RENDER_ERROR_CODE = 'RENDER_ERROR';
+
 /** Error message prefix for all openElement errors. */
 export const ERROR_PREFIX = '[openElement]';
 
@@ -242,6 +254,8 @@ export const AuthoringErrorCode = {
   INVALID_TAG_NAME: 'OE_INVALID_TAG_NAME',
   /** A `wrapInDocument` meta entry uses an attribute name HTML forbids. */
   UNSAFE_META_ATTRIBUTE: 'OE_UNSAFE_META_ATTRIBUTE',
+  /** A `wrapInDocument` structuredData entry is not a JSON-LD document. */
+  INVALID_STRUCTURED_DATA: 'OE_INVALID_STRUCTURED_DATA',
   /** An `html` sink received a string that was not marked trusted. */
   UNTRUSTED_HTML_SINK: 'OE_UNTRUSTED_HTML_SINK',
   /** The `params` attribute exceeds the documented size limit. */
@@ -250,12 +264,20 @@ export const AuthoringErrorCode = {
 
 /** SSR/bootstrap failures raised by the public entries (phase `ssr` / `csr`). */
 export const FacadeErrorCode = {
-  /** `renderDsd` was handed a class with no compiled Part Program. */
+  /**
+   * No usable compiled Part Program for the requested class or tag: an
+   * uncompiled class, an unregistered tag, or a tag that disagrees with the
+   * compiled program's own tag. One code because it is one condition from the
+   * caller's side — the class and the program do not describe the same
+   * element — and because this value shipped in 1.0.0-alpha.3.
+   */
   PROGRAM_MISSING: 'OE_PROGRAM_MISSING',
+  /** Nested element expansion exceeded the depth bound (cyclic composition). */
+  COMPOSITION_DEPTH: 'OE_SSR_COMPOSITION_DEPTH',
   /** A compiled property is marked computed but has no `__computedFields` factory. */
   COMPUTED_FACTORY_MISSING: 'OE_COMPUTED_FACTORY_MISSING',
   /** A computed property is read-only and was assigned to. */
-  COMPUTED_PROPERTY_READONLY: 'OE_COMPUTED_PROPERTY_READONLY',
+  COMPUTED_READONLY: 'OE_COMPUTED_READONLY',
   /** The compiled class names a handler the instance does not implement. */
   HANDLER_MISSING: 'OE_HANDLER_MISSING',
   /** JSX ran outside the compiler pipeline, where the factory was removed. */

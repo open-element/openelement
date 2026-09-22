@@ -7,6 +7,10 @@
  */
 
 import ts from 'typescript';
+// The single error dialect (#1386 item 3): a failed compile is catchable by
+// code like every other failure this package raises. The error contract is an
+// import-free protocol base owner, so the semantic core stays bundler-neutral.
+import { CompilerErrorCode, OpenElementError } from '../../../protocol/errors.ts';
 
 export interface CompilerDiagnostic {
   code: string;
@@ -18,7 +22,15 @@ export interface CompilerDiagnostic {
   end: number;
 }
 
-export class CompilerDiagnosticError extends Error {
+/**
+ * One compile step refused the module it was handed. Part of the single error
+ * dialect (#1386 item 3): an `OpenElementError` carrying
+ * {@linkcode CompilerErrorCode.DIAGNOSTICS}, so a build adapter catches a
+ * failed compile by code. The per-diagnostic `OEC####` codes stay on each
+ * record in `diagnostics` — those locate a source range, this classifies the
+ * failure.
+ */
+export class CompilerDiagnosticError extends OpenElementError {
   readonly diagnostics: CompilerDiagnostic[];
 
   constructor(diagnostics: CompilerDiagnostic[]) {
@@ -29,6 +41,12 @@ export class CompilerDiagnosticError extends Error {
           `${diagnostic.code}: ${diagnostic.message}`
         )
         .join('\n'),
+      {
+        code: CompilerErrorCode.DIAGNOSTICS,
+        severity: 'error',
+        phase: 'build',
+        recoverable: false,
+      },
     );
     this.name = 'CompilerDiagnosticError';
     this.diagnostics = diagnostics;

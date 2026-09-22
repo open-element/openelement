@@ -15,6 +15,13 @@ import {
   themeManager,
 } from '../../../open-element-styles.ts';
 import type { StyleSheetLike } from '../../../internal/protocol/style-sheet.ts';
+// Single error dialect (#1386 item 3): kernel lifecycle failures carry codes.
+import { frameworkError, KernelErrorCode } from '../../protocol/errors.ts';
+
+/** Raise one kernel lifecycle failure with its catalogued code. */
+function fail(code: string, message: string): never {
+  throw frameworkError(code, message, { phase: 'csr' });
+}
 
 export type CompiledRootMode = 'light' | 'open' | 'closed';
 
@@ -94,11 +101,12 @@ export class CompiledElementKernel {
    * lifecycle hooks from this result; a thrown connect never produces a mode.
    */
   connect(): CompiledKernelActivation {
-    if (this.#destroyed) throw new Error('[compiled-kernel] kernel is disposed');
+    if (this.#destroyed) fail(KernelErrorCode.DISPOSED, '[compiled-kernel] kernel is disposed');
     if (this.#active) return this.#activation as CompiledKernelActivation;
 
     if (this.#element.tagName.toLowerCase() !== this.#program.tag) {
-      throw new Error(
+      fail(
+        KernelErrorCode.TAG_MISMATCH,
         `[compiled-kernel] program tag <${this.#program.tag}> does not match ` +
           `<${this.#element.tagName.toLowerCase()}>`,
       );
@@ -199,7 +207,8 @@ export class CompiledElementKernel {
   ): CompiledProgramInstance {
     const executor = claimExecutor();
     if (!executor) {
-      throw new Error(
+      fail(
+        KernelErrorCode.CLAIM_EXECUTOR_MISSING,
         '[compiled-kernel] existing DOM in the resolved root needs the claim executor: ' +
           "the element was connected from the '@openelement/element/client-only' entry, " +
           "which omits it. Import '@openelement/element' for any element that can " +
@@ -218,7 +227,10 @@ export class CompiledElementKernel {
     }
     if (this.#options.root) {
       if (!('host' in this.#options.root) || this.#options.root.host !== this.#element) {
-        throw new Error('[compiled-kernel] supplied root is not owned by the element');
+        fail(
+          KernelErrorCode.ROOT_NOT_OWNED,
+          '[compiled-kernel] supplied root is not owned by the element',
+        );
       }
       this.#root = this.#options.root;
       return this.#root;
@@ -229,7 +241,10 @@ export class CompiledElementKernel {
       return existing;
     }
     if (typeof this.#element.attachShadow !== 'function') {
-      throw new Error(`[compiled-kernel] ${mode} root requires attachShadow()`);
+      fail(
+        KernelErrorCode.ATTACH_SHADOW_REQUIRED,
+        `[compiled-kernel] ${mode} root requires attachShadow()`,
+      );
     }
     this.#root = this.#element.attachShadow({
       mode,

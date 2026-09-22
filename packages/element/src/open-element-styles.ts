@@ -1,6 +1,13 @@
 import type { StyleSheetLike } from './internal/protocol/style-sheet.ts';
 import { scopeCompiledLightCss } from './internal/compiled/style.ts';
 import { OpenElementThemeManager } from './open-element-theme.ts';
+// Single error dialect (#1386 item 3): style-application failures carry codes.
+import { frameworkError, StyleErrorCode } from './internal/protocol/errors.ts';
+
+/** Raise one style-application failure with its catalogued code. */
+function fail(code: string, message: string): never {
+  throw frameworkError(code, message, { phase: 'csr' });
+}
 
 /**
  * Owns the global style registry and host theme propagation.
@@ -58,7 +65,10 @@ export class CompiledStyleScope {
 
     if (isShadowRoot(root)) {
       if (!('adoptedStyleSheets' in root)) {
-        throw new Error('[compiled-styles] shadow root does not support adoptedStyleSheets');
+        fail(
+          StyleErrorCode.ADOPTED_STYLES_UNSUPPORTED,
+          '[compiled-styles] shadow root does not support adoptedStyleSheets',
+        );
       }
       themeManager.applyStyles(root, component);
       this.#adoptedSheets = styles;
@@ -72,7 +82,10 @@ export class CompiledStyleScope {
     const document = root.ownerDocument;
     const parent = document?.head ?? document?.documentElement;
     if (!document?.createElement || !parent) {
-      throw new Error('[compiled-styles] light DOM style sink requires an owner document');
+      fail(
+        StyleErrorCode.LIGHT_SINK_WITHOUT_DOCUMENT,
+        '[compiled-styles] light DOM style sink requires an owner document',
+      );
     }
     const style = this.#lightStyle ?? document.createElement('style');
     style.setAttribute('data-open-element-compiled-style', '');

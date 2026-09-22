@@ -11,7 +11,7 @@
  */
 
 import type { RenderError as ProtocolRenderError } from '../protocol/render.ts';
-import { ErrorCode, OpenElementError } from '../protocol/errors.ts';
+import { DEFAULT_RENDER_ERROR_CODE, ErrorCode, OpenElementError } from '../protocol/errors.ts';
 import type { ErrorTelemetryHook } from '../protocol/errors.ts';
 
 // ─── Well-known error codes / prefix (authoritative source in protocol) ───────
@@ -21,6 +21,7 @@ export {
   ClaimErrorCode,
   CompilerErrorCode,
   ContextErrorCode,
+  DEFAULT_RENDER_ERROR_CODE,
   EachKeyErrorCode,
   ERROR_PREFIX,
   ErrorCode,
@@ -93,7 +94,10 @@ export class RenderError extends OpenElementError implements ProtocolRenderError
   constructor(
     componentPath: string,
     message: string,
-    code = 'RENDER_ERROR',
+    // Annotated `string` on purpose: the default moved from an inline literal
+    // to the catalogue constant, and an inferred literal type would narrow this
+    // parameter and reject the caller-supplied codes the signature accepts.
+    code: string = DEFAULT_RENDER_ERROR_CODE,
     tagName = '',
     cause?: Error,
   ) {
