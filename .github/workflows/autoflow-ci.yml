@@ -22,6 +22,15 @@ concurrency:
 #   input is missing or inconsistent. Nothing re-runs the suite in the
 #   aggregation step. The fresh-clone job is isolated with empty DENO_DIR and
 #   npm cache. Bun remains an optional, non-blocking compatibility signal.
+#
+# PR layer vs release train: this workflow runs the fast PR layer. The
+# source-matrix lane drives `tools/repo#gate:source` (the trimmed fast gate)
+# and the fresh-clone lane owns the candidate's Site E2E proof, so a pull
+# request gets quick feedback. The steps trimmed out of gate:source
+# (site build + www checks, coverage, fixture gates, provenance/boundary
+# scans, three-engine site/browser matrices) live in `tools/repo#gate:release`
+# and run on the release train: `deno task release:check` in the Release
+# workflow, which must pass before anything is published.
 jobs:
   dependency-review:
     if: github.event_name == 'pull_request'
@@ -129,9 +138,12 @@ jobs:
           retention-days: 14
 
   # Core source matrix for the candidate scope (Element, Router, Create, UI,
-  # Site, repo/release tooling). Independently governed apps/saas is NOT here:
-  # its build/test/Workers proof are the separate, non-blocking saas-optional
-  # job below. Router Nitro Node/Workers fixtures remain the core deploy proof.
+  # Site, repo/release tooling). This lane runs the PR-layer source gate
+  # (`tools/repo#gate:source`, 9 fast steps); the release train's heavier
+  # steps are `tools/repo#gate:release`, which the Release workflow runs.
+  # Independently governed apps/saas is NOT here: its build/test/Workers proof
+  # are the separate, non-blocking saas-optional job below. Router Nitro
+  # Node/Workers fixtures remain the core deploy proof (gate:release).
   source-matrix:
     runs-on: ubuntu-latest
     timeout-minutes: 60
@@ -143,9 +155,10 @@ jobs:
           persist-credentials: false
       - uses: ./.github/actions/setup-deno-workspace
       - name: Install Playwright browsers
-        # The source matrix's fixture gates run Chromium, Firefox and WebKit.
+        # The gate's element browser leg launches Chromium; the recorded
+        # toolchain metadata names all three engines.
         run: ./node_modules/.bin/playwright install --with-deps chromium firefox webkit
-      - name: Source matrix (unit/integration, Site, Node, Workers, browsers)
+      - name: Source matrix (PR-layer source gate, unit tests, browsers)
         env:
           CANDIDATE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: deno task --cwd tools/repo candidate:evidence:source
@@ -215,12 +228,13 @@ jobs:
         with:
           node-version: '24'
       - name: Install Playwright browsers
-        # The clone's own packed gate runs the three-browser consumers; the
-        # browser binaries are reused from the preinstalled HOME cache
-        # (disclosed in the fresh-clone manifest), while the clone's DENO_DIR
-        # and npm cache start empty.
+        # The clone's own packed gate runs the three-browser consumers and this
+        # lane also drives the official Site E2E suite (it owns the candidate's
+        # Site proof); the browser binaries are reused from the preinstalled
+        # HOME cache (disclosed in the fresh-clone manifest), while the clone's
+        # DENO_DIR and npm cache start empty.
         run: ./node_modules/.bin/playwright install --with-deps chromium firefox webkit
-      - name: Fresh clone (install, check, packed gate, publish dry-run)
+      - name: Fresh clone (install, check, source gate, packed gate, Site E2E)
         env:
           CANDIDATE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: deno task --cwd tools/repo candidate:evidence:fresh

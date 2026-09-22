@@ -97,8 +97,14 @@ jobs:
             }
           " "$npm_version"
       - name: Install browser engines
+        # The release train runs the three-engine Site E2E matrix and the
+        # element browser conformance matrix (gate:release), not just the PR
+        # layer's Chromium subset.
         run: ./node_modules/.bin/playwright install --with-deps chromium firefox webkit
-      - name: Qualify candidate
+      # The release train: registry truth + the full gate:release step set
+      # (everything trimmed out of the fast PR-layer gate:source) + the packed
+      # gate + the publish dry-run. See docs/maintainers/releasing.md.
+      - name: Qualify candidate (release train)
         env:
           CANDIDATE_SHA: ${{ inputs.candidate_sha }}
         run: deno task release:check

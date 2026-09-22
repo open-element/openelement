@@ -181,7 +181,11 @@ export const freshCloneCommands = {
   gateSource: (
     denoExe: string,
   ): string[] => [denoExe, 'task', '--cwd', 'tools/repo', 'gate:source'],
-  releaseCheck: (denoExe: string): string[] => [denoExe, 'task', 'release:check'],
+  gatePacked: (
+    denoExe: string,
+  ): string[] => [denoExe, 'task', '--cwd', 'tools/release', 'gate:packed'],
+  siteBuild: (denoExe: string): string[] => [denoExe, 'task', 'site:build'],
+  siteE2e: (denoExe: string): string[] => [denoExe, 'task', '--cwd', 'www', 'e2e:browsers'],
 } as const;
 
 export const FRESH_CLONE_STEPS: readonly StepContract[] = [
@@ -224,9 +228,28 @@ export const FRESH_CLONE_STEPS: readonly StepContract[] = [
     match: exact(['deno', 'task', '--cwd', 'tools/repo', 'gate:source']),
   },
   {
-    name: 'task-release-check',
+    // The PR-layer lane: the fresh clone proves the fast gate AND the packed
+    // gate, not the release train. release:check (registry read, gate:release,
+    // packed gate, publish dry-run) is the release workflow's job; running it
+    // here only re-ran the same tarball qualification a second time.
+    name: 'task-gate-packed',
     cwd: EVIDENCE_ROLES.clone,
-    match: exact(['deno', 'task', 'release:check']),
+    match: exact(['deno', 'task', '--cwd', 'tools/release', 'gate:packed']),
+  },
+  // Site E2E owns the candidate's Site proof (the trimmed source gate no
+  // longer runs it), so the lane that records the sidecar must run the real
+  // built-site suite: build the Site, then drive the official Playwright
+  // suite. Both steps are pinned here so a lane cannot claim the Site proof
+  // from a build the clone never made.
+  {
+    name: 'task-site-build',
+    cwd: EVIDENCE_ROLES.clone,
+    match: exact(['deno', 'task', 'site:build']),
+  },
+  {
+    name: 'task-site-e2e',
+    cwd: EVIDENCE_ROLES.clone,
+    match: exact(['deno', 'task', '--cwd', 'www', 'e2e:browsers']),
   },
   cleanProof('after', EVIDENCE_ROLES.clone),
 ];
