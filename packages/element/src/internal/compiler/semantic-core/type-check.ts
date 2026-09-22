@@ -12,7 +12,7 @@
  * The check compiles the emitted text as a real TypeScript program and returns
  * the diagnostics a type checker produces for it. It is a pure function of its
  * inputs — the emitted text plus explicit compiler options and module
- * resolution paths — because ADR-0148 gives the semantic core no ambient state:
+ * resolution paths — because the semantic core is admitted no ambient state:
  * it reads no clock, touches no network, and mutates no global. Callers own the
  * environment (a Vite adapter passes its resolved paths; a test passes the
  * workspace map).

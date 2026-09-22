@@ -15,7 +15,7 @@
 
 // Single error dialect (#1386 item 3): a malformed segment carries a code. The
 // error contract is an import-free protocol base owner, so importing it leaves
-// the semantic core bundler-neutral (ADR-0148).
+// the semantic core bundler-neutral (the core holds no ambient state).
 import { frameworkError, ProgramErrorCode } from '../../protocol/errors.ts';
 
 export interface CompiledElementSourceMap {

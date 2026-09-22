@@ -13,14 +13,14 @@
  * provenance fields on top of that contract.
  *
  * The class lives here, not in `../core/errors.ts`, because this module is
- * import-free: the semantic core (ADR-0148) and the canonical Part Program
- * protocol may import it without gaining host, bundler, or mutable module
- * state, and `../core/errors.ts` re-exports it for the rest of the package.
+ * import-free: the semantic core and the canonical Part Program protocol may
+ * import it without gaining host, bundler, or mutable module state, and
+ * `../core/errors.ts` re-exports it for the rest of the package.
  *
  * ## Code families
  *
- * `ErrorCode` is the legacy documented set that the www error catalog reads by
- * name (`www/tools/generate-error-codes.ts`, `generate-error-reference.ts`).
+ * `ErrorCode` is the legacy documented set that the documentation site's error
+ * catalog reads by name (the generated error-code and error-reference pages).
  * The `*ErrorCode` tables below are the completed dialect's catalogue, one
  * table per failure surface — the shape `@openelement/router` already uses in
  * `src/internal/error-codes.ts`. Codes are stable: `OPEN_ELEMENT_COMPILED_*`
@@ -39,9 +39,9 @@ export const ErrorCode = {
 
 /**
  * Default code for {@linkcode RenderError}. Deliberately NOT a member of
- * {@linkcode ErrorCode}: that object is the scan target of the www error
- * catalog (`www/tools/generate-error-codes.ts`), which requires every member
- * to carry a phase/severity family rule. `RENDER_ERROR` is the pre-dialect
+ * {@linkcode ErrorCode}: that object is the scan target of the documentation
+ * site's error catalog, which requires every member to carry a phase/severity
+ * family rule. `RENDER_ERROR` is the pre-dialect
  * value `RenderError` has always defaulted to — kept verbatim so callers that
  * observe it keep working, and kept out of the catalogue because it is not a
  * failure this package classifies, only a constructor default a caller may
