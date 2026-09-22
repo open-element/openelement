@@ -3,15 +3,16 @@
  *
  * The canonical exchange artifact shared by the compiler semantic core, the
  * server serializer, fresh DOM creation, and existing-DOM claim. Its only
- * imports are the import-free, host-free canonical VOID_TAGS and forbidden
- * sink owners (keeps the artifact free of runtime/host edges;
- * void-tags and forbidden-sinks are neither). The
+ * imports are the import-free, host-free canonical owners — VOID_TAGS,
+ * forbidden sinks, and the error contract (#1386 item 3); all three are
+ * import-free, so the artifact keeps its freedom from runtime/host edges. The
  * generated JSON is the seam, and both the runtime and the compiler import
  * this one module instead of keeping mirrored copies. Every dynamic location
  * receives a compiler-owned identity. Runtime code does not discover bindings
  * by walking a VNode or a generic DOM tree.
  */
 
+import { frameworkError, ProgramErrorCode } from './errors.ts';
 import { forbiddenSinkReason } from './forbidden-sinks.ts';
 import { VOID_TAGS } from './void-tags.ts';
 
@@ -409,8 +410,17 @@ export const STATIC_STYLES_MARKER = 'data-oe-static-styles';
  */
 export const DATA_OE_LIGHT = 'data-oe-light';
 
+/**
+ * Reject one malformed Part Program record (#1386 item 3). Every validation
+ * site in this module funnels through here, so the whole wire boundary raises
+ * one catchable error type with one stable code.
+ */
 function fail(reason: string): never {
-  throw new Error(`[compiled-program] invalid Part Program v1: ${reason}`);
+  throw frameworkError(
+    ProgramErrorCode.INVALID_PROGRAM,
+    `[compiled-program] invalid Part Program v1: ${reason}`,
+    { phase: 'validation' },
+  );
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

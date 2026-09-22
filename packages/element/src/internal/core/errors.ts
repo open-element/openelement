@@ -1,25 +1,44 @@
 /**
- * ./errors.ts — Unified Error Architecture.
+ * ./errors.ts — the package's error façade (#1386 item 3).
  *
- * ERROR_PREFIX and ErrorCode are re-exported from ../protocol/errors.ts.
- * They are pure string constants (no runtime side effects), so importing them
- * here is safe for SSG/browser bundles that tree-shake ./index.ts.
+ * The contract itself (the {@linkcode OpenElementError} class, the code
+ * catalogue, and the phase/severity types) is declared once in
+ * `../protocol/errors.ts`, which is import-free so the semantic core and the
+ * canonical Part Program protocol can raise framework errors. This module
+ * re-exports that contract and adds only the pieces that need the rest of the
+ * package: the `SsrRenderError`/`RenderError` subclasses and the telemetry
+ * hook plumbing.
  */
 
 import type { RenderError as ProtocolRenderError } from '../protocol/render.ts';
-import {
-  ERROR_PREFIX,
-  ErrorCode,
-  type ErrorPhase,
-  type ErrorSeverity,
-  type ErrorTelemetryHook,
-  type OpenElementError as ProtocolOpenElementError,
-} from '../protocol/errors.ts';
+import { ErrorCode, OpenElementError } from '../protocol/errors.ts';
+import type { ErrorTelemetryHook } from '../protocol/errors.ts';
 
 // ─── Well-known error codes / prefix (authoritative source in protocol) ───────
 
-export { ERROR_PREFIX, ErrorCode };
-export type { ErrorPhase, ErrorSeverity, ErrorTelemetryHook };
+export {
+  AuthoringErrorCode,
+  ClaimErrorCode,
+  CompilerErrorCode,
+  ContextErrorCode,
+  EachKeyErrorCode,
+  ERROR_PREFIX,
+  ErrorCode,
+  FacadeErrorCode,
+  frameworkError,
+  KernelErrorCode,
+  OpenElementError,
+  ProgramErrorCode,
+  RuntimeErrorCode,
+  ServerErrorCode,
+  StyleErrorCode,
+} from '../protocol/errors.ts';
+export type {
+  ErrorPhase,
+  ErrorSeverity,
+  ErrorTelemetryHook,
+  OpenElementErrorOptions,
+} from '../protocol/errors.ts';
 
 // ─── Error formatting helper ────────────────────────────────────────
 
@@ -35,49 +54,6 @@ export function formatError(e: unknown): string {
     cause = cause.cause;
   }
   return parts.join(': ');
-}
-
-// ─── Base Error ─────────────────────────────────────────────────────
-
-interface OpenElementErrorOptions {
-  cause?: Error;
-  code?: string;
-  statusCode?: number;
-  severity?: ErrorSeverity;
-  phase?: ErrorPhase;
-  recoverable?: boolean;
-}
-
-/** Framework error carrying a stable code, severity, phase and recoverability contract. */
-export class OpenElementError extends Error implements ProtocolOpenElementError {
-  public readonly code: string;
-  public readonly severity: ErrorSeverity;
-  public readonly phase: ErrorPhase;
-  public readonly recoverable: boolean;
-  public readonly statusCode?: number;
-
-  constructor(message: string, options: OpenElementErrorOptions = {}) {
-    super(message, options.cause ? { cause: options.cause } : undefined);
-    this.name = 'OpenElementError';
-    this.code = options.code ?? ErrorCode.UNKNOWN;
-    this.severity = options.severity ?? 'error';
-    this.phase = options.phase ?? 'unknown';
-    this.recoverable = options.recoverable ?? false;
-    this.statusCode = options.statusCode;
-  }
-
-  toJSON(): Record<string, unknown> {
-    return {
-      name: this.name,
-      code: this.code,
-      message: this.message,
-      severity: this.severity,
-      phase: this.phase,
-      recoverable: this.recoverable,
-      statusCode: this.statusCode,
-      cause: this.cause instanceof Error ? this.cause.message : this.cause,
-    };
-  }
 }
 
 // ─── SsrRenderError ──────────────────────────────────────────────────
