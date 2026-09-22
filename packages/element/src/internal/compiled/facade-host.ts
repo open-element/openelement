@@ -12,7 +12,7 @@
  * module owns no lifecycle state of its own.
  */
 
-import { OpenElementError } from '../core/errors.ts';
+import { FacadeErrorCode, OpenElementError } from '../core/errors.ts';
 import type {
   CompiledElementMetadata,
   CompiledPropertyMetadata,
@@ -191,7 +191,7 @@ export function createFacadePropertyState(
         `[openElement] compiled property "${property.name}" is marked computed but the class ` +
           'carries no __computedFields factory for it. Rebuild the component through the ' +
           '0.44 compiler so the generated class and its Part Program agree.',
-        { code: 'OE_COMPUTED_FACTORY_MISSING', phase: 'csr' },
+        { code: FacadeErrorCode.COMPUTED_FACTORY_MISSING, phase: 'csr' },
       );
     }
     signals[property.name] = factory(signals);
@@ -238,7 +238,7 @@ export function installAccessors(
           throw new OpenElementError(
             `[openElement] computed property "${record.name}" is read-only: it derives from ` +
               'its source signals. Assign the source properties instead.',
-            { code: 'OE_COMPUTED_READONLY', phase: 'csr' },
+            { code: FacadeErrorCode.COMPUTED_READONLY, phase: 'csr' },
           );
         },
       });
@@ -397,7 +397,7 @@ export function bindProgramHandlers(
         `[openElement] <${classNameOf(ctor)}> is compiled to call handler "${name}", ` +
           'but the instance has no such method. Rebuild the component through the ' +
           '0.44 compiler so the generated class and its Part Program agree.',
-        { code: 'OE_HANDLER_MISSING', phase: 'csr' },
+        { code: FacadeErrorCode.HANDLER_MISSING, phase: 'csr' },
       );
     }
     handlers[name] = (method as (event: unknown) => void).bind(element);

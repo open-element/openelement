@@ -25,6 +25,23 @@ const PROTOCOL_FORBIDDEN_SINKS = new URL(
   '../src/internal/protocol/forbidden-sinks.ts',
   import.meta.url,
 );
+/**
+ * The import-free, host-free error contract (#1386 item 3). The semantic core
+ * raises `OpenElementError`, so the class has to live where a compiler module
+ * may import it without gaining host state — the same admission rule as the
+ * other protocol base owners.
+ */
+const PROTOCOL_ERRORS = new URL(
+  '../src/internal/protocol/errors.ts',
+  import.meta.url,
+);
+
+/** Protocol base owners a semantic-core or protocol module may import. */
+const PROTOCOL_BASE = [
+  { url: PROTOCOL_VOID_TAGS, label: 'VOID_TAGS owner' },
+  { url: PROTOCOL_FORBIDDEN_SINKS, label: 'forbidden-sink owner' },
+  { url: PROTOCOL_ERRORS, label: 'error contract' },
+] as const;
 
 async function sourceFiles(root: URL): Promise<URL[]> {
   const files: URL[] = [];
@@ -70,7 +87,7 @@ Deno.test('ADR-0148 semantic core imports stay bundler-neutral and inside the co
       const resolved = new URL(specifier, file);
       const insideCore = resolved.href.startsWith(CORE_ROOT.href);
       const isCanonicalProtocol = resolved.href === PROTOCOL_PROGRAM.href ||
-        resolved.href === PROTOCOL_FORBIDDEN_SINKS.href;
+        PROTOCOL_BASE.some((base) => base.url.href === resolved.href);
       assert(
         insideCore || isCanonicalProtocol,
         `${file.pathname} escapes semantic core through ${specifier}`,
@@ -85,31 +102,27 @@ Deno.test('ADR-0148 semantic core imports stay bundler-neutral and inside the co
 
   // The allowed outside modules must stay neutral: no runtime, Vite, or Node
   // capability may ride into the semantic core. The Part Program artifact's
-  // only edges are the import-free canonical VOID_TAGS and forbidden-sink
-  // owners.
+  // only edges are the import-free canonical protocol base owners.
   const protocolSource = await Deno.readTextFile(PROTOCOL_PROGRAM);
   assertEquals(
     moduleSpecifiers(protocolSource, PROTOCOL_PROGRAM),
-    ['./forbidden-sinks.ts', './void-tags.ts'],
+    ['./errors.ts', './forbidden-sinks.ts', './void-tags.ts'],
     'canonical Part Program protocol may only import the protocol base owners (ADR-0148)',
   );
-  const voidTagsSource = await Deno.readTextFile(PROTOCOL_VOID_TAGS);
-  assertEquals(
-    moduleSpecifiers(voidTagsSource, PROTOCOL_VOID_TAGS),
-    [],
-    'canonical VOID_TAGS owner must stay import-free',
-  );
-  const forbiddenSinksSource = await Deno.readTextFile(PROTOCOL_FORBIDDEN_SINKS);
-  assertEquals(
-    moduleSpecifiers(forbiddenSinksSource, PROTOCOL_FORBIDDEN_SINKS),
-    [],
-    'canonical forbidden-sink owner must stay import-free',
-  );
+  for (const { url, label } of PROTOCOL_BASE) {
+    const source = await Deno.readTextFile(url);
+    assertEquals(
+      moduleSpecifiers(source, url),
+      [],
+      `canonical ${label} must stay import-free`,
+    );
+  }
   for (
     const [source, label] of [
       [protocolSource, 'Part Program protocol'],
-      [voidTagsSource, 'VOID_TAGS owner'],
-      [forbiddenSinksSource, 'forbidden-sink owner'],
+      ...await Promise.all(
+        PROTOCOL_BASE.map(async ({ url, label }) => [await Deno.readTextFile(url), label] as const),
+      ),
     ] as const
   ) {
     assert(

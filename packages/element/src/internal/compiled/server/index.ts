@@ -31,6 +31,10 @@ import {
   voidElement,
 } from './shared.ts';
 import { trustedHtmlValue } from '../../core/security.ts';
+import { formatError } from '../../core/errors.ts';
+// The single error dialect (#1386 item 3): every failure in this module is an
+// OpenElementError carrying a code from the catalogue.
+import { frameworkError, ProgramErrorCode } from '../../protocol/errors.ts';
 // Canonical attribute-escape contract (issue #1220, L1): the server output is
 // the wire truth for claim parity, so both serializers share this one
 // implementation (escapes & < > " ').
@@ -327,9 +331,14 @@ function itemsFor(
       key = eachItemKey(part, item);
     } catch (error) {
       if (error instanceof EachKeyError) {
+        // Preserve the canonical key-identity code (#1386 item 3): the
+        // server and the client raise the SAME code for the same bad data, so
+        // a consumer classifies a keyed-list failure without knowing which
+        // executor produced it.
         throw new CompiledProgramValidationError(
           `parts[${part.index}].signal[${ordinal}]`,
           `each Region ${error.reason}`,
+          error.code,
         );
       }
       throw error;
@@ -551,12 +560,18 @@ function serializeElement(
     if (node.tag.includes('-') && typeof value !== 'string') {
       try {
         const encoded = JSON.stringify(value);
-        if (encoded === undefined) throw new TypeError('value has no JSON representation');
+        if (encoded === undefined) {
+          throw frameworkError(
+            ProgramErrorCode.NOT_SERIALIZABLE,
+            'value has no JSON representation',
+            { phase: 'validation' },
+          );
+        }
         serialized = encoded;
       } catch (error) {
         throw new CompiledProgramValidationError(
           `template[${programPath.join('][')}].${part.name}`,
-          `custom-element property value must be JSON-serializable (${String(error)})`,
+          `custom-element property value must be JSON-serializable (${formatError(error)})`,
         );
       }
     } else {

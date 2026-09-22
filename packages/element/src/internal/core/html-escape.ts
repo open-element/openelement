@@ -13,7 +13,7 @@
 import { createLogger, createWarnScope, warnOnce } from './logger.ts';
 import type { WarnScope } from './logger.ts';
 
-import { OpenElementError } from './errors.ts';
+import { AuthoringErrorCode, frameworkError } from './errors.ts';
 import { isSafeAttributeName } from './security.ts';
 
 const log = createLogger('html-escape');
@@ -245,22 +245,30 @@ function buildStructuredDataTags(
   const tags: string[] = [];
   for (const entry of entries) {
     if (entry === null || typeof entry !== 'object' || Array.isArray(entry)) {
-      throw new TypeError(
+      throw frameworkError(
+        AuthoringErrorCode.INVALID_STRUCTURED_DATA,
         'wrapInDocument: every structuredData entry must be a JSON-LD document (a plain object).',
+        { phase: 'build' },
       );
     }
     let json: string | undefined;
     try {
       json = JSON.stringify(entry);
     } catch (cause) {
-      throw new TypeError(
+      throw frameworkError(
+        AuthoringErrorCode.INVALID_STRUCTURED_DATA,
         `wrapInDocument: structuredData entry is not JSON-serializable: ${
           cause instanceof Error ? cause.message : String(cause)
         }`,
+        { phase: 'build', cause: cause instanceof Error ? cause : undefined },
       );
     }
     if (typeof json !== 'string') {
-      throw new TypeError('wrapInDocument: structuredData entry is not JSON-serializable.');
+      throw frameworkError(
+        AuthoringErrorCode.INVALID_STRUCTURED_DATA,
+        'wrapInDocument: structuredData entry is not JSON-serializable.',
+        { phase: 'build' },
+      );
     }
     const nonceAttr = nonce ? ` nonce="${nonce}"` : '';
     tags.push(
@@ -372,11 +380,12 @@ function buildMetaTags(
       const attrs = Object.entries(tag)
         .map(([key, value]) => {
           if (!isSafeAttributeName(key)) {
-            throw new OpenElementError(
+            throw frameworkError(
+              AuthoringErrorCode.UNSAFE_META_ATTRIBUTE,
               `wrapInDocument: unsafe meta attribute name: ${
                 JSON.stringify(key)
               }. Meta tag keys must be valid HTML attribute names and must not be event handlers.`,
-              { code: 'UNSAFE_META_ATTR_NAME', statusCode: 400, recoverable: false },
+              { phase: 'validation', statusCode: 400 },
             );
           }
           return `${escapeAttr(key)}="${escapeAttrValue(value)}"`;

@@ -6,6 +6,8 @@
  */
 
 import { type PartProgramV1, validatePartProgram } from '../protocol/part-program.ts';
+// Single error dialect (#1386 item 3): serializability failures carry a code.
+import { frameworkError, ProgramErrorCode } from '../protocol/errors.ts';
 
 declare const runtimeProgramBrand: unique symbol;
 
@@ -37,7 +39,11 @@ export function normalizePartProgram(raw: unknown): RuntimeProgramIR {
   validatePartProgram(raw);
   const serialized = JSON.stringify(raw);
   if (serialized === undefined) {
-    throw new Error('[compiled-program] canonical Part Program is not JSON serializable');
+    throw frameworkError(
+      ProgramErrorCode.NOT_SERIALIZABLE,
+      '[compiled-program] canonical Part Program is not JSON serializable',
+      { phase: 'validation' },
+    );
   }
   const normalized: unknown = JSON.parse(serialized);
   validatePartProgram(normalized);
