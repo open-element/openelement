@@ -73,7 +73,15 @@ claimed or tested.
 ## What It Creates
 
 - `deno.json` - starter authoring imports and build tasks
-- `vite.config.ts` - Vite build configuration with the openElement plugin
+- `vite.config.ts` - Vite build configuration; the plugin call is plain
+  `openElement()`, because framework options have exactly one home:
+- `openelement.config.ts` - the framework options. It is OPTIONAL and nearly
+  empty by default; every option it omits comes from a file convention —
+  design tokens from `app/styles/tokens.css`, the app shell from
+  `app/islands/app-shell.tsx`, structural document-head content from
+  `app/head.tsx`, the site title from `package.json`. Passing framework
+  options inline to `openElement()` while this file carries options is a hard
+  error, and an unknown key fails the build with the accepted-key list.
 - `app/` - application directory with starter pages and islands
 - `app/routes/blog/` - the sample blog as compiled page routes (`index` list
   and `welcome` post), prerendered at build time

@@ -1,0 +1,42 @@
+/**
+ * app/head.tsx — the starter's structural document-head content.
+ *
+ * Everything here is DATA: the framework validates attribute names and URL
+ * values, escapes every attribute, and serializes the tags into the document
+ * <head>. The array is emitted in the order written, so this file is the head
+ * order. Delete the file and the starter still builds — it is a convention, not
+ * a requirement.
+ *
+ * Entries take one of three shapes:
+ *   { meta: { name, content } }   one <meta> tag
+ *   { link: { rel, href, ... } }  one <link> tag (rel and href are required)
+ *   { style: 'css text' }         one inline <style> block
+ *
+ * The module is compiled by the build, so it can import CSS by URL
+ * (`import css from './site.css?raw'`) and pull constants from local modules.
+ * It must not use host APIs (no Deno, no Node): its output is a build artifact,
+ * so a runtime read would make the document depend on the build machine.
+ *
+ * `head` in openelement.config.ts already covers the title, description,
+ * favicon and the og:/twitter: pairs; `head.scripts` / `head.stylesheets`
+ * cover external scripts and stylesheets. This file is for what neither can
+ * express — here, a resource preload. Per-page meaning (title, description,
+ * og:title, canonical) is declared by each route module's `head`, which
+ * resolves at render time and wins for crawlers.
+ */
+export default [
+  // The brand mark is used above the fold on the starter home page, so it is
+  // preloaded. `crossorigin` needs an explicit value when the resource is
+  // fetched with CORS; an image preload without it is same-origin as authored.
+  {
+    link: {
+      rel: 'preload',
+      href: '/openelement-mark.svg',
+      as: 'image',
+      type: 'image/svg+xml',
+    },
+  },
+  // Declaring the color scheme the starter supports lets the browser pick the
+  // right native form/scrollbar palette before any CSS is parsed.
+  { meta: { name: 'color-scheme', content: 'dark light' } },
+];

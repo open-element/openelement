@@ -5,7 +5,16 @@
  * that live outside every component @scope, which is why they cannot live in
  * component sheets. Component-local concerns (including language variants via
  * subject-side `:lang(zh)`) belong in the component sheets instead.
+ *
+ * `documentStyle` is the same layer one step further out: the site's
+ * @font-face faces plus the open-props token sheet, composed with `siteCSS`
+ * into the single inline <style> the document head carries. It lives here
+ * rather than in app/head.tsx because check-site-theme-tokens.ts scans www/app
+ * for hardcoded theme values; font faces and token bodies are definitions, and
+ * this module is the site's designated home for them (the site style layer the
+ * gate's own doctrine names).
  */
+import { openPropsTokenSheet } from '@openelement/ui';
 
 /**
  * Central viewport tier scale (px). Every bare-number @media width/height
@@ -168,3 +177,25 @@ body {
     word-break: break-all;
   }
 }`;
+
+// Make token variables available to document-level elements while shadow trees
+// continue to inherit them from the document root. The sheet's token block
+// selects `:root, :host` (packages/ui/tools/generate-ui-tokens.ts), so this
+// module only consumes the finished sheet — there is no transform.
+const rootTokens = [...openPropsTokenSheet.cssRules].map((rule) => rule.cssText).join('\n');
+
+/**
+ * The site's font faces. Three faces, deliberately: the two text faces (prose
+ * Inter, code JetBrains Mono) plus the Instrument Serif accent; the two text
+ * faces are also preloaded in app/head.tsx (critical-path hardening, #1088).
+ */
+const fontFaces =
+  `@font-face{font-family:'JetBrains Mono';font-style:normal;font-weight:100 800;font-display:swap;src:url('/assets/fonts/jetbrains-mono-latin-variable.woff2') format('woff2')}@font-face{font-family:'Instrument Serif';font-style:normal;font-weight:400;font-display:swap;src:url('/assets/fonts/instrument-serif-latin-regular.woff2') format('woff2')}@font-face{font-family:'Instrument Serif';font-style:italic;font-weight:400;font-display:swap;src:url('/assets/fonts/instrument-serif-latin-italic.woff2') format('woff2')}@font-face{font-family:'Inter Variable';font-style:normal;font-weight:100 900;font-display:swap;src:url('/assets/fonts/inter-latin-variable.woff2') format('woff2')}`;
+
+/**
+ * The complete document-level style body: faces first (so the preloaded files
+ * are usable at first paint), then the open-props tokens, then the body
+ * baseline and the site rules. app/head.tsx wraps this in one <style> entry.
+ */
+export const documentStyle =
+  `${fontFaces}${rootTokens}body{font-family:var(--font-sans);-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}${siteCSS}`;

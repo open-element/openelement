@@ -29,7 +29,49 @@ export default defineConfig({
 
 ## openElement() umbrella
 
-`openElement()` wraps `openPipeline` with the unified SSG and island plugin set. It takes the flat framework options — `routesDir`, `islandsDir`, `componentsDir`, `packageIslands`, `html`, `inject`, `middleware` — plus `i18n: { locales, defaultLocale }` for locale-prefixed builds and `ssg: { dynamicRouteFailure: 'fail' | 'warn' }` for the SSG render-failure policy. Content collections are not part of it; markdown/frontmatter parsing, schemas, collections, navigation and document-route mapping are site-owned.
+`openElement()` wraps `openPipeline` with the unified SSG and island plugin set. In an application **it takes no arguments**: `plugins: [...openElement()]`. Framework options have exactly one home, `openelement.config.ts` (see below), and passing them inline while that file carries options is a hard error. The low-level `openPipeline()` from `@openelement/router/vite` keeps its own explicit config shape for callers that build a pipeline directly.
+
+## openelement.config.ts
+
+The optional, near-empty config file: `export default defineConfig({ ... })` from `@openelement/router`. Every option it omits comes from a file convention, and the conventions follow the `dirs` block:
+
+| Option | Convention when omitted |
+| --- | --- |
+| `dirs` | routes `app/routes`, islands `app/islands`, components `app/components` |
+| design tokens | `<shared base>/styles/tokens.css` (inlined into every document `<head>`) |
+| app shell | `<shared base>/islands/app-shell.tsx` (auto-registered; deleting the file is supported) |
+| document head content | `<shared base>/head.tsx` |
+| site title | the `name` field of `package.json` |
+
+The shared base is the three roots' longest common directory: `dirs: { routes: 'src/routes', islands: 'src/islands', components: 'src/components' }` moves the tokens file to `src/styles/tokens.css`, the shell to `src/islands/app-shell.tsx` and the head module to `src/head.tsx`. A partial `dirs` has no shared segment left (`src/pages` against the default `app/*`), so it moves only what it names and the conventions stay at `app`.
+
+Accepted keys — anything else fails the build with this list:
+
+- `renderer` — `'native'` (default, the compiled Part Program serializer) or `'lit'`.
+- `dirs` — `{ routes, islands, components }`.
+- `appShell` — `false` to opt out, or `{ import, props }`. The tag name is derived from the import's basename, so it is not configurable.
+- `packageIslands` — extra package names whose island modules the build admits, e.g. `['@openelement/ui']`. The loader folds the list into the SSR externalization list (a listed package is bundled, not imported at run time), which is why there is no `ssr.noExternal` key.
+- `head` — the structured document-head channel: `title`, `description`, `lang`, `favicon`, `ogImage`, `stylesheets: string[]` and `scripts: { src, defer?, crossOrigin?, integrity? }[]`. Scripts and stylesheets serialize through the framework's own link/script writer, so a config entry and an inline `inject` entry emit identical bytes. `inject` itself — the framework's raw-HTML channel — deliberately has no home here.
+- `styles` — `{ tokens }` to point the token convention at another file.
+- `i18n` — `{ locales, defaultLocale }`; the build expands every route under each additional locale prefix.
+- `viewTransition` / `speculation` — booleans. The object forms are a possible future widening of these two keys.
+- `build` — `{ manifestBudget }`, an advisory per-entry manifest budget in KB.
+- `middleware` — `{ corsOrigin }` static allowlist data; the origin *callback* lives in a module (`middleware.use` / `middleware.corsOriginModule`), never in the config file.
+
+### app/head.tsx
+
+Structural head content a URL list cannot express — site meta tags, font preloads, icon and feed links, inline critical CSS — belongs in the head convention module, not in the config file. It is compiled into the app's module graph, so it may import CSS by URL and pull constants from local modules; it must not use host APIs, because its output is a build artifact rather than a runtime read.
+
+```tsx
+// app/head.tsx — entries are data; the framework serializes them.
+export default [
+  { meta: { property: 'og:site_name', content: 'My App' } },
+  { link: { rel: 'preload', href: '/assets/inter.woff2', as: 'font', crossorigin: 'anonymous' } },
+  { style: 'html{visibility:visible!important}' },
+];
+```
+
+Each entry is a `{ meta }` record, a `{ link }` record (`rel` and `href` required) or a `{ style }` CSS string, emitted in the order written. Attribute names, URL protocols and inline CSS all pass the same fail-closed checks as every other head fragment: an unsafe attribute name, a `javascript:` URL, an `@import` or a `</style>` that closes the block early fails the build instead of being dropped. Import CSS with `?raw` when the file must reach the document byte-for-byte (`?inline` runs it through Vite's CSS pipeline) — this site's pinned Prism theme is imported that way.
 
 ## Content collections are site-owned
 
@@ -120,7 +162,7 @@ export default definePage(BlogPostPage, {
 
 ## Code-block highlighting (optional)
 
-The site-owned collection loader renders fenced blocks as `<pre><code class="language-x">` with no token-level colors. A collection's `markdown` option replaces the renderer; its output is still first-party trusted content, and hljs spans only add `class` attributes. For code blocks in routes/pages, wrap them in `<open-code-block>` (`@openelement/ui`) — it highlights via a global Prism that your page must load (core + language grammars, e.g. the vendored same-origin scripts this site injects from `public/assets/vendor/prism/` in `www/vite.config.ts`); without Prism you get the copy button but no token spans.
+The site-owned collection loader renders fenced blocks as `<pre><code class="language-x">` with no token-level colors. A collection's `markdown` option replaces the renderer; its output is still first-party trusted content, and hljs spans only add `class` attributes. For code blocks in routes/pages, wrap them in `<open-code-block>` (`@openelement/ui`) — it highlights via a global Prism that your page must load (core + language grammars, e.g. the vendored same-origin scripts this site vendors under `public/assets/vendor/prism/` and declares in `www/openelement.config.ts`); without Prism you get the copy button but no token spans.
 
 ### lib/blog.ts — syntax highlighting recipe (optional)
 
@@ -157,6 +199,8 @@ Custom renderer output stays within the same first-party trust boundary.
 `middleware.use` registers fetch middleware with the WinterCG shape `(request, next) => Promise<Response>` — no HTTP-framework dialect. The chain is composed around the generated handler in onion order (`use[0]` is outermost: first to see the request, last to see the response), outside the built-in `requestId`/`logger`/`cors`/`securityHeaders`/`csp` middleware. Middleware semantics are request-time only: a static GET/HEAD is served straight from the built artifacts (`tryStatic`) and never passes through the `middleware.use` chain or the built-in middleware, so do not rely on middleware to guard prerendered pages. On the request-time dispatch path (dynamic routes, POSTs, and non-static fallbacks) the same chain runs in the dev server, the `start` CLI, the e2e fixture server, and the Nitro production entry (locked by the request-time parity contract test). A middleware may short-circuit by returning a `Response` without calling `next()`. Each entry is a **module path** (resolved like `appShell.import`): the module default-exports the middleware, and the generated server entry imports it — so middleware may close over module scope and import local helpers and third-party packages. Route-scoped `_middleware.ts` files use the same WinterCG shape: a root or nested `_middleware.ts` default-exports `(request, next) => Promise<Response>`, applied to its route subtree.
 
 ### vite.config.ts — middleware.use
+
+`middleware.use` is the one framework option that stays inline: the config file's `middleware` block carries `corsOrigin` only, so a project that needs a middleware chain passes it through `openElement(...)` and therefore keeps that call as its framework-options home (a non-empty `openelement.config.ts` next to inline options is a hard error). Use the inline form *or* the file, never both.
 
 ```ts
 import { defineConfig } from 'vite';

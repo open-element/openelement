@@ -189,7 +189,7 @@ export default defineConfig({
       routesDir: 'app/routes',
       componentsDir: 'app/components',
       appShell: false,
-      html: { title: 'packed serve proof' },
+      head: { title: 'packed serve proof' },
     }),
   ],
 });
