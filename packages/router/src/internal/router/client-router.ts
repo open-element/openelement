@@ -8,6 +8,7 @@
  * Alpha.9 removes client-local route grammars and compatibility matchers so
  * browser navigation and the other route consumers share one semantic owner.
  */
+import { NavigationState, type NavigationTicket } from './navigation-state.ts';
 import { type RouteMatch, type RouteRecord, RouteTable } from './route-table.ts';
 
 const ERROR_PREFIX = '[openElement]';
@@ -117,12 +118,13 @@ export function createRouter(options: RouterOptions): RouterInstance {
   let currentParams: Record<string, string> = Object.create(null);
   let currentSearchParams = new URLSearchParams();
   const checkedNavigation = Object.freeze({});
-  /** One-shot URL of the router's own guard-veto restore (Navigation API path). */
-  let pendingRestoreUrl: string | null = null;
+  // The navigation state machine owns every cross-flow invariant: ticket
+  // ownership (#1023 latest-wins), browser-landing dedup, the one-shot
+  // guard-veto restore marker (#1036) and disposal. See navigation-state.ts.
+  const navigationState = new NavigationState();
   const nativeNavigation = mode === 'history' && typeof navigation !== 'undefined'
     ? navigation
     : undefined;
-  let disposed = false;
 
   /** Registered listeners keyed by event type, to support dispose. */
   const listeners: Array<{ type: string; handler: EventListener }> = [];
@@ -164,7 +166,7 @@ export function createRouter(options: RouterOptions): RouterInstance {
   }
 
   function notifyChange(): void {
-    if (disposed) return;
+    if (navigationState.disposed) return;
     // Outer try/catch catches synchronous throws from onChange().
     // Promise.resolve().catch() only handles async rejections; a sync throw
     // during argument evaluation would crash the router.
@@ -193,11 +195,13 @@ export function createRouter(options: RouterOptions): RouterInstance {
     if (nativeNavigation) {
       // An intercepted traverse must be superseded by a real navigation to
       // leave the vetoed URL. history.replaceState fires a navigate event
-      // (navigationType "replace") for it; the one-shot URL marker lets
+      // (navigationType "replace") for it; the one-shot marker armed here lets
       // onNativeNavigate recognize that event as the router's own restore
       // and intercept it without rematch/notify — an unintercepted replace
-      // races the in-flight traverse and does not land.
-      pendingRestoreUrl = url;
+      // races the in-flight traverse and does not land. The marker is armed
+      // as an absolute href so it compares directly against the navigate
+      // event's already-resolved destination URL.
+      navigationState.armRestore(new URL(url, location.href).href);
       history.replaceState(null, '', url);
       return;
     }
@@ -207,9 +211,9 @@ export function createRouter(options: RouterOptions): RouterInstance {
   async function commitNavigation(
     path: string,
     navOptions: { replace: boolean; depth?: number; restoreOnBlock?: boolean },
-    ticket?: number,
+    ticket: NavigationTicket,
   ): Promise<void> {
-    if (disposed) return;
+    if (navigationState.disposed) return;
     const depth = navOptions.depth ?? 0;
     if (depth > MAX_GUARD_REDIRECTS) {
       throw new Error(
@@ -227,10 +231,10 @@ export function createRouter(options: RouterOptions): RouterInstance {
     const matched = resolveTarget(u);
     if (matched?.route.guard) {
       const result = await matched.route.guard();
-      if (disposed) return;
-      // Latest-wins (#1023): a newer programmatic navigation already owns the
-      // outcome; a superseded guard resolution must not push state.
-      if (ticket !== undefined && ticket !== programmaticNavigationSeq) return;
+      // Latest-wins (#1023): a newer navigation already owns the outcome; a
+      // superseded guard resolution must not push state. Disposal supersedes
+      // every outstanding ticket, so it needs no separate check (#1343).
+      if (!navigationState.owns(ticket)) return;
       if (result === false) {
         if (navOptions.restoreOnBlock) {
           // Browser-driven navigation already landed on this URL (via a guard
@@ -249,7 +253,7 @@ export function createRouter(options: RouterOptions): RouterInstance {
       }
     }
 
-    if (disposed || (ticket !== undefined && ticket !== programmaticNavigationSeq)) return;
+    if (!navigationState.owns(ticket)) return;
     const url = mode === 'hash' ? toHashUrl(path) : path;
     if (nativeNavigation) {
       // Under the Navigation API the commit point is the navigate event:
@@ -275,25 +279,20 @@ export function createRouter(options: RouterOptions): RouterInstance {
     // restore/redirect rewrote the landed entry to, and a genuine back onto
     // that entry must not be deduped away. commitBrowserNavigation re-derives
     // the key in its finally block after browser-driven processing.
-    lastLandedUrl = null;
+    navigationState.recordLanding(null);
     rematch();
     notifyChange();
   }
-
-  // Latest-wins sequencing for programmatic navigations (#1023): guards are
-  // async, so without ordering a slow guard from an earlier navigate() would
-  // commit after a newer navigation and roll the UI back to the stale intent.
-  let programmaticNavigationSeq = 0;
 
   function navigate(path: string): Promise<void> {
     // No onPending here: pending execution is cancelled at the ownership
     // point (guard passed, latest ticket held), never on a navigation attempt
     // a guard may still veto (#1343 review).
-    return commitNavigation(path, { replace: false }, ++programmaticNavigationSeq);
+    return commitNavigation(path, { replace: false }, navigationState.issue('programmatic'));
   }
 
   function replace(path: string): Promise<void> {
-    return commitNavigation(path, { replace: true }, ++programmaticNavigationSeq);
+    return commitNavigation(path, { replace: true }, navigationState.issue('programmatic'));
   }
 
   /**
@@ -302,25 +301,24 @@ export function createRouter(options: RouterOptions): RouterInstance {
    * cannot be withheld the way commitNavigation withholds pushState, so
    * a rejected guard rewrites the landed entry back to the previous URL,
    * and a guard redirect replaces the landed entry with the redirect target.
+   *
+   * Dedup of consecutive browser events landing on the same URL (rapid
+   * popstate/hashchange bursts) so guards and onChange do not run twice for
+   * what is effectively a single navigation is the machine's
+   * `isDuplicateLanding`/`recordLanding` pair.
    */
-  // Dedup consecutive browser events that land on the same URL (rapid
-  // popstate/hashchange bursts) so guards and onChange do not run twice
-  // for what is effectively a single navigation.
-  let lastLandedUrl: string | null = null;
-
   async function commitBrowserNavigation(
-    ticket = programmaticNavigationSeq,
+    ticket: NavigationTicket,
     landed = readPath(),
   ): Promise<void> {
-    if (disposed) return;
-    if (landed === lastLandedUrl) return;
+    if (navigationState.disposed) return;
+    if (navigationState.isDuplicateLanding(landed)) return;
     try {
       const u = new URL(landed, location.href);
       const matched = resolveTarget(u);
       if (matched?.route.guard) {
-        const seqAtGuardStart = programmaticNavigationSeq;
         const result = await matched.route.guard();
-        if (disposed || ticket !== programmaticNavigationSeq) return;
+        if (!navigationState.owns(ticket)) return;
         if (result === false) {
           // Blocked: restore the entry the user came from (see
           // restoreBlockedEntry for why this rewrites rather than pushes).
@@ -330,19 +328,19 @@ export function createRouter(options: RouterOptions): RouterInstance {
         if (typeof result === 'string') {
           // Latest-wins (#1023): a programmatic navigation committed while
           // the guard was pending already owns the outcome; the stale
-          // redirect must not replaceState over it. The captured seq rides
-          // along as the ticket so the check keeps holding across the
-          // redirect target's own guard await as well.
-          if (seqAtGuardStart !== programmaticNavigationSeq) return;
+          // redirect must not replaceState over it. The same ticket rides
+          // along so the check keeps holding across the redirect target's own
+          // guard await as well — a newer ticket still supersedes it there.
+          if (!navigationState.owns(ticket)) return;
           await commitNavigation(result, {
             replace: true,
             depth: 1,
             restoreOnBlock: true,
-          }, seqAtGuardStart);
+          }, ticket);
           return;
         }
       }
-      if (disposed || ticket !== programmaticNavigationSeq) return;
+      if (!navigationState.owns(ticket)) return;
       // Ownership point (see commitNavigation): the guard allowed this
       // traversal, so pending execution for the previous route is cancelled
       // now — and only now.
@@ -352,7 +350,7 @@ export function createRouter(options: RouterOptions): RouterInstance {
     } finally {
       // Track the committed URL (restored on block, replaced on redirect) so
       // only bursts landing on the same URL are deduped, not genuine retries.
-      if (ticket === programmaticNavigationSeq) lastLandedUrl = currentPath;
+      if (navigationState.owns(ticket)) navigationState.recordLanding(currentPath);
     }
   }
 
@@ -361,33 +359,31 @@ export function createRouter(options: RouterOptions): RouterInstance {
   let browserNavigationQueue: Promise<void> = Promise.resolve();
 
   function onBrowserNavigation(): void {
-    if (disposed) return;
+    if (navigationState.disposed) return;
     // No onPending at event time: the guard in commitBrowserNavigation may
     // veto this traversal, and a veto must leave the current route's pending
     // render untouched (#1343 review).
-    const ticket = ++programmaticNavigationSeq;
+    const ticket = navigationState.issue('browser');
     browserNavigationQueue = browserNavigationQueue
-      .then(() =>
-        ticket === programmaticNavigationSeq ? commitBrowserNavigation(ticket) : undefined
-      )
+      .then(() => navigationState.owns(ticket) ? commitBrowserNavigation(ticket) : undefined)
       .catch((err) => {
-        if (disposed || ticket !== programmaticNavigationSeq) return;
+        if (!navigationState.owns(ticket)) return;
         // Intentional fail-open: a rejected guard or a router error must not
         // wedge the queue or leave the UI inconsistent with the address bar,
         // so we log and converge to the real URL instead of rethrowing.
         log.error('browser navigation failed:', err);
         rematch();
-        lastLandedUrl = currentPath;
+        navigationState.recordLanding(currentPath);
         notifyChange();
       });
   }
 
   function dispose(): void {
-    if (disposed) return;
-    disposed = true;
-    // Supersede every programmatic guard ticket that was issued before
-    // disposal. Browser guards use the same disposed check after each await.
-    programmaticNavigationSeq++;
+    if (navigationState.disposed) return;
+    // Supersede every guard ticket issued before disposal — browser and
+    // programmatic alike (they share one sequence); browser guards use the
+    // same disposed check after each await.
+    navigationState.dispose();
     for (const { type, handler } of listeners) {
       removeEventListener(type, handler);
     }
@@ -400,16 +396,18 @@ export function createRouter(options: RouterOptions): RouterInstance {
     // into SPA handling; browser-driven POST/fragment/reload default to the
     // browser. No onPending, no ticket bump, no intercept for those.
     const eventInfo = (event as NavigateEvent & { info?: unknown }).info;
-    if (pendingRestoreUrl !== null) {
+    if (navigationState.restoreHref !== null) {
       // The navigate event fired by our own guard-veto replaceState: intercept
       // so the vetoed traverse stays superseded, but never rematch/notify —
       // the router state already describes the restored URL. A genuine
       // navigation clears a stale marker via the URL/type match.
       const navigationType = (event as NavigateEvent & { navigationType?: string }).navigationType;
-      const matches = eventInfo === undefined && navigationType === 'replace' &&
-        new URL(event.destination.url).href === new URL(pendingRestoreUrl, location.href).href;
-      pendingRestoreUrl = null;
-      if (matches) {
+      const restored = navigationState.consumeRestore({
+        destinationHref: new URL(event.destination.url).href,
+        navigationType,
+        info: eventInfo,
+      });
+      if (restored) {
         event.intercept({ handler: () => {} });
         return;
       }
@@ -457,15 +455,18 @@ export function createRouter(options: RouterOptions): RouterInstance {
       // traverse that is vetoed cancels nothing (#1343 review).
       options.onPending?.();
     }
-    const ticket = ++programmaticNavigationSeq;
+    const ticket = navigationState.issue('native');
     event.signal.addEventListener('abort', () => {
-      if (ticket === programmaticNavigationSeq) programmaticNavigationSeq++;
+      // An aborted navigation request (a newer navigation superseded this one,
+      // or the user moved on) retires its ticket: the intercept handler below
+      // must not commit it.
+      if (navigationState.owns(ticket)) navigationState.supersede();
     }, { once: true });
     event.intercept({
       handler: async () => {
-        if (event.signal.aborted || ticket !== programmaticNavigationSeq) return;
-        if (event.info === checkedNavigation) {
-          lastLandedUrl = null;
+        if (event.signal.aborted || !navigationState.owns(ticket)) return;
+        if (isOwn) {
+          navigationState.recordLanding(null);
           rematch(target.pathname + target.search);
           notifyChange();
         } else {
