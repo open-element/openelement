@@ -1,5 +1,5 @@
 /** The published CLI version, embedded so packed npm installs are self-contained. */
-export const CREATE_VERSION = '1.0.0-alpha.3';
+export const CREATE_VERSION = '1.0.0-alpha.4';
 
 /**
  * The Vite dev release stamped into the generated starter's import map and
