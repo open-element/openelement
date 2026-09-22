@@ -504,10 +504,16 @@ Deno.test('ci contract: tree-SHA evidence reuse is fail-closed and single-source
     );
   }
 
-  // Every producer lane depends on the decision, and each lane's gate is
-  // skipped ONLY in the reused branch, with a claim step present in the
-  // complementary branch. A lane that ran its gate but claimed reused evidence
-  // (or vice versa) would fail the aggregate's tree identity check.
+  // Every producer lane depends on the decision, and each lane's gate runs
+  // unless the claim actually stamped a record. A lane that ran its gate but
+  // claimed reused evidence (or vice versa) would fail the aggregate's tree
+  // identity check.
+  //
+  // The claim is deliberately non-fatal and runs BEFORE the gate (#1439): a
+  // refused claim means "run the gate", never "fail the lane". The gate is
+  // therefore skipped only on `reused == 'true' && claim succeeded`, and every
+  // lane must carry a cleanup step that discards the unclaimable download
+  // before the fallback gate starts.
   const lanes: Array<[string, string]> = [
     ['fast-checks', 'candidate:evidence:fast'],
     ['source-matrix', 'candidate:evidence:source'],
@@ -526,13 +532,41 @@ Deno.test('ci contract: tree-SHA evidence reuse is fail-closed and single-source
     const head = block.slice(0, taskIndex);
     const lastIf = head.lastIndexOf('if:');
     assert(
-      lastIf >= 0 && /needs\.reuse\.outputs\.reused\s*!=\s*'true'/.test(head.slice(lastIf)),
-      `${job}'s gate must be skipped exactly when a tree-identical package exists`,
+      lastIf >= 0 &&
+        /needs\.reuse\.outputs\.reused\s*!=\s*'true'\s*\|\|\s*steps\.claim\.outcome\s*!=\s*'success'/
+          .test(head.slice(lastIf)),
+      `${job}'s gate must run unless the decision AND the claim both succeeded`,
+    );
+    // The claim is present, guarded to the reused branch, and NON-FATAL: a
+    // refusal must fall through to the gate instead of failing the lane.
+    assert(
+      /claim-reused-evidence/.test(block),
+      `${job} must claim the reused artifact in the reuse branch`,
+    );
+    const claimIndex = block.indexOf('claim-reused-evidence');
+    const claimHead = block.slice(0, claimIndex);
+    // The step's own keys: from its `- name:` line to its `uses:` line.
+    const claimStepStart = claimHead.lastIndexOf('\n      - ');
+    const claimStep = claimHead.slice(claimStepStart);
+    assert(
+      claimStepStart >= 0 && /if:\s*needs\.reuse\.outputs\.reused\s*==\s*'true'/.test(claimStep),
+      `${job}'s claim must run only when the decision says reuse`,
     );
     assert(
-      /claim-reused-evidence/.test(block) &&
-        /if:\s*needs\.reuse\.outputs\.reused\s*==\s*'true'/.test(block),
-      `${job} must claim the reused artifact in the complementary branch`,
+      /continue-on-error:\s*true/.test(claimStep),
+      `${job}'s claim must be non-fatal so a refusal falls back to the gate`,
+    );
+    assert(
+      /id:\s*claim\b/.test(claimStep),
+      `${job}'s claim must carry the step id the gate's fallback condition reads`,
+    );
+    // The rejected download must be removed before the fallback gate runs:
+    // otherwise another run's files (or a stale artifact) reach this lane's
+    // evidence upload.
+    assert(
+      /steps\.claim\.outcome\s*!=\s*'success'/.test(block) &&
+        /rm -rf \.artifacts\/ci/.test(block),
+      `${job} must discard the unclaimable download before its fallback gate`,
     );
   }
 

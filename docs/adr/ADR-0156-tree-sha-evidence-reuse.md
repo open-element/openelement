@@ -1,13 +1,16 @@
 # ADR-0156: Tree-SHA evidence reuse for the candidate gate
 
 - Status: ACCEPTED (2026-09-22, alpha4 lane W — implements the owner-approved
-  plan 1)
+  plan 1); AMENDED (2026-09-23, hotfix — see [Amendment](#amendment-2026-09-23):
+  a reuse **chain** is judged by the producer's tree, and a refused claim falls
+  back to the real gate instead of failing the lane)
 - Amends: none. Constrains the candidate evidence contract documented in
   `docs/maintainers/releasing.md`, which the aggregate and validator enforce.
 - Tracking: [#1425](https://github.com/open-element/openelement/issues/1425)
   (the tree-identity observation this rests on),
   [#1436](https://github.com/open-element/openelement/pull/1436) (the lane that
-  lands it).
+  lands it), [#1439](https://github.com/open-element/openelement/pull/1439)
+  (the release that exposed the two defects this amendment fixes).
 
 ## Context
 
@@ -67,12 +70,13 @@ T, and the candidate's tree is T, the obligation for that tree is discharged.
 
 4. **The lane claims, and the claim refuses to lie.** After downloading the
    source artifact, `evidence-reuse.ts --claim` verifies that the record
-   already binds **this** tree and the **resolved source commit**, and that its
-   result is PASS. Only then does it add
-   `reused: { runId, sha }` — and `sha` is the run that actually executed the
-   gate, not the run that forwarded it (a re-reused package keeps its origin).
-   A mismatch fails the lane rather than producing evidence the aggregate would
-   have to reject.
+   already binds **this** tree, re-derives the **producer commit's** tree from
+   the local object store (it must be this tree), and that its result is PASS.
+   Only then does it add `reused: { runId, sha }` — and `sha` is the commit
+   that actually executed the gate, not the run that forwarded it (a
+   re-reused package keeps its origin; see the amendment for the chain case).
+   A mismatch fails the claim, and a failed claim makes the lane run its gate
+   rather than failing the lane.
 
 5. **The aggregate re-derives the property it depends on.** It does not trust
    the resolver. For each job it still requires `tree == checked-out tree`, and
@@ -104,9 +108,10 @@ T, and the candidate's tree is T, the obligation for that tree is discharged.
   often the tree is unchanged, which is exactly when a re-run teaches nothing.
 - **A new failure surface exists and is fail-closed.** A bug in the resolver
   costs a full run (the wrong direction is cheap: the gate simply runs). A bug
-  in the claim fails the lane. A bug in the aggregate would have to be
-  simultaneous with a genuine tree-identity violation to matter, since the tree
-  check is unchanged and still authoritative.
+  in the claim costs a full run too — since the 2026-09-23 amendment the lane
+  falls back to its gate instead of failing. A bug in the aggregate would have
+  to be simultaneous with a genuine tree-identity violation to matter, since
+  the tree check is unchanged and still authoritative.
 - **`gh` becomes a CI dependency of the PR layer.** The resolver needs
   `actions: read` and the `gh` CLI. It is fail-closed on its absence, so a
   token change costs CI time, never correctness.
@@ -188,3 +193,72 @@ to be named.
   evidence without the lanes' participation, which hides the operation from the
   lane logs and puts the entire trust decision in one place with no independent
   claim.
+
+## Amendment (2026-09-23): chained reuse, and a refusal that falls back
+
+### What the release exposed
+
+The alpha.4 release run (`main@7c5705418`) resolved a source run whose head
+commit was `eeebe25d9` but whose downloaded evidence package carried records
+stamped `produced-by: be7563784`. Decision 4 required
+`record.sha == resolved source commit`, so **every** claim refused, all four
+lanes failed, and no lane fell back to running its gate — the run was red
+because a legitimate chain was rejected, not because a gate failed.
+
+The chain was real, not forged: `be7563784` and `eeebe25d9` are the same
+**tree**, which is exactly the identity decision 1 declares as the reuse key.
+`eeebe25d9` was itself a replay of the package `be7563784` produced; the record
+inside the package must keep naming the commit that ran the suite, so it can
+never be rewritten to the forwarder's commit.
+
+### The amendment
+
+1. **The claim judges the producer by its TREE.** `claimReusedResult` now takes
+   a `resolveTree(commit)` lookup and requires the record's own producer commit
+   to resolve to the checked-out tree. The record's `tree` field is not
+   accepted as an answer about itself: the CLI resolves the producer with
+   `git rev-parse <sha>^{tree}` in the checked-out repository. An unresolvable
+   producer commit is a refusal. `record.sha == resolved source commit` is gone
+   as a condition — the resolved source commit stays in the message and in the
+   `reuse` job's outputs, but it is no longer a matching key.
+   **Not a relaxation:** a producer commit on a different tree is still
+   refused, and a record that does not bind the checked-out tree is still
+   refused. What changed is which commit the tree comparison is made against.
+2. **The producer commit stays in the stamp.** `reused.sha` remains the commit
+   that actually executed the gate (unchanged from decision 4, and pinned by
+   the aggregate's `reused.sha == job.sha` rule). A stale, malformed, or
+   contradictory carried stamp is now refused _at claim time_ instead of
+   downstream, so the lane falls back to a real run rather than turning the
+   bundle red.
+3. **A refused claim falls back to the full gate.** In `autoflow-ci.yml` each
+   of the four lanes runs the claim FIRST, with `continue-on-error: true` and
+   `id: claim`; the lane's real gate runs unless
+   `reused == 'true' && steps.claim.outcome == 'success'`. A refused claim
+   discards the unclaimable download (`rm -rf .artifacts/ci`) before the
+   fallback gate so another run's files can never reach this lane's evidence
+   upload. A failed claim is therefore a full run, never a red lane — which is
+   what decision 3 already promised the resolver and now holds for the claim.
+4. **The aggregate is unchanged.** It still requires every record's `tree` to
+   equal the checked-out tree, still audits the stamp's shape, still refuses a
+   stamp naming the candidate's own commit or disagreeing with the record's
+   `sha`, and still requires one source run across reused jobs. The fail-closed
+   acceptance surface is not part of this amendment.
+
+### Why this is not "skipping the check"
+
+The property being relied on is unchanged and is the whole point of the ADR:
+**the same tree with a different commit is the same input.** The claim now
+re-derives that property against the commit that produced the record rather
+than against the run that forwarded it — a strictly more local and more
+verifiable step, since `git rev-parse <sha>^{tree}` runs in the checkout the
+lane is testing. Trusting `record.tree` without that lookup, or accepting any
+producer commit, is the relaxation this amendment explicitly does not make.
+
+### Consequences of the amendment
+
+- A reuse chain of any length works, and its provenance stays honest: the
+  stamp always names the run and commit that ran the suite.
+- A claim bug costs a full gate run instead of a red lane, matching the
+  resolver's fail-closed direction (`reused=false` → run the gate).
+- The lane's evidence is either a claimed no-op or a fresh run; there is no
+  third state, because the download is discarded on the fallback path.
