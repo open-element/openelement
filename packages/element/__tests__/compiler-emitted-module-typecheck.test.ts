@@ -21,7 +21,7 @@ import {
   typeCheckEmittedModule,
 } from '../src/internal/compiler/semantic-core/type-check.ts';
 import { typeCheckEmittedModule as typeCheckFromSubpath } from '../src/compiler.ts';
-import { readPackages } from '../../../tools/lib/package-graph.ts';
+import { readPackage } from '../../../tools/lib/package-graph.ts';
 
 const REPO_ROOT = fromFileUrl(new URL('../../../', import.meta.url));
 
@@ -30,10 +30,24 @@ const REPO_ROOT = fromFileUrl(new URL('../../../', import.meta.url));
  * the same form `tools/repo/check-public-interface-snapshot.ts` builds for its
  * type-checking pass. Reading it from the manifests rather than hardcoding one
  * specifier means a new subpath is covered without editing this test.
+ *
+ * The walk is anchored at `REPO_ROOT` rather than `readPackages()`: that helper
+ * reads `packages` relative to the process CWD, because every caller of it is a
+ * root task. This suite is a package task, and `gate.ts` runs a package task as
+ * `deno task --cwd packages/<name> <task>` — under which a relative walk throws
+ * before a single test runs. Resolving each manifest path from this file's own
+ * URL keeps the map identical under both invocation forms.
  */
 async function workspacePaths(): Promise<Record<string, string[]>> {
+  const packagesDir = join(REPO_ROOT, 'packages');
   const paths: Record<string, string[]> = {};
-  for (const pkg of await readPackages()) {
+  const entries = [];
+  for await (const entry of Deno.readDir(packagesDir)) {
+    if (entry.isDirectory) entries.push(entry.name);
+  }
+  for (const name of entries.sort()) {
+    const pkg = await readPackage(join(packagesDir, name));
+    if (!pkg) continue;
     const exports = typeof pkg.exports === 'string' ? { '.': pkg.exports } : pkg.exports ?? {};
     for (const [subpath, source] of Object.entries(exports)) {
       const specifier = subpath === '.' ? pkg.name : `${pkg.name}/${subpath.replace(/^\.\//, '')}`;
