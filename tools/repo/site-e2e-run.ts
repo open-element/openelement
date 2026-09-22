@@ -3,10 +3,10 @@
  *
  * Runs the official `www` Playwright suite and writes two artifacts:
  *   .artifacts/site-e2e-report.json — the raw Playwright JSON reporter
- *     output. This file IS the evidence-tree copy of the report:
- *     candidate-evidence stages these exact bytes into the source-matrix
- *     evidence bundle and recomputes the sidecar from them, so nothing else
- *     may write or rewrite this path.
+ *     output. This file IS the evidence-tree copy of the report: the
+ *     fresh-clone lane (which owns the candidate's Site proof) stages these
+ *     exact bytes into its evidence bundle and recomputes the sidecar from
+ *     them, so nothing else may write or rewrite this path.
  *   .artifacts/site-e2e-result.json — a compact sidecar manifest bound to
  *     the raw report (`reportSha256`), the Playwright config (`configFile`,
  *     empty `grep`), the suite size (`expected`), and the commit

@@ -7,9 +7,10 @@
  *
  *   generate-*.ts — committed-output generators. Must carry a real --check
  *     task (a task in the owning workspace whose command runs the same
- *     script with --check) wired into gate:source as `<workspace>#<key>`.
+ *     script with --check) wired into a gate as `<workspace>#<key>`, either
+ *     the PR layer (gate:source) or the release train (gate:release).
  *   emit-*.ts — build-artifact emitters (www/dist only). Must NOT declare a
- *     --check task and must NOT appear in gate:source; their output is
+ *     --check task and must NOT appear in either gate; their output is
  *     verified by the build/integration gates that consume the artifact.
  *
  * Orphan detection: every generate- or emit- script physically present in a
@@ -26,13 +27,33 @@ import {
 
 const repoRoot = fromFileUrl(new URL('../../', import.meta.url));
 const workspaces = await readWorkspaces(repoRoot);
-const gateSteps = new Set(
-  (
-    JSON.parse(await Deno.readTextFile(join(repoRoot, 'tools/repo/deno.json'))) as {
-      tasks?: Record<string, string>;
-    }
-  ).tasks?.['gate:source']?.split(/\s+/) ?? [],
+const repoTasks = (
+  JSON.parse(await Deno.readTextFile(join(repoRoot, 'tools/repo/deno.json'))) as {
+    tasks?: Record<string, string>;
+  }
+).tasks ?? {};
+/**
+ * The two gate layers a check task may be wired into: `gate:source` is what
+ * every pull request runs, `gate:release` is the release train (the steps
+ * that were trimmed out of the PR layer). A generator check must be in one of
+ * them — in NEITHER is the wiring bug this scan exists to catch, and having
+ * both gates means the checklist can no longer be "is it in gate:source".
+ */
+const GATE_LAYERS = ['gate:source', 'gate:release'] as const;
+const gateSteps = new Map<string, Set<string>>(
+  GATE_LAYERS.map((layer) => [layer, new Set(repoTasks[layer]?.split(/\s+/) ?? [])]),
 );
+const gateOf = (step: string): string | undefined =>
+  GATE_LAYERS.find((layer) => gateSteps.get(layer)!.has(step));
+for (const layer of GATE_LAYERS) {
+  if (gateSteps.get(layer)!.size === 0) {
+    console.error(
+      `generator-gates: ${layer} is missing or empty in tools/repo/deno.json — refusing to ` +
+        `report on a gate list it could not read.`,
+    );
+    Deno.exit(1);
+  }
+}
 
 const failures: string[] = [];
 const rows: string[] = [];
@@ -43,32 +64,33 @@ for (const ws of workspaces) {
     const checkTask = Object.keys(ws.tasks).find((key) =>
       ws.tasks[key].includes(entry.script) && ws.tasks[key].includes('--check')
     ) ?? '(none)';
-    const inGate = checkTask !== '(none)' && gateSteps.has(`${ws.workspace}#${checkTask}`);
+    const inGate = checkTask === '(none)' ? undefined : gateOf(`${ws.workspace}#${checkTask}`);
     rows.push(
-      `generate | ${ws.workspace} | ${entry.script} | ${checkTask} | ${inGate ? 'yes' : 'no'}`,
+      `generate | ${ws.workspace} | ${entry.script} | ${checkTask} | ${inGate ?? 'NO'}`,
     );
     if (checkTask === '(none)') {
       failures.push(`${ws.workspace}/${entry.script}: no --check task wired`);
-    } else if (!inGate) {
+    } else if (inGate === undefined) {
       failures.push(
-        `${ws.workspace}/${entry.script}: --check task ${checkTask} not in gate:source`,
+        `${ws.workspace}/${entry.script}: --check task ${checkTask} is in no gate ` +
+          `(${GATE_LAYERS.join(', ')})`,
       );
     }
   }
 
   for (const entry of emitterEntries([ws])) {
     const declaresCheck = ws.tasks[entry.taskKey].includes('--check');
-    const inGate = gateSteps.has(`${ws.workspace}#${entry.taskKey}`);
+    const inGate = gateOf(`${ws.workspace}#${entry.taskKey}`);
     rows.push(
       `emit | ${ws.workspace} | ${entry.script} | ${declaresCheck ? 'has --check' : '(none)'} | ${
-        inGate ? 'YES' : 'no'
+        inGate ?? 'no'
       }`,
     );
     if (declaresCheck) {
       failures.push(`${ws.workspace}/${entry.script}: artifact emitter must not declare a --check`);
     }
-    if (inGate) {
-      failures.push(`${ws.workspace}/${entry.script}: artifact emitter must not be in gate:source`);
+    if (inGate !== undefined) {
+      failures.push(`${ws.workspace}/${entry.script}: artifact emitter must not be in ${inGate}`);
     }
   }
 }
@@ -99,7 +121,7 @@ for (const file of await discoverScriptFiles(workspaces)) {
   }
 }
 
-console.log('class | workspace | script | check task | in gate:source');
+console.log(`class | workspace | script | check task | gate (${GATE_LAYERS.join(' / ')})`);
 for (const row of rows.sort()) console.log(row);
 
 const generatorCount = rows.filter((row) => row.startsWith('generate')).length;

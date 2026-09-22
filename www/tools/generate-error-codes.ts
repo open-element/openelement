@@ -10,8 +10,8 @@
  *   OEC diagnostics — every `OEC####` literal in the retained packages, with
  *     the static message argument at each call site. A code that exists in the
  *     source therefore cannot be missing from the /errors page: the page reads
- *     this module, so `www#check:error-codes` (gate:source) fails closed on any
- *     drift between the two.
+ *     this module, so `www#check:error-codes` (gate:release, the release
+ *     train) fails closed on any drift between the two.
  *   Runtime codes — the `ErrorCode` constants declared in
  *     packages/element/src/internal/protocol/errors.ts, with their own JSDoc.
  *

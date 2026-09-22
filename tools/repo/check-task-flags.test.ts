@@ -107,6 +107,23 @@ Deno.test('task wiring: gate:source generates site data before typecheck', async
   );
 });
 
+Deno.test('task wiring: gate:release generates site data before its own consumers', async () => {
+  const gateRelease = (await tasks('tools/repo/deno.json'))['gate:release'];
+  assert(gateRelease, 'gate:release must exist');
+  const generate = gateRelease.indexOf('tools/repo#generate:all');
+  assert(generate !== -1, 'gate:release must run the generators (generate:all)');
+  // Each generator --check in the release train reads the output of
+  // generate:all, so the generators must come first there too.
+  for (const consumer of ['www#check:api-reference', 'www#check:content-data', 'site:build']) {
+    const index = gateRelease.indexOf(consumer);
+    assert(index !== -1, `gate:release must run ${consumer}`);
+    assert(
+      generate < index,
+      `gate:release must generate before ${consumer} (its --check reads generated output)`,
+    );
+  }
+});
+
 Deno.test('task wiring: gate:packed covers every required packed consumer', async () => {
   const gatePacked = (await tasks('tools/release/deno.json'))['gate:packed'];
   assert(gatePacked, 'gate:packed must exist');

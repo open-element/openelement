@@ -295,12 +295,56 @@ Deno.test('ci contract: BFCache runs a blocking Chrome-channel lane', async () =
     block.includes('test:bfcache'),
     'the BFCache lane must run the chrome-bfcache project task',
   );
-  // The official three-browser Site matrix must remain unchanged in the
-  // source gate the candidate runs.
+  // The official three-browser Site matrix is a release-train step: it must
+  // stay wired into gate:release (the trimmed PR layer no longer builds or
+  // drives the Site) and the PR-layer fresh-clone lane must keep producing
+  // the Site E2E sidecar that the required candidate evidence requires.
   const repoConfig = JSON.parse(
     await Deno.readTextFile(join(repoRoot, 'tools/repo/deno.json')),
   ) as { tasks: Record<string, string> };
-  assert(repoConfig.tasks['gate:source'].includes('www#e2e:browsers'));
+  assert(
+    repoConfig.tasks['gate:release'].includes('www#e2e:browsers'),
+    'gate:release must run the three-browser Site E2E matrix',
+  );
+  assert(
+    !repoConfig.tasks['gate:source'].includes('www#e2e:browsers'),
+    'the PR layer must not run the three-browser Site matrix (it is a release-train step)',
+  );
+  const freshClone = jobBlock(workflow, 'fresh-clone');
+  assert(
+    freshClone.includes('candidate:evidence:fresh'),
+    'the fresh-clone lane records the candidate Site E2E sidecar',
+  );
+  const candidateSteps = await Deno.readTextFile(
+    join(repoRoot, 'tools/repo/candidate-steps.ts'),
+  );
+  assert(
+    /name:\s*'task-site-e2e'/.test(candidateSteps) &&
+      /name:\s*'task-site-build'/.test(candidateSteps),
+    'the fresh-clone contract must pin the Site build and Site E2E steps that produce the sidecar',
+  );
+});
+
+Deno.test('ci contract: Site E2E evidence is owned by the fresh-clone lane', async () => {
+  const evidence = await Deno.readTextFile(join(repoRoot, 'tools/repo/candidate-evidence.ts'));
+  assert(
+    /SITE_E2E_REPORT_BUNDLE_PATH\s*=\s*`ci\/fresh-clone\//.test(evidence),
+    'the raw Site E2E report must travel in the fresh-clone evidence tree',
+  );
+  assert(
+    /jobs\.find\(\(\{ job \}\) => job\.job === 'fresh-clone'\)[\s\S]{0,200}siteE2e/.test(evidence),
+    'aggregation must read the Site E2E sidecar from the fresh-clone job',
+  );
+  assert(
+    !/job === 'source-matrix'[\s\S]{0,40}sourceExtras/.test(evidence),
+    'the source-matrix producer must no longer stage Site E2E evidence',
+  );
+  // The trimmed PR gate must not lose the Site proof outright: the release
+  // train still runs the official suite, and the sidecar is recomputed.
+  assert(
+    /auditSiteE2e\(rollup\.siteE2e\)/.test(evidence),
+    'the Site E2E audit must stay wired into the rollup',
+  );
 });
 
 Deno.test('ci contract: SaaS is decoupled from the core candidate gate', async () => {
@@ -311,9 +355,27 @@ Deno.test('ci contract: SaaS is decoupled from the core candidate gate', async (
   for (const token of ['saas:verify', 'apps/saas', 'workers:boundary-check']) {
     assert(!gateSource.includes(token), `gate:source must not include SaaS step ${token}`);
   }
-  // The framework core still proves deploy output through the Router fixture.
-  assert(gateSource.includes('tests/fixtures/router-nitro#proof:workers'));
-  assert(gateSource.includes('tests/fixtures/router-nitro#proof:node'));
+  // The framework core still proves deploy output through the Router fixture —
+  // on the release train, where the deploy-proof steps now live. It must not
+  // be in neither gate.
+  const gateRelease = repoConfig.tasks['gate:release'];
+  for (
+    const step of [
+      'tests/fixtures/router-nitro#proof:workers',
+      'tests/fixtures/router-nitro#proof:node',
+    ]
+  ) {
+    assert(
+      gateRelease.includes(step),
+      `the Router deploy proof '${step}' must remain wired into gate:release`,
+    );
+    assert(!gateSource.includes(step), `'${step}' is a release-train step, not a PR-layer one`);
+  }
+  for (const gate of [gateSource, gateRelease]) {
+    for (const token of ['saas:verify', 'apps/saas', 'workers:boundary-check']) {
+      assert(!gate.includes(token), `no candidate gate may include SaaS step ${token}`);
+    }
+  }
 
   const rootConfig = JSON.parse(await Deno.readTextFile(join(repoRoot, 'deno.json'))) as {
     tasks: Record<string, string>;

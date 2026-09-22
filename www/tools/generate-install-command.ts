@@ -8,7 +8,7 @@
  * mechanism as `{{OPENELEMENT_VERSION}}`), and every curated display copy in
  * the repository is asserted against the canonical string — a hand-written
  * command that differs from what the CLI prints fails `--check`, which
- * gate:source runs.
+ * gate:release (the release train) runs.
  *
  * The assertion compares the command's *prefix* (the `deno run … npm:…@tag`
  * part) so a documentation example may name its own project (`my-app`) while

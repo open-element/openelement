@@ -1,5 +1,5 @@
-import { assertEquals } from '@std/assert';
-import { join } from '@std/path';
+import { assert, assertEquals } from '@std/assert';
+import { dirname, join } from '@std/path';
 
 /**
  * Audit gate: boolean expressions must not be passed to assertExists.
@@ -14,14 +14,23 @@ import { join } from '@std/path';
  * .startsWith(/.endsWith(/.some(/.every(/instanceof, or a comparison/logical
  * operator. Nested expressions — e.g. a `.find((w) => ...)` narrowing guard
  * whose callback uses predicates — are legitimate and not flagged.
+ *
+ * The package root is derived from this file's own URL, never from the
+ * process cwd: `deno task --cwd packages/router test` runs with the cwd set to
+ * packages/router, where `join(cwd, 'packages')` is a directory that does not
+ * exist (the scan crashed) — or, worse, whatever stray `packages/` happens to
+ * be there, which would silently scan the wrong tree and pass vacuously.
  */
 
 const BOOLEAN_PATTERN =
   /\.(?:includes|startsWith|endsWith|some|every)\(|\binstanceof\b|===|!==|>=|<=|\|\||&&/;
 
+/** Repository root, derived from this test's location (packages/router/__tests__). */
+const REPO_ROOT = join(dirname(new URL(import.meta.url).pathname), '..', '..', '..');
+
 function listTestFiles(): string[] {
   const files: string[] = [];
-  const packagesDir = join(Deno.cwd(), 'packages');
+  const packagesDir = join(REPO_ROOT, 'packages');
   for (const pkg of Deno.readDirSync(packagesDir)) {
     if (!pkg.isDirectory) continue;
     const testsDir = join(packagesDir, pkg.name, '__tests__');
@@ -83,8 +92,15 @@ function directArguments(source: string): Array<{ text: string; line: number }> 
 
 Deno.test('audit gate: no boolean expressions passed to assertExists', () => {
   const offenders: string[] = [];
+  const files = listTestFiles();
+  // A scan that found no test files proves nothing: an empty offender list
+  // from an empty file set would report success without looking at any code.
+  assert(
+    files.length > 0,
+    `no test files found under ${join(REPO_ROOT, 'packages')} — the audit cannot pass vacuously`,
+  );
 
-  for (const file of listTestFiles()) {
+  for (const file of files) {
     const content = Deno.readTextFileSync(file);
     for (const { text, line } of directArguments(content)) {
       if (BOOLEAN_PATTERN.test(text)) {
