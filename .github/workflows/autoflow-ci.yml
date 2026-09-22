@@ -161,6 +161,13 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
       - uses: ./.github/actions/setup-deno-workspace
+      # v7.0.0 — the gate:source packed leg installs and loads the packed
+      # Router, which requires the Web Standard URLPattern global: ADR-0154
+      # pins the Alpha node runtime to Node 24, and the runner default (22)
+      # cannot load it ("requires the Web Standard URLPattern API").
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: '24'
       - name: Install Playwright browsers
         # The gate's element browser leg launches Chromium; the recorded
         # toolchain metadata names all three engines.
