@@ -1,134 +1,15 @@
 import { openElement } from '@openelement/router/vite';
-import { openPropsTokenSheet, registerOpenUi } from '@openelement/ui';
+import { registerOpenUi } from '@openelement/ui';
 import { defineConfig } from 'vite';
-import { SITE_BUDGET } from './site-budget.ts';
-import { siteCSS } from './site-css.ts';
-import { SITE_DEFAULT_LOCALE, SITE_LOCALES } from './site-config.ts';
-import { headerNav, navSections } from './app/data/_generated-nav-data.ts';
 
+// Vite configuration only. Every framework option lives in
+// openelement.config.ts (which the plugin reads itself) and the structural
+// document-head content lives in app/head.tsx — so the plugin call stays
+// `openElement()` with no arguments: framework options have exactly one home.
+//
 // www is an npm-first consumer; local workspace resolution during dev,
-// npm tarballs in production. No resolve.alias needed.
-
-// Make token variables available to document-level elements while shadow trees
-// continue to inherit them from the document root. The sheet's token block
-// selects `:root, :host` (packages/ui/tools/generate-ui-tokens.ts), so this
-// file only consumes the finished sheet — there is no transform.
-const rootCSS = [...openPropsTokenSheet.cssRules].map((r) => r.cssText).join('\n');
-
-const colorTokensStyle =
-  `<style>@font-face{font-family:'JetBrains Mono';font-style:normal;font-weight:100 800;font-display:swap;src:url('/assets/fonts/jetbrains-mono-latin-variable.woff2') format('woff2')}@font-face{font-family:'Instrument Serif';font-style:normal;font-weight:400;font-display:swap;src:url('/assets/fonts/instrument-serif-latin-regular.woff2') format('woff2')}@font-face{font-family:'Instrument Serif';font-style:italic;font-weight:400;font-display:swap;src:url('/assets/fonts/instrument-serif-latin-italic.woff2') format('woff2')}@font-face{font-family:'Inter Variable';font-style:normal;font-weight:100 900;font-display:swap;src:url('/assets/fonts/inter-latin-variable.woff2') format('woff2')}${rootCSS}body{font-family:var(--font-sans);-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}${siteCSS}</style>`;
-
-// Critical-path hardening (#1088 site-level findings):
-// - The two text fonts (prose Inter, code JetBrains Mono) are preloaded so the
-//   swap resolves before first paint — measured CLS 0.195 → ~0. Serif accents
-//   are intentionally not preloaded (not used above the fold on most pages).
-// - theme-init.js stays an external sync script: raw head fragments reject
-//   <script> outright (H-04) and the framework ships no raw inline-script
-//   channel. Structured data does not need one: it goes through
-//   `structuredData`, which the framework serializes (with `<` escaped) into
-//   its own application/ld+json element.
-// - The Prism theme CSS is inlined: it was a render-blocking stylesheet on a
-//   third-party origin (cdnjs) — a slow-network FCP stall and a SPOF.
-const fontPreloads = [
-  '/assets/fonts/inter-latin-variable.woff2',
-  '/assets/fonts/jetbrains-mono-latin-variable.woff2',
-].map((href) =>
-  // crossorigin needs an explicit value: the head-fragment sanitizer strips
-  // the bare form, and a no-cors preload would fetch the font twice.
-  `<link rel="preload" href="${href}" as="font" type="font/woff2" crossorigin="anonymous" />`
-).join('');
-const prismThemeStyle = `<style>${
-  Deno.readTextFileSync(new URL('./public/assets/vendor/prism/prism.min.css', import.meta.url))
-}</style>`;
-
-const openElementPlugins = openElement({
-  routesDir: 'app/routes',
-  islandsDir: 'app/islands',
-  componentsDir: 'app/components',
-  html: {
-    title: 'openElement',
-  },
-  // One shared official-Site SLO (www/site-budget.ts): the build
-  // manifest reports against exactly these values.
-  build: {
-    manifestBudget: SITE_BUDGET,
-  },
-  appShell: {
-    tagName: 'open-layout',
-    import: new URL('./app/islands/open-layout.tsx', import.meta.url).pathname,
-    props: {
-      footerText: 'Built with OpenElement — Web Components-native application framework',
-      // Router 1.0 keeps the app-shell nav contract in the consumer: the Site
-      // projects its route-meta nav tree into the shell (Nav items are
-      // static; the router injects currentPath/locale per route).
-      navItems: navSections,
-      headerNav,
-    },
-  },
-  packageIslands: ['@openelement/ui'],
-  ssr: {
-    noExternal: ['@openelement/ui'],
-  },
-  viewTransition: true,
-  speculation: true,
-  inject: {
-    // No external stylesheets: the Prism theme is inlined (see prismThemeStyle
-    // below) — nothing render-blocking may be served from a third-party origin.
-    stylesheets: [],
-    // All scripts are same-origin. Prism is vendored under
-    // public/assets/vendor/prism/ (pinned 1.29.0, SRI-verified against the
-    // former cdnjs hashes at vendor time — see #1088); theme-init is inlined
-    // instead of requested; goatcounter was removed (unreachable from CN
-    // networks, cost a console error + best-practices points on every page).
-    scripts: [
-      { src: '/theme-init.js' },
-      { src: '/assets/vendor/prism/prism.min.js', defer: true },
-      { src: '/assets/vendor/prism/prism-javascript.min.js', defer: true },
-      { src: '/assets/vendor/prism/prism-typescript.min.js', defer: true },
-      { src: '/assets/vendor/prism/prism-json.min.js', defer: true },
-      { src: '/assets/vendor/prism/prism-bash.min.js', defer: true },
-      { src: '/assets/vendor/prism/prism-css.min.js', defer: true },
-      { src: '/assets/vendor/prism/prism-markup.min.js', defer: true },
-      { src: '/prism-init.js', defer: true },
-    ],
-    headFragments: [
-      // Site-wide head only (Beta.2.2, #1327): per-page meaning — title,
-      // description, og:title/og:description/og:url, canonical, hreflang —
-      // is declared by each route module's descriptor head and serialized at
-      // SSG time (www/app/site-ui/head.ts). Nothing rewrites <head> after the
-      // build anymore, so no page-level boilerplate may live here: a
-      // boilerplate og:title/description would duplicate the page's own.
-      '<meta property="og:site_name" content="OpenElement">',
-      '<meta property="og:type" content="website">',
-      '<meta property="og:image" content="https://openelement.org/assets/og-image.jpg">',
-      '<meta property="og:image:width" content="1200">',
-      '<meta property="og:image:height" content="630">',
-      '<meta name="twitter:card" content="summary_large_image">',
-      '<meta name="twitter:image" content="https://openelement.org/assets/og-image.jpg">',
-      '<style>html{visibility:visible!important;}body{background:var(--bg-base);color:var(--text-primary);}</style>',
-      fontPreloads,
-      '<link rel="icon" type="image/svg+xml" href="/assets/open-favicon.svg" />',
-      '<link rel="apple-touch-icon" href="/assets/open-avatar.svg" />',
-      // One feed for the whole site: dispatches are single-language originals
-      // (the blog collection's `lang` field names the original), so /zh/blog
-      // lists the same posts and a per-locale feed would be an empty duplicate.
-      // title must match the feed's channel <title> (tools/lib/site-rss.ts
-      // SITE_FEED_TITLE); the href is site-root-relative like every other
-      // asset fragment here, and resolves the same on locale-prefixed pages.
-      '<link rel="alternate" type="application/rss+xml" title="openElement Blog" href="/blog/rss.xml" />',
-      colorTokensStyle,
-      prismThemeStyle,
-    ],
-  },
-  // The site's generated data modules (app/data/_generated-*) are untracked
-  // build inputs, regenerated by `deno task --cwd www generate:content`
-  // (article collections and blog) and `deno task --cwd www
-  // generate:api-reference` from www/lib/content.ts + lib/blog.ts.
-  i18n: {
-    locales: [...SITE_LOCALES],
-    defaultLocale: SITE_DEFAULT_LOCALE,
-  },
-});
+// npm tarballs in production. No resolve.alias needed for the framework. The
+// Site's own `@openelement/site-ui` alias is a Vite concern and stays here.
 
 export default defineConfig({
   resolve: {
@@ -142,6 +23,6 @@ export default defineConfig({
     jsx: 'automatic',
     jsxImportSource: '@openelement/element',
   },
-  plugins: openElementPlugins,
+  plugins: openElement(),
 });
 registerOpenUi();

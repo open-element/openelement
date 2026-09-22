@@ -15,6 +15,13 @@ import {
   releaseConsumedContext,
 } from '../../core/signal-context.ts';
 import type { Unsubscribe } from '../../protocol/signal.ts';
+// Single error dialect (#1386 item 3): context lifecycle failures carry codes.
+import { ContextErrorCode, frameworkError } from '../../protocol/errors.ts';
+
+/** Raise one context-service lifecycle failure with its catalogued code. */
+function fail(code: string, message: string): never {
+  throw frameworkError(code, message, { phase: 'csr' });
+}
 
 interface ContextConsumer {
   context: Context<unknown>;
@@ -46,7 +53,9 @@ export class CompiledContextService {
    * re-resolved against the DOM tree on every reconnect.
    */
   consume<T>(context: Context<T>, notify: (value: T) => void): void {
-    if (this.#disposed) throw new Error('[compiled-context] service is disposed');
+    if (this.#disposed) {
+      fail(ContextErrorCode.SERVICE_DISPOSED, '[compiled-context] service is disposed');
+    }
     const consumer: ContextConsumer = {
       context: context as Context<unknown>,
       notify: notify as (value: unknown) => void,
@@ -57,7 +66,9 @@ export class CompiledContextService {
 
   /** Subscribe every registered consumer; called when the element connects. */
   connect(): void {
-    if (this.#disposed) throw new Error('[compiled-context] service is disposed');
+    if (this.#disposed) {
+      fail(ContextErrorCode.SERVICE_DISPOSED, '[compiled-context] service is disposed');
+    }
     if (this.#connected) return;
     this.#connected = true;
     for (const consumer of this.#consumers) this.#subscribe(consumer);

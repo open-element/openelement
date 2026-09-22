@@ -483,3 +483,89 @@ Deno.test('ci contract: the nightly JFB workflow measures, never gates', async (
   );
   assert(!/pull_request/.test(nightly), 'a nightly measurement never runs on pull requests');
 });
+
+Deno.test('ci contract: tree-SHA evidence reuse is fail-closed and single-source', async () => {
+  // #1425 follow-up: the four producer lanes may replay a tree-identical
+  // package instead of re-running their gates. The safety properties are
+  // structural, so they are pinned here rather than left to review.
+  const reuse = jobBlock(workflow, 'reuse');
+  assert(
+    /actions:\s*read/.test(reuse),
+    'the resolver needs actions: read to list runs and their artifacts',
+  );
+  assert(
+    !/actions:\s*write/.test(reuse) && !/contents:\s*write/.test(reuse),
+    'the resolver must stay read-only',
+  );
+  for (const output of ['reused', 'source_run_id', 'source_sha', 'tree']) {
+    assert(
+      new RegExp(`^\\s{6}${output}:`, 'm').test(reuse),
+      `the reuse job must expose the '${output}' output the lanes consume`,
+    );
+  }
+
+  // Every producer lane depends on the decision, and each lane's gate is
+  // skipped ONLY in the reused branch, with a claim step present in the
+  // complementary branch. A lane that ran its gate but claimed reused evidence
+  // (or vice versa) would fail the aggregate's tree identity check.
+  const lanes: Array<[string, string]> = [
+    ['fast-checks', 'candidate:evidence:fast'],
+    ['source-matrix', 'candidate:evidence:source'],
+    ['packed-consumers', 'candidate:evidence:packed'],
+    ['fresh-clone', 'candidate:evidence:fresh'],
+  ];
+  for (const [job, task] of lanes) {
+    const block = jobBlock(workflow, job);
+    assert(
+      /needs:\s*reuse\b/.test(block) || /needs:\s*\[.*\breuse\b.*\]/.test(block),
+      `${job} must depend on the reuse decision`,
+    );
+    const taskIndex = block.indexOf(task);
+    assert(taskIndex >= 0, `${job} must run its evidence task`);
+    // The gate step's `if:` guard sits between the previous step and the run.
+    const head = block.slice(0, taskIndex);
+    const lastIf = head.lastIndexOf('if:');
+    assert(
+      lastIf >= 0 && /needs\.reuse\.outputs\.reused\s*!=\s*'true'/.test(head.slice(lastIf)),
+      `${job}'s gate must be skipped exactly when a tree-identical package exists`,
+    );
+    assert(
+      /claim-reused-evidence/.test(block) &&
+        /if:\s*needs\.reuse\.outputs\.reused\s*==\s*'true'/.test(block),
+      `${job} must claim the reused artifact in the complementary branch`,
+    );
+  }
+
+  // The claim must download the SOURCE run's artifact and stamp it through the
+  // audited tool, never by hand.
+  const claim = await Deno.readTextFile(
+    join(repoRoot, '.github/actions/claim-reused-evidence/action.yml'),
+  );
+  assert(
+    /run-id:\s*\$\{\{\s*inputs\.source-run-id\s*\}\}/.test(claim),
+    'the claim must download from the resolved source run',
+  );
+  assert(
+    /candidate:evidence:reuse:claim/.test(claim),
+    'the claim must stamp through the audited tool',
+  );
+
+  // The aggregate must wait for the decision rather than race it, and the
+  // released bundle keeps proving the tree the package was produced for.
+  const aggregate = jobBlock(workflow, 'autoflow-ci');
+  assert(
+    /needs:\s*\[reuse,/.test(aggregate),
+    'the aggregate must wait for the reuse decision instead of racing it',
+  );
+  assert(
+    /candidate:evidence:reuse:resolve/.test(reuse) &&
+      /candidate:evidence:reuse:claim/.test(claim),
+    'both reuse tasks must be wired to their tools',
+  );
+  const repoConfig = JSON.parse(
+    await Deno.readTextFile(join(repoRoot, 'tools/repo/deno.json')),
+  ) as { tasks: Record<string, string> };
+  for (const task of ['candidate:evidence:reuse:resolve', 'candidate:evidence:reuse:claim']) {
+    assert(repoConfig.tasks[task] !== undefined, `${task} must exist as a task`);
+  }
+});

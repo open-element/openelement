@@ -23,7 +23,7 @@ export default defineConfig({
       componentsDir: 'app/components',
       // No app shell: the fixture stays minimal and does not pull @acme/components.
       appShell: false,
-      html: {
+      head: {
         title: 'request-time fixture',
       },
       // ADR-0123 item 2 (#858): fetch middleware contract proof. Module

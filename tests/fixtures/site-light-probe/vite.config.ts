@@ -25,7 +25,7 @@ export default defineConfig({
       islandsDir: 'app/islands',
       componentsDir: 'app/components',
       appShell: false,
-      html: {
+      head: {
         title: 'site-light-probe fixture',
       },
     }),

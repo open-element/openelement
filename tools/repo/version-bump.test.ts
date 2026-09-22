@@ -9,6 +9,7 @@
 
 import { assert, assertEquals } from '@std/assert';
 import { join } from '@std/path';
+import { prereleaseParts } from '../lib/version.ts';
 import {
   inconsistencyFailures,
   LOCK_FILES,
@@ -64,14 +65,25 @@ Deno.test('version-bump: rewriters move only the version token', () => {
 });
 
 Deno.test('version-bump: dry run reports every point against the live tree', async () => {
-  const plan = await planVersionBump(repoRoot, '1.0.0-alpha.4');
+  // The dry-run target is derived from the live tree, not hardcoded: this test
+  // once pinned `1.0.0-alpha.4` as the "next" version, which is exactly the
+  // version the tree reaches after the alpha.4 bump — at which point the dry run
+  // correctly reports "nothing to do" and the assertions below fail on a
+  // legitimate tree. Advancing the trailing prerelease identifier keeps the
+  // test about the knob's reporting contract instead of about which train is
+  // being cut.
+  const current = readConfigVersion(await Deno.readTextFile(join(repoRoot, PACKAGE_CONFIGS[0])));
+  const parts = prereleaseParts(current ?? '');
+  assert(parts, `the live tree must declare a prerelease line version, got ${current}`);
+  const target = `${parts.base}-${parts.name}.${parts.num + 1}`;
+  const plan = await planVersionBump(repoRoot, target);
   assertEquals(
     plan.currentVersion,
     readConfigVersion(
       await Deno.readTextFile(join(repoRoot, PACKAGE_CONFIGS[0])),
     ),
   );
-  assert(plan.currentVersion !== '1.0.0-alpha.4');
+  assert(plan.currentVersion !== target);
   // Points 1-5: all four configs plus the anchor carry the bumped token.
   assertEquals(
     plan.edits.map((edit) => edit.path),
@@ -83,7 +95,7 @@ Deno.test('version-bump: dry run reports every point against the live tree', asy
   for (const edit of plan.lockEdits) {
     assert(edit.point === 'fixture-lock', edit.path);
     assert(
-      edit.after.includes(`@1.0.0-alpha.4`) && !edit.after.includes(`@${plan.currentVersion}`),
+      edit.after.includes(`@${target}`) && !edit.after.includes(`@${plan.currentVersion}`),
       edit.path,
     );
   }

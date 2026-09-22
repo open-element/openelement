@@ -10,12 +10,32 @@ versions it was generated from (`${v.element}`) in `deno.json`; update both
 there when moving to a new release.
 
 Styling ownership is split three ways. Global design tokens and the document
-baseline (`body`, `::selection`) live in `vite.config.ts`
-(`inject.headFragments`). Pages use light roots and own their rules in
-`static styles` (`app/components/page-styles.ts`): the server inlines each
-page's sheets into the SSR output as a `@scope(<page-tag>)` style block, so
-pages are fully styled with zero client JavaScript. The shell and the islands
-hydrate in the browser and carry their own `static styles`.
+baseline (`body`, `::selection`) live in `app/styles/tokens.css` — the file
+convention the build inlines into every document `<head>`. Pages use light
+roots and own their rules in `static styles`
+(`app/components/page-styles.ts`): the server inlines each page's sheets into
+the SSR output as a `@scope(<page-tag>)` style block, so pages are fully styled
+with zero client JavaScript. The shell and the islands hydrate in the browser
+and carry their own `static styles`.
+
+## Where options live
+
+Framework options have exactly one home: `openelement.config.ts`. It is
+optional and nearly empty — every option it omits comes from a file
+convention:
+
+| Option | Convention |
+| --- | --- |
+| design tokens | `app/styles/tokens.css` |
+| app shell | `app/islands/app-shell.tsx` (deletable) |
+| document head content | `app/head.tsx` (meta tags, preloads, inline CSS) |
+| site title | the `name` field of `package.json` |
+
+Passing framework options inline to `openElement()` while the config file
+carries options is a hard error, and an unknown key fails the build with the
+accepted-key list. `vite.config.ts` stays Vite-only: `plugins: [...openElement()]`.
+The conventions follow the `dirs` block, so moving the three roots under
+`src/` moves the token, shell and head files with them.
 
 ## Tasks
 

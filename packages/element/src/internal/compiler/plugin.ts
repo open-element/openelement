@@ -29,6 +29,7 @@ import {
 } from './semantic-core/compile.ts';
 import { analyzeModuleSemantics } from './semantic-core/module-analysis.ts';
 import { diagnosticPluginError } from './semantic-core/diagnostics/index.ts';
+import { typeCheckEmittedModule } from './semantic-core/type-check.ts';
 
 /** The authored substring every compiled element module contains (`@element(`), used as the cheap prefilter. */
 export const COMPILED_ELEMENT_MARKER = '@element(';
@@ -125,6 +126,16 @@ export interface CompiledElementPluginOptions {
    * that do not know a workspace root omit it and get ids passed through.
    */
   workspaceRoot?: string;
+  /**
+   * Type-check every module the compiler emits and fail the build when one
+   * does not compile (#1386 item 2). Off by default: it runs a TypeScript
+   * program per emitted module, which a dev-server transform must not pay.
+   * A build or verification pass turns it on, so the emitted program is
+   * checked against the declarations the consumer compiles against.
+   */
+  typeCheckEmitted?: boolean;
+  /** Specifier → candidate files map used when `typeCheckEmitted` is on. */
+  resolutionPaths?: Record<string, string[]>;
 }
 
 /**
@@ -150,8 +161,30 @@ export function compiledElementPlugin(options: CompiledElementPluginOptions = {}
 
     transform(code, id) {
       try {
-        return compileElementModule(code, stableModuleId(id, viteRoot, workspaceRoot))?.code ??
-          null;
+        const moduleId = stableModuleId(id, viteRoot, workspaceRoot);
+        const compiled = compileElementModule(code, moduleId);
+        if (!compiled) return null;
+        if (options.typeCheckEmitted) {
+          const diagnostics = typeCheckEmittedModule(compiled.code, moduleId, {
+            paths: options.resolutionPaths,
+          });
+          const first = diagnostics[0];
+          if (first) {
+            // The emitted module is the compiler's own output, so a diagnostic
+            // here is a compiler defect rather than an authoring error. The
+            // message says which it is, and the first diagnostic supplies the
+            // location the build overlay underlines.
+            this.error({
+              id,
+              loc: { file: id, line: first.line - 1, column: first.character - 1 },
+              message: `[open:compiled-element] the compiler emitted a module that does not ` +
+                `type-check (${diagnostics.length} diagnostic(s); TS${first.code}: ` +
+                `${first.message}). This is a compiler defect — report it with the authored ` +
+                'module that triggered it.',
+            });
+          }
+        }
+        return compiled.code;
       } catch (error) {
         if (error instanceof CompiledElementError) {
           // #1413: hand the build the structured diagnostic record

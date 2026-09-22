@@ -1,5 +1,5 @@
 import { createLogger } from './internal/core/logger.ts';
-import { formatError, OpenElementError } from './internal/core/errors.ts';
+import { AuthoringErrorCode, formatError, OpenElementError } from './internal/core/errors.ts';
 import { signal } from './internal/signal/index.ts';
 
 const MAX_PARAMS_ATTRIBUTE_BYTES = 64 * 1024;
@@ -57,7 +57,7 @@ export class ElementParams {
     try {
       if (new TextEncoder().encode(attrParams).byteLength > MAX_PARAMS_ATTRIBUTE_BYTES) {
         throw new OpenElementError('params attribute exceeds the 64 KiB limit', {
-          code: 'PARAMS_ATTRIBUTE_TOO_LARGE',
+          code: AuthoringErrorCode.PARAMS_ATTRIBUTE_TOO_LARGE,
           phase: 'csr',
         });
       }

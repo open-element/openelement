@@ -1,4 +1,4 @@
-import { OpenElementError } from './internal/core/errors.ts';
+import { FacadeErrorCode, OpenElementError } from './internal/core/errors.ts';
 
 /** SSR-safe HTMLElement base without mutating the host global scope. */
 export const OpenElementBase: typeof HTMLElement = typeof HTMLElement !== 'undefined'
@@ -8,7 +8,7 @@ export const OpenElementBase: typeof HTMLElement = typeof HTMLElement !== 'undef
       throw new OpenElementError(
         `[openElement] HTMLElement.${member} is unavailable during SSR. ` +
           'Move DOM access to a browser lifecycle hook or guard it with typeof document.',
-        { code: 'SSR_DOM_ACCESS_UNSUPPORTED', phase: 'ssr' },
+        { code: FacadeErrorCode.SSR_DOM_ACCESS_UNSUPPORTED, phase: 'ssr' },
       );
     }
 

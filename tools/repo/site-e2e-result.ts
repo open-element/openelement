@@ -10,7 +10,7 @@
  *     tracks the real suite size (currently 231 tests per browser, 693
  *     total) and MUST be raised when the suite grows, never lowered to force
  *     a pass, so a `--grep`-shrunk run cannot look green;
- *   - `expected` (Playwright `stats.expected`) is a safe integer
+ *   - `expected` (Playwright `stats.expected`) plus `flaky` is a safe integer
  *     >= 3 * floor and equals the total executed tests, so the sidecar
  *     cannot shrink the suite by omission;
  *   - `configFile` is the canonical repo-relative `www/e2e/playwright.config.ts`;
@@ -24,12 +24,36 @@
  *     recomputes the summary and the hash from the raw report and requires
  *     the candidate SHA to match, so a forged or stale sidecar fails.
  *
- * A project with any `skipped`/`failed` test is not proof of a green Site
- * suite, so a fully skipped Playwright run (which exits 0) still fails
- * closed. A test whose `results` array is empty never started and counts as
- * failed, not passed. The validator recomputes from the sidecar's
+ * A project with any `skipped`, `failed`, or never-started test is not proof
+ * of a green Site suite, so a fully skipped Playwright run (which exits 0)
+ * still fails closed. A test whose `results` array is empty never started and
+ * counts as failed, not passed. The validator recomputes from the sidecar's
  * per-project and total numbers; it never trusts the runner's `ran` boolean
  * alone.
+ *
+ * ## Retries and the `flaky` count
+ *
+ * `www#e2e:browsers` runs with `--retries 1`, and the runner allowlists that
+ * flag. A retry is therefore part of the contract, and a test that timed out
+ * on the first attempt and passed on the retry is a pass with a recorded
+ * retry — Playwright's own verdict: it reports such a test as `flaky`, keeps
+ * it out of `stats.unexpected`, and exits 0. The suite's proof obligation
+ * follows Playwright here, because the gate attests "the Site suite passed",
+ * not "no runner ever hiccuped":
+ *
+ *   - `passed` counts every test that ultimately passed, INCLUDING a
+ *     retry-cleared one (previously the first timed-out attempt was counted
+ *     as a failure, so a Playwright-successful run was reported as a failed
+ *     proof — the same commit that failed attempt 1 ran green on attempt 2);
+ *   - `flaky` is the retry-cleared SUBSET of `passed`, recorded so the retry
+ *     is visible in the evidence instead of laundered away, and bound to the
+ *     raw report's own `stats.flaky`;
+ *   - the suite-size identity is `expected + flaky === executed`, because
+ *     `stats.expected` counts FIRST-ATTEMPT passes only;
+ *   - `failed` keeps its meaning: the final attempt failed, the test never
+ *     started, or Playwright says `unexpected`. `--retries 1` does not make a
+ *     real failure disappear, and every other axis (skips, the per-browser
+ *     floor, the executed-count binding, the byte/hash binding) is unchanged.
  */
 export const SITE_E2E_PROJECTS = ['chromium', 'firefox', 'webkit'] as const;
 
@@ -50,6 +74,12 @@ export interface SiteProjectSummary {
   passed: number;
   failed: number;
   skipped: number;
+  /**
+   * Retry-cleared tests: the subset of `passed` whose first attempt failed
+   * and whose retry passed. Recorded rather than folded away, so the retry is
+   * visible in the evidence.
+   */
+  flaky: number;
 }
 
 export interface SiteE2eResult {
@@ -58,7 +88,12 @@ export interface SiteE2eResult {
   passed: number;
   failed: number;
   skipped: number;
-  /** Playwright `stats.expected` from the raw report. */
+  /** Sum of the projects' `flaky` counts; see {@linkcode SiteProjectSummary}. */
+  flaky: number;
+  /**
+   * Playwright `stats.expected` from the raw report — FIRST-ATTEMPT passes
+   * only, so `expected + flaky` is the run's passing total.
+   */
   expected: number;
   /** Repo-relative POSIX path of the Playwright config that produced the run. */
   configFile: string;
@@ -110,13 +145,18 @@ export function isEmptyGrep(grep: unknown): boolean {
     Object.keys(grep).length === 0;
 }
 
+/** Attempt statuses Playwright records for an attempt that did not pass. */
+function attemptFailed(status: string | undefined): boolean {
+  return status === 'failed' || status === 'timedOut' || status === 'interrupted';
+}
+
 /** Pure per-project aggregation over a Playwright JSON report. */
 export function summarizePlaywrightReport(
   report: PlaywrightReport,
 ): Record<string, SiteProjectSummary> {
   const projects: Record<string, SiteProjectSummary> = {};
   const ensure = (name: string): SiteProjectSummary => {
-    projects[name] ??= { passed: 0, failed: 0, skipped: 0 };
+    projects[name] ??= { passed: 0, failed: 0, skipped: 0, flaky: 0 };
     return projects[name];
   };
   const visit = (suites: PlaywrightSuite[] | undefined): void => {
@@ -126,18 +166,27 @@ export function summarizePlaywrightReport(
           const name = test.projectName ?? 'unknown';
           const summary = ensure(name);
           const results = test.results ?? [];
-          // Fail closed: a test with no results never executed, so it can
-          // never count as passed.
+          const last = results.at(-1)?.status;
+          // Fail closed on the OUTCOME, not on any single attempt: a test with
+          // no results never executed, Playwright's own `unexpected` verdict is
+          // authoritative, and a final attempt that did not pass is a failure —
+          // a retry only clears the attempts before it (see the header's retry
+          // note: `--retries 1` is part of the contract, so a retry-cleared test
+          // is a pass with a recorded retry, not a failure).
           const failed = results.length === 0 || test.status === 'unexpected' ||
-            results.some((result) =>
-              result.status === 'failed' || result.status === 'timedOut' ||
-              result.status === 'interrupted'
-            );
+            attemptFailed(last);
           const skipped = !failed && (test.status === 'skipped' ||
             results.every((result) => result.status === 'skipped'));
+          // Retry-cleared: the final attempt passed, an earlier one did not.
+          // Counted in `passed` AND recorded in `flaky`.
+          const wasFlaky = !failed && !skipped &&
+            results.slice(0, -1).some((result) => attemptFailed(result.status));
           if (failed) summary.failed++;
           else if (skipped) summary.skipped++;
-          else summary.passed++;
+          else {
+            summary.passed++;
+            if (wasFlaky) summary.flaky++;
+          }
         }
       }
       visit(suite.suites);
@@ -172,7 +221,7 @@ export function auditSiteE2e(site: Partial<SiteE2eResult> | undefined): string[]
   if (extraProjects.length > 0) {
     failures.push(`Site E2E unexpected extra projects: ${extraProjects.sort().join(', ')}`);
   }
-  const totals = { passed: 0, failed: 0, skipped: 0 };
+  const totals = { passed: 0, failed: 0, skipped: 0, flaky: 0 };
   let executed = 0;
   let countsValid = true;
   const count = (value: unknown): value is number =>
@@ -185,7 +234,7 @@ export function auditSiteE2e(site: Partial<SiteE2eResult> | undefined): string[]
       continue;
     }
     let valid = true;
-    for (const field of ['passed', 'failed', 'skipped'] as const) {
+    for (const field of ['passed', 'failed', 'skipped', 'flaky'] as const) {
       if (!count(summary[field])) {
         failures.push(
           `Site E2E ${browser}.${field} must be a non-negative safe integer, got ${
@@ -205,6 +254,13 @@ export function auditSiteE2e(site: Partial<SiteE2eResult> | undefined): string[]
         `Site E2E ${browser} skipped=${summary.skipped} (candidate proof forbids skips)`,
       );
     }
+    // `flaky` is a subset of `passed`, so this can only fail on a forged or
+    // mismatched summary — a retry-cleared test is never double counted.
+    if (summary.flaky > summary.passed) {
+      failures.push(
+        `Site E2E ${browser} flaky=${summary.flaky} > passed=${summary.passed} (flaky is a subset of passed)`,
+      );
+    }
     if (summary.passed < SITE_E2E_MIN_PASSED_PER_PROJECT) {
       failures.push(
         `Site E2E ${browser} passed=${summary.passed} (must be >= ${SITE_E2E_MIN_PASSED_PER_PROJECT}; a filtered run is not candidate proof)`,
@@ -213,9 +269,10 @@ export function auditSiteE2e(site: Partial<SiteE2eResult> | undefined): string[]
     totals.passed += summary.passed;
     totals.failed += summary.failed;
     totals.skipped += summary.skipped;
+    totals.flaky += summary.flaky;
     executed += summary.passed + summary.failed + summary.skipped;
   }
-  for (const field of ['passed', 'failed', 'skipped'] as const) {
+  for (const field of ['passed', 'failed', 'skipped', 'flaky'] as const) {
     if (!count(site[field])) {
       failures.push(
         `Site E2E total ${field} must be a non-negative safe integer, got ${
@@ -235,8 +292,12 @@ export function auditSiteE2e(site: Partial<SiteE2eResult> | undefined): string[]
         JSON.stringify(site.expected)
       }`,
     );
-  } else if (countsValid && site.expected !== executed) {
-    failures.push(`Site E2E expected=${site.expected} != executed tests ${executed}`);
+  } else if (countsValid && (site.flaky as number) + (site.expected as number) !== executed) {
+    // `stats.expected` counts first-attempt passes, so the suite-size identity
+    // is expected + flaky === executed (see the header's retry note).
+    failures.push(
+      `Site E2E flaky=${site.flaky}+expected=${site.expected} != executed tests ${executed}`,
+    );
   }
   if (site.configFile !== SITE_E2E_CONFIG_FILE) {
     failures.push(

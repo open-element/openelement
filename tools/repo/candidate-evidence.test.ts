@@ -9,6 +9,7 @@
  * reported by the round-2 review is a regression here.
  */
 import { assert, assertEquals, assertRejects } from '@std/assert';
+import { join } from '@std/path';
 import {
   carryPackedTarballs,
   collectBundleFailures,
@@ -16,6 +17,7 @@ import {
   collectPackedTarballFailures,
   collectRollupFailures,
   collectSiteE2eRecomputeFailures,
+  composeBundleJobs,
   packedRollupFromLog,
   REQUIRED_PACKAGE_TARBALLS,
   REQUIRED_PACKED_CONSUMERS,
@@ -23,6 +25,7 @@ import {
   REQUIRED_STEPS,
   SITE_E2E_REPORT_BUNDLE_PATH,
   SITE_E2E_REPORT_FILE,
+  stageCloneSiteE2e,
   stageTarballEvidence,
 } from './candidate-evidence.ts';
 import {
@@ -187,12 +190,13 @@ async function fixture(): Promise<Fixture> {
     projects: Object.fromEntries(
       REQUIRED_SITE_BROWSERS.map((browser) => [
         browser,
-        { passed: sitePassed, failed: 0, skipped: 0 },
+        { passed: sitePassed, failed: 0, skipped: 0, flaky: 0 },
       ]),
     ),
     passed: siteTotal,
     failed: 0,
     skipped: 0,
+    flaky: 0,
     expected: siteTotal,
     configFile: SITE_E2E_CONFIG_FILE,
     grep: {},
@@ -1096,6 +1100,254 @@ Deno.test('job-name, SHA/tree, and duplicate/unknown jobs are rejected', async (
   assert((await failuresFor(wrongSha, f)).some((x) => x.includes('evidence sha')));
 });
 
+/** The source commit a reuse test replays from (never the candidate SHA). */
+const SOURCE_SHA = 'e'.repeat(40);
+
+/**
+ * Rewrite a bundle job into EXACTLY the shape a tree-identical reuse
+ * produces: the record keeps its own (source) commit, its steps still carry
+ * the source commit in argv, its clean-proof log lines name the source commit
+ * (they were written by the run that executed the gate), it gains the
+ * `reused` stamp, and — for fresh-clone, which owns the Site E2E proof — the
+ * staged sidecar follows the same commit. The tree is untouched: that is the
+ * reuse key.
+ *
+ * Rewritten log bytes are returned as `ci/<job>/logs/<name>.log` overlays
+ * rather than written into the shared fixture, so one test's replay cannot
+ * change what another test reads.
+ */
+async function reuseJob(
+  bundle: Record<string, unknown>,
+  job: string,
+  options: { runId?: number; withLogs?: boolean } = {},
+): Promise<{ overlays: Record<string, string> }> {
+  const withLogs = options.withLogs ?? true;
+  const overlays: Record<string, string> = {};
+  const record = bundleJob(bundle, job);
+  record.sha = SOURCE_SHA;
+  record.reused = { runId: options.runId ?? 42, sha: SOURCE_SHA };
+  for (const step of record.steps as Array<Record<string, unknown>>) {
+    step.command = (step.command as string[]).map((element) =>
+      element === SHA ? SOURCE_SHA : element
+    );
+    const name = step.name as string;
+    if (!name.startsWith('workspace-clean-') || !withLogs) continue;
+    // The staged log is the source run's log, so its clean-proof line names
+    // the source commit. Re-hash it: the validator recomputes from bytes.
+    const phase = name.endsWith('before') ? 'before' : 'after';
+    const text = `${cleanProofLine(SOURCE_SHA, TREE, phase as 'before' | 'after')}\n`;
+    step.logSha256 = await sha256(text);
+    overlays[`ci/${job}/logs/${name}.log`] = text;
+  }
+  // A reused fresh-clone package also carries the sidecar the source run
+  // wrote, which is bound to that run's commit.
+  if (job === 'fresh-clone') rollupSiteE2e(bundle).candidateSha = SOURCE_SHA;
+  return { overlays };
+}
+
+/** `failuresFor` with per-path log overlays layered over the fixture bytes. */
+async function failuresWith(
+  bundle: Record<string, unknown>,
+  f: Fixture,
+  overlays: Record<string, string>,
+) {
+  return await collectBundleFailures(bundle, {
+    expectedSha: SHA,
+    expectedTree: TREE,
+    read: (path) =>
+      path in overlays ? Promise.resolve(encoder.encode(overlays[path])) : f.read(path),
+  });
+}
+
+Deno.test('reuse: a stamped tree-identical bundle is accepted by the aggregate', async () => {
+  const f = await shared();
+  const bundle = clone(f.bundle);
+  // Reuse EVERY lane from one source run: that is what the resolver decides,
+  // and it is the only shape the aggregate accepts.
+  const overlays: Record<string, string> = {};
+  for (const job of JOB_NAMES) {
+    Object.assign(overlays, (await reuseJob(bundle, job, { runId: 42 })).overlays);
+  }
+  assertEquals(await failuresWith(bundle, f, overlays), []);
+});
+
+Deno.test('reuse: the aggregator carries the stamp into the bundle it composes', async () => {
+  // Regression: the aggregator composes bundle records from the DOWNLOADED
+  // producer records through an explicit field projection, and it omitted
+  // `reused`. Every earlier reuse test built its bundle by cloning the fixture
+  // and stamping the record in place, so the composition was never exercised —
+  // and in CI every reused bundle failed at aggregation with
+  // `sha "<source>" != <candidate>`, clean-proof argv mismatches and a "stale
+  // or foreign sidecar", even though all four downloaded records were correct.
+  // This test runs the producer's real records through the real composer.
+  const f = await shared();
+  const jobs = f.jobs.map((entry) => ({
+    job: structuredClone(entry.job),
+    dir: `/runner/.artifacts/ci/${entry.job.job as string}`,
+    read: entry.read,
+  }));
+  const sourceSha = 'e'.repeat(40);
+  // Rewrite every producer record into the shape a tree-identical replay has:
+  // its own (source) commit in `sha`, the stamp, argv and clean-proof lines
+  // naming that commit (these bytes were written by the run that ran).
+  const overlays: Record<string, string> = {};
+  for (const entry of jobs) {
+    const record = entry.job;
+    record.sha = sourceSha;
+    record.reused = { runId: 42, sha: sourceSha };
+    for (const step of record.steps as Array<Record<string, unknown>>) {
+      step.command = (step.command as string[]).map((element) =>
+        element === SHA ? sourceSha : element
+      );
+      const name = step.name as string;
+      if (!name.startsWith('workspace-clean-')) continue;
+      const phase = name.endsWith('before') ? 'before' : 'after';
+      const text = `${cleanProofLine(sourceSha, TREE, phase as 'before' | 'after')}\n`;
+      step.logSha256 = await sha256(text);
+      overlays[`ci/${entry.job.job}/logs/${name}.log`] = text;
+    }
+    if (record.job === 'fresh-clone') {
+      ((record.extras as Record<string, unknown>).siteE2e as Record<string, unknown>).candidateSha =
+        sourceSha;
+    }
+  }
+  // The composition itself must keep the stamp; without it the bundle audit
+  // cannot tell a licensed replay from a foreign record.
+  const composed = composeBundleJobs(jobs as never, '/runner/.artifacts');
+  for (const record of composed) {
+    assertEquals(record.reused, { runId: 42, sha: sourceSha }, `${record.job} lost its stamp`);
+  }
+  // And the bundle assembled from those records validates against the
+  // CANDIDATE sha, which is the aggregation that runs in CI. The rollup is
+  // composed the same way `aggregate()` does it — out of the producer records'
+  // extras — so the Site E2E sidecar under test is the replayed one.
+  const packedRecord = jobs.find((entry) => entry.job.job === 'packed')!.job;
+  const freshRecord = jobs.find((entry) => entry.job.job === 'fresh-clone')!.job;
+  const composedBundle = {
+    ...clone(f.bundle),
+    jobs: composed,
+    rollup: {
+      artifactCheck: (packedRecord.extras as Record<string, unknown>).artifactCheck === true,
+      consumers: (packedRecord.extras as Record<string, unknown>).consumers ?? [],
+      siteE2e: (freshRecord.extras as Record<string, unknown>).siteE2e,
+    },
+  };
+  const failures = await collectBundleFailures(composedBundle, {
+    expectedSha: SHA,
+    expectedTree: TREE,
+    read: (path) =>
+      path in overlays ? Promise.resolve(encoder.encode(overlays[path])) : f.read(path),
+  });
+  assertEquals(failures, []);
+});
+
+Deno.test('reuse: a bundle spliced from two source runs is rejected', async () => {
+  const f = await shared();
+  const bundle = clone(f.bundle);
+  const overlays = {
+    ...(await reuseJob(bundle, 'fast-checks', { runId: 42 })).overlays,
+    ...(await reuseJob(bundle, 'packed', { runId: 43 })).overlays,
+  };
+  const failures = await failuresWith(bundle, f, overlays);
+  assert(
+    failures.some((x) => x.includes('different runs')),
+    `two source runs must be rejected, got: ${failures.join(' | ')}`,
+  );
+});
+
+Deno.test('reuse: the site E2E sidecar and logs follow the source commit', async () => {
+  const f = await shared();
+  // Reused fresh-clone: the sidecar and the clean-proof lines name the source
+  // commit, and the bundle is accepted.
+  const replayed = clone(f.bundle);
+  const { overlays } = await reuseJob(replayed, 'fresh-clone', { runId: 42 });
+  assertEquals(await failuresWith(replayed, f, overlays), []);
+
+  // The same reused record with the sidecar left at the candidate commit is
+  // refused: the sidecar must describe the run that produced it.
+  const stale = clone(f.bundle);
+  const replayedStale = await reuseJob(stale, 'fresh-clone', { runId: 42 });
+  rollupSiteE2e(stale).candidateSha = SHA;
+  assert(
+    (await failuresWith(stale, f, replayedStale.overlays)).some((x) => x.includes('candidateSha')),
+    'a sidecar bound to the wrong commit must be rejected',
+  );
+
+  // And a reused record whose clean-proof log still names the candidate
+  // commit is refused: the logs are the audit trail of the run that ran.
+  const wrongLog = clone(f.bundle);
+  const replayedWrongLog = await reuseJob(wrongLog, 'fresh-clone', { runId: 42 });
+  replayedWrongLog.overlays['ci/fresh-clone/logs/workspace-clean-before.log'] = `${
+    cleanProofLine(SHA, TREE, 'before')
+  }\n`;
+  assert(
+    (await failuresWith(wrongLog, f, replayedWrongLog.overlays)).some((x) =>
+      x.includes('clean-proof')
+    ),
+    'a reused job must be audited against ITS OWN commit for log lines',
+  );
+});
+
+Deno.test('reuse: a reused job claiming the candidate commit is rejected', async () => {
+  const f = await shared();
+  const bundle = clone(f.bundle);
+  // Stamped, but still claiming to be this commit: that is the shape a lane
+  // would produce to skip its gate without a real source.
+  bundleJob(bundle, 'fast-checks').reused = { runId: 42, sha: SHA };
+  const failures = await failuresFor(bundle, f);
+  assert(
+    failures.some((x) => x.includes('claims reused proof for its own commit')),
+    failures.join(' | '),
+  );
+});
+
+Deno.test('reuse: a malformed or disagreeing stamp is rejected', async () => {
+  const f = await shared();
+  for (
+    const [label, stamp, expected] of [
+      ['not-an-object', 'yes', 'reused must be an object'],
+      ['bad-runId', { runId: 0, sha: SOURCE_SHA }, 'reused.runId'],
+      ['bad-sha', { runId: 42, sha: 'nope' }, 'reused.sha'],
+      ['extra-field', { runId: 42, sha: SOURCE_SHA, extra: 1 }, 'unknown fields'],
+      // A stamp naming a different commit than the record cannot be traced.
+      ['disagreeing-sha', { runId: 42, sha: '9'.repeat(40) }, '!= job sha'],
+    ] as const
+  ) {
+    const bundle = clone(f.bundle);
+    const job = bundleJob(bundle, 'fast-checks');
+    job.sha = SOURCE_SHA;
+    job.reused = stamp;
+    const failures = await failuresFor(bundle, f);
+    assert(
+      failures.some((x) => x.includes(expected)),
+      `${label}: expected a failure mentioning ${JSON.stringify(expected)}, got ${
+        failures.join(' | ')
+      }`,
+    );
+  }
+});
+
+Deno.test('reuse: an unstamped job with a foreign commit is still rejected', async () => {
+  const f = await shared();
+  const bundle = clone(f.bundle);
+  // No `reused` stamp at all: the differing sha is the pre-reuse violation.
+  bundleJob(bundle, 'fast-checks').sha = SOURCE_SHA;
+  assert((await failuresFor(bundle, f)).some((x) => x.includes('sha')));
+});
+
+Deno.test('reuse: a stamp for the right run on a DIFFERENT tree is rejected', async () => {
+  const f = await shared();
+  const bundle = clone(f.bundle);
+  // No log overlays: the tree check must reject before any log binding.
+  const { overlays } = await reuseJob(bundle, 'fast-checks', { withLogs: false });
+  bundleJob(bundle, 'fast-checks').tree = 'f'.repeat(40);
+  const failures = await failuresWith(bundle, f, overlays);
+  assert(
+    failures.some((x) => x.includes('tree')),
+    `the tree is the reuse key and must still match: ${failures.join(' | ')}`,
+  );
+});
+
 Deno.test('collectJobFailures rejects old-style and decoy fresh clones', async () => {
   const f = await shared();
   const cloneJobs = () =>
@@ -1199,6 +1451,7 @@ Deno.test('rollup checks are unchanged and strict', () => {
       passed: floor * REQUIRED_SITE_BROWSERS.length,
       failed: 0,
       skipped: 0,
+      flaky: 0,
       expected: floor * REQUIRED_SITE_BROWSERS.length,
       configFile: SITE_E2E_CONFIG_FILE,
       grep: {},
@@ -1207,7 +1460,7 @@ Deno.test('rollup checks are unchanged and strict', () => {
       projects: Object.fromEntries(
         REQUIRED_SITE_BROWSERS.map((
           browser,
-        ) => [browser, { passed: floor, failed: 0, skipped: 0 }]),
+        ) => [browser, { passed: floor, failed: 0, skipped: 0, flaky: 0 }]),
       ),
     },
   };
@@ -1217,7 +1470,9 @@ Deno.test('rollup checks are unchanged and strict', () => {
   skipped.siteE2e.passed = 0;
   skipped.siteE2e.expected = 3;
   skipped.siteE2e.projects = Object.fromEntries(
-    REQUIRED_SITE_BROWSERS.map((browser) => [browser, { passed: 0, failed: 0, skipped: 1 }]),
+    REQUIRED_SITE_BROWSERS.map((
+      browser,
+    ) => [browser, { passed: 0, failed: 0, skipped: 1, flaky: 0 }]),
   );
   assert(collectRollupFailures(skipped).some((x) => x.includes('skipped=1')));
 });
@@ -1234,12 +1489,58 @@ function tinySiteReport(configFile: string) {
   };
 }
 
+/**
+ * A Site E2E report at the real suite's shape: `perBrowser` passing tests in
+ * every project, so `auditSiteE2e`'s per-project floor and the executed-count
+ * binding are both satisfied. Used by the tests that exercise the full
+ * staging + audit path rather than the recompute guard alone.
+ */
+function fullSiteReport(
+  perBrowser: number,
+  configFile = '/agent/checkout/www/e2e/playwright.config.ts',
+) {
+  return {
+    config: { configFile, grep: {} },
+    suites: REQUIRED_SITE_BROWSERS.map((browser) => ({
+      specs: Array.from({ length: perBrowser }, (_, index) => ({
+        title: `${browser} test ${index}`,
+        tests: [{ projectName: browser, status: 'expected', results: [{ status: 'passed' }] }],
+      })),
+    })),
+    stats: { expected: perBrowser * REQUIRED_SITE_BROWSERS.length },
+  };
+}
+
+/** The sidecar a green run writes for `reportText`, plus the report bytes. */
+async function fullSiteE2e(report: unknown, reportText: string) {
+  const bytes = encoder.encode(reportText);
+  const projects = summarizePlaywrightReport(report as never);
+  const totals = { passed: 0, failed: 0, skipped: 0, flaky: 0 };
+  for (const summary of Object.values(projects)) {
+    totals.passed += summary.passed;
+    totals.failed += summary.failed;
+    totals.skipped += summary.skipped;
+    totals.flaky += summary.flaky;
+  }
+  return {
+    ran: true,
+    projects,
+    ...totals,
+    expected: (report as { stats: { expected: number } }).stats.expected,
+    configFile: SITE_E2E_CONFIG_FILE,
+    grep: {},
+    reportSha256: (await sha256BytesLocal(bytes)).slice('sha256:'.length),
+    candidateSha: SHA,
+  };
+}
+
 async function tinySiteE2e(reportBytes: Uint8Array, report: unknown) {
   return {
     projects: summarizePlaywrightReport(report as never),
     passed: REQUIRED_SITE_BROWSERS.length,
     failed: 0,
     skipped: 0,
+    flaky: 0,
     expected: REQUIRED_SITE_BROWSERS.length,
     configFile: SITE_E2E_CONFIG_FILE,
     grep: {},
@@ -1358,4 +1659,131 @@ Deno.test('packedRollupFromLog derives the artifact scan and consumers from the 
   assertEquals(parsed.artifactCheck, true);
   assertEquals(parsed.consumers.length, REQUIRED_PACKED_CONSUMERS.length);
   assertEquals(packedRollupFromLog('PASS tools/release#pack:dry-run').artifactCheck, false);
+});
+
+/**
+ * Run `stageCloneSiteE2e` against a scratch clone and out dir, both of which
+ * this helper creates and removes. Nothing is returned by path, so the caller
+ * never has to clean up after itself.
+ */
+async function stageScratchSiteE2e(
+  files: { sidecar?: unknown; reportText?: string },
+  options: { required: boolean },
+): Promise<{ rollup: Awaited<ReturnType<typeof stageCloneSiteE2e>>; stagedText: string | null }> {
+  const cloneDir = await Deno.makeTempDir({ prefix: 'oe-stage-clone-' });
+  const outDir = await Deno.makeTempDir({ prefix: 'oe-stage-out-' });
+  try {
+    if (files.sidecar !== undefined || files.reportText !== undefined) {
+      await Deno.mkdir(join(cloneDir, '.artifacts'), { recursive: true });
+    }
+    if (files.sidecar !== undefined) {
+      await Deno.writeTextFile(
+        join(cloneDir, '.artifacts', 'site-e2e-result.json'),
+        JSON.stringify(files.sidecar),
+      );
+    }
+    if (files.reportText !== undefined) {
+      await Deno.writeTextFile(
+        join(cloneDir, '.artifacts', SITE_E2E_REPORT_FILE),
+        files.reportText,
+      );
+    }
+    const rollup = await stageCloneSiteE2e(cloneDir, outDir, SHA, options);
+    const stagedText = await Deno.readTextFile(join(outDir, SITE_E2E_REPORT_FILE)).catch(() =>
+      null
+    );
+    return { rollup, stagedText };
+  } finally {
+    await Deno.remove(cloneDir, { recursive: true }).catch(() => undefined);
+    await Deno.remove(outDir, { recursive: true }).catch(() => undefined);
+  }
+}
+
+/** A sidecar whose one failed browser test still recomputes from the report. */
+function redSidecarFixture(sidecar: Record<string, unknown>): Record<string, unknown> {
+  return { ...sidecar, failed: 1, passed: (sidecar.passed as number) - 1 };
+}
+
+Deno.test('stageCloneSiteE2e: a green run must produce recordable evidence', async () => {
+  const report = fullSiteReport(SITE_E2E_MIN_PASSED_PER_PROJECT);
+  const reportText = JSON.stringify(report);
+  const sidecar = await fullSiteE2e(report, reportText);
+
+  // Green + recordable stages the raw report bytes next to result.json.
+  const green = await stageScratchSiteE2e({ sidecar, reportText }, { required: true });
+  assertEquals(green.rollup.candidateSha, SHA);
+  assertEquals(green.stagedText, reportText);
+  // The staged sidecar is exactly what the aggregate accepts.
+  assertEquals(
+    await collectSiteE2eRecomputeFailures(green.rollup, {
+      readReport: () => Promise.resolve(encoder.encode(reportText)),
+      expectedSha: SHA,
+    }),
+    [],
+  );
+
+  // Green with no report at all is still a hard error (unchanged contract).
+  await assertRejects(
+    () => stageScratchSiteE2e({ sidecar }, { required: true }),
+    Error,
+    'did not produce the Site E2E sidecar',
+  );
+  // Green with a red sidecar (a failed test) is not recordable.
+  await assertRejects(
+    () =>
+      stageScratchSiteE2e(
+        { sidecar: redSidecarFixture(sidecar as Record<string, unknown>), reportText },
+        { required: true },
+      ),
+    Error,
+    'not recordable',
+  );
+});
+
+Deno.test('stageCloneSiteE2e: a red run stages the report and never fakes a pass', async () => {
+  // A genuinely red report: one webkit test failed, so the recompute agrees
+  // with the sidecar's `failed: 1` and only the audit rejects it.
+  const report = fullSiteReport(SITE_E2E_MIN_PASSED_PER_PROJECT);
+  const failing = report.suites.at(-1)!;
+  failing.specs[0] = {
+    title: 'webkit test 0',
+    tests: [{ projectName: 'webkit', status: 'unexpected', results: [{ status: 'failed' }] }],
+  };
+  const reportText = JSON.stringify(report);
+  const red = await fullSiteE2e(report, reportText);
+
+  // Red + report present: staged as-is, so the per-test names are readable
+  // from the evidence tree (#1409), and the rollup still fails the aggregate.
+  const staged = await stageScratchSiteE2e({ sidecar: red, reportText }, { required: false });
+  assertEquals(staged.rollup.failed, 1);
+  assertEquals(staged.stagedText, reportText);
+  // The red sidecar recomputes cleanly (it is honest) — auditSiteE2e is what
+  // rejects it, which is the fail-closed path the aggregate takes.
+  assertEquals(
+    await collectSiteE2eRecomputeFailures(staged.rollup, {
+      readReport: () => Promise.resolve(encoder.encode(reportText)),
+      expectedSha: SHA,
+    }),
+    [],
+  );
+  assert(
+    (await collectRollupFailures({
+      artifactCheck: true,
+      consumers: REQUIRED_PACKED_CONSUMERS as unknown as string[],
+      siteE2e: staged.rollup,
+    })).some((failure) => failure.includes('Site E2E')),
+    'a red Site E2E rollup must not validate',
+  );
+
+  // Red + nothing written: records ran:false instead of throwing, so the lane
+  // still writes result.json and the aggregate fails closed on the sidecar.
+  const empty = await stageScratchSiteE2e({}, { required: false });
+  assertEquals(empty.rollup.ran, false);
+
+  // Red + a sidecar belonging to another candidate is not recorded as ours.
+  const foreign = await stageScratchSiteE2e(
+    { sidecar: { ...red, candidateSha: 'c'.repeat(40) }, reportText },
+    { required: false },
+  );
+  assertEquals(foreign.rollup.ran, false);
 });

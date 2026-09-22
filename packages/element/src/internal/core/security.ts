@@ -19,7 +19,7 @@
  */
 
 import { createLogger } from './logger.ts';
-import { formatError, OpenElementError } from './errors.ts';
+import { AuthoringErrorCode, formatError, OpenElementError } from './errors.ts';
 
 /** Object prototype keys that must never be injected from untrusted props. */
 export const DANGEROUS_KEYS: ReadonlySet<string> = new Set([
@@ -92,7 +92,7 @@ export function trustedHtmlValue(value: unknown): string {
   if (typeof value !== 'object' || value === null || !trustedHtmlValues.has(value)) {
     throw new OpenElementError(
       '[openElement] html Part requires a value created by trustedHtml(); ordinary strings are rejected.',
-      { code: 'UNTRUSTED_HTML_SINK', phase: 'render' },
+      { code: AuthoringErrorCode.UNTRUSTED_HTML_SINK, phase: 'render' },
     );
   }
   return (value as TrustedHtml).html;

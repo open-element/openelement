@@ -37,6 +37,27 @@ export function renderActionRuntime(): string {
     } else if (!crossSite && fetchSite === 'same-site') {
       crossSite = true;
     }
+    // #1382: the residual window is a client that omits BOTH Origin and Fetch
+    // Metadata — the allowance above exists for non-browser tools (curl,
+    // health probes). A browser-shaped form body (urlencoded or multipart)
+    // that also carries browser navigation evidence (Upgrade-Insecure-
+    // Requests, or the text/html Accept every form navigation sends) is not
+    // that: it is a pre-Fetch-Metadata browser (Safari < 16.4, Chrome < 76),
+    // which does send Origin on a form POST (the #921 assumption), so a
+    // missing Origin is fail-closed here. An Origin of literal null is still
+    // an Origin the browser sent — the #938 no-referrer case — and is
+    // deliberately left to that rule.
+    if (!crossSite && !origin && !fetchSite) {
+      const contentType = (c.req.header('content-type') || '').toLowerCase();
+      const browserFormBody = contentType.indexOf('application/x-www-form-urlencoded') === 0 ||
+        contentType.indexOf('multipart/form-data') === 0;
+      if (browserFormBody) {
+        const accept = (c.req.header('accept') || '').toLowerCase();
+        const browserNavigation = (c.req.header('upgrade-insecure-requests') || '') === '1' ||
+          accept.indexOf('text/html') !== -1;
+        if (browserNavigation) crossSite = true;
+      }
+    }
     if (crossSite) {
       const response = state.isFetch
         ? c.json({ type: 'about:blank', title: 'Forbidden', status: 403, detail: 'Cross-site form submission rejected' }, 403, { 'Content-Type': __problemJsonMediaType })
