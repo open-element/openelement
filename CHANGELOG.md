@@ -9,6 +9,120 @@ lives in:
 - [`docs/release/release-state.json`](./docs/release/release-state.json)
 - [`docs/release/public-interface-snapshot.json`](./docs/release/public-interface-snapshot.json)
 
+## 1.0.0-alpha.3
+
+**Door-handle train: the surfaces a consumer actually touches — the config
+file, the packed npm facade, the error vocabulary, the documentation
+pipeline, and the shipped bundle — are converged and gated.** The source
+line is `1.0.0-alpha.3`; npm publication is a separate, gated step, so
+`docs/release/release-state.json` keeps its registry block at the alpha.2
+truth until the post-publish sync. **No migration steps**: the config file is
+an optional overlay and nothing here is a breaking change, so an alpha.2
+consumer upgrades with no action.
+
+- **Element, Router — framework options get one home (#1411)**:
+  `openelement.config.ts` is optional and near-empty; with an empty object
+  every option comes from a file convention — design tokens from
+  `app/styles/tokens.css`, the application shell from
+  `app/islands/app-shell.tsx`, site title from `package.json`. A non-empty
+  config file next to inline `openElement(...)` options is a hard error
+  ("framework options have two homes"), and an unknown or wrong-typed key
+  throws with the accepted-key list; there is no silent merging. The starter
+  template's `vite.config.ts` is now `plugins: [...openElement()]` with zero
+  CSS strings, `<app-shell>` is registered by convention and stays
+  deletable, favicon and og tags reach the built document, and the first
+  `deno task dev` run no longer prints the production CORS advisory. The
+  documented consumer scaffold command is the short all-permissions form the
+  owner ruled on 2026-09-21 (the full command, with its concrete dist-tag,
+  lives in the create README and the getting-started guide), admitted as an
+  exact path-and-line exemption in the `check-no-allow-all` tripwire while
+  every first-party invocation stays scoped.
+- **Release — packed npm facade (#1412)**: per-package `keywords`, `engines`
+  (node `>=24`; deno `>=2.9` on the two Deno-driven toolchains) and
+  `sideEffects` (`false` for element/router/ui, `['./src/cli.js']` for
+  create) are written from one source and re-read from the real tarball
+  bytes by the new `pack-surface:check` gate, which also fails closed on a
+  repository path or ADR citation in shipped text, on an export subpath the
+  shipped README never names, and on a module-scope global write in a
+  package declared `sideEffects: false`. Every Element facade subpath is
+  documented in the package README — the eight that existed when this landed,
+  plus `client-only` below; 54 shipped files lost their
+  repository-internal references; the create README states the current "do
+  not run the bin under npx" limitation (the Node entry is tracked by
+  #1387).
+- **Element, Router — error experience (#1413)**: the compiler hands the
+  build a structured diagnostic (`{id, loc, frame, message, diagnostics}`)
+  instead of a pre-joined display string, so an overlay can underline the
+  authored line and a consumer can read the location without parsing the
+  message apart. The three user-facing runtime failures name the compiled
+  module, the tag and the authored `this.<property>` instead of an index the
+  author cannot map back; router authoring throws carry stable codes with
+  phase and severity plus the remediation sentence they were missing; the
+  `start` CLI prints one actionable line built from the message and cause
+  chain, with `--debug` expanding the full stack. `/errors` is a derived
+  artifact — every `fail(…, 'OEC9xxx', …)` literal plus the element error
+  protocol and router code maps — and **38 codes** render per locale from
+  the source that raises them; a hand-written list fails `check:errors`.
+- **Docs — pipeline before content (#1414)**: five pipeline pieces landed
+  first, so the facts are rendered rather than retyped. The API reference
+  renders each export's declared signature and its option-bag members; an
+  undocumented public export is red, and all **51 empty summaries are now
+  documented at their declarations**; the config option table is generated
+  from the application options type; `/errors` is generated from the
+  definitions; and the install command has one owner
+  (`packages/create/src/install-command.ts`) which the site interpolates and
+  `starter-smoke` asserts against the packed CLI's own output. Content
+  followed the pipeline: the routing-and-data Metadata and Data boundary
+  sections are written out, `delegatesFocus`/`formAssociated`/`converter`
+  are documented on core-concepts, and getting-started's Build section is
+  user-facing.
+- **Repo — legacy cleanup (#1415)**: `deno task version-bump <version>` owns
+  all six version points — 4× package `deno.json`, `CREATE_VERSION`, and the
+  four fixture `deno.lock` files — with a dry run by default and `--write`
+  applying the edits, regenerating the locks, and then failing closed unless
+  all six agree; hand-editing them burned two alpha.2 release rounds. A
+  `workflow_run` companion re-runs the FAILED jobs of AutoFlow CI exactly
+  once (attempt 1 only), because webkit fails deterministically per runner
+  and only a fresh machine can change the outcome (#1409). A
+  workspace-alias-hijack guard refuses to alias `@openelement/*` onto a
+  checkout's sources when an app is scaffolded inside a framework clone — a
+  build that would otherwise report success while resolving a different
+  framework version (#1371 family). The `evidence/` directory (0.43.3
+  tarballs) is gone and its ignore rule is documented as staying; the
+  per-fixture Nitro rules collapsed to `**/.output*|.wrangler|.nitro`; and
+  the ten fixture and e2e directories that had no README have one.
+- **Element — bundle and update cost (#1416)**: `@openelement/element/client-only`
+  is a fresh-DOM entry without the existing-DOM claim executor, and the
+  Router selects it only when no island on a page can hydrate server DOM
+  (an island that says nothing keeps the full entry, because guessing the
+  other way breaks hydration). Measured on the JFB keyed-table harness:
+  **77,557 B → 68,630 B, −8,927 B (−11.5%)**, with the claim diagnostic
+  strings at grep count 0 in the final bundle. Keyed updates also skip the
+  slot walk when an entry's item reference is unchanged, turn the
+  created-entry lookup into a Set, and resolve the fallback insertion
+  reference on demand: instrumented on `05_swap1k`, `updateItemValues`
+  calls drop from **1000 to 0** per swap and the synchronous segment from
+  3.0 ms to 2.7 ms median (−10%, 480 samples).
+- **Honest measurement — the swap1k target was not met**: swap1k did **not**
+  reach single digits, and this section records why rather than restating the
+  goal. On the same runs the afterframe protocol floor (one
+  `requestAnimationFrame` plus one `MessageChannel` task with no DOM work at
+  all) measured **~13–15 ms** — 15.2 ms baseline against 14.5 ms with the
+  change, and ~12.8 ms median in the separately documented floor
+  measurement — while `moveEntries`' 997 real `insertBefore` calls cost
+  ~2.3–2.7 ms. `moveEntries` is unchanged byte for byte (Svelte's algorithm,
+  ruled out of scope for this train), so the reported total contains the
+  protocol floor plus that walk. The reactive boundary this exposes is
+  documented in both locales on core-concepts: mutating an item in place is
+  outside the contract — the same reference comparison a `signal()` holding
+  an object draws — and the supported shape is a new item or a new array.
+- **Tracked, not fixed**: the packed-starter browser matrix runs behind
+  `OPEN_ELEMENT_SKIP_BROWSER_MATRIX=1` (#1425). It fails 3/3 browsers with a
+  `waitForFunction` timeout in the consumer harness while the identical
+  probe against a manually scaffolded packed starter passes all three
+  browsers. The rest of packed qualification stays required; the guard is to
+  be deleted when the investigation closes, not carried forward.
+
 ## 1.0.0-alpha.2
 
 **Constitutional-enforcement train: the alpha.1 review's fail-closed and
