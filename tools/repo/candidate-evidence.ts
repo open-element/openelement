@@ -1814,6 +1814,53 @@ function jobProofSha(job: Pick<JobResult, 'sha' | 'reused'>, expected: string): 
   return job.reused !== undefined && typeof job.sha === 'string' ? job.sha : expected;
 }
 
+/**
+ * Compose the bundle's per-job records from the downloaded producer records
+ * (#1425 follow-up). The composition is an explicit projection rather than a
+ * spread, so a field the bundle audit reads can never ride along by accident —
+ * which also means every field it DOES read has to be named here. `reused` is
+ * one of them: it is what licenses a replayed record's `sha` to differ from
+ * the candidate, and `jobProofSha` reads it to bind the Site E2E sidecar to
+ * the commit the suite actually ran at. Dropping it here made every reused
+ * bundle contradict itself at aggregation time ("sha ... != <candidate>",
+ * clean-proof argv mismatches, "stale or foreign sidecar") even though each
+ * downloaded record was correct on its own.
+ *
+ * Kept absent rather than defaulted when the proof was not replayed: the
+ * schema defines the key as present only on a reused record, and `undefined`
+ * would serialise away inconsistently between the in-memory audit and the
+ * written bundle.
+ */
+export function composeBundleJobs(
+  jobs: readonly Pick<LoadedJob, 'job' | 'dir'>[],
+  outDir: string,
+): Array<Record<string, unknown>> {
+  return jobs.map(({ job, dir }) => ({
+    schemaVersion: job.schemaVersion,
+    job: job.job,
+    sha: job.sha,
+    tree: job.tree,
+    trackedClean: job.trackedClean,
+    result: job.result,
+    generatedAt: job.generatedAt,
+    toolVersions: job.toolVersions,
+    extras: job.extras ?? {},
+    ...(job.reused === undefined ? {} : { reused: job.reused }),
+    steps: job.steps.map((step) => ({
+      name: step.name,
+      command: step.command,
+      cwd: step.cwd,
+      startedAt: step.startedAt,
+      durationMs: step.durationMs,
+      exitCode: step.exitCode,
+      result: step.result,
+      counts: step.counts ?? {},
+      logSource: relative(outDir, join(dir, step.logPath)),
+      logSha256: step.logSha256,
+    })),
+  }));
+}
+
 async function loadJobs(inputDir: string): Promise<LoadedJob[]> {
   const jobs: LoadedJob[] = [];
   for (const jobName of JOB_NAMES) {
@@ -1901,29 +1948,7 @@ async function aggregate(inputDir: string, output: string): Promise<void> {
     trackedClean: true,
     toolVersions: jobs.find(({ job }) => job.job === 'source-matrix')?.job.toolVersions ?? {},
     packageVersion,
-    jobs: jobs.map(({ job, dir }) => ({
-      schemaVersion: job.schemaVersion,
-      job: job.job,
-      sha: job.sha,
-      tree: job.tree,
-      trackedClean: job.trackedClean,
-      result: job.result,
-      generatedAt: job.generatedAt,
-      toolVersions: job.toolVersions,
-      extras: job.extras ?? {},
-      steps: job.steps.map((step) => ({
-        name: step.name,
-        command: step.command,
-        cwd: step.cwd,
-        startedAt: step.startedAt,
-        durationMs: step.durationMs,
-        exitCode: step.exitCode,
-        result: step.result,
-        counts: step.counts ?? {},
-        logSource: relative(outDir, join(dir, step.logPath)),
-        logSha256: step.logSha256,
-      })),
-    })),
+    jobs: composeBundleJobs(jobs, outDir),
     tarballs,
     tarballFiles,
     tarballManifest: { path: 'tarball-manifest.json', sha256: tarballManifestSha },

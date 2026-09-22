@@ -17,6 +17,7 @@ import {
   collectPackedTarballFailures,
   collectRollupFailures,
   collectSiteE2eRecomputeFailures,
+  composeBundleJobs,
   packedRollupFromLog,
   REQUIRED_PACKAGE_TARBALLS,
   REQUIRED_PACKED_CONSUMERS,
@@ -1168,6 +1169,76 @@ Deno.test('reuse: a stamped tree-identical bundle is accepted by the aggregate',
     Object.assign(overlays, (await reuseJob(bundle, job, { runId: 42 })).overlays);
   }
   assertEquals(await failuresWith(bundle, f, overlays), []);
+});
+
+Deno.test('reuse: the aggregator carries the stamp into the bundle it composes', async () => {
+  // Regression: the aggregator composes bundle records from the DOWNLOADED
+  // producer records through an explicit field projection, and it omitted
+  // `reused`. Every earlier reuse test built its bundle by cloning the fixture
+  // and stamping the record in place, so the composition was never exercised —
+  // and in CI every reused bundle failed at aggregation with
+  // `sha "<source>" != <candidate>`, clean-proof argv mismatches and a "stale
+  // or foreign sidecar", even though all four downloaded records were correct.
+  // This test runs the producer's real records through the real composer.
+  const f = await shared();
+  const jobs = f.jobs.map((entry) => ({
+    job: structuredClone(entry.job),
+    dir: `/runner/.artifacts/ci/${entry.job.job as string}`,
+    read: entry.read,
+  }));
+  const sourceSha = 'e'.repeat(40);
+  // Rewrite every producer record into the shape a tree-identical replay has:
+  // its own (source) commit in `sha`, the stamp, argv and clean-proof lines
+  // naming that commit (these bytes were written by the run that ran).
+  const overlays: Record<string, string> = {};
+  for (const entry of jobs) {
+    const record = entry.job;
+    record.sha = sourceSha;
+    record.reused = { runId: 42, sha: sourceSha };
+    for (const step of record.steps as Array<Record<string, unknown>>) {
+      step.command = (step.command as string[]).map((element) =>
+        element === SHA ? sourceSha : element
+      );
+      const name = step.name as string;
+      if (!name.startsWith('workspace-clean-')) continue;
+      const phase = name.endsWith('before') ? 'before' : 'after';
+      const text = `${cleanProofLine(sourceSha, TREE, phase as 'before' | 'after')}\n`;
+      step.logSha256 = await sha256(text);
+      overlays[`ci/${entry.job.job}/logs/${name}.log`] = text;
+    }
+    if (record.job === 'fresh-clone') {
+      ((record.extras as Record<string, unknown>).siteE2e as Record<string, unknown>).candidateSha =
+        sourceSha;
+    }
+  }
+  // The composition itself must keep the stamp; without it the bundle audit
+  // cannot tell a licensed replay from a foreign record.
+  const composed = composeBundleJobs(jobs as never, '/runner/.artifacts');
+  for (const record of composed) {
+    assertEquals(record.reused, { runId: 42, sha: sourceSha }, `${record.job} lost its stamp`);
+  }
+  // And the bundle assembled from those records validates against the
+  // CANDIDATE sha, which is the aggregation that runs in CI. The rollup is
+  // composed the same way `aggregate()` does it — out of the producer records'
+  // extras — so the Site E2E sidecar under test is the replayed one.
+  const packedRecord = jobs.find((entry) => entry.job.job === 'packed')!.job;
+  const freshRecord = jobs.find((entry) => entry.job.job === 'fresh-clone')!.job;
+  const composedBundle = {
+    ...clone(f.bundle),
+    jobs: composed,
+    rollup: {
+      artifactCheck: (packedRecord.extras as Record<string, unknown>).artifactCheck === true,
+      consumers: (packedRecord.extras as Record<string, unknown>).consumers ?? [],
+      siteE2e: (freshRecord.extras as Record<string, unknown>).siteE2e,
+    },
+  };
+  const failures = await collectBundleFailures(composedBundle, {
+    expectedSha: SHA,
+    expectedTree: TREE,
+    read: (path) =>
+      path in overlays ? Promise.resolve(encoder.encode(overlays[path])) : f.read(path),
+  });
+  assertEquals(failures, []);
 });
 
 Deno.test('reuse: a bundle spliced from two source runs is rejected', async () => {
