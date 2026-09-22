@@ -10,6 +10,7 @@
     "export-files:check": "deno run --allow-run ./run-in.ts --root ../.. -- deno run --allow-read --allow-write --allow-run tools/repo/generate-openelement-export-files.ts --check",
     "fixtures:locks:check": "deno run --allow-run ./run-in.ts --root ../.. -- deno run --allow-read tools/repo/check-fixture-locks.ts",
     "fixtures:locks:update": "deno run --allow-run ./run-in.ts --root ../.. -- deno run --allow-read --allow-write --allow-run --allow-env tools/repo/check-fixture-locks.ts --update",
+    "version-bump": "deno run --allow-run ./run-in.ts --root ../.. -- deno run --allow-read --allow-write --allow-run tools/repo/version-bump.ts",
     "workspace:links:check": "deno run --allow-run ./run-in.ts --root ../.. -- deno run --allow-read tools/repo/check-workspace-links.ts",
     "interface:snapshot": "deno run --allow-run ./run-in.ts --root ../.. -- deno run --allow-read --allow-env tools/repo/check-public-interface-snapshot.ts",
     "interface:snapshot:write": "deno run --allow-run ./run-in.ts --root ../.. -- deno run --allow-read --allow-write --allow-env tools/repo/check-public-interface-snapshot.ts --write",
