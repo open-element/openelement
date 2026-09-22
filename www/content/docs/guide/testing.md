@@ -9,7 +9,7 @@ order: 110
 The generated project wires a single fast signal against the real framework types:
 
 ```bash
-deno task check   # deno check --config deno.json app/ vite.config.ts
+deno task check   # deno check --config deno.json app/ vite.config.ts openelement.config.ts
 ```
 
 It type-checks every route and component source with the actual `@openelement/*` declarations, so a wrong option on `definePage`, a `props` projector that does not match its loader's data, an unsupported decorator option or a broken import fails here — before any build runs and without a browser.

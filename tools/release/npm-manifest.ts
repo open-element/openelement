@@ -81,9 +81,30 @@ const ENGINES: Record<string, Record<string, string>> = {
  * `window`/`document`/`customElements` assignment in their shipped sources),
  * so an unused import may be dropped. Create's `./src/cli.js` IS the program —
  * it scaffolds on import — so that module stays flagged.
+ *
+ * `@openelement/element` cannot be a flat `false` (#1425). The default entry
+ * installs the compiled claim executor through an import-time seam: the entry
+ * performs `import './internal/compiled/runtime/claim-install.js'` and that
+ * module calls `installClaimExecutor(...)` at module scope. A bundler that
+ * reads `sideEffects: false` removes BOTH halves — the bare import inside the
+ * entry (an unused statement in a side-effect-free module) and the installer
+ * body (a side-effect-free module with no used exports) — so the claim
+ * executor is missing at runtime and every island that must adopt
+ * server-rendered DOM throws instead of hydrating. Declaring an array is not
+ * enough to name one side of that edge: the two entries below are the importer
+ * and the installer, and both must survive. Verified by the packed-consumer
+ * browser matrix (tools/release#consumer:packaged leg 6), which fails 3/3
+ * browsers when either entry is removed from this list.
+ *
+ * The `./client-only` entry stays unflagged and never imports either module,
+ * so a page whose islands are all client-only still bundles without the claim
+ * cluster (ADR-0155's −9.4 KB).
  */
 const SIDE_EFFECTS: Record<string, false | string[]> = {
-  '@openelement/element': false,
+  '@openelement/element': [
+    './src/index.js',
+    './src/internal/compiled/runtime/claim-install.js',
+  ],
   '@openelement/router': false,
   '@openelement/create': ['./src/cli.js'],
   '@openelement/ui': false,

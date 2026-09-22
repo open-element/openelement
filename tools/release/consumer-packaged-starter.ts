@@ -660,19 +660,14 @@ try {
     serveProbes,
   );
   // Lifecycle leg 6 — browser: packed three-browser matrix over cli/start.
-  // TEMP (#1424): the matrix is deterministic-failing in the consumer harness
-  // while the identical probe passes against a manually-scaffolded packed
-  // starter (chromium/firefox/webkit verified). Tracked for root-cause under
-  // the e2-surgery client-only selection; non-blocking so the alpha3 train
-  // can close. Delete this guard when the matrix is green again.
-  const skipBrowserMatrix = Deno.env.get('OPEN_ELEMENT_SKIP_BROWSER_MATRIX') === '1';
-  if (skipBrowserMatrix) {
-    console.warn(
-      'SKIP packed starter browser matrix (OPEN_ELEMENT_SKIP_BROWSER_MATRIX=1, tracked)',
-    );
-  } else {
-    await runStarterBrowserMatrix(starter, tmp);
-  }
+  // #1425 root cause: the packed `@openelement/element` manifest declared
+  // `sideEffects: false` while the default entry installs the compiled claim
+  // executor through an import-time seam, so the consumer's own client build
+  // tree-shook the install away and every island threw instead of hydrating.
+  // The declaration now names both the entry and the installer
+  // (tools/release/npm-manifest.ts, guarded by tools/release#pack-surface:check);
+  // this leg is unconditionally required, and fails the gate on any browser.
+  await runStarterBrowserMatrix(starter, tmp);
   // Lifecycle leg 7 — preview: the starter ships a request-time route, so the
   // documented preview behavior is a fail-closed refusal that points at
   // `deno task start` (#601); a silent static-only preview would be wrong.

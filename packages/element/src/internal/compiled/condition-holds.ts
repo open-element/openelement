@@ -18,6 +18,8 @@
  */
 
 import type { ProgramCondition } from '../protocol/part-program.ts';
+// Single error dialect (#1386 item 3): the evaluation fail-closed path carries a code.
+import { frameworkError, ProgramErrorCode } from '../protocol/errors.ts';
 
 /**
  * Wire validation guarantees ordering operators carry a numeric literal; a
@@ -26,7 +28,11 @@ import type { ProgramCondition } from '../protocol/part-program.ts';
  */
 function numericThreshold(test: ProgramCondition): number {
   if (typeof test.value !== 'number') {
-    throw new Error(`when test operator ${test.op} requires a numeric literal`);
+    throw frameworkError(
+      ProgramErrorCode.NON_NUMERIC_CONDITION,
+      `when test operator ${test.op} requires a numeric literal`,
+      { phase: 'validation' },
+    );
   }
   return test.value;
 }

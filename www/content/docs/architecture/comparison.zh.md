@@ -83,23 +83,23 @@ OpenElement × Supabase × Cloudflare 是经过验证的全栈交付路径，所
 
 ### 产物体积
 
-以下数字于 2026-09-21 量自 docs 站点自身的构建（`www/dist`，由 `deno task site:build` 生成）。下列命令可复现每一行；页面数与 URL 数随路由集合变化，内容变更后请重跑。这些数字最近一次变动是因为生成的 `/errors` 路由落地（#1413）：每个语言各多一页，加上随共享 compiled-runtime chunk 一起发布的运行时错误文案。
+以下数字于 2026-09-22 量自 docs 站点自身的构建（`www/dist`，由 `deno task site:build` 生成）。下列命令可复现每一行；页面数与 URL 数随路由集合变化，内容变更后请重跑。这些数字最近一次变动是因为 `/guide/i18n` 指南页落地（#1383）：每个语言各多一页，加上 Element 错误方言重构（#1386）让每个 island bundle 里的共享 compiled-runtime chunk 变大。
 
 | 指标                 | 数值                                             |
 | -------------------- | ------------------------------------------------ |
-| 预渲染文档           | 64 个 HTML 文件                                  |
-| `sitemap.xml` URL 数 | 62                                               |
-| 静态产物总量         | 7.8 MB                                           |
-| island manifest      | 64 份——每页一份                                  |
-| 搜索索引             | 每个语言 31 页（en、zh），62 个 fragment，1.2 MB |
+| 预渲染文档           | 66 个 HTML 文件                                  |
+| `sitemap.xml` URL 数 | 64                                               |
+| 静态产物总量         | 8.0 MB                                           |
+| island manifest      | 66 份——每页一份                                  |
+| 搜索索引             | 每个语言 32 页（en、zh），64 个 fragment，1.2 MB |
 
 ```bash
 deno task site:build                        # 先重新生成以下全部内容
-find www/dist -name '*.html' | wc -l        # 64
-grep -c '<loc>' www/dist/sitemap.xml        # 62
-du -sh www/dist                             # 7.8M
-ls www/dist/island-manifests | wc -l        # 64
-cat www/dist/pagefind/pagefind-entry.json   # 每种语言 page_count 31
+find www/dist -name '*.html' | wc -l        # 66
+grep -c '<loc>' www/dist/sitemap.xml        # 64
+du -sh www/dist                             # 8.6M（随平台变化；上表 8.0 MB 是字节总和）
+ls www/dist/island-manifests | wc -l        # 66
+cat www/dist/pagefind/pagefind-entry.json   # 每种语言 page_count 32
 ```
 
 ### Island bundle
@@ -109,7 +109,7 @@ docs 站点就是一个普通的 openElement 应用（同样有 island），所�
 | Chunk                          | 原始字节 | gzip -9 |
 | ------------------------------ | -------- | ------- |
 | `island-open-layout`           | 102,042  | 17,702  |
-| `island-open-cinematic-scroll` | 81,984   | 25,215  |
+| `island-open-cinematic-scroll` | 85,765   | 26,855  |
 | `open-button`                  | 16,320   | 3,132   |
 | `island-open-dragon-live-gaze` | 14,161   | 5,170   |
 | `island-open-page-rail`        | 9,684    | 2,747   |
@@ -130,9 +130,9 @@ gzip -9 -c www/dist/client/islands/client.js | wc -c
 | ------------------------ | ------------------ | ------------- |
 | `/guide/mdx`             | 126,948 B          | 4             |
 | `/guide/getting-started` | 126,948 B          | 4             |
-| `/`                      | 217,362 B          | 6             |
+| `/`                      | 221,626 B          | 6             |
 
-64 份页面 manifest 合计声明了 10 个 island 标签、304 条记录：外壳 island（`open-layout`、`open-search`、`open-theme-toggle`）出现在每一页，`open-page-rail` 出现在 54 页，`open-code-block` 出现在 42 页，其余标签只在少数页面上。
+66 份页面 manifest 合计声明了 10 个 island 标签、314 条记录：外壳 island（`open-layout`、`open-search`、`open-theme-toggle`）出现在每一页，`open-page-rail` 出现在 56 页，`open-code-block` 出现在 44 页，其余标签只在少数页面上。
 
 ```bash
 cat www/dist/island-manifests/page-<hash>.json   # 单页的 island 集合：标签、chunk、策略、层级

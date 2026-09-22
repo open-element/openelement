@@ -27,4 +27,10 @@ export {
   analyzeModuleSemantics,
   type ModuleSemanticFacts,
 } from './internal/compiler/semantic-core/module-analysis.ts';
+export {
+  type EmittedModuleDiagnostic,
+  type EmittedModuleTypeCheckOptions,
+  emittedModuleTypeChecks,
+  typeCheckEmittedModule,
+} from './internal/compiler/semantic-core/type-check.ts';
 export { validatePartProgram } from './internal/protocol/part-program.ts';

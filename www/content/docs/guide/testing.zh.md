@@ -9,7 +9,7 @@ order: 110
 生成的项目用一个快速信号对着真实的框架类型做检查：
 
 ```bash
-deno task check   # deno check --config deno.json app/ vite.config.ts
+deno task check   # deno check --config deno.json app/ vite.config.ts openelement.config.ts
 ```
 
 它用真实的 `@openelement/*` 声明检查每个 route 与 component 源文件，因此 `definePage` 上写错的选项、与 loader 数据不匹配的 `props` 投影器、不受支持的装饰器选项或断掉的 import 都会在这里失败——在任何构建运行之前，且不需要浏览器。

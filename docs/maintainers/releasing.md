@@ -102,3 +102,12 @@ evidence; the release job still refuses to proceed unless that evidence
 validates against the exact candidate SHA. Trimming the PR layer therefore
 changes **when** the heavier proofs run, never whether they are required to
 ship.
+
+The suite runs with `--retries 1`, and a retry is part of the contract: a test
+that timed out and passed on the retry is Playwright's `flaky` (kept out of
+`stats.expected`, never out of `stats.unexpected`), so the proof counts it as a
+pass and records it in the sidecar's `flaky` rather than discarding it. The
+suite-size identity is therefore `expected + flaky == executed tests`, and
+`failed` still means the final attempt failed. A sidecar cannot under- or
+over-report retries: the recompute binds `flaky` to the raw report's own
+`stats.flaky`, so the fact has to be in the bytes.

@@ -9,15 +9,17 @@
  *   3. unknown keys / wrong types -> hard error naming the accepted surface.
  */
 
-import { assert, assertEquals, assertFalse } from '@std/assert';
+import { assert, assertEquals, assertFalse, assertThrows } from '@std/assert';
 import { join } from '@std/path';
 import { OpenElementError } from '@openelement/element';
 import { openElement } from '../src/vite/app-vite.ts';
+import { buildHeadExtras } from '../src/vite/head-injection.ts';
 import { resolveAppConfig } from '../src/vite/app-config.ts';
 import {
   defineConfig,
   hasInlineFrameworkOptions,
   OPEN_ELEMENT_CONFIG_KEYS,
+  resolveDirs,
   tagNameFromModule,
 } from '../src/config.ts';
 
@@ -67,11 +69,22 @@ Deno.test('defineConfig: identity helper, accepted key set is the documented sur
   assertEquals(config, { renderer: 'native' });
   assertEquals([...OPEN_ELEMENT_CONFIG_KEYS], [
     'renderer',
+    'dirs',
     'appShell',
+    'packageIslands',
     'head',
     'styles',
+    'i18n',
+    'viewTransition',
+    'speculation',
+    'build',
     'middleware',
   ]);
+  // `inject` is the framework's raw-HTML channel and deliberately has no home
+  // in the config file: structured head content is `head` + `app/head.tsx`.
+  assertFalse(OPEN_ELEMENT_CONFIG_KEYS.includes('inject'));
+  // The inline `html` spelling is retired; `head` is the one spelling.
+  assertFalse(OPEN_ELEMENT_CONFIG_KEYS.includes('html'));
 });
 
 Deno.test('app config: no file and no inline options resolves every convention', async () => {
@@ -139,7 +152,7 @@ Deno.test('app config: non-empty file + inline options is a hard conflict', asyn
         root: app.root,
         configFile,
         importedConfig: defineConfig({ renderer: 'lit' }),
-        inlineOptions: { html: { title: 'inline' } },
+        inlineOptions: { head: { title: 'inline' } },
       })
     );
     assertEquals(code, 'CONFIG_CONFLICT');
@@ -149,7 +162,7 @@ Deno.test('app config: non-empty file + inline options is a hard conflict', asyn
         root: app.root,
         configFile,
         importedConfig: defineConfig({ renderer: 'lit' }),
-        inlineOptions: { html: { title: 'inline' } },
+        inlineOptions: { head: { title: 'inline' } },
       });
     } catch (error) {
       message = (error as Error).message;
@@ -163,13 +176,13 @@ Deno.test('app config: non-empty file + inline options is a hard conflict', asyn
 
 Deno.test('app config: an all-undefined inline object is not a second home', async () => {
   await withApp((app) => {
-    assertEquals(hasInlineFrameworkOptions({ html: undefined, appShell: undefined }), false);
-    assertEquals(hasInlineFrameworkOptions({ html: { title: 'x' } }), true);
+    assertEquals(hasInlineFrameworkOptions({ head: undefined, appShell: undefined }), false);
+    assertEquals(hasInlineFrameworkOptions({ head: { title: 'x' } }), true);
     const resolved = resolveAppConfig({
       root: app.root,
       configFile: configFileIn(app.root),
       importedConfig: defineConfig({ renderer: 'native' }),
-      inlineOptions: { html: undefined },
+      inlineOptions: { head: undefined },
     });
     assertEquals(resolved.options.renderer, 'native');
   });
@@ -178,9 +191,16 @@ Deno.test('app config: an all-undefined inline object is not a second home', asy
 Deno.test('app config: unknown top-level and nested keys fail closed', () => {
   const cases: Array<[Record<string, unknown>, string]> = [
     [{ routez: { dir: 'app/routes' } }, 'routez'],
+    // `inject` is the raw-HTML channel: naming it in the config file is a
+    // rejection, not a silent ignore.
+    [{ inject: { headFragments: ['<meta name="x" content="1">'] } }, 'inject'],
+    [{ dirs: { routez: 'app/routes' } }, 'routez'],
     [{ head: { titel: 'typo' } }, 'titel'],
+    [{ head: { scripts: [{ src: '/x.js', type: 'module' }] } }, 'type'],
     [{ appShell: { import: './x.tsx', props: {}, tagName: 'x-y' } }, 'tagName'],
     [{ styles: { token: 'x.css' } }, 'token'],
+    [{ i18n: { locale: ['en'] } }, 'locale'],
+    [{ build: { manifestBudgets: {} } }, 'manifestBudgets'],
     [{ middleware: { corsOrigins: ['https://a'] } }, 'corsOrigins'],
   ];
   for (const [value, key] of cases) {
@@ -203,9 +223,26 @@ Deno.test('app config: unknown top-level and nested keys fail closed', () => {
 Deno.test('app config: type violations fail closed with the offending key named', () => {
   const cases: Array<Record<string, unknown>> = [
     { renderer: 'preact' },
+    { dirs: { routes: 42 } },
+    { dirs: 'app' },
     { appShell: { import: '' } },
     { appShell: true },
+    { packageIslands: '@openelement/ui' },
+    { packageIslands: [1, 2] },
     { head: { title: 42 } },
+    { head: { stylesheets: '/a.css' } },
+    { head: { stylesheets: [42] } },
+    { head: { scripts: [{ defer: true }] } },
+    { head: { scripts: [{ src: '' }] } },
+    { head: { scripts: [{ src: '/a.js', defer: 'yes' }] } },
+    { head: { scripts: [{ src: '/a.js', crossOrigin: 'sometimes' }] } },
+    { head: { scripts: ['/a.js'] } },
+    // The boolean-only keys reject the not-yet-supported object form.
+    { viewTransition: { types: ['fade'] } },
+    { speculation: { eagerness: 'moderate' } },
+    { i18n: { locales: 'en', defaultLocale: 'en' } },
+    { i18n: { locales: ['en'] } },
+    { build: { manifestBudget: { islandKB: 'big' } } },
     { styles: { tokens: 42 } },
     { middleware: { corsOrigin: [1, 2] } },
     { middleware: { corsOrigin: 42 } },
@@ -342,6 +379,207 @@ Deno.test('config: tagNameFromModule derives the convention shell tag', () => {
   assertEquals(tagNameFromModule('./app/islands/app-shell.tsx'), 'app-shell');
   assertEquals(tagNameFromModule('app/islands/siteLayout.ts'), 'site-layout');
   assertEquals(tagNameFromModule('app/islands/open_layout.tsx'), 'open-layout');
+});
+
+// ─── alpha.4: `dirs` moves the conventions with the roots ───
+
+Deno.test('config: resolveDirs shares a base so the conventions follow the move', () => {
+  assertEquals(resolveDirs(undefined), {
+    routes: 'app/routes',
+    islands: 'app/islands',
+    components: 'app/components',
+    base: 'app',
+  });
+  assertEquals(
+    resolveDirs({ routes: 'src/routes', islands: 'src/islands', components: 'src/components' }),
+    {
+      routes: 'src/routes',
+      islands: 'src/islands',
+      components: 'src/components',
+      base: 'src',
+    },
+  );
+  // A partial override that leaves the three roots without a shared leading
+  // segment moves only the overridden root; the conventions stay at `app`.
+  assertEquals(
+    resolveDirs({ routes: 'src/pages' }),
+    {
+      routes: 'src/pages',
+      islands: 'app/islands',
+      components: 'app/components',
+      base: 'app',
+    },
+  );
+  // A trailing slash is filesystem noise, not a different root.
+  assertEquals(resolveDirs({ routes: 'src/routes/' }).routes, 'src/routes');
+});
+
+Deno.test('app config: dirs moves the tokens/app-shell conventions with the roots', async () => {
+  await withApp((app) => {
+    app.write('package.json', JSON.stringify({ name: 'moved-app' }));
+    // The moved roots …
+    app.write('src/styles/tokens.css', ':root { --brand: green; }\n');
+    app.write('src/islands/app-shell.tsx', 'export default class Shell {}\n');
+    app.write('src/head.tsx', 'export default [];\n');
+    // … and the defaults, which must NOT contribute.
+    app.write('app/styles/tokens.css', ':root { --brand: red; }\n');
+    app.write('app/islands/app-shell.tsx', 'export default class OldShell {}\n');
+
+    const resolved = resolveAppConfig({
+      root: app.root,
+      configFile: configFileIn(app.root),
+      importedConfig: defineConfig({
+        dirs: { routes: 'src/routes', islands: 'src/islands', components: 'src/components' },
+      }),
+    });
+    assertEquals(resolved.options.routesDir, 'src/routes');
+    assertEquals(resolved.options.islandsDir, 'src/islands');
+    assertEquals(resolved.options.componentsDir, 'src/components');
+    assertEquals(resolved.options.appShell, {
+      tagName: 'app-shell',
+      import: './src/islands/app-shell.tsx',
+      props: {},
+    });
+    const fragments = resolved.options.inject?.headFragments ?? [];
+    assert(fragments[0].includes('--brand: green'), fragments[0]);
+    assertEquals(
+      fragments.some((fragment) => fragment.includes('--brand: red')),
+      false,
+      'the default app/ conventions must not leak once dirs moved the roots',
+    );
+    assertEquals(
+      resolved.conventions.map((use) => `${use.path}:${use.provides}`),
+      [
+        'package.json:title',
+        'src/head.tsx:head',
+        'src/islands/app-shell.tsx:appShell',
+        'src/styles/tokens.css:tokens',
+      ],
+    );
+    assertEquals(resolved.headConventionFile, 'src/head.tsx');
+  });
+});
+
+Deno.test('app config: a partial dirs override leaves the conventions at their defaults', async () => {
+  await withApp((app) => {
+    app.write('app/styles/tokens.css', ':root { --brand: red; }\n');
+    app.write('app/islands/app-shell.tsx', 'export default class Shell {}\n');
+    const resolved = resolveAppConfig({
+      root: app.root,
+      configFile: configFileIn(app.root),
+      importedConfig: defineConfig({ dirs: { routes: 'src/pages' } }),
+    });
+    assertEquals(resolved.options.routesDir, 'src/pages');
+    // A `dirs` block states all three roots; the two the author omitted take
+    // the documented defaults, and the conventions follow the shared base.
+    assertEquals(resolved.options.islandsDir, 'app/islands');
+    assertEquals(resolved.options.componentsDir, 'app/components');
+    assertEquals(resolved.options.appShell, {
+      tagName: 'app-shell',
+      import: './app/islands/app-shell.tsx',
+      props: {},
+    });
+    const fragments = resolved.options.inject?.headFragments ?? [];
+    assert(fragments[0].includes('--brand: red'), fragments[0]);
+  });
+});
+
+// ─── alpha.4: packageIslands derives the SSR externalization list ───
+
+Deno.test('app config: packageIslands becomes the SSR noExternal list', () => {
+  const resolved = resolveAppConfig({
+    root: Deno.cwd(),
+    configFile: '/tmp/openelement.config.ts',
+    importedConfig: defineConfig({ packageIslands: ['@openelement/ui', '@acme/components'] }),
+  });
+  assertEquals(resolved.options.packageIslands, ['@openelement/ui', '@acme/components']);
+  // The config file has no `ssr.noExternal` key: the loader derives it, so a
+  // listed package is bundled rather than imported at run time.
+  assertEquals(resolved.options.ssr, { noExternal: ['@openelement/ui', '@acme/components'] });
+});
+
+Deno.test('app config: an app without packageIslands derives no noExternal list', () => {
+  const resolved = resolveAppConfig({
+    root: Deno.cwd(),
+    configFile: '/tmp/openelement.config.ts',
+    importedConfig: defineConfig({ renderer: 'native' }),
+  });
+  assertEquals(resolved.options.ssr, undefined);
+});
+
+Deno.test('app config: inline packageIslands also derives noExternal', () => {
+  const resolved = resolveAppConfig({
+    root: Deno.cwd(),
+    configFile: null,
+    inlineOptions: { packageIslands: ['@acme/components'] },
+  });
+  assertEquals(resolved.options.packageIslands, ['@acme/components']);
+  assertEquals(resolved.options.ssr, { noExternal: ['@acme/components'] });
+});
+
+// ─── alpha.4: the structured head channel ───
+
+Deno.test('app config: head.scripts and head.stylesheets reach the inject channel', () => {
+  const resolved = resolveAppConfig({
+    root: Deno.cwd(),
+    configFile: '/tmp/openelement.config.ts',
+    importedConfig: defineConfig({
+      head: {
+        stylesheets: ['/assets/site.css'],
+        scripts: [
+          { src: '/theme-init.js' },
+          { src: '/prism.js', defer: true },
+          { src: '/sri.js', defer: true, integrity: 'sha384-abc', crossOrigin: 'anonymous' },
+        ],
+      },
+    }),
+  });
+  assertEquals(resolved.options.inject?.stylesheets, ['/assets/site.css']);
+  assertEquals(resolved.options.inject?.scripts, [
+    { src: '/theme-init.js' },
+    { src: '/prism.js', defer: true },
+    { src: '/sri.js', defer: true, integrity: 'sha384-abc', crossorigin: 'anonymous' },
+  ]);
+});
+
+Deno.test('app config: head.scripts serialize into real <script> tags', () => {
+  // The config-file channel and the inline `inject.scripts` channel must reach
+  // ONE serializer: this asserts the bytes the framework actually emits.
+  const resolved = resolveAppConfig({
+    root: Deno.cwd(),
+    configFile: '/tmp/openelement.config.ts',
+    importedConfig: defineConfig({
+      head: { scripts: [{ src: '/theme-init.js' }, { src: '/prism.js', defer: true }] },
+    }),
+  });
+  const built = buildHeadExtras({ inject: resolved.options.inject });
+  assert(built.headExtras?.includes('<script src="/theme-init.js"></script>'), built.headExtras);
+  assert(built.headExtras?.includes('<script defer src="/prism.js"></script>'), built.headExtras);
+});
+
+Deno.test('app config: a head.stylesheets entry cannot smuggle a javascript: URL', () => {
+  const resolved = resolveAppConfig({
+    root: Deno.cwd(),
+    configFile: '/tmp/openelement.config.ts',
+    importedConfig: defineConfig({ head: { stylesheets: ['javascript:alert(1)'] } }),
+  });
+  assertThrows(
+    () => buildHeadExtras({ inject: resolved.options.inject }),
+    Error,
+    'javascript:',
+  );
+});
+
+Deno.test('app config: structural head content lives in app/head.tsx, not in the config', () => {
+  const resolved = resolveAppConfig({
+    root: Deno.cwd(),
+    configFile: null,
+    inlineOptions: {},
+  });
+  // No raw-fragment key exists on the config surface; the convention is the
+  // only route to structural head content.
+  assertEquals(OPEN_ELEMENT_CONFIG_KEYS.includes('inject'), false);
+  assertEquals(resolved.headConventionFile, null);
 });
 
 // ─── #1411 starter facade: the templates are the acceptance surface ───

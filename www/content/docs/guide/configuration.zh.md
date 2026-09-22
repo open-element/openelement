@@ -29,7 +29,49 @@ export default defineConfig({
 
 ## openElement() 伞入口
 
-`openElement()` 用统一的 SSG 与 island 插件集包装 `openPipeline`。它接受扁平框架选项——`routesDir`、`islandsDir`、`componentsDir`、`packageIslands`、`html`、`inject`、`middleware`——外加用于 locale 前缀构建的 `i18n: { locales, defaultLocale }`，以及 SSG 渲染失败策略 `ssg: { dynamicRouteFailure: 'fail' | 'warn' }`。内容 collection 不在其中；markdown/frontmatter 解析、schema、collection、导航与文档路由映射均由站点自己拥有。
+`openElement()` 用统一的 SSG 与 island 插件集包装 `openPipeline`。在应用里它**不接受参数**：`plugins: [...openElement()]`。框架选项只有一个家，即 `openelement.config.ts`（见下）；当该文件已带选项时再内联传参是硬错误。需要自行搭管线的调用方仍可直接使用 `@openelement/router/vite` 的 `openPipeline()`，它有自己显式的配置形状。
+
+## openelement.config.ts
+
+可选且近乎为空的配置文件：`export default defineConfig({ ... })`，`defineConfig` 从 `@openelement/router` 导入。它省略的每个选项都由文件约定提供，而约定会跟着 `dirs` 一起移动：
+
+| 选项 | 省略时的约定 |
+| --- | --- |
+| `dirs` | routes `app/routes`、islands `app/islands`、components `app/components` |
+| 设计 token | `<共享基目录>/styles/tokens.css`（内联进每个文档 `<head>`） |
+| app shell | `<共享基目录>/islands/app-shell.tsx`（自动注册；删除该文件是受支持的） |
+| 文档头内容 | `<共享基目录>/head.tsx` |
+| 站点标题 | `package.json` 的 `name` 字段 |
+
+共享基目录是三个根的公共前缀：`dirs: { routes: 'src/routes', islands: 'src/islands', components: 'src/components' }` 会把 token 文件移到 `src/styles/tokens.css`、shell 移到 `src/islands/app-shell.tsx`、head 模块移到 `src/head.tsx`。部分覆盖的 `dirs` 不再与默认的 `app/*` 共享前缀（例如只写 `src/pages`），因此它只移动自己点名的根，约定仍留在 `app`。
+
+可接受的键——其余任何键都会以这份列表报错并让构建失败：
+
+- `renderer`——`'native'`（默认，编译后的 Part Program 序列化器）或 `'lit'`。
+- `dirs`——`{ routes, islands, components }`。
+- `appShell`——`false` 表示退出约定，或 `{ import, props }`。标签名由 import 的文件名推导，因此不可配置。
+- `packageIslands`——构建额外接纳其 island 模块的包名，例如 `['@openelement/ui']`。加载器会把该列表并入 SSR 外部化列表（列出的包被打包而非运行时导入），因此没有 `ssr.noExternal` 键。
+- `head`——结构化文档头通道：`title`、`description`、`lang`、`favicon`、`ogImage`、`stylesheets: string[]` 与 `scripts: { src, defer?, crossOrigin?, integrity? }[]`。脚本与样式表都经框架自己的 link/script 序列化器写出，因此配置条目与内联 `inject` 条目产出的字节完全一致。`inject` 本身——框架的原始 HTML 通道——刻意在这里没有家。
+- `styles`——`{ tokens }`，把 token 约定指向另一个文件。
+- `i18n`——`{ locales, defaultLocale }`；构建会在每个额外 locale 前缀下展开所有路由。
+- `viewTransition` / `speculation`——布尔值。对象形式是这两个键将来可能的扩展方向。
+- `build`——`{ manifestBudget }`，以 KB 为单位的建议性 manifest 预算。
+- `middleware`——`{ corsOrigin }` 静态白名单数据；来源**回调**放在模块里（`middleware.use` / `middleware.corsOriginModule`），永远不进配置文件。
+
+### app/head.tsx
+
+URL 列表无法表达的结构性 head 内容——站点 meta 标签、字体预加载、图标与 feed 链接、内联关键 CSS——属于 head 约定模块，而不是配置文件。它会被编译进应用的模块图，因此可以按 URL 导入 CSS、从本地模块取常量；它不得使用宿主 API，因为它的产物是构建产物而不是运行时读取。
+
+```tsx
+// app/head.tsx —— 条目都是数据；由框架序列化。
+export default [
+  { meta: { property: 'og:site_name', content: 'My App' } },
+  { link: { rel: 'preload', href: '/assets/inter.woff2', as: 'font', crossorigin: 'anonymous' } },
+  { style: 'html{visibility:visible!important}' },
+];
+```
+
+每个条目是 `{ meta }` 记录、`{ link }` 记录（`rel` 与 `href` 必填）或 `{ style }` CSS 字符串，按书写顺序输出。属性名、URL 协议与内联 CSS 都经过与其他 head 片段完全相同的 fail-closed 检查：不安全的属性名、`javascript:` URL、`@import` 或提前闭合的 `</style>` 会让构建失败，而不是被静默丢弃。需要文件字节原样进入文档时用 `?raw` 导入 CSS（`?inline` 会让它过一遍 Vite 的 CSS 管线）——本站固定的 Prism 主题就是这样导入的。
 
 ## 内容 collection 归站点所有
 
@@ -120,7 +162,7 @@ export default definePage(BlogPostPage, {
 
 ## 代码块语法高亮（可选）
 
-站点自有的 collection loader 把围栏代码块渲染为 `<pre><code class="language-x">`，无 token 级着色。collection 的 `markdown` 选项可以替换 renderer；其输出仍是第一方可信内容，hljs span 只追加 `class` 属性。路由/页面里的代码块则用 `<open-code-block>`（`@openelement/ui`）包裹——它通过全局 Prism 高亮，页面必须自行加载 Prism（core + 语言 grammar，参考本站在 `www/vite.config.ts` 注入的 vendored 同源 script，来自 `public/assets/vendor/prism/`）；不加载 Prism 就只有 copy 按钮、没有 token 着色。
+站点自有的 collection loader 把围栏代码块渲染为 `<pre><code class="language-x">`，无 token 级着色。collection 的 `markdown` 选项可以替换 renderer；其输出仍是第一方可信内容，hljs span 只追加 `class` 属性。路由/页面里的代码块则用 `<open-code-block>`（`@openelement/ui`）包裹——它通过全局 Prism 高亮，页面必须自行加载 Prism（core + 语言 grammar，参考本站 vendored 在 `public/assets/vendor/prism/` 并在 `www/openelement.config.ts` 声明的同源 script）；不加载 Prism 就只有 copy 按钮、没有 token 着色。
 
 ### lib/blog.ts —— 语法高亮配方（可选）
 
@@ -157,6 +199,8 @@ export const blogCollection: CollectionOptions = {
 `middleware.use` 注册 WinterCG 形态的 fetch 中间件：`(request, next) => Promise<Response>`——不含任何 HTTP 框架方言。中间件链在生成的 handler 边界按洋葱序组合（`use[0]` 最外层：最先看到请求，最后看到响应），位于内置 `requestId`/`logger`/`cors`/`securityHeaders`/`csp` 中间件之外。中间件语义仅作用于请求时路径：静态 GET/HEAD 由构建产物直接给出（`tryStatic`），不经过 `middleware.use` 链与内置中间件，因此不要用中间件守卫预渲染页面。在请求时派发路径（dynamic 路由、POST 与非静态回退）上，dev server、`start` CLI、e2e fixture server 与 Nitro 生产入口运行同一条中间件链（由 request-time parity 契约测试锁定）。中间件可以不调用 `next()` 直接返回 `Response` 来短路。每一项是一个**模块路径**（解析方式与 `appShell.import` 相同）：模块默认导出中间件，生成的 server entry 直接 import 该模块——因此中间件可以闭包引用模块作用域，也可以 import 本地 helper 和第三方包。路由级 `_middleware.ts` 文件使用同一 WinterCG 形态：根级或嵌套的 `_middleware.ts` 默认导出 `(request, next) => Promise<Response>`，作用于其路由子树。
 
 ### vite.config.ts —— middleware.use
+
+`middleware.use` 是唯一保留内联的框架选项：配置文件的 `middleware` 块只承载 `corsOrigin`，因此需要中间件链的项目通过 `openElement(...)` 传入，并把这次调用作为框架选项的家（非空的 `openelement.config.ts` 与内联选项同时存在是硬错误）。内联形式与配置文件**二选一**，不可并用。
 
 ```ts
 import { defineConfig } from 'vite';

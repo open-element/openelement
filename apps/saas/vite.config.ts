@@ -22,7 +22,7 @@ export default defineConfig({
         tagName: 'ref-layout',
         import: new URL('./app/shell.tsx', import.meta.url).pathname,
       },
-      html: {
+      head: {
         title: 'OpenElement SaaS',
       },
       build: {

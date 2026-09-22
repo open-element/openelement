@@ -1324,6 +1324,15 @@ function installFakeNavigation() {
     navigation: Object.getOwnPropertyDescriptor(globalThis, 'navigation'),
   };
   const listeners = new Map<string, EventListener[]>();
+  // Programmatic navigations the router issued through the Navigation API, in
+  // order. Each recorded `info` is what the browser echoes back on the
+  // navigate event the navigate() call fires, which is how the router tells
+  // its own navigations apart.
+  const navigations: Array<{ url: string; options: { history?: string; info?: unknown } }> = [];
+  // history.replaceState/pushState calls, in order. Under the Navigation API
+  // the router only uses replaceState for a guard-veto restore; this records
+  // whether that rewrite happened (and where) without faking a URL stack.
+  const historyCalls: Array<{ method: string; url: string }> = [];
   Object.defineProperty(globalThis, 'location', {
     configurable: true,
     value: {
@@ -1337,7 +1346,14 @@ function installFakeNavigation() {
   });
   Object.defineProperty(globalThis, 'history', {
     configurable: true,
-    value: { pushState() {}, replaceState() {} },
+    value: {
+      pushState(_state: unknown, _title: string, url: string) {
+        historyCalls.push({ method: 'pushState', url });
+      },
+      replaceState(_state: unknown, _title: string, url: string) {
+        historyCalls.push({ method: 'replaceState', url });
+      },
+    },
   });
   const fakeNavigation = {
     addEventListener(type: string, listener: EventListener) {
@@ -1345,6 +1361,13 @@ function installFakeNavigation() {
     },
     removeEventListener(type: string, listener: EventListener) {
       listeners.set(type, (listeners.get(type) ?? []).filter((entry) => entry !== listener));
+    },
+    // Synchronous settle: these tests drive the navigate event the browser
+    // would fire by hand (firePendingOwnNavigation), so the promise never has
+    // to be awaited through a microtask the test cannot observe.
+    navigate(url: string, options: { history?: string; info?: unknown }) {
+      navigations.push({ url, options });
+      return { finished: Promise.resolve() };
     },
   };
   Object.defineProperty(globalThis, 'navigation', { configurable: true, value: fakeNavigation });
@@ -1369,6 +1392,24 @@ function installFakeNavigation() {
       for (const listener of listeners.get('navigate') ?? []) {
         (listener as (e: unknown) => void)(event);
       }
+    },
+    navigations,
+    historyCalls,
+    /**
+     * Fire the navigate event the browser emits for the most recent
+     * programmatic navigate() call: the destination is its url and the
+     * echoed `info` is exactly the object the router passed (its ownership
+     * handshake).
+     */
+    firePendingOwnNavigation() {
+      const last = navigations.at(-1);
+      if (last === undefined) throw new Error('no programmatic navigate() was issued to echo');
+      const event = makeEvent({
+        destination: { url: new URL(last.url, 'http://router.test/a').href },
+        info: last.options.info,
+      });
+      this.fire(event);
+      return event;
     },
     makeEvent,
     restore() {
@@ -1661,5 +1702,195 @@ Deno.test('client router searchParams are per-reader snapshots, never shared mut
   } finally {
     router.dispose();
     browser.restore();
+  }
+});
+
+// ─── Navigation state machine interactions (#1385) ─────────────────
+//
+// The extraction moved ticket ownership, landing dedup and the guard-veto
+// restore marker into one machine (navigation-state.ts). Its own transitions
+// are pinned in navigation-state.test.ts; the cases below pin the
+// *interactions* across the router's navigation flows — the pairing that
+// motivated the extraction.
+
+Deno.test('Navigation API: an aborted traversal is superseded and never commits (#1385)', async () => {
+  const nav = installFakeNavigation();
+  let pending = 0;
+  const router = createRouter({
+    mode: 'history',
+    routes: [
+      { path: '/a', tagName: 'a-page' },
+      { path: '/b', tagName: 'b-page' },
+    ],
+    onPending: () => pending++,
+  });
+  try {
+    const controller = new AbortController();
+    const event = nav.makeEvent({
+      destination: { url: 'http://router.test/b' },
+      signal: controller.signal,
+    });
+    nav.fire(event);
+    assertEquals(event.intercepted, true);
+    // The browser aborts the traversal (a newer navigation took over) before
+    // the intercept handler runs: the ticket is retired, so the handler is a
+    // no-op — no rematch, no notify, and no pending cancellation.
+    controller.abort();
+    await event.runHandler();
+    assertEquals(pending, 0, 'an aborted traversal must not cancel pending execution');
+    assertEquals(router.currentPath, '/a', 'an aborted traversal must not rematch');
+    // The router still works: a later native traverse commits normally.
+    const next = nav.makeEvent({ destination: { url: 'http://router.test/b' } });
+    nav.fire(next);
+    await next.runHandler();
+    assertEquals(pending, 1);
+    assertEquals(router.currentPath, '/b');
+  } finally {
+    router.dispose();
+    nav.restore();
+  }
+});
+
+Deno.test('Navigation API: a guard-vetoed traverse leaves the queued newer navigation owning intent (#1385)', async () => {
+  const nav = installFakeNavigation();
+  let pending = 0;
+  let guards = 0;
+  let releaseGuard!: () => void;
+  const router = createRouter({
+    mode: 'history',
+    routes: [
+      { path: '/a', tagName: 'a-page' },
+      {
+        path: '/blocked',
+        tagName: 'blocked-page',
+        guard: () => {
+          guards++;
+          return new Promise<boolean>((resolve) => releaseGuard = () => resolve(false));
+        },
+      },
+      { path: '/open', tagName: 'open-page' },
+    ],
+    onPending: () => pending++,
+  });
+  try {
+    const blocked = nav.makeEvent({ destination: { url: 'http://router.test/blocked' } });
+    nav.fire(blocked);
+    assertEquals(blocked.intercepted, true);
+    // The traversal suspends in its guard (the pending render must survive),
+    // and a newer traversal takes over while it is suspended.
+    const blockedRun = blocked.runHandler();
+    await flushBrowserNavigation();
+    assertEquals(guards, 1, 'the first traversal reached its guard');
+    const open = nav.makeEvent({ destination: { url: 'http://router.test/open' } });
+    nav.fire(open);
+    // The stale traversal now resolves with a veto: it owns no intent, so it
+    // must not rematch, notify, restore or cancel pending execution.
+    releaseGuard();
+    await blockedRun;
+    assertEquals(pending, 0, 'a vetoed traversal owns no intent');
+    assertEquals(router.currentPath, '/a');
+    // The newer traversal still commits and cancels pending execution once.
+    await open.runHandler();
+    assertEquals(pending, 1);
+    assertEquals(router.currentPath, '/open');
+  } finally {
+    router.dispose();
+    nav.restore();
+  }
+});
+
+Deno.test("Navigation API: the router's own restore is intercepted without rematch or notify (#1036, #1385)", async () => {
+  const nav = installFakeNavigation();
+  let changes = 0;
+  const router = createRouter({
+    mode: 'history',
+    routes: [
+      { path: '/a', tagName: 'a-page' },
+      { path: '/blocked', tagName: 'blocked-page', guard: () => Promise.resolve(false) },
+      { path: '/b', tagName: 'b-page' },
+    ],
+    onChange: () => {
+      changes++;
+    },
+  });
+  try {
+    // A browser-driven traverse onto a vetoed route restores the entry the
+    // user came from via a marked replaceState.
+    const traverse = nav.makeEvent({ destination: { url: 'http://router.test/blocked' } });
+    nav.fire(traverse);
+    await traverse.runHandler();
+    assertEquals(
+      nav.historyCalls,
+      [{ method: 'replaceState', url: '/a' }],
+      'the veto rewrote the landed entry instead of pushing',
+    );
+    assertEquals(changes, 0);
+    assertEquals(router.currentPath, '/a');
+
+    // The navigate event that replaceState fires: the router recognizes it as
+    // its own restore, intercepts it (so the vetoed traverse stays
+    // superseded) and neither rematches nor notifies.
+    const restoreEvent = nav.makeEvent({
+      destination: { url: 'http://router.test/a' },
+      navigationType: 'replace',
+    });
+    nav.fire(restoreEvent);
+    assertEquals(restoreEvent.intercepted, true, "the router's own restore is intercepted");
+    await restoreEvent.runHandler();
+    assertEquals(changes, 0, 'the restore is not a change');
+    assertEquals(router.currentPath, '/a');
+
+    // A later genuine traversal is NOT swallowed by a stale marker: the
+    // one-shot marker is gone, so the router runs it as a normal traverse.
+    const genuine = nav.makeEvent({ destination: { url: 'http://router.test/b' } });
+    nav.fire(genuine);
+    assertEquals(genuine.intercepted, true);
+    await genuine.runHandler();
+    assertEquals(router.currentPath, '/b');
+    assertEquals(changes, 1, 'a genuine traversal after the restore still commits');
+  } finally {
+    router.dispose();
+    nav.restore();
+  }
+});
+
+Deno.test('Navigation API: a programmatic navigation superseded mid-guard never reaches the address bar (#1385)', async () => {
+  const nav = installFakeNavigation();
+  let pending = 0;
+  let releaseSlowGuard!: () => void;
+  const router = createRouter({
+    mode: 'history',
+    routes: [
+      { path: '/a', tagName: 'a-page' },
+      {
+        path: '/slow',
+        tagName: 'slow-page',
+        guard: () => new Promise<boolean>((resolve) => releaseSlowGuard = () => resolve(true)),
+      },
+      { path: '/fast', tagName: 'fast-page' },
+    ],
+    onPending: () => pending++,
+  });
+  try {
+    // The first navigation suspends in its guard; the second supersedes it
+    // before the guard resolves.
+    const slow = router.navigate('/slow');
+    await flushBrowserNavigation();
+    const fast = router.navigate('/fast');
+    releaseSlowGuard();
+    await Promise.all([slow, fast]);
+    assertEquals(
+      nav.navigations.map((entry) => entry.url),
+      ['/fast'],
+      'only the newest navigation issues a navigate() call',
+    );
+    // The winner's own navigate event is the ownership point.
+    const own = nav.firePendingOwnNavigation();
+    await own.runHandler();
+    assertEquals(pending, 1);
+    assertEquals(router.currentPath, '/fast');
+  } finally {
+    router.dispose();
+    nav.restore();
   }
 });

@@ -27,6 +27,7 @@ import { formatError, OpenElementError } from '@openelement/element';
 import { createLogger } from '@openelement/element';
 import { hasInlineFrameworkOptions } from '../config.ts';
 import { detectAppConfigFile, resolveAppConfig } from './app-config.ts';
+import { resolveHeadConvention } from './head-convention.ts';
 
 const log = createLogger('router-vite');
 
@@ -204,6 +205,11 @@ export function createOpenPlugin(
     if (merged.headExtras !== undefined) rawHeadExtras = merged.headExtras;
     Object.assign(resolvedOptions, merged);
     Object.assign(ctx.options, merged);
+    // Options that PROJECT into plugin state (the locale declaration) must be
+    // re-derived here: the context was constructed before the config file
+    // resolved, so its constructor-time derivation would keep the pre-file
+    // value and the build would emit a single-locale site.
+    ctx.refreshDerivedState();
     const head = computeHeadExtras(paramsFromRawHead(resolvedOptions, rawHeadExtras));
     headExtrasValue = head.headExtras;
     allowHeadExtrasValue = head.allowHeadExtrasScripts;
@@ -254,6 +260,23 @@ export function createOpenPlugin(
       inlineOptionsPresent,
     });
     applyResolvedOptions(resolved.options);
+    // The `app/head.tsx` convention is structural head content: it is compiled
+    // through the app's own module graph (a `?inline` CSS import cannot load
+    // through the config-file loader) and appended to the head channel AFTER
+    // the resolved options are in place, so its fragments land in the same
+    // serialized artifact as every other head entry.
+    if (resolved.headConventionFile !== null) {
+      const fragments = await resolveHeadConvention({
+        root,
+        relativePath: resolved.headConventionFile,
+      });
+      applyResolvedOptions({
+        inject: {
+          ...resolvedOptions.inject,
+          headFragments: [...(resolvedOptions.inject?.headFragments ?? []), ...fragments],
+        },
+      });
+    }
     if (resolved.conventions.length > 0) {
       log.info(
         `openelement.config.ts conventions: ${

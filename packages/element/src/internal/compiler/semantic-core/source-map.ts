@@ -13,6 +13,11 @@
  * authored TSX module), so the source index is always 0.
  */
 
+// Single error dialect (#1386 item 3): a malformed segment carries a code. The
+// error contract is an import-free protocol base owner, so importing it leaves
+// the semantic core bundler-neutral (the core holds no ambient state).
+import { frameworkError, ProgramErrorCode } from '../../protocol/errors.ts';
+
 export interface CompiledElementSourceMap {
   version: 3;
   file: string;
@@ -69,8 +74,10 @@ export class SourceMapSegmentBuilder {
       !Number.isInteger(segment.sourceLine) || segment.sourceLine < 1 ||
       !Number.isInteger(segment.sourceColumn) || segment.sourceColumn < 0
     ) {
-      throw new Error(
+      throw frameworkError(
+        ProgramErrorCode.INVALID_SOURCE_SEGMENT,
         `[compiled-program] invalid source segment ${JSON.stringify(segment)}`,
+        { phase: 'build' },
       );
     }
     if (segment.name !== undefined && !this.nameIndexes.has(segment.name)) {

@@ -1,6 +1,6 @@
 {
   "name": "@openelement/create",
-  "version": "1.0.0-alpha.3",
+  "version": "1.0.0-alpha.4",
   "exports": {
     ".": "./src/cli.ts",
     "./install-command": "./src/install-command.ts"

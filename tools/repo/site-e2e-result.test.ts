@@ -24,7 +24,7 @@ function healthy(): SiteE2eResult {
   const projects = Object.fromEntries(
     SITE_E2E_PROJECTS.map((browser) => [
       browser,
-      { passed: PASSED_PER_BROWSER, failed: 0, skipped: 0 },
+      { passed: PASSED_PER_BROWSER, failed: 0, skipped: 0, flaky: 0 },
     ]),
   );
   return {
@@ -33,6 +33,7 @@ function healthy(): SiteE2eResult {
     passed: TOTAL,
     failed: 0,
     skipped: 0,
+    flaky: 0,
     expected: TOTAL,
     configFile: SITE_E2E_CONFIG_FILE,
     grep: {},
@@ -49,17 +50,59 @@ Deno.test('site e2e audit accepts a healthy three-browser result', () => {
 Deno.test('site e2e audit accepts the exact floor', () => {
   const result = healthy();
   for (const browser of SITE_E2E_PROJECTS) {
-    result.projects[browser] = { passed: SITE_E2E_MIN_PASSED_PER_PROJECT, failed: 0, skipped: 0 };
+    result.projects[browser] = {
+      passed: SITE_E2E_MIN_PASSED_PER_PROJECT,
+      failed: 0,
+      skipped: 0,
+      flaky: 0,
+    };
   }
   result.passed = SITE_E2E_MIN_PASSED_PER_PROJECT * SITE_E2E_PROJECTS.length;
   result.expected = result.passed;
   assertEquals(auditSiteE2e(result), []);
 });
 
+Deno.test('site e2e audit accepts a retry-cleared run and records the retries', () => {
+  // The shape that a `--retries 1` run produces when two tests time out and
+  // pass on the retry: Playwright exits 0 with `unexpected: 0, flaky: 2`, so
+  // `stats.expected` counts 712 of the 714 executed tests and the two
+  // retry-cleared ones are the difference. The proof must accept it (the
+  // runner allowlists `--retries 1`) while keeping the retry visible.
+  const flakyPerBrowser = 1;
+  const result = healthy();
+  for (const browser of SITE_E2E_PROJECTS) {
+    result.projects[browser] = {
+      passed: PASSED_PER_BROWSER,
+      failed: 0,
+      skipped: 0,
+      flaky: flakyPerBrowser,
+    };
+  }
+  result.flaky = flakyPerBrowser * SITE_E2E_PROJECTS.length;
+  result.expected = result.passed - result.flaky;
+  assertEquals(auditSiteE2e(result), []);
+
+  // A retry cannot inflate the pass count: `flaky` is a subset of `passed`.
+  const inflated = healthy();
+  inflated.projects.chromium = { passed: 231, failed: 0, skipped: 0, flaky: 232 };
+  inflated.flaky = 232;
+  assert(
+    auditSiteE2e(inflated).some((f) => f.includes('chromium flaky=232 > passed=231')),
+  );
+
+  // ...and the executed-count binding moves with it, so a summary that hides
+  // retries (expected alone == executed) is rejected when retries happened.
+  const hidden = healthy();
+  hidden.flaky = 2;
+  assert(
+    auditSiteE2e(hidden).some((f) => f.includes('flaky=2+expected=') && f.includes('executed')),
+  );
+});
+
 Deno.test('site e2e audit rejects a fully skipped run', () => {
   const result = healthy();
   for (const browser of SITE_E2E_PROJECTS) {
-    result.projects[browser] = { passed: 0, failed: 0, skipped: PASSED_PER_BROWSER };
+    result.projects[browser] = { passed: 0, failed: 0, skipped: PASSED_PER_BROWSER, flaky: 0 };
   }
   result.passed = 0;
   result.skipped = TOTAL;
@@ -72,18 +115,18 @@ Deno.test('site e2e audit rejects a fully skipped run', () => {
 
 Deno.test('site e2e audit rejects zero-pass, skipped, and failed projects', () => {
   const zero = healthy();
-  zero.projects.chromium = { passed: 0, failed: 0, skipped: 0 };
+  zero.projects.chromium = { passed: 0, failed: 0, skipped: 0, flaky: 0 };
   zero.passed -= PASSED_PER_BROWSER;
   assert(auditSiteE2e(zero).some((f) => f.includes('chromium passed=0')));
 
   const skipped = healthy();
-  skipped.projects.firefox = { passed: 200, failed: 0, skipped: 31 };
+  skipped.projects.firefox = { passed: 200, failed: 0, skipped: 31, flaky: 0 };
   skipped.passed = TOTAL - 31;
   skipped.skipped = 31;
   assert(auditSiteE2e(skipped).some((f) => f.includes('firefox skipped=31')));
 
   const failed = healthy();
-  failed.projects.webkit = { passed: 229, failed: 2, skipped: 0 };
+  failed.projects.webkit = { passed: 229, failed: 2, skipped: 0, flaky: 0 };
   failed.passed -= 2;
   failed.failed = 2;
   assert(auditSiteE2e(failed).some((f) => f.includes('webkit failed=2')));
@@ -95,7 +138,7 @@ Deno.test('site e2e audit rejects a missing browser, a single-browser run, and r
   assert(auditSiteE2e(missing).some((f) => f.includes('missing browser proof: webkit')));
 
   const single = healthy();
-  single.projects = { chromium: { passed: PASSED_PER_BROWSER, failed: 0, skipped: 0 } };
+  single.projects = { chromium: { passed: PASSED_PER_BROWSER, failed: 0, skipped: 0, flaky: 0 } };
   single.passed = PASSED_PER_BROWSER;
   single.expected = PASSED_PER_BROWSER;
   const singleFailures = auditSiteE2e(single);
@@ -111,7 +154,12 @@ Deno.test('site e2e audit rejects a missing browser, a single-browser run, and r
 
 Deno.test('site e2e audit rejects an unexpected extra project', () => {
   const result = healthy();
-  (result.projects as Record<string, unknown>).opera = { passed: 231, failed: 0, skipped: 0 };
+  (result.projects as Record<string, unknown>).opera = {
+    passed: 231,
+    failed: 0,
+    skipped: 0,
+    flaky: 0,
+  };
   assert(
     auditSiteE2e(result).some((f) => f.includes('unexpected extra projects: opera')),
   );
@@ -119,7 +167,12 @@ Deno.test('site e2e audit rejects an unexpected extra project', () => {
 
 Deno.test('site e2e audit rejects a suite shrunk below the per-browser floor', () => {
   const result = healthy();
-  result.projects.chromium = { passed: SITE_E2E_MIN_PASSED_PER_PROJECT - 1, failed: 0, skipped: 0 };
+  result.projects.chromium = {
+    passed: SITE_E2E_MIN_PASSED_PER_PROJECT - 1,
+    failed: 0,
+    skipped: 0,
+    flaky: 0,
+  };
   result.passed = TOTAL - (PASSED_PER_BROWSER - SITE_E2E_MIN_PASSED_PER_PROJECT + 1);
   result.expected = result.passed;
   const failures = auditSiteE2e(result);
@@ -245,8 +298,49 @@ Deno.test('summarizePlaywrightReport counts per project and skips', () => {
     }],
   };
   assertEquals(summarizePlaywrightReport(report), {
-    chromium: { passed: 1, failed: 1, skipped: 0 },
-    firefox: { passed: 0, failed: 0, skipped: 1 },
+    chromium: { passed: 1, failed: 1, skipped: 0, flaky: 0 },
+    firefox: { passed: 0, failed: 0, skipped: 1, flaky: 0 },
+  });
+});
+
+Deno.test('summarizePlaywrightReport counts a retry-cleared test as a pass and a retry', () => {
+  // Exactly the alpha.4 attempt-1 shape: a first attempt that timed out, a
+  // retry that passed, Playwright reporting the test as `flaky` with
+  // `unexpected: 0`. Two such tests, and one that failed both attempts —
+  // which stays a failure, because `--retries 1` must not launder a real one.
+  const report = {
+    suites: [{
+      specs: [{
+        tests: [
+          {
+            projectName: 'chromium',
+            status: 'flaky',
+            results: [{ status: 'timedOut' }, { status: 'passed' }],
+          },
+          {
+            projectName: 'chromium',
+            status: 'flaky',
+            results: [{ status: 'failed' }, { status: 'passed' }],
+          },
+          {
+            projectName: 'firefox',
+            status: 'unexpected',
+            results: [{ status: 'failed' }, { status: 'failed' }],
+          },
+          {
+            projectName: 'webkit',
+            status: 'flaky',
+            // A retry that itself timed out is a failure, not a flake.
+            results: [{ status: 'passed' }, { status: 'timedOut' }],
+          },
+        ],
+      }],
+    }],
+  };
+  assertEquals(summarizePlaywrightReport(report), {
+    chromium: { passed: 2, failed: 0, skipped: 0, flaky: 2 },
+    firefox: { passed: 0, failed: 1, skipped: 0, flaky: 0 },
+    webkit: { passed: 0, failed: 1, skipped: 0, flaky: 0 },
   });
 });
 
@@ -263,9 +357,9 @@ Deno.test('summarizePlaywrightReport fails closed on a test that never executed'
     }],
   };
   assertEquals(summarizePlaywrightReport(report), {
-    chromium: { passed: 0, failed: 1, skipped: 0 },
-    firefox: { passed: 0, failed: 1, skipped: 0 },
-    webkit: { passed: 1, failed: 0, skipped: 0 },
+    chromium: { passed: 0, failed: 1, skipped: 0, flaky: 0 },
+    firefox: { passed: 0, failed: 1, skipped: 0, flaky: 0 },
+    webkit: { passed: 1, failed: 0, skipped: 0, flaky: 0 },
   });
 });
 

@@ -49,6 +49,16 @@ import {
   STATIC_STYLES_MARKER,
 } from '../protocol/part-program.ts';
 import { normalizePartProgram, type RuntimeProgramIR } from './runtime-program.ts';
+// The single error dialect (#1386 item 3): every failure raised by this module
+// is an OpenElementError carrying a code from the catalogue, so a consumer
+// classifies a compiled-runtime failure by code instead of by message prefix.
+import {
+  ClaimErrorCode,
+  EachKeyErrorCode,
+  frameworkError,
+  OpenElementError,
+  RuntimeErrorCode,
+} from '../protocol/errors.ts';
 
 type ProgramFixedPart = Extract<
   PartProgramV1['parts'][number],
@@ -77,15 +87,31 @@ export type ClaimOwner = RootClaimOwner | RegionClaimOwner;
  * exact owning range (root or one bounded Region) so bounded `owning`
  * recovery can rebuild exactly that range — and nothing outside it.
  */
-export class PartProgramClaimError extends Error {
-  readonly code = 'OPEN_ELEMENT_COMPILED_CLAIM_MISMATCH';
+/**
+ * Structured diagnostic for claim-time structure/identity drift. The canonical
+ * constructor contract is `(path, message, owner)`: every mismatch carries the
+ * exact owning range (root or one bounded Region) so bounded `owning`
+ * recovery can rebuild exactly that range — and nothing outside it.
+ *
+ * Part of the single error dialect (#1386 item 3): an `OpenElementError`
+ * carrying {@linkcode ClaimErrorCode.STRUCTURE_MISMATCH}. The code value is
+ * unchanged from 1.0.0-alpha.3, so a consumer matching on it keeps working;
+ * `owner` and `detail` stay as fields because they are per-site provenance,
+ * not contract.
+ */
+export class PartProgramClaimError extends OpenElementError {
   readonly path: string;
   readonly detail: string;
   readonly ownerKind: ClaimOwner['kind'];
   readonly owner: ClaimOwner;
 
   constructor(path: string, message: string, owner: ClaimOwner) {
-    super(`[compiled-claim] ${path}: ${message}`);
+    super(`[compiled-claim] ${path}: ${message}`, {
+      code: ClaimErrorCode.STRUCTURE_MISMATCH,
+      severity: 'error',
+      phase: 'render',
+      recoverable: true,
+    });
     this.name = 'PartProgramClaimError';
     this.path = path;
     this.detail = message;
@@ -242,6 +268,17 @@ function origin(ctx: MountContext): string {
 }
 
 /**
+ * Raise one runtime failure (#1386 item 3): every throw in this module is an
+ * `OpenElementError` carrying a code from the catalogue, so a consumer catches
+ * a compiled-runtime failure by code rather than by `[compiled-runtime]`
+ * message prefix. The `[compiled-runtime]` text stays in the message for the
+ * reader; the code is the contract.
+ */
+function fail(code: string, message: string): never {
+  throw frameworkError(code, message, { phase: 'render' });
+}
+
+/**
  * A list Region's authored name: the compiler's Region identity is a numeric
  * part index, which an author cannot map back to source. The signal name is
  * the authored `this.<property>` the Region renders.
@@ -273,7 +310,8 @@ function duplicateKeyMessage(ctx: MountContext, part: ProgramEachPart, key: stri
 function signalOf(ctx: MountContext, name: string): SignalLike<unknown> {
   const signal = ctx.host.signals[name];
   if (!signal) {
-    throw new Error(
+    fail(
+      RuntimeErrorCode.HOST_SIGNAL_MISSING,
       `${origin(ctx)}: render() reads this.${name}, but no host signal is registered. Every ` +
         `signal read by render() must be a declared @property on the compiled class.`,
     );
@@ -302,7 +340,10 @@ function subscribeWrites(
   });
   subscribeReturned = true;
   if (typeof unsub !== 'function') {
-    throw new Error(`[compiled-runtime] signal "${name}" returned an invalid unsubscribe`);
+    fail(
+      RuntimeErrorCode.SUBSCRIPTION_INVALID,
+      `[compiled-runtime] signal "${name}" returned an invalid unsubscribe`,
+    );
   }
   scope.add(unsub);
 }
@@ -471,9 +512,17 @@ function mountNodes(
     }
     if (node.k === 'ival') {
       if (item === NO_ITEM) {
-        throw new Error('[compiled-runtime] item value slot outside an each Region');
+        fail(
+          RuntimeErrorCode.ITEM_SLOT_OUTSIDE_REGION,
+          '[compiled-runtime] item value slot outside an each Region',
+        );
       }
-      if (!itemPart) throw new Error('[compiled-runtime] item value slot has no item Region');
+      if (!itemPart) {
+        fail(
+          RuntimeErrorCode.ITEM_SLOT_WITHOUT_REGION,
+          '[compiled-runtime] item value slot has no item Region',
+        );
+      }
       const value = displayValue(itemValue(itemPart, item, node.field));
       const slot: ItemValueSlot = { parent, position: out.length, field: node.field };
       if (value.length > 0) {
@@ -489,7 +538,10 @@ function mountNodes(
       for (const [name, value] of node.attrs) el.setAttribute(name, value);
       if (node.iattrs !== undefined) {
         if (item === NO_ITEM || !itemPart) {
-          throw new Error('[compiled-runtime] item attribute slot outside an each Region');
+          fail(
+            RuntimeErrorCode.ITEM_SLOT_OUTSIDE_REGION,
+            '[compiled-runtime] item attribute slot outside an each Region',
+          );
         }
         for (const [name, field] of node.iattrs) {
           const value = itemAttrValue(item, field);
@@ -716,14 +768,14 @@ function buildEach(
   });
   const value = signalOf(ctx, part.signal).value;
   if (!Array.isArray(value)) {
-    throw new Error(expectsArrayMessage(ctx, part, value));
+    fail(RuntimeErrorCode.LIST_VALUE_NOT_ARRAY, expectsArrayMessage(ctx, part, value));
   }
   const nodes: Node[] = [];
   const seen = new Set<string>();
   for (let index = 0; index < value.length; index++) {
     const key = eachItemKey(part, value[index]);
     if (seen.has(key)) {
-      throw new Error(duplicateKeyMessage(ctx, part, key));
+      fail(EachKeyErrorCode.DUPLICATE_KEY, duplicateKeyMessage(ctx, part, key));
     }
     seen.add(key);
     const entry = buildItem(ctx, scope, doc, part, value[index], parent);
@@ -821,7 +873,12 @@ function updateItemValues(
     const parent = slot.parent ?? regionParent;
     slot.parent = parent;
     const document = parent.ownerDocument;
-    if (!document) throw new Error('[compiled-runtime] item value slot has no owner document');
+    if (!document) {
+      fail(
+        RuntimeErrorCode.ITEM_SLOT_WITHOUT_DOCUMENT,
+        '[compiled-runtime] item value slot has no owner document',
+      );
+    }
     const text = document.createTextNode(next);
     slot.text = text;
     insertItemValue(entry, index, text, regionParent, regionReferenceForInsert());
@@ -861,7 +918,10 @@ function moveEntries(region: EachRegion, parent: Node, entries: EachEntry[]): vo
 function updateEach(region: EachRegion, value: unknown): void {
   if (region.scope.disposed) return;
   if (!Array.isArray(value)) {
-    throw new Error(expectsArrayMessage(region.ctx, region.part, value));
+    fail(
+      RuntimeErrorCode.LIST_VALUE_NOT_ARRAY,
+      expectsArrayMessage(region.ctx, region.part, value),
+    );
   }
   const parent = region.end.parentNode;
   // A detached anchor/end pair means the Region's owning boundary is gone;
@@ -874,7 +934,7 @@ function updateEach(region: EachRegion, value: unknown): void {
     const item = value[index];
     const key = eachItemKey(region.part, item);
     if (seen.has(key)) {
-      throw new Error(duplicateKeyMessage(region.ctx, region.part, key));
+      fail(EachKeyErrorCode.DUPLICATE_KEY, duplicateKeyMessage(region.ctx, region.part, key));
     }
     seen.add(key);
     descriptors.push({ key, item, existing: region.byKey.get(key) });
@@ -945,11 +1005,14 @@ function mountPart(
   parent?: Node,
 ): Node[] {
   const part = ctx.program.parts[index];
-  if (!part) throw new Error(`[compiled-runtime] missing Part ${index}`);
+  if (!part) fail(RuntimeErrorCode.PART_MISSING, `[compiled-runtime] missing Part ${index}`);
   if (part.k === 'text') return buildTextPart(ctx, parentScope, doc, part);
   if (part.k === 'when') return buildWhen(ctx, parentScope, doc, part, item, itemPart, parent);
   if (part.k === 'each') return buildEach(ctx, parentScope, doc, part, parent);
-  throw new Error(`[compiled-runtime] fixed Part ${part.index} cannot be used as an anchor`);
+  fail(
+    RuntimeErrorCode.FIXED_PART_AS_ANCHOR,
+    `[compiled-runtime] fixed Part ${part.index} cannot be used as an anchor`,
+  );
 }
 
 /** Resolve a compiler-owned static path without any selector/discovery walk. */
@@ -964,17 +1027,25 @@ function resolvePath(
   // path [0]). The validator rejects empty paths, so every path walks at least
   // once into the template.
   if (path.length === 0) {
-    throw new Error(`[compiled-runtime] ${where}: path [] unresolved`);
+    fail(RuntimeErrorCode.PATH_UNRESOLVED, `[compiled-runtime] ${where}: path [] unresolved`);
   }
   let node: Node = root;
   for (let depth = 0; depth < path.length; depth++) {
     const index = path[depth] + (depth === 0 ? rootOffset : 0);
     const child = node.childNodes[index];
-    if (!child) throw new Error(`[compiled-runtime] ${where}: path [${path.join(',')}] unresolved`);
+    if (!child) {
+      fail(
+        RuntimeErrorCode.PATH_UNRESOLVED,
+        `[compiled-runtime] ${where}: path [${path.join(',')}] unresolved`,
+      );
+    }
     node = child;
   }
   if (!isElement(node)) {
-    throw new Error(`[compiled-runtime] ${where}: path [${path.join(',')}] is not an element`);
+    fail(
+      RuntimeErrorCode.PATH_NOT_ELEMENT,
+      `[compiled-runtime] ${where}: path [${path.join(',')}] is not an element`,
+    );
   }
   return node;
 }
@@ -1103,7 +1174,12 @@ function installEventPart(
   const element = resolvePath(root, part.path, 'event Part', rootOffset);
   const scope = ctx.rootScope.child();
   const handler = ctx.host.handlers?.[part.handler];
-  if (!handler) throw new Error(`[compiled-runtime] missing host handler "${part.handler}"`);
+  if (!handler) {
+    fail(
+      RuntimeErrorCode.HOST_HANDLER_MISSING,
+      `[compiled-runtime] missing host handler "${part.handler}"`,
+    );
+  }
   const listener: EventListener = (event) => handler(event);
   element.addEventListener(part.event, listener);
   scope.add(() => element.removeEventListener(part.event, listener));
@@ -1118,7 +1194,9 @@ function installRefPart(
   const element = resolvePath(root, part.path, 'ref Part', rootOffset);
   const scope = ctx.rootScope.child();
   const ref = ctx.host.refs?.[part.ref];
-  if (!ref) throw new Error(`[compiled-runtime] missing host ref "${part.ref}"`);
+  if (!ref) {
+    fail(RuntimeErrorCode.HOST_REF_MISSING, `[compiled-runtime] missing host ref "${part.ref}"`);
+  }
   let cleanup = ref(element);
 
   const detach = (): void => {
@@ -1171,9 +1249,14 @@ export function createFreshDom(
 ): CompiledProgramInstance {
   const ctx = createContext(normalizePartProgram(program), host);
   const doc = root.ownerDocument;
-  if (!doc) throw new Error('[compiled-runtime] root must have an ownerDocument');
+  if (!doc) {
+    fail(
+      RuntimeErrorCode.ROOT_WITHOUT_DOCUMENT,
+      '[compiled-runtime] root must have an ownerDocument',
+    );
+  }
   if (root.childNodes.length > 0) {
-    throw new Error('[compiled-runtime] fresh DOM root must be empty');
+    fail(RuntimeErrorCode.FRESH_ROOT_NOT_EMPTY, '[compiled-runtime] fresh DOM root must be empty');
   }
   let created: Node[] = [];
   try {
@@ -1247,7 +1330,10 @@ function serializeElement(
   const attrList = serializedFixedAttributes(ctx, node, programPath);
   if (node.iattrs !== undefined) {
     if (item === NO_ITEM || !itemPart) {
-      throw new Error('[compiled-runtime] item attribute slot outside an each Region');
+      fail(
+        RuntimeErrorCode.ITEM_SLOT_OUTSIDE_REGION,
+        '[compiled-runtime] item attribute slot outside an each Region',
+      );
     }
     for (const [name, field] of node.iattrs) {
       const value = itemAttrValue(item, field);
@@ -1278,15 +1364,23 @@ function serializeNode(
   if (node.k === 'text') return escapeText(node.value);
   if (node.k === 'ival') {
     if (item === NO_ITEM) {
-      throw new Error('[compiled-runtime] item value slot outside an each Region');
+      fail(
+        RuntimeErrorCode.ITEM_SLOT_OUTSIDE_REGION,
+        '[compiled-runtime] item value slot outside an each Region',
+      );
     }
-    if (!itemPart) throw new Error('[compiled-runtime] item value slot has no item Region');
+    if (!itemPart) {
+      fail(
+        RuntimeErrorCode.ITEM_SLOT_WITHOUT_REGION,
+        '[compiled-runtime] item value slot has no item Region',
+      );
+    }
     return escapeText(displayValue(itemValue(itemPart, item)));
   }
   if (node.k === 'el') return serializeElement(ctx, node, programPath, item, itemPart);
 
   const part = ctx.program.parts[node.index];
-  if (!part) throw new Error(`[compiled-runtime] missing Part ${node.index}`);
+  if (!part) fail(RuntimeErrorCode.PART_MISSING, `[compiled-runtime] missing Part ${node.index}`);
   const open = `<!--${partAnchorMarker(part.index)}-->`;
   if (part.k === 'text') return open + escapeText(displayValue(signalOf(ctx, part.signal).value));
   const close = `<!--${partAnchorEndMarker(part.index)}-->`;
@@ -1300,7 +1394,7 @@ function serializeNode(
   if (part.k === 'each') {
     const value = signalOf(ctx, part.signal).value;
     if (!Array.isArray(value)) {
-      throw new Error(expectsArrayMessage(ctx, part, value));
+      fail(RuntimeErrorCode.LIST_VALUE_NOT_ARRAY, expectsArrayMessage(ctx, part, value));
     }
     return open + value.map((entry) =>
       part.item.map((child, index) =>
@@ -1308,7 +1402,10 @@ function serializeNode(
       ).join('')
     ).join('') + close;
   }
-  throw new Error(`[compiled-runtime] fixed Part ${part.index} has no serialized anchor`);
+  fail(
+    RuntimeErrorCode.SERIALIZED_ANCHOR_MISSING,
+    `[compiled-runtime] fixed Part ${part.index} has no serialized anchor`,
+  );
 }
 
 /** Server serialization: the same program renders deterministic HTML. */
@@ -2123,7 +2220,10 @@ function preUpgradeEventList(
     source.stop();
     return source.events;
   }
-  throw new Error('[compiled-claim] preUpgradeEvents: expected an event array or capture object');
+  fail(
+    ClaimErrorCode.PRE_UPGRADE_EVENTS_INVALID,
+    '[compiled-claim] preUpgradeEvents: expected an event array or capture object',
+  );
 }
 
 /**
@@ -2268,11 +2368,17 @@ function validateFixedPartTargets(
     }
     if (part.k === 'event') {
       if (typeof ctx.host.handlers?.[part.handler] !== 'function') {
-        throw new Error(`[compiled-runtime] missing host handler "${part.handler}"`);
+        fail(
+          RuntimeErrorCode.HOST_HANDLER_MISSING,
+          `[compiled-runtime] missing host handler "${part.handler}"`,
+        );
       }
     } else if (part.k === 'ref') {
       if (!ctx.host.refs?.[part.ref]) {
-        throw new Error(`[compiled-runtime] missing host ref "${part.ref}"`);
+        fail(
+          RuntimeErrorCode.HOST_REF_MISSING,
+          `[compiled-runtime] missing host ref "${part.ref}"`,
+        );
       }
     } else {
       signalOf(ctx, part.signal);
@@ -2333,7 +2439,10 @@ function buildStaticRecoveryNodes(doc: Document, nodes: ProgramTreeNode[]): Node
       out.push(element);
       continue;
     }
-    throw new Error('[compiled-claim] recovery build met a dynamic node in a static Region');
+    fail(
+      ClaimErrorCode.DYNAMIC_NODE_IN_STATIC_REGION,
+      '[compiled-claim] recovery build met a dynamic node in a static Region',
+    );
   }
   return out;
 }
@@ -2367,7 +2476,10 @@ function buildRecoveryItemNodes(
         out.push(element);
         continue;
       }
-      throw new Error('[compiled-claim] item templates may not contain Part anchors');
+      fail(
+        ClaimErrorCode.ITEM_TEMPLATE_ANCHOR,
+        '[compiled-claim] item templates may not contain Part anchors',
+      );
     }
     return out;
   };
@@ -2411,7 +2523,10 @@ function buildRecoveryTemplateNodes(
       continue;
     }
     if (node.k === 'ival') {
-      throw new Error('[compiled-claim] item value slot outside an each Region');
+      fail(
+        RuntimeErrorCode.ITEM_SLOT_OUTSIDE_REGION,
+        '[compiled-claim] item value slot outside an each Region',
+      );
     }
     if (node.k === 'el') {
       const element = doc.createElement(node.tag);
@@ -2426,7 +2541,7 @@ function buildRecoveryTemplateNodes(
       continue;
     }
     const part = ctx.program.parts[node.index];
-    if (!part) throw new Error(`[compiled-runtime] missing Part ${node.index}`);
+    if (!part) fail(RuntimeErrorCode.PART_MISSING, `[compiled-runtime] missing Part ${node.index}`);
     if (part.k === 'text') {
       out.push(doc.createComment(partAnchorMarker(part.index)));
       const current = displayValue(signalOf(ctx, part.signal).value);
@@ -2439,7 +2554,10 @@ function buildRecoveryTemplateNodes(
       out.push(doc.createComment(partAnchorEndMarker(part.index)));
       continue;
     }
-    throw new Error(`[compiled-runtime] fixed Part ${part.index} cannot be used as an anchor`);
+    fail(
+      RuntimeErrorCode.FIXED_PART_AS_ANCHOR,
+      `[compiled-runtime] fixed Part ${part.index} cannot be used as an anchor`,
+    );
   }
   return out;
 }
