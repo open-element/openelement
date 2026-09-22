@@ -5,8 +5,15 @@ the resulting browser modules with Web Test Runner on Chromium, Firefox, and
 WebKit (#1333).
 
 ```sh
-deno task --cwd packages/element browser:gate
+deno task --cwd packages/element browser:gate        # PR layer: Chromium only
+deno task --cwd packages/element browser:gate:full   # release train: all three engines
 ```
+
+`browser:gate` is the fast PR-layer subset the trimmed source gate runs;
+`browser:gate:full` is the complete three-engine matrix and is what the
+release train (`tools/repo#gate:release`) requires. The engine list is read
+from `WTR_BROWSERS` by `web-test-runner.config.js` (default: all three; an
+unknown engine name fails the run instead of shrinking the matrix silently).
 
 The positive suite covers compiled rendering, events, forms, shadow DOM,
 hydration/claim behavior, and instance isolation. A fail-closed configuration
@@ -49,13 +56,18 @@ __wtr__/
 ## How to run
 
 ```sh
-# hermetic gate (npm ci + compile + browsers + negative proofs):
+# PR-layer gate (npm ci + compile + Chromium + negative proofs):
 deno task --cwd packages/element browser:gate
+
+# release-train gate (npm ci + compile + Chromium/Firefox/WebKit + negative proofs):
+deno task --cwd packages/element browser:gate:full
 
 # manual equivalents, from the repository root:
 deno task --cwd packages/element browser:compile   # regenerate generated/ via tools/compile-fixtures.ts
 # green suite (Chromium + Firefox + WebKit):
 cd packages/element/__wtr__ && npx web-test-runner
+# green suite, one engine (same selector the PR gate uses):
+WTR_BROWSERS=chromium npx web-test-runner
 # negative proofs:
 deno task --cwd packages/element browser:negative
 ```

@@ -2,6 +2,13 @@
  * Element browser conformance config (#1333) — Chromium + Firefox + WebKit
  * via @web/test-runner-playwright.
  *
+ * Engine selection: the full three-engine matrix is the default and is what
+ * the release train runs (`browser:gate:full`). `WTR_BROWSERS=chromium`
+ * narrows one run to the PR-layer subset (`browser:gate`); the name is an
+ * explicit, fail-closed list — an unknown engine is a configuration error,
+ * never a silently smaller matrix, and a subset run is never mistaken for
+ * the full conformance proof (the release train owns that claim).
+ *
  * Serving model:
  *   - rootDir is packages/element, so the working-tree runtime source at
  *     /src/** and the suite files at /__wtr__/** are both served directly.
@@ -81,6 +88,39 @@ function countTests(suite) {
   return suite.tests.length + suite.suites.reduce((count, child) => count + countTests(child), 0);
 }
 
+/**
+ * Every engine this suite can launch, keyed by the name `WTR_BROWSERS` uses.
+ * The default is the complete matrix — a narrowed run is opt-in per
+ * invocation, never the ambient default.
+ */
+const ENGINES = {
+  chromium: () => playwrightLauncher({ product: 'chromium' }),
+  firefox: () => playwrightLauncher({ product: 'firefox' }),
+  webkit: () => playwrightLauncher({ product: 'webkit' }),
+};
+
+const DEFAULT_ENGINES = ['chromium', 'firefox', 'webkit'];
+
+/** Parse `WTR_BROWSERS` into a non-empty launcher list, failing closed. */
+function selectedEngines() {
+  const requested = process.env.WTR_BROWSERS;
+  if (requested === undefined || requested.trim() === '') return DEFAULT_ENGINES;
+  const names = requested.split(',').map((name) => name.trim()).filter(Boolean);
+  if (names.length === 0) {
+    throw new Error('WTR_BROWSERS is set but names no engine');
+  }
+  for (const name of names) {
+    if (!(name in ENGINES)) {
+      throw new Error(
+        `WTR_BROWSERS names an unknown engine '${name}' (known: ${
+          DEFAULT_ENGINES.join(', ')
+        })`,
+      );
+    }
+  }
+  return names;
+}
+
 export default {
   rootDir: new URL('../', import.meta.url).pathname,
   nodeResolve: true,
@@ -89,11 +129,7 @@ export default {
   // driver) need more than mocha's 2s default; every wait is still a bounded
   // predicate poll, never a sleep.
   testFramework: { config: { timeout: 15000 } },
-  browsers: [
-    playwrightLauncher({ product: 'chromium' }),
-    playwrightLauncher({ product: 'firefox' }),
-    playwrightLauncher({ product: 'webkit' }),
-  ],
+  browsers: selectedEngines().map((name) => ENGINES[name]()),
   plugins: [openElementRuntimeAlias, uiSourcePlugin, esbuildPlugin({ ts: true, target: 'es2022' })],
   reporters: [defaultReporter(), zeroTestsGuard],
   // The dev build of lit (resolved by default) logs a one-line dev-mode

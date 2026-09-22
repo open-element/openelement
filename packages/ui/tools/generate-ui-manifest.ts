@@ -10,7 +10,7 @@
  *     -> (re)write the manifest.
  *   deno run --allow-read --allow-write tools/generate-ui-manifest.ts --check
  *     -> regenerate in memory and fail (exit 1) when the tracked manifest is
- *        missing or stale. Wired into `gate:source` as ui-manifest:check.
+ *        missing or stale. Wired into `gate:release` as ui-manifest:check.
  */
 
 import { walkSync } from '@std/fs/walk';

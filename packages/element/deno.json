@@ -39,9 +39,12 @@
     "test": "deno test --deny-ffi --no-prompt --allow-read --allow-write --allow-env --allow-net --allow-run __tests__/",
     "test:ci": "deno test --allow-read --allow-write --allow-env --allow-net --allow-run --coverage --junit-path=test-results.xml __tests__/",
     "browser:compile": "deno run --allow-read --allow-write --allow-env __wtr__/tools/compile-fixtures.ts",
+    "browser:install": "deno run --allow-run ../../tools/repo/run-in.ts --root __wtr__ --env PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 -- npm ci --no-audit --no-fund",
     "browser:test": "deno task browser:compile && deno task --cwd __wtr__ test",
+    "browser:test:chromium": "deno task browser:compile && deno run --allow-run ../../tools/repo/run-in.ts --root __wtr__ --env WTR_BROWSERS=chromium -- npm test",
     "browser:negative": "deno run --allow-run --allow-env __wtr__/tools/negative-proofs.ts",
-    "browser:gate": "deno run --allow-run ../../tools/repo/run-in.ts --root __wtr__ --env PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 -- npm ci --no-audit --no-fund && deno task browser:test && deno task browser:negative"
+    "browser:gate": "deno task browser:install && deno task browser:test:chromium && deno task browser:negative",
+    "browser:gate:full": "deno task browser:install && deno task browser:test && deno task browser:negative"
   },
   "include": [
     "src"

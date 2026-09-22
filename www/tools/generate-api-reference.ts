@@ -20,8 +20,9 @@
  * node_modules layout the generating machine happens to have.
  *
  * Undocumented-export gate (#1414): an export without a JSDoc summary fails
- * generation, so `www#check:api-reference` (gate:source) turns red the moment a
- * new export lands without its rustdoc-style comment. The @openelement/ui
+ * generation, so `www#check:api-reference` (gate:release, the release train)
+ * turns red the moment a new export lands without its rustdoc-style comment.
+ * The @openelement/ui
  * compiler manifest description is the documented fallback for UI element
  * classes — it is generated from the element's own `@element` meta, not
  * hand-copied.
