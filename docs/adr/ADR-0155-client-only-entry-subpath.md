@@ -209,17 +209,17 @@ Run in the session that produced this ADR, in the worktree at
 `.work/alpha3/adr` (branch `alpha3/adr-client-only`, based on `origin/dev`
 `de8c9c265`):
 
-| Command                                                                                        | Result                                                                                           |
-| ---------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| `deno task check`                                                                              | 0 — `gate ok: 4 step(s)`                                                                         |
-| `deno run --allow-all benchmarks/jfb/harness/build.ts --local-only --build-dir /tmp/oeadr-jfb` | 0 — `bundleBytes: 69295` (client-only entry)                                                     |
-| same, with the harness alias pointed at `src/index.ts` (probe reverted afterwards)             | 0 — `bundleBytes: 78702` (full entry), delta **−9,407 B**                                        |
-| `deno task --cwd tools/repo interface:snapshot`                                                | 0 — `Public interface snapshot matches (4 packages).` (`.` and `./client-only` both `658f4f62…`) |
-| `deno task --cwd tools/repo export-files:check`                                                | 0 — sync check passed                                                                            |
-| `deno task --cwd tools/repo release:state-machine:check`                                       | 0 — source `1.0.0-alpha.2`                                                                       |
-| `deno task --cwd tools/release pack:dry-run`                                                   | 0 — 4 tarballs; element packed manifest carries `./client-only`                                  |
-| `deno task --cwd tools/release package-artifacts:check`                                        | 0 — `Package artifact checks passed for 4 packages.`                                             |
-| `deno task --cwd tools/release pack-surface:check`                                             | 0 — `Packed facade check passed`                                                                 |
+| Command                                                                                                                                                       | Result                                                                                           |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `deno task check`                                                                                                                                             | 0 — `gate ok: 4 step(s)`                                                                         |
+| `deno run --allow-read --allow-write --allow-env --allow-net --allow-run --allow-sys benchmarks/jfb/harness/build.ts --local-only --build-dir /tmp/oeadr-jfb` | 0 — `bundleBytes: 69295` (client-only entry)                                                     |
+| same, with the harness alias pointed at `src/index.ts` (probe reverted afterwards)                                                                            | 0 — `bundleBytes: 78702` (full entry), delta **−9,407 B**                                        |
+| `deno task --cwd tools/repo interface:snapshot`                                                                                                               | 0 — `Public interface snapshot matches (4 packages).` (`.` and `./client-only` both `658f4f62…`) |
+| `deno task --cwd tools/repo export-files:check`                                                                                                               | 0 — sync check passed                                                                            |
+| `deno task --cwd tools/repo release:state-machine:check`                                                                                                      | 0 — source `1.0.0-alpha.2`                                                                       |
+| `deno task --cwd tools/release pack:dry-run`                                                                                                                  | 0 — 4 tarballs; element packed manifest carries `./client-only`                                  |
+| `deno task --cwd tools/release package-artifacts:check`                                                                                                       | 0 — `Package artifact checks passed for 4 packages.`                                             |
+| `deno task --cwd tools/release pack-surface:check`                                                                                                            | 0 — `Packed facade check passed`                                                                 |
 
 Recorded-figure note: `packages/element/src/client-only.ts` cites
 "77,639 B full graph → 68,203 B from this entry" while PR #1423's table records
