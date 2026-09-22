@@ -41,6 +41,18 @@ export default class MyCounter extends OpenElement {
 
 A state change re-renders only the Parts that read the changed value. Event handlers written in the template (`onClick`, `onInput`) are bound at upgrade; nothing is looked up by string at runtime. Server-side, the same compiled class is serialized to markup by `renderDsd`, so there is one program behind both outputs rather than two renderers that can drift.
 
+### Shadow root behavior: delegatesFocus
+
+`@element('my-dialog', { root: 'shadow-open', delegatesFocus: true })` emits the matching class static, so the attached shadow root is created with `delegatesFocus`. Focus moving into the host is then delegated to the first focusable element inside the shadow tree, and the host itself matches `:focus` — which is what makes a wrapper such as a dialog, a menu or a composite field keyboard-navigable without a manual focus trap. It applies to shadow roots only (a `'light'` root has no shadow root to configure) and the compiler accepts the literal only: `@element(..., { delegatesFocus: <boolean literal> })`. Anything else fails closed with `OEC9002`.
+
+### Form participation: formAssociated
+
+`@element('my-field', { root: 'shadow-open', formAssociated: true })` emits `static formAssociated = true`, and the runtime then associates the host with the surrounding form through `ElementInternals` when it connects. The host becomes a form control: it appears in `form.elements`, participates in submission and `form.reset()`, and receives `form`, `name` and `value` semantics. Because association is a platform contract rather than a framework one, put the interactive control inside the shadow root and keep the host's own attributes for the form-facing name and value; the runtime does not invent a form value for you. As with `delegatesFocus`, the option takes a boolean literal, and an unsupported `@element` option fails closed with `OEC9002`.
+
+### Attribute conversion: converter
+
+`@property({ reflect: false, type: Number })` and `@property({ reflect: false, converter: Number })` mean the same thing to the compiler: the converter names the built-in conversion the host attribute is parsed through, and it is one of `String`, `Number`, `Boolean`, `Array` or `Object` — anything else fails closed with `OEC9021`. `type` is the declaring form and reads best in a component's contract; `converter` is the same declaration under the name Lit-style code uses, accepted so a ported element does not need rewriting. `Boolean` follows the platform attribute convention: presence is `true`, absence is `false`, so a boolean property reflects as an empty attribute rather than `"true"`. When neither is given, the converter is inferred from the field's initializer (`count = 0` → `Number`, `label = ''` → `String`, `items: string[] = []` → `Array`), so a typed field with a literal default already declares its own channel.
+
 ## DSD
 
 Server output is Declarative Shadow DOM: component markup travels inside `<template shadowrootmode="open">` and the browser parses it natively, without script. The document is styled and readable on first paint — before any client module is fetched. Styles declared in a component's `static styles` are inlined; for a light root the server scopes them in a `@scope(<tag>)` block so page rules cannot leak into the rest of the document.
@@ -72,6 +84,17 @@ A ternary is the two-branch spelling of the same test: `{this.status === 'pendin
 Why the grammar is bounded, and what is deliberately outside it: a condition must lower to a serializable test the server serializer, a fresh mount, and the existing-DOM claim can all evaluate identically without shipping JavaScript — that is what keeps the three modes byte-identical. Comparisons between two properties (`this.count > this.limit`), loose equality (`==`), and arithmetic on either side stay outside the grammar and fail closed at build time with `OEC9013`; the idiomatic path is a computed `@property` or getter that holds the already-computed boolean, which the bare-truthiness form then tests.
 
 Everything else — content, layout, documentation — needs no client behavior and stays static DSD, shipping no JavaScript at all. That split is the whole runtime story: browser code exists only where a module declared it.
+
+## Keyed lists and the update contract
+
+A keyed list (an `each` region) reuses the DOM it already built. The runtime derives each item's identity with the canonical key rule — `` `${typeof}:${String}` `` over the declared key field — and a new array is diffed against the entries it already has: unchanged keys keep their nodes, new keys build, missing keys dispose. Two boundaries follow from that, both deliberate:
+
+- **Identity is the key, values are read from the item.** An entry is re-rendered from the item object it currently holds; when an update hands back the *same* object reference, its slots are already the projection of that object and the slot walk is skipped entirely.
+- **Mutating an item in place is outside the reactive contract.** Reassigning `rows[3].label` changes an object the runtime has no reason to re-read — the same reference-comparison boundary a `signal()` holding an object draws. The supported shape is to produce a new item (`{ ...row, label }`) or a new array, which is what the runtime diff is built to notice. This is a performance boundary, not an accident: it is what makes the common update proportional to what actually changed.
+
+## Measuring updates: the afterframe floor
+
+The JFB harness (`benchmarks/jfb`) times a click the way the upstream benchmark does — afterframe, meaning one `requestAnimationFrame` plus one `MessageChannel` task. That protocol has a floor of its own: an afterframe round-trip with **no DOM work at all** measured ~12.8 ms (median) on this repo's runner, which is scheduling and event-loop cost, not runtime work. A reported number such as "swap 1000 rows ≈ 26 ms" therefore contains that floor; the part the runtime owns is the synchronous segment between the click and the handler returning (~3 ms on the same run, with the keyed-list walk dominating it). When reading any benchmark number, compare the sync segment first — the afterframe total can move several milliseconds either way without the runtime having changed a line.
 
 ## See also
 

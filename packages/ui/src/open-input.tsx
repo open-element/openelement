@@ -4,7 +4,7 @@
  * Minimal input field following Swiss International Style.
  * Clean borders, subtle focus states.
  *
- * v0.44: compiled authoring (ADR-0143). Attribute-backed properties drive the
+ * Compiled authoring. Attribute-backed properties drive the
  * compiled sinks (type/placeholder/label/name/value/disabled/required/error);
  * the form contract (setFormValue, validity mirroring, custom states) stays
  * imperative in methods. Per-instance ids are assigned at activation — SSG

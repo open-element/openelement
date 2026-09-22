@@ -6,7 +6,7 @@
  * wiring instead of copying textContent into the shadow root, so child markup
  * structure and event listeners are preserved.
  *
- * v0.44: compiled authoring (ADR-0143). The render is fully static (slot
+ * Compiled authoring. The render is fully static (slot
  * projection); the decoration runs imperatively from an effect over the
  * compiled `active` signal, so selecting a tab re-decorates without any
  * re-render. The per-instance id prefix is assigned at activation (SSG and

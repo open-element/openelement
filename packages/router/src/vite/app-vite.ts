@@ -10,6 +10,7 @@ import type { FrameworkOptions } from './internal/protocol/framework.ts';
 import type { SsgBehaviorOptions } from './internal/protocol/ssg.ts';
 import { OpenElementBuildContext } from './build-context.ts';
 import { createOpenPlugin } from './plugin.ts';
+import { hasInlineFrameworkOptions } from '../config.ts';
 import {
   DEFAULT_COMPONENTS_DIR,
   DEFAULT_ISLANDS_DIR,
@@ -31,7 +32,14 @@ export function openElement(options: OpenElementOptions = {}): Plugin[] {
     componentsDir: options.componentsDir || DEFAULT_COMPONENTS_DIR,
   });
 
-  return [...createOpenPlugin(options, ctx)];
+  // #1411: options passed here are user input and must be stated as such, so
+  // the plugin can fail closed when `openelement.config.ts` also carries
+  // options. `options` is forwarded verbatim, so its own values answer it.
+  return [
+    ...createOpenPlugin(options, ctx, {
+      inlineOptionsPresent: hasInlineFrameworkOptions(options as Record<string, unknown>),
+    }),
+  ];
 }
 
 export default openElement;

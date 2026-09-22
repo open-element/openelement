@@ -195,7 +195,7 @@ export function renderEntry(desc: EntryDescriptor): string {
   for (const mwScope of desc.middlewareScopes) {
     lines.push(`import * as ${mwScope.varName} from '${mwScope.importPath}'`);
   }
-  // ADR-0123 item 2 (#858): middleware.use entries are MODULE PATHS — the
+  // middleware.use entries are MODULE PATHS — the
   // entry imports each module and composes its default export at the handler
   // boundary, so user middleware keeps its module graph (closures, helpers,
   // third-party deps) instead of being serialized into the entry.
@@ -208,7 +208,7 @@ export function renderEntry(desc: EntryDescriptor): string {
 
   // --- Register page components in SSR customElements registry ---
   {
-    lines.push('// ADR 0014: Idempotent customElements.define for SSR (dev + SSG)');
+    lines.push('// Idempotent customElements.define for SSR (dev + SSG)');
     lines.push(
       '// The SSR dom-shim does not make define() idempotent, so we patch it.',
     );
@@ -358,7 +358,7 @@ export function renderEntry(desc: EntryDescriptor): string {
   // it in 0.42.0-alpha.1).
   if (desc.isSSG) {
     lines.push(
-      '// SSG: headExtras injected via Vite define (ADR 0008 Phase A)',
+      '// SSG: headExtras injected via Vite define (Phase A)',
     );
     lines.push('// Replaces the old .openElement/head-extras.html runtime file read');
     lines.push('const __headExtras = __HEAD_EXTRAS__ || "";');
@@ -470,11 +470,11 @@ export function renderEntry(desc: EntryDescriptor): string {
 
   // --- Export ---
   if (desc.fetchMiddleware?.length) {
-    // ADR-0123 item 2 (#858): fetch middleware composed at the handler
+    // Fetch middleware composed at the handler
     // boundary in onion order (use[0] outermost), outside the Hono app, so
     // the dev server, the start CLI, the e2e fixture server, and the Nitro
     // production entry share one composed handler.
-    lines.push('// ADR-0123 (#858): fetch middleware contract (WinterCG shape)');
+    lines.push('// Fetch middleware contract (WinterCG shape)');
     lines.push('const __openElementFetchMiddleware = [');
     for (const varName of fetchMiddlewareVars) {
       lines.push(`  ${varName}.default,`);

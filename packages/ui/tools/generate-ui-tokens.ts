@@ -4,11 +4,11 @@
  * This is @openelement/ui's build-time adapter and lives with the package it
  * serves. Upstream open-props (MIT) is the canonical source for the tokens we
  * carry verbatim (gray ramp, indigo-6, border sizes, font weights, two
- * line-heights); `packages/ui/src/semantic-tokens.css` is the canonical source
+ * line-heights); `src/semantic-tokens.css` is the canonical source
  * for everything tuned. The adapter injects the upstream declarations at the
  * `@upstream-tokens` anchor and writes ONE generated artifact:
  *
- *   packages/ui/src/open-props-tokens.ts — the CSSOM module whose
+ *   `src/open-props-tokens.ts` — the CSSOM module whose
  *   `openPropsTokenSheet` is adopted at :root or inside a shadow root (the
  *   token block selects `:root, :host`; no transform, no second export).
  *
@@ -111,7 +111,7 @@ for (const name of wanted) {
 // untouched even if one ever contains a $-pattern.
 const cssBody = semantic.replace(ANCHOR, () => upstreamBlock.trim());
 const generatedCss =
-  `/**\n * GENERATED — do not edit; source: open-props@${OPEN_PROPS_VERSION} (MIT) + semantic-tokens.css.\n * Regenerate with: deno task --cwd packages/ui generate:ui-tokens\n */\n\n${cssBody}`;
+  `/**\n * GENERATED — do not edit; source: open-props@${OPEN_PROPS_VERSION} (MIT) + semantic-tokens.css.\n * Regenerate with: deno task generate:ui-tokens\n */\n\n${cssBody}`;
 
 if (generatedCss.includes('`') || generatedCss.includes('${') || generatedCss.includes('\\')) {
   throw new Error('generated CSS must stay free of template-literal metacharacters');
@@ -119,7 +119,7 @@ if (generatedCss.includes('`') || generatedCss.includes('${') || generatedCss.in
 
 const generatedTs = `/**
  * GENERATED — do not edit; source: open-props@${OPEN_PROPS_VERSION} (MIT) + semantic-tokens.css.
- * Regenerate with: deno task --cwd packages/ui generate:ui-tokens
+ * Regenerate with: deno task generate:ui-tokens
  */
 
 import { StyleSheet, type StyleSheetLike } from '@openelement/element';

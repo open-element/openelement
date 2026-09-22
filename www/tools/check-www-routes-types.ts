@@ -10,8 +10,9 @@
  * against). Derivation means a new route file joins the gate automatically.
  *
  * Fail-closed invariants:
- *   - generated modules are produced by `generate:all`, which `gate:source`
- *     runs first; a missing one is diagnosed from the compiler's own TS2307
+ *   - generated modules are produced by `generate:all`, which both gate:source
+ *     (the PR layer) and gate:release (the release train) run first; a missing
+ *     one is diagnosed from the compiler's own TS2307
  *     output (see below), so the hint can never go stale;
  *   - a zero-entry scan is an error, never a vacuous pass;
  *   - any per-module `deno check` failure fails the gate.

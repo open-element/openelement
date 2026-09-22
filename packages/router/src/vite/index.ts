@@ -6,7 +6,7 @@
  * - Dev server integration via @hono/vite-dev-server
  * - Island marking transform
  * - SSG build pipeline (Phase 1/2/3)
- * - Core subpath resolution (ADR 0016)
+ * - Core subpath resolution
  *
  * Runtime code (renderDsd, defineIsland, escapeHtml, etc.) lives in @openelement/element.
  * This package only contains Vite-specific build orchestration.
@@ -57,7 +57,10 @@ export function openPipeline(config: OpenPipelineConfig = {}): Plugin[] {
     island: config.island as FrameworkOptions['island'],
     build: config.output as FrameworkOptions['build'],
   };
-  return createOpenPlugin(options);
+  // #1411: `options` above is default-filled, so it cannot answer whether the
+  // CALLER passed framework options — `config` is the caller's own object.
+  const inlineOptionsPresent = Object.values(config).some((value) => value !== undefined);
+  return createOpenPlugin(options, undefined, { inlineOptionsPresent });
 }
 
 /**

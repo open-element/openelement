@@ -15,6 +15,11 @@ import type {
 import type { Middleware } from '../protocol/framework.ts';
 export type { OpenElementRequestHandler, RuntimeContext };
 
+/**
+ * Normalize a runtime adapter declaration: pass the name, fetch handler and
+ * optional prerender iterator through unchanged so a host integration only
+ * implements the {@link RuntimeAdapter} contract it needs.
+ */
 export function createRuntimeAdapter<
   Env extends Record<string, unknown> = Record<string, unknown>,
 >(options: RuntimeAdapterOptions<Env>): RuntimeAdapter<Env> {
@@ -26,7 +31,7 @@ export function createRuntimeAdapter<
 }
 
 /**
- * Compose a fetch middleware chain (ADR-0123 item 2, #858) around a handler,
+ * Compose a fetch middleware chain (#858) around a handler,
  * in onion order: `middleware[0]` is outermost — it sees the request first
  * and the response last. A middleware may short-circuit by returning a
  * Response without calling `next()`.

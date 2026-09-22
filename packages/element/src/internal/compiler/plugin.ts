@@ -28,7 +28,9 @@ import {
   type CompileElementResult,
 } from './semantic-core/compile.ts';
 import { analyzeModuleSemantics } from './semantic-core/module-analysis.ts';
+import { diagnosticPluginError } from './semantic-core/diagnostics/index.ts';
 
+/** The authored substring every compiled element module contains (`@element(`), used as the cheap prefilter. */
 export const COMPILED_ELEMENT_MARKER = '@element(';
 
 /**
@@ -125,6 +127,13 @@ export interface CompiledElementPluginOptions {
   workspaceRoot?: string;
 }
 
+/**
+ * The `open:compiled-element` Vite plugin: runs at `enforce: 'pre'` so the
+ * compiler sees authored TSX before Vite's own TS/JSX lowering, compiles every
+ * module with a canonically bound `@element` decorator, and leaves all other
+ * modules untouched. `workspaceRoot` anchors generated source-map ids for
+ * linked workspace packages.
+ */
 export function compiledElementPlugin(options: CompiledElementPluginOptions = {}): Plugin {
   let viteRoot: string | undefined;
   const workspaceRoot = options.workspaceRoot;
@@ -145,7 +154,12 @@ export function compiledElementPlugin(options: CompiledElementPluginOptions = {}
           null;
       } catch (error) {
         if (error instanceof CompiledElementError) {
-          this.error(error.message);
+          // #1413: hand the build the structured diagnostic record
+          // ({id, loc, frame} plus the diagnostics array) instead of the
+          // pre-joined display string — the overlay underlines the authored
+          // line, and a programmatic consumer reads the location instead of
+          // parsing a message back apart.
+          this.error(diagnosticPluginError(error.diagnostics, code, id) ?? error.message);
         }
         throw error;
       }

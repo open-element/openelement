@@ -75,6 +75,11 @@ const TEMPLATE_FILES: readonly (readonly [string, string])[] = [
   // generated. npm is the only public registry.
   ['package.json.tmpl', 'package.json'],
   ['vite.config.ts.tmpl', 'vite.config.ts'],
+  // #1411: framework options live in openelement.config.ts; the starter ships
+  // it near-empty, so every option comes from a file convention until the user
+  // overrides one.
+  ['openelement.config.ts.tmpl', 'openelement.config.ts'],
+  ['app/styles/tokens.css', 'app/styles/tokens.css'],
   ['app/islands/app-shell.tsx.tmpl', 'app/islands/app-shell.tsx'],
   ['app/components/page-styles.ts.tmpl', 'app/components/page-styles.ts'],
   ['app/components/page-home.tsx.tmpl', 'app/components/page-home.tsx'],

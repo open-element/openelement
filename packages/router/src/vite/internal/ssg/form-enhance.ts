@@ -1,5 +1,5 @@
 /**
- * form-enhance.ts - data-open-enhance submit interception (ADR-0120) and the
+ * form-enhance.ts - data-open-enhance submit interception and the
  * enhanced-navigation guards for the morph client runtime. Split from
  * enhance-client.ts (#908).
  *
@@ -113,7 +113,7 @@ export function computeSubmissionTuple(
  * value, BEFORE percent-encoding. FormData hands the interceptor the raw
  * string (a textarea's value, or an entry a formdata listener appended), so
  * without this step the enhanced body would carry %0A where the native body
- * carries %0D%0A — breaking the ADR-0120 rule-2 promise that the two wire
+ * carries %0D%0A — breaking the rule-2 promise that the two wire
  * bodies never differ.
  */
 export function normalizeNewlinesForUrlencoded(value: string): string {
@@ -218,7 +218,7 @@ export function createFormEnhance(deps: FormEnhanceDeps): FormEnhance {
       form.ownerDocument === submittedDocument &&
       win.location.href.split('#')[0] === submittedPage;
     // #544: the submitter's name/value is part of the body — the body never
-    // differs between the two paths (ADR-0120 rule 2).
+    // differs between the two paths.
     const formData = submitter
       ? new win.FormData(form, submitter as HTMLButtonElement)
       : new win.FormData(form);
@@ -275,7 +275,7 @@ export function createFormEnhance(deps: FormEnhanceDeps): FormEnhance {
       const morphable = (result.status === 200 || result.status === 422) &&
         result.type.indexOf('text/html') !== -1 && result.html.trim() !== '';
       if (morphable) {
-        // ADR-0121 §11 (#546): cancelable failure hook before the default morph.
+        // Cancelable failure hook before the default morph.
         if (result.status === 422) {
           const proceed = form.dispatchEvent(
             new win.CustomEvent('open:action-failure', {
@@ -328,7 +328,7 @@ export function createFormEnhance(deps: FormEnhanceDeps): FormEnhance {
     scanSubmitRoots(doc);
   }
 
-  // ADR-0121 §10 (#545): enhanced navigation is pushState-based; back/forward
+  // Enhanced navigation is pushState-based; back/forward
   // reloads the restored URL so content never disagrees with the address bar.
   // The guard keeps the listener inert on pages that never enhanced-navigated
   // (e.g. sites running their own client-side routing on the same bundle);

@@ -22,7 +22,7 @@ import {
 import { renderActionProtocol } from './entry-action-runtime.ts';
 
 /**
- * #863 / ADR-0123 addendum item 13: the action error channel speaks RFC 9457
+ * #863: the action error channel speaks RFC 9457
  * Problem Details — application/problem+json with type/title/status/detail —
  * in place of the bespoke { type: 'error', error: { message } } JSON.
  * 'about:blank' carries the HTTP reason phrase as the title (RFC 9457 §4.2).
@@ -78,7 +78,7 @@ function renderRouteHandlerPreamble(lines: string[], ctx: RouteHandlerEmitContex
     lines.push('// GET handler - renders the page with loader data');
   }
   if (isAction) {
-    // ADR-0121 (#568): conservative default body limit on action POSTs;
+    // Conservative default body limit on action POSTs;
     // larger uploads belong on API routes with explicit limits.
     lines.push(
       `__pageHandlers[${pathLiteral}].POST = [__asFetchMiddleware(__bodyLimit({ maxSize: 10 * 1024 * 1024, onError: (c) => { c.header('Cache-Control', 'no-store'); c.header('Vary', __actionFetchHeader); if (c.req.header(__actionFetchHeader) === 'true') return ${
@@ -92,7 +92,7 @@ function renderRouteHandlerPreamble(lines: string[], ctx: RouteHandlerEmitContex
   } else {
     lines.push(`__pageHandlers[${pathLiteral}].GET = [__asFetchHandler(async (c, __route) => {`);
   }
-  // ADR-0129: one mutable response-header channel per request, shared by the
+  // One mutable response-header channel per request, shared by the
   // loader and the action (the spread into the action context carries the
   // reference). The handler body is wrapped in an IIFE so EVERY exit —
   // success, re-render, redirect, rejection, error fallback — merges the
@@ -104,7 +104,7 @@ function renderRouteHandlerPreamble(lines: string[], ctx: RouteHandlerEmitContex
   lines.push(`  let __params = {}`);
   lines.push(`  let __routeMetaValue = ${routeMeta}`);
   lines.push(`  const __routeContext = ${routeContext}`);
-  // ADR-0121 section 6 (#550): request-time responses are never cacheable;
+  // Request-time responses are never cacheable;
   // the POST endpoint is negotiated by the framework action header.
   lines.push(`  c.header('Cache-Control', 'no-store');`);
   if (isAction) {
@@ -186,7 +186,7 @@ function renderRouteResponseAndCatch(lines: string[], ctx: RouteHandlerEmitConte
   lines.push('');
   if (!isAction) {
     // #943: successful GET pages relax no-store to private,no-cache so the UA
-    // can bfcache/scroll-restore them (ADR-0121 section 6 amendment). The
+    // can bfcache/scroll-restore them. The
     // override is emitted only AFTER the shell render succeeded: a
     // redirect/notFound()/throw out of render lands in the catch below, and
     // every error/redirect response (and every POST response) keeps the
@@ -214,7 +214,7 @@ function renderRouteResponseAndCatch(lines: string[], ctx: RouteHandlerEmitConte
   lines.push(`  } catch (err) {`);
   lines.push(`    if (__isOpenElementRedirect(err)) {`);
   if (isAction) {
-    // ADR-0121 section 3 (#547): in the POST action context every 3xx is
+    // In the POST action context every 3xx is
     // coerced to 303 (PRG must be method-safe and non-cacheable); GET
     // handlers keep the author's status.
     lines.push(
@@ -243,7 +243,7 @@ function renderRouteResponseAndCatch(lines: string[], ctx: RouteHandlerEmitConte
   lines.push(`      }), 404)`);
   lines.push(`    }`);
 
-  // ADR-0121 (#558): the JSON error channel scrubs internals in production,
+  // The JSON error channel scrubs internals in production,
   // matching the HTML channel. Fetch callers get RFC 9457 problem+json
   // (#863), never the boundary page.
   if (isAction) {
@@ -262,7 +262,7 @@ function renderRouteResponseAndCatch(lines: string[], ctx: RouteHandlerEmitConte
     );
     lines.push(`    }`);
   }
-  // ADR-0121 section 7 (#551): POST takes the same nearest-error-boundary
+  // POST takes the same nearest-error-boundary
   // channel as GET — the page's error variant renders with status 500.
   {
     lines.push(`    if (typeof __page.error === "function") {`);
@@ -316,7 +316,7 @@ function renderRouteResponseAndCatch(lines: string[], ctx: RouteHandlerEmitConte
   lines.push(`      return c.html('<h1>500</h1><pre>' + safeErr + '</pre>', 500)`);
   lines.push(`    }`);
   lines.push(`  }`);
-  // ADR-0129: close the handler-body IIFE and merge the response-header
+  // close the handler-body IIFE and merge the response-header
   // channel into whatever response the body produced.
   lines.push(`  })(), __responseHeaders);`);
   lines.push(`})];`);

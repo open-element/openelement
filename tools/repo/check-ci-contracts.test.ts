@@ -295,12 +295,56 @@ Deno.test('ci contract: BFCache runs a blocking Chrome-channel lane', async () =
     block.includes('test:bfcache'),
     'the BFCache lane must run the chrome-bfcache project task',
   );
-  // The official three-browser Site matrix must remain unchanged in the
-  // source gate the candidate runs.
+  // The official three-browser Site matrix is a release-train step: it must
+  // stay wired into gate:release (the trimmed PR layer no longer builds or
+  // drives the Site) and the PR-layer fresh-clone lane must keep producing
+  // the Site E2E sidecar that the required candidate evidence requires.
   const repoConfig = JSON.parse(
     await Deno.readTextFile(join(repoRoot, 'tools/repo/deno.json')),
   ) as { tasks: Record<string, string> };
-  assert(repoConfig.tasks['gate:source'].includes('www#e2e:browsers'));
+  assert(
+    repoConfig.tasks['gate:release'].includes('www#e2e:browsers'),
+    'gate:release must run the three-browser Site E2E matrix',
+  );
+  assert(
+    !repoConfig.tasks['gate:source'].includes('www#e2e:browsers'),
+    'the PR layer must not run the three-browser Site matrix (it is a release-train step)',
+  );
+  const freshClone = jobBlock(workflow, 'fresh-clone');
+  assert(
+    freshClone.includes('candidate:evidence:fresh'),
+    'the fresh-clone lane records the candidate Site E2E sidecar',
+  );
+  const candidateSteps = await Deno.readTextFile(
+    join(repoRoot, 'tools/repo/candidate-steps.ts'),
+  );
+  assert(
+    /name:\s*'task-site-e2e'/.test(candidateSteps) &&
+      /name:\s*'task-site-build'/.test(candidateSteps),
+    'the fresh-clone contract must pin the Site build and Site E2E steps that produce the sidecar',
+  );
+});
+
+Deno.test('ci contract: Site E2E evidence is owned by the fresh-clone lane', async () => {
+  const evidence = await Deno.readTextFile(join(repoRoot, 'tools/repo/candidate-evidence.ts'));
+  assert(
+    /SITE_E2E_REPORT_BUNDLE_PATH\s*=\s*`ci\/fresh-clone\//.test(evidence),
+    'the raw Site E2E report must travel in the fresh-clone evidence tree',
+  );
+  assert(
+    /jobs\.find\(\(\{ job \}\) => job\.job === 'fresh-clone'\)[\s\S]{0,200}siteE2e/.test(evidence),
+    'aggregation must read the Site E2E sidecar from the fresh-clone job',
+  );
+  assert(
+    !/job === 'source-matrix'[\s\S]{0,40}sourceExtras/.test(evidence),
+    'the source-matrix producer must no longer stage Site E2E evidence',
+  );
+  // The trimmed PR gate must not lose the Site proof outright: the release
+  // train still runs the official suite, and the sidecar is recomputed.
+  assert(
+    /auditSiteE2e\(rollup\.siteE2e\)/.test(evidence),
+    'the Site E2E audit must stay wired into the rollup',
+  );
 });
 
 Deno.test('ci contract: SaaS is decoupled from the core candidate gate', async () => {
@@ -311,9 +355,27 @@ Deno.test('ci contract: SaaS is decoupled from the core candidate gate', async (
   for (const token of ['saas:verify', 'apps/saas', 'workers:boundary-check']) {
     assert(!gateSource.includes(token), `gate:source must not include SaaS step ${token}`);
   }
-  // The framework core still proves deploy output through the Router fixture.
-  assert(gateSource.includes('tests/fixtures/router-nitro#proof:workers'));
-  assert(gateSource.includes('tests/fixtures/router-nitro#proof:node'));
+  // The framework core still proves deploy output through the Router fixture —
+  // on the release train, where the deploy-proof steps now live. It must not
+  // be in neither gate.
+  const gateRelease = repoConfig.tasks['gate:release'];
+  for (
+    const step of [
+      'tests/fixtures/router-nitro#proof:workers',
+      'tests/fixtures/router-nitro#proof:node',
+    ]
+  ) {
+    assert(
+      gateRelease.includes(step),
+      `the Router deploy proof '${step}' must remain wired into gate:release`,
+    );
+    assert(!gateSource.includes(step), `'${step}' is a release-train step, not a PR-layer one`);
+  }
+  for (const gate of [gateSource, gateRelease]) {
+    for (const token of ['saas:verify', 'apps/saas', 'workers:boundary-check']) {
+      assert(!gate.includes(token), `no candidate gate may include SaaS step ${token}`);
+    }
+  }
 
   const rootConfig = JSON.parse(await Deno.readTextFile(join(repoRoot, 'deno.json'))) as {
     tasks: Record<string, string>;
@@ -362,4 +424,62 @@ Deno.test('ci contract: partial publish receipts are persisted as recovery recor
     /receipt\.result !== 'published'[\s\S]{0,40}Deno\.exit\(1\)/.test(publish),
     'a partial/failed publish must exit non-zero',
   );
+});
+
+Deno.test('ci contract: the requeue companion re-runs a failed CI run exactly once', async () => {
+  // #1409: webkit fails deterministically PER RUNNER, so the only retry that
+  // can change the outcome is a re-run on fresh runners — and exactly one of
+  // them, or a genuine failure would be retried forever.
+  const requeue = await Deno.readTextFile(
+    join(repoRoot, '.github/workflows/requeue-once.yml'),
+  );
+  assert(
+    /workflow_run:/.test(requeue) && /workflows:\s*\['AutoFlow CI'\]/.test(requeue),
+    'the requeue must trigger on the AutoFlow CI workflow_run event',
+  );
+  assert(
+    /types:\s*\[completed\]/.test(requeue),
+    'the requeue must wait for completion: an in-progress run cannot be re-run',
+  );
+  assert(
+    /conclusion\s*==\s*'failure'/.test(requeue),
+    'only a failed run may be requeued',
+  );
+  assert(
+    /run_attempt\s*==\s*1/.test(requeue),
+    'only attempt 1 may be requeued; a second failure is the verdict',
+  );
+  assert(
+    /rerun-failed-jobs/.test(requeue),
+    'the requeue must call the rerun-failed-jobs endpoint',
+  );
+  // Scope discipline: actions: write is the whole point, and nothing else.
+  const writeScopes = [...requeue.matchAll(/^\s{4,6}([a-z-]+):\s*write\s*$/gm)].map((m) => m[1]);
+  assertEquals(writeScopes, ['actions'], 'only actions may be a write scope');
+  assert(requeue.includes('contents: read'), 'the requeue must keep contents: read');
+});
+
+Deno.test('ci contract: the nightly JFB workflow measures, never gates', async () => {
+  const nightly = await Deno.readTextFile(
+    join(repoRoot, '.github/workflows/jfb-nightly.yml'),
+  );
+  assert(
+    /continue-on-error:\s*true/.test(nightly),
+    'benchmark numbers move with the runner; a nightly measurement must not gate anything',
+  );
+  assert(nightly.includes('contents: read'), 'the nightly benchmark workflow is read-only');
+  assert(
+    /benchmarks\/jfb\/harness\/build\.ts/.test(nightly) &&
+      /benchmarks\/jfb\/harness\/run\.ts/.test(nightly),
+    'the nightly must run the real harness build and runner',
+  );
+  assert(
+    /actions\/upload-artifact@/.test(nightly) && /jfb-evidence\.json/.test(nightly),
+    'the nightly must publish the redacted evidence record as an artifact',
+  );
+  assert(
+    /playwright install[^\n]*chromium/.test(nightly),
+    'the nightly must install the browser the harness drives',
+  );
+  assert(!/pull_request/.test(nightly), 'a nightly measurement never runs on pull requests');
 });

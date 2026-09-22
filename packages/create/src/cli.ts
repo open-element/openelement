@@ -2,8 +2,9 @@
 /**
  * @openelement/create - Minimal project scaffold for openElement framework.
  *
- * Usage (Alpha): deno run --allow-read --allow-write --minimum-dependency-age 0 npm:@openelement/create@alpha my-app
- * (a versionless install resolves the stable 0.43 line)
+ * The install command this CLI documents is built by ./install-command.ts
+ * (#1414): usage output, the guides and the homepage all render that one
+ * string, so the documented command cannot drift from the shipped flags.
  *
  * openElement Architecture: Keep It Simple, Stupid.
  * One template, zero prompts, instant start.
@@ -13,6 +14,7 @@
  */
 
 import { buildTemplates, resolveVersions, validateProjectName } from './template-builder.ts';
+import { createInstallCommand } from './install-command.ts';
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
@@ -37,9 +39,8 @@ function dirnameOf(path: string): string {
 async function main(): Promise<void> {
   const name = Deno.args[0];
   if (!name || name === '--help' || name === '-h') {
-    console.log(
-      'Usage (Alpha): deno run --allow-read --allow-write --minimum-dependency-age 0 npm:@openelement/create@alpha <project-name>',
-    );
+    console.log(`Usage (Alpha): ${createInstallCommand()}`);
+    console.log('(a versionless install resolves the stable 0.43 line)');
     Deno.exit(name ? 0 : 1);
   }
 

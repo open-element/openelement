@@ -5,14 +5,14 @@ English | [简体中文](./README.zh.md)
 OpenElement is a Web Platform-first core for two products: **Element** and **Router**.
 Element compiles JSX-authored Custom Elements into a Part Program used by server serialization, fresh DOM, and existing-DOM claim. Router owns route selection, HTTP semantics, navigation, loaders, actions, and the shared Native/Lit Framework Mode application contract.
 
-The source tree is `1.0.0-alpha.1`, a new public baseline for Element and Router. It is not a compatibility migration from historic 0.x snapshots. npm `latest` is per package: element, create, and ui remain on the 0.43 stable line, while Router's `latest` is the 0.41.0-alpha.6 prerelease. No single version is published for all four packages until a separately admitted release.
+The source tree is `1.0.0-alpha.3`, a new public baseline for Element and Router. It is not a compatibility migration from historic 0.x snapshots. npm `latest` is per package: element, create, and ui remain on the 0.43 stable line, while Router's `latest` is the 0.41.0-alpha.6 prerelease. No single version is published for all four packages until a separately admitted release.
 
 ## Quick Start
 
 Requires **Deno 2.9+**. Create, run, and build:
 
 ```bash
-deno run --allow-read --allow-write --allow-env --allow-net --deny-ffi --no-prompt --minimum-dependency-age 0 npm:@openelement/create@alpha my-app
+deno run -A npm:@openelement/create@alpha my-app
 cd my-app
 deno task dev
 deno task build

@@ -50,6 +50,7 @@ export interface RoutePattern {
   exec(input: string, baseURL?: string): RoutePatternResult | null;
 }
 
+/** One route as the table stores it: the pathname `path`, an optional stable `id` used in match results, optional non-pathname URL component patterns, and the admitted `methods`. */
 export interface RouteRecord {
   path: string;
   id?: string;
@@ -58,6 +59,11 @@ export interface RouteRecord {
   methods?: readonly string[];
 }
 
+/**
+ * One URL matched against the table: the matched `route` record, the identity
+ * reported for it, the decoded path `params`, the parsed `searchParams`, and
+ * the raw URLPattern `patternResult` the match was derived from.
+ */
 export interface RouteMatch<T extends RouteRecord> {
   route: T;
   id: string;
@@ -66,11 +72,17 @@ export interface RouteMatch<T extends RouteRecord> {
   patternResult: RoutePatternResult;
 }
 
+/**
+ * The table's verdict for one request: a `match` (with the resolved method),
+ * `method-not-allowed` (with the `allow` list the caller answers 405 with), or
+ * `not-found` when no path in the table matches at all.
+ */
 export type RouteResolution<T extends RouteRecord> =
   | ({ kind: 'match'; method: string } & RouteMatch<T>)
   | { kind: 'method-not-allowed'; allow: string[] }
   | { kind: 'not-found' };
 
+/** Construction options: a URL prefix every route is mounted under, and whether a trailing slash is significant. */
 export interface RouteTableOptions {
   basePath?: string;
   trailingSlash?: 'strict' | 'ignore';
@@ -141,6 +153,13 @@ function isSafeParamName(name: string): boolean {
   return name !== '__proto__' && name !== 'prototype' && name !== 'constructor';
 }
 
+/**
+ * Immutable route matcher built once from a route list: it freezes every
+ * record, rejects duplicate identities and pathname-owning patterns at
+ * construction, and answers {@link RouteTable.resolve} with a
+ * {@link RouteResolution}. `Pattern` is injectable so callers can pin the
+ * URLPattern implementation.
+ */
 export class RouteTable<T extends RouteRecord> {
   readonly #list: URLPatternList<{ route: T; id: string }>;
   readonly routes: readonly T[];

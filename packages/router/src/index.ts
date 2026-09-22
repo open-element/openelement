@@ -53,3 +53,18 @@ export { ACTION_FETCH_HEADER, PROBLEM_JSON_MEDIA_TYPE } from '@openelement/eleme
 // driver bridge" API as an empty shell (🟡-F).
 export { createRequestContext } from './model.ts';
 export type { CreateRequestContextOptions, OpenElementRequestContext } from './model.ts';
+
+// Framework configuration surface (#1411): `openelement.config.ts` imports
+// defineConfig from here. Host-neutral — this module reads no files and
+// imports no host APIs; loading lives in @openelement/router/vite and
+// @openelement/router/cli/*.
+export {
+  CONVENTION_APP_SHELL_PATH,
+  CONVENTION_APP_SHELL_TAG,
+  CONVENTION_PACKAGE_JSON,
+  CONVENTION_TOKENS_PATH,
+  defineConfig,
+  OPEN_ELEMENT_CONFIG_FILE,
+  OPEN_ELEMENT_CONFIG_KEYS,
+} from './config.ts';
+export type { OpenElementUserConfig } from './config.ts';

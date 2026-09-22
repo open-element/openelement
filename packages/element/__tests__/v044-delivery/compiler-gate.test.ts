@@ -24,14 +24,17 @@ import type { Plugin } from 'vite';
 import { compiledElementPlugin, compileElementModule } from '../../src/internal/compiler/plugin.ts';
 
 interface TransformContext {
-  error(message: string): never;
+  // Mirrors Vite's `this.error(string | RollupError)`: the adapter passes the
+  // structured form since #1413, so the harness normalizes both.
+  error(error: string | { message: string }): never;
 }
 
 function failingContext(): TransformContext & { messages: string[] } {
   const messages: string[] = [];
   return {
     messages,
-    error(message: string): never {
+    error(error: string | { message: string }): never {
+      const message = typeof error === 'string' ? error : error.message;
       messages.push(message);
       throw new Error(message);
     },

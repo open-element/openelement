@@ -11,6 +11,7 @@ import {
   diagramOutput,
 } from '../../site-ui/diagrams.ts';
 import { alphaLineNote, COMMON_PUBLISHED_NOTE, REGISTRY_NOTE } from '../../data/version.ts';
+import { installCommand } from '../../data/_generated-install-command.ts';
 
 const content = {
   en: {
@@ -264,6 +265,9 @@ export default definePage(PageHome, {
     return {
       ...copy,
       ...homeStrings(resolved),
+      // The begin-scene command is the create CLI's canonical string (#1414):
+      // the page renders the generated module, never a copy of the flags.
+      beginCommand: installCommand,
       registryNote: REGISTRY_NOTE,
       commonVersionNote: COMMON_PUBLISHED_NOTE(resolved),
       marqueeText: marquee + marquee,

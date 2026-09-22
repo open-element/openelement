@@ -35,8 +35,9 @@ publish; a missing environment fails the job closed instead of publishing:
   Publishing via the workflow's `id-token: write` OIDC claim. The publish
   step passes `--provenance` only under `GITHUB_ACTIONS=true`, so local runs
   can never mint registry attestations.
-- `publish:npm` runs only after `release:check` (packed qualification,
-  `publish:npm:dry-run`, and the read-only registry-state check) on the exact
+- `publish:npm` runs only after `release:check` (the release train
+  `tools/repo#gate:release`, packed qualification, `publish:npm:dry-run`, and
+  the read-only registry-state check) on the exact
   `candidate_sha`, and re-verifies `git rev-parse HEAD == candidate_sha` after
   checkout.
 - `publish:npm` publishes each package, then verifies every published package's exact version and dist-tag against the registry (continuity is checked per package, not just the first), and writes `.artifacts/release-receipt.json` bound to the exact SHA, tree, and tarball hashes. A partial publish is recorded as `partial` and fails the job instead of reporting success; a re-run safely resumes because already-published versions are skipped. `latest` is never moved onto a prerelease. The workflow uploads `.artifacts/release-receipt.json` with `if: always()` as a recovery record (successful/partial/failed), bound to the candidate SHA and run id/attempt; the receipt is a recovery aid, not proof of a successful publish, and post-publish consumers run only after a complete publish plus registry verification.
@@ -66,11 +67,38 @@ publish; a missing environment fails the job closed instead of publishing:
   optional/non-blocking Bun compatibility signal: it runs with
   `continue-on-error: true`, is not a required check, and never gates the
   candidate or the release graph. The independently governed `apps/saas`
-  application is decoupled from the candidate: `tools/repo#gate:source` and
-  candidate evidence contain no SaaS step, and `saas-optional` runs with
+  application is decoupled from the candidate: neither `tools/repo#gate:source`
+  nor `tools/repo#gate:release` nor candidate evidence contains a SaaS step,
+  and `saas-optional` runs with
   `continue-on-error: true`, is not required, and never sets `requiredOk`
   false. Scope is explicit at the task level: `deno task verify:core` is the
   Element/Router Alpha candidate verification, `deno task verify` is the full
   repository verification (including SaaS). Post-publish
   (`published-consumers.yml`) verifies the registry afterward and never
   substitutes for the pre-publish matrix.
+
+## Two-tier gates: PR layer and release train
+
+The candidate gate is split so a pull request gets fast, honest feedback
+without giving up any release-time proof.
+
+- `tools/repo#gate:source` — the PR layer (10 steps): `generate:all`,
+  `typecheck`, the Element and Router unit suites, markdown lint, the
+  content-dates timing check, the public-interface snapshot, the
+  request-time fixture gate, the Element browser gate (Chromium) and the
+  packed gate. This is what `AutoFlow CI` runs on every pull request; a
+  green `deno task gate:ci` reproduces it locally.
+- `tools/repo#gate:release` — the release train: Site build and every `www`
+  check, coverage, all deploy/framework fixture gates, the boundary and
+  provenance scans, the generator/floor/classification gates, the
+  three-engine Site E2E suite and the full three-engine Element browser
+  conformance matrix. `deno task release:check` runs it (plus registry
+  truth, the packed gate, and the publish dry-run) before anything is
+  published, so every trimmed step is still a precondition of release.
+
+The candidate's Site E2E proof is produced by the PR-layer `fresh-clone`
+lane, which stages its sidecar and raw Playwright report into the candidate
+evidence; the release job still refuses to proceed unless that evidence
+validates against the exact candidate SHA. Trimming the PR layer therefore
+changes **when** the heavier proofs run, never whether they are required to
+ship.

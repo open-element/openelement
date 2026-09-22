@@ -1,0 +1,70 @@
+name: JFB benchmark (nightly)
+
+# Local js-framework-benchmark harness (#1219) on a schedule.
+#
+# This workflow is a MEASUREMENT, never a gate: benchmark numbers move with the
+# runner's CPU and neighbours, so it must not fail a change or block a release.
+# It publishes the redacted evidence record as an artifact so a claim about a
+# change can be compared against a same-kind run.
+#
+# The browser JFB harness is not part of autoflow-ci (no browsers there, and a
+# full run takes minutes); `deno task bench` covers the deterministic
+# self-checks in PR CI.
+on:
+  schedule:
+    # Nightly, off the hour to avoid the busiest runner window.
+    - cron: '41 3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: jfb-nightly
+  cancel-in-progress: false
+
+jobs:
+  jfb:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    # Non-blocking by construction: measurement output, never a verdict.
+    continue-on-error: true
+    steps:
+      # v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-deno-workspace
+      - name: Install benchmark browsers
+        run: ./node_modules/.bin/playwright install chromium
+      - name: Build every implementation bundle
+        run: |
+          set -euo pipefail
+          deno run --allow-read --allow-write --allow-net --allow-env --allow-run --allow-sys \
+            benchmarks/jfb/harness/build.ts > /tmp/jfb-build.log
+          # The runner's only input is the resolved build directory, so read it
+          # from the report instead of pattern-matching human-readable output.
+          deno eval '
+            const raw = await Deno.readTextFile("/tmp/jfb-build.log");
+            const report = JSON.parse(raw.slice(raw.indexOf("{")));
+            await Deno.writeTextFile("/tmp/jfb-build-dir.txt", report.buildDir);
+          '
+          test -s /tmp/jfb-build-dir.txt
+          grep -c '"built": true' /tmp/jfb-build.log
+      - name: Measure
+        run: |
+          deno run --allow-read --allow-write --allow-net --allow-env --allow-run --allow-sys \
+            benchmarks/jfb/harness/run.ts \
+            --build-dir "$(cat /tmp/jfb-build-dir.txt)" \
+            --out .artifacts/jfb-evidence.json
+      - name: Upload JFB evidence
+        if: always()
+        # v7.0.1
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: jfb-evidence-${{ github.run_id }}
+          path: |
+            .artifacts/jfb-evidence.json
+            /tmp/jfb-build.log
+          if-no-files-found: ignore
+          retention-days: 14

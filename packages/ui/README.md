@@ -3,6 +3,8 @@
 > Experimental product: maintained in the OpenElement repository, outside the
 > 1.0 stable API promise. APIs may change without a migration path during Alpha.
 
+Docs and guides: <https://openelement.org>.
+
 First-party dogfood and reference UI package for OpenElement.
 
 Element and Router are the two core products; Router includes Framework Mode.
@@ -15,10 +17,9 @@ prove the OpenElement authoring model with shadow/DSD output, explicit light DOM
 where needed, and island upgrade. UI is a supporting reference surface, not a
 separate application-framework promise.
 
-As of v0.42.0-alpha.10, there is **no Linear compatibility layer**. The legacy
-`open-*-linear` components and `linear-token-sheet` token sheet have been
-removed from the public surface. Use the canonical Open Props components and
-`@openelement/ui/open-props-tokens` instead.
+There is **no Linear compatibility layer**: the `open-*-linear` components and
+the `linear-token-sheet` token sheet are not part of the public surface. Use the
+canonical Open Props components and `@openelement/ui/open-props-tokens` instead.
 
 ## Install
 
@@ -56,7 +57,7 @@ Tokens contain shared style values and classes and import no components.
 Primitives may consume tokens but never composites. Composites may compose
 primitives and tokens. Application routing and document navigation belongs to
 `@openelement/router`; the site layout component (`OpenLayout`) lives in the
-reference site (`www/app/islands/open-layout.tsx`).
+reference site that consumes this package, not in it.
 
 ## `open-code-block` syntax highlighting
 
@@ -80,16 +81,18 @@ button (and retries briefly while deferred scripts load).
 </open-code-block>
 ```
 
-The reference site wires the same scripts through the `inject` option in
-`www/vite.config.ts`.
+The reference site wires the same scripts through its Vite `inject` option.
 
 ## Design tokens
 
-`src/open-props-tokens.ts` is **generated — do not edit**. Regenerate with:
+`src/open-props-tokens.ts` is **generated — do not edit**. Regenerate from
+the package directory with:
 
 ```bash
-deno task --cwd packages/ui generate:ui-tokens
+deno task generate:ui-tokens
 ```
+
+The drift gate for the same task runs as `ui-tokens:check`.
 
 Sources:
 
@@ -156,7 +159,11 @@ manifest; the per-component JSDoc is the source of truth for those.
 @openelement/ui/open-dropdown
 @openelement/ui/open-tabs
 @openelement/ui/open-props-tokens
+@openelement/ui/open-props-tokens.js   (legacy alias of the previous entry)
 ```
+
+The last entry is a compatibility alias kept for import maps written against the
+`.js` form; new code uses `@openelement/ui/open-props-tokens`.
 
 ## License
 
