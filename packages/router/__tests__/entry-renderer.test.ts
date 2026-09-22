@@ -978,6 +978,13 @@ Deno.test('renderEntry: ADR-0121 hardening is present in the action codegen', ()
   assertStringIncludes(code, 'OPEN_ELEMENT_DISABLE_CSRF');
   assertStringIncludes(code, 'Cross-site form submission rejected');
   assertStringIncludes(code, 'loadContext.env');
+  // #1382: the browser-shaped-form residual window is fail-closed in the same
+  // dialect — a urlencoded/multipart body whose only browser evidence is a
+  // form navigation (Upgrade-Insecure-Requests or a text/html Accept) must
+  // carry an Origin.
+  assertStringIncludes(code, "c.req.header('upgrade-insecure-requests')");
+  assertStringIncludes(code, "contentType.indexOf('multipart/form-data') === 0");
+  assertStringIncludes(code, "accept.indexOf('text/html') !== -1");
 
   // #542: named-action dispatch is own-key gated (prototype keys are 404).
   assertStringIncludes(code, 'Object.prototype.hasOwnProperty.call(namedActions, actionName)');
