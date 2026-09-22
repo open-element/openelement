@@ -6,7 +6,7 @@
  * Colors use semantic tokens and respond to theme changes; the light-theme
  * warn/danger/tip backgrounds use tuned rgba tints on top of them.
  *
- * v0.44: compiled authoring (ADR-0143). The `type` attribute drives styling
+ * Compiled authoring. The `type` attribute drives styling
  * (:host([type=...])); the label header is a compiled text sink hidden via a
  * computed flag when no label is set.
  *

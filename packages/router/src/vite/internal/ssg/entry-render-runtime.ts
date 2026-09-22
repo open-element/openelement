@@ -11,7 +11,7 @@
  * page-definition extraction shared by the Hono handlers and the SSG render
  * pipeline.
  *
- * v0.44 (ADR-0143): __ssr renders one compiled element class to deterministic
+ * __ssr renders one compiled element class to deterministic
  * HTML through the SYNC compiled renderDsd(); page markup arrives as HTML
  * (there is no runtime VNode path). Nested custom-element hosts inside a
  * compiled page programs are composed by Element's canonical server
@@ -240,7 +240,7 @@ export function renderRuntimeHelpers(
   lines.push('}');
   lines.push('');
 
-  // ADR-0129: merge the loader/action response-header channel into the
+  // Merge the loader/action response-header channel into the
   // response. Channel entries are appended; framework protocol headers
   // always win when already set — the channel cannot override the protocol.
   lines.push(

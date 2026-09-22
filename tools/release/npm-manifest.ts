@@ -16,12 +16,84 @@ const REPOSITORY = {
   url: 'git+https://github.com/open-element/openelement.git',
 };
 
-const KEYWORDS = ['openelement', 'web-components', 'ssg', 'framework', 'deno'];
-const PACKAGE_KEYWORDS: Record<string, string[]> = {
-  '@openelement/ui': [...KEYWORDS, 'experimental'],
-};
 const HOMEPAGE = 'https://openelement.org';
 const BUGS = 'https://github.com/open-element/openelement/issues';
+
+/**
+ * Per-package keyword sets (#1412): npm search relevance is per artifact, so
+ * each package names its own surface instead of sharing one framework list.
+ */
+const PACKAGE_KEYWORDS: Record<string, string[]> = {
+  '@openelement/element': [
+    'openelement',
+    'web-components',
+    'custom-elements',
+    'typescript',
+    'signals',
+    'ssg',
+  ],
+  '@openelement/router': [
+    'openelement',
+    'web-components',
+    'router',
+    'ssg',
+    'vite',
+    'nitro',
+  ],
+  '@openelement/create': [
+    'openelement',
+    'web-components',
+    'scaffolding',
+    'generator',
+    'starter',
+  ],
+  '@openelement/ui': [
+    'openelement',
+    'web-components',
+    'ui',
+    'design-tokens',
+    'open-props',
+    'experimental',
+  ],
+};
+
+/**
+ * Host floors (#1412). `node` is the Alpha target the repository actually
+ * exercises: ADR-0154 names Node 24, and CI runs the packed consumers on Node
+ * 24 plus a 24/26 serve matrix. `deno` is the pinned, documented, CI-verified
+ * Deno floor (`.dvmrc`, README) and is declared only by the two packages whose
+ * supported toolchain is Deno-driven today: Router's `./vite` + `./cli/*`
+ * subpaths call Deno APIs at build time (#1387 tracks the portable-host
+ * migration) and Create's CLI is a `deno run` program. npm ignores unknown
+ * engine keys, so the `deno` entry documents the requirement without
+ * constraining npm installs.
+ */
+const ENGINES: Record<string, Record<string, string>> = {
+  '@openelement/element': { node: '>=24' },
+  '@openelement/router': { node: '>=24', deno: '>=2.9' },
+  '@openelement/create': { deno: '>=2.9' },
+  '@openelement/ui': { node: '>=24' },
+};
+
+/**
+ * Bundler tree-shaking contract (#1412). Element, Router, and UI modules
+ * declare no import-time global writes (no module-scope `globalThis`/
+ * `window`/`document`/`customElements` assignment in their shipped sources),
+ * so an unused import may be dropped. Create's `./src/cli.js` IS the program —
+ * it scaffolds on import — so that module stays flagged.
+ */
+const SIDE_EFFECTS: Record<string, false | string[]> = {
+  '@openelement/element': false,
+  '@openelement/router': false,
+  '@openelement/create': ['./src/cli.js'],
+  '@openelement/ui': false,
+};
+
+/**
+ * The single description source for published metadata (#1412): the packed
+ * `description` is written from here, never from a package `deno.json`, so one
+ * artifact has one description.
+ */
 const PACKAGE_DESCRIPTIONS: Record<string, string> = {
   '@openelement/router':
     'Routing, application runtime, and lifecycle tooling for the OpenElement framework.',
@@ -30,6 +102,31 @@ const PACKAGE_DESCRIPTIONS: Record<string, string> = {
   '@openelement/ui':
     'Experimental reference Web Components and UI primitives built on the OpenElement runtime.',
 };
+
+/** The npm facade metadata the coordinator writes into a packed manifest. */
+export interface PackedMetadata {
+  description?: string;
+  keywords?: string[];
+  homepage: string;
+  engines?: Record<string, string>;
+  sideEffects?: false | string[];
+}
+
+/**
+ * Expected published metadata for a package, and the single source the
+ * coordinator writes from. tools/release/pack-surface.ts re-reads the packed
+ * tarball against this, so an added package cannot ship half-declared
+ * metadata.
+ */
+export function packedMetadata(name: string): PackedMetadata {
+  return {
+    description: PACKAGE_DESCRIPTIONS[name],
+    keywords: PACKAGE_KEYWORDS[name],
+    homepage: HOMEPAGE,
+    engines: ENGINES[name],
+    sideEffects: SIDE_EFFECTS[name],
+  };
+}
 
 const CREATE_BIN = {
   'openelement-create': './src/cli.js',
@@ -50,6 +147,8 @@ export const APPROVED_MANIFEST_MUTATIONS: ReadonlySet<string> = new Set([
   'license',
   'description',
   'keywords',
+  'engines',
+  'sideEffects',
   'bin',
   'dependencies',
   'peerDependencies',
@@ -292,13 +391,16 @@ export function applyPackageJsonOverrides(
   pkg: PackageInfo,
   pkgJson: Record<string, unknown>,
 ): void {
+  const metadata = packedMetadata(pkg.name);
   pkgJson.type = 'module';
   pkgJson.repository = REPOSITORY;
-  pkgJson.homepage = HOMEPAGE;
+  pkgJson.homepage = metadata.homepage;
   pkgJson.bugs = BUGS;
   pkgJson.license = 'MIT';
-  pkgJson.description = PACKAGE_DESCRIPTIONS[pkg.name];
-  pkgJson.keywords = PACKAGE_KEYWORDS[pkg.name] ?? KEYWORDS;
+  pkgJson.description = metadata.description;
+  pkgJson.keywords = metadata.keywords;
+  if (metadata.engines) pkgJson.engines = metadata.engines;
+  if (metadata.sideEffects !== undefined) pkgJson.sideEffects = metadata.sideEffects;
   if (pkg.name === '@openelement/create') {
     pkgJson.bin = CREATE_BIN;
   }

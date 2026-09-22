@@ -23,6 +23,12 @@ export interface HydrationHint {
   hydrate?: HydrationStrategy;
 }
 
+/**
+ * The public result of one `renderDsd()` call: the serialized DSD `html`, the
+ * render errors collected while composing it (empty on success), the render
+ * metrics for the root component, and the hydration hints the client
+ * scheduler reads to upgrade islands.
+ */
 export interface RenderOutput {
   html: string;
   errors: RenderError[];
@@ -39,6 +45,11 @@ export interface DsdRenderMetrics {
   nestingDepth: number;
 }
 
+/**
+ * The build's admission verdict for one discovered tag: where the declaration
+ * lives (`modulePath`), how it was discovered (`source`), which render path it
+ * is admitted to, and the reason recorded for the manifest.
+ */
 export interface SsrAdmissionDecision {
   tagName: string;
   /**

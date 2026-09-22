@@ -17,6 +17,9 @@ const SIGNAL_SRC_DIR = new URL('../src/internal/signal/', import.meta.url);
 /** Every source file reachable from the package entry points that is public API. */
 const PUBLIC_SOURCES = [
   'index.ts',
+  // #1416: the shared export list both entries re-export.
+  'public-surface.ts',
+  'client-only.ts',
   'authoring.ts',
   'build-utils.ts',
   'compiler.ts',

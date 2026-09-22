@@ -1,13 +1,13 @@
 /**
  * GENERATED — do not edit; source: open-props@1.7.23 (MIT) + semantic-tokens.css.
- * Regenerate with: deno task --cwd packages/ui generate:ui-tokens
+ * Regenerate with: deno task generate:ui-tokens
  */
 
 import { StyleSheet, type StyleSheetLike } from '@openelement/element';
 
 const OPEN_PROPS_TOKEN_CSS = `/**
  * GENERATED — do not edit; source: open-props@1.7.23 (MIT) + semantic-tokens.css.
- * Regenerate with: deno task --cwd packages/ui generate:ui-tokens
+ * Regenerate with: deno task generate:ui-tokens
  */
 
 /**
@@ -17,8 +17,8 @@ const OPEN_PROPS_TOKEN_CSS = `/**
  * themes, the :host structural fallback, and the CJK font stacks. Tokens that
  * match upstream open-props verbatim (gray ramp, indigo-6, border sizes,
  * font weights, two line-heights) are NOT listed here — they are injected at
- * the @upstream-tokens anchor below by packages/ui/tools/generate-ui-tokens.ts
- * (deno task --cwd packages/ui generate:ui-tokens), which reads them from the real
+ * the @upstream-tokens anchor below by the ui tokens generator
+ * (deno task generate:ui-tokens), which reads them from the real
  * open-props npm dependency. Do not re-add them here: the generator fails on
  * any duplication.
  *

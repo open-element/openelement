@@ -1,5 +1,5 @@
 /**
- * @openelement/element — ErrorBoundary (ADR-0053 Layer 2, 0.44 compiled model).
+ * @openelement/element — ErrorBoundary (compiled element model).
  *
  * Public error-boundary contract implemented over the compiled kernel's
  * CompiledErrorBoundary service (internal/compiled/runtime/error-boundary.ts).
@@ -26,7 +26,7 @@ import type { OpenElementError } from './internal/core/index.ts';
 /** Base class for elements that catch descendant render/hydration errors and apply a retry policy. */
 export abstract class ErrorBoundary extends OpenElement {
   /**
-   * ADR-0053 Layer 2: marks this component as an error boundary. The kernel
+   * Marks this component as an error boundary. The kernel
    * wires an unbounded-budget CompiledErrorBoundary for classes carrying this
    * flag; the user-facing retry policy lives on this class (maxRetries).
    */

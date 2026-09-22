@@ -5,11 +5,11 @@
  * The evidence system never re-runs the suite in the aggregation step:
  *
  *   fast-checks  -> job result (fmt/lint/markdown/typecheck + OSS scanners)
- *   source-matrix-> gate:source + permission/FFI scans
+ *   source-matrix-> gate:source (the fast PR-layer gate) + permission/FFI scans
  *   packed       -> gate:packed + publish:npm:dry-run + tarball hashes +
  *                   structured pack diagnostics
  *   fresh-clone  -> clean clone, empty DENO_DIR/npm cache, install, check,
- *                   source gate, release check
+ *                   source gate, packed gate, Site build + official Site E2E
  *
  * Each `--job` run writes `<out>/result.json` plus `<out>/logs/*.log`; the
  * result records command, exit code, result, log path, and the log SHA-256.
@@ -19,8 +19,9 @@
  * `--validate` re-checks a written artifact (SHA/tree, log presence + hashes,
  * manifest hashes, artifact age) without trusting its contents.
  *
- * Site E2E proof travels as data, not log lines: the source-matrix producer
- * stages the raw `.artifacts/site-e2e-report.json` bytes next to its
+ * Site E2E proof travels as data, not log lines: the fresh-clone lane owns it
+ * (the fast source gate no longer drives the Site) and stages the raw
+ * `.artifacts/site-e2e-report.json` bytes from inside the clone next to its
  * result.json (the sidecar stays in `extras.siteE2e`), and both aggregation
  * and validation recompute the summary + SHA-256 from those bytes and
  * require the sidecar's `candidateSha` to equal the candidate commit. A
@@ -275,10 +276,10 @@ export function packedRollupFromLog(logText: string): {
 /** Partial sidecar shape as embedded in the aggregated evidence bundle. */
 export type SiteE2eRollup = Partial<SiteE2eResult>;
 
-/** Raw Playwright report file name inside the source-matrix evidence dir. */
+/** Raw Playwright report file name inside the fresh-clone evidence dir. */
 export const SITE_E2E_REPORT_FILE = 'site-e2e-report.json';
 /** Raw report path relative to the aggregated evidence root. */
-export const SITE_E2E_REPORT_BUNDLE_PATH = `ci/source-matrix/${SITE_E2E_REPORT_FILE}`;
+export const SITE_E2E_REPORT_BUNDLE_PATH = `ci/fresh-clone/${SITE_E2E_REPORT_FILE}`;
 
 /** Order-insensitive deep equality (map insertion order is not evidence). */
 function deepEqualUnordered(a: unknown, b: unknown): boolean {
@@ -678,22 +679,36 @@ async function packExtras(
   };
 }
 
-async function sourceExtras(
-  _sourceSteps: StepResult[],
+/**
+ * Stage the Site E2E proof recorded inside a fresh clone.
+ *
+ * The official Site E2E suite belongs to the PR-layer fresh-clone lane: the
+ * trimmed source gate no longer builds or drives the Site. The runner writes
+ * a structured sidecar (Playwright JSON summary) plus the raw Playwright
+ * report inside the clone; the raw bytes are staged next to this job's
+ * result.json so aggregation and validation recompute the sidecar instead of
+ * trusting it. A lazy probe cannot fake the proof: a lane that exits 0
+ * without a reportable sidecar fails closed here.
+ */
+async function stageCloneSiteE2e(
+  cloneDir: string,
   outDir: string,
-): Promise<Record<string, unknown>> {
-  // The Site E2E task writes a structured sidecar (Playwright JSON summary),
-  // so unrelated fixture output can never fake the browser proof. The raw
-  // report bytes are staged next to this job's result.json so aggregation
-  // and validation can recompute the sidecar instead of trusting it.
+  expectedCommit: string,
+): Promise<SiteE2eRollup> {
+  const artifacts = join(cloneDir, '.artifacts');
   let result: SiteE2eRollup;
   let reportBytes: Uint8Array;
   try {
-    const raw = await Deno.readTextFile(join(repoRoot, '.artifacts/site-e2e-result.json'));
-    result = JSON.parse(raw) as SiteE2eRollup;
-    reportBytes = await Deno.readFile(join(repoRoot, '.artifacts', SITE_E2E_REPORT_FILE));
-  } catch {
-    return { siteE2e: { ran: false } };
+    result = JSON.parse(
+      await Deno.readTextFile(join(artifacts, 'site-e2e-result.json')),
+    ) as SiteE2eRollup;
+    reportBytes = await Deno.readFile(join(artifacts, SITE_E2E_REPORT_FILE));
+  } catch (cause) {
+    throw new Error(
+      `fresh clone did not produce the Site E2E sidecar and raw report the candidate proof requires: ${
+        String(cause)
+      }`,
+    );
   }
   // Fail closed at record time: a sidecar that does not recompute from the
   // raw report bytes, or that belongs to another commit, is never recorded.
@@ -701,14 +716,14 @@ async function sourceExtras(
     ...auditSiteE2e(result),
     ...await collectSiteE2eRecomputeFailures(result, {
       readReport: () => Promise.resolve(reportBytes),
-      expectedSha: expectedSha(),
+      expectedSha: expectedCommit,
     }),
   ];
   if (failures.length > 0) {
     throw new Error(`Site E2E evidence is not recordable:\n${failures.join('\n')}`);
   }
   await Deno.writeFile(join(outDir, SITE_E2E_REPORT_FILE), reportBytes);
-  return { siteE2e: result };
+  return result;
 }
 
 /** Role mapping for workspace jobs: the repository root is $SOURCE. */
@@ -745,11 +760,10 @@ async function recordJob(job: Exclude<JobName, 'fresh-clone'>, outDir: string): 
     );
   }
   await runCleanProof('after');
-  const extras = job === 'packed'
-    ? await packExtras(steps, outDir)
-    : job === 'source-matrix'
-    ? await sourceExtras(steps, outDir)
-    : undefined;
+  // Site E2E proof is owned by the fresh-clone lane (the trimmed source gate
+  // does not build or drive the Site), so this producer records no siteE2e
+  // key at all — a missing key is rejected at aggregation, never faked here.
+  const extras = job === 'packed' ? await packExtras(steps, outDir) : undefined;
   const result: JobResult = {
     schemaVersion: CANDIDATE_EVIDENCE_SCHEMA_VERSION,
     job,
@@ -795,6 +809,9 @@ async function recordFreshClone(outDir: string): Promise<void> {
     [cloneDir, EVIDENCE_ROLES.clone],
   ];
   const commands: FreshCloneCommand[] = [];
+  // Staged from inside the clone before it is deleted; the sidecar is the
+  // candidate's Site proof and this lane is where it is produced.
+  let siteE2e: SiteE2eRollup | undefined;
   const run = async (
     name: string,
     roleArgv: string[],
@@ -853,17 +870,19 @@ async function recordFreshClone(outDir: string): Promise<void> {
     await runCleanProof('before');
     await run('install', freshCloneCommands.install(denoExe), cloneDir, isolatedEnv);
     await run('task-check', freshCloneCommands.check(denoExe), cloneDir, isolatedEnv);
-    // The real source gate (includes Site E2E) and the real release check
-    // (registry check + packed gate + publish dry-run) — no duplicated
-    // packed/dry-run steps, since release:check already owns them.
+    // The PR-layer lane: the fresh clone proves the fast source gate and the
+    // packed gate. The release train (registry read, gate:release, packed
+    // gate, publish dry-run) belongs to the release workflow, not to every
+    // PR — see docs/maintainers/releasing.md.
     await run('task-gate-source', freshCloneCommands.gateSource(denoExe), cloneDir, isolatedEnv);
-    await run(
-      'task-release-check',
-      freshCloneCommands.releaseCheck(denoExe),
-      cloneDir,
-      isolatedEnv,
-    );
+    await run('task-gate-packed', freshCloneCommands.gatePacked(denoExe), cloneDir, isolatedEnv);
+    // This lane owns the candidate's Site proof: build the Site in the clone
+    // and drive the official Playwright suite there, so the recorded sidecar
+    // describes the same exact SHA/tree as every other job.
+    await run('task-site-build', freshCloneCommands.siteBuild(denoExe), cloneDir, isolatedEnv);
+    await run('task-site-e2e', freshCloneCommands.siteE2e(denoExe), cloneDir, isolatedEnv);
     await runCleanProof('after');
+    siteE2e = await stageCloneSiteE2e(cloneDir, outDir, sha);
   } finally {
     await Deno.remove(tmpRoot, { recursive: true }).catch(() => undefined);
   }
@@ -886,7 +905,7 @@ async function recordFreshClone(outDir: string): Promise<void> {
       logSha256: command.logSha256,
     })),
     toolVersions: await toolVersions(),
-    extras: { isolation: FRESH_CLONE_ISOLATION },
+    extras: { isolation: FRESH_CLONE_ISOLATION, siteE2e: siteE2e ?? { ran: false } },
     generatedAt: new Date().toISOString(),
   };
   await Deno.writeTextFile(join(outDir, 'result.json'), JSON.stringify(result, null, 2) + '\n');
@@ -1164,6 +1183,13 @@ async function auditJob(
   if (job === 'fresh-clone') {
     const isolation = isRecord(rawJob.extras) ? rawJob.extras.isolation : undefined;
     failures.push(...auditFreshCloneIsolation(isolation).map((failure) => `${job}: ${failure}`));
+    // This lane owns exactly two keys: the isolation disclosure and the Site
+    // E2E sidecar it produced. Any other key is an unknown extra and fails
+    // closed, so a lane cannot smuggle unaccounted proof into its record.
+    if (isRecord(rawJob.extras)) {
+      const extra = unknownKeys(rawJob.extras, ['isolation', 'siteE2e']);
+      if (extra.length > 0) failures.push(`${job}: unknown extras fields: ${extra.join(', ')}`);
+    }
   } else if (job === 'packed') {
     // ponytail: bundle mode checks shape only; final archive bytes are
     // re-verified against the top-level maps (upgrade: byte-check here too
@@ -1662,16 +1688,16 @@ async function aggregate(inputDir: string, output: string): Promise<void> {
   }
 
   const packed = jobs.find(({ job }) => job.job === 'packed') as LoadedJob;
-  const source = jobs.find(({ job }) => job.job === 'source-matrix') as LoadedJob;
+  const fresh = jobs.find(({ job }) => job.job === 'fresh-clone') as LoadedJob;
   const rollup = {
     artifactCheck: packed.job.extras?.artifactCheck === true,
     consumers: (packed.job.extras?.consumers ?? []) as string[],
-    siteE2e: (source.job.extras?.siteE2e ?? {}) as SiteE2eRollup,
+    siteE2e: (fresh.job.extras?.siteE2e ?? {}) as SiteE2eRollup,
   };
   const rollupFailures = collectRollupFailures(rollup);
   rollupFailures.push(
     ...await collectSiteE2eRecomputeFailures(rollup.siteE2e, {
-      readReport: () => source.read(SITE_E2E_REPORT_FILE),
+      readReport: () => fresh.read(SITE_E2E_REPORT_FILE),
       expectedSha: expected,
     }),
   );

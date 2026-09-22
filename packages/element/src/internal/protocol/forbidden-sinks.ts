@@ -16,7 +16,7 @@
  * - `FORBIDDEN_ATTRIBUTE_NAMES`: attribute names that must never be a static
  *   attribute or an `attr`/`bool` sink. `srcdoc` smuggles a full HTML
  *   document past attribute escaping; `innerHTML` is admissible only through
- *   the dedicated trusted-HTML `html` Part (ADR-0150), never as a plain
+ *   the dedicated trusted-HTML `html` Part, never as a plain
  *   attribute name.
  * - `FORBIDDEN_PROPERTY_NAMES`: `prop` sink names that would re-prototype or
  *   re-construct the target element (prototype-pollution primitives).

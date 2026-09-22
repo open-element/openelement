@@ -160,6 +160,12 @@ function normalizeI18nOptions(
   };
 }
 
+/**
+ * The build's shared mutable state: the resolved framework options, the
+ * phase-1/phase-3 metadata, the sub-plugin data slots, and the production plan
+ * and artifact records the release and deployment adapters read. One instance
+ * is threaded through every adapter plugin for a build.
+ */
 export class OpenElementBuildContext {
   /** Canonical production plan computed once after Phase 1 discovery. */
   buildPlan: BuildPlan | null = null;
@@ -211,7 +217,7 @@ export class OpenElementBuildContext {
   /** Mark a phase as complete, enforcing ordering constraints. */
   markComplete(phase: Phase): void {
     // Phase 2 (client build) requires Phase 1 (route scanning) only.
-    // Phase 2 runs after Phase 3 (SSG) per ADR 0023; it does NOT require Phase 3.
+    // Phase 2 runs after Phase 3 (SSG); it does NOT require Phase 3.
     if (phase === 2 && !this.completed.has(1)) {
       throw new Error('Phase 2 requires Phase 1 to be completed first');
     }

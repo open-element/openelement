@@ -1,7 +1,7 @@
 /**
  * morph-align.ts - id-keyed tree alignment (morphChildren/morphNode), scoped
  * morph (data-open-region-target), and the morphDocument orchestration for
- * the enhance-client runtime (ADR-0120/0121 §8-9). Split from
+ * the enhance-client runtime. Split from
  * enhance-client.ts (#908).
  */
 
@@ -131,7 +131,7 @@ export function createMorphAlign(deps: MorphAlignDeps): MorphAlign {
   }
 
   function morphChildren(oldParent: Node, newParent: Node): void {
-    // ADR-0121 §9 (#554, rewritten for #580): an ordered walk. Old children
+    // An ordered walk (#554, rewritten for #580). Old children
     // are indexed by id (id'd nodes are consumed ONLY by an id match); each
     // new child in order matches by id else structurally ahead of the
     // reference point; the match is morphed and MOVED into position (moves
@@ -298,7 +298,7 @@ export function createMorphAlign(deps: MorphAlignDeps): MorphAlign {
     form: HTMLFormElement | null,
     regionName: string | null,
   ): boolean {
-    // ADR-0121 §8 (#553): the form scopes the morph — data-open-region-target
+    // The form scopes the morph — data-open-region-target
     // (submitter wins over the form), else its nearest ancestor region, else
     // the whole body. A scope missing on either side is a full navigation,
     // never a silent full morph.

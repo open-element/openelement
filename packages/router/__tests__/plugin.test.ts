@@ -24,17 +24,25 @@ type HookRecord = {
   load?: unknown;
   resolveId?: unknown;
 };
-type TestConfigHook = (config: Record<string, unknown>) => unknown;
+type TestConfigHook = (
+  config: Record<string, unknown>,
+  env?: { command: 'build' | 'serve'; mode: string },
+) => unknown;
 type TestLoadHook = (id: string) => unknown;
 type TestResolveIdHook = (id: string) => unknown;
 
-function callConfig(
+/**
+ * #1411: the core `config` hook is async — it loads `openelement.config.ts`
+ * through Vite's config loader — so every caller awaits it.
+ */
+async function callConfig(
   plugin: unknown,
   config: Record<string, unknown> = {},
-): Record<string, unknown> {
+): Promise<Record<string, unknown>> {
   const hook = (plugin as HookRecord).config;
   assertExists(hook, 'config hook must exist');
-  return (hook as TestConfigHook)(config) as Record<string, unknown>;
+  const result = await (hook as TestConfigHook)(config, { command: 'build', mode: 'production' });
+  return result as Record<string, unknown>;
 }
 
 function callResolveId(plugin: unknown, id: string): unknown {
@@ -88,7 +96,7 @@ async function renderVirtualEntry(
     const plugins = createOpenPlugin(options);
     const corePlugin = plugins.find((p) => p.name === 'open:core')!;
     const virtualPlugin = plugins.find((p) => p.name === 'open:virtual-entry')!;
-    callConfig(corePlugin);
+    await callConfig(corePlugin);
     const configResolved = (corePlugin as { configResolved?: unknown }).configResolved;
     assertExists(configResolved, 'configResolved hook must exist');
     (configResolved as (config: never) => void)({} as never);
@@ -276,20 +284,20 @@ Deno.test('openPlugin: core plugin has buildStart hook', () => {
   assertEquals(typeof corePlugin.buildStart, 'function');
 });
 
-Deno.test('openPlugin: core config sets chunkSizeWarningLimit', () => {
+Deno.test('openPlugin: core config sets chunkSizeWarningLimit', async () => {
   const plugins = createOpenPlugin({});
   const corePlugin = plugins.find((p) => p.name === 'open:core')!;
 
-  const result = callConfig(corePlugin);
+  const result = await callConfig(corePlugin);
   const build = result.build as Record<string, unknown>;
   assertEquals(build.chunkSizeWarningLimit, 1500);
 });
 
-Deno.test('openPlugin: core config includes rollupOptions with build trigger input', () => {
+Deno.test('openPlugin: core config includes rollupOptions with build trigger input', async () => {
   const plugins = createOpenPlugin({});
   const corePlugin = plugins.find((p) => p.name === 'open:core')!;
 
-  const result = callConfig(corePlugin);
+  const result = await callConfig(corePlugin);
   const build = result.build as Record<string, unknown>;
   const rollupOptions = build.rollupOptions as Record<string, unknown>;
   const input = rollupOptions.input as string[];
@@ -298,11 +306,11 @@ Deno.test('openPlugin: core config includes rollupOptions with build trigger inp
   assertArrayIncludes(input, ['virtual:open-build-trigger']);
 });
 
-Deno.test('openPlugin: core config sorts aliases by subpath specificity', () => {
+Deno.test('openPlugin: core config sorts aliases by subpath specificity', async () => {
   const plugins = createOpenPlugin({});
   const corePlugin = plugins.find((p) => p.name === 'open:core')!;
 
-  const result = callConfig(corePlugin, {
+  const result = await callConfig(corePlugin, {
     resolve: {
       alias: [
         { find: '@openelement/element', replacement: '/repo/packages/core/src/index.ts' },

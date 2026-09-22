@@ -14,6 +14,7 @@ export interface Logger {
   error: (msg: string, ...args: unknown[]) => void;
 }
 
+/** Create a {@link Logger} that prefixes every message with `[tag]`. */
 export function createLogger(tag: string): Logger {
   return {
     debug: (msg: string, ...args: unknown[]) => console.debug(`[${tag}] ${msg}`, ...args),
@@ -45,6 +46,10 @@ export function createWarnScope(): WarnScope {
 // Module-level fallback for call sites that don't pass an explicit render scope.
 const _globalWarned = new Set<string>();
 
+/**
+ * Warn at most once per `key` for the given render {@link WarnScope},
+ * falling back to a process-wide set when no scope is passed.
+ */
 export function warnOnce(key: string, logger: Logger, msg: string, scope?: WarnScope): void {
   const set = scope ? scope.warned : _globalWarned;
   if (!set.has(key)) {

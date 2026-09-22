@@ -13,7 +13,7 @@
  *
  * Generated third-party output is not product source: the check proves the
  * entry dependency graph, it does not rewrite Nitro/unenv output. Run after
- * `apps/saas#nitro:build-workers` (gate:source does).
+ * `apps/saas#nitro:build-workers` (the root `saas:workers` task does).
  */
 
 import { walkSync } from '@std/fs/walk';

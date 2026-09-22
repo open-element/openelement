@@ -9,7 +9,7 @@ import { OpenInput } from './open-input.tsx';
 import { OpenTabs } from './open-tabs.tsx';
 import { OpenThemeToggle } from './open-theme-toggle.tsx';
 
-// v0.44: compiled modules carry no runtime tagName export (the compiled
+// Compiled modules carry no runtime tagName export (the compiled
 // program owns the tag), so the registration table lives here, beside the
 // class imports. Keep aligned with manifest.declarations order.
 const COMPONENTS: ReadonlyArray<readonly [string, CustomElementConstructor]> = [

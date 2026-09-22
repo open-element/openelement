@@ -49,23 +49,29 @@ Use public package boundaries rather than private workspace imports. Prefer Web 
 
 The root `deno.json` defines 20 tasks:
 
-| Task                                          | Purpose                                                                            |
-| --------------------------------------------- | ---------------------------------------------------------------------------------- |
-| `check`                                       | `fmt:check` + `lint` + `typecheck` + markdown lint, run serially through `gate.ts` |
-| `test`                                        | Full Deno test suite with full permissions (see the permission note below)         |
-| `test:e2e`                                    | Site build plus browser end-to-end suites (www, router fixtures)                   |
-| `build`                                       | Build the four public packages (element, router, create, ui)                       |
-| `pack`                                        | Pack release tarballs through `tools/release`                                      |
-| `verify`                                      | Full repository verification, including SaaS                                       |
-| `verify:core`                                 | Element/Router Alpha candidate verification (no SaaS steps)                        |
-| `release:check`                               | Registry check plus packed qualification plus npm publish dry-run                  |
-| `site:build` / `site:verify`                  | Build / fully verify the documentation site                                        |
-| `saas:build` / `saas:verify` / `saas:workers` | The independently governed SaaS application                                        |
-| `clean` / `clean:deep`                        | Remove generated artifacts                                                         |
-| `fmt` / `fmt:check` / `lint` / `typecheck`    | Format, lint, and type-check the workspace                                         |
-| `gate:ci`                                     | Source gate plus packed gate (the fast local equivalent of CI producers)           |
+| Task                                          | Purpose                                                                                                   |
+| --------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| `check`                                       | `fmt:check` + `lint` + `typecheck` + markdown lint, run serially through `gate.ts`                        |
+| `test`                                        | Full Deno test suite with full permissions (see the permission note below)                                |
+| `test:e2e`                                    | Site build plus browser end-to-end suites (www, router fixtures)                                          |
+| `build`                                       | Build the four public packages (element, router, create, ui)                                              |
+| `pack`                                        | Pack release tarballs through `tools/release`                                                             |
+| `verify`                                      | Full repository verification, including SaaS                                                              |
+| `verify:core`                                 | Element/Router Alpha candidate verification (no SaaS steps)                                               |
+| `release:check`                               | Registry check plus the release train (`gate:release`) plus packed qualification plus npm publish dry-run |
+| `site:build` / `site:verify`                  | Build / fully verify the documentation site                                                               |
+| `saas:build` / `saas:verify` / `saas:workers` | The independently governed SaaS application                                                               |
+| `clean` / `clean:deep`                        | Remove generated artifacts                                                                                |
+| `fmt` / `fmt:check` / `lint` / `typecheck`    | Format, lint, and type-check the workspace                                                                |
+| `gate:ci`                                     | PR-layer source gate plus packed gate (the fast local equivalent of CI producers)                         |
+| `gate:release`                                | Source gate's trimmed-out steps plus packed gate (the release train)                                      |
 
-Workspace subtasks run two ways: by directory (`--cwd`) or by member (`--filter`):
+The CI gate is split in two layers. `tools/repo#gate:source` (9 steps) is the
+fast PR layer and runs on every pull request; the steps that need a built
+Site, coverage, deploy fixtures, or three-engine browser matrices live in
+`tools/repo#gate:release` and run on the release train via `release:check`
+before anything is published. Nothing is dropped — a step is either in the
+PR layer or in the release train.
 
 ```bash
 deno task check                                   # fmt + lint + typecheck + markdown
@@ -73,6 +79,7 @@ deno task --cwd tools/repo release:registry-check # one directory-scoped task
 deno task --filter @openelement/router test       # one task in one workspace member
 deno task verify:core                             # core candidate verification (no SaaS)
 deno task verify                                  # full repository (including SaaS)
+deno task gate:release                            # the release train (trimmed-out steps)
 ```
 
 Subtask areas: `tools/repo` (gates, release-state checks, coverage, hooks), `tools/release` (pack, publish dry-run, packaged consumers), `www` (site generation, content/link/theme checks, browser e2e), `apps/saas` (`check`, `test`, Nitro builds — separately governed, never blocking).

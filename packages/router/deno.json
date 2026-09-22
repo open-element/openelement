@@ -1,7 +1,6 @@
 {
   "name": "@openelement/router",
-  "version": "1.0.0-alpha.2",
-  "description": "Router Route Mode, Framework Mode, and application lifecycle tooling (Vite plugin, dev/build/start/preview CLI, Nitro mount) for OpenElement applications.",
+  "version": "1.0.0-alpha.3",
   "exports": {
     ".": "./src/index.ts",
     "./http": "./src/http.ts",

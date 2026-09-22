@@ -1,8 +1,8 @@
 /**
  * Build-time generator for the @openelement/ui package manifest.
  *
- * Scans packages/ui/src/open-*.tsx, parses component metadata, and writes a
- * static JSON file to packages/ui/src/generated-manifest.json. This keeps
+ * Scans `src/open-*.tsx`, parses component metadata, and writes a
+ * static JSON file to `src/generated-manifest.json`. This keeps
  * runtime-free packages free of Deno.readDirSync/Deno.readFileSync.
  *
  * Usage:
@@ -10,7 +10,7 @@
  *     -> (re)write the manifest.
  *   deno run --allow-read --allow-write tools/generate-ui-manifest.ts --check
  *     -> regenerate in memory and fail (exit 1) when the tracked manifest is
- *        missing or stale. Wired into `gate:source` as ui-manifest:check.
+ *        missing or stale. Wired into `gate:release` as ui-manifest:check.
  */
 
 import { walkSync } from '@std/fs/walk';
@@ -371,7 +371,7 @@ export function buildManifest(): GeneratedUiManifest {
 
   return {
     $comment:
-      'GENERATED FILE - do not edit. Regenerate with: deno task --cwd packages/ui generate:ui-manifest (drift gate: ui-manifest:check).',
+      'GENERATED FILE - do not edit. Regenerate with: deno task generate:ui-manifest (drift gate: ui-manifest:check).',
     schemaVersion: '1.0.0',
     packageName: '@openelement/ui',
     version: pkgVersion,

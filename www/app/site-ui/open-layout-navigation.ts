@@ -20,6 +20,9 @@ export const SECTION_MAP: Readonly<Record<string, readonly string[]>> = {
   '/guide': ['Guide', 'Core', 'Recipes'],
   '/architecture': ['Principles', 'Reference'],
   '/reference': ['Reference'],
+  // The error-code reference is the second Reference page (#1413): its sidebar
+  // keeps the same single group so the two reference tables read as one family.
+  '/errors': ['Reference'],
   '/blog': ['Project'],
   '/roadmap': ['Project'],
   '/changelog': ['Project'],
@@ -303,6 +306,7 @@ const FOOTER_COLUMNS: Record<FooterColumnId, FooterColumnSource> = {
     links: [
       { path: '/guide/getting-started', en: 'Guide', zh: '指南' },
       { path: '/guide/api', en: 'API', zh: 'API' },
+      { path: '/errors', en: 'Error Codes', zh: '错误码' },
       { path: '/architecture', en: 'Architecture', zh: '架构' },
       { path: '/blog', en: 'Blog', zh: '博客' },
     ],

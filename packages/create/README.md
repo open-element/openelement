@@ -2,10 +2,12 @@
 
 Project scaffolding CLI for openElement applications.
 
+Docs and guides: <https://openelement.org>.
+
 > 1.0 Alpha line: the supported creation entry for Element and Router. The
-> published npm versions and dist-tags are registered in
-> `docs/release/release-state.json` (registry-verified); `latest` stays on the
-> stable 0.43 line until a separately admitted stable release.
+> published npm versions and dist-tags are registry truth (query them with
+> `npm view @openelement/create dist-tags`); `latest` stays on the stable 0.43
+> line until a separately admitted stable release.
 
 `@openelement/create` generates a new openElement project with the recommended
 directory structure, Deno configuration, Vite setup, and starter pages.
@@ -13,18 +15,19 @@ directory structure, Deno configuration, Vite setup, and starter pages.
 ## Usage (1.0 Alpha)
 
 ```bash
-deno run --allow-read --allow-write --allow-env --allow-net --deny-ffi --no-prompt --minimum-dependency-age 0 npm:@openelement/create@alpha my-app
+deno run -A npm:@openelement/create@alpha my-app
 cd my-app
 deno task dev
 ```
 
 The version `@alpha` resolves to is registered in
-`docs/release/release-state.json` (currently `1.0.0-alpha.1`, a new baseline —
+`the tracked release-state manifest` (currently `1.0.0-alpha.2`, a new baseline —
 not a 0.x upgrade, with no migration path from 0.x). Pin that exact version
-when reproducibility matters:
+when reproducibility matters (verify against the live registry with
+`npm view @openelement/create dist-tags.alpha`):
 
 ```bash
-deno run --allow-read --allow-write --allow-env --allow-net --deny-ffi --no-prompt --minimum-dependency-age 0 npm:@openelement/create@1.0.0-alpha.1 my-app
+deno run -A npm:@openelement/create@1.0.0-alpha.2 my-app
 ```
 
 `--minimum-dependency-age 0` is needed because Deno's default
@@ -33,6 +36,22 @@ minimumDependencyAge (~24h) refuses packages published within the last day.
 The generated starter pins the exact `@openelement/*` versions it was built
 from in its `deno.json` import map.
 
+The canonical install command is exported from `@openelement/create/install-command` (one builder, every documented copy derives from it).
+
+## Do not run the bin under Node (`npx`)
+
+> **Use the bare-flag create command documented above. Do not use
+> `npx @openelement/create` / `npx create-openelement`.** The CLI is a Deno
+> program: it is written against the Deno API, and its `bin` entries and
+> shebang (`#!/usr/bin/env -S deno run --allow-read --allow-write`) both assume
+> a Deno host. Under a plain Node host the bin dies at startup with
+> `ReferenceError: Deno is not defined`.
+>
+> A Node-executable entry point is a deferred roadmap item (portable-host
+> tooling, [#1387](https://github.com/open-element/openelement/issues/1387)).
+> Until it lands, the bare-flag create form is the
+> supported install path.
+
 ## Stable 0.43 (maintenance line)
 
 The stable 0.43 line is still published, but it is not the Alpha install path.
@@ -40,7 +59,7 @@ A versionless install resolves the npm `latest` dist-tag to it; pin the line
 explicitly instead:
 
 ```bash
-deno run --allow-read --allow-write --allow-env --allow-net --deny-ffi --no-prompt --minimum-dependency-age 0 npm:@openelement/create@0.43 my-app
+deno run -A npm:@openelement/create@0.43 my-app
 ```
 
 ## Requirements

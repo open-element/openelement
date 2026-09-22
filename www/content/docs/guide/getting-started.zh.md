@@ -11,7 +11,7 @@ order: 1
 三条命令跑起应用：
 
 ```bash
-deno run --allow-read --allow-write --allow-env --allow-net --deny-ffi --no-prompt --minimum-dependency-age 0 npm:@openelement/create@alpha my-app
+{{INSTALL_COMMAND}}
 cd my-app
 deno task dev
 ```
@@ -26,7 +26,19 @@ deno task dev
 
 ## 构建
 
-发布前运行 build、package、docs truth 与 visual smoke 门禁。
+`deno task build` 把可部署的站点产出到 `dist/`——每条静态路由的预渲染 HTML、`public/` 下按原样复制的内容，以及应用含 island 或请求时路由时一并生成的客户端 chunk 与服务端入口。那个目录就是产物：可以上传到任意静态托管，或让 Node/Workers 部署指向 `dist/server/index.js`。
+
+三个任务覆盖整个循环：
+
+```bash
+deno task build     # 预渲染到 dist/（需要时另有 dist/client、dist/server）
+deno task start     # 起真实构建产物，包含请求时路由
+deno task preview   # 纯静态预览；存在 dist/server 时会拒绝运行
+```
+
+校验改动应该用 `deno task start`：它起的是与生产一致的输出，并把动态路由与表单 POST 分派给生成的服务端入口。`deno task preview` 刻意更窄——它拒绝带服务端的构建，而不是悄悄把它藏起来，因此只对没有请求时路由的应用有意义。端口取自 `OPEN_ELEMENT_PORT`（回退到 `PORT`，默认 4173），host 取自 `OPEN_ELEMENT_HOST`。
+
+上线前，`deno task check` 对应用做类型检查，`deno task test` 跑测试；两者都已在 starter 的任务里接好，无需额外配置。完整的输出契约——构建写了哪些文件、每个文件回答什么——见[部署](/zh/guide/deployment)。
 
 ## 另见
 

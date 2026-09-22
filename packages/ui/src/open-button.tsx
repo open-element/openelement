@@ -4,7 +4,7 @@
  * Minimal button component following Swiss International Style.
  * Violet brand accents with subtle hover states.
  *
- * v0.44: compiled authoring (ADR-0143). The anchor/button switch is compiled
+ * Compiled authoring. The anchor/button switch is compiled
  * as two sibling controls, exactly one visible: `linkMode`/`buttonMode`
  * computeds read the `href` property, and `hidden` sinks pick the visible
  * branch — so SSR emits a working link (no-JS navigation) and the claim

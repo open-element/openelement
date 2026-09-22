@@ -9,7 +9,7 @@
  * <script>). Without Prism the block degrades to plain text with the copy
  * button — that is expected, not a bug. See README.md for the script recipe.
  *
- * v0.44: compiled authoring (ADR-0143). The shell (slot + copy button) is the
+ * Compiled authoring: the shell (slot + copy button) is the
  * compiled template; the copy label is a compiled text sink driven by the
  * `copyLabel` property. Prism highlighting stays imperative in methods; its
  * per-instance bookkeeping lives in the shared instance-state module. On
@@ -34,9 +34,9 @@ import { readInstanceState, writeInstanceState } from './instance-state.ts';
  * out of the template): the vendored light-DOM Prism theme's comment gray
  * #708090 is 3.6:1 on its own #f5f2f0 background (under AA), but that pairing
  * never renders — the vendor only paints it through pre[class*=language-] and
- * site fences carry the language class on code, not pre. The site pins its
- * code surface to --bg-code/#0d0f12 (pre[class*=language-] override in
- * www/app/components/page-styles.ts), where #708090 measures 4.7:1.
+ * site fences carry the language class on code, not pre. A host site that
+ * pins its code surface to --bg-code/#0d0f12 (pre[class*=language-] override)
+ * measures 4.7:1 there.
  */
 @element('open-code-block', { root: 'shadow-open' })
 export class OpenCodeBlock extends OpenElement {

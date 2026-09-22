@@ -113,12 +113,44 @@ export const pageReferenceStyles = [compiledStyle(`
     text-transform: uppercase;
   }
 
+  /* generated reference: declared signature + option table per export */
+  .ref-signature {
+    display: block;
+    margin-block-start: var(--size-2);
+    color: var(--violet-8);
+    font-family: var(--font-mono);
+    font-size: var(--font-size-00);
+    line-height: var(--font-lineheight-2);
+    overflow-wrap: anywhere;
+  }
+  .ref-options { margin-block-start: var(--size-3); }
+  .ref-options summary {
+    cursor: pointer;
+    color: var(--text-secondary);
+    font-size: var(--font-size-00);
+  }
+  .option-table { margin-block-start: var(--size-2); border-block-start: var(--border-size-1) solid var(--border); }
+  .option-row {
+    display: grid;
+    grid-template-columns: minmax(0, .8fr) minmax(0, 1.2fr) minmax(0, .5fr);
+    gap: var(--size-2) var(--size-3);
+    padding-block: var(--size-2);
+    border-block-end: var(--border-size-1) solid var(--border);
+  }
+  .option-name, .option-type, .option-note, .option-description { overflow-wrap: anywhere; }
+  .option-name { color: var(--text-primary); font-family: var(--font-mono); font-size: var(--font-size-00); font-weight: var(--font-weight-7); }
+  .option-type { color: var(--violet-8); font-family: var(--font-mono); font-size: var(--font-size-00); }
+  .option-note { color: var(--text-muted); font-size: var(--font-size-00); }
+  .option-description { grid-column: 1 / -1; color: var(--text-secondary); font-size: var(--font-size-00); line-height: var(--font-lineheight-2); }
+
   /* Three columns cannot hold a 540px source path, an identifier and a summary
      once the reading column drops below ~1100px, so the reference rows stack
      there (and the reference header goes with them). */
   @media (max-width: 1100px) {
     #api-reference .registry-head { display: none; }
+    #config-options .registry-head { display: none; }
     .ref-row, .ce-row { grid-template-columns: minmax(0, 1fr); gap: var(--size-2); }
+    .option-row { grid-template-columns: minmax(0, 1fr); }
   }
 
   @media (max-width: 860px) {

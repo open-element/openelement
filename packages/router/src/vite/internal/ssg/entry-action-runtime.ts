@@ -1,7 +1,7 @@
 import { quoteGeneratedJavaScriptValue } from './codegen-literals.ts';
 import type { RouteHandlerEmitContext } from './entry-codegen.ts';
 
-/** Emit the shared ADR-0120/ADR-0121 action protocol exactly once per entry. */
+/** Emit the shared action protocol exactly once per entry. */
 export function renderActionRuntime(): string {
   return `async function __runActionProtocol(c, routeModule, loadContext, renderHtmlError, state) {
   const url = new URL(c.req.url);
@@ -92,8 +92,8 @@ export function renderActionRuntime(): string {
 }
 
 /**
- * Emit only the route-specific wiring of the action POST protocol block
- * (ADR-0120/ADR-0121); the protocol implementation above is shared. Covers the
+ * Emit only the route-specific wiring of the action POST protocol block;
+ * the protocol implementation above is shared. Covers the
  * status-page callback, the named-action dispatch result, and the 422
  * re-render data refresh.
  */

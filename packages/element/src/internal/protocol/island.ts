@@ -12,9 +12,8 @@ export interface IslandOptions {
    *   - 'visible': use IntersectionObserver to defer until element is visible
    *   - 'only': client-only render, no DSD/SSR output
    *
-   * Named `hydrate` to match `defineIslandConfig()` in the app package
-   * (`packages/router/src/authoring.ts`) — one option name across both
-   * packages (ADR-0127).
+   * Named `hydrate` to match `defineIslandConfig()` in the Router package —
+   * one option name across both packages.
    */
   hydrate?: HydrationStrategy;
 

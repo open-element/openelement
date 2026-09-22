@@ -82,8 +82,12 @@ function stepArgv(job: string, name: string): string[] {
         return freshCloneCommands.check('deno');
       case 'task-gate-source':
         return freshCloneCommands.gateSource('deno');
-      case 'task-release-check':
-        return freshCloneCommands.releaseCheck('deno');
+      case 'task-gate-packed':
+        return freshCloneCommands.gatePacked('deno');
+      case 'task-site-build':
+        return freshCloneCommands.siteBuild('deno');
+      case 'task-site-e2e':
+        return freshCloneCommands.siteE2e('deno');
       default:
         throw new Error(`no fresh argv for ${name}`);
     }
@@ -235,7 +239,7 @@ async function fixture(): Promise<Fixture> {
       });
     }
     const extras = job === 'fresh-clone'
-      ? { isolation: FRESH_CLONE_ISOLATION }
+      ? { isolation: FRESH_CLONE_ISOLATION, siteE2e }
       : job === 'packed'
       ? {
         packageVersion: VERSION,
@@ -245,8 +249,6 @@ async function fixture(): Promise<Fixture> {
         artifactCheck: true,
         consumers: [...REQUIRED_PACKED_CONSUMERS],
       }
-      : job === 'source-matrix'
-      ? { siteE2e }
       : {};
     const jobRecord = {
       schemaVersion: CANDIDATE_EVIDENCE_SCHEMA_VERSION,
@@ -264,7 +266,9 @@ async function fixture(): Promise<Fixture> {
       job: jobRecord,
       read: (path) => {
         if (path in archives) return Promise.resolve(archives[path]);
-        if (job === 'source-matrix' && path === SITE_E2E_REPORT_FILE) {
+        // The Site E2E raw report travels with the fresh-clone lane that
+        // produced it, exactly as the producer stages it.
+        if (job === 'fresh-clone' && path === SITE_E2E_REPORT_FILE) {
           return Promise.resolve(siteReportBytes);
         }
         const value = logs[`${job}/${path.replace(/^logs\//u, '').replace(/\.log$/u, '')}`];
@@ -1101,7 +1105,16 @@ Deno.test('collectJobFailures rejects old-style and decoy fresh clones', async (
   const fresh = oldStyle.find((entry) => entry.job.job === 'fresh-clone');
   if (!fresh) throw new Error('fresh fixture missing');
   fresh.job.steps = (fresh.job.steps as Array<{ name: string }>).filter((step) =>
-    ['clone', 'git-checkout', 'install', 'task-check', 'task-gate-source', 'task-release-check']
+    [
+      'clone',
+      'git-checkout',
+      'install',
+      'task-check',
+      'task-gate-source',
+      'task-gate-packed',
+      'task-site-build',
+      'task-site-e2e',
+    ]
       .includes(step.name)
   );
   assert(
@@ -1124,18 +1137,32 @@ Deno.test('collectJobFailures rejects old-style and decoy fresh clones', async (
     ),
   );
 
+  // A fresh clone that skipped the Site E2E leg has no candidate Site proof;
+  // the lane owns it now, so the missing step must fail the job.
+  const noSiteProof = cloneJobs();
+  const noSiteFresh = noSiteProof.find((entry) => entry.job.job === 'fresh-clone');
+  if (!noSiteFresh) throw new Error('fresh fixture missing');
+  noSiteFresh.job.steps = (noSiteFresh.job.steps as Array<{ name: string }>).filter((step) =>
+    step.name !== 'task-site-e2e'
+  );
+  assert(
+    (await collectJobFailures(noSiteProof as never, SHA, TREE)).some((x) =>
+      x.includes('required step missing: task-site-e2e')
+    ),
+  );
+
   const failed = cloneJobs();
   const failedFresh = failed.find((entry) => entry.job.job === 'fresh-clone');
   if (!failedFresh) throw new Error('fresh fixture missing');
-  const release = (failedFresh.job.steps as Array<Record<string, unknown>>).find((step) =>
-    step.name === 'task-release-check'
+  const packed = (failedFresh.job.steps as Array<Record<string, unknown>>).find((step) =>
+    step.name === 'task-gate-packed'
   );
-  if (!release) throw new Error('release fixture missing');
-  release.result = 'FAIL';
-  release.exitCode = 1;
+  if (!packed) throw new Error('packed fixture missing');
+  packed.result = 'FAIL';
+  packed.exitCode = 1;
   assert(
     (await collectJobFailures(failed as never, SHA, TREE)).some((x) =>
-      x.includes('task-release-check')
+      x.includes('task-gate-packed')
     ),
   );
 });

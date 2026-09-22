@@ -19,6 +19,11 @@ export type HttpHandler = (
   next: () => Promise<Response>,
 ) => Response | Promise<Response>;
 
+/**
+ * A route record for the WinterCG middleware ({@link createRouteMiddleware}):
+ * the matching fields of a {@link RouteRecord} plus a per-method handler (or
+ * handler chain) map, so one path can answer each HTTP method differently.
+ */
 export interface HttpRouteRecord extends Omit<RouteRecord, 'methods'> {
   handlers: Readonly<Record<string, HttpHandler | readonly HttpHandler[]>>;
 }

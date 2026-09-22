@@ -100,8 +100,13 @@ export default definePage(PostPage, {
 
 `redirect()` 也可显式指定状态码（301/302/303/307/308）；其他状态码在调用时即被拒绝。同样的守卫在 SPA 链上可用，但 SPA 的 loader/action 拿到的是 `{ params, searchParams, signal }`（action 另有 `formData`）。
 
+## 构建期诊断
+
+以上都是运行时通道。编译器另有回答：超出创作语法的模块在构建期失败，并给出带源码位置、携带稳定 `OEC####` 码的诊断——即编译元素边界强制执行的 attribute、Region、装饰器与 provenance 规则。[错误码](/zh/errors) 逐条列出每个码触发的消息与确切的源码调用点，且由诊断本身生成，因此这张表既不会描述构建已经不再产生的码，也不会漏掉仍在产生的码。
+
 ## 另见
 
 - [路由与数据](/zh/guide/routing-and-data)——`fail()`、`redirect()` 与 action 的出处。
+- [错误码](/zh/errors)——编译器诊断，逐码列出。
 - [安全](/zh/guide/security)——生成的 handler 会发出的状态码与响应头。
 - [API 路由](/zh/guide/api)——非页面路由使用的同一组响应原语。

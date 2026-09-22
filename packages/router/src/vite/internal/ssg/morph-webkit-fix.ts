@@ -1,6 +1,6 @@
 /**
  * morph-webkit-fix.ts - WebKit upgrade-repair and DSD-instantiation
- * workarounds for the morph client (ADR-0120/0121). Split from
+ * workarounds for the morph client. Split from
  * enhance-client.ts (#908).
  *
  * ─── KNOWN-BROWSER-QUIRKS (anti-rot ledger; each entry names a removal

@@ -132,6 +132,131 @@ Deno.test('client:only islands are scheduled with immediate load (not idle)', ()
   assertEntrySyntax(code);
 });
 
+// #1416: the element entry is chosen per page. A page whose every island is
+// client-only hydrates nothing, so its bundle imports the claim-free entry;
+// everything else keeps the full one.
+
+Deno.test('#1416: a page with only client-only islands imports the client-only entry', () => {
+  const code = generateClientEntry([
+    {
+      tagName: 'client-only-widget',
+      modulePath: './client-only-widget.ts',
+      strategy: 'only',
+      ssr: false,
+      dsd: false,
+    },
+    {
+      tagName: 'another-widget',
+      modulePath: './another-widget.ts',
+      strategy: 'only',
+      ssr: false,
+      dsd: false,
+    },
+  ]);
+
+  assert(
+    code.includes("from '@openelement/element/client-only'"),
+    'client-only entry is imported when no island can hydrate server DOM',
+  );
+  assertEquals(
+    code.includes("from '@openelement/element'"),
+    false,
+    'the full entry must not also be imported',
+  );
+  assertEntrySyntax(code);
+});
+
+Deno.test('#1416: a page with any dsd island never takes the client-only entry', () => {
+  // The ruling's reverse case, and the direction that matters: a wrong guess
+  // here breaks hydration instead of costing bytes. An island that hydrates
+  // is enough, even next to client-only ones.
+  const code = generateClientEntry([
+    {
+      tagName: 'client-only-widget',
+      modulePath: './client-only-widget.ts',
+      strategy: 'only',
+      ssr: false,
+      dsd: false,
+    },
+    {
+      tagName: 'hydrating-widget',
+      modulePath: './hydrating-widget.ts',
+      strategy: 'idle',
+      ssr: true,
+      dsd: true,
+    },
+  ]);
+
+  assert(code.includes("from '@openelement/element'"), 'full entry for a hydrating page');
+  assertEquals(
+    code.includes("'@openelement/element/client-only'"),
+    false,
+    'the claim-free entry must never appear on a page that can hydrate',
+  );
+});
+
+/** Import prologue lines only: the header comments mention module names. */
+function importLines(code: string): string[] {
+  return code.split('\n').filter((line) => line.startsWith('import'));
+}
+
+Deno.test('#1416: an island that declares nothing keeps the full entry (conservative)', () => {
+  // Silence is not a client-only claim: ssr/dsd absent means "not known to be
+  // client-only", so the full entry stands. Same for one flag set and the
+  // other absent, and for ssr:true/dsd:false — every partial declaration
+  // resolves to the full entry.
+  const silent = generateClientEntry([
+    { tagName: 'x-silent', modulePath: './silent.ts', strategy: 'idle' },
+  ]);
+  assert(importLines(silent).some((line) => line.endsWith("from '@openelement/element';")));
+  assertEquals(importLines(silent).some((line) => line.includes('client-only')), false);
+
+  const halfDeclared = generateClientEntry([
+    { tagName: 'x-half', modulePath: './half.ts', strategy: 'idle', ssr: false },
+  ]);
+  assert(importLines(halfDeclared).some((line) => line.endsWith("from '@openelement/element';")));
+
+  const dsdOnly = generateClientEntry([
+    { tagName: 'x-dsd-only', modulePath: './dsd-only.ts', strategy: 'idle', ssr: false, dsd: true },
+  ]);
+  assert(
+    importLines(dsdOnly).some((line) => line.endsWith("from '@openelement/element';")),
+    'dsd alone keeps the claim: only both flags false prove client-only',
+  );
+});
+
+Deno.test('#1416: both ssr and dsd false is client-only even off the "only" strategy', () => {
+  // The predicate agrees with the build's own client-only determination
+  // (build-ssg.ts: `meta.ssr !== false` decides the client-only stub), and it
+  // is the same declaration: `ssr: false, dsd: false` means no server output
+  // for this island, so there is nothing to claim. `strategy: 'only'` carries
+  // the same meaning by definition (island.ts: "client-only render, no DSD/SSR
+  // output"), which is why it is admitted without the explicit flags.
+  const explicit = generateClientEntry([
+    { tagName: 'x-load', modulePath: './load.ts', strategy: 'load', ssr: false, dsd: false },
+  ]);
+  assert(
+    importLines(explicit).some((line) => line.includes("'@openelement/element/client-only'")),
+  );
+
+  const onlyWithoutFlags = generateClientEntry([
+    { tagName: 'x-only', modulePath: './only.ts', strategy: 'only' },
+  ]);
+  assert(
+    importLines(onlyWithoutFlags).some((line) =>
+      line.includes("'@openelement/element/client-only'")
+    ),
+  );
+});
+
+Deno.test('#1416: the lit renderer entry imports no element entry at all', () => {
+  const code = generateClientEntry(
+    [{ tagName: 'x-lit', modulePath: './lit.ts', strategy: 'idle' }],
+    { renderer: 'lit' },
+  );
+  assertEquals(importLines(code).some((line) => line.includes('@openelement/element')), false);
+});
+
 Deno.test('legacy eager/lazy strategies are not emitted by v0.21 runtime', () => {
   const code = generateClientEntry([
     { tagName: 'x-load', modulePath: './load.ts', strategy: 'load' },
