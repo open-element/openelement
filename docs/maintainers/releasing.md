@@ -63,15 +63,13 @@ publish; a missing environment fails the job closed instead of publishing:
   by design: `autoflow-ci` runs with `if: always()` and asserts each
   producer's result before aggregating, so a failed or cancelled producer
   fails the required check explicitly instead of passing as GitHub's
-  skipped-reports-Success. `bun-serve-smoke` is an
-  optional/non-blocking Bun compatibility signal: it runs with
-  `continue-on-error: true`, is not a required check, and never gates the
-  candidate or the release graph. The independently governed `apps/saas`
-  application is decoupled from the candidate: neither `tools/repo#gate:source`
-  nor `tools/repo#gate:release` nor candidate evidence contains a SaaS step,
-  and `saas-optional` runs with
-  `continue-on-error: true`, is not required, and never sets `requiredOk`
-  false. Scope is explicit at the task level: `deno task verify:core` is the
+  skipped-reports-Success. Compatibility probes and the independently
+  governed `apps/saas` application are not part of every PR run; use their
+  explicit local tasks or dedicated qualification runs when changing those
+  surfaces. The SaaS application remains decoupled from the candidate:
+  neither `tools/repo#gate:source` nor `tools/repo#gate:release` nor candidate
+  evidence contains a SaaS step. Scope is explicit at the task level:
+  `deno task verify:core` is the
   Element/Router Alpha candidate verification, `deno task verify` is the full
   repository verification (including SaaS). Post-publish
   (`published-consumers.yml`) verifies the registry afterward and never
