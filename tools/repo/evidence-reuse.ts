@@ -27,6 +27,20 @@
  * proof. Reuse is chained-safe — a claim records the ORIGIN run — and the
  * aggregate's own age window still bounds how long a package stays reusable.
  *
+ * The claim judges the PRODUCER by its tree, not by its commit (#1439). A
+ * package can hand its proof forward more than once: run A proves tree T at
+ * commit a, run B replays it (stamp names run A and commit a) and uploads its
+ * own artifact, and run C replays B's artifact. C's resolved source run is B,
+ * whose head commit is b != a, while the record inside the artifact still
+ * says `sha: a` — the commit that actually executed the gate. Requiring
+ * `record.sha == resolved source sha` there refused a legitimate chain and
+ * turned four lanes red. The identity that licenses the reuse is the tree, so
+ * the claim keeps requiring `record.tree == checked-out tree` and adds a
+ * LOCAL re-derivation of the producer commit's tree (`git rev-parse
+ * <record.sha>^{tree}`): it must equal the checked-out tree, and a commit
+ * whose tree cannot be resolved is a refusal. The producer commit stays in
+ * the stamp as the audit field, never rewritten to the forwarder's commit.
+ *
  * Everything the network answers is untrusted: `resolveReuse` re-derives the
  * tree of every candidate through `resolveTree` and requires the lane's
  * artifact to exist before it reports a source.
@@ -42,6 +56,8 @@ export const EVIDENCE_ARTIFACT_PREFIX = 'evidence-';
 export function evidenceArtifactName(job: JobName): string {
   return `${EVIDENCE_ARTIFACT_PREFIX}${job}`;
 }
+
+const COMMIT_SHA = /^[0-9a-f]{40}$/u;
 
 /** One workflow run as the resolver needs to see it. */
 export interface RunSummary {
@@ -158,20 +174,49 @@ export interface ReusedStamp {
   sha: string;
 }
 
+/** Inputs one lane's claim is judged against. */
+export interface ClaimReuseOptions {
+  job: JobName;
+  /** The checked-out candidate commit; a record produced by it is refused. */
+  currentSha: string;
+  /** Tree of the checked-out candidate commit. */
+  currentTree: string;
+  /** Run the artifact was downloaded from (the resolved source run). */
+  sourceRunId: number;
+  /**
+   * Tree SHA of one commit, or null when it cannot be resolved. The CLI
+   * resolves it with `git rev-parse <sha>^{tree}`; tests inject a stub. A null
+   * is a refusal, never a pass.
+   */
+  resolveTree: (sha: string) => Promise<string | null>;
+}
+
 /**
  * Stamp one lane's downloaded `result.json` as reused.
  *
- * The record must already bind the tree this run is proving — that is the
- * whole safety condition, so a mismatch is refused instead of stamped. The
- * source commit is recorded as the stamp's `sha`, and the record's own `sha`
- * is left untouched: the evidence keeps claiming the commit that actually ran
- * the suite, and the aggregate accepts the difference on the strength of the
- * tree match plus this stamp.
+ * Two conditions, both about TREE identity, must hold before a record is
+ * stamped: the record itself must already bind the checked-out tree, and the
+ * commit that produced it must really carry that tree — re-derived locally
+ * through `resolveTree`, never taken from the record's own `tree` field. A
+ * record that fails either one is refused instead of stamped, and an
+ * unresolvable producer commit is a refusal too. A record produced by the
+ * checked-out commit itself is refused for the same reason the aggregate
+ * refuses it: that lane would skip the gate that is supposed to prove it.
+ *
+ * The producer commit is deliberately NOT required to be the resolved source
+ * run's head commit (#1439): a reused package stays valid when it is handed
+ * forward through another run, and in that chain the record's `sha` names the
+ * commit that originally executed the gate. That commit is preserved verbatim
+ * as the stamp's audit field, together with the run that first proved the
+ * tree, so a reader can always follow the stamp to the run that ran the suite
+ * rather than to a forwarding no-op. The record's own `sha` is left untouched
+ * for the same reason, and the aggregate accepts the difference on the
+ * strength of the tree match plus this stamp.
  */
-export function claimReusedResult(
+export async function claimReusedResult(
   result: Record<string, unknown>,
-  options: { job: JobName; currentTree: string; sourceRunId: number; sourceSha: string },
-): { claimed: Record<string, unknown>; failures: string[] } {
+  options: ClaimReuseOptions,
+): Promise<{ claimed: Record<string, unknown>; failures: string[] }> {
   const failures: string[] = [];
   if (result.job !== options.job) {
     failures.push(
@@ -185,39 +230,81 @@ export function claimReusedResult(
       }, not the checked-out tree ${options.currentTree}`,
     );
   }
-  if (result.sha !== options.sourceSha) {
+  const producerSha = result.sha;
+  if (typeof producerSha !== 'string' || !COMMIT_SHA.test(producerSha)) {
     failures.push(
-      `reused artifact was produced by ${
-        JSON.stringify(result.sha)
-      }, not the resolved source ${options.sourceSha}`,
+      `reused artifact's sha must be the 40-char hex commit that produced it, got ${
+        JSON.stringify(producerSha)
+      }`,
+    );
+  } else if (producerSha === options.currentSha) {
+    // Same refusal the aggregate makes: a lane may not skip its gate for the
+    // very commit that was supposed to prove itself.
+    failures.push(
+      `reused artifact was produced by the checked-out commit ${producerSha}; a reused job must ` +
+        `record the source commit it was replayed from`,
     );
   }
   if (result.result !== 'PASS') {
     failures.push(`reused artifact result must be PASS, got ${JSON.stringify(result.result)}`);
   }
+  // A record that already failed is never resolved against Git: the refusal is
+  // decided by what the artifact says about itself.
   if (failures.length > 0) return { claimed: result, failures };
+
+  // The safety condition. `resolveTree` is the caller's Git lookup, so this
+  // cannot degrade into trusting the record's `tree` field.
+  const producerTree = await options.resolveTree(producerSha as string);
+  if (producerTree === null) {
+    return {
+      claimed: result,
+      failures: [
+        `reused artifact was produced by ${producerSha}, whose tree could not be resolved`,
+      ],
+    };
+  }
+  if (producerTree !== options.currentTree) {
+    return {
+      claimed: result,
+      failures: [
+        `reused artifact was produced by ${producerSha} at tree ${producerTree}, ` +
+        `not the checked-out tree ${options.currentTree}`,
+      ],
+    };
+  }
+
   // Carry the ORIGIN of the proof forward: a re-reused package reports the run
-  // that actually executed the gate, not the run that forwarded it.
+  // that actually executed the gate, not the run that forwarded it. An origin
+  // stamp that is malformed, or that names a commit other than this record's
+  // producer, is refused — the aggregate would reject it anyway, and refusing
+  // here lets the lane fall back to a real run instead of turning the bundle
+  // red.
   const previous = result.reused;
-  const stamp: ReusedStamp = {
-    runId: existingStampRunId(previous) ?? options.sourceRunId,
-    sha: existingStampSha(previous) ?? options.sourceSha,
-  };
+  let stamp: ReusedStamp;
+  if (previous === undefined) {
+    stamp = { runId: options.sourceRunId, sha: producerSha as string };
+  } else {
+    const stampFailures = auditReusedStamp(previous);
+    if (stampFailures.length > 0) {
+      return {
+        claimed: result,
+        failures: stampFailures.map((failure) => `reused artifact carries ${failure}`),
+      };
+    }
+    const origin = previous as ReusedStamp;
+    if (origin.sha !== producerSha) {
+      return {
+        claimed: result,
+        failures: [
+          `reused artifact carries a stamp for ${origin.sha} but was produced by ${producerSha}`,
+        ],
+      };
+    }
+    stamp = { runId: origin.runId, sha: origin.sha };
+  }
   // Key order matters: `reused` is appended so a re-claim is byte-stable
   // against the record it replaces.
   return { claimed: { ...result, reused: stamp }, failures };
-}
-
-function existingStampRunId(previous: unknown): number | undefined {
-  if (typeof previous !== 'object' || previous === null) return undefined;
-  const runId = (previous as Record<string, unknown>).runId;
-  return typeof runId === 'number' && Number.isSafeInteger(runId) ? runId : undefined;
-}
-
-function existingStampSha(previous: unknown): string | undefined {
-  if (typeof previous !== 'object' || previous === null) return undefined;
-  const sha = (previous as Record<string, unknown>).sha;
-  return typeof sha === 'string' && /^[0-9a-f]{40}$/u.test(sha) ? sha : undefined;
 }
 
 /** Audit one `reused` field, shared by the job and bundle validators. */
@@ -229,7 +316,7 @@ export function auditReusedStamp(value: unknown): string[] {
   if (!Number.isSafeInteger(value.runId) || (value.runId as number) <= 0) {
     failures.push(`reused.runId must be a positive integer, got ${JSON.stringify(value.runId)}`);
   }
-  if (typeof value.sha !== 'string' || !/^[0-9a-f]{40}$/u.test(value.sha)) {
+  if (typeof value.sha !== 'string' || !COMMIT_SHA.test(value.sha)) {
     failures.push(`reused.sha must be a 40-char hex commit, got ${JSON.stringify(value.sha)}`);
   }
   return failures;
@@ -281,9 +368,11 @@ if (import.meta.main) {
     console.error(
       'usage: evidence-reuse.ts --resolve [--github-output <path>]\n' +
         '                        [--current-sha <sha>] [--current-tree <tree>]\n' +
-        '       evidence-reuse.ts --claim --job <name> --source-run-id <id> --source-sha <sha> ' +
-        '[--out <dir>]\n' +
-        '       both accept --repo-root <dir> (default: the checkout this tool ships in)',
+        '       evidence-reuse.ts --claim --job <name> --source-run-id <id>\n' +
+        '                        [--source-sha <sha>] [--out <dir>]\n' +
+        "       --source-sha is audit context (the resolved run's head commit), never a\n" +
+        '       matching key: the claim compares TREES. Both accept --repo-root <dir>\n' +
+        '       (default: the checkout this tool ships in).',
     );
     Deno.exit(2);
   }
@@ -356,6 +445,22 @@ async function resolveTreeViaGh(sha: string): Promise<string | null> {
   }
 }
 
+/**
+ * Tree SHA of a commit in the local checkout. Used by the claim to re-derive
+ * the tree of the commit that produced a downloaded record — the record's own
+ * `tree` field is never trusted for that. A commit the checkout does not have
+ * resolves to null, which the claim refuses on: an unresolvable producer is a
+ * reason to run the gate, never a reason to stamp.
+ */
+async function treeOfLocalCommit(sha: string): Promise<string | null> {
+  try {
+    const tree = await git(['rev-parse', `${sha}^{tree}`]);
+    return /^[0-9a-f]{40}$/u.test(tree) ? tree : null;
+  } catch {
+    return null;
+  }
+}
+
 async function listArtifactsViaGh(runId: number): Promise<string[]> {
   const names = await ghText([
     'api',
@@ -410,21 +515,31 @@ async function claimCommand(): Promise<void> {
   if (!Number.isSafeInteger(sourceRunId) || sourceRunId <= 0) {
     throw new Error('--source-run-id must be a positive integer');
   }
-  const tree = await git(['rev-parse', 'HEAD^{tree}']);
+  if (sourceSha !== '' && !COMMIT_SHA.test(sourceSha)) {
+    throw new Error(`--source-sha must be a 40-char hex commit when given, got ${sourceSha}`);
+  }
+  const [sha, tree] = [await git(['rev-parse', 'HEAD']), await git(['rev-parse', 'HEAD^{tree}'])];
   const resultPath = join(outDir, job, 'result.json');
   const raw = JSON.parse(await Deno.readTextFile(resultPath)) as Record<string, unknown>;
-  const { claimed, failures } = claimReusedResult(raw, {
+  const { claimed, failures } = await claimReusedResult(raw, {
     job,
+    currentSha: sha,
     currentTree: tree,
     sourceRunId,
-    sourceSha,
+    // The producer's tree is re-derived from the LOCAL object store: the
+    // record's own `tree` field never answers this question for itself.
+    resolveTree: treeOfLocalCommit,
   });
   if (failures.length > 0) {
     throw new Error(`refusing to stamp reused evidence:\n- ${failures.join('\n- ')}`);
   }
   await Deno.writeTextFile(resultPath, JSON.stringify(claimed, null, 2) + '\n');
+  // The resolved source commit is printed for the reader; it is deliberately
+  // NOT a matching key any more (#1439) — the record's own producer commit and
+  // this tree are what the claim verified.
   console.log(
-    `reuse[${job}]: stamped result.json as reused from run ${sourceRunId} (commit ${sourceSha}) ` +
-      `for tree ${tree}`,
+    `reuse[${job}]: stamped result.json as reused from run ${sourceRunId}` +
+      (sourceSha === '' ? '' : ` (resolved source commit ${sourceSha})`) +
+      `, record produced by ${String(claimed.sha)}, checked-out tree ${tree}`,
   );
 }
