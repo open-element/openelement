@@ -122,6 +122,7 @@ export function createRouter(options: RouterOptions): RouterInstance {
   // ownership (#1023 latest-wins), browser-landing dedup, the one-shot
   // guard-veto restore marker (#1036) and disposal. See navigation-state.ts.
   const navigationState = new NavigationState();
+  const streamControlKey = Symbol.for('openelement.stream-control.v1');
   const nativeNavigation = mode === 'history' && typeof navigation !== 'undefined'
     ? navigation
     : undefined;
@@ -176,6 +177,22 @@ export function createRouter(options: RouterOptions): RouterInstance {
       });
     } catch (err) {
       log.error('onChange failed:', err);
+    }
+  }
+
+  function retireOwnedStream(ticket: NavigationTicket): void {
+    if (typeof document === 'undefined') return;
+    const control = (document as unknown as Record<symbol, unknown>)[streamControlKey] as
+      | { token: string; pending: boolean; cancel(): void }
+      | undefined;
+    if (!control || typeof control.token !== 'string' || typeof control.cancel !== 'function') {
+      return;
+    }
+    navigationState.observeStream(control.token);
+    if (!control.pending) {
+      navigationState.settleStream(control.token);
+    } else if (navigationState.retireStream(ticket, control.token)) {
+      control.cancel();
     }
   }
 
@@ -268,6 +285,7 @@ export function createRouter(options: RouterOptions): RouterInstance {
     // Ownership point: every guard passed and this navigation still holds the
     // latest ticket. Only now is pending execution invalidated — a navigation
     // that was vetoed above never owned intent and left it running (#1343).
+    retireOwnedStream(ticket);
     options.onPending?.();
     if (navOptions.replace) {
       history.replaceState(null, '', url);
@@ -344,6 +362,7 @@ export function createRouter(options: RouterOptions): RouterInstance {
       // Ownership point (see commitNavigation): the guard allowed this
       // traversal, so pending execution for the previous route is cancelled
       // now — and only now.
+      retireOwnedStream(ticket);
       options.onPending?.();
       rematch(landed);
       notifyChange();
@@ -447,15 +466,13 @@ export function createRouter(options: RouterOptions): RouterInstance {
       target.origin !== location.origin ||
       !resolveTarget(target)
     ) return;
+    const ticket = navigationState.issue('native');
     if (isOwn) {
-      // Programmatic commit under the Navigation API: the guard already
-      // passed in commitNavigation, so this is the ownership point.
-      // Browser-driven traverses instead cancel pending execution in
-      // commitBrowserNavigation after their guard resolves — an intercepted
-      // traverse that is vetoed cancels nothing (#1343 review).
+      // The programmatic guard passed before this intercept; browser-driven
+      // traversals still wait for commitBrowserNavigation's guard decision.
+      retireOwnedStream(ticket);
       options.onPending?.();
     }
-    const ticket = navigationState.issue('native');
     event.signal.addEventListener('abort', () => {
       // An aborted navigation request (a newer navigation superseded this one,
       // or the user moved on) retires its ticket: the intercept handler below

@@ -36,7 +36,6 @@ import {
   hasUserConfigEntries,
   OPEN_ELEMENT_CONFIG_FILE,
   OPEN_ELEMENT_HEAD_KEYS,
-  OPEN_ELEMENT_HEAD_STRING_KEYS,
   type OpenElementUserConfig,
   tagNameFromModule,
 } from '../config.ts';
@@ -174,14 +173,44 @@ function metaTag(attrs: Record<string, string>): string {
   return `<meta ${serialized}>`;
 }
 
-/**
- * The `head` keys this loader turns into the framework's channels. Everything
- * else in {@linkcode OPEN_ELEMENT_HEAD_KEYS} is structure the loader carries
- * through verbatim (title/lang feed the document, scripts/stylesheets feed the
- * structured inject channel), so the two lists together are the whole accepted
- * surface.
- */
-const HEAD_KEYS_EMITTED_AS_FRAGMENTS: readonly string[] = ['favicon', 'description', 'ogImage'];
+type HeadConfig = NonNullable<OpenElementUserConfig['head']>;
+type HeadFragmentEmitter = (
+  head: HeadConfig,
+  title: string | null,
+  fragments: string[],
+) => void;
+
+const HEAD_FRAGMENT_EMITTERS = {
+  favicon(head, _title, fragments) {
+    if (head.favicon) fragments.push(`<link rel="icon" href="${escapeAttr(head.favicon)}">`);
+  },
+  title(_head, title, fragments) {
+    if (title) {
+      fragments.push(metaTag({ property: 'og:title', content: title }));
+      fragments.push(metaTag({ property: 'og:site_name', content: title }));
+    }
+  },
+  description(head, title, fragments) {
+    if (head.description) {
+      fragments.push(metaTag({ property: 'og:description', content: head.description }));
+    }
+    if (title || head.description) {
+      fragments.push(metaTag({ property: 'og:type', content: 'website' }));
+    }
+  },
+  ogImage(head, _title, fragments) {
+    if (head.ogImage) {
+      fragments.push(metaTag({ property: 'og:image', content: head.ogImage }));
+      fragments.push(metaTag({ name: 'twitter:card', content: 'summary_large_image' }));
+    }
+  },
+} satisfies Partial<Record<keyof HeadConfig, HeadFragmentEmitter>>;
+
+const HEAD_DOCUMENT_FIELDS = { lang: true } as const;
+const HEAD_INJECT_FIELDS = {
+  scripts: headScriptsToInject,
+  stylesheets: headStylesheetsToInject,
+} as const;
 
 /**
  * Fail closed when the accepted head surface and this loader's handling of it
@@ -191,12 +220,12 @@ const HEAD_KEYS_EMITTED_AS_FRAGMENTS: readonly string[] = ['favicon', 'descripti
  * a future addition is a one-line, self-explaining edit instead of a mystery.
  */
 function assertHeadSurfaceHandled(): void {
-  const handled = new Set([...HEAD_KEYS_EMITTED_AS_FRAGMENTS, ...OPEN_ELEMENT_HEAD_STRING_KEYS]);
-  const unhandled = OPEN_ELEMENT_HEAD_KEYS.filter((key) => {
-    if (handled.has(key)) return false;
-    // Carried through as channels, not as head fragments.
-    return key !== 'stylesheets' && key !== 'scripts';
-  });
+  const handled = new Set([
+    ...Object.keys(HEAD_FRAGMENT_EMITTERS),
+    ...Object.keys(HEAD_DOCUMENT_FIELDS),
+    ...Object.keys(HEAD_INJECT_FIELDS),
+  ]);
+  const unhandled = OPEN_ELEMENT_HEAD_KEYS.filter((key) => !handled.has(key));
   if (unhandled.length > 0) {
     throw new OpenElementError(
       `[openElement] openelement.config.ts head key(s) ${
@@ -223,24 +252,7 @@ function headFragmentsFor(input: {
   const { head, title } = input;
   if (!head) return [];
   const fragments: string[] = [];
-  if (head.favicon) {
-    fragments.push(`<link rel="icon" href="${escapeAttr(head.favicon)}">`);
-  }
-  const ogTitle = title;
-  if (ogTitle) {
-    fragments.push(metaTag({ property: 'og:title', content: ogTitle }));
-    fragments.push(metaTag({ property: 'og:site_name', content: ogTitle }));
-  }
-  if (head.description) {
-    fragments.push(metaTag({ property: 'og:description', content: head.description }));
-  }
-  if (ogTitle || head.description) {
-    fragments.push(metaTag({ property: 'og:type', content: 'website' }));
-  }
-  if (head.ogImage) {
-    fragments.push(metaTag({ property: 'og:image', content: head.ogImage }));
-    fragments.push(metaTag({ name: 'twitter:card', content: 'summary_large_image' }));
-  }
+  for (const emit of Object.values(HEAD_FRAGMENT_EMITTERS)) emit(head, title, fragments);
   return fragments;
 }
 
@@ -385,8 +397,8 @@ export function resolveAppConfig(input: ResolveAppConfigInput): ResolvedAppConfi
   // additionally becomes the SSR externalization list: a package whose island
   // modules the build admits must be BUNDLED, not imported at run time, and the
   // config surface deliberately has no separate key for that derivation.
-  const headScripts = headScriptsToInject(headBlock?.scripts);
-  const headStylesheets = headStylesheetsToInject(headBlock?.stylesheets);
+  const headScripts = HEAD_INJECT_FIELDS.scripts(headBlock?.scripts);
+  const headStylesheets = HEAD_INJECT_FIELDS.stylesheets(headBlock?.stylesheets);
   const packageIslands = overrides.packageIslands ?? inline['packageIslands'] as
     | string[]
     | undefined;

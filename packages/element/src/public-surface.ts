@@ -28,8 +28,17 @@ export { collectPublicProps } from './public-runtime.ts';
 // server entries; ensurePreHydrationClickCapture installs the pre-upgrade
 // capture that the compiled claim replays after upgrade (generated client
 // entries call it).
-export { ensurePreHydrationClickCapture, renderDsd } from './public-runtime.ts';
+export {
+  createDeferredDsdExecutor,
+  ensurePreHydrationClickCapture,
+  renderDsd,
+} from './public-runtime.ts';
 export type { RenderDsdOptions } from './public-runtime.ts';
+export type {
+  CreateDeferredDsdOptions,
+  DeferredDsdExecutor,
+  DeferredDsdManifest,
+} from './public-runtime.ts';
 
 // Explicit type-only surface for build adapters (#488).
 export type { RenderOutput, SsrAdmissionDecision } from './public-runtime.ts';
@@ -63,7 +72,7 @@ export { element, property } from './public-runtime.ts';
 
 // ─── HTML utilities (re-export from core) ────────────────
 
-export { escapeAttr, escapeHtml, wrapInDocument } from './public-runtime.ts';
+export { documentStreamParts, escapeAttr, escapeHtml, wrapInDocument } from './public-runtime.ts';
 
 // ─── Security predicates (re-export from core) ───────────────────
 
@@ -78,6 +87,20 @@ export type { TrustedHtml } from './public-runtime.ts';
  * the B1.2 surface freeze.
  */
 export { DANGEROUS_KEYS, injectPropsSafe, isDangerousKey } from './public-runtime.ts';
+
+// ─── Streamed-frame policy (re-export from core) ───────────────────
+
+// The streamed-frame admission policy: one deny list for the build manifest
+// scan, the deferred executor admission, and the generated browser installer.
+// Consumed by the router's streaming pipeline and available to custom
+// deferred executors.
+export {
+  STREAM_FRAME_FORBIDDEN_TAGS,
+  STREAM_FRAME_UNSAFE_URL,
+  STREAM_FRAME_URL_ATTRIBUTES,
+  STREAM_FRAME_URL_CONTROL_MAX,
+  unsafeStreamFrameAttribute,
+} from './public-runtime.ts';
 
 // ─── Island types (protocol) ─────────────────────────────
 

@@ -1,0 +1,190 @@
+{
+  "schemaVersion": 1,
+  "issue": 1453,
+  "kind": "local-advisory-stream-comparison",
+  "environment": {
+    "revision": "664f8b82d7fbece63673a9a5716054e2a223d425",
+    "workspaceDirty": true,
+    "deno": "2.9.7",
+    "os": "darwin",
+    "arch": "aarch64",
+    "browser": "chromium 147.0.7727.15",
+    "viewport": "1280x800"
+  },
+  "method": {
+    "build": "router-native-framework workspace-source dist/server; no Nitro deployment",
+    "routes": [
+      "/stream-proof",
+      "/stream-proof-off"
+    ],
+    "simulatedLoaderDelayMs": 100,
+    "sampleCountPerMode": 10,
+    "warmupPerMode": 1,
+    "navigation": "fresh page per sample; waitUntil=commit; alternating mode order",
+    "fcp": "PerformancePaintTiming first-contentful-paint, navigation-relative",
+    "partReadyProxy": "performance.now after Playwright polls the owning shadow Part text; includes polling overhead, not standardized TTI",
+    "scope": "local Chromium observation; no CI timing threshold or production claim"
+  },
+  "observations": [
+    {
+      "index": 0,
+      "order": [
+        "stream",
+        "off"
+      ],
+      "stream": {
+        "fcpMs": 48,
+        "partReadyProxyMs": 109
+      },
+      "off": {
+        "fcpMs": 148,
+        "partReadyProxyMs": 150.7000002861023
+      }
+    },
+    {
+      "index": 1,
+      "order": [
+        "off",
+        "stream"
+      ],
+      "stream": {
+        "fcpMs": 48,
+        "partReadyProxyMs": 113.30000019073486
+      },
+      "off": {
+        "fcpMs": 152,
+        "partReadyProxyMs": 151.90000009536743
+      }
+    },
+    {
+      "index": 2,
+      "order": [
+        "stream",
+        "off"
+      ],
+      "stream": {
+        "fcpMs": 48,
+        "partReadyProxyMs": 112.09999990463257
+      },
+      "off": {
+        "fcpMs": 152,
+        "partReadyProxyMs": 151.59999990463257
+      }
+    },
+    {
+      "index": 3,
+      "order": [
+        "off",
+        "stream"
+      ],
+      "stream": {
+        "fcpMs": 48,
+        "partReadyProxyMs": 113.10000038146973
+      },
+      "off": {
+        "fcpMs": 152,
+        "partReadyProxyMs": 152.90000009536743
+      }
+    },
+    {
+      "index": 4,
+      "order": [
+        "stream",
+        "off"
+      ],
+      "stream": {
+        "fcpMs": 48,
+        "partReadyProxyMs": 111.90000009536743
+      },
+      "off": {
+        "fcpMs": 152,
+        "partReadyProxyMs": 149
+      }
+    },
+    {
+      "index": 5,
+      "order": [
+        "off",
+        "stream"
+      ],
+      "stream": {
+        "fcpMs": 48,
+        "partReadyProxyMs": 111.69999980926514
+      },
+      "off": {
+        "fcpMs": 152,
+        "partReadyProxyMs": 149.5
+      }
+    },
+    {
+      "index": 6,
+      "order": [
+        "stream",
+        "off"
+      ],
+      "stream": {
+        "fcpMs": 48,
+        "partReadyProxyMs": 112.69999980926514
+      },
+      "off": {
+        "fcpMs": 152,
+        "partReadyProxyMs": 152.30000019073486
+      }
+    },
+    {
+      "index": 7,
+      "order": [
+        "off",
+        "stream"
+      ],
+      "stream": {
+        "fcpMs": 48,
+        "partReadyProxyMs": 113.59999990463257
+      },
+      "off": {
+        "fcpMs": 148,
+        "partReadyProxyMs": 150.59999990463257
+      }
+    },
+    {
+      "index": 8,
+      "order": [
+        "stream",
+        "off"
+      ],
+      "stream": {
+        "fcpMs": 48,
+        "partReadyProxyMs": 112.10000038146973
+      },
+      "off": {
+        "fcpMs": 152,
+        "partReadyProxyMs": 151.2000002861023
+      }
+    },
+    {
+      "index": 9,
+      "order": [
+        "off",
+        "stream"
+      ],
+      "stream": {
+        "fcpMs": 48,
+        "partReadyProxyMs": 113.09999990463257
+      },
+      "off": {
+        "fcpMs": 148,
+        "partReadyProxyMs": 147.39999961853027
+      }
+    }
+  ],
+  "medians": {
+    "stream": {
+      "fcpMedianMs": 48,
+      "partReadyProxyMedianMs": 112.40000009536743
+    },
+    "off": {
+      "fcpMedianMs": 152,
+      "partReadyProxyMedianMs": 150.9500002861023
+    }
+  }
+}

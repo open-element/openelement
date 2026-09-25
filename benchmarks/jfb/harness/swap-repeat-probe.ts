@@ -17,7 +17,7 @@
  *
  * Usage:
  *   deno run -A benchmarks/jfb/harness/swap-repeat-probe.ts \
- *     --build-dir <dir> --iterations 6 --swaps 40 --out /tmp/probe.json
+ *     --build-dir <dir> --rows 1000 --iterations 6 --swaps 40 --out /tmp/probe.json
  */
 import { join } from '@std/path';
 import { AFTERFRAME_SOURCE } from './spec.ts';
@@ -60,15 +60,17 @@ const DRIVER = `
   };
 `;
 
-async function runOnce(page: BrowserPage, baseUrl: string, swaps: number) {
+async function runOnce(page: BrowserPage, baseUrl: string, swaps: number, rows: 1000 | 10000) {
   await page.goto(`${baseUrl}/oe/index.html`, { waitUntil: 'load' });
   await page.evaluate(AFTERFRAME_SOURCE + '\n' + DRIVER);
   await page.evaluate(
     `(async () => { const d = performance.now(); while (performance.now() - d < 10000) { if (window.__repeat && document.getElementById('run')) return; await new Promise(r => setTimeout(r, 25)); } throw new Error('oe app did not boot'); })()`,
   );
-  await page.evaluate('window.__repeat.click("run")');
   await page.evaluate(
-    `(async () => { const d = performance.now(); while (performance.now() - d < 10000) { if (window.__repeat.rowIdText(1000) === '1000') return; await new Promise(r => setTimeout(r, 25)); } throw new Error('run did not reach 1000 rows'); })()`,
+    `window.__repeat.click(${JSON.stringify(rows === 1000 ? 'run' : 'runlots')})`,
+  );
+  await page.evaluate(
+    `(async () => { const d = performance.now(); while (performance.now() - d < 10000) { if (window.__repeat.rowIdText(${rows}) === '${rows}') return; await new Promise(r => setTimeout(r, 25)); } throw new Error('run did not reach ${rows} rows'); })()`,
   );
   // Stock 05_swap1k warmup: six unmeasured swaps.
   for (let warmup = 0; warmup < 6; warmup++) {
@@ -76,12 +78,12 @@ async function runOnce(page: BrowserPage, baseUrl: string, swaps: number) {
     await page.evaluate('new Promise((r) => requestAnimationFrame(() => setTimeout(r, 0)))');
   }
   const frameFloorMs = await page.evaluate<number>('window.__repeat.frameFloor()');
-  // Even count so the table ends where it started and the post-state check below
-  // is the stock one (row 2 holds id 999, row 999 holds id 2 -- 1-based rows).
+  // Six warmup swaps plus an even measured count restore row 2 to id 2.
   const pairs = await page.evaluate<Array<{ totalMs: number; syncMs: number }>>(
     `window.__repeat.measureSwaps(${swaps})`,
   );
   const row2 = await page.evaluate<string | null>('window.__repeat.rowIdText(2)');
+  if (row2 !== '2') throw new Error(`swap probe ended in unexpected row state: ${row2}`);
   return { frameFloorMs, pairs, row2 };
 }
 
@@ -109,7 +111,15 @@ if (import.meta.main) {
   if (!buildDir) throw new Error('--build-dir is required');
   const iterations = Number(arg('--iterations', '6'));
   const swaps = Number(arg('--swaps', '40'));
+  const rows = Number(arg('--rows', '1000'));
   const out = arg('--out', '/tmp/jfb-swap-repeat.json')!;
+  if (rows !== 1000 && rows !== 10000) throw new Error('--rows must be 1000 or 10000');
+  if (!Number.isInteger(swaps) || swaps < 2 || swaps % 2 !== 0) {
+    throw new Error('--swaps must be a positive even number');
+  }
+  if (!Number.isInteger(iterations) || iterations < 1) {
+    throw new Error('--iterations must be a positive integer');
+  }
 
   const bundleBytes = (await Deno.stat(join(buildDir, 'oe', 'main.js'))).size;
   const server = Deno.serve({ port: 0 }, async (req) => {
@@ -149,7 +159,7 @@ if (import.meta.main) {
     for (let iteration = 0; iteration < iterations; iteration++) {
       const page = await browser.newPage();
       try {
-        runs.push(await runOnce(page, baseUrl, swaps));
+        runs.push(await runOnce(page, baseUrl, swaps, rows));
       } finally {
         await page.close();
       }
@@ -163,12 +173,12 @@ if (import.meta.main) {
   const total = runs.flatMap((run) => run.pairs.map((pair) => pair.totalMs));
   const report = {
     buildDir,
+    rows,
     bundleBytes,
     iterations,
     swapsPerPage: swaps,
     swapCount: sync.length,
-    // Post-state of the stock 05_swap1k check: after an even number of swaps
-    // the first two rows hold the swapped ids.
+    // Six warmups plus the measured swaps restore the original row order.
     row2AfterAllSwaps: runs.map((run) => run.row2),
     syncMs: {
       median: median(sync),

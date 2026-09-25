@@ -228,10 +228,9 @@ export const FRESH_CLONE_STEPS: readonly StepContract[] = [
     match: exact(['deno', 'task', '--cwd', 'tools/repo', 'gate:source']),
   },
   {
-    // The PR-layer lane: the fresh clone proves the fast gate AND the packed
-    // gate, not the release train. release:check (registry read, gate:release,
-    // packed gate, publish dry-run) is the release workflow's job; running it
-    // here only re-ran the same tarball qualification a second time.
+    // The fresh clone proves the source gate and, separately, the packed gate
+    // with cold Deno/npm caches. Source must not nest packed qualification.
+    // The release train still belongs to release:check.
     name: 'task-gate-packed',
     cwd: EVIDENCE_ROLES.clone,
     match: exact(['deno', 'task', '--cwd', 'tools/release', 'gate:packed']),

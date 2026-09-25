@@ -228,3 +228,44 @@ Deno.test('Region update errors propagate when the host has no update-error sink
   );
   instance.dispose();
 });
+
+Deno.test('each validates every reused item projection before mutating and keeps its subscription', () => {
+  const items = signal<unknown>([{ id: 'a', text: 'A' }, { id: 'b', text: 'B' }]);
+  const errors: unknown[] = [];
+  const program = testProgram({
+    tag: 'oe-each-update-preflight',
+    template: [{ k: 'el', tag: 'ul', attrs: [], children: [{ k: 'part', index: 0 }] }],
+    parts: [{
+      k: 'each',
+      index: 0,
+      signal: 'items',
+      key: 'id',
+      field: 'text',
+      item: [{ k: 'el', tag: 'li', attrs: [], children: [{ k: 'ival', field: 'text' }] }],
+    }],
+  });
+  const host = {
+    signals: { items },
+    handlers: {},
+    onUpdateError: (error: unknown) => errors.push(error),
+  } as CompiledRuntimeHost;
+  const doc = new TestDocument();
+  const root = doc.createElement('host');
+  const instance = createFreshDom(program, host, node(root));
+  const before = toHtml(root);
+  items.value = [
+    { id: 'a', text: 'changed-too-early' },
+    {
+      id: 'b',
+      get text() {
+        throw new Error('later item failed');
+      },
+    },
+  ];
+  assertEquals(errors.length, 1);
+  assertEquals(toHtml(root), before);
+
+  items.value = [{ id: 'a', text: 'A2' }, { id: 'b', text: 'B2' }];
+  assertEquals(toHtml(root).includes('<li>A2</li><li>B2</li>'), true);
+  instance.dispose();
+});

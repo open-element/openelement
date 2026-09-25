@@ -20,6 +20,7 @@
  */
 
 import type { PartProgramV1 } from '../../protocol/part-program.ts';
+import type { LifetimeScope } from '../lifetime-scope.ts';
 import type {
   CompiledClaimOptions,
   CompiledProgramInstance,
@@ -35,6 +36,7 @@ export type ClaimExecutor = (
   host: CompiledRuntimeHost,
   root: Node,
   options?: CompiledClaimOptions,
+  ownerScope?: LifetimeScope,
 ) => CompiledProgramInstance;
 
 let installed: ClaimExecutor | undefined;

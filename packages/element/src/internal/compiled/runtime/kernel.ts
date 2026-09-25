@@ -5,10 +5,11 @@ import {
   createFreshDom,
 } from '../runtime.ts';
 import { claimExecutor } from './claim-seam.ts';
+import { streamHostState } from '../stream-state.ts';
 import { CompiledErrorBoundary, type CompiledErrorBoundaryOptions } from './error-boundary.ts';
 import { CompiledContextService } from './context.ts';
 import { ElementFormController } from '../../../open-element-form.ts';
-import { ElementLifecycle } from '../../../open-element-lifecycle.ts';
+import { LifetimeScope } from '../lifetime-scope.ts';
 import {
   type CompiledStyleRoot,
   CompiledStyleScope,
@@ -16,7 +17,7 @@ import {
 } from '../../../open-element-styles.ts';
 import type { StyleSheetLike } from '../../../internal/protocol/style-sheet.ts';
 // Single error dialect (#1386 item 3): kernel lifecycle failures carry codes.
-import { frameworkError, KernelErrorCode } from '../../protocol/errors.ts';
+import { ClaimErrorCode, frameworkError, KernelErrorCode } from '../../protocol/errors.ts';
 
 /** Raise one kernel lifecycle failure with its catalogued code. */
 function fail(code: string, message: string): never {
@@ -109,7 +110,6 @@ export interface CompiledElementKernelOptions extends CompiledRuntimeHost {
  * consumption, and errors to the element's connect/disconnect boundary.
  */
 export class CompiledElementKernel {
-  readonly lifecycle = new ElementLifecycle();
   readonly form = new ElementFormController();
   readonly errors: CompiledErrorBoundary;
   readonly context: CompiledContextService;
@@ -118,6 +118,7 @@ export class CompiledElementKernel {
   #program: PartProgram;
   #options: CompiledElementKernelOptions;
   #styleScope = new CompiledStyleScope();
+  #lifecycle = new LifetimeScope();
   #root?: CompiledStyleRoot;
   #instance?: CompiledProgramInstance;
   #activation?: CompiledKernelActivation;
@@ -148,6 +149,15 @@ export class CompiledElementKernel {
     return this.#active;
   }
 
+  get lifecycle(): LifetimeScope {
+    return this.#lifecycle;
+  }
+
+  resolveStreamPart(index: number): void {
+    if (!this.#active) return;
+    this.#instance?.resolveDeferred?.(index);
+  }
+
   /**
    * Resolve the root, run exactly one executor (claim of existing content or
    * fresh creation), and return the activation truth. The facade derives its
@@ -164,7 +174,7 @@ export class CompiledElementKernel {
           `<${this.#element.tagName.toLowerCase()}>`,
       );
     }
-    this.lifecycle.connect();
+    this.#lifecycle.connect();
     let themeConnected = false;
     try {
       // Form internals attach first: for a form-associated host they are the
@@ -192,11 +202,9 @@ export class CompiledElementKernel {
         ...this.#options,
         onUpdateError: (error) => this.errors.capture(error, this.#element),
       };
-      this.#instance = mode === 'fresh' ? createFreshDom(this.#program, host, root) : this.#claim(
-        host,
-        root,
-        styleCount,
-      );
+      this.#instance = mode === 'fresh'
+        ? createFreshDom(this.#program, host, root, this.#lifecycle)
+        : this.#claim(host, root, styleCount);
       this.context.connect();
       if (this.errors.hasError) this.errors.reset();
       this.#activation = { mode, root };
@@ -209,6 +217,11 @@ export class CompiledElementKernel {
         // Preserve the original construction/claim error.
       }
       try {
+        this.#lifecycle.dispose();
+      } catch {
+        // Preserve the original construction/claim error.
+      }
+      try {
         this.#instance?.dispose();
       } catch {
         // Preserve the original construction/claim error.
@@ -216,7 +229,7 @@ export class CompiledElementKernel {
       this.#instance = undefined;
       if (themeConnected) themeManager.disconnect(this.#element);
       this.#styleScope.disconnect();
-      this.lifecycle.dispose();
+      this.#lifecycle = new LifetimeScope();
       this.errors.capture(error, this.#element);
       throw error;
     }
@@ -226,15 +239,24 @@ export class CompiledElementKernel {
     if (!this.#active) return;
     this.#active = false;
     this.#activation = undefined;
-    try {
-      this.#instance?.dispose();
-    } finally {
-      this.#instance = undefined;
-      this.context.disconnect();
-      themeManager.disconnect(this.#element);
-      this.#styleScope.disconnect();
-      this.lifecycle.dispose();
-    }
+    let firstError: unknown;
+    let hasError = false;
+    const attempt = (cleanup: () => void) => {
+      try {
+        cleanup();
+      } catch (error) {
+        if (!hasError) firstError = error;
+        hasError = true;
+      }
+    };
+    attempt(() => this.#lifecycle.dispose());
+    attempt(() => this.#instance?.dispose());
+    this.#instance = undefined;
+    attempt(() => this.context.disconnect());
+    attempt(() => themeManager.disconnect(this.#element));
+    attempt(() => this.#styleScope.disconnect());
+    this.#lifecycle = new LifetimeScope();
+    if (hasError) throw firstError;
   }
 
   adopted(): void {
@@ -275,7 +297,19 @@ export class CompiledElementKernel {
           'hydrate server-rendered content.',
       );
     }
-    return executor(this.#program, host, root, { expectStaticStyle: styleCount > 0 });
+    const stream = streamHostState(this.#element, this.#program);
+    if (this.#element.hasAttribute('data-oe-stream-request') && !stream) {
+      fail(
+        ClaimErrorCode.STRUCTURE_MISMATCH,
+        '[compiled-claim] streamed host has no matching typed seed for its Part Program.',
+      );
+    }
+    return executor(this.#program, host, root, {
+      expectStaticStyle: styleCount > 0,
+      streamParts: stream?.parts,
+      pendingParts: stream ? [...stream.pending] : undefined,
+      recovery: stream ? 'owning' : 'throw',
+    }, this.#lifecycle);
   }
 
   #resolveRoot(): CompiledStyleRoot {

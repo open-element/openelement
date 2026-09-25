@@ -30,9 +30,6 @@ export default defineConfig({
   // meaning <title> should carry. Setting it here would additionally emit the
   // site-level og:title/og:site_name pair, which the page-level head owns.
   head: {
-    // No external stylesheets: the Prism theme is inlined through app/head.tsx
-    // — nothing render-blocking may be served from a third-party origin.
-    stylesheets: [],
     // All scripts are same-origin. Prism is vendored under
     // public/assets/vendor/prism/ (pinned 1.29.0, SRI-verified against the
     // former cdnjs hashes at vendor time — see #1088); theme-init is inlined

@@ -1,6 +1,7 @@
 import { assertEquals, assertInstanceOf } from '@std/assert';
 import { OpenElementError } from '../src/internal/core/errors.ts';
 import {
+  documentStreamParts,
   escapeAttr,
   escapeAttrValue,
   escapeHtml,
@@ -158,6 +159,46 @@ Deno.test('wrapInDocument: no scripts and no nonce stays byte-identical', () => 
   assertEquals(wrapInDocument('x', { title: 'T' }), baseline);
   // An explicitly empty descriptor list changes nothing either.
   assertEquals(wrapInDocument('x', { title: 'T', scripts: [] }), baseline);
+});
+
+Deno.test('documentStreamParts reuses the exact document boundary and nonce rules', () => {
+  const options = {
+    title: '<Stream>',
+    cspNonce: 'nonce123',
+    scripts: [{ src: '/client.js', type: 'module' }],
+    meta: { description: 'a & b' },
+  };
+  const { prefix, suffix } = documentStreamParts(options);
+  assertEquals(
+    prefix + '<main>shell</main>' + suffix,
+    wrapInDocument('<main>shell</main>', options),
+  );
+  assertEquals(prefix.includes('</body>'), false);
+  assertEquals(suffix.includes('nonce="nonce123"'), true);
+});
+
+Deno.test('documentStreamParts emits an optional nonce-bearing classic bootstrap in the head', () => {
+  const baseline = documentStreamParts({ title: 'T' });
+  const streamed = documentStreamParts({
+    title: 'T',
+    cspNonce: 'nonce123',
+    streamBootstrap: 'window.__streamStarted = true;',
+  });
+  assertEquals(
+    streamed.prefix.includes(
+      '<script nonce="nonce123">window.__streamStarted = true;</script>\n</head>',
+    ),
+    true,
+  );
+  assertEquals(streamed.suffix, baseline.suffix);
+  assertEquals(
+    streamed.prefix + 'shell' + streamed.suffix,
+    wrapInDocument('shell', {
+      title: 'T',
+      cspNonce: 'nonce123',
+      streamBootstrap: 'window.__streamStarted = true;',
+    }),
+  );
 });
 
 Deno.test('wrapInDocument: script descriptors serialize byte-identically to the retired injectors when no nonce is present', () => {

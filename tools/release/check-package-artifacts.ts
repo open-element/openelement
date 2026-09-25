@@ -467,7 +467,13 @@ async function verifyTarball(pkg: PackageInfo): Promise<PackageScanResult> {
 }
 
 async function main(): Promise<void> {
-  await runCommand(Deno.execPath(), ['task', '--cwd', 'tools/release', 'pack:dry-run']);
+  const prepacked = Deno.args.length === 1 && Deno.args[0] === '--prepacked';
+  if (Deno.args.length > 0 && !prepacked) {
+    throw new Error('Usage: check-package-artifacts.ts [--prepacked]');
+  }
+  if (!prepacked) {
+    await runCommand(Deno.execPath(), ['task', '--cwd', 'tools/release', 'pack:dry-run']);
+  }
 
   const packages = releasePublishOrder(await readPackages());
   const results: PackageScanResult[] = [];

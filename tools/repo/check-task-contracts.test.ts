@@ -27,6 +27,9 @@ const rootConfig = JSON.parse(
 const repoConfig = JSON.parse(
   await Deno.readTextFile(join(repoRoot, 'tools/repo/deno.json')),
 ) as { tasks: Record<string, string> };
+const releaseConfig = JSON.parse(
+  await Deno.readTextFile(join(repoRoot, 'tools/release/deno.json')),
+) as { tasks: Record<string, string> };
 
 const GATE_RUNNER = 'deno run --allow-run tools/repo/gate.ts ';
 
@@ -95,9 +98,41 @@ Deno.test('task contract: gate:source is the fast PR-layer step set', () => {
       'tools/repo#interface:snapshot',
       'tests/fixtures/router-request-time#gate',
       'packages/element#browser:gate',
-      'tools/release#gate:packed',
     ],
     'gate:source is what every pull request runs; adding a step to the PR layer needs this contract updated (and a reason it cannot wait for the release train)',
+  );
+});
+
+Deno.test('task contract: packed qualification runs separately from the source gate', () => {
+  assert(
+    !repoSplitSteps('gate:source').includes('tools/release#gate:packed'),
+    'the source producer must not duplicate the independent packed producer',
+  );
+  assert(
+    gateCiSteps.includes('tools/release#gate:packed'),
+    'the local CI equivalent must retain packed qualification',
+  );
+});
+
+Deno.test('task contract: artifact scan consumes the packed gate tarballs exactly once', () => {
+  const packed = releaseConfig.tasks['gate:packed'].split(/\s+/);
+  const packIndex = packed.indexOf('tools/release#pack:dry-run');
+  const scanIndex = packed.indexOf('tools/release#package-artifacts:check:prepacked');
+  assert(packIndex >= 0 && scanIndex === packIndex + 1);
+  assert(
+    !packed.includes('tools/release#package-artifacts:check'),
+    'the standalone scanner repacks and must not run inside gate:packed',
+  );
+  assert(
+    releaseConfig.tasks['package-artifacts:check:prepacked'].endsWith(
+      'tools/release/check-package-artifacts.ts --prepacked',
+    ),
+  );
+  assert(
+    releaseConfig.tasks['package-artifacts:check'].endsWith(
+      'tools/release/check-package-artifacts.ts',
+    ),
+    'the standalone scanner still builds its own tarballs',
   );
 });
 

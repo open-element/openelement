@@ -98,6 +98,35 @@ jobs:
           " "$npm_version"
       - name: Install browser engines
         run: ./node_modules/.bin/playwright install --with-deps chromium firefox webkit
+      - name: Web Component tier diagnostic (advisory)
+        continue-on-error: true
+        env:
+          CANDIDATE_SHA: ${{ inputs.candidate_sha }}
+          OPEN_ELEMENT_TIER_REPORT: ${{ github.workspace }}/.artifacts/wc-tier-report.json
+        run: deno task --cwd tests/fixtures/third-party-web-components smoke
+      - name: Upload Web Component tier report
+        if: always()
+        # v7.0.1
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: wc-tier-diagnostic-${{ inputs.candidate_sha }}-${{ github.run_id }}
+          path: .artifacts/wc-tier-report.json
+          if-no-files-found: warn
+          retention-days: 30
+      - name: Lit structure snapshot prototype (advisory)
+        continue-on-error: true
+        env:
+          OPEN_ELEMENT_T1_PROTOTYPE_REPORT: ${{ github.workspace }}/.artifacts/lit-snapshot-prototype.json
+        run: deno task --cwd tests/fixtures/third-party-web-components snapshot:prototype
+      - name: Upload Lit snapshot prototype report
+        if: always()
+        # v7.0.1
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: lit-snapshot-prototype-${{ inputs.candidate_sha }}-${{ github.run_id }}
+          path: .artifacts/lit-snapshot-prototype.json
+          if-no-files-found: warn
+          retention-days: 30
       - name: Qualify candidate
         env:
           CANDIDATE_SHA: ${{ inputs.candidate_sha }}

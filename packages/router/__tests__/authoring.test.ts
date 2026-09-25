@@ -139,6 +139,34 @@ Deno.test('definePage(Class) without a descriptor defaults renderIntent to stati
   assertEquals(descriptor.error, undefined);
 });
 
+Deno.test('definePage() validates the opt-in stream.defer authoring shape', () => {
+  const Page = makeCompiledPageClass('stream-authoring-page', 'Hello');
+  definePage(Page, {
+    renderIntent: { mode: 'dynamic', stream: { defer: ['first', 'second'] } },
+  });
+  assertEquals(
+    (Page as unknown as { openElementPage: { renderIntent: unknown } }).openElementPage
+      .renderIntent,
+    { mode: 'dynamic', stream: { defer: ['first', 'second'] } },
+  );
+  const invalid = [
+    { mode: 'static', stream: { defer: ['first'] } },
+    { mode: 'dynamic', stream: { defer: [] } },
+    { mode: 'dynamic', stream: { defer: ['first', 'first'] } },
+    { mode: 'dynamic', stream: { defer: ['__proto__'] } },
+    { mode: 'dynamic', stream: { defer: ['bad-key'] } },
+    { mode: 'dynamic', stream: { defer: 'first' } },
+    { mode: 'dynamic', stream: { defer: ['first'], unexpected: true } },
+  ];
+  for (const renderIntent of invalid) {
+    assertThrows(
+      () => definePage(Page, { renderIntent } as never),
+      OpenElementError,
+      'renderIntent.stream requires mode',
+    );
+  }
+});
+
 Deno.test('definePage() descriptor renders through the compiled serializer', () => {
   const Page = makeCompiledPageClass('rendered-page', 'Hello from definePage');
   definePage(Page, { head: { title: 'Rendered' } });

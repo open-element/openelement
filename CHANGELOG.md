@@ -9,6 +9,33 @@ lives in:
 - [`docs/release/release-state.json`](./docs/release/release-state.json)
 - [`docs/release/public-interface-snapshot.json`](./docs/release/public-interface-snapshot.json)
 
+## 1.0.0-alpha.5 (unreleased candidate)
+
+**Framework-only candidate; not a published release.** The source version and
+registry state remain `1.0.0-alpha.4` until the separately authorized release
+train. ADR-0157/0158/0159 are still proposals, and the candidate has not yet
+passed exact-SHA CI, independent review or human GO. The evidence boundary is
+recorded in [`docs/release/alpha5-qualification.md`](./docs/release/alpha5-qualification.md).
+
+- **Element / Router — rendered as data resolves:** opted-in dynamic document
+  GETs may defer eligible compiled text/Region Parts after status, security,
+  headers and Cookie decisions. The same Part Program still drives SSR, fresh
+  DOM and claim; server Part backfill is independent of island hydration.
+  Actions and non-opted-in/static routes retain their non-streaming paths.
+- **Element — ownership and keyed identity:** a single internal tree-shaped
+  lifetime scope owns component activations and child Part/Region resources;
+  it preserves DOM on disconnect and removes owned ranges on replacement.
+  Keyed reorders retain stationary node identity/focus and use bounded moves.
+  Old Part Program material is retained; no cross-alpha migration is implied.
+- **Router — internal renderer selection:** Native/Lit imports and hydration
+  ownership converge behind an internal adapter without a public renderer
+  plug-in SDK or a third rendering path.
+- **Evidence, not support expansion:** the Native reference route exercises a
+  delayed Part, late failure, no-JS tail and ordinary POST action against a
+  non-streamed comparison route. Local raw measurements are advisory. The WC
+  snapshot experiment does not grant Lit-in-stream or T1/T2; a Workers module
+  call is not a real deployment. Bun remains advisory.
+
 ## 1.0.0-alpha.4
 
 **Self-consistency train: the shipped package manifest stops lying about a
