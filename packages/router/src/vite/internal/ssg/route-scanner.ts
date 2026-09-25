@@ -49,6 +49,10 @@ import { normalizeSeparators, pathToTagName } from '@openelement/element/build-u
 import { dirname, join, resolve } from '../../../internal/host-path.ts';
 import { safeReadDir, safeReadFile, safeStat } from './route-scanner-fs.ts';
 import { analyzeModuleSemantics } from '@openelement/element/compiler';
+import { scanStreamManifest } from './stream-manifest.ts';
+import type { StreamRouteManifest } from '../protocol/ssg.ts';
+
+export type ScannedRouteEntry = RouteEntry & { streamManifest?: StreamRouteManifest };
 
 const IMPORT_EXTENSIONS = ['.tsx', '.ts', '.jsx', '.js'];
 
@@ -185,6 +189,10 @@ function isIgnoredFile(fileName: string): boolean {
 interface ScanRoutesOptions {
   /** Capture source text for page routes so consumers can extract metadata. */
   includeSource?: boolean;
+  /** Same project identity root as the Vite compiled-element transform. */
+  root?: string;
+  /** Secondary identity anchor for linked workspace page modules. */
+  workspaceRoot?: string;
 }
 
 /**
@@ -195,8 +203,8 @@ export async function scanRoutes(
   routesDir: string,
   baseDir: string = '',
   options: ScanRoutesOptions = {},
-): Promise<RouteEntry[]> {
-  const entries: RouteEntry[] = [];
+): Promise<ScannedRouteEntry[]> {
+  const entries: ScannedRouteEntry[] = [];
   const files = await safeReadDir(routesDir);
 
   if (files === undefined) {
@@ -248,6 +256,7 @@ export async function scanRoutes(
         let tagName: string | undefined;
         let source: string | undefined;
         let isDefinePage = false;
+        let streamManifest: StreamRouteManifest | undefined;
         if (routeType === 'page') {
           // The compiler semantic core reads route meaning without executing the module.
           source = await safeReadFile(fullPath);
@@ -257,6 +266,14 @@ export async function scanRoutes(
             const semantics = analyzeModuleSemantics(source, fullPath);
             tagName = semantics.exportedTagName;
             isDefinePage = semantics.definePage;
+            streamManifest = await scanStreamManifest(
+              routePath,
+              fullPath,
+              source,
+              params,
+              options.root,
+              options.workspaceRoot,
+            );
             // .mdx routes never carry a tagName export either — the entry
             // wraps their function component itself (#954), like definePage.
             if (tagName === undefined && !isDefinePage && !fullPath.endsWith('.mdx')) {
@@ -314,6 +331,7 @@ export async function scanRoutes(
           varName: pathToVarName(routePath),
           tagName,
           ...(isDefinePage ? { definePage: true } : {}),
+          ...(streamManifest ? { streamManifest } : {}),
           // #569: page sources carrying data-open-enhance require the client
           // enhancement layer even when the app has zero islands. The match
           // requires attribute shape (= or >) so prose mentioning the

@@ -649,6 +649,27 @@ Deno.test('compiled part program v1 - one program, three execution modes', async
     const wrongVersion = JSON.parse(programJson);
     wrongVersion.version = 2;
     assertThrows(() => validatePartProgram(wrongVersion), Error, 'version');
+
+    const unknownInstruction = JSON.parse(programJson);
+    unknownInstruction.parts[0].k = 'future';
+    for (
+      const [invalid, diagnostic] of [
+        [broken, 'parts[0].index must equal its position'],
+        [wrongVersion, 'version'],
+        [unknownInstruction, 'parts[0]'],
+      ] as const
+    ) {
+      const { host } = makeHost({ subs: 0 });
+      const freshDoc = new FDocument();
+      const freshRoot = freshDoc.createElement('host');
+      const claimDoc = new FDocument();
+      const claimRoot = parseHtml(claimDoc, ssrHtml);
+      assertThrows(() => runtime.serializeToHtml(invalid, host), Error, diagnostic);
+      assertThrows(() => runtime.createFreshDom(invalid, host, freshRoot), Error, diagnostic);
+      assertThrows(() => runtime.claimExistingDom(invalid, host, claimRoot), Error, diagnostic);
+      assertEquals(toHtml(freshRoot), '<host></host>');
+      assertEquals(toHtml(claimRoot), `<host>${ssrHtml}</host>`);
+    }
   });
 
   await t.step('measurement evidence against the frozen 0.43-equivalent proxy', () => {

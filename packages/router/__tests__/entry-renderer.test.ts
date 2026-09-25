@@ -342,7 +342,7 @@ Deno.test('renderEntry: imports Hono and DSD renderer', () => {
   // renderDsd is the only serializer — no runtime JSX or tree renderer.
   assertStringIncludes(
     code,
-    "import { renderDsd, trustedHtml, escapeHtml, wrapInDocument } from '@openelement/element'",
+    "import { createDeferredDsdExecutor, renderDsd, trustedHtml, escapeHtml, wrapInDocument } from '@openelement/element'",
   );
   assertFalse(code.includes('renderDsdTree'));
   assertFalse(code.includes("import { jsx } from '@openelement/element'"));

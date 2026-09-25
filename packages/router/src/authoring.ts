@@ -52,10 +52,12 @@ interface PageRouteIntent {
 
 interface PageRenderIntent {
   mode?: PageRenderingMode;
+  stream?: { defer: readonly string[] };
 }
 
 interface NormalizedPageRenderIntent {
   mode: PageRenderingMode;
+  stream?: { defer: readonly string[] };
 }
 
 export interface PageRouteContext {
@@ -487,12 +489,32 @@ export function definePage<
         'per-request page that runs its loader on every request.',
     );
   }
+  const stream = descriptor?.renderIntent?.stream;
+  if (stream !== undefined) {
+    if (
+      renderMode !== 'dynamic' || typeof stream !== 'object' || stream === null ||
+      Array.isArray(stream) || Object.keys(stream).some((key) => key !== 'defer') ||
+      !Array.isArray(stream.defer) || stream.defer.length === 0 ||
+      stream.defer.some((field) =>
+        typeof field !== 'string' || !/^[a-zA-Z_$][\w$]*$/.test(field) ||
+        isDangerousKey(field)
+      ) || new Set(stream.defer).size !== stream.defer.length
+    ) {
+      throw authoringError(
+        PageErrorCode.RENDER_MODE,
+        `${ERROR_PREFIX} renderIntent.stream requires mode: 'dynamic' and a nonempty, ` +
+          'duplicate-free defer list of safe property names. Use literal field names, ' +
+          'or remove stream to keep the existing render path.',
+      );
+    }
+  }
   const pageDescriptor: OpenElementPageDescriptor<Data, Params> = {
     kind: 'page',
     ...(descriptor?.route !== undefined ? { route: descriptor.route } : {}),
     ...(descriptor?.head !== undefined ? { head: descriptor.head } : {}),
     renderIntent: {
       mode: renderMode,
+      ...(stream === undefined ? {} : { stream: { defer: [...stream.defer] } }),
     },
     ...(descriptor?.props !== undefined ? { props: descriptor.props } : {}),
     ...(descriptor?.error !== undefined ? { error: descriptor.error } : {}),

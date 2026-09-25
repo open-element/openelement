@@ -25,11 +25,12 @@ import {
 
 const DEFAULT_REGISTRY_DELAYS_MS = [
   0,
-  1_000,
-  2_000,
-  4_000,
-  8_000,
-  15_000,
+  5_000,
+  10_000,
+  20_000,
+  30_000,
+  45_000,
+  60_000,
 ] as const;
 
 export class NpmViewError extends Error {

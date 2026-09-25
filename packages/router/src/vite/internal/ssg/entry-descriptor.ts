@@ -20,12 +20,12 @@ import type {
   FrameworkOptions,
   HydrationStrategy,
   OpenElementPackageManifest,
-  RouteEntry,
 } from '../protocol/framework.ts';
 import type { SsrAdmissionDecision } from '@openelement/element';
 import { normalizeSeparators } from '@openelement/element/build-utils';
 import { DEFAULT_ISLANDS_DIR, DEFAULT_ROUTES_DIR } from '../paths.ts';
 import { fileToTagName } from './route-scanner.ts';
+import type { ScannedRouteEntry } from './route-scanner.ts';
 import {
   buildPackageIslandDecls,
   expandIslandDeliveryDecl,
@@ -39,7 +39,7 @@ import {
   validateIslandDeliveryExportNames,
 } from './delivery.ts';
 import { compilerBehaviorDeclarations } from './client-admission.ts';
-import { quoteGeneratedJavaScriptValue } from './codegen-literals.ts';
+import { selectRendererAdapter } from './renderer-adapter.ts';
 
 function normalizeAppShellImport(importPath: string): string {
   if (importPath.startsWith('./')) return `/${importPath.slice(2)}`;
@@ -70,7 +70,7 @@ function buildAppShellPlan(options: {
 }
 
 export function buildEntryDescriptor(
-  routes: RouteEntry[],
+  routes: ScannedRouteEntry[],
   options: {
     routesDir?: string;
     islandsDir?: string;
@@ -119,15 +119,8 @@ export function buildEntryDescriptor(
   const routesDir = options.routesDir || DEFAULT_ROUTES_DIR;
   const islandsDir = options.islandsDir || DEFAULT_ISLANDS_DIR;
   const isSSG = options.ssg === true;
-  const renderer = options.renderer ?? 'native';
-  if (renderer !== 'native' && renderer !== 'lit') {
-    throw new Error(
-      `[openElement] renderer must be 'native' or 'lit' (got ${
-        quoteGeneratedJavaScriptValue(String(renderer))
-      }). ` +
-        'Renderer selection is explicit openElement({ renderer }) config and is never inferred.',
-    );
-  }
+  const adapter = selectRendererAdapter(options.renderer);
+  const renderer = adapter.mode;
 
   // --- Imports ---
   const imports: ImportDecl[] = [];
@@ -136,28 +129,7 @@ export function buildEntryDescriptor(
   imports.push({ from: 'hono', names: ['Hono'] });
   // Default body limit on action POST routes.
   imports.push({ from: 'hono/body-limit', names: ['bodyLimit'], alias: '__bodyLimit' });
-  if (renderer === 'lit') {
-    // #1339: the lit path never imports the compiled serializer (renderDsd /
-    // Part Program kernel) NOR the package root barrel that re-exports it —
-    // the pure HTML utilities come from the @openelement/element/html leaf
-    // (single implementation source, no runtime kernel in its module graph).
-    // Page SSR goes through renderLitPageToHtml from @openelement/router/lit-ssr;
-    // trustedHtml is only reached by the (rejected for lit) app-shell path.
-    imports.push({
-      from: '@openelement/element/html',
-      names: ['trustedHtml', 'escapeHtml', 'wrapInDocument'],
-    });
-    imports.push({
-      from: '@openelement/router/lit-ssr',
-      names: ['renderLitPageToHtml'],
-      alias: '__renderLitPageToHtml',
-    });
-  } else {
-    imports.push({
-      from: '@openelement/element',
-      names: ['renderDsd', 'trustedHtml', 'escapeHtml', 'wrapInDocument'],
-    });
-  }
+  imports.push(...adapter.serverImports(routes.some((route) => route.streamManifest)));
   // #1326: both renderers resolve page meaning through the one Document seam
   // before wrapInDocument serializes it.
   imports.push({
@@ -316,6 +288,7 @@ export function buildEntryDescriptor(
         importPath: `/${routesDir}/${r.filePath}`,
         isDynamic,
         paramNames,
+        ...(r.streamManifest ? { streamManifest: r.streamManifest } : {}),
       };
     });
 
@@ -335,6 +308,21 @@ export function buildEntryDescriptor(
       };
     })
     .sort((a, b) => b.depth - a.depth);
+  for (const route of pageRoutes) {
+    if (
+      route.streamManifest && (renderer !== 'native' ||
+        renderers.some((entry) =>
+          entry.scope === '/' || route.path === entry.scope ||
+          route.path.startsWith(entry.scope + '/')
+        ))
+    ) {
+      throw new Error(
+        `[openElement] stream route ${route.path}, field ${
+          route.streamManifest.fields[0].field
+        }: opaque renderer wrapper is not admitted. Keep the field front-gate or disable streaming.`,
+      );
+    }
+  }
 
   const middlewareScopes = specialRoutes
     .filter((r) => r.special === 'middleware')
@@ -426,6 +414,29 @@ export function buildEntryDescriptor(
     appShell: options.appShell,
     layouts: options.layouts,
   });
+  // Streaming boundary, project-level by construction: the generated streamed
+  // document is flushed in parts and never passes through __renderAppShell
+  // (entry-codegen.ts emits __streamBody directly), so a resolved shell would
+  // be silently dropped. The descriptor carries no per-route layout — the
+  // scan records the manifest, not `route.layout` — so the check cannot be
+  // narrowed to the routes that actually resolve a shell; it fails closed for
+  // the whole project instead of admitting a descriptor that would only fail
+  // at request time. The generated route guard (entry-codegen.ts) keeps the
+  // route-level check for descriptors that reach the runtime by another path.
+  if (
+    pageRoutes.some((route) => route.streamManifest) &&
+    (appShell.default !== false || Object.values(appShell.layouts).some((shell) => shell !== false))
+  ) {
+    const streamRoutes = pageRoutes.filter((route) => route.streamManifest)
+      .map((route) => `${route.path} (${route.filePath})`).join(', ');
+    throw new Error(
+      '[openElement] streaming requires the compiled app shell/layout wrapper to be off for the ' +
+        'whole project: a streamed document is flushed in parts and cannot be wrapped by a shell. ' +
+        'Set openElement({ appShell: false }) and remove every layouts entry, or leave streaming ' +
+        'off. A per-route route: { layout: false } cannot satisfy this gate — the build cannot see ' +
+        `a stream route's own layout. Streaming routes: ${streamRoutes}.`,
+    );
+  }
   if (
     renderer === 'lit' &&
     (appShell.default !== false || Object.values(appShell.layouts).some((shell) => shell !== false))

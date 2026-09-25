@@ -403,7 +403,10 @@ export function createOpenPlugin(
    * virtual entry module so the dev server re-evaluates it on the next pass.
    */
   async function rescanRoutes(): Promise<void> {
-    const routes = await scanRoutes(resolvedOptions.routesDir!);
+    const routes = await scanRoutes(resolvedOptions.routesDir!, '', {
+      root: viteRoot ?? Deno.cwd(),
+      workspaceRoot,
+    });
     ctx.phase1.cachedRoutes = routes;
     ctx.phase1.staticComponents = await scanStaticComponents({
       root: Deno.cwd(),
@@ -602,7 +605,10 @@ export function createOpenPlugin(
       ctx.reset();
 
       try {
-        const routes = await scanRoutes(resolvedOptions.routesDir!);
+        const routes = await scanRoutes(resolvedOptions.routesDir!, '', {
+          root: viteRoot ?? Deno.cwd(),
+          workspaceRoot,
+        });
         ctx.phase1.staticComponents = await scanStaticComponents({
           root: Deno.cwd(),
           routesDir: resolvedOptions.routesDir!,

@@ -8,7 +8,11 @@
  * capture bootstrap are reimplemented over the compiled serializer and the
  * compiled claim capture/replay seam.
  */
-import { serializeCompiledProgram } from './internal/compiled/server/index.ts';
+import {
+  createDeferredServerExecutor,
+  type DeferredServerOwner,
+  serializeCompiledProgram,
+} from './internal/compiled/server/index.ts';
 import { scopeCompiledLightCss } from './internal/compiled/style.ts';
 import type {
   CompiledElementMetadata,
@@ -45,7 +49,22 @@ export {
 } from './internal/core/security.ts';
 export { injectPropsSafe } from './internal/core/security.ts';
 export type { TrustedHtml } from './internal/core/security.ts';
-export { escapeAttr, escapeHtml, wrapInDocument } from './internal/core/html-escape.ts';
+export {
+  documentStreamParts,
+  escapeAttr,
+  escapeHtml,
+  wrapInDocument,
+} from './internal/core/html-escape.ts';
+// Streamed-frame admission policy (#1412 companion): the single source the
+// build manifest scan, the deferred executor admission, and the generated
+// browser installer all consume.
+export {
+  STREAM_FRAME_FORBIDDEN_TAGS,
+  STREAM_FRAME_UNSAFE_URL,
+  STREAM_FRAME_URL_ATTRIBUTES,
+  STREAM_FRAME_URL_CONTROL_MAX,
+  unsafeStreamFrameAttribute,
+} from './internal/protocol/stream-frame-policy.ts';
 export type { IslandOptions } from './internal/protocol/island.ts';
 export { StyleSheet } from './internal/core/style-sheet.ts';
 export { createLogger } from './internal/core/logger.ts';
@@ -136,7 +155,12 @@ function serializePropertyValue(record: CompiledPropertyMetadata, value: unknown
 }
 
 /** Coerce a JS-side prop value per the compiled converter record. */
-function coerceServerProp(record: CompiledPropertyMetadata, value: unknown): unknown {
+function coerceServerProp(
+  record: CompiledPropertyMetadata,
+  value: unknown,
+  preserveNull = false,
+): unknown {
+  if (value === null && preserveNull) return null;
   if (value === null || value === undefined) return record.default;
   switch (record.converter) {
     case 'boolean':
@@ -163,6 +187,348 @@ function parseJsonProp(record: CompiledPropertyMetadata, raw: string): unknown {
   } catch {
     return record.default;
   }
+}
+
+function seedCompiledProperties(
+  ctor: CompiledComponentConstructor,
+  props: Record<string, unknown>,
+  pendingProperties: ReadonlySet<string> = new Set(),
+  preserveNull = false,
+): {
+  signals: Record<string, ReturnType<typeof signal>>;
+  hostAttrs: Array<readonly [string, unknown]>;
+} {
+  const properties = Array.isArray(ctor.__compiledProperties)
+    ? ctor.__compiledProperties
+    : ctor.__partProgram!.metadata.properties;
+  const signals: Record<string, ReturnType<typeof signal>> = {};
+  const hostAttrs: Array<readonly [string, unknown]> = [];
+  for (const record of properties) {
+    if (record.computed) continue;
+    if (pendingProperties.has(record.name)) {
+      signals[record.name] = {
+        get value(): never {
+          throw new OpenElementError(
+            `[openElement] pending property "${record.name}" was read while creating a deferred shell.`,
+            { code: FacadeErrorCode.PROGRAM_MISSING, phase: 'ssr' },
+          );
+        },
+        subscribe: () => () => {},
+      } as unknown as ReturnType<typeof signal>;
+      continue;
+    }
+    const present = preserveNull
+      ? Object.prototype.hasOwnProperty.call(props, record.name)
+      : record.name in props;
+    const value = present
+      ? coerceServerProp(record, props[record.name], preserveNull)
+      : record.default;
+    signals[record.name] = signal(value);
+    if (record.attribute !== null) {
+      const serialized = serializePropertyValue(record, value);
+      if (serialized !== serializePropertyValue(record, record.default) && serialized !== null) {
+        hostAttrs.push([record.attribute, serialized] as const);
+      }
+    }
+  }
+  const computedFactories = ctor.__computedFields;
+  for (const record of properties) {
+    if (!record.computed) continue;
+    const factory = computedFactories?.[record.name];
+    if (!factory) {
+      throw new OpenElementError(
+        `[openElement] <${
+          ctor.__partProgram!.tag
+        }> computed property "${record.name}" has no generated factory. ` +
+          'Rebuild the component through the 0.44 compiler.',
+        { code: FacadeErrorCode.COMPUTED_FACTORY_MISSING, phase: 'ssr' },
+      );
+    }
+    signals[record.name] = factory(signals);
+  }
+  return { signals, hostAttrs };
+}
+
+/** Maps route-local deferred fields to the compiled Part or Region owners they update. */
+export interface DeferredDsdManifest {
+  program: { version: number; tag: string; sha256: string };
+  fields: readonly {
+    field: string;
+    signal: string;
+    owners: readonly { kind: 'part' | 'region'; index: number }[];
+  }[];
+}
+
+/** Inputs for a request-scoped deferred DSD server executor. */
+export interface CreateDeferredDsdOptions {
+  componentClass: CustomElementConstructor;
+  props?: Record<string, unknown>;
+  manifest: DeferredDsdManifest;
+  instanceId: string;
+  documentToken?: string;
+}
+
+/** Initial shell, typed seed, and bounded updates for a deferred DSD request. */
+export interface DeferredDsdExecutor {
+  readonly shell: string;
+  readonly owner: DeferredServerOwner;
+  readonly seed: Record<
+    string,
+    { state: 'resolved'; type: string; value: unknown } | {
+      state: 'pending';
+      type: string;
+    } | {
+      state: 'missing';
+      type: string;
+    }
+  >;
+  resolvedValue(field: string, value: unknown): unknown;
+  serializeResolved(field: string, value: unknown): string[];
+}
+
+function jsonSeed(value: unknown, field: string): unknown {
+  const reject = (): never => {
+    throw new OpenElementError(
+      `[openElement] deferred property "${field}" is not a JSON-safe typed value.`,
+      { code: FacadeErrorCode.PROGRAM_MISSING, phase: 'ssr' },
+    );
+  };
+  const seen = new Set<object>();
+  const visit = (item: unknown): unknown => {
+    if (item === null || typeof item === 'string' || typeof item === 'boolean') return item;
+    if (typeof item === 'number' && Number.isFinite(item)) return item;
+    if (Array.isArray(item)) {
+      if (seen.has(item)) reject();
+      seen.add(item);
+      const result = item.map(visit);
+      seen.delete(item);
+      return result;
+    }
+    if (item && typeof item === 'object' && Object.getPrototypeOf(item) === Object.prototype) {
+      if (seen.has(item)) reject();
+      seen.add(item);
+      const result: Record<string, unknown> = {};
+      for (const [key, entry] of Object.entries(item)) {
+        if (key === '__proto__' || key === 'constructor' || key === 'prototype') {
+          reject();
+        }
+        result[key] = visit(entry);
+      }
+      seen.delete(item);
+      return result;
+    }
+    return reject();
+  };
+  try {
+    return visit(value);
+  } catch {
+    return reject();
+  }
+}
+
+/**
+ * Create one request-local deferred shell from a generated route manifest.
+ * The manifest hash is checked against the exact runtime wire program before
+ * any shell can be produced.
+ */
+export async function createDeferredDsdExecutor(
+  options: CreateDeferredDsdOptions,
+): Promise<DeferredDsdExecutor> {
+  const ctor = options.componentClass as CompiledComponentConstructor;
+  const program = ctor.__partProgram;
+  if (!program) failUncompiled(ctor, '<unknown>');
+  if (
+    !options.manifest || !Array.isArray(options.manifest.fields) ||
+    !options.manifest.program || typeof options.manifest.program.sha256 !== 'string'
+  ) {
+    throw new OpenElementError(
+      '[openElement] deferred route manifest is malformed.',
+      { code: FacadeErrorCode.PROGRAM_MISSING, phase: 'ssr' },
+    );
+  }
+  const { sourceMap: _sourceMap, ...wireProgram } = program;
+  const bytes = new TextEncoder().encode(JSON.stringify(wireProgram));
+  const digest = await crypto.subtle.digest('SHA-256', bytes);
+  const sha256 = [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join(
+    '',
+  );
+  const manifest = options.manifest;
+  if (
+    manifest.program.version !== program.version || manifest.program.tag !== program.tag ||
+    manifest.program.sha256 !== sha256
+  ) {
+    throw new OpenElementError(
+      `[openElement] deferred route manifest does not match compiled program <${program.tag}>.`,
+      { code: FacadeErrorCode.PROGRAM_MISSING, phase: 'ssr' },
+    );
+  }
+  const properties = Array.isArray(ctor.__compiledProperties)
+    ? ctor.__compiledProperties
+    : program.metadata.properties;
+  if (
+    properties.some((record) =>
+      record.name === '__proto__' || record.name === 'constructor' ||
+      record.name === 'prototype'
+    )
+  ) {
+    throw new OpenElementError(
+      '[openElement] reserved compiled property name cannot enter a deferred seed.',
+      { code: FacadeErrorCode.PROGRAM_MISSING, phase: 'ssr' },
+    );
+  }
+  // Same bounded budget the build manifest scan and the runtime/browser
+  // front gate enforce (fields <= 32, Part owners <= 64): the hand-written
+  // manifest path must fail loud here instead of emitting a shell whose seed
+  // or frames the browser contractually discards.
+  const manifestOwnerTotal = manifest.fields.reduce(
+    (count, field) => count + field.owners.length,
+    0,
+  );
+  if (manifest.fields.length > 32 || manifestOwnerTotal > 64) {
+    throw new OpenElementError(
+      `[openElement] deferred manifest for <${program.tag}> exceeds the bounded ` +
+        `deferred budget: ${manifest.fields.length} fields (max 32), ` +
+        `${manifestOwnerTotal} Part owners (max 64). Defer fewer fields, reduce ` +
+        'the deferred sinks per field, or split the page.',
+      { code: FacadeErrorCode.PROGRAM_MISSING, phase: 'ssr' },
+    );
+  }
+  const propertyNames = new Set(properties.map((record) => record.name));
+  const pending = new Set<string>();
+  const deferredProperties = new Map<string, CompiledPropertyMetadata>();
+  const selectedParts: number[] = [];
+  for (const field of manifest.fields) {
+    if (
+      !field.field || field.signal !== field.field || pending.has(field.field) ||
+      !propertyNames.has(field.field)
+    ) {
+      throw new OpenElementError(
+        `[openElement] invalid deferred field "${field.field}" in route manifest.`,
+        { code: FacadeErrorCode.PROGRAM_MISSING, phase: 'ssr' },
+      );
+    }
+    const record = properties.find((property) => property.name === field.field)!;
+    if (record.computed || record.attribute !== null || record.reflect) {
+      throw new OpenElementError(
+        `[openElement] deferred property "${field.field}" must be writable and nonreflecting.`,
+        { code: FacadeErrorCode.PROGRAM_MISSING, phase: 'ssr' },
+      );
+    }
+    pending.add(field.field);
+    deferredProperties.set(field.field, record);
+    for (const owner of field.owners) {
+      const part = program.parts[owner.index];
+      if (
+        !part || part.index !== owner.index ||
+        (part.k !== 'text' && part.k !== 'when' && part.k !== 'each') ||
+        part.signal !== field.signal ||
+        owner.kind !== (part.k === 'text' ? 'part' : 'region')
+      ) {
+        throw new OpenElementError(
+          `[openElement] deferred field "${field.field}" has an invalid Part owner ${owner.index}.`,
+          { code: FacadeErrorCode.PROGRAM_MISSING, phase: 'ssr' },
+        );
+      }
+      selectedParts.push(owner.index);
+    }
+    if (field.owners.length === 0) {
+      throw new OpenElementError(
+        `[openElement] deferred field "${field.field}" has no Part owners.`,
+        { code: FacadeErrorCode.PROGRAM_MISSING, phase: 'ssr' },
+      );
+    }
+  }
+  const props = options.props ?? {};
+  const { signals, hostAttrs } = seedCompiledProperties(ctor, props, pending, true);
+  const seed: DeferredDsdExecutor['seed'] = {};
+  for (const record of properties) {
+    if (record.computed) continue;
+    if (pending.has(record.name)) {
+      seed[record.name] = { state: 'pending', type: record.type };
+    } else if (
+      !Object.prototype.hasOwnProperty.call(props, record.name) ||
+      signals[record.name].value === undefined
+    ) {
+      seed[record.name] = { state: 'missing', type: record.type };
+    } else {
+      seed[record.name] = {
+        state: 'resolved',
+        type: record.type,
+        value: jsonSeed(signals[record.name].value, record.name),
+      };
+    }
+  }
+  // The browser seed contract rejects any seed carrying more than 64 typed
+  // properties — and it rejects the WHOLE seed, so an oversized component
+  // would silently fail to hydrate instead of failing loud here.
+  if (Object.keys(seed).length > 64) {
+    throw new OpenElementError(
+      `[openElement] deferred stream seed for <${program.tag}> carries ${
+        Object.keys(seed).length
+      } properties; the browser seed contract accepts at most 64. ` +
+        'Trim the component property surface or the seed is silently rejected at hydration.',
+      { code: FacadeErrorCode.PROGRAM_MISSING, phase: 'ssr' },
+    );
+  }
+  if (options.documentToken) {
+    hostAttrs.push(['data-oe-stream-request', options.documentToken]);
+    hostAttrs.push([
+      'data-oe-stream-program',
+      `${manifest.program.version}:${manifest.program.sha256}`,
+    ]);
+    hostAttrs.push(['data-oe-stream-instance', options.instanceId]);
+  }
+  const mode = program.root.kind === 'light'
+    ? 'light'
+    : program.root.kind === 'shadow-open'
+    ? 'open'
+    : 'closed';
+  const owner: DeferredServerOwner = {
+    program,
+    version: program.version,
+    instanceId: options.instanceId,
+  };
+  const styleCss = collectStaticStyleCss(ctor);
+  const executor = createDeferredServerExecutor(
+    program,
+    { signals, handlers: {} },
+    { owner, pendingParts: selectedParts },
+    {
+      mode,
+      hostAttrs,
+      dsd: ctor.delegatesFocus === true ? { delegatesFocus: true } : undefined,
+      styleCss: mode === 'light' && styleCss
+        ? scopeCompiledLightCss(program.tag, styleCss)
+        : styleCss,
+    },
+  );
+  return {
+    shell: executor.shell,
+    owner,
+    seed,
+    resolvedValue(field, value) {
+      const record = deferredProperties.get(field);
+      if (!record) {
+        throw new OpenElementError(
+          `[openElement] unknown deferred field "${field}".`,
+          { code: FacadeErrorCode.PROGRAM_MISSING, phase: 'ssr' },
+        );
+      }
+      return jsonSeed(value === null ? null : coerceServerProp(record, value), field);
+    },
+    serializeResolved(field, value) {
+      const entry = manifest.fields.find((candidate) => candidate.field === field);
+      if (!entry) {
+        throw new OpenElementError(
+          `[openElement] unknown deferred field "${field}".`,
+          { code: FacadeErrorCode.PROGRAM_MISSING, phase: 'ssr' },
+        );
+      }
+      const record = deferredProperties.get(field)!;
+      const seededValue = value === null ? null : coerceServerProp(record, value);
+      return entry.owners.map((part) => executor.serializeResolved(owner, part.index, seededValue));
+    },
+  };
 }
 
 /**
@@ -214,41 +580,14 @@ function renderDsdAtDepth(
     );
   }
 
-  const properties = Array.isArray(resolvedClass.__compiledProperties)
-    ? resolvedClass.__compiledProperties
-    : program.metadata.properties;
   const props = options.props ?? {};
-
-  const signals: Record<string, ReturnType<typeof signal>> = {};
-  const hostAttrs: Array<readonly [string, unknown]> = [...(options.hostAttrs ?? [])];
-  for (const record of properties) {
-    if (record.computed) continue;
-    const value = record.name in props
-      ? coerceServerProp(record, props[record.name])
-      : record.default;
-    signals[record.name] = signal(value);
-    if (record.attribute !== null) {
-      const serialized = serializePropertyValue(record, value);
-      if (serialized !== serializePropertyValue(record, record.default) && serialized !== null) {
-        hostAttrs.push([record.attribute, serialized] as const);
-      }
-    }
-  }
   // Computed fields derive from the seeded plain signals — same factories the
   // client facade runs, so server output and client claim read one value set.
-  const computedFactories = (resolvedClass as CompiledComponentConstructor).__computedFields;
-  for (const record of properties) {
-    if (!record.computed) continue;
-    const factory = computedFactories?.[record.name];
-    if (!factory) {
-      throw new OpenElementError(
-        `[openElement] <${tag}> computed property "${record.name}" has no generated factory. ` +
-          'Rebuild the component through the 0.44 compiler.',
-        { code: FacadeErrorCode.COMPUTED_FACTORY_MISSING, phase: 'ssr' },
-      );
-    }
-    signals[record.name] = factory(signals);
-  }
+  const { signals, hostAttrs: seededAttrs } = seedCompiledProperties(resolvedClass, props);
+  const hostAttrs: Array<readonly [string, unknown]> = [
+    ...(options.hostAttrs ?? []),
+    ...seededAttrs,
+  ];
 
   const mode = program.root.kind === 'light'
     ? 'light'

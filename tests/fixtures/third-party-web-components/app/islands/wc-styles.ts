@@ -20,6 +20,12 @@ export const wcFixtureStyles = [
     .fixture-root { display: grid; gap: 1rem; }
     section { display: grid; gap: 0.5rem; padding: 1rem; border: 1px solid #d0d7de; border-radius: 8px; }
     .row { display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: center; }
+    wc-lit-counter:not(:defined), sl-button:not(:defined), md-filled-button:not(:defined) {
+      outline: 1px solid rgb(0, 120, 80);
+    }
+    wc-lit-counter:defined, sl-button:defined, md-filled-button:defined {
+      outline: 1px solid rgb(80, 80, 80);
+    }
   `),
 ];
 

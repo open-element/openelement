@@ -47,7 +47,11 @@ export function renderSsgSection(desc: EntryDescriptor): string {
       }, tagName: ${tagNameExpr}, module: ${r.varName}, isDynamic: ${!!r
         .isDynamic}, paramNames: [${
         (r.paramNames || []).map(quoteGeneratedJavaScriptValue).join(', ')
-      }], rendering: (__pageDefinition(${r.varName}).renderIntent?.mode || "static"), hasAction: (typeof ${r.varName}.action === "function" || (typeof ${r.varName}.actions === "object" && ${r.varName}.actions !== null)) },`,
+      }], rendering: (__pageDefinition(${r.varName}).renderIntent?.mode || "static"), hasAction: (typeof ${r.varName}.action === "function" || (typeof ${r.varName}.actions === "object" && ${r.varName}.actions !== null))${
+        r.streamManifest
+          ? `, streamManifest: __streamManifests[${quoteGeneratedJavaScriptValue(r.path)}]`
+          : ''
+      } },`,
     );
   }
   lines.push('];');

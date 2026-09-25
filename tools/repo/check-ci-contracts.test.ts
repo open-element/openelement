@@ -1,12 +1,8 @@
 /**
  * check-ci-contracts.test.ts — CI required/optional contract tripwire.
  *
- * Bun is a non-blocking compatibility signal, never a gate: if a workflow
- * edit drops `continue-on-error` from bun-serve-smoke (or promotes it into
- * the required set), this test fails before the policy silently changes.
- * Conversely the required jobs (autoflow-ci, node-serve-smoke,
- * packed-consumer-matrix) must stay blocking, and the packed-consumer
- * matrix must install all three packed-gate browsers.
+ * Required workflow jobs must stay blocking, and the packed-consumer matrix
+ * must install all three packed-gate browsers.
  */
 
 import { assert, assertEquals } from '@std/assert';
@@ -18,6 +14,7 @@ const releasing = await Deno.readTextFile(join(repoRoot, 'docs/maintainers/relea
 const dependencyAudit = await Deno.readTextFile(
   join(repoRoot, '.github/workflows/dependency-audit.yml'),
 );
+const siteConfig = await Deno.readTextFile(join(repoRoot, 'www/openelement.config.ts'));
 
 /** Extract one top-level job block (two-space `name:` jobs) by job key. */
 function jobBlock(text: string, job: string): string {
@@ -28,17 +25,14 @@ function jobBlock(text: string, job: string): string {
   return next < 0 ? rest : rest.slice(0, next + 1);
 }
 
-Deno.test('ci contract: bun-serve-smoke is explicitly non-blocking', () => {
-  const block = jobBlock(workflow, 'bun-serve-smoke');
-  assert(
-    /continue-on-error:\s*true/.test(block),
-    'bun-serve-smoke must carry job-level continue-on-error: true (Bun is optional, never a gate)',
-  );
-});
-
 Deno.test('ci contract: required jobs stay blocking', () => {
   for (
-    const job of ['autoflow-ci', 'node-serve-smoke', 'packed-consumer-matrix', 'bfcache-chrome']
+    const job of [
+      'autoflow-ci',
+      'node-serve-smoke',
+      'packed-consumer-matrix',
+      'bfcache-chrome',
+    ]
   ) {
     const block = jobBlock(workflow, job);
     assert(
@@ -46,6 +40,38 @@ Deno.test('ci contract: required jobs stay blocking', () => {
       `required job ${job} must not carry continue-on-error: true`,
     );
   }
+});
+
+Deno.test('ci contract: release guide names individually required ruleset checks', () => {
+  const normalizedReleasing = releasing.replace(/\s+/gu, ' ');
+  for (
+    const check of [
+      '21775463',
+      '`fast-checks`',
+      '`source-matrix`',
+      '`fresh-clone`',
+      '`packed-consumers`',
+      '`dependency-review`',
+      '`CodeQL`',
+      'strict required status-check policy',
+    ]
+  ) {
+    assert(
+      normalizedReleasing.includes(check),
+      `releasing guide must name required check ${check}`,
+    );
+  }
+  assert(
+    !/producers are not individual required checks/u.test(releasing),
+    'the guide must not describe the aggregate as the only required CI check',
+  );
+});
+
+Deno.test('ci contract: Site config omits the inert empty stylesheet channel', () => {
+  assert(
+    !/stylesheets:\s*\[\s*\]/u.test(siteConfig),
+    'the Site must not configure an empty stylesheet list',
+  );
 });
 
 Deno.test('ci contract: packed-consumer matrix installs all three packed-gate browsers', () => {
@@ -264,21 +290,6 @@ Deno.test('ci contract: Deno dependencies are audited, never auto-merged', () =>
   );
 });
 
-Deno.test('ci contract: release docs never present Bun as required', () => {
-  const flat = releasing.replace(/\s+/g, ' ');
-  assert(
-    /bun-serve-smoke[^.]{0,200}optional\/non-blocking/i.test(flat) ||
-      /optional\/non-blocking[^.]{0,200}bun-serve-smoke/i.test(flat),
-    'releasing.md must mark bun-serve-smoke optional/non-blocking',
-  );
-  const requiredLine = releasing.split('\n').find((line) => line.includes('branch protection'));
-  assertEquals(
-    requiredLine?.includes('bun-serve-smoke'),
-    false,
-    'bun-serve-smoke must not appear in the required branch-protection list',
-  );
-});
-
 Deno.test('ci contract: BFCache runs a blocking Chrome-channel lane', async () => {
   const block = jobBlock(workflow, 'bfcache-chrome');
   assert(block.length > 0, 'bfcache-chrome job must exist');
@@ -383,13 +394,6 @@ Deno.test('ci contract: SaaS is decoupled from the core candidate gate', async (
   assert(rootConfig.tasks['verify:core'], 'root verify:core must exist');
   assert(!rootConfig.tasks['verify:core'].toLowerCase().includes('saas'));
   assert(rootConfig.tasks['verify'].includes('saas:verify'), 'full verify keeps SaaS');
-});
-
-Deno.test('ci contract: the SaaS CI job is optional and never required', () => {
-  const block = jobBlock(workflow, 'saas-optional');
-  assert(/continue-on-error:\s*true/.test(block), 'saas-optional must be non-blocking');
-  const aggregate = jobBlock(workflow, 'autoflow-ci');
-  assert(!/saas-optional/.test(aggregate), 'aggregation must not depend on the SaaS job');
 });
 
 Deno.test('ci contract: partial publish receipts are persisted as recovery records', async () => {
@@ -522,6 +526,10 @@ Deno.test('ci contract: tree-SHA evidence reuse is fail-closed and single-source
   ];
   for (const [job, task] of lanes) {
     const block = jobBlock(workflow, job);
+    assert(
+      /permissions:\s*\n\s+contents:\s*read\s*\n\s+actions:\s*read/.test(block),
+      `${job} must grant actions: read for the cross-run evidence claim`,
+    );
     assert(
       /needs:\s*reuse\b/.test(block) || /needs:\s*\[.*\breuse\b.*\]/.test(block),
       `${job} must depend on the reuse decision`,

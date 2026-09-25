@@ -19,6 +19,8 @@ import {
   evidenceArtifactName,
   resolveReuse,
   type RunSummary,
+  workflowArtifactListArgs,
+  workflowRunListArgs,
 } from './evidence-reuse.ts';
 
 const TREE = 'b'.repeat(40);
@@ -84,6 +86,26 @@ Deno.test('reuse resolver: a tree-identical successful run with the artifact is 
   assertEquals(decision.reused, true);
   assertEquals(decision.sourceRunId, 42);
   assertEquals(decision.sourceSha, SOURCE_SHA);
+});
+
+Deno.test('reuse GitHub queries stay scoped and paginate artifact listings', () => {
+  assertEquals(workflowRunListArgs(50), [
+    'run',
+    'list',
+    '--workflow',
+    'autoflow-ci.yml',
+    '--limit',
+    '50',
+    '--json',
+    'databaseId,headSha,conclusion,createdAt',
+  ]);
+  assertEquals(workflowArtifactListArgs(42), [
+    'api',
+    '--paginate',
+    'repos/{owner}/{repo}/actions/runs/42/artifacts?per_page=100',
+    '--jq',
+    '.artifacts[].name',
+  ]);
 });
 
 Deno.test('reuse resolver: a different tree is never a source', async () => {
@@ -171,6 +193,31 @@ Deno.test('reuse resolver: an unresolvable commit is skipped, not guessed', asyn
   });
   assertEquals(decision.reused, true);
   assertEquals(decision.sourceRunId, 42);
+});
+
+Deno.test('reuse resolver: maxCandidates bounds inspected eligible runs, including unresolved trees', async () => {
+  let treeLookups = 0;
+  const decision = await resolveReuse({
+    currentSha: SHA,
+    currentTree: TREE,
+    jobs: ['packed'],
+    now: NOW,
+    maxCandidates: 2,
+    listRuns: () =>
+      Promise.resolve([
+        { runId: 43, headSha: '1'.repeat(40), conclusion: 'success', createdAt: fresh(DAY) },
+        { runId: 42, headSha: '2'.repeat(40), conclusion: 'success', createdAt: fresh(DAY) },
+        { runId: 41, headSha: SOURCE_SHA, conclusion: 'success', createdAt: fresh(DAY) },
+      ]),
+    resolveTree: (sha) => {
+      treeLookups++;
+      return Promise.resolve(sha === SOURCE_SHA ? TREE : null);
+    },
+    listArtifacts: () => Promise.resolve([evidenceArtifactName('packed')]),
+  });
+  assertEquals(treeLookups, 2);
+  assertEquals(decision.reused, false);
+  assertEquals(decision.reason.includes('2 inspected candidate(s)'), true);
 });
 
 Deno.test('reuse resolver: a run-list failure is fail-closed', async () => {

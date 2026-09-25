@@ -3,6 +3,7 @@ import { ACTION_FETCH_HEADER } from '@openelement/element';
 import { stableModuleId } from '@openelement/element/compiler';
 import { findWorkspaceRoot } from '../../workspace-alias.ts';
 import { quoteGeneratedJavaScriptValue } from './codegen-literals.ts';
+import { selectRendererAdapter } from './renderer-adapter.ts';
 import {
   type AdmittedClientIslandEntry,
   type AdmittedIslandModuleSpecifier,
@@ -213,7 +214,7 @@ export function generateClientEntry(
     return '// openElement Client Entry - No islands detected, zero client JS needed\n';
   }
 
-  const lit = options.renderer === 'lit';
+  const lit = selectRendererAdapter(options.renderer).hydration === 'lit-adoption';
   // Lit hydration is owned by lit-element-hydrate-support, not by the compiled
   // claim, so the element package's claim executor is never part of a lit
   // client bundle: that entry already keeps its element imports minimal and

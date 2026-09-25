@@ -12,10 +12,8 @@
  *
  * The qualification pins, per consumed third-party Web Component kind:
  * - tag presence and authored literal attributes in the SSG HTML,
- * - authored light-DOM children surviving verbatim (v0.44: none — the
- *   compiler grammar admits foreign hosts as empty static shells with literal
- *   attributes only; slotted content is stamped at island activation and is
- *   pinned by the browser probes instead),
+ * - authored light-DOM children surviving verbatim for the slot-first
+ *   probes; other client-only labels are stamped at island activation,
  * - presence/absence of a DSD `<template shadowrootmode>` per component kind,
  * - the data-eid event-binding attribute (v0.44: never — the legacy
  *   marker-based event binding was replaced by compiled event Parts claimed
@@ -204,17 +202,87 @@ export interface BrowserCapabilityEvidence {
   slotContent: boolean | null;
   attributeProperty: boolean | null;
   eventObserved: boolean | null;
-  hydrationSafe: boolean;
+  hydrationSafe: boolean | null;
+}
+
+interface SlotFirstEvidence {
+  contentWithoutJs: boolean;
+  undefinedStyle: boolean;
+  definedStyle: boolean;
+  capturedBeforeUpgrade: boolean;
+  hostPreserved: boolean;
+  identityPreserved: boolean;
 }
 
 export async function verifyBrowser(
   distDir: string,
-): Promise<Record<string, BrowserCapabilityEvidence>> {
+): Promise<{
+  capabilities: Record<string, BrowserCapabilityEvidence>;
+  slotFirst: Record<string, SlotFirstEvidence>;
+  browserVersion: string;
+}> {
   const { chromium } = await import('npm:playwright@1.59.1');
   const server = serveStatic(distDir);
   const browser = await chromium.launch();
   try {
+    const slotFirst: Record<string, SlotFirstEvidence> = {};
+    const slotText = new Map(
+      CORPUS.filter((entry) => entry.expect.lightDomChildren.length > 0)
+        .map((entry) => [entry.tag, entry.expect.lightDomChildren[0]] as const),
+    );
+    const noJs = await browser.newContext({ javaScriptEnabled: false });
+    try {
+      const rawPage = await noJs.newPage();
+      await rawPage.goto(`${server.origin}/third-party-wc/`);
+      for (const [tag, expected] of slotText) {
+        const host = rawPage.locator(tag).first();
+        slotFirst[tag] = {
+          contentWithoutJs: (await host.textContent())?.includes(expected) === true,
+          undefinedStyle: await rawPage.locator(`${tag}:not(:defined)`).count() > 0 &&
+            await host.evaluate((node) =>
+              getComputedStyle(node).outlineColor === 'rgb(0, 120, 80)'
+            ),
+          definedStyle: false,
+          capturedBeforeUpgrade: false,
+          hostPreserved: false,
+          identityPreserved: false,
+        };
+      }
+    } finally {
+      await noJs.close();
+    }
     const page = await browser.newPage();
+    await page.addInitScript(() => {
+      const captured = new Map<string, { host: Element; child: Node }>();
+      const tags = ['wc-lit-counter', 'sl-button', 'md-filled-button'];
+      const observed = new Set<Node>();
+      const watch = new MutationObserver(() => {
+        const appRoot = document.querySelector('app-shell')?.shadowRoot;
+        const routeRoot = appRoot?.querySelector('third-party-wc')?.shadowRoot;
+        const root = routeRoot?.querySelector('wc-fixture')?.shadowRoot;
+        for (const candidate of [appRoot, routeRoot, root]) {
+          if (candidate && !observed.has(candidate)) {
+            watch.observe(candidate, { childList: true, subtree: true });
+            observed.add(candidate);
+          }
+        }
+        if (!root) return;
+        for (const tag of tags) {
+          if (captured.has(tag) || customElements.get(tag)) continue;
+          const host = root.querySelector(tag);
+          // Pure-text light children (sl-button, md-filled-button) have no
+          // firstElementChild, so the identity snapshot pins the first child
+          // NODE — a text node carries the same host/child identity evidence
+          // an element child does.
+          if (host && host.firstChild) captured.set(tag, { host, child: host.firstChild });
+        }
+        if (captured.size === tags.length) watch.disconnect();
+      });
+      watch.observe(document, { childList: true, subtree: true });
+      (globalThis as typeof globalThis & {
+        __wcBeforeUpgrade?: Map<string, { host: Element; child: Node }>;
+      }).__wcBeforeUpgrade = captured;
+    });
     const browserErrors: string[] = [];
     page.on('pageerror', (error) => browserErrors.push(error.message));
     page.on('console', (message) => {
@@ -358,7 +426,7 @@ export async function verifyBrowser(
           slotContent: options.slot ? element?.textContent?.includes(options.slot) === true : null,
           attributeProperty: options.attributeProperty ?? null,
           eventObserved: options.event ? eventLog.includes(options.event) : null,
-          hydrationSafe: true,
+          hydrationSafe: null,
         };
       };
       const fast = root.querySelector('wc-fast-counter') as HTMLElement & { count?: number };
@@ -377,7 +445,7 @@ export async function verifyBrowser(
       fast.setAttribute('data-probe', 'fast');
       ionic.disabled = true;
       mdButton.disabled = true;
-      const evidence = {
+      const evidence: Record<string, BrowserCapabilityEvidence> = {
         'wc-fixture': {
           registered: !!customElements.get('wc-fixture'),
           upgraded: root.host.constructor !== HTMLElement,
@@ -385,7 +453,7 @@ export async function verifyBrowser(
           slotContent: null,
           attributeProperty: null,
           eventObserved: null,
-          hydrationSafe: true,
+          hydrationSafe: null,
         },
         'wc-lit-counter': probe('wc-lit-counter', {
           slot: 'Lit slot label',
@@ -441,7 +509,34 @@ export async function verifyBrowser(
     if (browserErrors.length > 0) {
       throw new Error(`browser/hydration errors: ${browserErrors.join(' | ')}`);
     }
-    return evidence;
+    for (const tag of slotText.keys()) {
+      const host = page.locator(tag).first();
+      slotFirst[tag].definedStyle = await page.locator(`${tag}:defined`).count() > 0 &&
+        await host.evaluate((node) => getComputedStyle(node).outlineColor === 'rgb(80, 80, 80)');
+      const identity = await page.evaluate((name) => {
+        const before = (globalThis as typeof globalThis & {
+          __wcBeforeUpgrade?: Map<string, { host: Element; child: Node }>;
+        }).__wcBeforeUpgrade?.get(name);
+        const root = document.querySelector('app-shell')?.shadowRoot
+          ?.querySelector('third-party-wc')?.shadowRoot
+          ?.querySelector('wc-fixture')?.shadowRoot;
+        const current = root?.querySelector(name);
+        return {
+          capturedBeforeUpgrade: !!before,
+          hostPreserved: !!before && current === before.host,
+          identityPreserved: !!before && current === before.host &&
+            current.firstChild === before.child,
+        };
+      }, tag);
+      Object.assign(slotFirst[tag], identity);
+      // README contract: hydration safety is null unless pre-upgrade identity
+      // was actually captured — a missing capture is a probe gap, never
+      // evidence of unsafety.
+      evidence[tag].hydrationSafe = identity.capturedBeforeUpgrade
+        ? identity.identityPreserved
+        : null;
+    }
+    return { capabilities: evidence, slotFirst, browserVersion: browser.version() };
   } finally {
     await browser.close();
     await server.close();
@@ -450,11 +545,9 @@ export async function verifyBrowser(
 
 async function verifySsrHtml(appDir: string): Promise<void> {
   const html = await Deno.readTextFile(join(appDir, 'dist', 'third-party-wc', 'index.html'));
-  // SSR form: foreign tags serialize as empty static hosts carrying their
-  // authored literal attributes (the compiler grammar v1 admits no host
-  // children, so the slotted labels/text are stamped client-side by the
-  // fixture island's activation seam; the legacy data-eid event-binding
-  // marker is gone — the compiled claim attaches method handlers directly).
+  // SSR form: foreign tags remain opaque hosts; three slot-first Lit probes
+  // have server-born children, while the other labels are attached by the
+  // fixture after activation. The legacy data-eid marker is not emitted.
   for (
     const expected of [
       '<wc-fixture',
@@ -538,7 +631,7 @@ interface SsrAdmissionPlan {
 }
 
 interface CorpusExpectation {
-  /** Authored light-DOM children surviving SSR (always empty — stamped at activation). */
+  /** Authored light-DOM children surviving SSR for slot-first probes. */
   lightDomChildren: string[];
   /** Whether SSR emits a DSD shadow template directly inside the tag. */
   dsdTemplate: boolean;
@@ -574,7 +667,7 @@ const CORPUS: CorpusEntry[] = [
     library: 'lit',
     metadata: 'none',
     expect: {
-      lightDomChildren: [],
+      lightDomChildren: ['Lit slot label'],
       dsdTemplate: false,
       dataEid: false,
       admission: 'client-only',
@@ -596,7 +689,7 @@ const CORPUS: CorpusEntry[] = [
     library: '@shoelace-style/shoelace',
     metadata: 'cem',
     expect: {
-      lightDomChildren: [],
+      lightDomChildren: ['Shoelace Button'],
       dsdTemplate: false,
       dataEid: false,
       admission: 'client-only',
@@ -629,7 +722,7 @@ const CORPUS: CorpusEntry[] = [
     library: '@material/web',
     metadata: 'none',
     expect: {
-      lightDomChildren: [],
+      lightDomChildren: ['Material Button'],
       dsdTemplate: false,
       dataEid: false,
       admission: 'client-only',
@@ -756,6 +849,60 @@ interface SsrFormObservation {
   dataEid: boolean;
 }
 
+/** True when `char` can follow an element name inside its tag (`<name`+char). */
+function endsElementName(char: string | undefined): boolean {
+  return char === undefined || char === '>' || char === '/' || char === ' ' ||
+    char === '\t' || char === '\n' || char === '\r';
+}
+
+/**
+ * The outer HTML of the FIRST `tag` element, or '' when it is absent or
+ * unbalanced. Nested same-tag elements are skipped by depth counting.
+ *
+ * The light-DOM child pin must be read inside the host it belongs to: a whole
+ * document `html.includes(child)` also passes when the same text appears in an
+ * unrelated element (another tag's authored child, a heading, the `<noscript>`
+ * tail), so the probe would no longer evidence this host's slot-first
+ * children. Slicing the balanced host range keeps the pin on the host.
+ */
+export function hostOuterHtml(html: string, tag: string): string {
+  const openPrefix = '<' + tag;
+  const closePrefix = '</' + tag;
+  let start = -1;
+  for (let cursor = 0; start < 0;) {
+    const candidate = html.indexOf(openPrefix, cursor);
+    // `<tag-other` / `<tags>` share the prefix but are not this host.
+    if (candidate < 0) return '';
+    if (endsElementName(html[candidate + openPrefix.length])) start = candidate;
+    else cursor = candidate + 1;
+  }
+  let depth = 0;
+  for (let cursor = start; cursor < html.length;) {
+    const nextOpen = html.indexOf(openPrefix, cursor);
+    const nextClose = html.indexOf(closePrefix, cursor);
+    if (nextClose >= 0 && (nextOpen < 0 || nextClose < nextOpen)) {
+      depth--;
+      cursor = nextClose + closePrefix.length;
+      if (depth === 0) {
+        const end = html.indexOf('>', cursor);
+        return html.slice(start, end < 0 ? html.length : end + 1);
+      }
+      continue;
+    }
+    if (nextOpen < 0) return '';
+    if (!endsElementName(html[nextOpen + openPrefix.length])) {
+      cursor = nextOpen + 1;
+      continue;
+    }
+    const close = html.indexOf('>', nextOpen + openPrefix.length);
+    if (close < 0) return '';
+    // `<tag/>` closes itself; anything else opens a nested host.
+    if (html[close - 1] !== '/') depth++;
+    cursor = close + 1;
+  }
+  return '';
+}
+
 function observeSsrForm(html: string, entry: CorpusEntry): SsrFormObservation {
   const openTag = new RegExp(`<${escapeRegExp(entry.tag)}(\\s[^>]*)?>`);
   const match = openTag.exec(html);
@@ -763,7 +910,9 @@ function observeSsrForm(html: string, entry: CorpusEntry): SsrFormObservation {
   const dsdTemplate = tagPresent &&
     new RegExp(`<${escapeRegExp(entry.tag)}(\\s[^>]*)?>\\s*<template shadowrootmode`).test(html);
   const dataEid = tagPresent && /\bdata-eid=/.test(match![0]);
-  const lightDomChildren = entry.expect.lightDomChildren.filter((child) => html.includes(child));
+  const lightDomChildren = entry.expect.lightDomChildren.filter((child) =>
+    hostOuterHtml(html, entry.tag).includes(child)
+  );
   return { tagPresent, lightDomChildren, dsdTemplate, dataEid };
 }
 
@@ -777,7 +926,9 @@ async function main(): Promise<void> {
     const entryJs = await Deno.readTextFile(join(appDir, 'dist', 'server', 'entry.js'));
     const plan = extractSsrAdmissionPlan(entryJs);
     const decisionByTag = new Map(plan.decisions.map((d) => [d.tagName, d]));
-    const browser = await verifyBrowser(join(appDir, 'dist'));
+    const { capabilities: browser, slotFirst, browserVersion } = await verifyBrowser(
+      join(appDir, 'dist'),
+    );
     const metadataProbes = await Promise.all(METADATA_PROBES.map(async (probe) => ({
       library: probe.library,
       format: probe.format,
@@ -824,8 +975,11 @@ async function main(): Promise<void> {
 
       const browserCapabilities = browser[entry.tag];
       if (
-        !browserCapabilities ||
-        Object.values(browserCapabilities).some((value) => value === false)
+        !browserCapabilities || !browserCapabilities.registered ||
+        !browserCapabilities.upgraded || !browserCapabilities.shadowRoot ||
+        browserCapabilities.slotContent === false ||
+        browserCapabilities.attributeProperty === false ||
+        browserCapabilities.eventObserved === false
       ) {
         failures.push(`${entry.tag}: one or more browser capability probes failed`);
       }
@@ -843,6 +997,57 @@ async function main(): Promise<void> {
       throw new Error(`SSR corpus mismatches:\n- ${failures.join('\n- ')}`);
     }
 
+    const hash = async (text: string): Promise<string> =>
+      [...new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text)))]
+        .map((byte) => byte.toString(16).padStart(2, '0')).join('');
+    const tierReport = {
+      schemaVersion: 1,
+      basis: 'observed SSR HTML and Chromium upgrade; not an adapter declaration',
+      evidenceIdentity: {
+        candidateSha: Deno.env.get('CANDIDATE_SHA') ?? null,
+        htmlSha256: await hash(html),
+        entrySha256: await hash(entryJs),
+        deno: Deno.version.deno,
+        chromium: browserVersion,
+      },
+      entries: entries.filter((entry) => entry.tag !== 'wc-fixture').map((entry) => {
+        const slot = slotFirst[entry.tag];
+        const t0Failures = [
+          ...(!entry.ssrForm.tagPresent ? ['host missing from SSR'] : []),
+          ...(entry.ssrForm.dsdTemplate ? ['unexpected foreign DSD'] : []),
+          ...(!slot?.contentWithoutJs ? ['slot-first no-JS content not proved'] : []),
+          ...(!slot?.undefinedStyle || !slot?.definedStyle
+            ? [':defined styling transition not proved']
+            : []),
+          ...(!slot?.capturedBeforeUpgrade
+            ? ['pre-upgrade identity not captured']
+            : !slot.identityPreserved
+            ? ['host or child identity lost on upgrade']
+            : []),
+          // 'browser upgrade not proved' covers the upgrade probes only.
+          // Hydration-safety nullness (a capture gap) and a real identity
+          // loss are both already reported above — counting them here again
+          // would double-charge a single missing probe as a failed upgrade.
+          ...(!entry.browserCapabilities.registered || !entry.browserCapabilities.upgraded
+            ? ['browser upgrade not proved']
+            : []),
+        ];
+        return {
+          tag: entry.tag,
+          resolvedLibrary: THIRD_PARTY_IMPORTS[
+            entry.library as keyof typeof THIRD_PARTY_IMPORTS
+          ] ?? entry.library,
+          highestPassedTier: t0Failures.length === 0 ? 'T0' : null,
+          t0Failures,
+          observations: {
+            ssrForm: entry.ssrForm,
+            browser: entry.browserCapabilities,
+            slotFirst: slot ?? null,
+          },
+          higherTiers: { T1: 'not run', T2: 'not run', T3: 'not applicable to foreign tag' },
+        };
+      }),
+    };
     const record = {
       schemaVersion: 2,
       // No timestamp: output stays deterministic and diffable in CI logs.
@@ -851,9 +1056,19 @@ async function main(): Promise<void> {
         'Pins admission, SSR form, metadata availability, and browser interoperability probes; client-only is an explicit supported path, not an SSR claim.',
       metadataProbes,
       entries,
+      slotFirst,
+      tierReport,
     };
+    const reportPath = Deno.env.get('OPEN_ELEMENT_TIER_REPORT');
+    if (reportPath) {
+      await Deno.mkdir(dirname(reportPath), { recursive: true });
+      await Deno.writeTextFile(reportPath, formatJson(tierReport));
+    }
     console.log(JSON.stringify(record, null, 2));
-    console.log('third-party Web Components qualification passed');
+    const t0Proved = tierReport.entries.filter((entry) => entry.highestPassedTier === 'T0').length;
+    console.log(
+      `third-party Web Components diagnostic completed: ${t0Proved}/${tierReport.entries.length} T0 proved; T1/T2 not run`,
+    );
   } finally {
     if (keep) {
       console.log(`Keeping third-party WC qualification project at ${tmpRoot}`);

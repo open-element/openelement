@@ -209,7 +209,7 @@ Deno.test('renderEntry: produces valid module code', () => {
   // import — the legacy VNode tree renderer is gone.
   assertStringIncludes(
     code,
-    "import { renderDsd, trustedHtml, escapeHtml, wrapInDocument } from '@openelement/element'",
+    "import { createDeferredDsdExecutor, renderDsd, trustedHtml, escapeHtml, wrapInDocument } from '@openelement/element'",
   );
   assertEquals(code.includes('renderDsdTree'), false);
   assertStringIncludes(code, 'export default app');

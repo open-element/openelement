@@ -21,6 +21,8 @@ const openElementHandler = createOpenElementNitroHandler({
           '<main data-route="load"><h1>Load route</h1><p data-load="nitro-data">Loaded from request context.</p></main>',
           headers,
         );
+      case '/stream':
+        return streamTransportProof(request, headers);
       case '/layout':
         return html(
           '<div data-layout="shell"><main data-route="layout"><h1>Layout route</h1></main></div>',
@@ -86,6 +88,36 @@ function html(body: string, headers: Headers, status = 200): Response {
     status,
     headers: nextHeaders,
   });
+}
+
+function streamTransportProof(request: Request, headers: Headers): Response {
+  headers.set('content-type', 'text/html; charset=utf-8');
+  headers.set('cache-control', 'private, no-cache');
+  headers.append('set-cookie', 'stream-proof=1; HttpOnly; SameSite=Lax');
+  const encoder = new TextEncoder();
+  let stage = 0;
+  const stream = new ReadableStream<Uint8Array>({
+    async pull(controller) {
+      if (request.signal.aborted) {
+        controller.close();
+        return;
+      }
+      if (stage++ === 0) {
+        controller.enqueue(encoder.encode(
+          '<!doctype html><html><body><main data-route="stream"><!--oe:p0--><!--oe:/p0--></main>',
+        ));
+      } else {
+        await new Promise((resolve) => setTimeout(resolve, 10));
+        if (!request.signal.aborted) {
+          controller.enqueue(encoder.encode(
+            '<template data-oe-transport-proof>Loaded</template><noscript>Loaded</noscript></body></html>',
+          ));
+        }
+        controller.close();
+      }
+    },
+  }, { highWaterMark: 0 });
+  return new Response(stream, { status: 200, headers });
 }
 
 // Nitro v3 (h3 v2) is fetch-native: the route event's `req` is already a

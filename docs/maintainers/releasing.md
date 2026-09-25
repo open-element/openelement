@@ -49,29 +49,18 @@ publish; a missing environment fails the job closed instead of publishing:
   window. Copied or hand-written evidence is never accepted.
 - Prereleases publish under `--tag alpha|beta|rc` only; `latest` never moves
   onto an alpha (`publishPackage` guard, tested).
-- Required pre-publish CI (branch protection on `main`): the AutoFlow CI
-  `autoflow-ci` aggregation job (which depends on `fast-checks`,
-  `source-matrix`, `packed-consumers`, and the isolated `fresh-clone`),
-  `node-serve-smoke` (24/26, required), `packed-consumer-matrix`
-  (Linux/macOS packed tarball consumers, required),
-  `bfcache-chrome` (installed Chrome channel under xvfb; the bundled Chromium
-  disables BFCache, so this is the only lane that proves the #943 restore
-  contract, required),
-  dependency-review on PRs, and CodeQL. The execution jobs run the suite;
-  `autoflow-ci` only aggregates and validates their artifacts — it never
-  re-runs the suite. The four producers are not individual required checks
-  by design: `autoflow-ci` runs with `if: always()` and asserts each
-  producer's result before aggregating, so a failed or cancelled producer
-  fails the required check explicitly instead of passing as GitHub's
-  skipped-reports-Success. `bun-serve-smoke` is an
-  optional/non-blocking Bun compatibility signal: it runs with
-  `continue-on-error: true`, is not a required check, and never gates the
-  candidate or the release graph. The independently governed `apps/saas`
-  application is decoupled from the candidate: neither `tools/repo#gate:source`
-  nor `tools/repo#gate:release` nor candidate evidence contains a SaaS step,
-  and `saas-optional` runs with
-  `continue-on-error: true`, is not required, and never sets `requiredOk`
-  false. Scope is explicit at the task level: `deno task verify:core` is the
+- Required checks for `dev` and `main` (repository ruleset `21775463`):
+  `fast-checks`, `source-matrix`, `fresh-clone`, and `packed-consumers` from
+  AutoFlow CI, plus `dependency-review`, `CodeQL`, and the strict required
+  status-check policy. These producer checks are individually required; the
+  `autoflow-ci` aggregate still validates the complete evidence bundle and
+  does not re-run the suite. Compatibility probes and the independently
+  governed `apps/saas` application are not part of every PR run; use their
+  explicit local tasks or dedicated qualification runs when changing those
+  surfaces. The SaaS application remains decoupled from the candidate:
+  neither `tools/repo#gate:source` nor `tools/repo#gate:release` nor candidate
+  evidence contains a SaaS step. Scope is explicit at the task level:
+  `deno task verify:core` is the
   Element/Router Alpha candidate verification, `deno task verify` is the full
   repository verification (including SaaS). Post-publish
   (`published-consumers.yml`) verifies the registry afterward and never
@@ -82,12 +71,13 @@ publish; a missing environment fails the job closed instead of publishing:
 The candidate gate is split so a pull request gets fast, honest feedback
 without giving up any release-time proof.
 
-- `tools/repo#gate:source` — the PR layer (10 steps): `generate:all`,
+- `tools/repo#gate:source` — the PR source layer (nine steps): `generate:all`,
   `typecheck`, the Element and Router unit suites, markdown lint, the
   content-dates timing check, the public-interface snapshot, the
-  request-time fixture gate, the Element browser gate (Chromium) and the
-  packed gate. This is what `AutoFlow CI` runs on every pull request; a
-  green `deno task gate:ci` reproduces it locally.
+  request-time fixture gate, and the Element browser gate (Chromium). The
+  separate packed producer owns `tools/release#gate:packed`; the independent
+  fresh-clone lane runs source and packed once each with cold Deno/npm caches.
+  A green `deno task gate:ci` runs source plus packed locally.
 - `tools/repo#gate:release` — the release train: Site build and every `www`
   check, coverage, all deploy/framework fixture gates, the boundary and
   provenance scans, the generator/floor/classification gates, the
@@ -102,6 +92,35 @@ evidence; the release job still refuses to proceed unless that evidence
 validates against the exact candidate SHA. Trimming the PR layer therefore
 changes **when** the heavier proofs run, never whether they are required to
 ship.
+
+The top-level task count is not a work count. Before the alpha5 de-duplication,
+`gate:source` called `gate:packed` internally, so the source producer, the
+independent packed producer, and fresh-clone's source plus explicit packed step
+could run the complete packed gate four times on one non-reused PR. Removing
+that nested call leaves two complete packed runs (packed producer and isolated
+fresh-clone). Node 24/26 serving and Linux/macOS starter jobs still pack their
+own current-SHA tarballs; no unmeasured wall-time saving is asserted.
+
+## Tree-identical evidence reuse
+
+The reuse job may select one successful AutoFlow CI evidence package for the
+same Git tree within the artifact-retention window. Every producer needs
+`actions: read` to download its source-run artifact. Its claim verifies the
+producer commit's tree in the checkout before stamping the job record with
+`reused: { runId, sha }`; `sha` names the commit that actually ran the gate,
+not a later commit that forwarded its evidence. The aggregate independently
+checks the tree, stamps, log hashes, tarball hashes, and the Site E2E report.
+A failed resolution or claim runs the real gate after discarding an
+unclaimable download. Nothing accepts a partial mix of source runs.
+
+To distinguish a replay from fresh execution, inspect each producer's
+`result.json` in the `candidate-evidence-*` artifact: a replay has the
+`reused` stamp and its `sha` is the original producer. Fresh execution has
+no stamp and its command logs show the gate running for the candidate SHA.
+The run summary reports the resolver decision, but the per-job records and
+aggregate audit are the authority. Reuse never grants publication by itself:
+the Release workflow still requires a green, non-expired AutoFlow CI bundle
+for the exact candidate SHA.
 
 The suite runs with `--retries 1`, and a retry is part of the contract: a test
 that timed out and passed on the retry is Playwright's `flaky` (kept out of

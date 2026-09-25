@@ -568,6 +568,47 @@ async function flushBrowserNavigation(): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, 0));
 }
 
+Deno.test('stream frames retire only after a guarded router navigation owns intent', async () => {
+  const browser = installFakeBrowser('/public');
+  const originalDocument = Object.getOwnPropertyDescriptor(globalThis, 'document');
+  let cancellations = 0;
+  const control = {
+    token: 'request-1',
+    pending: true,
+    cancel() {
+      cancellations++;
+      control.pending = false;
+    },
+  };
+  Object.defineProperty(globalThis, 'document', {
+    configurable: true,
+    value: { [Symbol.for('openelement.stream-control.v1')]: control },
+  });
+  const router = createRouter({
+    mode: 'history',
+    routes: [
+      { path: '/public', tagName: 'public-page' },
+      { path: '/blocked', tagName: 'blocked-page', guard: () => Promise.resolve(false) },
+      { path: '/next', tagName: 'next-page', guard: () => Promise.resolve(true) },
+    ],
+  });
+  try {
+    await router.navigate('/blocked');
+    assertEquals(cancellations, 0);
+    assertEquals(browser.path(), '/public');
+    await router.navigate('/next');
+    assertEquals(cancellations, 1);
+    assertEquals(browser.path(), '/next');
+    await router.replace('/public');
+    assertEquals(cancellations, 1, 'retirement is one-shot');
+  } finally {
+    router.dispose();
+    browser.restore();
+    if (originalDocument) Object.defineProperty(globalThis, 'document', originalDocument);
+    else delete (globalThis as Record<string, unknown>).document;
+  }
+});
+
 Deno.test('popstate runs the guard and restores the previous entry when blocked', async () => {
   const browser = installFakeBrowser('/public');
   const events: string[] = [];

@@ -134,9 +134,9 @@ export async function resolveReuse(options: ResolveReuseOptions): Promise<ReuseD
     .slice(0, maxCandidates);
   let inspected = 0;
   for (const run of candidates) {
+    inspected++;
     const tree = await options.resolveTree(run.headSha).catch(() => null);
     if (tree === null) continue;
-    inspected++;
     if (tree !== options.currentTree) continue;
     let artifacts: string[];
     try {
@@ -413,15 +413,26 @@ async function writeOutputs(
   await Deno.writeTextFile(path, lines, { append: true, create: true });
 }
 
-async function listWorkflowRuns(limit: number): Promise<RunSummary[]> {
-  const payload = await ghJson([
+export function workflowRunListArgs(limit: number): string[] {
+  return [
     'run',
     'list',
+    '--workflow',
+    'autoflow-ci.yml',
     '--limit',
     String(limit),
     '--json',
     'databaseId,headSha,conclusion,createdAt',
-  ]) as Array<{ databaseId: number; headSha: string; conclusion: string; createdAt: string }>;
+  ];
+}
+
+async function listWorkflowRuns(limit: number): Promise<RunSummary[]> {
+  const payload = await ghJson(workflowRunListArgs(limit)) as Array<{
+    databaseId: number;
+    headSha: string;
+    conclusion: string;
+    createdAt: string;
+  }>;
   return payload.map((run) => ({
     runId: run.databaseId,
     headSha: run.headSha,
@@ -461,13 +472,18 @@ async function treeOfLocalCommit(sha: string): Promise<string | null> {
   }
 }
 
-async function listArtifactsViaGh(runId: number): Promise<string[]> {
-  const names = await ghText([
+export function workflowArtifactListArgs(runId: number): string[] {
+  return [
     'api',
+    '--paginate',
     `repos/{owner}/{repo}/actions/runs/${runId}/artifacts?per_page=100`,
     '--jq',
     '.artifacts[].name',
-  ]);
+  ];
+}
+
+async function listArtifactsViaGh(runId: number): Promise<string[]> {
+  const names = await ghText(workflowArtifactListArgs(runId));
   return names.split('\n').map((line) => line.trim()).filter((line) => line !== '');
 }
 

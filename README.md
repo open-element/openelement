@@ -48,7 +48,13 @@ export default definePage(HelloPage, {
 
 Re-run `deno task dev`, open the URL Vite prints plus `/hello`, and `deno task build` emits the static-first `dist/` output. Full walkthrough: <https://openelement.org/guide/getting-started>.
 
-**Build-time host note:** the `@openelement/router` tooling subpaths (`./vite`, `./cli/*`) call Deno APIs directly and require a Deno host at **build time** — invoking them from a plain Node `vite.config.ts` fails with `Deno is not defined`. The request-time output stays WinterCG-pure and deploys to any target. This is an interim constraint: the portable-host tooling migration that removes it is a deferred roadmap item ([#1387](https://github.com/open-element/openelement/issues/1387)).
+**Build-time host:** Framework Mode development and builds require Deno 2.9+ by
+design (ADR-0108). The `@openelement/router` tooling subpaths (`./vite`,
+`./cli/*`) are not a plain Node/npm build interface. The request-time output
+uses standard ESM and Web `Request`/`Response`; deployment support is limited
+to the runtimes and Nitro targets actually covered by the qualification
+matrix, not every runtime that can load ESM. Element remains independently
+consumable in npm-only projects.
 
 ## Features
 
