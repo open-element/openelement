@@ -11,6 +11,22 @@ import type {
   RenderError,
   SsrAdmissionDecision,
 } from './framework.ts';
+import type { CompileElementResult } from '@openelement/element/compiler';
+
+/** Build-only route projection bound to a specific compiled page program. */
+export interface StreamRouteManifest {
+  program: { version: number; tag: string; sha256: string };
+  fields: Array<{
+    field: string;
+    signal: string;
+    owners: Array<{
+      kind: 'part' | 'region';
+      index: number;
+      location: string;
+      source: CompileElementResult['program']['sourceMap']['records'][number]['source'];
+    }>;
+  }>;
+}
 
 /** Adapter-owned browser delivery strategy, including media-query admission. */
 export type IslandDeliveryStrategy = HydrationStrategy | 'media';
@@ -146,6 +162,7 @@ export interface PageRouteDecl {
   importPath: string;
   isDynamic?: boolean;
   paramNames?: string[];
+  streamManifest?: StreamRouteManifest;
 }
 
 export interface IslandDecl {
@@ -322,6 +339,7 @@ export interface RouteInfoEntry {
   rendering?: string;
   /** True when the route module exports an action (request-time form POST). */
   hasAction?: boolean;
+  streamManifest?: StreamRouteManifest;
   params?: Record<string, string>;
 }
 

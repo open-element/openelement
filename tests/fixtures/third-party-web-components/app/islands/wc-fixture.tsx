@@ -2,14 +2,10 @@
  * wc-fixture — third-party Web Components interop island (v0.44
  * compiled, ADR-0143).
  *
- * The compiler grammar v1 admits custom-element hosts as opaque static shells
- * (literal attributes only — no children, no event handlers, no slots), so the
- * foreign widgets render into SSR HTML as empty static hosts with their
- * literal attributes, and the imperative seam (onDsdHydrated/onCsrRendered)
- * appends the slotted labels/text and attaches the event listeners against
- * the island's own compiled DOM. The interop evidence (slot projection,
- * attribute→property reflection, composed events) is asserted at the browser
- * level by fixtures/third-party-web-components/qualify.ts.
+ * Foreign widgets stay opaque to the Part Program. Three Lit-based probes
+ * carry static, server-born light children; other labels and composed-event
+ * listeners are attached at activation. The browser qualifier checks the
+ * emitted children, upgrade behavior, and event contract separately.
  */
 import { defineIslandConfig } from '@openelement/router';
 import { element, OpenElement, property } from '@openelement/element';
@@ -40,11 +36,8 @@ export default class ThirdPartyWcFixture extends OpenElement {
   }
 
   /**
-   * Imperative seam: register the third-party element definitions (client
-   * bundle side effect), then stamp the slotted content and event listeners
-   * the compiler grammar cannot express declaratively. Host-level listeners
-   * catch the composed events after each foreign element upgrades, so
-   * stamping does not wait on registration.
+   * Register third-party definitions, fill the remaining client-only labels,
+   * and attach host listeners for their composed events.
    */
   activateForeignWidgets(): void {
     if (typeof window !== 'undefined') {
@@ -95,12 +88,14 @@ export default class ThirdPartyWcFixture extends OpenElement {
         <p id='event-count'>events: {this.eventCount}</p>
         <section id='lit-section'>
           <h2>Lit</h2>
-          <wc-lit-counter id='lit-counter' label='Lit counter'></wc-lit-counter>
+          <wc-lit-counter id='lit-counter' label='Lit counter'>
+            <span slot='label'>Lit slot label</span>
+          </wc-lit-counter>
         </section>
         <section id='shoelace-section'>
           <h2>Shoelace</h2>
           <div class='row'>
-            <sl-button id='sl-button' variant='primary'></sl-button>
+            <sl-button id='sl-button' variant='primary'>Shoelace Button</sl-button>
             <sl-switch id='sl-switch'></sl-switch>
           </div>
           <sl-dialog id='sl-dialog' label='Shoelace Dialog'></sl-dialog>
@@ -108,7 +103,7 @@ export default class ThirdPartyWcFixture extends OpenElement {
         <section id='material-section'>
           <h2>Material Web</h2>
           <div class='row'>
-            <md-filled-button id='md-button'></md-filled-button>
+            <md-filled-button id='md-button'>Material Button</md-filled-button>
             <md-outlined-text-field id='md-field' label='Material Field' value='interop'>
             </md-outlined-text-field>
             <md-switch id='md-switch'></md-switch>

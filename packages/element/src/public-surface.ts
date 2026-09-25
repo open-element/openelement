@@ -28,8 +28,17 @@ export { collectPublicProps } from './public-runtime.ts';
 // server entries; ensurePreHydrationClickCapture installs the pre-upgrade
 // capture that the compiled claim replays after upgrade (generated client
 // entries call it).
-export { ensurePreHydrationClickCapture, renderDsd } from './public-runtime.ts';
+export {
+  createDeferredDsdExecutor,
+  ensurePreHydrationClickCapture,
+  renderDsd,
+} from './public-runtime.ts';
 export type { RenderDsdOptions } from './public-runtime.ts';
+export type {
+  CreateDeferredDsdOptions,
+  DeferredDsdExecutor,
+  DeferredDsdManifest,
+} from './public-runtime.ts';
 
 // Explicit type-only surface for build adapters (#488).
 export type { RenderOutput, SsrAdmissionDecision } from './public-runtime.ts';
@@ -63,7 +72,7 @@ export { element, property } from './public-runtime.ts';
 
 // ─── HTML utilities (re-export from core) ────────────────
 
-export { escapeAttr, escapeHtml, wrapInDocument } from './public-runtime.ts';
+export { documentStreamParts, escapeAttr, escapeHtml, wrapInDocument } from './public-runtime.ts';
 
 // ─── Security predicates (re-export from core) ───────────────────
 

@@ -81,6 +81,26 @@ export interface DocumentScriptDescriptor {
   type?: string;
 }
 
+export interface DocumentWrapOptions {
+  title?: string;
+  lang?: string;
+  clientScript?: string;
+  scripts?: DocumentScriptDescriptor[];
+  meta?: {
+    description?: string;
+    tags?: Array<Record<string, string | number | boolean>>;
+  };
+  devScripts?: string;
+  headExtras?: string;
+  dangerouslyHeadFragments?: string[];
+  allowHeadExtrasScripts?: boolean;
+  links?: Array<{ rel: string; href: string; hreflang?: string }>;
+  structuredData?: ReadonlyArray<Record<string, unknown>>;
+  cspNonce?: string;
+  /** Trusted framework bootstrap emitted synchronously in the document head. */
+  streamBootstrap?: string;
+}
+
 /**
  * Wrap rendered HTML in a full HTML document.
  * Adds DOCTYPE, head (title, meta, preload), and body.
@@ -88,56 +108,16 @@ export interface DocumentScriptDescriptor {
  */
 export function wrapInDocument(
   html: string,
-  options: {
-    title?: string;
-    lang?: string;
-    /** Client-side module script injected after rendered HTML. */
-    clientScript?: string;
-    /** Structured framework-generated scripts (island client entry, …). */
-    scripts?: DocumentScriptDescriptor[];
-    meta?: {
-      description?: string;
-      tags?: Array<Record<string, string | number | boolean>>;
-    };
-    /** Raw HTML script tags to inject after rendered HTML (e.g. Vite client, route module registration). */
-    devScripts?: string;
-    headExtras?: string;
-    /**
-     * Raw route-local head fragments from explicit dangerous page metadata.
-     * Trust boundary: injected verbatim into <head>; never concatenate
-     * unsanitized user-controlled content into these fragments.
-     */
-    dangerouslyHeadFragments?: string[];
-    /** Trust script tags that were produced by structured framework injection APIs. */
-    allowHeadExtrasScripts?: boolean;
-    /**
-     * <link> tags emitted into <head> (Beta.2.2, #1326): the canonical link
-     * and hreflang alternates of the page. Attributes are escaped at this
-     * boundary; entries missing rel or href are skipped. Meaning-level
-     * resolution lives in @openelement/router/document.
-     */
-    links?: Array<{ rel: string; href: string; hreflang?: string }>;
-    /**
-     * Structured data (JSON-LD) documents for this page, one per
-     * `<script type="application/ld+json">` element in <head>.
-     *
-     * Trust boundary: entries are DATA, never markup. The body is produced by
-     * `JSON.stringify` and then `<`-escaped, so an entry cannot close the
-     * element early or open an HTML comment. A caller that wants to hand the
-     * framework raw <head> markup must use `dangerouslyHeadFragments`; a
-     * string here is not a fragment channel, it is malformed data.
-     *
-     * Meaning-level validation (fail-closed on values JSON cannot represent)
-     * belongs to the caller's seam — @openelement/router/document's
-     * structured-data channel. This serializer guards the shape and what
-     * `JSON.stringify` itself rejects, so an unrepresentable document throws
-     * instead of disappearing from the output.
-     */
-    structuredData?: ReadonlyArray<Record<string, unknown>>;
-    /** CSP nonce, if provided, added to all generated <script> tags. */
-    cspNonce?: string;
-  } = {},
+  options: DocumentWrapOptions = {},
 ): string {
+  const { prefix, suffix } = documentStreamParts(options);
+  return prefix + html + suffix;
+}
+
+/** The same document serialization boundary, with only body wrappers left open. */
+export function documentStreamParts(
+  options: DocumentWrapOptions = {},
+): { prefix: string; suffix: string } {
   // Per-render warning scope: the same headExtras key can warn again on the
   // next SSG page/request instead of being suppressed for the whole process
   // (v0.42.0-alpha.9, #643).
@@ -155,6 +135,7 @@ export function wrapInDocument(
     links = [],
     structuredData = [],
     cspNonce,
+    streamBootstrap,
   } = options;
   // v0.14.5: CSP nonce format validation per CSP spec (base64 value)
   const NONCE_RE = /^[A-Za-z0-9+/=_-]+$/;
@@ -179,20 +160,25 @@ export function wrapInDocument(
   const safeTitle = escapeHtml(title);
   const safeLang = escapeAttr(lang);
   const scriptBlock = buildScriptTags(scripts, validNonce);
+  const streamBootstrapBlock = streamBootstrap
+    ? `\n  ${buildScriptTags([{ code: streamBootstrap }], validNonce)}`
+    : '';
 
-  return `<!DOCTYPE html>
+  const prefix = `<!DOCTYPE html>
 <html lang="${safeLang}">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>${safeTitle}</title>${metaBlock}${linkBlock}${structuredDataBlock}
-  ${safeHeadExtras}${dangerousHeadBlock}
+  ${safeHeadExtras}${dangerousHeadBlock}${streamBootstrapBlock}
 </head>
 <body>
-  ${html}
+  `;
+  const suffix = `
   ${clientScript}${devScripts}${scriptBlock}
 </body>
 </html>`;
+  return { prefix, suffix };
 }
 
 /**

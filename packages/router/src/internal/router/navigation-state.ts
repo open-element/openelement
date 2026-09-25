@@ -54,6 +54,8 @@ export interface RestoreCandidate {
   readonly info: unknown;
 }
 
+export type StreamNavigationStatus = 'idle' | 'pending' | 'retired';
+
 export class NavigationState {
   /** Ticket sequence: also the id of the newest ticket. Never decreases. */
   #sequence = 0;
@@ -61,6 +63,8 @@ export class NavigationState {
   #landedUrl: string | null = null;
   /** One-shot href of the router's own guard-veto restore (Navigation API). */
   #restoreHref: string | null = null;
+  #streamToken: string | null = null;
+  #streamStatus: StreamNavigationStatus = 'idle';
   #disposed = false;
 
   get disposed(): boolean {
@@ -80,6 +84,33 @@ export class NavigationState {
   /** The armed restore href, or null when no restore is pending. Read-only. */
   get restoreHref(): string | null {
     return this.#restoreHref;
+  }
+
+  get streamStatus(): StreamNavigationStatus {
+    return this.#streamStatus;
+  }
+
+  /** A fresh full-document seed supersedes any retired token in this document. */
+  observeStream(token: string): void {
+    if (this.#disposed || !token || token === this.#streamToken) return;
+    this.#streamToken = token;
+    this.#streamStatus = 'pending';
+  }
+
+  /** A terminal stream no longer needs an ownership-point cancellation. */
+  settleStream(token: string): void {
+    if (this.#streamToken === token && this.#streamStatus === 'pending') {
+      this.#streamStatus = 'idle';
+    }
+  }
+
+  /** Only a committing navigation may retire the old document's pending frames. */
+  retireStream(ticket: NavigationTicket, token: string): boolean {
+    if (!this.owns(ticket) || this.#streamToken !== token || this.#streamStatus !== 'pending') {
+      return false;
+    }
+    this.#streamStatus = 'retired';
+    return true;
   }
 
   /** Issue the newest ticket: its holder owns intent unless superseded. */
@@ -142,5 +173,7 @@ export class NavigationState {
     this.supersede();
     this.#restoreHref = null;
     this.#landedUrl = null;
+    this.#streamToken = null;
+    this.#streamStatus = 'idle';
   }
 }

@@ -21,7 +21,8 @@ concurrency:
 #   those artifacts (same SHA/tree, recomputed log hashes) and fails if any
 #   input is missing or inconsistent. Nothing re-runs the suite in the
 #   aggregation step. The fresh-clone job is isolated with empty DENO_DIR and
-#   npm cache. Bun remains an optional, non-blocking compatibility signal.
+#   npm cache. Bun is not a required Alpha runtime; its explicit local smoke
+#   task is outside this default workflow.
 #
 # PR layer vs release train: this workflow runs the fast PR layer. The
 # source-matrix lane drives `tools/repo#gate:source` (the trimmed fast gate)
@@ -102,6 +103,9 @@ jobs:
     needs: reuse
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    permissions:
+      contents: read
+      actions: read
     steps:
       # v7.0.1
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -226,8 +230,9 @@ jobs:
 
   # Core source matrix for the candidate scope (Element, Router, Create, UI,
   # Site, repo/release tooling). This lane runs the PR-layer source gate
-  # (`tools/repo#gate:source`, 10 fast steps, ending in the packed gate); the
-  # release train's heavier steps are `tools/repo#gate:release`, which the
+  # (`tools/repo#gate:source`, nine steps). The separate packed-consumers lane
+  # owns the packed gate; fresh-clone runs it once in its isolated checkout.
+  # The release train's heavier steps are `tools/repo#gate:release`, which the
   # Release workflow runs. Independently governed apps/saas is outside this
   # candidate lane. Router Nitro Node/Workers fixtures remain the core deploy
   # proof (gate:release).
@@ -235,6 +240,9 @@ jobs:
     needs: reuse
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    permissions:
+      contents: read
+      actions: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -263,10 +271,8 @@ jobs:
         run: |
           echo "::warning::tree-identical reuse was resolved, but the claim did not stamp this lane's record; running the full gate instead"
           rm -rf .artifacts/ci
-      # v7.0.0 — the gate:source packed leg installs and loads the packed
-      # Router, which requires the Web Standard URLPattern global: ADR-0154
-      # pins the Alpha node runtime to Node 24, and the runner default (22)
-      # cannot load it ("requires the Web Standard URLPattern API").
+      # The request-time fixture may launch Node consumers; keep the Node 24
+      # floor even though packed qualification now has its own producer.
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         if: needs.reuse.outputs.reused != 'true' || steps.claim.outcome != 'success'
         with:
@@ -294,6 +300,9 @@ jobs:
     needs: reuse
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    permissions:
+      contents: read
+      actions: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -351,6 +360,9 @@ jobs:
     needs: reuse
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    permissions:
+      contents: read
+      actions: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -380,7 +392,7 @@ jobs:
         run: |
           echo "::warning::tree-identical reuse was resolved, but the claim did not stamp this lane's record; running the full gate instead"
           rm -rf .artifacts/ci
-      # v7.0.0 — the clone's own packed gate runs the same Node 24 consumers
+      # v7.0.0 — the clone's explicit packed gate runs the Node 24 consumers
       # (ADR-0154); the runner default (22) lacks native URLPattern.
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         if: needs.reuse.outputs.reused != 'true' || steps.claim.outcome != 'success'

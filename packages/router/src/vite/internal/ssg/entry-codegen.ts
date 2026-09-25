@@ -97,13 +97,19 @@ function renderRouteHandlerPreamble(lines: string[], ctx: RouteHandlerEmitContex
   // reference). The handler body is wrapped in an IIFE so EVERY exit —
   // success, re-render, redirect, rejection, error fallback — merges the
   // channel via __mergeChannelHeaders.
-  lines.push(`  const __responseHeaders = new Headers();`);
+  if (!isAction && route.streamManifest) {
+    lines.push(`  const __headerChannel = __streamHeaderChannel(${pathLiteral});`);
+    lines.push(`  const __responseHeaders = __headerChannel.channel;`);
+  } else {
+    lines.push(`  const __responseHeaders = new Headers();`);
+  }
   lines.push(`  return __mergeChannelHeaders(await (async () => {`);
   lines.push(`  let __tag = ${tagNameExpr}`);
   lines.push(`  let __page = ${pageDefExpr}`);
   lines.push(`  let __params = {}`);
   lines.push(`  let __routeMetaValue = ${routeMeta}`);
   lines.push(`  const __routeContext = ${routeContext}`);
+  if (!isAction && route.streamManifest) lines.push(`  let __streamScope;`);
   // Request-time responses are never cacheable;
   // the POST endpoint is negotiated by the framework action header.
   lines.push(`  c.header('Cache-Control', 'no-store');`);
@@ -119,9 +125,14 @@ function renderRouteHandlerPreamble(lines: string[], ctx: RouteHandlerEmitContex
   // The WinterCG route middleware resolved the winner; the bridged Hono
   // context still owns request/response mechanics inside the handler body.
   lines.push(`    __params = __route.params`);
+  if (!isAction && route.streamManifest) {
+    lines.push(`    __streamScope = __streamRequestScope(c.req.raw);`);
+  }
   lines.push(`    const __loadContext = {`);
   lines.push(`      params: __params,`);
-  lines.push(`      request: c.req.raw,`);
+  lines.push(
+    `      request: ${!isAction && route.streamManifest ? '__streamScope.request' : 'c.req.raw'},`,
+  );
   lines.push(`      responseHeaders: __responseHeaders,`);
   lines.push(`      env: c.env || {},`);
   lines.push(
@@ -169,49 +180,92 @@ function renderRouteContentLines(
 function renderRouteResponseAndCatch(lines: string[], ctx: RouteHandlerEmitContext): void {
   const { isAction, matchingRenderers, docConfig, pathLiteral, headExtrasExpr } = ctx;
 
-  // #1326: one request-scoped context object feeds both the props projector
-  // and the resolved-Document seam.
-  requestTimePageContextLines(lines, {
-    dataExpr: '__data',
-    actionDataExpr: isAction ? '__actionData' : 'undefined',
-    indent: '    ',
-  });
-
-  renderRouteContentLines(
-    lines,
-    ctx,
-    `__pageProps(${ctx.route.varName}, __pageContext)`,
-    '    ',
-  );
-  lines.push('');
-  if (!isAction) {
-    // #943: successful GET pages relax no-store to private,no-cache so the UA
-    // can bfcache/scroll-restore them. The
-    // override is emitted only AFTER the shell render succeeded: a
-    // redirect/notFound()/throw out of render lands in the catch below, and
-    // every error/redirect response (and every POST response) keeps the
-    // no-store baseline.
+  if (!isAction && ctx.route.streamManifest) {
+    const manifest = `__streamManifests[${pathLiteral}]`;
+    lines.push(`    const __records = __streamFields(__data, ${manifest});`);
+    lines.push(`    const __frontData = { ...__data };`);
+    lines.push(`    for (const __record of __records) delete __frontData[__record.entry.field];`);
+    lines.push(`    await Promise.resolve();`);
+    lines.push(`    for (const __record of __records) if (__record.failed) throw __record.error;`);
+    requestTimePageContextLines(lines, {
+      dataExpr: '__frontData',
+      actionDataExpr: 'undefined',
+      indent: '    ',
+    });
+    lines.push(`    const __token = crypto.randomUUID();`);
+    lines.push(`    const __instance = crypto.randomUUID();`);
+    lines.push(
+      `    const __executor = await __createDeferredPageShell(${pathLiteral}, ${ctx.route.varName}, __pageProps(${ctx.route.varName}, __pageContext), __instance, __token);`,
+    );
+    lines.push(
+      `    if (__resolveAppShell(__routeMetaValue)) throw new Error('stream route requires no compiled app shell');`,
+    );
+    lines.push(`    const __document = documentStreamParts({`);
+    lines.push(`      streamBootstrap: __streamBrowserBootstrap(),`);
+    for (
+      const optionLine of documentWrapOptionsLines({
+        titleExpr: `__doc.title || ${quoteGeneratedJavaScriptValue(docConfig.title)}`,
+        langExpr: `__doc.lang || ${quoteGeneratedJavaScriptValue(docConfig.lang)}`,
+        headExtrasExpr,
+        allowHeadExtrasScripts: docConfig.allowHeadExtrasScripts,
+        cspNonce: true,
+        clientScripts: true,
+      })
+    ) lines.push(`      ${optionLine}`);
+    lines.push(`    });`);
+    lines.push(`    for (const __record of __records) if (__record.failed) throw __record.error;`);
     lines.push(`    c.header('Cache-Control', 'private, no-cache');`);
+    lines.push(
+      `    const __body = __streamBody({ scope: __streamScope, route: ${pathLiteral}, manifest: ${manifest}, executor: __executor, records: __records, document: __document, token: __token });`,
+    );
+    lines.push(`    __headerChannel.commit();`);
+    lines.push(`    return c.body(__body, 200, { 'Content-Type': 'text/html; charset=UTF-8' });`);
+  } else {
+    // #1326: one request-scoped context object feeds both the props projector
+    // and the resolved-Document seam.
+    requestTimePageContextLines(lines, {
+      dataExpr: '__data',
+      actionDataExpr: isAction ? '__actionData' : 'undefined',
+      indent: '    ',
+    });
+
+    renderRouteContentLines(
+      lines,
+      ctx,
+      `__pageProps(${ctx.route.varName}, __pageContext)`,
+      '    ',
+    );
+    lines.push('');
+    if (!isAction) {
+      // #943: successful GET pages relax no-store to private,no-cache so the UA
+      // can bfcache/scroll-restore them. The
+      // override is emitted only AFTER the shell render succeeded: a
+      // redirect/notFound()/throw out of render lands in the catch below, and
+      // every error/redirect response (and every POST response) keeps the
+      // no-store baseline.
+      lines.push(`    c.header('Cache-Control', 'private, no-cache');`);
+    }
+    // #951: the island client script rides wrapInDocument's script descriptors
+    // (the dev URL, or the request-time src handed in by dist/server/index.js),
+    // so a CSP nonce reaches it; static pages keep the post-build injector.
+    lines.push(`    return c.html(wrapInDocument(content, {`);
+    for (
+      const optionLine of documentWrapOptionsLines({
+        titleExpr: `__doc.title || ${quoteGeneratedJavaScriptValue(docConfig.title)}`,
+        langExpr: `__doc.lang || ${quoteGeneratedJavaScriptValue(docConfig.lang)}`,
+        headExtrasExpr,
+        allowHeadExtrasScripts: docConfig.allowHeadExtrasScripts,
+        cspNonce: true,
+        clientScripts: true,
+      })
+    ) {
+      lines.push(`      ${optionLine}`);
+    }
+    lines.push(`    })${isAction ? ', __actionStatus' : ''})`);
   }
-  // #951: the island client script rides wrapInDocument's script descriptors
-  // (the dev URL, or the request-time src handed in by dist/server/index.js),
-  // so a CSP nonce reaches it; static pages keep the post-build injector.
-  lines.push(`    return c.html(wrapInDocument(content, {`);
-  for (
-    const optionLine of documentWrapOptionsLines({
-      titleExpr: `__doc.title || ${quoteGeneratedJavaScriptValue(docConfig.title)}`,
-      langExpr: `__doc.lang || ${quoteGeneratedJavaScriptValue(docConfig.lang)}`,
-      headExtrasExpr,
-      allowHeadExtrasScripts: docConfig.allowHeadExtrasScripts,
-      cspNonce: true,
-      clientScripts: true,
-    })
-  ) {
-    lines.push(`      ${optionLine}`);
-  }
-  lines.push(`    })${isAction ? ', __actionStatus' : ''})`);
 
   lines.push(`  } catch (err) {`);
+  if (!isAction && ctx.route.streamManifest) lines.push(`    __streamScope?.cancel();`);
   lines.push(`    if (__isOpenElementRedirect(err)) {`);
   if (isAction) {
     // In the POST action context every 3xx is

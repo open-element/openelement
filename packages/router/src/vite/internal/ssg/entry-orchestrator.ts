@@ -45,6 +45,8 @@ import { renderRuntimeHelpers } from './entry-render-runtime.ts';
 import { renderActionRuntime } from './entry-action-runtime.ts';
 import { renderSsgSection } from './entry-render-ssg.ts';
 import { quoteGeneratedJavaScriptValue } from './codegen-literals.ts';
+import { renderStreamRuntime } from './entry-stream-runtime.ts';
+import { selectRendererAdapter } from './renderer-adapter.ts';
 
 /**
  * Render an EntryDescriptor into a complete virtual module string.
@@ -54,14 +56,15 @@ import { quoteGeneratedJavaScriptValue } from './codegen-literals.ts';
 export function renderEntry(desc: EntryDescriptor): string {
   const lines: string[] = [];
   const ssrAdmissionPlan = desc.ssrAdmissionPlan;
+  const adapter = selectRendererAdapter(desc.renderer);
   for (const island of desc.islands) validateIslandModuleSpecifier(island.modulePath);
 
-  if (desc.renderer === 'lit') {
+  if (adapter.firstServerImport) {
     // #1339: the lit SSR DOM shim must be the FIRST import of the entry so it
     // evaluates before @openelement/element, lit, and every route/island
     // module (route module imports are emitted below). Covers the dev entry,
     // the SSG bundle and the request-time server entry uniformly.
-    lines.push(`import '@lit-labs/ssr/lib/install-global-dom-shim.js';`);
+    lines.push(adapter.firstServerImport);
   }
   lines.push(
     "import { createRouteMiddleware as __createRouteMiddleware } from '@openelement/router/http';",
@@ -375,6 +378,10 @@ export function renderEntry(desc: EntryDescriptor): string {
     lines.push(renderActionRuntime());
     lines.push('');
   }
+  if (desc.pageRoutes.some((route) => route.streamManifest)) {
+    lines.push(renderStreamRuntime());
+    lines.push('');
+  }
 
   // --- App creation + Middleware ---
   lines.push('const app = new Hono()');
@@ -426,6 +433,60 @@ export function renderEntry(desc: EntryDescriptor): string {
       quoteGeneratedJavaScriptValue(desc.pageRoutes.map((r) => r.path))
     }.map(path => [path, {}]));`,
   );
+  const streamManifests = Object.fromEntries(
+    desc.pageRoutes
+      .filter((route) => route.streamManifest)
+      .map((route) => [route.path, route.streamManifest]),
+  );
+  if (Object.keys(streamManifests).length > 0) {
+    lines.push(
+      `export const __streamManifests = ${quoteGeneratedJavaScriptValue(streamManifests)};`,
+    );
+  }
+  if (desc.pageRoutes.length > 0) {
+    if (!adapter.supportsCompiledStream) {
+      lines.push('function __assertLitStreamRoute(module, route, file) {');
+      lines.push('  const stream = module?.default?.openElementPage?.renderIntent?.stream;');
+      lines.push('  if (stream === undefined) return;');
+      lines.push(
+        '  throw new Error("[openElement] Lit renderer does not support stream route " + route + " at " + file + ".");',
+      );
+      lines.push('}');
+      for (const route of desc.pageRoutes) {
+        lines.push(
+          `__assertLitStreamRoute(${route.varName}, ${quoteGeneratedJavaScriptValue(route.path)}, ${
+            quoteGeneratedJavaScriptValue(route.filePath)
+          });`,
+        );
+      }
+    } else {
+      lines.push('function __assertStreamRoute(module, route, file, manifest) {');
+      lines.push('  const stream = module?.default?.openElementPage?.renderIntent?.stream;');
+      lines.push('  if (stream === undefined && manifest === undefined) return;');
+      lines.push('  const defer = stream?.defer;');
+      lines.push('  const expected = manifest?.fields.map(field => field.field);');
+      lines.push('  const program = module?.default?.__partProgram;');
+      lines.push(
+        '  if (!manifest || !Array.isArray(defer) || JSON.stringify(defer) !== JSON.stringify(expected) || !program || program.version !== manifest.program.version || program.tag !== manifest.program.tag) {',
+      );
+      lines.push(
+        '    throw new Error("[openElement] stream route " + route + ", field " + (defer?.[0] ?? expected?.[0] ?? "defer") + " at " + file + ": stream declaration has no matching compiled route manifest/program. Use a literal descriptor and renderIntent, or disable streaming.");',
+      );
+      lines.push('  }');
+      lines.push('}');
+      for (const route of desc.pageRoutes) {
+        lines.push(
+          `__assertStreamRoute(${route.varName}, ${quoteGeneratedJavaScriptValue(route.path)}, ${
+            quoteGeneratedJavaScriptValue(route.filePath)
+          }, ${
+            route.streamManifest
+              ? `__streamManifests[${quoteGeneratedJavaScriptValue(route.path)}]`
+              : 'undefined'
+          });`,
+        );
+      }
+    }
+  }
   // --- Page routes ---
   const docConfig = {
     title: desc.document.title,

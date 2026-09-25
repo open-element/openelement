@@ -19,6 +19,7 @@ import {
   defineConfig,
   hasInlineFrameworkOptions,
   OPEN_ELEMENT_CONFIG_KEYS,
+  OPEN_ELEMENT_HEAD_KEYS,
   resolveDirs,
   tagNameFromModule,
 } from '../src/config.ts';
@@ -335,7 +336,7 @@ Deno.test('app config: styles.tokens pointing at a missing file fails closed', a
   });
 });
 
-Deno.test('app config: og tags carry the resolved title and the configured image', async () => {
+Deno.test('app config: head fragments preserve their exact order', async () => {
   await withApp((app) => {
     const resolved = resolveAppConfig({
       root: app.root,
@@ -344,26 +345,41 @@ Deno.test('app config: og tags carry the resolved title and the configured image
         head: {
           title: 'Site title',
           description: 'Site description',
+          favicon: '/favicon.svg',
           ogImage: 'https://example.com/og.png',
         },
       }),
     });
-    const fragments = (resolved.options.inject?.headFragments ?? []).join('\n');
-    assert(fragments.includes('<meta property="og:title" content="Site title">'), fragments);
-    assert(fragments.includes('<meta property="og:type" content="website">'), fragments);
-    assert(
-      fragments.includes('<meta property="og:image" content="https://example.com/og.png">'),
-      fragments,
-    );
-    assert(
-      fragments.includes('<meta name="twitter:card" content="summary_large_image">'),
-      fragments,
-    );
-    assert(
-      fragments.includes('<meta property="og:description" content="Site description">'),
-      fragments,
-    );
+    assertEquals(resolved.options.inject?.headFragments, [
+      '<link rel="icon" href="/favicon.svg">',
+      '<meta property="og:title" content="Site title">',
+      '<meta property="og:site_name" content="Site title">',
+      '<meta property="og:description" content="Site description">',
+      '<meta property="og:type" content="website">',
+      '<meta property="og:image" content="https://example.com/og.png">',
+      '<meta name="twitter:card" content="summary_large_image">',
+    ]);
   });
+});
+
+Deno.test('app config: an accepted head key without a handler fails closed', () => {
+  const acceptedKeys = OPEN_ELEMENT_HEAD_KEYS as string[];
+  const originalLength = acceptedKeys.length;
+  acceptedKeys.push('futureKey');
+  try {
+    assertThrows(
+      () =>
+        resolveAppConfig({
+          root: Deno.cwd(),
+          configFile: null,
+          importedConfig: defineConfig({}),
+        }),
+      OpenElementError,
+      'futureKey',
+    );
+  } finally {
+    acceptedKeys.length = originalLength;
+  }
 });
 
 Deno.test('app config: head fragments from the file merge after inline fragments', () => {

@@ -10,6 +10,7 @@
 
 import {
   DATA_OE_LIGHT,
+  PART_PROGRAM_VERSION,
   partAnchorEndMarker,
   partAnchorMarker,
   type PartProgramV1,
@@ -117,6 +118,7 @@ interface SerializeContext {
   readonly htmlSinksByPath: Map<string, { signal: string }>;
   readonly options: CompiledServerOptions;
   readonly consumedProjections: Set<string>;
+  readonly pending?: ReadonlySet<number>;
 }
 
 function pathKey(path: readonly number[]): string {
@@ -127,6 +129,7 @@ function createSerializeContext(
   program: PartProgramV1,
   host: unknown,
   options: CompiledServerOptions = {},
+  pending?: ReadonlySet<number>,
 ): SerializeContext {
   const propPartsByPath = new Map<string, Array<{ name: string; signal: string }>>();
   const valueSinksByPath = new Map<
@@ -167,6 +170,7 @@ function createSerializeContext(
     htmlSinksByPath,
     options,
     consumedProjections: new Set(),
+    pending,
   };
 }
 
@@ -283,8 +287,8 @@ function itemTemplateFields(
 }
 
 function itemsFor(
-  ctx: SerializeContext,
   part: ProgramEachPart,
+  value: unknown,
 ): Array<Record<string, unknown>> {
   if (part.key === undefined) {
     throw new CompiledProgramValidationError(
@@ -294,7 +298,6 @@ function itemsFor(
   }
   const keyField = part.key;
   const requiredFields = itemTemplateFields(part.item);
-  const value = signalOf(ctx.host, part.signal).value;
   if (!Array.isArray(value)) {
     throw new CompiledProgramValidationError(
       `parts[${part.index}].signal`,
@@ -477,31 +480,45 @@ function serializeNode(
   }
   const part = ctx.program.parts[node.index];
   const start = `<!--${partAnchorMarker(part.index)}-->`;
+  if (ctx.pending?.has(part.index)) {
+    return `${start}<!--${partAnchorEndMarker(part.index)}-->`;
+  }
   if (part.k === 'text') {
-    return `${start}${escapeText(String(signalOf(ctx.host, part.signal).value))}`;
+    return `${start}${serializePartValue(ctx, part, signalOf(ctx.host, part.signal).value)}`;
   }
   if (part.k === 'when') {
-    const value = signalOf(ctx.host, part.signal).value;
-    const active = whenIsActive(part, value);
-    const branch = active ? part.on : part.off;
     const end = `<!--${partAnchorEndMarker(part.index)}-->`;
     // Branch content keeps the anchor's canonical path prefix: Region
     // subtrees hold no value sinks (the validator rejects fixed paths
     // crossing or preceded by an anchor), and resetting to [] would collide
     // with template-level sink paths and emit their values here.
-    return `${start}${serializeNodes(ctx, branch, nodePath)}${end}`;
+    return `${start}${
+      serializePartValue(ctx, part, signalOf(ctx.host, part.signal).value, nodePath)
+    }${end}`;
   }
   if (part.k === 'each') {
     const end = `<!--${partAnchorEndMarker(part.index)}-->`;
-    const items = itemsFor(ctx, part)
-      .map((item) => serializeItemNodes(ctx, part.item, part, item))
-      .join('');
-    return `${start}${items}${end}`;
+    return `${start}${serializePartValue(ctx, part, signalOf(ctx.host, part.signal).value)}${end}`;
   }
   throw new CompiledProgramValidationError(
     `template${nodePath.map((value) => `[${value}]`).join('')}`,
     `Part ${node.index} does not own a serializable anchor`,
   );
+}
+
+function serializePartValue(
+  ctx: SerializeContext,
+  part: ProgramEachPart | ProgramWhenPart | Extract<PartProgramV1['parts'][number], { k: 'text' }>,
+  value: unknown,
+  nodePath: readonly number[] = part.location.path,
+): string {
+  if (part.k === 'text') return escapeText(String(value));
+  if (part.k === 'when') {
+    return serializeNodes(ctx, whenIsActive(part, value) ? part.on : part.off, nodePath);
+  }
+  return itemsFor(part, value)
+    .map((item) => serializeItemNodes(ctx, part.item, part, item))
+    .join('');
 }
 
 function serializeChildren(
@@ -624,11 +641,12 @@ function snapshotProgram(
   raw: unknown,
   host: unknown,
   options: CompiledServerOptions = {},
+  pending?: ReadonlySet<number>,
 ): { program: PartProgramV1; ctx: SerializeContext } {
   const program = assertCompiledProgram(raw);
   // The host is intentionally checked lazily by signalOf so static-only
   // programs remain server-only and need no client signal artifact.
-  return { program, ctx: createSerializeContext(program, host, options) };
+  return { program, ctx: createSerializeContext(program, host, options, pending) };
 }
 
 /** Serialize only the program-owned root content, with deterministic markers. */
@@ -647,7 +665,16 @@ export function serializeCompiledProgram(
   host: unknown,
   options: CompiledServerOptions = {},
 ): string {
-  const { program, ctx } = snapshotProgram(raw, host, options);
+  return serializeCompiledSnapshot(raw, host, options);
+}
+
+function serializeCompiledSnapshot(
+  raw: unknown,
+  host: unknown,
+  options: CompiledServerOptions,
+  pending?: ReadonlySet<number>,
+): string {
+  const { program, ctx } = snapshotProgram(raw, host, options, pending);
   const mode = options.mode ?? 'open';
   if (mode !== 'light' && mode !== 'open' && mode !== 'closed') {
     throw new CompiledProgramValidationError(
@@ -678,6 +705,122 @@ export function serializeCompiledProgram(
   }
   const dsdAttrs = serializeDsdAttributes(options.dsd);
   return `<${program.tag}${hostAttrs}><template shadowrootmode="${mode}"${dsdAttrs}>${styleElement}${content}</template></${program.tag}>`;
+}
+
+/** A request-local owner; its program reference and object identity are never serialized. */
+export interface DeferredServerOwner {
+  readonly program: PartProgramV1;
+  readonly version: number;
+  readonly instanceId: string;
+}
+
+export interface DeferredServerSelection {
+  readonly owner: DeferredServerOwner;
+  readonly pendingParts: readonly number[];
+}
+
+export interface DeferredServerExecutor {
+  readonly shell: string;
+  /** Returns only the owned range's HTML, without anchors or transport framing. */
+  serializeResolved(owner: DeferredServerOwner, partIndex: number, value: unknown): string;
+}
+
+function hasOpaqueRegionNode(nodes: readonly ProgramTreeNode[]): boolean {
+  return nodes.some((node) =>
+    node.k === 'el' &&
+    (node.tag.includes('-') || node.tag === 'slot' || hasOpaqueRegionNode(node.children))
+  );
+}
+
+/**
+ * Opt-in request-local mode of the existing serializer. Admission of route
+ * dependencies remains the compiler's job; this boundary rejects non-range
+ * sinks and foreign owners before any pending shell can be emitted.
+ */
+export function createDeferredServerExecutor(
+  raw: PartProgramV1,
+  host: unknown,
+  selection: DeferredServerSelection,
+  options: CompiledServerOptions = {},
+): DeferredServerExecutor {
+  const program = assertCompiledProgram(raw);
+  const { owner } = selection;
+  if (
+    owner.program !== raw || owner.version !== PART_PROGRAM_VERSION ||
+    !owner.instanceId || typeof owner.instanceId !== 'string'
+  ) {
+    throw new CompiledProgramValidationError('owner', 'wrong program, version, or instance');
+  }
+  if (
+    (options.mode ?? 'open') === 'closed' || options.renderNestedElement ||
+    options.projectedChildren
+  ) {
+    throw new CompiledProgramValidationError(
+      'options',
+      'deferred ranges require accessible roots and no opaque nested renderer',
+    );
+  }
+  const pending = new Set<number>();
+  for (const index of selection.pendingParts) {
+    if (!Number.isInteger(index) || index < 0 || index >= program.parts.length) {
+      throw new CompiledProgramValidationError('pendingParts', `unknown Part ${String(index)}`);
+    }
+    if (pending.has(index)) {
+      throw new CompiledProgramValidationError('pendingParts', `duplicate Part ${index}`);
+    }
+    const part = program.parts[index];
+    if (part.k !== 'text' && part.k !== 'when' && part.k !== 'each') {
+      throw new CompiledProgramValidationError(
+        `parts[${index}]`,
+        'only anchor-owned text and Region Parts may be pending',
+      );
+    }
+    if (
+      program.parts.some((other) =>
+        other !== part && 'signal' in other && other.signal === part.signal &&
+        (other.k !== 'text' && other.k !== 'when' && other.k !== 'each' ||
+          !selection.pendingParts.includes(other.index))
+      )
+    ) {
+      throw new CompiledProgramValidationError(
+        `parts[${index}]`,
+        'pending signal also owns an unselected or non-range sink',
+      );
+    }
+    if (
+      part.k === 'when' && (hasOpaqueRegionNode(part.on) || hasOpaqueRegionNode(part.off)) ||
+      part.k === 'each' && hasOpaqueRegionNode(part.item)
+    ) {
+      throw new CompiledProgramValidationError(
+        `parts[${index}]`,
+        'deferred Region contains an opaque nested element or slot',
+      );
+    }
+    pending.add(index);
+  }
+  const shell = serializeCompiledSnapshot(raw, host, options, pending);
+  const ctx = createSerializeContext(program, host, options);
+  return {
+    shell,
+    serializeResolved(candidate, index, value) {
+      if (
+        candidate !== owner || candidate.program !== raw || candidate.version !== program.version
+      ) {
+        throw new CompiledProgramValidationError('owner', 'wrong deferred Part owner');
+      }
+      if (!pending.has(index)) {
+        throw new CompiledProgramValidationError(
+          'pendingParts',
+          `unknown or non-pending Part ${String(index)}`,
+        );
+      }
+      const part = program.parts[index];
+      if (part.k !== 'text' && part.k !== 'when' && part.k !== 'each') {
+        throw new CompiledProgramValidationError(`parts[${index}]`, 'Part is not a range');
+      }
+      return serializePartValue(ctx, part, value);
+    },
+  };
 }
 
 /**

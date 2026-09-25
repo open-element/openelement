@@ -1,6 +1,6 @@
 import { assert, assertEquals } from '@std/assert';
 import { ElementParams } from '../src/open-element-params.ts';
-import { ElementLifecycle } from '../src/open-element-lifecycle.ts';
+import { LifetimeScope } from '../src/internal/compiled/lifetime-scope.ts';
 import { attachFormInternals } from '../src/open-element-form.ts';
 
 // ─── ElementParams (#904) ────────────────────────────────────────────
@@ -63,18 +63,18 @@ Deno.test('params: setter copies, getter returns the copy', () => {
   assertEquals(params.value, { a: '1' });
 });
 
-// ─── ElementLifecycle (#904) ─────────────────────────────────────────
+// ─── LifetimeScope (#1458) ───────────────────────────────────────────
 
-Deno.test('lifecycle: dispose aborts the signal and starts fresh', () => {
-  const lifecycle = new ElementLifecycle();
+Deno.test('lifecycle: dispose aborts the signal and next activation starts fresh', () => {
+  const lifecycle = new LifetimeScope();
   const first = lifecycle.signal;
   lifecycle.dispose();
   assert(first.aborted);
-  assert(!lifecycle.signal.aborted);
+  assert(!new LifetimeScope().signal.aborted);
 });
 
 Deno.test('lifecycle: setTimeout is cleared on dispose', async () => {
-  const lifecycle = new ElementLifecycle();
+  const lifecycle = new LifetimeScope();
   let fired = false;
   lifecycle.setTimeout(() => {
     fired = true;
@@ -85,7 +85,7 @@ Deno.test('lifecycle: setTimeout is cleared on dispose', async () => {
 });
 
 Deno.test('lifecycle: setTimeout fires when not disposed', async () => {
-  const lifecycle = new ElementLifecycle();
+  const lifecycle = new LifetimeScope();
   let fired = false;
   lifecycle.setTimeout(() => {
     fired = true;

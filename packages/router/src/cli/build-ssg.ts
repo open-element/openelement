@@ -252,7 +252,10 @@ async function buildSSG(
 
   // Generate SSG entry code (all statically imported — no cycle with the
   // internal/ssg barrel, #847).
-  const routes = options.routes ?? await scanRoutes(routesDir);
+  const routes = options.routes ?? await scanRoutes(routesDir, '', {
+    root,
+    workspaceRoot: findWorkspaceRoot(Deno.cwd()) ?? undefined,
+  });
   const staticComponents = options.staticComponents ?? await scanStaticComponents({
     root,
     routesDir,

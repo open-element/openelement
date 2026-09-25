@@ -49,6 +49,7 @@ import {
   STATIC_STYLES_MARKER,
 } from '../protocol/part-program.ts';
 import { normalizePartProgram, type RuntimeProgramIR } from './runtime-program.ts';
+import { LifetimeScope } from './lifetime-scope.ts';
 // The single error dialect (#1386 item 3): every failure raised by this module
 // is an OpenElementError carrying a code from the catalogue, so a consumer
 // classifies a compiled-runtime failure by code instead of by message prefix.
@@ -146,97 +147,22 @@ export interface CompiledRuntimeHost {
 
 export interface CompiledProgramInstance {
   dispose(): void;
-}
-
-/**
- * A scope is the lifetime owner for one Part or Region. Parent scopes own
- * nested scopes, so removing a Region disposes all nested subscriptions,
- * event listeners, and refs exactly once.
- */
-class ResourceScope {
-  #parent?: ResourceScope;
-  #children = new Set<ResourceScope>();
-  #cleanups: Array<() => void> = [];
-  #rangeCleanups: Array<() => void> = [];
-  #disposed = false;
-
-  constructor(parent?: ResourceScope) {
-    this.#parent = parent;
-    if (parent) parent.#children.add(this);
-  }
-
-  child(): ResourceScope {
-    return new ResourceScope(this);
-  }
-
-  get disposed(): boolean {
-    return this.#disposed;
-  }
-
-  add(cleanup: () => void): void {
-    if (this.#disposed) {
-      cleanup();
-      return;
-    }
-    this.#cleanups.push(cleanup);
-  }
-
-  addRangeCleanup(cleanup: () => void): void {
-    if (this.#disposed) {
-      cleanup();
-      return;
-    }
-    this.#rangeCleanups.push(cleanup);
-  }
-
-  dispose(detachOwnedNodes = false): void {
-    if (this.#disposed) return;
-    this.#disposed = true;
-    let firstError: unknown;
-    let hasError = false;
-
-    for (const child of [...this.#children]) {
-      try {
-        child.dispose(detachOwnedNodes);
-      } catch (error) {
-        hasError = true;
-        firstError ??= error;
-      }
-    }
-    this.#children.clear();
-
-    for (const cleanup of this.#cleanups.splice(0).reverse()) {
-      try {
-        cleanup();
-      } catch (error) {
-        hasError = true;
-        firstError ??= error;
-      }
-    }
-    const rangeCleanups = this.#rangeCleanups.splice(0).reverse();
-    if (detachOwnedNodes) {
-      for (const cleanup of rangeCleanups) {
-        try {
-          cleanup();
-        } catch (error) {
-          hasError = true;
-          firstError ??= error;
-        }
-      }
-    }
-    if (this.#parent) this.#parent.#children.delete(this);
-    if (hasError) throw firstError;
-  }
+  /** Adopt one formerly pending streamed Part after its owned range is filled. */
+  resolveDeferred?(partIndex: number): void;
 }
 
 interface MountContext {
   program: RuntimeProgramIR;
   host: CompiledRuntimeHost;
-  rootScope: ResourceScope;
+  rootScope: LifetimeScope;
   fixedPartsByPath: Map<string, ProgramFixedPart[]>;
 }
 
-function createContext(program: RuntimeProgramIR, host: CompiledRuntimeHost): MountContext {
+function createContext(
+  program: RuntimeProgramIR,
+  host: CompiledRuntimeHost,
+  ownerScope?: LifetimeScope,
+): MountContext {
   const fixedPartsByPath = new Map<string, ProgramFixedPart[]>();
   for (const part of program.parts) {
     if (!isFixedPart(part)) continue;
@@ -248,7 +174,7 @@ function createContext(program: RuntimeProgramIR, host: CompiledRuntimeHost): Mo
   return {
     program,
     host,
-    rootScope: new ResourceScope(),
+    rootScope: ownerScope?.child() ?? new LifetimeScope(),
     fixedPartsByPath,
   };
 }
@@ -327,7 +253,7 @@ function signalOf(ctx: MountContext, name: string): SignalLike<unknown> {
  */
 function subscribeWrites(
   ctx: MountContext,
-  scope: ResourceScope,
+  scope: LifetimeScope,
   name: string,
   fn: (value: unknown) => void,
 ): void {
@@ -424,18 +350,18 @@ function itemAttrValue(item: unknown, field: string): string | null {
 interface WhenRegion {
   ctx: MountContext;
   part: ProgramWhenPart;
-  scope: ResourceScope;
+  scope: LifetimeScope;
   anchor: Comment;
   end: Comment;
   current: boolean;
-  branchScope: ResourceScope;
+  branchScope: LifetimeScope;
   nodes: Node[];
   item: unknown;
   itemPart?: ProgramEachPart;
 }
 
 interface TextPartSlot {
-  scope: ResourceScope;
+  scope: LifetimeScope;
   anchor: Comment;
   text?: Text;
   current: string;
@@ -459,7 +385,7 @@ interface ItemAttrSlot {
 
 interface EachEntry {
   key: string;
-  scope: ResourceScope;
+  scope: LifetimeScope;
   nodes: Node[];
   valueSlots: ItemValueSlot[];
   attrSlots: ItemAttrSlot[];
@@ -478,7 +404,7 @@ interface EachEntry {
 interface EachRegion {
   ctx: MountContext;
   part: ProgramEachPart;
-  scope: ResourceScope;
+  scope: LifetimeScope;
   anchor: Comment;
   end: Comment;
   entries: EachEntry[];
@@ -494,7 +420,7 @@ function whenActive(part: ProgramWhenPart, value: unknown): boolean {
 
 function mountNodes(
   ctx: MountContext,
-  scope: ResourceScope,
+  scope: LifetimeScope,
   doc: Document,
   nodes: ProgramTreeNode[],
   item: unknown = NO_ITEM,
@@ -585,12 +511,12 @@ const NO_ITEM = Symbol('compiled-runtime.no-item');
 
 function buildItem(
   ctx: MountContext,
-  regionScope: ResourceScope,
+  regionScope: LifetimeScope,
   doc: Document,
   part: ProgramEachPart,
   item: unknown,
   parent?: Node,
-): { nodes: Node[]; valueSlots: ItemValueSlot[]; attrSlots: ItemAttrSlot[]; scope: ResourceScope } {
+): { nodes: Node[]; valueSlots: ItemValueSlot[]; attrSlots: ItemAttrSlot[]; scope: LifetimeScope } {
   const scope = regionScope.child();
   const valueSlots: ItemValueSlot[] = [];
   const attrSlots: ItemAttrSlot[] = [];
@@ -613,7 +539,7 @@ function buildItem(
 
 function buildWhen(
   ctx: MountContext,
-  parentScope: ResourceScope,
+  parentScope: LifetimeScope,
   doc: Document,
   part: ProgramWhenPart,
   item: unknown,
@@ -722,7 +648,7 @@ function updateTextPart(slot: TextPartSlot, value: unknown): void {
 
 function buildTextPart(
   ctx: MountContext,
-  parentScope: ResourceScope,
+  parentScope: LifetimeScope,
   doc: Document,
   part: ProgramTextPart,
 ): Node[] {
@@ -745,7 +671,7 @@ function buildTextPart(
 
 function buildEach(
   ctx: MountContext,
-  parentScope: ResourceScope,
+  parentScope: LifetimeScope,
   doc: Document,
   part: ProgramEachPart,
   parent?: Node,
@@ -848,9 +774,8 @@ function removeItemValue(entry: EachEntry, slot: ItemValueSlot, text: Text): voi
 }
 
 function updateItemValues(
-  part: ProgramEachPart,
   entry: EachEntry,
-  item: unknown,
+  projection: { values: string[]; attrs: Array<string | null> },
   regionParent: Node,
   resolveRegionReference: () => Node,
 ): void {
@@ -861,7 +786,7 @@ function updateItemValues(
   let regionReference: Node | undefined;
   const regionReferenceForInsert = (): Node => (regionReference ??= resolveRegionReference());
   for (const [index, slot] of entry.valueSlots.entries()) {
-    const next = displayValue(itemValue(part, item, slot.field));
+    const next = projection.values[index];
     if (next.length === 0) {
       if (slot.text) removeItemValue(entry, slot, slot.text);
       continue;
@@ -883,8 +808,8 @@ function updateItemValues(
     slot.text = text;
     insertItemValue(entry, index, text, regionParent, regionReferenceForInsert());
   }
-  for (const slot of entry.attrSlots) {
-    const next = itemAttrValue(item, slot.field);
+  for (const [index, slot] of entry.attrSlots.entries()) {
+    const next = projection.attrs[index];
     if (next === null) {
       if (slot.element.hasAttribute(slot.name)) slot.element.removeAttribute(slot.name);
     } else if (slot.element.getAttribute(slot.name) !== next) {
@@ -901,16 +826,75 @@ function disposeEntry(entry: EachEntry): void {
   }
 }
 
-function moveEntries(region: EachRegion, parent: Node, entries: EachEntry[]): void {
-  let cursor: Node = region.anchor.nextSibling ?? region.end;
-  for (const entry of entries) {
-    for (const node of entry.nodes) {
-      if (node === cursor) {
-        cursor = node.nextSibling ?? region.end;
-      } else {
-        parent.insertBefore(node, cursor);
-        cursor = node.nextSibling ?? region.end;
+function moveEntries(
+  region: EachRegion,
+  parent: Node,
+  entries: EachEntry[],
+  previousPositions: Map<EachEntry, number>,
+  mounted: Set<EachEntry>,
+): void {
+  // A physically ordered suffix already touches the Region end anchor.
+  // Leave it in place and keep the LIS work confined to the changed prefix.
+  let limit = entries.length;
+  let reference: Node = region.end;
+  while (limit > 0) {
+    const nodes = entries[limit - 1].nodes;
+    let next = reference;
+    let contiguous = true;
+    for (let index = nodes.length - 1; index >= 0; index--) {
+      if (nodes[index].parentNode !== parent || nodes[index].nextSibling !== next) {
+        contiguous = false;
+        break;
       }
+      next = nodes[index];
+    }
+    if (!contiguous) break;
+    reference = next;
+    limit--;
+  }
+
+  // Keep the longest already-ordered subsequence in place. New entries and
+  // formerly empty entries have no mounted position to preserve.
+  const tails: number[] = [];
+  const predecessors = new Int32Array(limit).fill(-1);
+  for (let index = 0; index < limit; index++) {
+    const entry = entries[index];
+    const position = previousPositions.get(entry);
+    const nodes = entry.nodes;
+    if (
+      position === undefined || !mounted.has(entry) || nodes.length === 0 ||
+      nodes.some((node, nodeIndex) =>
+        node.parentNode !== parent ||
+        (nodeIndex > 0 && nodes[nodeIndex - 1].nextSibling !== node)
+      )
+    ) continue;
+    let low = 0;
+    let high = tails.length;
+    while (low < high) {
+      const middle = (low + high) >>> 1;
+      if (previousPositions.get(entries[tails[middle]])! < position) low = middle + 1;
+      else high = middle;
+    }
+    if (low > 0) predecessors[index] = tails[low - 1];
+    tails[low] = index;
+  }
+  const stationary = new Set<number>();
+  for (let index = tails.at(-1) ?? -1; index >= 0; index = predecessors[index]) {
+    stationary.add(index);
+  }
+
+  for (let index = limit - 1; index >= 0; index--) {
+    const nodes = entries[index].nodes;
+    if (stationary.has(index)) {
+      if (nodes.length > 0) reference = nodes[0];
+      continue;
+    }
+    for (let nodeIndex = nodes.length - 1; nodeIndex >= 0; nodeIndex--) {
+      const node = nodes[nodeIndex];
+      if (node.parentNode !== parent || node.nextSibling !== reference) {
+        parent.insertBefore(node, reference);
+      }
+      reference = node;
     }
   }
 }
@@ -927,8 +911,17 @@ function updateEach(region: EachRegion, value: unknown): void {
   // A detached anchor/end pair means the Region's owning boundary is gone;
   // updates stop rather than rebuilding outside the owned range.
   if (!parent || region.anchor.parentNode !== parent) return;
+  const previousPositions = new Map(region.entries.map((entry, index) => [entry, index]));
+  const mounted = new Set(
+    region.entries.filter((entry) => entry.nodes.some((node) => node.parentNode === parent)),
+  );
 
-  const descriptors: Array<{ key: string; item: unknown; existing?: EachEntry }> = [];
+  const descriptors: Array<{
+    key: string;
+    item: unknown;
+    existing?: EachEntry;
+    projection?: { values: string[]; attrs: Array<string | null> };
+  }> = [];
   const seen = new Set<string>();
   for (let index = 0; index < value.length; index++) {
     const item = value[index];
@@ -938,6 +931,16 @@ function updateEach(region: EachRegion, value: unknown): void {
     }
     seen.add(key);
     descriptors.push({ key, item, existing: region.byKey.get(key) });
+  }
+  for (const descriptor of descriptors) {
+    const entry = descriptor.existing;
+    if (!entry || entry.item === descriptor.item) continue;
+    descriptor.projection = {
+      values: entry.valueSlots.map((slot) =>
+        displayValue(itemValue(region.part, descriptor.item, slot.field))
+      ),
+      attrs: entry.attrSlots.map((slot) => itemAttrValue(descriptor.item, slot.field)),
+    };
   }
 
   // Membership only: `created` exists to tell a freshly built entry (already
@@ -981,7 +984,7 @@ function updateEach(region: EachRegion, value: unknown): void {
     // entirely (#1416); the reference is refreshed below for every entry that
     // does re-render, so the next update compares against what is on screen.
     if (entry.item === descriptor.item) continue;
-    updateItemValues(region.part, entry, descriptor.item, parent, () => {
+    updateItemValues(entry, descriptor.projection!, parent, () => {
       for (let nextIndex = descriptorIndex + 1; nextIndex < nextEntries.length; nextIndex++) {
         const nextNode = nextEntries[nextIndex].nodes.find((node) => node.parentNode === parent);
         if (nextNode) return nextNode;
@@ -992,12 +995,12 @@ function updateEach(region: EachRegion, value: unknown): void {
   }
   region.entries = nextEntries;
   region.byKey = new Map(nextEntries.map((entry) => [entry.key, entry]));
-  moveEntries(region, parent, nextEntries);
+  moveEntries(region, parent, nextEntries, previousPositions, mounted);
 }
 
 function mountPart(
   ctx: MountContext,
-  parentScope: ResourceScope,
+  parentScope: LifetimeScope,
   doc: Document,
   index: number,
   item: unknown,
@@ -1246,8 +1249,9 @@ export function createFreshDom(
   program: PartProgramV1,
   host: CompiledRuntimeHost,
   root: Node,
+  ownerScope?: LifetimeScope,
 ): CompiledProgramInstance {
-  const ctx = createContext(normalizePartProgram(program), host);
+  const ctx = createContext(normalizePartProgram(program), host, ownerScope);
   const doc = root.ownerDocument;
   if (!doc) {
     fail(
@@ -1568,9 +1572,25 @@ function claimItemRecords(
  * ref attaches, so a failed claim leaves zero live resources behind.
  */
 interface DeferredSubscription {
-  scope: ResourceScope;
+  scope: LifetimeScope;
   signal: string;
   fn: (value: unknown) => void;
+}
+
+interface StreamClaimRange {
+  parent: Node;
+  anchor: Comment;
+  end: Comment;
+  scope: LifetimeScope;
+  path: string;
+  programPath: number[];
+  owner: ClaimOwner;
+}
+
+interface StreamClaimState {
+  streamed: ReadonlySet<number>;
+  pending: ReadonlySet<number>;
+  ranges: Map<number, StreamClaimRange>;
 }
 
 function claimNodes(
@@ -1580,13 +1600,14 @@ function claimNodes(
   nodes: ProgramTreeNode[],
   path: string,
   programPath: number[],
-  scope: ResourceScope,
+  scope: LifetimeScope,
   owner: ClaimOwner,
   pending: DeferredSubscription[],
   item: unknown = NO_ITEM,
   itemPart?: ProgramEachPart,
   itemValueSlots?: ItemValueSlot[],
   itemAttrSlots?: ItemAttrSlot[],
+  stream?: StreamClaimState,
 ): number {
   const at = (index: number): Node => {
     const node = parent.childNodes[index];
@@ -1689,6 +1710,7 @@ function claimNodes(
           itemPart,
           itemValueSlots,
           itemAttrSlots,
+          stream,
         );
       if (consumed !== dom.childNodes.length) {
         claimFailure(`${nodePath}.children`, 'unexpected trailing nodes', owner);
@@ -1698,6 +1720,23 @@ function claimNodes(
 
     const part = ctx.program.parts[node.index];
     if (!part) claimFailure(nodePath, `missing Part ${node.index}`, owner);
+    if (stream?.pending.has(part.index)) {
+      if (part.k !== 'text' && part.k !== 'when' && part.k !== 'each') {
+        claimFailure(nodePath, 'pending Part is not an owned range', owner);
+      }
+      const anchor = expectComment(at(cursor++), partAnchorMarker(part.index), nodePath, owner);
+      const end = expectComment(at(cursor++), partAnchorEndMarker(part.index), nodePath, owner);
+      stream.ranges.set(part.index, {
+        parent,
+        anchor,
+        end,
+        scope,
+        path: nodePath,
+        programPath,
+        owner,
+      });
+      continue;
+    }
     if (part.k === 'text') {
       const anchor = expectComment(at(cursor++), partAnchorMarker(part.index), nodePath, owner);
       const expected = displayValue(signalOf(ctx, part.signal).value);
@@ -1711,6 +1750,9 @@ function claimNodes(
         if (text.data !== expected) {
           claimFailure(nodePath, `part text drift: expected ${JSON.stringify(expected)}`, owner);
         }
+      }
+      if (stream?.streamed.has(part.index)) {
+        expectComment(at(cursor++), partAnchorEndMarker(part.index), nodePath, owner);
       }
       const partScope = scope.child();
       const slot: TextPartSlot = { scope: partScope, anchor, text, current: expected };
@@ -1749,6 +1791,8 @@ function claimNodes(
         item,
         itemPart,
         itemValueSlots,
+        undefined,
+        stream,
       );
       const end = expectComment(
         at(cursor++),
@@ -1817,6 +1861,7 @@ function claimNodes(
           part,
           itemSlots,
           itemAttrs,
+          stream,
         );
         const entry: EachEntry = {
           key,
@@ -2334,6 +2379,9 @@ export interface CompiledClaimOptions {
   onMismatch?: (error: PartProgramClaimError) => void;
   /** Events captured before upgrade and replayed after a successful attach. */
   preUpgradeEvents?: readonly PreUpgradeEvent[] | PreUpgradeEventCapture;
+  /** Stream-only Parts have a closing marker even for text; pending ranges are empty. */
+  streamParts?: readonly number[];
+  pendingParts?: readonly number[];
 }
 
 function isStaticStyleNode(node: Node | undefined): boolean {
@@ -2396,6 +2444,7 @@ function scanClaim(
   root: Node,
   options: CompiledClaimOptions,
   pending: DeferredSubscription[],
+  stream?: StreamClaimState,
 ): number {
   const owner: RootClaimOwner = { kind: 'root', root };
   const styleNode = root.childNodes[0];
@@ -2414,12 +2463,95 @@ function scanClaim(
     ctx.rootScope,
     owner,
     pending,
+    NO_ITEM,
+    undefined,
+    undefined,
+    undefined,
+    stream,
   );
   if (consumed !== root.childNodes.length) {
     claimFailure('template', 'unexpected trailing nodes', owner);
   }
   validateFixedPartTargets(ctx, root, cursorStart, owner);
   return cursorStart;
+}
+
+function recoverStreamRange(ctx: MountContext, range: StreamClaimRange, index: number): boolean {
+  const part = ctx.program.parts[index];
+  const { parent, anchor, end } = range;
+  const doc = parent.ownerDocument;
+  if (!doc || anchor.parentNode !== parent || end.parentNode !== parent) return false;
+  const nodes = part.k === 'text'
+    ? (() => {
+      const value = displayValue(signalOf(ctx, part.signal).value);
+      return value ? [doc.createTextNode(value)] : [];
+    })()
+    : part.k === 'when' || part.k === 'each'
+    ? buildRecoveryRegionContent(ctx, doc, part)
+    : [];
+  let cursor = anchor.nextSibling;
+  while (cursor && cursor !== end) {
+    const next = cursor.nextSibling;
+    parent.removeChild(cursor);
+    cursor = next;
+  }
+  if (cursor !== end) return false;
+  for (const node of nodes) parent.insertBefore(node, end);
+  return true;
+}
+
+function resolveStreamRange(
+  ctx: MountContext,
+  range: StreamClaimRange,
+  index: number,
+  options: CompiledClaimOptions,
+): void {
+  let recovered = false;
+  for (;;) {
+    const { parent, anchor, end } = range;
+    const children = Array.from(parent.childNodes);
+    const start = children.indexOf(anchor);
+    const finish = children.indexOf(end);
+    if (start < 0 || finish <= start) {
+      claimFailure(range.path, 'stream Part anchors are detached or out of order', range.owner);
+    }
+    const scope = range.scope.child();
+    const subscriptions: DeferredSubscription[] = [];
+    try {
+      const consumed = claimNodes(
+        ctx,
+        parent,
+        start,
+        [{ k: 'part', id: ctx.program.parts[index].location.id, index }],
+        range.path,
+        range.programPath,
+        scope,
+        range.owner,
+        subscriptions,
+        NO_ITEM,
+        undefined,
+        undefined,
+        undefined,
+        { streamed: new Set([index]), pending: new Set(), ranges: new Map() },
+      );
+      if (consumed !== finish + 1) {
+        claimFailure(range.path, 'stream Part has unexpected trailing nodes', range.owner);
+      }
+      for (const deferred of subscriptions) {
+        subscribeWrites(ctx, deferred.scope, deferred.signal, deferred.fn);
+      }
+      return;
+    } catch (error) {
+      scope.dispose();
+      if (!(error instanceof PartProgramClaimError)) throw error;
+      options.onMismatch?.(error);
+      if (
+        options.recovery !== 'owning' || recovered ||
+        !recoverStreamRange(ctx, range, index)
+      ) throw error;
+      recovered = true;
+    }
+  }
 }
 
 /** Static recovery build: Region branches and item templates hold no anchors. */
@@ -2619,6 +2751,7 @@ export function claimExistingDom(
   host: CompiledRuntimeHost,
   root: Node,
   options: CompiledClaimOptions = {},
+  ownerScope?: LifetimeScope,
 ): CompiledProgramInstance {
   // Stop a live capture before staged validation so a failed claim cannot
   // leave its root listener installed. The captured records are replayed only
@@ -2628,10 +2761,33 @@ export function claimExistingDom(
   let recovered = false;
   let rootRebuilt = false;
   for (;;) {
-    const ctx = createContext(normalizePartProgram(program), host);
+    const ctx = createContext(normalizePartProgram(program), host, ownerScope);
     const pending: DeferredSubscription[] = [];
+    const streamed = new Set(options.streamParts ?? []);
+    const unresolved = new Set(options.pendingParts ?? []);
+    const isStream = options.streamParts !== undefined || options.pendingParts !== undefined;
+    const stream: StreamClaimState | undefined = isStream
+      ? { streamed, pending: unresolved, ranges: new Map() }
+      : undefined;
     try {
-      const cursorStart = scanClaim(ctx, root, options, pending);
+      if (
+        streamed.size !== (options.streamParts?.length ?? 0) ||
+        unresolved.size !== (options.pendingParts?.length ?? 0) ||
+        [...unresolved].some((index) => !streamed.has(index)) ||
+        [...streamed].some((index) =>
+          !Number.isInteger(index) || !ctx.program.parts[index] ||
+          !['text', 'when', 'each'].includes(ctx.program.parts[index].k)
+        )
+      ) {
+        claimFailure('template', 'invalid streamed or pending Part selection', {
+          kind: 'root',
+          root,
+        });
+      }
+      const cursorStart = scanClaim(ctx, root, options, pending, stream);
+      if (stream && stream.ranges.size !== unresolved.size) {
+        claimFailure('template', 'pending Part has no owned range', { kind: 'root', root });
+      }
       for (const deferred of pending) {
         subscribeWrites(ctx, deferred.scope, deferred.signal, deferred.fn);
       }
@@ -2640,7 +2796,25 @@ export function claimExistingDom(
       // recovery never contains fixed-Part targets, so `claim` mode stands.
       attachFixedParts(ctx, root, rootRebuilt ? 'fresh' : 'claim', cursorStart);
       replayPreUpgradeEvents(root, capturedEvents);
-      return instance(ctx);
+      const claimed = instance(ctx);
+      if (!stream || stream.ranges.size === 0) return claimed;
+      let disposed = false;
+      return {
+        dispose() {
+          disposed = true;
+          claimed.dispose();
+        },
+        resolveDeferred(index) {
+          if (disposed || !stream.ranges.has(index)) {
+            claimFailure(`parts[${index}]`, 'stream Part is disposed or already resolved', {
+              kind: 'root',
+              root,
+            });
+          }
+          resolveStreamRange(ctx, stream.ranges.get(index)!, index, options);
+          stream.ranges.delete(index);
+        },
+      };
     } catch (error) {
       try {
         ctx.rootScope.dispose();
@@ -2649,7 +2823,9 @@ export function claimExistingDom(
       }
       if (!(error instanceof PartProgramClaimError)) throw error;
       options.onMismatch?.(error);
-      if (recovery !== 'owning' || recovered || !recoverClaimOwner(error, ctx)) throw error;
+      if (stream || recovery !== 'owning' || recovered || !recoverClaimOwner(error, ctx)) {
+        throw error;
+      }
       recovered = true;
       rootRebuilt = error.owner.kind === 'root';
     }

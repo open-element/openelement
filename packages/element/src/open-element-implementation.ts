@@ -64,7 +64,8 @@ import {
   CompiledElementKernel,
   type CompiledRootMode,
 } from './internal/compiled/runtime/kernel.ts';
-import { ElementLifecycle } from './open-element-lifecycle.ts';
+import { streamHostState } from './internal/compiled/stream-state.ts';
+import { LifetimeScope } from './internal/compiled/lifetime-scope.ts';
 import { ElementParams } from './open-element-params.ts';
 import { OpenElementConfiguration } from './open-element-configuration.ts';
 
@@ -179,13 +180,14 @@ export class OpenElement extends OpenElementConfiguration {
    * without a program never connects; the kernel owns the connected lifecycle
    * otherwise).
    */
-  #detachedLifecycle = new ElementLifecycle();
+  #detachedLifecycle = new LifetimeScope();
 
   /** Error state owner used before a kernel exists (never connected). */
   #detachedErrors = new CompiledErrorBoundary();
 
   /** Present only when the class carries a compiled Part Program. */
   #kernel?: CompiledElementKernel;
+  #streamUnsubscribe?: () => void;
 
   constructor() {
     super();
@@ -288,12 +290,35 @@ export class OpenElement extends OpenElementConfiguration {
     this.#params.syncFromAttribute(this as unknown as HTMLElement);
     reconcileOwnProperties(this, state);
     syncAttributesToSignals(this, state);
-    applyPendingOwnValues(state);
-
     // The kernel's connect result owns the claim-vs-fresh truth; the facade
     // derives its hooks from it and never guesses from pre-connect state.
     try {
+      const stream = streamHostState(this as unknown as HTMLElement, kernel.program);
+      if (stream) {
+        for (const property of state.properties) {
+          if (property.computed) continue;
+          const seed = stream.properties[property.name];
+          if (!seed) continue;
+          if (seed.type !== property.type) {
+            throw new OpenElementError(
+              `[openElement] streamed property "${property.name}" has a mismatched type.`,
+              { code: FacadeErrorCode.PROGRAM_MISSING, phase: 'csr' },
+            );
+          }
+          if (seed.state === 'resolved') state.signals[property.name].value = seed.value;
+        }
+      }
+      applyPendingOwnValues(state);
       const activation = kernel.connect();
+      this.#streamUnsubscribe?.();
+      this.#streamUnsubscribe = stream?.listen((part, field, outcome) => {
+        if (outcome !== 'content') return;
+        const seed = stream.properties[field];
+        const property = state.properties.find((item) => item.name === field);
+        if (!seed || seed.state !== 'resolved' || property?.type !== seed.type) return;
+        state.signals[field].value = seed.value;
+        kernel.resolveStreamPart(part);
+      });
       if (activation.mode === 'claim') {
         replayPreUpgradeCaptures(activation.root as unknown as Node);
         this.onDsdHydrated();
@@ -358,6 +383,8 @@ export class OpenElement extends OpenElementConfiguration {
    */
   disconnectedCallback(): void {
     try {
+      this.#streamUnsubscribe?.();
+      this.#streamUnsubscribe = undefined;
       // Removal / morph replacement must not strand this root's records:
       // release them with the disconnect (detached targets are additionally
       // swept by the release itself, so cancelled islands free their queue).

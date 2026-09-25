@@ -115,6 +115,23 @@ async function assertRuntimeRoutes(fetchRuntime: FetchLike): Promise<void> {
   const loadHtml = await fetchRuntimeText(fetchRuntime, '/load', 200);
   assertIncludes(loadHtml, 'data-load="nitro-data"', 'load route');
 
+  const streamed = await fetchRuntime(new Request('http://127.0.0.1/stream'));
+  if (
+    streamed.status !== 200 ||
+    streamed.headers.get('cache-control') !== 'private, no-cache' ||
+    !streamed.headers.get('set-cookie')?.includes('stream-proof=1') ||
+    !streamed.body
+  ) {
+    throw new Error('Nitro stream transport lost status, headers, cookie, or body');
+  }
+  const streamText = await streamed.text();
+  assertIncludes(streamText, '<!--oe:p0--><!--oe:/p0-->', 'Nitro stream shell');
+  assertIncludes(streamText, '<template data-oe-transport-proof>Loaded</template>', 'Nitro frame');
+  assertIncludes(streamText, '<noscript>Loaded</noscript>', 'Nitro no-JS tail');
+  if (streamText.indexOf('data-route="stream"') > streamText.indexOf('data-oe-transport-proof')) {
+    throw new Error('Nitro stream transport reordered shell and frame');
+  }
+
   const layoutHtml = await fetchRuntimeText(fetchRuntime, '/layout', 200);
   assertIncludes(layoutHtml, 'data-layout="shell"', 'layout route');
   assertIncludes(layoutHtml, 'data-route="layout"', 'layout route');

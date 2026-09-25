@@ -27,11 +27,18 @@ Ionic/Stencil, bare-native, plus the OpenElement control island):
 - the build's `ssrAdmissionPlan` decision per tag;
 - browser capability evidence: registration, upgrade, shadow root, slot
   projection, attribute/property reflection, composed events, interaction
-  event propagation, hydration safety;
+  event propagation; hydration safety is `null` unless pre-upgrade identity
+  was actually captured;
 - metadata availability per library (CEM / Stencil collection manifest).
 
-The run prints a deterministic JSON record to stdout; generated evidence is
-not committed to the repository.
+The run prints a deterministic JSON record to stdout. Three Lit-based
+representatives also probe no-JS server-born children, `:defined` styling,
+and pre-upgrade host/child identity. The tier report grants only the highest
+observed tier; unavailable probes are named as gaps, and T1/T2 are never
+inferred from CEM metadata. Set `OPEN_ELEMENT_TIER_REPORT` to a writable path
+to emit the generated JSON. The release workflow uploads it as an advisory
+artifact; it does not gate publishing or claim a real Workers deployment.
+Generated evidence is not committed to the repository.
 
 ## Boundary with `fixtures/web-component-interop/`
 
@@ -51,8 +58,28 @@ checks there.
 deno task --cwd tests/fixtures/third-party-web-components smoke   # from the repository root
 # or directly:
 deno run --allow-read --allow-write --allow-run --allow-env --allow-net --allow-sys \
-  fixtures/third-party-web-components/qualify.ts
+  tests/fixtures/third-party-web-components/qualify.ts
 ```
 
 Set `OPEN_ELEMENT_KEEP_THIRD_PARTY_WC_SMOKE=1` to keep the generated temp app
 for inspection.
+
+## T1 snapshot prototype
+
+`snapshot:prototype` captures a pinned Lit fixture's _structure_ in a
+headless browser, removes volatile Lit comment markers, hashes the exact
+package/bundle/tool/browser/inputs, checks an ephemeral cache read and a
+simulated version-bump miss, and serves a generated DSD demo route without
+JavaScript. The same run observes upgrade node identity and focus; failed
+upgrade keeps `highestPassedTier: null`. It neither caches request data nor
+qualifies T1 or a third-party T2 adapter. The release workflow uploads the
+report as advisory evidence, never as a publishing gate.
+
+```sh
+OPEN_ELEMENT_T1_PROTOTYPE_REPORT=/tmp/openelement-t1-report.json \
+  deno task --cwd tests/fixtures/third-party-web-components snapshot:prototype
+```
+
+Set `OPEN_ELEMENT_KEEP_T1_PROTOTYPE=1` to retain the generated demo and
+cache for inspection; otherwise both are removed after the proof. The version
+change in the report is simulated, not a dependency upgrade.

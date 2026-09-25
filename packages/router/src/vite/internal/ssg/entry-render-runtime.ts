@@ -94,6 +94,25 @@ export function renderRuntimeHelpers(
     );
     lines.push('}');
     lines.push('');
+    lines.push(
+      'async function __createDeferredPageShell(route, routeModule, props, instanceId, documentToken) {',
+    );
+    lines.push(
+      '  const manifest = typeof __streamManifests === "undefined" ? undefined : __streamManifests[route];',
+    );
+    lines.push('  const Cls = routeModule?.default;');
+    lines.push(
+      '  if (!manifest || !Cls?.__partProgram || Cls.__partProgram.tag !== manifest.program.tag || Cls.__partProgram.version !== manifest.program.version) {',
+    );
+    lines.push(
+      '    throw new Error("[openElement] stream route " + route + " has no matching compiled route manifest/program.");',
+    );
+    lines.push('  }');
+    lines.push(
+      '  return createDeferredDsdExecutor({ componentClass: Cls, props, manifest, instanceId, documentToken });',
+    );
+    lines.push('}');
+    lines.push('');
   }
 
   // #1276 (B1.3-F1): the compiled program is the one canonical source for the

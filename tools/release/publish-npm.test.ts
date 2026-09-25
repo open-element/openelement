@@ -375,6 +375,25 @@ Deno.test('verifyNpmRelease retries transient registry misses and verifies the m
   assertEquals(sleeps, [1, 2]);
 });
 
+Deno.test('verifyNpmRelease default retry schedule covers npm propagation delays', async () => {
+  const sleeps: number[] = [];
+  let misses = 6;
+  await verifyNpmRelease({
+    version: '1.0.0',
+    packages: ['element'],
+    sleep: (ms) => {
+      sleeps.push(ms);
+      return Promise.resolve();
+    },
+    query: () => {
+      if (misses-- > 0) throw new NpmViewError('registry has not propagated yet', true);
+      return Promise.resolve('1.0.0');
+    },
+  });
+  assertEquals(sleeps, [5_000, 10_000, 20_000, 30_000, 45_000, 60_000]);
+  assertEquals(sleeps.reduce((total, delay) => total + delay, 0), 170_000);
+});
+
 Deno.test('verifyNpmRelease does not require latest === prerelease (#607)', async () => {
   // Prerelease only checks the alpha/beta/rc tag; latest may stay on stable.
   await verifyNpmRelease({

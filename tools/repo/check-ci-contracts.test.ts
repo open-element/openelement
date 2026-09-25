@@ -1,9 +1,8 @@
 /**
  * check-ci-contracts.test.ts — CI required/optional contract tripwire.
  *
- * The required jobs (autoflow-ci, node-serve-smoke,
- * packed-consumer-matrix) must stay blocking, and the packed-consumer
- * matrix must install all three packed-gate browsers.
+ * Required workflow jobs must stay blocking, and the packed-consumer matrix
+ * must install all three packed-gate browsers.
  */
 
 import { assert, assertEquals } from '@std/assert';
@@ -15,6 +14,7 @@ const releasing = await Deno.readTextFile(join(repoRoot, 'docs/maintainers/relea
 const dependencyAudit = await Deno.readTextFile(
   join(repoRoot, '.github/workflows/dependency-audit.yml'),
 );
+const siteConfig = await Deno.readTextFile(join(repoRoot, 'www/openelement.config.ts'));
 
 /** Extract one top-level job block (two-space `name:` jobs) by job key. */
 function jobBlock(text: string, job: string): string {
@@ -27,7 +27,12 @@ function jobBlock(text: string, job: string): string {
 
 Deno.test('ci contract: required jobs stay blocking', () => {
   for (
-    const job of ['autoflow-ci', 'node-serve-smoke', 'packed-consumer-matrix', 'bfcache-chrome']
+    const job of [
+      'autoflow-ci',
+      'node-serve-smoke',
+      'packed-consumer-matrix',
+      'bfcache-chrome',
+    ]
   ) {
     const block = jobBlock(workflow, job);
     assert(
@@ -35,6 +40,38 @@ Deno.test('ci contract: required jobs stay blocking', () => {
       `required job ${job} must not carry continue-on-error: true`,
     );
   }
+});
+
+Deno.test('ci contract: release guide names individually required ruleset checks', () => {
+  const normalizedReleasing = releasing.replace(/\s+/gu, ' ');
+  for (
+    const check of [
+      '21775463',
+      '`fast-checks`',
+      '`source-matrix`',
+      '`fresh-clone`',
+      '`packed-consumers`',
+      '`dependency-review`',
+      '`CodeQL`',
+      'strict required status-check policy',
+    ]
+  ) {
+    assert(
+      normalizedReleasing.includes(check),
+      `releasing guide must name required check ${check}`,
+    );
+  }
+  assert(
+    !/producers are not individual required checks/u.test(releasing),
+    'the guide must not describe the aggregate as the only required CI check',
+  );
+});
+
+Deno.test('ci contract: Site config omits the inert empty stylesheet channel', () => {
+  assert(
+    !/stylesheets:\s*\[\s*\]/u.test(siteConfig),
+    'the Site must not configure an empty stylesheet list',
+  );
 });
 
 Deno.test('ci contract: packed-consumer matrix installs all three packed-gate browsers', () => {
@@ -489,6 +526,10 @@ Deno.test('ci contract: tree-SHA evidence reuse is fail-closed and single-source
   ];
   for (const [job, task] of lanes) {
     const block = jobBlock(workflow, job);
+    assert(
+      /permissions:\s*\n\s+contents:\s*read\s*\n\s+actions:\s*read/.test(block),
+      `${job} must grant actions: read for the cross-run evidence claim`,
+    );
     assert(
       /needs:\s*reuse\b/.test(block) || /needs:\s*\[.*\breuse\b.*\]/.test(block),
       `${job} must depend on the reuse decision`,
