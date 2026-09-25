@@ -150,6 +150,7 @@ Deno.test('task contract: gate:release carries the steps trimmed out of the PR l
     'www#check:error-codes',
     'www#check:install-command',
     'www#check:content-data',
+    'www#check:article-routes',
     'www#check:nav',
     'www#check:links',
     'www#check:machine-paths',

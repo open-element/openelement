@@ -20,9 +20,9 @@ import { defineIslandConfig } from '@openelement/router';
 export const openElement = defineIslandConfig({ hydrate: 'visible', ssr: true, dsd: true });
 ```
 
-`hydrate` selects when the module is imported — `'load'` for first-paint controls, `'idle'` for work that can wait, `'visible'` for components that matter as they approach the viewport, and `'only'` for browser-only components that skip SSR. `ssr` and `dsd` state whether the server serializes the component at all. The build records the result per page, so an island that a page never reaches is never fetched.
+`hydrate` selects when the module is imported — `'load'` for first-paint controls, `'idle'` for work that can wait, `'visible'` for components that matter as they approach the viewport, and `'only'` for browser-only components that skip SSR. `ssr` and `dsd` state whether the server serializes the component at all. The build records the result per page, so an island that a page never reaches is never fetched. These two settings do not apply on a [streaming](/guide/streaming) route: its shell admits no nested renderer, so every island and nested compiled component is emitted there as an opaque empty host and activates in the browser.
 
-The upgrade itself is the browser's Custom Element mechanism. The server serializes the compiled Part Program as Declarative Shadow DOM; when the class is defined the generated claim artifact runs the same program against the DOM that is already there, binding the handlers the template declared and restoring `@property` fields from host attributes. No tree is rebuilt, no binding is discovered by string lookup, and no event is synthesized from an attribute.
+The upgrade itself is the browser's Custom Element mechanism. The server serializes the compiled Part Program as Declarative Shadow DOM; when the class is defined the generated claim artifact runs the same program against the DOM that is already there, binding the handlers the template declared and restoring `@property` fields from host attributes. No tree is rebuilt, no binding is discovered by string lookup, and no event is synthesized from an attribute. A [streaming](/guide/streaming) route is the exception to that serialization promise — see above.
 
 ## Small runtime
 

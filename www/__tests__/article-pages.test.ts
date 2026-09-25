@@ -3,6 +3,11 @@ import { loadCollectionData } from '../lib/content.ts';
 import { fromFileUrl } from '@std/path';
 import { articleCollections } from '../content-collections.ts';
 import { projectArticlePage } from '../app/site-ui/article-page-model.ts';
+// The route table is generated from the same content this file loads
+// (www/tools/generate-site-article-routes.ts, run by `generate:all`), so the
+// tests below double as its staleness gate: the table is compared against the
+// content files and against the managed route directories on disk.
+import { articleRoutes } from '../app/data/_generated-article-routes.ts';
 
 type ArticleCollection = keyof typeof articleCollections;
 type ArticleContentPage = {
@@ -25,112 +30,175 @@ const loadContentPages = (collection: ArticleCollection) =>
     ...articleCollections[collection],
     contentDir: `${siteRoot}/${articleCollections[collection].contentDir}`,
   }) as Promise<ArticleContentPage[]>;
+const collections = Object.keys(articleCollections) as ArticleCollection[];
+const tableGenerator = 'www/tools/generate-site-article-routes.ts';
 
 // The content routes share the site-ui article shell: each route module is a
 // thin binding — a content slug — and the nav contract (section / order /
 // navLabel) lives in the article frontmatter
 // (www/content/docs/<collection>/<slug>[.<locale>].md), the single source of
-// truth that www/tools/generate-site-nav.ts projects (#1087, ADR-0136).
-const articleRoutes = [
-  ['guide', 'api', 'GuideApiPage', 60],
-  ['guide', 'configuration', 'GuideConfigurationPage', 70],
-  ['guide', 'core-concepts', 'GuideCoreConceptsPage', 10],
-  ['guide', 'deployment', 'GuideDeploymentPage', 100],
-  ['guide', 'error-handling', 'GuideErrorHandlingPage', 80],
-  ['guide', 'getting-started', 'GuideGettingStartedPage', 1],
-  ['guide', 'glossary', 'GuideGlossaryPage', 65],
-  ['guide', 'i18n', 'GuideI18nPage', 55],
-  ['guide', 'recipe-form-actions', 'GuideRecipeFormActionsPage', 120],
-  ['guide', 'recipe-theming', 'GuideRecipeThemingPage', 121],
-  ['guide', 'recipe-island-strategies', 'GuideRecipeIslandStrategiesPage', 122],
-  ['guide', 'islands-and-ssr', 'GuideIslandsAndSsrPage', 90],
-  ['guide', 'mdx', 'GuideMdxPage', 50],
-  ['guide', 'routing-and-data', 'GuideRoutingAndDataPage', 40],
-  ['guide', 'security', 'GuideSecurityPage', 95],
-  ['guide', 'styling', 'GuideStylingPage', 5],
-  ['guide', 'testing', 'GuideTestingPage', 110],
-  ['guide', 'tutorial', 'GuideTutorialPage', 2],
-  ['architecture', 'architecture', 'ArchitecturePage', 10, 'index'],
-  ['architecture', 'comparison', 'ComparisonPage', 20],
-  ['architecture', 'design-system', 'DesignSystemPage', 15],
-  ['architecture', 'dsd', 'DsdGuidePage', 30],
-  ['architecture', 'islands', 'IslandsPage', 40],
-  ['architecture', 'web-component-admission', 'WebComponentAdmissionPage', 45],
-] as const;
-
-for (const [collection, route, className, , routeFile] of articleRoutes) {
-  Deno.test(`${collection}/${route} is a thin article shell`, async () => {
+// truth that www/tools/generate-site-article-routes.ts projects (#1087,
+// ADR-0136). Adding an article means adding content and running `generate:all`;
+// no hand-written route module, binding or table row remains.
+for (const route of articleRoutes) {
+  const { collection, slug, className, componentFile, elementTag, routeFile } = route;
+  Deno.test(`${collection}/${slug} is a thin article shell`, async () => {
     const routeSource = await Deno.readTextFile(
-      new URL(`../app/routes/${collection}/${routeFile ?? route}.tsx`, import.meta.url),
+      new URL(`../app/routes/${collection}/${routeFile}`, import.meta.url),
     );
     const adapterSource = await Deno.readTextFile(
-      new URL(`../app/components/article-routes/${collection}-${route}.tsx`, import.meta.url),
+      new URL(`../app/components/article-routes/${componentFile}`, import.meta.url),
     );
     assertStringIncludes(routeSource, 'export default definePage(');
     assertStringIncludes(
       routeSource,
-      `projectArticlePage('${collection}', '${route}', locale)`,
+      `projectArticlePage('${collection}', '${slug}', locale)`,
     );
     assert(
       !routeSource.includes('export const meta'),
-      `${collection}/${route} must not duplicate nav metadata; declare it in the frontmatter`,
+      `${collection}/${slug} must not duplicate nav metadata; declare it in the frontmatter`,
     );
-    assertStringIncludes(adapterSource, `@element('${collection}-${route}')`);
+    assertStringIncludes(adapterSource, `@element('${elementTag}')`);
     assertStringIncludes(adapterSource, `class ${className} extends OpenElement`);
     assertStringIncludes(
       adapterSource,
       '<open-article-view model={this.model} locale={this.locale}>',
     );
+    // The generated header is what proves ownership to the generator (its
+    // "--check" and its stale cleanup both key off it), and it names the
+    // content file each artifact is derived from.
+    const header = `// Auto-generated by ${tableGenerator}`;
+    const sourcePath = `www/content/docs/${collection}/${slug}.md`;
+    assert(
+      routeSource.startsWith(header) && routeSource.split('\n')[0].includes(sourcePath),
+      `${collection}/${slug}: ${routeFile} must be generator output naming ${sourcePath}`,
+    );
+    assert(
+      adapterSource.startsWith(header) && adapterSource.split('\n')[0].includes(sourcePath),
+      `${collection}/${slug}: ${componentFile} must be generator output naming ${sourcePath}`,
+    );
 
-    const model = projectArticlePage(collection, route, 'en');
-    assertEquals(model.slug, route);
-    assert(model.metadata.title.length > 0, `${collection}/${route} must project article data`);
+    const model = projectArticlePage(collection, slug, 'en');
+    assertEquals(model.slug, slug);
+    assert(model.metadata.title.length > 0, `${collection}/${slug} must project article data`);
     assertStringIncludes(
       model.articleHtml,
       '<h2',
-      `${collection}/${route} must project compiled article HTML`,
+      `${collection}/${slug} must project compiled article HTML`,
     );
   });
 }
 
+// Ownership: the generated table, the content collections and the managed route
+// directories must agree. A hand-added route module (no content) or a stale
+// table row fails here, not only in the generator's own gate.
+Deno.test('managed article directories hold exactly the generated routes', async () => {
+  assert(articleRoutes.length > 0, 'the generated article route table is empty');
+  for (const collection of collections) {
+    const listed = articleRoutes
+      .filter((route) => route.collection === collection)
+      .map((route) => route.routeFile)
+      .sort();
+    const onDisk: string[] = [];
+    for await (
+      const entry of Deno.readDir(new URL(`../app/routes/${collection}/`, import.meta.url))
+    ) {
+      if (entry.isFile && entry.name.endsWith('.tsx')) onDisk.push(entry.name);
+    }
+    assertEquals(
+      onDisk.sort(),
+      listed,
+      `app/routes/${collection}/ must hold exactly the routes the content emits`,
+    );
+    const bindings: string[] = [];
+    for await (
+      const entry of Deno.readDir(new URL('../app/components/article-routes/', import.meta.url))
+    ) {
+      if (entry.isFile && entry.name.startsWith(`${collection}-`)) bindings.push(entry.name);
+    }
+    assertEquals(
+      bindings.sort(),
+      articleRoutes.filter((route) => route.collection === collection)
+        .map((route) => route.componentFile).sort(),
+      'app/components/article-routes/ must hold exactly the generated bindings',
+    );
+  }
+});
+
+Deno.test('the article route table is generated, never hand-maintained', async () => {
+  const source = await Deno.readTextFile(
+    new URL('../app/data/_generated-article-routes.ts', import.meta.url),
+  );
+  assertStringIncludes(
+    source.split('\n')[0],
+    `Auto-generated by ${tableGenerator}`,
+    'the route table is a generated artifact; hand-maintaining it re-introduces the wiring this generator deleted',
+  );
+});
+
 // Content-level assertions run against the real Markdown via the pipeline's
 // pure loader — no generated-artifact dependency.
 Deno.test('content covers every route in both locales', async () => {
-  for (const collection of ['guide', 'architecture'] as const) {
+  for (const collection of collections) {
     const pages = await loadContentPages(collection);
-    for (const [, route, , order] of articleRoutes.filter((r) => r[0] === collection)) {
+    for (
+      const { slug, order } of articleRoutes.filter((route) => route.collection === collection)
+    ) {
       for (const locale of ['en', 'zh'] as const) {
-        const page = pages.find((p) => p.slug === route && p.locale === locale);
-        assertExists(page, `content/${collection} missing ${route} (${locale})`);
+        const page = pages.find((p) => p.slug === slug && p.locale === locale);
+        assertExists(page, `content/${collection} missing ${slug} (${locale})`);
         assertEquals(
           page.frontmatter.order,
           order,
-          `${collection}/${route} (${locale}) order mismatch`,
+          `${collection}/${slug} (${locale}) order mismatch`,
         );
         assert(
           page.frontmatter.title.length > 0,
-          `${collection}/${route} (${locale}) title must not be empty`,
+          `${collection}/${slug} (${locale}) title must not be empty`,
         );
         assert(
           typeof page.frontmatter.section === 'string' && page.frontmatter.section.length > 0,
-          `${collection}/${route} (${locale}) must declare a nav section`,
+          `${collection}/${slug} (${locale}) must declare a nav section`,
         );
         assertStringIncludes(
           page.html,
           '<h2',
-          `${collection}/${route} (${locale}) must have article sections`,
+          `${collection}/${slug} (${locale}) must have article sections`,
         );
         assert(
           !page.html.includes('open-card'),
-          `${collection}/${route} (${locale}) must not contain cards`,
+          `${collection}/${slug} (${locale}) must not contain cards`,
         );
       }
     }
   }
 });
 
+// The other direction: a content file the table has not caught up with. The
+// table is generated, so this can only fail when it is stale — the failure mode
+// a generated artifact consumed by tests otherwise hides.
+Deno.test('content has no route the generated table misses', async () => {
+  for (const collection of collections) {
+    const pages = await loadContentPages(collection);
+    const fromContent = [
+      ...new Set(
+        pages.filter((page) => (page.locale ?? 'en') === 'en').map((page) => page.slug),
+      ),
+    ].sort();
+    const fromTable = articleRoutes
+      .filter((route) => route.collection === collection)
+      .map((route) => route.slug)
+      .sort();
+    assertEquals(
+      fromContent,
+      fromTable,
+      `regenerate with \`deno task --cwd www generate:article-routes\` (${collection})`,
+    );
+  }
+});
+
 Deno.test('frontmatter orders are unique within each collection locale', async () => {
-  for (const collection of ['guide', 'architecture'] as const) {
+  for (const collection of collections) {
     const pages = await loadContentPages(collection);
     for (const locale of ['en', 'zh'] as const) {
       const orders = pages.filter((p) => p.locale === locale).map((p) => p.frontmatter.order);
@@ -165,8 +233,7 @@ Deno.test('configuration keeps the middleware-use anchor target', async () => {
 });
 
 Deno.test('content collection loading succeeds for all collections', async () => {
-  const count = (await Promise.all(
-    (Object.keys(articleCollections) as ArticleCollection[]).map(loadContentPages),
-  )).reduce((total, pages) => total + pages.length, 0);
+  const count = (await Promise.all(collections.map(loadContentPages)))
+    .reduce((total, pages) => total + pages.length, 0);
   assertEquals(count, articleRoutes.length * 2, 'every route needs en + zh content');
 });

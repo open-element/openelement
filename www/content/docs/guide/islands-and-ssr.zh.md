@@ -20,9 +20,9 @@ import { defineIslandConfig } from '@openelement/router';
 export const openElement = defineIslandConfig({ hydrate: 'visible', ssr: true, dsd: true });
 ```
 
-`hydrate` 决定模块何时被 import——`'load'` 用于首屏控件，`'idle'` 用于可以等待的工作，`'visible'` 用于接近视口才重要的组件，`'only'` 用于跳过 SSR 的浏览器专用组件。`ssr` 与 `dsd` 说明服务端是否序列化该组件。构建会逐页记录结果，因此页面永远到不了的 island 永远不会被拉取。
+`hydrate` 决定模块何时被 import——`'load'` 用于首屏控件，`'idle'` 用于可以等待的工作，`'visible'` 用于接近视口才重要的组件，`'only'` 用于跳过 SSR 的浏览器专用组件。`ssr` 与 `dsd` 说明服务端是否序列化该组件。构建会逐页记录结果，因此页面永远到不了的 island 永远不会被拉取。这两个设置在[流式渲染](/zh/guide/streaming)路由上不适用：其壳不接受嵌套渲染器，因此那里的每个 island 与嵌套已编译组件都只输出为不透明的空宿主，并在浏览器中激活。
 
-upgrade 本身是浏览器的 Custom Element 机制。服务端把编译后的 Part Program 序列化为 Declarative Shadow DOM；类被定义后，生成的 claim 产物对已经存在的 DOM 重放同一份程序，绑定模板声明过的处理器，并用宿主 attribute 还原 `@property` 字段。不会重建树，不会用字符串查找绑定，也不会从 attribute 合成事件。
+upgrade 本身是浏览器的 Custom Element 机制。服务端把编译后的 Part Program 序列化为 Declarative Shadow DOM；类被定义后，生成的 claim 产物对已经存在的 DOM 重放同一份程序，绑定模板声明过的处理器，并用宿主 attribute 还原 `@property` 字段。不会重建树，不会用字符串查找绑定，也不会从 attribute 合成事件。[流式渲染](/zh/guide/streaming)路由是这条序列化承诺的例外——见上文。
 
 ## 小运行时
 
