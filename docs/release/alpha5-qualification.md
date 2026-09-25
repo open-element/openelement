@@ -35,11 +35,26 @@ generation boundaries. The reference off route is also asserted to omit
 stream metadata. No single one of these tests proves _all_ static output;
 candidate checks must verify generated artifacts again before a release.
 
+Third-party Web Components on a streamed route have one verified placement:
+server-born inside the streamed shell. The `/stream-lit-proof` probe pins a
+single instance that upgrades, keeps its server-born slot children, and stays
+interactive after the backfill. Backfilled frame content fails closed on
+foreign custom-element tags — placing a third-party component inside a
+backfill range is not a supported placement. The third-party qualification
+smoke's tier report proves T0 for the three corpus tags with server-born
+light children (`wc-lit-counter`, `sl-button`, `md-filled-button` — 3/11;
+the sl-button/md-filled-button passes date from the pre-upgrade capture fix
+for text-only light children). Formal T1/T2 qualification remains open.
+
 Actions, uploads, webhooks, and security rejections are not streamed. Headers,
 Cookie, status, redirects, CSP nonce, and front-gate loader values settle
 before the first byte; a late error is an in-stream outcome and cannot rewrite
 HTTP metadata. A deferred loader must not own late redirect or Cookie
-decisions. See ADR-0158 and ADR-0159 while they remain **PROPOSED**.
+decisions. A deferred text Part renders its settled value through the
+canonical String form: a deferred field resolving to `null` streams the
+literal text `null` (the browser frame check compares against the same String
+semantics; the owner reserves the right to change this rendering). See
+ADR-0158 and ADR-0159 while they remain **PROPOSED**.
 
 ## Local measurement
 

@@ -69,7 +69,7 @@ function deferred<T>() {
   return { promise, resolve, reject };
 }
 
-async function handler(timeoutMs?: number) {
+async function handler(timeoutMs?: number, streamManifest?: StreamRouteManifest) {
   const route: PageRouteDecl = {
     kind: 'page',
     path: '/',
@@ -78,7 +78,7 @@ async function handler(timeoutMs?: number) {
     defaultTagName: 'oe-stream-handler',
     tagName: 'oe-stream-handler',
     importPath: '/app/routes/index.tsx',
-    streamManifest: await manifest(),
+    streamManifest: streamManifest ?? await manifest(),
   };
   const config = { title: 'Stream', lang: 'en', headExtras: '', allowHeadExtrasScripts: false };
   const lines: string[] = [];
@@ -326,4 +326,129 @@ Deno.test('late loader success cannot overwrite a queued timeout error for a slo
   assertEquals(late.includes('settled-after-timeout'), false);
   assertStringIncludes(decoder.decode((await reader.read()).value), '</html>');
   assertEquals((await reader.read()).done, true);
+});
+
+/** Collect unhandled rejections so an observed-rejection contract can be asserted. */
+function unhandledRejectionGuard(): { events: unknown[]; install(): void; restore(): void } {
+  const events: unknown[] = [];
+  const listener = (event: PromiseRejectionEvent) => {
+    events.push(event.reason);
+    event.preventDefault();
+  };
+  return {
+    events,
+    install: () => globalThis.addEventListener('unhandledrejection', listener),
+    restore: () => globalThis.removeEventListener('unhandledrejection', listener),
+  };
+}
+
+Deno.test('front gate observes every loader rejection when a declared field is missing', async () => {
+  const { fetch, routeModule } = await handler();
+  const guard = unhandledRejectionGuard();
+  guard.install();
+  try {
+    // 'second' is missing from the loader data, so the front gate throws the
+    // missing-declared-field error before the undeclared-thenable scan runs;
+    // every rejecting promise here must still be observed or the process dies.
+    routeModule.loader = () => ({
+      first: Promise.reject(new Error('declared field rejection')),
+      stray: Promise.reject(new Error('undeclared stray rejection')),
+    });
+    assertEquals((await fetch(new Request('https://example.test/'))).status, 500);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assertEquals(guard.events, []);
+    // The process survives the front-gate throw and keeps serving requests.
+    routeModule.loader = () => ({ first: Promise.resolve('a'), second: Promise.resolve('b') });
+    assertEquals((await fetch(new Request('https://example.test/'))).status, 200);
+  } finally {
+    guard.restore();
+  }
+});
+
+Deno.test('front gate observes every loader rejection when several thenables are undeclared', async () => {
+  const { fetch, routeModule } = await handler();
+  const guard = unhandledRejectionGuard();
+  guard.install();
+  try {
+    // The undeclared-thenable scan reports only the first offender; the later
+    // one must not escape observation when the gate throws.
+    routeModule.loader = () => ({
+      first: 'a',
+      second: 'b',
+      ghost1: Promise.reject(new Error('ghost one')),
+      ghost2: Promise.reject(new Error('ghost two')),
+    });
+    assertEquals((await fetch(new Request('https://example.test/'))).status, 500);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assertEquals(guard.events, []);
+    routeModule.loader = () => ({ first: Promise.resolve('a'), second: Promise.resolve('b') });
+    assertEquals((await fetch(new Request('https://example.test/'))).status, 200);
+  } finally {
+    guard.restore();
+  }
+});
+
+Deno.test('front gate observes loader rejections when the loader returns a non-object', async () => {
+  const { fetch, routeModule } = await handler();
+  const guard = unhandledRejectionGuard();
+  guard.install();
+  try {
+    // An array loader fails the one-object shape gate before any per-field
+    // observer exists; its rejecting entries must still be observed or the
+    // process dies instead of answering 500.
+    routeModule.loader = () => [Promise.reject(new Error('array stray rejection'))];
+    assertEquals((await fetch(new Request('https://example.test/'))).status, 500);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assertEquals(guard.events, []);
+    // The process survives the front-gate throw and keeps serving requests.
+    routeModule.loader = () => ({ first: Promise.resolve('a'), second: Promise.resolve('b') });
+    assertEquals((await fetch(new Request('https://example.test/'))).status, 200);
+  } finally {
+    guard.restore();
+  }
+});
+
+Deno.test('front gate answers 500 when the loader itself returns a rejected promise', async () => {
+  const { fetch, routeModule } = await handler();
+  const guard = unhandledRejectionGuard();
+  guard.install();
+  try {
+    // A bare rejecting promise (no object at all): the generated handler's
+    // await consumes the rejection, so no stray unhandled rejection survives
+    // and the route still answers 500 instead of crashing.
+    routeModule.loader = () => Promise.reject(new Error('loader rejection'));
+    assertEquals((await fetch(new Request('https://example.test/'))).status, 500);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assertEquals(guard.events, []);
+    // The process survives and keeps serving requests.
+    routeModule.loader = () => ({ first: Promise.resolve('a'), second: Promise.resolve('b') });
+    assertEquals((await fetch(new Request('https://example.test/'))).status, 200);
+  } finally {
+    guard.restore();
+  }
+});
+
+Deno.test('stream budget front gate observes loader rejections before its diagnostic throw', async () => {
+  // The budget diagnostic fires in __streamFields before the deferred shell is
+  // created, so an over-budget manifest alone is enough to reach it through
+  // the real generated handler.
+  const overBudget: StreamRouteManifest = {
+    program: { version: 1, tag: 'oe-stream-handler', sha256: '0'.repeat(64) },
+    fields: Array.from({ length: 33 }, (_, index) => ({
+      field: `f${index}`,
+      signal: `f${index}`,
+      owners: [{ kind: 'part' as const, index, location: `p${index}`, source: {} as never }],
+    })),
+  };
+  const { fetch, routeModule } = await handler(undefined, overBudget);
+  const guard = unhandledRejectionGuard();
+  guard.install();
+  try {
+    routeModule.loader = () => ({ f0: Promise.reject(new Error('budget stray')) });
+    assertEquals((await fetch(new Request('https://example.test/'))).status, 500);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assertEquals(guard.events, [], 'the budget throw observed the loader rejection');
+  } finally {
+    guard.restore();
+  }
 });

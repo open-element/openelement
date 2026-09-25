@@ -55,6 +55,7 @@ const articleRoutes = [
   ['architecture', 'design-system', 'DesignSystemPage', 15],
   ['architecture', 'dsd', 'DsdGuidePage', 30],
   ['architecture', 'islands', 'IslandsPage', 40],
+  ['architecture', 'web-component-admission', 'WebComponentAdmissionPage', 45],
 ] as const;
 
 for (const [collection, route, className, , routeFile] of articleRoutes) {

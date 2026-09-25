@@ -366,6 +366,23 @@ export async function createDeferredDsdExecutor(
       { code: FacadeErrorCode.PROGRAM_MISSING, phase: 'ssr' },
     );
   }
+  // Same bounded budget the build manifest scan and the runtime/browser
+  // front gate enforce (fields <= 32, Part owners <= 64): the hand-written
+  // manifest path must fail loud here instead of emitting a shell whose seed
+  // or frames the browser contractually discards.
+  const manifestOwnerTotal = manifest.fields.reduce(
+    (count, field) => count + field.owners.length,
+    0,
+  );
+  if (manifest.fields.length > 32 || manifestOwnerTotal > 64) {
+    throw new OpenElementError(
+      `[openElement] deferred manifest for <${program.tag}> exceeds the bounded ` +
+        `deferred budget: ${manifest.fields.length} fields (max 32), ` +
+        `${manifestOwnerTotal} Part owners (max 64). Defer fewer fields, reduce ` +
+        'the deferred sinks per field, or split the page.',
+      { code: FacadeErrorCode.PROGRAM_MISSING, phase: 'ssr' },
+    );
+  }
   const propertyNames = new Set(properties.map((record) => record.name));
   const pending = new Set<string>();
   const deferredProperties = new Map<string, CompiledPropertyMetadata>();
@@ -430,6 +447,18 @@ export async function createDeferredDsdExecutor(
         value: jsonSeed(signals[record.name].value, record.name),
       };
     }
+  }
+  // The browser seed contract rejects any seed carrying more than 64 typed
+  // properties — and it rejects the WHOLE seed, so an oversized component
+  // would silently fail to hydrate instead of failing loud here.
+  if (Object.keys(seed).length > 64) {
+    throw new OpenElementError(
+      `[openElement] deferred stream seed for <${program.tag}> carries ${
+        Object.keys(seed).length
+      } properties; the browser seed contract accepts at most 64. ` +
+        'Trim the component property surface or the seed is silently rejected at hydration.',
+      { code: FacadeErrorCode.PROGRAM_MISSING, phase: 'ssr' },
+    );
   }
   if (options.documentToken) {
     hostAttrs.push(['data-oe-stream-request', options.documentToken]);

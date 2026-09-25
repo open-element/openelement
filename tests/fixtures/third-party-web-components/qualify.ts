@@ -253,7 +253,7 @@ export async function verifyBrowser(
     }
     const page = await browser.newPage();
     await page.addInitScript(() => {
-      const captured = new Map<string, { host: Element; child: Element }>();
+      const captured = new Map<string, { host: Element; child: Node }>();
       const tags = ['wc-lit-counter', 'sl-button', 'md-filled-button'];
       const observed = new Set<Node>();
       const watch = new MutationObserver(() => {
@@ -270,14 +270,17 @@ export async function verifyBrowser(
         for (const tag of tags) {
           if (captured.has(tag) || customElements.get(tag)) continue;
           const host = root.querySelector(tag);
-          const child = host?.firstElementChild;
-          if (host && child) captured.set(tag, { host, child });
+          // Pure-text light children (sl-button, md-filled-button) have no
+          // firstElementChild, so the identity snapshot pins the first child
+          // NODE — a text node carries the same host/child identity evidence
+          // an element child does.
+          if (host && host.firstChild) captured.set(tag, { host, child: host.firstChild });
         }
         if (captured.size === tags.length) watch.disconnect();
       });
       watch.observe(document, { childList: true, subtree: true });
       (globalThis as typeof globalThis & {
-        __wcBeforeUpgrade?: Map<string, { host: Element; child: Element }>;
+        __wcBeforeUpgrade?: Map<string, { host: Element; child: Node }>;
       }).__wcBeforeUpgrade = captured;
     });
     const browserErrors: string[] = [];
@@ -512,7 +515,7 @@ export async function verifyBrowser(
         await host.evaluate((node) => getComputedStyle(node).outlineColor === 'rgb(80, 80, 80)');
       const identity = await page.evaluate((name) => {
         const before = (globalThis as typeof globalThis & {
-          __wcBeforeUpgrade?: Map<string, { host: Element; child: Element }>;
+          __wcBeforeUpgrade?: Map<string, { host: Element; child: Node }>;
         }).__wcBeforeUpgrade?.get(name);
         const root = document.querySelector('app-shell')?.shadowRoot
           ?.querySelector('third-party-wc')?.shadowRoot
@@ -522,11 +525,16 @@ export async function verifyBrowser(
           capturedBeforeUpgrade: !!before,
           hostPreserved: !!before && current === before.host,
           identityPreserved: !!before && current === before.host &&
-            current.firstElementChild === before.child,
+            current.firstChild === before.child,
         };
       }, tag);
       Object.assign(slotFirst[tag], identity);
-      evidence[tag].hydrationSafe = identity.identityPreserved;
+      // README contract: hydration safety is null unless pre-upgrade identity
+      // was actually captured — a missing capture is a probe gap, never
+      // evidence of unsafety.
+      evidence[tag].hydrationSafe = identity.capturedBeforeUpgrade
+        ? identity.identityPreserved
+        : null;
     }
     return { capabilities: evidence, slotFirst, browserVersion: browser.version() };
   } finally {
@@ -960,8 +968,11 @@ async function main(): Promise<void> {
             : !slot.identityPreserved
             ? ['host or child identity lost on upgrade']
             : []),
-          ...(!entry.browserCapabilities.registered || !entry.browserCapabilities.upgraded ||
-              !entry.browserCapabilities.hydrationSafe
+          // 'browser upgrade not proved' covers the upgrade probes only.
+          // Hydration-safety nullness (a capture gap) and a real identity
+          // loss are both already reported above — counting them here again
+          // would double-charge a single missing probe as a failed upgrade.
+          ...(!entry.browserCapabilities.registered || !entry.browserCapabilities.upgraded
             ? ['browser upgrade not proved']
             : []),
         ];

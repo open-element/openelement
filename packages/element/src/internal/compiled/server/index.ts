@@ -36,6 +36,13 @@ import { formatError } from '../../core/errors.ts';
 // The single error dialect (#1386 item 3): every failure in this module is an
 // OpenElementError carrying a code from the catalogue.
 import { frameworkError, ProgramErrorCode } from '../../protocol/errors.ts';
+// Streamed-frame admission policy (canonical lists live in the protocol
+// module): the deferred executor must refuse any pending Region whose
+// serialized frame the browser installer is contractually required to reject.
+import {
+  STREAM_FRAME_FORBIDDEN_TAGS,
+  unsafeStreamFrameAttribute,
+} from '../../protocol/stream-frame-policy.ts';
 // Canonical attribute-escape contract (issue #1220, L1): the server output is
 // the wire truth for claim parity, so both serializers share this one
 // implementation (escapes & < > " ').
@@ -725,10 +732,27 @@ export interface DeferredServerExecutor {
   serializeResolved(owner: DeferredServerOwner, partIndex: number, value: unknown): string;
 }
 
+const STREAM_FRAME_FORBIDDEN_TAG_SET: ReadonlySet<string> = new Set(STREAM_FRAME_FORBIDDEN_TAGS);
+
+/**
+ * A pending Region whose range would carry a custom element, a slot, a
+ * stream-frame-forbidden tag, or an unsafe static attribute serializes into a
+ * frame the browser installer rejects wholesale — the content would be lost.
+ * Admission therefore enforces the same streamed-frame policy constants the
+ * build manifest scan uses, so the public hand-written manifest path fails
+ * loud here instead of emitting doomed frames. This boundary is intentionally
+ * NARROWER than the build scan structurally: the build side additionally
+ * rejects dynamic per-item attribute slots (iattrs) and opaque ancestor
+ * chains (anchorPathIsOpaque) with full source ownership knowledge, while
+ * this check covers the shared policy over the program's static shape only.
+ */
 function hasOpaqueRegionNode(nodes: readonly ProgramTreeNode[]): boolean {
   return nodes.some((node) =>
     node.k === 'el' &&
-    (node.tag.includes('-') || node.tag === 'slot' || hasOpaqueRegionNode(node.children))
+    (node.tag.includes('-') || node.tag === 'slot' ||
+      STREAM_FRAME_FORBIDDEN_TAG_SET.has(node.tag) ||
+      node.attrs.some(([name, value]) => unsafeStreamFrameAttribute(name, value)) ||
+      hasOpaqueRegionNode(node.children))
   );
 }
 

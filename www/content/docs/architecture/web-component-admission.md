@@ -58,6 +58,16 @@ registered Lit pages/islands; native OpenElement components use their compiled
 program. Build-time headless snapshots and automatic third-party Lit T2
 admission are **proposed**, not current blanket guarantees.
 
+On a streamed route the verified third-party placement is server-born in the
+streamed shell: the qualification probe pins a single instance that upgrades,
+keeps its server-born slot children, and stays interactive after the
+backfill. Backfilled frame content fails closed on foreign custom-element
+tags — a third-party component inside a backfill range is not a supported
+placement. The third-party qualification smoke's current tier report proves
+T0 for the three corpus tags with server-born light children
+(`wc-lit-counter`, `sl-button`, `md-filled-button` — 3/11); formal T1/T2
+qualification remains open.
+
 The [admission harness issue](https://github.com/open-element/openelement/issues/1451)
 will report the highest passed tier for pinned OSS Lit fixtures, including
 slot-first content, definition-state styling, streaming, and downgrade

@@ -240,6 +240,18 @@ function manifestForProgram(
     if (owners.length === 0) diagnostic(route, field, at, 'no eligible Part or Region consumer');
     result.push({ field, signal: field, owners });
   }
+  // Build-time mirror of the runtime/browser seed and frame budget
+  // (__streamFields rejects fields > 32 / owners > 64; the browser seed
+  // contract caps fields at 32 and pending Parts at 64). Failing here keeps
+  // the error actionable instead of a silent browser rejection at hydration.
+  const ownerTotal = result.reduce((count, entry) => count + entry.owners.length, 0);
+  if (result.length > 32 || ownerTotal > 64) {
+    throw new Error(
+      `[openElement] stream route ${route} exceeds the bounded deferred budget: ` +
+        `${result.length} fields (max 32), ${ownerTotal} Part owners (max 64). ` +
+        'Defer fewer fields, reduce the deferred sinks per field, or split the page.',
+    );
+  }
   const { sourceMap: _sourceMap, ...wireProgram } = program;
   const bytes = new TextEncoder().encode(JSON.stringify(wireProgram));
   return crypto.subtle.digest('SHA-256', bytes).then((hash) => ({

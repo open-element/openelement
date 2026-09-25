@@ -1,6 +1,7 @@
 /**
  * Local alpha5 streamed-GET comparison. Run after building the Native fixture:
- * deno run -A benchmarks/streaming/measure.ts --samples 10 --delay 100 \
+ * deno run --allow-read --allow-write --allow-net --allow-env --allow-sys \
+ *   --allow-run benchmarks/streaming/measure.ts --samples 10 --delay 100 \
  *   --out benchmarks/streaming/alpha5-local.json
  */
 import { chromium } from '@playwright/test';

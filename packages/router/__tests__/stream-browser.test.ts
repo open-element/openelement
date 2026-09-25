@@ -70,6 +70,141 @@ function shell(): string {
   return `<oe-stream-test data-oe-stream-request="${request}" data-oe-stream-program="${program}" data-oe-stream-instance="${instance}"><main><!--oe:p0--><!--oe:/p0--><!--oe:p1--><!--oe:/p1--></main></oe-stream-test>`;
 }
 
+function anchoredShell(count: number): string {
+  const anchors = Array.from(
+    { length: count },
+    (_, index) => `<!--oe:p${index}--><!--oe:/p${index}-->`,
+  ).join('');
+  return `<oe-stream-test data-oe-stream-request="${request}" data-oe-stream-program="${program}" data-oe-stream-instance="${instance}"><main>${anchors}</main></oe-stream-test>`;
+}
+
+interface TypedFieldSpec {
+  field: string;
+  type: 'number' | 'boolean' | 'string';
+}
+
+function typedSeed(fields: readonly TypedFieldSpec[]): string {
+  return `<template data-oe-seed="${
+    escapeAttr(JSON.stringify({
+      request,
+      program,
+      instance,
+      properties: Object.fromEntries(fields.map((entry) => [
+        entry.field,
+        { state: 'pending', type: entry.type },
+      ])),
+      pending: fields.map((_, index) => index),
+      fields: fields.map((entry, index) => ({
+        field: entry.field,
+        signal: entry.field,
+        type: entry.type,
+        parts: [{ index, kind: 'part' }],
+      })),
+    }))
+  }"></template>`;
+}
+
+function typedFrame(
+  part: number,
+  field: string,
+  type: string,
+  value: unknown,
+  html: string,
+): string {
+  return `<template data-oe-frame="${
+    escapeAttr(JSON.stringify({
+      request,
+      program,
+      instance,
+      part,
+      field,
+      type,
+      kind: 'part',
+      outcome: 'content',
+      value,
+    }))
+  }">${html}</template>`;
+}
+
+Deno.test({
+  name: 'stream browser installer accepts typed number, boolean, and null text Part values',
+  sanitizeOps: false,
+  sanitizeResources: false,
+  async fn() {
+    const browser = await chromium.launch({ headless: true });
+    try {
+      const page = await browser.newPage();
+      const warnings: string[] = [];
+      page.on('console', (message) => {
+        if (message.type() === 'warning') warnings.push(message.text());
+      });
+      const parts = documentStreamParts({
+        title: 'stream test',
+        cspNonce: 'nonce-123',
+        streamBootstrap: renderStreamBrowserBootstrap(),
+      });
+      const fields: readonly TypedFieldSpec[] = [
+        { field: 'zero', type: 'number' },
+        { field: 'ratio', type: 'number' },
+        { field: 'flag', type: 'boolean' },
+        { field: 'off', type: 'boolean' },
+        { field: 'nothing', type: 'number' },
+      ];
+      await page.setContent(
+        parts.prefix + anchoredShell(fields.length) + typedSeed(fields) + parts.suffix,
+      );
+
+      // The markup/value agreement stays enforced for typed values: a frame
+      // whose HTML does not match String(value) is still rejected.
+      await page.evaluate((html) => {
+        document.body.insertAdjacentHTML('beforeend', html);
+      }, typedFrame(0, 'zero', 'number', 0, 'zero'));
+      await page.evaluate((html) => {
+        document.body.insertAdjacentHTML('beforeend', html);
+      }, typedFrame(4, 'nothing', 'number', null, 'void'));
+      await page.waitForTimeout(20);
+      assertEquals(await page.locator('oe-stream-test main').textContent(), '');
+      assert(
+        warnings.length >= 2,
+        'typed-value markup drift is diagnosed like string drift',
+      );
+
+      // The server convention renders a text Part as String(value)
+      // (escapeText applied), so number (including 0), boolean, and null
+      // typed values must install instead of being rejected as markup drift.
+      const frames = [
+        typedFrame(0, 'zero', 'number', 0, '0'),
+        typedFrame(1, 'ratio', 'number', 1.5, '1.5'),
+        typedFrame(2, 'flag', 'boolean', true, 'true'),
+        typedFrame(3, 'off', 'boolean', false, 'false'),
+        typedFrame(4, 'nothing', 'number', null, 'null'),
+      ];
+      for (const html of frames) {
+        await page.evaluate((content) => {
+          document.body.insertAdjacentHTML('beforeend', content);
+        }, html);
+      }
+      await page.waitForFunction(() =>
+        document.querySelector('oe-stream-test main')?.textContent === '01.5truefalsenull'
+      );
+      assertEquals(await page.locator('oe-stream-test main').textContent(), '01.5truefalsenull');
+      const properties = await page.evaluate(() => {
+        const host = document.querySelector('oe-stream-test') as unknown as Record<
+          symbol,
+          { properties: Record<string, { state: string; type: string; value: unknown }> }
+        >;
+        return host[Symbol.for('openelement.stream-state.v1')].properties;
+      });
+      assertEquals(properties.zero, { state: 'resolved', type: 'number', value: 0 });
+      assertEquals(properties.flag, { state: 'resolved', type: 'boolean', value: true });
+      assertEquals(properties.off, { state: 'resolved', type: 'boolean', value: false });
+      assertEquals(properties.nothing, { state: 'resolved', type: 'number', value: null });
+    } finally {
+      await browser.close();
+    }
+  },
+});
+
 Deno.test({
   name:
     'stream browser installer authorizes and installs sequential ranges without waiting for the final field',

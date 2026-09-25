@@ -637,3 +637,72 @@ Deno.test('stream route params and opaque wrappers fail closed', async () => {
     assertStringIncludes(error.message, 'opaque renderer wrapper');
   });
 });
+
+/** Generate a stream fixture page/route with `fieldCount` deferred fields, each owning `ownersPerField` text Parts. */
+function budgetFixture(
+  fieldCount: number,
+  ownersPerField: number,
+): { pageSource: string; routeSource: string } {
+  const names = Array.from({ length: fieldCount }, (_, index) => `f${index}`);
+  const props = names.map((name) =>
+    `  @property({ type: String, attribute: false, reflect: false }) ${name} = '';`
+  ).join('\n');
+  const sinks = names.map((name) =>
+    Array.from({ length: ownersPerField }, () => `<p>\${this.${name}}</p>`).join('')
+  ).join('');
+  const pageSource = `
+import { element, OpenElement, property } from '@openelement/element';
+@element('stream-page', { root: 'light' })
+export default class StreamPage extends OpenElement {
+${props}
+  render() { return <main>${sinks}</main>; }
+}`;
+  const routeSource = `
+import { definePage } from '@openelement/router';
+import Page from '../components/page.tsx';
+export const loader = () => ({ ${
+    names.map((name) => `${name}: Promise.resolve('x')`).join(', ')
+  } });
+export default definePage(Page, {
+  renderIntent: { mode: 'dynamic', stream: { defer: [${
+    names.map((name) => `'${name}'`).join(', ')
+  }] } },
+});`;
+  return { pageSource, routeSource };
+}
+
+Deno.test('stream admission enforces the build-time field/owner budget aligned with the runtime seed contract', async () => {
+  // Negative: 33 fields are rejected at build time.
+  await fixture(
+    async (dir) => {
+      const error = await assertRejects(() => scanRoutes(dir)) as Error;
+      assertStringIncludes(error.message, 'bounded deferred budget');
+      assertStringIncludes(error.message, '33 fields (max 32), 33 Part owners');
+    },
+    budgetFixture(33, 1).pageSource,
+    budgetFixture(33, 1).routeSource,
+  );
+  // Negative: 65 owners on one field are rejected at build time.
+  await fixture(
+    async (dir) => {
+      const error = await assertRejects(() => scanRoutes(dir)) as Error;
+      assertStringIncludes(error.message, 'bounded deferred budget');
+      assertStringIncludes(error.message, '1 fields (max 32), 65 Part owners (max 64)');
+    },
+    budgetFixture(1, 65).pageSource,
+    budgetFixture(1, 65).routeSource,
+  );
+  // Boundary: exactly 32 fields with 64 total owners still build a manifest.
+  await fixture(
+    async (dir) => {
+      const manifest = (await scanRoutes(dir))[0].streamManifest!;
+      assertEquals(manifest.fields.length, 32);
+      assertEquals(
+        manifest.fields.reduce((count, entry) => count + entry.owners.length, 0),
+        64,
+      );
+    },
+    budgetFixture(32, 2).pageSource,
+    budgetFixture(32, 2).routeSource,
+  );
+});

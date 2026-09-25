@@ -64,13 +64,33 @@ function __streamJson(value) {
   })[char]);
 }
 
+// A front-gate throw must never strand an unobserved loader rejection: the
+// request scope's per-field observers may not exist yet (or may not cover
+// every entry), and an unhandled rejection would kill the process instead of
+// surfacing as the 500 the route contract promises. Every exit below sweeps
+// the loader value itself (a non-object shape may itself be thenable) and all
+// its entries first.
+function __streamObserveThenables(data) {
+  if (data != null && typeof data.then === 'function') {
+    Promise.resolve(data).catch(() => {});
+  }
+  if (data && typeof data === 'object') {
+    for (const value of Object.values(data)) {
+      if (value != null && typeof value.then === 'function') {
+        Promise.resolve(value).catch(() => {});
+      }
+    }
+  }
+}
 function __streamFields(data, manifest) {
   if (!data || typeof data !== 'object' || Array.isArray(data) ||
       (Object.getPrototypeOf(data) !== Object.prototype && Object.getPrototypeOf(data) !== null)) {
+    __streamObserveThenables(data);
     throw new Error('stream loader must return one object');
   }
   if (manifest.fields.length > 32 ||
       manifest.fields.reduce((count, field) => count + field.owners.length, 0) > 64) {
+    __streamObserveThenables(data);
     throw new Error('stream manifest exceeds the bounded field/Part budget');
   }
   const declared = new Set(manifest.fields.map(entry => entry.field));
@@ -91,12 +111,15 @@ function __streamFields(data, manifest) {
   });
   for (const entry of manifest.fields) {
     if (!Object.prototype.hasOwnProperty.call(data, entry.field)) {
+      __streamObserveThenables(data);
       throw new Error('missing declared deferred field ' + entry.field);
     }
   }
   for (const [field, value] of Object.entries(data)) {
     if (!declared.has(field) && value != null && typeof value.then === 'function') {
-      Promise.resolve(value).catch(() => {});
+      // Observe every thenable, not just this one: the loader may carry
+      // several undeclared promises and this loop reports the first.
+      __streamObserveThenables(data);
       throw new Error('undeclared thenable loader field ' + field);
     }
   }
@@ -375,7 +398,11 @@ export function renderStreamBrowserBootstrap(): string {
     if (frame.outcome === 'content' && frame.kind === 'part' && (
       fragment.childNodes.length > 1 ||
       fragment.firstChild && fragment.firstChild.nodeType !== Node.TEXT_NODE ||
-      fragment.textContent !== frame.value
+      // The server serializes a text Part as escapeText(String(value)) while
+      // the frame carries the typed value, so the comparison is on the
+      // canonical string form: number (including 0), boolean, and null typed
+      // values must not be rejected for not being string instances.
+      fragment.textContent !== String(frame.value)
     )) return 'text Part markup does not match its typed value';
     while (range.start.nextSibling && range.start.nextSibling !== range.end) {
       range.start.parentNode.removeChild(range.start.nextSibling);

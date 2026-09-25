@@ -5,7 +5,8 @@ non-streamed GET paths with the same simulated slow loader:
 
 ```sh
 deno task --cwd tests/fixtures/router-native-framework build
-deno run -A benchmarks/streaming/measure.ts --samples 10 --delay 100 \
+deno run --allow-read --allow-write --allow-net --allow-env --allow-sys --allow-run \
+  benchmarks/streaming/measure.ts --samples 10 --delay 100 \
   --out benchmarks/streaming/alpha5-local.json
 ```
 

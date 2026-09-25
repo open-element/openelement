@@ -294,6 +294,15 @@ export class OpenElement extends OpenElementConfiguration {
     // derives its hooks from it and never guesses from pre-connect state.
     try {
       const stream = streamHostState(this as unknown as HTMLElement, kernel.program);
+      // Pre-upgrade JS sets land before the streamed seed application: a
+      // resolved seed is the server's value for a deferred field and must win
+      // over a pre-upgrade write, exactly like the late-frame listener below
+      // lets the server value win once the frame arrives. Applying the seed
+      // before applyPendingOwnValues let a pre-upgrade write overwrite an
+      // early-arrived frame's value, drifting the claim text away from the
+      // server-rendered DOM — and with owning recovery disabled in stream
+      // mode the element could then never hydrate.
+      applyPendingOwnValues(state);
       if (stream) {
         for (const property of state.properties) {
           if (property.computed) continue;
@@ -308,7 +317,6 @@ export class OpenElement extends OpenElementConfiguration {
           if (seed.state === 'resolved') state.signals[property.name].value = seed.value;
         }
       }
-      applyPendingOwnValues(state);
       const activation = kernel.connect();
       this.#streamUnsubscribe?.();
       this.#streamUnsubscribe = stream?.listen((part, field, outcome) => {
