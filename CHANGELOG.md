@@ -9,12 +9,12 @@ lives in:
 - [`docs/release/release-state.json`](./docs/release/release-state.json)
 - [`docs/release/public-interface-snapshot.json`](./docs/release/public-interface-snapshot.json)
 
-## 1.0.0-alpha.5 (unreleased candidate)
+## 1.0.0-alpha.5
 
-**Framework-only candidate; not a published release.** The source version and
-registry state remain `1.0.0-alpha.4` until the separately authorized release
-train. ADR-0157/0158/0159 are still proposals, and the candidate has not yet
-passed exact-SHA CI, independent review or human GO. The evidence boundary is
+**Rendered as data resolves: part-level streaming, WC admission tiers, runtime
+convergence.** ADR-0157/0158/0159 are accepted (2026-09-25 owner ruling). The
+qualification evidence boundary — including honest negatives (T1 offline
+snapshot falsified, third-party components verified shell-born only) — is
 recorded in [`docs/release/alpha5-qualification.md`](./docs/release/alpha5-qualification.md).
 
 - **Element / Router — rendered as data resolves:** opted-in dynamic document
