@@ -17,7 +17,7 @@
       },
       "declarations": {
         ".": {
-          "publicShapeSha256": "be1fde45da8e1aaf84096e4c77c278c6491db95a8e5ff3a32ea7f53a1590e0e8",
+          "publicShapeSha256": "0414b54084468b43f41f900a8f817980f9eb1e258ba7628a9714965cc9cac72f",
           "publicSymbols": [
             "ACTION_FETCH_HEADER=value:\"x-openelement-action\"",
             "Action=type:{call:(ctx:{env:Env;formData:FormData;params:Record<string, string>;platform:union(Platform|undefined);request:Request;responseHeaders:Headers;route:Route})=>union(Promise<T>|T)}",
@@ -61,6 +61,10 @@
             "RenderError=type:{readonly code:string;readonly componentPath:string;readonly phase:union(\"build\"|\"csr\"|\"navigation\"|\"render\"|\"ssr\"|\"unknown\"|\"validation\");readonly recoverable:union(false|true);readonly severity:union(\"error\"|\"warning\");readonly statusCode?:union(number|undefined);readonly tagName:string;toJSON:{call:()=>Record<string, unknown>}}|value:{construct:(componentPath:string,message:string,code:string,tagName:string,cause:union(Error|undefined))=>{readonly code:string;readonly componentPath:string;readonly phase:union(\"build\"|\"csr\"|\"navigation\"|\"render\"|\"ssr\"|\"unknown\"|\"validation\");readonly recoverable:union(false|true);readonly severity:union(\"error\"|\"warning\");readonly statusCode?:union(number|undefined);readonly tagName:string;toJSON:{call:()=>Record<string, unknown>}}}",
             "RenderOutput=type:{errors:array({code:string;message:string;phase:string;recoverable:union(false|true);severity:union(\"error\"|\"warning\");tagName:string});html:string;hydrationHints:array({hydrate?:union(\"idle\"|\"load\"|\"only\"|\"visible\"|undefined);layer:union(\"dsd-interactive\"|\"dsd-static\"|\"light-dom\"|\"pure-island\");tagName:string});metrics:{hasError:union(false|true);layer:union(\"dsd-interactive\"|\"dsd-static\"|\"light-dom\"|\"pure-island\");nestingDepth:number;renderTimeMs:number;tagName:string;templateSize:number}}",
             "RouteEntry=type:{definePage?:union(false|true|undefined);filePath:string;hasEnhancedForms?:union(false|true|undefined);params?:union(array(string)|undefined);path:string;source?:union(string|undefined);special?:union(\"middleware\"|\"renderer\"|undefined);tagName?:union(string|undefined);type:union(\"api\"|\"island\"|\"page\"|\"special\");varName:string}",
+            "STREAM_FRAME_FORBIDDEN_TAGS=value:tuple(\"script\",\"style\",\"template\",\"iframe\",\"object\",\"embed\",\"base\",\"meta\",\"link\")",
+            "STREAM_FRAME_UNSAFE_URL=value:RegExp",
+            "STREAM_FRAME_URL_ATTRIBUTES=value:tuple(\"href\",\"src\",\"action\",\"formaction\",\"xlink:href\")",
+            "STREAM_FRAME_URL_CONTROL_MAX=value:32",
             "ServerRouteContext=type:{env:Env;params:Record<string, string>;platform:union(Platform|undefined);request:Request;responseHeaders:Headers;route:Route}",
             "ServerRouteMetadata=type:{filePath:string;path:string}",
             "Signal=type:union({readonly [SIGNAL_BRAND]:true;readonly value:T;subscribe:{call:(fn:{call:(value:T)=>void})=>{call:()=>void}}}|{readonly [SIGNAL_BRAND]:true;subscribe:{call:(fn:{call:(value:T)=>void})=>{call:()=>void}};value:T})",
@@ -96,6 +100,7 @@
             "setErrorTelemetryHook=value:{call:(hook:{call:(error:{readonly code:string;readonly phase:union(\"build\"|\"csr\"|\"navigation\"|\"render\"|\"ssr\"|\"unknown\"|\"validation\");readonly recoverable:union(false|true);readonly severity:union(\"error\"|\"warning\");readonly statusCode?:union(number|undefined);toJSON:{call:()=>Record<string, unknown>}})=>void})=>void}",
             "signal=value:{call:<T>(initialValue:T)=>{readonly [SIGNAL_BRAND]:true;subscribe:{call:(fn:{call:(value:T)=>void})=>{call:()=>void}};value:T}}",
             "trustedHtml=value:{call:(html:string)=>{readonly html:string}}",
+            "unsafeStreamFrameAttribute=value:{call:(name:string,value:string)=>union(false|true)}",
             "wrapInDocument=value:{call:(html:string,options:{allowHeadExtrasScripts?:union(false|true|undefined);clientScript?:union(string|undefined);cspNonce?:union(string|undefined);dangerouslyHeadFragments?:union(array(string)|undefined);devScripts?:union(string|undefined);headExtras?:union(string|undefined);lang?:union(string|undefined);links?:union(array({href:string;hreflang?:union(string|undefined);rel:string})|undefined);meta?:union(undefined|{description?:union(string|undefined);tags?:union(array(Record<string, string | number | boolean>)|undefined)});scripts?:union(array({code?:union(string|undefined);src?:union(string|undefined);type?:union(string|undefined)})|undefined);streamBootstrap?:union(string|undefined);structuredData?:union(array(Record<string, unknown>)|undefined);title?:union(string|undefined)})=>string}"
           ]
         },
@@ -132,7 +137,7 @@
           ]
         },
         "./client-only": {
-          "publicShapeSha256": "be1fde45da8e1aaf84096e4c77c278c6491db95a8e5ff3a32ea7f53a1590e0e8",
+          "publicShapeSha256": "0414b54084468b43f41f900a8f817980f9eb1e258ba7628a9714965cc9cac72f",
           "publicSymbols": [
             "ACTION_FETCH_HEADER=value:\"x-openelement-action\"",
             "Action=type:{call:(ctx:{env:Env;formData:FormData;params:Record<string, string>;platform:union(Platform|undefined);request:Request;responseHeaders:Headers;route:Route})=>union(Promise<T>|T)}",
@@ -176,6 +181,10 @@
             "RenderError=type:{readonly code:string;readonly componentPath:string;readonly phase:union(\"build\"|\"csr\"|\"navigation\"|\"render\"|\"ssr\"|\"unknown\"|\"validation\");readonly recoverable:union(false|true);readonly severity:union(\"error\"|\"warning\");readonly statusCode?:union(number|undefined);readonly tagName:string;toJSON:{call:()=>Record<string, unknown>}}|value:{construct:(componentPath:string,message:string,code:string,tagName:string,cause:union(Error|undefined))=>{readonly code:string;readonly componentPath:string;readonly phase:union(\"build\"|\"csr\"|\"navigation\"|\"render\"|\"ssr\"|\"unknown\"|\"validation\");readonly recoverable:union(false|true);readonly severity:union(\"error\"|\"warning\");readonly statusCode?:union(number|undefined);readonly tagName:string;toJSON:{call:()=>Record<string, unknown>}}}",
             "RenderOutput=type:{errors:array({code:string;message:string;phase:string;recoverable:union(false|true);severity:union(\"error\"|\"warning\");tagName:string});html:string;hydrationHints:array({hydrate?:union(\"idle\"|\"load\"|\"only\"|\"visible\"|undefined);layer:union(\"dsd-interactive\"|\"dsd-static\"|\"light-dom\"|\"pure-island\");tagName:string});metrics:{hasError:union(false|true);layer:union(\"dsd-interactive\"|\"dsd-static\"|\"light-dom\"|\"pure-island\");nestingDepth:number;renderTimeMs:number;tagName:string;templateSize:number}}",
             "RouteEntry=type:{definePage?:union(false|true|undefined);filePath:string;hasEnhancedForms?:union(false|true|undefined);params?:union(array(string)|undefined);path:string;source?:union(string|undefined);special?:union(\"middleware\"|\"renderer\"|undefined);tagName?:union(string|undefined);type:union(\"api\"|\"island\"|\"page\"|\"special\");varName:string}",
+            "STREAM_FRAME_FORBIDDEN_TAGS=value:tuple(\"script\",\"style\",\"template\",\"iframe\",\"object\",\"embed\",\"base\",\"meta\",\"link\")",
+            "STREAM_FRAME_UNSAFE_URL=value:RegExp",
+            "STREAM_FRAME_URL_ATTRIBUTES=value:tuple(\"href\",\"src\",\"action\",\"formaction\",\"xlink:href\")",
+            "STREAM_FRAME_URL_CONTROL_MAX=value:32",
             "ServerRouteContext=type:{env:Env;params:Record<string, string>;platform:union(Platform|undefined);request:Request;responseHeaders:Headers;route:Route}",
             "ServerRouteMetadata=type:{filePath:string;path:string}",
             "Signal=type:union({readonly [SIGNAL_BRAND]:true;readonly value:T;subscribe:{call:(fn:{call:(value:T)=>void})=>{call:()=>void}}}|{readonly [SIGNAL_BRAND]:true;subscribe:{call:(fn:{call:(value:T)=>void})=>{call:()=>void}};value:T})",
@@ -211,6 +220,7 @@
             "setErrorTelemetryHook=value:{call:(hook:{call:(error:{readonly code:string;readonly phase:union(\"build\"|\"csr\"|\"navigation\"|\"render\"|\"ssr\"|\"unknown\"|\"validation\");readonly recoverable:union(false|true);readonly severity:union(\"error\"|\"warning\");readonly statusCode?:union(number|undefined);toJSON:{call:()=>Record<string, unknown>}})=>void})=>void}",
             "signal=value:{call:<T>(initialValue:T)=>{readonly [SIGNAL_BRAND]:true;subscribe:{call:(fn:{call:(value:T)=>void})=>{call:()=>void}};value:T}}",
             "trustedHtml=value:{call:(html:string)=>{readonly html:string}}",
+            "unsafeStreamFrameAttribute=value:{call:(name:string,value:string)=>union(false|true)}",
             "wrapInDocument=value:{call:(html:string,options:{allowHeadExtrasScripts?:union(false|true|undefined);clientScript?:union(string|undefined);cspNonce?:union(string|undefined);dangerouslyHeadFragments?:union(array(string)|undefined);devScripts?:union(string|undefined);headExtras?:union(string|undefined);lang?:union(string|undefined);links?:union(array({href:string;hreflang?:union(string|undefined);rel:string})|undefined);meta?:union(undefined|{description?:union(string|undefined);tags?:union(array(Record<string, string | number | boolean>)|undefined)});scripts?:union(array({code?:union(string|undefined);src?:union(string|undefined);type?:union(string|undefined)})|undefined);streamBootstrap?:union(string|undefined);structuredData?:union(array(Record<string, unknown>)|undefined);title?:union(string|undefined)})=>string}"
           ]
         },

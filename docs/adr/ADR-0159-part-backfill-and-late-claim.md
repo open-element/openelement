@@ -1,6 +1,6 @@
 # ADR-0159: Out-of-order Part backfill and late claim
 
-- Status: PROPOSED for 1.0.0-alpha.5; subject to main-agent review
+- Status: ACCEPTED (2026-09-25, owner ruling — approved for the alpha5 lane)
 - Tracking: #1445, #1448, #1449, #1451
 - Depends on: ADR-0158; preserves ADR-0143, ADR-0129, and ADR-0155
 

@@ -5,7 +5,7 @@ import { compileElementProgram, stableModuleId } from '@openelement/element/comp
 import { isDangerousKey } from '@openelement/element/authoring';
 import type { StreamRouteManifest } from '../protocol/ssg.ts';
 import { safeReadFile } from './route-scanner-fs.ts';
-import { STREAM_FRAME_FORBIDDEN_TAGS, unsafeStreamFrameAttribute } from './stream-frame-policy.ts';
+import { STREAM_FRAME_FORBIDDEN_TAGS, unsafeStreamFrameAttribute } from '@openelement/element';
 
 type Program = ReturnType<typeof compileElementProgram>['program'];
 

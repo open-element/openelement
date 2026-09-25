@@ -4,7 +4,7 @@ import {
   STREAM_FRAME_UNSAFE_URL,
   STREAM_FRAME_URL_ATTRIBUTES,
   STREAM_FRAME_URL_CONTROL_MAX,
-} from './stream-frame-policy.ts';
+} from '@openelement/element';
 
 export function renderStreamRuntime(timeoutMs = 30_000): string {
   return `

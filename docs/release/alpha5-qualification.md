@@ -54,7 +54,7 @@ decisions. A deferred text Part renders its settled value through the
 canonical String form: a deferred field resolving to `null` streams the
 literal text `null` (the browser frame check compares against the same String
 semantics; the owner reserves the right to change this rendering). See
-ADR-0158 and ADR-0159 while they remain **PROPOSED**.
+ADR-0158 and ADR-0159 (accepted 2026-09-25).
 
 ## Local measurement
 
@@ -70,8 +70,9 @@ cross-framework benchmark, or release qualification.
 
 ## Remaining release work
 
-- Design owner must resolve ADR-0157/0158/0159; third-party WC T1/T2 and real
-  Workers deployment are not established by current local evidence.
+- Design owner has resolved ADR-0157/0158/0159 (accepted 2026-09-25);
+  third-party WC T1/T2 and real Workers deployment are not established by
+  current local evidence.
 - Rebuild, regenerate, verify static-off parity, full browser/packed/fresh-clone
   gates and required CI on one exact candidate SHA. Keep advisory jobs separate
   from required release evidence.

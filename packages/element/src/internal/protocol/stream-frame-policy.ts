@@ -3,25 +3,26 @@
  * text/Region Part frame must satisfy for the browser installer to accept it.
  *
  * This module is import-free and host-free by design (same base-of-graph
- * contract as forbidden-sinks.ts). It is the SINGLE policy source for every
- * streaming admission boundary:
+ * contract as forbidden-sinks.ts) and is the single policy source for every
+ * streaming admission boundary; the public export carries it to each
+ * consumer:
  *
- * - the compiler-side build manifest scan (the router package re-pins this
- *   exact content in its own stream-frame-policy module; a parity test in the
- *   router suite fails loud on drift, because the element package must not
- *   depend on the router),
+ * - the router's compiler-side build manifest scan and the generated entry's
+ *   browser installer bootstrap (the lists are injected verbatim into the
+ *   runtime script),
  * - the element-side deferred executor admission
  *   (internal/compiled/server/index.ts), so the public API's hand-written
  *   manifest path cannot emit frames the browser is contractually required to
- *   discard,
- * - the browser installer bootstrap emitted by the router (the list is
- *   injected verbatim into the runtime script).
+ *   discard.
  *
  * The lists must never diverge: a frame the server emits and the browser
  * rejects is silently lost content.
  */
 
-/** Tags a deferred frame cannot safely install into an owned Part range. */
+/**
+ * Tags a deferred frame cannot safely install into an owned Part range: the
+ * browser installer rejects any frame whose markup carries one of these.
+ */
 export const STREAM_FRAME_FORBIDDEN_TAGS = [
   'script',
   'style',
@@ -34,6 +35,10 @@ export const STREAM_FRAME_FORBIDDEN_TAGS = [
   'link',
 ] as const;
 
+/**
+ * URL-carrying attributes the frame check screens for script-bearing scheme
+ * obfuscation; only these attribute names are value-screened.
+ */
 export const STREAM_FRAME_URL_ATTRIBUTES = [
   'href',
   'src',
@@ -42,7 +47,16 @@ export const STREAM_FRAME_URL_ATTRIBUTES = [
   'xlink:href',
 ] as const;
 
+/**
+ * Control characters at or below this code point are stripped before the
+ * URL-scheme test, so tab/newline/control obfuscation cannot smuggle a
+ * scheme past admission.
+ */
 export const STREAM_FRAME_URL_CONTROL_MAX = 32;
+
+/**
+ * Schemes that make a URL attribute unsafe in a streamed frame.
+ */
 export const STREAM_FRAME_UNSAFE_URL = /^(javascript|vbscript|data):/i;
 
 const urlAttributes: ReadonlySet<string> = new Set(STREAM_FRAME_URL_ATTRIBUTES);
@@ -64,14 +78,12 @@ const urlAttributes: ReadonlySet<string> = new Set(STREAM_FRAME_URL_ATTRIBUTES);
  * without the trailing semicolon (both `&#58;`/`&#X3A;` and the
  * semicolon-less `&#58`/`&#X3A` decode); the named colon/Tab/NewLine
  * obfuscation set, which requires the semicolon — HTML parsers do not decode
- * non-legacy named references without one.
- *
- * Digit runs are consumed greedily and the outcome stays parser-faithful:
- * the decoded code point equals the parser's, and the scheme-anchored deny
- * regex matches or not exactly as it would on the parser's output. One
- * greedy-hex consequence the corpus pins as a non-match: `&#X3Aalert`
- * decodes to U+03AA ('ʒ') because the trailing 'a' is itself a hex digit —
- * that form never lands a colon.
+ * non-legacy named references without one. Digit runs are consumed greedily
+ * and the outcome stays parser-faithful: the decoded code point equals the
+ * parser's, and the scheme-anchored deny regex matches or not exactly as it
+ * would on the parser's output. One greedy-hex consequence the corpus pins
+ * as a non-match: `&#X3Aalert` decodes to U+03AA ('ʒ') because the trailing
+ * 'a' is itself a hex digit — that form never lands a colon.
  */
 const STREAM_FRAME_ENTITY = /&(?:#[xX]?[0-9a-fA-F]+;?|colon;|Tab;|NewLine;)/g;
 
@@ -94,6 +106,12 @@ function decodeStreamFrameEntities(value: string): string {
   });
 }
 
+/**
+ * Whether a static attribute (name/value as authored into the Part Program)
+ * makes a streamed frame unsafely installable: event-handler, seed-spoofing,
+ * and srcdoc names fail outright, and URL-carrying names fail when the
+ * entity-decoded, control-stripped value carries a script scheme.
+ */
 export function unsafeStreamFrameAttribute(name: string, value: string): boolean {
   const lower = name.toLowerCase();
   return lower.startsWith('on') || lower.startsWith('data-oe-') || lower === 'srcdoc' ||

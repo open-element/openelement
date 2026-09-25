@@ -5,7 +5,7 @@ navLabel: 'WC Admission'
 order: 45
 ---
 
-> Proposed for alpha5 ([ADR-0157](https://github.com/open-element/openelement/blob/main/docs/adr/ADR-0157-web-component-admission-tiers.md)); not a claim that all tiers ship in the current version.
+> Accepted for alpha5 ([ADR-0157](https://github.com/open-element/openelement/blob/main/docs/adr/ADR-0157-web-component-admission-tiers.md), 2026-09-25); acceptance does not claim that all tiers ship in the current version.
 
 ## What the tiers mean
 

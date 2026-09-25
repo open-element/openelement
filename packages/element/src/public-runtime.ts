@@ -55,6 +55,16 @@ export {
   escapeHtml,
   wrapInDocument,
 } from './internal/core/html-escape.ts';
+// Streamed-frame admission policy (#1412 companion): the single source the
+// build manifest scan, the deferred executor admission, and the generated
+// browser installer all consume.
+export {
+  STREAM_FRAME_FORBIDDEN_TAGS,
+  STREAM_FRAME_UNSAFE_URL,
+  STREAM_FRAME_URL_ATTRIBUTES,
+  STREAM_FRAME_URL_CONTROL_MAX,
+  unsafeStreamFrameAttribute,
+} from './internal/protocol/stream-frame-policy.ts';
 export type { IslandOptions } from './internal/protocol/island.ts';
 export { StyleSheet } from './internal/core/style-sheet.ts';
 export { createLogger } from './internal/core/logger.ts';

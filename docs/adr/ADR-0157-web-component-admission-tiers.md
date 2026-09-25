@@ -1,7 +1,7 @@
 # ADR-0157: Web Component admission tiers (T0-T3)
 
-- Status: PROPOSED for `1.0.0-alpha.5`; draft for main-agent and owner review,
-  not an approval or a claim of implementation.
+- Status: ACCEPTED (2026-09-25, owner ruling — approved for the alpha5 lane,
+  with alpha-period public-API variability explicitly accepted).
 - Tracking: [#1446](https://github.com/open-element/openelement/issues/1446);
   admission harness and Lit-in-stream qualification:
   [#1451](https://github.com/open-element/openelement/issues/1451).

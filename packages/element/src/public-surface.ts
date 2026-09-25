@@ -88,6 +88,20 @@ export type { TrustedHtml } from './public-runtime.ts';
  */
 export { DANGEROUS_KEYS, injectPropsSafe, isDangerousKey } from './public-runtime.ts';
 
+// ─── Streamed-frame policy (re-export from core) ───────────────────
+
+// The streamed-frame admission policy: one deny list for the build manifest
+// scan, the deferred executor admission, and the generated browser installer.
+// Consumed by the router's streaming pipeline and available to custom
+// deferred executors.
+export {
+  STREAM_FRAME_FORBIDDEN_TAGS,
+  STREAM_FRAME_UNSAFE_URL,
+  STREAM_FRAME_URL_ATTRIBUTES,
+  STREAM_FRAME_URL_CONTROL_MAX,
+  unsafeStreamFrameAttribute,
+} from './public-runtime.ts';
+
 // ─── Island types (protocol) ─────────────────────────────
 
 export type { IslandOptions } from './public-runtime.ts';

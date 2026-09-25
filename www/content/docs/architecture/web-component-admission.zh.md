@@ -5,7 +5,7 @@ navLabel: 'WC 准入'
 order: 45
 ---
 
-> alpha5 提案（[ADR-0157](https://github.com/open-element/openelement/blob/main/docs/adr/ADR-0157-web-component-admission-tiers.md)）；并不代表所有层级都会在当前版本中交付。
+> alpha5 已接受（[ADR-0157](https://github.com/open-element/openelement/blob/main/docs/adr/ADR-0157-web-component-admission-tiers.md)，2026-09-25）；接受并不意味着所有层级都会在当前版本中交付。
 
 ## 各层级的含义
 

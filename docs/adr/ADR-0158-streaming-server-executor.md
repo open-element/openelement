@@ -1,6 +1,6 @@
 # ADR-0158: Optional streaming mode of the compiled server executor
 
-- Status: PROPOSED for 1.0.0-alpha.5; subject to main-agent review
+- Status: ACCEPTED (2026-09-25, owner ruling — approved for the alpha5 lane)
 - Tracking: #1444, #1447, #1450, #1453
 - Preserves: ADR-0143, ADR-0148, ADR-0120, ADR-0129, ADR-0152, ADR-0153
 
