@@ -92,12 +92,19 @@ if (import.meta.main) {
   if (!Number.isInteger(sampleCount) || sampleCount < 2 || sampleCount > 100 || !out) {
     throw new Error('pass --samples 2..100 and --out <path>');
   }
-  const git = new Deno.Command('git', {
-    args: ['rev-parse', 'HEAD'],
-    stdout: 'piped',
-    stderr: 'null',
-  });
-  const revision = new TextDecoder().decode((await git.output()).stdout).trim();
+  const git = async (args: string[]): Promise<string> => {
+    const result = await new Deno.Command('git', {
+      args,
+      stdout: 'piped',
+      stderr: 'null',
+    }).output();
+    if (!result.success) throw new Error(`git ${args.join(' ')} failed`);
+    return new TextDecoder().decode(result.stdout).trim();
+  };
+  const revision = await git(['rev-parse', 'HEAD']);
+  // Real working-tree provenance: the tracked evidence says which tree it was
+  // measured from, the same way benchmarks/streaming/measure.ts records it.
+  const workspaceDirty = (await git(['status', '--porcelain'])).length > 0;
   const cases = [];
   for (const size of [1000, 10000]) {
     for (const scenario of ['swap', 'rotate'] as const) {
@@ -115,7 +122,7 @@ if (import.meta.main) {
     recordedAt: new Date().toISOString(),
     environment: {
       revision,
-      workspaceDirty: true,
+      workspaceDirty,
       deno: Deno.version.deno,
       os: Deno.build.os,
       arch: Deno.build.arch,

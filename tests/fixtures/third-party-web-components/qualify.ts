@@ -849,6 +849,60 @@ interface SsrFormObservation {
   dataEid: boolean;
 }
 
+/** True when `char` can follow an element name inside its tag (`<name`+char). */
+function endsElementName(char: string | undefined): boolean {
+  return char === undefined || char === '>' || char === '/' || char === ' ' ||
+    char === '\t' || char === '\n' || char === '\r';
+}
+
+/**
+ * The outer HTML of the FIRST `tag` element, or '' when it is absent or
+ * unbalanced. Nested same-tag elements are skipped by depth counting.
+ *
+ * The light-DOM child pin must be read inside the host it belongs to: a whole
+ * document `html.includes(child)` also passes when the same text appears in an
+ * unrelated element (another tag's authored child, a heading, the `<noscript>`
+ * tail), so the probe would no longer evidence this host's slot-first
+ * children. Slicing the balanced host range keeps the pin on the host.
+ */
+export function hostOuterHtml(html: string, tag: string): string {
+  const openPrefix = '<' + tag;
+  const closePrefix = '</' + tag;
+  let start = -1;
+  for (let cursor = 0; start < 0;) {
+    const candidate = html.indexOf(openPrefix, cursor);
+    // `<tag-other` / `<tags>` share the prefix but are not this host.
+    if (candidate < 0) return '';
+    if (endsElementName(html[candidate + openPrefix.length])) start = candidate;
+    else cursor = candidate + 1;
+  }
+  let depth = 0;
+  for (let cursor = start; cursor < html.length;) {
+    const nextOpen = html.indexOf(openPrefix, cursor);
+    const nextClose = html.indexOf(closePrefix, cursor);
+    if (nextClose >= 0 && (nextOpen < 0 || nextClose < nextOpen)) {
+      depth--;
+      cursor = nextClose + closePrefix.length;
+      if (depth === 0) {
+        const end = html.indexOf('>', cursor);
+        return html.slice(start, end < 0 ? html.length : end + 1);
+      }
+      continue;
+    }
+    if (nextOpen < 0) return '';
+    if (!endsElementName(html[nextOpen + openPrefix.length])) {
+      cursor = nextOpen + 1;
+      continue;
+    }
+    const close = html.indexOf('>', nextOpen + openPrefix.length);
+    if (close < 0) return '';
+    // `<tag/>` closes itself; anything else opens a nested host.
+    if (html[close - 1] !== '/') depth++;
+    cursor = close + 1;
+  }
+  return '';
+}
+
 function observeSsrForm(html: string, entry: CorpusEntry): SsrFormObservation {
   const openTag = new RegExp(`<${escapeRegExp(entry.tag)}(\\s[^>]*)?>`);
   const match = openTag.exec(html);
@@ -856,7 +910,9 @@ function observeSsrForm(html: string, entry: CorpusEntry): SsrFormObservation {
   const dsdTemplate = tagPresent &&
     new RegExp(`<${escapeRegExp(entry.tag)}(\\s[^>]*)?>\\s*<template shadowrootmode`).test(html);
   const dataEid = tagPresent && /\bdata-eid=/.test(match![0]);
-  const lightDomChildren = entry.expect.lightDomChildren.filter((child) => html.includes(child));
+  const lightDomChildren = entry.expect.lightDomChildren.filter((child) =>
+    hostOuterHtml(html, entry.tag).includes(child)
+  );
   return { tagPresent, lightDomChildren, dsdTemplate, dataEid };
 }
 

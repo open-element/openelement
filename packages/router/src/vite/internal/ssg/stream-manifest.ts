@@ -61,18 +61,69 @@ function diagnostic(
   );
 }
 
+/** True when the module declares a function/variable binding of this name. */
+function declaresBinding(sf: ts.SourceFile, name: string): boolean {
+  return sf.statements.some((statement) =>
+    ts.isFunctionDeclaration(statement) && statement.name?.text === name ||
+    ts.isVariableStatement(statement) &&
+      statement.declarationList.declarations.some((entry) =>
+        ts.isIdentifier(entry.name) && entry.name.text === name
+      )
+  );
+}
+
+/**
+ * Local names the module binds for the loader the generated entry reads.
+ *
+ * The entry consumes `module.loader` (route codegen: `typeof
+ * ${route.varName}.loader === "function"`), so the EXPORT name is the
+ * contract, never the local spelling: `export { statsLoader as loader }`
+ * publishes the same `module.loader` as `export const loader = …`. The local
+ * names reachable under the export name `loader` are collected here; a
+ * type-only export is not (it vanishes at runtime). An explicit alias wins
+ * over a bare binding named `loader`, because that binding is not what
+ * `module.loader` resolves to.
+ */
+function loaderBindingNames(sf: ts.SourceFile): Set<string> {
+  const aliased = new Set<string>();
+  const direct = new Set<string>();
+  let exportedAsLoader = 0;
+  for (const statement of sf.statements) {
+    if (
+      !ts.isExportDeclaration(statement) || statement.isTypeOnly || statement.moduleSpecifier ||
+      !statement.exportClause || !ts.isNamedExports(statement.exportClause)
+    ) continue;
+    for (const entry of statement.exportClause.elements) {
+      if (entry.isTypeOnly || entry.name.text !== 'loader') continue;
+      exportedAsLoader += 1;
+      const local = entry.propertyName?.text ?? 'loader';
+      if (local === 'loader') direct.add(local);
+      else aliased.add(local);
+    }
+  }
+  if (exportedAsLoader > 1) {
+    throw new Error(
+      'stream route exports `loader` more than once: `as loader` may appear at most once ' +
+        '(a duplicate is a module SyntaxError at load time; remove the extra export)',
+    );
+  }
+  if (declaresBinding(sf, 'loader')) direct.add('loader');
+  return aliased.size > 0 ? aliased : direct;
+}
+
 function staticLoaderFields(
   sf: ts.SourceFile,
   route: string,
   field: string,
+  loaderNames: ReadonlySet<string>,
 ): Set<string> | undefined {
   for (const statement of sf.statements) {
     if (!ts.isVariableStatement(statement) && !ts.isFunctionDeclaration(statement)) continue;
     const declaration = ts.isVariableStatement(statement)
       ? statement.declarationList.declarations.find((entry) =>
-        ts.isIdentifier(entry.name) && entry.name.text === 'loader'
+        ts.isIdentifier(entry.name) && loaderNames.has(entry.name.text)
       )
-      : statement.name?.text === 'loader'
+      : statement.name && loaderNames.has(statement.name.text)
       ? statement
       : undefined;
     if (!declaration) continue;
@@ -121,8 +172,7 @@ function hasExportedLoader(sf: ts.SourceFile): boolean {
       ts.isExportDeclaration(statement) && !statement.isTypeOnly && !statement.moduleSpecifier &&
       statement.exportClause && ts.isNamedExports(statement.exportClause) &&
       statement.exportClause.elements.some((entry) =>
-        !entry.isTypeOnly && entry.name.text === 'loader' &&
-        (entry.propertyName?.text ?? entry.name.text) === 'loader'
+        !entry.isTypeOnly && entry.name.text === 'loader'
       )
     ) return true;
     if (
@@ -350,18 +400,16 @@ export async function scanStreamManifest(
     (entry as ts.StringLiteral).text
   );
   if (new Set(fields).size !== fields.length) fail('duplicate defer field');
-  const hasLoader = sf.statements.some((statement) =>
-    ts.isFunctionDeclaration(statement) && statement.name?.text === 'loader' ||
-    ts.isVariableStatement(statement) &&
-      statement.declarationList.declarations.some((entry) =>
-        ts.isIdentifier(entry.name) && entry.name.text === 'loader'
-      )
-  );
+  // One binding set serves both admission and the literal-field check, so an
+  // aliased export keeps the loader-shape guarantee instead of silently
+  // skipping it (see loaderBindingNames).
+  const loaderNames = loaderBindingNames(sf);
+  const hasLoader = [...loaderNames].some((name) => declaresBinding(sf, name));
   if (!hasLoader) fail('stream requires a route loader');
   if (!hasExportedLoader(sf)) {
     fail('route loader must be a named export consumed by the generated entry');
   }
-  const knownFields = staticLoaderFields(sf, route, fields[0]);
+  const knownFields = staticLoaderFields(sf, route, fields[0], loaderNames);
   if (knownFields) {
     for (const field of fields) {
       if (!knownFields.has(field)) {

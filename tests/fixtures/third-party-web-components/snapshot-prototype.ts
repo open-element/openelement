@@ -44,6 +44,21 @@ interface SnapshotRecord {
   };
 }
 
+/**
+ * One cache read by exact key path: the record, or undefined on a miss. Both
+ * the first (empty cache) and the second (written) lookup below go through
+ * this, so the reported hit is an observation of the lookup, not an
+ * assumption about the write that preceded it.
+ */
+async function readSnapshotRecord(path: string): Promise<SnapshotRecord | undefined> {
+  try {
+    return JSON.parse(await Deno.readTextFile(path)) as SnapshotRecord;
+  } catch (error) {
+    if (error instanceof Deno.errors.NotFound) return undefined;
+    throw error;
+  }
+}
+
 async function main(): Promise<void> {
   const root = await Deno.makeTempDir({ prefix: 'openelement-lit-snapshot-' });
   const keep = Deno.env.get('OPEN_ELEMENT_KEEP_T1_PROTOTYPE') === '1';
@@ -144,7 +159,9 @@ async function main(): Promise<void> {
     const cache = join(root, 'cache');
     await Deno.mkdir(cache);
     const path = join(cache, `${key}.json`);
-    const initialMiss = !(await Deno.stat(path).then(() => true, () => false));
+    // First lookup: an empty cache must MISS, or the ephemeral-cache premise of
+    // this prototype is false.
+    const initialMiss = (await readSnapshotRecord(path)) === undefined;
     if (!initialMiss) throw new Error('prototype cache unexpectedly existed');
 
     const demoDir = join(dist, 'lit-snapshot');
@@ -237,19 +254,23 @@ async function main(): Promise<void> {
       },
     };
     await Deno.writeTextFile(path, formatJson(record));
-    const cached = JSON.parse(await Deno.readTextFile(path)) as SnapshotRecord;
-    assertEquals(cached.key, await sha256(JSON.stringify(cached.inputs)));
-    assertEquals(cached.snapshotSha256, await sha256(cached.shadowHtml));
-    assertEquals(cached.qualification, record.qualification);
+    // Second lookup of the same key: this is the cache HIT the report claims.
+    // The record read back is the stored artifact, so every assertion below
+    // validates what a later run would receive from the cache.
+    const cached = await readSnapshotRecord(path);
+    const verifiedCacheHit = cached !== undefined;
+    assertEquals(verifiedCacheHit, true, 'a written snapshot must be readable by key');
+    assertEquals(cached!.key, await sha256(JSON.stringify(cached!.inputs)));
+    assertEquals(cached!.snapshotSha256, await sha256(cached!.shadowHtml));
+    assertEquals(cached!.qualification, record.qualification);
+    assertEquals(cached!.inputs, inputs);
+    // A different input set must address a different key, and that key must
+    // still MISS — the hit above is key-addressed, not "any file exists".
     const bumpedInputs = { ...inputs, resolvedPackage: 'npm:lit@3.3.4' };
     const bumpedKey = await sha256(JSON.stringify(bumpedInputs));
-    if (
-      bumpedKey === key ||
-      await Deno.stat(join(cache, `${bumpedKey}.json`)).then(
-        () => true,
-        () => false,
-      )
-    ) {
+    const versionBumpCacheMiss = bumpedKey !== key &&
+      (await readSnapshotRecord(join(cache, `${bumpedKey}.json`))) === undefined;
+    if (!versionBumpCacheMiss) {
       throw new Error(
         'a simulated version change must miss the snapshot cache',
       );
@@ -271,12 +292,12 @@ async function main(): Promise<void> {
         ? 'two clean builds and full adapter admission have not been proved'
         : `browser upgrade produced ${upgradeButtonCount} shadow buttons or lost focus`,
       initialMiss,
-      verifiedCacheHit: true,
+      verifiedCacheHit,
       simulatedVersionBump: {
         from: resolvedPackage,
         to: bumpedInputs.resolvedPackage,
       },
-      versionBumpCacheMiss: true,
+      versionBumpCacheMiss,
       demo: keep ? join(demoDir, 'index.html') : 'ephemeral build artifact',
     };
     const reportPath = Deno.env.get('OPEN_ELEMENT_T1_PROTOTYPE_REPORT');

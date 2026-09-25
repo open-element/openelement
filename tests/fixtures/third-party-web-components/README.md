@@ -68,12 +68,13 @@ for inspection.
 
 `snapshot:prototype` captures a pinned Lit fixture's _structure_ in a
 headless browser, removes volatile Lit comment markers, hashes the exact
-package/bundle/tool/browser/inputs, checks an ephemeral cache read and a
-simulated version-bump miss, and serves a generated DSD demo route without
-JavaScript. The same run observes upgrade node identity and focus; failed
-upgrade keeps `highestPassedTier: null`. It neither caches request data nor
-qualifies T1 or a third-party T2 adapter. The release workflow uploads the
-report as advisory evidence, never as a publishing gate.
+package/bundle/tool/browser/inputs, reads an ephemeral cache by key — a miss
+before the write, a hit after it, and a miss again for a simulated version
+bump — and serves a generated DSD demo route without JavaScript. The same run
+observes upgrade node identity and focus; failed upgrade keeps
+`highestPassedTier: null`. It neither caches request data nor qualifies T1 or
+a third-party T2 adapter. The release workflow uploads the report as advisory
+evidence, never as a publishing gate.
 
 ```sh
 OPEN_ELEMENT_T1_PROTOTYPE_REPORT=/tmp/openelement-t1-report.json \

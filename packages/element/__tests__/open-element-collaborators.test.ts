@@ -1,7 +1,16 @@
-import { assert, assertEquals } from '@std/assert';
+import { assert, assertEquals, assertNotStrictEquals, assertStrictEquals } from '@std/assert';
 import { ElementParams } from '../src/open-element-params.ts';
 import { LifetimeScope } from '../src/internal/compiled/lifetime-scope.ts';
 import { attachFormInternals } from '../src/open-element-form.ts';
+// The claim executor is installed by the package entry, not by the kernel
+// (#1416); the kernel case below reconnects into retained content, which is a
+// claim. This file reaches the kernel directly, so it installs it exactly as
+// the default '@openelement/element' entry does.
+import '../src/internal/compiled/runtime/claim-install.ts';
+import { CompiledElementKernel } from '../src/internal/compiled/runtime/kernel.ts';
+import { signal } from '../src/internal/signal/framework.ts';
+import { TestDocument } from './compiled-runtime/test-dom.ts';
+import { testProgram } from './compiled-runtime/test-program.ts';
 
 // ─── ElementParams (#904) ────────────────────────────────────────────
 
@@ -65,12 +74,59 @@ Deno.test('params: setter copies, getter returns the copy', () => {
 
 // ─── LifetimeScope (#1458) ───────────────────────────────────────────
 
-Deno.test('lifecycle: dispose aborts the signal and next activation starts fresh', () => {
+const KERNEL_PROGRAM = testProgram({
+  tag: 'oe-collaborators-kernel',
+  template: [{ k: 'el', tag: 'div', attrs: [], children: [{ k: 'part', index: 0 }] }],
+  parts: [{ k: 'text', index: 0, signal: 'message' }],
+});
+
+Deno.test('lifecycle: dispose aborts the scope signal', () => {
   const lifecycle = new LifetimeScope();
   const first = lifecycle.signal;
   lifecycle.dispose();
-  assert(first.aborted);
-  assert(!new LifetimeScope().signal.aborted);
+  assert(first.aborted, 'the signal held by the disposed scope is aborted');
+  assert(lifecycle.signal.aborted, 'the disposed scope keeps reporting an aborted signal');
+  assert(!lifecycle.active);
+});
+
+Deno.test('lifecycle: a kernel reconnect replaces the scope and starts a fresh live signal', () => {
+  const document = new TestDocument();
+  const element = document.createElement('oe-collaborators-kernel');
+  const message = signal('first');
+  const kernel = new CompiledElementKernel(element as unknown as HTMLElement, KERNEL_PROGRAM, {
+    signals: { message },
+    handlers: {},
+    rootMode: 'open',
+  });
+
+  kernel.connect();
+  const activation = kernel.lifecycle;
+  const connectedSignal = activation.signal;
+  kernel.disconnect();
+  // Disconnect disposes the activation scope and replaces it (kernel.ts:252,
+  // 258): the retained signal is aborted, the replacement is live and is a
+  // different instance — the current signal of a disposed scope is itself
+  // aborted (lifetime-scope.ts:42), so "aborted" alone cannot identify it.
+  const replacement = kernel.lifecycle;
+  assert(activation.disposed, 'disconnect disposes the activation scope');
+  assert(connectedSignal.aborted, 'the disposed activation signal is aborted');
+  assert(!replacement.disposed, 'the replacement scope is live');
+  assert(!replacement.signal.aborted);
+  assertNotStrictEquals(replacement, activation);
+  assertNotStrictEquals(replacement.signal, connectedSignal);
+
+  // Reconnect reuses the replacement scope — connect() never swaps the scope
+  // (kernel.ts:177) — so the live signal observed after disconnect is the one
+  // the reconnected activation runs against, and it is still un-aborted.
+  kernel.connect();
+  assertStrictEquals(kernel.lifecycle, replacement);
+  assert(connectedSignal.aborted, 'the aborted signal stays aborted across reconnect');
+  assert(!kernel.lifecycle.signal.aborted);
+
+  kernel.disconnect();
+  assert(replacement.disposed, 'disconnect disposes the scope the reconnect activated');
+  assertNotStrictEquals(kernel.lifecycle, replacement);
+  assert(!kernel.lifecycle.signal.aborted, 'the third scope starts live');
 });
 
 Deno.test('lifecycle: setTimeout is cleared on dispose', async () => {

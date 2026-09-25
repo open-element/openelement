@@ -5,10 +5,14 @@
  *   --out benchmarks/streaming/alpha5-local.json
  */
 import { chromium } from '@playwright/test';
-import { dirname } from '@std/path';
+import { dirname, fromFileUrl } from '@std/path';
+import {
+  dispatchRequest,
+  importRequestTimeServer,
+} from '../../packages/router/src/vite/internal/static-serve.ts';
 
 const fixture = new URL('../../tests/fixtures/router-native-framework/', import.meta.url);
-const serverRoot = new URL('e2e/', fixture);
+const distDir = new URL('dist/', fixture);
 const serverEntry = new URL('dist/server/index.js', fixture);
 const message = 'Rendered as data resolves';
 
@@ -43,7 +47,7 @@ async function ready(base: string): Promise<void> {
       await response.body?.cancel();
       if (response.ok) return;
     } catch {
-      // The generated server is still starting.
+      // The server is still starting.
     }
     await new Promise((resolve) => setTimeout(resolve, 100));
   }
@@ -61,29 +65,32 @@ if (
 }
 await Deno.stat(serverEntry);
 
-const listener = Deno.listen({ hostname: '127.0.0.1', port: 0 });
-const port = (listener.addr as Deno.NetAddr).port;
-listener.close();
-const base = `http://127.0.0.1:${port}`;
-const server = new Deno.Command(Deno.execPath(), {
-  cwd: serverRoot.pathname,
-  args: [
-    'run',
-    '--config',
-    '../../../../deno.json',
-    '--allow-read',
-    '--allow-env',
-    '--allow-net',
-    'server.ts',
-    '--port',
-    String(port),
-    '--dir',
-    '../dist',
-  ],
-  env: { OPEN_ELEMENT_DISABLE_CSRF: '1' },
-  stdout: 'null',
-  stderr: 'null',
-}).spawn();
+// One serving socket owns the port for the whole measurement. The previous
+// shape bound port 0, read the port, closed the listener and hoped the
+// generated server would win the re-bind — a window in which any process on
+// the machine can take the port. Deno.serve({ port: 0 }) picks the port and
+// this same server answers every request until shutdown
+// (benchmarks/jfb/harness/swap-repeat-probe.ts:125 uses the same seam).
+// Requests reach the fixture's built output through the shared static and
+// request-time adapter the fixture's own e2e/server.ts wraps, so the measured
+// artifact is still dist/ + dist/server.
+const distRoot = fromFileUrl(distDir);
+const serverMod = await importRequestTimeServer(fromFileUrl(serverEntry));
+const server = Deno.serve(
+  {
+    hostname: '127.0.0.1',
+    port: 0,
+    onListen: () => {},
+  },
+  (request) =>
+    dispatchRequest(request, {
+      distDir: distRoot,
+      serverMod,
+      env: { ...Deno.env.toObject(), OPEN_ELEMENT_DISABLE_CSRF: '1' },
+      onHandlerError: (error) => console.error('[streaming measure] fixture handler error:', error),
+    }),
+);
+const base = `http://127.0.0.1:${server.addr.port}`;
 
 try {
   await ready(base);
@@ -161,7 +168,8 @@ try {
           viewport: '1280x800',
         },
         method: {
-          build: 'router-native-framework workspace-source dist/server; no Nitro deployment',
+          build:
+            'router-native-framework workspace-source dist/ + dist/server served in-process through static-serve.ts; no Nitro deployment',
           routes: ['/stream-proof', '/stream-proof-off'],
           simulatedLoaderDelayMs: delay,
           sampleCountPerMode: samples,
@@ -187,10 +195,5 @@ try {
     await browser.close();
   }
 } finally {
-  try {
-    server.kill('SIGTERM');
-  } catch {
-    // The child may have exited on its own.
-  }
-  await server.status;
+  await server.shutdown();
 }

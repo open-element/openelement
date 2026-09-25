@@ -1,4 +1,10 @@
-import { assert, assertEquals, assertStrictEquals, assertThrows } from '@std/assert';
+import {
+  assert,
+  assertEquals,
+  assertNotStrictEquals,
+  assertStrictEquals,
+  assertThrows,
+} from '@std/assert';
 import { LifetimeScope } from '../../src/internal/compiled/lifetime-scope.ts';
 
 Deno.test('scope: abort precedes child and subscription cleanup', () => {
@@ -62,7 +68,15 @@ Deno.test('scope: a reconnect gets a distinct live signal', () => {
   const next = new LifetimeScope();
   assert(signal.aborted);
   assert(!next.signal.aborted);
-  assertStrictEquals(next.signal, next.signal);
+  assertNotStrictEquals(next.signal, signal);
+  // The live getter is cached: every read hands back the same AbortSignal.
+  const live = next.signal;
+  assertStrictEquals(next.signal, live);
+  // A disposed scope's current signal is aborted too
+  // (lifetime-scope.ts:42), so "un-aborted" is what identifies the live one.
+  assert(former.signal.aborted, 'the disposed scope never hands back a live signal');
+  next.dispose();
+  assert(live.aborted);
 });
 
 Deno.test('scope: animation frame is cancelled on dispose', () => {

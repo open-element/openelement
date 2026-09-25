@@ -484,6 +484,136 @@ Deno.test('stream admission requires the loader named export used by the generat
   );
 });
 
+Deno.test('an export alias may publish the loader the generated entry reads', async () => {
+  // The generated entry reads `module.loader`, so the EXPORT name is the
+  // contract: `export { statsLoader as loader }` publishes the same
+  // `module.loader` as `export const loader = …`.
+  const routePreamble = `
+import { definePage } from '@openelement/router';
+import Page from '../components/page.tsx';
+`;
+  const descriptor = `
+export default definePage(Page, {
+  renderIntent: { mode: 'dynamic', stream: { defer: ['first', 'second'] } },
+});`;
+  const body = "{ first: Promise.resolve('a'), second: Promise.resolve('b') }";
+  // Parenthesised so the arrow body is the object literal, not a block: the
+  // literal-loader-field check only reads a returned/expression object.
+  const aliasedVariable = `${routePreamble}const statsLoader = () => (${body});
+export { statsLoader as loader };
+${descriptor}`;
+  const aliasedFunction = `${routePreamble}function statsLoader() { return ${body}; }
+export { statsLoader as loader };
+${descriptor}`;
+  await fixture(
+    async (dir) => {
+      const routes = await scanRoutes(dir);
+      const manifest = routes[0].streamManifest!;
+      assertEquals(manifest.fields.map((entry) => entry.field), ['first', 'second']);
+      assertEquals(manifest.fields.map((entry) => entry.owners.map((owner) => owner.index)), [
+        [0],
+        [1],
+      ]);
+      assertEquals(manifest.fields.map((entry) => entry.owners[0].kind), ['part', 'part']);
+      assertEquals(manifest.program.tag, 'stream-page');
+      assertEquals(manifest.program.sha256.length, 64);
+      const desc = buildEntryDescriptor(routes, { ssg: true });
+      assertEquals(desc.pageRoutes[0].streamManifest, manifest);
+      assertStringIncludes(renderEntry(desc), 'export const __streamManifests =');
+    },
+    page,
+    aliasedVariable,
+  );
+  // A function declaration under a different local name is the same contract.
+  await fixture(
+    async (dir) => {
+      const manifest = (await scanRoutes(dir))[0].streamManifest!;
+      assertEquals(manifest.fields.map((entry) => entry.field), ['first', 'second']);
+      assertEquals(
+        manifest.fields.map((entry) => entry.owners.map((owner) => owner.index)),
+        [[0], [1]],
+      );
+    },
+    page,
+    aliasedFunction,
+  );
+  // The alias does not skip the literal-loader-field check: a deferred field
+  // the aliased loader never produces still fails the build.
+  await fixture(
+    async (dir) => {
+      const error = await assertRejects(() => scanRoutes(dir)) as Error;
+      assertStringIncludes(error.message, 'field second');
+      assertStringIncludes(error.message, 'missing from literal loader object');
+    },
+    page,
+    aliasedVariable.replace("second: Promise.resolve('b')", "other: Promise.resolve('b')"),
+  );
+  // The alias is admitted only when it names a local binding.
+  await fixture(
+    async (dir) => {
+      const error = await assertRejects(() => scanRoutes(dir)) as Error;
+      assertStringIncludes(error.message, 'stream route /, field defer');
+      assertStringIncludes(error.message, 'requires a route loader');
+    },
+    page,
+    `${routePreamble}export { statsLoader as loader };
+${descriptor}`,
+  );
+  // Exporting the local name under a DIFFERENT name leaves module.loader
+  // undefined, so admission stays closed.
+  await fixture(
+    async (dir) => {
+      const error = await assertRejects(() => scanRoutes(dir)) as Error;
+      assertStringIncludes(error.message, 'loader must be a named export');
+    },
+    page,
+    `${routePreamble}const loader = () => (${body});
+export { loader as load };
+${descriptor}`,
+  );
+  // The alias inherits the alias-free guard rails: a spread object is still
+  // rejected against the aliased loader body, not silently skipped.
+  await fixture(
+    async (dir) => {
+      const error = await assertRejects(() => scanRoutes(dir)) as Error;
+      assertStringIncludes(error.message, 'loader object spread');
+    },
+    page,
+    aliasedVariable.replace(
+      "{ first: Promise.resolve('a'), second: Promise.resolve('b') }",
+      "{ ...getFields(), first: Promise.resolve('a'), second: Promise.resolve('b') }",
+    ),
+  );
+});
+
+Deno.test('a duplicate `as loader` export is rejected by the scan itself', async () => {
+  // `export { a as loader, b as loader }` is a module SyntaxError at load
+  // time; the scan still names the problem so the build fails with the
+  // framework's own diagnostic instead of the parser's.
+  const routePreamble = `
+import { definePage } from '@openelement/router';
+import Page from '../components/page.tsx';
+`;
+  const descriptor = `
+export default definePage(Page, {
+  renderIntent: { mode: 'dynamic', stream: { defer: ['first', 'second'] } },
+});`;
+  const body = "{ first: Promise.resolve('a'), second: Promise.resolve('b') }";
+  const duplicateAliases = `${routePreamble}const a = () => (${body});
+const b = () => (${body});
+export { a as loader, b as loader };
+${descriptor}`;
+  await fixture(
+    async (dir) => {
+      const error = await assertRejects(() => scanRoutes(dir)) as Error;
+      assertStringIncludes(error.message, 'exports `loader` more than once');
+      assertStringIncludes(error.message, 'at most once');
+    },
+    page,
+    duplicateAliases,
+  );
+});
+
 Deno.test('stream page program must belong to the one class selected by its import', async () => {
   const secondClass = `
 @element('other-page')
@@ -610,6 +740,57 @@ Deno.test('generated entry rejects opaque stream descriptors before serving GET'
       Error,
       'no matching compiled route manifest/program',
     );
+  });
+});
+
+Deno.test('streaming requires the project-wide app shell to be off, and the gate says so', async () => {
+  const shell = { tagName: 'open-layout', import: '@acme/components/open-layout', props: {} };
+  const cases: Array<[string, Parameters<typeof buildEntryDescriptor>[1], string]> = [
+    ['default appShell', { ssg: true, appShell: shell }, 'whole project'],
+    [
+      'named layout with no default shell',
+      { ssg: true, appShell: false, layouts: { post: shell } },
+      'Streaming routes: / (index.tsx)',
+    ],
+    [
+      'layouts.default',
+      { ssg: true, layouts: { default: shell, post: false } },
+      'whole project',
+    ],
+  ];
+  for (const [name, options, expected] of cases) {
+    await fixture(async (dir) => {
+      const routes = await scanRoutes(dir);
+      assertEquals(routes[0].streamManifest !== undefined, true, name);
+      const error = assertThrows(() => buildEntryDescriptor(routes, options)) as Error;
+      // The gate is project-level, so the guidance must name the project-wide
+      // action instead of a per-route opt-out the build cannot see.
+      assertStringIncludes(error.message, expected, name);
+      assertStringIncludes(error.message, 'appShell: false', name);
+      assertStringIncludes(error.message, 'layouts', name);
+      assertStringIncludes(error.message, 'cannot satisfy this gate', name);
+      assertStringIncludes(error.message, 'route: { layout: false }', name);
+    });
+  }
+  // The same configuration without a stream route builds normally: the gate is
+  // about streaming, not about shells.
+  await fixture(
+    async (dir) => {
+      const routes = await scanRoutes(dir);
+      const desc = buildEntryDescriptor(routes, { ssg: true, appShell: shell });
+      assertEquals(desc.pageRoutes[0].streamManifest, undefined);
+      assertEquals(desc.appShell.default === false, false);
+    },
+    page,
+    route.replace("stream: { defer: ['first', 'second'] }", ''),
+  );
+  // With no shell anywhere, the stream route is admitted (the fixtures'
+  // configuration) and the gate stays silent.
+  await fixture(async (dir) => {
+    const routes = await scanRoutes(dir);
+    const desc = buildEntryDescriptor(routes, { ssg: true, appShell: false, layouts: {} });
+    assertEquals(desc.pageRoutes[0].streamManifest?.fields.length, 2);
+    assertEquals(desc.appShell.default, false);
   });
 });
 

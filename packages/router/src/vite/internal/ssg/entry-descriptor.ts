@@ -414,13 +414,27 @@ export function buildEntryDescriptor(
     appShell: options.appShell,
     layouts: options.layouts,
   });
+  // Streaming boundary, project-level by construction: the generated streamed
+  // document is flushed in parts and never passes through __renderAppShell
+  // (entry-codegen.ts emits __streamBody directly), so a resolved shell would
+  // be silently dropped. The descriptor carries no per-route layout — the
+  // scan records the manifest, not `route.layout` — so the check cannot be
+  // narrowed to the routes that actually resolve a shell; it fails closed for
+  // the whole project instead of admitting a descriptor that would only fail
+  // at request time. The generated route guard (entry-codegen.ts) keeps the
+  // route-level check for descriptors that reach the runtime by another path.
   if (
     pageRoutes.some((route) => route.streamManifest) &&
     (appShell.default !== false || Object.values(appShell.layouts).some((shell) => shell !== false))
   ) {
+    const streamRoutes = pageRoutes.filter((route) => route.streamManifest)
+      .map((route) => `${route.path} (${route.filePath})`).join(', ');
     throw new Error(
-      '[openElement] stream route cannot use a compiled app shell/layout wrapper; ' +
-        'disable the wrapper for this route or leave streaming off.',
+      '[openElement] streaming requires the compiled app shell/layout wrapper to be off for the ' +
+        'whole project: a streamed document is flushed in parts and cannot be wrapped by a shell. ' +
+        'Set openElement({ appShell: false }) and remove every layouts entry, or leave streaming ' +
+        'off. A per-route route: { layout: false } cannot satisfy this gate — the build cannot see ' +
+        `a stream route's own layout. Streaming routes: ${streamRoutes}.`,
     );
   }
   if (

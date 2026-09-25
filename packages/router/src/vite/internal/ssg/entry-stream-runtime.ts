@@ -149,6 +149,7 @@ function __streamBody({ scope, route, manifest, executor, records, document, tok
   let active = true;
   let started = false;
   let tail = false;
+  let cancelled = false;
   let wake;
   let current = [];
   const queued = [];
@@ -188,7 +189,7 @@ function __streamBody({ scope, route, manifest, executor, records, document, tok
 
   return new ReadableStream({
     async pull(controller) {
-      if (!active) { controller.close(); return; }
+      if (!active) { if (!cancelled) controller.close(); return; }
       if (!started) {
         started = true;
         controller.enqueue(encoder.encode(shell));
@@ -198,7 +199,13 @@ function __streamBody({ scope, route, manifest, executor, records, document, tok
         await new Promise(resolve => { wake = resolve; });
         wake = undefined;
       }
-      if (!active) { controller.close(); return; }
+      // A cancel/abort that lands while this pull is parked at the wake-await
+      // resumes it on an already-cancelled stream, where close() throws
+      // TypeError ("The stream controller cannot close or enqueue") out of the
+      // resumed pull. The stream is already closed in that case, so closing is
+      // skipped; an abort without cancel() leaves the stream readable and
+      // still needs the close to terminate the body.
+      if (!active) { if (!cancelled) controller.close(); return; }
       if (current.length === 0 && queued.length) {
         const record = queued.shift();
         const { entry } = record;
@@ -238,7 +245,7 @@ function __streamBody({ scope, route, manifest, executor, records, document, tok
         controller.close();
       }
     },
-    cancel() { cleanup(); },
+    cancel() { cancelled = true; cleanup(); },
   }, { highWaterMark: 0 });
 }
 `;

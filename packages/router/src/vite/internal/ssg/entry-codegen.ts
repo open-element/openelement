@@ -198,7 +198,7 @@ function renderRouteResponseAndCatch(lines: string[], ctx: RouteHandlerEmitConte
       `    const __executor = await __createDeferredPageShell(${pathLiteral}, ${ctx.route.varName}, __pageProps(${ctx.route.varName}, __pageContext), __instance, __token);`,
     );
     lines.push(
-      `    if (__resolveAppShell(__routeMetaValue)) throw new Error('stream route requires no compiled app shell');`,
+      `    if (__resolveAppShell(__routeMetaValue)) throw new Error('stream route ' + ${pathLiteral} + ' resolved a compiled app shell, and a streamed document is flushed in parts so it cannot be wrapped: build the project with appShell: false and no layouts entries, or leave streaming off for this route.');`,
     );
     lines.push(`    const __document = documentStreamParts({`);
     lines.push(`      streamBootstrap: __streamBrowserBootstrap(),`);
