@@ -157,13 +157,13 @@
       "npm:lit@3.3.3"
     ],
     "links": {
-      "jsr:@openelement/create@1.0.0-alpha.4": {},
-      "jsr:@openelement/element@1.0.0-alpha.4": {
+      "jsr:@openelement/create@1.0.0-alpha.5": {},
+      "jsr:@openelement/element@1.0.0-alpha.5": {
         "dependencies": [
           "npm:typescript@6.0.3"
         ]
       },
-      "jsr:@openelement/router@1.0.0-alpha.4": {
+      "jsr:@openelement/router@1.0.0-alpha.5": {
         "dependencies": [
           "npm:@hono/vite-dev-server@~0.25.3",
           "npm:@openelement/url-pattern-list@0.6.0",
@@ -175,7 +175,7 @@
           "npm:vite@8.0.16"
         ]
       },
-      "jsr:@openelement/ui@1.0.0-alpha.4": {}
+      "jsr:@openelement/ui@1.0.0-alpha.5": {}
     }
   }
 }
