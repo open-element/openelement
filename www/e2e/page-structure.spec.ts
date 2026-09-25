@@ -11,6 +11,7 @@ const guideRoutes = [
   '/guide/getting-started',
   '/guide/core-concepts',
   '/guide/routing-and-data',
+  '/guide/streaming',
   '/guide/mdx',
   '/guide/api',
   '/guide/configuration',
