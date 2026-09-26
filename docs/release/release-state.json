@@ -12,25 +12,25 @@
   "packages": [
     {
       "name": "@openelement/element",
-      "registry": { "latest": "0.43.3", "alpha": "1.0.0-alpha.4", "beta": "0.44.0-beta.2.2" }
+      "registry": { "latest": "0.43.3", "alpha": "1.0.0-alpha.5", "beta": "0.44.0-beta.2.2" }
     },
     {
       "name": "@openelement/router",
-      "registry": { "latest": "0.41.0-alpha.6", "alpha": "1.0.0-alpha.4" }
+      "registry": { "latest": "0.41.0-alpha.6", "alpha": "1.0.0-alpha.5" }
     },
     {
       "name": "@openelement/create",
-      "registry": { "latest": "0.43.3", "alpha": "1.0.0-alpha.4", "beta": "0.44.0-beta.2.2" }
+      "registry": { "latest": "0.43.3", "alpha": "1.0.0-alpha.5", "beta": "0.44.0-beta.2.2" }
     },
     {
       "name": "@openelement/ui",
-      "registry": { "latest": "0.43.3", "alpha": "1.0.0-alpha.4", "beta": "0.44.0-beta.2.2" }
+      "registry": { "latest": "0.43.3", "alpha": "1.0.0-alpha.5", "beta": "0.44.0-beta.2.2" }
     }
   ],
   "commonCompleteVersion": null,
   "commonCompleteVersionNote": "No stable version is published for all four packages. @openelement/router has only 0.41.0 prereleases; the 0.43.3 stable line covers element, create, and ui only. Any non-null value here must be present in every package and is verified by release:registry-check.",
   "latestPrerelease": {
-    "version": "1.0.0-alpha.4",
+    "version": "1.0.0-alpha.5",
     "distTag": "alpha",
     "state": "complete",
     "publishedPackages": [
