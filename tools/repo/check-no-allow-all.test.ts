@@ -103,7 +103,7 @@ export const CONSUMER_SCAFFOLD_EXEMPT_LINES: ReadonlyArray<{ path: string; line:
   { path: 'README.md', line: 'deno run -A npm:@openelement/create@alpha my-app' },
   {
     path: 'packages/create/README.md',
-    line: 'deno run -A npm:@openelement/create@1.0.0-alpha.4 my-app',
+    line: 'deno run -A npm:@openelement/create@1.0.0-alpha.5 my-app',
   },
   { path: 'packages/create/README.md', line: 'deno run -A npm:@openelement/create@0.43 my-app' },
   {
