@@ -5,6 +5,7 @@
 // cross-asserted by release:state-machine:check and the version-bump anchor
 // audit. Prose that claims a published line must not use this constant
 // directly: publish is a gated human authorization, not an automatic step.
+import type { SiteLocale } from '../../site-config.ts';
 import {
   ALPHA_RESOLVES_TO,
   SOURCE_LINE_PUBLISHED,
@@ -62,7 +63,7 @@ export const REGISTRY_NOTE = Object.entries(PUBLISHED_LATEST)
   .map(([name, version]) => `${name.replace('@openelement/', '')} ${version}`)
   .join(' · ');
 
-type ReleaseLocale = 'en' | 'zh';
+type ReleaseLocale = SiteLocale;
 
 /** Docs-page stamp: "vX · repository baseline" until publish, then plain. */
 export function sourceLineStamp(locale: ReleaseLocale): string {

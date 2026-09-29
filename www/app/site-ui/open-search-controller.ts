@@ -1,5 +1,6 @@
 /** Browser-only behavior used by the open-search island. */
 import { stripLocalePrefix } from '@openelement/site-ui/link.ts';
+import type { SiteLocale } from '../../site-config.ts';
 import { searchChromeStrings } from './chrome-strings.ts';
 
 interface PagefindResultData {
@@ -56,7 +57,7 @@ interface SearchCopy {
   indexMissing: string;
 }
 
-const COPY: Record<'en' | 'zh', SearchCopy> = {
+const COPY: Record<SiteLocale, SearchCopy> = {
   en: {
     noResults: (query: string) => `No results found for “${query}”`,
     indexMissing: 'Search index not found — run deno task build to generate it',
@@ -79,7 +80,7 @@ const ZH_SECTIONS: Record<string, string> = {
 };
 
 /** The page locale is the <html lang> contract (seo-meta.spec.ts pins it). */
-function searchLocale(): 'en' | 'zh' {
+function searchLocale(): SiteLocale {
   return document.documentElement.lang.toLowerCase().startsWith('zh') ? 'zh' : 'en';
 }
 

@@ -2,6 +2,7 @@ import { definePage } from '@openelement/router';
 import { siteHead } from '@openelement/site-ui/head.ts';
 import { contentLocale } from '@openelement/site-ui/locale.ts';
 import { localizePath } from '@openelement/site-ui/link.ts';
+import type { SiteLocale } from '../../site-config.ts';
 import redirectTableJson from '../../tools/site-redirects.json' with { type: 'json' };
 import Page404 from '../components/page-404.tsx';
 
@@ -15,7 +16,7 @@ const redirectTable = redirectTableJson as {
  * already covers. A stale 404 that a cache lands on still heals itself.
  * The zh target honors toZh: translated heading ids differ per locale.
  */
-function redirectSuggestions(locale: 'en' | 'zh', popularHrefs: Set<string>) {
+function redirectSuggestions(locale: SiteLocale, popularHrefs: Set<string>) {
   const seen = new Set<string>();
   const suggestions: Array<{ label: string; href: string }> = [];
   for (const mapping of redirectTable.redirects) {
