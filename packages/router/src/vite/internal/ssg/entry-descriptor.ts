@@ -194,6 +194,30 @@ export function buildEntryDescriptor(
         names: ['createStreamHeaderChannel'],
         alias: '__streamHeaderChannel',
       });
+      // The streaming pump (ADR-0158, #1470 block d): the request scope, the
+      // deferred-field front gate, the bound body builder, and the browser
+      // bootstrap string are the imported runtime module (ADR-0160 rule a);
+      // the entry keeps the call sites and binds escapeAttr at wiring time.
+      imports.push({
+        from: '@openelement/router/server-runtime',
+        names: ['createStreamRequestScope'],
+        alias: '__streamRequestScope',
+      });
+      imports.push({
+        from: '@openelement/router/server-runtime',
+        names: ['streamFields'],
+        alias: '__streamFields',
+      });
+      imports.push({
+        from: '@openelement/router/server-runtime',
+        names: ['createStreamBody'],
+        alias: '__createStreamBody',
+      });
+      imports.push({
+        from: '@openelement/router/server-runtime',
+        names: ['STREAM_BROWSER_BOOTSTRAP'],
+        alias: '__streamBrowserBootstrap',
+      });
     }
     // The page-render seam (ADR-0160 rule a): page tag resolution, the page
     // SSR renderer factory, the props projection, page-definition/route-meta

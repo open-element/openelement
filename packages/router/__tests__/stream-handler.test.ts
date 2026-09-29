@@ -19,6 +19,12 @@ import {
   createStreamHeaderChannel,
   mergeChannelHeaders,
 } from '../src/vite/internal/server-runtime/response-channel.ts';
+import {
+  createStreamBody,
+  createStreamRequestScope,
+  STREAM_BROWSER_BOOTSTRAP,
+  streamFields,
+} from '../src/vite/internal/server-runtime/stream-runtime.ts';
 import type { PageRouteDecl, StreamRouteManifest } from '../src/vite/internal/protocol/ssg.ts';
 import { renderActionRoute, renderPageRoute } from '../src/vite/internal/ssg/entry-codegen.ts';
 import { renderStreamRuntime } from '../src/vite/internal/ssg/entry-stream-runtime.ts';
@@ -81,17 +87,19 @@ function deferred<T>() {
 }
 
 /**
- * The generated handler calls the response-header channel runtime by name
- * (`__mergeChannelHeaders`, `__streamHeaderChannel`); since ADR-0160 rule a
- * those names bind to `@openelement/router/server-runtime` imports at the
- * top of the generated entry. A `new Function` harness cannot carry import
- * declarations, so the REAL production implementations are bound in through
- * `deps` instead — the assertions below still execute the shipped module,
- * never a harness-local copy. The emitted stream runtime (renderStreamRuntime
- * below) carries the real `__createDeferredPageShell` text itself, so the
- * deferred-shell gate runs as shipped too. The action POST wiring never
- * executes here (only the GET handler is driven), but the harness binds the
- * real bridge/body-limit so the composed source matches the shipped entry.
+ * The generated handler calls the response-header channel and the streaming
+ * pump by name (`__mergeChannelHeaders`, `__streamHeaderChannel`,
+ * `__streamRequestScope`, `__streamFields`, `__streamBody`); since ADR-0160
+ * rule a those names bind to `@openelement/router/server-runtime` imports at
+ * the top of the generated entry. A `new Function` harness cannot carry
+ * import declarations, so the REAL production implementations are bound in
+ * through `deps` instead — the assertions below still execute the shipped
+ * modules, never a harness-local copy. The emitted stream runtime
+ * (renderStreamRuntime below) carries the real `__createDeferredPageShell`
+ * text itself, so the deferred-shell gate runs as shipped too. The action
+ * POST wiring never executes here (only the GET handler is driven), but the
+ * harness binds the real bridge/body-limit so the composed source matches the
+ * shipped entry.
  */
 async function handler(timeoutMs?: number, streamManifest?: StreamRouteManifest) {
   const route: PageRouteDecl = {
@@ -115,6 +123,10 @@ async function handler(timeoutMs?: number, streamManifest?: StreamRouteManifest)
       escapeAttr, escapeHtml, wrapInDocument } = deps;
     const __mergeChannelHeaders = deps.mergeChannelHeaders;
     const __streamHeaderChannel = deps.createStreamHeaderChannel;
+    const __streamRequestScope = deps.createStreamRequestScope;
+    const __streamFields = deps.streamFields;
+    const __streamBody = deps.createStreamBody({ escapeAttr, timeoutMs: deps.timeoutMs });
+    const __streamBrowserBootstrap = deps.streamBrowserBootstrap;
     const { contexts: __honoContexts, asFetchHandler: __asFetchHandler, asFetchMiddleware: __asFetchMiddleware } = deps.bridge;
     const __actionBodyLimit = deps.createActionBodyLimit(deps.maxActionBodyBytes);
     const __actionFetchHeader = deps.ACTION_FETCH_HEADER;
@@ -137,7 +149,7 @@ async function handler(timeoutMs?: number, streamManifest?: StreamRouteManifest)
     const __resolveAppShell = () => deps.resolvedAppShell ?? false;
     const __renderAppShell = html => html;
     const __ssr = () => '<p>error</p>';
-    ${renderStreamRuntime(timeoutMs)}
+    ${renderStreamRuntime()}
     ${lines.join('\n').replaceAll('import.meta.env.PROD', 'false')}
     return __pageHandlers['/'].GET[0];
   `;
@@ -154,6 +166,11 @@ async function handler(timeoutMs?: number, streamManifest?: StreamRouteManifest)
     escapeAttr,
     escapeHtml,
     wrapInDocument,
+    createStreamRequestScope,
+    streamFields,
+    createStreamBody,
+    streamBrowserBootstrap: STREAM_BROWSER_BOOTSTRAP,
+    timeoutMs,
     createStreamHeaderChannel,
     mergeChannelHeaders,
     bridge,

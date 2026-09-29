@@ -284,3 +284,82 @@ oracle evidence.
   `compiled-escape-parity` all green with assertions intact;
   `stream-handler.test.ts` drives the real generated GET handler through the
   real bridge (15 tests, unchanged assertions).
+
+### S3d — the streaming pump becomes an imported runtime (#1470 block d)
+
+- Artifact: the generated virtual Hono server entry — every shape that
+  embeds it (the dev entry, the SSG SSR bundle `dist/server/entry.js`, and
+  the request-time `dist/server/index.js` bundle) — for entries with an
+  admitted stream route; plus the `@openelement/element/authoring` export
+  surface and the derived `docs/release/public-interface-snapshot.json`.
+- Expected difference: the emitted streaming-pump bodies are gone from the
+  entry — `__streamRequestScope` (abort fan-out/cancel), `__streamJson`
+  (the 256 KiB-bounded escaping encoder), `__streamObserveThenables`,
+  `__streamFields` (the 32/64 front gate), `__streamBody` (shell commitment
+  with the typed seed attribute, the bounded wake/queue behind
+  `highWaterMark: 0`, the 30 s timeout sweep, Part backfill frames,
+  terminal error frames, the no-JS tail), and the ~14 kB
+  `__streamBrowserBootstrap` literal. The entry imports
+  `createStreamRequestScope`, `streamFields`, `createStreamBody`, and
+  `STREAM_BROWSER_BOOTSTRAP` from `@openelement/router/server-runtime`,
+  binds `const __streamBody = __createStreamBody({ escapeAttr });`, and
+  passes the bootstrap constant (not a call result) to
+  `documentStreamParts`; the bundler still inlines the pump and the
+  bootstrap into every bundled entry, and the bootstrap stays an inline head
+  script per streamed page (S4 re-homes it). The bare literals 262144, 32,
+  64, and the timeout now reference the policy constants. Byte evidence at
+  the renderer-adapter.test.ts pin: UNCHANGED (native server 17478, lit
+  server 17018, clients 1983/3138) — the pinned descriptors have no stream
+  routes, and every emission change is stream-gated; streamed entries drop
+  the pump bodies and the duplicated bootstrap literal. The
+  `__createDeferredPageShell` emission is byte-identical to the pre-block
+  text (verified by a pre/post diff of the emitter output; the bootstrap
+  string is byte-identical too, 14039 chars).
+- Reason: ADR-0160 rule (a) — the request scope, the deferred-field front
+  gate with its rejection-observation sweep, the bounded queue,
+  cancellation/timeout, the frame formats, and the browser installer are
+  server runtime semantics and must live in typecheckable, unit-testable TS
+  modules, not inside template strings. This is also the "separate
+  convergence pass" S1c scheduled for the generated-string copies of the
+  policy constants.
+- Impact: the server-runtime subpath grows from 34 to 44 public symbols and
+  `@openelement/element/authoring` gains the nine stream policy/frame
+  constants (`STREAM_MAX_FIELDS`, `STREAM_MAX_OWNERS`,
+  `STREAM_MAX_SEED_PROPERTIES`, `STREAM_MAX_PAYLOAD_LENGTH`,
+  `STREAM_TIMEOUT_MS`, `STREAM_FRAME_FORBIDDEN_TAGS`,
+  `STREAM_FRAME_UNSAFE_URL`, `STREAM_FRAME_URL_ATTRIBUTES`,
+  `STREAM_FRAME_URL_CONTROL_MAX`) — ritual regeneration of
+  `docs/release/public-interface-snapshot.json` for both packages. The
+  constants ride the kernel-free `/authoring` leaf (same transport as the
+  action protocol constants in S3c), so the typed module imports them as
+  real values with no Element-runtime edge and the LIT graph stays
+  kernel-free. One serialized copy is kept BY DESIGN in generated code: the
+  `__createDeferredPageShell` gate stays emitted (entry-stream-runtime.ts
+  shrinks to that one emitter) because the read-only stream-manifest oracle
+  pins its emitted shape (`stream-manifest.test.ts`: the function head and
+  the `createDeferredDsdExecutor(...)` return line); migrating it requires
+  an oracle amendment, so the block-b hand-off note resolves to "kept, with
+  the oracle" for this lane. The string-eval harness in
+  stream-handler.test.ts binds the real module functions through its
+  evaluation context (as in S3a) — no harness-local reimplementation; the
+  deleted pump emission was the "rest" this block removed.
+  `stream-browser.test.ts` now imports the bootstrap constant from the
+  typed module and still executes the byte-identical string in real
+  Chromium. A new `server-runtime-stream-runtime.test.ts` suite (13 tests)
+  drives the typed module directly: the scope fan-out/cancel contract, the
+  front-gate rejections and their observation sweep, the policy bounds
+  (field budget, oversized range → error frames), the shell commitment, the
+  terminal error frame, the timeout sweep, and the bootstrap's policy
+  interpolation.
+- Oracle evidence: `stream-manifest` green unmodified (13 tests — its two
+  emitted-shape assertions hold byte for byte); `request-time-parity` green
+  on all 29 steps for both runtimes against the rebuilt fixture;
+  `lit-graph-boundary` green (the walk resolves the new stream module
+  through the subpath's `/authoring` edge and the LIT graph stays
+  kernel-free, negative control intact); `renderer-scope-parity`,
+  `ssg-admission-parity`, `compiler-open-core-boundary`,
+  `registry-marker-drift`, and `compiled-escape-parity` all green with
+  assertions intact; `renderer-adapter.test.ts` byte pins unchanged;
+  `stream-handler.test.ts` green (15 tests, unchanged assertions) with the
+  real pump bound through deps; `stream-browser.test.ts` green (7 tests,
+  real Chromium against the byte-identical bootstrap).

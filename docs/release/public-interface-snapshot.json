@@ -113,7 +113,7 @@
           ]
         },
         "./authoring": {
-          "publicShapeSha256": "5ecbd25c4ab5c143b33cff84aee5755e6a0f83e0d0193e1ba65d8c58b8d76af7",
+          "publicShapeSha256": "876778996779a5c21932ffcbda76a031cf6e27539e99f6fea7ddb470736e46b1",
           "publicSymbols": [
             "ACTION_FETCH_HEADER=value:\"x-openelement-action\"",
             "DANGEROUS_KEYS=value:ReadonlySet<string>",
@@ -122,6 +122,15 @@
             "HydrationStrategy=type:union(\"idle\"|\"load\"|\"only\"|\"visible\")",
             "OpenElementError=type:{readonly code:string;readonly phase:union(\"build\"|\"csr\"|\"navigation\"|\"render\"|\"ssr\"|\"unknown\"|\"validation\");readonly recoverable:union(false|true);readonly severity:union(\"error\"|\"warning\");readonly statusCode?:union(number|undefined);toJSON:{call:()=>Record<string, unknown>}}|value:{construct:(message:string,options:{cause?:union(Error|undefined);code?:union(string|undefined);phase?:union(\"build\"|\"csr\"|\"navigation\"|\"render\"|\"ssr\"|\"unknown\"|\"validation\"|undefined);recoverable?:union(false|true|undefined);severity?:union(\"error\"|\"warning\"|undefined);statusCode?:union(number|undefined)})=>{readonly code:string;readonly phase:union(\"build\"|\"csr\"|\"navigation\"|\"render\"|\"ssr\"|\"unknown\"|\"validation\");readonly recoverable:union(false|true);readonly severity:union(\"error\"|\"warning\");readonly statusCode?:union(number|undefined);toJSON:{call:()=>Record<string, unknown>}}}",
             "PROBLEM_JSON_MEDIA_TYPE=value:\"application/problem+json\"",
+            "STREAM_FRAME_FORBIDDEN_TAGS=value:tuple(\"script\",\"style\",\"template\",\"iframe\",\"object\",\"embed\",\"base\",\"meta\",\"link\")",
+            "STREAM_FRAME_UNSAFE_URL=value:RegExp",
+            "STREAM_FRAME_URL_ATTRIBUTES=value:tuple(\"href\",\"src\",\"action\",\"formaction\",\"xlink:href\")",
+            "STREAM_FRAME_URL_CONTROL_MAX=value:32",
+            "STREAM_MAX_FIELDS=value:32",
+            "STREAM_MAX_OWNERS=value:64",
+            "STREAM_MAX_PAYLOAD_LENGTH=value:number",
+            "STREAM_MAX_SEED_PROPERTIES=value:64",
+            "STREAM_TIMEOUT_MS=value:30000",
             "assertValidTagName=value:{call:(tagName:string)=>void}",
             "injectPropsSafe=value:{call:(target:Record<string, unknown>,props:Record<string, unknown>,tagName:string,log:{debug:{call:(message:string)=>void};warn:{call:(message:string)=>void}})=>void}",
             "isDangerousKey=value:{call:(key:string)=>union(false|true)}",
@@ -479,7 +488,7 @@
           ]
         },
         "./server-runtime": {
-          "publicShapeSha256": "2aa4f86b79c1d5ce283d67c43fb3e05d617a7934bb3ce642fc6542c333adcdfc",
+          "publicShapeSha256": "7c34e27e8f689a1d25985d61828bd4f36f8b7a59d7ffcce3d49f4c258fda6986",
           "publicSymbols": [
             "ACTION_FETCH_HEADER=value:\"x-openelement-action\"",
             "ActionExecution=type:{actionResult?:union(undefined|{data:unknown;kind:\"failure\";status:number}|{data:unknown;kind:\"success\"});response?:union(Response|undefined)}",
@@ -502,7 +511,15 @@
             "ProjectedProps=type:{index:string=>unknown}",
             "ResponseHeaderChannel=type:{commit:{call:()=>void};readonly channel:Headers}",
             "RouteModule=type:{default?:union(undefined|{index:string=>unknown;openElementPage?:union(undefined|{index:string=>unknown})});index:string=>unknown;loader?:unknown}",
+            "STREAM_BROWSER_BOOTSTRAP=value:string",
             "StatusHtmlRenderer=type:{call:(title:unknown,message:unknown)=>string}",
+            "StreamBodyConfig=type:{escapeAttr:{call:(value:string)=>string};timeoutMs?:union(number|undefined)}",
+            "StreamBodyFn=type:{call:(options:{document:{readonly prefix:string;readonly suffix:string};executor:{readonly owner:{readonly instanceId:string};readonly seed:Record<string, { type: string; }>;readonly shell:string;resolvedValue:{call:(field:string,value:unknown)=>unknown};serializeResolved:{call:(field:string,value:unknown)=>array(string)}};manifest:{fields:array({field:string;owners:array({index:number;kind:union(\"part\"|\"region\");location:string;source:ProgramSourceRange});signal:string});program:{sha256:string;tag:string;version:number}};records:array({error:unknown;failed:union(false|true);notify?:union(undefined|{call:()=>void});readonly entry:{field:string;owners:array({index:number;kind:union(\"part\"|\"region\");location:string;source:ProgramSourceRange});signal:string};settled:union(false|true);value:unknown});route:string;scope:{abortWork:{call:()=>void};cancel:{call:()=>void};readonly request:Request;readonly upstreamSignal:AbortSignal};token:string})=>ReadableStream<Uint8Array<ArrayBufferLike>>}",
+            "StreamBodyOptions=type:{document:{readonly prefix:string;readonly suffix:string};executor:{readonly owner:{readonly instanceId:string};readonly seed:Record<string, { type: string; }>;readonly shell:string;resolvedValue:{call:(field:string,value:unknown)=>unknown};serializeResolved:{call:(field:string,value:unknown)=>array(string)}};manifest:{fields:array({field:string;owners:array({index:number;kind:union(\"part\"|\"region\");location:string;source:ProgramSourceRange});signal:string});program:{sha256:string;tag:string;version:number}};records:array({error:unknown;failed:union(false|true);notify?:union(undefined|{call:()=>void});readonly entry:{field:string;owners:array({index:number;kind:union(\"part\"|\"region\");location:string;source:ProgramSourceRange});signal:string};settled:union(false|true);value:unknown});route:string;scope:{abortWork:{call:()=>void};cancel:{call:()=>void};readonly request:Request;readonly upstreamSignal:AbortSignal};token:string}",
+            "StreamDocumentParts=type:{readonly prefix:string;readonly suffix:string}",
+            "StreamExecutorView=type:{readonly owner:{readonly instanceId:string};readonly seed:Record<string, { type: string; }>;readonly shell:string;resolvedValue:{call:(field:string,value:unknown)=>unknown};serializeResolved:{call:(field:string,value:unknown)=>array(string)}}",
+            "StreamFieldRecord=type:{error:unknown;failed:union(false|true);notify?:union(undefined|{call:()=>void});readonly entry:{field:string;owners:array({index:number;kind:union(\"part\"|\"region\");location:string;source:ProgramSourceRange});signal:string};settled:union(false|true);value:unknown}",
+            "StreamRequestScope=type:{abortWork:{call:()=>void};cancel:{call:()=>void};readonly request:Request;readonly upstreamSignal:AbortSignal}",
             "TrustedHtmlValue=type:{readonly html:string}",
             "actionErrorResponse=value:{call:(context:{get:{call:(key:string)=>unknown};header:{call:(name:string,value:string)=>void};json:{call:(object:unknown,status:union(number|undefined),headers:union(Record<string, string>|undefined))=>Response};readonly res:Response;redirect:{call:(location:string,status:union(number|undefined))=>Response};req:{header:{call:(name:string)=>union(string|undefined)};readonly raw:Request;readonly url:string};text:{call:(text:string,status:union(number|undefined))=>Response}},routePath:string,error:unknown,production:union(false|true))=>Response}",
             "actionRedirectResponse=value:{call:(context:{get:{call:(key:string)=>unknown};header:{call:(name:string,value:string)=>void};json:{call:(object:unknown,status:union(number|undefined),headers:union(Record<string, string>|undefined))=>Response};readonly res:Response;redirect:{call:(location:string,status:union(number|undefined))=>Response};req:{header:{call:(name:string)=>union(string|undefined)};readonly raw:Request;readonly url:string};text:{call:(text:string,status:union(number|undefined))=>Response}},location:string,isFetch:union(false|true))=>Response}",
@@ -515,7 +532,9 @@
             "createNativePageRenderer=value:{call:(deps:{customElements:{get:{call:(tag:string)=>unknown}};renderDsd:{call:(tag:string,options:{componentClass?:unknown;projectedChildren?:union(ProjectedChildren|undefined);props?:union(Record<string, unknown>|undefined);sourceInfo?:union(undefined|{route?:union(string|undefined);source?:union(string|undefined)});ssrRenderableTags?:union(array(string)|undefined)})=>{html:string}};ssrRenderableTags:array(string)})=>{call:(tag:string,props:union(Record<string, unknown>|undefined),sourceInfo:union(undefined|{route?:union(string|undefined);source?:union(string|undefined)}),depth:union(number|undefined),projectedChildren:union(ProjectedChildren|undefined))=>string}}",
             "createPagePropsRuntime=value:{call:(deps:{dangerousKeys:ReadonlySet<string>})=>{defaultPageProps:{call:(context:{data?:unknown;index:string=>unknown;params?:unknown})=>{index:string=>unknown}};pageErrorProps:{call:(routeModule:unknown,error:unknown,context:{data?:unknown;index:string=>unknown;params?:unknown})=>{index:string=>unknown}};pageProps:{call:(routeModule:unknown,context:{data?:unknown;index:string=>unknown;params?:unknown})=>{index:string=>unknown}}}}",
             "createStatusHtml=value:{call:(escapeHtml:{call:(value:string)=>string})=>{call:(title:unknown,message:unknown)=>string}}",
+            "createStreamBody=value:{call:(config:{escapeAttr:{call:(value:string)=>string};timeoutMs?:union(number|undefined)})=>{call:(options:{document:{readonly prefix:string;readonly suffix:string};executor:{readonly owner:{readonly instanceId:string};readonly seed:Record<string, { type: string; }>;readonly shell:string;resolvedValue:{call:(field:string,value:unknown)=>unknown};serializeResolved:{call:(field:string,value:unknown)=>array(string)}};manifest:{fields:array({field:string;owners:array({index:number;kind:union(\"part\"|\"region\");location:string;source:ProgramSourceRange});signal:string});program:{sha256:string;tag:string;version:number}};records:array({error:unknown;failed:union(false|true);notify?:union(undefined|{call:()=>void});readonly entry:{field:string;owners:array({index:number;kind:union(\"part\"|\"region\");location:string;source:ProgramSourceRange});signal:string};settled:union(false|true);value:unknown});route:string;scope:{abortWork:{call:()=>void};cancel:{call:()=>void};readonly request:Request;readonly upstreamSignal:AbortSignal};token:string})=>ReadableStream<Uint8Array<ArrayBufferLike>>}}",
             "createStreamHeaderChannel=value:{call:(route:string)=>{commit:{call:()=>void};readonly channel:Headers}}",
+            "createStreamRequestScope=value:{call:(original:Request)=>{abortWork:{call:()=>void};cancel:{call:()=>void};readonly request:Request;readonly upstreamSignal:AbortSignal}}",
             "localeFromPath=value:{call:(locales:array(string),path:unknown,fallback:string)=>string}",
             "localizeShellHref=value:{call:(href:string,locale:string,defaultLocale:string)=>string}",
             "mergeChannelHeaders=value:{call:(response:Response,channel:Headers)=>Response}",
@@ -523,7 +542,8 @@
             "resolveCompiledPageTag=value:{call:(routeModule:unknown,fallbackTag:string)=>string}",
             "resolveLitPageTag=value:{call:(routeModule:unknown,fallbackTag:string)=>string}",
             "routeMeta=value:{call:(routeModule:unknown)=>Record<string, unknown>}",
-            "runActionProtocol=value:{call:(context:{get:{call:(key:string)=>unknown};header:{call:(name:string,value:string)=>void};json:{call:(object:unknown,status:union(number|undefined),headers:union(Record<string, string>|undefined))=>Response};readonly res:Response;redirect:{call:(location:string,status:union(number|undefined))=>Response};req:{header:{call:(name:string)=>union(string|undefined)};readonly raw:Request;readonly url:string};text:{call:(text:string,status:union(number|undefined))=>Response}},routeModule:unknown,loadContext:intersection(Record<string, unknown>&{env?:unknown}),renderStatusPage:{call:(title:string,message:string,status:number)=>Response},state:{isFetch:union(false|true)})=>Promise<ActionExecution>}"
+            "runActionProtocol=value:{call:(context:{get:{call:(key:string)=>unknown};header:{call:(name:string,value:string)=>void};json:{call:(object:unknown,status:union(number|undefined),headers:union(Record<string, string>|undefined))=>Response};readonly res:Response;redirect:{call:(location:string,status:union(number|undefined))=>Response};req:{header:{call:(name:string)=>union(string|undefined)};readonly raw:Request;readonly url:string};text:{call:(text:string,status:union(number|undefined))=>Response}},routeModule:unknown,loadContext:intersection(Record<string, unknown>&{env?:unknown}),renderStatusPage:{call:(title:string,message:string,status:number)=>Response},state:{isFetch:union(false|true)})=>Promise<ActionExecution>}",
+            "streamFields=value:{call:(data:unknown,manifest:{fields:array({field:string;owners:array({index:number;kind:union(\"part\"|\"region\");location:string;source:ProgramSourceRange});signal:string});program:{sha256:string;tag:string;version:number}})=>array({error:unknown;failed:union(false|true);notify?:union(undefined|{call:()=>void});readonly entry:{field:string;owners:array({index:number;kind:union(\"part\"|\"region\");location:string;source:ProgramSourceRange});signal:string};settled:union(false|true);value:unknown})}"
           ]
         },
         "./vite": {

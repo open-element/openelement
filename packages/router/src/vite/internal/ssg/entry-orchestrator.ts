@@ -410,6 +410,11 @@ export function renderEntry(desc: EntryDescriptor): string {
   if (desc.pageRoutes.some((route) => route.streamManifest)) {
     lines.push(renderStreamRuntime());
     lines.push('');
+    lines.push(
+      "// Stream pump runtime (ADR-0160 rule a), bound to the entry's escapeAttr import.",
+    );
+    lines.push('const __streamBody = __createStreamBody({ escapeAttr });');
+    lines.push('');
   }
 
   // --- App creation + Middleware ---

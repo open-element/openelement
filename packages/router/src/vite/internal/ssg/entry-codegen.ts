@@ -184,7 +184,7 @@ function renderRouteResponseAndCatch(lines: string[], ctx: RouteHandlerEmitConte
       `    if (__resolveAppShell(__routeMetaValue)) throw new Error('stream route ' + ${pathLiteral} + ' resolved a compiled app shell, and a streamed document is flushed in parts so it cannot be wrapped: build the project with appShell: false and no layouts entries, or leave streaming off for this route.');`,
     );
     lines.push(`    const __document = documentStreamParts({`);
-    lines.push(`      streamBootstrap: __streamBrowserBootstrap(),`);
+    lines.push(`      streamBootstrap: __streamBrowserBootstrap,`);
     for (
       const optionLine of documentWrapOptionsLines({
         titleExpr: `__doc.title || ${quoteGeneratedJavaScriptValue(docConfig.title)}`,
