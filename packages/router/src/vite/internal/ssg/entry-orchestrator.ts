@@ -121,9 +121,10 @@ export function renderEntry(desc: EntryDescriptor): string {
   //   dead code). The setter seam and the descriptor list live in the
   //   generated-app factory (server-runtime/app.ts).
   // - Prod request-time: whether Phase 2 actually shipped a client bundle is
-  //   only known after the SSR build, so the generated dist/server/index.js
-  //   calls __setRequestTimeClientScript (from ./client-script.js) once at
-  //   startup. SSG prerendering never calls the setter, so static pages stay
+  //   only known at request time, so the generated dist/server/index.js
+  //   calls __setRequestTimeClientScript (with the entry URL from the
+  //   structured client asset manifest, ./client-assets.js) once at startup.
+  //   SSG prerendering never calls the setter, so static pages stay
   //   script-free here and keep the post-build injector (postprocess.ts).
   const hasClientEntry = desc.islands.length > 0 || desc.hasEnhancedForms === true;
   lines.push('// #951: island client script descriptors (serialized by wrapInDocument)');

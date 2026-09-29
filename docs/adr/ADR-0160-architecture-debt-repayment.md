@@ -538,3 +538,45 @@ oracle evidence.
   and the generated entry emission is byte-pinned by
   `renderer-adapter.test.ts`; no protocol semantics change (the number is
   identical; only its carriage changes).
+
+### S4a — the client asset manifest and the client-before-SSG build order (#1471 items 1/2/5)
+
+- Artifact: the request-time artifacts of every built project tree — the
+  generated `dist/server/index.js` module and its companion data module
+  (`dist/server/client-script.js` → `dist/server/client-assets.js`).
+- Expected difference: the generated `index.js` imports `clientAssets` from
+  `./client-assets.js` and calls
+  `__setRequestTimeClientScript(clientAssets.entry)` (previously it imported
+  `clientScriptSrc` from `./client-script.js`); the companion module now
+  carries the structured client asset manifest (`{ entry, islands: Record<tag,
+  { file, strategy, preload? }>, shared[] }`) instead of a single URL string.
+  Everything else in every output tree is unchanged: rendered HTML, client
+  chunks, island manifests, and the generated server entry
+  (`dist/server/entry.js`) are byte-identical (verified by full-tree diff of
+  the `router-native-framework`, `router-lit-framework`, and
+  `router-request-time` fixture rebuilds against their pre-change builds).
+- Reason: rule (d) — client asset injection is manifest-driven. The new
+  manifest (`vite/internal/protocol/client-assets.ts`, built by
+  `vite/client-asset-manifest.ts` inside the Phase 2 client build) keys
+  islands by compile-time identity (delivery tag) joined with the Vite build
+  manifest (`dist/client/.vite/manifest.json`) and Rollup output module
+  metadata — a chunk is matched by the module ids it contains, so islands
+  that share a chunk keep their identity and no code parses output chunk
+  file names. `closeBundle` now runs Phase 1 SSR → Phase 2 client → Phase 3
+  SSG: the SSG render pass and the request-time artifact carry the final
+  asset addresses. SSG consumes exactly its pre-reorder Phase 1 facts —
+  closeBundle snapshots the island declarations before Phase 2 narrows them
+  to the reachable client set. The rendered-HTML script injection stays a
+  post-Phase-3 step until the S4 document-renderer item; HTML bytes do not
+  move. The build-context gains the internal `clientAssetManifest` slot
+  (not a declared export; the public-interface snapshot is unchanged), and
+  build.ts's `readClientEntryFromManifest` is retired with its test — its
+  entry lookup lives on as `findClientEntryFile` in the new module, covered
+  by `client-asset-manifest.test.ts`.
+- Oracle evidence: `request-time-parity` green on all 29 steps against the
+  rebuilt fixture (the generated `index.js` drives the same request-time
+  protocol through the manifest's `entry`); `stream-manifest`,
+  `renderer-scope-parity`, `ssg-admission-parity`, `lit-graph-boundary`,
+  and the `generated-entry-gate` all green with assertions intact, and the
+  `renderer-adapter.test.ts` byte pins (14141/14254 server, 2012/3167
+  client) hold — no generated-entry bytes moved.

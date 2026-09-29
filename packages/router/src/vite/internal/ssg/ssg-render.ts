@@ -22,6 +22,10 @@ import type {
   SsgRenderSummary,
   SsrBundle,
 } from '../protocol/ssg.ts';
+import {
+  EMPTY_CLIENT_ASSET_MANIFEST,
+  serializeClientAssetsModule,
+} from '../protocol/client-assets.ts';
 import { createLogger } from '@openelement/element';
 import { expandDynamicRoutes, expandI18nLocales } from './ssg-dynamic.ts';
 import { findHtmlFiles, renderRequestTimeServerModule } from './ssg-helpers.ts';
@@ -229,11 +233,13 @@ export async function ssgRender(
         requestTimeRoutes.map((r) => ({ path: r.path })),
       ),
     );
-    // Placeholder: Phase 2 overwrites this with the real island client entry
-    // URL when the project has islands (build.ts writeRequestTimeClientScript).
+    // Placeholder: Phase 2's client asset manifest overwrites this with the
+    // real record when the project ships a client bundle (build.ts
+    // writeRequestTimeClientAssets). Structured data only — no injection
+    // logic (#1471).
     Deno.writeTextFileSync(
-      join(serverDir, 'client-script.js'),
-      `export const clientScriptSrc = '';\n`,
+      join(serverDir, 'client-assets.js'),
+      serializeClientAssetsModule(EMPTY_CLIENT_ASSET_MANIFEST),
     );
     // Local preview is served by the start CLI from TypeScript source
     // (Deno.serve over the shared fetch handler); production deploys go

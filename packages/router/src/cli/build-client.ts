@@ -2,7 +2,9 @@
  * @openelement/router - CLI: Client Island Build
  *
  * Client build for Island components.
- * Produces dist/client/islands/*.js + manifest for SSG post-processing.
+ * Produces dist/client/islands/*.js + manifest for SSG post-processing, and
+ * the client asset manifest (#1471) — compile-time island identity joined
+ * with the build manifest and Rollup module metadata.
  *
  * This module exports buildClient() only - it is called from
  * closeBundle() in open:build plugin. No longer a standalone CLI entry.
@@ -28,6 +30,11 @@ import { walkHtmlFileEntries } from '../vite/internal/html-files.ts';
 import { VIRTUAL_RUNTIME_SPECIFIERS } from '../vite/internal/ssg/entry-generators.ts';
 import type { OpenElementBuildContext } from '../vite/build-context.ts';
 import type { IslandDecl } from '../vite/internal/protocol/ssg.ts';
+import type { ClientAssetManifest } from '../vite/internal/protocol/client-assets.ts';
+import {
+  type ClientAssetIslandInput,
+  createClientAssetManifest,
+} from '../vite/client-asset-manifest.ts';
 import { createNpmSpecifierPlugin } from '../vite/npm-specifier-plugin.ts';
 import { createDenoImportMapResolvePlugin } from '../vite/deno-import-map.ts';
 import { analyzeModuleSemantics, compiledElementPlugin } from '@openelement/element/compiler';
@@ -233,7 +240,7 @@ type ViteInlineConfigWithManifest = Omit<InlineConfig, 'build'> & {
   build?: ViteBuildOptionsWithManifest;
 };
 
-async function buildClient(ctx: OpenElementBuildContext): Promise<void> {
+async function buildClient(ctx: OpenElementBuildContext): Promise<ClientAssetManifest | null> {
   const root = ctx.phase3.root || Deno.cwd();
   const outDir = ctx.phase3.outDir || DEFAULT_OUT_DIR;
   const islandsDir = ctx.phase3.islandsDir || DEFAULT_ISLANDS_DIR;
@@ -271,7 +278,7 @@ async function buildClient(ctx: OpenElementBuildContext): Promise<void> {
   ) {
     await removeClientDeliveryArtifacts(root, outDir);
     log.info('No islands found - zero client JS output');
-    return;
+    return null;
   }
 
   const localDeliveryTags = localIslands.flatMap((tagName) =>
@@ -319,7 +326,7 @@ async function buildClient(ctx: OpenElementBuildContext): Promise<void> {
   ) {
     await removeClientDeliveryArtifacts(root, outDir);
     log.info('No admitted reachable islands - zero client JS output');
-    return;
+    return null;
   }
 
   const totalIslands = selectedLocalTags.length + selectedCompilerBehaviorDecls.length +
@@ -341,6 +348,26 @@ async function buildClient(ctx: OpenElementBuildContext): Promise<void> {
     compilerBehaviorDecls: selectedCompilerBehaviorDecls,
     upgradeStrategy: ctx.phase3.upgradeStrategy,
   });
+
+  // #1471: compile-time island identity for the client asset manifest — the
+  // same list the entry was generated from, with local islands carrying the
+  // absolute source path buildClientIslandEntries resolved.
+  const clientAssetIslands: ClientAssetIslandInput[] = [
+    ...selectedLocalTags.map((tagName, index) => ({
+      entry: islandEntries[index],
+      sourceFile: resolve(
+        root,
+        selectedLocalFiles[index]
+          ? `${islandsDir}/${selectedLocalFiles[index]}`
+          : `${islandsDir}/${tagName}.ts`,
+      ),
+    })),
+    ...islandEntries.slice(selectedLocalTags.length).map((entry) => ({
+      entry,
+      // Package/compiler islands declare a module-path fragment as identity.
+      sourceFile: null,
+    })),
+  ];
 
   const clientEntryCode = generateClientEntry(islandEntries, {
     enhancedForms,
@@ -513,8 +540,23 @@ async function buildClient(ctx: OpenElementBuildContext): Promise<void> {
   };
 
   try {
-    await viteBuild(clientConfig);
+    const outputs = await viteBuild(clientConfig);
     log.info('Client bundle built -> ' + clientOutDir);
+
+    // #1471: the client asset manifest — compile-time island identity joined
+    // with the build manifest and Rollup module metadata (never output file
+    // names). Stored on ctx so closeBundle's post-processing and the
+    // request-time artifact consume the same record.
+    ctx.clientAssetManifest = await createClientAssetManifest({
+      root,
+      base: clientBase,
+      islands: clientAssetIslands,
+      manifestPath: join(clientOutDir, '.vite', 'manifest.json'),
+      buildResult: outputs,
+    });
+    if (!ctx.clientAssetManifest) {
+      log.warn('Client build manifest missing - client asset manifest not built');
+    }
 
     const { printBuildManifest } = await import('../vite/build-manifest.ts');
     printBuildManifest({ root, outDir, phase: 2, budget: ctx.phase3.manifestBudget });
@@ -522,6 +564,8 @@ async function buildClient(ctx: OpenElementBuildContext): Promise<void> {
     log.error(`Client build failed: ${formatError(error)}`);
     throw error;
   }
+
+  return ctx.clientAssetManifest;
 }
 
 export { buildClient };
