@@ -1,7 +1,7 @@
 /**
  * Supported development JSX transform entrypoint for Element authors.
  *
- * 0.44: this module exists only so TSX sources typecheck while authoring
+ * This module exists only so TSX sources typecheck while authoring
  * components that the OpenElement compiler lowers to Part Programs. Compiled
  * output never calls `jsxDEV`, so it fails closed with a diagnostic — JSX
  * executing at runtime means the module never passed through the compiler.
@@ -15,7 +15,7 @@ import { FacadeErrorCode, OpenElementError } from './internal/core/errors.ts';
 
 function jsxOutsideCompiler(): never {
   throw new OpenElementError(
-    '[openElement] JSX executed outside the 0.44 compiler pipeline. ' +
+    '[openElement] JSX executed outside the compiler pipeline. ' +
       'The runtime JSX factory was removed; run the OpenElement Vite adapter ' +
       'so the component is compiled to a Part Program.',
     { code: FacadeErrorCode.JSX_OUTSIDE_COMPILER, phase: 'build' },

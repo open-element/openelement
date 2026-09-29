@@ -71,7 +71,7 @@ export async function ssgRender(
     );
   }
 
-  // ── Request-time route partition (0.42.0-alpha.1) ──
+  // ── Request-time route partition ──
   // renderIntent.mode was inert metadata before this line: 'dynamic' routes
   // are no longer prerendered — they are served at request time by the
   // generated server entry and recorded in server-manifest.json.

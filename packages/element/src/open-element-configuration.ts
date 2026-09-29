@@ -6,7 +6,7 @@ import { themeManager } from './open-element-styles.ts';
 export class OpenElementConfiguration extends OpenElementBase {
   static styles?: StyleSheetLike | StyleSheetLike[];
   /**
-   * Compile-time hint for the intended root mode. The 0.44 runtime derives
+   * Compile-time hint for the intended root mode. The runtime derives
    * the actual root mode from the compiled program's `root.kind`; this static
    * remains part of the authoring-time configuration contract.
    */
@@ -36,7 +36,7 @@ export class OpenElementConfiguration extends OpenElementBase {
     themeManager.resetStyles();
   }
 
-  // v0.44: the compiled statics own `observedAttributes` — generated classes
+  // The compiled statics own `observedAttributes` — generated classes
   // declare `static observedAttributes = [...]`, which shadows any inherited
   // member in the normal way. The legacy static-props union getter/setter was
   // removed with the legacy renderer.

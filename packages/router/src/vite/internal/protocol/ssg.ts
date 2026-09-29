@@ -482,7 +482,7 @@ export interface BuildManifestArtifact {
   routes: Array<{ kind: 'page' | 'api'; path: string; tagName?: string; isDynamic: boolean }>;
   islands: BuildIslandInput[];
   /**
-   * Paths served at request time (renderIntent mode 'dynamic', 0.42.0-alpha.1).
+   * Paths served at request time (renderIntent mode 'dynamic').
    * Absent for pure-static builds.
    */
   requestTimeRoutes?: string[];

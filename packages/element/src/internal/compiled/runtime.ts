@@ -1,5 +1,5 @@
 /**
- * @openelement/element — compiled Part Program runtime (v0.44 alpha.8).
+ * @openelement/element — compiled Part Program runtime.
  *
  * A Part Program v1 is executed by three entry points in this file:
  * `serializeToHtml`, `createFreshDom`, and `claimExistingDom`. They share the

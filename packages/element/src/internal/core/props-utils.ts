@@ -6,8 +6,8 @@
  * Filters internal `__openElement` prefixed keys and uses Reflect.get
  * for safe access to inherited getters.
  *
- * v0.42.0-alpha.15 (#903): normalizePublicProps is the shared
- * prop-normalization core. DANGEROUS_KEYS filtering applies on every
+ * normalizePublicProps (#903) is the shared prop-normalization core.
+ * DANGEROUS_KEYS filtering applies on every
  * projection path (host prop collection / SSR serialization here, page
  * projection via injectPropsSafe and projectPageProps, and the Router tooling
  * generated server runtime — #1214) through the single isDangerousKey

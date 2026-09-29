@@ -118,7 +118,7 @@ export function parseRouteFilePath(filePath: string): string {
   p = p.replace(/\.[^.]+$/, '');
 
   // v0.25: AST-verified — path utility, converts [param] to :param
-  // 0.42.0-alpha.5 (#556): a catch-all segment [...path] becomes the Hono
+  // #556: a catch-all segment [...path] becomes the Hono
   // named regex parameter :path{.+} (matches across '/'), not the literal
   // single-segment ':...path' the naive replacement produced.
   p = p.replace(/\[\.\.\.([^\]]+)\]/g, ':$1{.+}');
@@ -247,7 +247,7 @@ export async function scanRoutes(
         const routePath = parseRouteFilePath(relativePath);
         const routeType = getRouteType(relativePath);
         // v0.25: AST-verified — path utility, extracts [param] patterns
-        // 0.42.0-alpha.5 (#556): a catch-all [...path] contributes the bare
+        // #556: a catch-all [...path] contributes the bare
         // param name 'path' (no '...' prefix) to match the ':path{.+}' pattern.
         const paramMatches = relativePath.match(/\[([^\]]+)\]/g);
         const params = paramMatches

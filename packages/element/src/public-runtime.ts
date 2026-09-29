@@ -1,7 +1,7 @@
 /**
  * Deliberate root-facade implementation boundary. Not a package subpath.
  *
- * v0.44: this facade re-exports only modules that survived the compiled
+ * This facade re-exports only modules that survived the compiled
  * Part Program reentry. The legacy VNode renderer, runtime JSX factories,
  * hydration-scope runtime, island registration and client-runtime helpers
  * were removed; the server-render entry (`renderDsd`) and the pre-upgrade
@@ -140,7 +140,7 @@ function classNameOf(ctor: object): string {
 function failUncompiled(ctor: object, tag: string): never {
   throw new OpenElementError(
     `[openElement] <${tag}> (${classNameOf(ctor)}) has no compiled Part Program. ` +
-      'renderDsd only serializes classes produced by the 0.44 compiler ' +
+      'renderDsd only serializes classes produced by the OpenElement compiler ' +
       '(@openelement/element/compiler open:compiled-element transform).',
     { code: FacadeErrorCode.PROGRAM_MISSING, phase: 'ssr' },
   );
@@ -240,7 +240,7 @@ function seedCompiledProperties(
         `[openElement] <${
           ctor.__partProgram!.tag
         }> computed property "${record.name}" has no generated factory. ` +
-          'Rebuild the component through the 0.44 compiler.',
+          'Rebuild the component through the OpenElement compiler.',
         { code: FacadeErrorCode.COMPUTED_FACTORY_MISSING, phase: 'ssr' },
       );
     }
@@ -543,7 +543,7 @@ export async function createDeferredDsdExecutor(
  * mode comes from `program.root.kind` (light content vs. DSD open/closed).
  *
  * Fails closed with `OE_PROGRAM_MISSING` for unregistered or uncompiled
- * classes — there is no runtime JSX fallback renderer in 0.44.
+ * classes — there is no runtime JSX fallback renderer.
  */
 function renderDsdAtDepth(
   input: string | CustomElementConstructor,
@@ -565,7 +565,7 @@ function renderDsdAtDepth(
       `[openElement] renderDsd(${
         typeof input === 'string' ? JSON.stringify(input) : 'class'
       }) found no compiled class: pass options.componentClass or register the tag. ` +
-        'The 0.44 serializer reads the compiled statics from the class and fails ' +
+        'The serializer reads the compiled statics from the class and fails ' +
         'closed for unregistered components.',
       { code: FacadeErrorCode.PROGRAM_MISSING, phase: 'ssr' },
     );

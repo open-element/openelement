@@ -81,7 +81,7 @@ export function renderEntry(desc: EntryDescriptor): string {
     islandLookup[island.tagName] = island.modulePath;
   }
   // --- App-shell imports + explicit registration ---
-  // Compiled shell modules do not self-register (0.44): the entry imports the
+  // Compiled shell modules do not self-register: the entry imports the
   // module namespace and registers the default-exported compiled class under
   // the configured shell tag. renderDsd fails closed on a tag mismatch.
   // Deduped by importPath — one module maps to one compiled class and tag.
@@ -253,9 +253,8 @@ export function renderEntry(desc: EntryDescriptor): string {
     // (registration decoupling) a definePage route's page class registration
     // is decoupled from the module's tagName export; since #1276 (B1.3-F1) the
     // registered tag resolves from the compiled Part Program
-    // (__resolvePageTag), with the path-derived tag as fallback. v0.44
-    // compiled modules never
-    // self-register, so the entry owns every registration. The ownership
+    // (__resolvePageTag), with the path-derived tag as fallback. Compiled
+    // modules never self-register, so the entry owns every registration. The ownership
     // guard still covers dev re-evaluation — overwriting a fresh
     // self-registered class with the entry's page class would recurse when
     // its compiled program emits the same tag. The entry therefore only
@@ -357,8 +356,7 @@ export function renderEntry(desc: EntryDescriptor): string {
   // --- SSG: headExtras via define injection ---
   // Always emitted in SSG mode: renderRouteHandler references __headExtras
   // unconditionally, so a project without headExtras would otherwise render
-  // every static page into a 500 (latent until the request-time fixture hit
-  // it in 0.42.0-alpha.1).
+  // every static page into a 500 (latent until the request-time fixture hit it).
   if (desc.isSSG) {
     lines.push(
       '// SSG: headExtras injected via Vite define (Phase A)',

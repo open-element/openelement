@@ -6,15 +6,18 @@
  * 0.43.x) can never again be represented as one shared four-package version.
  *
  * Offline `deno task check` validates structure + source versions + Site copy
- * consistency; it is explicitly NOT registry proof. The release/candidate
- * phase runs the registry drift check, which queries npm read-only and fails
- * closed. The "common complete version" is computed from the live registry as
- * the intersection of stable versions across all four packages; a tracked
- * value must equal that intersection, and no three-package fallback is ever
- * accepted. The checker never publishes or moves a dist-tag.
+ * consistency + the www source-line anchor (www/app/data/version.ts must keep
+ * OPENELEMENT_VERSION derived from the generated release-line module, and that
+ * module must mirror release-state.json); it is explicitly NOT registry proof.
+ * The release/candidate phase runs the registry drift check, which queries npm
+ * read-only and fails closed. The "common complete version" is computed from
+ * the live registry as the intersection of stable versions across all four
+ * packages; a tracked value must equal that intersection, and no three-package
+ * fallback is ever accepted. The checker never publishes or moves a dist-tag.
  */
 
 import { compare, parse } from '@std/semver';
+import { wwwReleaseAnchorFailures } from './www-release-anchor.ts';
 
 export type RegistryTags = Record<string, string>;
 
@@ -249,6 +252,11 @@ async function main(): Promise<void> {
   const versions = await workspaceVersions();
   const siteVersionSource = await Deno.readTextFile('www/app/data/version.ts');
   const failures = validateReleaseState(state, versions, siteVersionSource);
+  // The www source-line anchor audit rides the same offline gate: version.ts
+  // must stay derived from the generated release-line module, and that module
+  // must mirror release-state.json (see www-release-anchor.ts).
+  const releaseLineSource = await Deno.readTextFile('www/app/data/_generated-release-line.ts');
+  failures.push(...wwwReleaseAnchorFailures(state, siteVersionSource, releaseLineSource));
 
   if (!offline) {
     const evidence: RegistryEvidence = { versions: {}, distTags: {} };

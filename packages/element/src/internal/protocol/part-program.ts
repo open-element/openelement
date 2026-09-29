@@ -20,6 +20,16 @@ export { VOID_TAGS };
 
 export const PART_PROGRAM_VERSION = 1 as const;
 
+/**
+ * Version of the compiled-module ABI: the statics a generated module carries
+ * (`__partProgram`, `__compiledProperties`, `__elementMetadata`,
+ * `__observedAttributes`, `__computedFields`) and the runtime facade binds.
+ * Bump when the generated-module contract changes shape; generated artifacts
+ * stamp both this and PART_PROGRAM_VERSION so consumers can tell format drift
+ * from release drift.
+ */
+export const COMPILED_MODULE_ABI_VERSION = 1 as const;
+
 export type RootMode = 'light' | 'shadow-open' | 'shadow-closed';
 
 export interface ProgramRoot {

@@ -1,5 +1,5 @@
 /**
- * v0.44 island delivery contracts.
+ * Island delivery contracts.
  *
  * Delivery is deliberately a build-side concern. The generated client entry
  * knows only which capability module to import and which custom-element names

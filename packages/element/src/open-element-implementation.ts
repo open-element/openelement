@@ -1,8 +1,8 @@
 /**
- * @openelement/element - OpenElement base class (v0.44 compiled facade).
+ * @openelement/element - OpenElement base class (compiled facade).
  *
  * The public OpenElement base class is a thin facade over the compiled Part
- * Program kernel (internal/compiled/runtime/kernel.ts). A 0.44 component is
+ * Program kernel (internal/compiled/runtime/kernel.ts). A component is
  * authored in TSX and passed through the OpenElement compiler (the
  * @openelement/element/compiler `open:compiled-element` transform), which emits a
  * decorator-free class carrying the compiled statics this facade consumes:
@@ -158,7 +158,7 @@ function releasePreUpgradeCapturesFor(root: Node): void {
 function failMissingProgram(ctor: object): never {
   throw new OpenElementError(
     `[openElement] <${classNameOf(ctor)}> has no compiled Part Program. ` +
-      'In 0.44 every OpenElement component must pass through the OpenElement ' +
+      'Every OpenElement component must pass through the OpenElement ' +
       'compiler (the @openelement/element/compiler open:compiled-element transform); ' +
       'the runtime JSX render path was removed.',
     { code: FacadeErrorCode.PROGRAM_MISSING, phase: 'csr' },
@@ -168,11 +168,11 @@ function failMissingProgram(ctor: object): never {
 /**
  * Custom Element base class for the compiled Part Program architecture.
  *
- * Subclasses are produced by the 0.44 compiler; hand-written subclasses that
+ * Subclasses are produced by the compiler; hand-written subclasses that
  * never pass through the compiler fail closed at connect time.
  */
 export class OpenElement extends OpenElementConfiguration {
-  /** v0.42.0-alpha.15 (#904): route params box (open-element-params.ts). */
+  /** Route params box (#904, open-element-params.ts). */
   #params = new ElementParams();
 
   /**
@@ -352,7 +352,7 @@ export class OpenElement extends OpenElementConfiguration {
   }
 
   /**
-   * v0.23.0: Hook called after a successful claim of server-rendered DOM.
+   * Hook called after a successful claim of server-rendered DOM.
    *
    * Subclasses override this instead of relying on fragile
    * `super.connectedCallback()` call order. At this point the program's DOM
@@ -363,7 +363,7 @@ export class OpenElement extends OpenElementConfiguration {
   protected onDsdHydrated(): void {}
 
   /**
-   * v0.23.0: Hook called after fresh client-side DOM creation completes.
+   * Hook called after fresh client-side DOM creation completes.
    *
    * Subclasses override this for post-render initialization that depends on
    * the program's DOM being populated.
@@ -373,7 +373,7 @@ export class OpenElement extends OpenElementConfiguration {
   protected onCsrRendered(): void {}
 
   /**
-   * v0.40.0: Client-side activation hook.
+   * Client-side activation hook.
    *
    * Called once after the element is connected and the compiled program has
    * been claimed or created. This is the right place for framework hydration

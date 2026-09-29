@@ -88,7 +88,7 @@ export async function stableHash(str: string): Promise<string> {
     .join('');
 }
 
-// ─── Request-time server entry module (0.42.0-alpha.1) ────────────────────
+// ─── Request-time server entry module ────────────────────
 
 /** One request-time route as recorded in server-manifest.json. */
 interface RequestTimeRoutePattern {
