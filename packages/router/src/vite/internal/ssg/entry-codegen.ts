@@ -22,19 +22,6 @@ import {
 } from './entry-route-helpers.ts';
 import { renderActionProtocol } from './entry-action-runtime.ts';
 
-/**
- * #863: the action error channel speaks RFC 9457
- * Problem Details — application/problem+json with type/title/status/detail —
- * in place of the bespoke { type: 'error', error: { message } } JSON.
- * 'about:blank' carries the HTTP reason phrase as the title (RFC 9457 §4.2).
- * `detailExpr` is emitted verbatim (a quoted literal or a runtime expression).
- */
-function problemJsonLine(status: number, title: string, detailExpr: string): string {
-  return `c.json({ type: 'about:blank', title: ${
-    quoteGeneratedJavaScriptValue(title)
-  }, status: ${status}, detail: ${detailExpr} }, ${status}, { 'Content-Type': __problemJsonMediaType })`;
-}
-
 interface RouteHandlerDocConfig {
   title: string;
   lang: string;
@@ -79,16 +66,11 @@ function renderRouteHandlerPreamble(lines: string[], ctx: RouteHandlerEmitContex
     lines.push('// GET handler - renders the page with loader data');
   }
   if (isAction) {
-    // Conservative default body limit on action POSTs;
-    // larger uploads belong on API routes with explicit limits.
+    // The default body-limit middleware is the imported runtime module bound
+    // to the serialized MAX_ACTION_BODY_BYTES policy constant (#568, #1470
+    // block c); larger uploads belong on API routes with explicit limits.
     lines.push(
-      `__pageHandlers[${pathLiteral}].POST = [__asFetchMiddleware(__bodyLimit({ maxSize: 10 * 1024 * 1024, onError: (c) => { c.header('Cache-Control', 'no-store'); c.header('Vary', __actionFetchHeader); if (c.req.header(__actionFetchHeader) === 'true') return ${
-        problemJsonLine(
-          413,
-          'Payload Too Large',
-          `'The request body exceeded the 10 MiB action limit.'`,
-        )
-      }; return c.text('Payload Too Large', 413); } })), __asFetchHandler(async (c, __route) => {`,
+      `__pageHandlers[${pathLiteral}].POST = [__asFetchMiddleware(__actionBodyLimit), __asFetchHandler(async (c, __route) => {`,
     );
   } else {
     lines.push(`__pageHandlers[${pathLiteral}].GET = [__asFetchHandler(async (c, __route) => {`);
@@ -270,15 +252,12 @@ function renderRouteResponseAndCatch(lines: string[], ctx: RouteHandlerEmitConte
   lines.push(`    if (__isOpenElementRedirect(err)) {`);
   if (isAction) {
     // In the POST action context every 3xx is
-    // coerced to 303 (PRG must be method-safe and non-cacheable); GET
-    // handlers keep the author's status.
+    // coerced to 303 (PRG must be method-safe and non-cacheable); the
+    // imported runtime helper answers the fetch channel with the ActionResult
+    // redirect shape. GET handlers keep the author's status.
     lines.push(
-      `      const __redirectStatus = 303;`,
+      `      return __actionRedirectResponse(c, err.location, __actionState.isFetch);`,
     );
-    lines.push(
-      `      if (__actionState.isFetch) return c.json({ type: 'redirect', status: __redirectStatus, location: err.location });`,
-    );
-    lines.push(`      return c.redirect(err.location, __redirectStatus)`);
   } else {
     lines.push(`      return c.redirect(err.location, err.status)`);
   }
@@ -300,20 +279,12 @@ function renderRouteResponseAndCatch(lines: string[], ctx: RouteHandlerEmitConte
 
   // The JSON error channel scrubs internals in production,
   // matching the HTML channel. Fetch callers get RFC 9457 problem+json
-  // (#863), never the boundary page.
+  // (#863), never the boundary page; the imported runtime helper owns the
+  // mapping and the diagnostic.
   if (isAction) {
     lines.push(`    if (__actionState.isFetch) {`);
     lines.push(
-      `      console.error('[openElement] Action POST failed for ' + ${pathLiteral} + ':', err)`,
-    );
-    lines.push(
-      `      return ${
-        problemJsonLine(
-          500,
-          'Internal Server Error',
-          `import.meta.env.PROD ? 'Internal Server Error' : String(err && err.message ? err.message : err)`,
-        )
-      };`,
+      `      return __actionErrorResponse(c, ${pathLiteral}, err, import.meta.env.PROD);`,
     );
     lines.push(`    }`);
   }

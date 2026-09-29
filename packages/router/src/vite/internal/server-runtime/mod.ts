@@ -10,10 +10,12 @@
  * live in the modules re-exported here, so the logic is visible to
  * `deno check` and directly unit-testable instead of hiding inside codegen
  * template strings. The bundler inlines the import into every generated
- * entry (dev, SSG prerender, Nitro production). The modules never import
- * @openelement/element: the entry injects its Element functions and its
- * serialized build data (admitted tag list, dangerous keys, shell plan) at
- * binding time, keeping the LIT entry's graph kernel-free (#1339).
+ * entry (dev, SSG prerender, Nitro production). The modules never import the
+ * Element runtime barrel: the entry injects its Element functions and its
+ * serialized build data (admitted tag list, dangerous keys, shell plan, body
+ * limit) at binding time, keeping the LIT entry's graph kernel-free (#1339).
+ * The only Element edge is the kernel-free `/authoring` leaf's protocol
+ * constants (the action fetch header and the problem+json media type).
  *
  * Authors never import this subpath directly; it is the generated entry's
  * runtime, kept on the package surface because generated code can only
@@ -28,6 +30,21 @@ export {
   PROTOCOL_HEADERS,
 } from './response-channel.ts';
 export type { ResponseHeaderChannel } from './types.ts';
+export {
+  ACTION_FETCH_HEADER,
+  actionErrorResponse,
+  actionRedirectResponse,
+  createActionBodyLimit,
+  createHonoBridge,
+  runActionProtocol,
+} from './action-runtime.ts';
+export type {
+  ActionExecution,
+  ActionHonoContext,
+  ActionLoadContext,
+  ActionProtocolState,
+  HonoBridge,
+} from './action-runtime.ts';
 export {
   createPagePropsRuntime,
   localeFromPath,

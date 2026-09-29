@@ -9,7 +9,8 @@
 // Code structure validation
  */
 
-import { assert, assertEquals, assertExists, assertFalse, assertStringIncludes } from '@std/assert';
+import { assertEquals, assertExists, assertFalse, assertStringIncludes } from '@std/assert';
+import { MAX_ACTION_BODY_BYTES } from '@openelement/element';
 import { buildEntryDescriptor, renderEntry } from '../src/vite/internal/ssg/index.ts';
 import { resetCorsOriginWarningForTests } from '../src/vite/internal/ssg/entry-server-codegen.ts';
 import { createAppShellRuntime } from '../src/vite/internal/server-runtime/document-runtime.ts';
@@ -581,9 +582,12 @@ Deno.test('renderEntry: definePage descriptor feeds load and metadata wiring', (
     code,
     "import { pageDefinition as __pageDefinition } from '@openelement/router/server-runtime'",
   );
+  // The lifecycle guards stay the authoring imports; the action protocol
+  // constants and classifier moved into the server-runtime action module
+  // (ADR-0160 rule a, #1470 block c).
   assertStringIncludes(
     code,
-    "import { isOpenElementRedirect as __isOpenElementRedirect, isOpenElementNotFound as __isOpenElementNotFound, classifyActionResult as __classifyActionResult, ACTION_FETCH_HEADER as __actionFetchHeader, PROBLEM_JSON_MEDIA_TYPE as __problemJsonMediaType } from '@openelement/router';",
+    "import { isOpenElementRedirect as __isOpenElementRedirect, isOpenElementNotFound as __isOpenElementNotFound } from '@openelement/router';",
   );
   assertFalse(code.includes('function __isOpenElementRedirect(error) {'));
   assertFalse(code.includes('function __isOpenElementNotFound(error) {'));
@@ -978,124 +982,126 @@ Deno.test('buildEntryDescriptor: ssr field is extracted from manifest declaratio
   assertEquals(defaultComp?.ssr, undefined); // no ssr field in manifest -> undefined
 });
 
-// ─── 0.42.0-alpha.2 (ADR-0120): action protocol codegen ───────────────────
+// ─── 0.42.0-alpha.2 (ADR-0120): action protocol wiring ─────────────────────
+//
+// The protocol semantics themselves (CSRF floor, named-action dispatch, the
+// fail()/PRG channels, the RFC 9457 problem+json bodies) are BEHAVIOR of the
+// imported @openelement/router/server-runtime action module since #1470
+// block c (ADR-0160 rule a); they are exercised against that module by
+// server-runtime-action-runtime.test.ts and end-to-end by the read-only
+// request-time-parity oracle. What remains pinned here is the generated
+// WIRING: the import bindings, the middleware composition, and the
+// action-before-loader revalidation order.
 
-Deno.test('renderEntry: action POST follows the ADR-0120 protocol', () => {
+Deno.test('renderEntry: action POST wiring follows the ADR-0120 protocol', () => {
   const desc = buildEntryDescriptor(basicRoutes, {});
   const code = renderEntry(desc);
 
+  // The protocol runner is the imported runtime module, bound once.
+  assertStringIncludes(
+    code,
+    "import { runActionProtocol as __runActionProtocol } from '@openelement/router/server-runtime'",
+  );
+  assertFalse(code.includes('async function __runActionProtocol'));
+
   // The action runs before the loader (revalidation invariant): a mutation
   // never renders stale loader data.
-  const actionIndex = code.indexOf('const actionOutcome = __classifyActionResult(await actionFn');
+  const actionIndex = code.indexOf('const __actionExecution = await __runActionProtocol(');
   const loaderIndex = code.indexOf('const __data =', actionIndex);
   assertEquals(actionIndex > 0, true, 'action execution must be emitted');
   assertEquals(loaderIndex > actionIndex, true, 'loader must run after the action on POST');
 
-  // Real FormData (not parseBody objects), fail() 422 channel, PRG 303 on
-  // success, named actions via ?/name, fetch-path ActionResult JSON.
-  assertStringIncludes(code, 'await c.req.raw.formData()');
-  assertStringIncludes(code, "actionOutcome.kind === 'failure'");
-  assertStringIncludes(code, 'response: c.redirect(prgTarget, 303)');
-  assertStringIncludes(code, "key.startsWith('/')");
-  assertStringIncludes(code, 'namedActions[actionName]');
-  // #743: generated code references the shared ACTION_FETCH_HEADER constant
-  // (single source of truth in @openelement/element) instead of a literal.
-  assertStringIncludes(code, 'ACTION_FETCH_HEADER as __actionFetchHeader');
-  assertStringIncludes(code, 'c.req.header(__actionFetchHeader)');
+  // The POST handler composes the default body-limit middleware ahead of the
+  // handler through the Hono↔WinterCG bridge; the limit value is the
+  // serialized MAX_ACTION_BODY_BYTES policy constant (#568, S1c) — the copy
+  // derives from the canonical value, never an independent literal.
   assertStringIncludes(
     code,
-    'if (JSON.stringify(data) === undefined) data = null;',
+    '__pageHandlers["/"].POST = [__asFetchMiddleware(__actionBodyLimit), __asFetchHandler(async (c, __route) => {',
   );
   assertStringIncludes(
     code,
-    "{ type: 'failure', status: actionOutcome.status, data }",
+    `const __maxActionBodyBytes = ${MAX_ACTION_BODY_BYTES};`,
   );
+  assertStringIncludes(
+    code,
+    'const __actionBodyLimit = __createActionBodyLimit(__maxActionBodyBytes);',
+  );
+  // The Vary negotiation header rides the shared wire constant, never a
+  // literal (#743).
+  assertStringIncludes(
+    code,
+    "import { ACTION_FETCH_HEADER as __actionFetchHeader } from '@openelement/router/server-runtime'",
+  );
+  assertStringIncludes(code, "c.header('Vary', __actionFetchHeader);");
+  // The 422 re-render renders at the author's fail() status.
   assertStringIncludes(code, ', __actionStatus)');
-  // No action export on a route: POST is a defined 404, not a render.
-  assertStringIncludes(code, 'This route does not accept submissions.');
 });
 
-// ─── 0.42.0-alpha.5 (ADR-0121): protocol hardening codegen ─────────────────
+// ─── 0.42.0-alpha.5 (ADR-0121): protocol hardening wiring ──────────────────
 
-Deno.test('renderEntry: ADR-0121 hardening is present in the action codegen', () => {
+Deno.test('renderEntry: ADR-0121 hardening wiring is present in the action codegen', () => {
   const desc = buildEntryDescriptor(basicRoutes, {});
   const code = renderEntry(desc);
 
-  // #611: default same-origin CSRF floor on generated action POST
-  assertStringIncludes(code, 'sec-fetch-site');
-  assertStringIncludes(code, 'cross-site');
-  assertStringIncludes(code, 'OPEN_ELEMENT_DISABLE_CSRF');
-  assertStringIncludes(code, 'Cross-site form submission rejected');
-  assertStringIncludes(code, 'loadContext.env');
-  // #1382: the browser-shaped-form residual window is fail-closed in the same
-  // dialect — a urlencoded/multipart body whose only browser evidence is a
-  // form navigation (Upgrade-Insecure-Requests or a text/html Accept) must
-  // carry an Origin.
-  assertStringIncludes(code, "c.req.header('upgrade-insecure-requests')");
-  assertStringIncludes(code, "contentType.indexOf('multipart/form-data') === 0");
-  assertStringIncludes(code, "accept.indexOf('text/html') !== -1");
-
-  // #542: named-action dispatch is own-key gated (prototype keys are 404).
-  assertStringIncludes(code, 'Object.prototype.hasOwnProperty.call(namedActions, actionName)');
-  // #541: App owns returned-Response rejection; generated Hono code consumes
-  // the canonical action classifier instead of redefining the contract.
-  assertStringIncludes(code, '__classifyActionResult(await actionFn');
-  assertEquals(code.includes('actionResult instanceof Response'), false);
-  // #548: the default PRG target strips the ?/name action marker.
-  assertStringIncludes(code, 'prgParams.delete(key)');
-  assertStringIncludes(code, "{ type: 'redirect', status: 303, location: prgTarget }");
-  // #549 + #863: fetch callers receive an RFC 9457 problem+json 404, not an
-  // HTML page.
-  assertStringIncludes(
-    code,
-    "{ type: 'about:blank', title: 'Not Found', status: 404, detail: message }",
-  );
-  assertStringIncludes(code, "{ 'Content-Type': __problemJsonMediaType }");
-  // #550: request-time responses are never cacheable; POST is negotiated.
+  // The CSRF floor, the own-key named-action gate, the PRG target stripping,
+  // and the problem+json error bodies are behavior of the imported module
+  // (server-runtime-action-runtime.test.ts). The entry-level pins are the
+  // response-negotiation wiring and the middleware registration.
   assertStringIncludes(code, "c.header('Cache-Control', 'no-store');");
+  // #550: request-time responses are never cacheable; POST is negotiated.
   assertStringIncludes(code, "c.header('Vary', __actionFetchHeader);");
   // #943: successful GET pages relax to private,no-cache (bfcache/scroll
   // restoration); the no-store baseline above still guards every other kind.
   assertStringIncludes(code, "c.header('Cache-Control', 'private, no-cache');");
-  // #558: the JSON error channel scrubs internals in production.
-  assertStringIncludes(code, "import.meta.env.PROD ? 'Internal Server Error' : String(err");
-  // #568: action POSTs carry a default body limit.
-  assertStringIncludes(code, '__bodyLimit({ maxSize: 10 * 1024 * 1024');
   // #572: non-GET/POST methods on page routes are a defined 405.
   assertStringIncludes(code, 'const __routeMiddleware = __createRouteMiddleware([');
   assertStringIncludes(
     code,
     "app.all('*', (c, next) => { __honoContexts.set(c.req.raw, c); return __routeMiddleware(c.req.raw,",
   );
+  // The Hono↔WinterCG bridge is the imported runtime module, destructured
+  // once (ADR-0160 rule a).
+  assertStringIncludes(
+    code,
+    "import { createHonoBridge as __createHonoBridge } from '@openelement/router/server-runtime'",
+  );
+  assertStringIncludes(
+    code,
+    'const { contexts: __honoContexts, asFetchHandler: __asFetchHandler, asFetchMiddleware: __asFetchMiddleware } = __createHonoBridge();',
+  );
+  assertFalse(code.includes('const __honoContexts = new WeakMap();'));
 });
 
-Deno.test('renderEntry: the 413 body-limit channel answers fetch callers with problem+json', () => {
+Deno.test('renderEntry: the action error/redirect channels are imported runtime calls', () => {
   const desc = buildEntryDescriptor(basicRoutes, {});
   const code = renderEntry(desc);
 
-  // Same fetch-status fork as the CSRF 403 (#863): fetch callers parse every
-  // action error as RFC 9457 problem+json; the native form channel keeps the
-  // plain-text 413. Runtime upgrade note: the over-limit behavior this pins
-  // at codegen level is exercised end-to-end by the 11 MiB adversarial POST
-  // step in request-time-parity.test.ts ('oversized action POST → 413, fetch
-  // channel speaks problem+json'), on both dev and build servers.
+  // ADR-0121: the 303 redirect coercion (fetch ActionResult shape included)
+  // and the RFC 9457 500 mapping (#863, #558) are the imported module; the
+  // catch block keeps only the call sites. The `import.meta.env.PROD`
+  // argument stays emitted at the call site so the bundler define keeps
+  // owning the production flag.
   assertStringIncludes(
     code,
-    `if (c.req.header(__actionFetchHeader) === 'true') return c.json({ type: 'about:blank', title: "Payload Too Large", status: 413,`,
+    "import { actionRedirectResponse as __actionRedirectResponse } from '@openelement/router/server-runtime'",
   );
-  assertStringIncludes(code, "return c.text('Payload Too Large', 413);");
-  // The fetch fork sits inside the bodyLimit onError, before the plain-text
-  // fallback.
-  const onErrorStart = code.indexOf('onError: (c) => {');
-  const onErrorEnd = code.indexOf('\n', onErrorStart);
-  assert(onErrorStart >= 0 && onErrorEnd > onErrorStart, 'bodyLimit onError emission found');
-  const onError = code.slice(onErrorStart, onErrorEnd);
-  const fetchFork = onError.indexOf("c.req.header(__actionFetchHeader) === 'true'");
-  const textFallback = onError.indexOf("c.text('Payload Too Large', 413)");
-  assert(fetchFork >= 0 && textFallback > fetchFork, 'fetch fork precedes the text fallback');
+  assertStringIncludes(
+    code,
+    "import { actionErrorResponse as __actionErrorResponse } from '@openelement/router/server-runtime'",
+  );
+  assertStringIncludes(
+    code,
+    'return __actionRedirectResponse(c, err.location, __actionState.isFetch);',
+  );
+  assertStringIncludes(
+    code,
+    'return __actionErrorResponse(c, "/", err, import.meta.env.PROD);',
+  );
+  assertFalse(code.includes("title: 'Internal Server Error'"));
 });
 
-Deno.test('renderEntry: action protocol is emitted once for many routes (#1098)', () => {
+Deno.test('renderEntry: the action protocol wiring is emitted once for many routes (#1098)', () => {
   const routes: RouteEntry[] = Array.from({ length: 30 }, (_, index) => ({
     path: `/page-${index}`,
     filePath: `page-${index}.ts`,
@@ -1103,8 +1109,8 @@ Deno.test('renderEntry: action protocol is emitted once for many routes (#1098)'
     varName: `page${index}`,
   }));
   const code = renderEntry(buildEntryDescriptor(routes));
-  assertEquals(code.match(/async function __runActionProtocol/g)?.length, 1);
-  assertEquals(code.match(/const csrfOff =/g)?.length, 1);
+  assertEquals(code.match(/import { runActionProtocol as __runActionProtocol }/g)?.length, 1);
+  assertEquals(code.match(/const __actionBodyLimit =/g)?.length, 1);
   assertEquals(code.match(/await __runActionProtocol\(/g)?.length, routes.length);
 });
 
@@ -1174,21 +1180,17 @@ Deno.test('renderEntry: hasAction codegen covers named `actions` exports (#539)'
   assertStringIncludes(code, '.actions === "object" &&');
 });
 
-Deno.test('renderEntry: action catch paths answer fetch callers (redirect as ActionResult, errors as problem+json)', () => {
+Deno.test('renderEntry: GET catch keeps the author redirect status while POST coerces to 303', () => {
   const desc = buildEntryDescriptor(basicRoutes, {});
   const code = renderEntry(desc);
 
-  // Redirects out of a POST action are coerced to 303 (PRG) — every 3xx,
-  // per ADR-0121 — including the ActionResult redirect shape; GET handlers
-  // keep the author's status.
-  assertStringIncludes(code, 'const __redirectStatus = 303;');
+  // The GET handler keeps the author's status; the POST handler delegates to
+  // the imported 303-coercion helper (ADR-0121; behavior covered by
+  // server-runtime-action-runtime.test.ts and the request-time-parity oracle).
+  assertStringIncludes(code, 'return c.redirect(err.location, err.status)');
   assertStringIncludes(
     code,
-    "{ type: 'redirect', status: __redirectStatus, location: err.location }",
-  );
-  assertStringIncludes(
-    code,
-    '{ type: \'about:blank\', title: "Internal Server Error", status: 500, detail: import.meta.env.PROD',
+    'return __actionRedirectResponse(c, err.location, __actionState.isFetch);',
   );
 });
 

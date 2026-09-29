@@ -128,8 +128,6 @@ export function buildEntryDescriptor(
 
   // Always needed
   imports.push({ from: 'hono', names: ['Hono'] });
-  // Default body limit on action POST routes.
-  imports.push({ from: 'hono/body-limit', names: ['bodyLimit'], alias: '__bodyLimit' });
   imports.push(...adapter.serverImports(routes.some((route) => route.streamManifest)));
   // #1326: both renderers resolve page meaning through the one Document seam
   // before wrapInDocument serializes it.
@@ -137,6 +135,22 @@ export function buildEntryDescriptor(
     from: '@openelement/router/document',
     names: ['resolvePageDocument'],
     alias: '__resolvePageDocument',
+  });
+  // The internal Hono↔WinterCG bridge (ADR-0160 rule a): every page handler
+  // composes through it and the 405 fallback reads the bridged context, so
+  // the bridge factory is imported unconditionally like the Hono app itself.
+  imports.push({
+    from: '@openelement/router/server-runtime',
+    names: ['createHonoBridge'],
+    alias: '__createHonoBridge',
+  });
+  // The action protocol response-channel negotiation header (the Vary value
+  // the POST preamble and the 405 fallback both set) — the wire constant from
+  // the runtime module, never a literal in generated code (#743).
+  imports.push({
+    from: '@openelement/router/server-runtime',
+    names: ['ACTION_FETCH_HEADER'],
+    alias: '__actionFetchHeader',
   });
   // ADR-0129/ADR-0158: the response-header channel and CSP auto-nonce are
   // runtime modules the generated handlers call (ADR-0160 rule a) — the
@@ -148,6 +162,31 @@ export function buildEntryDescriptor(
       from: '@openelement/router/server-runtime',
       names: ['mergeChannelHeaders'],
       alias: '__mergeChannelHeaders',
+    });
+    // ADR-0120/ADR-0121: the action POST protocol (CSRF floor, dispatch,
+    // classification, problem+json, PRG, the default body limit, the 303
+    // coercion and the 500 error mapping) is the imported runtime module
+    // (ADR-0160 rule a); the entry keeps the call sites and binds the
+    // serialized body-limit constant at wiring time.
+    imports.push({
+      from: '@openelement/router/server-runtime',
+      names: ['runActionProtocol'],
+      alias: '__runActionProtocol',
+    });
+    imports.push({
+      from: '@openelement/router/server-runtime',
+      names: ['createActionBodyLimit'],
+      alias: '__createActionBodyLimit',
+    });
+    imports.push({
+      from: '@openelement/router/server-runtime',
+      names: ['actionRedirectResponse'],
+      alias: '__actionRedirectResponse',
+    });
+    imports.push({
+      from: '@openelement/router/server-runtime',
+      names: ['actionErrorResponse'],
+      alias: '__actionErrorResponse',
     });
     if (routes.some((route) => route.streamManifest)) {
       imports.push({

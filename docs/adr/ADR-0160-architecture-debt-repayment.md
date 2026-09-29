@@ -215,3 +215,72 @@ oracle evidence.
   `ssg-admission-parity`, `lit-graph-boundary` (walk stays kernel-free),
   `compiler-open-core-boundary`, `registry-marker-drift`,
   `compiled-escape-parity` all green with assertions intact.
+
+### S3c — the action POST protocol becomes an imported runtime (#1470 block c)
+
+- Artifact: the generated virtual Hono server entry — every shape that
+  embeds it (the dev entry, the SSG SSR bundle `dist/server/entry.js`, and
+  the request-time `dist/server/index.js` bundle).
+- Expected difference: the emitted `__runActionProtocol` function body, the
+  `__bodyLimit({ maxSize: 10 * 1024 * 1024, onError: … })` options emission
+  (413 problem+json fork and text fallback), the POST catch-branch bodies
+  (the ADR-0121 303 coercion with its fetch ActionResult redirect, and the
+  RFC 9457 500 mapping), the `problemJsonLine` helper, and the
+  `__honoContexts`/`__asFetchHandler`/`__asFetchMiddleware` bridge
+  definitions are gone from the entry. It now imports `runActionProtocol`,
+  `createActionBodyLimit`, `actionRedirectResponse`, `actionErrorResponse`,
+  `createHonoBridge`, and `ACTION_FETCH_HEADER` from
+  `@openelement/router/server-runtime` and keeps only call sites and one-time
+  bindings (`const __actionBodyLimit = __createActionBodyLimit(__maxActionBodyBytes);`,
+  the bridge destructuring). The `@openelement/router` import shrinks to the
+  two lifecycle guards; the `hono/body-limit` import and the
+  `classifyActionResult`/`PROBLEM_JSON_MEDIA_TYPE` names no longer appear in
+  the entry. One new serialized data line: `__maxActionBodyBytes`, derived
+  from the S1c policy constant. Byte evidence at the renderer-adapter.test.ts
+  pin: native server entry 22783 → 17478 bytes, lit server entry
+  22323 → 17018 bytes; client entries unchanged (1983 / 3138 bytes, still at
+  the pre-lane baseline).
+- Reason: ADR-0160 rule (a) — the CSRF floor, named-action dispatch,
+  classification, the problem+json error channel, PRG, the body limit, the
+  redirect coercion, the 500 error mapping, and the internal
+  Hono↔WinterCG bridge are server runtime semantics and must live in
+  typecheckable, unit-testable TS modules, not inside template strings.
+- Impact: the server-runtime subpath grows from 22 to 34 public symbols
+  (ritual regeneration of `docs/release/public-interface-snapshot.json`;
+  `./server-runtime` was already a declared export, so
+  `generated-export-files.ts` needed no change). One serialized copy is kept
+  by design: the body-limit NUMBER stays build data in the entry because
+  `MAX_ACTION_BODY_BYTES` lives behind the Element runtime facade
+  (`public-runtime.ts`), which the LIT kernel-free graph and packed consumer
+  setups cannot import — the same reason as `__DANGEROUS_KEYS`; the copy is
+  derived from the build-time import, so changing the canonical value
+  re-derives it (entry-renderer.test.ts pins the derivation, not a literal).
+  The protocol CONSTANTS (`ACTION_FETCH_HEADER`, `PROBLEM_JSON_MEDIA_TYPE`,
+  `classifyActionResult`) travel as real imports of the kernel-free
+  authoring leaves — no copies. The string-eval harness in
+  stream-handler.test.ts binds the real bridge, body-limit factory, policy
+  constant, and fetch header through its evaluation context (as in S3a) —
+  no harness-local reimplementation remains; the deleted harness-local stubs
+  (`__bodyLimit`, the literal `__actionFetchHeader`,
+  `__problemJsonMediaType`) are the "rest" this block removed. The
+  ADR-0120/0121 entry-renderer pins became wiring pins (import bindings,
+  middleware composition, action-before-loader order, `import.meta.env.PROD`
+  staying at the call site) and the protocol semantics moved to behavior
+  assertions: the new `server-runtime-action-runtime.test.ts` suite (22
+  tests) drives the shipped module for CSRF (#611/#921/#938/#1382), the
+  own-key gate (#542), the fail/PRG channels (#548), problem+json (#863),
+  the 413 fork (#568), the 303 coercion, the 500 scrubbing (#558), and the
+  bridge.
+- Oracle evidence: `request-time-parity.test.ts` green on all 29 steps for
+  both runtimes against the rebuilt fixture — and it caught a real wire
+  divergence during migration (the migrated catch-branch fetch redirect
+  initially answered HTTP 303 because the helper passed the status as
+  `c.json`'s second argument, where the emitted original answered HTTP 200
+  with the 303 in the ActionResult body; fixed and pinned by the behavior
+  suite before landing). `stream-manifest`, `renderer-scope-parity`,
+  `ssg-admission-parity`, `lit-graph-boundary` (the walk resolves the new
+  action module and confirms the LIT graph stays kernel-free),
+  `compiler-open-core-boundary`, `registry-marker-drift`, and
+  `compiled-escape-parity` all green with assertions intact;
+  `stream-handler.test.ts` drives the real generated GET handler through the
+  real bridge (15 tests, unchanged assertions).

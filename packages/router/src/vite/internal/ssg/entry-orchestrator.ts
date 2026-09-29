@@ -42,15 +42,15 @@ import { renderActionRoute, renderPageRoute } from './entry-codegen.ts';
 import { renderNotFoundRoute } from './entry-not-found-codegen.ts';
 import { pageRouteTagExpr, renderImport } from './entry-route-helpers.ts';
 import { renderApiRoute, renderMiddleware } from './entry-server-codegen.ts';
-import { renderActionRuntime } from './entry-action-runtime.ts';
 import { renderSsgSection } from './entry-render-ssg.ts';
 import { quoteGeneratedJavaScriptValue } from './codegen-literals.ts';
 import { renderStreamRuntime } from './entry-stream-runtime.ts';
 import { selectRendererAdapter } from './renderer-adapter.ts';
-// Build-time only: the canonical dangerous-key rule (constitution 4.2) is
-// serialized into the generated entry, which cannot import Element internals
-// in packed consumer setups. Changing the canonical guard re-derives the copy.
-import { DANGEROUS_KEYS } from '@openelement/element';
+// Build-time only: the canonical dangerous-key rule (constitution 4.2) and
+// the action body-limit budget (S1c policy constant) are serialized into the
+// generated entry, which cannot import Element internals in packed consumer
+// setups. Changing either canonical value re-derives the copy.
+import { DANGEROUS_KEYS, MAX_ACTION_BODY_BYTES } from '@openelement/element';
 
 /**
  * Render an EntryDescriptor into a complete virtual module string.
@@ -151,7 +151,7 @@ export function renderEntry(desc: EntryDescriptor): string {
     lines.push(`import { composeFetchMiddleware } from '@openelement/element/build-utils';`);
   }
   lines.push(
-    `import { isOpenElementRedirect as __isOpenElementRedirect, isOpenElementNotFound as __isOpenElementNotFound, classifyActionResult as __classifyActionResult, ACTION_FETCH_HEADER as __actionFetchHeader, PROBLEM_JSON_MEDIA_TYPE as __problemJsonMediaType } from '@openelement/router';`,
+    `import { isOpenElementRedirect as __isOpenElementRedirect, isOpenElementNotFound as __isOpenElementNotFound } from '@openelement/router';`,
   );
   // Nav data is not part of the 1.0 surface: the app-shell layout props keep
   // their contract with empty defaults. Locales, by contrast, are a project
@@ -374,10 +374,10 @@ export function renderEntry(desc: EntryDescriptor): string {
   // Page-render semantics (the page SSR renderer, props projection, app-shell
   // composition, tag/locale/status helpers) live in
   // @openelement/router/server-runtime; the entry imports them per the
-  // renderer adapter and binds them to its generated data below. The tag and
-  // dangerous-key lists stay serialized build data: packed consumer setups
-  // cannot import Element at all, so the canonical lists are copied from the
-  // build-time imports exactly like the shell plan.
+  // renderer adapter and binds them to its generated data below. The tag,
+  // dangerous-key, and body-limit values stay serialized build data: packed
+  // consumer setups cannot import Element at all, so the canonical values are
+  // copied from the build-time imports exactly like the shell plan.
   if (desc.pageRoutes.length > 0) {
     lines.push(
       `const __ssrRenderableTags = ${
@@ -390,14 +390,21 @@ export function renderEntry(desc: EntryDescriptor): string {
     lines.push(
       `const __DANGEROUS_KEYS = new Set(${quoteGeneratedJavaScriptValue([...DANGEROUS_KEYS])});`,
     );
+    lines.push(
+      `const __maxActionBodyBytes = ${quoteGeneratedJavaScriptValue(MAX_ACTION_BODY_BYTES)};`,
+    );
     lines.push(`const __appShellPlan = ${quoteGeneratedJavaScriptValue(desc.appShell, 2)};`);
     lines.push('');
     lines.push('// Page-render runtime (ADR-0160 rule a), bound to the generated data above.');
     for (const wiring of adapter.runtimeSeam().wiring) lines.push(wiring);
-    lines.push('');
-  }
-  if (desc.pageRoutes.length > 0) {
-    lines.push(renderActionRuntime());
+    lines.push(
+      '// Action protocol runtime (ADR-0160 rule a): the body-limit middleware bound',
+    );
+    lines.push(
+      '// to the serialized policy constant; the protocol runner and error mapping',
+    );
+    lines.push('// are the imported module functions.');
+    lines.push('const __actionBodyLimit = __createActionBodyLimit(__maxActionBodyBytes);');
     lines.push('');
   }
   if (desc.pageRoutes.some((route) => route.streamManifest)) {
@@ -412,17 +419,11 @@ export function renderEntry(desc: EntryDescriptor): string {
   // middleware from @openelement/router/http is the dialect-free public
   // contract, while the generated handlers below keep their internal Hono
   // dialect. The per-request Hono context is bridged by request identity —
-  // one WeakMap entry per dispatch, no cross-request leakage.
-  lines.push('const __honoContexts = new WeakMap();');
+  // one WeakMap entry per dispatch, no cross-request leakage. The bridge
+  // implementation is the imported runtime module (ADR-0160 rule a).
   lines.push(
-    'const __asFetchHandler = (h) => (request, route, _next) => h(__honoContexts.get(request), route);',
+    'const { contexts: __honoContexts, asFetchHandler: __asFetchHandler, asFetchMiddleware: __asFetchMiddleware } = __createHonoBridge();',
   );
-  lines.push('const __asFetchMiddleware = (m) => async (request, route, next) => {');
-  lines.push('  const c = __honoContexts.get(request);');
-  lines.push('  let downstream;');
-  lines.push('  const own = await m(c, async () => { downstream = await next(); });');
-  lines.push('  return own ?? downstream ?? c.res;');
-  lines.push('};');
   if (desc.apiRoutes.length > 0) {
     lines.push('const __apiRouteRecords = [];');
   }

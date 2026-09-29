@@ -4,10 +4,17 @@ import {
   documentStreamParts,
   escapeAttr,
   escapeHtml,
+  MAX_ACTION_BODY_BYTES,
   wrapInDocument,
 } from '@openelement/element';
 import type { PartProgramV1 } from '../../element/src/internal/protocol/part-program.ts';
 import { testProgram } from '../../element/__tests__/compiled-runtime/test-program.ts';
+import {
+  ACTION_FETCH_HEADER,
+  createActionBodyLimit,
+  createHonoBridge,
+} from '../src/vite/internal/server-runtime/action-runtime.ts';
+import type { ActionHonoContext } from '../src/vite/internal/server-runtime/action-runtime.ts';
 import {
   createStreamHeaderChannel,
   mergeChannelHeaders,
@@ -82,7 +89,9 @@ function deferred<T>() {
  * `deps` instead — the assertions below still execute the shipped module,
  * never a harness-local copy. The emitted stream runtime (renderStreamRuntime
  * below) carries the real `__createDeferredPageShell` text itself, so the
- * deferred-shell gate runs as shipped too.
+ * deferred-shell gate runs as shipped too. The action POST wiring never
+ * executes here (only the GET handler is driven), but the harness binds the
+ * real bridge/body-limit so the composed source matches the shipped entry.
  */
 async function handler(timeoutMs?: number, streamManifest?: StreamRouteManifest) {
   const route: PageRouteDecl = {
@@ -106,13 +115,12 @@ async function handler(timeoutMs?: number, streamManifest?: StreamRouteManifest)
       escapeAttr, escapeHtml, wrapInDocument } = deps;
     const __mergeChannelHeaders = deps.mergeChannelHeaders;
     const __streamHeaderChannel = deps.createStreamHeaderChannel;
+    const { contexts: __honoContexts, asFetchHandler: __asFetchHandler, asFetchMiddleware: __asFetchMiddleware } = deps.bridge;
+    const __actionBodyLimit = deps.createActionBodyLimit(deps.maxActionBodyBytes);
+    const __actionFetchHeader = deps.ACTION_FETCH_HEADER;
     const $Route_Index = routeModule;
     const __streamManifests = { '/': manifest };
     const __pageHandlers = { '/': {} };
-    const __asFetchHandler = fn => fn;
-    const __bodyLimit = () => () => {};
-    const __actionFetchHeader = 'X-OpenElement-Action';
-    const __problemJsonMediaType = 'application/problem+json';
     const __isOpenElementRedirect = error => error?.redirect === true;
     const __isOpenElementNotFound = error => error?.notFound === true;
     const __pageDefinition = module => module.default.openElementPage;
@@ -137,6 +145,7 @@ async function handler(timeoutMs?: number, streamManifest?: StreamRouteManifest)
     default: Object.assign(Page, { openElementPage: { renderIntent: { mode: 'dynamic' } } }),
     loader: (_context: { responseHeaders: Headers; request: Request }): unknown => ({}),
   };
+  const bridge = createHonoBridge();
   const deps = {
     routeModule,
     manifest: route.streamManifest,
@@ -147,10 +156,14 @@ async function handler(timeoutMs?: number, streamManifest?: StreamRouteManifest)
     wrapInDocument,
     createStreamHeaderChannel,
     mergeChannelHeaders,
+    bridge,
+    createActionBodyLimit,
+    maxActionBodyBytes: MAX_ACTION_BODY_BYTES,
+    ACTION_FETCH_HEADER,
     resolvedAppShell: undefined as unknown,
   };
   const generated = new Function('deps', source)(deps) as (
-    context: unknown,
+    request: Request,
     route: unknown,
   ) => Promise<Response>;
   const fetch = (request: Request) => {
@@ -167,7 +180,11 @@ async function handler(timeoutMs?: number, streamManifest?: StreamRouteManifest)
       redirect: (location: string, status: number) =>
         new Response(null, { status, headers: { Location: location } }),
     };
-    return generated(context, { params: {} });
+    // The generated handler is the bridge-wrapped WinterCG shape; production
+    // populates the context WeakMap in the app.all('*') hook. Mirror it here.
+    // The fake context carries only the GET-handler slice of the Hono shape.
+    bridge.contexts.set(request, context as unknown as ActionHonoContext);
+    return generated(request, { params: {} });
   };
   return {
     fetch,
