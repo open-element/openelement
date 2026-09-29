@@ -2,9 +2,9 @@
  * @openelement/router - Entry Orchestrator
  *
  * Top-level composition axis of the entry-* family (#901): renderEntry()
- * composes the codegen fragments (entry-codegen.ts), the runtime helper
- * emission (entry-render-runtime.ts) and the SSG section
- * (entry-render-ssg.ts) into the complete virtual Hono entry module.
+ * composes the codegen fragments (entry-codegen.ts), the serialized runtime
+ * data + typed-runtime binding, and the SSG section (entry-render-ssg.ts)
+ * into the complete virtual Hono entry module.
  *
  * Pure function: routes + options -> Hono entry virtual module code.
  *
@@ -22,7 +22,8 @@
  *
  * Thin orchestrator: delegates code generation to focused sub-modules:
  *   - entry-codegen.ts         — entry code string generation (#901)
- *   - entry-render-runtime.ts  — runtime helper function code generation
+ *   - renderer-adapter.ts      — the typed page-render runtime seam (imports
+ *                                + wiring; ADR-0160 rule a)
  *   - entry-render-ssg.ts      — SSG re-export & routeInfo/renderRoute/getStaticPaths
  *
  * v0.41.0-alpha.1: Consumers build a descriptor via `buildEntryDescriptor()`
@@ -41,12 +42,15 @@ import { renderActionRoute, renderPageRoute } from './entry-codegen.ts';
 import { renderNotFoundRoute } from './entry-not-found-codegen.ts';
 import { pageRouteTagExpr, renderImport } from './entry-route-helpers.ts';
 import { renderApiRoute, renderMiddleware } from './entry-server-codegen.ts';
-import { renderRuntimeHelpers } from './entry-render-runtime.ts';
 import { renderActionRuntime } from './entry-action-runtime.ts';
 import { renderSsgSection } from './entry-render-ssg.ts';
 import { quoteGeneratedJavaScriptValue } from './codegen-literals.ts';
 import { renderStreamRuntime } from './entry-stream-runtime.ts';
 import { selectRendererAdapter } from './renderer-adapter.ts';
+// Build-time only: the canonical dangerous-key rule (constitution 4.2) is
+// serialized into the generated entry, which cannot import Element internals
+// in packed consumer setups. Changing the canonical guard re-derives the copy.
+import { DANGEROUS_KEYS } from '@openelement/element';
 
 /**
  * Render an EntryDescriptor into a complete virtual module string.
@@ -366,12 +370,32 @@ export function renderEntry(desc: EntryDescriptor): string {
     lines.push('');
   }
 
-  // --- Runtime helpers ---
-  lines.push(renderRuntimeHelpers(desc.appShell, [
-    ...desc.ssrAdmissionPlan.renderableTags,
-    ...desc.staticComponents.map((component) => component.tagName),
-  ], desc.renderer ?? 'native'));
-  lines.push('');
+  // --- Runtime data + typed runtime binding (ADR-0160 rule a) ---
+  // Page-render semantics (the page SSR renderer, props projection, app-shell
+  // composition, tag/locale/status helpers) live in
+  // @openelement/router/server-runtime; the entry imports them per the
+  // renderer adapter and binds them to its generated data below. The tag and
+  // dangerous-key lists stay serialized build data: packed consumer setups
+  // cannot import Element at all, so the canonical lists are copied from the
+  // build-time imports exactly like the shell plan.
+  if (desc.pageRoutes.length > 0) {
+    lines.push(
+      `const __ssrRenderableTags = ${
+        quoteGeneratedJavaScriptValue([
+          ...desc.ssrAdmissionPlan.renderableTags,
+          ...desc.staticComponents.map((component) => component.tagName),
+        ])
+      };`,
+    );
+    lines.push(
+      `const __DANGEROUS_KEYS = new Set(${quoteGeneratedJavaScriptValue([...DANGEROUS_KEYS])});`,
+    );
+    lines.push(`const __appShellPlan = ${quoteGeneratedJavaScriptValue(desc.appShell, 2)};`);
+    lines.push('');
+    lines.push('// Page-render runtime (ADR-0160 rule a), bound to the generated data above.');
+    for (const wiring of adapter.runtimeSeam().wiring) lines.push(wiring);
+    lines.push('');
+  }
   if (desc.pageRoutes.length > 0) {
     lines.push(renderActionRuntime());
     lines.push('');

@@ -479,14 +479,40 @@
           ]
         },
         "./server-runtime": {
-          "publicShapeSha256": "2c57838bcaacf326cf88926b92af582f70a2889dabd6fdd1009610e86c008365",
+          "publicShapeSha256": "596e790de498d036490e6db2c4d94ef0daebcd7f7e275be2377f1b4468f23bd6",
           "publicSymbols": [
+            "AppShellRuntime=type:{renderAppShell:{call:(pageHtml:unknown,routePath:string,options:union(undefined|{locale?:union(string|undefined);routeMeta?:union(Record<string, unknown>|undefined)}))=>string};resolveAppShell:{call:(routeMeta:union(Record<string, unknown>|undefined))=>union(false|{importPath:string;props:Record<string, unknown>;tagName:string})}}",
+            "AppShellRuntimeDeps=type:{appShellPlan:{default:union(false|{importPath:string;props:Record<string, unknown>;tagName:string});layouts:Record<string, ResolvedAppShell>};defaultLocale:string;headerNav:array(Record<string, unknown>);locales:array(string);navSections:array(unknown);ssr:{call:(tag:string,props:union(Record<string, unknown>|undefined),sourceInfo:union(undefined|{route?:union(string|undefined);source?:union(string|undefined)}),depth:union(number|undefined),projectedChildren:union(ProjectedChildren|undefined))=>string};trustedHtml:{call:(html:string)=>{readonly html:string}}}",
+            "LitPageRendererDeps=type:{renderLitPageToHtml:{call:(input:{props?:union(Record<string, unknown>|undefined);tag:string})=>{html:string}}}",
+            "NativePageRendererDeps=type:{customElements:{get:{call:(tag:string)=>unknown}};renderDsd:{call:(tag:string,options:{componentClass?:unknown;projectedChildren?:union(ProjectedChildren|undefined);props?:union(Record<string, unknown>|undefined);sourceInfo?:union(undefined|{route?:union(string|undefined);source?:union(string|undefined)});ssrRenderableTags?:union(array(string)|undefined)})=>{html:string}};ssrRenderableTags:array(string)}",
             "PROTOCOL_HEADERS=value:ReadonlySet<string>",
+            "PageContext=type:{data?:unknown;index:string=>unknown;params?:unknown}",
+            "PageDefinition=type:{index:string=>unknown}",
+            "PagePropsRuntime=type:{defaultPageProps:{call:(context:{data?:unknown;index:string=>unknown;params?:unknown})=>{index:string=>unknown}};pageErrorProps:{call:(routeModule:unknown,error:unknown,context:{data?:unknown;index:string=>unknown;params?:unknown})=>{index:string=>unknown}};pageProps:{call:(routeModule:unknown,context:{data?:unknown;index:string=>unknown;params?:unknown})=>{index:string=>unknown}}}",
+            "PagePropsRuntimeDeps=type:{dangerousKeys:ReadonlySet<string>}",
+            "PageSsrRenderer=type:{call:(tag:string,props:union(Record<string, unknown>|undefined),sourceInfo:union(undefined|{route?:union(string|undefined);source?:union(string|undefined)}),depth:union(number|undefined),projectedChildren:union(ProjectedChildren|undefined))=>string}",
+            "PageSsrSourceInfo=type:{route?:union(string|undefined);source?:union(string|undefined)}",
+            "ProjectedChildren=type:ProjectedChildren",
+            "ProjectedProps=type:{index:string=>unknown}",
             "ResponseHeaderChannel=type:{commit:{call:()=>void};readonly channel:Headers}",
+            "RouteModule=type:{default?:union(undefined|{index:string=>unknown;openElementPage?:union(undefined|{index:string=>unknown})});index:string=>unknown;loader?:unknown}",
+            "StatusHtmlRenderer=type:{call:(title:unknown,message:unknown)=>string}",
+            "TrustedHtmlValue=type:{readonly html:string}",
             "applyCspNonce=value:{call:(policyTemplate:string,nonce:string)=>string}",
+            "createAppShellRuntime=value:{call:(deps:{appShellPlan:{default:union(false|{importPath:string;props:Record<string, unknown>;tagName:string});layouts:Record<string, ResolvedAppShell>};defaultLocale:string;headerNav:array(Record<string, unknown>);locales:array(string);navSections:array(unknown);ssr:{call:(tag:string,props:union(Record<string, unknown>|undefined),sourceInfo:union(undefined|{route?:union(string|undefined);source?:union(string|undefined)}),depth:union(number|undefined),projectedChildren:union(ProjectedChildren|undefined))=>string};trustedHtml:{call:(html:string)=>{readonly html:string}}})=>{renderAppShell:{call:(pageHtml:unknown,routePath:string,options:union(undefined|{locale?:union(string|undefined);routeMeta?:union(Record<string, unknown>|undefined)}))=>string};resolveAppShell:{call:(routeMeta:union(Record<string, unknown>|undefined))=>union(false|{importPath:string;props:Record<string, unknown>;tagName:string})}}}",
             "createCspNonce=value:{call:()=>string}",
+            "createLitPageRenderer=value:{call:(deps:{renderLitPageToHtml:{call:(input:{props?:union(Record<string, unknown>|undefined);tag:string})=>{html:string}}})=>{call:(tag:string,props:union(Record<string, unknown>|undefined),sourceInfo:union(undefined|{route?:union(string|undefined);source?:union(string|undefined)}),depth:union(number|undefined),projectedChildren:union(ProjectedChildren|undefined))=>string}}",
+            "createNativePageRenderer=value:{call:(deps:{customElements:{get:{call:(tag:string)=>unknown}};renderDsd:{call:(tag:string,options:{componentClass?:unknown;projectedChildren?:union(ProjectedChildren|undefined);props?:union(Record<string, unknown>|undefined);sourceInfo?:union(undefined|{route?:union(string|undefined);source?:union(string|undefined)});ssrRenderableTags?:union(array(string)|undefined)})=>{html:string}};ssrRenderableTags:array(string)})=>{call:(tag:string,props:union(Record<string, unknown>|undefined),sourceInfo:union(undefined|{route?:union(string|undefined);source?:union(string|undefined)}),depth:union(number|undefined),projectedChildren:union(ProjectedChildren|undefined))=>string}}",
+            "createPagePropsRuntime=value:{call:(deps:{dangerousKeys:ReadonlySet<string>})=>{defaultPageProps:{call:(context:{data?:unknown;index:string=>unknown;params?:unknown})=>{index:string=>unknown}};pageErrorProps:{call:(routeModule:unknown,error:unknown,context:{data?:unknown;index:string=>unknown;params?:unknown})=>{index:string=>unknown}};pageProps:{call:(routeModule:unknown,context:{data?:unknown;index:string=>unknown;params?:unknown})=>{index:string=>unknown}}}}",
+            "createStatusHtml=value:{call:(escapeHtml:{call:(value:string)=>string})=>{call:(title:unknown,message:unknown)=>string}}",
             "createStreamHeaderChannel=value:{call:(route:string)=>{commit:{call:()=>void};readonly channel:Headers}}",
-            "mergeChannelHeaders=value:{call:(response:Response,channel:Headers)=>Response}"
+            "localeFromPath=value:{call:(locales:array(string),path:unknown,fallback:string)=>string}",
+            "localizeShellHref=value:{call:(href:string,locale:string,defaultLocale:string)=>string}",
+            "mergeChannelHeaders=value:{call:(response:Response,channel:Headers)=>Response}",
+            "pageDefinition=value:{call:(routeModule:unknown)=>{index:string=>unknown}}",
+            "resolveCompiledPageTag=value:{call:(routeModule:unknown,fallbackTag:string)=>string}",
+            "resolveLitPageTag=value:{call:(routeModule:unknown,fallbackTag:string)=>string}",
+            "routeMeta=value:{call:(routeModule:unknown)=>Record<string, unknown>}"
           ]
         },
         "./vite": {

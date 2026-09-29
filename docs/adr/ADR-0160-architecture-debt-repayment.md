@@ -158,3 +158,60 @@ oracle evidence.
   boundary` all green with assertions intact; `stream-handler.test.ts`
   drives the real generated handler against the typed module (15 tests,
   including protocol precedence and the post-commit late-write gate).
+
+### S3b — page/document/render runtime becomes imported modules (#1470 block b)
+
+- Artifact: the generated virtual Hono server entry — every shape that
+  embeds it (the dev entry, the SSG SSR bundle, and the request-time server
+  bundle).
+- Expected difference: the emitted helper function bodies of the old
+  entry-render-runtime.ts are gone from the entry — `__ssr` (native
+  renderDsd fork and lit renderLitPageToHtml fork), `__resolvePageTag`
+  (compiled-program fork and lit openElementPageTag fork),
+  `__filterPageProps`/`__defaultPageProps`/`__pageProps`/`__pageErrorProps`,
+  `__pageDefinition`/`__routeMeta`, `__localeFromPath`,
+  `__localizeShellHref`, `__statusHtml`, `__resolveAppShell`, and
+  `__renderAppShell` now live in the `@openelement/router/server-runtime`
+  modules (page-render.ts, renderer-runtime.ts, document-runtime.ts) and the
+  entry keeps the renderer-adapter-selected imports plus one-time factory
+  bindings that wire them to its serialized build data. The data lists stay
+  serialized in the entry by design (packed consumer setups cannot import
+  Element at all, and generated code cannot import Element internals):
+  `__ssrRenderableTags`, `__DANGEROUS_KEYS`, `__appShellPlan`, `__locales`,
+  `__navSections`, `__headerNav`, `__getDefaultLocale`. `__localeFromPath`
+  gained the locales argument at its one call site (the page-context
+  builder); `__createDeferredPageShell` moved emitter-to-emitter into the
+  stream runtime emission (entry-stream-runtime.ts) with its text unchanged —
+  it is stream machinery, only called by streamed routes, and the
+  stream-manifest oracle pins its emitted shape, so its typed migration
+  belongs to the streaming-pump block together with that oracle. Helpers are
+  now gated on page routes existing (API-only entries stop carrying them).
+  Byte evidence at the renderer-adapter.test.ts pin: native server entry
+  27032 → 22783 bytes, lit server entry 25087 → 22323 bytes; client entries
+  unchanged (1983 / 3138 bytes, still at the pre-lane baseline).
+- Reason: ADR-0160 rule (a) — the page SSR render seam, the props projection
+  with its dangerous-key guard, the app-shell composition, tag resolution,
+  locale resolution, and status pages are server runtime semantics and must
+  live in typecheckable, unit-testable TS modules, not inside template
+  strings. The native/lit fork keeps its renderer-adapter seam shape: the
+  adapter selects which factory and tag resolver the entry imports, and the
+  emitted call sites are renderer-neutral.
+- Impact: the server-runtime subpath grows from 6 to 22 public symbols
+  (ritual regeneration of `docs/release/public-interface-snapshot.json`;
+  `./server-runtime` was already a declared export). The string-eval
+  harnesses in `packages/router/__tests__` that used to eval the emitted
+  helper bodies (data:-URL modules cannot resolve imports) now call the
+  shipped modules directly; stream-handler.test.ts binds the real module
+  implementations through its evaluation context as in S3a and now executes
+  the real emitted `__createDeferredPageShell` text. The typed modules carry
+  no `@openelement/element` import edge — the entry injects renderDsd,
+  trustedHtml, escapeHtml, the registry, and renderLitPageToHtml at binding
+  time — so the LIT entry's import graph stays kernel-free.
+- Oracle evidence: `request-time-parity.test.ts` green on all 29 steps for
+  both runtimes against the rebuilt fixture (the fixture build exercises the
+  new factory wiring end to end, including the app-shell composition, the
+  error-boundary re-render, and the styled 404); `stream-manifest` green
+  unmodified (its two emitted-shape assertions hold); `renderer-scope-parity`,
+  `ssg-admission-parity`, `lit-graph-boundary` (walk stays kernel-free),
+  `compiler-open-core-boundary`, `registry-marker-drift`,
+  `compiled-escape-parity` all green with assertions intact.

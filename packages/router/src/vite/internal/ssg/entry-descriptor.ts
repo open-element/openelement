@@ -156,6 +156,12 @@ export function buildEntryDescriptor(
         alias: '__streamHeaderChannel',
       });
     }
+    // The page-render seam (ADR-0160 rule a): page tag resolution, the page
+    // SSR renderer factory, the props projection, page-definition/route-meta
+    // extraction, locale resolution, status pages, and the app-shell runtime
+    // are imported per the renderer adapter; the orchestrator binds them to
+    // the entry's serialized data. Same page-handler gate as the channel.
+    imports.push(...adapter.runtimeSeam().imports);
   }
 
   // Conditional middleware imports

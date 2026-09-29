@@ -58,13 +58,27 @@ Deno.test('lit renderer: entry forks tag resolution and page render (no page-dat
     litEntry.startsWith("import '@lit-labs/ssr/lib/install-global-dom-shim.js';"),
     true,
   );
-  assertStringIncludes(litEntry, 'routeModule.default.openElementPageTag');
-  assertStringIncludes(litEntry, '__renderLitPageToHtml({ tag, props })');
+  // The lit forks bind through the typed runtime seam (ADR-0160 rule a): the
+  // lit page-tag resolver and the lit page renderer factory are imports; the
+  // call sites stay renderer-neutral.
+  assertStringIncludes(
+    litEntry,
+    "import { resolveLitPageTag as __resolvePageTag } from '@openelement/router/server-runtime'",
+  );
+  assertStringIncludes(
+    litEntry,
+    "import { createLitPageRenderer as __createLitPageRenderer } from '@openelement/router/server-runtime'",
+  );
+  assertStringIncludes(
+    litEntry,
+    'const __ssr = __createLitPageRenderer({ renderLitPageToHtml: __renderLitPageToHtml });',
+  );
   // Beta.2.2 review: the embedded page-data JSON channel had no consumer —
   // it is removed and its absence is pinned on both renderers.
   assertEquals(litEntry.includes('__litPageDataScript'), false);
   assertEquals(litEntry.includes('data-open-element-page-data'), false);
-  // The compiled serializer / Part Program kernel is never referenced.
+  // The compiled serializer / Part Program kernel is never referenced — the
+  // typed renderer modules carry no Element edge of their own.
   assertEquals(litEntry.includes('renderDsd'), false);
   assertEquals(litEntry.includes('__partProgram'), false);
 

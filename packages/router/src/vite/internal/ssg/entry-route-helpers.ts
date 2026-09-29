@@ -10,10 +10,12 @@ export function renderImport(imp: ImportDecl): string {
 /**
  * Page-route tag expression (#1276, B1.3-F1): resolves the route→program tag
  * binding from the route module's compiled Part Program at generated-entry
- * evaluation time (`__resolvePageTag`, emitted by entry-render-runtime.ts).
- * The path-derived tag is passed only as the fallback for classes without a
- * compiled program. Used for SSR registration, the page/404 handlers, and the
- * SSG routeInfo — one canonical binding for every page-route tag consumer.
+ * evaluation time (`__resolvePageTag`, imported from
+ * @openelement/router/server-runtime per the renderer adapter — ADR-0160
+ * rule a). The path-derived tag is passed only as the fallback for classes
+ * without a compiled program. Used for SSR registration, the page/404
+ * handlers, and the SSG routeInfo — one canonical binding for every
+ * page-route tag consumer.
  */
 export function pageRouteTagExpr(varName: string, fallbackTagName: string): string {
   return `__resolvePageTag(${varName}, ${quoteGeneratedJavaScriptValue(fallbackTagName)})`;
@@ -83,7 +85,7 @@ export function requestTimePageContextLines(
   options: { dataExpr: string; actionDataExpr: string; indent: string },
 ): void {
   lines.push(
-    `${options.indent}const __pageContext = { data: ${options.dataExpr}, actionData: ${options.actionDataExpr}, params: __params, request: c.req.raw, locale: __localeFromPath(c.req.path, __getDefaultLocale()), route: __routeContext, meta: __routeMetaValue };`,
+    `${options.indent}const __pageContext = { data: ${options.dataExpr}, actionData: ${options.actionDataExpr}, params: __params, request: c.req.raw, locale: __localeFromPath(__locales, c.req.path, __getDefaultLocale()), route: __routeContext, meta: __routeMetaValue };`,
   );
   lines.push(`${options.indent}${documentResolutionSetupLine('__page', '__pageContext')}`);
 }

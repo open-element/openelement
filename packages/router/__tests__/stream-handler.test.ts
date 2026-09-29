@@ -80,7 +80,9 @@ function deferred<T>() {
  * top of the generated entry. A `new Function` harness cannot carry import
  * declarations, so the REAL production implementations are bound in through
  * `deps` instead — the assertions below still execute the shipped module,
- * never a harness-local copy.
+ * never a harness-local copy. The emitted stream runtime (renderStreamRuntime
+ * below) carries the real `__createDeferredPageShell` text itself, so the
+ * deferred-shell gate runs as shipped too.
  */
 async function handler(timeoutMs?: number, streamManifest?: StreamRouteManifest) {
   const route: PageRouteDecl = {
@@ -116,6 +118,7 @@ async function handler(timeoutMs?: number, streamManifest?: StreamRouteManifest)
     const __pageDefinition = module => module.default.openElementPage;
     const __routeMeta = () => ({});
     const __resolvePageTag = () => 'oe-stream-handler';
+    const __locales = [];
     const __localeFromPath = () => 'en';
     const __getDefaultLocale = () => 'en';
     const __resolvePageDocument = () => ({ title: 'Stream', lang: 'en', links: [] });
@@ -126,12 +129,6 @@ async function handler(timeoutMs?: number, streamManifest?: StreamRouteManifest)
     const __resolveAppShell = () => deps.resolvedAppShell ?? false;
     const __renderAppShell = html => html;
     const __ssr = () => '<p>error</p>';
-    async function __createDeferredPageShell(route, module, props, instanceId, documentToken) {
-      return createDeferredDsdExecutor({
-        componentClass: module.default, props, manifest: __streamManifests[route],
-        instanceId, documentToken,
-      });
-    }
     ${renderStreamRuntime(timeoutMs)}
     ${lines.join('\n').replaceAll('import.meta.env.PROD', 'false')}
     return __pageHandlers['/'].GET[0];

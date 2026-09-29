@@ -12,6 +12,8 @@
 import { assert, assertEquals, assertExists, assertFalse, assertStringIncludes } from '@std/assert';
 import { buildEntryDescriptor, renderEntry } from '../src/vite/internal/ssg/index.ts';
 import { resetCorsOriginWarningForTests } from '../src/vite/internal/ssg/entry-server-codegen.ts';
+import { createAppShellRuntime } from '../src/vite/internal/server-runtime/document-runtime.ts';
+import { routeMeta } from '../src/vite/internal/server-runtime/page-render.ts';
 import type { RouteEntry } from '../src/vite/internal/protocol/framework.ts';
 
 // Fixtures
@@ -364,13 +366,37 @@ Deno.test('renderEntry: app shell composes the page host through the compiled se
   });
   const code = renderEntry(desc);
 
-  assertStringIncludes(code, 'function __renderAppShell(pageHtml, routePath');
+  // The shell composition is typed runtime code; the entry binds it to the
+  // serialized plan and its own imports (ADR-0160 rule a).
   assertStringIncludes(code, '"tagName": "open-layout"');
   assertStringIncludes(code, 'import * as __shell_0 from "@acme/components/open-layout";');
   assertStringIncludes(
     code,
-    '__ssr(shell.tagName, layoutProps, { route: routePath }, 0, new Map([["", trustedHtml(content)]]))',
+    'const { resolveAppShell: __resolveAppShell, renderAppShell: __renderAppShell } = __createAppShellRuntime({ ssr: __ssr, trustedHtml, appShellPlan: __appShellPlan, locales: __locales, navSections: __navSections, headerNav: __headerNav, defaultLocale: __getDefaultLocale() });',
   );
+  // The slot claim contract stays pinned on the shipped runtime: the shell
+  // renders through the page renderer with the content as trusted slot HTML.
+  const { runtime, ssrCalls } = loadLayoutRuntime({
+    default: { tagName: 'open-layout', props: { brand: 'acme' } },
+    layouts: {},
+  });
+  const composed = runtime.renderAppShell('<page></page>', '/guide');
+  assertEquals(composed, '<shell>open-layout</shell>');
+  assertEquals(ssrCalls, [{
+    tag: 'open-layout',
+    props: {
+      currentPath: '/guide',
+      locale: 'en',
+      locales: ['en'],
+      navItems: [],
+      headerNav: [],
+      homeHref: '/',
+      home: undefined,
+      routeMeta: {},
+      brand: 'acme',
+    },
+    route: '/guide',
+  }]);
   assertFalse(code.includes('layoutHtml.slice'));
 });
 
@@ -380,7 +406,10 @@ Deno.test('renderEntry: unconfigured appShell defaults to false (no import)', ()
 
   assertFalse(code.includes('import "@acme/components/open-layout";'));
   assertStringIncludes(code, '"default": false');
-  assertStringIncludes(code, 'if (!shell) return content;');
+  // An unresolved shell returns route content unchanged (shipped runtime).
+  const { runtime, ssrCalls } = loadLayoutRuntime({ default: false, layouts: {} });
+  assertEquals(runtime.renderAppShell('<page></page>', '/'), '<page></page>');
+  assertEquals(ssrCalls, []);
 });
 
 Deno.test('renderEntry: appShell false renders route content without default layout import', () => {
@@ -389,7 +418,9 @@ Deno.test('renderEntry: appShell false renders route content without default lay
 
   assertFalse(code.includes('import "@acme/components/open-layout";'));
   assertStringIncludes(code, '"default": false');
-  assertStringIncludes(code, 'if (!shell) return content;');
+  const { runtime, ssrCalls } = loadLayoutRuntime({ default: false, layouts: {} });
+  assertEquals(runtime.renderAppShell('<page></page>', '/'), '<page></page>');
+  assertEquals(ssrCalls, []);
 });
 
 Deno.test('renderEntry: custom appShell import and props are generated from config', () => {
@@ -422,45 +453,41 @@ Deno.test('renderEntry: route meta layout can select named layouts', () => {
   const code = renderEntry(desc);
 
   assertStringIncludes(code, 'import * as __shell_0 from "/app/components/post-layout.tsx";');
+  // The named-layout lookup lives in the typed app-shell runtime; the entry
+  // pins the plan data and the binding (ADR-0160 rule a).
+  assertStringIncludes(code, '"post-layout"');
   assertStringIncludes(
     code,
-    'const layout = Object.prototype.hasOwnProperty.call(routeMeta, "layout")',
+    'const { resolveAppShell: __resolveAppShell, renderAppShell: __renderAppShell } = __createAppShellRuntime({ ssr: __ssr, trustedHtml, appShellPlan: __appShellPlan, locales: __locales, navSections: __navSections, headerNav: __headerNav, defaultLocale: __getDefaultLocale() });',
   );
-  assertStringIncludes(code, '__appShellPlan.layouts[layout] ?? __appShellPlan.default');
   assertStringIncludes(code, 'module: $pageIndex');
 });
 
-// Behavior-level proof for the named-layout wiring: execute the generated
-// __routeMeta/__resolveAppShell helpers instead of asserting their source.
-interface LayoutHarness {
-  routeMeta(module: unknown): Record<string, unknown>;
-  resolveAppShell(routeMeta?: Record<string, unknown>): unknown;
-}
-
-async function loadLayoutHarness(): Promise<LayoutHarness> {
-  const { renderRuntimeHelpers } = await import(
-    '../src/vite/internal/ssg/entry-render-runtime.ts'
-  );
-  const defaultShell = { tagName: 'main-shell' };
-  const postShell = { tagName: 'post-layout' };
-  const helpers = renderRuntimeHelpers(
-    { default: defaultShell, layouts: { post: postShell } } as never,
-    [],
-  );
-  const harness = `
-const customElements = { get() { return undefined; } };
-const escapeHtml = (value) => String(value);
-const __locales = ["en"];
-const __getDefaultLocale = () => "en";
-const __navSections = [];
-const __headerNav = [];
-function renderDsd() { return { html: "" }; }
-${helpers}
-export function routeMeta(module) { return __routeMeta(module); }
-export function resolveAppShell(routeMeta) { return __resolveAppShell(routeMeta); }
-`;
-  const mod = await import('data:text/javascript;charset=utf-8,' + encodeURIComponent(harness));
-  return mod as LayoutHarness;
+// Behavior-level proof for the named-layout wiring: execute the shipped typed
+// runtime (routeMeta + the app-shell runtime) with the same plan shape the
+// entry binds (ADR-0160 rule a).
+function loadLayoutRuntime(appShellPlan: {
+  default: unknown;
+  layouts: Record<string, unknown>;
+}) {
+  const ssrCalls: Array<{ tag: string; props: Record<string, unknown>; route: string }> = [];
+  const runtime = createAppShellRuntime({
+    ssr: (tag, props, sourceInfo) => {
+      ssrCalls.push({
+        tag,
+        props: props ?? {},
+        route: sourceInfo?.route ?? '',
+      });
+      return '<shell>' + tag + '</shell>';
+    },
+    trustedHtml: (html) => ({ html }),
+    appShellPlan: appShellPlan as never,
+    locales: ['en'],
+    navSections: [],
+    headerNav: [],
+    defaultLocale: 'en',
+  });
+  return { runtime, ssrCalls };
 }
 
 function pageModule(layout: string | false | undefined): unknown {
@@ -471,24 +498,33 @@ function pageModule(layout: string | false | undefined): unknown {
   };
 }
 
-Deno.test('__routeMeta surfaces route.layout and __resolveAppShell selects the named layout', async () => {
-  const harness = await loadLayoutHarness();
-  const meta = harness.routeMeta(pageModule('post'));
+Deno.test('routeMeta surfaces route.layout and resolveAppShell selects the named layout', () => {
+  const defaultShell = { tagName: 'main-shell' };
+  const postShell = { tagName: 'post-layout' };
+  const { runtime } = loadLayoutRuntime({
+    default: defaultShell,
+    layouts: { post: postShell },
+  });
+  const meta = routeMeta(pageModule('post'));
   assertEquals(meta.layout, 'post');
-  assertEquals(harness.resolveAppShell(meta), { tagName: 'post-layout' });
+  assertEquals<unknown>(runtime.resolveAppShell(meta), { tagName: 'post-layout' });
 });
 
-Deno.test('__resolveAppShell: layout false disables the shell, unknown names fall back to default', async () => {
-  const harness = await loadLayoutHarness();
-  assertEquals(harness.resolveAppShell(harness.routeMeta(pageModule(false))), false);
-  assertEquals(
-    harness.resolveAppShell(harness.routeMeta(pageModule('no-such-layout'))),
+Deno.test('resolveAppShell: layout false disables the shell, unknown names fall back to default', () => {
+  const defaultShell = { tagName: 'main-shell' };
+  const { runtime } = loadLayoutRuntime({
+    default: defaultShell,
+    layouts: { post: { tagName: 'post-layout' } },
+  });
+  assertEquals<unknown>(runtime.resolveAppShell(routeMeta(pageModule(false))), false);
+  assertEquals<unknown>(
+    runtime.resolveAppShell(routeMeta(pageModule('no-such-layout'))),
     { tagName: 'main-shell' },
   );
   // Unset layout: no layout key in the meta, default shell applies.
-  const meta = harness.routeMeta(pageModule(undefined));
+  const meta = routeMeta(pageModule(undefined));
   assertEquals('layout' in meta, false);
-  assertEquals(harness.resolveAppShell(meta), { tagName: 'main-shell' });
+  assertEquals<unknown>(runtime.resolveAppShell(meta), { tagName: 'main-shell' });
 });
 
 Deno.test('renderEntry: definePage descriptor feeds load and metadata wiring', () => {
@@ -508,7 +544,7 @@ Deno.test('renderEntry: definePage descriptor feeds load and metadata wiring', (
   // projector and the resolved-Document seam.
   assertStringIncludes(
     code,
-    'const __pageContext = { data: __data, actionData: undefined, params: __params, request: c.req.raw, locale: __localeFromPath(c.req.path, __getDefaultLocale()), route: __routeContext, meta: __routeMetaValue };',
+    'const __pageContext = { data: __data, actionData: undefined, params: __params, request: c.req.raw, locale: __localeFromPath(__locales, c.req.path, __getDefaultLocale()), route: __routeContext, meta: __routeMetaValue };',
   );
   assertStringIncludes(code, 'const __doc = __resolvePageDocument(__page.head, __pageContext);');
   assertStringIncludes(
@@ -522,10 +558,11 @@ Deno.test('renderEntry: definePage descriptor feeds load and metadata wiring', (
   assertFalse(code.includes('__openElementData'));
   assertEquals(code.includes('module?.meta'), false);
   // Named layouts (ADR-0123): the descriptor's route.layout is the producer
-  // for the routeMeta.layout the app-shell resolver reads.
+  // for the routeMeta.layout the app-shell resolver reads. The extractor is
+  // imported runtime (ADR-0160 rule a); the entry pins the import binding.
   assertStringIncludes(
     code,
-    '...(page.route?.layout !== undefined ? { layout: page.route.layout } : {}),',
+    "import { routeMeta as __routeMeta } from '@openelement/router/server-runtime'",
   );
   assertStringIncludes(code, 'title: __doc.title || "openElement"');
   assertStringIncludes(
@@ -538,7 +575,12 @@ Deno.test('renderEntry: definePage descriptor feeds load and metadata wiring', (
     code,
     'dangerouslyHeadFragments: __doc.dangerouslyHeadFragments || [],',
   );
-  assertStringIncludes(code, 'function __pageDefinition(module) {');
+  // The page-definition extractor is imported runtime (ADR-0160 rule a):
+  // the entry pins the binding, not a local function body.
+  assertStringIncludes(
+    code,
+    "import { pageDefinition as __pageDefinition } from '@openelement/router/server-runtime'",
+  );
   assertStringIncludes(
     code,
     "import { isOpenElementRedirect as __isOpenElementRedirect, isOpenElementNotFound as __isOpenElementNotFound, classifyActionResult as __classifyActionResult, ACTION_FETCH_HEADER as __actionFetchHeader, PROBLEM_JSON_MEDIA_TYPE as __problemJsonMediaType } from '@openelement/router';",

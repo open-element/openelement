@@ -3,7 +3,11 @@
  * route. The streamed route's response-header channel is NOT emitted here:
  * the entry imports it from @openelement/router/server-runtime (ADR-0160
  * rule a) — the late-mutation Proxy guard and its commitment switch are
- * typecheckable, unit-tested module code.
+ * typecheckable, unit-tested module code. `__createDeferredPageShell` moved
+ * here from the old entry-render-runtime.ts emitter (#1470 block b): it is
+ * stream machinery (its manifest/program binding gate belongs with the
+ * streaming pump it feeds), it is only called by streamed routes, and the
+ * stream-manifest oracle pins its emitted shape.
  */
 import {
   STREAM_FRAME_FORBIDDEN_TAGS,
@@ -35,6 +39,19 @@ function __streamRequestScope(original) {
       if (!controller.signal.aborted) controller.abort();
     },
   };
+}
+
+// #1276 (B1.3-F1): the compiled program is the one canonical source for the
+// route→program tag binding — the deferred shell re-checks it against the
+// build manifest before any shell can exist (createDeferredDsdExecutor
+// re-verifies the wire hash; this gate fails closed first, with the route).
+async function __createDeferredPageShell(route, routeModule, props, instanceId, documentToken) {
+  const manifest = typeof __streamManifests === "undefined" ? undefined : __streamManifests[route];
+  const Cls = routeModule?.default;
+  if (!manifest || !Cls?.__partProgram || Cls.__partProgram.tag !== manifest.program.tag || Cls.__partProgram.version !== manifest.program.version) {
+    throw new Error("[openElement] stream route " + route + " has no matching compiled route manifest/program.");
+  }
+  return createDeferredDsdExecutor({ componentClass: Cls, props, manifest, instanceId, documentToken });
 }
 
 function __streamJson(value) {

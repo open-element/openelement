@@ -4,9 +4,10 @@
  * The codegen axis of the entry-* family (#901): shared code-generation
  * helpers used by entry-orchestrator.ts and entry-render-ssg.ts. Each
  * function generates a fragment of the virtual Hono entry. Client entry
- * emission lives in entry-client-codegen.ts. Runtime helper
- * emission lives in entry-render-runtime.ts; the descriptor data model
- * lives in protocol/ssg.ts and is constructed by entry-descriptor.ts.
+ * emission lives in entry-client-codegen.ts. The page-render runtime is
+ * imported from @openelement/router/server-runtime (ADR-0160 rule a); the
+ * descriptor data model lives in protocol/ssg.ts and is constructed by
+ * entry-descriptor.ts.
  */
 
 import type { PageRouteDecl, RendererDecl } from '../protocol/ssg.ts';

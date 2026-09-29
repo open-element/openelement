@@ -260,13 +260,20 @@ Deno.test('renderEntry: page routes use SSR helper and wrapInDocument', () => {
   const code = renderEntry(desc);
 
   assertStringIncludes(code, '__pageHandlers["/"].GET = [');
-  // v0.5.0: __ssr takes route params as second arg for SSR-time data access
-  assertStringIncludes(code, '__ssr(tag');
+  // v0.5.0: __ssr takes route params as second arg for SSR-time data access —
+  // the renderer seam is imported runtime (ADR-0160 rule a); the handler call
+  // site and the native factory binding stay pinned.
+  assertStringIncludes(code, '__ssr(__tag,');
+  assertStringIncludes(
+    code,
+    'const __ssr = __createPageRenderer({ renderDsd, customElements, ssrRenderableTags: __ssrRenderableTags });',
+  );
   // The WinterCG route middleware hands params to the handler directly.
   assertStringIncludes(code, '__params = __route.params');
   // v0.3.4: SSR automatically registers page components for Shadow DOM rendering
   assertStringIncludes(code, 'customElements.define(');
-  // v0.5.0: DSD renderer uses customElements.get(tag) to find component class
+  // v0.5.0: the SSR registry lookup binds into the typed renderer (the
+  // registration plumbing still consults customElements directly).
   assertStringIncludes(code, 'customElements.get(tag)');
   // v0.3.0: Uses wrapInDocument from ssr-handler.ts (single source of truth)
   assertStringIncludes(code, 'wrapInDocument(');
