@@ -36,19 +36,14 @@
 
 import { dirname, fromFileUrl, join } from '@std/path';
 
-import type { Page } from 'npm:playwright@1.59.1';
+import type { Page } from '@playwright/test';
 import { formatJson } from '@openelement/element/build-utils';
-import { allPackageAliases } from '../../../tools/lib/package-graph.ts';
-import { serveStatic } from '../../../tools/lib/static-server.ts';
 import { escapeRegExp } from '../../../tools/lib/text.ts';
-
-async function readJson<T = unknown>(path: string | URL): Promise<T> {
-  return JSON.parse(await Deno.readTextFile(path)) as T;
-}
-
-function normalizeSlashes(path: string): string {
-  return path.replace(/\\/g, '/');
-}
+import { extractSsrAdmissionPlan } from '../../lib/qualify-harness/admission-plan.ts';
+import { runRouterBuild } from '../../lib/qualify-harness/build-router.ts';
+import { launchQualifyBrowser } from '../../lib/qualify-harness/drive-chromium.ts';
+import { scaffoldApp } from '../../lib/qualify-harness/scaffold-app.ts';
+import { applyWorkspaceAliases } from '../../lib/qualify-harness/workspace-alias.ts';
 
 const repoRoot = dirname(dirname(dirname(dirname(fromFileUrl(import.meta.url)))));
 const fixtureDir = dirname(fromFileUrl(import.meta.url));
@@ -64,71 +59,6 @@ const THIRD_PARTY_IMPORTS = {
   '@ionic/core': 'npm:@ionic/core@8.8.18',
   '@ionic/core/': 'npm:@ionic/core@8.8.18/',
 };
-
-async function run(
-  args: string[],
-  cwd: string,
-  env: Record<string, string> = {},
-): Promise<void> {
-  console.log(`$ deno ${args.join(' ')}  # cwd=${cwd}`);
-  const output = await new Deno.Command(Deno.execPath(), {
-    args,
-    cwd,
-    env,
-    stdout: 'piped',
-    stderr: 'piped',
-  }).output();
-  if (output.success) return;
-
-  const stdout = new TextDecoder().decode(output.stdout).trim();
-  const stderr = new TextDecoder().decode(output.stderr).trim();
-  if (stdout) console.error(stdout);
-  if (stderr) console.error(stderr);
-  throw new Error(`Command failed with exit code ${output.code}: deno ${args.join(' ')}`);
-}
-
-async function patchDenoJson(appDir: string): Promise<void> {
-  const denoJsonPath = join(appDir, 'deno.json');
-  const denoJson = await readJson<{
-    imports: Record<string, string>;
-    tasks: Record<string, string>;
-  }>(denoJsonPath);
-  const imports = denoJson.imports;
-
-  Object.assign(imports, THIRD_PARTY_IMPORTS);
-
-  for (const [specifier, url] of allPackageAliases(repoRoot)) {
-    imports[specifier] = url;
-  }
-
-  denoJson.tasks.build =
-    `deno run --unstable-sloppy-imports --config deno.json --allow-read --allow-write --allow-env --allow-net --allow-run --allow-sys --allow-ffi --no-prompt ${
-      join(repoRoot, 'packages', 'router', 'src', 'cli', 'build.ts')
-    }`;
-
-  await Deno.writeTextFile(denoJsonPath, formatJson(denoJson));
-}
-
-async function patchViteConfig(appDir: string): Promise<void> {
-  const viteConfigPath = join(appDir, 'vite.config.ts');
-  let text = await Deno.readTextFile(viteConfigPath);
-
-  const aliasText = [...allPackageAliases(repoRoot)]
-    .map(([find, url]) =>
-      `{ find: '${find}', replacement: '${normalizeSlashes(fromFileUrl(url))}' }`
-    )
-    .join(',\n        ');
-
-  text = text.replace(
-    'export default defineConfig({',
-    `export default defineConfig({\n  resolve: {\n    alias: [\n        ${aliasText}\n    ],\n  },`,
-  );
-  text = text.replace(
-    "packageIslands: ['@acme/components'],",
-    "packageIslands: ['@acme/components'],\n    island: { upgradeStrategy: 'load' },",
-  );
-  await Deno.writeTextFile(viteConfigPath, text);
-}
 
 async function readEventCount(page: Page): Promise<number> {
   return await page.evaluate(() => {
@@ -221,19 +151,17 @@ export async function verifyBrowser(
   slotFirst: Record<string, SlotFirstEvidence>;
   browserVersion: string;
 }> {
-  const { chromium } = await import('npm:playwright@1.59.1');
-  const server = serveStatic(distDir);
-  const browser = await chromium.launch();
+  const session = await launchQualifyBrowser({ distDir });
   try {
     const slotFirst: Record<string, SlotFirstEvidence> = {};
     const slotText = new Map(
       CORPUS.filter((entry) => entry.expect.lightDomChildren.length > 0)
         .map((entry) => [entry.tag, entry.expect.lightDomChildren[0]] as const),
     );
-    const noJs = await browser.newContext({ javaScriptEnabled: false });
+    const noJs = await session.browser.newContext({ javaScriptEnabled: false });
     try {
       const rawPage = await noJs.newPage();
-      await rawPage.goto(`${server.origin}/third-party-wc/`);
+      await rawPage.goto(`${session.origin}/third-party-wc/`);
       for (const [tag, expected] of slotText) {
         const host = rawPage.locator(tag).first();
         slotFirst[tag] = {
@@ -251,7 +179,9 @@ export async function verifyBrowser(
     } finally {
       await noJs.close();
     }
-    const page = await browser.newPage();
+    const page = await session.browser.newPage();
+    session.watchPageErrors(page);
+    const browserErrors = session.pageErrors;
     await page.addInitScript(() => {
       const captured = new Map<string, { host: Element; child: Node }>();
       const tags = ['wc-lit-counter', 'sl-button', 'md-filled-button'];
@@ -283,12 +213,7 @@ export async function verifyBrowser(
         __wcBeforeUpgrade?: Map<string, { host: Element; child: Node }>;
       }).__wcBeforeUpgrade = captured;
     });
-    const browserErrors: string[] = [];
-    page.on('pageerror', (error) => browserErrors.push(error.message));
-    page.on('console', (message) => {
-      if (message.type() === 'error') browserErrors.push(message.text());
-    });
-    await page.goto(`${server.origin}/third-party-wc/`);
+    await page.goto(`${session.origin}/third-party-wc/`);
 
     const expectedTags = [
       'wc-lit-counter',
@@ -536,10 +461,9 @@ export async function verifyBrowser(
         ? identity.identityPreserved
         : null;
     }
-    return { capabilities: evidence, slotFirst, browserVersion: browser.version() };
+    return { capabilities: evidence, slotFirst, browserVersion: session.browser.version() };
   } finally {
-    await browser.close();
-    await server.close();
+    await session.close();
   }
 }
 
@@ -573,61 +497,39 @@ async function verifySsrHtml(appDir: string): Promise<void> {
   }
 }
 
+const FIXTURE_SOURCE_FILES = [
+  'app/routes/third-party-wc.tsx',
+  'app/components/page-third-party-wc.tsx',
+  'app/islands/wc-fixture.tsx',
+  'app/islands/wc-styles.ts',
+  'app/islands/wc-open-child.tsx',
+  'app/client/wc-client.ts',
+] as const;
+
 /**
  * Create a temp app from packages/create, patch it to consume the third-party
  * WC fixture, copy the fixture sources in, and build it. Returns the app dir.
  */
 export async function prepareFixtureApp(tmpRoot: string): Promise<string> {
-  await run(
-    [
-      'run',
-      '--allow-read',
-      '--allow-write',
-      '--allow-env',
-      '--allow-net',
-      '--deny-ffi',
-      '--no-prompt',
-      join(repoRoot, 'packages', 'create', 'src', 'cli.ts'),
-      PROJECT_NAME,
-    ],
-    tmpRoot,
-  );
-  const appDir = join(tmpRoot, PROJECT_NAME);
-  await patchDenoJson(appDir);
-  await patchViteConfig(appDir);
-
-  for (
-    const src of [
-      'app/routes/third-party-wc.tsx',
-      'app/components/page-third-party-wc.tsx',
-      'app/islands/wc-fixture.tsx',
-      'app/islands/wc-styles.ts',
-      'app/islands/wc-open-child.tsx',
-      'app/client/wc-client.ts',
-    ]
-  ) {
-    Deno.mkdirSync(dirname(join(appDir, src)), { recursive: true });
-    Deno.copyFileSync(join(fixtureDir, src), join(appDir, src));
-  }
-
-  await run(['task', 'build'], appDir);
+  const appDir = await scaffoldApp({
+    workDir: tmpRoot,
+    projectName: PROJECT_NAME,
+    createCli: join(repoRoot, 'packages', 'create', 'src', 'cli.ts'),
+    copySources: { fromRoot: fixtureDir, files: FIXTURE_SOURCE_FILES },
+  });
+  await applyWorkspaceAliases(appDir, {
+    repoRoot,
+    extraImports: THIRD_PARTY_IMPORTS,
+    // This fixture pins island activation to the load strategy: the slot-first
+    // probes capture pre-upgrade DOM only when hydration does not race them.
+    transformViteConfig: (text) =>
+      text.replace(
+        "packageIslands: ['@acme/components'],",
+        "packageIslands: ['@acme/components'],\n    island: { upgradeStrategy: 'load' },",
+      ),
+  });
+  await runRouterBuild(appDir);
   return appDir;
-}
-
-interface SsrAdmissionDecision {
-  tagName: string;
-  modulePath: string;
-  source: string;
-  renderPath: string;
-  reason: string;
-}
-
-interface SsrAdmissionPlan {
-  renderableTags: string[];
-  clientOnlyTags: string[];
-  rejectedTags: string[];
-  reasons: Record<string, string>;
-  decisions: SsrAdmissionDecision[];
 }
 
 interface CorpusExpectation {
@@ -822,26 +724,7 @@ async function pathExists(path: string): Promise<boolean> {
   }
 }
 
-/** Extract the generated `var ssrAdmissionPlan = {...}` object literal. */
-export function extractSsrAdmissionPlan(entryJs: string): SsrAdmissionPlan {
-  const marker = 'var ssrAdmissionPlan = ';
-  const start = entryJs.indexOf(marker);
-  if (start === -1) throw new Error('ssrAdmissionPlan not found in server entry');
-  let i = start + marker.length;
-  if (entryJs[i] !== '{') throw new Error('ssrAdmissionPlan is not an object literal');
-  let depth = 0;
-  const begin = i;
-  for (; i < entryJs.length; i++) {
-    if (entryJs[i] === '{') depth++;
-    else if (entryJs[i] === '}') {
-      depth--;
-      if (depth === 0) break;
-    }
-  }
-  if (depth !== 0) throw new Error('ssrAdmissionPlan object literal is unbalanced');
-  return JSON.parse(entryJs.slice(begin, i + 1)) as SsrAdmissionPlan;
-}
-
+/** The observed SSR form of one corpus tag in the built output. */
 interface SsrFormObservation {
   tagPresent: boolean;
   lightDomChildren: string[];
