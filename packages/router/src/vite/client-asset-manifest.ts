@@ -9,7 +9,7 @@
  * contains, so islands that share a chunk keep their identity.
  */
 
-import { join, relative, resolve } from '../internal/host-path.ts';
+import { join, relative } from '../internal/host-path.ts';
 import { normalizeSeparators } from '@openelement/element/build-utils';
 import type { ClientAssetManifest, ClientIslandAsset } from './internal/protocol/client-assets.ts';
 import {
