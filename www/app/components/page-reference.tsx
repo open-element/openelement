@@ -329,13 +329,17 @@ export default class ReferencePage extends OpenElement {
             <span slot='copy'>{this.s4Copy}</span>
             <div class='registry' id='element-reference'>
               {this.elementEntries.map((element) => (
+                // Compiled list-Region grammar (OEC9013): item children are
+                // static text, {element.<field>} values or intrinsic elements —
+                // no conditional JSX. Stable rows carry status:'' and the
+                // .chip:empty rule hides the stability chip.
                 <div class='ce-row' id={element.anchor} key={element.key}>
                   <div>
                     <span class='ce-tag'>{element.tag}</span>
                     <span class='ce-class'>{element.className}</span>
                     <span class='chip'>{element.layer}</span>
                     <span class='chip'>{element.hydrate}</span>
-                    {element.status && <span class='chip chip-stability'>{element.status}</span>}
+                    <span class='chip chip-stability'>{element.status}</span>
                   </div>
                   <p class='ce-description'>{element.description}</p>
                   <span class='ce-module'>{element.module}</span>
