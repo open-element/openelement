@@ -89,7 +89,7 @@ export { createLogger } from './internal/core/logger.ts';
 export type { Logger } from './internal/core/logger.ts';
 export type { StyleSheetLike } from './internal/protocol/style-sheet.ts';
 export { deepGetElementById, ensureDeepFragmentNavigation } from './internal/core/deep-fragment.ts';
-export { ensurePreHydrationClickCapture } from './open-element-implementation.ts';
+export { ensurePreHydrationClickCapture } from './internal/compiled/runtime/pre-upgrade-events.ts';
 
 // ─── Server-render entry (compiled serializer) ─────────────────────
 
