@@ -12,7 +12,7 @@
  * by walking a VNode or a generic DOM tree.
  */
 
-import { frameworkError, ProgramErrorCode } from './errors.ts';
+import { ProgramErrorCode, raiseFrameworkError } from './errors.ts';
 import { forbiddenSinkReason } from './forbidden-sinks.ts';
 import { VOID_TAGS } from './void-tags.ts';
 
@@ -426,10 +426,10 @@ export const DATA_OE_LIGHT = 'data-oe-light';
  * one catchable error type with one stable code.
  */
 function fail(reason: string): never {
-  throw frameworkError(
+  raiseFrameworkError(
+    'validation',
     ProgramErrorCode.INVALID_PROGRAM,
     `[compiled-program] invalid Part Program v1: ${reason}`,
-    { phase: 'validation' },
   );
 }
 

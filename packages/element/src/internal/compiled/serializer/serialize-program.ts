@@ -44,7 +44,7 @@ import {
   type ProgramWhenPart,
 } from '../../protocol/part-program.ts';
 import { VOID_TAGS } from '../../protocol/void-tags.ts';
-import { frameworkError, RuntimeErrorCode } from '../../protocol/errors.ts';
+import { raiseFrameworkError, RuntimeErrorCode } from '../../protocol/errors.ts';
 // Canonical text-node escape contract (#1272) — the one shared implementation;
 // do not reintroduce a private copy.
 import { escapeText } from '../escape-text.ts';
@@ -187,7 +187,7 @@ function createWalkContext(program: PartProgramV1, seams: SerializeProgramSeams)
 
 /** Fail closed on shapes the wire validator rejects before any walk runs. */
 function failUnreachable(code: string, message: string): never {
-  throw frameworkError(code, message, { phase: 'render' });
+  raiseFrameworkError('render', code, message);
 }
 
 function orderedSinks(ctx: WalkContext, path: readonly number[]): readonly ProgramAttributeSink[] {

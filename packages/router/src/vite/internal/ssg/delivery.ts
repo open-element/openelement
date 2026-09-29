@@ -10,6 +10,7 @@
 import type { ClientIslandEntry, IslandDeliveryStrategy } from '../protocol/ssg.ts';
 export type { IslandDeliveryStrategy } from '../protocol/ssg.ts';
 import { HYDRATION_STRATEGIES, isValidTagName } from '@openelement/element';
+import { hasControlCharacter } from '../../../internal/control-characters.ts';
 import { buildError, DeliveryErrorCode } from '../../../internal/error-codes.ts';
 
 // Derived from the element protocol's single-source strategy list (same
@@ -38,14 +39,6 @@ export interface IslandDeliveryMeta {
 
 export type ClientIslandDeliveryInput = ClientIslandEntry | ClientIslandDeliveryEntry;
 
-function hasControlCharacters(value: string): boolean {
-  for (let index = 0; index < value.length; index++) {
-    const code = value.charCodeAt(index);
-    if (code <= 0x1f || code === 0x7f) return true;
-  }
-  return false;
-}
-
 /**
  * Media queries are data in the generated artifact, never executable source.
  * Keep the value bounded and reject controls before it is passed to
@@ -59,7 +52,7 @@ export function validateIslandMediaQuery(media: unknown, context = 'island'): st
     );
   }
   const normalized = media.trim();
-  if (normalized.length > 512 || hasControlCharacters(normalized)) {
+  if (normalized.length > 512 || hasControlCharacter(normalized)) {
     throw buildError(
       DeliveryErrorCode.MEDIA_QUERY,
       `Invalid island media query for ${context}: unsafe or oversized value`,
@@ -153,7 +146,7 @@ export function validateIslandDeliveryExportNames(
       !isValidTagName(tag) ||
       typeof exportName !== 'string' ||
       exportName.trim() === '' ||
-      hasControlCharacters(exportName)
+      hasControlCharacter(exportName)
     ) {
       throw buildError(
         DeliveryErrorCode.EXPORT_NAMES,

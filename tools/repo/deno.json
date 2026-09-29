@@ -17,7 +17,6 @@
     "retired-api:check": "deno run --allow-run ./run-in.ts --root ../.. -- deno run --allow-read --allow-run=git tools/repo/check-retired-api-refs.ts",
     "signals:check-protocol-boundary": "deno run --allow-run ./run-in.ts --root ../.. -- deno run --allow-read --allow-env tools/repo/check-signal-protocol-boundary.ts",
     "test:coverage:check": "deno run --allow-run ./run-in.ts --root ../.. -- deno run --allow-read --allow-run --allow-write --allow-env --allow-net --allow-ffi --allow-sys tools/repo/check-coverage.ts --threshold 80 --branch-threshold 84 --function-threshold 86",
-    "candidate:evidence": "deno run --allow-run ./run-in.ts --root ../.. -- deno run --allow-read --allow-write --allow-run --allow-env --allow-net --deny-ffi --no-prompt tools/repo/candidate-evidence.ts",
     "gate:ts7:shadow": "deno run --allow-run ./run-in.ts --root ../.. -- deno run --allow-read --allow-write --allow-run --allow-env --allow-net tools/repo/ts7-shadow-gate.ts",
     "validation:boundary-check": "deno run --allow-run ./run-in.ts --root ../.. -- deno run --allow-read --allow-env tools/repo/check-validation-boundary.ts",
     "workers:boundary-check": "deno run --allow-run ./run-in.ts --root ../.. -- deno run --allow-read --allow-env tools/repo/check-workers-boundary.ts apps/saas/.output-workers",

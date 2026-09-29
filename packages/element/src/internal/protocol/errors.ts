@@ -307,3 +307,18 @@ export function frameworkError(
     code,
   });
 }
+
+/**
+ * Raise one framework failure and never return: the throwing companion of
+ * {@linkcode frameworkError}. The per-module `fail(code, message)`
+ * micro-factories bind their failure surface's fixed {@linkcode ErrorPhase}
+ * here — one implementation, the phase as a parameter — so a code and a phase
+ * cannot drift apart per throw site.
+ */
+export function raiseFrameworkError(
+  phase: ErrorPhase,
+  code: string,
+  message: string,
+): never {
+  throw frameworkError(code, message, { phase });
+}

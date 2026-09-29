@@ -38,7 +38,7 @@
  * @module @openelement/element/open-element
  */
 
-import { FacadeErrorCode, OpenElementError } from './internal/core/errors.ts';
+import { FacadeErrorCode, OpenElementError, raiseFrameworkError } from './internal/core/errors.ts';
 import {
   applyPendingOwnValues,
   bindProgramHandlers,
@@ -70,12 +70,13 @@ import { OpenElementConfiguration } from './open-element-configuration.ts';
 const facadeStates = new WeakMap<OpenElement, FacadePropertyState>();
 
 function failMissingProgram(ctor: object): never {
-  throw new OpenElementError(
+  raiseFrameworkError(
+    'csr',
+    FacadeErrorCode.PROGRAM_MISSING,
     `[openElement] <${classNameOf(ctor)}> has no compiled Part Program. ` +
       'Every OpenElement component must pass through the OpenElement ' +
       'compiler (the @openelement/element/compiler open:compiled-element transform); ' +
       'the runtime JSX render path was removed.',
-    { code: FacadeErrorCode.PROGRAM_MISSING, phase: 'csr' },
   );
 }
 

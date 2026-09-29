@@ -19,7 +19,7 @@ import type {
   CompiledPropertyMetadata,
   PartProgram,
 } from './internal/protocol/part-program.ts';
-import { FacadeErrorCode, OpenElementError } from './internal/core/errors.ts';
+import { FacadeErrorCode, OpenElementError, raiseFrameworkError } from './internal/core/errors.ts';
 import {
   MAX_COMPOSITION_DEPTH,
   STREAM_MAX_FIELDS,
@@ -156,11 +156,12 @@ function classNameOf(ctor: object): string {
 }
 
 function failUncompiled(ctor: object, tag: string): never {
-  throw new OpenElementError(
+  raiseFrameworkError(
+    'ssr',
+    FacadeErrorCode.PROGRAM_MISSING,
     `[openElement] <${tag}> (${classNameOf(ctor)}) has no compiled Part Program. ` +
       'renderDsd only serializes classes produced by the OpenElement compiler ' +
       '(@openelement/element/compiler open:compiled-element transform).',
-    { code: FacadeErrorCode.PROGRAM_MISSING, phase: 'ssr' },
   );
 }
 

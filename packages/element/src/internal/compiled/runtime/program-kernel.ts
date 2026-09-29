@@ -12,7 +12,7 @@ import type { PartProgramV1, ProgramEachPart } from '../../protocol/part-program
 // The single error dialect (#1386 item 3): every failure raised by this module
 // is an OpenElementError carrying a code from the catalogue, so a consumer
 // classifies a compiled-runtime failure by code instead of by message prefix.
-import { frameworkError, RuntimeErrorCode } from '../../protocol/errors.ts';
+import { raiseFrameworkError, RuntimeErrorCode } from '../../protocol/errors.ts';
 import type { RuntimeProgramIR } from '../runtime-program.ts';
 import { LifetimeScope } from '../lifetime-scope.ts';
 
@@ -101,7 +101,7 @@ export function origin(ctx: MountContext): string {
  * reader; the code is the contract.
  */
 export function fail(code: string, message: string): never {
-  throw frameworkError(code, message, { phase: 'render' });
+  raiseFrameworkError('render', code, message);
 }
 
 export function signalOf(ctx: MountContext, name: string): SignalLike<unknown> {

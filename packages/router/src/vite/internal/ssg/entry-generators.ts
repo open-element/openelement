@@ -12,6 +12,7 @@
  */
 
 import { HYDRATION_STRATEGIES, isValidTagName } from '@openelement/element';
+import { hasControlCharacter } from '../../../internal/control-characters.ts';
 import { buildError, IslandEntryErrorCode } from '../../../internal/error-codes.ts';
 import {
   type ClientIslandDeliveryEntry,
@@ -55,14 +56,6 @@ export interface AdmittedClientIslandEntry
   extends Omit<ClientIslandDeliveryEntry, 'modulePath' | 'strategy'> {
   modulePath: AdmittedIslandModuleSpecifier;
   strategy: IslandDeliveryStrategy;
-}
-
-function hasControlCharacter(value: string): boolean {
-  for (let i = 0; i < value.length; i++) {
-    const code = value.charCodeAt(i);
-    if (code <= 0x1f || code === 0x7f) return true;
-  }
-  return false;
 }
 
 function hasTraversalSegment(value: string): boolean {

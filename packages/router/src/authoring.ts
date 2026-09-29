@@ -19,6 +19,7 @@ import { ERROR_PREFIX } from '@openelement/element/authoring';
 import { isDangerousKey, isValidTagName, OpenElementError } from '@openelement/element/authoring';
 import { HYDRATION_STRATEGIES } from '@openelement/element/authoring';
 import type { HydrationStrategy } from '@openelement/element/authoring';
+import { hasControlCharacter } from './internal/control-characters.ts';
 import { authoringError, IslandErrorCode, PageErrorCode } from './internal/error-codes.ts';
 
 /**
@@ -611,15 +612,12 @@ function validateIslandMedia(media: unknown): string {
         'Keep the query under 512 characters and free of control characters.',
     );
   }
-  for (let index = 0; index < value.length; index++) {
-    const code = value.charCodeAt(index);
-    if (code <= 0x1f || code === 0x7f) {
-      throw authoringError(
-        IslandErrorCode.HYDRATE,
-        `${ERROR_PREFIX} defineIslandConfig() media contains an unsafe or oversized query. ` +
-          'Keep the query under 512 characters and free of control characters.',
-      );
-    }
+  if (hasControlCharacter(value)) {
+    throw authoringError(
+      IslandErrorCode.HYDRATE,
+      `${ERROR_PREFIX} defineIslandConfig() media contains an unsafe or oversized query. ` +
+        'Keep the query under 512 characters and free of control characters.',
+    );
   }
   return value;
 }
@@ -736,13 +734,7 @@ export function defineIslandConfig(config: IslandConfig): IslandConfig {
         (deliveryTags !== undefined && !allowedTags.has(tag)) ||
         typeof exportName !== 'string' ||
         exportName.trim() === '' ||
-        (() => {
-          for (let index = 0; index < exportName.length; index++) {
-            const code = exportName.charCodeAt(index);
-            if (code <= 0x1f || code === 0x7f) return true;
-          }
-          return false;
-        })()
+        hasControlCharacter(exportName)
       ) {
         throw authoringError(
           IslandErrorCode.EXPORT_NAMES,
