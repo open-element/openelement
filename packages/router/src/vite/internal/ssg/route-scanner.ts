@@ -49,6 +49,7 @@ import { normalizeSeparators, pathToTagName } from '@openelement/element/build-u
 import { dirname, join, resolve } from '../../../internal/host-path.ts';
 import { safeReadDir, safeReadFile, safeStat } from './route-scanner-fs.ts';
 import { analyzeModuleSemantics } from '@openelement/element/compiler';
+import { ROUTER_MODULE_VOCABULARY } from '../protocol/module-vocabulary.ts';
 import { scanStreamManifest } from './stream-manifest.ts';
 import type { StreamRouteManifest } from '../protocol/ssg.ts';
 
@@ -68,7 +69,9 @@ async function sourceTreeHasEnhancedForms(
   depth = 0,
   seen: Set<string> = new Set(),
 ): Promise<boolean> {
-  const semantics = analyzeModuleSemantics(source, filePath);
+  const semantics = analyzeModuleSemantics(source, filePath, {
+    vocabulary: ROUTER_MODULE_VOCABULARY,
+  });
   if (semantics.enhancedForm) return true;
   if (depth >= 3 || seen.has(filePath)) return false;
   seen.add(filePath);
@@ -263,7 +266,9 @@ export async function scanRoutes(
           if (source === undefined) {
             log.debug(`Unable to read route module: ${fullPath}`);
           } else {
-            const semantics = analyzeModuleSemantics(source, fullPath);
+            const semantics = analyzeModuleSemantics(source, fullPath, {
+              vocabulary: ROUTER_MODULE_VOCABULARY,
+            });
             tagName = semantics.exportedTagName;
             isDefinePage = semantics.definePage;
             streamManifest = await scanStreamManifest(

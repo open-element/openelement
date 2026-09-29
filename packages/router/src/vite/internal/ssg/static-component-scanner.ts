@@ -11,6 +11,7 @@ import type { RouteEntry } from '../protocol/framework.ts';
 import type { StaticComponentDecl } from '../protocol/ssg.ts';
 import { normalizeSeparators } from '@openelement/element/build-utils';
 import { analyzeModuleSemantics } from '@openelement/element/compiler';
+import { ROUTER_MODULE_VOCABULARY } from '../protocol/module-vocabulary.ts';
 
 const SOURCE_EXTENSIONS = ['.tsx', '.ts', '.jsx', '.js'] as const;
 
@@ -76,7 +77,9 @@ export async function scanStaticComponents(
     } catch {
       continue;
     }
-    const semantics = analyzeModuleSemantics(source, file);
+    const semantics = analyzeModuleSemantics(source, file, {
+      vocabulary: ROUTER_MODULE_VOCABULARY,
+    });
     const collect = !inside(routeRoot, file) && !inside(islandRoot, file);
     const tagName = collect ? semantics.defaultCompiledTag : undefined;
     if (tagName) {

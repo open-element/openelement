@@ -23,6 +23,11 @@ export interface ModuleSemanticFacts {
    */
   unsupportedElementDecorator?: string;
   exportedTagName?: string;
+  /**
+   * True when the module default-exports a page-definition factory call from
+   * the host's injected vocabulary, or is an .mdx route. The default scan
+   * (no injected vocabulary) never recognizes another package's factories.
+   */
   definePage: boolean;
   usesExportedTagName: boolean;
   enhancedForm: boolean;
@@ -81,6 +86,53 @@ export interface SemanticCoreOptions {
    */
   readonly staticSidecars?: readonly StaticSidecarDescriptor[];
 }
+
+/**
+ * One module-scan vocabulary entry the host admits: a binding identity
+ * (module specifier + exported name, aliases followed) plus the fact a
+ * canonical call of that binding contributes. Plain data — the scan consumes
+ * the descriptors without learning the caller's package vocabulary
+ * (ADR-0160 rule c), the same direction as the compiler's
+ * {@link StaticSidecarDescriptor} admission (#1473 item 3).
+ */
+export interface ModuleVocabularyDescriptor {
+  /** Canonical module specifier the factory must be imported from. */
+  readonly moduleSpecifier: string;
+  /** Exported name of the factory binding. */
+  readonly exportName: string;
+  /** What a canonical call of the binding contributes to the scan. */
+  readonly kind: 'page-definition' | 'element-registration';
+}
+
+/** Host-supplied vocabulary extensions for the module scan. */
+export interface ModuleSemanticsOptions {
+  /**
+   * Vocabulary descriptors the host admits beyond the core's own element
+   * bindings. The default scan knows no other package: a route module's
+   * page-definition export or registration factory is recognized only when
+   * the host injects its descriptor.
+   */
+  readonly vocabulary?: readonly ModuleVocabularyDescriptor[];
+}
+
+/**
+ * The core's own vocabulary: the element package's registration factories.
+ * Every other package's factories — Router's page definition, the lit page
+ * factory — ride host-injected descriptors; the default scan fails closed on
+ * them.
+ */
+const CORE_VOCABULARY: readonly ModuleVocabularyDescriptor[] = [
+  {
+    moduleSpecifier: '@openelement/element',
+    exportName: 'defineElement',
+    kind: 'element-registration',
+  },
+  {
+    moduleSpecifier: '@openelement/element',
+    exportName: 'defineIsland',
+    kind: 'element-registration',
+  },
+];
 
 /**
  * Intrinsics that exist only at compile time: the compiler erases the
@@ -329,9 +381,17 @@ function stringArgument(call: ts.CallExpression, index = 0): string | undefined 
  * Parse one module source and report the semantic facts the compiler boundary
  * and the Vite graph adapters branch on. Pure: it never resolves imports from
  * disk and never throws on foreign or invalid syntax — an unparsable module
- * simply yields no recognized facts.
+ * simply yields no recognized facts. The scan's factory vocabulary is
+ * host-injected: the default knows only the element package's own
+ * registration factories, and page-definition/registration facts for other
+ * packages require the caller's {@link ModuleSemanticsOptions.vocabulary}
+ * descriptors (ADR-0160 rule c).
  */
-export function analyzeModuleSemantics(source: string, fileName: string): ModuleSemanticFacts {
+export function analyzeModuleSemantics(
+  source: string,
+  fileName: string,
+  options: ModuleSemanticsOptions = {},
+): ModuleSemanticFacts {
   const sourceFile = ts.createSourceFile(
     fileName,
     source,
@@ -340,6 +400,13 @@ export function analyzeModuleSemantics(source: string, fileName: string): Module
     fileName.endsWith('.tsx') || fileName.endsWith('.jsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
   );
   const imports = createModuleIntrinsicBindings(sourceFile);
+  const vocabulary = [...CORE_VOCABULARY, ...(options.vocabulary ?? [])];
+  const pageDefinitionBindings = vocabulary.filter((descriptor) =>
+    descriptor.kind === 'page-definition'
+  );
+  const registrationBindings = vocabulary.filter((descriptor) =>
+    descriptor.kind === 'element-registration'
+  );
   const relativeImports = new Set<string>();
   for (const statement of sourceFile.statements) {
     if (
@@ -376,22 +443,23 @@ export function analyzeModuleSemantics(source: string, fileName: string): Module
     }
     if (
       ts.isExportAssignment(statement) && ts.isCallExpression(statement.expression) &&
-      ts.isIdentifier(statement.expression.expression) &&
-      (imports.isRuntimeNamedImport(
-        statement.expression.expression.text,
-        '@openelement/router',
-        'definePage',
-      ) ||
-        // #1339: the lit renderer's page definition factory lives on the
-        // @openelement/router/lit subpath; a route default-exporting it is a
-        // definePage-shaped route for scanning purposes (descriptor attached
-        // by the same internal path, host tag on openElementPageTag).
-        imports.isRuntimeNamedImport(
-          statement.expression.expression.text,
-          '@openelement/router/lit',
-          'defineLitPage',
-        ))
-    ) definePage = true;
+      ts.isIdentifier(statement.expression.expression)
+    ) {
+      // A default-exported page-definition factory call marks the module as a
+      // page — but only for a binding the host's injected vocabulary admits.
+      // (The lit renderer's factory lives on a subpath; the router injects
+      // both specifiers, the core stays package-blind, #1339.)
+      const pageFactory = statement.expression.expression.text;
+      if (
+        pageDefinitionBindings.some((descriptor) =>
+          imports.isRuntimeNamedImport(
+            pageFactory,
+            descriptor.moduleSpecifier,
+            descriptor.exportName,
+          )
+        )
+      ) definePage = true;
+    }
 
     if (!ts.isClassDeclaration(statement)) continue;
     const isDefault = statement.modifiers?.some((modifier) =>
@@ -438,19 +506,17 @@ export function analyzeModuleSemantics(source: string, fileName: string): Module
         relativeImports.add(node.arguments[0].text);
       }
       if (ts.isIdentifier(expression)) {
-        // Provenance-only (#1209): the legacy registration factories count
-        // only when bound to a real runtime named import from an OpenElement
-        // package; a bare same-name spelling records nothing.
+        // Provenance-only (#1209): a registration factory counts only when the
+        // host's injected vocabulary admits the binding — a runtime named
+        // import from a descriptor's canonical specifier (aliases followed);
+        // a bare same-name spelling records nothing.
         if (
-          imports.isRuntimeNamedImport(
-            expression.text,
-            ['@openelement/element', '@openelement/router'],
-            'defineElement',
-          ) ||
-          imports.isRuntimeNamedImport(
-            expression.text,
-            ['@openelement/element', '@openelement/router'],
-            'defineIsland',
+          registrationBindings.some((descriptor) =>
+            imports.isRuntimeNamedImport(
+              expression.text,
+              descriptor.moduleSpecifier,
+              descriptor.exportName,
+            )
           )
         ) {
           const tag = stringArgument(node);

@@ -29,11 +29,30 @@ import {
 } from '../src/internal/compiler/semantic-core/compile.ts';
 import {
   analyzeModuleSemantics,
+  type ModuleVocabularyDescriptor,
   type StaticSidecarDescriptor,
 } from '../src/internal/compiler/semantic-core/module-analysis.ts';
 import { compileElementModule } from '../src/internal/compiler/plugin.ts';
 
 const FILE = '/project/app/islands/provenance.tsx';
+
+/**
+ * The router registration vocabulary a host framework injects (#1473): the
+ * module scan ships no router knowledge, so the router's registration
+ * factories are recognized only through this explicit descriptor set.
+ */
+const ROUTER_VOCABULARY: readonly ModuleVocabularyDescriptor[] = [
+  {
+    moduleSpecifier: '@openelement/router',
+    exportName: 'defineElement',
+    kind: 'element-registration',
+  },
+  {
+    moduleSpecifier: '@openelement/router',
+    exportName: 'defineIsland',
+    kind: 'element-registration',
+  },
+];
 
 /**
  * The island sidecar descriptor a host framework injects (#1468): the
@@ -500,13 +519,25 @@ Deno.test('provenance: module analysis drops bare-spelling defineElement but kee
   assertEquals(bare.definedCustomElementTags, []);
   assertEquals(bare.usesExportedTagName, false);
 
+  const boundSource = [
+    "import { defineElement } from '@openelement/router';",
+    "export const tagName = 'oe-bound-defined';",
+    'defineElement(tagName, {});',
+  ].join('\n');
+  // Default scan (no injected vocabulary): the router factory is unknown —
+  // fail closed.
+  const unadmitted = analyzeModuleSemantics(
+    boundSource,
+    '/project/app/routes/unadmitted.tsx',
+  );
+  assertEquals(unadmitted.definedCustomElementTags, []);
+  assertEquals(unadmitted.usesExportedTagName, false);
+  // Host-injected vocabulary: the bound import is recognized (aliases
+  // followed, canonical specifier).
   const bound = analyzeModuleSemantics(
-    [
-      "import { defineElement } from '@openelement/router';",
-      "export const tagName = 'oe-bound-defined';",
-      'defineElement(tagName, {});',
-    ].join('\n'),
+    boundSource,
     '/project/app/routes/bound.tsx',
+    { vocabulary: ROUTER_VOCABULARY },
   );
   assertEquals(bound.usesExportedTagName, true);
 });

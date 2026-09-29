@@ -39,6 +39,7 @@ import { createNpmSpecifierPlugin } from '../vite/npm-specifier-plugin.ts';
 import { createDenoImportMapResolvePlugin } from '../vite/deno-import-map.ts';
 import { analyzeModuleSemantics, compiledElementPlugin } from '@openelement/element/compiler';
 import { ISLAND_ADMISSION } from '../vite/internal/protocol/island-admission.ts';
+import { ROUTER_MODULE_VOCABULARY } from '../vite/internal/protocol/module-vocabulary.ts';
 import { compilerBehaviorDeclarations } from '../vite/internal/ssg/client-admission.ts';
 import { sortAliasEntries } from '../vite/alias-utils.ts';
 import { formatError } from '@openelement/element';
@@ -144,7 +145,9 @@ export function findReachableIslandTags(
   const candidateSet = new Set(allowed);
   const recordSource = (source: string, filePath?: string): void => {
     if (filePath) {
-      const semantics = analyzeModuleSemantics(source, filePath);
+      const semantics = analyzeModuleSemantics(source, filePath, {
+        vocabulary: ROUTER_MODULE_VOCABULARY,
+      });
       for (const tag of semantics.referencedCustomElementTags) {
         if (candidateSet.has(tag)) reachable.add(tag);
       }
@@ -166,7 +169,9 @@ export function findReachableIslandTags(
     } catch {
       return;
     }
-    const semantics = analyzeModuleSemantics(source, normalizedPath);
+    const semantics = analyzeModuleSemantics(source, normalizedPath, {
+      vocabulary: ROUTER_MODULE_VOCABULARY,
+    });
     recordSource(source, normalizedPath);
     if (ctx.options.renderer === 'lit') {
       // #1339: lit pages reference islands inside html`` template literals,

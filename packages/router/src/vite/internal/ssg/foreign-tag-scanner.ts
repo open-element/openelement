@@ -21,18 +21,25 @@ import { createLogger } from '@openelement/element';
 import { join } from '../../../internal/host-path.ts';
 import { safeReadFile } from './route-scanner-fs.ts';
 import { analyzeModuleSemantics } from '@openelement/element/compiler';
+import { ROUTER_MODULE_VOCABULARY } from '../protocol/module-vocabulary.ts';
 
 const log = createLogger('foreign-tag-scan');
 
 /** Extract custom-element tags the compiler semantic core sees as definitions. */
 export function collectDefinedTags(source: string): Set<string> {
-  return new Set(analyzeModuleSemantics(source, 'foreign-tag-module.tsx').definedCustomElementTags);
+  return new Set(
+    analyzeModuleSemantics(source, 'foreign-tag-module.tsx', {
+      vocabulary: ROUTER_MODULE_VOCABULARY,
+    }).definedCustomElementTags,
+  );
 }
 
 /** Extract compiler-proven custom-element JSX references. */
 export function collectUsedTags(source: string): Set<string> {
   return new Set(
-    analyzeModuleSemantics(source, 'foreign-tag-module.tsx').referencedCustomElementTags,
+    analyzeModuleSemantics(source, 'foreign-tag-module.tsx', {
+      vocabulary: ROUTER_MODULE_VOCABULARY,
+    }).referencedCustomElementTags,
   );
 }
 

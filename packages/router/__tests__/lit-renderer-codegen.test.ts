@@ -12,6 +12,7 @@ import { assertEquals, assertStringIncludes, assertThrows } from '@std/assert';
 import { buildEntryDescriptor, renderEntry } from '../src/vite/internal/ssg/index.ts';
 import { generateClientEntry } from '../src/vite/internal/ssg/entry-client-codegen.ts';
 import { analyzeModuleSemantics } from '@openelement/element/compiler';
+import { ROUTER_MODULE_VOCABULARY } from '../src/vite/internal/protocol/module-vocabulary.ts';
 import type { RouteEntry } from '../src/vite/internal/protocol/framework.ts';
 
 const litRoutes: RouteEntry[] = [
@@ -119,11 +120,22 @@ Deno.test('lit renderer: route scanner semantics accept defineLitPage from @open
     "import { NotesPage } from '../components/notes-page.ts';",
     "export default defineLitPage('notes-list-page', NotesPage, {});",
   ].join('\n');
-  assertEquals(analyzeModuleSemantics(source, 'notes.ts').definePage, true);
-  // A same-named foreign binding must not count.
+  assertEquals(
+    analyzeModuleSemantics(source, 'notes.ts', {
+      vocabulary: ROUTER_MODULE_VOCABULARY,
+    }).definePage,
+    true,
+  );
+  // A same-named foreign binding must not count — even with the vocabulary
+  // injected, admission stays a canonical import binding.
   const foreign = [
     "import { defineLitPage } from './local.ts';",
     'export default defineLitPage(x, y, {});',
   ].join('\n');
-  assertEquals(analyzeModuleSemantics(foreign, 'notes.ts').definePage, false);
+  assertEquals(
+    analyzeModuleSemantics(foreign, 'notes.ts', {
+      vocabulary: ROUTER_MODULE_VOCABULARY,
+    }).definePage,
+    false,
+  );
 });
