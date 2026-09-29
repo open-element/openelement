@@ -145,7 +145,14 @@ async function handler(timeoutMs?: number, streamManifest?: StreamRouteManifest)
     const __locales = [];
     const __localeFromPath = () => 'en';
     const __getDefaultLocale = () => 'en';
-    const __resolvePageDocument = () => ({ title: 'Stream', lang: 'en', links: [] });
+    // Faithful to resolvePageDocument's #1471 signature: the render wiring's
+    // client-script descriptors ride the resolved document.
+    const __resolvePageDocument = (_head, _context, clientScripts) => ({
+      title: 'Stream',
+      lang: 'en',
+      links: [],
+      ...(clientScripts && clientScripts.length > 0 ? { clientScripts } : {}),
+    });
     const __pageProps = (_module, context) => context.data;
     const __pageErrorProps = () => ({});
     const __statusHtml = (title, text) => '<h1>' + escapeHtml(title) + '</h1><p>' + escapeHtml(text) + '</p>';

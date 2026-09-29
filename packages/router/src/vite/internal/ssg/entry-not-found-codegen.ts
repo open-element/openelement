@@ -84,7 +84,6 @@ export function renderNotFoundRoute(
       headExtrasExpr,
       allowHeadExtrasScripts: docConfig.allowHeadExtrasScripts,
       cspNonce: true,
-      clientScripts: true,
     })
   ) {
     lines.push(`      ${optionLine}`);

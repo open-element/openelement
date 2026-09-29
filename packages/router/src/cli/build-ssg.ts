@@ -484,6 +484,21 @@ async function buildSSG(
       throw new SsrRenderError('virtual:open-ssg-entry', new Error('Failed to load Hono app'));
     }
 
+    // #1471 (S4b): the document renders the client scripts. Phase 2 ran
+    // before Phase 3 (client-before-SSG build order), so the client asset
+    // manifest's entry URL is final here. Hand it to the entry once — every
+    // render channel (the SSG GET handlers, renderRoute, the styled 404)
+    // then resolves it into the document and serializes the final script
+    // tag at document time. No post-build HTML injection. An empty entry
+    // (no client bundle shipped) embeds nothing.
+    const setRequestTimeClientScript = (module as {
+      __setRequestTimeClientScript?: (src: string | null | undefined) => void;
+    }).__setRequestTimeClientScript;
+    setRequestTimeClientScript?.(ctx.clientAssetManifest?.entry ?? null);
+    if (ctx.clientAssetManifest?.entry) {
+      log.info(`Client scripts embedded at render time from: ${ctx.clientAssetManifest.entry}`);
+    }
+
     // Delegate to shared ssgRender() - zero Vite dependency from this point
     await ssgRender(
       module as Parameters<typeof ssgRender>[0],

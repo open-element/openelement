@@ -19,18 +19,22 @@ const routes: RouteEntry[] = [{
 // client-script plumbing, the registry guard, the stream assertions, and the
 // page-render wiring are the imported factory; the serialized
 // __DANGEROUS_KEYS/body-limit copies were deleted (the factory imports the
-// canonical /authoring policy constants). Server bytes are unchanged by the
-// S4 tail work. Client bytes moved once from the pre-lane baseline
+// canonical /authoring policy constants). Server bytes moved once more for
+// S4b (#1471): the document-resolution call sites pass the client-script
+// descriptors and every document wrap reads `scripts:
+// __doc.clientScripts || []` (+108 bytes each mode) — the script tags are
+// rendered from the resolved document at document time, no post-build
+// injection. Client bytes moved once from the pre-lane baseline
 // (1983/3138) for the S4 idle-fallback wiring: the __schedule deps carry the
 // IDLE_FALLBACK_TIMEOUT_MS policy constant serialized at build time
 // (ADR-0160 admitted output delta).
 const expected = {
   native: {
-    server: [14141, '299c20285aa0817b925c23a7511b0c54dfb0e2da3095ef43fd353ea02405c7b1'],
+    server: [14249, '6f7c0d86e8a921c3dde7637d47c9d8eb03a77b1ab431f34a0c76b24f426dc263'],
     client: [2012, 'd38366aedd3e45243f27e7191b5e10a0fbc7ab06b273c457b22a8c6cea33674d'],
   },
   lit: {
-    server: [14254, '69d620f6de4d25279055d8a7ccbcc532054ba77887bacdc23c237b261e9cddc9'],
+    server: [14362, 'b8d1cb020803e044cd195501f701137fa054a50a28aff581d2f58b9e52120dbf'],
     client: [3167, '7dcb18fd659ffe53b039adfc5139a2496e1b4c02b5d4322ed6c216606511f418'],
   },
 } as const;

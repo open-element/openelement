@@ -580,3 +580,84 @@ oracle evidence.
   and the `generated-entry-gate` all green with assertions intact, and the
   `renderer-adapter.test.ts` byte pins (14141/14254 server, 2012/3167
   client) hold — no generated-entry bytes moved.
+
+### S4b — client script injection becomes document-time rendering (#1471 items 3/4/6)
+
+- Artifact: every HTML document the framework renders (SSG prerendered
+  pages and request-time pages, native and lit), the generated server
+  entry, the SSG post-processing pass, and the derived
+  `docs/release/public-interface-snapshot.json` (`./document` and `./vite`
+  shapes).
+- Expected difference: (1) generated server entries move once — native
+  14141 → 14249 bytes, lit 14254 → 14362 bytes — because the emitted
+  document-resolution call sites pass the factory's client-script
+  descriptors (`__resolvePageDocument(…, __clientScriptDescriptors())`)
+  and every document wrap reads `scripts: __doc.clientScripts || []`
+  instead of the request-time-only `scripts: __clientScriptDescriptors()`
+  line; client entry bytes are unchanged (2012/3167). (2) A prerendered
+  page with a client bundle now ends
+  `…\n  <script type="module" src="…"></script>\n</body>\n</html>` — the
+  tag is serialized by wrapInDocument at render time, and the empty
+  placeholder line the retired post-build injector used to splice in front
+  of the tag (`…\n  \n  <script …>`) is gone. (3) Static HTML files in the
+  output tree that the framework did not render (files copied from
+  `public/`) no longer receive a script tag: the injector rewrote every
+  `*.html` it found, while document-time injection only attaches to
+  rendered documents. Rendered-page coverage is unchanged (status
+  redirect/not-found stubs are never persisted as pages). (4) Request-time
+  HTML is byte-identical — the same descriptor list flows through the same
+  serializer channel. (5) The per-page island manifests and
+  `dist/server/client-assets.js` keep their shapes; the island manifests
+  now read chunk URLs from the manifest's delivery-tag-keyed record.
+- Reason: rule (d) — client asset injection is manifest-driven. The chunk ↔
+  tag trade ran through `postprocess.ts`'s manifest-`name` matching plus a
+  filename-prefix fallback (`matchIslandChunkFile`), and the script tag was
+  spliced into every HTML file after the build (`injectClientScript`) —
+  both derive injection from output artifacts instead of identity. The
+  client asset manifest (S4a) already joins compile-time island identity
+  with the Phase 2 build outputs, and the client-before-SSG build order
+  makes the final addresses available at render time, so the document
+  renderer is the injection point: `ResolvedDocument` carries the
+  structured `clientScripts` descriptors (src/type; the loading strategy
+  stays build data in the island manifests, and the CSP nonce attaches
+  exactly once at serialization — request-time pages carry the per-request
+  nonce, SSG output carries none, and the SSG CSP injector still rejects
+  the nonce option), the build hands the manifest's entry URL to the SSR
+  bundle before prerendering (the same `__setRequestTimeClientScript` seam
+  the request-time server entry calls at startup), and
+  `matchIslandChunkFile`/`injectClientScript`/`buildIslandChunkMap` are
+  deleted. Island chunk resolution survives as
+  `islandChunkMapFromAssetManifest` (identity-keyed; an unrecorded island
+  is surfaced, never silently mapped).
+- Impact: `@openelement/router/document` grows the public
+  `ClientScriptDescriptor` type, `ResolvedDocument.clientScripts`, and the
+  optional third `clientScripts` parameter of `resolvePageDocument`
+  (validated fail-closed like every other head field; an empty list keeps
+  the document shape byte-equal to the pre-#1471 contract), and
+  regeneration of `docs/release/public-interface-snapshot.json` also
+  records `OpenElementBuildContext.clientAssetManifest` on `./vite` — the
+  S4a slot whose entry had declared the snapshot unchanged. The string-eval
+  harnesses bind the widened seam through their evaluation contexts
+  (entry-render-ssg.test.ts, stream-handler.test.ts) with no
+  harness-local reimplementation; `ssg-postprocess.test.ts` and
+  `ssg-integration.test.ts` are rewritten to the new contract (script
+  presence and position at render time, island identity through the
+  manifest, no post-build HTML surgery), and the new
+  `ssg-asset-manifest.test.ts` pins the nine-scenario matrix — chunk hash
+  change, chunk file rename (Rolldown default and manualChunks naming),
+  manualChunks off, a new shared chunk, entry-chunk fallback, islands
+  sharing a chunk, native, lit, and enhanced-forms-only with zero islands —
+  proving identity never drifts with a file name.
+- Oracle evidence: the full `packages/router/__tests__` batch green (945
+  tests, 0 failed) including the read-only oracles with assertions intact —
+  `request-time-parity` (all 29 steps), `stream-manifest`,
+  `renderer-scope-parity`, `lit-graph-boundary`, `ssg-admission-parity`,
+  `compiler-open-core-boundary`, `generated-entry-gate`,
+  `registry-marker-drift` (run as one targeted batch: 37 passed, 29 steps)
+  and `compiled-escape-parity` (7 passed); the regenerated
+  `renderer-adapter.test.ts` byte pins hold at 14249/14362 server,
+  2012/3167 client; the `router-native-framework` and
+  `router-lit-framework` fixture builds complete end to end with the
+  manifest-driven tag rendered immediately before `</body>`, per-page
+  island manifests written from the manifest record, and no nonce attribute
+  in any static page.

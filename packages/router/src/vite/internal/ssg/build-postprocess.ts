@@ -1,16 +1,22 @@
 /**
  * build-postprocess.ts - Adapter-agnostic SSG build post-processing.
  *
- * Orchestrates client-script injection, island chunk/strategy/layer map
- * construction, and SSR artifact cleanup. This module has zero Vite
- * dependency and only reads/writes files.
+ * Orchestrates island chunk/strategy/layer map construction and SSR artifact
+ * cleanup. This module has zero Vite dependency and only reads/writes files.
+ *
+ * Client scripts are not post-processed here: the document renderer embeds
+ * the final script tags at render time from the client asset manifest
+ * (#1471, ADR-0160 rule d). The remaining island chunk resolution is
+ * identity-driven too — the per-page island manifests read their chunk URLs
+ * from the manifest's delivery-tag-keyed record, never from output file
+ * names.
  */
 
 import { join } from '../../../internal/host-path.ts';
 import type { ComponentLayer, HydrationStrategy } from '../protocol/framework.ts';
+import type { ClientAssetManifest } from '../protocol/client-assets.ts';
 import type { IslandDecl } from '../protocol/ssg.ts';
 import { createLogger } from '@openelement/element';
-import { buildIslandChunkMap, injectClientScript } from './postprocess.ts';
 import { generateIslandManifests, writeIslandManifests } from './island-manifest.ts';
 import { expandIslandDeliveryDecl, resolveIslandHydrate } from './island-scanner.ts';
 import {
@@ -37,11 +43,12 @@ export interface BuildContextView {
     compilerBehaviorDecls?: IslandDecl[];
     islandMeta: Record<string, Partial<IslandDecl>>;
   };
+  /** The Phase 2 client build's asset manifest (null when no client bundle shipped). */
+  clientAssetManifest?: ClientAssetManifest | null;
 }
 
 type DeliveryIslandMeta = Partial<IslandDecl> & IslandDeliveryMeta & {
   hydrate?: IslandDeliveryStrategy;
-  filePath?: string;
 };
 
 function expandLocalIslandMeta(
@@ -62,19 +69,40 @@ function expandLocalIslandMeta(
 }
 
 /**
- * Inject the island client script and generate per-page island manifests.
- * Must only run after Phase 2 (client island build) has completed.
+ * Resolve the per-island client chunk URLs from the Phase 2 client asset
+ * manifest (ADR-0160 rule d): delivery tag -> asset URL, identity-keyed.
+ * No output file name is ever parsed — a chunk rename or rehash leaves every
+ * island identity intact because the manifest was joined on module ids.
+ * An island the manifest does not record would silently never appear in a
+ * page manifest — surface that instead of dropping it.
  */
-export async function postProcessClientIslandBuild(
-  ctx: BuildContextView,
-  scriptSrc: string,
-): Promise<void> {
+export function islandChunkMapFromAssetManifest(
+  manifest: ClientAssetManifest | null | undefined,
+  islandTagNames: readonly string[],
+): Record<string, string> {
+  const chunkMap: Record<string, string> = {};
+  for (const tagName of islandTagNames) {
+    const asset = manifest?.islands[tagName];
+    if (asset) {
+      chunkMap[tagName] = asset.file;
+    } else {
+      log.warn(`No client asset recorded for island "${tagName}" in the client asset manifest.`);
+    }
+  }
+  return chunkMap;
+}
+
+/**
+ * Generate the per-page island manifests from the client asset manifest.
+ * Must only run after Phase 2 (client island build) has completed. The
+ * client script tags themselves were already embedded at render time
+ * (#1471) — this pass records the identity-driven chunk/strategy/layer
+ * manifests only.
+ */
+export async function postProcessClientIslandBuild(ctx: BuildContextView): Promise<void> {
   const root = ctx.phase3.root || Deno.cwd();
   const outDir = ctx.phase3.outDir || DEFAULT_OUT_DIR;
-  const base = ctx.phase3.base || '/';
   const outputDir = join(root, outDir);
-
-  injectClientScript(outputDir, scriptSrc);
 
   // Local and package islands share the same strategy/layer derivation; the
   // only difference is where the tag->meta pairs come from.
@@ -97,45 +125,9 @@ export async function postProcessClientIslandBuild(
   const islandMetas: Array<[string, DeliveryIslandMeta]> = [...localMetas, ...packageMetas];
   const islandTagNames = [...new Set(islandMetas.map(([tag]) => tag))].sort();
 
-  const chunkAliases: Record<string, readonly string[]> = {};
-  const addAliases = (tagName: string, aliases: string[]): void => {
-    chunkAliases[tagName] = [...new Set([...(chunkAliases[tagName] || []), ...aliases])];
-  };
-  for (const [primaryTag, meta] of Object.entries(ctx.phase1.islandMeta || {})) {
-    const filePath = meta && typeof (meta as { filePath?: unknown }).filePath === 'string'
-      ? (meta as { filePath: string }).filePath
-      : undefined;
-    const basename = filePath?.replaceAll('\\', '/').split('/').pop()?.replace(/\.[^.]+$/, '');
-    const deliveredTags = resolveIslandDeliveryTags(
-      primaryTag,
-      (meta as DeliveryIslandMeta | undefined)?.tags,
-      (meta as DeliveryIslandMeta | undefined)?.tagNames,
-      primaryTag,
-    );
-    for (const tagName of deliveredTags) {
-      addAliases(tagName, [primaryTag, ...(basename ? [basename] : [])]);
-    }
-  }
-  for (const island of declaredMetas) {
-    const delivery = island as IslandDecl & {
-      tags?: readonly string[];
-      tagNames?: readonly string[];
-    };
-    const deliveredTags = resolveIslandDeliveryTags(
-      island.tagName,
-      delivery.tags,
-      delivery.tagNames,
-      island.tagName,
-    );
-    for (const tagName of deliveredTags) addAliases(tagName, [island.tagName]);
-  }
-
-  const chunkMap = await buildIslandChunkMap(
-    root,
-    outDir,
+  const chunkMap = islandChunkMapFromAssetManifest(
+    ctx.clientAssetManifest,
     islandTagNames,
-    base,
-    chunkAliases,
   );
 
   const strategyMap = Object.fromEntries(

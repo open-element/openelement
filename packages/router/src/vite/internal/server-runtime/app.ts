@@ -151,9 +151,11 @@ export function createGeneratedApp(config: GeneratedAppConfig): GeneratedApp {
 
   // #951: one render-time seam for the island client entry. The dev URL was
   // computed by the entry from its compile-time import.meta.env constants;
-  // the request-time src arrives from the generated dist/server/index.js at
-  // startup (SSG prerendering never calls the setter, so static pages stay
-  // script-free and keep the post-build injector).
+  // the prod src arrives from whoever knows the final asset addresses — the
+  // generated dist/server/index.js at request-time startup, and the SSG
+  // build before prerendering (both hand in the Phase 2 client asset
+  // manifest's entry URL, #1471). The descriptors ride the resolved
+  // document, so every render channel serializes the same tag.
   let requestTimeClientScriptSrc: string | null = null;
   const clientScriptDescriptors = () => {
     const src = config.devClientScriptSrc || requestTimeClientScriptSrc;

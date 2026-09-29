@@ -545,7 +545,10 @@ Deno.test('renderEntry: definePage descriptor feeds load and metadata wiring', (
     code,
     'const __pageContext = { data: __data, actionData: undefined, params: __params, request: c.req.raw, locale: __localeFromPath(__locales, c.req.path, __getDefaultLocale()), route: __routeContext, meta: __routeMetaValue };',
   );
-  assertStringIncludes(code, 'const __doc = __resolvePageDocument(__page.head, __pageContext);');
+  assertStringIncludes(
+    code,
+    'const __doc = __resolvePageDocument(__page.head, __pageContext, __clientScriptDescriptors());',
+  );
   assertStringIncludes(
     code,
     "import { resolvePageDocument as __resolvePageDocument } from '@openelement/router/document'",
@@ -594,7 +597,10 @@ Deno.test('renderEntry: definePage descriptor feeds load and metadata wiring', (
     'data = typeof info.module.loader === "function" ? await info.module.loader(loadContext) : undefined;',
   );
   assertStringIncludes(code, '__pageProps(info.module, __pageContext)');
-  assertStringIncludes(code, 'const __doc = __resolvePageDocument(page.head, __pageContext);');
+  assertStringIncludes(
+    code,
+    'const __doc = __resolvePageDocument(page.head, __pageContext, __clientScriptDescriptors());',
+  );
   assertStringIncludes(code, 'filePath: "index.ts"');
   assertStringIncludes(
     code,
@@ -1155,13 +1161,20 @@ Deno.test('renderEntry: island client script descriptors also cover notFound/err
     'return c.html(wrapInDocument(__statusHtml("404 Not Found", "Not Found"), {',
   );
   assertEquals(code.includes('__withDevClientScript'), false);
-  // Every request-time document wrap passes the descriptor line: GET+POST
-  // success, 404 catch and error boundary per page route, plus the two
-  // app.notFound wraps.
+  // #951/#1471: the document wraps read the resolved document's clientScripts
+  // (`scripts: __doc.clientScripts || []` — GET+POST success and error
+  // boundary per page route, plus the app.notFound success wrap). The direct
+  // descriptor call remains only where no resolved document exists: the
+  // 404 catch per page route (GET + POST) and the app.notFound catch — same
+  // list, same tags, one serialization point.
   const pageRouteCount = routes.filter((r) => r.type === 'page').length;
   assertEquals(
     code.match(/scripts: __clientScriptDescriptors\(\)/g)?.length,
-    pageRouteCount * 6 + 2,
+    pageRouteCount * 2 + 1,
+  );
+  assertEquals(
+    code.match(/scripts: __doc\.clientScripts \|\| \[\]/g)?.length,
+    pageRouteCount * 4 + 1,
   );
 });
 

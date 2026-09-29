@@ -68,10 +68,14 @@ export function renderMatchingRenderersFn(lines: string[], renderers: RendererDe
  * Emit the per-render resolved-Document setup (#1326): the descriptor head
  * (static object or resolver function) is resolved exactly once against the
  * same context object the props projector consumes, before wrapInDocument
- * serializes the page. `documentWrapOptionsLines` then reads only `__doc`.
+ * serializes the page. The render wiring hands the factory's client-script
+ * descriptors (#951 — the dev URL, or the request-time/SSG src handed in
+ * through the setter seam) to the resolver, so the resolved document carries
+ * them and `documentWrapOptionsLines` reads only `__doc` (#1471: the SSG
+ * render pass embeds the final script tag through the same seam).
  */
 export function documentResolutionSetupLine(pageExpr: string, contextExpr: string): string {
-  return `const __doc = __resolvePageDocument(${pageExpr}.head, ${contextExpr});`;
+  return `const __doc = __resolvePageDocument(${pageExpr}.head, ${contextExpr}, __clientScriptDescriptors());`;
 }
 
 /**
@@ -100,8 +104,6 @@ export function documentWrapOptionsLines(options: {
   allowHeadExtrasScripts: boolean;
   /** Emit the per-request CSP nonce line (Hono handlers only). */
   cspNonce?: boolean;
-  /** Emit the island client script descriptor line (request-time handlers only; SSG keeps the post-build injector). */
-  clientScripts?: boolean;
 }): string[] {
   const lines = [
     `title: ${options.titleExpr},`,
@@ -112,8 +114,11 @@ export function documentWrapOptionsLines(options: {
     `headExtras: ${options.headExtrasExpr},`,
     `dangerouslyHeadFragments: __doc.dangerouslyHeadFragments || [],`,
     `allowHeadExtrasScripts: ${JSON.stringify(options.allowHeadExtrasScripts)},`,
+    // #1471: the client scripts ride the resolved document — every channel
+    // (request-time handlers AND the SSG render pass) serializes the final
+    // script tags from the same resolved field.
+    `scripts: __doc.clientScripts || [],`,
   ];
   if (options.cspNonce) lines.push(`cspNonce: c.get('cspNonce'),`);
-  if (options.clientScripts) lines.push(`scripts: __clientScriptDescriptors(),`);
   return lines;
 }

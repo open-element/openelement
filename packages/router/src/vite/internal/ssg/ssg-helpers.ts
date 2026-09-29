@@ -164,12 +164,12 @@ const nitroHandler = async (event) => {
   });
 };
 
-// Island hydration parity with static pages: the static pipeline injects the
-// island client entry into prerendered HTML post-build, which request-time
-// rendering bypasses. Hand the entry the client entry URL from the structured
-// client asset manifest (#1471) once at startup; the entry embeds the tag at
-// render time through wrapInDocument's script descriptors, so a per-request
-// CSP nonce (middleware.csp.nonce) reaches it.
+// Island hydration parity with static pages: the SSG build hands the entry
+// the same client entry URL from the structured client asset manifest
+// (#1471) before prerendering, so request-time rendering embeds the same
+// tag the static pages carry — both at document time, through the resolved
+// document's script descriptors, so a per-request CSP nonce
+// (middleware.csp.nonce) reaches it.
 // An empty clientAssets.entry (no client bundle shipped) embeds nothing.
 __setRequestTimeClientScript(clientAssets.entry);
 

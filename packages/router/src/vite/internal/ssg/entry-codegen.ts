@@ -192,7 +192,6 @@ function renderRouteResponseAndCatch(lines: string[], ctx: RouteHandlerEmitConte
         headExtrasExpr,
         allowHeadExtrasScripts: docConfig.allowHeadExtrasScripts,
         cspNonce: true,
-        clientScripts: true,
       })
     ) lines.push(`      ${optionLine}`);
     lines.push(`    });`);
@@ -228,9 +227,10 @@ function renderRouteResponseAndCatch(lines: string[], ctx: RouteHandlerEmitConte
       // no-store baseline.
       lines.push(`    c.header('Cache-Control', 'private, no-cache');`);
     }
-    // #951: the island client script rides wrapInDocument's script descriptors
-    // (the dev URL, or the request-time src handed in by dist/server/index.js),
-    // so a CSP nonce reaches it; static pages keep the post-build injector.
+    // #951/#1471: the island client script rides the resolved document's
+    // clientScripts descriptors (the dev URL, or the request-time/SSG src
+    // handed in through the setter seam), so a CSP nonce reaches it and the
+    // static render pass embeds the same tag at document time.
     lines.push(`    return c.html(wrapInDocument(content, {`);
     for (
       const optionLine of documentWrapOptionsLines({
@@ -239,7 +239,6 @@ function renderRouteResponseAndCatch(lines: string[], ctx: RouteHandlerEmitConte
         headExtrasExpr,
         allowHeadExtrasScripts: docConfig.allowHeadExtrasScripts,
         cspNonce: true,
-        clientScripts: true,
       })
     ) {
       lines.push(`      ${optionLine}`);
@@ -273,6 +272,8 @@ function renderRouteResponseAndCatch(lines: string[], ctx: RouteHandlerEmitConte
     `        allowHeadExtrasScripts: ${JSON.stringify(docConfig.allowHeadExtrasScripts)},`,
   );
   lines.push(`        cspNonce: c.get('cspNonce'),`);
+  // Status fallback: no resolved document exists here (the throw may precede
+  // resolution), so the descriptors pass directly — same list, same tags.
   lines.push(`        scripts: __clientScriptDescriptors(),`);
   lines.push(`      }), 404)`);
   lines.push(`    }`);
@@ -317,7 +318,6 @@ function renderRouteResponseAndCatch(lines: string[], ctx: RouteHandlerEmitConte
         headExtrasExpr,
         allowHeadExtrasScripts: docConfig.allowHeadExtrasScripts,
         cspNonce: true,
-        clientScripts: true,
       })
     ) {
       lines.push(`          ${optionLine}`);

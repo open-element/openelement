@@ -45,11 +45,11 @@ async function runClientIslandBuild(ctx: OpenElementBuildContext): Promise<void>
 /**
  * Write the structured client asset manifest for the request-time server
  * entry. dist/server/index.js imports the module at startup and hands the
- * client entry URL to the SSR entry (__setRequestTimeClientScript), which
- * embeds the same island client script into request-time HTML at render time
- * that the static pipeline injects post-build. The module is pure structured
- * manifest data (#1471) — no injection logic. No-op for pure-static builds
- * (no request-time server entry was emitted).
+ * client entry URL to the SSR entry (__setRequestTimeClientScript), so
+ * request-time HTML embeds the same island client script at render time the
+ * SSG render pass embedded into the static pages. The module is pure
+ * structured manifest data (#1471) — no injection logic. No-op for
+ * pure-static builds (no request-time server entry was emitted).
  */
 export function writeRequestTimeClientAssets(
   ctx: OpenElementBuildContext,
@@ -118,8 +118,9 @@ export function buildPlugin(
       // render pass and the request-time artifact then carry the final
       // client asset addresses from the Phase 2 build manifest. SSG needs
       // only Phase 1 facts — it renders HTML from the SSR bundle and the
-      // Phase 1 metadata in ctx; the client script injection into the
-      // rendered pages stays a post-Phase-3 step below.
+      // Phase 1 metadata in ctx, and buildSSG hands the manifest's entry URL
+      // to the SSR bundle so every rendered page embeds the final script
+      // tag at document time (#1471, S4b).
       const ssgIslandTagNames = [...(ctx.phase1.islandTagNames ?? [])];
       const ssgIslandFiles = [...(ctx.phase1.islandFiles ?? [])];
       const hasEnhancedForms = (ctx.phase1.cachedRoutes ?? []).some((route) =>
@@ -150,27 +151,29 @@ export function buildPlugin(
         throw error;
       }
 
-      // -- Inject client script + record the request-time asset manifest --
-      // Runs after Phase 3: injection post-processes the rendered HTML pages,
-      // and dist/server/client-assets.js overwrites the placeholder the SSG
-      // render wrote. The asset URLs come from the Phase 2 client asset
-      // manifest (#1471), keyed by compile-time island identity.
+      // -- Per-page island manifests + record the request-time asset manifest --
+      // Runs after Phase 3: the island manifests post-process the rendered
+      // pages, and dist/server/client-assets.js overwrites the placeholder
+      // the SSG render wrote. The asset URLs come from the Phase 2 client
+      // asset manifest (#1471), keyed by compile-time island identity. The
+      // script tags themselves needed no post-processing — the Phase 3
+      // render pass embedded them at document time (S4b).
       if (ctx.isComplete(2)) {
         try {
           const manifest = ctx.clientAssetManifest;
           if (manifest) {
-            await postProcessClientIslandBuild(ctx, manifest.entry);
+            await postProcessClientIslandBuild(ctx);
             await writeRequestTimeClientAssets(ctx, manifest);
-            log.info(`Client script injected: ${manifest.entry}`);
+            log.info(`Client scripts rendered from the asset manifest: ${manifest.entry}`);
           } else {
-            log.info('No Phase 2 client asset manifest - client script injection skipped');
+            log.info('No Phase 2 client asset manifest - island manifests skipped');
           }
         } catch (error) {
-          log.error(`Failed to inject client script: ${error}`);
+          log.error(`Failed to record client assets: ${error}`);
           throw error;
         }
       } else {
-        log.info('No Phase 2 - client script injection skipped');
+        log.info('No Phase 2 - island manifests and client assets skipped');
       }
 
       // -- Clean Phase 1 SSR artifacts from public dist (v0.14.10) --

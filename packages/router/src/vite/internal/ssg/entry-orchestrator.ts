@@ -112,9 +112,9 @@ export function renderEntry(desc: EntryDescriptor): string {
   // The island client entry lives at one deterministic public URL in dev and
   // prod (cli/build-client.ts emits hash-free islands/[name].js; in dev the
   // open:dev-island-client plugin serves the same URL). Whoever knows the URL
-  // hands it to the entry; wrapInDocument embeds the tag at render time
-  // through its `scripts` descriptors, so a CSP nonce
-  // (middleware.csp.nonce) reaches it — no post-hoc HTML splicing.
+  // hands it to the entry; the resolved document carries the descriptors and
+  // wrapInDocument embeds the tags at render time (#1471), so a CSP nonce
+  // (middleware.csp.nonce) reaches them — no post-hoc HTML splicing.
   // - Dev: no client build exists, so the entry computes the URL itself
   //   (import.meta.env.DEV/BASE_URL are compile-time constants in both the
   //   dev module runner and the build; the built bundle keeps this branch as
@@ -124,8 +124,9 @@ export function renderEntry(desc: EntryDescriptor): string {
   //   only known at request time, so the generated dist/server/index.js
   //   calls __setRequestTimeClientScript (with the entry URL from the
   //   structured client asset manifest, ./client-assets.js) once at startup.
-  //   SSG prerendering never calls the setter, so static pages stay
-  //   script-free here and keep the post-build injector (postprocess.ts).
+  // - Prod SSG: the build calls the same setter before prerendering with the
+  //   Phase 2 manifest entry (client-before-SSG build order), so the static
+  //   pages embed the final script tag at document time too.
   const hasClientEntry = desc.islands.length > 0 || desc.hasEnhancedForms === true;
   lines.push('// #951: island client script descriptors (serialized by wrapInDocument)');
   lines.push('');

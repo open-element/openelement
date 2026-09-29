@@ -262,6 +262,33 @@ Deno.test('resolvePageDocument: malformed structured data fails loudly', () => {
   }
 });
 
+Deno.test('resolvePageDocument: clientScripts ride the resolved document (#1471) and stay pure', () => {
+  const descriptors = [{ type: 'module', src: '/client/islands/client.js' }];
+  const first = resolvePageDocument(undefined, ctx(), descriptors);
+  const second = resolvePageDocument(undefined, ctx(), descriptors);
+  assertEquals(first, {
+    links: [],
+    clientScripts: [{ type: 'module', src: '/client/islands/client.js' }],
+  });
+  assertEquals(first, second);
+  // No scripts handed in: the field stays absent, the document shape is
+  // byte-equal to the pre-#1471 contract.
+  assertEquals(resolvePageDocument({ title: 'Notes' }, ctx()), {
+    title: 'Notes',
+    links: [],
+  });
+  // The serializer renders the tag at document time; nothing is dropped.
+  const html = wrapInDocument('<p>ok</p>', {
+    scripts: resolvePageDocument(undefined, ctx(), descriptors).clientScripts,
+  });
+  assertEquals(
+    html.endsWith(
+      '<script type="module" src="/client/islands/client.js"></script>\n</body>\n</html>',
+    ),
+    true,
+  );
+});
+
 Deno.test('resolvePageDocument + wrapInDocument: the resolved JSON-LD reaches <head> escaped', () => {
   // Composition proof for both serialization paths (the SSG entry and the
   // request-time entry both feed raw values into the same call).
