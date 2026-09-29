@@ -2,6 +2,17 @@ import { assertEquals, assertStringIncludes } from '@std/assert';
 import { compileElementProgram } from '@openelement/element/compiler';
 import { REPOSITORY_URL } from '../app/site-ui/open-layout-navigation.ts';
 
+/**
+ * The compiler admits no sidecar by default (#1468): compiling an island
+ * module injects the host's island admission descriptor (the same one the
+ * router build injects).
+ */
+const ISLAND_SIDECARS = [{
+  moduleSpecifier: '@openelement/router',
+  exportName: 'defineIslandConfig',
+  kind: 'static-sidecar',
+}] as const;
+
 const siteModules = [
   ['open-standards-visual', '../app/site-ui/open-standards-visual.tsx'],
   ['open-page-rail', '../app/site-ui/open-page-rail.tsx'],
@@ -26,7 +37,9 @@ Deno.test('open-layout is an explicitly hydrated compiled app-shell island', asy
   );
   assertStringIncludes(source, "@element('open-layout')");
   assertStringIncludes(source, 'export default class OpenLayout extends OpenElement');
-  const result = compileElementProgram(source, url.pathname);
+  const result = compileElementProgram(source, url.pathname, {
+    staticSidecars: ISLAND_SIDECARS,
+  });
   assertEquals(result.program.tag, 'open-layout');
   // Regions: header nav (desktop + mobile panel), sidebar rows (desktop +
   // mobile disclosure panel) and the four footer link columns.
@@ -101,7 +114,9 @@ Deno.test('open-search keeps its view compiler-owned and its browser state exter
   );
   assertStringIncludes(source, "@element('open-search')");
   assertStringIncludes(source, "from '../site-ui/open-search-controller.ts'");
-  const result = compileElementProgram(source, url.pathname);
+  const result = compileElementProgram(source, url.pathname, {
+    staticSidecars: ISLAND_SIDECARS,
+  });
   assertEquals(result.program.tag, 'open-search');
   // The view is property-driven (C-5): the shell passes the page-locale chrome
   // copy as attributes (searchChromeStrings), while the empty/error message

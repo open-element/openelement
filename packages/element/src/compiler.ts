@@ -26,6 +26,8 @@ export {
 export {
   analyzeModuleSemantics,
   type ModuleSemanticFacts,
+  type SemanticCoreOptions,
+  type StaticSidecarDescriptor,
 } from './internal/compiler/semantic-core/module-analysis.ts';
 export {
   type EmittedModuleDiagnostic,

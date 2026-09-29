@@ -19,6 +19,7 @@ import {
   createModuleIntrinsicBindings,
   isCompileTimeOnlyImport,
   type ModuleIntrinsicBindings,
+  type SemanticCoreOptions,
 } from './module-analysis.ts';
 import { type CompiledElementSourceMap, SourceMapSegmentBuilder } from './source-map.ts';
 import {
@@ -1633,12 +1634,13 @@ function isDeclareStatement(statement: ts.Statement): boolean {
  * The one extra runtime statement a compiled module may carry: the island
  * delivery policy colocated with the class
  * (`export const openElement = defineIslandConfig({ ... })`). The callee must
- * bind the canonical `defineIslandConfig` import from '@openelement/router'
- * (#1209); a same-name spelling bound to anything else is not the policy
- * statement and falls through to the OEC9008 runtime-statement rejection.
+ * bind a static-sidecar descriptor the host injected through the compile
+ * options (#1209); the default core knows none, so an unconfigured compiler
+ * rejects the statement as OEC9008. A same-name spelling bound to anything
+ * else is not the policy statement and falls through to the same rejection.
  * The statement is validated here and copied verbatim into the generated
- * module; the runtime defineIslandConfig() validates the descriptor itself at
- * module evaluation. Anything else stays outside the compiled module grammar
+ * module; the runtime factory validates the descriptor itself at module
+ * evaluation. Anything else stays outside the compiled module grammar
  * (OEC9008).
  */
 function isIslandConfigStatement(
@@ -1660,9 +1662,7 @@ function isIslandConfigStatement(
   }
   const initializer = declaration.initializer;
   if (!initializer || !ts.isCallExpression(initializer)) return false;
-  if (!intrinsics.resolveIntrinsic(initializer.expression, 'defineIslandConfig').canonical) {
-    return false;
-  }
+  if (!intrinsics.isStaticSidecarCallee(initializer.expression)) return false;
   if (
     initializer.arguments.length !== 1 || !ts.isObjectLiteralExpression(initializer.arguments[0])
   ) {
@@ -1770,8 +1770,14 @@ function generatedHandlerText(handler: GeneratedHandler): string {
  * `fileName` is used for diagnostics and the emitted source map only —
  * filesystem resolution is the caller's job. Fails closed with a
  * {@link CompiledElementError} carrying the ordered OEC diagnostics.
+ * `options.staticSidecars` admits host-declared sidecar policy statements
+ * (e.g. an island delivery descriptor); the default core admits none.
  */
-export function compileElementProgram(source: string, fileName: string): CompileElementResult {
+export function compileElementProgram(
+  source: string,
+  fileName: string,
+  options: SemanticCoreOptions = {},
+): CompileElementResult {
   const sf = ts.createSourceFile(fileName, source, ts.ScriptTarget.ES2022, true, ts.ScriptKind.TSX);
   const syntaxDiagnostics = ts.transpileModule(source, {
     fileName,
@@ -1789,7 +1795,7 @@ export function compileElementProgram(source: string, fileName: string): Compile
   // #1209: every intrinsic use site below (decorators, heritage, factories)
   // resolves through the one canonical binding model shared with module
   // analysis — no spelling-based recognizer survives in the compiler.
-  const intrinsics = createModuleIntrinsicBindings(sf);
+  const intrinsics = createModuleIntrinsicBindings(sf, options);
 
   const passthroughStatements: ts.Statement[] = [];
   for (const statement of sf.statements) {

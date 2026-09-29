@@ -4,6 +4,7 @@ import { dirname, extname, resolve } from '../../../internal/host-path.ts';
 import { compileElementProgram, stableModuleId } from '@openelement/element/compiler';
 import { isDangerousKey } from '@openelement/element/authoring';
 import type { StreamRouteManifest } from '../protocol/ssg.ts';
+import { ISLAND_ADMISSION } from '../protocol/island-admission.ts';
 import { safeReadFile } from './route-scanner-fs.ts';
 import { STREAM_FRAME_FORBIDDEN_TAGS, unsafeStreamFrameAttribute } from '@openelement/element';
 
@@ -487,6 +488,10 @@ export async function scanStreamManifest(
   const program = compileElementProgram(
     pageSource!,
     stableModuleId(pageFile!, resolve(projectRoot), workspaceRoot),
+    // A page module may colocate the island delivery policy statement with
+    // its compiled class; the compiler admits it only through the injected
+    // descriptor.
+    { staticSidecars: [ISLAND_ADMISSION] },
   ).program;
   if (program.metadata.className !== pageClass.name?.text) {
     diagnostic(

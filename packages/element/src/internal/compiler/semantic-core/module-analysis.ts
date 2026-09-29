@@ -36,17 +36,17 @@ export interface ModuleSemanticFacts {
  * The canonical intrinsic-binding model (#1209, A10.1): compiler intrinsics
  * are binding identities (module specifier + imported name, aliases
  * followed), never identifier spellings. A bare/global spelling NEVER admits
- * an intrinsic. `@openelement/router` re-exports neither `OpenElement` nor the
- * compile-time-only decorator intrinsics, so the canonical specifier for
- * those is `@openelement/element` only.
+ * an intrinsic. The built-in set covers `@openelement/element` only — host
+ * frameworks extend admission through injected
+ * {@link StaticSidecarDescriptor}s, never through compiler-side knowledge of
+ * another package.
  */
 export type IntrinsicName =
   | 'element'
   | 'property'
   | 'OpenElement'
   | 'computed'
-  | 'trustedHtml'
-  | 'defineIslandConfig';
+  | 'trustedHtml';
 
 const INTRINSIC_MODULES: Readonly<Record<IntrinsicName, readonly string[]>> = {
   element: ['@openelement/element'],
@@ -54,8 +54,33 @@ const INTRINSIC_MODULES: Readonly<Record<IntrinsicName, readonly string[]>> = {
   OpenElement: ['@openelement/element'],
   computed: ['@openelement/element'],
   trustedHtml: ['@openelement/element'],
-  defineIslandConfig: ['@openelement/router'],
 };
+
+/**
+ * A compile-time binding a host application teaches the semantic core beyond
+ * the built-in element intrinsics. Admission stays a binding identity: the
+ * export must arrive as a runtime named import from the canonical specifier
+ * (aliases followed); namespace, default, type-only, conflicting and
+ * relative-re-export provenance is never admitted.
+ */
+export interface StaticSidecarDescriptor {
+  /** Canonical module specifier the sidecar export must be imported from. */
+  readonly moduleSpecifier: string;
+  /** Exported name of the sidecar factory binding. */
+  readonly exportName: string;
+  /** The admission granted: a colocated static policy statement. */
+  readonly kind: 'static-sidecar';
+}
+
+/** Host-supplied admission extensions for the semantic core. */
+export interface SemanticCoreOptions {
+  /**
+   * Static-sidecar descriptors the host admits. The default core knows none:
+   * a module carrying a sidecar policy statement fails closed until the host
+   * injects its descriptor.
+   */
+  readonly staticSidecars?: readonly StaticSidecarDescriptor[];
+}
 
 /**
  * Intrinsics that exist only at compile time: the compiler erases the
@@ -95,6 +120,13 @@ export interface IntrinsicResolution {
 
 export interface ModuleIntrinsicBindings {
   resolveIntrinsic(expression: ts.Expression, intrinsic: IntrinsicName): IntrinsicResolution;
+  /**
+   * True only when the expression resolves to a runtime named import matching
+   * one of the injected 'static-sidecar' descriptors (aliases followed,
+   * canonical specifier). Namespace, default, type-only, conflicting and
+   * re-export provenance is never admitted — the caller fails closed.
+   */
+  isStaticSidecarCallee(expression: ts.Expression): boolean;
   /** True for a runtime (non-type-only) named import, aliases followed. */
   isRuntimeNamedImport(
     localName: string,
@@ -107,9 +139,14 @@ export interface ModuleIntrinsicBindings {
  * Resolve the module-scope import/declaration bindings of one source file
  * once, so decorator, heritage and factory use sites all answer provenance
  * from the same table. The semantic core analyzes a single module and stays
- * bundler-neutral: it never follows re-exports across files.
+ * bundler-neutral: it never follows re-exports across files. Host-injected
+ * static-sidecar descriptors ride the options — the core itself never names
+ * another package.
  */
-export function createModuleIntrinsicBindings(sourceFile: ts.SourceFile): ModuleIntrinsicBindings {
+export function createModuleIntrinsicBindings(
+  sourceFile: ts.SourceFile,
+  options: SemanticCoreOptions = {},
+): ModuleIntrinsicBindings {
   const imports = new Map<string, ImportBinding[]>();
   const locals = new Set<string>();
   for (const statement of sourceFile.statements) {
@@ -177,8 +214,11 @@ export function createModuleIntrinsicBindings(sourceFile: ts.SourceFile): Module
     return `import of ${binding.imported} from '${binding.module}'`;
   };
 
-  const resolveIdentifier = (name: string, intrinsic: IntrinsicName): IntrinsicResolution => {
-    const modules = INTRINSIC_MODULES[intrinsic];
+  const resolveIdentifier = (
+    name: string,
+    bindingName: string,
+    modules: readonly string[],
+  ): IntrinsicResolution => {
     if (locals.has(name)) return { canonical: false };
     const bindings = imports.get(name) ?? [];
     if (bindings.length === 0) return { canonical: false };
@@ -189,7 +229,7 @@ export function createModuleIntrinsicBindings(sourceFile: ts.SourceFile): Module
           `conflicting module-scope bindings for "${name}" (${
             bindings.map(describe).join('; ')
           }); ` +
-          `import ${intrinsic} once from its canonical module '${modules.join("' or '")}'`,
+          `import ${bindingName} once from its canonical module '${modules.join("' or '")}'`,
       };
     }
     const binding = bindings[0];
@@ -199,29 +239,29 @@ export function createModuleIntrinsicBindings(sourceFile: ts.SourceFile): Module
           canonical: false,
           unsupported: `"${name}" is a ${
             describe(binding)
-          }; ${intrinsic} requires a runtime named import`,
+          }; ${bindingName} requires a runtime named import`,
         };
       }
       return { canonical: false };
     }
     if (modules.includes(binding.module)) {
-      if (binding.imported !== intrinsic) return { canonical: false };
+      if (binding.imported !== bindingName) return { canonical: false };
       if (binding.typeOnly) {
         return {
           canonical: false,
           unsupported:
-            `"${name}" is a type-only import of ${intrinsic} from '${binding.module}'; ` +
+            `"${name}" is a type-only import of ${bindingName} from '${binding.module}'; ` +
             'intrinsics are runtime named imports',
         };
       }
       return { canonical: true, localName: name };
     }
-    if (binding.imported === intrinsic && binding.module.startsWith('.')) {
+    if (binding.imported === bindingName && binding.module.startsWith('.')) {
       return {
         canonical: false,
         unsupported:
-          `"${name}" imports ${intrinsic} from '${binding.module}'; re-export provenance is not ` +
-          `resolved across modules — import ${intrinsic} from its canonical module ` +
+          `"${name}" imports ${bindingName} from '${binding.module}'; re-export provenance is not ` +
+          `resolved across modules — import ${bindingName} from its canonical module ` +
           `'${modules.join("' or '")}'`,
       };
     }
@@ -230,7 +270,9 @@ export function createModuleIntrinsicBindings(sourceFile: ts.SourceFile): Module
 
   return {
     resolveIntrinsic(expression, intrinsic) {
-      if (ts.isIdentifier(expression)) return resolveIdentifier(expression.text, intrinsic);
+      if (ts.isIdentifier(expression)) {
+        return resolveIdentifier(expression.text, intrinsic, INTRINSIC_MODULES[intrinsic]);
+      }
       if (
         ts.isPropertyAccessExpression(expression) && ts.isIdentifier(expression.expression) &&
         expression.name.text === intrinsic
@@ -250,6 +292,16 @@ export function createModuleIntrinsicBindings(sourceFile: ts.SourceFile): Module
         }
       }
       return { canonical: false };
+    },
+    isStaticSidecarCallee(expression) {
+      if (!ts.isIdentifier(expression)) return false;
+      for (const descriptor of options.staticSidecars ?? []) {
+        if (
+          resolveIdentifier(expression.text, descriptor.exportName, [descriptor.moduleSpecifier])
+            .canonical
+        ) return true;
+      }
+      return false;
     },
     isRuntimeNamedImport(localName, module, imported) {
       if (locals.has(localName)) return false;

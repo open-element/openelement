@@ -31,6 +31,7 @@ import type { IslandDecl } from '../vite/internal/protocol/ssg.ts';
 import { createNpmSpecifierPlugin } from '../vite/npm-specifier-plugin.ts';
 import { createDenoImportMapResolvePlugin } from '../vite/deno-import-map.ts';
 import { analyzeModuleSemantics, compiledElementPlugin } from '@openelement/element/compiler';
+import { ISLAND_ADMISSION } from '../vite/internal/protocol/island-admission.ts';
 import { compilerBehaviorDeclarations } from '../vite/internal/ssg/client-admission.ts';
 import { sortAliasEntries } from '../vite/alias-utils.ts';
 import { formatError } from '@openelement/element';
@@ -469,6 +470,9 @@ async function buildClient(ctx: OpenElementBuildContext): Promise<void> {
         // Linked workspace packages sit outside the project root; without the
         // workspace anchor their absolute ids would land in the source maps.
         workspaceRoot: findWorkspaceRoot(Deno.cwd()) ?? undefined,
+        // Island modules carry the island delivery policy statement; the
+        // compiler admits it only through the injected descriptor.
+        staticSidecars: [ISLAND_ADMISSION],
       }),
       createNpmSpecifierPlugin(),
       {

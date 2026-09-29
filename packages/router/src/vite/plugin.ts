@@ -58,6 +58,7 @@ import {
   stableModuleId,
   stripInlineSourceMapComment,
 } from '@openelement/element/compiler';
+import { ISLAND_ADMISSION } from './internal/protocol/island-admission.ts';
 import { devIslandClientPlugin, RESOLVED_CLIENT_ENTRY_ID } from './dev-island-client.ts';
 import {
   detectAndClassifyCemPackages,
@@ -544,7 +545,11 @@ export function createOpenPlugin(
 
     transform(code, id) {
       try {
-        const result = compileElementModule(code, stableModuleId(id, viteRoot, workspaceRoot));
+        const result = compileElementModule(
+          code,
+          stableModuleId(id, viteRoot, workspaceRoot),
+          { staticSidecars: [ISLAND_ADMISSION] },
+        );
         if (!result) return null;
         const key = id.split('?', 1)[0];
         compiledProgramShapes.set(key, programShape(result.program));
@@ -575,6 +580,7 @@ export function createOpenPlugin(
         const result = compileElementModule(
           source,
           stableModuleId(hmr.file, viteRoot, workspaceRoot),
+          { staticSidecars: [ISLAND_ADMISSION] },
         );
         if (!result) {
           compiledProgramShapes.delete(hmr.file);

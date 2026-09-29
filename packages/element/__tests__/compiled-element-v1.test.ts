@@ -23,8 +23,20 @@ import {
   COMPILED_MODULE_ABI_VERSION,
   PART_PROGRAM_VERSION,
 } from '../src/internal/protocol/part-program.ts';
+import type { StaticSidecarDescriptor } from '../src/internal/compiler/semantic-core/module-analysis.ts';
 
 const FIXTURE_DIR = new URL('../__fixtures__/compiled-element-v1/', import.meta.url);
+
+/**
+ * The island sidecar descriptor a host framework injects (#1468): the
+ * compiler ships no router knowledge, so the alpha.8 island policy statement
+ * is exercised through this explicit descriptor.
+ */
+const ISLAND_SIDECAR: StaticSidecarDescriptor = {
+  moduleSpecifier: '@openelement/router',
+  exportName: 'defineIslandConfig',
+  kind: 'static-sidecar',
+};
 
 async function readFixture(name: string): Promise<string> {
   return await Deno.readTextFile(new URL(name, FIXTURE_DIR));
@@ -634,7 +646,11 @@ Deno.test('compiled-element alpha.8 - canonical page/island authoring grammar', 
       '  render() { return <main><h1>{this.label}</h1></main>; }',
       '}',
     ].join('\n');
-    const { code, program } = compileElementProgram(source, '/project/app/routes/alpha8.tsx');
+    const { code, program } = compileElementProgram(
+      source,
+      '/project/app/routes/alpha8.tsx',
+      { staticSidecars: [ISLAND_SIDECAR] },
+    );
     assertEquals(program.root.kind, 'shadow-open');
     assertStringIncludes(code, 'export default class Alpha8Page extends OpenElement {');
     // The island delivery policy is copied verbatim into the compiled module.
@@ -699,7 +715,11 @@ Deno.test('compiled-element alpha.8 - canonical page/island authoring grammar', 
     const expectFailure = (source: string, code: string, fragment: string) => {
       let thrown: unknown;
       try {
-        compileElementProgram(source, '/project/app/components/bad.tsx');
+        compileElementProgram(
+          source,
+          '/project/app/components/bad.tsx',
+          { staticSidecars: [ISLAND_SIDECAR] },
+        );
       } catch (error) {
         thrown = error;
       }

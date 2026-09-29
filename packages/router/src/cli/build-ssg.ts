@@ -54,6 +54,7 @@ import {
   generateSsrPolyfillBanner,
 } from '../vite/internal/ssg/index.ts';
 import { compiledElementPlugin } from '@openelement/element/compiler';
+import { ISLAND_ADMISSION } from '../vite/internal/protocol/island-admission.ts';
 import { normalizeViteAliases } from '../vite/alias-utils.ts';
 import {
   CHUNK_SIZE_WARNING_LIMIT_KB,
@@ -420,6 +421,9 @@ async function buildSSG(
           // Linked workspace packages sit outside the project root; without the
           // workspace anchor their absolute ids would land in the source maps.
           workspaceRoot: findWorkspaceRoot(Deno.cwd()) ?? undefined,
+          // Route/island sources carry the island delivery policy statement;
+          // the compiler admits it only through the injected descriptor.
+          staticSidecars: [ISLAND_ADMISSION],
         }),
         // Virtual SSG entry module
         // Replaces .openElement/.openElement-ssg-entry.ts file write
@@ -450,9 +454,9 @@ async function buildSSG(
             // SSR outputs <tag-name data-client-only="true"></tag-name>
             // Client runtime imports the real module and upgrades the element.
             return [
-              `import { defineIslandConfig } from '@openelement/router';`,
+              `import { ${ISLAND_ADMISSION.exportName} } from '${ISLAND_ADMISSION.moduleSpecifier}';`,
               `export const tagName = ${quoteGeneratedJavaScriptValue(tagName)};`,
-              'export const openElement = defineIslandConfig({ ssr: false });',
+              `export const openElement = ${ISLAND_ADMISSION.exportName}({ ssr: false });`,
               `export default class OpenClientOnlyStub extends HTMLElement {
   connectedCallback() {
     if (!this.hasAttribute('data-client-only')) {
