@@ -49,7 +49,6 @@ import { pageRouteTagExpr, renderImport } from './entry-route-helpers.ts';
 import { renderApiRoute, renderMiddleware } from './entry-server-codegen.ts';
 import { renderSsgSection } from './entry-render-ssg.ts';
 import { quoteGeneratedJavaScriptValue } from './codegen-literals.ts';
-import { renderStreamRuntime } from './entry-stream-runtime.ts';
 import { selectRendererAdapter } from './renderer-adapter.ts';
 
 /**
@@ -212,15 +211,21 @@ export function renderEntry(desc: EntryDescriptor): string {
       `export const __streamManifests = ${quoteGeneratedJavaScriptValue(streamManifests)};`,
     );
     lines.push('');
-    // Stream pump runtime (ADR-0160 rule a, #1470 block d): the pump and the
-    // browser bootstrap are imported runtime; the entry binds the pump to its
-    // escapeAttr import and carries the oracle-pinned deferred-shell gate.
-    lines.push(renderStreamRuntime());
-    lines.push('');
+    // Stream pump runtime (ADR-0160 rule a): the pump, the browser bootstrap,
+    // and (Amendment 1) the deferred-shell gate are imported runtime; the
+    // entry binds the pump to its escapeAttr import and the gate to its
+    // serialized manifests + createDeferredDsdExecutor import.
     lines.push(
       "// Stream pump runtime (ADR-0160 rule a), bound to the entry's escapeAttr import.",
     );
     lines.push('const __streamBody = __createStreamBody({ escapeAttr });');
+    lines.push(
+      "// The deferred-shell gate (ADR-0160 rule a, Amendment 1), bound to the entry's",
+      '// serialized stream manifests and its createDeferredDsdExecutor import.',
+    );
+    lines.push(
+      'const __createDeferredPageShell = __createDeferredPageShellGate({ streamManifests: __streamManifests, createDeferredDsdExecutor });',
+    );
     lines.push('');
   }
 

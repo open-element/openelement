@@ -120,11 +120,20 @@ Deno.test('stream manifest binds two loader fields to independent compiled Part 
     assertStringIncludes(code, 'streamManifest:');
     assertStringIncludes(code, 'export const __streamManifests =');
     assertStringIncludes(code, manifest.program.sha256);
-    assertStringIncludes(code, 'async function __createDeferredPageShell(');
+    // ADR-0160 Amendment 1: the deferred-shell gate is the typed runtime
+    // module — the entry imports the factory, binds it to the serialized
+    // manifests + createDeferredDsdExecutor import, and keeps the call site;
+    // the gate's fail-closed contract is pinned by the behavior tests in
+    // server-runtime-stream-runtime.test.ts instead of emitted text.
     assertStringIncludes(
       code,
-      'return createDeferredDsdExecutor({ componentClass: Cls, props, manifest, instanceId, documentToken });',
+      "import { createDeferredPageShell as __createDeferredPageShellGate } from '@openelement/router/server-runtime'",
     );
+    assertStringIncludes(
+      code,
+      'const __createDeferredPageShell = __createDeferredPageShellGate({ streamManifests: __streamManifests, createDeferredDsdExecutor });',
+    );
+    assertStringIncludes(code, 'await __createDeferredPageShell(');
     assertStringIncludes(code, '"location":"p1"');
     assertStringIncludes(
       renderEntry(buildEntryDescriptor(routes)),

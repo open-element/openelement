@@ -20,6 +20,7 @@ import {
   mergeChannelHeaders,
 } from '../src/vite/internal/server-runtime/response-channel.ts';
 import {
+  createDeferredPageShell,
   createStreamBody,
   createStreamRequestScope,
   STREAM_BROWSER_BOOTSTRAP,
@@ -27,7 +28,6 @@ import {
 } from '../src/vite/internal/server-runtime/stream-runtime.ts';
 import type { PageRouteDecl, StreamRouteManifest } from '../src/vite/internal/protocol/ssg.ts';
 import { renderActionRoute, renderPageRoute } from '../src/vite/internal/ssg/entry-codegen.ts';
-import { renderStreamRuntime } from '../src/vite/internal/ssg/entry-stream-runtime.ts';
 
 const program = testProgram({
   tag: 'oe-stream-handler',
@@ -94,12 +94,12 @@ function deferred<T>() {
  * the top of the generated entry. A `new Function` harness cannot carry
  * import declarations, so the REAL production implementations are bound in
  * through `deps` instead — the assertions below still execute the shipped
- * modules, never a harness-local copy. The emitted stream runtime
- * (renderStreamRuntime below) carries the real `__createDeferredPageShell`
- * text itself, so the deferred-shell gate runs as shipped too. The action
- * POST wiring never executes here (only the GET handler is driven), but the
- * harness binds the real bridge/body-limit so the composed source matches the
- * shipped entry.
+ * modules, never a harness-local copy. The deferred-shell gate binds the same
+ * way since ADR-0160 Amendment 1 (the typed `createDeferredPageShell` factory
+ * over the serialized manifests + the real executor import), so the gate runs
+ * as shipped too. The action POST wiring never executes here (only the GET
+ * handler is driven), but the harness binds the real bridge/body-limit so the
+ * composed source matches the shipped entry.
  */
 async function handler(timeoutMs?: number, streamManifest?: StreamRouteManifest) {
   const route: PageRouteDecl = {
@@ -132,6 +132,10 @@ async function handler(timeoutMs?: number, streamManifest?: StreamRouteManifest)
     const __actionFetchHeader = deps.ACTION_FETCH_HEADER;
     const $Route_Index = routeModule;
     const __streamManifests = { '/': manifest };
+    const __createDeferredPageShell = deps.createDeferredPageShell({
+      streamManifests: __streamManifests,
+      createDeferredDsdExecutor,
+    });
     const __pageHandlers = { '/': {} };
     const __isOpenElementRedirect = error => error?.redirect === true;
     const __isOpenElementNotFound = error => error?.notFound === true;
@@ -149,7 +153,6 @@ async function handler(timeoutMs?: number, streamManifest?: StreamRouteManifest)
     const __resolveAppShell = () => deps.resolvedAppShell ?? false;
     const __renderAppShell = html => html;
     const __ssr = () => '<p>error</p>';
-    ${renderStreamRuntime()}
     ${lines.join('\n').replaceAll('import.meta.env.PROD', 'false')}
     return __pageHandlers['/'].GET[0];
   `;
@@ -162,6 +165,7 @@ async function handler(timeoutMs?: number, streamManifest?: StreamRouteManifest)
     routeModule,
     manifest: route.streamManifest,
     createDeferredDsdExecutor,
+    createDeferredPageShell,
     documentStreamParts,
     escapeAttr,
     escapeHtml,

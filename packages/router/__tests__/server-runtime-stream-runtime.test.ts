@@ -4,14 +4,23 @@
  * generated entries import instead of carrying emitted function bodies —
  * the request scope's abort fan-out, the deferred-field front gate with its
  * rejection-observation sweep, the policy-bounded payload checks, the shell
- * commitment and terminal error frames, and the browser bootstrap constant.
+ * commitment and terminal error frames, the deferred-shell gate (Amendment 1:
+ * the route→manifest/program fail-closed binding the entry wires to its
+ * serialized manifests and executor import), and the browser bootstrap
+ * constant.
  *
  * The end-to-end behavior stays pinned by the read-only stream-manifest
  * oracle, by stream-handler.test.ts (the real generated handler driving this
  * module), and by stream-browser.test.ts (real Chromium executing the real
  * bootstrap string).
  */
-import { assert, assertEquals, assertStringIncludes, assertThrows } from '@std/assert';
+import {
+  assert,
+  assertEquals,
+  assertRejects,
+  assertStringIncludes,
+  assertThrows,
+} from '@std/assert';
 import {
   STREAM_FRAME_FORBIDDEN_TAGS,
   STREAM_FRAME_UNSAFE_URL,
@@ -23,6 +32,7 @@ import {
   STREAM_MAX_SEED_PROPERTIES,
 } from '@openelement/element/authoring';
 import {
+  createDeferredPageShell,
   createStreamBody,
   createStreamRequestScope,
   STREAM_BROWSER_BOOTSTRAP,
@@ -148,6 +158,62 @@ Deno.test('stream front gate attaches both observers per declared field', async 
   assertEquals(records.map((record) => record.failed), [false, true]);
   assertEquals(records[0].value, 'ok');
   assertEquals((records[1].error as Error).message, 'no');
+});
+
+Deno.test('deferred-shell gate fails closed when the route has no build manifest', async () => {
+  const gate = createDeferredPageShell({
+    streamManifests: {},
+    createDeferredDsdExecutor: () => Promise.resolve(executor()),
+  });
+  const error = await assertRejects(
+    () => gate('/', { default: { __partProgram: { tag: 'oe-unit', version: 1 } } }, {}, 'i', 't'),
+    Error,
+  );
+  assertEquals(
+    error.message,
+    '[openElement] stream route / has no matching compiled route manifest/program.',
+  );
+});
+
+Deno.test('deferred-shell gate fails closed on a program tag or version mismatch', async () => {
+  const gate = createDeferredPageShell({
+    streamManifests: { '/': manifest(1) },
+    createDeferredDsdExecutor: () => Promise.resolve(executor()),
+  });
+  const routeModule = { default: { __partProgram: { tag: 'other-unit', version: 1 } } };
+  await assertRejects(() => gate('/', routeModule, {}, 'i', 't'), Error, 'no matching compiled');
+  const wrongVersion = {
+    default: { __partProgram: { tag: 'oe-unit', version: manifest(1).program.version + 1 } },
+  };
+  await assertRejects(() => gate('/', wrongVersion, {}, 'i', 't'), Error, 'no matching compiled');
+  // A page module without a compiled program fails the same gate.
+  await assertRejects(
+    () => gate('/', { default: {} }, {}, 'i', 't'),
+    Error,
+    'no matching compiled',
+  );
+});
+
+Deno.test('deferred-shell gate delegates to the entry executor import on a match', async () => {
+  const routeModule = { default: { __partProgram: { tag: 'oe-unit', version: 1 } } };
+  const calls: unknown[] = [];
+  const produced = executor();
+  const gate = createDeferredPageShell({
+    streamManifests: { '/': manifest(1) },
+    createDeferredDsdExecutor: (options) => {
+      calls.push(options);
+      return Promise.resolve(produced);
+    },
+  });
+  const executorView = await gate('/', routeModule, { first: 'v' }, 'instance-9', 'token-9');
+  assertEquals(executorView, produced);
+  assertEquals(calls, [{
+    componentClass: routeModule.default,
+    props: { first: 'v' },
+    manifest: manifest(1),
+    instanceId: 'instance-9',
+    documentToken: 'token-9',
+  }]);
 });
 
 Deno.test('stream body commits the shell with its typed seed attribute first', async () => {

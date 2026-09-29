@@ -11,9 +11,10 @@
  * so the pump is visible to `deno check` and directly unit-testable
  * (ADR-0160 rule a).
  *
- * The per-route shell gate (`__createDeferredPageShell`) stays emitted in the
- * entry: the read-only stream-manifest oracle pins its emitted shape, and its
- * body is the route→manifest/program binding the oracle re-expresses.
+ * The per-route shell gate (`__createDeferredPageShell`) is the typed
+ * {@linkcode createDeferredPageShell} factory (ADR-0160 Amendment 1): the
+ * entry binds it to its serialized stream manifests and its
+ * `createDeferredDsdExecutor` import and keeps only the call site.
  *
  * The admission budgets and the frame deny lists come from the policy
  * constants on Element's kernel-free `/authoring` leaf — the same numbers the
@@ -421,6 +422,82 @@ export function createStreamBody(config: StreamBodyConfig): StreamBodyFn {
         cleanup();
       },
     }, { highWaterMark: 0 });
+  };
+}
+
+/**
+ * The entry bindings the deferred-shell gate reads. `streamManifests` is the
+ * generated `__streamManifests` build data; the executor creator is the
+ * entry's `createDeferredDsdExecutor` Element import, injected so this module
+ * stays free of an Element runtime edge (#1339).
+ */
+export interface DeferredPageShellConfig {
+  /** The entry's serialized route→stream-manifest build data (`__streamManifests`). */
+  streamManifests: Record<string, StreamRouteManifest>;
+  /**
+   * The entry's `createDeferredDsdExecutor` import — the deferred shell it
+   * produces is the pump's executor view.
+   */
+  createDeferredDsdExecutor: (options: {
+    componentClass: unknown;
+    props?: unknown;
+    manifest: StreamRouteManifest;
+    instanceId: string;
+    documentToken?: string;
+  }) => Promise<StreamExecutorView>;
+}
+
+/**
+ * The per-route shell gate the streamed handlers await before any streamed
+ * document exists: the route must resolve its build manifest, the page class
+ * must carry the compiled Part Program, and both must agree on tag and
+ * program version — the gate fails closed with the route before the executor
+ * re-verifies the wire hash (#1276 B1.3-F1). Bound to the entry's serialized
+ * manifests and its `createDeferredDsdExecutor` import; the returned gate is
+ * the `__createDeferredPageShell` call site (ADR-0160 Amendment 1 — the last
+ * runtime function body that stayed emitted for its oracle pin).
+ */
+export function createDeferredPageShell(
+  config: DeferredPageShellConfig,
+): (
+  route: string,
+  routeModule: unknown,
+  props: unknown,
+  instanceId: string,
+  documentToken: string,
+) => Promise<StreamExecutorView> {
+  const { streamManifests, createDeferredDsdExecutor } = config;
+  return async function __createDeferredPageShell(
+    route,
+    routeModule,
+    props,
+    instanceId,
+    documentToken,
+  ) {
+    const manifest = streamManifests[route];
+    const Cls = (routeModule as
+      | {
+        default?: { __partProgram?: { tag: unknown; version: unknown } };
+      }
+      | undefined
+      | null)?.default;
+    if (
+      !manifest || !Cls?.__partProgram ||
+      Cls.__partProgram.tag !== manifest.program.tag ||
+      Cls.__partProgram.version !== manifest.program.version
+    ) {
+      throw new Error(
+        '[openElement] stream route ' + route +
+          ' has no matching compiled route manifest/program.',
+      );
+    }
+    return createDeferredDsdExecutor({
+      componentClass: Cls,
+      props,
+      manifest,
+      instanceId,
+      documentToken,
+    });
   };
 }
 

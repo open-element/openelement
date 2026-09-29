@@ -210,6 +210,14 @@ export function buildEntryDescriptor(
         names: ['STREAM_BROWSER_BOOTSTRAP'],
         alias: '__streamBrowserBootstrap',
       });
+      // The deferred-shell gate (ADR-0160 Amendment 1): the typed runtime
+      // factory the entry binds to its serialized stream manifests and its
+      // createDeferredDsdExecutor import; the handlers keep the call site.
+      imports.push({
+        from: '@openelement/router/server-runtime',
+        names: ['createDeferredPageShell'],
+        alias: '__createDeferredPageShellGate',
+      });
     }
     // The page-render seam (ADR-0160 rule a): page tag resolution and the
     // page-definition/route-meta/locale extractors are pure helpers the

@@ -99,6 +99,47 @@ Exception: `packages/router/__tests__/registry-marker-drift.test.ts` pins the
 SSR registry marker wire values and the generated artifacts that carry them;
 S3 rewrites that test as part of its design.
 
+## Amendment 1 — the deferred-shell gate becomes imported runtime (2026-09-29)
+
+- Amends: the read-only `stream-manifest` oracle's two emitted-shape
+  assertions and the `generated-entry-gate` function allowlist (both as
+  recorded in the S3d/S3e entries below).
+- Motivation: `__createDeferredPageShell` was the lane's last runtime
+  function body emitted into a generated entry — the one carve-out S3d kept
+  "with the oracle" (the read-only stream-manifest pin held its emitted text
+  byte-exact, so migrating it required this amendment first). It is stream
+  machinery like the pump it serves; rule (a) has no remaining reason to
+  exempt it, and the pin that kept it emitted is exactly what kept its body
+  invisible to `deno check` and to direct unit tests.
+- Assertion before: `stream-manifest.test.ts` asserted the generated entry
+  EMITS `async function __createDeferredPageShell(` and the literal
+  `return createDeferredDsdExecutor({ componentClass: Cls, props, manifest, instanceId, documentToken });`
+  line; `generated-entry-gate.test.ts` allowlisted that one name in the
+  request-time section (`REQUEST_TIME_ALLOWED`).
+- Assertion after (equal or stronger): `stream-manifest.test.ts` asserts the
+  entry IMPORTS the typed factory (`createDeferredPageShell as
+  __createDeferredPageShellGate` from `@openelement/router/server-runtime`),
+  binds it (`const __createDeferredPageShell = __createDeferredPageShellGate({
+  streamManifests: __streamManifests, createDeferredDsdExecutor });`), and
+  keeps the `await __createDeferredPageShell(` call site;
+  `generated-entry-gate.test.ts` allows ZERO request-time function
+  declarations — streamed entry shapes are now among the gated descriptors —
+  and adds the emitted head to the retired list. The fail-closed contract the
+  emitted text used to carry is pinned as behavior on the typed module
+  (`server-runtime-stream-runtime.test.ts`: missing manifest, program
+  tag/version mismatch, uncompiled class, and the exact delegation of
+  `{ componentClass, props, manifest, instanceId, documentToken }`);
+  `stream-handler.test.ts` binds the real factory through its evaluation
+  context and still drives the gate through the real generated handler.
+- Equivalence: the gate's semantics are unchanged — same fail-closed
+  condition, same error text, same executor delegation — so protocol behavior
+  is identical; only the carrying artifact changes (emitted text → bundled
+  typed module that the bundler inlines as before). The emptied emitter
+  (`entry-stream-runtime.ts`) is deleted; the server-runtime subpath grows by
+  the factory and its config type (ritual regeneration of
+  `docs/release/public-interface-snapshot.json`; `./server-runtime` was
+  already a declared export).
+
 ## Verification
 
 - The oracle suite is green, unweakened, at every stage boundary.

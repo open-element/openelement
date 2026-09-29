@@ -87,12 +87,14 @@ export type {
   StatusHtmlRenderer,
 } from './document-runtime.ts';
 export {
+  createDeferredPageShell,
   createStreamBody,
   createStreamRequestScope,
   STREAM_BROWSER_BOOTSTRAP,
   streamFields,
 } from './stream-runtime.ts';
 export type {
+  DeferredPageShellConfig,
   StreamBodyConfig,
   StreamBodyFn,
   StreamBodyOptions,
