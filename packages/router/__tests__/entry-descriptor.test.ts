@@ -6,7 +6,7 @@
  *   2. renderEntry - renders data to code string
  */
 
-import { assertEquals, assertStringIncludes, assertThrows } from '@std/assert';
+import { assertEquals, assertFalse, assertStringIncludes, assertThrows } from '@std/assert';
 import { buildEntryDescriptor, renderEntry } from '../src/vite/internal/ssg/index.ts';
 import type { RouteEntry } from '../src/vite/internal/protocol/framework.ts';
 
@@ -162,7 +162,10 @@ Deno.test('buildEntryDescriptor: static components are explicit and rendered int
     code,
     '__registerSsrComponent("open-article-view", __static_component_0.default)',
   );
-  assertStringIncludes(code, 'ssrRenderableTags: __ssrRenderableTags');
+  // The admitted-tag list is serialized build data inside the factory config
+  // (#1470 block e — no standalone const anymore).
+  assertStringIncludes(code, '"open-article-view"');
+  assertStringIncludes(code, 'ssrRenderableTags: [');
   assertEquals(code.includes('__expandNestedHosts'), false);
   assertEquals(code.includes('__nestedShellPattern'), false);
   assertEquals(code.includes('__propsFromAttrs'), false);
@@ -204,7 +207,11 @@ Deno.test('renderEntry: produces valid module code', () => {
   const desc = buildEntryDescriptor(sampleRoutes);
   const code = renderEntry(desc);
 
-  assertStringIncludes(code, "import { Hono } from 'hono'");
+  // ADR-0160 rule a (#1470 block e): the Hono app is the factory's — the
+  // entry carries no Hono import and no `new Hono()` assembly.
+  assertFalse(code.includes("from 'hono'"));
+  assertFalse(code.includes('new Hono()'));
+  assertStringIncludes(code, 'const __app = createGeneratedApp({');
   // v0.44 (ADR-0143): the sync compiled renderDsd is the only serializer
   // import — the legacy VNode tree renderer is gone.
   assertStringIncludes(
@@ -213,7 +220,6 @@ Deno.test('renderEntry: produces valid module code', () => {
   );
   assertEquals(code.includes('renderDsdTree'), false);
   assertStringIncludes(code, 'export default app');
-  assertStringIncludes(code, 'const app = new Hono()');
 });
 
 Deno.test('renderEntry: SSG mode excludes DOM shim (DSD renderer has no shim dependency)', () => {
@@ -262,19 +268,18 @@ Deno.test('renderEntry: page routes use SSR helper and wrapInDocument', () => {
   assertStringIncludes(code, '__pageHandlers["/"].GET = [');
   // v0.5.0: __ssr takes route params as second arg for SSR-time data access —
   // the renderer seam is imported runtime (ADR-0160 rule a); the handler call
-  // site and the native factory binding stay pinned.
+  // site stays pinned and the native factory binding lives in
+  // createGeneratedApp (#1470 block e).
   assertStringIncludes(code, '__ssr(__tag,');
-  assertStringIncludes(
-    code,
-    'const __ssr = __createPageRenderer({ renderDsd, customElements, ssrRenderableTags: __ssrRenderableTags });',
-  );
+  assertStringIncludes(code, 'ssr: __ssr,');
   // The WinterCG route middleware hands params to the handler directly.
   assertStringIncludes(code, '__params = __route.params');
   // v0.3.4: SSR automatically registers page components for Shadow DOM rendering
-  assertStringIncludes(code, 'customElements.define(');
-  // v0.5.0: the SSR registry lookup binds into the typed renderer (the
-  // registration plumbing still consults customElements directly).
-  assertStringIncludes(code, 'customElements.get(tag)');
+  // (#952/#1339/#1470 block e: registration runs through the imported registry
+  // guard — the wrapper and its registry reads are typed module code, so the
+  // generated entry carries the register call sites only).
+  assertStringIncludes(code, '__registerSsrComponent(');
+  assertEquals(code.includes('customElements.define ='), false);
   // v0.3.0: Uses wrapInDocument from ssr-handler.ts (single source of truth)
   assertStringIncludes(code, 'wrapInDocument(');
   // v0.5.0: No legacy SSR client artifacts
@@ -326,7 +331,8 @@ Deno.test('buildEntryDescriptor + renderEntry: end-to-end produces runnable code
     islandsDir: 'app/islands',
   }));
 
-  assertStringIncludes(code, "import { Hono } from 'hono'");
+  // ADR-0160 rule a (#1470 block e): Hono assembly is the factory's.
+  assertFalse(code.includes("from 'hono'"));
   assertStringIncludes(code, 'export default app');
   assertStringIncludes(code, '__apiRouteRecords.push({ id: "api/hello.ts"');
   assertStringIncludes(code, '__pageHandlers["/"].GET = [');

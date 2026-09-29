@@ -126,8 +126,12 @@ export function buildEntryDescriptor(
   // --- Imports ---
   const imports: ImportDecl[] = [];
 
-  // Always needed
-  imports.push({ from: 'hono', names: ['Hono'] });
+  // The generated-app factory (ADR-0160 rule a, #1470 block e): the entry's
+  // assembly — the Hono app, its bridge, the composed handler exports, the
+  // registry guard, and the page-render bindings — is the imported runtime;
+  // the entry keeps imports + descriptor data + wiring. It replaces the
+  // entry-emitted `new Hono()` and the bridge import.
+  imports.push({ from: '@openelement/router/server-runtime', names: ['createGeneratedApp'] });
   imports.push(...adapter.serverImports(routes.some((route) => route.streamManifest)));
   // #1326: both renderers resolve page meaning through the one Document seam
   // before wrapInDocument serializes it.
@@ -136,17 +140,10 @@ export function buildEntryDescriptor(
     names: ['resolvePageDocument'],
     alias: '__resolvePageDocument',
   });
-  // The internal Hono↔WinterCG bridge (ADR-0160 rule a): every page handler
-  // composes through it and the 405 fallback reads the bridged context, so
-  // the bridge factory is imported unconditionally like the Hono app itself.
-  imports.push({
-    from: '@openelement/router/server-runtime',
-    names: ['createHonoBridge'],
-    alias: '__createHonoBridge',
-  });
   // The action protocol response-channel negotiation header (the Vary value
-  // the POST preamble and the 405 fallback both set) — the wire constant from
-  // the runtime module, never a literal in generated code (#743).
+  // the POST preamble sets) — the wire constant from the runtime module,
+  // never a literal in generated code (#743). The 405 fallback sets it inside
+  // the typed dispatch module.
   imports.push({
     from: '@openelement/router/server-runtime',
     names: ['ACTION_FETCH_HEADER'],
@@ -164,19 +161,14 @@ export function buildEntryDescriptor(
       alias: '__mergeChannelHeaders',
     });
     // ADR-0120/ADR-0121: the action POST protocol (CSRF floor, dispatch,
-    // classification, problem+json, PRG, the default body limit, the 303
-    // coercion and the 500 error mapping) is the imported runtime module
-    // (ADR-0160 rule a); the entry keeps the call sites and binds the
-    // serialized body-limit constant at wiring time.
+    // classification, problem+json, PRG, the 303 coercion and the 500 error
+    // mapping) is the imported runtime module (ADR-0160 rule a); the entry
+    // keeps the call sites. The default body limit is bound inside the
+    // generated-app factory to the canonical policy constant (#1470 block e).
     imports.push({
       from: '@openelement/router/server-runtime',
       names: ['runActionProtocol'],
       alias: '__runActionProtocol',
-    });
-    imports.push({
-      from: '@openelement/router/server-runtime',
-      names: ['createActionBodyLimit'],
-      alias: '__createActionBodyLimit',
     });
     imports.push({
       from: '@openelement/router/server-runtime',
@@ -219,12 +211,16 @@ export function buildEntryDescriptor(
         alias: '__streamBrowserBootstrap',
       });
     }
-    // The page-render seam (ADR-0160 rule a): page tag resolution, the page
-    // SSR renderer factory, the props projection, page-definition/route-meta
-    // extraction, locale resolution, status pages, and the app-shell runtime
-    // are imported per the renderer adapter; the orchestrator binds them to
-    // the entry's serialized data. Same page-handler gate as the channel.
+    // The page-render seam (ADR-0160 rule a): page tag resolution and the
+    // page-definition/route-meta/locale extractors are pure helpers the
+    // emitted call sites reference; the runtime binding itself (renderer,
+    // props projection, status pages, app shell) happens inside the
+    // generated-app factory per the renderer adapter (#1470 block e). The
+    // adapter's startup stream guard is imported under the same
+    // `__assertStreamRoute` binding for both renderers. Same page-handler
+    // gate as the channel.
     imports.push(...adapter.runtimeSeam().imports);
+    imports.push(adapter.runtimeSeam().streamGuard);
   }
 
   // Conditional middleware imports

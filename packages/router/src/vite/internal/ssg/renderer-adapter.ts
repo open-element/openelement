@@ -6,14 +6,24 @@ type RendererMode = 'native' | 'lit';
 /**
  * The typed page-render runtime seam (ADR-0160 rule a): which
  * @openelement/router/server-runtime functions the generated entry imports
- * and how it binds them to its data (the serialized tag list, dangerous keys,
- * shell plan, nav/locale declarations, and the entry's own Element imports).
- * The emitted call sites (`__ssr`, `__pageProps`, `__renderAppShell`, …) are
- * identical for both renderers — only this seam forks.
+ * and how its `createGeneratedApp` config binds the page-render runtime to
+ * the entry's own Element imports. The emitted call sites (`__ssr`,
+ * `__pageProps`, `__renderAppShell`, …) are identical for both renderers —
+ * only this seam forks. The runtime binding itself moved into the factory
+ * (server-runtime/app.ts, #1470 block e); the entry keeps only the
+ * adapter-selected imports and the `pageRuntime` config lines.
  */
 interface RuntimeSeam {
+  /** Pure helper functions the emitted call sites reference by name. */
   imports: ImportDecl[];
-  wiring: string[];
+  /** The adapter's startup stream guard, imported as `__assertStreamRoute`. */
+  streamGuard: ImportDecl;
+  /**
+   * The renderer-specific lines of the entry's `pageRuntime` factory config:
+   * mode plus the Element functions this renderer's entry imports. The
+   * orchestrator appends the `ssrRenderableTags` build data.
+   */
+  pageRuntimeLines: string[];
 }
 
 interface RendererAdapter {
@@ -48,31 +58,21 @@ const native: RendererAdapter = {
     return {
       imports: [
         { from: RUNTIME_MODULE, names: ['resolveCompiledPageTag'], alias: '__resolvePageTag' },
-        {
-          from: RUNTIME_MODULE,
-          names: ['createNativePageRenderer'],
-          alias: '__createPageRenderer',
-        },
-        {
-          from: RUNTIME_MODULE,
-          names: ['createPagePropsRuntime'],
-          alias: '__createPagePropsRuntime',
-        },
         { from: RUNTIME_MODULE, names: ['pageDefinition'], alias: '__pageDefinition' },
         { from: RUNTIME_MODULE, names: ['routeMeta'], alias: '__routeMeta' },
         { from: RUNTIME_MODULE, names: ['localeFromPath'], alias: '__localeFromPath' },
-        { from: RUNTIME_MODULE, names: ['createStatusHtml'], alias: '__createStatusHtml' },
-        {
-          from: RUNTIME_MODULE,
-          names: ['createAppShellRuntime'],
-          alias: '__createAppShellRuntime',
-        },
       ],
-      wiring: [
-        'const __ssr = __createPageRenderer({ renderDsd, customElements, ssrRenderableTags: __ssrRenderableTags });',
-        'const { pageProps: __pageProps, pageErrorProps: __pageErrorProps } = __createPagePropsRuntime({ dangerousKeys: __DANGEROUS_KEYS });',
-        'const __statusHtml = __createStatusHtml(escapeHtml);',
-        'const { resolveAppShell: __resolveAppShell, renderAppShell: __renderAppShell } = __createAppShellRuntime({ ssr: __ssr, trustedHtml, appShellPlan: __appShellPlan, locales: __locales, navSections: __navSections, headerNav: __headerNav, defaultLocale: __getDefaultLocale() });',
+      streamGuard: {
+        from: RUNTIME_MODULE,
+        names: ['assertCompiledStreamRoute'],
+        alias: '__assertStreamRoute',
+      },
+      pageRuntimeLines: [
+        `mode: 'native',`,
+        `renderDsd,`,
+        `customElements,`,
+        `trustedHtml,`,
+        `escapeHtml,`,
       ],
     };
   },
@@ -100,31 +100,20 @@ const lit: RendererAdapter = {
     return {
       imports: [
         { from: RUNTIME_MODULE, names: ['resolveLitPageTag'], alias: '__resolvePageTag' },
-        {
-          from: RUNTIME_MODULE,
-          names: ['createLitPageRenderer'],
-          alias: '__createLitPageRenderer',
-        },
-        {
-          from: RUNTIME_MODULE,
-          names: ['createPagePropsRuntime'],
-          alias: '__createPagePropsRuntime',
-        },
         { from: RUNTIME_MODULE, names: ['pageDefinition'], alias: '__pageDefinition' },
         { from: RUNTIME_MODULE, names: ['routeMeta'], alias: '__routeMeta' },
         { from: RUNTIME_MODULE, names: ['localeFromPath'], alias: '__localeFromPath' },
-        { from: RUNTIME_MODULE, names: ['createStatusHtml'], alias: '__createStatusHtml' },
-        {
-          from: RUNTIME_MODULE,
-          names: ['createAppShellRuntime'],
-          alias: '__createAppShellRuntime',
-        },
       ],
-      wiring: [
-        'const __ssr = __createLitPageRenderer({ renderLitPageToHtml: __renderLitPageToHtml });',
-        'const { pageProps: __pageProps, pageErrorProps: __pageErrorProps } = __createPagePropsRuntime({ dangerousKeys: __DANGEROUS_KEYS });',
-        'const __statusHtml = __createStatusHtml(escapeHtml);',
-        'const { resolveAppShell: __resolveAppShell, renderAppShell: __renderAppShell } = __createAppShellRuntime({ ssr: __ssr, trustedHtml, appShellPlan: __appShellPlan, locales: __locales, navSections: __navSections, headerNav: __headerNav, defaultLocale: __getDefaultLocale() });',
+      streamGuard: {
+        from: RUNTIME_MODULE,
+        names: ['assertLitStreamRoute'],
+        alias: '__assertStreamRoute',
+      },
+      pageRuntimeLines: [
+        `mode: 'lit',`,
+        `renderLitPageToHtml: __renderLitPageToHtml,`,
+        `trustedHtml,`,
+        `escapeHtml,`,
       ],
     };
   },

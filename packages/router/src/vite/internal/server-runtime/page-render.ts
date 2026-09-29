@@ -8,11 +8,13 @@
  * helpers (entry-render-runtime.ts) so the logic is visible to `deno check`
  * and directly unit-testable (ADR-0160 rule a).
  *
- * The dangerous-key set is injected, not imported: generated modules cannot
- * import Element internals in packed consumer setups, so the canonical list
- * (packages/element/src/internal/core/security.ts DANGEROUS_KEYS) is
- * serialized into the entry as generated data and handed to
- * {@linkcode createPagePropsRuntime} at binding time.
+ * The dangerous-key set is injected, not imported: the narrow runtime reads
+ * mirror the generated helpers exactly, and the caller binds the policy —
+ * since #1470 block e that caller is the generated-app factory (app.ts),
+ * which imports the canonical list (packages/element/src/internal/core/
+ * security.ts DANGEROUS_KEYS, re-exported by the kernel-free /authoring
+ * leaf) and hands it to {@linkcode createPagePropsRuntime}; the generated
+ * entry carries no serialized copy of it.
  *
  * Route modules are author-shaped and reach this module as opaque records —
  * the narrow runtime reads mirror the generated helpers exactly.
@@ -103,10 +105,11 @@ export interface PagePropsRuntime {
   pageErrorProps(routeModule: unknown, error: unknown, context: PageContext): ProjectedProps;
 }
 
+/** The binding the generated-app factory hands {@linkcode createPagePropsRuntime}. */
 export interface PagePropsRuntimeDeps {
   /**
-   * The canonical dangerous-key set serialized into the generated entry
-   * (Element's security.ts DANGEROUS_KEYS): one rule, no second copy.
+   * The canonical dangerous-key set (the factory imports it from the
+   * kernel-free /authoring leaf): one rule, no second copy.
    */
   dangerousKeys: ReadonlySet<string>;
 }

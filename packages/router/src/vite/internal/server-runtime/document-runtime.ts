@@ -72,6 +72,7 @@ export interface AppShellRuntime {
   ): string;
 }
 
+/** What {@linkcode createAppShellRuntime} binds: the entry's Element imports plus its serialized plan data. */
 export interface AppShellRuntimeDeps {
   /** The entry's bound page renderer (`__ssr`) — the shell renders through the same seam. */
   ssr: PageSsrRenderer;

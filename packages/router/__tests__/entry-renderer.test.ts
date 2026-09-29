@@ -10,7 +10,6 @@
  */
 
 import { assertEquals, assertExists, assertFalse, assertStringIncludes } from '@std/assert';
-import { MAX_ACTION_BODY_BYTES } from '@openelement/element';
 import { buildEntryDescriptor, renderEntry } from '../src/vite/internal/ssg/index.ts';
 import { resetCorsOriginWarningForTests } from '../src/vite/internal/ssg/entry-server-codegen.ts';
 import { createAppShellRuntime } from '../src/vite/internal/server-runtime/document-runtime.ts';
@@ -343,11 +342,15 @@ Deno.test('renderEntry: exports default app', () => {
   assertStringIncludes(code, 'export default app');
 });
 
-Deno.test('renderEntry: imports Hono and DSD renderer', () => {
+Deno.test('renderEntry: imports DSD renderer; Hono assembly is the factory (#1470 block e)', () => {
   const desc = buildEntryDescriptor(basicRoutes);
   const code = renderEntry(desc);
 
-  assertStringIncludes(code, "import { Hono } from 'hono'");
+  // ADR-0160 rule a: `new Hono()` moved into createGeneratedApp — the entry
+  // no longer imports Hono or builds the app itself.
+  assertFalse(code.includes("from 'hono'"));
+  assertStringIncludes(code, 'const __app = createGeneratedApp({');
+  assertStringIncludes(code, 'export default app');
   // v0.5.0: DSD renderer replaces @lit-labs/ssr; v0.44: the compiled sync
   // renderDsd is the only serializer — no runtime JSX or tree renderer.
   assertStringIncludes(
@@ -367,14 +370,12 @@ Deno.test('renderEntry: app shell composes the page host through the compiled se
   });
   const code = renderEntry(desc);
 
-  // The shell composition is typed runtime code; the entry binds it to the
-  // serialized plan and its own imports (ADR-0160 rule a).
+  // The shell composition is typed runtime code; the entry pins the plan data
+  // in the factory config and the factory binds the runtime (ADR-0160 rule a,
+  // #1470 block e — the wiring line moved into createGeneratedApp).
   assertStringIncludes(code, '"tagName": "open-layout"');
   assertStringIncludes(code, 'import * as __shell_0 from "@acme/components/open-layout";');
-  assertStringIncludes(
-    code,
-    'const { resolveAppShell: __resolveAppShell, renderAppShell: __renderAppShell } = __createAppShellRuntime({ ssr: __ssr, trustedHtml, appShellPlan: __appShellPlan, locales: __locales, navSections: __navSections, headerNav: __headerNav, defaultLocale: __getDefaultLocale() });',
-  );
+  assertStringIncludes(code, 'appShellPlan: {');
   // The slot claim contract stays pinned on the shipped runtime: the shell
   // renders through the page renderer with the content as trusted slot HTML.
   const { runtime, ssrCalls } = loadLayoutRuntime({
@@ -455,12 +456,9 @@ Deno.test('renderEntry: route meta layout can select named layouts', () => {
 
   assertStringIncludes(code, 'import * as __shell_0 from "/app/components/post-layout.tsx";');
   // The named-layout lookup lives in the typed app-shell runtime; the entry
-  // pins the plan data and the binding (ADR-0160 rule a).
+  // pins the plan data in the factory config (ADR-0160 rule a, #1470 block e).
   assertStringIncludes(code, '"post-layout"');
-  assertStringIncludes(
-    code,
-    'const { resolveAppShell: __resolveAppShell, renderAppShell: __renderAppShell } = __createAppShellRuntime({ ssr: __ssr, trustedHtml, appShellPlan: __appShellPlan, locales: __locales, navSections: __navSections, headerNav: __headerNav, defaultLocale: __getDefaultLocale() });',
-  );
+  assertStringIncludes(code, 'appShellPlan: {');
   assertStringIncludes(code, 'module: $pageIndex');
 });
 
@@ -1013,20 +1011,17 @@ Deno.test('renderEntry: action POST wiring follows the ADR-0120 protocol', () =>
 
   // The POST handler composes the default body-limit middleware ahead of the
   // handler through the Hono↔WinterCG bridge; the limit value is the
-  // serialized MAX_ACTION_BODY_BYTES policy constant (#568, S1c) — the copy
-  // derives from the canonical value, never an independent literal.
+  // canonical MAX_ACTION_BODY_BYTES policy constant (#568, S1c) — since
+  // #1470 block e the factory imports it from the kernel-free /authoring
+  // leaf and binds the middleware itself, so the entry carries neither the
+  // serialized number nor the binding line (only the destructured middleware).
   assertStringIncludes(
     code,
     '__pageHandlers["/"].POST = [__asFetchMiddleware(__actionBodyLimit), __asFetchHandler(async (c, __route) => {',
   );
-  assertStringIncludes(
-    code,
-    `const __maxActionBodyBytes = ${MAX_ACTION_BODY_BYTES};`,
-  );
-  assertStringIncludes(
-    code,
-    'const __actionBodyLimit = __createActionBodyLimit(__maxActionBodyBytes);',
-  );
+  assertFalse(code.includes('__maxActionBodyBytes'));
+  assertFalse(code.includes('createActionBodyLimit'));
+  assertStringIncludes(code, 'actionBodyLimit: __actionBodyLimit,');
   // The Vary negotiation header rides the shared wire constant, never a
   // literal (#743).
   assertStringIncludes(
@@ -1060,17 +1055,17 @@ Deno.test('renderEntry: ADR-0121 hardening wiring is present in the action codeg
     code,
     "app.all('*', (c, next) => { __honoContexts.set(c.req.raw, c); return __routeMiddleware(c.req.raw,",
   );
-  // The Hono↔WinterCG bridge is the imported runtime module, destructured
-  // once (ADR-0160 rule a).
+  // The Hono↔WinterCG bridge is the factory's own bridge, destructured once
+  // (ADR-0160 rule a, #1470 block e — the bridge creation moved into
+  // createGeneratedApp; the 405 responder is the factory-bound dispatch
+  // module).
+  assertStringIncludes(code, 'methodNotAllowed: __methodNotAllowed,');
   assertStringIncludes(
     code,
-    "import { createHonoBridge as __createHonoBridge } from '@openelement/router/server-runtime'",
-  );
-  assertStringIncludes(
-    code,
-    'const { contexts: __honoContexts, asFetchHandler: __asFetchHandler, asFetchMiddleware: __asFetchMiddleware } = __createHonoBridge();',
+    'const { contexts: __honoContexts, asFetchHandler: __asFetchHandler, asFetchMiddleware: __asFetchMiddleware } = __app.hono;',
   );
   assertFalse(code.includes('const __honoContexts = new WeakMap();'));
+  assertFalse(code.includes('createHonoBridge'));
 });
 
 Deno.test('renderEntry: the action error/redirect channels are imported runtime calls', () => {
@@ -1110,7 +1105,7 @@ Deno.test('renderEntry: the action protocol wiring is emitted once for many rout
   }));
   const code = renderEntry(buildEntryDescriptor(routes));
   assertEquals(code.match(/import { runActionProtocol as __runActionProtocol }/g)?.length, 1);
-  assertEquals(code.match(/const __actionBodyLimit =/g)?.length, 1);
+  assertEquals(code.match(/actionBodyLimit: __actionBodyLimit,/g)?.length, 1);
   assertEquals(code.match(/await __runActionProtocol\(/g)?.length, routes.length);
 });
 
@@ -1204,25 +1199,21 @@ Deno.test('renderEntry: middleware.use composes imported module defaults at the 
   });
   const code = renderEntry(desc);
 
-  assertStringIncludes(
-    code,
-    "import { composeFetchMiddleware } from '@openelement/element/build-utils';",
-  );
   // Module contract: each middleware module is imported and its default
-  // export composed — order preserved (use[0] outermost), no source inlining.
+  // export handed to the factory — order preserved (use[0] outermost), no
+  // source inlining. The onion composition itself is the typed factory
+  // (#1470 block e): the entry no longer imports composeFetchMiddleware.
   assertStringIncludes(code, 'import * as __mw_0 from "/app/middleware/outer.ts"');
   assertStringIncludes(code, 'import * as __mw_1 from "/app/middleware/inner.ts"');
-  assertStringIncludes(code, 'const __openElementFetchMiddleware = [');
+  assertStringIncludes(code, 'fetchMiddleware: [');
   assertStringIncludes(code, '__mw_0.default,');
   assertStringIncludes(code, '__mw_1.default,');
-  assertStringIncludes(
-    code,
-    'export const openElementHandler = composeFetchMiddleware(' +
-      '__openElementFetchMiddleware, __openElementBaseHandler)',
-  );
+  assertFalse(code.includes('composeFetchMiddleware'));
+  // The composed handler is the factory result under the same export name.
+  assertStringIncludes(code, 'export const openElementHandler = __app.handler;');
   // Dev-server boundary export (@hono/vite-dev-server reads it via the
   // `export` option when middleware.use is configured).
-  assertStringIncludes(code, 'export const openElementDevFetch = {');
+  assertStringIncludes(code, 'export const openElementDevFetch = __app.devFetch;');
   // The raw Hono app stays the default export — SSG prerender is unchanged.
   assertStringIncludes(code, 'export default app');
 });
@@ -1237,13 +1228,16 @@ Deno.test('renderEntry: middleware.corsOriginModule is imported and referenced, 
   assertStringIncludes(code, "app.use('*', cors({ origin: __cors_origin_module.default,");
 });
 
-Deno.test('renderEntry: no middleware.use keeps the pre-#858 handler shape', () => {
+Deno.test('renderEntry: no middleware.use keeps the single composed handler export', () => {
   const desc = buildEntryDescriptor(basicRoutes);
   const code = renderEntry(desc);
 
+  // The handler export exists in both shapes since #1470 block e — without
+  // middleware.use the factory composes nothing around app.fetch, and no
+  // dev-server export is emitted.
   assertFalse(code.includes('composeFetchMiddleware'));
   assertFalse(code.includes('openElementDevFetch'));
-  assertStringIncludes(code, 'export const openElementHandler = (request, context = {}) => {');
+  assertStringIncludes(code, 'export const openElementHandler = __app.handler;');
 });
 
 Deno.test('renderEntry: corsOrigin warning is emitted once per process (#925)', () => {
@@ -1272,16 +1266,21 @@ Deno.test('renderEntry: island client script is descriptor-driven (dev URL + req
     islandFiles: ['live-counter.ts'],
   }));
 
-  // One render-time seam: the dev URL (compile-time constant) or the src the
-  // generated dist/server/index.js hands in at startup. wrapInDocument
-  // serializes the tag — the only place a CSP nonce is attached.
-  assertStringIncludes(code, 'export function __setRequestTimeClientScript(src) {');
+  // One render-time seam: the dev URL (compile-time constant) is computed in
+  // the entry and handed to the factory; the request-time src the generated
+  // dist/server/index.js hands in reaches the same seam. wrapInDocument
+  // serializes the tag — the only place a CSP nonce is attached. (#1470
+  // block e: the setter/descriptor machinery moved into createGeneratedApp;
+  // the entry re-exports the setter and binds the descriptor list.)
   assertStringIncludes(
     code,
-    "const __devClientScriptSrc = import.meta.env.DEV && true ? import.meta.env.BASE_URL + 'client/islands/client.js' : null;",
+    "devClientScriptSrc: import.meta.env.DEV && true ? import.meta.env.BASE_URL + 'client/islands/client.js' : null,",
   );
-  assertStringIncludes(code, 'function __clientScriptDescriptors() {');
-  assertStringIncludes(code, `return src ? [{ type: 'module', src }] : [];`);
+  assertStringIncludes(
+    code,
+    'export const __setRequestTimeClientScript = __app.setRequestTimeClientScript;',
+  );
+  assertStringIncludes(code, 'clientScriptDescriptors: __clientScriptDescriptors,');
   // No HTML string-splicing survives in the generated entry.
   assertEquals(code.includes('insertBeforeBodyClose'), false);
   assertEquals(code.includes('__withDevClientScript'), false);
@@ -1291,7 +1290,7 @@ Deno.test('renderEntry: no islands and no enhanced forms yields no dev client sc
   const code = renderEntry(buildEntryDescriptor(basicRoutes));
   assertStringIncludes(
     code,
-    "const __devClientScriptSrc = import.meta.env.DEV && false ? import.meta.env.BASE_URL + 'client/islands/client.js' : null;",
+    "devClientScriptSrc: import.meta.env.DEV && false ? import.meta.env.BASE_URL + 'client/islands/client.js' : null,",
   );
 });
 

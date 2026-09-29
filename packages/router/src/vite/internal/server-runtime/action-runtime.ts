@@ -24,11 +24,11 @@
  * The protocol constants come from the authoring leaves (Element's
  * `internal/protocol/data.ts` via `@openelement/element/authoring`, and the
  * router's own authoring module) — both kernel-free, so the LIT entry's
- * import graph stays clean (#1339). The body-limit NUMBER is injected, not
- * imported: it lives behind the Element runtime facade, which packed consumer
- * setups and the LIT graph cannot import, so the generated entry serializes
- * the canonical `MAX_ACTION_BODY_BYTES` value as build data and hands it to
- * {@linkcode createActionBodyLimit} at binding time.
+ * import graph stays clean (#1339). The body-limit NUMBER arrives the same
+ * way since #1470 block e: `MAX_ACTION_BODY_BYTES` rides the `/authoring`
+ * leaf (it lives in the import-free `internal/protocol/policy.ts`), so the
+ * generated-app factory binds {@linkcode createActionBodyLimit} to the
+ * canonical value and the generated entry carries no serialized copy.
  */
 
 import { ACTION_FETCH_HEADER, PROBLEM_JSON_MEDIA_TYPE } from '@openelement/element/authoring';
@@ -54,7 +54,11 @@ export interface ActionHonoContext {
   header(name: string, value: string): void;
   get(key: string): unknown;
   json(object: unknown, status?: number, headers?: Record<string, string>): Response;
-  text(text: string, status?: number): Response;
+  text(
+    text: string,
+    status?: number,
+    headers?: Record<string, string>,
+  ): Response;
   redirect(location: string, status?: number): Response;
   /** The response under construction (read by the middleware bridge fallback). */
   readonly res: Response;

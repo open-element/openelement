@@ -363,3 +363,111 @@ oracle evidence.
   `stream-handler.test.ts` green (15 tests, unchanged assertions) with the
   real pump bound through deps; `stream-browser.test.ts` green (7 tests,
   real Chromium against the byte-identical bootstrap).
+
+### S3e — the generated entry is reduced to route wiring (#1470 block e)
+
+- Artifact: the generated virtual Hono server entry — every shape that
+  embeds it (the dev entry, the SSG SSR bundle `dist/server/entry.js`, and
+  the request-time `dist/server/index.js` bundle); plus the
+  `@openelement/element/authoring` export surface (one constant), the
+  derived `docs/release/public-interface-snapshot.json`, and the
+  `registry-marker-drift` oracle (rewritten by design — the lane's one
+  scheduled exception).
+- Expected difference: the entry's final form is imports + route-descriptor
+  data + one `createGeneratedApp({...})` factory call + per-route wiring.
+  The emitted assembly is gone: `const app = new Hono()` and the
+  `createHonoBridge()` destructure (now the factory's `hono` bridge), the
+  `__openElementFetchMiddleware`/`composeFetchMiddleware` handler
+  composition and the `openElementDevFetch`/`openElementRuntimeAdapter`
+  export literals (factory-composed, re-exported as `__app.handler` /
+  `__app.devFetch` / `__app.runtimeAdapter`), the `__setRequestTimeClientScript`
+  setter body and `__clientScriptDescriptors` factory (#951 plumbing moved
+  into the factory; the entry keeps the `import.meta.env` dev-URL literal at
+  the `devClientScriptSrc` config property and re-exports the setter), the
+  `__registerSsrComponent`/`__entryDefined` registry wrapper and the
+  injected marker literals (the typed `security.ts` guard imports the
+  canonical constants; the entry keeps only the register call sites), the
+  `__assertStreamRoute`/`__assertLitStreamRoute` function bodies and the
+  405 `methodNotAllowed` closure (typed `route-dispatch.ts`; the entry keeps
+  the per-route assertion call sites), the `Object.fromEntries` page-handler
+  table, and the `createLogger`/`log` binding (dead in every generated
+  entry). The `__createRouteMiddleware` import, the `app.all('*')` request
+  hook, and the emitted per-route GET/POST/404 wiring are byte-identical to
+  block d (verified: the dispatch composition still follows the
+  page/action emissions — createRouteMiddleware reads each handler record at
+  call time). Serialized-copy deletion: `__DANGEROUS_KEYS` and
+  `__maxActionBodyBytes` are gone — the factory imports
+  `DANGEROUS_KEYS` and `MAX_ACTION_BODY_BYTES` from the kernel-free
+  `/authoring` leaf (which gained `MAX_ACTION_BODY_BYTES`; it already rode
+  that leaf's `internal/protocol/policy.ts` home) and binds the props
+  projection and the body-limit middleware itself. `__ssrRenderableTags`,
+  the shell plan, locales, and the island map stay serialized build data
+  (they are per-project descriptor values with no importable source), now
+  as factory-config properties instead of standalone consts. Byte evidence
+  at the renderer-adapter.test.ts pin: native server entry 17478 → 14141
+  bytes, lit server entry 17018 → 14254 bytes; client entries UNCHANGED
+  (1983 / 3138 bytes, still at the pre-lane baseline).
+- Reason: ADR-0160 rule (a) — app assembly, dispatch, registration
+  security, client-script plumbing, and the handler-export contract are
+  server runtime semantics and must live in typecheckable, unit-testable TS
+  modules, not inside template strings. This block also lands the two
+  remaining items of the S3a verdict: the only consumer setup that cannot
+  import Element is the repo's own string-eval test harness (data:-URL /
+  `new Function` evaluation cannot carry imports), and those harnesses bind
+  implementations through their evaluation context (`deps`) — as recorded
+  in S3a-d — so no product setup needs the serialized copies and both are
+  deleted; the harness accommodation (deps bindings, not copies) is the
+  recorded exit condition, and it retires only if a packed-consumer setup
+  that cannot resolve the bundler-inlined import ever appears.
+- Impact: the server-runtime subpath grows from 44 to 55 public symbols
+  (`createGeneratedApp` + types, the dispatch guards/table/405 responder,
+  the registry guard, and the re-exported `DANGEROUS_KEYS`) and
+  `@openelement/element/authoring` gains `MAX_ACTION_BODY_BYTES` (ritual
+  regeneration of `docs/release/public-interface-snapshot.json` for both
+  packages; `./server-runtime` was already a declared export). The factory
+  imports only kernel-free leaves (hono, element/logger, element/build-utils,
+  element/authoring, router/http) — the LIT entry's import graph stays
+  kernel-free (lit-graph-boundary walks the new factory edge). The
+  `registry-marker-drift` oracle is rewritten per the lane's design
+  exception: the wire values and the polyfill-banner pin stay byte-exact;
+  the "generated entry injects every canonical marker" pin becomes
+  "the entry carries neither the markers nor customElements surgery — only
+  the factory-bound register call sites", plus new guard behavior cases
+  (single wrapper install with the TRUE original kept on the registry, stub
+  registry re-definition wins with ownership tracking, dev re-evaluation
+  overwrites its OWN tag through the original define, foreign
+  registrations fail closed). `entry-renderer.test.ts` /
+  `entry-descriptor.test.ts` / `lit-renderer-codegen.test.ts` pins whose
+  subject moved into the factory became factory-config pins; the pins whose
+  subject is unchanged wiring (handler emissions, call sites, exports)
+  are untouched. New `generated-entry-gate.test.ts` hard gates: (a) every
+  generated shape parses with zero TypeScript syntax diagnostics
+  (transpileModule with reportDiagnostics — the bundler-facing deno-check
+  floor); (b) every emitted function declaration is allowlisted (only the
+  oracle-pinned `__createDeferredPageShell` in the request-time section and
+  the four SSG prerender-section functions) and 27 retired emission heads
+  can never reappear; (c) no `__DANGEROUS_KEYS` and no serialized canonical
+  key literal; (d) a real static import walk from the generated client
+  entry and the browser runtime modules (island-scheduler.ts,
+  enhance-client.ts behind `virtual:open-client-runtime`) never reaches
+  `server-runtime/`, with a negative control from the server entry. The
+  stream-manifest oracle's `__assertStreamRoute` harness now executes the
+  shipped typed guard directly (the emitted-helper extraction could not
+  carry imports) — its assertions (call-site text, rejection messages,
+  field/file naming) are unchanged; the deferred-shell pins it also carries
+  were left byte-exact per S3d.
+- Oracle evidence: `request-time-parity` green on all 29 steps for both
+  runtimes against the rebuilt fixture (it caught the one real migration
+  bug: an intermediate revision emitted the dispatch composition before the
+  page-handler population, and the built bundle failed SSG rendering with
+  `No handlers for /` — fixed by restoring the pre-block emission order);
+  `stream-manifest` (13 tests, deferred-shell pins byte-exact),
+  `renderer-scope-parity`, `ssg-admission-parity`, `lit-graph-boundary`
+  (the walk resolves the factory and stays kernel-free, negative control
+  intact), `compiler-open-core-boundary`, and `compiled-escape-parity` all
+  green with assertions intact; the full `packages/router/__tests__` batch
+  (929 tests) and `packages/element/__tests__` batch (426 tests) green;
+  `generate:all` and `interface:snapshot:write` rituals run clean;
+  `stream-handler.test.ts` green (15 tests, unchanged assertions — its deps
+  harness already bound the implementations the emitted call sites
+  reference).

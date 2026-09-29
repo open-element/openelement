@@ -1,16 +1,19 @@
 /**
  * Page props projection guard tests (#1214).
  *
- * The generated entry binds the typed projection runtime
- * (@openelement/router/server-runtime `createPagePropsRuntime`) to its
- * serialized `__DANGEROUS_KEYS` copy; the projection seams (`defaultPageProps`
+ * The generated entry binds the typed projection runtime through the
+ * generated-app factory; since #1470 block e the factory imports the
+ * canonical dangerous-key set from the kernel-free /authoring leaf
+ * (@openelement/element/authoring re-exporting
+ * packages/element/src/internal/core/security.ts) and the generated entry
+ * carries NO serialized copy of it. The projection seams (`defaultPageProps`
  * / `pageProps` / `pageErrorProps`) must filter the canonical dangerous keys
- * (packages/element/src/internal/core/security.ts) so hostile route params,
- * loader data, or author projector records can never pollute the props record
- * that flows into the compiled serializer.
+ * so hostile route params, loader data, or author projector records can
+ * never pollute the props record that flows into the compiled serializer.
  */
 import { assert, assertEquals } from '@std/assert';
-import { DANGEROUS_KEYS } from '../../element/src/internal/core/security.ts';
+import { DANGEROUS_KEYS as CANONICAL_DANGEROUS_KEYS } from '../../element/src/internal/core/security.ts';
+import { DANGEROUS_KEYS } from '../src/vite/internal/server-runtime/security.ts';
 import { buildEntryDescriptor, renderEntry } from '../src/vite/internal/ssg/index.ts';
 import { createPagePropsRuntime } from '../src/vite/internal/server-runtime/page-render.ts';
 
@@ -21,13 +24,19 @@ const basicRoutes = [
   { path: '/', filePath: 'index.tsx', type: 'page', varName: 'pageIndex', definePage: true },
 ] as const;
 
-Deno.test('the generated __DANGEROUS_KEYS copy equals the canonical security.ts set (drift guard)', () => {
+Deno.test('the security module binds the canonical security.ts set, and generated entries carry no copy', () => {
+  // The factory-side binding is the canonical set itself (one import edge,
+  // no serialization to drift).
+  assertEquals(DANGEROUS_KEYS, CANONICAL_DANGEROUS_KEYS);
+  // #1470 block e: the serialized __DANGEROUS_KEYS copy is retired from the
+  // generated entry in every consumer setup (the repo's string-eval harnesses
+  // bind implementations through their evaluation context, so they never
+  // needed the copy either).
   const code = renderEntry(buildEntryDescriptor([...basicRoutes]));
-  const match = code.match(/const __DANGEROUS_KEYS = new Set\((\[.*\])\);/);
-  assert(match, 'generated entries must serialize a __DANGEROUS_KEYS copy');
-  const serialized = JSON.parse(match[1]) as string[];
-  assertEquals(serialized.length, DANGEROUS_KEYS.size);
-  assertEquals(new Set(serialized), new Set(DANGEROUS_KEYS));
+  assert(!code.includes('__DANGEROUS_KEYS'), 'no serialized dangerous-key copy');
+  for (const key of DANGEROUS_KEYS) {
+    assert(!code.includes(`"${key}"`), `generated entries must not serialize the key ${key}`);
+  }
 });
 
 function assertFiltered(record: Record<string, unknown>, expected: Record<string, unknown>): void {

@@ -12,21 +12,22 @@ const routes: RouteEntry[] = [{
   varName: 'pageIndex',
 }];
 
-// Pins verified byte-exact. The server pins moved from the #1470-block-b
-// values (22783/d4638f24…, 22323/250ed4cc…) to the #1470-block-c values
-// below: the action protocol bodies (__runActionProtocol, the 413/303/500
-// emissions, the Hono↔WinterCG bridge) were replaced by imports + bindings
-// of @openelement/router/server-runtime, leaving the serialized data lists
-// (dangerous keys, body-limit constant) and the call sites (ADR-0160 rule a,
-// admitted output delta). Client bytes are untouched by the migration —
-// their hashes still match the pre-lane baseline.
+// Pins verified byte-exact. The server pins moved from the #1470-block-c
+// values (17478/4bfb796b…, 17018/8ed50861…) to the #1470-block-e values
+// below: the entry was reduced to imports + descriptor data + one
+// createGeneratedApp call — the Hono app/bridge, the handler exports, the
+// client-script plumbing, the registry guard, the stream assertions, and the
+// page-render wiring are the imported factory; the serialized
+// __DANGEROUS_KEYS/body-limit copies were deleted (the factory imports the
+// canonical /authoring policy constants). Client bytes are untouched by the
+// migration — their hashes still match the pre-lane baseline.
 const expected = {
   native: {
-    server: [17478, '4bfb796b61013052eb577b7bf3ce99380901ddcbe5cdf96fc5642b34e7cba543'],
+    server: [14141, '299c20285aa0817b925c23a7511b0c54dfb0e2da3095ef43fd353ea02405c7b1'],
     client: [1983, 'e3ea822d06ec4f70fbf67a073f9a10e3eac4e41efb897b0bb2fbd561b3da91a6'],
   },
   lit: {
-    server: [17018, '8ed508612b963210977d67e00eebf33b48cc9db71f044ae8a0689c2e8a2fb106'],
+    server: [14254, '69d620f6de4d25279055d8a7ccbcc532054ba77887bacdc23c237b261e9cddc9'],
     client: [3138, 'ec06ba0190166c71ccd692e29b35e2990f7ef555804308d420e51478d8feecd1'],
   },
 } as const;

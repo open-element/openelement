@@ -3,10 +3,20 @@
  *
  * Top-level composition axis of the entry-* family (#901): renderEntry()
  * composes the codegen fragments (entry-codegen.ts), the serialized runtime
- * data + typed-runtime binding, and the SSG section (entry-render-ssg.ts)
- * into the complete virtual Hono entry module.
+ * data + the createGeneratedApp factory call, and the SSG section
+ * (entry-render-ssg.ts) into the complete virtual Hono entry module.
  *
  * Pure function: routes + options -> Hono entry virtual module code.
+ *
+ * The generated entry's final form (ADR-0160 rule a, #1470 block e) is
+ * imports + route descriptor data + one createGeneratedApp(...) factory call
+ * plus per-route wiring. The assembly logic — the Hono app and its WinterCG
+ * bridge, the composed handler exports, the client-script plumbing, the SSR
+ * registry guard, the dispatch table, and the page-render bindings — is the
+ * imported server-runtime factory (server-runtime/app.ts); the entry keeps
+ * only route wiring: it imports route modules, emits the per-route
+ * GET/POST/404 handlers, registers components through the guard, and
+ * re-exports the factory results under the consumer contract names.
  *
  * Architecture notes:
  * - API routes mount either as (ctx) => Response functions (app.all) or as
@@ -23,7 +33,7 @@
  * Thin orchestrator: delegates code generation to focused sub-modules:
  *   - entry-codegen.ts         — entry code string generation (#901)
  *   - renderer-adapter.ts      — the typed page-render runtime seam (imports
- *                                + wiring; ADR-0160 rule a)
+ *                                + factory config; ADR-0160 rule a)
  *   - entry-render-ssg.ts      — SSG re-export & routeInfo/renderRoute/getStaticPaths
  *
  * v0.41.0-alpha.1: Consumers build a descriptor via `buildEntryDescriptor()`
@@ -32,11 +42,6 @@
  */
 
 import type { EntryDescriptor } from '../protocol/ssg.ts';
-import {
-  ENTRY_REGISTRATION_OWNERS,
-  SSR_REGISTRY_ORIGINAL_DEFINE,
-  SSR_REGISTRY_STUB_MARKER,
-} from '../protocol/registry-markers.ts';
 import { validateIslandModuleSpecifier } from './entry-generators.ts';
 import { renderActionRoute, renderPageRoute } from './entry-codegen.ts';
 import { renderNotFoundRoute } from './entry-not-found-codegen.ts';
@@ -46,11 +51,6 @@ import { renderSsgSection } from './entry-render-ssg.ts';
 import { quoteGeneratedJavaScriptValue } from './codegen-literals.ts';
 import { renderStreamRuntime } from './entry-stream-runtime.ts';
 import { selectRendererAdapter } from './renderer-adapter.ts';
-// Build-time only: the canonical dangerous-key rule (constitution 4.2) and
-// the action body-limit budget (S1c policy constant) are serialized into the
-// generated entry, which cannot import Element internals in packed consumer
-// setups. Changing either canonical value re-derives the copy.
-import { DANGEROUS_KEYS, MAX_ACTION_BODY_BYTES } from '@openelement/element';
 
 /**
  * Render an EntryDescriptor into a complete virtual module string.
@@ -72,6 +72,11 @@ export function renderEntry(desc: EntryDescriptor): string {
   }
   lines.push(
     "import { createRouteMiddleware as __createRouteMiddleware } from '@openelement/router/http';",
+  );
+  // The lifecycle guards stay the authoring imports; the emitted catch blocks
+  // call them directly (the redirect/not-found channels).
+  lines.push(
+    `import { isOpenElementRedirect as __isOpenElementRedirect, isOpenElementNotFound as __isOpenElementNotFound } from '@openelement/router';`,
   );
 
   // --- Imports ---
@@ -108,64 +113,24 @@ export function renderEntry(desc: EntryDescriptor): string {
   // The island client entry lives at one deterministic public URL in dev and
   // prod (cli/build-client.ts emits hash-free islands/[name].js; in dev the
   // open:dev-island-client plugin serves the same URL). Whoever knows the URL
-  // hands it to the entry; the entry embeds the tag at render time through
-  // wrapInDocument's `scripts` descriptors, so a CSP nonce
+  // hands it to the entry; wrapInDocument embeds the tag at render time
+  // through its `scripts` descriptors, so a CSP nonce
   // (middleware.csp.nonce) reaches it — no post-hoc HTML splicing.
   // - Dev: no client build exists, so the entry computes the URL itself
   //   (import.meta.env.DEV/BASE_URL are compile-time constants in both the
   //   dev module runner and the build; the built bundle keeps this branch as
-  //   dead code).
+  //   dead code). The setter seam and the descriptor list live in the
+  //   generated-app factory (server-runtime/app.ts).
   // - Prod request-time: whether Phase 2 actually shipped a client bundle is
   //   only known after the SSR build, so the generated dist/server/index.js
-  //   pushes clientScriptSrc (from ./client-script.js) in through
-  //   __setRequestTimeClientScript once at startup. SSG prerendering never
-  //   calls the setter, so static pages stay script-free here and keep the
-  //   post-build injector (postprocess.ts).
-  {
-    const hasClientEntry = desc.islands.length > 0 || desc.hasEnhancedForms === true;
-    lines.push('// #951: island client script descriptors (serialized by wrapInDocument)');
-    lines.push('let __requestTimeClientScriptSrc = null;');
-    lines.push('export function __setRequestTimeClientScript(src) {');
-    lines.push('  __requestTimeClientScriptSrc = src || null;');
-    lines.push('}');
-    lines.push(
-      `const __devClientScriptSrc = import.meta.env.DEV && ${
-        quoteGeneratedJavaScriptValue(hasClientEntry)
-      } ? import.meta.env.BASE_URL + 'client/islands/client.js' : null;`,
-    );
-    lines.push('function __clientScriptDescriptors() {');
-    lines.push('  const src = __devClientScriptSrc || __requestTimeClientScriptSrc;');
-    lines.push(`  return src ? [{ type: 'module', src }] : [];`);
-    lines.push('}');
-    lines.push('');
-  }
+  //   calls __setRequestTimeClientScript (from ./client-script.js) once at
+  //   startup. SSG prerendering never calls the setter, so static pages stay
+  //   script-free here and keep the post-build injector (postprocess.ts).
+  const hasClientEntry = desc.islands.length > 0 || desc.hasEnhancedForms === true;
+  lines.push('// #951: island client script descriptors (serialized by wrapInDocument)');
+  lines.push('');
 
   // Element owns document and compiled-render semantics; this entry wires them.
-  // createLogger comes from the kernel-free logger leaf so the LIT server
-  // entry never loads the Native runtime barrel (#1339 boundary).
-  lines.push(`import { createLogger } from '@openelement/element/logger';`);
-  lines.push(
-    `import { createRuntimeAdapter } from '@openelement/element/build-utils';`,
-  );
-  if (desc.fetchMiddleware?.length) {
-    lines.push(`import { composeFetchMiddleware } from '@openelement/element/build-utils';`);
-  }
-  lines.push(
-    `import { isOpenElementRedirect as __isOpenElementRedirect, isOpenElementNotFound as __isOpenElementNotFound } from '@openelement/router';`,
-  );
-  // Nav data is not part of the 1.0 surface: the app-shell layout props keep
-  // their contract with empty defaults. Locales, by contrast, are a project
-  // declaration (`openElement({ i18n })`) — the generated entry must carry them
-  // so path-derived locale resolution and shell href localization agree with
-  // the pages the build emits (see expandI18nLocales).
-  lines.push('const __headerNav = [];');
-  lines.push('const __navSections = [];');
-  lines.push(`const __locales = ${quoteGeneratedJavaScriptValue(desc.i18n?.locales ?? [])};`);
-  lines.push(
-    `function __getDefaultLocale() { return ${
-      quoteGeneratedJavaScriptValue(desc.i18n?.defaultLocale ?? 'en')
-    }; }`,
-  );
   const appShellModuleList = [...appShellModules].map(([importPath, tagName], index) => ({
     importPath,
     tagName,
@@ -189,7 +154,6 @@ export function renderEntry(desc: EntryDescriptor): string {
       };`,
     );
   }
-  lines.push(`const log = createLogger('server-entry');`);
   lines.push('');
 
   // --- Route module imports ---
@@ -202,10 +166,10 @@ export function renderEntry(desc: EntryDescriptor): string {
   for (const mwScope of desc.middlewareScopes) {
     lines.push(`import * as ${mwScope.varName} from '${mwScope.importPath}'`);
   }
-  // middleware.use entries are MODULE PATHS — the
-  // entry imports each module and composes its default export at the handler
-  // boundary, so user middleware keeps its module graph (closures, helpers,
-  // third-party deps) instead of being serialized into the entry.
+  // middleware.use entries are MODULE PATHS — the entry imports each module
+  // and hands its default export to the factory, which composes them at the
+  // handler boundary, so user middleware keeps its module graph (closures,
+  // helpers, third-party deps) instead of being serialized into the entry.
   const fetchMiddlewareVars = (desc.fetchMiddleware ?? []).map((importPath, index) => {
     const varName = `__mw_${index}`;
     lines.push(`import * as ${varName} from ${quoteGeneratedJavaScriptValue(importPath)}`);
@@ -213,45 +177,161 @@ export function renderEntry(desc: EntryDescriptor): string {
   });
   lines.push('');
 
+  // --- Serialized route-descriptor data ---
+  // The admission plan, shell plan, and locale declaration are per-project
+  // build data (the descriptor's own values — there is no importable source
+  // for them), so they stay generated data handed to the factory.
+  lines.push('// v0.17.4: SSR admission plan');
+  lines.push(
+    `export const ssrAdmissionPlan = ${quoteGeneratedJavaScriptValue(ssrAdmissionPlan, 2)};`,
+  );
+  lines.push('');
+
+  // --- SSG: headExtras via define injection ---
+  // Always emitted in SSG mode: renderRouteHandler references __headExtras
+  // unconditionally, so a project without headExtras would otherwise render
+  // every static page into a 500 (latent until the request-time fixture hit it).
+  if (desc.isSSG) {
+    lines.push(
+      '// SSG: headExtras injected via Vite define (Phase A)',
+    );
+    lines.push('// Replaces the old .openElement/head-extras.html runtime file read');
+    lines.push('const __headExtras = __HEAD_EXTRAS__ || "";');
+    lines.push('');
+  }
+
+  // --- Stream manifests (stream routes; consumed by the handlers, the
+  // deferred-shell gate, and the SSG routeInfo) ---
+  const streamManifests = Object.fromEntries(
+    desc.pageRoutes
+      .filter((route) => route.streamManifest)
+      .map((route) => [route.path, route.streamManifest]),
+  );
+  if (Object.keys(streamManifests).length > 0) {
+    lines.push(
+      `export const __streamManifests = ${quoteGeneratedJavaScriptValue(streamManifests)};`,
+    );
+    lines.push('');
+    // Stream pump runtime (ADR-0160 rule a, #1470 block d): the pump and the
+    // browser bootstrap are imported runtime; the entry binds the pump to its
+    // escapeAttr import and carries the oracle-pinned deferred-shell gate.
+    lines.push(renderStreamRuntime());
+    lines.push('');
+    lines.push(
+      "// Stream pump runtime (ADR-0160 rule a), bound to the entry's escapeAttr import.",
+    );
+    lines.push('const __streamBody = __createStreamBody({ escapeAttr });');
+    lines.push('');
+  }
+
+  // --- Generated-app assembly (ADR-0160 rule a, #1470 block e) ---
+  // One factory call owns what the entry template used to emit as assembly
+  // code: the Hono app + WinterCG bridge, the composed openElementHandler
+  // exports, the island client-script plumbing, the SSR registry guard, the
+  // page handler/dispatch tables, the body-limit middleware, and the
+  // page-render runtime bindings. The entry passes its serialized build data
+  // and its Element imports; dangerous keys and the body-limit budget are
+  // NOT passed — the factory imports the canonical policy values from the
+  // kernel-free /authoring leaf, so the entry carries no serialized copy.
+  lines.push('// Generated-app assembly (ADR-0160 rule a): the factory owns the Hono app,');
+  lines.push('// its bridge, the handler exports, the SSR registry guard, and the');
+  lines.push('// page-render bindings; the entry keeps the route wiring below.');
+  // Nav data is not part of the 1.0 surface: the app-shell layout props keep
+  // their contract with empty defaults. Locales, by contrast, are a project
+  // declaration (`openElement({ i18n })`) — the entry carries them so
+  // path-derived locale resolution and shell href localization agree with
+  // the pages the build emits (see expandI18nLocales).
+  lines.push('const __app = createGeneratedApp({');
+  lines.push('  islands: __islandMap,');
+  lines.push(`  appShellPlan: ${quoteGeneratedJavaScriptValue(desc.appShell, 2)},`);
+  lines.push(`  locales: ${quoteGeneratedJavaScriptValue(desc.i18n?.locales ?? [])},`);
+  lines.push('  navSections: [],');
+  lines.push('  headerNav: [],');
+  lines.push(
+    `  defaultLocale: ${quoteGeneratedJavaScriptValue(desc.i18n?.defaultLocale ?? 'en')},`,
+  );
+  lines.push(
+    `  devClientScriptSrc: import.meta.env.DEV && ${
+      quoteGeneratedJavaScriptValue(hasClientEntry)
+    } ? import.meta.env.BASE_URL + 'client/islands/client.js' : null,`,
+  );
+  lines.push(
+    `  pageHandlerPaths: ${quoteGeneratedJavaScriptValue(desc.pageRoutes.map((r) => r.path))},`,
+  );
+  if (desc.fetchMiddleware?.length) {
+    lines.push('  fetchMiddleware: [');
+    for (const varName of fetchMiddlewareVars) {
+      lines.push(`    ${varName}.default,`);
+    }
+    lines.push('  ],');
+  }
+  if (desc.pageRoutes.length > 0) {
+    lines.push('  pageRuntime: {');
+    for (const configLine of adapter.runtimeSeam().pageRuntimeLines) {
+      lines.push(`    ${configLine}`);
+    }
+    lines.push(
+      `    ssrRenderableTags: ${
+        quoteGeneratedJavaScriptValue([
+          ...desc.ssrAdmissionPlan.renderableTags,
+          ...desc.staticComponents.map((component) => component.tagName),
+        ])
+      },`,
+    );
+    lines.push('  },');
+  }
+  lines.push('});');
+  lines.push('');
+  // --- Factory bindings: the names the emitted wiring below calls ---
+  lines.push('const {');
+  lines.push('  app,');
+  if (desc.pageRoutes.length > 0) {
+    lines.push('  ssr: __ssr,');
+    lines.push('  pageProps: __pageProps,');
+    lines.push('  pageErrorProps: __pageErrorProps,');
+    lines.push('  statusHtml: __statusHtml,');
+    lines.push('  resolveAppShell: __resolveAppShell,');
+    lines.push('  renderAppShell: __renderAppShell,');
+  }
+  lines.push('  pageHandlers: __pageHandlers,');
+  if (desc.apiRoutes.length > 0) {
+    lines.push('  apiRouteRecords: __apiRouteRecords,');
+  }
+  lines.push('  methodNotAllowed: __methodNotAllowed,');
+  lines.push('  actionBodyLimit: __actionBodyLimit,');
+  lines.push('  registerSsrComponent: __registerSsrComponent,');
+  lines.push('  clientScriptDescriptors: __clientScriptDescriptors,');
+  lines.push('  locales: __locales,');
+  lines.push('  getDefaultLocale: __getDefaultLocale,');
+  lines.push('} = __app;');
+  lines.push('');
+  // The internal composition bridge (never user-visible): the WinterCG route
+  // middleware from @openelement/router/http is the dialect-free public
+  // contract, while the generated handlers below keep their internal Hono
+  // dialect. The per-request Hono context is bridged by request identity —
+  // one WeakMap entry per dispatch, no cross-request leakage.
+  lines.push(
+    'const { contexts: __honoContexts, asFetchHandler: __asFetchHandler, asFetchMiddleware: __asFetchMiddleware } = __app.hono;',
+  );
+  lines.push('');
+  lines.push('export const __setRequestTimeClientScript = __app.setRequestTimeClientScript;');
+  lines.push('');
+
   // --- Register page components in SSR customElements registry ---
   {
     lines.push('// Idempotent customElements.define for SSR (dev + SSG)');
     lines.push(
-      '// The SSR dom-shim does not make define() idempotent, so we patch it.',
+      '// #952/#1339: the define wrapper, the registration-ownership map, and the',
     );
     lines.push(
-      `// #952: under the dev SSR stub (${SSR_REGISTRY_STUB_MARKER}) re-definition must`,
+      '// fail-closed conflict rule are the imported registry guard',
     );
     lines.push(
-      '// WIN instead — the registry outlives module re-evaluation, so route',
+      '// (@openelement/router/server-runtime — security.ts); the marker constants it',
     );
     lines.push(
-      '// edits only reach SSR output when define() overwrites the stale class.',
+      '// reads are protocol values pinned by registry-marker-drift.test.ts.',
     );
-    // #1339 packed-consumer dev proof: the registry ALSO outlives this entry
-    // module, so a re-evaluation would capture the already-wrapped define as
-    // its "original" and every forced overwrite would silently early-return
-    // through the previous wrapper (observed: lit page edits never reached
-    // dev SSR output). Install the wrapper once and keep the TRUE original on
-    // the registry itself (SSR_REGISTRY_ORIGINAL_DEFINE). The marker names
-    // come from ../protocol/registry-markers.ts; generated code cannot import
-    // them, so the generator injects the values.
-    lines.push(`if (!customElements.${SSR_REGISTRY_ORIGINAL_DEFINE}) {`);
-    lines.push(
-      `  customElements.${SSR_REGISTRY_ORIGINAL_DEFINE} = customElements.define.bind(customElements);`,
-    );
-    lines.push('  customElements.define = (name, ctor, options) => {');
-    lines.push(
-      `    if (!customElements.${SSR_REGISTRY_STUB_MARKER} && customElements.get(name)) return;`,
-    );
-    lines.push(
-      `    try { customElements.${SSR_REGISTRY_ORIGINAL_DEFINE}(name, ctor, options); } catch (e) {`,
-    );
-    lines.push('      if (e && e.name === "NotSupportedError") return;');
-    lines.push('      throw e;');
-    lines.push('    }');
-    lines.push('  };');
-    lines.push('}');
     lines.push('');
     // #952: entry-side registration ownership tracking. Since #960
     // (registration decoupling) a definePage route's page class registration
@@ -263,67 +343,30 @@ export function renderEntry(desc: EntryDescriptor): string {
     // self-registered class with the entry's page class would recurse when
     // its compiled program emits the same tag. The entry therefore only
     // overwrites registrations it made itself.
-    // #965: the marker/property names below are chartered constants —
-    // SSR_REGISTRY_STUB_MARKER / ENTRY_REGISTRATION_OWNERS /
-    // SSR_REGISTRY_ORIGINAL_DEFINE in ../protocol/registry-markers.ts.
-    lines.push(
-      `const __entryDefined = customElements.${ENTRY_REGISTRATION_OWNERS} ||= new Map();`,
-    );
-    lines.push('function __registerSsrComponent(tag, ctor) {');
-    lines.push('  const current = customElements.get(tag);');
-    lines.push(`  if (customElements.${SSR_REGISTRY_STUB_MARKER}) {`);
-    lines.push('    if (current && __entryDefined.get(tag) !== current) return;');
-    lines.push('    customElements.define(tag, ctor);');
-    lines.push('    __entryDefined.set(tag, ctor);');
-    lines.push('    return;');
-    lines.push('  }');
-    lines.push('  if (!current) {');
-    lines.push('    customElements.define(tag, ctor);');
-    lines.push('    __entryDefined.set(tag, ctor);');
-    lines.push('    return;');
-    lines.push('  }');
-    lines.push('  if (current === ctor) return;');
-    // #1339 packed-consumer dev proof: the lit SSR shim registry outlives
-    // vite dev SSR module re-evaluation, so a page/island edit re-registers
-    // the SAME tag with a FRESH class while the stale class is still
-    // registered. Without an overwrite the dev server keeps rendering the old
-    // class forever. When the entry re-registers its OWN tag (ownership
-    // tracked in __entryDefined), the new class must win — through the TRUE
-    // original define (the wrapper early-returns on existing registrations
-    // for non-stub registries); the lit shim overwrites on duplicate define
-    // in development mode (its console.warn is the upstream-designed
-    // live-reload notice). A registration the entry did NOT make is a
-    // genuine conflict and keeps the fail-closed no-op.
-    lines.push('  if (__entryDefined.get(tag) === current) {');
-    lines.push(`    customElements.${SSR_REGISTRY_ORIGINAL_DEFINE}(tag, ctor);`);
-    lines.push('    __entryDefined.set(tag, ctor);');
-    lines.push('  }');
-    lines.push('}');
+    for (const route of desc.pageRoutes) {
+      const tagNameExpr = pageRouteTagExpr(route.varName, route.tagName);
+      lines.push(
+        `try { __registerSsrComponent(${tagNameExpr}, ${route.varName}.default); } catch (err) { console.error('[ssg] Failed to register route custom element ${tagNameExpr}:', err); throw err; }`,
+      );
+    }
+    for (const shellModule of appShellModuleList) {
+      lines.push(
+        `try { __registerSsrComponent(${
+          quoteGeneratedJavaScriptValue(shellModule.tagName)
+        }, ${shellModule.varName}.default); } catch (err) { console.error('[ssg] Failed to register app shell custom element ${
+          quoteGeneratedJavaScriptValue(shellModule.tagName)
+        }:', err); throw err; }`,
+      );
+    }
+    for (const component of staticComponentModules) {
+      lines.push(
+        `try { __registerSsrComponent(${
+          quoteGeneratedJavaScriptValue(component.tagName)
+        }, ${component.varName}.default); } catch (err) { console.error('[ssg] Failed to register static component <${component.tagName}>:', err); throw err; }`,
+      );
+    }
     lines.push('');
   }
-  for (const route of desc.pageRoutes) {
-    const tagNameExpr = pageRouteTagExpr(route.varName, route.tagName);
-    lines.push(
-      `try { __registerSsrComponent(${tagNameExpr}, ${route.varName}.default); } catch (err) { console.error('[ssg] Failed to register route custom element ${tagNameExpr}:', err); throw err; }`,
-    );
-  }
-  for (const shellModule of appShellModuleList) {
-    lines.push(
-      `try { __registerSsrComponent(${
-        quoteGeneratedJavaScriptValue(shellModule.tagName)
-      }, ${shellModule.varName}.default); } catch (err) { console.error('[ssg] Failed to register app shell custom element ${
-        quoteGeneratedJavaScriptValue(shellModule.tagName)
-      }:', err); throw err; }`,
-    );
-  }
-  for (const component of staticComponentModules) {
-    lines.push(
-      `try { __registerSsrComponent(${
-        quoteGeneratedJavaScriptValue(component.tagName)
-      }, ${component.varName}.default); } catch (err) { console.error('[ssg] Failed to register static component <${component.tagName}>:', err); throw err; }`,
-    );
-  }
-  lines.push('');
 
   // --- Register island components in SSR customElements registry ---
   const ssrRenderableTags = new Set(ssrAdmissionPlan.renderableTags);
@@ -351,89 +394,27 @@ export function renderEntry(desc: EntryDescriptor): string {
   }
   lines.push('');
 
-  lines.push('// v0.17.4: SSR admission plan');
-  lines.push(
-    `export const ssrAdmissionPlan = ${quoteGeneratedJavaScriptValue(ssrAdmissionPlan, 2)};`,
-  );
-  lines.push('');
-
-  // --- SSG: headExtras via define injection ---
-  // Always emitted in SSG mode: renderRouteHandler references __headExtras
-  // unconditionally, so a project without headExtras would otherwise render
-  // every static page into a 500 (latent until the request-time fixture hit it).
-  if (desc.isSSG) {
-    lines.push(
-      '// SSG: headExtras injected via Vite define (Phase A)',
-    );
-    lines.push('// Replaces the old .openElement/head-extras.html runtime file read');
-    lines.push('const __headExtras = __HEAD_EXTRAS__ || "";');
-    lines.push('');
-  }
-
-  // --- Runtime data + typed runtime binding (ADR-0160 rule a) ---
-  // Page-render semantics (the page SSR renderer, props projection, app-shell
-  // composition, tag/locale/status helpers) live in
-  // @openelement/router/server-runtime; the entry imports them per the
-  // renderer adapter and binds them to its generated data below. The tag,
-  // dangerous-key, and body-limit values stay serialized build data: packed
-  // consumer setups cannot import Element at all, so the canonical values are
-  // copied from the build-time imports exactly like the shell plan.
+  // --- Startup stream guards (ADR-0160 rule a) ---
+  // The adapter-selected assertion is imported from
+  // @openelement/router/server-runtime; the entry emits only the per-route
+  // call sites. A stream declaration that has no matching compiled route
+  // manifest/program fails the entry at load, not at request time.
   if (desc.pageRoutes.length > 0) {
-    lines.push(
-      `const __ssrRenderableTags = ${
-        quoteGeneratedJavaScriptValue([
-          ...desc.ssrAdmissionPlan.renderableTags,
-          ...desc.staticComponents.map((component) => component.tagName),
-        ])
-      };`,
-    );
-    lines.push(
-      `const __DANGEROUS_KEYS = new Set(${quoteGeneratedJavaScriptValue([...DANGEROUS_KEYS])});`,
-    );
-    lines.push(
-      `const __maxActionBodyBytes = ${quoteGeneratedJavaScriptValue(MAX_ACTION_BODY_BYTES)};`,
-    );
-    lines.push(`const __appShellPlan = ${quoteGeneratedJavaScriptValue(desc.appShell, 2)};`);
-    lines.push('');
-    lines.push('// Page-render runtime (ADR-0160 rule a), bound to the generated data above.');
-    for (const wiring of adapter.runtimeSeam().wiring) lines.push(wiring);
-    lines.push(
-      '// Action protocol runtime (ADR-0160 rule a): the body-limit middleware bound',
-    );
-    lines.push(
-      '// to the serialized policy constant; the protocol runner and error mapping',
-    );
-    lines.push('// are the imported module functions.');
-    lines.push('const __actionBodyLimit = __createActionBodyLimit(__maxActionBodyBytes);');
-    lines.push('');
-  }
-  if (desc.pageRoutes.some((route) => route.streamManifest)) {
-    lines.push(renderStreamRuntime());
-    lines.push('');
-    lines.push(
-      "// Stream pump runtime (ADR-0160 rule a), bound to the entry's escapeAttr import.",
-    );
-    lines.push('const __streamBody = __createStreamBody({ escapeAttr });');
+    for (const route of desc.pageRoutes) {
+      lines.push(
+        `__assertStreamRoute(${route.varName}, ${quoteGeneratedJavaScriptValue(route.path)}, ${
+          quoteGeneratedJavaScriptValue(route.filePath)
+        }, ${
+          route.streamManifest
+            ? `__streamManifests[${quoteGeneratedJavaScriptValue(route.path)}]`
+            : 'undefined'
+        });`,
+      );
+    }
     lines.push('');
   }
 
-  // --- App creation + Middleware ---
-  lines.push('const app = new Hono()');
-  lines.push('');
-  // Internal composition bridge (never user-visible): the WinterCG route
-  // middleware from @openelement/router/http is the dialect-free public
-  // contract, while the generated handlers below keep their internal Hono
-  // dialect. The per-request Hono context is bridged by request identity —
-  // one WeakMap entry per dispatch, no cross-request leakage. The bridge
-  // implementation is the imported runtime module (ADR-0160 rule a).
-  lines.push(
-    'const { contexts: __honoContexts, asFetchHandler: __asFetchHandler, asFetchMiddleware: __asFetchMiddleware } = __createHonoBridge();',
-  );
-  if (desc.apiRoutes.length > 0) {
-    lines.push('const __apiRouteRecords = [];');
-  }
-  lines.push('');
-
+  // --- App middleware ---
   for (const mw of desc.middleware) {
     renderMiddleware(lines, mw);
   }
@@ -456,65 +437,6 @@ export function renderEntry(desc: EntryDescriptor): string {
     renderApiRoute(lines, route);
   }
 
-  lines.push(
-    `const __pageHandlers = Object.fromEntries(${
-      quoteGeneratedJavaScriptValue(desc.pageRoutes.map((r) => r.path))
-    }.map(path => [path, {}]));`,
-  );
-  const streamManifests = Object.fromEntries(
-    desc.pageRoutes
-      .filter((route) => route.streamManifest)
-      .map((route) => [route.path, route.streamManifest]),
-  );
-  if (Object.keys(streamManifests).length > 0) {
-    lines.push(
-      `export const __streamManifests = ${quoteGeneratedJavaScriptValue(streamManifests)};`,
-    );
-  }
-  if (desc.pageRoutes.length > 0) {
-    if (!adapter.supportsCompiledStream) {
-      lines.push('function __assertLitStreamRoute(module, route, file) {');
-      lines.push('  const stream = module?.default?.openElementPage?.renderIntent?.stream;');
-      lines.push('  if (stream === undefined) return;');
-      lines.push(
-        '  throw new Error("[openElement] Lit renderer does not support stream route " + route + " at " + file + ".");',
-      );
-      lines.push('}');
-      for (const route of desc.pageRoutes) {
-        lines.push(
-          `__assertLitStreamRoute(${route.varName}, ${quoteGeneratedJavaScriptValue(route.path)}, ${
-            quoteGeneratedJavaScriptValue(route.filePath)
-          });`,
-        );
-      }
-    } else {
-      lines.push('function __assertStreamRoute(module, route, file, manifest) {');
-      lines.push('  const stream = module?.default?.openElementPage?.renderIntent?.stream;');
-      lines.push('  if (stream === undefined && manifest === undefined) return;');
-      lines.push('  const defer = stream?.defer;');
-      lines.push('  const expected = manifest?.fields.map(field => field.field);');
-      lines.push('  const program = module?.default?.__partProgram;');
-      lines.push(
-        '  if (!manifest || !Array.isArray(defer) || JSON.stringify(defer) !== JSON.stringify(expected) || !program || program.version !== manifest.program.version || program.tag !== manifest.program.tag) {',
-      );
-      lines.push(
-        '    throw new Error("[openElement] stream route " + route + ", field " + (defer?.[0] ?? expected?.[0] ?? "defer") + " at " + file + ": stream declaration has no matching compiled route manifest/program. Use a literal descriptor and renderIntent, or disable streaming.");',
-      );
-      lines.push('  }');
-      lines.push('}');
-      for (const route of desc.pageRoutes) {
-        lines.push(
-          `__assertStreamRoute(${route.varName}, ${quoteGeneratedJavaScriptValue(route.path)}, ${
-            quoteGeneratedJavaScriptValue(route.filePath)
-          }, ${
-            route.streamManifest
-              ? `__streamManifests[${quoteGeneratedJavaScriptValue(route.path)}]`
-              : 'undefined'
-          });`,
-        );
-      }
-    }
-  }
   // --- Page routes ---
   const docConfig = {
     title: desc.document.title,
@@ -531,6 +453,10 @@ export function renderEntry(desc: EntryDescriptor): string {
     renderActionRoute(lines, route, desc.renderers, docConfig, desc.isSSG, desc.renderer);
   }
 
+  // --- Shared dispatch: the WinterCG route middleware over the populated
+  // handler records (the composition must follow the page/action emissions —
+  // createRouteMiddleware reads each record at call time); the 405/Allow
+  // responder is the factory-bound dispatch module (#572, ADR-0160 rule a). ---
   lines.push(`const __routeMiddleware = __createRouteMiddleware([`);
   if (desc.apiRoutes.length > 0) {
     // Method-keyed API records dispatch ahead of pages (the API section used
@@ -544,12 +470,11 @@ export function renderEntry(desc: EntryDescriptor): string {
       }, handlers: __pageHandlers[${quoteGeneratedJavaScriptValue(route.path)}] },`,
     );
   }
-  lines.push(
-    `], { methodNotAllowed: (request, allow) => { const c = __honoContexts.get(request); c.header('Cache-Control', 'no-store'); c.header('Vary', __actionFetchHeader); return c.text('Method Not Allowed', 405, { Allow: allow.join(', ') }); } });`,
-  );
+  lines.push(`], { methodNotAllowed: __methodNotAllowed });`);
   lines.push(
     `app.all('*', (c, next) => { __honoContexts.set(c.req.raw, c); return __routeMiddleware(c.req.raw, async () => { await next(); return c.res; }); });`,
   );
+  lines.push('');
 
   // --- Styled 404 (#923): unmatched paths render the /404 page ---
   const notFoundPage = desc.pageRoutes.find((r) => r.path === '/404');
@@ -557,42 +482,19 @@ export function renderEntry(desc: EntryDescriptor): string {
     renderNotFoundRoute(lines, notFoundPage, desc.renderers, docConfig, desc.isSSG);
   }
 
-  // --- Export ---
+  // --- Exports: the consumer contract names are the factory results ---
+  lines.push('// Handler contract: the factory composed the fetch-middleware onion');
+  lines.push('// (#858) around app.fetch — every runtime (dev server, start CLI, e2e');
+  lines.push('// fixture server, Nitro production entry) shares one composed handler.');
+  lines.push('export const openElementHandler = __app.handler;');
   if (desc.fetchMiddleware?.length) {
-    // Fetch middleware composed at the handler
-    // boundary in onion order (use[0] outermost), outside the Hono app, so
-    // the dev server, the start CLI, the e2e fixture server, and the Nitro
-    // production entry share one composed handler.
-    lines.push('// Fetch middleware contract (WinterCG shape)');
-    lines.push('const __openElementFetchMiddleware = [');
-    for (const varName of fetchMiddlewareVars) {
-      lines.push(`  ${varName}.default,`);
-    }
-    lines.push('];');
-    lines.push('const __openElementBaseHandler = (request, context = {}) => {');
-    lines.push('  return app.fetch(request, context.env || {}, context.platform)');
-    lines.push('}');
-    lines.push(
-      'export const openElementHandler = composeFetchMiddleware(__openElementFetchMiddleware, __openElementBaseHandler)',
-    );
     lines.push('');
     // The dev server (@hono/vite-dev-server) reads this named export instead of
-    // the default Hono app when middleware.use is configured (see plugin.ts);
-    // it adapts the (request, env, executionCtx) call shape onto the same
-    // composed handler every other runtime uses.
-    lines.push('export const openElementDevFetch = {');
-    lines.push('  fetch: (request, env, executionContext) =>');
-    lines.push('    openElementHandler(request, { env: env || {}, platform: executionContext }),');
-    lines.push('}');
-  } else {
-    lines.push('export const openElementHandler = (request, context = {}) => {');
-    lines.push('  return app.fetch(request, context.env || {}, context.platform)');
-    lines.push('}');
+    // the default Hono app when middleware.use is configured (see plugin.ts).
+    lines.push('export const openElementDevFetch = __app.devFetch;');
   }
   lines.push('');
-  lines.push('export const openElementRuntimeAdapter = {');
-  lines.push("  ...createRuntimeAdapter({ name: 'openelement-hono', fetch: openElementHandler }),");
-  lines.push('}');
+  lines.push('export const openElementRuntimeAdapter = __app.runtimeAdapter;');
   lines.push('');
   lines.push('export default app');
 

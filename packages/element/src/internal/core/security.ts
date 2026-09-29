@@ -9,11 +9,10 @@
  * Consumers: props-utils.ts (host prop collection / SSR serialization via
  * collectPublicProps and normalizePublicProps), the guarded assigner
  * injectPropsSafe below (employed by the SPA bootstrap page-projection write
- * boundary in @openelement/router), and the page projectors in @openelement/router
- * (authoring.ts projectPageProps) and the Router tooling generated server
- * runtime (which serializes DANGEROUS_KEYS into generated code at build
- * time — generated modules cannot import this internal module, so the
- * canonical list is the single source they copy from).
+ * boundary in @openelement/router), and the Router tooling generated server
+ * runtime — whose generated-app factory imports the canonical set through
+ * the kernel-free /authoring leaf (#1470 block e: the old build-time
+ * serialization copy into generated code is retired).
  *
  * @module ./security.ts
  */

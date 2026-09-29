@@ -25,7 +25,11 @@ export { ACTION_FETCH_HEADER, PROBLEM_JSON_MEDIA_TYPE } from './internal/protoco
 // budgets and frame deny lists the router's typed stream runtime imports
 // kernel-free (#1470 block d) — the same leaf transport as the protocol
 // constants above, so no consumer of them ever reaches the runtime barrel.
+// MAX_ACTION_BODY_BYTES joins for the same reason (#1470 block e): the typed
+// action runtime binds the canonical body-limit budget directly instead of
+// receiving a serialized copy through the generated entry.
 export {
+  MAX_ACTION_BODY_BYTES,
   STREAM_MAX_FIELDS,
   STREAM_MAX_OWNERS,
   STREAM_MAX_PAYLOAD_LENGTH,

@@ -59,20 +59,19 @@ Deno.test('lit renderer: entry forks tag resolution and page render (no page-dat
     true,
   );
   // The lit forks bind through the typed runtime seam (ADR-0160 rule a): the
-  // lit page-tag resolver and the lit page renderer factory are imports; the
-  // call sites stay renderer-neutral.
+  // lit page-tag resolver is an import and the lit page renderer is bound
+  // inside the generated-app factory via the pageRuntime config (#1470
+  // block e); the call sites stay renderer-neutral.
   assertStringIncludes(
     litEntry,
     "import { resolveLitPageTag as __resolvePageTag } from '@openelement/router/server-runtime'",
   );
   assertStringIncludes(
     litEntry,
-    "import { createLitPageRenderer as __createLitPageRenderer } from '@openelement/router/server-runtime'",
+    "import { renderLitPageToHtml as __renderLitPageToHtml } from '@openelement/router/lit-ssr'",
   );
-  assertStringIncludes(
-    litEntry,
-    'const __ssr = __createLitPageRenderer({ renderLitPageToHtml: __renderLitPageToHtml });',
-  );
+  assertStringIncludes(litEntry, "mode: 'lit',");
+  assertStringIncludes(litEntry, 'renderLitPageToHtml: __renderLitPageToHtml,');
   // Beta.2.2 review: the embedded page-data JSON channel had no consumer —
   // it is removed and its absence is pinned on both renderers.
   assertEquals(litEntry.includes('__litPageDataScript'), false);
