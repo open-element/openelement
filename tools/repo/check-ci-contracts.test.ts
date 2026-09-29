@@ -337,23 +337,36 @@ Deno.test('ci contract: BFCache runs a blocking Chrome-channel lane', async () =
 });
 
 Deno.test('ci contract: Site E2E evidence is owned by the fresh-clone lane', async () => {
-  const evidence = await Deno.readTextFile(join(repoRoot, 'tools/repo/candidate-evidence.ts'));
+  // #1473 split candidate-evidence.ts into single-duty modules; each contract
+  // assertion reads the module the symbol now lives in, semantics unchanged.
+  const siteE2e = await Deno.readTextFile(
+    join(repoRoot, 'tools/repo/candidate-evidence-site-e2e.ts'),
+  );
   assert(
-    /SITE_E2E_REPORT_BUNDLE_PATH\s*=\s*`ci\/fresh-clone\//.test(evidence),
+    /SITE_E2E_REPORT_BUNDLE_PATH\s*=\s*`ci\/fresh-clone\//.test(siteE2e),
     'the raw Site E2E report must travel in the fresh-clone evidence tree',
   );
+  const aggregate = await Deno.readTextFile(
+    join(repoRoot, 'tools/repo/candidate-evidence-aggregate.ts'),
+  );
   assert(
-    /jobs\.find\(\(\{ job \}\) => job\.job === 'fresh-clone'\)[\s\S]{0,200}siteE2e/.test(evidence),
+    /jobs\.find\(\(\{ job \}\) => job\.job === 'fresh-clone'\)[\s\S]{0,200}siteE2e/.test(aggregate),
     'aggregation must read the Site E2E sidecar from the fresh-clone job',
   );
+  // The producer's per-job extras staging stayed on candidate-evidence.ts, so
+  // the no-reintroduction guard reads it there.
+  const evidence = await Deno.readTextFile(join(repoRoot, 'tools/repo/candidate-evidence.ts'));
   assert(
     !/job === 'source-matrix'[\s\S]{0,40}sourceExtras/.test(evidence),
     'the source-matrix producer must no longer stage Site E2E evidence',
   );
   // The trimmed PR gate must not lose the Site proof outright: the release
   // train still runs the official suite, and the sidecar is recomputed.
+  const validator = await Deno.readTextFile(
+    join(repoRoot, 'tools/repo/candidate-evidence-validate.ts'),
+  );
   assert(
-    /auditSiteE2e\(rollup\.siteE2e\)/.test(evidence),
+    /auditSiteE2e\(rollup\.siteE2e\)/.test(validator),
     'the Site E2E audit must stay wired into the rollup',
   );
 });
