@@ -12,12 +12,9 @@
 
 import type { SignalLike, Unsubscribe } from '../protocol/signal.ts';
 import { trustedHtmlValue } from '../core/security.ts';
-// Canonical void-element set and attribute-escape contract (issue #1220,
-// M4/L1) — single source of truth, shared with the server serializer.
-import { escapeAttr, VOID_TAGS } from '../core/html-escape.ts';
-// Canonical text-node escape contract (#1272) — shared with the server
-// serializer; do not reintroduce a private copy.
-import { escapeText } from './escape-text.ts';
+// Canonical attribute-escape contract (issue #1220, M4/L1) — single source of
+// truth, shared with the server serializer and the serialization kernel.
+import { escapeAttr } from '../core/html-escape.ts';
 // Canonical each-Region item-key derivation (#1374) — single source shared
 // with the server serializer; do not reintroduce a private copy.
 import { eachItemKey } from './each-key.ts';
@@ -1365,136 +1362,6 @@ function seedSerializerSeams(
 export function serializeToHtml(program: PartProgramV1, host: CompiledRuntimeHost): string {
   const ir = normalizePartProgram(program);
   return serializeProgramTemplate(ir, seedSerializerSeams(ir, host));
-}
-
-function serializedFixedAttributes(
-  ctx: MountContext,
-  node: ProgramElementNode,
-  path: number[],
-): Array<[string, string]> {
-  const attrs = new Map<string, string>();
-  for (const [name, value] of node.attrs) attrs.set(name, value);
-  for (const part of fixedPartsAtPath(ctx, path)) {
-    if (part.k === 'attr' || part.k === 'prop') {
-      const value = signalOf(ctx, part.signal).value;
-      const next = attributeValueOf(value);
-      if (next === null) attrs.delete(part.name);
-      else attrs.set(part.name, next);
-    } else if (part.k === 'bool') {
-      const value = signalOf(ctx, part.signal).value;
-      if (value) attrs.set(part.name, '');
-      else attrs.delete(part.name);
-    } else if (part.k === 'class') {
-      const value = signalOf(ctx, part.signal).value;
-      const next = classValueOf(value);
-      if (next) attrs.set('class', next);
-      else attrs.delete('class');
-    } else if (part.k === 'style') {
-      const value = signalOf(ctx, part.signal).value;
-      const next = styleValueOf(value);
-      if (next) attrs.set('style', next);
-      else attrs.delete('style');
-    }
-  }
-  return [...attrs.entries()];
-}
-
-function serializeElement(
-  ctx: MountContext,
-  node: ProgramElementNode,
-  programPath: number[],
-  item: unknown,
-  itemPart?: ProgramEachPart,
-): string {
-  const attrList = serializedFixedAttributes(ctx, node, programPath);
-  if (node.iattrs !== undefined) {
-    if (item === NO_ITEM || !itemPart) {
-      fail(
-        RuntimeErrorCode.ITEM_SLOT_OUTSIDE_REGION,
-        '[compiled-runtime] item attribute slot outside an each Region',
-      );
-    }
-    for (const [name, field] of node.iattrs) {
-      const value = itemAttrValue(item, field);
-      if (value !== null) attrList.push([name, value]);
-    }
-  }
-  const attrs = attrList.map(([name, value]) => ` ${name}="${escapeAttr(value)}"`).join('');
-  const open = `<${node.tag}${attrs}`;
-  if (VOID_TAGS.has(node.tag)) return `${open}>`;
-  const htmlSink = fixedPartsAtPath(ctx, programPath).find((part) => part.k === 'html');
-  if (htmlSink && htmlSink.k === 'html') {
-    const value = trustedHtmlValue(signalOf(ctx, htmlSink.signal).value);
-    return `${open}>${value}</${node.tag}>`;
-  }
-  const children = node.children
-    .map((child, index) => serializeNode(ctx, child, [...programPath, index], item, itemPart))
-    .join('');
-  return `${open}>${children}</${node.tag}>`;
-}
-
-function serializeNode(
-  ctx: MountContext,
-  node: ProgramTreeNode,
-  programPath: number[],
-  item: unknown = NO_ITEM,
-  itemPart?: ProgramEachPart,
-): string {
-  if (node.k === 'text') return escapeText(node.value);
-  if (node.k === 'ival') {
-    if (item === NO_ITEM) {
-      fail(
-        RuntimeErrorCode.ITEM_SLOT_OUTSIDE_REGION,
-        '[compiled-runtime] item value slot outside an each Region',
-      );
-    }
-    if (!itemPart) {
-      fail(
-        RuntimeErrorCode.ITEM_SLOT_WITHOUT_REGION,
-        '[compiled-runtime] item value slot has no item Region',
-      );
-    }
-    return escapeText(displayValue(itemValue(itemPart, item)));
-  }
-  if (node.k === 'el') return serializeElement(ctx, node, programPath, item, itemPart);
-
-  const part = ctx.program.parts[node.index];
-  if (!part) fail(RuntimeErrorCode.PART_MISSING, `[compiled-runtime] missing Part ${node.index}`);
-  const open = `<!--${partAnchorMarker(part.index)}-->`;
-  if (part.k === 'text') return open + escapeText(displayValue(signalOf(ctx, part.signal).value));
-  const close = `<!--${partAnchorEndMarker(part.index)}-->`;
-  if (part.k === 'when') {
-    const branch = whenActive(part, signalOf(ctx, part.signal).value) ? part.on : part.off;
-    return open + branch.map((child, index) =>
-      serializeNode(ctx, child, [...programPath, index], item, itemPart)
-    ).join('') +
-      close;
-  }
-  if (part.k === 'each') {
-    const value = signalOf(ctx, part.signal).value;
-    if (!Array.isArray(value)) {
-      fail(RuntimeErrorCode.LIST_VALUE_NOT_ARRAY, expectsArrayMessage(origin(ctx), part, value));
-    }
-    return open + value.map((entry) =>
-      part.item.map((child, index) =>
-        serializeNode(ctx, child, [...programPath, index], entry, part)
-      ).join('')
-    ).join('') + close;
-  }
-  fail(
-    RuntimeErrorCode.SERIALIZED_ANCHOR_MISSING,
-    `[compiled-runtime] fixed Part ${part.index} has no serialized anchor`,
-  );
-}
-
-/**
- * Differential-only oracle for issue #1469: the pre-kernel seed walker, kept
- * until the differential parity harness has retired. Not a production entry
- * point — `serializeToHtml` is the serialized contract.
- */
-export function serializeToHtmlLegacy(program: PartProgramV1, host: CompiledRuntimeHost): string {
-  const ctx = createContext(normalizePartProgram(program), host);
-  return ctx.program.template.map((node, index) => serializeNode(ctx, node, [index])).join('');
 }
 
 // ─── Existing-DOM claim ─────────────────────────────────────────────

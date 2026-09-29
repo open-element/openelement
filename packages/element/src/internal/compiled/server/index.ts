@@ -3,19 +3,20 @@
  *
  * The serializer is a pure projection of one validated program and one host
  * snapshot. It never subscribes, creates a DOM, discovers bindings, or invokes
- * component code. `serializeCompiledProgram()` is the host-shaped server
- * artifact; `serializeProgramContent()` is the same artifact's root content and
- * matches the alpha.0 seed serializer's inner-output contract.
+ * component code. The template walk itself is the shared kernel
+ * (`serializer/serialize-program.ts`, issue #1469 / ADR-0160 rule b); this
+ * module contributes the server seams (host signal access, sink emissions,
+ * item admission) and the host-artifact wrapping. `serializeCompiledProgram()`
+ * is the host-shaped server artifact; `serializeProgramContent()` is the same
+ * artifact's root content and matches the alpha.0 seed serializer's
+ * inner-output contract.
  */
 
 import {
   DATA_OE_LIGHT,
   PART_PROGRAM_VERSION,
-  partAnchorEndMarker,
-  partAnchorMarker,
   type PartProgramV1,
   type ProgramEachPart,
-  type ProgramElementNode,
   type ProgramTreeNode,
   type ProgramWhenPart,
   STATIC_STYLES_MARKER,
@@ -29,7 +30,6 @@ import {
   isRecordValue,
   signalOf,
   styleValueOf,
-  voidElement,
 } from './shared.ts';
 import { trustedHtmlValue } from '../../core/security.ts';
 import { formatError } from '../../core/errors.ts';
@@ -48,9 +48,6 @@ import {
 // the wire truth for claim parity, so both serializers share this one
 // implementation (escapes & < > " ').
 import { escapeAttr } from '../../core/html-escape.ts';
-// Canonical text-node escape contract (#1272): shared with the runtime seed
-// serializer; do not reintroduce a private copy.
-import { escapeText } from '../escape-text.ts';
 // Canonical each-Region item-key derivation (#1374): single source shared
 // with the runtime executors; do not reintroduce a private copy.
 import { eachItemKey, EachKeyError } from '../each-key.ts';
@@ -113,81 +110,6 @@ export interface CompiledServerOptions {
   renderNestedElement?: (element: CompiledNestedElement) => string | undefined;
   /** Light-root projection supplied by an owning compiled parent. */
   projectedChildren?: ReadonlyMap<string, string>;
-}
-
-const PROPERTY_PATH_SEPARATOR = '.';
-
-interface SerializeContext {
-  readonly program: PartProgramV1;
-  readonly host: unknown;
-  readonly propPartsByPath: Map<string, Array<{ name: string; signal: string }>>;
-  /** attr/bool/class/style sinks keyed by template path (part-index order). */
-  readonly valueSinksByPath: Map<
-    string,
-    Array<{
-      k: 'attr' | 'bool' | 'class' | 'style';
-      signal: string;
-      name?: string;
-    }>
-  >;
-  /** html content sinks keyed by template path. */
-  readonly htmlSinksByPath: Map<string, { signal: string }>;
-  readonly options: CompiledServerOptions;
-  readonly consumedProjections: Set<string>;
-  readonly pending?: ReadonlySet<number>;
-}
-
-function pathKey(path: readonly number[]): string {
-  return path.join(PROPERTY_PATH_SEPARATOR);
-}
-
-function createSerializeContext(
-  program: PartProgramV1,
-  host: unknown,
-  options: CompiledServerOptions = {},
-  pending?: ReadonlySet<number>,
-): SerializeContext {
-  const propPartsByPath = new Map<string, Array<{ name: string; signal: string }>>();
-  const valueSinksByPath = new Map<
-    string,
-    Array<{ k: 'attr' | 'bool' | 'class' | 'style'; signal: string; name?: string }>
-  >();
-  const htmlSinksByPath = new Map<string, { signal: string }>();
-  for (const part of program.parts) {
-    if (part.k === 'prop') {
-      const key = pathKey(part.path);
-      const parts = propPartsByPath.get(key) ?? [];
-      parts.push(part);
-      propPartsByPath.set(key, parts);
-      continue;
-    }
-    if (
-      part.k === 'attr' || part.k === 'bool' || part.k === 'class' || part.k === 'style'
-    ) {
-      const key = pathKey(part.path);
-      const sinks = valueSinksByPath.get(key) ?? [];
-      sinks.push(
-        part.k === 'attr' || part.k === 'bool'
-          ? { k: part.k, signal: part.signal, name: part.name }
-          : { k: part.k, signal: part.signal },
-      );
-      valueSinksByPath.set(key, sinks);
-      continue;
-    }
-    if (part.k === 'html') {
-      htmlSinksByPath.set(pathKey(part.path), { signal: part.signal });
-    }
-  }
-  return {
-    program,
-    host,
-    propPartsByPath,
-    valueSinksByPath,
-    htmlSinksByPath,
-    options,
-    consumedProjections: new Set(),
-    pending,
-  };
 }
 
 function serializeAttribute(name: string, value: string): string {
@@ -397,274 +319,6 @@ function serializeItemAttribute(value: unknown): string | null {
   return String(value);
 }
 
-function serializeItemChildren(
-  ctx: SerializeContext,
-  nodes: ProgramTreeNode[],
-  part: ProgramEachPart,
-  item: Record<string, unknown>,
-): { html: string; projected: Map<string, string> } {
-  let html = '';
-  const projected = new Map<string, string>();
-  for (const node of nodes) {
-    let serialized: string;
-    let slotName = '';
-    if (node.k === 'ival') {
-      const field = node.field ?? part.field;
-      if (field === undefined) {
-        throw new CompiledProgramValidationError(
-          `parts[${part.index}].item`,
-          'item value slot needs a field',
-        );
-      }
-      serialized = escapeText(String(item[field]));
-    } else if (node.k === 'text') {
-      serialized = escapeText(node.value);
-    } else if (node.k === 'el') {
-      const attributes: CompiledHostAttribute[] = node.attrs.map(([name, value]) => [name, value]);
-      for (const [name, field] of node.iattrs ?? []) {
-        const value = serializeItemAttribute(item[field]);
-        if (value !== null) attributes.push([name, value === '' ? true : value]);
-      }
-      slotName = String(attributes.find(([name]) => name === 'slot')?.[1] ?? '');
-      const attrText = attributes.map(([name, value]) =>
-        value === true ? ` ${name}` : serializeAttribute(name, String(value))
-      ).join('');
-      if (voidElement(node.tag)) {
-        serialized = `<${node.tag}${attrText}>`;
-      } else {
-        const children = serializeItemChildren(ctx, node.children, part, item);
-        if (node.tag.includes('-') && ctx.options.renderNestedElement) {
-          serialized = ctx.options.renderNestedElement({
-            tag: node.tag,
-            attributes,
-            properties: {},
-            children: children.html,
-            projectedChildren: children.projected,
-          }) ?? `<${node.tag}${attrText}>${children.html}</${node.tag}>`;
-        } else {
-          serialized = `<${node.tag}${attrText}>${children.html}</${node.tag}>`;
-        }
-      }
-    } else {
-      throw new CompiledProgramValidationError(
-        `parts[${part.index}].item`,
-        'item templates may not contain Part anchors',
-      );
-    }
-    html += serialized;
-    projected.set(slotName, (projected.get(slotName) ?? '') + serialized);
-  }
-  return { html, projected };
-}
-
-function serializeItemNodes(
-  ctx: SerializeContext,
-  nodes: ProgramTreeNode[],
-  part: ProgramEachPart,
-  item: Record<string, unknown>,
-): string {
-  return serializeItemChildren(ctx, nodes, part, item).html;
-}
-
-function slotNameFor(
-  ctx: SerializeContext,
-  node: ProgramElementNode,
-  programPath: readonly number[],
-): string {
-  let name = node.attrs.find(([attribute]) => attribute === 'slot')?.[1] ?? '';
-  for (const sink of ctx.valueSinksByPath.get(pathKey(programPath)) ?? []) {
-    if (sink.k === 'attr' && sink.name === 'slot') {
-      const value = attributeValueOf(signalOf(ctx.host, sink.signal).value);
-      name = value ?? '';
-    }
-  }
-  return name;
-}
-
-function serializeNode(
-  ctx: SerializeContext,
-  node: ProgramTreeNode,
-  nodePath: readonly number[],
-): string {
-  if (node.k === 'text') return escapeText(node.value);
-  if (node.k === 'el') return serializeElement(ctx, node, nodePath);
-  if (node.k === 'ival') {
-    throw new CompiledProgramValidationError(
-      'template',
-      'item value slot is outside an each Region',
-    );
-  }
-  const part = ctx.program.parts[node.index];
-  const start = `<!--${partAnchorMarker(part.index)}-->`;
-  if (ctx.pending?.has(part.index)) {
-    return `${start}<!--${partAnchorEndMarker(part.index)}-->`;
-  }
-  if (part.k === 'text') {
-    return `${start}${serializePartValue(ctx, part, signalOf(ctx.host, part.signal).value)}`;
-  }
-  if (part.k === 'when') {
-    const end = `<!--${partAnchorEndMarker(part.index)}-->`;
-    // Branch content keeps the anchor's canonical path prefix: Region
-    // subtrees hold no value sinks (the validator rejects fixed paths
-    // crossing or preceded by an anchor), and resetting to [] would collide
-    // with template-level sink paths and emit their values here.
-    return `${start}${
-      serializePartValue(ctx, part, signalOf(ctx.host, part.signal).value, nodePath)
-    }${end}`;
-  }
-  if (part.k === 'each') {
-    const end = `<!--${partAnchorEndMarker(part.index)}-->`;
-    return `${start}${serializePartValue(ctx, part, signalOf(ctx.host, part.signal).value)}${end}`;
-  }
-  throw new CompiledProgramValidationError(
-    `template${nodePath.map((value) => `[${value}]`).join('')}`,
-    `Part ${node.index} does not own a serializable anchor`,
-  );
-}
-
-function serializePartValue(
-  ctx: SerializeContext,
-  part: ProgramEachPart | ProgramWhenPart | Extract<PartProgramV1['parts'][number], { k: 'text' }>,
-  value: unknown,
-  nodePath: readonly number[] = part.location.path,
-): string {
-  if (part.k === 'text') return escapeText(String(value));
-  if (part.k === 'when') {
-    return serializeNodes(ctx, whenIsActive(part, value) ? part.on : part.off, nodePath);
-  }
-  return itemsFor(part, value)
-    .map((item) => serializeItemNodes(ctx, part.item, part, item))
-    .join('');
-}
-
-function serializeChildren(
-  ctx: SerializeContext,
-  nodes: ProgramTreeNode[],
-  parentPath: readonly number[],
-): { html: string; projected: Map<string, string> } {
-  let html = '';
-  const projected = new Map<string, string>();
-  nodes.forEach((node, index) => {
-    const nodePath = [...parentPath, index];
-    const serialized = serializeNode(ctx, node, nodePath);
-    html += serialized;
-    const name = node.k === 'el' ? slotNameFor(ctx, node, nodePath) : '';
-    projected.set(name, (projected.get(name) ?? '') + serialized);
-  });
-  return { html, projected };
-}
-
-function serializeElement(
-  ctx: SerializeContext,
-  node: ProgramElementNode,
-  programPath: readonly number[],
-): string {
-  const attributes: CompiledHostAttribute[] = node.attrs.map(([name, value]) => [name, value]);
-  const properties: Record<string, unknown> = {};
-  const attrText = (): string =>
-    attributes.map(([name, value]) =>
-      value === true ? ` ${name}` : serializeAttribute(name, String(value))
-    ).join('');
-
-  const key = pathKey(programPath);
-  for (const sink of ctx.valueSinksByPath.get(key) ?? []) {
-    const value = signalOf(ctx.host, sink.signal).value;
-    if (sink.k === 'attr') {
-      const serialized = attributeValueOf(value);
-      if (serialized !== null) attributes.push([sink.name!, serialized]);
-      continue;
-    }
-    if (sink.k === 'bool') {
-      if (value) attributes.push([sink.name!, true]);
-      continue;
-    }
-    if (sink.k === 'class') {
-      const serialized = classValueOf(value);
-      if (serialized !== '') attributes.push(['class', serialized]);
-      continue;
-    }
-    const serialized = styleValueOf(value);
-    if (serialized !== '') attributes.push(['style', serialized]);
-  }
-  for (const part of ctx.propPartsByPath.get(key) ?? []) {
-    const value = signalOf(ctx.host, part.signal).value;
-    properties[part.name] = value;
-    let serialized: string;
-    if (node.tag.includes('-') && typeof value !== 'string') {
-      try {
-        const encoded = JSON.stringify(value);
-        if (encoded === undefined) {
-          throw frameworkError(
-            ProgramErrorCode.NOT_SERIALIZABLE,
-            'value has no JSON representation',
-            { phase: 'validation' },
-          );
-        }
-        serialized = encoded;
-      } catch (error) {
-        throw new CompiledProgramValidationError(
-          `template[${programPath.join('][')}].${part.name}`,
-          `custom-element property value must be JSON-serializable (${formatError(error)})`,
-        );
-      }
-    } else {
-      serialized = String(value);
-    }
-    attributes.push([part.name, serialized]);
-  }
-
-  const open = `<${node.tag}${attrText()}`;
-  if (voidElement(node.tag)) return `${open}>`;
-  const htmlSink = ctx.htmlSinksByPath.get(key);
-  if (htmlSink) {
-    const value = trustedHtmlValue(signalOf(ctx.host, htmlSink.signal).value);
-    return `${open}>${value}</${node.tag}>`;
-  }
-
-  const children = serializeChildren(ctx, node.children, programPath);
-  let content = children.html;
-  if (node.tag === 'slot' && ctx.options.projectedChildren) {
-    const name = attributes.find(([attribute]) => attribute === 'name')?.[1];
-    const slotName = typeof name === 'string' ? name : '';
-    if (!ctx.consumedProjections.has(slotName) && ctx.options.projectedChildren.has(slotName)) {
-      content = ctx.options.projectedChildren.get(slotName)!;
-      ctx.consumedProjections.add(slotName);
-    }
-  }
-
-  if (node.tag.includes('-') && ctx.options.renderNestedElement) {
-    const rendered = ctx.options.renderNestedElement({
-      tag: node.tag,
-      attributes,
-      properties,
-      children: content,
-      projectedChildren: children.projected,
-    });
-    if (rendered !== undefined) return rendered;
-  }
-  return `${open}>${content}</${node.tag}>`;
-}
-
-function serializeNodes(
-  ctx: SerializeContext,
-  nodes: ProgramTreeNode[],
-  parentPath: readonly number[],
-): string {
-  return serializeChildren(ctx, nodes, parentPath).html;
-}
-
-function snapshotProgram(
-  raw: unknown,
-  host: unknown,
-  options: CompiledServerOptions = {},
-  pending?: ReadonlySet<number>,
-): { program: PartProgramV1; ctx: SerializeContext } {
-  const program = assertCompiledProgram(raw);
-  // The host is intentionally checked lazily by signalOf so static-only
-  // programs remain server-only and need no client signal artifact.
-  return { program, ctx: createSerializeContext(program, host, options, pending) };
-}
-
 /**
  * The server serializer's seams over the shared tree-walking kernel
  * (serializer/serialize-program.ts): signal reads through the shared host
@@ -795,66 +449,6 @@ function serializeCompiledSnapshot(
   );
   for (const [name, value] of options.projectedChildren ?? []) {
     if (!consumedProjections.has(name) && (name !== '' || value.trim() !== '')) {
-      throw new CompiledProgramValidationError(
-        'projectedChildren',
-        `light content targets missing slot ${JSON.stringify(name || 'default')}`,
-      );
-    }
-  }
-  const hostAttrs = serializeHostAttributes(options.hostAttrs, mode);
-  const styleCss = options.styleCss ?? '';
-  if (/<\/style/i.test(styleCss)) {
-    throw new CompiledProgramValidationError(
-      'styleCss',
-      'static component CSS may not contain "</style"',
-    );
-  }
-  const styleElement = styleCss ? `<style ${STATIC_STYLES_MARKER}>${styleCss}</style>` : '';
-  if (mode === 'light') {
-    return `<${program.tag}${hostAttrs}>${styleElement}${content}</${program.tag}>`;
-  }
-  const dsdAttrs = serializeDsdAttributes(options.dsd);
-  return `<${program.tag}${hostAttrs}><template shadowrootmode="${mode}"${dsdAttrs}>${styleElement}${content}</template></${program.tag}>`;
-}
-
-// ─── Differential-only oracle (issue #1469) ─────────────────────────
-//
-// The pre-kernel server walker below is kept until the differential parity
-// harness has retired. These exports are not production entry points —
-// `serializeProgramContent` / `serializeCompiledProgram` are the contract.
-
-/** Differential-only oracle: the pre-kernel root-content walker. */
-export function serializeProgramContentLegacy(raw: unknown, host: unknown): string {
-  const { program, ctx } = snapshotProgram(raw, host);
-  return serializeNodes(ctx, program.template, []);
-}
-
-/** Differential-only oracle: the pre-kernel host-artifact walker. */
-export function serializeCompiledProgramLegacy(
-  raw: unknown,
-  host: unknown,
-  options: CompiledServerOptions = {},
-): string {
-  return serializeCompiledSnapshotLegacy(raw, host, options);
-}
-
-function serializeCompiledSnapshotLegacy(
-  raw: unknown,
-  host: unknown,
-  options: CompiledServerOptions,
-  pending?: ReadonlySet<number>,
-): string {
-  const { program, ctx } = snapshotProgram(raw, host, options, pending);
-  const mode = options.mode ?? 'open';
-  if (mode !== 'light' && mode !== 'open' && mode !== 'closed') {
-    throw new CompiledProgramValidationError(
-      'mode',
-      `unsupported compiled root mode ${JSON.stringify(mode)}`,
-    );
-  }
-  const content = serializeNodes(ctx, program.template, []);
-  for (const [name, value] of options.projectedChildren ?? []) {
-    if (!ctx.consumedProjections.has(name) && (name !== '' || value.trim() !== '')) {
       throw new CompiledProgramValidationError(
         'projectedChildren',
         `light content targets missing slot ${JSON.stringify(name || 'default')}`,
@@ -1010,60 +604,6 @@ export function createDeferredServerExecutor(
   };
 }
 
-/** Differential-only oracle: the pre-kernel deferred executor. */
-export function createDeferredServerExecutorLegacy(
-  raw: PartProgramV1,
-  host: unknown,
-  selection: DeferredServerSelection,
-  options: CompiledServerOptions = {},
-): DeferredServerExecutor {
-  const program = assertCompiledProgram(raw);
-  const { owner } = selection;
-  if (
-    owner.program !== raw || owner.version !== PART_PROGRAM_VERSION ||
-    !owner.instanceId || typeof owner.instanceId !== 'string'
-  ) {
-    throw new CompiledProgramValidationError('owner', 'wrong program, version, or instance');
-  }
-  const pending = new Set<number>();
-  for (const index of selection.pendingParts) {
-    if (!Number.isInteger(index) || index < 0 || index >= program.parts.length) {
-      throw new CompiledProgramValidationError('pendingParts', `unknown Part ${String(index)}`);
-    }
-    if (pending.has(index)) {
-      throw new CompiledProgramValidationError('pendingParts', `duplicate Part ${index}`);
-    }
-    pending.add(index);
-  }
-  const shell = serializeCompiledSnapshotLegacy(raw, host, options, pending);
-  const ctx = createSerializeContext(program, host, options);
-  return {
-    shell,
-    serializeResolved(candidate, index, value) {
-      if (
-        candidate !== owner || candidate.program !== raw || candidate.version !== program.version
-      ) {
-        throw new CompiledProgramValidationError('owner', 'wrong deferred Part owner');
-      }
-      if (!pending.has(index)) {
-        throw new CompiledProgramValidationError(
-          'pendingParts',
-          `unknown or non-pending Part ${String(index)}`,
-        );
-      }
-      const part = program.parts[index];
-      if (part.k !== 'text' && part.k !== 'when' && part.k !== 'each') {
-        throw new CompiledProgramValidationError(`parts[${index}]`, 'Part is not a range');
-      }
-      return serializePartValue(ctx, part, value);
-    },
-  };
-}
-
-/**
- * Seed-compatible name: without options this returns only root content; with
- * root options it emits the complete compiled host artifact.
- */
 export function serializeToHtml(
   raw: unknown,
   host: unknown,

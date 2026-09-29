@@ -2,10 +2,12 @@
  * escape-text.ts — the ONE text-node escape contract for the compiled
  * serializers (B1.1 audit remediation, #1272 / finding F3).
  *
- * Both compiled serializers (the runtime seed serializer `runtime.ts` and the
- * server serializer `server/index.ts`) emit text-node bytes through this one
- * helper; before the convergence each carried a private byte-identical copy
- * with no named owner and no byte-level parity corpus (the claim-parity guard
+ * The shared serialization kernel (`serializer/serialize-program.ts`, issue
+ * #1469 / ADR-0160 rule b) emits every text-node byte of both serializer
+ * entry points (the runtime seed serializer `runtime.ts` and the server
+ * serializer `server/index.ts`) through this one helper; before the
+ * convergence each carried a private byte-identical copy with no named owner
+ * and no byte-level parity corpus (the parity guard
  * `compiled-escape-parity.test.ts` covered attributes only).
  *
  * The contract is deliberately reduced: `&`, `<`, `>` only. Quotes are NOT
