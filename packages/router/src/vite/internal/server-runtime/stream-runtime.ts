@@ -491,7 +491,10 @@ export function createDeferredPageShell(
           ' has no matching compiled route manifest/program.',
       );
     }
-    return createDeferredDsdExecutor({
+    // `return await` (not a bare return) keeps this an async function in the
+    // linter's eyes, so the fail-closed check above rejects instead of
+    // throwing synchronously — the emitted original was async too.
+    return await createDeferredDsdExecutor({
       componentClass: Cls,
       props,
       manifest,
