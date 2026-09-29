@@ -138,6 +138,25 @@ export function buildEntryDescriptor(
     names: ['resolvePageDocument'],
     alias: '__resolvePageDocument',
   });
+  // ADR-0129/ADR-0158: the response-header channel and CSP auto-nonce are
+  // runtime modules the generated handlers call (ADR-0160 rule a) — the
+  // entry imports them instead of carrying emitted function bodies. Needed
+  // only when a page handler exists (every page/not-found handler merges the
+  // channel), plus the stream channel when any page streams.
+  if (routes.some((route) => route.type === 'page' && !route.special)) {
+    imports.push({
+      from: '@openelement/router/server-runtime',
+      names: ['mergeChannelHeaders'],
+      alias: '__mergeChannelHeaders',
+    });
+    if (routes.some((route) => route.streamManifest)) {
+      imports.push({
+        from: '@openelement/router/server-runtime',
+        names: ['createStreamHeaderChannel'],
+        alias: '__streamHeaderChannel',
+      });
+    }
+  }
 
   // Conditional middleware imports
   const mw = options.middleware;
@@ -152,6 +171,21 @@ export function buildEntryDescriptor(
   }
   if (mw?.securityHeaders !== false) {
     imports.push({ from: 'hono/secure-headers', names: ['secureHeaders'] });
+  }
+  // The CSP auto-nonce is the same imported-runtime seam: the middleware
+  // emission below only references __cspCreateNonce/__cspApplyNonce, and the
+  // policy template stays generated data derived from middleware.csp.
+  if (mw?.csp?.nonce) {
+    imports.push({
+      from: '@openelement/router/server-runtime',
+      names: ['createCspNonce'],
+      alias: '__cspCreateNonce',
+    });
+    imports.push({
+      from: '@openelement/router/server-runtime',
+      names: ['applyCspNonce'],
+      alias: '__cspApplyNonce',
+    });
   }
 
   // --- Middleware ---

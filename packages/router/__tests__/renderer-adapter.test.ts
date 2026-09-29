@@ -12,16 +12,20 @@ const routes: RouteEntry[] = [{
   varName: 'pageIndex',
 }];
 
-// Pins verified byte-exact: re-inserting the removed 'v0.44 - ' banner segment
-// reproduces the pre-b22a3c7c3 hashes, proving the only generated-output delta
-// is that commit's intentional banner de-versioning (server bytes unchanged).
+// Pins verified byte-exact. The server pins moved from the b22a3c7c3
+// banner-de-versioning values (27507/d3ad3394…, 25562/412be26c…) to the
+// #1470-block-a values below: the response-header channel runtime
+// (__mergeChannelHeaders / __streamHeaderChannel bodies) and the CSP nonce
+// expressions were replaced by imports of @openelement/router/server-runtime
+// (ADR-0160 rule a, admitted output delta). Client bytes are untouched by
+// the migration — their hashes still match the pre-lane baseline.
 const expected = {
   native: {
-    server: [27507, 'd3ad339420441a76ce8cf8087402279695d5339cf7130d43106fe36203a1c964'],
+    server: [27032, 'd7f1af80f31a19ee760de15edeadd435bbcbcf3ed6eeecc61ec7098f11185597'],
     client: [1983, 'e3ea822d06ec4f70fbf67a073f9a10e3eac4e41efb897b0bb2fbd561b3da91a6'],
   },
   lit: {
-    server: [25562, '412be26cbf34f809e01460afaa25b74e4c4d1fa13c467fe97a61ef5c49da9820'],
+    server: [25087, 'cda7b4182512ff51b6c4c655116668811b3fd2e5bd38cb2f9443db393853c177'],
     client: [3138, 'ec06ba0190166c71ccd692e29b35e2990f7ef555804308d420e51478d8feecd1'],
   },
 } as const;

@@ -9,6 +9,7 @@
     "./document": "./src/document.ts",
     "./lit": "./src/lit.ts",
     "./lit-ssr": "./src/lit-ssr.ts",
+    "./server-runtime": "./src/vite/internal/server-runtime/mod.ts",
     "./vite": "./src/vite/index.ts",
     "./nitro-mount": "./src/nitro-mount.ts",
     "./cli/build": "./src/cli/build.ts",

@@ -115,3 +115,46 @@ S3 rewrites that test as part of its design.
 None recorded at lane start. S3 and S4 append entries here, one per artifact
 difference, each with stage, artifact, expected difference, reason, and
 oracle evidence.
+
+### S3a — response/header channel becomes imported runtime (#1470 block a)
+
+- Artifact: the generated virtual Hono server entry — every shape that
+  embeds it (the dev entry, the SSG SSR bundle `dist/server/entry.js`, and
+  the request-time `dist/server/index.js` bundle).
+- Expected difference: the emitted `__PROTOCOL_HEADERS` constant and the
+  `__mergeChannelHeaders` function body (entry-render-runtime.ts) and the
+  `__streamHeaderChannel` Proxy body (entry-stream-runtime.ts) are gone; the
+  entry imports them from the new `@openelement/router/server-runtime`
+  subpath and keeps only call sites. The CSP auto-nonce middleware emission
+  replaces inline `crypto.randomUUID().replace(/-/g, '')` and
+  `.replace('NONCE_PLACEHOLDER', nonce)` with `__cspCreateNonce()` /
+  `__cspApplyNonce(<template>, nonce)` calls into the same module. Byte
+  evidence at the renderer-adapter.test.ts pin: native server entry
+  27507 → 27032 bytes, lit server entry 25562 → 25087 bytes; client entries
+  unchanged (1983 / 3138 bytes).
+- Reason: ADR-0160 rule (a) — header commitment, the late-mutation Proxy
+  gate, Set-Cookie merge, protocol-header precedence, and the CSP nonce are
+  server runtime semantics and must live in typecheckable, unit-testable TS
+  modules, not inside template strings.
+- Impact: the new subpath is a declared export (`packages/router/deno.json`),
+  so the derived generated artifacts regenerate by ritual:
+  `generated-export-files.ts` and
+  `docs/release/public-interface-snapshot.json` gain the `./server-runtime`
+  entry (6 public symbols, all documented). The string-eval harnesses in
+  `packages/router/__tests__` (`new Function` / data:-URL evaluation) cannot
+  carry import declarations, so they bind the real module implementations
+  through their evaluation context (stream-handler.test.ts injects them via
+  `deps`) — no harness-local reimplementation exists; the only serialized
+  copies kept in generated code remain the pre-existing data lists
+  (`__DANGEROUS_KEYS`, `__ssrRenderableTags`) that exist because packed
+  consumer setups cannot import Element at all.
+- Oracle evidence: `request-time-parity.test.ts` green on all 29 steps for
+  both runtimes against the rebuilt fixture — including the ADR-0129 step
+  (GET channel header present, protocol `Cache-Control` wins over the
+  channel, `Set-Cookie` survives the 303 redirect, the 422 re-render carries
+  the action's channel entry); `stream-manifest`, `renderer-scope-parity`,
+  `ssg-admission-parity`, `lit-graph-boundary` (the walk resolves the new
+  subpath and confirms it stays kernel-free), and `compiler-open-core-
+  boundary` all green with assertions intact; `stream-handler.test.ts`
+  drives the real generated handler against the typed module (15 tests,
+  including protocol precedence and the post-commit late-write gate).

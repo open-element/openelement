@@ -8,9 +8,12 @@ import {
 } from '@openelement/element';
 import type { PartProgramV1 } from '../../element/src/internal/protocol/part-program.ts';
 import { testProgram } from '../../element/__tests__/compiled-runtime/test-program.ts';
+import {
+  createStreamHeaderChannel,
+  mergeChannelHeaders,
+} from '../src/vite/internal/server-runtime/response-channel.ts';
 import type { PageRouteDecl, StreamRouteManifest } from '../src/vite/internal/protocol/ssg.ts';
 import { renderActionRoute, renderPageRoute } from '../src/vite/internal/ssg/entry-codegen.ts';
-import { renderRuntimeHelpers } from '../src/vite/internal/ssg/entry-render-runtime.ts';
 import { renderStreamRuntime } from '../src/vite/internal/ssg/entry-stream-runtime.ts';
 
 const program = testProgram({
@@ -71,30 +74,14 @@ function deferred<T>() {
 }
 
 /**
- * The canonical response-header channel helper, taken verbatim from the real
- * emitter (entry-render-runtime.ts:265-281). This harness used to carry a
- * hand-written `__mergeChannelHeaders`, which meant the assertions never ran
- * the generated code: protocol-header precedence (`__PROTOCOL_HEADERS`) and
- * the streamed `new Response(resp.body, …)` rebuild were unexecuted. The
- * emitter returns source text, so the helper is spliced in by its markers; a
- * rename or removal fails here instead of silently skipping the real path.
+ * The generated handler calls the response-header channel runtime by name
+ * (`__mergeChannelHeaders`, `__streamHeaderChannel`); since ADR-0160 rule a
+ * those names bind to `@openelement/router/server-runtime` imports at the
+ * top of the generated entry. A `new Function` harness cannot carry import
+ * declarations, so the REAL production implementations are bound in through
+ * `deps` instead — the assertions below still execute the shipped module,
+ * never a harness-local copy.
  */
-function channelHeaderHelpers(): string {
-  const emitted = renderRuntimeHelpers({ default: false, layouts: {} }, []);
-  const start = emitted.indexOf('const __PROTOCOL_HEADERS');
-  const tail = emitted.indexOf('return new Response(resp.body');
-  const end = tail < 0 ? -1 : emitted.indexOf('\n}\n', tail);
-  if (start < 0 || tail < 0 || end < 0) {
-    throw new Error(
-      'entry-render-runtime.ts no longer emits __PROTOCOL_HEADERS/__mergeChannelHeaders: ' +
-        'update this harness instead of reintroducing a stub',
-    );
-  }
-  return emitted.slice(start, end + 3);
-}
-
-const CHANNEL_HEADER_HELPERS = channelHeaderHelpers();
-
 async function handler(timeoutMs?: number, streamManifest?: StreamRouteManifest) {
   const route: PageRouteDecl = {
     kind: 'page',
@@ -115,6 +102,8 @@ async function handler(timeoutMs?: number, streamManifest?: StreamRouteManifest)
   const source = `
     const { routeModule, manifest, createDeferredDsdExecutor, documentStreamParts,
       escapeAttr, escapeHtml, wrapInDocument } = deps;
+    const __mergeChannelHeaders = deps.mergeChannelHeaders;
+    const __streamHeaderChannel = deps.createStreamHeaderChannel;
     const $Route_Index = routeModule;
     const __streamManifests = { '/': manifest };
     const __pageHandlers = { '/': {} };
@@ -137,7 +126,6 @@ async function handler(timeoutMs?: number, streamManifest?: StreamRouteManifest)
     const __resolveAppShell = () => deps.resolvedAppShell ?? false;
     const __renderAppShell = html => html;
     const __ssr = () => '<p>error</p>';
-    ${CHANNEL_HEADER_HELPERS}
     async function __createDeferredPageShell(route, module, props, instanceId, documentToken) {
       return createDeferredDsdExecutor({
         componentClass: module.default, props, manifest: __streamManifests[route],
@@ -160,6 +148,8 @@ async function handler(timeoutMs?: number, streamManifest?: StreamRouteManifest)
     escapeAttr,
     escapeHtml,
     wrapInDocument,
+    createStreamHeaderChannel,
+    mergeChannelHeaders,
     resolvedAppShell: undefined as unknown,
   };
   const generated = new Function('deps', source)(deps) as (
@@ -254,7 +244,7 @@ Deno.test('the real channel merge keeps protocol headers and the streamed body',
   const response = await fetch(new Request('https://example.test/'));
   assertEquals(response.status, 200);
   // The channel cannot override a protocol header the response already set
-  // (entry-render-runtime.ts:274: `__PROTOCOL_HEADERS.has(key) && merged.has(key)`).
+  // (server-runtime/response-channel.ts: `PROTOCOL_HEADERS.has(key) && merged.has(key)`).
   assertEquals(response.headers.get('Content-Type'), 'text/html; charset=UTF-8');
   assertEquals(response.headers.get('Cache-Control'), 'private, no-cache');
   // A protocol header the response does NOT carry, and every ordinary channel

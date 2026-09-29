@@ -1,4 +1,10 @@
-/** Request-local helpers emitted only when an entry has an admitted stream route. */
+/**
+ * Request-local helpers emitted only when an entry has an admitted stream
+ * route. The streamed route's response-header channel is NOT emitted here:
+ * the entry imports it from @openelement/router/server-runtime (ADR-0160
+ * rule a) — the late-mutation Proxy guard and its commitment switch are
+ * typecheckable, unit-tested module code.
+ */
 import {
   STREAM_FRAME_FORBIDDEN_TAGS,
   STREAM_FRAME_UNSAFE_URL,
@@ -29,31 +35,6 @@ function __streamRequestScope(original) {
       if (!controller.signal.aborted) controller.abort();
     },
   };
-}
-
-function __streamHeaderChannel(route) {
-  const headers = new Headers();
-  let committed = false;
-  const channel = new Proxy(headers, {
-    get(target, key) {
-      if (key === 'append' || key === 'set' || key === 'delete') {
-        return (name, value) => {
-          if (committed) {
-            console.warn('[openElement] late response header write', { route, header: String(name), operation: key });
-            return;
-          }
-          return target[key](name, value);
-        };
-      }
-      if (key === 'forEach') {
-        return (callback, thisArg) =>
-          target.forEach((value, name) => callback.call(thisArg, value, name, channel));
-      }
-      const member = Reflect.get(target, key, target);
-      return typeof member === 'function' ? member.bind(target) : member;
-    },
-  });
-  return { channel, commit: () => { committed = true; } };
 }
 
 function __streamJson(value) {

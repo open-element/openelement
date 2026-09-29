@@ -118,11 +118,18 @@ Deno.test('renderEntry: CSP with nonce generates per-request nonce', () => {
   });
   const code = renderEntry(desc);
 
-  assertStringIncludes(code, 'crypto.randomUUID()');
+  // ADR-0160 rule a: nonce creation and policy instantiation are calls into
+  // the imported @openelement/router/server-runtime module; the template is
+  // generated data (the nonce semantics themselves are pinned by
+  // server-runtime-response-channel.test.ts).
+  assertStringIncludes(code, 'const nonce = __cspCreateNonce()');
   assertStringIncludes(code, "c.set('cspNonce'");
   // v0.3.1: NONCE_PLACEHOLDER template approach (fixes missing closing quote bug)
   assertStringIncludes(code, 'NONCE_PLACEHOLDER');
-  assertStringIncludes(code, ".replace('NONCE_PLACEHOLDER', nonce)");
+  assertStringIncludes(
+    code,
+    `__cspApplyNonce("default-src 'self'; script-src 'nonce-NONCE_PLACEHOLDER'", nonce)`,
+  );
 });
 
 Deno.test('renderEntry: CSP report-only mode', () => {
@@ -664,7 +671,7 @@ Deno.test('renderEntry: complex scenario with all features', () => {
 
   // All features present
   assertStringIncludes(code, 'Content-Security-Policy');
-  assertStringIncludes(code, 'crypto.randomUUID()');
+  assertStringIncludes(code, '__cspCreateNonce()');
   assertStringIncludes(code, '"https://example.com"');
   assertStringIncludes(code, '_renderer');
   assertStringIncludes(code, '_middleware');

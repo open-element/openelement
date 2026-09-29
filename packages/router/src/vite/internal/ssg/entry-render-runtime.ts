@@ -259,27 +259,6 @@ export function renderRuntimeHelpers(
   lines.push('}');
   lines.push('');
 
-  // Merge the loader/action response-header channel into the
-  // response. Channel entries are appended; framework protocol headers
-  // always win when already set — the channel cannot override the protocol.
-  lines.push(
-    `const __PROTOCOL_HEADERS = new Set(['location', 'content-type', 'cache-control', 'vary', 'x-openelement-action']);`,
-  );
-  lines.push('function __mergeChannelHeaders(resp, channel) {');
-  lines.push('  let needsMerge = false;');
-  lines.push('  channel.forEach(() => { needsMerge = true; });');
-  lines.push('  if (!needsMerge) return resp;');
-  lines.push('  const merged = new Headers(resp.headers);');
-  lines.push('  channel.forEach((value, key) => {');
-  lines.push('    if (__PROTOCOL_HEADERS.has(key.toLowerCase()) && merged.has(key)) return;');
-  lines.push('    merged.append(key, value);');
-  lines.push('  });');
-  lines.push(
-    '  return new Response(resp.body, { status: resp.status, statusText: resp.statusText, headers: merged });',
-  );
-  lines.push('}');
-  lines.push('');
-
   lines.push(`const __appShellPlan = ${quoteGeneratedJavaScriptValue(appShell, 2)};`);
   lines.push('');
 

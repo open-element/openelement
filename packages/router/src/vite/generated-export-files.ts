@@ -29,6 +29,7 @@ export const OPENELEMENT_EXPORT_FILES: Record<string, Record<string, string>> = 
     'nitro-mount': 'src/nitro-mount.ts',
     'router': 'src/router.ts',
     'router/client': 'src/router-client.ts',
+    'server-runtime': 'src/vite/internal/server-runtime/mod.ts',
     'vite': 'src/vite/index.ts',
   },
   'ui': {
