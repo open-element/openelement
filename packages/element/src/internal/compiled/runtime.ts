@@ -28,6 +28,12 @@ import { conditionHolds } from './condition-holds.ts';
 // shared with the server serializer (server/shared.ts) so all three
 // execution modes stay byte-identical; do not reintroduce private copies.
 import { attributeValueOf, classValueOf, styleValueOf } from './server/shared.ts';
+// The ONE tree-walking serializer (issue #1469, ADR-0160 rule b): both the
+// seed and the server serializer delegate their walk to this kernel.
+import {
+  type SerializeProgramSeams,
+  serializeProgramTemplate,
+} from './serializer/serialize-program.ts';
 import {
   DATA_OE_LIGHT,
   partAnchorEndMarker,
@@ -219,9 +225,9 @@ function regionName(part: ProgramEachPart | ProgramWhenPart): string {
  * actionable; the compiler cannot reject it because the property type is an
  * authoring decision, and the Region is re-read on every signal write.
  */
-function expectsArrayMessage(ctx: MountContext, part: ProgramEachPart, value: unknown): string {
+function expectsArrayMessage(where: string, part: ProgramEachPart, value: unknown): string {
   const received = value === null ? 'null' : Array.isArray(value) ? 'array' : typeof value;
-  return `${origin(ctx)}: the list Region over ${regionName(part)} expects an array, got ` +
+  return `${where}: the list Region over ${regionName(part)} expects an array, got ` +
     `${received} — it renders ${regionName(part)}.map(...), so initialize that property to [] ` +
     `instead of null/undefined.`;
 }
@@ -694,7 +700,7 @@ function buildEach(
   });
   const value = signalOf(ctx, part.signal).value;
   if (!Array.isArray(value)) {
-    fail(RuntimeErrorCode.LIST_VALUE_NOT_ARRAY, expectsArrayMessage(ctx, part, value));
+    fail(RuntimeErrorCode.LIST_VALUE_NOT_ARRAY, expectsArrayMessage(origin(ctx), part, value));
   }
   const nodes: Node[] = [];
   const seen = new Set<string>();
@@ -904,7 +910,7 @@ function updateEach(region: EachRegion, value: unknown): void {
   if (!Array.isArray(value)) {
     fail(
       RuntimeErrorCode.LIST_VALUE_NOT_ARRAY,
-      expectsArrayMessage(region.ctx, region.part, value),
+      expectsArrayMessage(origin(region.ctx), region.part, value),
     );
   }
   const parent = region.end.parentNode;
@@ -1290,7 +1296,76 @@ export function createFreshDom(
   }
 }
 
-// ─── Server serialization ──────────────────────────────────────────
+// ─── Seed serialization ────────────────────────────────────────────
+
+/**
+ * The seed serializer's seams over the shared tree-walking kernel
+ * (serializer/serialize-program.ts): signal reads through the host's signal
+ * record, sink values merged into one attribute per name with quoted boolean
+ * presence, and no Region item admission beyond the array check.
+ */
+function seedSerializerSeams(
+  program: RuntimeProgramIR,
+  host: CompiledRuntimeHost,
+): SerializeProgramSeams {
+  const where = `${program.metadata.sourceFile} <${program.tag}>`;
+  return {
+    attributeAssembly: 'merge-by-name',
+    sinkOrder: 'part-index',
+    signalValue(name: string): unknown {
+      const signal = host.signals[name];
+      if (!signal) {
+        fail(
+          RuntimeErrorCode.HOST_SIGNAL_MISSING,
+          `${where}: render() reads this.${name}, but no host signal is registered. Every ` +
+            `signal read by render() must be a declared @property on the compiled class.`,
+        );
+      }
+      return signal.value;
+    },
+    attributeEmission: (part, value) => {
+      const serialized = attributeValueOf(value);
+      return serialized === null ? null : { name: part.name, value: serialized, bare: false };
+    },
+    boolEmission: (part, value) => (value ? { name: part.name, value: '', bare: false } : null),
+    classEmission: (_part, value) => {
+      const serialized = classValueOf(value);
+      return serialized ? { name: 'class', value: serialized, bare: false } : null;
+    },
+    styleEmission: (_part, value) => {
+      const serialized = styleValueOf(value);
+      return serialized ? { name: 'style', value: serialized, bare: false } : null;
+    },
+    propEmission: (_node, part, value) => {
+      const serialized = attributeValueOf(value);
+      return {
+        attribute: serialized === null ? null : { name: part.name, value: serialized, bare: false },
+        property: value,
+      };
+    },
+    itemAttributeEmission: (item, name, field) => {
+      const value = itemAttrValue(item, field);
+      return value === null ? null : { name, value, bare: false };
+    },
+    itemTextValue: (part, _node, item) => displayValue(itemValue(part, item)),
+    textPartValue: displayValue,
+    whenHolds: (part, value) => conditionHolds(part.test, value),
+    regionItems: (part, value) => {
+      if (!Array.isArray(value)) {
+        fail(RuntimeErrorCode.LIST_VALUE_NOT_ARRAY, expectsArrayMessage(where, part, value));
+      }
+      return value;
+    },
+    escapeAttr,
+    trustedHtml: trustedHtmlValue,
+  };
+}
+
+/** Seed serialization: the same program renders deterministic HTML. */
+export function serializeToHtml(program: PartProgramV1, host: CompiledRuntimeHost): string {
+  const ir = normalizePartProgram(program);
+  return serializeProgramTemplate(ir, seedSerializerSeams(ir, host));
+}
 
 function serializedFixedAttributes(
   ctx: MountContext,
@@ -1398,7 +1473,7 @@ function serializeNode(
   if (part.k === 'each') {
     const value = signalOf(ctx, part.signal).value;
     if (!Array.isArray(value)) {
-      fail(RuntimeErrorCode.LIST_VALUE_NOT_ARRAY, expectsArrayMessage(ctx, part, value));
+      fail(RuntimeErrorCode.LIST_VALUE_NOT_ARRAY, expectsArrayMessage(origin(ctx), part, value));
     }
     return open + value.map((entry) =>
       part.item.map((child, index) =>
@@ -1412,8 +1487,12 @@ function serializeNode(
   );
 }
 
-/** Server serialization: the same program renders deterministic HTML. */
-export function serializeToHtml(program: PartProgramV1, host: CompiledRuntimeHost): string {
+/**
+ * Differential-only oracle for issue #1469: the pre-kernel seed walker, kept
+ * until the differential parity harness has retired. Not a production entry
+ * point — `serializeToHtml` is the serialized contract.
+ */
+export function serializeToHtmlLegacy(program: PartProgramV1, host: CompiledRuntimeHost): string {
   const ctx = createContext(normalizePartProgram(program), host);
   return ctx.program.template.map((node, index) => serializeNode(ctx, node, [index])).join('');
 }

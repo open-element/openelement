@@ -33,6 +33,7 @@ import {
 } from './shared.ts';
 import { trustedHtmlValue } from '../../core/security.ts';
 import { formatError } from '../../core/errors.ts';
+import type { RuntimeProgramIR } from '../runtime-program.ts';
 // The single error dialect (#1386 item 3): every failure in this module is an
 // OpenElementError carrying a code from the catalogue.
 import { frameworkError, ProgramErrorCode } from '../../protocol/errors.ts';
@@ -56,6 +57,14 @@ import { eachItemKey, EachKeyError } from '../each-key.ts';
 // Canonical when-Region condition evaluation (#1372): single source shared
 // with the runtime executors; do not reintroduce a private comparison.
 import { conditionHolds } from '../condition-holds.ts';
+// The ONE tree-walking serializer (issue #1469, ADR-0160 rule b): the server
+// serializer and the runtime seed serializer delegate their walk to this
+// kernel.
+import {
+  serializeProgramRange,
+  type SerializeProgramSeams,
+  serializeProgramTemplate,
+} from '../serializer/serialize-program.ts';
 
 export type { CompiledProgramHost, CompiledSignalLike } from './shared.ts';
 export { assertCompiledProgram, CompiledProgramValidationError } from './shared.ts';
@@ -656,10 +665,100 @@ function snapshotProgram(
   return { program, ctx: createSerializeContext(program, host, options, pending) };
 }
 
+/**
+ * The server serializer's seams over the shared tree-walking kernel
+ * (serializer/serialize-program.ts): signal reads through the shared host
+ * access, sink evaluations appended after the static attributes with bare
+ * boolean presence, and full Region item admission.
+ */
+function serializerSeams(
+  host: unknown,
+  options: CompiledServerOptions,
+  consumedProjections: Set<string>,
+  pending?: ReadonlySet<number>,
+): SerializeProgramSeams {
+  return {
+    attributeAssembly: 'append',
+    sinkOrder: 'value-sinks-then-props',
+    signalValue: (signal) => signalOf(host, signal).value,
+    attributeEmission: (part, value) => {
+      const serialized = attributeValueOf(value);
+      return serialized === null ? null : { name: part.name, value: serialized, bare: false };
+    },
+    boolEmission: (part, value) => (value ? { name: part.name, value: '', bare: true } : null),
+    classEmission: (_part, value) => {
+      const serialized = classValueOf(value);
+      return serialized !== '' ? { name: 'class', value: serialized, bare: false } : null;
+    },
+    styleEmission: (_part, value) => {
+      const serialized = styleValueOf(value);
+      return serialized !== '' ? { name: 'style', value: serialized, bare: false } : null;
+    },
+    propEmission: (node, part, value, path) => {
+      let serialized: string;
+      if (node.tag.includes('-') && typeof value !== 'string') {
+        try {
+          const encoded = JSON.stringify(value);
+          if (encoded === undefined) {
+            throw frameworkError(
+              ProgramErrorCode.NOT_SERIALIZABLE,
+              'value has no JSON representation',
+              { phase: 'validation' },
+            );
+          }
+          serialized = encoded;
+        } catch (error) {
+          throw new CompiledProgramValidationError(
+            `template[${path.join('][')}].${part.name}`,
+            `custom-element property value must be JSON-serializable (${formatError(error)})`,
+          );
+        }
+      } else {
+        serialized = String(value);
+      }
+      return { attribute: { name: part.name, value: serialized, bare: false }, property: value };
+    },
+    itemAttributeEmission: (item, name, field) => {
+      const value = serializeItemAttribute((item as Record<string, unknown>)[field]);
+      return value === null ? null : { name, value, bare: value === '' };
+    },
+    itemTextValue: (part, node, item) => {
+      const field = node.field ?? part.field;
+      if (field === undefined) {
+        throw new CompiledProgramValidationError(
+          `parts[${part.index}].item`,
+          'item value slot needs a field',
+        );
+      }
+      return String((item as Record<string, unknown>)[field]);
+    },
+    textPartValue: (value) => String(value),
+    whenHolds: (part, value) => whenIsActive(part, value),
+    regionItems: (part, value) => itemsFor(part, value),
+    escapeAttr,
+    trustedHtml: trustedHtmlValue,
+    renderNestedElement: options.renderNestedElement,
+    projectedChildren: options.projectedChildren,
+    consumedProjections,
+    pendingParts: pending,
+  };
+}
+
+function serializedProgramContent(
+  program: RuntimeProgramIR,
+  host: unknown,
+  options: CompiledServerOptions,
+  pending?: ReadonlySet<number>,
+): string {
+  return serializeProgramTemplate(
+    program,
+    serializerSeams(host, options, new Set(), pending),
+  );
+}
+
 /** Serialize only the program-owned root content, with deterministic markers. */
 export function serializeProgramContent(raw: unknown, host: unknown): string {
-  const { program, ctx } = snapshotProgram(raw, host);
-  return serializeNodes(ctx, program.template, []);
+  return serializedProgramContent(assertCompiledProgram(raw), host, {});
 }
 
 /**
@@ -676,6 +775,70 @@ export function serializeCompiledProgram(
 }
 
 function serializeCompiledSnapshot(
+  raw: unknown,
+  host: unknown,
+  options: CompiledServerOptions,
+  pending?: ReadonlySet<number>,
+): string {
+  const program = assertCompiledProgram(raw);
+  const mode = options.mode ?? 'open';
+  if (mode !== 'light' && mode !== 'open' && mode !== 'closed') {
+    throw new CompiledProgramValidationError(
+      'mode',
+      `unsupported compiled root mode ${JSON.stringify(mode)}`,
+    );
+  }
+  const consumedProjections = new Set<string>();
+  const content = serializeProgramTemplate(
+    program,
+    serializerSeams(host, options, consumedProjections, pending),
+  );
+  for (const [name, value] of options.projectedChildren ?? []) {
+    if (!consumedProjections.has(name) && (name !== '' || value.trim() !== '')) {
+      throw new CompiledProgramValidationError(
+        'projectedChildren',
+        `light content targets missing slot ${JSON.stringify(name || 'default')}`,
+      );
+    }
+  }
+  const hostAttrs = serializeHostAttributes(options.hostAttrs, mode);
+  const styleCss = options.styleCss ?? '';
+  if (/<\/style/i.test(styleCss)) {
+    throw new CompiledProgramValidationError(
+      'styleCss',
+      'static component CSS may not contain "</style"',
+    );
+  }
+  const styleElement = styleCss ? `<style ${STATIC_STYLES_MARKER}>${styleCss}</style>` : '';
+  if (mode === 'light') {
+    return `<${program.tag}${hostAttrs}>${styleElement}${content}</${program.tag}>`;
+  }
+  const dsdAttrs = serializeDsdAttributes(options.dsd);
+  return `<${program.tag}${hostAttrs}><template shadowrootmode="${mode}"${dsdAttrs}>${styleElement}${content}</template></${program.tag}>`;
+}
+
+// ─── Differential-only oracle (issue #1469) ─────────────────────────
+//
+// The pre-kernel server walker below is kept until the differential parity
+// harness has retired. These exports are not production entry points —
+// `serializeProgramContent` / `serializeCompiledProgram` are the contract.
+
+/** Differential-only oracle: the pre-kernel root-content walker. */
+export function serializeProgramContentLegacy(raw: unknown, host: unknown): string {
+  const { program, ctx } = snapshotProgram(raw, host);
+  return serializeNodes(ctx, program.template, []);
+}
+
+/** Differential-only oracle: the pre-kernel host-artifact walker. */
+export function serializeCompiledProgramLegacy(
+  raw: unknown,
+  host: unknown,
+  options: CompiledServerOptions = {},
+): string {
+  return serializeCompiledSnapshotLegacy(raw, host, options);
+}
+
+function serializeCompiledSnapshotLegacy(
   raw: unknown,
   host: unknown,
   options: CompiledServerOptions,
@@ -823,6 +986,56 @@ export function createDeferredServerExecutor(
     pending.add(index);
   }
   const shell = serializeCompiledSnapshot(raw, host, options, pending);
+  const rangeSeams = serializerSeams(host, options, new Set());
+  return {
+    shell,
+    serializeResolved(candidate, index, value) {
+      if (
+        candidate !== owner || candidate.program !== raw || candidate.version !== program.version
+      ) {
+        throw new CompiledProgramValidationError('owner', 'wrong deferred Part owner');
+      }
+      if (!pending.has(index)) {
+        throw new CompiledProgramValidationError(
+          'pendingParts',
+          `unknown or non-pending Part ${String(index)}`,
+        );
+      }
+      const part = program.parts[index];
+      if (part.k !== 'text' && part.k !== 'when' && part.k !== 'each') {
+        throw new CompiledProgramValidationError(`parts[${index}]`, 'Part is not a range');
+      }
+      return serializeProgramRange(program, part, value, rangeSeams);
+    },
+  };
+}
+
+/** Differential-only oracle: the pre-kernel deferred executor. */
+export function createDeferredServerExecutorLegacy(
+  raw: PartProgramV1,
+  host: unknown,
+  selection: DeferredServerSelection,
+  options: CompiledServerOptions = {},
+): DeferredServerExecutor {
+  const program = assertCompiledProgram(raw);
+  const { owner } = selection;
+  if (
+    owner.program !== raw || owner.version !== PART_PROGRAM_VERSION ||
+    !owner.instanceId || typeof owner.instanceId !== 'string'
+  ) {
+    throw new CompiledProgramValidationError('owner', 'wrong program, version, or instance');
+  }
+  const pending = new Set<number>();
+  for (const index of selection.pendingParts) {
+    if (!Number.isInteger(index) || index < 0 || index >= program.parts.length) {
+      throw new CompiledProgramValidationError('pendingParts', `unknown Part ${String(index)}`);
+    }
+    if (pending.has(index)) {
+      throw new CompiledProgramValidationError('pendingParts', `duplicate Part ${index}`);
+    }
+    pending.add(index);
+  }
+  const shell = serializeCompiledSnapshotLegacy(raw, host, options, pending);
   const ctx = createSerializeContext(program, host, options);
   return {
     shell,
