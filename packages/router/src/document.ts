@@ -28,6 +28,7 @@ import type {
   StructuredDataEntry,
 } from './authoring.ts';
 import { assertNoScriptTags, assertTrustedHeadHtml } from './internal/head-safety.ts';
+import { authoringError, DocumentErrorCode } from './internal/error-codes.ts';
 
 /** One <link rel="alternate"> record, typically carrying an hreflang. */
 export interface PageHeadAlternate {
@@ -68,7 +69,10 @@ export interface ResolvedDocument {
 }
 
 function fail(message: string): never {
-  throw new Error(`[openElement] resolvePageDocument: ${message}`);
+  throw authoringError(
+    DocumentErrorCode.HEAD_INVALID,
+    `[openElement] resolvePageDocument: ${message}`,
+  );
 }
 
 /**

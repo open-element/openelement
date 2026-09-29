@@ -12,6 +12,7 @@
  */
 
 import { HYDRATION_STRATEGIES, isValidTagName } from '@openelement/element';
+import { buildError, IslandEntryErrorCode } from '../../../internal/error-codes.ts';
 import {
   type ClientIslandDeliveryEntry,
   type ClientIslandDeliveryInput,
@@ -76,7 +77,10 @@ export function validateIslandModuleSpecifier(modulePath: string): void {
     modulePath.startsWith('//') ||
     hasTraversalSegment(modulePath)
   ) {
-    throw new Error(`Invalid island modulePath: ${modulePath}`);
+    throw buildError(
+      IslandEntryErrorCode.MODULE_PATH,
+      `Invalid island modulePath: ${modulePath}`,
+    );
   }
   if (
     !SAFE_RELATIVE_SPECIFIER_RE.test(modulePath) &&
@@ -84,7 +88,10 @@ export function validateIslandModuleSpecifier(modulePath: string): void {
     !SAFE_FS_SPECIFIER_RE.test(modulePath) &&
     !SAFE_BARE_SPECIFIER_RE.test(modulePath)
   ) {
-    throw new Error(`Invalid island modulePath: ${modulePath}`);
+    throw buildError(
+      IslandEntryErrorCode.MODULE_PATH,
+      `Invalid island modulePath: ${modulePath}`,
+    );
   }
 }
 
@@ -98,18 +105,21 @@ export function validateClientIslandEntry(
 ): AdmittedClientIslandEntry {
   const deliveryEntry = entry as ClientIslandDeliveryEntry;
   if (!isValidTagName(entry.tagName)) {
-    throw new Error(`Invalid island tagName: ${entry.tagName}`);
+    throw buildError(IslandEntryErrorCode.TAG_NAME, `Invalid island tagName: ${entry.tagName}`);
   }
   let modulePath: AdmittedIslandModuleSpecifier;
   try {
     modulePath = admitIslandModuleSpecifier(entry.modulePath);
   } catch (e) {
-    throw new Error(`Invalid island modulePath for ${entry.tagName}: ${entry.modulePath}`, {
-      cause: e,
-    });
+    throw buildError(
+      IslandEntryErrorCode.MODULE_PATH,
+      `Invalid island modulePath for ${entry.tagName}: ${entry.modulePath}`,
+      { cause: e as Error },
+    );
   }
   if (!isIslandDeliveryStrategy(entry.strategy) || !VALID_STRATEGIES.has(entry.strategy)) {
-    throw new Error(
+    throw buildError(
+      IslandEntryErrorCode.STRATEGY,
       `Invalid island strategy for ${entry.tagName}: ${String(entry.strategy)}. ` +
         'Use one of: load, idle, visible, media, only.',
     );
@@ -124,12 +134,14 @@ export function validateClientIslandEntry(
     ? undefined
     : validateIslandMediaQuery(deliveryEntry.media, entry.tagName);
   if (entry.strategy === 'media' && media === undefined) {
-    throw new Error(
+    throw buildError(
+      IslandEntryErrorCode.MEDIA,
       `Invalid island media query for ${entry.tagName}: strategy "media" requires media`,
     );
   }
   if (entry.strategy !== 'media' && media !== undefined) {
-    throw new Error(
+    throw buildError(
+      IslandEntryErrorCode.MEDIA,
       `Invalid island media query for ${entry.tagName}: media is only valid with strategy "media"`,
     );
   }
@@ -139,7 +151,10 @@ export function validateClientIslandEntry(
       deliveryEntry.exportName.trim() === '' ||
       hasControlCharacter(deliveryEntry.exportName))
   ) {
-    throw new Error(`Invalid island export name for ${entry.tagName}`);
+    throw buildError(
+      IslandEntryErrorCode.EXPORT_NAME,
+      `Invalid island export name for ${entry.tagName}`,
+    );
   }
   const exportNames = validateIslandDeliveryExportNames(
     deliveryEntry.exportNames,

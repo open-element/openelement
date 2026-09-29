@@ -311,7 +311,7 @@ export class OpenElement extends OpenElementConfiguration {
           if (seed.type !== property.type) {
             throw new OpenElementError(
               `[openElement] streamed property "${property.name}" has a mismatched type.`,
-              { code: FacadeErrorCode.PROGRAM_MISSING, phase: 'csr' },
+              { code: FacadeErrorCode.STREAM_TYPE_MISMATCH, phase: 'csr' },
             );
           }
           if (seed.state === 'resolved') state.signals[property.name].value = seed.value;

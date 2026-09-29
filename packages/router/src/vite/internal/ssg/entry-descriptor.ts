@@ -40,6 +40,7 @@ import {
 } from './delivery.ts';
 import { compilerBehaviorDeclarations } from './client-admission.ts';
 import { selectRendererAdapter } from './renderer-adapter.ts';
+import { buildError, DescriptorErrorCode } from '../../../internal/error-codes.ts';
 
 function normalizeAppShellImport(importPath: string): string {
   if (importPath.startsWith('./')) return `/${importPath.slice(2)}`;
@@ -172,7 +173,8 @@ export function buildEntryDescriptor(
     let corsOrigin: CorsOriginConfig | undefined;
     if (mw?.corsOrigin !== undefined) {
       if (typeof mw.corsOrigin === 'function') {
-        throw new Error(
+        throw buildError(
+          DescriptorErrorCode.CORS,
           '[openElement] middleware.corsOrigin no longer accepts a function ' +
             '(Alpha.1 breaking change: function config is never serialized into the generated entry). ' +
             'Move the origin callback into a module that default-exports ' +
@@ -180,7 +182,8 @@ export function buildEntryDescriptor(
         );
       }
       if (typeof mw.corsOrigin !== 'string' && !Array.isArray(mw.corsOrigin)) {
-        throw new Error(
+        throw buildError(
+          DescriptorErrorCode.CORS,
           `[openElement] middleware.corsOrigin must be a string or an array of strings; got ${typeof mw
             .corsOrigin}.`,
         );
@@ -190,14 +193,16 @@ export function buildEntryDescriptor(
     let corsOriginModule: string | undefined;
     if (mw?.corsOriginModule !== undefined) {
       if (typeof mw.corsOriginModule !== 'string') {
-        throw new Error(
+        throw buildError(
+          DescriptorErrorCode.CORS,
           '[openElement] middleware.corsOriginModule must be a module path (string) to a module ' +
             `that default-exports (origin: string) => string | undefined; got ${typeof mw
               .corsOriginModule}.`,
         );
       }
       if (corsOrigin !== undefined) {
-        throw new Error(
+        throw buildError(
+          DescriptorErrorCode.CORS,
           '[openElement] middleware.corsOrigin and middleware.corsOriginModule are mutually ' +
             'exclusive: pass static origin data via corsOrigin OR a callback module via ' +
             'corsOriginModule, not both.',
@@ -236,7 +241,8 @@ export function buildEntryDescriptor(
   // source serialization, no self-containment constraint.
   const fetchMiddleware = (mw?.use ?? []).map((entry, index) => {
     if (typeof entry !== 'string') {
-      throw new Error(
+      throw buildError(
+        DescriptorErrorCode.MIDDLEWARE_USE,
         `[openElement] middleware.use[${index}] must be a module path (string) to a module that ` +
           `default-exports a Middleware (request: Request, next: () => Promise<Response>) => ` +
           `Promise<Response>; got ${typeof entry}. ` +
@@ -316,7 +322,8 @@ export function buildEntryDescriptor(
           route.path.startsWith(entry.scope + '/')
         ))
     ) {
-      throw new Error(
+      throw buildError(
+        DescriptorErrorCode.STREAM_RENDERER,
         `[openElement] stream route ${route.path}, field ${
           route.streamManifest.fields[0].field
         }: opaque renderer wrapper is not admitted. Keep the field front-gate or disable streaming.`,
@@ -429,7 +436,8 @@ export function buildEntryDescriptor(
   ) {
     const streamRoutes = pageRoutes.filter((route) => route.streamManifest)
       .map((route) => `${route.path} (${route.filePath})`).join(', ');
-    throw new Error(
+    throw buildError(
+      DescriptorErrorCode.STREAM_APP_SHELL,
       '[openElement] streaming requires the compiled app shell/layout wrapper to be off for the ' +
         'whole project: a streamed document is flushed in parts and cannot be wrapped by a shell. ' +
         'Set openElement({ appShell: false }) and remove every layouts entry, or leave streaming ' +
@@ -445,7 +453,8 @@ export function buildEntryDescriptor(
     // shell composition renders through the compiled serializer, which the
     // lit path deliberately never imports. Fail the build loudly instead of
     // silently emitting a shell-less page.
-    throw new Error(
+    throw buildError(
+      DescriptorErrorCode.LIT_APP_SHELL,
       `[openElement] renderer: 'lit' does not support a compiled appShell/layouts yet. ` +
         `Set openElement({ renderer: 'lit', appShell: false }) and drop the layouts config.`,
     );

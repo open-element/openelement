@@ -26,6 +26,7 @@ import { createLogger } from '@openelement/element';
 import { expandDynamicRoutes, expandI18nLocales } from './ssg-dynamic.ts';
 import { findHtmlFiles, renderRequestTimeServerModule } from './ssg-helpers.ts';
 import { formatJson, normalizeSeparators } from '@openelement/element/build-utils';
+import { buildError, SsgRenderErrorCode } from '../../../internal/error-codes.ts';
 import { DEFAULT_OUT_DIR } from './../paths.ts';
 
 const log = createLogger('ssg-render');
@@ -54,7 +55,8 @@ export async function ssgRender(
   // ── Dynamic route expansion via bundle.getStaticPaths() ──────
   const routeInfo: RouteInfoEntry[] = module.routeInfo ?? [];
   if (!module.routeInfo || !Array.isArray(module.routeInfo)) {
-    throw new Error(
+    throw buildError(
+      SsgRenderErrorCode.ROUTE_INFO_MISSING,
       'SSR bundle does not export routeInfo; SSG cannot generate routes.',
     );
   }
@@ -66,7 +68,8 @@ export async function ssgRender(
     | undefined;
 
   if (routeInfo.length === 0) {
-    throw new Error(
+    throw buildError(
+      SsgRenderErrorCode.ROUTE_INFO_EMPTY,
       '[openElement] SSG failed: routeInfo is empty. No routes were exported by the SSR bundle.',
     );
   }
@@ -122,7 +125,8 @@ export async function ssgRender(
   const outputDir = join(root, outDir);
   const app = module.default as SsgHonoApp | undefined;
   if (!app) {
-    throw new Error(
+    throw buildError(
+      SsgRenderErrorCode.APP_MISSING,
       'SSR bundle loaded but no Hono app found (no default export)',
     );
   }
@@ -260,7 +264,8 @@ export async function ssgRender(
     log.error(
       `Static route non-200 results: ${pageNon200.length} page(s) dropped (not written): ${detail}`,
     );
-    throw new Error(
+    throw buildError(
+      SsgRenderErrorCode.STATIC_NON_200,
       `SSG failed: ${pageNon200.length} static route(s) returned non-200 ` +
         `(pages not written): ${detail}`,
     );
