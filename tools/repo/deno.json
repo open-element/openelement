@@ -3,7 +3,6 @@
     "assets:check-provenance": "deno run --allow-run ./run-in.ts --root ../.. -- deno run --allow-read tools/repo/check-assets-provenance.ts",
     "generate:all": "deno run --allow-run ./run-in.ts --root ../.. -- deno run --allow-read --allow-write --allow-run --allow-env --allow-net tools/repo/generate-all.ts",
     "generator-gates:check": "deno run --allow-run ./run-in.ts --root ../.. -- deno run --allow-read tools/repo/check-generator-gates.ts",
-    "census": "deno run --allow-run ./run-in.ts --root ../.. -- deno run --allow-read --allow-write --allow-run --allow-env tools/repo/tracked-census.ts",
     "deno-api:check": "deno run --allow-run ./run-in.ts --root ../.. -- deno run --allow-read --allow-env tools/repo/check-deno-api-free.ts",
     "deps:vite-check": "deno run --allow-run ./run-in.ts --root ../.. -- deno run --allow-read tools/repo/deps-vite-check.ts",
     "esm:boundary-check": "deno run --allow-run ./run-in.ts --root ../.. -- deno run --allow-read --allow-run --allow-env tools/repo/check-esm-boundary.ts",
@@ -22,8 +21,6 @@
     "gate:ts7:shadow": "deno run --allow-run ./run-in.ts --root ../.. -- deno run --allow-read --allow-write --allow-run --allow-env --allow-net tools/repo/ts7-shadow-gate.ts",
     "validation:boundary-check": "deno run --allow-run ./run-in.ts --root ../.. -- deno run --allow-read --allow-env tools/repo/check-validation-boundary.ts",
     "workers:boundary-check": "deno run --allow-run ./run-in.ts --root ../.. -- deno run --allow-read --allow-env tools/repo/check-workers-boundary.ts apps/saas/.output-workers",
-    "perf:baseline": "deno run --allow-run ./run-in.ts --root ../.. -- deno run --allow-read --allow-run --allow-env benchmarks/micro/micro.ts",
-    "perf:record": "deno run --allow-run ./run-in.ts --root ../.. -- deno run --allow-read --allow-write --allow-run --allow-env tools/repo/perf-record.ts",
     "lint:markdown": "deno run --allow-run ./run-in.ts --root ../.. -- deno run --allow-read --allow-write --allow-env --allow-net --allow-sys npm:markdownlint-cli2@0.23.2 \"**/*.md\"",
     "url-pattern-list:provenance": "deno run --allow-run ./run-in.ts --root ../.. -- npm ci --prefix tests/fixtures/url-pattern-list-audit --ignore-scripts --no-audit --no-fund && deno run --allow-run ./run-in.ts --root ../.. -- npm audit signatures --prefix tests/fixtures/url-pattern-list-audit --ignore-scripts",
     "hooks:install": "git -C ../.. config core.hooksPath .githooks && chmod +x ../../.githooks/pre-commit ../../.githooks/pre-push",
@@ -41,7 +38,6 @@
     "candidate:evidence:reuse:claim": "deno run --allow-run ./run-in.ts --root ../.. -- deno run --allow-read --allow-write --allow-run=git --allow-env --deny-ffi --no-prompt tools/repo/evidence-reuse.ts --claim",
     "release:registry-check": "deno run --allow-run ./run-in.ts --root ../.. -- deno run --allow-read --allow-run=git,npm tools/repo/check-release-state-machine.ts",
     "product:classification:check": "deno run --allow-run ./run-in.ts --root ../.. -- deno run --allow-read tools/repo/check-product-classification.ts",
-    "deno-floor:check": "deno run --allow-run ./run-in.ts --root ../.. -- deno run --allow-read tools/repo/check-deno-floor.ts",
-    "generate:export-files": "deno run --allow-run ./run-in.ts --root ../.. -- deno run --allow-read --allow-write --allow-run tools/repo/generate-openelement-export-files.ts"
+    "deno-floor:check": "deno run --allow-run ./run-in.ts --root ../.. -- deno run --allow-read tools/repo/check-deno-floor.ts"
   }
 }

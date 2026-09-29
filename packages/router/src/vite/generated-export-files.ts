@@ -1,5 +1,5 @@
 // GENERATED FILE — do not edit by hand.
-// Regenerate with the repository task: generate:export-files
+// Regenerate: deno run --allow-read --allow-write --allow-run tools/repo/generate-openelement-export-files.ts
 // Source of truth: the "exports" field of each workspace package manifest.
 export const OPENELEMENT_EXPORT_FILES: Record<string, Record<string, string>> = {
   'create': {
@@ -33,6 +33,7 @@ export const OPENELEMENT_EXPORT_FILES: Record<string, Record<string, string>> = 
   },
   'ui': {
     '.': 'src/index.ts',
+    'instance-state': 'src/instance-state.ts',
     'open-badge': 'src/open-badge.tsx',
     'open-button': 'src/open-button.tsx',
     'open-callout': 'src/open-callout.tsx',

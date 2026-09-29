@@ -1,14 +1,14 @@
 /**
  * check-task-contracts.test.ts — root gate-task contract tripwire.
  *
- * `verify` (local) and `gate:ci` (what the CI candidate run executes) are
- * two definitions of "the full gate" and must stay parallel truth: a green
- * local `verify` certifies exactly what CI runs only while its step set
- * covers `gate:ci`. `gate:ci` is pinned to the source gate plus the packed
- * gate; `verify` must run that same step set plus only the documented
- * local-only extras (fmt/lint via `check`, the unit-test suite via `test`,
- * and the SaaS lanes). Drift on either side fails here before the two
- * definitions silently diverge.
+ * `verify` (full, local) and `verify:core` (the CI-equivalent core) are two
+ * definitions of "the full gate" and must stay parallel truth: a green local
+ * `verify` certifies exactly what the CI candidate producers run only while
+ * its step set covers `verify:core`. `verify:core` is pinned to the source
+ * gate plus the packed gate; `verify` must run that same step set plus only
+ * the documented local-only extras (fmt/lint via `check`, the unit-test
+ * suite via `test`, and the SaaS lanes). Drift on either side fails here
+ * before the two definitions silently diverge.
  *
  * The two-tier gate model (CI trim) is pinned here too: `gate:source` is the
  * fast PR-layer subset, and every step trimmed out of it must be reachable
@@ -56,32 +56,32 @@ function repoSplitSteps(task: string): string[] {
   return command.slice(prefix.length).trim().split(/\s+/);
 }
 
-const gateCiSteps = gateSteps('gate:ci');
+const coreSteps = gateSteps('verify:core');
 
-Deno.test('task contract: gate:ci stays the source gate plus the packed gate', () => {
+Deno.test('task contract: verify:core stays the source gate plus the packed gate', () => {
   assertEquals(
-    gateCiSteps,
+    coreSteps,
     ['tools/repo#gate:source', 'tools/release#gate:packed'],
-    'gate:ci defines what CI certifies; changing its step set requires updating this contract',
+    'verify:core is the CI-equivalent core; changing its step set requires updating this contract',
   );
 });
 
-Deno.test('task contract: verify runs every gate:ci step', () => {
+Deno.test('task contract: verify runs every verify:core step', () => {
   const verifySteps = gateSteps('verify');
-  for (const step of gateCiSteps) {
+  for (const step of coreSteps) {
     assert(
       verifySteps.includes(step),
-      `verify must run the gate:ci step '${step}' — a green local verify must certify what CI runs`,
+      `verify must run the verify:core step '${step}' — a green local verify must certify the core gate`,
     );
   }
 });
 
 Deno.test('task contract: verify adds only the documented local-only steps', () => {
-  const extras = gateSteps('verify').filter((step) => !gateCiSteps.includes(step)).sort();
+  const extras = gateSteps('verify').filter((step) => !coreSteps.includes(step)).sort();
   assertEquals(
     extras,
     ['check', 'saas:verify', 'saas:workers', 'test'],
-    'verify may only add fmt/lint (check), the unit-test suite (test) and the SaaS lanes on top of gate:ci',
+    'verify may only add fmt/lint (check), the unit-test suite (test) and the SaaS lanes on top of verify:core',
   );
 });
 
@@ -109,7 +109,7 @@ Deno.test('task contract: packed qualification runs separately from the source g
     'the source producer must not duplicate the independent packed producer',
   );
   assert(
-    gateCiSteps.includes('tools/release#gate:packed'),
+    coreSteps.includes('tools/release#gate:packed'),
     'the local CI equivalent must retain packed qualification',
   );
 });

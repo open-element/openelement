@@ -2,7 +2,7 @@
  * TypeScript 7 shadow gate (1.0 Alpha convergence — "TypeScript 7: split
  * decision"). An INDEPENDENT SHADOW GATE, not a required gate: it is wired
  * into CI as a non-blocking job and is deliberately absent from
- * gate:ci/release:check. It graduates to required only after a complete
+ * verify:core/release:check. It graduates to required only after a complete
  * matching matrix against the current checker.
  *
  * The layered TypeScript strategy this gate enforces/observes:

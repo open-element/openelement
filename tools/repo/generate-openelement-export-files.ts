@@ -83,7 +83,9 @@ function render(map: Record<string, PackageExports>): string {
   const packages = Object.keys(map).sort();
   const lines: string[] = [];
   lines.push('// GENERATED FILE — do not edit by hand.');
-  lines.push('// Regenerate with the repository task: generate:export-files');
+  lines.push(
+    '// Regenerate: deno run --allow-read --allow-write --allow-run tools/repo/generate-openelement-export-files.ts',
+  );
   lines.push('// Source of truth: the "exports" field of each workspace package manifest.');
   lines.push(
     'export const OPENELEMENT_EXPORT_FILES: Record<string, Record<string, string>> = {',

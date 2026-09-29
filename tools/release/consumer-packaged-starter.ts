@@ -30,7 +30,7 @@
  *   preview  fails closed with start guidance (the starter is dynamic, #601)
  *
  * Every leg asserts over-the-wire output, not just a green exit. Gated in CI
- * via the `consumer:packaged` root task (gate:ci task chain).
+ * via the `consumer:packaged` root task (verify:core task chain).
  */
 
 import { existsSync } from '@std/fs';
