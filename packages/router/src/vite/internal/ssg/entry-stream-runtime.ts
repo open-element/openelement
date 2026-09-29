@@ -4,9 +4,10 @@ import {
   STREAM_FRAME_UNSAFE_URL,
   STREAM_FRAME_URL_ATTRIBUTES,
   STREAM_FRAME_URL_CONTROL_MAX,
+  STREAM_TIMEOUT_MS,
 } from '@openelement/element';
 
-export function renderStreamRuntime(timeoutMs = 30_000): string {
+export function renderStreamRuntime(timeoutMs = STREAM_TIMEOUT_MS): string {
   return `
 function __streamBrowserBootstrap() {
   return ${JSON.stringify(renderStreamBrowserBootstrap())};
