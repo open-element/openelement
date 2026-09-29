@@ -40,6 +40,8 @@ export interface OpenElementExtensions {
   dsd?: boolean;
   layer?: ComponentLayer;
   hydrate?: HydrationStrategy;
+  /** Stability marker from the owning package's manifest policy. */
+  status?: 'stable' | 'experimental';
   module?: string;
   export?: string;
 }

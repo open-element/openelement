@@ -72,6 +72,8 @@ export interface ApiElementItem {
   layer: string;
   hydrate: string;
   module: string;
+  /** Locale label shown only for manifest status 'experimental'; else empty. */
+  status: string;
   attributes: string;
   events: string;
   slots: string;
@@ -333,6 +335,7 @@ export default class ReferencePage extends OpenElement {
                     <span class='ce-class'>{element.className}</span>
                     <span class='chip'>{element.layer}</span>
                     <span class='chip'>{element.hydrate}</span>
+                    {element.status && <span class='chip chip-stability'>{element.status}</span>}
                   </div>
                   <p class='ce-description'>{element.description}</p>
                   <span class='ce-module'>{element.module}</span>

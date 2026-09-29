@@ -6,6 +6,9 @@
  * Colors use semantic tokens and respond to theme changes; the light-theme
  * warn/danger/tip backgrounds use tuned rgba tints on top of them.
  *
+ * Experimental (owner ruling C1, #1468): no compatibility promise — may
+ * change or be removed before 1.0.
+ *
  * Compiled authoring. The `type` attribute drives styling
  * (:host([type=...])); the label header is a compiled text sink hidden via a
  * computed flag when no label is set.

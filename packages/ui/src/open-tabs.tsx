@@ -6,6 +6,9 @@
  * wiring instead of copying textContent into the shadow root, so child markup
  * structure and event listeners are preserved.
  *
+ * Experimental (owner ruling C1, #1468): no compatibility promise — may
+ * change or be removed before 1.0.
+ *
  * Compiled authoring. The render is fully static (slot
  * projection); the decoration runs imperatively from an effect over the
  * compiled `active` signal, so selecting a tab re-decorates without any
