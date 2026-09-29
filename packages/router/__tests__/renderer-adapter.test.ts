@@ -12,14 +12,17 @@ const routes: RouteEntry[] = [{
   varName: 'pageIndex',
 }];
 
+// Pins verified byte-exact: re-inserting the removed 'v0.44 - ' banner segment
+// reproduces the pre-b22a3c7c3 hashes, proving the only generated-output delta
+// is that commit's intentional banner de-versioning (server bytes unchanged).
 const expected = {
   native: {
     server: [27507, 'd3ad339420441a76ce8cf8087402279695d5339cf7130d43106fe36203a1c964'],
-    client: [1991, 'bda4e992427410669071e45d27855f5706a5680de03005eec077bcd2c84f7f88'],
+    client: [1983, 'e3ea822d06ec4f70fbf67a073f9a10e3eac4e41efb897b0bb2fbd561b3da91a6'],
   },
   lit: {
     server: [25562, '412be26cbf34f809e01460afaa25b74e4c4d1fa13c467fe97a61ef5c49da9820'],
-    client: [3146, '928957c8e210ed8127a8db6538becce56b77a38623ca4c790b2933a00de8d858'],
+    client: [3138, 'ec06ba0190166c71ccd692e29b35e2990f7ef555804308d420e51478d8feecd1'],
   },
 } as const;
 
