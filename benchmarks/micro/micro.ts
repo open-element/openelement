@@ -18,6 +18,14 @@
  *
  * Timings are recorded as evidence only; CI asserts deterministic DOM-op
  * counts, never durations (see micro.test.ts).
+ *
+ * Internal benchmark by design: this suite imports
+ * packages/element/src/internal/** (compiled runtime, server serializer,
+ * signal engine) to measure the canonical compiled path, which the public
+ * surface deliberately does not export. It must stay benchmark-local —
+ * shipped packages and product code never import from here. `deno task bench`
+ * exercises it through the deterministic self-checks in micro.test.ts;
+ * standalone evidence runs use the import.meta.main entry below.
  */
 import { compileElementProgram } from '../../packages/element/src/internal/compiler/semantic-core/compile.ts';
 import {
