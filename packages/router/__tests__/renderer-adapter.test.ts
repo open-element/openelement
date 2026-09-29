@@ -19,16 +19,19 @@ const routes: RouteEntry[] = [{
 // client-script plumbing, the registry guard, the stream assertions, and the
 // page-render wiring are the imported factory; the serialized
 // __DANGEROUS_KEYS/body-limit copies were deleted (the factory imports the
-// canonical /authoring policy constants). Client bytes are untouched by the
-// migration — their hashes still match the pre-lane baseline.
+// canonical /authoring policy constants). Server bytes are unchanged by the
+// S4 tail work. Client bytes moved once from the pre-lane baseline
+// (1983/3138) for the S4 idle-fallback wiring: the __schedule deps carry the
+// IDLE_FALLBACK_TIMEOUT_MS policy constant serialized at build time
+// (ADR-0160 admitted output delta).
 const expected = {
   native: {
     server: [14141, '299c20285aa0817b925c23a7511b0c54dfb0e2da3095ef43fd353ea02405c7b1'],
-    client: [1983, 'e3ea822d06ec4f70fbf67a073f9a10e3eac4e41efb897b0bb2fbd561b3da91a6'],
+    client: [2012, 'd38366aedd3e45243f27e7191b5e10a0fbc7ab06b273c457b22a8c6cea33674d'],
   },
   lit: {
     server: [14254, '69d620f6de4d25279055d8a7ccbcc532054ba77887bacdc23c237b261e9cddc9'],
-    client: [3138, 'ec06ba0190166c71ccd692e29b35e2990f7ef555804308d420e51478d8feecd1'],
+    client: [3167, '7dcb18fd659ffe53b039adfc5139a2496e1b4c02b5d4322ed6c216606511f418'],
   },
 } as const;
 

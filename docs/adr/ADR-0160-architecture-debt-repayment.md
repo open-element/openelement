@@ -512,3 +512,29 @@ oracle evidence.
   `stream-handler.test.ts` green (15 tests, unchanged assertions — its deps
   harness already bound the implementations the emitted call sites
   reference).
+
+### S4 — the idle-hydration fallback timeout becomes the policy constant
+
+- Artifact: the generated client entry — every shape that embeds it (the
+  Vite-built client bundle in dev and prod, native and lit).
+- Expected difference: the `__schedule({...})` deps gain one line,
+  `idleFallbackTimeoutMs: 50` (the serialized build-time value of Element's
+  `IDLE_FALLBACK_TIMEOUT_MS` policy constant; the provenance lives in the
+  scheduler's deps JSDoc and a derivation pin, not in emitted comments), and
+  `island-scheduler.ts`'s bare `50` in the
+  `requestIdleCallback || requestAnimationFrame || setTimeout` fallback is
+  gone — the import-free scheduler reads the injected dep. Byte evidence at
+  the renderer-adapter.test.ts pin: native client 1983 → 2012 bytes, lit
+  client 3138 → 3167 bytes; server entries unchanged (14141 / 14254); the
+  #868 wiring budget (2048 B) still holds.
+- Reason: S1c named the constant but left one emission site reading a bare
+  literal; the scheduler's import-free constraint (it bundles into any
+  consumer build unchanged, #868) rules out a direct import, so the value
+  rides the same build-time-serialization seam as the #1470-block-c
+  `__maxActionBodyBytes` derivation — the canonical constant in
+  `internal/protocol/policy.ts` stays the single source.
+- Oracle evidence: `island-scheduler.test.ts` pins the fallback behavior
+  (the injected timeout reaches `setTimeout` when neither idle API exists)
+  and the generated entry emission is byte-pinned by
+  `renderer-adapter.test.ts`; no protocol semantics change (the number is
+  identical; only its carriage changes).

@@ -1,5 +1,5 @@
 /** Client island entry emission; browser runtime wiring only. */
-import { ACTION_FETCH_HEADER } from '@openelement/element';
+import { ACTION_FETCH_HEADER, IDLE_FALLBACK_TIMEOUT_MS } from '@openelement/element';
 import { stableModuleId } from '@openelement/element/compiler';
 import { findWorkspaceRoot } from '../../workspace-alias.ts';
 import { quoteGeneratedJavaScriptValue } from './codegen-literals.ts';
@@ -365,6 +365,7 @@ var __scheduler = __schedule({
   win: window,
   doc: document,
   map: __map,
+  idleFallbackTimeoutMs: ${IDLE_FALLBACK_TIMEOUT_MS},
   strategies: {
     load: [${loadTags}],
     idle: [${idleTags}],
