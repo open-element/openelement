@@ -32,6 +32,7 @@
  */
 
 import { ACTION_FETCH_HEADER, PROBLEM_JSON_MEDIA_TYPE } from '@openelement/element/authoring';
+import type { MiddlewareHandler } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import { classifyActionResult } from '../../../authoring.ts';
 import type { ActionOutcome } from '../../../authoring.ts';
@@ -256,7 +257,7 @@ export async function runActionProtocol(
  * The no-store/Vary negotiation headers ride every 413 like every other
  * action response. Larger uploads belong on API routes with explicit limits.
  */
-export function createActionBodyLimit(maxSize: number) {
+export function createActionBodyLimit(maxSize: number): MiddlewareHandler {
   return bodyLimit({
     maxSize,
     onError: (c) => {
