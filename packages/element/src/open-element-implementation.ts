@@ -1,8 +1,8 @@
 /**
- * @openelement/element - OpenElement base class (v0.44 compiled facade).
+ * @openelement/element - OpenElement base class (compiled facade).
  *
  * The public OpenElement base class is a thin facade over the compiled Part
- * Program kernel (internal/compiled/runtime/kernel.ts). A 0.44 component is
+ * Program kernel (internal/compiled/runtime/kernel.ts). A component is
  * authored in TSX and passed through the OpenElement compiler (the
  * @openelement/element/compiler `open:compiled-element` transform), which emits a
  * decorator-free class carrying the compiled statics this facade consumes:
@@ -38,7 +38,7 @@
  * @module @openelement/element/open-element
  */
 
-import { FacadeErrorCode, OpenElementError } from './internal/core/errors.ts';
+import { FacadeErrorCode, OpenElementError, raiseFrameworkError } from './internal/core/errors.ts';
 import {
   applyPendingOwnValues,
   bindProgramHandlers,
@@ -51,14 +51,11 @@ import {
   reconcileOwnProperties,
   syncAttributesToSignals,
 } from './internal/compiled/facade-host.ts';
+import { markPreUpgradeIslandSettled } from './internal/compiled/runtime.ts';
 import {
-  acceptPendingIslandEvent,
-  capturePreUpgradeEvents,
-  markPreUpgradeIslandSettled,
-  type PreUpgradeEventCapture,
-  releasePreUpgradeEvents,
-  replayPreUpgradeEvents,
-} from './internal/compiled/runtime.ts';
+  releasePreUpgradeCapturesFor,
+  replayPreUpgradeCaptures,
+} from './internal/compiled/runtime/pre-upgrade-events.ts';
 import { CompiledErrorBoundary } from './internal/compiled/runtime/error-boundary.ts';
 import {
   CompiledElementKernel,
@@ -72,107 +69,25 @@ import { OpenElementConfiguration } from './open-element-configuration.ts';
 /** Per-instance facade state, keyed off the element (constructor closures). */
 const facadeStates = new WeakMap<OpenElement, FacadePropertyState>();
 
-// ─── Pre-upgrade event capture (claim replay seam) ──────────────────
-
-const preUpgradeCaptures = new Map<
-  EventTarget,
-  { capture: PreUpgradeEventCapture; declared: Set<string> }
->();
-
-/**
- * Install the bounded pre-upgrade interaction capture on an owning root
- * (default: the document). Generated client entries call this with their
- * declared island tags before any compiled element upgrades; after a
- * successful claim the element replays the captured events whose targets
- * live inside its root (compiled claim capture/replay,
- * internal/compiled/runtime.ts). Idempotent per root (repeat calls merge
- * tags, never reinstall listeners) and a no-op where no DOM exists (SSR).
- *
- * Invariant: the capture itself — one fixed listener set per owning root,
- * installed once per page — is page-lifetime by design and is NOT the leak.
- * The M1 leak was retained event-target records; each element releases exactly
- * its own records at its activation decision (success or failure), while
- * records owned by still-pending elements survive for their delayed/lazy
- * upgrade (#1170).
- *
- * Boundedness: the facade capture passes the declared-island filter, so only
- * interactions under a still-pending DECLARED island tag enter the queue —
- * ordinary events and undeclared third-party custom elements are skipped
- * (nested pending declared islands still capture through their own unsettled
- * host). With no tags declared the legacy dash heuristic applies. The queue
- * additionally carries a hard capacity cap (fail closed) and every release
- * sweeps detached targets, so post-hydration traffic and removals never grow
- * retention.
- */
-export function ensurePreHydrationClickCapture(
-  root?: EventTarget,
-  pendingTags?: readonly string[],
-): void {
-  const target = root ??
-    (typeof document !== 'undefined' ? (document as unknown as EventTarget) : undefined);
-  if (!target || typeof target.addEventListener !== 'function') return;
-  const existing = preUpgradeCaptures.get(target);
-  if (existing) {
-    if (pendingTags) {
-      for (const tag of pendingTags) {
-        if (typeof tag === 'string' && tag) existing.declared.add(tag.toLowerCase());
-      }
-    }
-    return;
-  }
-  const declared = new Set<string>();
-  if (pendingTags) {
-    for (const tag of pendingTags) {
-      if (typeof tag === 'string' && tag) declared.add(tag.toLowerCase());
-    }
-  }
-  // The accept closure holds the LIVE declared set: later merges into the
-  // same Set are visible to the filter without reinstalling listeners.
-  const accept = (event: Event, eventTarget: EventTarget): boolean =>
-    acceptPendingIslandEvent(event, eventTarget, declared);
-  preUpgradeCaptures.set(
-    target,
-    { capture: capturePreUpgradeEvents(target, undefined, { accept }), declared },
-  );
-}
-
-/** Replay captured pre-upgrade events owned by a successfully claimed root. */
-function replayPreUpgradeCaptures(root: Node): void {
-  for (const { capture } of preUpgradeCaptures.values()) {
-    replayPreUpgradeEvents(root, capture.events);
-  }
-}
-
-/**
- * Per-element release at the activation decision — success or failure: drop
- * exactly this root's captured records (the strong event-target references)
- * from every shared capture. The shared listener set stays installed for
- * elements that have not yet activated; their records are left pending.
- */
-function releasePreUpgradeCapturesFor(root: Node): void {
-  for (const { capture } of preUpgradeCaptures.values()) {
-    releasePreUpgradeEvents(root, capture.events);
-  }
-}
-
 function failMissingProgram(ctor: object): never {
-  throw new OpenElementError(
+  raiseFrameworkError(
+    'csr',
+    FacadeErrorCode.PROGRAM_MISSING,
     `[openElement] <${classNameOf(ctor)}> has no compiled Part Program. ` +
-      'In 0.44 every OpenElement component must pass through the OpenElement ' +
+      'Every OpenElement component must pass through the OpenElement ' +
       'compiler (the @openelement/element/compiler open:compiled-element transform); ' +
       'the runtime JSX render path was removed.',
-    { code: FacadeErrorCode.PROGRAM_MISSING, phase: 'csr' },
   );
 }
 
 /**
  * Custom Element base class for the compiled Part Program architecture.
  *
- * Subclasses are produced by the 0.44 compiler; hand-written subclasses that
+ * Subclasses are produced by the compiler; hand-written subclasses that
  * never pass through the compiler fail closed at connect time.
  */
 export class OpenElement extends OpenElementConfiguration {
-  /** v0.42.0-alpha.15 (#904): route params box (open-element-params.ts). */
+  /** Route params box (#904, open-element-params.ts). */
   #params = new ElementParams();
 
   /**
@@ -311,7 +226,7 @@ export class OpenElement extends OpenElementConfiguration {
           if (seed.type !== property.type) {
             throw new OpenElementError(
               `[openElement] streamed property "${property.name}" has a mismatched type.`,
-              { code: FacadeErrorCode.PROGRAM_MISSING, phase: 'csr' },
+              { code: FacadeErrorCode.STREAM_TYPE_MISMATCH, phase: 'csr' },
             );
           }
           if (seed.state === 'resolved') state.signals[property.name].value = seed.value;
@@ -352,7 +267,7 @@ export class OpenElement extends OpenElementConfiguration {
   }
 
   /**
-   * v0.23.0: Hook called after a successful claim of server-rendered DOM.
+   * Hook called after a successful claim of server-rendered DOM.
    *
    * Subclasses override this instead of relying on fragile
    * `super.connectedCallback()` call order. At this point the program's DOM
@@ -363,7 +278,7 @@ export class OpenElement extends OpenElementConfiguration {
   protected onDsdHydrated(): void {}
 
   /**
-   * v0.23.0: Hook called after fresh client-side DOM creation completes.
+   * Hook called after fresh client-side DOM creation completes.
    *
    * Subclasses override this for post-render initialization that depends on
    * the program's DOM being populated.
@@ -373,7 +288,7 @@ export class OpenElement extends OpenElementConfiguration {
   protected onCsrRendered(): void {}
 
   /**
-   * v0.40.0: Client-side activation hook.
+   * Client-side activation hook.
    *
    * Called once after the element is connected and the compiled program has
    * been claimed or created. This is the right place for framework hydration

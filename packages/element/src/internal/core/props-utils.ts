@@ -6,8 +6,8 @@
  * Filters internal `__openElement` prefixed keys and uses Reflect.get
  * for safe access to inherited getters.
  *
- * v0.42.0-alpha.15 (#903): normalizePublicProps is the shared
- * prop-normalization core. DANGEROUS_KEYS filtering applies on every
+ * normalizePublicProps (#903) is the shared prop-normalization core.
+ * DANGEROUS_KEYS filtering applies on every
  * projection path (host prop collection / SSR serialization here, page
  * projection via injectPropsSafe and projectPageProps, and the Router tooling
  * generated server runtime — #1214) through the single isDangerousKey
@@ -55,8 +55,10 @@ export function collectPublicProps(host: object): Record<string, unknown> {
 /**
  * Shared prop-normalization core (#903): strip framework-internal
  * (`__openElement*`) and prototype-dangerous keys from a raw props map.
- * Both SSR (render-dsd.ts) and CSR (jsx-render-dom.ts) filter through this
- * so the two paths cannot diverge on which keys survive.
+ * Host prop collection / SSR serialization (collectPublicProps) filters
+ * through this, and the dangerous-key half is the shared isDangerousKey
+ * predicate in security.ts that injectPropsSafe and the Router page
+ * projectors also enforce, so the paths cannot diverge on which keys survive.
  */
 export function normalizePublicProps(
   props: Record<string, unknown>,

@@ -1,7 +1,7 @@
 /**
  * Deliberate root-facade implementation boundary. Not a package subpath.
  *
- * v0.44: this facade re-exports only modules that survived the compiled
+ * This facade re-exports only modules that survived the compiled
  * Part Program reentry. The legacy VNode renderer, runtime JSX factories,
  * hydration-scope runtime, island registration and client-runtime helpers
  * were removed; the server-render entry (`renderDsd`) and the pre-upgrade
@@ -19,7 +19,13 @@ import type {
   CompiledPropertyMetadata,
   PartProgram,
 } from './internal/protocol/part-program.ts';
-import { FacadeErrorCode, OpenElementError } from './internal/core/errors.ts';
+import { FacadeErrorCode, OpenElementError, raiseFrameworkError } from './internal/core/errors.ts';
+import {
+  MAX_COMPOSITION_DEPTH,
+  STREAM_MAX_FIELDS,
+  STREAM_MAX_OWNERS,
+  STREAM_MAX_SEED_PROPERTIES,
+} from './internal/protocol/policy.ts';
 import { signal } from './internal/signal/index.ts';
 import type { CompiledProgramHost } from './internal/compiled/server/index.ts';
 import type { RenderOutput } from './internal/protocol/render.ts';
@@ -65,13 +71,25 @@ export {
   STREAM_FRAME_URL_CONTROL_MAX,
   unsafeStreamFrameAttribute,
 } from './internal/protocol/stream-frame-policy.ts';
+// Numeric build/runtime policy budgets (internal/protocol/policy.ts): the
+// same single-source contract for the streaming admission numbers.
+export {
+  IDLE_FALLBACK_TIMEOUT_MS,
+  MAX_ACTION_BODY_BYTES,
+  MAX_COMPOSITION_DEPTH,
+  STREAM_MAX_FIELDS,
+  STREAM_MAX_OWNERS,
+  STREAM_MAX_PAYLOAD_LENGTH,
+  STREAM_MAX_SEED_PROPERTIES,
+  STREAM_TIMEOUT_MS,
+} from './internal/protocol/policy.ts';
 export type { IslandOptions } from './internal/protocol/island.ts';
 export { StyleSheet } from './internal/core/style-sheet.ts';
 export { createLogger } from './internal/core/logger.ts';
 export type { Logger } from './internal/core/logger.ts';
 export type { StyleSheetLike } from './internal/protocol/style-sheet.ts';
 export { deepGetElementById, ensureDeepFragmentNavigation } from './internal/core/deep-fragment.ts';
-export { ensurePreHydrationClickCapture } from './open-element-implementation.ts';
+export { ensurePreHydrationClickCapture } from './internal/compiled/runtime/pre-upgrade-events.ts';
 
 // ─── Server-render entry (compiled serializer) ─────────────────────
 
@@ -138,11 +156,12 @@ function classNameOf(ctor: object): string {
 }
 
 function failUncompiled(ctor: object, tag: string): never {
-  throw new OpenElementError(
+  raiseFrameworkError(
+    'ssr',
+    FacadeErrorCode.PROGRAM_MISSING,
     `[openElement] <${tag}> (${classNameOf(ctor)}) has no compiled Part Program. ` +
-      'renderDsd only serializes classes produced by the 0.44 compiler ' +
+      'renderDsd only serializes classes produced by the OpenElement compiler ' +
       '(@openelement/element/compiler open:compiled-element transform).',
-    { code: FacadeErrorCode.PROGRAM_MISSING, phase: 'ssr' },
   );
 }
 
@@ -240,7 +259,7 @@ function seedCompiledProperties(
         `[openElement] <${
           ctor.__partProgram!.tag
         }> computed property "${record.name}" has no generated factory. ` +
-          'Rebuild the component through the 0.44 compiler.',
+          'Rebuild the component through the OpenElement compiler.',
         { code: FacadeErrorCode.COMPUTED_FACTORY_MISSING, phase: 'ssr' },
       );
     }
@@ -377,18 +396,18 @@ export async function createDeferredDsdExecutor(
     );
   }
   // Same bounded budget the build manifest scan and the runtime/browser
-  // front gate enforce (fields <= 32, Part owners <= 64): the hand-written
-  // manifest path must fail loud here instead of emitting a shell whose seed
-  // or frames the browser contractually discards.
+  // front gate enforce (STREAM_MAX_FIELDS / STREAM_MAX_OWNERS): the
+  // hand-written manifest path must fail loud here instead of emitting a
+  // shell whose seed or frames the browser contractually discards.
   const manifestOwnerTotal = manifest.fields.reduce(
     (count, field) => count + field.owners.length,
     0,
   );
-  if (manifest.fields.length > 32 || manifestOwnerTotal > 64) {
+  if (manifest.fields.length > STREAM_MAX_FIELDS || manifestOwnerTotal > STREAM_MAX_OWNERS) {
     throw new OpenElementError(
       `[openElement] deferred manifest for <${program.tag}> exceeds the bounded ` +
-        `deferred budget: ${manifest.fields.length} fields (max 32), ` +
-        `${manifestOwnerTotal} Part owners (max 64). Defer fewer fields, reduce ` +
+        `deferred budget: ${manifest.fields.length} fields (max ${STREAM_MAX_FIELDS}), ` +
+        `${manifestOwnerTotal} Part owners (max ${STREAM_MAX_OWNERS}). Defer fewer fields, reduce ` +
         'the deferred sinks per field, or split the page.',
       { code: FacadeErrorCode.PROGRAM_MISSING, phase: 'ssr' },
     );
@@ -458,14 +477,15 @@ export async function createDeferredDsdExecutor(
       };
     }
   }
-  // The browser seed contract rejects any seed carrying more than 64 typed
-  // properties — and it rejects the WHOLE seed, so an oversized component
-  // would silently fail to hydrate instead of failing loud here.
-  if (Object.keys(seed).length > 64) {
+  // The browser seed contract rejects any seed carrying more than
+  // STREAM_MAX_SEED_PROPERTIES typed properties — and it rejects the WHOLE
+  // seed, so an oversized component would silently fail to hydrate instead
+  // of failing loud here.
+  if (Object.keys(seed).length > STREAM_MAX_SEED_PROPERTIES) {
     throw new OpenElementError(
       `[openElement] deferred stream seed for <${program.tag}> carries ${
         Object.keys(seed).length
-      } properties; the browser seed contract accepts at most 64. ` +
+      } properties; the browser seed contract accepts at most ${STREAM_MAX_SEED_PROPERTIES}. ` +
         'Trim the component property surface or the seed is silently rejected at hydration.',
       { code: FacadeErrorCode.PROGRAM_MISSING, phase: 'ssr' },
     );
@@ -543,14 +563,14 @@ export async function createDeferredDsdExecutor(
  * mode comes from `program.root.kind` (light content vs. DSD open/closed).
  *
  * Fails closed with `OE_PROGRAM_MISSING` for unregistered or uncompiled
- * classes — there is no runtime JSX fallback renderer in 0.44.
+ * classes — there is no runtime JSX fallback renderer.
  */
 function renderDsdAtDepth(
   input: string | CustomElementConstructor,
   options: InternalRenderDsdOptions = {},
   depth = 0,
 ): RenderOutput {
-  if (depth > 8) {
+  if (depth > MAX_COMPOSITION_DEPTH) {
     throw new OpenElementError(
       '[openElement] nested element expansion exceeded the depth bound; cyclic component composition is not renderable.',
       { code: FacadeErrorCode.COMPOSITION_DEPTH, phase: 'ssr' },
@@ -565,7 +585,7 @@ function renderDsdAtDepth(
       `[openElement] renderDsd(${
         typeof input === 'string' ? JSON.stringify(input) : 'class'
       }) found no compiled class: pass options.componentClass or register the tag. ` +
-        'The 0.44 serializer reads the compiled statics from the class and fails ' +
+        'The serializer reads the compiled statics from the class and fails ' +
         'closed for unregistered components.',
       { code: FacadeErrorCode.PROGRAM_MISSING, phase: 'ssr' },
     );

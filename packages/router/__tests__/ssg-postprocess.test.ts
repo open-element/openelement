@@ -2,21 +2,51 @@
  * @openelement/router - ssg-postprocess.ts tests (Deno)
  *
  * Tests the SSG post-processing functions using temp directories.
+ *
+ * The #1471/S4b contract: client scripts are NOT post-processed here — the
+ * document renderer embeds the final script tags at render time from the
+ * client asset manifest (ADR-0160 rule d). What remains in postprocess.ts
+ * is the meta/speculation injection; the island chunk↔tag trade now runs
+ * only through the manifest (build-postprocess.ts) and fails closed: an
+ * admitted island without a manifest record fails the build instead of
+ * shipping a partial page manifest, and only the metadata Phase 2 selected
+ * is validated or delivered.
  */
-import { assert, assertEquals, assertExists, assertFalse, assertStringIncludes } from '@std/assert';
 import {
-  buildIslandChunkMap,
+  assert,
+  assertEquals,
+  assertExists,
+  assertFalse,
+  assertRejects,
+  assertStringIncludes,
+  assertThrows,
+} from '@std/assert';
+import { OpenElementError } from '@openelement/element';
+import { ClientAssetErrorCode } from '../src/internal/error-codes.ts';
+import {
   buildSpeculationRulesJson,
-  injectClientScript,
   injectCspMeta,
   injectSpeculationRules,
   injectViewTransitionMeta,
 } from '../src/vite/internal/ssg/index.ts';
+import {
+  islandChunkMapFromAssetManifest,
+  postProcessClientIslandBuild,
+} from '../src/vite/internal/ssg/build-postprocess.ts';
+import { stableHash } from '../src/vite/internal/ssg/ssg-helpers.ts';
+import type { ClientAssetManifest } from '../src/vite/internal/protocol/client-assets.ts';
+import type { IslandDecl } from '../src/vite/internal/protocol/ssg.ts';
 
 import { join } from '@std/path';
 
 function makeTempDir(): string {
   return Deno.makeTempDirSync({ prefix: 'open-test-' });
+}
+
+/** The per-page island manifest file writeIslandManifests emits for a route. */
+async function pageManifestPath(outputDir: string, route: string): Promise<string> {
+  // sha256 hex of the route, matching island-manifest.ts's stableHash naming.
+  return join(outputDir, 'island-manifests', `page-${await stableHash(route)}.json`);
 }
 
 function cleanup(dir: string) {
@@ -25,331 +55,294 @@ function cleanup(dir: string) {
   } catch { /* ignore */ }
 }
 
-// ─── buildIslandChunkMap ──────────────────────────────────────
+// ─── islandChunkMapFromAssetManifest (identity-driven chunk resolution) ──
 
-Deno.test('buildIslandChunkMap returns empty map for non-existent dir', async () => {
-  const result = await buildIslandChunkMap('/nonexistent/path', 'dist', ['counter-island']);
-  assertEquals(Object.keys(result).length, 0);
-});
-
-Deno.test('buildIslandChunkMap returns empty map when no client dir', async () => {
-  const tmp = makeTempDir();
-  try {
-    const outDir = join(tmp, 'dist');
-    Deno.mkdirSync(outDir);
-    // No client/ subdir
-    const result = await buildIslandChunkMap(tmp, outDir, ['counter-island']);
-    assertEquals(Object.keys(result).length, 0);
-  } finally {
-    cleanup(tmp);
-  }
-});
-
-Deno.test('buildIslandChunkMap returns empty map when no manifest', async () => {
-  const tmp = makeTempDir();
-  try {
-    // Create islands/ dir with chunk files but no manifest
-    const islandsDir = join(tmp, 'dist', 'client', 'islands');
-    Deno.mkdirSync(islandsDir, { recursive: true });
-    Deno.writeTextFileSync(join(islandsDir, 'island-counter-island-abc123.js'), '// counter');
-
-    const result = await buildIslandChunkMap(tmp, 'dist', ['counter-island']);
-    // Without manifest, returns empty (no fallback scan)
-    assertEquals(Object.keys(result).length, 0);
-  } finally {
-    cleanup(tmp);
-  }
-});
-
-Deno.test('buildIslandChunkMap scans manifest.json for island chunks', async () => {
-  const tmp = makeTempDir();
-  try {
-    const viteDir = join(tmp, 'dist', 'client', '.vite');
-    Deno.mkdirSync(viteDir, { recursive: true });
-
-    const manifest = {
-      'src/islands/counter-island.ts': { file: 'islands/island-counter-island-abc123.js' },
-      'src/islands/open-theme-toggle.ts': { file: 'islands/island-open-theme-toggle-def456.js' },
-      '.openElement-client-entry.ts': { file: 'islands/client.js' },
-    };
-    Deno.writeTextFileSync(join(viteDir, 'manifest.json'), JSON.stringify(manifest));
-
-    const result = await buildIslandChunkMap(
-      tmp,
-      'dist',
-      ['counter-island', 'open-theme-toggle'],
-    );
-
-    assertExists(result['counter-island']);
-    assertExists(result['open-theme-toggle']);
-    assertStringIncludes(result['counter-island'], 'counter');
-    assertStringIncludes(result['open-theme-toggle'], 'theme');
-  } finally {
-    cleanup(tmp);
-  }
-});
-
-Deno.test('buildIslandChunkMap respects basePath option', async () => {
-  const tmp = makeTempDir();
-  try {
-    const viteDir = join(tmp, 'dist', 'client', '.vite');
-    Deno.mkdirSync(viteDir, { recursive: true });
-    const manifest = {
-      'src/islands/counter-island.ts': { file: 'islands/island-counter-island-abc.js' },
-    };
-    Deno.writeTextFileSync(join(viteDir, 'manifest.json'), JSON.stringify(manifest));
-
-    const result = await buildIslandChunkMap(tmp, 'dist', ['counter-island'], '/my-app/');
-    assert(result['counter-island'].startsWith('/my-app/'));
-  } finally {
-    cleanup(tmp);
-  }
-});
-
-Deno.test('buildIslandChunkMap handles malformed manifest.json', async () => {
-  const tmp = makeTempDir();
-  try {
-    const viteDir = join(tmp, 'dist', 'client', '.vite');
-    Deno.mkdirSync(viteDir, { recursive: true });
-    Deno.writeTextFileSync(join(viteDir, 'manifest.json'), '{invalid json');
-
-    const result = await buildIslandChunkMap(tmp, 'dist', ['counter-island']);
-    // Malformed manifest returns empty map
-    assertEquals(Object.keys(result).length, 0);
-  } finally {
-    cleanup(tmp);
-  }
-});
-
-Deno.test('buildIslandChunkMap skips manifest entries without file field', async () => {
-  const tmp = makeTempDir();
-  try {
-    const viteDir = join(tmp, 'dist', 'client', '.vite');
-    Deno.mkdirSync(viteDir, { recursive: true });
-    const manifest = {
-      'src/something.ts': { css: ['style.css'] },
-      'src/islands/counter.ts': { file: 'islands/island-counter-abc123.js' },
-    };
-    Deno.writeTextFileSync(join(viteDir, 'manifest.json'), JSON.stringify(manifest));
-
-    const result = await buildIslandChunkMap(tmp, 'dist', ['counter']);
-    assertExists(result['counter']);
-  } finally {
-    cleanup(tmp);
-  }
-});
-
-Deno.test(
-  'buildIslandChunkMap: manifest entry.file with islands/ prefix has no double prefix',
-  async () => {
-    const tmp = makeTempDir();
-    try {
-      const viteDir = join(tmp, 'dist', 'client', '.vite');
-      Deno.mkdirSync(viteDir, { recursive: true });
-
-      const manifest = {
-        'app/islands/my-counter.ts': { file: 'islands/island-my-counter-abc123.js' },
-      };
-      Deno.writeTextFileSync(join(viteDir, 'manifest.json'), JSON.stringify(manifest));
-
-      const result = await buildIslandChunkMap(tmp, 'dist', ['my-counter']);
-
-      assertExists(result['my-counter']);
-      assertFalse(
-        result['my-counter'].includes('islands/islands/'),
-        'Path must NOT have double islands/ prefix, got: ' + result['my-counter'],
-      );
-      assertStringIncludes(
-        result['my-counter'],
-        'client/islands/island-my-counter-abc123.js',
-        'Path should be client/islands/island-my-counter-abc123.js, got: ' + result['my-counter'],
-      );
-    } finally {
-      cleanup(tmp);
-    }
-  },
-);
-
-// Regression: Rolldown/Vite content hashes are base64url and may contain
-// `-`/`_` (real site/dist output: scroll-reveal-PciKqeu-.js,
-// open-tabs-CcG-LXBP.js, flexsearch.bundle.module.min-BKwbD_Kx.js).
-// The old filename regex ([A-Za-z0-9]+ hash, lazy tagName split) silently
-// dropped these chunks.
-
-Deno.test('buildIslandChunkMap matches base64url hashes with trailing dash via manifest name', async () => {
-  const tmp = makeTempDir();
-  try {
-    const viteDir = join(tmp, 'dist', 'client', '.vite');
-    Deno.mkdirSync(viteDir, { recursive: true });
-
-    // Mirrors the real site/dist/client/.vite/manifest.json shape.
-    const manifest = {
-      'app/islands/scroll-reveal.tsx': {
-        file: 'islands/scroll-reveal-PciKqeu-.js',
-        name: 'scroll-reveal',
+Deno.test('islandChunkMapFromAssetManifest maps delivery tags to manifest asset URLs', () => {
+  const manifest: ClientAssetManifest = {
+    entry: '/client/islands/client.js',
+    islands: {
+      'open-counter': { file: '/client/islands/island-counter-Ab12.js', strategy: 'idle' },
+      'open-theme-toggle': {
+        file: '/client/islands/island-open-theme-toggle-Cd34.js',
+        strategy: 'load',
+        preload: true,
       },
-      '../third-party component package/src/open-tabs.tsx': {
-        file: 'islands/open-tabs-CcG-LXBP.js',
-        name: 'open-tabs',
-      },
-      // Shared (non-island) chunks living in islands/ — must not be
-      // matched and must not trigger the unmatched-chunk warning.
-      '_src-CT3H-DGJ.js': { file: 'islands/src-CT3H-DGJ.js', name: 'src' },
-      'flexsearch/dist/flexsearch.bundle.module.min.js': {
-        file: 'islands/flexsearch.bundle.module.min-BKwbD_Kx.js',
-        name: 'flexsearch.bundle.module.min',
-      },
-    };
-    Deno.writeTextFileSync(join(viteDir, 'manifest.json'), JSON.stringify(manifest));
-
-    const origWarn = console.warn;
-    const warnings: string[] = [];
-    console.warn = (...args: unknown[]) => {
-      warnings.push(args.join(' '));
-    };
-    let result: Record<string, string>;
-    try {
-      result = await buildIslandChunkMap(tmp, 'dist', ['scroll-reveal', 'open-tabs']);
-    } finally {
-      console.warn = origWarn;
-    }
-
-    assertEquals(
-      result['scroll-reveal'],
-      '/client/islands/scroll-reveal-PciKqeu-.js',
-    );
-    assertEquals(
-      result['open-tabs'],
-      '/client/islands/open-tabs-CcG-LXBP.js',
-    );
-    assertFalse('src' in result, 'Shared chunk must not be mapped as an island');
-    assertEquals(
-      warnings.filter((w) => w.includes('Unmatched island chunk')).length,
-      0,
-      'Shared chunks must not trigger the unmatched-chunk warning, got: ' + warnings.join(' | '),
-    );
-  } finally {
-    cleanup(tmp);
-  }
+    },
+    shared: [],
+  };
+  const map = islandChunkMapFromAssetManifest(manifest, ['open-counter', 'open-theme-toggle']);
+  assertEquals(map, {
+    'open-counter': '/client/islands/island-counter-Ab12.js',
+    'open-theme-toggle': '/client/islands/island-open-theme-toggle-Cd34.js',
+  });
 });
 
-Deno.test('buildIslandChunkMap falls back to filename matching when manifest has no name field', async () => {
-  const tmp = makeTempDir();
-  try {
-    const viteDir = join(tmp, 'dist', 'client', '.vite');
-    Deno.mkdirSync(viteDir, { recursive: true });
-
-    const manifest = {
-      // manualChunks naming: island-<tag>-<hash>.js, hash contains `-`/`_`.
-      'app/islands/scroll-reveal.ts': { file: 'islands/island-scroll-reveal-PciKqeu-.js' },
-      'app/islands/open-tabs.ts': { file: 'islands/island-open-tabs-CcG-LXBP.js' },
-      'app/islands/flex-search.ts': { file: 'islands/island-flex-search-BKwbD_Kx.js' },
-    };
-    Deno.writeTextFileSync(join(viteDir, 'manifest.json'), JSON.stringify(manifest));
-
-    const result = await buildIslandChunkMap(
-      tmp,
-      'dist',
-      ['scroll-reveal', 'open-tabs', 'flex-search'],
-    );
-
-    assertEquals(result['scroll-reveal'], '/client/islands/island-scroll-reveal-PciKqeu-.js');
-    assertEquals(result['open-tabs'], '/client/islands/island-open-tabs-CcG-LXBP.js');
-    assertEquals(result['flex-search'], '/client/islands/island-flex-search-BKwbD_Kx.js');
-  } finally {
-    cleanup(tmp);
-  }
+Deno.test('islandChunkMapFromAssetManifest follows a chunk rename through the manifest, not the name', () => {
+  // The file name carries no identity: after a rename/rehash the tag keeps
+  // resolving through the manifest record (joined on module ids at build
+  // time). The retired filename-prefix matcher would have dropped this.
+  const renamed: ClientAssetManifest = {
+    entry: '/client/islands/client.js',
+    islands: {
+      'open-counter': { file: '/client/islands/shared-bundle-Zz99.js', strategy: 'idle' },
+    },
+    shared: [],
+  };
+  assertEquals(
+    islandChunkMapFromAssetManifest(renamed, ['open-counter'])['open-counter'],
+    '/client/islands/shared-bundle-Zz99.js',
+  );
 });
 
-Deno.test('buildIslandChunkMap warns on unmatched island chunks instead of dropping silently', async () => {
-  const tmp = makeTempDir();
-  try {
-    const viteDir = join(tmp, 'dist', 'client', '.vite');
-    Deno.mkdirSync(viteDir, { recursive: true });
-
-    const manifest = {
-      'app/islands/ghost-widget.ts': {
-        file: 'islands/island-ghost-widget-AbCdEf12.js',
-        name: 'island-ghost-widget',
-      },
-    };
-    Deno.writeTextFileSync(join(viteDir, 'manifest.json'), JSON.stringify(manifest));
-
-    const origWarn = console.warn;
-    const warnings: string[] = [];
-    console.warn = (...args: unknown[]) => {
-      warnings.push(args.join(' '));
-    };
-    let result: Record<string, string>;
-    try {
-      result = await buildIslandChunkMap(tmp, 'dist', ['counter-island']);
-    } finally {
-      console.warn = origWarn;
-    }
-
-    assertEquals(Object.keys(result).length, 0);
-    assertExists(
-      warnings.find((w) => w.includes('Unmatched island chunk') && w.includes('ghost-widget')),
-      'Should warn about the unmatched island chunk, got: ' + warnings.join(' | '),
-    );
-    assertExists(
-      warnings.find((w) => w.includes('No client chunk found') && w.includes('counter-island')),
-      'Should warn about the island left without a chunk, got: ' + warnings.join(' | '),
-    );
-  } finally {
-    cleanup(tmp);
-  }
+Deno.test('islandChunkMapFromAssetManifest fails closed on islands the manifest does not record', () => {
+  // The former warn-and-continue shipped a partial chunk map: a page would
+  // carry an island whose client script never loads. Now the join fails,
+  // naming the island — whatever else the manifest does record.
+  const error = assertThrows(
+    () =>
+      islandChunkMapFromAssetManifest(
+        {
+          entry: '/client/islands/client.js',
+          islands: { 'open-other': { file: '/client/islands/other.js', strategy: 'idle' } },
+          shared: [],
+        },
+        ['open-ghost'],
+      ),
+    OpenElementError,
+  );
+  assertEquals(error.code, ClientAssetErrorCode.ISLAND_UNMAPPED);
+  assertEquals(error.phase, 'build');
+  assert(
+    error.message.includes('open-ghost') && error.message.includes('client asset manifest'),
+    `error names the island and the manifest: ${error.message}`,
+  );
 });
 
-// ─── injectClientScript ──────────────────────────────────────
-
-Deno.test('injectClientScript adds script tag to HTML files', () => {
-  const tmp = makeTempDir();
-  try {
-    const htmlPath = join(tmp, 'index.html');
-    Deno.writeTextFileSync(htmlPath, '<html><head></head><body><p>Hello</p></body></html>');
-
-    injectClientScript(tmp, '/client/islands/client.js');
-
-    const content = Deno.readTextFileSync(htmlPath);
-    assertStringIncludes(content, '/client/islands/client.js');
-    assertStringIncludes(content, '<script type="module"');
-  } finally {
-    cleanup(tmp);
-  }
+Deno.test('islandChunkMapFromAssetManifest fails closed for every island when no manifest shipped', () => {
+  const error = assertThrows(
+    () => islandChunkMapFromAssetManifest(null, ['open-counter']),
+    OpenElementError,
+  );
+  assertEquals(error.code, ClientAssetErrorCode.ISLAND_UNMAPPED);
+  assert(
+    error.message.includes('open-counter') && error.message.includes('no client asset manifest'),
+    `error names the island and the missing manifest: ${error.message}`,
+  );
+  // An island-free build owes no records: the empty list maps without
+  // consulting the manifest at all.
+  assertEquals(islandChunkMapFromAssetManifest(null, []), {});
 });
 
-Deno.test('injectClientScript does not duplicate existing injection', () => {
+// ─── postProcessClientIslandBuild (manifest-driven, no HTML surgery) ────
+
+/** Minimal BuildContextView for the island-manifest pass. */
+function ctxView(manifest: ClientAssetManifest | null, root: string) {
+  return {
+    phase3: { root, outDir: 'dist', base: '/', upgradeStrategy: 'idle' as const },
+    phase1: {
+      islandTagNames: ['open-counter'],
+      islandFiles: ['counter.ts'],
+      packageIslandDecls: [],
+      compilerBehaviorDecls: [],
+      islandMeta: {},
+    },
+    clientAssetManifest: manifest,
+  };
+}
+
+Deno.test('postProcessClientIslandBuild writes per-page manifests with manifest-keyed chunks and leaves HTML untouched', async () => {
   const tmp = makeTempDir();
   try {
-    const scriptTag = '<script type="module" src="/client/islands/client.js"></script>';
-    const htmlPath = join(tmp, 'index.html');
+    const dist = join(tmp, 'dist');
+    Deno.mkdirSync(join(dist, 'guide'), { recursive: true });
     Deno.writeTextFileSync(
-      htmlPath,
-      `<html><head></head><body>${scriptTag}<p>Hello</p></body></html>`,
+      join(dist, 'index.html'),
+      '<html><head></head><body><open-counter></open-counter></body></html>',
+    );
+    Deno.writeTextFileSync(
+      join(dist, 'guide', 'page.html'),
+      '<html><head></head><body><p>no islands here</p></body></html>',
     );
 
-    injectClientScript(tmp, '/client/islands/client.js');
+    const manifest: ClientAssetManifest = {
+      entry: '/client/islands/client.js',
+      islands: {
+        'open-counter': { file: '/client/islands/island-counter-Ab12.js', strategy: 'idle' },
+      },
+      shared: [],
+    };
+    await postProcessClientIslandBuild(ctxView(manifest, tmp));
 
-    const content = Deno.readTextFileSync(htmlPath);
-    const count = (content.match(/client\.js/g) || []).length;
-    assertEquals(count <= 1, true);
+    // The island identity resolves through the manifest, chunk URL intact.
+    const homeManifest = JSON.parse(
+      Deno.readTextFileSync(await pageManifestPath(dist, '/')),
+    ) as { route: string; islands: Array<{ tagName: string; chunkUrl: string; strategy: string }> };
+    assertEquals(homeManifest.route, '/');
+    const counter = homeManifest.islands.find((entry) => entry.tagName === 'open-counter');
+    assertExists(counter);
+    assertEquals(counter.chunkUrl, '/client/islands/island-counter-Ab12.js');
+    assertEquals(counter.strategy, 'idle');
+
+    // A page without islands gets a manifest with an empty island list.
+    const guideManifest = JSON.parse(
+      Deno.readTextFileSync(await pageManifestPath(dist, '/guide/page')),
+    ) as { islands: unknown[] };
+    assertEquals(guideManifest.islands, []);
+
+    // No script surgery: the rendered HTML is left byte-identical — script
+    // tags were already embedded at document render time (#1471).
+    assertEquals(
+      Deno.readTextFileSync(join(dist, 'index.html')),
+      '<html><head></head><body><open-counter></open-counter></body></html>',
+    );
+    assert(
+      !Deno.readTextFileSync(join(dist, 'index.html')).includes('<script'),
+      'post-processing must not inject scripts into rendered HTML',
+    );
   } finally {
     cleanup(tmp);
   }
 });
 
-Deno.test('injectClientScript recurses into subdirectories', () => {
+function dirExists(path: string): boolean {
+  try {
+    return Deno.statSync(path).isDirectory;
+  } catch {
+    return false;
+  }
+}
+
+Deno.test('postProcessClientIslandBuild without a manifest fails closed and writes nothing', async () => {
   const tmp = makeTempDir();
   try {
-    Deno.mkdirSync(join(tmp, 'blog'));
-    Deno.writeTextFileSync(join(tmp, 'index.html'), '<html><body></body></html>');
-    Deno.writeTextFileSync(join(tmp, 'blog', 'post.html'), '<html><body></body></html>');
+    const dist = join(tmp, 'dist');
+    Deno.mkdirSync(dist, { recursive: true });
+    Deno.writeTextFileSync(
+      join(dist, 'index.html'),
+      '<html><body><open-counter></open-counter></body></html>',
+    );
 
-    injectClientScript(tmp, '/client.js');
+    const error = await assertRejects(
+      () => postProcessClientIslandBuild(ctxView(null, tmp)),
+      OpenElementError,
+    );
+    assertEquals(error.code, ClientAssetErrorCode.ISLAND_UNMAPPED);
+    assert(
+      error.message.includes('open-counter'),
+      `error names the unrecorded island: ${error.message}`,
+    );
+    // No partial manifest: the pass either writes the complete set or none
+    // of it — here nothing was written at all.
+    assertEquals(dirExists(join(dist, 'island-manifests')), false);
+    // The rendered HTML stays untouched either way.
+    assertEquals(
+      Deno.readTextFileSync(join(dist, 'index.html')),
+      '<html><body><open-counter></open-counter></body></html>',
+    );
+  } finally {
+    cleanup(tmp);
+  }
+});
 
-    assertStringIncludes(Deno.readTextFileSync(join(tmp, 'index.html')), '/client.js');
-    assertStringIncludes(Deno.readTextFileSync(join(tmp, 'blog', 'post.html')), '/client.js');
+Deno.test('postProcessClientIslandBuild fails before writing when the manifest misses one island', async () => {
+  // One island resolves, one does not: the failure must land BEFORE any
+  // page manifest is generated, so the output tree never carries a partial
+  // record that silently omits the unrecorded island.
+  const tmp = makeTempDir();
+  try {
+    const dist = join(tmp, 'dist');
+    Deno.mkdirSync(dist, { recursive: true });
+    Deno.writeTextFileSync(
+      join(dist, 'index.html'),
+      '<html><body><open-counter></open-counter></body></html>',
+    );
+    const partial: ClientAssetManifest = {
+      entry: '/client/islands/client.js',
+      // open-counter is recorded; the second admitted island is not.
+      islands: {
+        'open-counter': { file: '/client/islands/island-counter-Ab12.js', strategy: 'idle' },
+      },
+      shared: [],
+    };
+    const error = await assertRejects(
+      () =>
+        postProcessClientIslandBuild({
+          phase3: { root: tmp, outDir: 'dist', base: '/', upgradeStrategy: 'idle' as const },
+          phase1: {
+            islandTagNames: ['open-counter', 'open-theme'],
+            islandFiles: ['counter.ts', 'theme.ts'],
+            packageIslandDecls: [],
+            compilerBehaviorDecls: [],
+            islandMeta: {},
+          },
+          clientAssetManifest: partial,
+        }),
+      OpenElementError,
+    );
+    assertEquals(error.code, ClientAssetErrorCode.ISLAND_UNMAPPED);
+    assert(error.message.includes('open-theme'), `error names the island: ${error.message}`);
+    assertEquals(dirExists(join(dist, 'island-manifests')), false);
+  } finally {
+    cleanup(tmp);
+  }
+});
+
+Deno.test('postProcessClientIslandBuild validates only the local metadata Phase 2 selected', async () => {
+  // buildClient narrows ctx.phase1.islandTagNames to the reachable client
+  // set but leaves islandMeta carrying every scanned island. An unselected
+  // island's metadata — malformed or merely multi-tag — must be neither
+  // validated nor delivered: re-admitting it would fail the fail-closed
+  // chunk map for an island that ships nothing.
+  const tmp = makeTempDir();
+  try {
+    const dist = join(tmp, 'dist');
+    Deno.mkdirSync(dist, { recursive: true });
+    Deno.writeTextFileSync(
+      join(dist, 'index.html'),
+      '<html><body><open-counter></open-counter></body></html>',
+    );
+    const manifest: ClientAssetManifest = {
+      entry: '/client/islands/client.js',
+      islands: {
+        'open-counter': { file: '/client/islands/island-counter-Ab12.js', strategy: 'idle' },
+      },
+      shared: [],
+    };
+    await postProcessClientIslandBuild({
+      phase3: { root: tmp, outDir: 'dist', base: '/', upgradeStrategy: 'idle' as const },
+      phase1: {
+        // Selected: only open-counter.
+        islandTagNames: ['open-counter'],
+        islandFiles: ['counter.ts'],
+        packageIslandDecls: [],
+        compilerBehaviorDecls: [],
+        // The delivery fields (tags/tagNames) ride this record untyped —
+        // the pipeline reads them through the same DeliveryIslandMeta cast
+        // expandLocalIslandMeta applies.
+        islandMeta: {
+          // Unselected and malformed (empty tags list): never validated.
+          'open-broken': { tags: [] },
+          // Unselected multi-tag island: its delivered aliases never enter
+          // the chunk-map request.
+          'open-dormant': { tags: ['open-dormant', 'open-dormant-panel'] },
+        } as unknown as Record<string, Partial<IslandDecl>>,
+      },
+      clientAssetManifest: manifest,
+    });
+    const pageManifest = JSON.parse(
+      Deno.readTextFileSync(await pageManifestPath(dist, '/')),
+    ) as {
+      islands: Array<{ tagName: string; chunkUrl: string; strategy: string; layer: string }>;
+    };
+    assertEquals(
+      pageManifest.islands,
+      [{
+        tagName: 'open-counter',
+        chunkUrl: '/client/islands/island-counter-Ab12.js',
+        strategy: 'idle',
+        layer: 'dsd-interactive',
+      }],
+    );
   } finally {
     cleanup(tmp);
   }
@@ -421,21 +414,6 @@ Deno.test('injectCspMeta does not duplicate on repeated calls', () => {
   }
 });
 
-Deno.test('injectClientScript handles HTML without </body> tag', () => {
-  const tmp = makeTempDir();
-  try {
-    const htmlPath = join(tmp, 'no-body.html');
-    Deno.writeTextFileSync(htmlPath, '<html><head></head><p>No body close');
-
-    injectClientScript(tmp, '/client.js');
-
-    const content = Deno.readTextFileSync(htmlPath);
-    assertStringIncludes(content, '/client.js');
-  } finally {
-    cleanup(tmp);
-  }
-});
-
 Deno.test('injectCspMeta handles HTML without <head> tag', () => {
   const tmp = makeTempDir();
   try {
@@ -466,7 +444,7 @@ Deno.test('injectCspMeta handles HTML starting with <!DOCTYPE>', () => {
   }
 });
 
-Deno.test('injectCspMeta warns when nonce=true', () => {
+Deno.test('injectCspMeta warns when nonce=true (SSG rejects nonce — behavior unchanged)', () => {
   const tmp = makeTempDir();
   try {
     const htmlPath = join(tmp, 'nonce.html');
@@ -482,6 +460,11 @@ Deno.test('injectCspMeta warns when nonce=true', () => {
 
     console.warn = origWarn;
     assertStringIncludes(warnMsg, 'nonce', 'Should warn about nonce not supported');
+    // The rejection is real: no nonce attribute may reach the static output.
+    assertFalse(
+      Deno.readTextFileSync(htmlPath).includes('nonce='),
+      'SSG output must not carry a nonce attribute',
+    );
   } finally {
     cleanup(tmp);
   }
@@ -499,23 +482,6 @@ Deno.test('injectCspMeta skips non-HTML files', () => {
 
     const txtContent = Deno.readTextFileSync(txtPath);
     assertEquals(txtContent, 'Not HTML', 'Non-HTML files should not be modified');
-  } finally {
-    cleanup(tmp);
-  }
-});
-
-Deno.test('injectClientScript skips non-HTML files', () => {
-  const tmp = makeTempDir();
-  try {
-    const htmlPath = join(tmp, 'index.html');
-    const jsPath = join(tmp, 'app.js');
-    Deno.writeTextFileSync(htmlPath, '<html><body></body></html>');
-    Deno.writeTextFileSync(jsPath, 'console.log("hi")');
-
-    injectClientScript(tmp, '/client.js');
-
-    const jsContent = Deno.readTextFileSync(jsPath);
-    assertEquals(jsContent, 'console.log("hi")', 'JS files should not be modified');
   } finally {
     cleanup(tmp);
   }

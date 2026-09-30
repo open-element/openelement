@@ -12,13 +12,23 @@
  * by walking a VNode or a generic DOM tree.
  */
 
-import { frameworkError, ProgramErrorCode } from './errors.ts';
+import { ProgramErrorCode, raiseFrameworkError } from './errors.ts';
 import { forbiddenSinkReason } from './forbidden-sinks.ts';
 import { VOID_TAGS } from './void-tags.ts';
 
 export { VOID_TAGS };
 
 export const PART_PROGRAM_VERSION = 1 as const;
+
+/**
+ * Version of the compiled-module ABI: the statics a generated module carries
+ * (`__partProgram`, `__compiledProperties`, `__elementMetadata`,
+ * `__observedAttributes`, `__computedFields`) and the runtime facade binds.
+ * Bump when the generated-module contract changes shape; generated artifacts
+ * stamp both this and PART_PROGRAM_VERSION so consumers can tell format drift
+ * from release drift.
+ */
+export const COMPILED_MODULE_ABI_VERSION = 1 as const;
 
 export type RootMode = 'light' | 'shadow-open' | 'shadow-closed';
 
@@ -416,10 +426,10 @@ export const DATA_OE_LIGHT = 'data-oe-light';
  * one catchable error type with one stable code.
  */
 function fail(reason: string): never {
-  throw frameworkError(
+  raiseFrameworkError(
+    'validation',
     ProgramErrorCode.INVALID_PROGRAM,
     `[compiled-program] invalid Part Program v1: ${reason}`,
-    { phase: 'validation' },
   );
 }
 

@@ -8,7 +8,9 @@
  * - SSG build pipeline (Phase 1/2/3)
  * - Core subpath resolution
  *
- * Runtime code (renderDsd, defineIsland, escapeHtml, etc.) lives in @openelement/element.
+ * Runtime code (renderDsd, escapeHtml, etc.) lives in @openelement/element;
+ * the island authoring helper (defineIslandConfig) is exported from the
+ * @openelement/router root entry.
  * This package only contains Vite-specific build orchestration.
  *
  * For the unified openElement() entry, use @openelement/router/vite.
@@ -16,7 +18,8 @@
  * v0.22 (SOP-004): Decomposed into focused modules:
  *   head-injection.ts      - HTML fragment validation & serialization
  *   plugin.ts              - Internal plugin factory (used by openPipeline)
- *   generated-data-resolver.ts - Generated app data namespace resolver
+ *   deno-import-map.ts     - Import-map resolution for app/site aliases
+ *                            (e.g. @openelement/generated/*)
  *
  * This file is now a re-export hub with the openPipeline()/buildApp() entry
  * points (~100 lines).

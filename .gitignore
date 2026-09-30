@@ -133,6 +133,8 @@ hub-submission.json
 /.zcode/
 /skills/
 /skills-lock.json
+# ZCode's local ignore file (a .gitignore sync target, user-local tool state)
+.zcodeignore
 
 # Root-local media/agent scratch artifacts (never release inputs)
 /.tmp/

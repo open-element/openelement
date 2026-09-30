@@ -6,7 +6,7 @@ import { ERROR_PREFIX } from '@openelement/element/authoring';
  * import from @openelement/router without pulling Vite tooling into the runtime
  * graph.
  *
- * v0.44 (decision 0143): a route module's default export is the COMPILED page
+ * Decision 0143: a route module's default export is the COMPILED page
  * element class itself — `@element('page-home') export default class
  * HomePage extends OpenElement { ... }` produced by the
  * `open:compiled-element` transform. `definePage(Class, descriptor?)`
@@ -19,6 +19,7 @@ import { ERROR_PREFIX } from '@openelement/element/authoring';
 import { isDangerousKey, isValidTagName, OpenElementError } from '@openelement/element/authoring';
 import { HYDRATION_STRATEGIES } from '@openelement/element/authoring';
 import type { HydrationStrategy } from '@openelement/element/authoring';
+import { hasControlCharacter } from './internal/control-characters.ts';
 import { authoringError, IslandErrorCode, PageErrorCode } from './internal/error-codes.ts';
 
 /**
@@ -150,7 +151,7 @@ export function isOpenElementNotFound(error: unknown): error is OpenElementNotFo
 }
 
 /**
- * Expected-failure channel for actions (0.42.0-alpha.2, decision 0120): validation
+ * Expected-failure channel for actions (decision 0120): validation
  * failures RETURN `fail(status, data)` — never throw — so the server can
  * answer 422 with the form re-rendered and the submitted values echoed back.
  * Thrown values keep the exception channel (redirect/notFound/error page).
@@ -242,9 +243,9 @@ export type JsonValue =
 export type StructuredDataEntry = { readonly [key: string]: JsonValue };
 
 /**
- * Page <head> meaning declared by a route descriptor (v0.44, decision 0143;
- * canonical/alternates added in Beta.2.2, #1326; structured data added in
- * Beta.2.3). Either a static object or — via PageHeadResolver — resolved per
+ * Page <head> meaning declared by a route descriptor (decision 0143;
+ * canonical/alternates in #1326; structured data via the typed JSON-LD
+ * channel). Either a static object or — via PageHeadResolver — resolved per
  * render from the request-scoped context by resolvePageDocument
  * (@openelement/router/document) before either serializer runs.
  */
@@ -282,7 +283,7 @@ export interface PageHead {
  * compiled page can render must pass through here: the compiled render() only
  * reads `this.<property>`, so the projector is the single deterministic seam
  * that maps loader data, action data, params and request onto the page's
- * compiled properties (v0.44, decision 0143).
+ * compiled properties (decision 0143).
  */
 export interface PagePropsContext<
   Data = unknown,
@@ -382,7 +383,7 @@ const PAGE_DESCRIPTOR_FIELDS = new Set([
 /**
  * Attach a page descriptor to a compiled page element class.
  *
- * Canonical 0.44 page authoring: the route module default-exports the
+ * Canonical page authoring: the route module default-exports the
  * compiled class (produced by the open:compiled-element transform) wrapped in
  * definePage(). The descriptor holds head/route/renderIntent metadata plus
  * the optional props/error projectors; it must NOT create classes or hold a
@@ -433,7 +434,7 @@ export function definePage<
         PageErrorCode.DESCRIPTOR_SHAPE,
         `${ERROR_PREFIX} definePage() does not accept top-level "${key}". ` +
           'Use only route, head, renderIntent, props, and error. Compiled pages render from ' +
-          `their Part Program — there is no render() function field (v0.44). Remove "${key}" ` +
+          `their Part Program — there is no render() function field. Remove "${key}" ` +
           'from the descriptor; to compute values, return them from props instead.',
       );
     }
@@ -611,15 +612,12 @@ function validateIslandMedia(media: unknown): string {
         'Keep the query under 512 characters and free of control characters.',
     );
   }
-  for (let index = 0; index < value.length; index++) {
-    const code = value.charCodeAt(index);
-    if (code <= 0x1f || code === 0x7f) {
-      throw authoringError(
-        IslandErrorCode.HYDRATE,
-        `${ERROR_PREFIX} defineIslandConfig() media contains an unsafe or oversized query. ` +
-          'Keep the query under 512 characters and free of control characters.',
-      );
-    }
+  if (hasControlCharacter(value)) {
+    throw authoringError(
+      IslandErrorCode.HYDRATE,
+      `${ERROR_PREFIX} defineIslandConfig() media contains an unsafe or oversized query. ` +
+        'Keep the query under 512 characters and free of control characters.',
+    );
   }
   return value;
 }
@@ -736,13 +734,7 @@ export function defineIslandConfig(config: IslandConfig): IslandConfig {
         (deliveryTags !== undefined && !allowedTags.has(tag)) ||
         typeof exportName !== 'string' ||
         exportName.trim() === '' ||
-        (() => {
-          for (let index = 0; index < exportName.length; index++) {
-            const code = exportName.charCodeAt(index);
-            if (code <= 0x1f || code === 0x7f) return true;
-          }
-          return false;
-        })()
+        hasControlCharacter(exportName)
       ) {
         throw authoringError(
           IslandErrorCode.EXPORT_NAMES,

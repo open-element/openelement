@@ -47,7 +47,7 @@ Use public package boundaries rather than private workspace imports. Prefer Web 
 
 ## Task map
 
-The root `deno.json` defines 20 tasks:
+The root `deno.json` defines 21 tasks:
 
 | Task                                          | Purpose                                                                                                   |
 | --------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
@@ -62,8 +62,8 @@ The root `deno.json` defines 20 tasks:
 | `site:build` / `site:verify`                  | Build / fully verify the documentation site                                                               |
 | `saas:build` / `saas:verify` / `saas:workers` | The independently governed SaaS application                                                               |
 | `clean` / `clean:deep`                        | Remove generated artifacts                                                                                |
+| `bench`                                       | Benchmark self-checks under `benchmarks/` (deterministic assertions, no browsers)                         |
 | `fmt` / `fmt:check` / `lint` / `typecheck`    | Format, lint, and type-check the workspace                                                                |
-| `gate:ci`                                     | PR-layer source gate plus packed gate (the fast local equivalent of CI producers)                         |
 | `gate:release`                                | Source gate's trimmed-out steps plus packed gate (the release train)                                      |
 
 The CI gate is split in two layers. `tools/repo#gate:source` (9 steps) is the

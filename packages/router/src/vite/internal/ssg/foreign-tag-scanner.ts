@@ -7,7 +7,7 @@
  * bare-native element) never entered the scan at all. This module statically
  * scans page route and island module sources for custom-element tag usages
  * and reports the tags that are neither local islands, package-manifest
- * islands, nor openElement-authored elements (defineElement/defineIsland/
+ * islands, nor openElement-authored elements (defineElement/
  * customElements.define within the scanned sources).
  *
  * Visibility only: the discovered tags are recorded in the admission plan as
@@ -21,18 +21,25 @@ import { createLogger } from '@openelement/element';
 import { join } from '../../../internal/host-path.ts';
 import { safeReadFile } from './route-scanner-fs.ts';
 import { analyzeModuleSemantics } from '@openelement/element/compiler';
+import { ROUTER_MODULE_VOCABULARY } from '../protocol/module-vocabulary.ts';
 
 const log = createLogger('foreign-tag-scan');
 
 /** Extract custom-element tags the compiler semantic core sees as definitions. */
 export function collectDefinedTags(source: string): Set<string> {
-  return new Set(analyzeModuleSemantics(source, 'foreign-tag-module.tsx').definedCustomElementTags);
+  return new Set(
+    analyzeModuleSemantics(source, 'foreign-tag-module.tsx', {
+      vocabulary: ROUTER_MODULE_VOCABULARY,
+    }).definedCustomElementTags,
+  );
 }
 
 /** Extract compiler-proven custom-element JSX references. */
 export function collectUsedTags(source: string): Set<string> {
   return new Set(
-    analyzeModuleSemantics(source, 'foreign-tag-module.tsx').referencedCustomElementTags,
+    analyzeModuleSemantics(source, 'foreign-tag-module.tsx', {
+      vocabulary: ROUTER_MODULE_VOCABULARY,
+    }).referencedCustomElementTags,
   );
 }
 

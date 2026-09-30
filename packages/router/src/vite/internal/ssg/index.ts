@@ -50,15 +50,17 @@ export type {
 export { ssgRender } from './ssg-render.ts';
 
 export {
-  buildIslandChunkMap,
   buildSpeculationRulesJson,
-  injectClientScript,
   injectCspMeta,
   injectSpeculationRules,
   injectViewTransitionMeta,
 } from './postprocess.ts';
 
-export { cleanSsrArtifacts, postProcessClientIslandBuild } from './build-postprocess.ts';
+export {
+  cleanSsrArtifacts,
+  islandChunkMapFromAssetManifest,
+  postProcessClientIslandBuild,
+} from './build-postprocess.ts';
 export type { BuildContextView } from './build-postprocess.ts';
 
 export { generateCustomElementsPolyfill, generateSsrPolyfillBanner } from './ssr-polyfills.ts';

@@ -282,6 +282,8 @@ export const FacadeErrorCode = {
   HANDLER_MISSING: 'OE_HANDLER_MISSING',
   /** JSX ran outside the compiler pipeline, where the factory was removed. */
   JSX_OUTSIDE_COMPILER: 'OE_JSX_OUTSIDE_COMPILER',
+  /** A streamed seed property's type disagrees with the compiled property record. */
+  STREAM_TYPE_MISMATCH: 'OE_STREAM_TYPE_MISMATCH',
   /** An `HTMLElement` member was reached during SSR, where no DOM exists. */
   SSR_DOM_ACCESS_UNSUPPORTED: 'SSR_DOM_ACCESS_UNSUPPORTED',
 } as const;
@@ -304,4 +306,19 @@ export function frameworkError(
     ...options,
     code,
   });
+}
+
+/**
+ * Raise one framework failure and never return: the throwing companion of
+ * {@linkcode frameworkError}. The per-module `fail(code, message)`
+ * micro-factories bind their failure surface's fixed {@linkcode ErrorPhase}
+ * here — one implementation, the phase as a parameter — so a code and a phase
+ * cannot drift apart per throw site.
+ */
+export function raiseFrameworkError(
+  phase: ErrorPhase,
+  code: string,
+  message: string,
+): never {
+  throw frameworkError(code, message, { phase });
 }

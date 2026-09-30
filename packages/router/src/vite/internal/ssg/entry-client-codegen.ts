@@ -1,5 +1,5 @@
 /** Client island entry emission; browser runtime wiring only. */
-import { ACTION_FETCH_HEADER } from '@openelement/element';
+import { ACTION_FETCH_HEADER, IDLE_FALLBACK_TIMEOUT_MS } from '@openelement/element';
 import { stableModuleId } from '@openelement/element/compiler';
 import { findWorkspaceRoot } from '../../workspace-alias.ts';
 import { quoteGeneratedJavaScriptValue } from './codegen-literals.ts';
@@ -273,7 +273,7 @@ export function generateClientEntry(
   ).join(',\n');
 
   const headerComment = lit
-    ? `// openElement Client Entry (v0.44 - load/idle/visible/media/only) — LIT renderer (#1339)
+    ? `// openElement Client Entry (load/idle/visible/media/only) — LIT renderer (#1339)
 // lit-element-hydrate-support is the FIRST import: it patches LitElement so
 // server-rendered DSD shadow roots are ADOPTED on definition instead of being
 // re-rendered. This module never imports @openelement/element: the native
@@ -282,7 +282,7 @@ export function generateClientEntry(
 // hydration; the logger is inlined to keep the bundle element-free.
 // Island scheduling and form enhancement are import-free runtimes shared
 // unchanged with the native renderer.`
-    : `// openElement Client Entry (v0.44 - load/idle/visible/media/only)
+    : `// openElement Client Entry (load/idle/visible/media/only)
 // load islands import immediately.
 // idle islands import during browser idle time.
 // visible islands import when their host enters the viewport.
@@ -365,6 +365,7 @@ var __scheduler = __schedule({
   win: window,
   doc: document,
   map: __map,
+  idleFallbackTimeoutMs: ${IDLE_FALLBACK_TIMEOUT_MS},
   strategies: {
     load: [${loadTags}],
     idle: [${idleTags}],
@@ -384,7 +385,7 @@ ${
 
 ${
     options.enhancedForms === true
-      ? `// Form enhancement (hardened in 0.42.0-alpha.5):
+      ? `// Form enhancement:
 // forms marked data-open-enhance submit via fetch and the returned document
 // is morphed into the live tree — INSIDE the page element's shadow root,
 // which is where page content lives under DSD. Without JavaScript the same

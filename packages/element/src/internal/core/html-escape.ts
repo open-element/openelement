@@ -43,7 +43,7 @@ export function escapeHtml(str: string): string {
  * Escape an HTML attribute value.
  *
  * Delegates to `escapeHtml` so both share the single `ESCAPE_MAP` and the
- * same single-pass replacement (consolidated in v0.42.0-alpha.9, #633).
+ * same single-pass replacement (consolidated in #633).
  *
  * Empty-value conventions remain intentionally distinct by design:
  * - `escapeHtml` returns '' for non-string input.
@@ -67,7 +67,7 @@ export { VOID_TAGS } from '../protocol/void-tags.ts';
 
 /**
  * A framework-generated <script> to embed after the rendered HTML
- * (v0.44.0-alpha, CSP nonce closure). Structured alternative to the raw
+ * with a CSP nonce closure. Structured alternative to the raw
  * `clientScript`/`devScripts` strings: wrapInDocument serializes every
  * descriptor through ONE code point, so a valid CSP nonce reaches every
  * framework-generated script tag uniformly.
@@ -120,7 +120,7 @@ export function documentStreamParts(
 ): { prefix: string; suffix: string } {
   // Per-render warning scope: the same headExtras key can warn again on the
   // next SSG page/request instead of being suppressed for the whole process
-  // (v0.42.0-alpha.9, #643).
+  // (#643).
   const warnScope = createWarnScope();
   const {
     title = 'openElement',

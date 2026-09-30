@@ -32,7 +32,7 @@ export function createLogger(tag: string): Logger {
  * given key from being suppressed for the entire process: the next page/request
  * gets a new scope and the warning can fire again. This fixes the previous
  * behavior where `warnOnce` permanently muted a key across all requests/SSG
- * pages (v0.42.0-alpha.9, #643).
+ * pages (#643).
  */
 export interface WarnScope {
   warned: Set<string>;

@@ -50,6 +50,7 @@
         "dsd": true,
         "layer": "dsd-static",
         "hydrate": "idle",
+        "status": "experimental",
         "module": "@openelement/ui/open-card",
         "export": "OpenCard"
       }
@@ -96,6 +97,7 @@
         "dsd": true,
         "layer": "dsd-static",
         "hydrate": "idle",
+        "status": "experimental",
         "module": "@openelement/ui/open-callout",
         "export": "OpenCallout"
       }
@@ -162,6 +164,7 @@
         "dsd": true,
         "layer": "dsd-interactive",
         "hydrate": "load",
+        "status": "stable",
         "module": "@openelement/ui/open-button",
         "export": "OpenButton"
       }
@@ -260,6 +263,7 @@
         "dsd": true,
         "layer": "dsd-interactive",
         "hydrate": "load",
+        "status": "experimental",
         "module": "@openelement/ui/open-input",
         "export": "OpenInput"
       }
@@ -302,6 +306,7 @@
         "dsd": true,
         "layer": "dsd-interactive",
         "hydrate": "load",
+        "status": "stable",
         "module": "@openelement/ui/open-theme-toggle",
         "export": "OpenThemeToggle"
       }
@@ -328,6 +333,7 @@
         "dsd": true,
         "layer": "dsd-static",
         "hydrate": "idle",
+        "status": "stable",
         "module": "@openelement/ui/open-code-block",
         "export": "OpenCodeBlock"
       }
@@ -366,6 +372,7 @@
         "dsd": true,
         "layer": "dsd-static",
         "hydrate": "idle",
+        "status": "stable",
         "module": "@openelement/ui/open-badge",
         "export": "OpenBadge"
       }
@@ -436,6 +443,7 @@
         "dsd": true,
         "layer": "dsd-interactive",
         "hydrate": "idle",
+        "status": "experimental",
         "module": "@openelement/ui/open-dialog",
         "export": "OpenDialog"
       }
@@ -470,6 +478,7 @@
         "dsd": true,
         "layer": "dsd-interactive",
         "hydrate": "load",
+        "status": "experimental",
         "module": "@openelement/ui/open-dropdown",
         "export": "OpenDropdown"
       }
@@ -494,6 +503,7 @@
         "dsd": true,
         "layer": "dsd-interactive",
         "hydrate": "load",
+        "status": "experimental",
         "module": "@openelement/ui/open-tabs",
         "export": "OpenTabs"
       }

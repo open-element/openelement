@@ -15,6 +15,7 @@ import {
   CompiledElementError,
   compileElementProgram,
 } from '../src/internal/compiler/semantic-core/compile.ts';
+import type { StaticSidecarDescriptor } from '../src/internal/compiler/semantic-core/module-analysis.ts';
 import { compileElementModule } from '../src/internal/compiler/plugin.ts';
 
 const FILE = '/project/app/components/map-fixture.tsx';
@@ -152,8 +153,24 @@ function assertResolves(
   );
 }
 
+/**
+ * The island sidecar descriptor a host framework injects (#1468): the
+ * compiler ships no router knowledge, so the fixture's island policy
+ * statement is admitted through this explicit descriptor.
+ */
+const ISLAND_SIDECAR: StaticSidecarDescriptor = {
+  moduleSpecifier: '@openelement/router',
+  exportName: 'defineIslandConfig',
+  kind: 'static-sidecar',
+};
+
+/** Compile the fixture with the host-injected island descriptor. */
+function compileFixture() {
+  return compileElementProgram(SOURCE, FILE, { staticSidecars: [ISLAND_SIDECAR] });
+}
+
 Deno.test('A10.2 compiler emits a REAL Source Map v3 (VLQ line+column segments)', () => {
-  const { code, map, program } = compileElementProgram(SOURCE, FILE);
+  const { code, map, program } = compileFixture();
 
   // The old substitute (mappings: '') is gone; a standard consumer decodes
   // real segments from both the returned map and the inline artifact map.
@@ -175,7 +192,7 @@ Deno.test('A10.2 compiler emits a REAL Source Map v3 (VLQ line+column segments)'
 });
 
 Deno.test('A10.2 the serialized payload omits the compile-time sourceMap provenance', () => {
-  const { code, map, program } = compileElementProgram(SOURCE, FILE);
+  const { code, map, program } = compileFixture();
 
   // Provenance stays on the in-memory program and the map's supplementary
   // x_openElement metadata; the browser-bound module payload carries no
@@ -187,7 +204,7 @@ Deno.test('A10.2 the serialized payload omits the compile-time sourceMap provena
 });
 
 Deno.test('A10.2 module scaffolding resolves to authored constructs', () => {
-  const { code, map } = compileElementProgram(SOURCE, FILE);
+  const { code, map } = compileFixture();
   const trace = traceOf(map);
 
   // Verbatim/rewritten imports resolve to the authored import statements.
@@ -246,7 +263,7 @@ Deno.test('A10.2 module scaffolding resolves to authored constructs', () => {
 });
 
 Deno.test('A10.2 properties, computed fields, methods and multiline initializers resolve', () => {
-  const { code, map } = compileElementProgram(SOURCE, FILE);
+  const { code, map } = compileFixture();
   const trace = traceOf(map);
 
   // Field declarations resolve to the authored field name (column-exact).
@@ -274,7 +291,7 @@ Deno.test('A10.2 properties, computed fields, methods and multiline initializers
 });
 
 Deno.test('A10.2 identical repeated source lines map to their DISTINCT authored locations', () => {
-  const { code, map } = compileElementProgram(SOURCE, FILE);
+  const { code, map } = compileFixture();
   const trace = traceOf(map);
 
   // Three identical method-body lines resolve to three distinct authored lines.
@@ -298,7 +315,7 @@ Deno.test('A10.2 identical repeated source lines map to their DISTINCT authored 
 });
 
 Deno.test('A10.2 MANDATORY: two generated `this.count++;` event handlers map to two distinct arrows', () => {
-  const { code, map } = compileElementProgram(SOURCE, FILE);
+  const { code, map } = compileFixture();
   const trace = traceOf(map);
 
   // The two generated handler lines are byte-identical; each must map back to
@@ -325,7 +342,7 @@ Deno.test('A10.2 MANDATORY: two generated `this.count++;` event handlers map to 
 });
 
 Deno.test('A10.2 segments carry original identifier names where the compiler knows them', () => {
-  const { code, map } = compileElementProgram(SOURCE, FILE);
+  const { code, map } = compileFixture();
   const trace = traceOf(map);
   assert(map.names.includes('count'), 'names table must carry authored identifiers');
   assert(map.names.includes('bump'), 'names table must carry authored method names');
@@ -364,8 +381,9 @@ export class NestedRegion extends OpenElement {
 });
 
 Deno.test('A10.2 Vite boundary: compileElementModule hands the real map to the host', () => {
-  // compileElementModule (the Vite-bound entrypoint) returns the real map.
-  const result = compileElementModule(SOURCE, FILE);
+  // compileElementModule (the Vite-bound entrypoint) returns the real map;
+  // the island descriptor rides the same options pass-through.
+  const result = compileElementModule(SOURCE, FILE, { staticSidecars: [ISLAND_SIDECAR] });
   assert(result, 'fixture must be admitted by the compiler gate');
   assertNotEquals(result.map.mappings, '');
   assertEquals(result.map.x_openElement, result.program.sourceMap);

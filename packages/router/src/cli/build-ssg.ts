@@ -54,6 +54,7 @@ import {
   generateSsrPolyfillBanner,
 } from '../vite/internal/ssg/index.ts';
 import { compiledElementPlugin } from '@openelement/element/compiler';
+import { ISLAND_ADMISSION } from '../vite/internal/protocol/island-admission.ts';
 import { normalizeViteAliases } from '../vite/alias-utils.ts';
 import {
   CHUNK_SIZE_WARNING_LIMIT_KB,
@@ -420,6 +421,9 @@ async function buildSSG(
           // Linked workspace packages sit outside the project root; without the
           // workspace anchor their absolute ids would land in the source maps.
           workspaceRoot: findWorkspaceRoot(Deno.cwd()) ?? undefined,
+          // Route/island sources carry the island delivery policy statement;
+          // the compiler admits it only through the injected descriptor.
+          staticSidecars: [ISLAND_ADMISSION],
         }),
         // Virtual SSG entry module
         // Replaces .openElement/.openElement-ssg-entry.ts file write
@@ -450,9 +454,9 @@ async function buildSSG(
             // SSR outputs <tag-name data-client-only="true"></tag-name>
             // Client runtime imports the real module and upgrades the element.
             return [
-              `import { defineIslandConfig } from '@openelement/router';`,
+              `import { ${ISLAND_ADMISSION.exportName} } from '${ISLAND_ADMISSION.moduleSpecifier}';`,
               `export const tagName = ${quoteGeneratedJavaScriptValue(tagName)};`,
-              'export const openElement = defineIslandConfig({ ssr: false });',
+              `export const openElement = ${ISLAND_ADMISSION.exportName}({ ssr: false });`,
               `export default class OpenClientOnlyStub extends HTMLElement {
   connectedCallback() {
     if (!this.hasAttribute('data-client-only')) {
@@ -478,6 +482,21 @@ async function buildSSG(
 
     if (!module.default) {
       throw new SsrRenderError('virtual:open-ssg-entry', new Error('Failed to load Hono app'));
+    }
+
+    // #1471 (S4b): the document renders the client scripts. Phase 2 ran
+    // before Phase 3 (client-before-SSG build order), so the client asset
+    // manifest's entry URL is final here. Hand it to the entry once — every
+    // render channel (the SSG GET handlers, renderRoute, the styled 404)
+    // then resolves it into the document and serializes the final script
+    // tag at document time. No post-build HTML injection. An empty entry
+    // (no client bundle shipped) embeds nothing.
+    const setRequestTimeClientScript = (module as {
+      __setRequestTimeClientScript?: (src: string | null | undefined) => void;
+    }).__setRequestTimeClientScript;
+    setRequestTimeClientScript?.(ctx.clientAssetManifest?.entry ?? null);
+    if (ctx.clientAssetManifest?.entry) {
+      log.info(`Client scripts embedded at render time from: ${ctx.clientAssetManifest.entry}`);
     }
 
     // Delegate to shared ssgRender() - zero Vite dependency from this point

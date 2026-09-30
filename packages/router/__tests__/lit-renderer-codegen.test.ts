@@ -12,6 +12,7 @@ import { assertEquals, assertStringIncludes, assertThrows } from '@std/assert';
 import { buildEntryDescriptor, renderEntry } from '../src/vite/internal/ssg/index.ts';
 import { generateClientEntry } from '../src/vite/internal/ssg/entry-client-codegen.ts';
 import { analyzeModuleSemantics } from '@openelement/element/compiler';
+import { ROUTER_MODULE_VOCABULARY } from '../src/vite/internal/protocol/module-vocabulary.ts';
 import type { RouteEntry } from '../src/vite/internal/protocol/framework.ts';
 
 const litRoutes: RouteEntry[] = [
@@ -58,13 +59,26 @@ Deno.test('lit renderer: entry forks tag resolution and page render (no page-dat
     litEntry.startsWith("import '@lit-labs/ssr/lib/install-global-dom-shim.js';"),
     true,
   );
-  assertStringIncludes(litEntry, 'routeModule.default.openElementPageTag');
-  assertStringIncludes(litEntry, '__renderLitPageToHtml({ tag, props })');
+  // The lit forks bind through the typed runtime seam (ADR-0160 rule a): the
+  // lit page-tag resolver is an import and the lit page renderer is bound
+  // inside the generated-app factory via the pageRuntime config (#1470
+  // block e); the call sites stay renderer-neutral.
+  assertStringIncludes(
+    litEntry,
+    "import { resolveLitPageTag as __resolvePageTag } from '@openelement/router/server-runtime'",
+  );
+  assertStringIncludes(
+    litEntry,
+    "import { renderLitPageToHtml as __renderLitPageToHtml } from '@openelement/router/lit-ssr'",
+  );
+  assertStringIncludes(litEntry, "mode: 'lit',");
+  assertStringIncludes(litEntry, 'renderLitPageToHtml: __renderLitPageToHtml,');
   // Beta.2.2 review: the embedded page-data JSON channel had no consumer —
   // it is removed and its absence is pinned on both renderers.
   assertEquals(litEntry.includes('__litPageDataScript'), false);
   assertEquals(litEntry.includes('data-open-element-page-data'), false);
-  // The compiled serializer / Part Program kernel is never referenced.
+  // The compiled serializer / Part Program kernel is never referenced — the
+  // typed renderer modules carry no Element edge of their own.
   assertEquals(litEntry.includes('renderDsd'), false);
   assertEquals(litEntry.includes('__partProgram'), false);
 
@@ -106,11 +120,22 @@ Deno.test('lit renderer: route scanner semantics accept defineLitPage from @open
     "import { NotesPage } from '../components/notes-page.ts';",
     "export default defineLitPage('notes-list-page', NotesPage, {});",
   ].join('\n');
-  assertEquals(analyzeModuleSemantics(source, 'notes.ts').definePage, true);
-  // A same-named foreign binding must not count.
+  assertEquals(
+    analyzeModuleSemantics(source, 'notes.ts', {
+      vocabulary: ROUTER_MODULE_VOCABULARY,
+    }).definePage,
+    true,
+  );
+  // A same-named foreign binding must not count — even with the vocabulary
+  // injected, admission stays a canonical import binding.
   const foreign = [
     "import { defineLitPage } from './local.ts';",
     'export default defineLitPage(x, y, {});',
   ].join('\n');
-  assertEquals(analyzeModuleSemantics(foreign, 'notes.ts').definePage, false);
+  assertEquals(
+    analyzeModuleSemantics(foreign, 'notes.ts', {
+      vocabulary: ROUTER_MODULE_VOCABULARY,
+    }).definePage,
+    false,
+  );
 });

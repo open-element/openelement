@@ -20,7 +20,7 @@ for (const mapping of mappings) {
   const perLocale = { en: mapping.to, zh: mapping.toZh ?? mapping.to };
   for (const locale of SITE_LOCALES) {
     const prefix = locale === 'en' ? '' : `/${locale}`;
-    const raw = perLocale[locale as 'en' | 'zh'];
+    const raw = perLocale[locale];
     const [toPath, fragment] = raw.split('#');
     const target = `${prefix}${toPath}${fragment ? `#${fragment}` : ''}`;
     lines.push(`${prefix}${mapping.from}  ${target}  ${mapping.status}`);

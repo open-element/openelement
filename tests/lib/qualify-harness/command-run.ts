@@ -1,0 +1,63 @@
+/**
+ * Shared subprocess step for the qualify harnesses (#1472).
+ *
+ * One runner replaces the per-consumer copies (qualify.ts runCommand,
+ * third-party qualify.ts run, starter-smoke setup.ts run/runCapture): it
+ * prints the command line up front, captures stdout/stderr, replays the
+ * captured output on failure, and supports stdin feeding and documented
+ * nonzero exits for the probe-style invocations.
+ */
+
+export interface RunStepOptions {
+  /** Working directory for the subprocess. */
+  cwd: string;
+  /** Extra environment variables layered over the inherited environment. */
+  env?: Record<string, string>;
+  /** Text written to the subprocess's stdin; stdin is closed afterwards. */
+  stdin?: string;
+  /** Treat a nonzero exit as a documented outcome instead of a failure. */
+  allowFailure?: boolean;
+}
+
+export interface RunStepResult {
+  stdout: string;
+  stderr: string;
+}
+
+/** Run a command, capturing output; a nonzero exit is reported with its logs. */
+export async function runStep(
+  command: string,
+  args: string[],
+  options: RunStepOptions,
+): Promise<RunStepResult> {
+  console.log(`$ ${command} ${args.join(' ')}  # cwd=${options.cwd}`);
+  const child = new Deno.Command(command, {
+    args,
+    cwd: options.cwd,
+    env: options.env,
+    stdout: 'piped',
+    stderr: 'piped',
+    stdin: options.stdin === undefined ? 'null' : 'piped',
+  }).spawn();
+  if (options.stdin !== undefined) {
+    const writer = child.stdin.getWriter();
+    writer.write(new TextEncoder().encode(options.stdin));
+    writer.releaseLock();
+    child.stdin.close();
+  }
+  const [status, stdoutBytes, stderrBytes] = await Promise.all([
+    child.status,
+    new Response(child.stdout).arrayBuffer(),
+    new Response(child.stderr).arrayBuffer(),
+  ]);
+  const stdout = new TextDecoder().decode(stdoutBytes);
+  const stderr = new TextDecoder().decode(stderrBytes);
+  if (!status.success && options.allowFailure !== true) {
+    if (stdout.trim()) console.error(stdout.trim());
+    if (stderr.trim()) console.error(stderr.trim());
+    throw new Error(
+      `command failed with exit code ${status.code}: ${command} ${args.join(' ')}`,
+    );
+  }
+  return { stdout, stderr };
+}

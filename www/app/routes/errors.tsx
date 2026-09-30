@@ -12,13 +12,14 @@
 import { definePage } from '@openelement/router';
 import { siteHead } from '@openelement/site-ui/head.ts';
 import { contentLocale } from '@openelement/site-ui/locale.ts';
+import type { SiteLocale } from '../../site-config.ts';
 import { errorCodes } from '../data/_generated-error-codes.ts';
 import { sourceLineStamp } from '../data/version.ts';
 import ErrorsPage, { type ErrorCodeItem } from '../components/page-errors.tsx';
 
 export const meta = { section: 'Reference', label: 'Error codes', order: 6 };
 
-type Locale = 'en' | 'zh';
+type Locale = SiteLocale;
 
 /**
  * The OEC code families, keyed by the numeric range each occupies. A range

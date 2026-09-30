@@ -1,17 +1,19 @@
 /**
- * @openelement/router — application-authoring error codes.
+ * @openelement/router — application-authoring and build-pipeline error codes.
  *
  * Every failure raised by the authoring surface (`definePage`,
- * `defineIslandConfig`) and the serve CLI carries a stable code, a phase and
- * a severity, exactly like the element package's `OpenElementError` contract
- * (decision 0053). Before this module those throws were bare `Error`s, so a host
- * could not classify a failure, and the CLI could not decide what to show
- * without pattern-matching message text.
+ * `defineIslandConfig`), the serve CLI, the island-delivery build pipeline,
+ * and the Document seam carries a stable code, a phase and a severity,
+ * exactly like the element package's `OpenElementError` contract (decision
+ * 0053). Before this module those throws were bare `Error`s, so a host could
+ * not classify a failure, and the CLI could not decide what to show without
+ * pattern-matching message text.
  *
- * Phase is `validation` for every code here: each one rejects an author's
- * descriptor or argument before any render, route or build work starts. The
- * `*_MISUSE_*` split below follows the function that raises it, so a code
- * points at one authoring surface.
+ * Phase follows the surface that raises the code: `validation` for the
+ * authoring descriptors and the Document head contract (each one rejects an
+ * author's data before any render work starts), and `build` for the SSG
+ * pipeline's build-time admission checks. One table per raising surface, so a
+ * code points at one place in the pipeline.
  */
 
 import { OpenElementError } from '@openelement/element/authoring';
@@ -49,6 +51,115 @@ export const ServeErrorCode = {
 } as const;
 
 /**
+ * Stable codes for the island-delivery admission contract
+ * (`vite/internal/ssg/delivery.ts`). Phase `build`: these reject a delivery
+ * declaration while the build materializes the island manifests.
+ */
+export const DeliveryErrorCode = {
+  /** A media query is not a non-empty, bounded, control-free string. */
+  MEDIA_QUERY: 'OE_DELIVERY_MEDIA_QUERY',
+  /** A tag list is missing/empty, or carries an invalid or duplicate tag. */
+  TAGS: 'OE_DELIVERY_TAGS',
+  /** `tags` and `tagNames` both resolve but disagree. */
+  TAG_CONFLICT: 'OE_DELIVERY_TAG_CONFLICT',
+  /** `exportNames` is not an object or names a tag outside the delivery set. */
+  EXPORT_NAMES: 'OE_DELIVERY_EXPORT_NAMES',
+} as const;
+
+/**
+ * Stable codes for the island entry admission checks
+ * (`vite/internal/ssg/entry-generators.ts`). Phase `build`: one code per
+ * entry field the generated client entry depends on.
+ */
+export const IslandEntryErrorCode = {
+  /** An island module specifier fails the admission grammar. */
+  MODULE_PATH: 'OE_ISLAND_ENTRY_MODULE_PATH',
+  /** The island tag name is not a valid custom element name. */
+  TAG_NAME: 'OE_ISLAND_ENTRY_TAG_NAME',
+  /** The hydration strategy is not one of the delivered strategies. */
+  STRATEGY: 'OE_ISLAND_ENTRY_STRATEGY',
+  /** `media` presence/absence contradicts the chosen strategy. */
+  MEDIA: 'OE_ISLAND_ENTRY_MEDIA',
+  /** The single `exportName` is malformed. */
+  EXPORT_NAME: 'OE_ISLAND_ENTRY_EXPORT_NAME',
+} as const;
+
+/**
+ * Stable codes for the entry descriptor build
+ * (`vite/internal/ssg/entry-descriptor.ts`). Phase `build`: these reject a
+ * project configuration the generated entry could not honor.
+ */
+export const DescriptorErrorCode = {
+  /** `middleware.corsOrigin`/`corsOriginModule` is not serializable or they conflict. */
+  CORS: 'OE_DESCRIPTOR_CORS',
+  /** A `middleware.use` entry is not a module path (string). */
+  MIDDLEWARE_USE: 'OE_DESCRIPTOR_MIDDLEWARE_USE',
+  /** A stream route reaches an opaque renderer wrapper. */
+  STREAM_RENDERER: 'OE_DESCRIPTOR_STREAM_RENDERER',
+  /** Streaming conflicts with the compiled app shell/layout wrapper. */
+  STREAM_APP_SHELL: 'OE_DESCRIPTOR_STREAM_APP_SHELL',
+  /** The lit renderer does not support a compiled appShell/layouts. */
+  LIT_APP_SHELL: 'OE_DESCRIPTOR_LIT_APP_SHELL',
+} as const;
+
+/**
+ * Stable codes for the SSG render pipeline (`vite/internal/ssg/ssg-render.ts`).
+ * Phase `build`: these report the prerender pipeline failing, which fails the
+ * whole build.
+ */
+export const SsgRenderErrorCode = {
+  /** The SSR bundle does not export the `routeInfo` the pipeline requires. */
+  ROUTE_INFO_MISSING: 'OE_SSG_ROUTE_INFO_MISSING',
+  /** `routeInfo` resolved but enumerates no routes. */
+  ROUTE_INFO_EMPTY: 'OE_SSG_ROUTE_INFO_EMPTY',
+  /** The SSR bundle carries no default Hono app export. */
+  APP_MISSING: 'OE_SSG_APP_MISSING',
+  /** Prerendered static page routes returned non-200 and were not written. */
+  STATIC_NON_200: 'OE_SSG_STATIC_NON_200',
+} as const;
+
+/**
+ * Stable codes for the Phase 2 client asset manifest
+ * (`vite/client-asset-manifest.ts`) and the SSG post-processor's
+ * manifest-keyed island chunk join (`vite/internal/ssg/build-postprocess.ts`).
+ * Phase `build`: the client build's manifest is the single join between
+ * compile-time island identity and the emitted client assets, so a missing,
+ * corrupted, or incomplete record — an admitted island that cannot be
+ * attributed to exactly one emitted module, a manifest that records more
+ * than one client entry, and a delivery tag claimed by two islands — fails
+ * the build instead of shipping silent or reordered identities.
+ */
+export const ClientAssetErrorCode = {
+  /** dist/client/.vite/manifest.json is missing or unreadable. */
+  MANIFEST_READ: 'OE_CLIENT_ASSET_MANIFEST_READ',
+  /** The manifest exists but is not the JSON record the join requires. */
+  MANIFEST_MALFORMED: 'OE_CLIENT_ASSET_MANIFEST_MALFORMED',
+  /** The manifest records no emitted client entry file. */
+  ENTRY_MISSING: 'OE_CLIENT_ASSET_ENTRY_MISSING',
+  /** The manifest records several client entry files (no first-hit pick). */
+  ENTRY_AMBIGUOUS: 'OE_CLIENT_ASSET_ENTRY_AMBIGUOUS',
+  /** An admitted island matches no emitted module in the build graph. */
+  ISLAND_UNMAPPED: 'OE_CLIENT_ASSET_ISLAND_UNMAPPED',
+  /** An island identity matches several emitted modules (ambiguous package). */
+  ISLAND_IDENTITY_AMBIGUOUS: 'OE_CLIENT_ASSET_ISLAND_IDENTITY_AMBIGUOUS',
+  /**
+   * A delivery tag is claimed by two island entries — even when both would
+   * resolve to the same asset and strategy, tag ownership is one-to-one.
+   */
+  ISLAND_TAG_DUPLICATE: 'OE_CLIENT_ASSET_ISLAND_TAG_DUPLICATE',
+} as const;
+
+/**
+ * Stable codes for the Document seam (`document.ts`). Phase `validation`:
+ * the head is authored data, resolved per render, and a malformed field is
+ * rejected the same way at build time and request time.
+ */
+export const DocumentErrorCode = {
+  /** A page head field or structured-data value violates the Document contract. */
+  HEAD_INVALID: 'OE_DOCUMENT_HEAD_INVALID',
+} as const;
+
+/**
  * One authoring-contract failure: `OpenElementError` with the shared
  * `validation` phase and `error` severity, so callers classify by code and
  * never by message text.
@@ -59,5 +170,25 @@ export function authoringError(code: string, message: string): OpenElementError 
     phase: 'validation',
     severity: 'error',
     recoverable: false,
+  });
+}
+
+/**
+ * One build-pipeline failure: `OpenElementError` with the shared `build`
+ * phase and `error` severity, so a build admission check is catchable by
+ * code exactly like the authoring surfaces. `cause` preserves the wrapped
+ * underlying failure for diagnostics.
+ */
+export function buildError(
+  code: string,
+  message: string,
+  options: { cause?: Error } = {},
+): OpenElementError {
+  return new OpenElementError(message, {
+    code,
+    phase: 'build',
+    severity: 'error',
+    recoverable: false,
+    ...(options.cause ? { cause: options.cause } : {}),
   });
 }

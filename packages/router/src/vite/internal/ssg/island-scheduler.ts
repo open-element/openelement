@@ -49,6 +49,14 @@ export interface IslandSchedulerDeps {
   /** One matchMedia result per media-gated tag. Missing entries fail closed. */
   mediaQueries?: Record<string, MediaQueryListLike | null | undefined>;
   /**
+   * Idle-hydration scheduling fallback in milliseconds when neither
+   * `requestIdleCallback` nor `requestAnimationFrame` exists — the generated
+   * entry serializes the element policy constant
+   * (IDLE_FALLBACK_TIMEOUT_MS) at build time; this import-free module never
+   * hard-codes the number.
+   */
+  idleFallbackTimeoutMs: number;
+  /**
    * Runs (macrotask-deferred) after any island module resolves. The enhance
    * layer uses it to rescan submit roots for late-hydrating islands (#584);
    * null when the page has no data-open-enhance forms (#597).
@@ -217,7 +225,7 @@ export function createIslandScheduler(deps: IslandSchedulerDeps): IslandSchedule
     };
     const schedule: (fn: () => void) => unknown = win.requestIdleCallback ||
       win.requestAnimationFrame ||
-      ((fn) => win.setTimeout(fn, 50));
+      ((fn) => win.setTimeout(fn, deps.idleFallbackTimeoutMs));
     schedule(deferred);
   }
 
