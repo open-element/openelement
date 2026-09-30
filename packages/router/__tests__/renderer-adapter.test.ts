@@ -28,13 +28,19 @@ const routes: RouteEntry[] = [{
 // (1983/3138) for the S4 idle-fallback wiring: the __schedule deps carry the
 // IDLE_FALLBACK_TIMEOUT_MS policy constant serialized at build time
 // (ADR-0160 admitted output delta).
+// Server pins moved from the 8b75ebdc8 values (14249/6f7c0d86…, 14362/b8d1cb02…)
+// to the values below: that commit dropped the ' (ADR-0160 rule a)' segment
+// from the emitted 'Generated-app assembly' comment (-18 bytes each mode) and
+// did not re-pin. Diffing the full dumped entries across d94b0af5e..current
+// shows exactly that one comment line per mode and nothing else; the later
+// comment-only sweep commits regenerate byte-identical entries to 8b75ebdc8.
 const expected = {
   native: {
-    server: [14249, '6f7c0d86e8a921c3dde7637d47c9d8eb03a77b1ab431f34a0c76b24f426dc263'],
+    server: [14231, 'e37d5c1831e39fddbe947d551215c39ace5cfab7c4c56232a0987e61fdecdbb8'],
     client: [2012, 'd38366aedd3e45243f27e7191b5e10a0fbc7ab06b273c457b22a8c6cea33674d'],
   },
   lit: {
-    server: [14362, 'b8d1cb020803e044cd195501f701137fa054a50a28aff581d2f58b9e52120dbf'],
+    server: [14344, '4433f89be2807e7dae6f7ec804f60607d09b2048ed6b5f9b9bcdc8477a9854e3'],
     client: [3167, '7dcb18fd659ffe53b039adfc5139a2496e1b4c02b5d4322ed6c216606511f418'],
   },
 } as const;
