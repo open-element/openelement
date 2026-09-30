@@ -35,6 +35,53 @@ export function sortAliasEntries<T extends Alias>(aliases: T[]): T[] {
   });
 }
 
+/** The absolute-path forms an alias replacement must take to be a module id. */
+function isAbsoluteModulePath(id: string): boolean {
+  return id.startsWith('/') || id.startsWith('\\') || /^[A-Za-z]:[\\/]/.test(id);
+}
+
+/**
+ * The module path one alias entry rewrites a specifier to — the same matching
+ * and rewrite semantics the Vite build applies to `resolve.alias`
+ * (@rollup/plugin-alias: string finds match exactly or at a `/` segment
+ * boundary, RegExp finds test, and the rewrite is a first-occurrence replace).
+ * Returns null when the entry does not claim the specifier, or when the
+ * rewrite is not an absolute filesystem path: a bare-specifier or virtual
+ * replacement cannot serve as a compile-time module identity, and the caller
+ * must keep the declared specifier instead of guessing a path.
+ */
+export function resolveAliasSourcePath(
+  alias: Alias,
+  specifier: string,
+): string | null {
+  if (alias.find instanceof RegExp) {
+    if (!alias.find.test(specifier)) return null;
+    const rewritten = specifier.replace(alias.find, alias.replacement);
+    return isAbsoluteModulePath(rewritten) ? rewritten : null;
+  }
+  const find = alias.find;
+  if (specifier !== find && !specifier.startsWith(`${find}/`)) return null;
+  const rewritten = specifier.replace(find, alias.replacement);
+  return isAbsoluteModulePath(rewritten) ? rewritten : null;
+}
+
+/**
+ * Resolve a bare specifier through a Vite alias table, first match wins in
+ * table order (the caller passes the same sorted entries the build ships as
+ * `resolve.alias`). Returns null when no entry claims the specifier with an
+ * absolute-path rewrite.
+ */
+export function resolveThroughAliases(
+  aliases: ReadonlyArray<Alias>,
+  specifier: string,
+): string | null {
+  for (const alias of aliases) {
+    const rewritten = resolveAliasSourcePath(alias, specifier);
+    if (rewritten !== null) return rewritten;
+  }
+  return null;
+}
+
 interface OpenElementSourceSubpaths {
   rootFile: string;
   files: Record<string, string>;
