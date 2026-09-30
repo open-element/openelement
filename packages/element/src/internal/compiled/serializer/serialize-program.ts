@@ -1,6 +1,6 @@
 /**
  * serialize-program.ts — the ONE tree-walking serializer for compiled Part
- * Programs (issue #1469, ADR-0160 rule b). The server serializer
+ * Programs (issue #1469). The server serializer
  * (`internal/compiled/server/index.ts`) and the runtime seed serializer
  * (`internal/compiled/runtime.ts`) delegate every walk to this module; neither
  * keeps a private walker.

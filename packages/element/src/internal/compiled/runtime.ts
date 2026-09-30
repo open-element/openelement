@@ -26,7 +26,7 @@ import { conditionHolds } from './condition-holds.ts';
 // shared with the server serializer (server/shared.ts) so all three
 // execution modes stay byte-identical; do not reintroduce private copies.
 import { attributeValueOf, classValueOf, styleValueOf } from './server/shared.ts';
-// The ONE tree-walking serializer (issue #1469, ADR-0160 rule b): both the
+// The ONE tree-walking serializer (issue #1469): both the
 // seed and the server serializer delegate their walk to this kernel.
 import {
   type SerializeProgramSeams,

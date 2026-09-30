@@ -8,7 +8,7 @@
  * and never constructs or transpiles a parse tree itself, so replacing the
  * backend is a change to this file's single implementation and nowhere else.
  *
- * Retirement conditions (ADR-0160 and the alpha6 architecture-debt lane): this
+ * Retirement conditions (the alpha6 architecture-debt lane, issue #1473): this
  * TypeScript-backed implementation is scheduled to be replaced when either
  * trigger fires, whichever lands first —
  *   1. the TypeScript 6 line ends JavaScript-API maintenance ("JS-API EOL"),

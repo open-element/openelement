@@ -4,7 +4,7 @@
  * The serializer is a pure projection of one validated program and one host
  * snapshot. It never subscribes, creates a DOM, discovers bindings, or invokes
  * component code. The template walk itself is the shared kernel
- * (`serializer/serialize-program.ts`, issue #1469 / ADR-0160 rule b); this
+ * (`serializer/serialize-program.ts`, issue #1469); this
  * module contributes the server seams (host signal access, sink emissions,
  * item admission) and the host-artifact wrapping. `serializeCompiledProgram()`
  * is the host-shaped server artifact; `serializeProgramContent()` is the same
@@ -54,7 +54,7 @@ import { eachItemKey, EachKeyError } from '../each-key.ts';
 // Canonical when-Region condition evaluation (#1372): single source shared
 // with the runtime executors; do not reintroduce a private comparison.
 import { conditionHolds } from '../condition-holds.ts';
-// The ONE tree-walking serializer (issue #1469, ADR-0160 rule b): the server
+// The ONE tree-walking serializer (issue #1469): the server
 // serializer and the runtime seed serializer delegate their walk to this
 // kernel.
 import {

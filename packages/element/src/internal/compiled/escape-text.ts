@@ -3,7 +3,7 @@
  * serializers (B1.1 audit remediation, #1272 / finding F3).
  *
  * The shared serialization kernel (`serializer/serialize-program.ts`, issue
- * #1469 / ADR-0160 rule b) emits every text-node byte of both serializer
+ * #1469) emits every text-node byte of both serializer
  * entry points (the runtime seed serializer `runtime.ts` and the server
  * serializer `server/index.ts`) through this one helper; before the
  * convergence each carried a private byte-identical copy with no named owner
