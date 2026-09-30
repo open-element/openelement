@@ -1,6 +1,6 @@
 /**
  * @openelement/router/server-runtime — the typecheckable runtime modules
- * that generated entries import (ADR-0160 rule a).
+ * that generated entries import.
  *
  * Generated Hono entries are route wiring: they select routes, bind
  * renderers, and forward requests. The request-time server semantics they

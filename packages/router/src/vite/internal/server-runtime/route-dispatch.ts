@@ -1,7 +1,7 @@
 /**
  * @openelement/router/server-runtime — route dispatch.
  *
- * The generated entry's dispatch-table assembly (ADR-0160 rule a): the
+ * The generated entry's dispatch-table assembly: the
  * startup stream-route assertions, the per-path page handler table, and the
  * 405 responder the WinterCG route middleware invokes for non-GET/POST page
  * requests. Migrated verbatim from the generated-entry strings

@@ -11,7 +11,7 @@
  *
  * Element functions are injected, never imported: the typed module carries no
  * @openelement/element edge, so the LIT entry's import graph stays free of
- * the Native runtime kernel (ADR-0160 rule a, #1339 boundary) and the
+ * the Native runtime kernel (#1339 boundary) and the
  * bundler inlines the module into every generated entry. The admitted tag
  * list is generated data (serialized into the entry) for the same reason.
  *

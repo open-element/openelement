@@ -1,7 +1,7 @@
 /**
- * Shared types for the server-runtime modules generated entries import
- * (ADR-0160 rule a: request-time server logic lives in typecheckable TS
- * modules, never accretes inside codegen template strings).
+ * Shared types for the server-runtime modules generated entries import:
+ * request-time server logic lives in typecheckable TS modules, never
+ * accretes inside codegen template strings.
  *
  * These modules execute inside the generated Hono entry in every runtime —
  * the Vite dev server, the SSG prerender bundle, and the Nitro production
@@ -10,10 +10,10 @@
  */
 
 /**
- * The per-request response-header channel (ADR-0129): the mutable `Headers`
+ * The per-request response-header channel: the mutable `Headers`
  * instance the loader and the action receive as `context.responseHeaders`,
  * plus the commitment switch the generated stream handler flips when the
- * response is committed (ADR-0158).
+ * response is committed.
  */
 export interface ResponseHeaderChannel {
   /**
@@ -25,7 +25,7 @@ export interface ResponseHeaderChannel {
    */
   readonly channel: Headers;
   /**
-   * The header-commitment point (ADR-0158): the generated handler calls this
+   * The header-commitment point: the generated handler calls this
    * once, immediately before it exposes the response body. Later mutator
    * calls are ignored with a diagnostic. Idempotent.
    */

@@ -1,5 +1,5 @@
 /**
- * Client asset manifest protocol (#1471, ADR-0160 rule d).
+ * Client asset manifest protocol (#1471).
  *
  * The structured record of what the client build emits for island delivery:
  * the island client entry URL, one asset per compile-time island identity

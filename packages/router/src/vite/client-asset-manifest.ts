@@ -1,5 +1,5 @@
 /**
- * Client asset manifest builder (#1471, ADR-0160 rule d).
+ * Client asset manifest builder (#1471).
  *
  * Joins the compile-time island identity (the ClientIslandDeliveryEntry list
  * the client entry was generated from) with the Phase 2 client build's

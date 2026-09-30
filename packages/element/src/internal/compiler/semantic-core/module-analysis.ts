@@ -91,8 +91,8 @@ export interface SemanticCoreOptions {
  * One module-scan vocabulary entry the host admits: a binding identity
  * (module specifier + exported name, aliases followed) plus the fact a
  * canonical call of that binding contributes. Plain data — the scan consumes
- * the descriptors without learning the caller's package vocabulary
- * (ADR-0160 rule c), the same direction as the compiler's
+ * the descriptors without learning the caller's package vocabulary, the
+ * same direction as the compiler's
  * {@link StaticSidecarDescriptor} admission (#1473 item 3).
  */
 export interface ModuleVocabularyDescriptor {
@@ -385,7 +385,7 @@ function stringArgument(call: ts.CallExpression, index = 0): string | undefined 
  * host-injected: the default knows only the element package's own
  * registration factories, and page-definition/registration facts for other
  * packages require the caller's {@link ModuleSemanticsOptions.vocabulary}
- * descriptors (ADR-0160 rule c).
+ * descriptors.
  */
 export function analyzeModuleSemantics(
   source: string,

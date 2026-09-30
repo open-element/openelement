@@ -2,19 +2,19 @@
  * @openelement/router/server-runtime — response/header channel.
  *
  * The request-time runtime semantics of the loader/action response-header
- * channel (ADR-0129), its streamed-document commitment gate (ADR-0158), and
+ * channel, its streamed-document commitment gate, and
  * the CSP auto-nonce: header commitment, the late-mutation Proxy guard, the
  * Set-Cookie-preserving merge, protocol-header precedence, and nonce
  * creation/application.
  *
  * Generated entries import this module and call it; the codegen templates
- * keep call sites, never function bodies (ADR-0160 rule a). The one
+ * keep call sites, never function bodies. The one
  * historical exception — the generated helpers inside the entry template —
  * moved here verbatim, so behavior is governed by this module and pinned by
  * the read-only oracles (request-time-parity, stream-manifest) plus the
  * unit tests beside it.
  *
- * Behavior contract (ADR-0129 §3, ADR-0158 "HTTP commitment"):
+ * Behavior contract:
  * - `mergeChannelHeaders` appends every channel entry into a copy of the
  *   response headers. `Headers.append` keeps multi-value `Set-Cookie`
  *   intact, and an empty channel returns the original `Response` untouched.
@@ -30,7 +30,7 @@ import type { ResponseHeaderChannel } from './types.ts';
 
 /**
  * Headers the loader/action channel may never override once the response
- * already carries them (ADR-0129 §3): the framework protocol always wins on
+ * already carries them: the framework protocol always wins on
  * conflict. Compared case-insensitively against the channel entry's name;
  * the channel may still introduce one of these when the response does not
  * set it itself.
@@ -50,8 +50,8 @@ export const PROTOCOL_HEADERS: ReadonlySet<string> = new Set([
  * The proxy guards the mutating members (`append`, `set`, `delete`) after
  * {@linkcode ResponseHeaderChannel.commit}: a late write from a held
  * `context.responseHeaders` reference is a no-op with a structured
- * diagnostic naming the route, header, and operation (ADR-0158 keeps
- * ADR-0129's no-op rule; it never throws and never reinterprets a late
+ * diagnostic naming the route, header, and operation (the no-op rule; it
+ * never throws and never reinterprets a late
  * `Location`/`Set-Cookie` as a protocol decision). Every other member —
  * reads, `forEach` included — behaves exactly like the wrapped `Headers`,
  * and `forEach` hands the callback the proxy itself so a callback-held
@@ -102,8 +102,8 @@ export function createStreamHeaderChannel(route: string): ResponseHeaderChannel 
 }
 
 /**
- * Merges the loader/action response-header channel into a response
- * (ADR-0129 §3). Channel entries are appended after the framework-set
+ * Merges the loader/action response-header channel into a response.
+ * Channel entries are appended after the framework-set
  * headers, so multi-value `Set-Cookie` accumulates; a protocol header
  * ({@linkcode PROTOCOL_HEADERS}) the response already carries is skipped —
  * the channel cannot override the protocol. An empty channel returns the

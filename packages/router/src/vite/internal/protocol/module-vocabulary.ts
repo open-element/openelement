@@ -8,7 +8,7 @@
  * host — this module is the one place the router's factory bindings are
  * written, and every router call site that scans module sources injects it,
  * so the scan and the authored route grammar cannot drift (#1473 item 3, the
- * static-sidecar admission pattern of ADR-0160 rule c).
+ * static-sidecar admission pattern).
  */
 
 import type { ModuleVocabularyDescriptor } from '@openelement/element/compiler';

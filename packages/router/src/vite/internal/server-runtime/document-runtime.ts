@@ -6,7 +6,7 @@
  * composition that projects the rendered route content into the shell's
  * default slot). Migrated verbatim from the generated-entry helpers
  * (entry-render-runtime.ts) so the logic is visible to `deno check` and
- * directly unit-testable (ADR-0160 rule a).
+ * directly unit-testable.
  *
  * Element functions are injected, never imported, so the module stays free of
  * any @openelement/element edge (the LIT entry's import graph must never

@@ -2,7 +2,7 @@
  * @openelement/router/server-runtime — the generated-app factory.
  *
  * `createGeneratedApp` is the assembly half of the generated Hono entry
- * (ADR-0160 rule a, #1470 block e): the entry's final form is imports + a
+ * (#1470 block e): the entry's final form is imports + a
  * route descriptor + one factory call, and this module owns everything that
  * used to be emitted as entry-template assembly code — the Hono app and its
  * WinterCG bridge, the composed `openElementHandler` (with the middleware.use
@@ -162,7 +162,7 @@ export function createGeneratedApp(config: GeneratedAppConfig): GeneratedApp {
     return src ? [{ type: 'module' as const, src }] : [];
   };
 
-  // The composed handler contract (ADR-0123 item 2, #858): fetch middleware
+  // The composed handler contract (#858): fetch middleware
   // composes at the handler boundary in onion order (use[0] outermost),
   // outside the Hono app, so the dev server, the start CLI, the e2e fixture
   // server, and the Nitro production entry share one composed handler.
@@ -214,7 +214,7 @@ export function createGeneratedApp(config: GeneratedAppConfig): GeneratedApp {
     getDefaultLocale: () => config.defaultLocale,
   };
 
-  // The page-render seam (ADR-0160 rule a) binds to the entry's injected
+  // The page-render seam binds to the entry's injected
   // Element functions and its serialized build data — exactly the wiring the
   // entry template used to emit (renderer-adapter selected), now typed. The
   // dangerous keys are the canonical policy imported from the kernel-free

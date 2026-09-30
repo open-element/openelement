@@ -2,10 +2,10 @@
  * Per-route wiring emission of the action POST protocol (#901). The
  * protocol itself — CSRF floor, named-action dispatch, classification,
  * problem+json errors, PRG, the fetch/native channel fork — is the typed
- * `runActionProtocol` in @openelement/router/server-runtime (ADR-0160 rule
- * a); the generated entry imports it and this file only wires each route's
- * call site: the status-page callback, the named-action dispatch result,
- * and the 422 re-render data refresh.
+ * `runActionProtocol` in @openelement/router/server-runtime; the generated
+ * entry imports it and this file only wires each route's call site: the
+ * status-page callback, the named-action dispatch result, and the 422
+ * re-render data refresh.
  */
 
 import { quoteGeneratedJavaScriptValue } from './codegen-literals.ts';

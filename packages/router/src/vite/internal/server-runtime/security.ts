@@ -6,7 +6,7 @@
  * registration-ownership tracking, and the fail-closed conflict rule the
  * entry's component registrations run through. Migrated verbatim from the
  * generated-entry strings (entry-orchestrator.ts) so the guard is visible to
- * `deno check` and directly unit-testable (ADR-0160 rule a).
+ * `deno check` and directly unit-testable.
  *
  * The marker constants are imported from the canonical protocol module
  * (../protocol/registry-markers.ts) instead of being injected into the

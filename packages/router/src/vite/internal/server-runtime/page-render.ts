@@ -6,7 +6,7 @@
  * (#1214: every projection filters the canonical dangerous-key set), and the
  * path-derived locale resolution. Migrated verbatim from the generated-entry
  * helpers (entry-render-runtime.ts) so the logic is visible to `deno check`
- * and directly unit-testable (ADR-0160 rule a).
+ * and directly unit-testable.
  *
  * The dangerous-key set is injected, not imported: the narrow runtime reads
  * mirror the generated helpers exactly, and the caller binds the policy —

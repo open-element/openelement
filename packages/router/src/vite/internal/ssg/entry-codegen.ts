@@ -5,7 +5,7 @@
  * helpers used by entry-orchestrator.ts and entry-render-ssg.ts. Each
  * function generates a fragment of the virtual Hono entry. Client entry
  * emission lives in entry-client-codegen.ts. The page-render runtime is
- * imported from @openelement/router/server-runtime (ADR-0160 rule a); the
+ * imported from @openelement/router/server-runtime; the
  * descriptor data model lives in protocol/ssg.ts and is constructed by
  * entry-descriptor.ts.
  */

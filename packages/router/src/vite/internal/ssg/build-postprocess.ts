@@ -6,7 +6,7 @@
  *
  * Client scripts are not post-processed here: the document renderer embeds
  * the final script tags at render time from the client asset manifest
- * (#1471, ADR-0160 rule d). The remaining island chunk resolution is
+ * (#1471). The remaining island chunk resolution is
  * identity-driven too — the per-page island manifests read their chunk URLs
  * from the manifest's delivery-tag-keyed record, never from output file
  * names.
@@ -70,7 +70,7 @@ function expandLocalIslandMeta(
 
 /**
  * Resolve the per-island client chunk URLs from the Phase 2 client asset
- * manifest (ADR-0160 rule d): delivery tag -> asset URL, identity-keyed.
+ * manifest: delivery tag -> asset URL, identity-keyed.
  * No output file name is ever parsed — a chunk rename or rehash leaves every
  * island identity intact because the manifest was joined on module ids.
  * An island the manifest does not record would silently never appear in a

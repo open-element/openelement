@@ -126,7 +126,7 @@ export function buildEntryDescriptor(
   // --- Imports ---
   const imports: ImportDecl[] = [];
 
-  // The generated-app factory (ADR-0160 rule a, #1470 block e): the entry's
+  // The generated-app factory (#1470 block e): the entry's
   // assembly — the Hono app, its bridge, the composed handler exports, the
   // registry guard, and the page-render bindings — is the imported runtime;
   // the entry keeps imports + descriptor data + wiring. It replaces the
@@ -149,20 +149,20 @@ export function buildEntryDescriptor(
     names: ['ACTION_FETCH_HEADER'],
     alias: '__actionFetchHeader',
   });
-  // ADR-0129/ADR-0158: the response-header channel and CSP auto-nonce are
-  // runtime modules the generated handlers call (ADR-0160 rule a) — the
-  // entry imports them instead of carrying emitted function bodies. Needed
-  // only when a page handler exists (every page/not-found handler merges the
-  // channel), plus the stream channel when any page streams.
+  // The response-header channel and CSP auto-nonce are runtime modules the
+  // generated handlers call — the entry imports them instead of carrying
+  // emitted function bodies. Needed only when a page handler exists (every
+  // page/not-found handler merges the channel), plus the stream channel when
+  // any page streams.
   if (routes.some((route) => route.type === 'page' && !route.special)) {
     imports.push({
       from: '@openelement/router/server-runtime',
       names: ['mergeChannelHeaders'],
       alias: '__mergeChannelHeaders',
     });
-    // ADR-0120/ADR-0121: the action POST protocol (CSRF floor, dispatch,
-    // classification, problem+json, PRG, the 303 coercion and the 500 error
-    // mapping) is the imported runtime module (ADR-0160 rule a); the entry
+    // The action POST protocol (CSRF floor, dispatch, classification,
+    // problem+json, PRG, the 303 coercion and the 500 error mapping) is the
+    // imported runtime module; the entry
     // keeps the call sites. The default body limit is bound inside the
     // generated-app factory to the canonical policy constant (#1470 block e).
     imports.push({
@@ -186,9 +186,9 @@ export function buildEntryDescriptor(
         names: ['createStreamHeaderChannel'],
         alias: '__streamHeaderChannel',
       });
-      // The streaming pump (ADR-0158, #1470 block d): the request scope, the
+      // The streaming pump (#1470 block d): the request scope, the
       // deferred-field front gate, the bound body builder, and the browser
-      // bootstrap string are the imported runtime module (ADR-0160 rule a);
+      // bootstrap string are the imported runtime module;
       // the entry keeps the call sites and binds escapeAttr at wiring time.
       imports.push({
         from: '@openelement/router/server-runtime',
@@ -210,7 +210,7 @@ export function buildEntryDescriptor(
         names: ['STREAM_BROWSER_BOOTSTRAP'],
         alias: '__streamBrowserBootstrap',
       });
-      // The deferred-shell gate (ADR-0160 Amendment 1): the typed runtime
+      // The deferred-shell gate (Amendment 1): the typed runtime
       // factory the entry binds to its serialized stream manifests and its
       // createDeferredDsdExecutor import; the handlers keep the call site.
       imports.push({
@@ -219,7 +219,7 @@ export function buildEntryDescriptor(
         alias: '__createDeferredPageShellGate',
       });
     }
-    // The page-render seam (ADR-0160 rule a): page tag resolution and the
+    // The page-render seam: page tag resolution and the
     // page-definition/route-meta/locale extractors are pure helpers the
     // emitted call sites reference; the runtime binding itself (renderer,
     // props projection, status pages, app shell) happens inside the

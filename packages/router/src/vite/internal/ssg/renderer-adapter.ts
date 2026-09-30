@@ -4,7 +4,7 @@ import { quoteGeneratedJavaScriptValue } from './codegen-literals.ts';
 type RendererMode = 'native' | 'lit';
 
 /**
- * The typed page-render runtime seam (ADR-0160 rule a): which
+ * The typed page-render runtime seam: which
  * @openelement/router/server-runtime functions the generated entry imports
  * and how its `createGeneratedApp` config binds the page-render runtime to
  * the entry's own Element imports. The emitted call sites (`__ssr`,

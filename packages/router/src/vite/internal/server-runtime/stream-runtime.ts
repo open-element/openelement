@@ -1,5 +1,5 @@
 /**
- * @openelement/router/server-runtime — the streaming pump (ADR-0158).
+ * @openelement/router/server-runtime — the streaming pump.
  *
  * The request-time streaming semantics of the generated Hono entry: the
  * request scope with its abort fan-out, the deferred-field observer front
@@ -8,11 +8,10 @@
  * cancellation/timeout sweep, the Part backfill frames with their terminal
  * error frames, and the no-JS tail. Migrated verbatim from the
  * generated-entry template strings (entry-stream-runtime.ts, #1470 block d)
- * so the pump is visible to `deno check` and directly unit-testable
- * (ADR-0160 rule a).
+ * so the pump is visible to `deno check` and directly unit-testable.
  *
  * The per-route shell gate (`__createDeferredPageShell`) is the typed
- * {@linkcode createDeferredPageShell} factory (ADR-0160 Amendment 1): the
+ * {@linkcode createDeferredPageShell} factory (Amendment 1): the
  * entry binds it to its serialized stream manifests and its
  * `createDeferredDsdExecutor` import and keeps only the call site.
  *
@@ -454,7 +453,7 @@ export interface DeferredPageShellConfig {
  * program version — the gate fails closed with the route before the executor
  * re-verifies the wire hash (#1276 B1.3-F1). Bound to the entry's serialized
  * manifests and its `createDeferredDsdExecutor` import; the returned gate is
- * the `__createDeferredPageShell` call site (ADR-0160 Amendment 1 — the last
+ * the `__createDeferredPageShell` call site (Amendment 1 — the last
  * runtime function body that stayed emitted for its oracle pin).
  */
 export function createDeferredPageShell(

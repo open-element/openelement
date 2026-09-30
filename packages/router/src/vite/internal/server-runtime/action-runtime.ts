@@ -6,13 +6,13 @@
  * (#542), the canonical action classification (#541), the fetch-channel
  * ActionResult union, the RFC 9457 problem+json error channel (#863),
  * the POST/Redirect/GET flow (#548), the default body limit (#568) bound to
- * the policy constant, the ADR-0121 redirect coercion, and the internal
+ * the policy constant, the redirect coercion, and the internal
  * Hono↔WinterCG bridge every generated page handler composes through.
  * Migrated verbatim from the generated-entry strings (entry-action-runtime.ts,
  * entry-codegen.ts, entry-orchestrator.ts) so the protocol is visible to
- * `deno check` and directly unit-testable (ADR-0160 rule a).
+ * `deno check` and directly unit-testable.
  *
- * Behavior contract (ADR-0120/ADR-0121): a validation failure RETURNs
+ * Behavior contract: a validation failure RETURNs
  * `fail(status, data)` and the no-JS channel re-renders the form at that
  * status (422); success redirects through PRG 303; CSRF rejections, unknown
  * actions, unparseable bodies, and unexpected errors answer problem+json on
@@ -77,7 +77,7 @@ export type ActionLoadContext = { env?: unknown } & Record<string, unknown>;
 /**
  * The per-request action channel state: mutated by
  * {@linkcode runActionProtocol} before any protocol exit so the generated
- * handler's catch block can branch on the fetch path (ADR-0121).
+ * handler's catch block can branch on the fetch path.
  */
 export interface ActionProtocolState {
   isFetch: boolean;
@@ -281,7 +281,7 @@ export function createActionBodyLimit(maxSize: number): MiddlewareHandler {
 }
 
 /**
- * The ADR-0121 redirect exit for a POST action: every 3xx an author throws
+ * The redirect exit for a POST action: every 3xx an author throws
  * out of an action is coerced to 303 — PRG must be method-safe and
  * non-cacheable. The native form channel answers a real 303; the fetch
  * channel answers HTTP 200 with the redirect carried as the ActionResult
