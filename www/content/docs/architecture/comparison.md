@@ -85,21 +85,21 @@ What we measure, and the commands that reproduce each row.
 
 ### Output size
 
-Numbers measured on 2026-09-25 from the docs site's own build (`www/dist`, built with `deno task site:build`). The commands below reproduce each row; page and URL counts follow the route set, so re-run them after content changes. These figures last moved when the `/guide/streaming` guide page landed (ADR-0158/0159): one new page per locale, which also grew the shared compiled-runtime chunk in every island bundle.
+Numbers measured on 2026-10-01 from the docs site's own build (`www/dist`, built with `deno task site:build`). The commands below reproduce each row; page and URL counts follow the route set, so re-run them after content changes. These figures last moved when the alpha6 build made client asset injection manifest-driven with exact package-island identity (#1471, ADR-0160): each package island now ships as its own `island-<tag>-<hash>.js` chunk matched by module identity, where the compiled component code previously bundled into whichever island chunk referenced it — so several chunks were re-cut and renamed, and a page's payload now follows its own island set instead of inheriting mis-attributed bundles.
 
 | Metric                 | Value                                              |
 | ---------------------- | -------------------------------------------------- |
 | Pre-rendered documents | 70 HTML files                                      |
 | URLs in `sitemap.xml`  | 68                                                 |
-| Total static output    | 9.0 MB                                             |
+| Total static output    | 8.9 MB                                             |
 | Island manifests       | 70 — one per page                                  |
-| Search index           | 34 pages per locale (en, zh), 68 fragments, 1.3 MB |
+| Search index           | 34 pages per locale (en, zh), 68 fragments, 1.6 MB |
 
 ```bash
 deno task site:build                        # regenerate everything below first
 find www/dist -name '*.html' | wc -l        # 70
 grep -c '<loc>' www/dist/sitemap.xml        # 68
-du -sh www/dist                             # 9.3M (platform-dependent; the 9.0 MB above is the byte sum)
+du -sh www/dist                             # 9.6M (platform-dependent; the 8.9 MB above is the byte sum)
 ls www/dist/island-manifests | wc -l        # 70
 cat www/dist/pagefind/pagefind-entry.json   # page_count 34 per language
 ```
@@ -110,29 +110,29 @@ The docs site is a normal openElement app, islands included, so its client outpu
 
 | Chunk                          | Raw bytes | gzip -9 |
 | ------------------------------ | --------- | ------- |
-| `island-open-layout`           | 102,042   | 17,705  |
-| `island-open-cinematic-scroll` | 90,533    | 28,601  |
-| `open-button`                  | 16,320    | 3,130   |
-| `island-open-dragon-live-gaze` | 14,161    | 5,169   |
-| `island-open-page-rail`        | 9,684     | 2,747   |
-| `open-code-block`              | 8,471     | 2,814   |
-| `island-open-hero-polish`      | 4,436     | 1,850   |
-| `open-badge`                   | 4,010     | 1,140   |
+| `island-open-layout`           | 100,147   | 17,217  |
+| `island-open-badge`            | 88,210    | 27,363  |
+| `island-open-button`           | 16,279    | 3,122   |
+| `island-open-dragon-live-gaze` | 14,198    | 5,182   |
+| `island-open-page-rail`        | 9,721     | 2,757   |
+| `island-open-code-block`       | 8,476     | 2,819   |
+| `island-open-cinematic-scroll` | 7,817     | 3,094   |
+| `island-open-hero-polish`      | 4,478     | 1,865   |
 
 ```bash
 ls -l www/dist/client/islands/*.js
 gzip -9 -c www/dist/client/islands/client.js | wc -c
 ```
 
-The shared entry (`client.js`, ~7 KB) is deliberately not pinned: it embeds checkout-absolute island paths in error strings, so its bytes vary by checkout depth. Route payloads below tolerate ±1% for the same reason; per-chunk rows stay exact.
+The shared entry (`client.js`, ~7 KB) is deliberately not pinned: it embeds checkout-absolute island paths in error strings, so its bytes vary by checkout depth. Per-chunk raw rows tolerate ±1% and gzip rows ±3% for the same class of cross-platform byte variance, route payloads below tolerate ±1%, and chunk counts stay exact.
 
 What a page actually downloads follows from its island manifest, not from the total:
 
 | Route                    | Client payload (raw) | Distinct chunks |
 | ------------------------ | -------------------- | --------------- |
-| `/guide/mdx`             | 126,948 B            | 4               |
-| `/guide/getting-started` | 126,948 B            | 4               |
-| `/`                      | 226,394 B            | 6               |
+| `/guide/mdx`             | 125,219 B            | 4               |
+| `/guide/getting-started` | 125,219 B            | 4               |
+| `/`                      | 141,991 B            | 6               |
 
 Across all 70 page manifests the site declares 10 island tags in 334 entries: the chrome islands (`open-layout`, `open-search`, `open-theme-toggle`) on every page, `open-page-rail` on 60, `open-code-block` on 48, and the remaining tags on a handful of pages each.
 
