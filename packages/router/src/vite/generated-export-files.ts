@@ -1,5 +1,5 @@
 // GENERATED FILE — do not edit by hand.
-// Regenerate: deno run --allow-read --allow-write --allow-run tools/repo/generate-openelement-export-files.ts
+// Regenerate via the repository's "generate:all" tooling task.
 // Source of truth: the "exports" field of each workspace package manifest.
 export const OPENELEMENT_EXPORT_FILES: Record<string, Record<string, string>> = {
   'create': {
