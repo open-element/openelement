@@ -7,9 +7,22 @@
  * document renderer embeds the final script tags at render time from the
  * client asset manifest (ADR-0160 rule d). What remains in postprocess.ts
  * is the meta/speculation injection; the island chunk↔tag trade now runs
- * only through the manifest (build-postprocess.ts).
+ * only through the manifest (build-postprocess.ts) and fails closed: an
+ * admitted island without a manifest record fails the build instead of
+ * shipping a partial page manifest, and only the metadata Phase 2 selected
+ * is validated or delivered.
  */
-import { assert, assertEquals, assertExists, assertFalse, assertStringIncludes } from '@std/assert';
+import {
+  assert,
+  assertEquals,
+  assertExists,
+  assertFalse,
+  assertRejects,
+  assertStringIncludes,
+  assertThrows,
+} from '@std/assert';
+import { OpenElementError } from '@openelement/element';
+import { ClientAssetErrorCode } from '../src/internal/error-codes.ts';
 import {
   buildSpeculationRulesJson,
   injectCspMeta,
@@ -22,6 +35,7 @@ import {
 } from '../src/vite/internal/ssg/build-postprocess.ts';
 import { stableHash } from '../src/vite/internal/ssg/ssg-helpers.ts';
 import type { ClientAssetManifest } from '../src/vite/internal/protocol/client-assets.ts';
+import type { IslandDecl } from '../src/vite/internal/protocol/ssg.ts';
 
 import { join } from '@std/path';
 
@@ -80,44 +94,43 @@ Deno.test('islandChunkMapFromAssetManifest follows a chunk rename through the ma
   );
 });
 
-Deno.test('islandChunkMapFromAssetManifest warns on islands the manifest does not record', () => {
-  const origWarn = console.warn;
-  const warnings: string[] = [];
-  console.warn = (...args: unknown[]) => {
-    warnings.push(args.join(' '));
-  };
-  let map: Record<string, string>;
-  try {
-    map = islandChunkMapFromAssetManifest(
-      { entry: '/client/islands/client.js', islands: {}, shared: [] },
-      ['open-ghost'],
-    );
-  } finally {
-    console.warn = origWarn;
-  }
-  assertEquals(map, {});
-  assertExists(
-    warnings.find((w) => w.includes('open-ghost') && w.includes('client asset manifest')),
-    'Should warn about the island left without a manifest record, got: ' +
-      warnings.join(' | '),
+Deno.test('islandChunkMapFromAssetManifest fails closed on islands the manifest does not record', () => {
+  // The former warn-and-continue shipped a partial chunk map: a page would
+  // carry an island whose client script never loads. Now the join fails,
+  // naming the island — whatever else the manifest does record.
+  const error = assertThrows(
+    () =>
+      islandChunkMapFromAssetManifest(
+        {
+          entry: '/client/islands/client.js',
+          islands: { 'open-other': { file: '/client/islands/other.js', strategy: 'idle' } },
+          shared: [],
+        },
+        ['open-ghost'],
+      ),
+    OpenElementError,
+  );
+  assertEquals(error.code, ClientAssetErrorCode.ISLAND_UNMAPPED);
+  assertEquals(error.phase, 'build');
+  assert(
+    error.message.includes('open-ghost') && error.message.includes('client asset manifest'),
+    `error names the island and the manifest: ${error.message}`,
   );
 });
 
-Deno.test('islandChunkMapFromAssetManifest warns for every island when no manifest shipped', () => {
-  const origWarn = console.warn;
-  const warnings: string[] = [];
-  console.warn = (...args: unknown[]) => {
-    warnings.push(args.join(' '));
-  };
-  let map: Record<string, string>;
-  try {
-    map = islandChunkMapFromAssetManifest(null, ['open-counter']);
-  } finally {
-    console.warn = origWarn;
-  }
-  assertEquals(map, {});
-  assertEquals(warnings.length, 1);
-  assertStringIncludes(warnings[0], 'open-counter');
+Deno.test('islandChunkMapFromAssetManifest fails closed for every island when no manifest shipped', () => {
+  const error = assertThrows(
+    () => islandChunkMapFromAssetManifest(null, ['open-counter']),
+    OpenElementError,
+  );
+  assertEquals(error.code, ClientAssetErrorCode.ISLAND_UNMAPPED);
+  assert(
+    error.message.includes('open-counter') && error.message.includes('no client asset manifest'),
+    `error names the island and the missing manifest: ${error.message}`,
+  );
+  // An island-free build owes no records: the empty list maps without
+  // consulting the manifest at all.
+  assertEquals(islandChunkMapFromAssetManifest(null, []), {});
 });
 
 // ─── postProcessClientIslandBuild (manifest-driven, no HTML surgery) ────
@@ -191,7 +204,15 @@ Deno.test('postProcessClientIslandBuild writes per-page manifests with manifest-
   }
 });
 
-Deno.test('postProcessClientIslandBuild without a manifest still writes page manifests (warn path)', async () => {
+function dirExists(path: string): boolean {
+  try {
+    return Deno.statSync(path).isDirectory;
+  } catch {
+    return false;
+  }
+}
+
+Deno.test('postProcessClientIslandBuild without a manifest fails closed and writes nothing', async () => {
   const tmp = makeTempDir();
   try {
     const dist = join(tmp, 'dist');
@@ -201,28 +222,126 @@ Deno.test('postProcessClientIslandBuild without a manifest still writes page man
       '<html><body><open-counter></open-counter></body></html>',
     );
 
-    const origWarn = console.warn;
-    const warnings: string[] = [];
-    console.warn = (...args: unknown[]) => {
-      warnings.push(args.join(' '));
-    };
-    try {
-      await postProcessClientIslandBuild(ctxView(null, tmp));
-    } finally {
-      console.warn = origWarn;
-    }
-    assertExists(
-      warnings.find((w) => w.includes('open-counter')),
-      'missing manifest record must be surfaced, got: ' + warnings.join(' | '),
+    const error = await assertRejects(
+      () => postProcessClientIslandBuild(ctxView(null, tmp)),
+      OpenElementError,
     );
-    // The unrecorded island is not silently mapped to a chunk: the page
-    // manifest carries no island entry for it.
+    assertEquals(error.code, ClientAssetErrorCode.ISLAND_UNMAPPED);
+    assert(
+      error.message.includes('open-counter'),
+      `error names the unrecorded island: ${error.message}`,
+    );
+    // No partial manifest: the pass either writes the complete set or none
+    // of it — here nothing was written at all.
+    assertEquals(dirExists(join(dist, 'island-manifests')), false);
+    // The rendered HTML stays untouched either way.
+    assertEquals(
+      Deno.readTextFileSync(join(dist, 'index.html')),
+      '<html><body><open-counter></open-counter></body></html>',
+    );
+  } finally {
+    cleanup(tmp);
+  }
+});
+
+Deno.test('postProcessClientIslandBuild fails before writing when the manifest misses one island', async () => {
+  // One island resolves, one does not: the failure must land BEFORE any
+  // page manifest is generated, so the output tree never carries a partial
+  // record that silently omits the unrecorded island.
+  const tmp = makeTempDir();
+  try {
+    const dist = join(tmp, 'dist');
+    Deno.mkdirSync(dist, { recursive: true });
+    Deno.writeTextFileSync(
+      join(dist, 'index.html'),
+      '<html><body><open-counter></open-counter></body></html>',
+    );
+    const partial: ClientAssetManifest = {
+      entry: '/client/islands/client.js',
+      // open-counter is recorded; the second admitted island is not.
+      islands: {
+        'open-counter': { file: '/client/islands/island-counter-Ab12.js', strategy: 'idle' },
+      },
+      shared: [],
+    };
+    const error = await assertRejects(
+      () =>
+        postProcessClientIslandBuild({
+          phase3: { root: tmp, outDir: 'dist', base: '/', upgradeStrategy: 'idle' as const },
+          phase1: {
+            islandTagNames: ['open-counter', 'open-theme'],
+            islandFiles: ['counter.ts', 'theme.ts'],
+            packageIslandDecls: [],
+            compilerBehaviorDecls: [],
+            islandMeta: {},
+          },
+          clientAssetManifest: partial,
+        }),
+      OpenElementError,
+    );
+    assertEquals(error.code, ClientAssetErrorCode.ISLAND_UNMAPPED);
+    assert(error.message.includes('open-theme'), `error names the island: ${error.message}`);
+    assertEquals(dirExists(join(dist, 'island-manifests')), false);
+  } finally {
+    cleanup(tmp);
+  }
+});
+
+Deno.test('postProcessClientIslandBuild validates only the local metadata Phase 2 selected', async () => {
+  // buildClient narrows ctx.phase1.islandTagNames to the reachable client
+  // set but leaves islandMeta carrying every scanned island. An unselected
+  // island's metadata — malformed or merely multi-tag — must be neither
+  // validated nor delivered: re-admitting it would fail the fail-closed
+  // chunk map for an island that ships nothing.
+  const tmp = makeTempDir();
+  try {
+    const dist = join(tmp, 'dist');
+    Deno.mkdirSync(dist, { recursive: true });
+    Deno.writeTextFileSync(
+      join(dist, 'index.html'),
+      '<html><body><open-counter></open-counter></body></html>',
+    );
+    const manifest: ClientAssetManifest = {
+      entry: '/client/islands/client.js',
+      islands: {
+        'open-counter': { file: '/client/islands/island-counter-Ab12.js', strategy: 'idle' },
+      },
+      shared: [],
+    };
+    await postProcessClientIslandBuild({
+      phase3: { root: tmp, outDir: 'dist', base: '/', upgradeStrategy: 'idle' as const },
+      phase1: {
+        // Selected: only open-counter.
+        islandTagNames: ['open-counter'],
+        islandFiles: ['counter.ts'],
+        packageIslandDecls: [],
+        compilerBehaviorDecls: [],
+        // The delivery fields (tags/tagNames) ride this record untyped —
+        // the pipeline reads them through the same DeliveryIslandMeta cast
+        // expandLocalIslandMeta applies.
+        islandMeta: {
+          // Unselected and malformed (empty tags list): never validated.
+          'open-broken': { tags: [] },
+          // Unselected multi-tag island: its delivered aliases never enter
+          // the chunk-map request.
+          'open-dormant': { tags: ['open-dormant', 'open-dormant-panel'] },
+        } as unknown as Record<string, Partial<IslandDecl>>,
+      },
+      clientAssetManifest: manifest,
+    });
     const pageManifest = JSON.parse(
       Deno.readTextFileSync(await pageManifestPath(dist, '/')),
-    ) as { islands: Array<{ tagName: string }> };
+    ) as {
+      islands: Array<{ tagName: string; chunkUrl: string; strategy: string; layer: string }>;
+    };
     assertEquals(
-      pageManifest.islands.some((entry) => entry.tagName === 'open-counter'),
-      false,
+      pageManifest.islands,
+      [{
+        tagName: 'open-counter',
+        chunkUrl: '/client/islands/island-counter-Ab12.js',
+        strategy: 'idle',
+        layer: 'dsd-interactive',
+      }],
     );
   } finally {
     cleanup(tmp);

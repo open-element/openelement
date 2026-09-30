@@ -9,7 +9,9 @@
  * (#1471). The remaining island chunk resolution is
  * identity-driven too — the per-page island manifests read their chunk URLs
  * from the manifest's delivery-tag-keyed record, never from output file
- * names.
+ * names — and fail-closed: an admitted island missing its record fails the
+ * build (OE_CLIENT_ASSET_ISLAND_UNMAPPED) before any page manifest is
+ * written.
  */
 
 import { join } from '../../../internal/host-path.ts';
@@ -17,6 +19,7 @@ import type { ComponentLayer, HydrationStrategy } from '../protocol/framework.ts
 import type { ClientAssetManifest } from '../protocol/client-assets.ts';
 import type { IslandDecl } from '../protocol/ssg.ts';
 import { createLogger } from '@openelement/element';
+import { buildError, ClientAssetErrorCode } from '../../../internal/error-codes.ts';
 import { generateIslandManifests, writeIslandManifests } from './island-manifest.ts';
 import { expandIslandDeliveryDecl, resolveIslandHydrate } from './island-scanner.ts';
 import {
@@ -73,8 +76,12 @@ function expandLocalIslandMeta(
  * manifest: delivery tag -> asset URL, identity-keyed.
  * No output file name is ever parsed — a chunk rename or rehash leaves every
  * island identity intact because the manifest was joined on module ids.
- * An island the manifest does not record would silently never appear in a
- * page manifest — surface that instead of dropping it.
+ * Fail-closed: with islands admitted (a non-empty tag list), an island the
+ * manifest does not record fails the build (`OE_CLIENT_ASSET_ISLAND_UNMAPPED`)
+ * instead of warning and shipping a partial manifest — the page would carry an
+ * island whose client script never loads. An empty tag list maps to an empty
+ * chunk map without consulting the manifest (an island-free build owes no
+ * records).
  */
 export function islandChunkMapFromAssetManifest(
   manifest: ClientAssetManifest | null | undefined,
@@ -83,11 +90,16 @@ export function islandChunkMapFromAssetManifest(
   const chunkMap: Record<string, string> = {};
   for (const tagName of islandTagNames) {
     const asset = manifest?.islands[tagName];
-    if (asset) {
-      chunkMap[tagName] = asset.file;
-    } else {
-      log.warn(`No client asset recorded for island "${tagName}" in the client asset manifest.`);
+    if (!asset) {
+      throw buildError(
+        ClientAssetErrorCode.ISLAND_UNMAPPED,
+        `Admitted island "${tagName}" has no client asset record in the client asset manifest` +
+          `${manifest ? '' : ' (no client asset manifest shipped)'}` +
+          ` — the per-page island manifests would silently omit it; ` +
+          `the Phase 2 client build must record every admitted island's asset`,
+      );
     }
+    chunkMap[tagName] = asset.file;
   }
   return chunkMap;
 }
@@ -97,21 +109,32 @@ export function islandChunkMapFromAssetManifest(
  * Must only run after Phase 2 (client island build) has completed. The
  * client script tags themselves were already embedded at render time
  * (#1471) — this pass records the identity-driven chunk/strategy/layer
- * manifests only.
+ * manifests only. Fail-closed: the chunk map is resolved — and any missing
+ * island asset thrown — before a single page manifest is generated or
+ * written, so the pass either writes the complete manifest set or none of
+ * it, never a partial record that silently omits an admitted island.
  */
 export async function postProcessClientIslandBuild(ctx: BuildContextView): Promise<void> {
   const root = ctx.phase3.root || Deno.cwd();
   const outDir = ctx.phase3.outDir || DEFAULT_OUT_DIR;
   const outputDir = join(root, outDir);
 
-  // Local and package islands share the same strategy/layer derivation; the
-  // only difference is where the tag->meta pairs come from.
-  const localMetas = Object.entries(ctx.phase1.islandMeta || {}).flatMap(([tag, meta]) =>
-    expandLocalIslandMeta(tag, meta)
-  );
-  const localMetaTags = new Set(Object.keys(ctx.phase1.islandMeta || {}));
+  // Local islands: only the metadata Phase 2 selected. buildClient narrows
+  // ctx.phase1.islandTagNames to the reachable client set but leaves
+  // islandMeta carrying every scanned island — validating (or delivering
+  // tags from) an unselected entry would re-admit what the client build
+  // already excluded, and its tags would fail the fail-closed chunk map
+  // below although nothing ships for them. islandMeta is a lookup keyed by
+  // the selected tags, never an iteration source.
+  const islandMeta = ctx.phase1.islandMeta || {};
+  const localMetas: Array<[string, DeliveryIslandMeta]> = [];
   for (const tagName of ctx.phase1.islandTagNames || []) {
-    if (!localMetaTags.has(tagName)) localMetas.push([tagName, { tagName }]);
+    const rawMeta = islandMeta[tagName];
+    if (rawMeta) {
+      localMetas.push(...expandLocalIslandMeta(tagName, rawMeta));
+    } else {
+      localMetas.push([tagName, { tagName }]);
+    }
   }
   const declaredMetas = [
     ...(ctx.phase1.compilerBehaviorDecls || []),

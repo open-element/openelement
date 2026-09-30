@@ -29,7 +29,13 @@ import { validateIslandMediaQuery } from '../src/vite/internal/ssg/delivery.ts';
 import { validateIslandModuleSpecifier } from '../src/vite/internal/ssg/entry-generators.ts';
 import { buildEntryDescriptor } from '../src/vite/internal/ssg/entry-descriptor.ts';
 import { ssgRender } from '../src/vite/internal/ssg/ssg-render.ts';
-import { readViteClientManifest } from '../src/vite/client-asset-manifest.ts';
+import {
+  buildClientAssetManifest,
+  findClientEntryFile,
+  readViteClientManifest,
+} from '../src/vite/client-asset-manifest.ts';
+import { islandChunkMapFromAssetManifest } from '../src/vite/internal/ssg/build-postprocess.ts';
+import type { ClientIslandDeliveryEntry } from '../src/vite/internal/ssg/delivery.ts';
 import type { SsgRenderOptions, SsrBundle } from '../src/vite/internal/protocol/ssg.ts';
 
 const TABLES = {
@@ -147,3 +153,54 @@ Deno.test('error codes: the client asset manifest reports build-phase codes', as
   assertEquals(error.code, ClientAssetErrorCode.MANIFEST_READ);
   assertEquals(error.phase, 'build');
 });
+
+Deno.test('error codes: manifest entry cardinality and tag ownership report build-phase codes', () => {
+  // Two manifest records claiming the client entry fail regardless of the
+  // order their keys iterate in (OE_CLIENT_ASSET_ENTRY_AMBIGUOUS).
+  const ambiguous = assertThrows(
+    () =>
+      findClientEntryFile({
+        'virtual:open-client-entry': { file: 'islands/client.js' },
+        'app/_client/open-client-entry.ts': { file: 'islands/client-2.js' },
+      }),
+    OpenElementError,
+  );
+  assertEquals(ambiguous.code, ClientAssetErrorCode.ENTRY_AMBIGUOUS);
+  assertEquals(ambiguous.phase, 'build');
+
+  // A delivery tag claimed by two island entries fails even when both would
+  // resolve identically (OE_CLIENT_ASSET_ISLAND_TAG_DUPLICATE).
+  const duplicate = assertThrows(
+    () =>
+      buildClientAssetManifest({
+        root: '/proj',
+        base: '/',
+        islands: [
+          { entry: islandEntry(), sourceFile: '/proj/app/islands/counter.ts' },
+          { entry: islandEntry(), sourceFile: '/proj/app/islands/counter.ts' },
+        ],
+        viteManifest: {
+          'virtual:open-client-entry': { file: 'islands/client.js', isEntry: true },
+        },
+        chunks: [],
+        manifestPath: '/proj/dist/client/.vite/manifest.json',
+      }),
+    OpenElementError,
+  );
+  assertEquals(duplicate.code, ClientAssetErrorCode.ISLAND_TAG_DUPLICATE);
+  assertEquals(duplicate.phase, 'build');
+
+  // The SSG post-processor's manifest join fails closed for an admitted
+  // island with no manifest record (OE_CLIENT_ASSET_ISLAND_UNMAPPED).
+  const unmapped = assertThrows(
+    () => islandChunkMapFromAssetManifest(null, ['open-ghost']),
+    OpenElementError,
+  );
+  assertEquals(unmapped.code, ClientAssetErrorCode.ISLAND_UNMAPPED);
+  assertEquals(unmapped.phase, 'build');
+});
+
+/** The minimal delivery entry the raiser proofs above need. */
+function islandEntry(): ClientIslandDeliveryEntry {
+  return { tagName: 'open-counter', modulePath: '/app/islands/counter.ts', strategy: 'idle' };
+}

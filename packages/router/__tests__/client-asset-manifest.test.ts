@@ -36,7 +36,66 @@ Deno.test('findClientEntryFile reads the virtual client entry from the build man
     }),
     'islands/client.js',
   );
+  // Position-independent: the entry record wins wherever its key sits —
+  // unrelated keys never shadow it and it never shadows them.
+  assertEquals(
+    findClientEntryFile({
+      'app/islands/counter.ts': { file: 'islands/island-counter-Ab12.js' },
+      'virtual:open-client-entry': { file: 'islands/client.js', isEntry: true },
+    }),
+    'islands/client.js',
+  );
   assertEquals(findClientEntryFile({ 'app/islands/counter.ts': { file: 'islands/x.js' } }), null);
+});
+
+Deno.test('findClientEntryFile fails closed when several records claim the client entry', () => {
+  // Object.entries follows JSON insertion order, which the manifest writer
+  // is free to change between builds — a first-hit pick would make the
+  // shipped entry depend on that order. Two claiming records are ambiguous
+  // in EITHER order, and the failure names every candidate.
+  const records = (order: 'virtual-first' | 'copy-first') =>
+    order === 'virtual-first'
+      ? {
+        'virtual:open-client-entry': { file: 'islands/client.js', isEntry: true },
+        'app/_client/open-client-entry.ts': { file: 'islands/client-2.js' },
+      }
+      : {
+        'app/_client/open-client-entry.ts': { file: 'islands/client-2.js' },
+        'virtual:open-client-entry': { file: 'islands/client.js', isEntry: true },
+      };
+  for (const order of ['virtual-first', 'copy-first'] as const) {
+    const error = assertThrows(
+      () => findClientEntryFile(records(order), MANIFEST_PATH),
+      OpenElementError,
+    );
+    assertEquals(error.code, ClientAssetErrorCode.ENTRY_AMBIGUOUS);
+    assert(
+      error.message.includes('islands/client.js') && error.message.includes('islands/client-2.js'),
+      `error names every candidate entry: ${error.message}`,
+    );
+    assert(error.message.includes(MANIFEST_PATH), `error names the manifest: ${error.message}`);
+  }
+});
+
+Deno.test('buildClientAssetManifest fails when the manifest records several client entries', () => {
+  // The builder's join must not depend on key order either: the ambiguity
+  // fails Phase 2 before any island is resolved.
+  const error = assertThrows(
+    () =>
+      buildClientAssetManifest({
+        root: ROOT,
+        base: '/',
+        islands: [{ entry: island(), sourceFile: join(ROOT, 'app/islands/counter.ts') }],
+        viteManifest: {
+          'virtual:open-client-entry': { file: 'islands/client.js', isEntry: true },
+          'app/_client/open-client-entry.ts': { file: 'islands/client-2.js', isEntry: true },
+        },
+        chunks: [],
+        manifestPath: MANIFEST_PATH,
+      }),
+    OpenElementError,
+  );
+  assertEquals(error.code, ClientAssetErrorCode.ENTRY_AMBIGUOUS);
 });
 
 Deno.test('readViteClientManifest fails closed when the manifest is missing', async () => {
@@ -304,6 +363,96 @@ Deno.test('buildClientAssetManifest maps delivery tags and export names onto one
   assertEquals(
     manifest.islands['open-card'],
     manifest.islands['open-card-panel'],
+  );
+});
+
+// ─── Fail-closed: delivery-tag ownership is one-to-one ─────────────────
+
+Deno.test('a delivery tag claimed by two islands fails even when both would ship the same asset', () => {
+  // Same module, same chunk, same strategy — the duplicate is still a
+  // duplicate: "the same answer twice" is not ownership, and a silent
+  // overwrite would make the winner depend on the island list's order.
+  const error = assertThrows(
+    () =>
+      buildClientAssetManifest({
+        root: ROOT,
+        base: '/',
+        islands: [
+          { entry: island(), sourceFile: join(ROOT, 'app/islands/counter.ts') },
+          {
+            entry: island({ modulePath: '/app/islands/counter.ts' }),
+            sourceFile: join(ROOT, 'app/islands/counter.ts'),
+          },
+        ],
+        viteManifest: {
+          'virtual:open-client-entry': { file: 'islands/client.js', isEntry: true },
+          'app/islands/counter.ts': { file: 'islands/island-counter-Ab12.js' },
+        },
+        chunks: [{
+          fileName: 'islands/island-counter-Ab12.js',
+          modules: { '/proj/app/islands/counter.ts': {} },
+        }],
+        manifestPath: MANIFEST_PATH,
+      }),
+    OpenElementError,
+  );
+  assertEquals(error.code, ClientAssetErrorCode.ISLAND_TAG_DUPLICATE);
+  assert(
+    error.message.includes('open-counter'),
+    `error names the contested tag: ${error.message}`,
+  );
+});
+
+Deno.test('a delivery tag claimed by two islands fails across alias lists and strategies', () => {
+  // open-card-panel is delivered by open-card's alias list AND declared by
+  // another island with a different strategy and chunk — the claim itself
+  // fails, whatever asset or strategy each side would resolve to.
+  const error = assertThrows(
+    () =>
+      buildClientAssetManifest({
+        root: ROOT,
+        base: '/',
+        islands: [
+          {
+            entry: island({
+              tagName: 'open-card',
+              modulePath: '/app/islands/card.ts',
+              tags: ['open-card', 'open-card-panel'],
+              strategy: 'load',
+            }),
+            sourceFile: join(ROOT, 'app/islands/card.ts'),
+          },
+          {
+            entry: island({
+              tagName: 'open-card-panel',
+              modulePath: '/app/islands/panel.ts',
+              strategy: 'visible',
+            }),
+            sourceFile: join(ROOT, 'app/islands/panel.ts'),
+          },
+        ],
+        viteManifest: {
+          'virtual:open-client-entry': { file: 'islands/client.js', isEntry: true },
+          'app/islands/card.ts': { file: 'islands/island-card-AA11.js' },
+          'app/islands/panel.ts': { file: 'islands/island-panel-BB22.js' },
+        },
+        chunks: [{
+          fileName: 'islands/island-card-AA11.js',
+          modules: { '/proj/app/islands/card.ts': {} },
+        }, {
+          fileName: 'islands/island-panel-BB22.js',
+          modules: { '/proj/app/islands/panel.ts': {} },
+        }],
+        manifestPath: MANIFEST_PATH,
+      }),
+    OpenElementError,
+  );
+  assertEquals(error.code, ClientAssetErrorCode.ISLAND_TAG_DUPLICATE);
+  assert(
+    error.message.includes('open-card-panel') &&
+      error.message.includes('/app/islands/card.ts') &&
+      error.message.includes('/app/islands/panel.ts'),
+    `error names the tag and both claimants: ${error.message}`,
   );
 });
 

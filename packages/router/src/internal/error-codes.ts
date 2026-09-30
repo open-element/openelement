@@ -120,11 +120,14 @@ export const SsgRenderErrorCode = {
 
 /**
  * Stable codes for the Phase 2 client asset manifest
- * (`vite/client-asset-manifest.ts`). Phase `build`: the client build's
- * manifest is the single join between compile-time island identity and the
- * emitted client assets, so a missing, corrupted, or incomplete record —
- * and an admitted island that cannot be attributed to exactly one emitted
- * module — fails the build instead of shipping silent identities.
+ * (`vite/client-asset-manifest.ts`) and the SSG post-processor's
+ * manifest-keyed island chunk join (`vite/internal/ssg/build-postprocess.ts`).
+ * Phase `build`: the client build's manifest is the single join between
+ * compile-time island identity and the emitted client assets, so a missing,
+ * corrupted, or incomplete record — an admitted island that cannot be
+ * attributed to exactly one emitted module, a manifest that records more
+ * than one client entry, and a delivery tag claimed by two islands — fails
+ * the build instead of shipping silent or reordered identities.
  */
 export const ClientAssetErrorCode = {
   /** dist/client/.vite/manifest.json is missing or unreadable. */
@@ -133,10 +136,17 @@ export const ClientAssetErrorCode = {
   MANIFEST_MALFORMED: 'OE_CLIENT_ASSET_MANIFEST_MALFORMED',
   /** The manifest records no emitted client entry file. */
   ENTRY_MISSING: 'OE_CLIENT_ASSET_ENTRY_MISSING',
+  /** The manifest records several client entry files (no first-hit pick). */
+  ENTRY_AMBIGUOUS: 'OE_CLIENT_ASSET_ENTRY_AMBIGUOUS',
   /** An admitted island matches no emitted module in the build graph. */
   ISLAND_UNMAPPED: 'OE_CLIENT_ASSET_ISLAND_UNMAPPED',
   /** An island identity matches several emitted modules (ambiguous package). */
   ISLAND_IDENTITY_AMBIGUOUS: 'OE_CLIENT_ASSET_ISLAND_IDENTITY_AMBIGUOUS',
+  /**
+   * A delivery tag is claimed by two island entries — even when both would
+   * resolve to the same asset and strategy, tag ownership is one-to-one.
+   */
+  ISLAND_TAG_DUPLICATE: 'OE_CLIENT_ASSET_ISLAND_TAG_DUPLICATE',
 } as const;
 
 /**

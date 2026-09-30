@@ -110,14 +110,32 @@ function isClientEntrySourceKey(src: string): boolean {
   return src.includes('open-client-entry') || src.includes('virtual:open-client');
 }
 
-/** The emitted client entry file recorded in the Vite build manifest, or null. */
+/**
+ * The emitted client entry file recorded in the Vite build manifest, or null.
+ * Entry cardinality is fail-closed: exactly one manifest record may claim the
+ * client entry. Two claiming records are an ambiguous manifest — which file
+ * wins must never depend on the order the manifest's keys iterate in
+ * (`Object.entries` follows JSON insertion order, which the writer is free to
+ * change), so several matches fail instead of taking a first hit.
+ */
 export function findClientEntryFile(
   viteManifest: Record<string, ViteClientManifestEntry>,
+  manifestPath?: string,
 ): string | null {
+  const candidates: Array<[src: string, file: string]> = [];
   for (const [src, entry] of Object.entries(viteManifest)) {
-    if (isClientEntrySourceKey(src) && entry.file) return entry.file;
+    if (isClientEntrySourceKey(src) && entry.file) candidates.push([src, entry.file]);
   }
-  return null;
+  if (candidates.length > 1) {
+    const where = manifestPath ? ` (manifest: ${manifestPath})` : '';
+    throw buildError(
+      ClientAssetErrorCode.ENTRY_AMBIGUOUS,
+      `Client asset manifest is ambiguous${where}: ${candidates.length} records claim the ` +
+        `client entry (${candidates.map(([src, file]) => `${src} -> ${file}`).join(', ')}) — ` +
+        `exactly one "virtual:open-client-entry" record must carry the emitted entry file`,
+    );
+  }
+  return candidates[0]?.[1] ?? null;
 }
 
 /** Strip query suffixes and normalize separators so module ids compare exactly. */
@@ -255,7 +273,7 @@ export function buildClientAssetManifest(options: {
   const { root, base, islands, viteManifest, chunks, manifestPath } = options;
   const assetUrl = (file: string) => `${base}client/${file}`;
 
-  const entryFile = findClientEntryFile(viteManifest);
+  const entryFile = findClientEntryFile(viteManifest, manifestPath);
   if (!entryFile) {
     throw buildError(
       ClientAssetErrorCode.ENTRY_MISSING,
@@ -284,6 +302,13 @@ export function buildClientAssetManifest(options: {
 
   const islandAssets: Record<string, ClientIslandAsset> = {};
   const islandFiles = new Set<string>();
+  // Delivery-tag ownership is one-to-one: one island entry may deliver many
+  // tags (one capability module registering several elements), but one tag is
+  // claimed by exactly one island entry. A second claimant fails even when it
+  // would resolve to the same asset and strategy — "same answer" is not
+  // ownership, and a silent overwrite would make the winner depend on the
+  // order the island list iterates in.
+  const tagOwners = new Map<string, string>();
   for (const island of islands) {
     const file = resolveIslandChunkFile(
       root,
@@ -300,6 +325,7 @@ export function buildClientAssetManifest(options: {
       strategy: island.entry.strategy,
     };
     if (island.entry.strategy === 'load') asset.preload = true;
+    const islandLabel = `${island.entry.tagName} (${island.entry.modulePath})`;
     for (
       const tag of resolveIslandDeliveryTags(
         island.entry.tagName,
@@ -308,6 +334,16 @@ export function buildClientAssetManifest(options: {
         island.entry.tagName,
       )
     ) {
+      const owner = tagOwners.get(tag);
+      if (owner !== undefined) {
+        throw buildError(
+          ClientAssetErrorCode.ISLAND_TAG_DUPLICATE,
+          `Delivery tag "${tag}" is claimed by two island entries: ${owner} and ${islandLabel} ` +
+            `— each delivery tag is owned by exactly one island, whatever asset or strategy ` +
+            `either would resolve to`,
+        );
+      }
+      tagOwners.set(tag, islandLabel);
       islandAssets[tag] = asset;
     }
     islandFiles.add(asset.file);

@@ -205,11 +205,11 @@ manifests attribute `open-button`/`open-theme-toggle` to
 `/client/islands/client.js` (the entry-chunk fallback absorbing a join that
 never matched) while dedicated `open-button-*.js` chunks sat unused in the
 same output tree — silent mis-attribution, P6's exact case. The fail-closed
-direction is correct and stays; the missing workspace-member resolution is an
-open repair for the implementation lane (extend the specifier resolution to
-the workspace-alias source, or the equivalent), recorded here so the closure
-does not pass the red site build off as green. Not fixed in this docs-only
-closure stage.
+direction is correct and stays. The missing workspace-member resolution this
+paragraph disclosed no longer exists: `packageIslandSourcePath` falls through
+from `lookupInDenoJson` to `resolveThroughAliases` over the same sorted alias
+table the build ships as `resolve.alias`, so the disclosure is retired by
+Amendment 3 below (with the green site-build evidence).
 
 ### defineIsland: final decision (removed)
 
@@ -323,9 +323,85 @@ attribution documented in the identity contract above), the client entry and
 island chunks (S4 plus the kernel movement), and pagefind artifacts
 re-derived from the changed pages, with www content edits of the lane folded
 in (the S1 reference-page chip, 13105b234 + 8a92fd22a, and the generated
-error-reference repoint, 31d357d8d). The site build at closure HEAD is not an
-output delta at all — it fails closed per the identity-contract disclosure
-above and is handed to the implementation lane.
+error-reference repoint, 31d357d8d). The closure-HEAD site build failure
+disclosed above (the then-missing workspace-member resolution) was retired
+the same day by the alias-table repair recorded in Amendment 3; the site
+build is green again, with the package islands attributed to their dedicated
+chunks.
+
+## Amendment 3 — closure tail: manifest entry cardinality, delivery-tag ownership, and the fail-closed SSG join (2026-09-30)
+
+- Amends: Amendment 2's client asset manifest failure contract and identity
+  contract (the comply-or-explain retirement recorded above), and the S4b-era
+  warn-path contract of `islandChunkMapFromAssetManifest`.
+- Motivation: three silent-order / silent-drop seams survived the closure.
+  `findClientEntryFile` took the FIRST manifest record claiming the client
+  entry, so two claiming records made the shipped entry depend on JSON key
+  order (`Object.entries` follows insertion order, which the manifest writer
+  is free to change). `buildClientAssetManifest` let a later island silently
+  overwrite an earlier island's delivery-tag record — including the case
+  where both resolve to the identical asset and strategy. And the SSG
+  post-processor warned and continued when an admitted island had no manifest
+  record (shipping partial per-page manifests) while validating and delivering
+  ALL of `islandMeta`, although Phase 2 had already narrowed
+  `ctx.phase1.islandTagNames` to the reachable client set.
+- Change record:
+  1. Entry cardinality is fail-closed: exactly one manifest record may claim
+     the client entry. Two or more fail `OE_CLIENT_ASSET_ENTRY_AMBIGUOUS`,
+     naming every candidate (`src -> file`) and the manifest path —
+     order-independent by construction, and a single candidate returns
+     wherever its key sits among unrelated records.
+  2. Delivery-tag ownership is one-to-one: one island entry may deliver many
+     tags (one capability module registering several elements — preserved,
+     as is islands sharing one chunk with distinct tags), but one tag is
+     owned by exactly one island entry. A second claimant fails
+     `OE_CLIENT_ASSET_ISLAND_TAG_DUPLICATE`, naming the tag and both
+     claimants, whatever asset or strategy either side would resolve to —
+     "the same answer twice" is not ownership, and a silent overwrite would
+     make the winner depend on the island list's order.
+  3. The SSG join fails closed: `islandChunkMapFromAssetManifest` throws
+     `OE_CLIENT_ASSET_ISLAND_UNMAPPED` for an admitted island (non-empty tag
+     list) with no manifest record — including the no-manifest case — and an
+     empty tag list maps to an empty chunk map without consulting the
+     manifest. `postProcessClientIslandBuild` resolves the entire chunk map
+     before generating or writing any page manifest, so the pass writes the
+     complete set or nothing, never a partial record that silently omits an
+     admitted island.
+  4. Postprocess validates only the selected local metadata:
+     `ctx.phase1.islandMeta` is consumed as a lookup keyed by the narrowed
+     `ctx.phase1.islandTagNames`, never as an iteration source. Unselected
+     entries are neither validated nor delivered — Phase 2's reachability
+     decision is not re-litigated, and an unselected island's tags cannot
+     fail the fail-closed join for an island that ships nothing. Package and
+     compiler-behavior declarations were already narrowed by Phase 2 and are
+     consumed as before.
+  5. Shared error contract: `ClientAssetErrorCode`
+     (`packages/router/src/internal/error-codes.ts`) is the one table both
+     raisers — the manifest builder and the SSG post-processor — carry; the
+     two new codes are pinned by `error-codes.test.ts` through the real
+     raisers alongside the manifest-builder and postprocess suites.
+- Workspace-alias repair landed: `packageIslandSourcePath`
+  (`packages/router/src/cli/build-client.ts`) resolves each package
+  specifier through `lookupInDenoJson` and then `resolveThroughAliases`
+  (`packages/router/src/vite/alias-utils.ts`, @rollup/plugin-alias matching
+  semantics: exact or segment-boundary string finds, first-occurrence
+  rewrite, bare/virtual replacements rejected) over the same sorted alias
+  table the build ships as `resolve.alias`. A workspace-member specifier —
+  the official Site's `@openelement/ui/open-button` — therefore resolves to
+  its real module path and joins by exact identity. Evidence at this change:
+  the `www` site build exits 0, and the site's island manifests attribute
+  `open-button` to its dedicated `island-open-button-*.js` chunk (not the
+  entry-chunk fallback the disclosure described), with `open-layout` and
+  `open-search` sharing one chunk as the legal shared-chunk case.
+- Oracle/equivalence: no oracle assertion changes — none of the seven
+  read-only oracles touch these seams. `ssg-postprocess.test.ts`'s former
+  warn-path pins are rewritten to the fail-closed contract (an S4b-rewritten
+  suite, not a read-only oracle); `ssg-asset-manifest.test.ts` matrix 9's
+  empty-tag-list short-circuit is preserved. The full router suite (970
+  tests, including the real fixture builds) passes at this change, and the
+  joins add no output delta on successful builds — they only convert states
+  that previously produced silently wrong or partial output into build
+  failures.
 
 ## Verification
 
