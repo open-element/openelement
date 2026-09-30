@@ -4,6 +4,9 @@
  * The content is a native popover (top layer, built-in light dismiss and
  * focus return); placement anchors to the host, no hand-rolled fallback.
  *
+ * Experimental (owner ruling C1, #1468): no compatibility promise — may
+ * change or be removed before 1.0.
+ *
  * Compiled authoring. The per-instance anchor name is
  * assigned at activation (SSG renders every page in one process while islands
  * upgrade in arbitrary order, so server and client counters can never agree —

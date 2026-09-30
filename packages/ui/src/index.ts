@@ -32,6 +32,11 @@
 // Design tokens (CSSStyleSheet, zero Lit dependency)
 export { openPropsTokenSheet } from './open-props-tokens.ts';
 
+// Per-instance mutable state for compiled classes (host-scoped, garbage-
+// collected with the host; a side-effect-free module — import the
+// './instance-state' subpath from islands to keep chunks minimal).
+export { readInstanceState, writeInstanceState } from './instance-state.ts';
+
 // Components
 export { OpenButton } from './open-button.tsx';
 export { OpenCard } from './open-card.tsx';

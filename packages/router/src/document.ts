@@ -15,10 +15,12 @@
  * - Response plumbing (status, headers, redirects) stays in the loader/action
  *   outcome channel; this module resolves document *meaning* only.
  * - No Vite or build-tool imports. Framework Mode surface: the module's only
- *   dependencies are the router authoring types and the neutral head-safety
- *   predicates, and those use @openelement/element's trusted-HTML contract
- *   (escape/attribute rules) rather than a second copy of it. The resolved
- *   Document is the shared contract between the two serializers.
+ *   dependencies are the router authoring types, the neutral head-safety
+ *   predicates, and the neutral client-script loading descriptors
+ *   (loading/module/nonce.ts), and those use @openelement/element's
+ *   trusted-HTML contract (escape/attribute rules) rather than a second copy
+ *   of it. The resolved Document is the shared contract between the two
+ *   serializers.
  */
 
 import type {
@@ -27,7 +29,14 @@ import type {
   PagePropsContext,
   StructuredDataEntry,
 } from './authoring.ts';
+import {
+  type ClientScriptDescriptor,
+  normalizeClientScriptDescriptors,
+} from './loading/module/nonce.ts';
 import { assertNoScriptTags, assertTrustedHeadHtml } from './internal/head-safety.ts';
+import { authoringError, DocumentErrorCode } from './internal/error-codes.ts';
+
+export type { ClientScriptDescriptor };
 
 /** One <link rel="alternate"> record, typically carrying an hreflang. */
 export interface PageHeadAlternate {
@@ -59,6 +68,13 @@ export interface ResolvedDocument {
    */
   structuredData?: StructuredDataEntry[];
   dangerouslyHeadFragments?: string[];
+  /**
+   * The framework client scripts this document embeds before `</body>` —
+   * structured descriptors rendered by the serializer at document time
+   * (#1471), never by post-build HTML surgery. The serializer attaches the
+   * per-request CSP nonce; SSG output carries none.
+   */
+  clientScripts?: ClientScriptDescriptor[];
   /** Document language: the resolved application locale for this render. */
   lang?: string;
   canonical?: string;
@@ -68,7 +84,10 @@ export interface ResolvedDocument {
 }
 
 function fail(message: string): never {
-  throw new Error(`[openElement] resolvePageDocument: ${message}`);
+  throw authoringError(
+    DocumentErrorCode.HEAD_INVALID,
+    `[openElement] resolvePageDocument: ${message}`,
+  );
 }
 
 /**
@@ -161,15 +180,31 @@ function normalizeStructuredData(structuredData: unknown): StructuredDataEntry[]
  * static head so malformed page meaning fails loudly at either build time or
  * request time instead of being silently dropped from the serialized
  * document.
+ *
+ * `clientScripts` carries the framework's client-script descriptors (the
+ * build's client asset manifest — the render wiring hands them in, they are
+ * never author head data); they are validated like every other field and
+ * become part of the resolved document, so every render channel — the SSG
+ * render pass included — serializes the final script tags from one place.
  */
 export function resolvePageDocument(
   head: PageHead | PageHeadResolver | undefined,
   context: PagePropsContext,
+  clientScripts?: readonly ClientScriptDescriptor[],
 ): ResolvedDocument {
   const resolved = typeof head === 'function' ? head(context) : head;
   const lang = typeof context.locale === 'string' ? context.locale : undefined;
+  const normalizedClientScripts = clientScripts === undefined
+    ? undefined
+    : normalizeClientScriptDescriptors(clientScripts, fail);
   if (resolved === undefined) {
-    return { links: [], ...(lang !== undefined ? { lang } : {}) };
+    return {
+      links: [],
+      ...(lang !== undefined ? { lang } : {}),
+      ...(normalizedClientScripts !== undefined && normalizedClientScripts.length > 0
+        ? { clientScripts: normalizedClientScripts }
+        : {}),
+    };
   }
   if (resolved === null || typeof resolved !== 'object' || Array.isArray(resolved)) {
     fail('head must be an object, or a resolver returning one.');
@@ -246,6 +281,9 @@ export function resolvePageDocument(
       ? { structuredData: normalizedStructuredData }
       : {}),
     ...(dangerouslyHeadFragments !== undefined ? { dangerouslyHeadFragments } : {}),
+    ...(normalizedClientScripts !== undefined && normalizedClientScripts.length > 0
+      ? { clientScripts: normalizedClientScripts }
+      : {}),
     ...(lang !== undefined ? { lang } : {}),
     ...(canonical !== undefined ? { canonical } : {}),
     ...(normalizedAlternates !== undefined ? { alternates: normalizedAlternates } : {}),

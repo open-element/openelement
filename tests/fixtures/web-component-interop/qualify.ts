@@ -19,13 +19,27 @@
  * committed as a second hand-written source of truth.
  */
 
-import { dirname, fromFileUrl, join, resolve, toFileUrl } from '@std/path';
+import { dirname, fromFileUrl, join, resolve } from '@std/path';
 import type {
   CustomElementDeclaration,
   CustomElementField,
   JavaScriptModule,
   Package as CemPackage,
 } from 'custom-elements-manifest';
+import { extractSsrAdmissionPlan } from '../../lib/qualify-harness/admission-plan.ts';
+import {
+  findFile,
+  findServerEntry,
+  runRouterBuild,
+} from '../../lib/qualify-harness/build-router.ts';
+import { launchQualifyBrowser } from '../../lib/qualify-harness/drive-chromium.ts';
+import { jsonText, readJson } from '../../lib/qualify-harness/json-file.ts';
+import { scaffoldApp } from '../../lib/qualify-harness/scaffold-app.ts';
+import {
+  applyWorkspaceAliases,
+  primeAppNodeModules,
+} from '../../lib/qualify-harness/workspace-alias.ts';
+import { escapeRegExp } from '../../../tools/lib/text.ts';
 
 /**
  * The regenerated CEM artifact, typed by the upstream Custom Elements
@@ -93,18 +107,6 @@ export interface SsrCapabilityDecision {
   renderPath: 'ssr+client' | 'client-only';
   code: 'OEI1000' | 'OEI2000' | 'OEI2001';
   message: string;
-}
-
-export interface AdmissionDecision {
-  tagName: string;
-  modulePath: string;
-  source: string;
-  renderPath: string;
-  reason: string;
-}
-
-interface AdmissionPlan {
-  decisions: AdmissionDecision[];
 }
 
 interface SsrComponentEvidence {
@@ -187,10 +189,6 @@ function stringField(
   key: string,
 ): string | undefined {
   return typeof value[key] === 'string' ? value[key] as string : undefined;
-}
-
-function readJson<T>(path: string): Promise<T> {
-  return Deno.readTextFile(path).then((text) => JSON.parse(text) as T);
 }
 
 function pathFromRoot(root: URL | string, relativePath: string): string {
@@ -593,68 +591,6 @@ export async function loadInteropCorpus(
   return { ...typedConfig, cem };
 }
 
-function json(value: unknown): string {
-  return `${JSON.stringify(value, null, 2)}\n`;
-}
-
-async function runCommand(
-  command: string,
-  args: string[],
-  cwd: string,
-): Promise<string> {
-  console.log(`$ ${command} ${args.join(' ')}  # cwd=${cwd}`);
-  const output = await new Deno.Command(command, {
-    args,
-    cwd,
-    stdout: 'piped',
-    stderr: 'piped',
-  }).output();
-  const text = `${new TextDecoder().decode(output.stdout)}${
-    new TextDecoder().decode(output.stderr)
-  }`.trim();
-  if (!output.success) {
-    if (text) console.error(text);
-    throw new Error(
-      `command failed with exit code ${output.code}: ${command} ${args.join(' ')}`,
-    );
-  }
-  return text;
-}
-
-function localPackageAliases(root: string): Array<[string, string]> {
-  const entries: Array<[string, string]> = [];
-  for (const packageEntry of Deno.readDirSync(join(root, 'packages'))) {
-    if (!packageEntry.isDirectory) continue;
-    const packageDir = join(root, 'packages', packageEntry.name);
-    let packageJson: { name?: unknown; exports?: unknown };
-    try {
-      packageJson = JSON.parse(
-        Deno.readTextFileSync(join(packageDir, 'deno.json')),
-      );
-    } catch {
-      continue;
-    }
-    if (typeof packageJson.name !== 'string') continue;
-    const exportsField = packageJson.exports;
-    if (typeof exportsField === 'string') {
-      entries.push([
-        packageJson.name,
-        toFileUrl(join(packageDir, exportsField)).href,
-      ]);
-      continue;
-    }
-    if (!isRecord(exportsField)) continue;
-    for (const [subpath, target] of Object.entries(exportsField)) {
-      if (typeof target !== 'string') continue;
-      const specifier = subpath === '.'
-        ? packageJson.name
-        : `${packageJson.name}${subpath.slice(1)}`;
-      entries.push([specifier, toFileUrl(join(packageDir, target)).href]);
-    }
-  }
-  return entries.sort((left, right) => right[0].length - left[0].length);
-}
-
 function localPackageImports(root: string): Record<string, string> {
   const imports: Record<string, string> = {};
   try {
@@ -701,172 +637,42 @@ function localPackageImports(root: string): Record<string, string> {
 }
 
 async function patchApp(appDir: string): Promise<void> {
-  const denoPath = join(appDir, 'deno.json');
-  const denoJson = await readJson<{
-    imports?: Record<string, string>;
-    tasks?: Record<string, string>;
-  }>(denoPath);
-  const imports = denoJson.imports ??= {};
-  Object.assign(imports, {
-    lit: 'npm:lit@3.3.3',
-    '@microsoft/fast-element': 'npm:@microsoft/fast-element@3.0.2',
-    '@ionic/core': 'npm:@ionic/core@8.8.18',
-    '@ionic/core/': 'npm:@ionic/core@8.8.18/',
-    ...localPackageImports(repoRoot),
+  await applyWorkspaceAliases(appDir, {
+    repoRoot,
+    extraImports: {
+      lit: 'npm:lit@3.3.3',
+      '@microsoft/fast-element': 'npm:@microsoft/fast-element@3.0.2',
+      '@ionic/core': 'npm:@ionic/core@8.8.18',
+      '@ionic/core/': 'npm:@ionic/core@8.8.18/',
+      ...localPackageImports(repoRoot),
+    },
+    externalViteAliases: ['@preact/signals-core'],
   });
-  for (const [specifier, target] of localPackageAliases(repoRoot)) {
-    imports[specifier] = target;
-  }
-  const tasks = denoJson.tasks ??= {};
-  tasks.build =
-    `deno run --unstable-sloppy-imports --config deno.json --allow-read --allow-write --allow-env --allow-net --allow-run --allow-sys --allow-ffi --no-prompt ${
-      join(repoRoot, 'packages', 'router', 'src', 'cli', 'build.ts')
-    }`;
-  await Deno.writeTextFile(denoPath, json(denoJson));
-
-  await runCommand(
-    Deno.execPath(),
-    [
-      'eval',
-      '--config',
-      'deno.json',
-      "import '@preact/signals-core';",
-    ],
-    appDir,
-  );
-
-  const vitePath = join(appDir, 'vite.config.ts');
-  const viteText = await Deno.readTextFile(vitePath);
-  const localAliases = localPackageAliases(repoRoot).map(([find, target]) =>
-    `{ find: ${JSON.stringify(find)}, replacement: ${JSON.stringify(fromFileUrl(target))} }`
-  );
-  const externalAliases = ['@preact/signals-core'].map((find) =>
-    `{ find: ${JSON.stringify(find)}, replacement: ${
-      JSON.stringify(join(appDir, 'node_modules', ...find.split('/')))
-    } }`
-  );
-  const aliases = [...localAliases, ...externalAliases].join(',\n      ');
-  const injected =
-    `export default defineConfig({\n  resolve: {\n    alias: [\n      ${aliases}\n    ],\n  },`;
-  if (!viteText.includes('resolve:')) {
-    await Deno.writeTextFile(
-      vitePath,
-      viteText.replace('export default defineConfig({', injected),
-    );
-  }
+  // The app-local vite alias for @preact/signals-core needs its node_modules
+  // entry to exist: priming installs the app's npm dependencies up front.
+  await primeAppNodeModules(appDir, '@preact/signals-core');
 }
 
-async function copyFixtureSources(
-  appDir: string,
-  root: URL | string,
-): Promise<void> {
-  for (
-    const relativePath of [
-      'app/routes/index.tsx',
-      'app/components/page-interop-home.tsx',
-      'app/islands/interop-fixture.tsx',
-      'app/client/interop-client.ts',
-    ]
-  ) {
-    const destination = join(appDir, relativePath);
-    await Deno.mkdir(dirname(destination), { recursive: true });
-    await Deno.copyFile(pathFromRoot(root, relativePath), destination);
-  }
-}
+const FIXTURE_SOURCE_FILES = [
+  'app/routes/index.tsx',
+  'app/components/page-interop-home.tsx',
+  'app/islands/interop-fixture.tsx',
+  'app/client/interop-client.ts',
+] as const;
 
 async function prepareInteropApp(
   tmpRoot: string,
   root: URL | string,
 ): Promise<string> {
-  await runCommand(
-    Deno.execPath(),
-    [
-      'run',
-      '--allow-read',
-      '--allow-write',
-      '--allow-env',
-      '--allow-net',
-      '--deny-ffi',
-      '--no-prompt',
-      join(repoRoot, 'packages', 'create', 'src', 'cli.ts'),
-      appProjectName,
-    ],
-    tmpRoot,
-  );
-  const appDir = join(tmpRoot, appProjectName);
+  const appDir = await scaffoldApp({
+    workDir: tmpRoot,
+    projectName: appProjectName,
+    createCli: join(repoRoot, 'packages', 'create', 'src', 'cli.ts'),
+    copySources: { fromRoot: root, files: FIXTURE_SOURCE_FILES },
+  });
   await patchApp(appDir);
-  await copyFixtureSources(appDir, root);
-  await runCommand(Deno.execPath(), ['task', 'build'], appDir);
+  await runRouterBuild(appDir);
   return appDir;
-}
-
-async function findFile(root: string, name: string): Promise<string | null> {
-  for await (const entry of Deno.readDir(root)) {
-    const path = join(root, entry.name);
-    if (entry.isFile && entry.name === name) return path;
-    if (entry.isDirectory) {
-      const found = await findFile(path, name);
-      if (found) return found;
-    }
-  }
-  return null;
-}
-
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
-/** Extract the generated admission plan without executing generated code. */
-export function extractAdmissionPlan(entryJs: string): AdmissionPlan {
-  const match = /(?:var|const|let)\s+ssrAdmissionPlan\s*=\s*/.exec(entryJs);
-  if (!match) {
-    throw new Error('ssrAdmissionPlan not found in generated server entry');
-  }
-  const begin = match.index + match[0].length;
-  if (entryJs[begin] !== '{') {
-    throw new Error('ssrAdmissionPlan is not an object literal');
-  }
-  let depth = 0;
-  let quote: '"' | "'" | null = null;
-  let escaped = false;
-  let end = -1;
-  for (let index = begin; index < entryJs.length; index++) {
-    const character = entryJs[index];
-    if (quote) {
-      if (escaped) escaped = false;
-      else if (character === '\\') escaped = true;
-      else if (character === quote) quote = null;
-      continue;
-    }
-    if (character === '"' || character === "'") {
-      quote = character;
-      continue;
-    }
-    if (character === '{') depth++;
-    if (character === '}') {
-      depth--;
-      if (depth === 0) {
-        end = index + 1;
-        break;
-      }
-    }
-  }
-  if (end === -1) {
-    throw new Error('ssrAdmissionPlan object literal is unbalanced');
-  }
-  const parsed = JSON.parse(entryJs.slice(begin, end)) as unknown;
-  if (!isRecord(parsed) || !Array.isArray(parsed.decisions)) {
-    throw new Error('ssrAdmissionPlan.decisions is missing');
-  }
-  return {
-    decisions: parsed.decisions.filter(isRecord).map((decision) => ({
-      tagName: String(decision.tagName ?? ''),
-      modulePath: String(decision.modulePath ?? ''),
-      source: String(decision.source ?? ''),
-      renderPath: String(decision.renderPath ?? ''),
-      reason: String(decision.reason ?? ''),
-    })),
-  };
 }
 
 async function verifySsr(
@@ -877,16 +683,8 @@ async function verifySsr(
   const htmlPath = await findFile(distDir, 'index.html');
   if (!htmlPath) throw new Error(`SSG index.html not found under ${distDir}`);
   const html = await Deno.readTextFile(htmlPath);
-  const serverEntryPath = join(distDir, 'server', 'entry.js');
-  const entryPath = await Deno.stat(serverEntryPath).then(() => serverEntryPath)
-    .catch(async () => {
-      const found = await findFile(distDir, 'entry.js');
-      if (!found) {
-        throw new Error(`generated server entry not found under ${distDir}`);
-      }
-      return found;
-    });
-  const plan = extractAdmissionPlan(await Deno.readTextFile(entryPath));
+  const entryPath = await findServerEntry(distDir);
+  const plan = extractSsrAdmissionPlan(await Deno.readTextFile(entryPath));
   const decisions = new Map(
     plan.decisions.map((decision) => [decision.tagName, decision]),
   );
@@ -961,74 +759,17 @@ async function verifySsr(
   };
 }
 
-interface StaticServer {
-  origin: string;
-  close(): Promise<void>;
-}
-
-function contentType(path: string): string {
-  if (path.endsWith('.html')) return 'text/html; charset=utf-8';
-  if (path.endsWith('.js')) return 'text/javascript; charset=utf-8';
-  if (path.endsWith('.css')) return 'text/css; charset=utf-8';
-  if (path.endsWith('.json')) return 'application/json; charset=utf-8';
-  if (path.endsWith('.svg')) return 'image/svg+xml';
-  return 'application/octet-stream';
-}
-
-function serveStatic(root: string): StaticServer {
-  const server = Deno.serve(
-    { hostname: '127.0.0.1', port: 0 },
-    async (request) => {
-      let pathname: string;
-      try {
-        pathname = decodeURIComponent(new URL(request.url).pathname);
-      } catch {
-        return new Response('Bad Request', { status: 400 });
-      }
-      if (pathname.includes('..') || pathname.includes('\0')) {
-        return new Response('Forbidden', { status: 403 });
-      }
-      const relative = pathname.replace(/^\/+/, '');
-      const candidates = relative.length === 0
-        ? ['index.html']
-        : [relative, `${relative}.html`, join(relative, 'index.html')];
-      for (const candidate of candidates) {
-        try {
-          const body = await Deno.readFile(join(root, candidate));
-          return new Response(body, {
-            headers: { 'content-type': contentType(candidate) },
-          });
-        } catch {
-          // Try the next deterministic candidate.
-        }
-      }
-      return new Response('Not found', { status: 404 });
-    },
-  );
-  const address = server.addr as Deno.NetAddr;
-  return {
-    origin: `http://127.0.0.1:${address.port}`,
-    close: () => server.shutdown(),
-  };
-}
-
 export async function verifyBrowser(
   distDir: string,
   corpus: InteropCorpus,
   browserName: BrowserName,
 ): Promise<BrowserEvidence> {
-  const playwright = await import('@playwright/test');
-  const browserType = playwright[browserName];
-  const server = serveStatic(distDir);
-  const browser = await browserType.launch();
+  const session = await launchQualifyBrowser({ distDir, browserName });
   try {
-    const page = await browser.newPage();
-    const pageErrors: string[] = [];
-    page.on('pageerror', (error) => pageErrors.push(error.message));
-    page.on('console', (message) => {
-      if (message.type() === 'error') pageErrors.push(message.text());
-    });
-    await page.goto(`${server.origin}/`, { waitUntil: 'networkidle' });
+    const page = await session.browser.newPage();
+    session.watchPageErrors(page);
+    const pageErrors = session.pageErrors;
+    await page.goto(`${session.origin}/`, { waitUntil: 'networkidle' });
     await page.waitForFunction(
       () =>
         (globalThis as typeof globalThis & {
@@ -1401,8 +1142,7 @@ export async function verifyBrowser(
       pageErrors,
     };
   } finally {
-    await browser.close();
-    await server.close();
+    await session.close();
   }
 }
 
@@ -1452,11 +1192,11 @@ async function qualify(
     // every run. Neither is committed (see .gitignore).
     await Deno.writeTextFile(
       join(tmpRoot, 'compiler-output.cem.json'),
-      json(corpus.cem),
+      jsonText(corpus.cem),
     );
     await Deno.writeTextFile(
       join(tmpRoot, 'interop-evidence.json'),
-      json(evidence),
+      jsonText(evidence),
     );
     console.log(JSON.stringify(evidence, null, 2));
     console.log('Web Components interoperability qualification passed');

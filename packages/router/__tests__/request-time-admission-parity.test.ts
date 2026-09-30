@@ -204,8 +204,8 @@ async function loadAdmissionPredicate(
         'export function __setRequestTimeClientScript() {}\n',
     );
     await Deno.writeTextFile(
-      join(dir, 'client-script.js'),
-      "export const clientScriptSrc = '';\n",
+      join(dir, 'client-assets.js'),
+      "export const clientAssets = { entry: '', islands: {}, shared: [] };\n",
     );
     await Deno.writeTextFile(
       join(dir, 'index.js'),

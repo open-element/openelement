@@ -20,7 +20,15 @@ export async function compileComponentClass(
 ): Promise<CustomElementConstructor> {
   const absoluteSource = new URL(sourceUrl, import.meta.url);
   const source = await Deno.readTextFile(absoluteSource);
-  const { code } = compileElementProgram(source, sourceUrl);
+  // Island modules colocate the island delivery policy statement with the
+  // class; the compiler admits it only through the injected descriptor (#1468).
+  const { code } = compileElementProgram(source, sourceUrl, {
+    staticSidecars: [{
+      moduleSpecifier: '@openelement/router',
+      exportName: 'defineIslandConfig',
+      kind: 'static-sidecar',
+    }],
+  });
   // The emitted module imports the framework packages by bare specifier;
   // re-point them at the monorepo sources, and rebase the component's
   // relative imports onto its own directory. The rewritten module imports

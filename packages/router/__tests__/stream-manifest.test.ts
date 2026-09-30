@@ -5,6 +5,7 @@ import { createDeferredDsdExecutor } from '@openelement/element';
 import { compileElementProgram } from '@openelement/element/compiler';
 import { buildEntryDescriptor } from '../src/vite/internal/ssg/entry-descriptor.ts';
 import { renderEntry } from '../src/vite/internal/ssg/entry-orchestrator.ts';
+import { assertCompiledStreamRoute as __assertStreamRoute } from '../src/vite/internal/server-runtime/route-dispatch.ts';
 import { scanRoutes } from '../src/vite/internal/ssg/route-scanner.ts';
 
 const page = `
@@ -119,11 +120,20 @@ Deno.test('stream manifest binds two loader fields to independent compiled Part 
     assertStringIncludes(code, 'streamManifest:');
     assertStringIncludes(code, 'export const __streamManifests =');
     assertStringIncludes(code, manifest.program.sha256);
-    assertStringIncludes(code, 'async function __createDeferredPageShell(');
+    // ADR-0160 Amendment 1: the deferred-shell gate is the typed runtime
+    // module — the entry imports the factory, binds it to the serialized
+    // manifests + createDeferredDsdExecutor import, and keeps the call site;
+    // the gate's fail-closed contract is pinned by the behavior tests in
+    // server-runtime-stream-runtime.test.ts instead of emitted text.
     assertStringIncludes(
       code,
-      'return createDeferredDsdExecutor({ componentClass: Cls, props, manifest, instanceId, documentToken });',
+      "import { createDeferredPageShell as __createDeferredPageShellGate } from '@openelement/router/server-runtime'",
     );
+    assertStringIncludes(
+      code,
+      'const __createDeferredPageShell = __createDeferredPageShellGate({ streamManifests: __streamManifests, createDeferredDsdExecutor });',
+    );
+    assertStringIncludes(code, 'await __createDeferredPageShell(');
     assertStringIncludes(code, '"location":"p1"');
     assertStringIncludes(
       renderEntry(buildEntryDescriptor(routes)),
@@ -667,18 +677,12 @@ Deno.test('generated entry rejects opaque stream descriptors before serving GET'
           code,
           '__assertStreamRoute($Route_Index, "/", "index.tsx", undefined)',
         );
-        const start = code.indexOf('function __assertStreamRoute(');
-        const end = code.indexOf('\n}', start) + 2;
-        const helper = code.slice(start, end) + '\nexport { __assertStreamRoute };';
-        const mod = await import(
-          'data:text/javascript;charset=utf-8,' + encodeURIComponent(helper)
-        ) as {
-          __assertStreamRoute: (
-            module: unknown,
-            route: string,
-            file: string,
-            manifest: unknown,
-          ) => void;
+        // #1470 block e (ADR-0160 rule a): the guard is the shipped typed
+        // module — the entry binds it via import, and this harness executes
+        // the module directly (the old emitted-helper extraction cannot carry
+        // imports). The assertions below are unchanged.
+        const mod = {
+          __assertStreamRoute,
         };
         const pageModule = {
           default: {
@@ -701,19 +705,11 @@ Deno.test('generated entry rejects opaque stream descriptors before serving GET'
   }
   await fixture(async (dir) => {
     const routes = await scanRoutes(dir);
-    const code = renderEntry(buildEntryDescriptor(routes));
-    const start = code.indexOf('function __assertStreamRoute(');
-    const end = code.indexOf('\n}', start) + 2;
-    const helper = code.slice(start, end) + '\nexport { __assertStreamRoute };';
-    const mod = await import(
-      'data:text/javascript;charset=utf-8,' + encodeURIComponent(helper)
-    ) as {
-      __assertStreamRoute: (
-        module: unknown,
-        route: string,
-        file: string,
-        manifest: unknown,
-      ) => void;
+    renderEntry(buildEntryDescriptor(routes));
+    // #1470 block e: the shipped typed guard, exercised directly (see the
+    // note on the harness change in the test above).
+    const mod = {
+      __assertStreamRoute,
     };
     const pageModule = {
       default: {

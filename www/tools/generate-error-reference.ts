@@ -42,9 +42,18 @@ export const ERROR_REFERENCE_ARTIFACT = 'www/app/data/_generated-error-reference
 
 const repoRoot = fromFileUrl(new URL('../../', import.meta.url));
 
-/** Sources whose diagnostic literals define the compiler half of the table. */
+/**
+ * Sources whose diagnostic literals define the compiler half of the table —
+ * every semantic-core module that carries OEC literals (#1473 split compile()
+ * into single-duty pipeline stages, so the literals no longer live only in
+ * compile.ts and module-analysis.ts).
+ */
 const COMPILER_SOURCES = [
+  'packages/element/src/internal/compiler/semantic-core/analyze-module.ts',
   'packages/element/src/internal/compiler/semantic-core/compile.ts',
+  'packages/element/src/internal/compiler/semantic-core/compiler-diagnostics.ts',
+  'packages/element/src/internal/compiler/semantic-core/emit-program.ts',
+  'packages/element/src/internal/compiler/semantic-core/lower-program.ts',
   'packages/element/src/internal/compiler/semantic-core/module-analysis.ts',
 ];
 
@@ -300,6 +309,15 @@ export async function buildErrorReference(): Promise<ErrorReferenceBuild> {
     });
   };
 
+  // One row per code: merge every semantic-core module's extraction before
+  // pushing. Since #1473 split the compile facade into single-duty pipeline
+  // stages, one code's raising sites legitimately live in several modules —
+  // the catalog keeps the first authored message (COMPILER_SOURCES order is
+  // static, so "first" is deterministic) and sums the site count.
+  const compilerEntries = new Map<
+    string,
+    { message: string; path: string; line: number; occurrences: number }
+  >();
   for (const relativePath of COMPILER_SOURCES) {
     const absolute = join(repoRoot, relativePath);
     let text: string;
@@ -319,13 +337,21 @@ export async function buildErrorReference(): Promise<ErrorReferenceBuild> {
       );
     }
     for (const [code, entry] of extraction.codes) {
-      push({
-        code,
-        message: entry.message,
-        source: { path: relativePath, line: entry.line },
-        occurrences: entry.occurrences,
-      });
+      const existing = compilerEntries.get(code);
+      if (existing === undefined) {
+        compilerEntries.set(code, { ...entry, path: relativePath });
+        continue;
+      }
+      existing.occurrences += entry.occurrences;
     }
+  }
+  for (const [code, entry] of compilerEntries) {
+    push({
+      code,
+      message: entry.message,
+      source: { path: entry.path, line: entry.line },
+      occurrences: entry.occurrences,
+    });
   }
 
   // Router authoring + serve codes, read from the constant maps the throws use.

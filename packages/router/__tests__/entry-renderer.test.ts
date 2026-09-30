@@ -9,9 +9,11 @@
 // Code structure validation
  */
 
-import { assert, assertEquals, assertExists, assertFalse, assertStringIncludes } from '@std/assert';
+import { assertEquals, assertExists, assertFalse, assertStringIncludes } from '@std/assert';
 import { buildEntryDescriptor, renderEntry } from '../src/vite/internal/ssg/index.ts';
 import { resetCorsOriginWarningForTests } from '../src/vite/internal/ssg/entry-server-codegen.ts';
+import { createAppShellRuntime } from '../src/vite/internal/server-runtime/document-runtime.ts';
+import { routeMeta } from '../src/vite/internal/server-runtime/page-render.ts';
 import type { RouteEntry } from '../src/vite/internal/protocol/framework.ts';
 
 // Fixtures
@@ -118,11 +120,25 @@ Deno.test('renderEntry: CSP with nonce generates per-request nonce', () => {
   });
   const code = renderEntry(desc);
 
-  assertStringIncludes(code, 'crypto.randomUUID()');
-  assertStringIncludes(code, "c.set('cspNonce'");
+  // ADR-0160 rule a: nonce creation and policy instantiation are calls into
+  // the imported @openelement/router/server-runtime module; the template is
+  // generated data (the nonce semantics themselves are pinned by
+  // server-runtime-response-channel.test.ts). The hono/ssg prerender pass
+  // binds no nonce — static bytes cannot be per-request — so binding is
+  // gated on __ssgPrerenderPass(c.env) and both the context variable and
+  // the CSP header only materialize for request-time dispatches.
+  assertStringIncludes(
+    code,
+    'const nonce = __ssgPrerenderPass(c.env) ? undefined : __cspCreateNonce()',
+  );
+  assertStringIncludes(code, "if (nonce) c.set('cspNonce', nonce)");
+  assertStringIncludes(code, "if (policy) c.header('Content-Security-Policy', policy)");
   // v0.3.1: NONCE_PLACEHOLDER template approach (fixes missing closing quote bug)
   assertStringIncludes(code, 'NONCE_PLACEHOLDER');
-  assertStringIncludes(code, ".replace('NONCE_PLACEHOLDER', nonce)");
+  assertStringIncludes(
+    code,
+    `const policy = nonce ? __cspApplyNonce("default-src 'self'; script-src 'nonce-NONCE_PLACEHOLDER'", nonce) : undefined`,
+  );
 });
 
 Deno.test('renderEntry: CSP report-only mode', () => {
@@ -333,11 +349,15 @@ Deno.test('renderEntry: exports default app', () => {
   assertStringIncludes(code, 'export default app');
 });
 
-Deno.test('renderEntry: imports Hono and DSD renderer', () => {
+Deno.test('renderEntry: imports DSD renderer; Hono assembly is the factory (#1470 block e)', () => {
   const desc = buildEntryDescriptor(basicRoutes);
   const code = renderEntry(desc);
 
-  assertStringIncludes(code, "import { Hono } from 'hono'");
+  // ADR-0160 rule a: `new Hono()` moved into createGeneratedApp — the entry
+  // no longer imports Hono or builds the app itself.
+  assertFalse(code.includes("from 'hono'"));
+  assertStringIncludes(code, 'const __app = createGeneratedApp({');
+  assertStringIncludes(code, 'export default app');
   // v0.5.0: DSD renderer replaces @lit-labs/ssr; v0.44: the compiled sync
   // renderDsd is the only serializer — no runtime JSX or tree renderer.
   assertStringIncludes(
@@ -357,13 +377,35 @@ Deno.test('renderEntry: app shell composes the page host through the compiled se
   });
   const code = renderEntry(desc);
 
-  assertStringIncludes(code, 'function __renderAppShell(pageHtml, routePath');
+  // The shell composition is typed runtime code; the entry pins the plan data
+  // in the factory config and the factory binds the runtime (ADR-0160 rule a,
+  // #1470 block e — the wiring line moved into createGeneratedApp).
   assertStringIncludes(code, '"tagName": "open-layout"');
   assertStringIncludes(code, 'import * as __shell_0 from "@acme/components/open-layout";');
-  assertStringIncludes(
-    code,
-    '__ssr(shell.tagName, layoutProps, { route: routePath }, 0, new Map([["", trustedHtml(content)]]))',
-  );
+  assertStringIncludes(code, 'appShellPlan: {');
+  // The slot claim contract stays pinned on the shipped runtime: the shell
+  // renders through the page renderer with the content as trusted slot HTML.
+  const { runtime, ssrCalls } = loadLayoutRuntime({
+    default: { tagName: 'open-layout', props: { brand: 'acme' } },
+    layouts: {},
+  });
+  const composed = runtime.renderAppShell('<page></page>', '/guide');
+  assertEquals(composed, '<shell>open-layout</shell>');
+  assertEquals(ssrCalls, [{
+    tag: 'open-layout',
+    props: {
+      currentPath: '/guide',
+      locale: 'en',
+      locales: ['en'],
+      navItems: [],
+      headerNav: [],
+      homeHref: '/',
+      home: undefined,
+      routeMeta: {},
+      brand: 'acme',
+    },
+    route: '/guide',
+  }]);
   assertFalse(code.includes('layoutHtml.slice'));
 });
 
@@ -373,7 +415,10 @@ Deno.test('renderEntry: unconfigured appShell defaults to false (no import)', ()
 
   assertFalse(code.includes('import "@acme/components/open-layout";'));
   assertStringIncludes(code, '"default": false');
-  assertStringIncludes(code, 'if (!shell) return content;');
+  // An unresolved shell returns route content unchanged (shipped runtime).
+  const { runtime, ssrCalls } = loadLayoutRuntime({ default: false, layouts: {} });
+  assertEquals(runtime.renderAppShell('<page></page>', '/'), '<page></page>');
+  assertEquals(ssrCalls, []);
 });
 
 Deno.test('renderEntry: appShell false renders route content without default layout import', () => {
@@ -382,7 +427,9 @@ Deno.test('renderEntry: appShell false renders route content without default lay
 
   assertFalse(code.includes('import "@acme/components/open-layout";'));
   assertStringIncludes(code, '"default": false');
-  assertStringIncludes(code, 'if (!shell) return content;');
+  const { runtime, ssrCalls } = loadLayoutRuntime({ default: false, layouts: {} });
+  assertEquals(runtime.renderAppShell('<page></page>', '/'), '<page></page>');
+  assertEquals(ssrCalls, []);
 });
 
 Deno.test('renderEntry: custom appShell import and props are generated from config', () => {
@@ -415,45 +462,38 @@ Deno.test('renderEntry: route meta layout can select named layouts', () => {
   const code = renderEntry(desc);
 
   assertStringIncludes(code, 'import * as __shell_0 from "/app/components/post-layout.tsx";');
-  assertStringIncludes(
-    code,
-    'const layout = Object.prototype.hasOwnProperty.call(routeMeta, "layout")',
-  );
-  assertStringIncludes(code, '__appShellPlan.layouts[layout] ?? __appShellPlan.default');
+  // The named-layout lookup lives in the typed app-shell runtime; the entry
+  // pins the plan data in the factory config (ADR-0160 rule a, #1470 block e).
+  assertStringIncludes(code, '"post-layout"');
+  assertStringIncludes(code, 'appShellPlan: {');
   assertStringIncludes(code, 'module: $pageIndex');
 });
 
-// Behavior-level proof for the named-layout wiring: execute the generated
-// __routeMeta/__resolveAppShell helpers instead of asserting their source.
-interface LayoutHarness {
-  routeMeta(module: unknown): Record<string, unknown>;
-  resolveAppShell(routeMeta?: Record<string, unknown>): unknown;
-}
-
-async function loadLayoutHarness(): Promise<LayoutHarness> {
-  const { renderRuntimeHelpers } = await import(
-    '../src/vite/internal/ssg/entry-render-runtime.ts'
-  );
-  const defaultShell = { tagName: 'main-shell' };
-  const postShell = { tagName: 'post-layout' };
-  const helpers = renderRuntimeHelpers(
-    { default: defaultShell, layouts: { post: postShell } } as never,
-    [],
-  );
-  const harness = `
-const customElements = { get() { return undefined; } };
-const escapeHtml = (value) => String(value);
-const __locales = ["en"];
-const __getDefaultLocale = () => "en";
-const __navSections = [];
-const __headerNav = [];
-function renderDsd() { return { html: "" }; }
-${helpers}
-export function routeMeta(module) { return __routeMeta(module); }
-export function resolveAppShell(routeMeta) { return __resolveAppShell(routeMeta); }
-`;
-  const mod = await import('data:text/javascript;charset=utf-8,' + encodeURIComponent(harness));
-  return mod as LayoutHarness;
+// Behavior-level proof for the named-layout wiring: execute the shipped typed
+// runtime (routeMeta + the app-shell runtime) with the same plan shape the
+// entry binds (ADR-0160 rule a).
+function loadLayoutRuntime(appShellPlan: {
+  default: unknown;
+  layouts: Record<string, unknown>;
+}) {
+  const ssrCalls: Array<{ tag: string; props: Record<string, unknown>; route: string }> = [];
+  const runtime = createAppShellRuntime({
+    ssr: (tag, props, sourceInfo) => {
+      ssrCalls.push({
+        tag,
+        props: props ?? {},
+        route: sourceInfo?.route ?? '',
+      });
+      return '<shell>' + tag + '</shell>';
+    },
+    trustedHtml: (html) => ({ html }),
+    appShellPlan: appShellPlan as never,
+    locales: ['en'],
+    navSections: [],
+    headerNav: [],
+    defaultLocale: 'en',
+  });
+  return { runtime, ssrCalls };
 }
 
 function pageModule(layout: string | false | undefined): unknown {
@@ -464,24 +504,33 @@ function pageModule(layout: string | false | undefined): unknown {
   };
 }
 
-Deno.test('__routeMeta surfaces route.layout and __resolveAppShell selects the named layout', async () => {
-  const harness = await loadLayoutHarness();
-  const meta = harness.routeMeta(pageModule('post'));
+Deno.test('routeMeta surfaces route.layout and resolveAppShell selects the named layout', () => {
+  const defaultShell = { tagName: 'main-shell' };
+  const postShell = { tagName: 'post-layout' };
+  const { runtime } = loadLayoutRuntime({
+    default: defaultShell,
+    layouts: { post: postShell },
+  });
+  const meta = routeMeta(pageModule('post'));
   assertEquals(meta.layout, 'post');
-  assertEquals(harness.resolveAppShell(meta), { tagName: 'post-layout' });
+  assertEquals<unknown>(runtime.resolveAppShell(meta), { tagName: 'post-layout' });
 });
 
-Deno.test('__resolveAppShell: layout false disables the shell, unknown names fall back to default', async () => {
-  const harness = await loadLayoutHarness();
-  assertEquals(harness.resolveAppShell(harness.routeMeta(pageModule(false))), false);
-  assertEquals(
-    harness.resolveAppShell(harness.routeMeta(pageModule('no-such-layout'))),
+Deno.test('resolveAppShell: layout false disables the shell, unknown names fall back to default', () => {
+  const defaultShell = { tagName: 'main-shell' };
+  const { runtime } = loadLayoutRuntime({
+    default: defaultShell,
+    layouts: { post: { tagName: 'post-layout' } },
+  });
+  assertEquals<unknown>(runtime.resolveAppShell(routeMeta(pageModule(false))), false);
+  assertEquals<unknown>(
+    runtime.resolveAppShell(routeMeta(pageModule('no-such-layout'))),
     { tagName: 'main-shell' },
   );
   // Unset layout: no layout key in the meta, default shell applies.
-  const meta = harness.routeMeta(pageModule(undefined));
+  const meta = routeMeta(pageModule(undefined));
   assertEquals('layout' in meta, false);
-  assertEquals(harness.resolveAppShell(meta), { tagName: 'main-shell' });
+  assertEquals<unknown>(runtime.resolveAppShell(meta), { tagName: 'main-shell' });
 });
 
 Deno.test('renderEntry: definePage descriptor feeds load and metadata wiring', () => {
@@ -501,9 +550,12 @@ Deno.test('renderEntry: definePage descriptor feeds load and metadata wiring', (
   // projector and the resolved-Document seam.
   assertStringIncludes(
     code,
-    'const __pageContext = { data: __data, actionData: undefined, params: __params, request: c.req.raw, locale: __localeFromPath(c.req.path, __getDefaultLocale()), route: __routeContext, meta: __routeMetaValue };',
+    'const __pageContext = { data: __data, actionData: undefined, params: __params, request: c.req.raw, locale: __localeFromPath(__locales, c.req.path, __getDefaultLocale()), route: __routeContext, meta: __routeMetaValue };',
   );
-  assertStringIncludes(code, 'const __doc = __resolvePageDocument(__page.head, __pageContext);');
+  assertStringIncludes(
+    code,
+    'const __doc = __resolvePageDocument(__page.head, __pageContext, __clientScriptDescriptors());',
+  );
   assertStringIncludes(
     code,
     "import { resolvePageDocument as __resolvePageDocument } from '@openelement/router/document'",
@@ -515,10 +567,11 @@ Deno.test('renderEntry: definePage descriptor feeds load and metadata wiring', (
   assertFalse(code.includes('__openElementData'));
   assertEquals(code.includes('module?.meta'), false);
   // Named layouts (ADR-0123): the descriptor's route.layout is the producer
-  // for the routeMeta.layout the app-shell resolver reads.
+  // for the routeMeta.layout the app-shell resolver reads. The extractor is
+  // imported runtime (ADR-0160 rule a); the entry pins the import binding.
   assertStringIncludes(
     code,
-    '...(page.route?.layout !== undefined ? { layout: page.route.layout } : {}),',
+    "import { routeMeta as __routeMeta } from '@openelement/router/server-runtime'",
   );
   assertStringIncludes(code, 'title: __doc.title || "openElement"');
   assertStringIncludes(
@@ -531,10 +584,18 @@ Deno.test('renderEntry: definePage descriptor feeds load and metadata wiring', (
     code,
     'dangerouslyHeadFragments: __doc.dangerouslyHeadFragments || [],',
   );
-  assertStringIncludes(code, 'function __pageDefinition(module) {');
+  // The page-definition extractor is imported runtime (ADR-0160 rule a):
+  // the entry pins the binding, not a local function body.
   assertStringIncludes(
     code,
-    "import { isOpenElementRedirect as __isOpenElementRedirect, isOpenElementNotFound as __isOpenElementNotFound, classifyActionResult as __classifyActionResult, ACTION_FETCH_HEADER as __actionFetchHeader, PROBLEM_JSON_MEDIA_TYPE as __problemJsonMediaType } from '@openelement/router';",
+    "import { pageDefinition as __pageDefinition } from '@openelement/router/server-runtime'",
+  );
+  // The lifecycle guards stay the authoring imports; the action protocol
+  // constants and classifier moved into the server-runtime action module
+  // (ADR-0160 rule a, #1470 block c).
+  assertStringIncludes(
+    code,
+    "import { isOpenElementRedirect as __isOpenElementRedirect, isOpenElementNotFound as __isOpenElementNotFound } from '@openelement/router';",
   );
   assertFalse(code.includes('function __isOpenElementRedirect(error) {'));
   assertFalse(code.includes('function __isOpenElementNotFound(error) {'));
@@ -543,7 +604,10 @@ Deno.test('renderEntry: definePage descriptor feeds load and metadata wiring', (
     'data = typeof info.module.loader === "function" ? await info.module.loader(loadContext) : undefined;',
   );
   assertStringIncludes(code, '__pageProps(info.module, __pageContext)');
-  assertStringIncludes(code, 'const __doc = __resolvePageDocument(page.head, __pageContext);');
+  assertStringIncludes(
+    code,
+    'const __doc = __resolvePageDocument(page.head, __pageContext, __clientScriptDescriptors());',
+  );
   assertStringIncludes(code, 'filePath: "index.ts"');
   assertStringIncludes(
     code,
@@ -664,7 +728,7 @@ Deno.test('renderEntry: complex scenario with all features', () => {
 
   // All features present
   assertStringIncludes(code, 'Content-Security-Policy');
-  assertStringIncludes(code, 'crypto.randomUUID()');
+  assertStringIncludes(code, '__cspCreateNonce()');
   assertStringIncludes(code, '"https://example.com"');
   assertStringIncludes(code, '_renderer');
   assertStringIncludes(code, '_middleware');
@@ -929,124 +993,123 @@ Deno.test('buildEntryDescriptor: ssr field is extracted from manifest declaratio
   assertEquals(defaultComp?.ssr, undefined); // no ssr field in manifest -> undefined
 });
 
-// ─── 0.42.0-alpha.2 (ADR-0120): action protocol codegen ───────────────────
+// ─── 0.42.0-alpha.2 (ADR-0120): action protocol wiring ─────────────────────
+//
+// The protocol semantics themselves (CSRF floor, named-action dispatch, the
+// fail()/PRG channels, the RFC 9457 problem+json bodies) are BEHAVIOR of the
+// imported @openelement/router/server-runtime action module since #1470
+// block c (ADR-0160 rule a); they are exercised against that module by
+// server-runtime-action-runtime.test.ts and end-to-end by the read-only
+// request-time-parity oracle. What remains pinned here is the generated
+// WIRING: the import bindings, the middleware composition, and the
+// action-before-loader revalidation order.
 
-Deno.test('renderEntry: action POST follows the ADR-0120 protocol', () => {
+Deno.test('renderEntry: action POST wiring follows the ADR-0120 protocol', () => {
   const desc = buildEntryDescriptor(basicRoutes, {});
   const code = renderEntry(desc);
 
+  // The protocol runner is the imported runtime module, bound once.
+  assertStringIncludes(
+    code,
+    "import { runActionProtocol as __runActionProtocol } from '@openelement/router/server-runtime'",
+  );
+  assertFalse(code.includes('async function __runActionProtocol'));
+
   // The action runs before the loader (revalidation invariant): a mutation
   // never renders stale loader data.
-  const actionIndex = code.indexOf('const actionOutcome = __classifyActionResult(await actionFn');
+  const actionIndex = code.indexOf('const __actionExecution = await __runActionProtocol(');
   const loaderIndex = code.indexOf('const __data =', actionIndex);
   assertEquals(actionIndex > 0, true, 'action execution must be emitted');
   assertEquals(loaderIndex > actionIndex, true, 'loader must run after the action on POST');
 
-  // Real FormData (not parseBody objects), fail() 422 channel, PRG 303 on
-  // success, named actions via ?/name, fetch-path ActionResult JSON.
-  assertStringIncludes(code, 'await c.req.raw.formData()');
-  assertStringIncludes(code, "actionOutcome.kind === 'failure'");
-  assertStringIncludes(code, 'response: c.redirect(prgTarget, 303)');
-  assertStringIncludes(code, "key.startsWith('/')");
-  assertStringIncludes(code, 'namedActions[actionName]');
-  // #743: generated code references the shared ACTION_FETCH_HEADER constant
-  // (single source of truth in @openelement/element) instead of a literal.
-  assertStringIncludes(code, 'ACTION_FETCH_HEADER as __actionFetchHeader');
-  assertStringIncludes(code, 'c.req.header(__actionFetchHeader)');
+  // The POST handler composes the default body-limit middleware ahead of the
+  // handler through the Hono↔WinterCG bridge; the limit value is the
+  // canonical MAX_ACTION_BODY_BYTES policy constant (#568, S1c) — since
+  // #1470 block e the factory imports it from the kernel-free /authoring
+  // leaf and binds the middleware itself, so the entry carries neither the
+  // serialized number nor the binding line (only the destructured middleware).
   assertStringIncludes(
     code,
-    'if (JSON.stringify(data) === undefined) data = null;',
+    '__pageHandlers["/"].POST = [__asFetchMiddleware(__actionBodyLimit), __asFetchHandler(async (c, __route) => {',
   );
+  assertFalse(code.includes('__maxActionBodyBytes'));
+  assertFalse(code.includes('createActionBodyLimit'));
+  assertStringIncludes(code, 'actionBodyLimit: __actionBodyLimit,');
+  // The Vary negotiation header rides the shared wire constant, never a
+  // literal (#743).
   assertStringIncludes(
     code,
-    "{ type: 'failure', status: actionOutcome.status, data }",
+    "import { ACTION_FETCH_HEADER as __actionFetchHeader } from '@openelement/router/server-runtime'",
   );
+  assertStringIncludes(code, "c.header('Vary', __actionFetchHeader);");
+  // The 422 re-render renders at the author's fail() status.
   assertStringIncludes(code, ', __actionStatus)');
-  // No action export on a route: POST is a defined 404, not a render.
-  assertStringIncludes(code, 'This route does not accept submissions.');
 });
 
-// ─── 0.42.0-alpha.5 (ADR-0121): protocol hardening codegen ─────────────────
+// ─── 0.42.0-alpha.5 (ADR-0121): protocol hardening wiring ──────────────────
 
-Deno.test('renderEntry: ADR-0121 hardening is present in the action codegen', () => {
+Deno.test('renderEntry: ADR-0121 hardening wiring is present in the action codegen', () => {
   const desc = buildEntryDescriptor(basicRoutes, {});
   const code = renderEntry(desc);
 
-  // #611: default same-origin CSRF floor on generated action POST
-  assertStringIncludes(code, 'sec-fetch-site');
-  assertStringIncludes(code, 'cross-site');
-  assertStringIncludes(code, 'OPEN_ELEMENT_DISABLE_CSRF');
-  assertStringIncludes(code, 'Cross-site form submission rejected');
-  assertStringIncludes(code, 'loadContext.env');
-  // #1382: the browser-shaped-form residual window is fail-closed in the same
-  // dialect — a urlencoded/multipart body whose only browser evidence is a
-  // form navigation (Upgrade-Insecure-Requests or a text/html Accept) must
-  // carry an Origin.
-  assertStringIncludes(code, "c.req.header('upgrade-insecure-requests')");
-  assertStringIncludes(code, "contentType.indexOf('multipart/form-data') === 0");
-  assertStringIncludes(code, "accept.indexOf('text/html') !== -1");
-
-  // #542: named-action dispatch is own-key gated (prototype keys are 404).
-  assertStringIncludes(code, 'Object.prototype.hasOwnProperty.call(namedActions, actionName)');
-  // #541: App owns returned-Response rejection; generated Hono code consumes
-  // the canonical action classifier instead of redefining the contract.
-  assertStringIncludes(code, '__classifyActionResult(await actionFn');
-  assertEquals(code.includes('actionResult instanceof Response'), false);
-  // #548: the default PRG target strips the ?/name action marker.
-  assertStringIncludes(code, 'prgParams.delete(key)');
-  assertStringIncludes(code, "{ type: 'redirect', status: 303, location: prgTarget }");
-  // #549 + #863: fetch callers receive an RFC 9457 problem+json 404, not an
-  // HTML page.
-  assertStringIncludes(
-    code,
-    "{ type: 'about:blank', title: 'Not Found', status: 404, detail: message }",
-  );
-  assertStringIncludes(code, "{ 'Content-Type': __problemJsonMediaType }");
-  // #550: request-time responses are never cacheable; POST is negotiated.
+  // The CSRF floor, the own-key named-action gate, the PRG target stripping,
+  // and the problem+json error bodies are behavior of the imported module
+  // (server-runtime-action-runtime.test.ts). The entry-level pins are the
+  // response-negotiation wiring and the middleware registration.
   assertStringIncludes(code, "c.header('Cache-Control', 'no-store');");
+  // #550: request-time responses are never cacheable; POST is negotiated.
   assertStringIncludes(code, "c.header('Vary', __actionFetchHeader);");
   // #943: successful GET pages relax to private,no-cache (bfcache/scroll
   // restoration); the no-store baseline above still guards every other kind.
   assertStringIncludes(code, "c.header('Cache-Control', 'private, no-cache');");
-  // #558: the JSON error channel scrubs internals in production.
-  assertStringIncludes(code, "import.meta.env.PROD ? 'Internal Server Error' : String(err");
-  // #568: action POSTs carry a default body limit.
-  assertStringIncludes(code, '__bodyLimit({ maxSize: 10 * 1024 * 1024');
   // #572: non-GET/POST methods on page routes are a defined 405.
   assertStringIncludes(code, 'const __routeMiddleware = __createRouteMiddleware([');
   assertStringIncludes(
     code,
     "app.all('*', (c, next) => { __honoContexts.set(c.req.raw, c); return __routeMiddleware(c.req.raw,",
   );
+  // The Hono↔WinterCG bridge is the factory's own bridge, destructured once
+  // (ADR-0160 rule a, #1470 block e — the bridge creation moved into
+  // createGeneratedApp; the 405 responder is the factory-bound dispatch
+  // module).
+  assertStringIncludes(code, 'methodNotAllowed: __methodNotAllowed,');
+  assertStringIncludes(
+    code,
+    'const { contexts: __honoContexts, asFetchHandler: __asFetchHandler, asFetchMiddleware: __asFetchMiddleware } = __app.hono;',
+  );
+  assertFalse(code.includes('const __honoContexts = new WeakMap();'));
+  assertFalse(code.includes('createHonoBridge'));
 });
 
-Deno.test('renderEntry: the 413 body-limit channel answers fetch callers with problem+json', () => {
+Deno.test('renderEntry: the action error/redirect channels are imported runtime calls', () => {
   const desc = buildEntryDescriptor(basicRoutes, {});
   const code = renderEntry(desc);
 
-  // Same fetch-status fork as the CSRF 403 (#863): fetch callers parse every
-  // action error as RFC 9457 problem+json; the native form channel keeps the
-  // plain-text 413. Runtime upgrade note: the over-limit behavior this pins
-  // at codegen level is exercised end-to-end by the 11 MiB adversarial POST
-  // step in request-time-parity.test.ts ('oversized action POST → 413, fetch
-  // channel speaks problem+json'), on both dev and build servers.
+  // ADR-0121: the 303 redirect coercion (fetch ActionResult shape included)
+  // and the RFC 9457 500 mapping (#863, #558) are the imported module; the
+  // catch block keeps only the call sites. The `import.meta.env.PROD`
+  // argument stays emitted at the call site so the bundler define keeps
+  // owning the production flag.
   assertStringIncludes(
     code,
-    `if (c.req.header(__actionFetchHeader) === 'true') return c.json({ type: 'about:blank', title: "Payload Too Large", status: 413,`,
+    "import { actionRedirectResponse as __actionRedirectResponse } from '@openelement/router/server-runtime'",
   );
-  assertStringIncludes(code, "return c.text('Payload Too Large', 413);");
-  // The fetch fork sits inside the bodyLimit onError, before the plain-text
-  // fallback.
-  const onErrorStart = code.indexOf('onError: (c) => {');
-  const onErrorEnd = code.indexOf('\n', onErrorStart);
-  assert(onErrorStart >= 0 && onErrorEnd > onErrorStart, 'bodyLimit onError emission found');
-  const onError = code.slice(onErrorStart, onErrorEnd);
-  const fetchFork = onError.indexOf("c.req.header(__actionFetchHeader) === 'true'");
-  const textFallback = onError.indexOf("c.text('Payload Too Large', 413)");
-  assert(fetchFork >= 0 && textFallback > fetchFork, 'fetch fork precedes the text fallback');
+  assertStringIncludes(
+    code,
+    "import { actionErrorResponse as __actionErrorResponse } from '@openelement/router/server-runtime'",
+  );
+  assertStringIncludes(
+    code,
+    'return __actionRedirectResponse(c, err.location, __actionState.isFetch);',
+  );
+  assertStringIncludes(
+    code,
+    'return __actionErrorResponse(c, "/", err, import.meta.env.PROD);',
+  );
+  assertFalse(code.includes("title: 'Internal Server Error'"));
 });
 
-Deno.test('renderEntry: action protocol is emitted once for many routes (#1098)', () => {
+Deno.test('renderEntry: the action protocol wiring is emitted once for many routes (#1098)', () => {
   const routes: RouteEntry[] = Array.from({ length: 30 }, (_, index) => ({
     path: `/page-${index}`,
     filePath: `page-${index}.ts`,
@@ -1054,8 +1117,8 @@ Deno.test('renderEntry: action protocol is emitted once for many routes (#1098)'
     varName: `page${index}`,
   }));
   const code = renderEntry(buildEntryDescriptor(routes));
-  assertEquals(code.match(/async function __runActionProtocol/g)?.length, 1);
-  assertEquals(code.match(/const csrfOff =/g)?.length, 1);
+  assertEquals(code.match(/import { runActionProtocol as __runActionProtocol }/g)?.length, 1);
+  assertEquals(code.match(/actionBodyLimit: __actionBodyLimit,/g)?.length, 1);
   assertEquals(code.match(/await __runActionProtocol\(/g)?.length, routes.length);
 });
 
@@ -1105,13 +1168,20 @@ Deno.test('renderEntry: island client script descriptors also cover notFound/err
     'return c.html(wrapInDocument(__statusHtml("404 Not Found", "Not Found"), {',
   );
   assertEquals(code.includes('__withDevClientScript'), false);
-  // Every request-time document wrap passes the descriptor line: GET+POST
-  // success, 404 catch and error boundary per page route, plus the two
-  // app.notFound wraps.
+  // #951/#1471: the document wraps read the resolved document's clientScripts
+  // (`scripts: __doc.clientScripts || []` — GET+POST success and error
+  // boundary per page route, plus the app.notFound success wrap). The direct
+  // descriptor call remains only where no resolved document exists: the
+  // 404 catch per page route (GET + POST) and the app.notFound catch — same
+  // list, same tags, one serialization point.
   const pageRouteCount = routes.filter((r) => r.type === 'page').length;
   assertEquals(
     code.match(/scripts: __clientScriptDescriptors\(\)/g)?.length,
-    pageRouteCount * 6 + 2,
+    pageRouteCount * 2 + 1,
+  );
+  assertEquals(
+    code.match(/scripts: __doc\.clientScripts \|\| \[\]/g)?.length,
+    pageRouteCount * 4 + 1,
   );
 });
 
@@ -1125,21 +1195,17 @@ Deno.test('renderEntry: hasAction codegen covers named `actions` exports (#539)'
   assertStringIncludes(code, '.actions === "object" &&');
 });
 
-Deno.test('renderEntry: action catch paths answer fetch callers (redirect as ActionResult, errors as problem+json)', () => {
+Deno.test('renderEntry: GET catch keeps the author redirect status while POST coerces to 303', () => {
   const desc = buildEntryDescriptor(basicRoutes, {});
   const code = renderEntry(desc);
 
-  // Redirects out of a POST action are coerced to 303 (PRG) — every 3xx,
-  // per ADR-0121 — including the ActionResult redirect shape; GET handlers
-  // keep the author's status.
-  assertStringIncludes(code, 'const __redirectStatus = 303;');
+  // The GET handler keeps the author's status; the POST handler delegates to
+  // the imported 303-coercion helper (ADR-0121; behavior covered by
+  // server-runtime-action-runtime.test.ts and the request-time-parity oracle).
+  assertStringIncludes(code, 'return c.redirect(err.location, err.status)');
   assertStringIncludes(
     code,
-    "{ type: 'redirect', status: __redirectStatus, location: err.location }",
-  );
-  assertStringIncludes(
-    code,
-    '{ type: \'about:blank\', title: "Internal Server Error", status: 500, detail: import.meta.env.PROD',
+    'return __actionRedirectResponse(c, err.location, __actionState.isFetch);',
   );
 });
 
@@ -1153,25 +1219,21 @@ Deno.test('renderEntry: middleware.use composes imported module defaults at the 
   });
   const code = renderEntry(desc);
 
-  assertStringIncludes(
-    code,
-    "import { composeFetchMiddleware } from '@openelement/element/build-utils';",
-  );
   // Module contract: each middleware module is imported and its default
-  // export composed — order preserved (use[0] outermost), no source inlining.
+  // export handed to the factory — order preserved (use[0] outermost), no
+  // source inlining. The onion composition itself is the typed factory
+  // (#1470 block e): the entry no longer imports composeFetchMiddleware.
   assertStringIncludes(code, 'import * as __mw_0 from "/app/middleware/outer.ts"');
   assertStringIncludes(code, 'import * as __mw_1 from "/app/middleware/inner.ts"');
-  assertStringIncludes(code, 'const __openElementFetchMiddleware = [');
+  assertStringIncludes(code, 'fetchMiddleware: [');
   assertStringIncludes(code, '__mw_0.default,');
   assertStringIncludes(code, '__mw_1.default,');
-  assertStringIncludes(
-    code,
-    'export const openElementHandler = composeFetchMiddleware(' +
-      '__openElementFetchMiddleware, __openElementBaseHandler)',
-  );
+  assertFalse(code.includes('composeFetchMiddleware'));
+  // The composed handler is the factory result under the same export name.
+  assertStringIncludes(code, 'export const openElementHandler = __app.handler;');
   // Dev-server boundary export (@hono/vite-dev-server reads it via the
   // `export` option when middleware.use is configured).
-  assertStringIncludes(code, 'export const openElementDevFetch = {');
+  assertStringIncludes(code, 'export const openElementDevFetch = __app.devFetch;');
   // The raw Hono app stays the default export — SSG prerender is unchanged.
   assertStringIncludes(code, 'export default app');
 });
@@ -1186,13 +1248,16 @@ Deno.test('renderEntry: middleware.corsOriginModule is imported and referenced, 
   assertStringIncludes(code, "app.use('*', cors({ origin: __cors_origin_module.default,");
 });
 
-Deno.test('renderEntry: no middleware.use keeps the pre-#858 handler shape', () => {
+Deno.test('renderEntry: no middleware.use keeps the single composed handler export', () => {
   const desc = buildEntryDescriptor(basicRoutes);
   const code = renderEntry(desc);
 
+  // The handler export exists in both shapes since #1470 block e — without
+  // middleware.use the factory composes nothing around app.fetch, and no
+  // dev-server export is emitted.
   assertFalse(code.includes('composeFetchMiddleware'));
   assertFalse(code.includes('openElementDevFetch'));
-  assertStringIncludes(code, 'export const openElementHandler = (request, context = {}) => {');
+  assertStringIncludes(code, 'export const openElementHandler = __app.handler;');
 });
 
 Deno.test('renderEntry: corsOrigin warning is emitted once per process (#925)', () => {
@@ -1221,16 +1286,21 @@ Deno.test('renderEntry: island client script is descriptor-driven (dev URL + req
     islandFiles: ['live-counter.ts'],
   }));
 
-  // One render-time seam: the dev URL (compile-time constant) or the src the
-  // generated dist/server/index.js hands in at startup. wrapInDocument
-  // serializes the tag — the only place a CSP nonce is attached.
-  assertStringIncludes(code, 'export function __setRequestTimeClientScript(src) {');
+  // One render-time seam: the dev URL (compile-time constant) is computed in
+  // the entry and handed to the factory; the request-time src the generated
+  // dist/server/index.js hands in reaches the same seam. wrapInDocument
+  // serializes the tag — the only place a CSP nonce is attached. (#1470
+  // block e: the setter/descriptor machinery moved into createGeneratedApp;
+  // the entry re-exports the setter and binds the descriptor list.)
   assertStringIncludes(
     code,
-    "const __devClientScriptSrc = import.meta.env.DEV && true ? import.meta.env.BASE_URL + 'client/islands/client.js' : null;",
+    "devClientScriptSrc: import.meta.env.DEV && true ? import.meta.env.BASE_URL + 'client/islands/client.js' : null,",
   );
-  assertStringIncludes(code, 'function __clientScriptDescriptors() {');
-  assertStringIncludes(code, `return src ? [{ type: 'module', src }] : [];`);
+  assertStringIncludes(
+    code,
+    'export const __setRequestTimeClientScript = __app.setRequestTimeClientScript;',
+  );
+  assertStringIncludes(code, 'clientScriptDescriptors: __clientScriptDescriptors,');
   // No HTML string-splicing survives in the generated entry.
   assertEquals(code.includes('insertBeforeBodyClose'), false);
   assertEquals(code.includes('__withDevClientScript'), false);
@@ -1240,7 +1310,7 @@ Deno.test('renderEntry: no islands and no enhanced forms yields no dev client sc
   const code = renderEntry(buildEntryDescriptor(basicRoutes));
   assertStringIncludes(
     code,
-    "const __devClientScriptSrc = import.meta.env.DEV && false ? import.meta.env.BASE_URL + 'client/islands/client.js' : null;",
+    "devClientScriptSrc: import.meta.env.DEV && false ? import.meta.env.BASE_URL + 'client/islands/client.js' : null,",
   );
 });
 

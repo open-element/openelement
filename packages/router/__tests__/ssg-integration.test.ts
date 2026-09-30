@@ -1,10 +1,13 @@
 /**
  * @openelement/router - SSG integration tests (Deno)
  *
- * Tests the SSG post-processing pipeline:
- *   1. buildIslandChunkMap - scan client build output -> tagName -> chunk path mapping
- *   2. injectClientScript - add client script tags to HTML
- *   3. injectCspMeta - add CSP meta tags to HTML
+ * Tests the SSG post-processing pipeline under the #1471/S4b contract:
+ *   1. islandChunkMapFromAssetManifest - client asset manifest -> tagName -> chunk URL
+ *      (identity-driven; no output file name is ever parsed)
+ *   2. injectCspMeta - add CSP meta tags to HTML
+ *
+ * The client script is NOT injected post-build: the document renderer embeds
+ * the final script tags at render time from the asset manifest.
  *
  * openElement Architecture constraints verified:
  *   - S (Static): DSD content visible without JS
@@ -13,11 +16,8 @@
 
 import { assertEquals, assertStringIncludes } from '@std/assert';
 import { join } from 'jsr:@std/path@^1.0.0';
-import {
-  buildIslandChunkMap,
-  injectClientScript,
-  injectCspMeta,
-} from '../src/vite/internal/ssg/index.ts';
+import { injectCspMeta, islandChunkMapFromAssetManifest } from '../src/vite/internal/ssg/index.ts';
+import type { ClientAssetManifest } from '../src/vite/internal/protocol/client-assets.ts';
 
 // ─── Test fixtures ─────────────────────────────────────────────
 
@@ -92,49 +92,42 @@ async function cleanupSsgFixtures() {
   }
 }
 
+const MANIFEST: ClientAssetManifest = {
+  entry: '/client/islands/client.js',
+  islands: {
+    'my-counter': { file: '/client/islands/island-my-counter-abc123.js', strategy: 'idle' },
+    'theme-toggle': { file: '/client/islands/island-theme-toggle-def456.js', strategy: 'load' },
+  },
+  shared: [],
+};
+
 // ─── Tests ─────────────────────────────────────────────────────
 
 Deno.test('SSG integration', { permissions: { read: true, write: true } }, async (t) => {
   await setupSsgFixtures();
 
-  await t.step('buildIslandChunkMap - returns empty without manifest', async () => {
-    const chunkMap = await buildIslandChunkMap(
-      join(FIXTURES_DIR),
-      'dist',
-      ['my-counter', 'theme-toggle'],
-      '/kiss/',
-    );
-
-    // No .vite/manifest.json exists -> empty map
-    assertEquals(Object.keys(chunkMap).length, 0);
+  await t.step('islandChunkMapFromAssetManifest - maps every scanned island identity', () => {
+    const chunkMap = islandChunkMapFromAssetManifest(MANIFEST, ['my-counter', 'theme-toggle']);
+    assertEquals(chunkMap, {
+      'my-counter': '/client/islands/island-my-counter-abc123.js',
+      'theme-toggle': '/client/islands/island-theme-toggle-def456.js',
+    });
   });
 
-  await t.step('buildIslandChunkMap - returns empty map when no client dir', async () => {
-    const chunkMap = await buildIslandChunkMap(
-      join(FIXTURES_DIR),
-      'nonexistent',
-      ['my-counter'],
-    );
-    assertEquals(Object.keys(chunkMap).length, 0);
-  });
-
-  await t.step('injectClientScript - adds <script type="module"> before </body>', () => {
-    injectClientScript(join(FIXTURES_DIR, 'dist'), '/client/islands/client.js');
-
-    const html = Deno.readTextFileSync(join(FIXTURES_DIR, 'dist', 'index.html'));
-    assertStringIncludes(html, '<script type="module" src="/client/islands/client.js"></script>');
-    const bodyIdx = html.indexOf('</body>');
-    const scriptIdx = html.indexOf('/client/islands/client.js');
-    assertEquals(scriptIdx < bodyIdx, true);
-  });
-
-  await t.step('injectClientScript - does not duplicate existing script', () => {
-    injectClientScript(join(FIXTURES_DIR, 'dist'), '/client/islands/client.js');
-
-    const html = Deno.readTextFileSync(join(FIXTURES_DIR, 'dist', 'index.html'));
-    const count = (html.match(/\/client\/islands\/client\.js/g) || []).length;
-    assertEquals(count, 1);
-  });
+  await t.step(
+    'islandChunkMapFromAssetManifest - a chunk rename never moves the tag identity',
+    () => {
+      const renamed: ClientAssetManifest = {
+        ...MANIFEST,
+        islands: {
+          'my-counter': { file: '/client/islands/shared-bundle-Qq11.js', strategy: 'idle' },
+        },
+      };
+      assertEquals(islandChunkMapFromAssetManifest(renamed, ['my-counter']), {
+        'my-counter': '/client/islands/shared-bundle-Qq11.js',
+      });
+    },
+  );
 
   await t.step('injectCspMeta - adds <meta http-equiv="Content-Security-Policy"> to head', () => {
     injectCspMeta(
@@ -149,6 +142,11 @@ Deno.test('SSG integration', { permissions: { read: true, write: true } }, async
     const headEnd = html.indexOf('</head>');
     const metaIdx = html.indexOf('Content-Security-Policy');
     assertEquals(metaIdx < headEnd, true);
+  });
+
+  await t.step('rendered HTML carries no post-build script surgery (S constraint)', () => {
+    const html = Deno.readTextFileSync(join(FIXTURES_DIR, 'dist', 'index.html'));
+    assertEquals(html.includes('<script'), false);
   });
 
   await t.step('DSD content preserved (S constraint)', () => {

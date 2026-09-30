@@ -20,7 +20,7 @@
 import { element, OpenElement } from '@openelement/element';
 import { defineIslandConfig } from '@openelement/router';
 import { compiledStyle, HERO_CURSOR_CSS } from '../site-ui/compiled-style.ts';
-import { readIslandState, writeIslandState } from '../site-ui/island-state.ts';
+import { readInstanceState, writeInstanceState } from '@openelement/ui/instance-state';
 
 export const openElement = defineIslandConfig({ hydrate: 'idle', ssr: true });
 
@@ -54,7 +54,7 @@ export default class HeroPolish extends OpenElement {
       const schedule = (): void => {
         if (!scheduled) {
           scheduled = true;
-          writeIslandState(this, 'frame', requestAnimationFrame(update));
+          writeInstanceState(this, 'frame', requestAnimationFrame(update));
         }
       };
       globalThis.addEventListener('scroll', schedule, { passive: true });
@@ -178,15 +178,15 @@ export default class HeroPolish extends OpenElement {
       });
     }
 
-    writeIslandState(this, 'cleanup', () => {
+    writeInstanceState(this, 'cleanup', () => {
       for (const fn of cleanups) fn();
-      cancelAnimationFrame(readIslandState(this, 'frame', () => 0));
+      cancelAnimationFrame(readInstanceState(this, 'frame', () => 0));
     });
   }
 
   override disconnectedCallback(): void {
-    readIslandState<(() => void) | undefined>(this, 'cleanup', () => undefined)?.();
-    writeIslandState(this, 'cleanup', undefined);
+    readInstanceState<(() => void) | undefined>(this, 'cleanup', () => undefined)?.();
+    writeInstanceState(this, 'cleanup', undefined);
     super.disconnectedCallback();
   }
 

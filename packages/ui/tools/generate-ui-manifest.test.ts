@@ -99,8 +99,8 @@ Deno.test('parseCssParts prefers @csspart doc descriptions over JSX literals', (
 });
 
 Deno.test('layer/hydrate policies fail loud on unknown component classes', () => {
-  assertThrows(() => layerFromClass('OpenUnknown'), Error, 'No layer/hydrate policy');
-  assertThrows(() => hydrateFromClass('OpenUnknown'), Error, 'No layer/hydrate policy');
+  assertThrows(() => layerFromClass('OpenUnknown'), Error, 'No layer/hydrate/status policy');
+  assertThrows(() => hydrateFromClass('OpenUnknown'), Error, 'No layer/hydrate/status policy');
   assertEquals(layerFromClass('OpenCard'), 'dsd-static');
   assertEquals(layerFromClass('OpenDialog'), 'dsd-interactive');
   assertEquals(hydrateFromClass('OpenDialog'), 'idle');

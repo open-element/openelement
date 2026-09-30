@@ -4,6 +4,9 @@
  * Minimal card container with optional header and footer.
  * Swiss International Style: borders are whispers, not shouts.
  *
+ * Experimental (owner ruling C1, #1468): no compatibility promise — may
+ * change or be removed before 1.0.
+ *
  * Compiled authoring. The `variant` attribute styles the
  * host directly (:host([variant=...])) — the card's render is fully static.
  *

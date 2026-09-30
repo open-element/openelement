@@ -102,6 +102,23 @@ export {
   unsafeStreamFrameAttribute,
 } from './public-runtime.ts';
 
+// ─── Build/runtime policy budgets (re-export from core) ────────────
+
+// The numeric admission budgets (streaming field/owner/seed/payload bounds,
+// composition depth, action body limit, stream timeout, idle fallback): one
+// value per policy boundary for the router's build pipeline, the generated
+// entries, and the element runtime itself.
+export {
+  IDLE_FALLBACK_TIMEOUT_MS,
+  MAX_ACTION_BODY_BYTES,
+  MAX_COMPOSITION_DEPTH,
+  STREAM_MAX_FIELDS,
+  STREAM_MAX_OWNERS,
+  STREAM_MAX_PAYLOAD_LENGTH,
+  STREAM_MAX_SEED_PROPERTIES,
+  STREAM_TIMEOUT_MS,
+} from './public-runtime.ts';
+
 // ─── Island types (protocol) ─────────────────────────────
 
 export type { IslandOptions } from './public-runtime.ts';

@@ -1,4 +1,5 @@
 import { assert, assertEquals, assertThrows } from '@std/assert';
+import { IDLE_FALLBACK_TIMEOUT_MS } from '@openelement/element';
 import { generateClientEntry, validateClientIslandEntry } from '../src/vite/internal/ssg/index.ts';
 
 const REJECTED_ISLAND_MODULE_PATHS = [
@@ -41,6 +42,20 @@ Deno.test('#868 client entry stays within the wiring budget', () => {
   assert(
     code.length < CLIENT_ENTRY_BUDGET_BYTES,
     `client entry ${code.length}B exceeds ${CLIENT_ENTRY_BUDGET_BYTES}B budget`,
+  );
+});
+
+Deno.test('#868 the idle fallback timeout is the serialized policy constant, not a second literal', () => {
+  // The import-free island-scheduler module receives the number through its
+  // deps; the emitted value must re-derive from the element policy constant
+  // (the __maxActionBodyBytes precedent — the pin reads the derivation, not
+  // a bare literal).
+  const code = generateClientEntry([
+    { tagName: 'x-counter', modulePath: './counter.ts', strategy: 'idle' },
+  ]);
+  assert(
+    code.includes(`idleFallbackTimeoutMs: ${IDLE_FALLBACK_TIMEOUT_MS},`),
+    'client entry must serialize the IDLE_FALLBACK_TIMEOUT_MS policy constant into the scheduler deps',
   );
 });
 

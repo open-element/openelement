@@ -1,9 +1,10 @@
-import { assertEquals, assertStrictEquals } from '@std/assert';
+import { assertEquals, assertStrictEquals, assertThrows } from '@std/assert';
 import { createDeferredServerExecutor } from '../../src/internal/compiled/server/index.ts';
 import {
   STREAM_STATE_KEY,
   type StreamHostState,
 } from '../../src/internal/compiled/stream-state.ts';
+import { FacadeErrorCode, OpenElementError } from '../../src/internal/protocol/errors.ts';
 import { signal } from '../../src/internal/signal/framework.ts';
 import {
   type FacadeElement,
@@ -42,7 +43,7 @@ ctor.__compiledProperties = program.metadata.properties;
 ctor.__elementMetadata = program.metadata;
 dom.registry.define(tag, ctor);
 
-function fixture(early: boolean) {
+function fixture(early: boolean, seedType = 'string') {
   const owner = { program, version: program.version, instanceId: 'instance-1' };
   const executor = createDeferredServerExecutor(
     program,
@@ -63,8 +64,8 @@ function fixture(early: boolean) {
     instance: owner.instanceId,
     properties: {
       title: early
-        ? { state: 'resolved', type: 'string', value: 'Early' }
-        : { state: 'pending', type: 'string' },
+        ? { state: 'resolved', type: seedType, value: 'Early' }
+        : { state: 'pending', type: seedType },
     },
     parts: [0],
     pending: new Set(early ? [] : [0]),
@@ -125,4 +126,20 @@ Deno.test('OpenElement disconnect cancels pending stream adoption without losing
   for (const listener of listeners) listener(0, 'title', 'content');
   assertEquals(element.title, 'Local');
   assertStrictEquals(main.childNodes[0], original);
+});
+
+Deno.test('a streamed seed whose type mismatches the compiled record fails closed with its own code', () => {
+  // The mismatch is its own raiser, not a PROGRAM_MISSING reuse.
+  assertEquals(FacadeErrorCode.STREAM_TYPE_MISMATCH, 'OE_STREAM_TYPE_MISMATCH');
+  // Mount throws out of connectedCallback with the element already attached;
+  // release the stray host so the failure stays isolated to this test.
+  const error = assertThrows(
+    () => fixture(false, 'number'),
+    OpenElementError,
+    'has a mismatched type',
+  );
+  const stray = dom.document.body.childNodes.at(-1);
+  if (stray) dom.document.body.removeChild(stray as never);
+  assertEquals(error.code, 'OE_STREAM_TYPE_MISMATCH');
+  assertEquals(error.phase, 'csr');
 });

@@ -49,6 +49,7 @@ import { normalizeSeparators, pathToTagName } from '@openelement/element/build-u
 import { dirname, join, resolve } from '../../../internal/host-path.ts';
 import { safeReadDir, safeReadFile, safeStat } from './route-scanner-fs.ts';
 import { analyzeModuleSemantics } from '@openelement/element/compiler';
+import { ROUTER_MODULE_VOCABULARY } from '../protocol/module-vocabulary.ts';
 import { scanStreamManifest } from './stream-manifest.ts';
 import type { StreamRouteManifest } from '../protocol/ssg.ts';
 
@@ -68,7 +69,9 @@ async function sourceTreeHasEnhancedForms(
   depth = 0,
   seen: Set<string> = new Set(),
 ): Promise<boolean> {
-  const semantics = analyzeModuleSemantics(source, filePath);
+  const semantics = analyzeModuleSemantics(source, filePath, {
+    vocabulary: ROUTER_MODULE_VOCABULARY,
+  });
   if (semantics.enhancedForm) return true;
   if (depth >= 3 || seen.has(filePath)) return false;
   seen.add(filePath);
@@ -118,7 +121,7 @@ export function parseRouteFilePath(filePath: string): string {
   p = p.replace(/\.[^.]+$/, '');
 
   // v0.25: AST-verified — path utility, converts [param] to :param
-  // 0.42.0-alpha.5 (#556): a catch-all segment [...path] becomes the Hono
+  // #556: a catch-all segment [...path] becomes the Hono
   // named regex parameter :path{.+} (matches across '/'), not the literal
   // single-segment ':...path' the naive replacement produced.
   p = p.replace(/\[\.\.\.([^\]]+)\]/g, ':$1{.+}');
@@ -247,7 +250,7 @@ export async function scanRoutes(
         const routePath = parseRouteFilePath(relativePath);
         const routeType = getRouteType(relativePath);
         // v0.25: AST-verified — path utility, extracts [param] patterns
-        // 0.42.0-alpha.5 (#556): a catch-all [...path] contributes the bare
+        // #556: a catch-all [...path] contributes the bare
         // param name 'path' (no '...' prefix) to match the ':path{.+}' pattern.
         const paramMatches = relativePath.match(/\[([^\]]+)\]/g);
         const params = paramMatches
@@ -263,7 +266,9 @@ export async function scanRoutes(
           if (source === undefined) {
             log.debug(`Unable to read route module: ${fullPath}`);
           } else {
-            const semantics = analyzeModuleSemantics(source, fullPath);
+            const semantics = analyzeModuleSemantics(source, fullPath, {
+              vocabulary: ROUTER_MODULE_VOCABULARY,
+            });
             tagName = semantics.exportedTagName;
             isDefinePage = semantics.definePage;
             streamManifest = await scanStreamManifest(

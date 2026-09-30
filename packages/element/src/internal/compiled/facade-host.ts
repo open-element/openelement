@@ -1,6 +1,6 @@
 /**
  * facade-host.ts — compiled property contract for the public OpenElement
- * facade (v0.44).
+ * facade.
  *
  * Everything the public base class needs to turn the compiler-emitted statics
  * (`__compiledProperties`, `__partProgram`) into live element behavior:
@@ -23,7 +23,7 @@ import type { CompiledElementKernel } from './runtime/kernel.ts';
 import { signal } from '../signal/index.ts';
 import type { WritableSignal } from '../signal/types.ts';
 
-/** Compiled statics emitted by the 0.44 compiler onto the generated class. */
+/** Compiled statics emitted by the compiler onto the generated class. */
 export interface CompiledStatics {
   __partProgram?: PartProgram;
   __compiledProperties?: CompiledPropertyMetadata[];
@@ -190,7 +190,7 @@ export function createFacadePropertyState(
       throw new OpenElementError(
         `[openElement] compiled property "${property.name}" is marked computed but the class ` +
           'carries no __computedFields factory for it. Rebuild the component through the ' +
-          '0.44 compiler so the generated class and its Part Program agree.',
+          'OpenElement compiler so the generated class and its Part Program agree.',
         { code: FacadeErrorCode.COMPUTED_FACTORY_MISSING, phase: 'csr' },
       );
     }
@@ -396,7 +396,7 @@ export function bindProgramHandlers(
       throw new OpenElementError(
         `[openElement] <${classNameOf(ctor)}> is compiled to call handler "${name}", ` +
           'but the instance has no such method. Rebuild the component through the ' +
-          '0.44 compiler so the generated class and its Part Program agree.',
+          'OpenElement compiler so the generated class and its Part Program agree.',
         { code: FacadeErrorCode.HANDLER_MISSING, phase: 'csr' },
       );
     }

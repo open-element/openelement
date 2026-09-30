@@ -6,6 +6,7 @@ import {
 } from '../data/version.ts';
 import { siteHead } from '@openelement/site-ui/head.ts';
 import { contentLocale } from '@openelement/site-ui/locale.ts';
+import type { SiteLocale } from '../../site-config.ts';
 import RoadmapPage from '../components/page-roadmap.tsx';
 
 export const meta = { section: '', label: 'Roadmap', order: 10 };
@@ -36,7 +37,7 @@ interface RoadmapListItem {
   value: string;
 }
 
-const entries: Record<'en' | 'zh', TimelineEntry[]> = {
+const entries: Record<SiteLocale, TimelineEntry[]> = {
   'en': [
     {
       'version': 'v1.0.0-alpha.1',

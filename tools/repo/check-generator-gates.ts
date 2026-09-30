@@ -23,6 +23,7 @@ import {
   emitterEntries,
   generatorEntries,
   readWorkspaces,
+  scriptInCommand,
 } from './workspace-tasks.ts';
 
 const repoRoot = fromFileUrl(new URL('../../', import.meta.url));
@@ -95,10 +96,13 @@ for (const ws of workspaces) {
   }
 }
 
-// Orphans: a generate- or emit- script that no task references. Task script
-// paths are resolved against the workspace dir first and the repo root
-// second (tools/repo tasks route through run-in with --root ../.., so their
-// paths are repo-relative; www and package tasks are workspace-relative).
+// Orphans: a generate- or emit- script that no task references — ANY task,
+// not only the generator/emitter classification, because a committed
+// generator may legitimately be wired through its --check task alone (the
+// write mode lives in the script invocation, not a generate:* task). Task
+// script paths are resolved against the workspace dir first and the repo
+// root second (tools/repo tasks route through run-in with --root ../.., so
+// their paths are repo-relative; www and package tasks are workspace-relative).
 async function resolveScript(workspace: string, script: string): Promise<string> {
   const wsDir = workspaces.find((ws) => ws.workspace === workspace)!.dir;
   for (const candidate of [join(wsDir, script), join(repoRoot, script)]) {
@@ -112,8 +116,11 @@ async function resolveScript(workspace: string, script: string): Promise<string>
   return join(wsDir, script);
 }
 const referenced = new Set<string>();
-for (const entry of [...generatorEntries(workspaces), ...emitterEntries(workspaces)]) {
-  referenced.add(await resolveScript(entry.workspace, entry.script));
+for (const ws of workspaces) {
+  for (const command of Object.values(ws.tasks)) {
+    const script = scriptInCommand(command);
+    if (script) referenced.add(await resolveScript(ws.workspace, script));
+  }
 }
 for (const file of await discoverScriptFiles(workspaces)) {
   if (!referenced.has(file.abs)) {

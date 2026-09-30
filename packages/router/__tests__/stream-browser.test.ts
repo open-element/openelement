@@ -1,7 +1,7 @@
 import { assert, assertEquals } from '@std/assert';
 import { chromium } from '@playwright/test';
 import { documentStreamParts, escapeAttr } from '@openelement/element';
-import { renderStreamBrowserBootstrap } from '../src/vite/internal/ssg/entry-stream-runtime.ts';
+import { STREAM_BROWSER_BOOTSTRAP } from '../src/vite/internal/server-runtime/stream-runtime.ts';
 
 const request = 'request-1';
 const program = '1:abc123';
@@ -141,7 +141,7 @@ Deno.test({
       const parts = documentStreamParts({
         title: 'stream test',
         cspNonce: 'nonce-123',
-        streamBootstrap: renderStreamBrowserBootstrap(),
+        streamBootstrap: STREAM_BROWSER_BOOTSTRAP,
       });
       const fields: readonly TypedFieldSpec[] = [
         { field: 'zero', type: 'number' },
@@ -221,7 +221,7 @@ Deno.test({
       const documentParts = documentStreamParts({
         title: 'stream test',
         cspNonce: 'nonce-123',
-        streamBootstrap: renderStreamBrowserBootstrap(),
+        streamBootstrap: STREAM_BROWSER_BOOTSTRAP,
       });
       await page.setContent(
         documentParts.prefix + shell() + seedTemplate() + documentParts.suffix,
@@ -307,7 +307,7 @@ Deno.test({
       const parts = documentStreamParts({
         title: 'stream test',
         cspNonce: 'nonce-123',
-        streamBootstrap: renderStreamBrowserBootstrap(),
+        streamBootstrap: STREAM_BROWSER_BOOTSTRAP,
       });
       await page.setContent(parts.prefix + shell() + seedTemplate() + parts.suffix);
       await page.evaluate((content) => {
@@ -350,7 +350,7 @@ Deno.test({
       const parts = documentStreamParts({
         title: 'stream test',
         cspNonce: 'nonce-123',
-        streamBootstrap: renderStreamBrowserBootstrap(),
+        streamBootstrap: STREAM_BROWSER_BOOTSTRAP,
       });
       await page.setContent(parts.prefix + shell() + seedTemplate('region') + parts.suffix);
       await page.evaluate(
@@ -396,7 +396,7 @@ Deno.test({
       const parts = documentStreamParts({
         title: 'stream test',
         cspNonce: 'nonce-123',
-        streamBootstrap: renderStreamBrowserBootstrap(),
+        streamBootstrap: STREAM_BROWSER_BOOTSTRAP,
       });
       await page.setContent(parts.prefix + shell());
       await page.evaluate(() => {
@@ -443,7 +443,7 @@ Deno.test({
       const parts = documentStreamParts({
         title: 'stream test',
         cspNonce: 'nonce-123',
-        streamBootstrap: renderStreamBrowserBootstrap(),
+        streamBootstrap: STREAM_BROWSER_BOOTSTRAP,
       });
       const restored = await browser.newPage();
       await restored.setContent(parts.prefix + shell() + seedTemplate() + parts.suffix);
@@ -484,7 +484,7 @@ Deno.test({
       const documentParts = documentStreamParts({
         title: 'stream test',
         cspNonce: 'nonce-123',
-        streamBootstrap: renderStreamBrowserBootstrap(),
+        streamBootstrap: STREAM_BROWSER_BOOTSTRAP,
       });
       const context = await browser.newContext({ javaScriptEnabled: false });
       const page = await context.newPage();

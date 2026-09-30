@@ -290,7 +290,7 @@ export class OpenButton extends OpenElement {
   }
 
   /**
-   * Submit `form` on behalf of this element (v0.42.0-alpha.9, #637).
+   * Submit `form` on behalf of this element (#637).
    *
    * Critical: the native 'submit' event is NOT composed (it does not cross
    * shadow boundaries). open-button typically lives inside another custom

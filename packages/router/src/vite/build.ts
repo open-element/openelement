@@ -4,7 +4,8 @@
  * Build produces only static files (K+S), Islands are the only JS (I).
  * API Routes (S - Serverless extension) deploy separately.
  *
- * closeBundle writes metadata to ctx, then triggers Phase 2/3.
+ * closeBundle writes metadata to ctx, then triggers Phase 2 (client) and
+ * Phase 3 (SSG), in that order (#1471).
  * No globalThis bridge - ctx stays in createOpenPlugin() closure scope throughout.
  */
 
@@ -12,6 +13,8 @@ import { existsSync } from '../internal/host-path.ts';
 import type { Plugin, ResolvedConfig } from 'vite';
 import type { FrameworkOptions } from './internal/protocol/framework.ts';
 import type { SsgBehaviorOptions } from './internal/protocol/ssg.ts';
+import type { ClientAssetManifest } from './internal/protocol/client-assets.ts';
+import { serializeClientAssetsModule } from './internal/protocol/client-assets.ts';
 import type { OpenElementBuildContext } from './build-context.ts';
 import { join } from '../internal/host-path.ts';
 import { createLogger } from '@openelement/element';
@@ -30,7 +33,7 @@ async function runClientIslandBuild(ctx: OpenElementBuildContext): Promise<void>
   log.info('[2/3] Client island build...');
   try {
     const { buildClient } = await import('../cli/build-client.ts');
-    await buildClient(ctx);
+    ctx.clientAssetManifest = await buildClient(ctx);
     ctx.markComplete(2);
     log.info('[2/3] Client island build - complete');
   } catch (error) {
@@ -39,40 +42,28 @@ async function runClientIslandBuild(ctx: OpenElementBuildContext): Promise<void>
   }
 }
 
-export async function readClientEntryFromManifest(manifestPath: string): Promise<string> {
-  const manifestRaw = await Deno.readTextFile(manifestPath);
-  const manifest = JSON.parse(manifestRaw);
-  for (const [src, entry] of Object.entries(manifest) as [string, { file?: string }][]) {
-    if (
-      (src.includes('open-client-entry') || src.includes('virtual:open-client')) && entry.file
-    ) {
-      return entry.file;
-    }
-  }
-  throw new Error(`Client manifest exists but no open-client-entry was found: ${manifestPath}`);
-}
-
 /**
- * Write the island client entry URL for the request-time server entry
- * (0.42.0-alpha.1). dist/server/index.js imports this module and
- * hands the URL to the SSR entry (__setRequestTimeClientScript), which
- * embeds the same island client script into request-time HTML at render time
- * that the static pipeline injects post-build. No-op for pure-static builds
- * (no request-time server entry was emitted).
+ * Write the structured client asset manifest for the request-time server
+ * entry. dist/server/index.js imports the module at startup and hands the
+ * client entry URL to the SSR entry (__setRequestTimeClientScript), so
+ * request-time HTML embeds the same island client script at render time the
+ * SSG render pass embedded into the static pages. The module is pure
+ * structured manifest data (#1471) — no injection logic. No-op for
+ * pure-static builds (no request-time server entry was emitted).
  */
-export function writeRequestTimeClientScript(
+export function writeRequestTimeClientAssets(
   ctx: OpenElementBuildContext,
-  scriptSrc: string,
+  manifest: ClientAssetManifest,
 ): void {
   const root = ctx.phase3.root || Deno.cwd();
   const outDir = ctx.phase3.outDir || DEFAULT_OUT_DIR;
   const serverIndex = join(root, outDir, 'server', 'index.js');
   if (!existsSync(serverIndex)) return;
   Deno.writeTextFileSync(
-    join(root, outDir, 'server', 'client-script.js'),
-    `export const clientScriptSrc = ${JSON.stringify(scriptSrc)};\n`,
+    join(root, outDir, 'server', 'client-assets.js'),
+    serializeClientAssetsModule(manifest),
   );
-  log.info(`Request-time client script recorded: ${scriptSrc}`);
+  log.info(`Request-time client assets recorded: ${manifest.entry}`);
 }
 
 /** Vite plugin: writes build metadata to ctx, then runs Phase 2 + Phase 3 */
@@ -120,20 +111,32 @@ export function buildPlugin(
 
       log.info('Phase 1 complete - SSR bundle and metadata written to build context');
 
-      // Phase 3 (SSG) runs before Phase 2 (client bundle).
-      // SSG only needs Phase 1 - it renders HTML from the SSR bundle.
-      // Phase 2 runs last because client chunks have content hashes that
-      // don't affect HTML content, and injection is a post-processing step.
       ctx.markComplete(1);
       ctx.buildPlan = createProductionBuildPlan(ctx);
+
+      // Phase 2 (client bundle) runs BEFORE Phase 3 (SSG) (#1471): the SSG
+      // render pass and the request-time artifact then carry the final
+      // client asset addresses from the Phase 2 build manifest. SSG needs
+      // only Phase 1 facts — it renders HTML from the SSR bundle and the
+      // Phase 1 metadata in ctx, and buildSSG hands the manifest's entry URL
+      // to the SSR bundle so every rendered page embeds the final script
+      // tag at document time (#1471, S4b).
+      const ssgIslandTagNames = [...(ctx.phase1.islandTagNames ?? [])];
+      const ssgIslandFiles = [...(ctx.phase1.islandFiles ?? [])];
+      const hasEnhancedForms = (ctx.phase1.cachedRoutes ?? []).some((route) =>
+        route.type === 'page' && route.hasEnhancedForms === true
+      );
+      if (totalIslands > 0 || hasEnhancedForms) {
+        await runClientIslandBuild(ctx);
+      }
 
       log.info('[3/3] Static site generation...');
       try {
         const { buildSSG } = await import('../cli/build-ssg.ts');
         await buildSSG({
           routes: ctx.phase1.cachedRoutes,
-          islandFiles: ctx.phase1.islandFiles,
-          islandTagNames: ctx.phase1.islandTagNames,
+          islandTagNames: ssgIslandTagNames,
+          islandFiles: ssgIslandFiles,
           islandMeta: ctx.phase1.islandMeta,
           staticComponents: ctx.phase1.staticComponents,
           packageManifests: ctx.phase1.packageManifests,
@@ -148,38 +151,29 @@ export function buildPlugin(
         throw error;
       }
 
-      // Phase 2: Client island bundle (only if islands exist — or enhanced
-      // forms, #569: an island-free app with data-open-enhance forms still
-      // needs the client entry for the enhancement layer)
-      const hasEnhancedForms = (ctx.phase1.cachedRoutes ?? []).some((route) =>
-        route.type === 'page' && route.hasEnhancedForms === true
-      );
-      if (totalIslands > 0 || hasEnhancedForms) {
-        await runClientIslandBuild(ctx);
-      }
-
-      // -- Inject client script (only runs if Phase 2 completed) --
-      // Phase 2's manifest.json tells us the client chunk URLs to inject
-      // into the already-rendered HTML pages.
+      // -- Per-page island manifests + record the request-time asset manifest --
+      // Runs after Phase 3: the island manifests post-process the rendered
+      // pages, and dist/server/client-assets.js overwrites the placeholder
+      // the SSG render wrote. The asset URLs come from the Phase 2 client
+      // asset manifest (#1471), keyed by compile-time island identity. The
+      // script tags themselves needed no post-processing — the Phase 3
+      // render pass embedded them at document time (S4b).
       if (ctx.isComplete(2)) {
         try {
-          const outDir = ctx.phase3.outDir || DEFAULT_OUT_DIR;
-          const root = ctx.phase3.root || Deno.cwd();
-          const clientManifestPath = join(root, outDir, 'client', '.vite', 'manifest.json');
-          if (existsSync(clientManifestPath)) {
-            const clientEntry = await readClientEntryFromManifest(clientManifestPath);
-            const base = ctx.phase3.base || '/';
-            const scriptSrc = `${base}client/${clientEntry}`;
-            await postProcessClientIslandBuild(ctx, scriptSrc);
-            await writeRequestTimeClientScript(ctx, scriptSrc);
-            log.info(`Client script injected: ${scriptSrc}`);
+          const manifest = ctx.clientAssetManifest;
+          if (manifest) {
+            await postProcessClientIslandBuild(ctx);
+            await writeRequestTimeClientAssets(ctx, manifest);
+            log.info(`Client scripts rendered from the asset manifest: ${manifest.entry}`);
+          } else {
+            log.info('No Phase 2 client asset manifest - island manifests skipped');
           }
         } catch (error) {
-          log.error(`Failed to inject client script: ${error}`);
+          log.error(`Failed to record client assets: ${error}`);
           throw error;
         }
       } else {
-        log.info('No Phase 2 - client script injection skipped');
+        log.info('No Phase 2 - island manifests and client assets skipped');
       }
 
       // -- Clean Phase 1 SSR artifacts from public dist (v0.14.10) --

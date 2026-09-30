@@ -1,5 +1,5 @@
 /**
- * v0.44 island delivery contracts.
+ * Island delivery contracts.
  *
  * Delivery is deliberately a build-side concern. The generated client entry
  * knows only which capability module to import and which custom-element names
@@ -10,6 +10,8 @@
 import type { ClientIslandEntry, IslandDeliveryStrategy } from '../protocol/ssg.ts';
 export type { IslandDeliveryStrategy } from '../protocol/ssg.ts';
 import { HYDRATION_STRATEGIES, isValidTagName } from '@openelement/element';
+import { hasControlCharacter } from '../../../internal/control-characters.ts';
+import { buildError, DeliveryErrorCode } from '../../../internal/error-codes.ts';
 
 // Derived from the element protocol's single-source strategy list (same
 // derivation as authoring.ts): a new hydration strategy lands here
@@ -37,14 +39,6 @@ export interface IslandDeliveryMeta {
 
 export type ClientIslandDeliveryInput = ClientIslandEntry | ClientIslandDeliveryEntry;
 
-function hasControlCharacters(value: string): boolean {
-  for (let index = 0; index < value.length; index++) {
-    const code = value.charCodeAt(index);
-    if (code <= 0x1f || code === 0x7f) return true;
-  }
-  return false;
-}
-
 /**
  * Media queries are data in the generated artifact, never executable source.
  * Keep the value bounded and reject controls before it is passed to
@@ -52,11 +46,17 @@ function hasControlCharacters(value: string): boolean {
  */
 export function validateIslandMediaQuery(media: unknown, context = 'island'): string {
   if (typeof media !== 'string' || media.trim() === '') {
-    throw new Error(`Invalid island media query for ${context}: a non-empty string is required`);
+    throw buildError(
+      DeliveryErrorCode.MEDIA_QUERY,
+      `Invalid island media query for ${context}: a non-empty string is required`,
+    );
   }
   const normalized = media.trim();
-  if (normalized.length > 512 || hasControlCharacters(normalized)) {
-    throw new Error(`Invalid island media query for ${context}: unsafe or oversized value`);
+  if (normalized.length > 512 || hasControlCharacter(normalized)) {
+    throw buildError(
+      DeliveryErrorCode.MEDIA_QUERY,
+      `Invalid island media query for ${context}: unsafe or oversized value`,
+    );
   }
   return normalized;
 }
@@ -73,14 +73,19 @@ export function validateIslandDeliveryTags(
 ): string[] {
   if (tags === undefined) return [];
   if (!Array.isArray(tags) || tags.length === 0) {
-    throw new Error(`Invalid island tags for ${context}: at least one tag is required`);
+    throw buildError(
+      DeliveryErrorCode.TAGS,
+      `Invalid island tags for ${context}: at least one tag is required`,
+    );
   }
   const seen = new Set<string>();
   return tags.map((tag) => {
     if (typeof tag !== 'string' || !isValidTagName(tag)) {
-      throw new Error(`Invalid island tagName for ${context}: ${tag}`);
+      throw buildError(DeliveryErrorCode.TAGS, `Invalid island tagName for ${context}: ${tag}`);
     }
-    if (seen.has(tag)) throw new Error(`Duplicate island tagName for ${context}: ${tag}`);
+    if (seen.has(tag)) {
+      throw buildError(DeliveryErrorCode.TAGS, `Duplicate island tagName for ${context}: ${tag}`);
+    }
     seen.add(tag);
     return tag;
   });
@@ -98,7 +103,10 @@ export function resolveIslandDeliveryTags(
   context = primaryTag,
 ): string[] {
   if (!isValidTagName(primaryTag)) {
-    throw new Error(`Invalid island tagName for ${context}: ${primaryTag}`);
+    throw buildError(
+      DeliveryErrorCode.TAGS,
+      `Invalid island tagName for ${context}: ${primaryTag}`,
+    );
   }
   const validatedTags = tags === undefined ? undefined : validateIslandDeliveryTags(tags, context);
   const validatedTagNames = tagNames === undefined
@@ -109,7 +117,10 @@ export function resolveIslandDeliveryTags(
       validatedTags.length !== validatedTagNames.length ||
       validatedTags.some((tag, index) => tag !== validatedTagNames[index])
     ) {
-      throw new Error(`Conflicting island tags/tagNames for ${context}`);
+      throw buildError(
+        DeliveryErrorCode.TAG_CONFLICT,
+        `Conflicting island tags/tagNames for ${context}`,
+      );
     }
   }
   return validatedTags ?? validatedTagNames ?? [primaryTag];
@@ -122,7 +133,10 @@ export function validateIslandDeliveryExportNames(
 ): Record<string, string> | undefined {
   if (exportNames === undefined) return undefined;
   if (typeof exportNames !== 'object' || exportNames === null || Array.isArray(exportNames)) {
-    throw new Error(`Invalid island export names for ${context}: an object is required`);
+    throw buildError(
+      DeliveryErrorCode.EXPORT_NAMES,
+      `Invalid island export names for ${context}: an object is required`,
+    );
   }
   const allowedTags = new Set(tags);
   const result: Record<string, string> = {};
@@ -132,9 +146,12 @@ export function validateIslandDeliveryExportNames(
       !isValidTagName(tag) ||
       typeof exportName !== 'string' ||
       exportName.trim() === '' ||
-      hasControlCharacters(exportName)
+      hasControlCharacter(exportName)
     ) {
-      throw new Error(`Invalid island export name for ${context}: ${tag}`);
+      throw buildError(
+        DeliveryErrorCode.EXPORT_NAMES,
+        `Invalid island export name for ${context}: ${tag}`,
+      );
     }
     result[tag] = exportName;
   }

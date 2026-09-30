@@ -25,11 +25,23 @@
  * docs/release/release-state.json, and `check-fixture-locks` re-derives the
  * lock universes. Registry truth (release-state.json) is release bookkeeping
  * and is deliberately NOT touched here.
+ *
+ * Two #1468 guards ride the same knob and fail closed in both modes:
+ *   - shipped source (each shipped package's src/ tree) must not carry
+ *     historical release names (the retired 0.23/0.40/0.42/0.44 lines) —
+ *     runtime copy and generated banners speak in protocol versions; release
+ *     history belongs in docs, changelogs, content, fixtures and locks (the
+ *     scan allowlist)
+ *   - the www source-line anchor audit (www-release-anchor.ts): version.ts
+ *     stays derived from the generated release-line module, which mirrors
+ *     release-state.json
  */
 
 import { parse } from '@std/semver';
-import { join } from '@std/path';
+import { walk } from '@std/fs/walk';
+import { join, relative } from '@std/path';
 import { FIXTURE_LOCKS } from './check-fixture-locks.ts';
+import { wwwReleaseAnchorDrift } from './www-release-anchor.ts';
 
 /** Packages whose `deno.json` carries the release line version. */
 export const PACKAGE_CONFIGS: readonly string[] = [
@@ -46,6 +58,83 @@ export const VERSION_SOURCE = 'packages/create/src/version.ts';
 export const LOCK_FILES: readonly string[] = FIXTURE_LOCKS.map((entry) =>
   `tests/fixtures/${entry.fixture}/deno.lock`
 );
+
+/** The published packages' source trees scanned for historical release names. */
+export const SHIPPED_SOURCE_ROOTS: readonly string[] = [
+  'packages/element/src',
+  'packages/router/src',
+  'packages/create/src',
+  'packages/ui/src',
+];
+
+/**
+ * Paths exempt from the shipped-source scan: release history belongs in
+ * docs, changelogs, site content, fixtures and lock files — never in what
+ * consumers import.
+ */
+export const SHIPPED_SCAN_ALLOWLIST: readonly string[] = [
+  'docs/',
+  'CHANGELOG.md',
+  'www/content/',
+  '**/__fixtures__/**',
+  'deno.lock',
+];
+
+/** Historical release-name lines that must not reappear in shipped source. */
+const HISTORICAL_RELEASE_NAME = /(^|[^0-9.])v?0\.(23|40|42|44)([^0-9]|$)/u;
+
+/** One historical release-name occurrence in shipped source. */
+export interface HistoricalVersionFinding {
+  /** Repo-relative path. */
+  path: string;
+  /** 1-based line number. */
+  line: number;
+  /** The trimmed offending line. */
+  text: string;
+}
+
+/** Minimal glob match: `**` spans path segments, `*` stays within one. */
+export function shippedScanAllowlisted(pattern: string, path: string): boolean {
+  let body = pattern.replace(/[.+^${}()|[\]\\]/g, '\\$&');
+  body = body.split('**').join('\u0000');
+  body = body.split('*').join('[^/]*');
+  body = body.split('\u0000').join('.*');
+  // A trailing '/' means "everything under this directory".
+  if (body.endsWith('/')) body += '.*';
+  return new RegExp('^' + body + '$').test(path);
+}
+
+/**
+ * Scan the shipped package sources for historical release names. A finding
+ * means a retired release train leaked back into what consumers receive;
+ * allowlisted paths are skipped.
+ */
+export async function historicalReleaseNameFindings(
+  root: string,
+): Promise<HistoricalVersionFinding[]> {
+  const findings: HistoricalVersionFinding[] = [];
+  for (const shippedRoot of SHIPPED_SOURCE_ROOTS) {
+    const walkRoot = join(root, shippedRoot);
+    try {
+      await Deno.stat(walkRoot);
+    } catch {
+      continue; // root absent — nothing to scan
+    }
+    for await (const entry of walk(walkRoot, { includeDirs: false })) {
+      const path = relative(root, entry.path);
+      if (SHIPPED_SCAN_ALLOWLIST.some((pattern) => shippedScanAllowlisted(pattern, path))) {
+        continue;
+      }
+      const lines = (await Deno.readTextFile(entry.path)).split('\n');
+      for (let index = 0; index < lines.length; index++) {
+        if (HISTORICAL_RELEASE_NAME.test(lines[index])) {
+          findings.push({ path, line: index + 1, text: lines[index].trim() });
+        }
+      }
+    }
+  }
+  return findings.sort((a, b) => a.path.localeCompare(b.path) || a.line - b.line);
+}
 
 /** One pending text edit. */
 export interface VersionEdit {
@@ -168,8 +257,10 @@ export async function planVersionBump(
 }
 
 /**
- * The six points after a bump must all carry one version. Returns one message
- * per point that does not (empty when the tree is consistent).
+ * The six points after a bump must all carry one version, and the www
+ * source-line anchor must stay derived from release bookkeeping truth (the
+ * anchor audit rides the same cross-assertion). Returns one message per point
+ * that does not (empty when the tree is consistent).
  */
 export async function inconsistencyFailures(
   root: string,
@@ -198,6 +289,7 @@ export async function inconsistencyFailures(
     if (!text.includes('jsr:@openelement/')) continue;
     failures.push(`${path}: no @${expected} workspace link`);
   }
+  failures.push(...await wwwReleaseAnchorDrift(root));
   return failures;
 }
 
@@ -247,6 +339,18 @@ async function main(): Promise<void> {
   if (invalid) {
     console.error(`version-bump: ${invalid}`);
     Deno.exit(2);
+  }
+
+  const findings = await historicalReleaseNameFindings(root);
+  if (findings.length > 0) {
+    console.error(
+      'version-bump: shipped source carries historical release names ' +
+        '(runtime copy and generated banners must speak protocol versions, not release trains):',
+    );
+    for (const finding of findings) {
+      console.error(`  ${finding.path}:${finding.line}: ${finding.text}`);
+    }
+    Deno.exit(1);
   }
 
   const plan = await planVersionBump(root, target);

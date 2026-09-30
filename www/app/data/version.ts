@@ -1,7 +1,18 @@
-// Current source line. The npm registry line may lag (publish is a gated
-// human authorization, not an automatic step); prose that claims a published
-// line must not use this constant directly.
-export const OPENELEMENT_VERSION = 'v1.0.0-alpha.4';
+// Current source line. Derived from the generated release-line module below —
+// the committed projection of docs/release/release-state.json (regenerate with
+// `deno task --cwd www generate:content`) — so the site can never show two
+// different "current version" claims on one screen. The derivation is
+// cross-asserted by release:state-machine:check and the version-bump anchor
+// audit. Prose that claims a published line must not use this constant
+// directly: publish is a gated human authorization, not an automatic step.
+import type { SiteLocale } from '../../site-config.ts';
+import {
+  ALPHA_RESOLVES_TO,
+  SOURCE_LINE_PUBLISHED,
+  SOURCE_VERSION,
+} from './_generated-release-line.ts';
+
+export const OPENELEMENT_VERSION = `v${SOURCE_VERSION}`;
 
 // Per-package registry `latest` dist-tag truth. There is deliberately NO
 // single "published version" constant: @openelement/router has never shipped
@@ -52,33 +63,7 @@ export const REGISTRY_NOTE = Object.entries(PUBLISHED_LATEST)
   .map(([name, version]) => `${name.replace('@openelement/', '')} ${version}`)
   .join(' · ');
 
-// The newest prerelease train. It is a COMPLETE publish: all four packages
-// shipped at this version under the @alpha dist-tag. Keep in sync with
-// docs/release/release-state.json.
-export const LATEST_PRERELEASE_VERSION = 'v1.0.0-alpha.3';
-
-// Per-package registry truth at LATEST_PRERELEASE_VERSION. `null` means the
-// package was never published at that version. Keep in sync with
-// docs/release/release-state.json (checked by release:state-machine:check).
-export const PUBLISHED_PACKAGE_VERSIONS: Readonly<Record<string, string | null>> = {
-  '@openelement/element': 'v1.0.0-alpha.3',
-  '@openelement/router': 'v1.0.0-alpha.3',
-  '@openelement/create': 'v1.0.0-alpha.3',
-  '@openelement/ui': 'v1.0.0-alpha.3',
-};
-
-// ---------------------------------------------------------------------------
-// Source-line wording, derived from release-state truth (generated module).
-// When the release train publishes the source line to @alpha for every
-// package, SOURCE_LINE_PUBLISHED flips and every consumer below rewrites
-// itself on the next site:build — no manual wording sweep.
-import {
-  ALPHA_RESOLVES_TO,
-  SOURCE_LINE_PUBLISHED,
-  SOURCE_VERSION,
-} from './_generated-release-line.ts';
-
-type ReleaseLocale = 'en' | 'zh';
+type ReleaseLocale = SiteLocale;
 
 /** Docs-page stamp: "vX · repository baseline" until publish, then plain. */
 export function sourceLineStamp(locale: ReleaseLocale): string {

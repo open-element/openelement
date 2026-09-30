@@ -6,7 +6,7 @@
  * for them at all. These tests pin:
  * - discovery: foreign tags are found in island and page JSX, while local
  *   islands, route registration tags, and openElement-authored elements
- *   (defineElement/defineIsland/customElements.define) are excluded;
+ *   (defineElement/customElements.define) are excluded;
  * - classification: a CEM classification for the tag records its tier in the
  *   decision reason; otherwise the reason is 'unscanned-foreign-tag';
  * - plan content: foreign tags are visible as source:'foreign' client-only
@@ -28,13 +28,13 @@ import type { CompatibilityClassification } from '../src/vite/internal/protocol/
 // ─── Discovery (pure, source-level) ─────────────────────────────
 
 const ISLAND_SOURCE = `
-import { defineElement, defineIsland, defineIslandConfig } from '@openelement/router';
+import { defineElement, defineIslandConfig } from '@openelement/router';
 
 defineElement('local-child', {
   render() { return <span>local child</span>; },
 });
 
-export default defineIsland('my-island', {
+export default class MyIsland {
   render() {
     return (
       <>
@@ -43,8 +43,10 @@ export default defineIsland('my-island', {
         <local-child></local-child>
       </>
     );
-  },
-}, defineIslandConfig({ ssr: true, dsd: true }));
+  }
+}
+
+export const openElement = defineIslandConfig({ ssr: true, dsd: true });
 `;
 
 const PAGE_SOURCE = `
@@ -88,8 +90,26 @@ Deno.test('foreign-tag scan: tags mentioned in comments never register as usage'
 Deno.test('foreign-tag scan: collects openElement-authored element definitions', () => {
   const defined = collectDefinedTags(ISLAND_SOURCE);
   assertEquals(defined.has('local-child'), true);
-  assertEquals(defined.has('my-island'), true);
+  // defineIsland is retired vocabulary (removed from both packages in v0.44):
+  // its calls no longer register authored definitions, so the island's own
+  // delivery tag is known only through the island scan, not this factory.
+  assertEquals(defined.has('my-island'), false);
   assertEquals(defined.has('sl-button'), false);
+});
+
+Deno.test('foreign-tag scan: defineIsland calls are no longer openElement-authored definitions', () => {
+  // Regression pin: the router module vocabulary must not admit defineIsland
+  // (the router never exported it; the element runtime retired it in v0.44),
+  // so a legacy defineIsland call site surfaces as a foreign tag instead of
+  // being silently excluded from the admission plan.
+  const source = `
+    import { defineIsland } from '@openelement/router';
+
+    defineIsland('legacy-island', {
+      render() { return <legacy-island></legacy-island>; },
+    });
+  `;
+  assertEquals(discoverForeignTags([source], new Set()), ['legacy-island']);
 });
 
 Deno.test('foreign-tag scan: discovers foreign tags in island and page JSX', () => {

@@ -7,16 +7,17 @@
  *    support distribution from a clean temporary directory. The JSON report
  *    is deliberately portable: CI uploads it even if a platform-specific
  *    command fails, so adopters get the environment and the exact failed
- *    command rather than a truncated Actions log alone. Run it through the
- *    repo task (scoped permissions, prompts off), e.g.
- *    `deno task --cwd tools/release consumer:element-smoke`.
+ *    command rather than a truncated Actions log alone. Run it with the
+ *    shebang-pinned scoped flags and --no-prompt (the CI invocation):
+ *    `deno run --allow-read --allow-write --allow-run --allow-env --allow-net
+ *    --deny-ffi --no-prompt tools/release/published-consumer-qualification.ts`
  *
  * 2. Consumer smoke (`--smoke`): post-publish npm smoke test. Creates
  *    temporary consumer projects and verifies @openelement/element can be
  *    consumed from npm in Deno and Node. Also checks the exact-version
  *    starter, and on request the jsDelivr CDN browser-safe export and the
- *    Nitro build output. Same invocation rule: use the repo task, never a
- *    broad-permission one-liner.
+ *    Nitro build output. Same invocation rule: the scoped shebang flags with
+ *    --no-prompt, never a broad-permission one-liner.
  *
  * This module also owns the canonical release-gate verdict contract (#1216,
  * A10.8; umbrella #1155; ADR-0151), formerly tools/gate-verdict.ts. A release

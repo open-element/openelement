@@ -252,11 +252,21 @@ Deno.test('client-island postprocess handles a static page with no islands', asy
       {
         phase3: { root, outDir: 'dist', base: '/', upgradeStrategy: 'idle' },
         phase1: { islandTagNames: [], packageIslandDecls: [], islandMeta: {} },
+        // A static page with no islands: the manifest carries an entry only
+        // (Phase 2 ran for enhanced forms) or nothing at all.
+        clientAssetManifest: {
+          entry: '/client/islands/client.js',
+          islands: {},
+          shared: [],
+        },
       },
-      '/client/islands/client.js',
     );
+    // #1471/S4b: no post-build script surgery — the document renderer
+    // embedded the script tags at render time, so the pass leaves the HTML
+    // byte-identical and only records the per-page island manifests.
     const html = await Deno.readTextFile(join(dist, 'index.html'));
-    assertEquals(html.includes('/client/islands/client.js'), true);
+    assertEquals(html.includes('/client/islands/client.js'), false);
+    assertEquals(html, '<!doctype html><html><body>static</body></html>');
     const manifestDir = join(dist, 'island-manifests');
     const [manifestFile] = [...Deno.readDirSync(manifestDir)].map((entry) => entry.name);
     const manifest = JSON.parse(await Deno.readTextFile(join(manifestDir, manifestFile)));

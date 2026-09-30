@@ -17,11 +17,11 @@ import {
 } from '../../../open-element-styles.ts';
 import type { StyleSheetLike } from '../../../internal/protocol/style-sheet.ts';
 // Single error dialect (#1386 item 3): kernel lifecycle failures carry codes.
-import { ClaimErrorCode, frameworkError, KernelErrorCode } from '../../protocol/errors.ts';
+import { ClaimErrorCode, KernelErrorCode, raiseFrameworkError } from '../../protocol/errors.ts';
 
 /** Raise one kernel lifecycle failure with its catalogued code. */
 function fail(code: string, message: string): never {
-  throw frameworkError(code, message, { phase: 'csr' });
+  raiseFrameworkError('csr', code, message);
 }
 
 /**

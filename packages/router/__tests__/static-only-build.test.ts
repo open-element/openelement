@@ -70,6 +70,24 @@ Deno.test('static-only build: no dist/server, mdx route prerendered (#953, #954)
   assertStringIncludes(mdxHtml, 'MDX route page');
 });
 
+Deno.test('static-only build: zero islands, zero enhanced forms, zero client JS', async () => {
+  // Phase 2 fail-closed hardening (client asset manifest) must not pull a
+  // zero-JS build into client output: with no islands, no compiler-proven
+  // interaction handlers, and no data-open-enhance routes, buildClient
+  // returns before any client build or manifest read, and dist/client (the
+  // client bundle, its .vite manifest, and the island manifests) is never
+  // emitted.
+  await ensureFixtureBuild();
+
+  for (const absent of ['client', 'island-manifests']) {
+    assertEquals(
+      await Deno.stat(join(distDir, absent)).then(() => true).catch(() => false),
+      false,
+      `pure-static build must not emit dist/${absent}`,
+    );
+  }
+});
+
 Deno.test({
   name: 'static-only build: preview mode serves the output (#953)',
   sanitizeOps: false,

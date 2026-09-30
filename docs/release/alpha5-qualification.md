@@ -59,14 +59,16 @@ ADR-0158 and ADR-0159 (accepted 2026-09-25).
 ## Local measurement
 
 `benchmarks/streaming/measure.ts` rebuilds nothing: first build the Native
-fixture, then run the Chromium measurement against its generated server. The
-tracked `benchmarks/streaming/alpha5-local.json` records 10 raw observations
-per mode with a simulated 100 ms loader, alternating route order, a fresh
-page per observation, browser/toolchain identity and dirty-HEAD provenance.
-Its local medians are 48/152 ms for streamed/off first contentful paint and
-112.4/151.0 ms for streamed/off **Part-ready polling proxy**. The latter is
-not standardized TTI; neither number is a CI timing threshold, official
-cross-framework benchmark, or release qualification.
+fixture, then run the Chromium measurement against its generated server,
+writing the report to an explicit `--out` path outside the repository (local
+measurements are observations, never committed baselines). The alpha.5 local
+run recorded 10 raw observations per mode with a simulated 100 ms loader,
+alternating route order, a fresh page per observation, browser/toolchain
+identity and dirty-HEAD provenance. Its local medians were 48/152 ms for
+streamed/off first contentful paint and 112.4/151.0 ms for streamed/off
+**Part-ready polling proxy**. The latter is not standardized TTI; neither
+number is a CI timing threshold, official cross-framework benchmark, or
+release qualification.
 
 ## Remaining release work
 

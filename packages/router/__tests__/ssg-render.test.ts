@@ -517,7 +517,10 @@ export default app;
 `,
     );
     await Deno.writeTextFile(join(dir, 'index.js'), renderRequestTimeServerModule());
-    await Deno.writeTextFile(join(dir, 'client-script.js'), `export const clientScriptSrc = '';\n`);
+    await Deno.writeTextFile(
+      join(dir, 'client-assets.js'),
+      `export const clientAssets = { entry: '', islands: {}, shared: [] };\n`,
+    );
 
     const mod = await import(toFileUrl(join(dir, 'index.js')).href) as {
       default: (event: { req: Request }) => Promise<Response>;
@@ -556,8 +559,8 @@ export default app;
     );
     await Deno.writeTextFile(join(dir, 'index.js'), renderRequestTimeServerModule());
     await Deno.writeTextFile(
-      join(dir, 'client-script.js'),
-      `export const clientScriptSrc = '/client/entry-abc123.js';\n`,
+      join(dir, 'client-assets.js'),
+      `export const clientAssets = { entry: '/client/entry-abc123.js', islands: {}, shared: [] };\n`,
     );
 
     const mod = await import(toFileUrl(join(dir, 'index.js')).href + '?with-script') as {
@@ -600,7 +603,10 @@ export default app;
         { path: '/docs/:path{.+}' },
       ]),
     );
-    await Deno.writeTextFile(join(dir, 'client-script.js'), `export const clientScriptSrc = '';\n`);
+    await Deno.writeTextFile(
+      join(dir, 'client-assets.js'),
+      `export const clientAssets = { entry: '', islands: {}, shared: [] };\n`,
+    );
 
     const mod = await import(toFileUrl(join(dir, 'index.js')).href + '?admission') as {
       isRequestTimePath: (pathname: string) => boolean;

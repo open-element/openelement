@@ -16,6 +16,10 @@
 
 import { join, relative, resolve, toFileUrl } from '@std/path';
 import { existsSync } from '@std/fs';
+import { runStep } from '../../lib/qualify-harness/command-run.ts';
+import { routerCliPath, runRouterBuild } from '../../lib/qualify-harness/build-router.ts';
+import { scaffoldApp } from '../../lib/qualify-harness/scaffold-app.ts';
+import { workspaceSourceAliases } from '../../lib/qualify-harness/workspace-alias.ts';
 
 const repoRoot = resolve(import.meta.dirname!, '..', '..', '..');
 const suiteDir = join(repoRoot, 'tests', 'e2e', 'starter-smoke');
@@ -25,26 +29,17 @@ const depsDir = join(workDir, 'deps');
 
 const PACKAGES = ['element', 'router', 'create'] as const;
 
-function run(cmd: string, args: string[], cwd: string): void {
-  const result = new Deno.Command(cmd, { args, cwd, stdout: 'piped', stderr: 'piped' })
-    .outputSync();
-  if (result.code !== 0) {
-    const out = new TextDecoder().decode(result.stderr) || new TextDecoder().decode(result.stdout);
-    throw new Error(`[${cmd} ${args.join(' ')}] failed:\n${out.slice(0, 4000)}`);
-  }
-}
-
-function packAndExtract(pkg: (typeof PACKAGES)[number]): void {
+function packAndExtract(pkg: (typeof PACKAGES)[number]): Promise<void> {
   const pkgDir = join(repoRoot, 'packages', pkg);
   const tgz = join(depsDir, `${pkg}.tgz`);
-  run('deno', ['pack', '--allow-dirty', '-o', tgz], pkgDir);
-  const extractDir = join(depsDir, pkg);
-  Deno.mkdirSync(extractDir, { recursive: true });
-  run('tar', ['-xzf', tgz, '-C', extractDir, '--strip-components=1'], repoRoot);
-}
-
-function relativeSource(...segments: string[]): string {
-  return relative(appDir, join(repoRoot, ...segments));
+  return (async () => {
+    await runStep('deno', ['pack', '--allow-dirty', '-o', tgz], { cwd: pkgDir });
+    const extractDir = join(depsDir, pkg);
+    Deno.mkdirSync(extractDir, { recursive: true });
+    await runStep('tar', ['-xzf', tgz, '-C', extractDir, '--strip-components=1'], {
+      cwd: repoRoot,
+    });
+  })();
 }
 
 /**
@@ -66,17 +61,33 @@ async function assertPackedCliPrintsCanonicalCommand(createCli: string): Promise
   ).href;
   // `deno eval` accepts no permission flags; a bare `deno run -` with the
   // script on stdin keeps the same isolation with the flags this check needs.
-  const expected = (await runCapture(
+  const expected = (await runStep(
     Deno.execPath(),
     ['run', '--allow-read', '--no-prompt', '-'],
-    repoRoot,
     {
+      cwd: repoRoot,
       stdin: `const { createInstallCommand } = await import(${
         JSON.stringify(installCommandUrl)
       }); console.log(createInstallCommand());`,
     },
   )).stdout.trim();
-  const stdout = await runCliUsage(createCli);
+  // The no-arguments path is the usage path; exit 1 is its documented code.
+  const stdout = (await runStep(
+    Deno.execPath(),
+    [
+      'run',
+      '--minimum-dependency-age',
+      '0',
+      '--allow-read',
+      '--allow-write',
+      '--allow-env',
+      '--allow-net',
+      '--deny-ffi',
+      '--no-prompt',
+      createCli,
+    ],
+    { cwd: workDir, allowFailure: true },
+  )).stdout;
   const printed = stdout.split('\n')
     .find((line) => line.includes('npm:@openelement/create@'))
     ?.replace(/^Usage \(Alpha\): /, '')
@@ -91,131 +102,66 @@ async function assertPackedCliPrintsCanonicalCommand(createCli: string): Promise
 }
 
 /**
- * The packed CLI's usage text. A bare invocation is the CLI's documented
- * "no arguments" exit path (it prints usage and exits 1), so this reads stdout
- * without treating the exit code as a failure.
+ * Rewire the scaffolded starter's @openelement/* import-map entries and
+ * build/start tasks to monorepo sources. The mapping is the workspace
+ * package exports (tools/lib/package-aliases.ts), expressed as repo-relative
+ * paths so the packed starter's rediscovered package deno.json files keep
+ * transitive npm imports resolving.
  */
-async function runCliUsage(createCli: string): Promise<string> {
-  return (await runCapture(
-    Deno.execPath(),
-    [
-      'run',
-      '--minimum-dependency-age',
-      '0',
-      '--allow-read',
-      '--allow-write',
-      '--allow-env',
-      '--allow-net',
-      '--deny-ffi',
-      '--no-prompt',
-      createCli,
-    ],
-    workDir,
-    // The no-arguments path is the usage path; exit 1 is its documented code.
-    { allowFailure: true },
-  )).stdout;
-}
-
-/** Run a command, capturing output; a nonzero exit is reported with its logs. */
-async function runCapture(
-  cmd: string,
-  args: string[],
-  cwd: string,
-  options: { allowFailure?: boolean; stdin?: string } = {},
-): Promise<{ stdout: string; stderr: string }> {
-  const child = new Deno.Command(cmd, {
-    args,
-    cwd,
-    stdout: 'piped',
-    stderr: 'piped',
-    stdin: options.stdin === undefined ? 'null' : 'piped',
-  }).spawn();
-  if (options.stdin !== undefined) {
-    const writer = child.stdin.getWriter();
-    writer.write(new TextEncoder().encode(options.stdin));
-    writer.releaseLock();
-    child.stdin.close();
-  }
-  const [status, stdoutBytes, stderrBytes] = await Promise.all([
-    child.status,
-    new Response(child.stdout).arrayBuffer(),
-    new Response(child.stderr).arrayBuffer(),
-  ]);
-  const stdout = new TextDecoder().decode(stdoutBytes);
-  const stderr = new TextDecoder().decode(stderrBytes);
-  if (!status.success && options.allowFailure !== true) {
-    throw new Error(`[${cmd} ${args.join(' ')}] failed:\n${stderr || stdout}`);
-  }
-  return { stdout, stderr };
-}
-
-async function main(): Promise<void> {
-  Deno.mkdirSync(depsDir, { recursive: true });
-  if (existsSync(appDir)) Deno.removeSync(appDir, { recursive: true });
-  for (const pkg of PACKAGES) packAndExtract(pkg);
-
-  const createCli = join(depsDir, 'create', 'src', 'cli.js');
-  await assertPackedCliPrintsCanonicalCommand(createCli);
-  run(
-    'deno',
-    [
-      'run',
-      '--minimum-dependency-age',
-      '0',
-      '--allow-read',
-      '--allow-write',
-      '--allow-env',
-      '--allow-net',
-      '--deny-ffi',
-      '--no-prompt',
-      createCli,
-      'my-blog',
-    ],
-    workDir,
-  );
-
-  const denoJsonPath = join(appDir, 'deno.json');
-  const denoJson = JSON.parse(Deno.readTextFileSync(denoJsonPath));
-  const imports = denoJson.imports as Record<string, string>;
-
-  const sourceMap: Record<string, string> = {
-    '@openelement/router': 'packages/router/src/index.ts',
-    '@openelement/router/vite': 'packages/router/src/vite/index.ts',
-    '@openelement/router/nitro-mount': 'packages/router/src/nitro-mount.ts',
-    '@openelement/element': 'packages/element/src/index.ts',
-    '@openelement/element/jsx-runtime': 'packages/element/src/jsx-runtime.ts',
-    '@openelement/element/jsx-dev-runtime': 'packages/element/src/jsx-dev-runtime.ts',
-    '@openelement/element/build-utils': 'packages/element/src/build-utils.ts',
+async function rewireToMonorepoSources(denoJsonPath: string): Promise<void> {
+  const denoJson = JSON.parse(await Deno.readTextFile(denoJsonPath)) as {
+    imports: Record<string, string>;
+    tasks: Record<string, string>;
   };
+  const imports = denoJson.imports;
 
-  for (const [key, target] of Object.entries(sourceMap)) {
-    if (imports[key]?.startsWith('npm:')) {
-      imports[key] = relativeSource(...target.split('/'));
-    } else if (key in imports) {
+  for (const { specifier, sourcePath } of workspaceSourceAliases(repoRoot)) {
+    if (imports[specifier]?.startsWith('npm:')) {
+      imports[specifier] = relative(appDir, sourcePath);
+    } else if (specifier in imports) {
       // The mapping exists but changed shape — never skip silently (#944):
       // an unwarned skip would leave the gate testing the published package
       // instead of the monorepo source. Keys absent from the template's
       // import map are fine and stay silent.
       console.warn(
-        `[starter-smoke setup] import-map entry "${key}" not rewired to monorepo source (current value: ${
-          imports[key]
+        `[starter-smoke setup] import-map entry "${specifier}" not rewired to monorepo source (current value: ${
+          imports[specifier]
         }); the gate may be testing the published package`,
       );
     }
   }
 
-  for (const [name, command] of Object.entries(denoJson.tasks as Record<string, string>)) {
+  for (const [name, command] of Object.entries(denoJson.tasks)) {
     const replaced = command.replace(
       /npm:@openelement\/router@[0-9][^/]*\/cli\/(build|start)/,
-      (_, sub: 'build' | 'start') =>
-        relativeSource('packages', 'router', 'src', 'cli', `${sub}.ts`),
+      (_, sub: 'build' | 'start') => relative(appDir, routerCliPath(repoRoot, sub)),
     );
     if (replaced !== command) denoJson.tasks[name] = replaced;
   }
 
-  Deno.writeTextFile(denoJsonPath, JSON.stringify(denoJson, null, 2) + '\n');
+  await Deno.writeTextFile(denoJsonPath, JSON.stringify(denoJson, null, 2) + '\n');
+}
 
-  run('deno', ['task', 'build'], appDir);
+async function main(): Promise<void> {
+  Deno.mkdirSync(depsDir, { recursive: true });
+  if (existsSync(appDir)) Deno.removeSync(appDir, { recursive: true });
+  for (const pkg of PACKAGES) await packAndExtract(pkg);
+
+  const createCli = join(depsDir, 'create', 'src', 'cli.js');
+  await assertPackedCliPrintsCanonicalCommand(createCli);
+  const scaffoldedAppDir = await scaffoldApp({
+    workDir,
+    projectName: 'my-blog',
+    createCli,
+    extraArgs: ['--minimum-dependency-age', '0'],
+  });
+  if (scaffoldedAppDir !== appDir) {
+    throw new Error(`scaffolded starter at ${scaffoldedAppDir}, expected ${appDir}`);
+  }
+
+  await rewireToMonorepoSources(join(appDir, 'deno.json'));
+
+  await runRouterBuild(appDir);
   console.log(`starter-smoke ready at ${appDir}`);
 }
 

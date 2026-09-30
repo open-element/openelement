@@ -4,14 +4,30 @@ import {
   documentStreamParts,
   escapeAttr,
   escapeHtml,
+  MAX_ACTION_BODY_BYTES,
   wrapInDocument,
 } from '@openelement/element';
 import type { PartProgramV1 } from '../../element/src/internal/protocol/part-program.ts';
 import { testProgram } from '../../element/__tests__/compiled-runtime/test-program.ts';
+import {
+  ACTION_FETCH_HEADER,
+  createActionBodyLimit,
+  createHonoBridge,
+} from '../src/vite/internal/server-runtime/action-runtime.ts';
+import type { ActionHonoContext } from '../src/vite/internal/server-runtime/action-runtime.ts';
+import {
+  createStreamHeaderChannel,
+  mergeChannelHeaders,
+} from '../src/vite/internal/server-runtime/response-channel.ts';
+import {
+  createDeferredPageShell,
+  createStreamBody,
+  createStreamRequestScope,
+  STREAM_BROWSER_BOOTSTRAP,
+  streamFields,
+} from '../src/vite/internal/server-runtime/stream-runtime.ts';
 import type { PageRouteDecl, StreamRouteManifest } from '../src/vite/internal/protocol/ssg.ts';
 import { renderActionRoute, renderPageRoute } from '../src/vite/internal/ssg/entry-codegen.ts';
-import { renderRuntimeHelpers } from '../src/vite/internal/ssg/entry-render-runtime.ts';
-import { renderStreamRuntime } from '../src/vite/internal/ssg/entry-stream-runtime.ts';
 
 const program = testProgram({
   tag: 'oe-stream-handler',
@@ -71,30 +87,20 @@ function deferred<T>() {
 }
 
 /**
- * The canonical response-header channel helper, taken verbatim from the real
- * emitter (entry-render-runtime.ts:265-281). This harness used to carry a
- * hand-written `__mergeChannelHeaders`, which meant the assertions never ran
- * the generated code: protocol-header precedence (`__PROTOCOL_HEADERS`) and
- * the streamed `new Response(resp.body, …)` rebuild were unexecuted. The
- * emitter returns source text, so the helper is spliced in by its markers; a
- * rename or removal fails here instead of silently skipping the real path.
+ * The generated handler calls the response-header channel and the streaming
+ * pump by name (`__mergeChannelHeaders`, `__streamHeaderChannel`,
+ * `__streamRequestScope`, `__streamFields`, `__streamBody`); since ADR-0160
+ * rule a those names bind to `@openelement/router/server-runtime` imports at
+ * the top of the generated entry. A `new Function` harness cannot carry
+ * import declarations, so the REAL production implementations are bound in
+ * through `deps` instead — the assertions below still execute the shipped
+ * modules, never a harness-local copy. The deferred-shell gate binds the same
+ * way since ADR-0160 Amendment 1 (the typed `createDeferredPageShell` factory
+ * over the serialized manifests + the real executor import), so the gate runs
+ * as shipped too. The action POST wiring never executes here (only the GET
+ * handler is driven), but the harness binds the real bridge/body-limit so the
+ * composed source matches the shipped entry.
  */
-function channelHeaderHelpers(): string {
-  const emitted = renderRuntimeHelpers({ default: false, layouts: {} }, []);
-  const start = emitted.indexOf('const __PROTOCOL_HEADERS');
-  const tail = emitted.indexOf('return new Response(resp.body');
-  const end = tail < 0 ? -1 : emitted.indexOf('\n}\n', tail);
-  if (start < 0 || tail < 0 || end < 0) {
-    throw new Error(
-      'entry-render-runtime.ts no longer emits __PROTOCOL_HEADERS/__mergeChannelHeaders: ' +
-        'update this harness instead of reintroducing a stub',
-    );
-  }
-  return emitted.slice(start, end + 3);
-}
-
-const CHANNEL_HEADER_HELPERS = channelHeaderHelpers();
-
 async function handler(timeoutMs?: number, streamManifest?: StreamRouteManifest) {
   const route: PageRouteDecl = {
     kind: 'page',
@@ -115,21 +121,38 @@ async function handler(timeoutMs?: number, streamManifest?: StreamRouteManifest)
   const source = `
     const { routeModule, manifest, createDeferredDsdExecutor, documentStreamParts,
       escapeAttr, escapeHtml, wrapInDocument } = deps;
+    const __mergeChannelHeaders = deps.mergeChannelHeaders;
+    const __streamHeaderChannel = deps.createStreamHeaderChannel;
+    const __streamRequestScope = deps.createStreamRequestScope;
+    const __streamFields = deps.streamFields;
+    const __streamBody = deps.createStreamBody({ escapeAttr, timeoutMs: deps.timeoutMs });
+    const __streamBrowserBootstrap = deps.streamBrowserBootstrap;
+    const { contexts: __honoContexts, asFetchHandler: __asFetchHandler, asFetchMiddleware: __asFetchMiddleware } = deps.bridge;
+    const __actionBodyLimit = deps.createActionBodyLimit(deps.maxActionBodyBytes);
+    const __actionFetchHeader = deps.ACTION_FETCH_HEADER;
     const $Route_Index = routeModule;
     const __streamManifests = { '/': manifest };
+    const __createDeferredPageShell = deps.createDeferredPageShell({
+      streamManifests: __streamManifests,
+      createDeferredDsdExecutor,
+    });
     const __pageHandlers = { '/': {} };
-    const __asFetchHandler = fn => fn;
-    const __bodyLimit = () => () => {};
-    const __actionFetchHeader = 'X-OpenElement-Action';
-    const __problemJsonMediaType = 'application/problem+json';
     const __isOpenElementRedirect = error => error?.redirect === true;
     const __isOpenElementNotFound = error => error?.notFound === true;
     const __pageDefinition = module => module.default.openElementPage;
     const __routeMeta = () => ({});
     const __resolvePageTag = () => 'oe-stream-handler';
+    const __locales = [];
     const __localeFromPath = () => 'en';
     const __getDefaultLocale = () => 'en';
-    const __resolvePageDocument = () => ({ title: 'Stream', lang: 'en', links: [] });
+    // Faithful to resolvePageDocument's #1471 signature: the render wiring's
+    // client-script descriptors ride the resolved document.
+    const __resolvePageDocument = (_head, _context, clientScripts) => ({
+      title: 'Stream',
+      lang: 'en',
+      links: [],
+      ...(clientScripts && clientScripts.length > 0 ? { clientScripts } : {}),
+    });
     const __pageProps = (_module, context) => context.data;
     const __pageErrorProps = () => ({});
     const __statusHtml = (title, text) => '<h1>' + escapeHtml(title) + '</h1><p>' + escapeHtml(text) + '</p>';
@@ -137,14 +160,6 @@ async function handler(timeoutMs?: number, streamManifest?: StreamRouteManifest)
     const __resolveAppShell = () => deps.resolvedAppShell ?? false;
     const __renderAppShell = html => html;
     const __ssr = () => '<p>error</p>';
-    ${CHANNEL_HEADER_HELPERS}
-    async function __createDeferredPageShell(route, module, props, instanceId, documentToken) {
-      return createDeferredDsdExecutor({
-        componentClass: module.default, props, manifest: __streamManifests[route],
-        instanceId, documentToken,
-      });
-    }
-    ${renderStreamRuntime(timeoutMs)}
     ${lines.join('\n').replaceAll('import.meta.env.PROD', 'false')}
     return __pageHandlers['/'].GET[0];
   `;
@@ -152,18 +167,31 @@ async function handler(timeoutMs?: number, streamManifest?: StreamRouteManifest)
     default: Object.assign(Page, { openElementPage: { renderIntent: { mode: 'dynamic' } } }),
     loader: (_context: { responseHeaders: Headers; request: Request }): unknown => ({}),
   };
+  const bridge = createHonoBridge();
   const deps = {
     routeModule,
     manifest: route.streamManifest,
     createDeferredDsdExecutor,
+    createDeferredPageShell,
     documentStreamParts,
     escapeAttr,
     escapeHtml,
     wrapInDocument,
+    createStreamRequestScope,
+    streamFields,
+    createStreamBody,
+    streamBrowserBootstrap: STREAM_BROWSER_BOOTSTRAP,
+    timeoutMs,
+    createStreamHeaderChannel,
+    mergeChannelHeaders,
+    bridge,
+    createActionBodyLimit,
+    maxActionBodyBytes: MAX_ACTION_BODY_BYTES,
+    ACTION_FETCH_HEADER,
     resolvedAppShell: undefined as unknown,
   };
   const generated = new Function('deps', source)(deps) as (
-    context: unknown,
+    request: Request,
     route: unknown,
   ) => Promise<Response>;
   const fetch = (request: Request) => {
@@ -180,7 +208,11 @@ async function handler(timeoutMs?: number, streamManifest?: StreamRouteManifest)
       redirect: (location: string, status: number) =>
         new Response(null, { status, headers: { Location: location } }),
     };
-    return generated(context, { params: {} });
+    // The generated handler is the bridge-wrapped WinterCG shape; production
+    // populates the context WeakMap in the app.all('*') hook. Mirror it here.
+    // The fake context carries only the GET-handler slice of the Hono shape.
+    bridge.contexts.set(request, context as unknown as ActionHonoContext);
+    return generated(request, { params: {} });
   };
   return {
     fetch,
@@ -254,7 +286,7 @@ Deno.test('the real channel merge keeps protocol headers and the streamed body',
   const response = await fetch(new Request('https://example.test/'));
   assertEquals(response.status, 200);
   // The channel cannot override a protocol header the response already set
-  // (entry-render-runtime.ts:274: `__PROTOCOL_HEADERS.has(key) && merged.has(key)`).
+  // (server-runtime/response-channel.ts: `PROTOCOL_HEADERS.has(key) && merged.has(key)`).
   assertEquals(response.headers.get('Content-Type'), 'text/html; charset=UTF-8');
   assertEquals(response.headers.get('Cache-Control'), 'private, no-cache');
   // A protocol header the response does NOT carry, and every ordinary channel
