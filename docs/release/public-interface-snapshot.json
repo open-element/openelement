@@ -492,7 +492,7 @@
           ]
         },
         "./server-runtime": {
-          "publicShapeSha256": "386a2c06f3840d64e92408efa1acab1a679cfdb3f5e53be3c42992e40e499a62",
+          "publicShapeSha256": "6413df5b02e8384ba64a4c18da6b9a81858dc3dcaf5bb3829c49153a0425abce",
           "publicSymbols": [
             "ACTION_FETCH_HEADER=value:\"x-openelement-action\"",
             "ActionExecution=type:{actionResult?:union(undefined|{data:unknown;kind:\"failure\";status:number}|{data:unknown;kind:\"success\"});response?:union(Response|undefined)}",
@@ -552,6 +552,7 @@
             "createStreamHeaderChannel=value:{call:(route:string)=>{commit:{call:()=>void};readonly channel:Headers}}",
             "createStreamRequestScope=value:{call:(original:Request)=>{abortWork:{call:()=>void};cancel:{call:()=>void};readonly request:Request;readonly upstreamSignal:AbortSignal}}",
             "installSsrRegistryGuard=value:{call:()=>{register:{call:(tag:string,ctor:unknown)=>void}}}",
+            "isSsgPrerenderDispatch=value:{call:(env:unknown)=>union(false|true)}",
             "localeFromPath=value:{call:(locales:array(string),path:unknown,fallback:string)=>string}",
             "localizeShellHref=value:{call:(href:string,locale:string,defaultLocale:string)=>string}",
             "mergeChannelHeaders=value:{call:(response:Response,channel:Headers)=>Response}",
