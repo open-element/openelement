@@ -11,8 +11,8 @@ export function renderImport(imp: ImportDecl): string {
  * Page-route tag expression (#1276, B1.3-F1): resolves the route→program tag
  * binding from the route module's compiled Part Program at generated-entry
  * evaluation time (`__resolvePageTag`, imported from
- * @openelement/router/server-runtime per the renderer adapter — ADR-0160
- * rule a). The path-derived tag is passed only as the fallback for classes
+ * @openelement/router/server-runtime per the renderer adapter
+ * (#1470). The path-derived tag is passed only as the fallback for classes
  * without a compiled program. Used for SSR registration, the page/404
  * handlers, and the SSG routeInfo — one canonical binding for every
  * page-route tag consumer.

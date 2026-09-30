@@ -8,7 +8,7 @@
  *
  * Pure function: routes + options -> Hono entry virtual module code.
  *
- * The generated entry's final form (ADR-0160 rule a, #1470 block e) is
+ * The generated entry's final form (#1470 block e) is
  * imports + route descriptor data + one createGeneratedApp(...) factory call
  * plus per-route wiring. The assembly logic — the Hono app and its WinterCG
  * bridge, the composed handler exports, the client-script plumbing, the SSR
@@ -33,7 +33,7 @@
  * Thin orchestrator: delegates code generation to focused sub-modules:
  *   - entry-codegen.ts         — entry code string generation (#901)
  *   - renderer-adapter.ts      — the typed page-render runtime seam (imports
- *                                + factory config; ADR-0160 rule a)
+ *                                + factory config)
  *   - entry-render-ssg.ts      — SSG re-export & routeInfo/renderRoute/getStaticPaths
  *
  * v0.41.0-alpha.1: Consumers build a descriptor via `buildEntryDescriptor()`
@@ -213,16 +213,16 @@ export function renderEntry(desc: EntryDescriptor): string {
       `export const __streamManifests = ${quoteGeneratedJavaScriptValue(streamManifests)};`,
     );
     lines.push('');
-    // Stream pump runtime (ADR-0160 rule a): the pump, the browser bootstrap,
+    // Stream pump runtime (#1470 block d): the pump, the browser bootstrap,
     // and (Amendment 1) the deferred-shell gate are imported runtime; the
     // entry binds the pump to its escapeAttr import and the gate to its
     // serialized manifests + createDeferredDsdExecutor import.
     lines.push(
-      "// Stream pump runtime (ADR-0160 rule a), bound to the entry's escapeAttr import.",
+      "// Stream pump runtime, bound to the entry's escapeAttr import.",
     );
     lines.push('const __streamBody = __createStreamBody({ escapeAttr });');
     lines.push(
-      "// The deferred-shell gate (ADR-0160 rule a, Amendment 1), bound to the entry's",
+      "// The deferred-shell gate (Amendment 1), bound to the entry's",
       '// serialized stream manifests and its createDeferredDsdExecutor import.',
     );
     lines.push(
@@ -231,7 +231,7 @@ export function renderEntry(desc: EntryDescriptor): string {
     lines.push('');
   }
 
-  // --- Generated-app assembly (ADR-0160 rule a, #1470 block e) ---
+  // --- Generated-app assembly (#1470 block e) ---
   // One factory call owns what the entry template used to emit as assembly
   // code: the Hono app + WinterCG bridge, the composed openElementHandler
   // exports, the island client-script plumbing, the SSR registry guard, the
@@ -240,7 +240,7 @@ export function renderEntry(desc: EntryDescriptor): string {
   // and its Element imports; dangerous keys and the body-limit budget are
   // NOT passed — the factory imports the canonical policy values from the
   // kernel-free /authoring leaf, so the entry carries no serialized copy.
-  lines.push('// Generated-app assembly (ADR-0160 rule a): the factory owns the Hono app,');
+  lines.push('// Generated-app assembly: the factory owns the Hono app,');
   lines.push('// its bridge, the handler exports, the SSR registry guard, and the');
   lines.push('// page-render bindings; the entry keeps the route wiring below.');
   // Nav data is not part of the 1.0 surface: the app-shell layout props keep
@@ -401,7 +401,7 @@ export function renderEntry(desc: EntryDescriptor): string {
   }
   lines.push('');
 
-  // --- Startup stream guards (ADR-0160 rule a) ---
+  // --- Startup stream guards ---
   // The adapter-selected assertion is imported from
   // @openelement/router/server-runtime; the entry emits only the per-route
   // call sites. A stream declaration that has no matching compiled route
@@ -463,7 +463,7 @@ export function renderEntry(desc: EntryDescriptor): string {
   // --- Shared dispatch: the WinterCG route middleware over the populated
   // handler records (the composition must follow the page/action emissions —
   // createRouteMiddleware reads each record at call time); the 405/Allow
-  // responder is the factory-bound dispatch module (#572, ADR-0160 rule a). ---
+  // responder is the factory-bound dispatch module (#572). ---
   lines.push(`const __routeMiddleware = __createRouteMiddleware([`);
   if (desc.apiRoutes.length > 0) {
     // Method-keyed API records dispatch ahead of pages (the API section used
