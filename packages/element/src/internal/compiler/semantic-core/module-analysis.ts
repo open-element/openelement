@@ -127,11 +127,10 @@ const CORE_VOCABULARY: readonly ModuleVocabularyDescriptor[] = [
     exportName: 'defineElement',
     kind: 'element-registration',
   },
-  {
-    moduleSpecifier: '@openelement/element',
-    exportName: 'defineIsland',
-    kind: 'element-registration',
-  },
+  // `defineIsland` is deliberately absent: the element package retired the
+  // defineIsland() runtime in v0.44 (the router never exported the name; the
+  // absence is pinned by router authoring tests), so the scan fails closed on
+  // the unresolvable import instead of recognizing it.
 ];
 
 /**

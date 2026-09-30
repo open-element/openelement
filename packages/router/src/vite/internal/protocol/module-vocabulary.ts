@@ -30,9 +30,8 @@ export const ROUTER_MODULE_VOCABULARY: readonly ModuleVocabularyDescriptor[] = [
     exportName: 'defineElement',
     kind: 'element-registration',
   },
-  {
-    moduleSpecifier: '@openelement/router',
-    exportName: 'defineIsland',
-    kind: 'element-registration',
-  },
+  // `defineIsland` is deliberately absent: the element package retired the
+  // defineIsland() runtime in v0.44 and the router never exported the name
+  // (the absence is pinned by the authoring surface tests), so the scan fails
+  // closed on the unresolvable import instead of recognizing it.
 ];

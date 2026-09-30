@@ -35,11 +35,6 @@ const ROUTER_VOCABULARY: readonly ModuleVocabularyDescriptor[] = [
     exportName: 'defineElement',
     kind: 'element-registration',
   },
-  {
-    moduleSpecifier: '@openelement/router',
-    exportName: 'defineIsland',
-    kind: 'element-registration',
-  },
 ];
 
 function emptyFacts(): ModuleSemanticFacts {
@@ -153,33 +148,20 @@ const semanticCases: SemanticCase[] = [
     },
   },
   {
-    name: 'recognizes defineElement and defineIsland aliases from both packages',
+    name: 'recognizes defineElement aliases from both packages',
     vocabulary: ROUTER_VOCABULARY,
     source: `
-      import {
-        defineElement as appElement,
-        defineIsland as appIsland,
-      } from '@openelement/router';
-      import {
-        defineElement as elementElement,
-        defineIsland as elementIsland,
-      } from '@openelement/element';
+      import { defineElement as appElement } from '@openelement/router';
+      import { defineElement as elementElement } from '@openelement/element';
       appElement('oe-app-element', {});
-      appIsland('oe-app-island', {});
       elementElement('oe-element-element', {});
-      elementIsland('oe-element-island', {});
     `,
     expected: {
-      definedCustomElementTags: [
-        'oe-app-element',
-        'oe-app-island',
-        'oe-element-element',
-        'oe-element-island',
-      ],
+      definedCustomElementTags: ['oe-app-element', 'oe-element-element'],
     },
   },
   {
-    name: 'default scan knows only the element package registration factory',
+    name: 'default scan knows only the element defineElement — defineIsland is retired vocabulary',
     source: `
       import {
         defineElement as elementElement,
@@ -195,8 +177,20 @@ const semanticCases: SemanticCase[] = [
       appIsland('oe-app-island', {});
     `,
     expected: {
-      definedCustomElementTags: ['oe-element-element', 'oe-element-island'],
+      // The default scan fails closed on every retired or foreign factory:
+      // defineIsland left both packages' authoring surface in v0.44, and the
+      // router's defineElement rides host-injected vocabulary only.
+      definedCustomElementTags: ['oe-element-element'],
     },
+  },
+  {
+    name: 'injected router vocabulary no longer admits defineIsland (retired v0.44)',
+    vocabulary: ROUTER_VOCABULARY,
+    source: `
+      import { defineIsland as legacyIsland } from '@openelement/router';
+      legacyIsland('oe-legacy-island', {});
+    `,
+    expected: {},
   },
   {
     name: 'recognizes customElements.define',

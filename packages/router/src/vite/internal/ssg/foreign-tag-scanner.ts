@@ -7,7 +7,7 @@
  * bare-native element) never entered the scan at all. This module statically
  * scans page route and island module sources for custom-element tag usages
  * and reports the tags that are neither local islands, package-manifest
- * islands, nor openElement-authored elements (defineElement/defineIsland/
+ * islands, nor openElement-authored elements (defineElement/
  * customElements.define within the scanned sources).
  *
  * Visibility only: the discovered tags are recorded in the admission plan as

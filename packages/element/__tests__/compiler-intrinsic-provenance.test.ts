@@ -38,18 +38,15 @@ const FILE = '/project/app/islands/provenance.tsx';
 
 /**
  * The router registration vocabulary a host framework injects (#1473): the
- * module scan ships no router knowledge, so the router's registration
- * factories are recognized only through this explicit descriptor set.
+ * module scan ships no router knowledge, so the router's registration factory
+ * is recognized only through this explicit descriptor. (`defineIsland` is
+ * retired vocabulary — removed from both packages in v0.44 — and is
+ * deliberately absent here and in the router's own list.)
  */
 const ROUTER_VOCABULARY: readonly ModuleVocabularyDescriptor[] = [
   {
     moduleSpecifier: '@openelement/router',
     exportName: 'defineElement',
-    kind: 'element-registration',
-  },
-  {
-    moduleSpecifier: '@openelement/router',
-    exportName: 'defineIsland',
     kind: 'element-registration',
   },
 ];
