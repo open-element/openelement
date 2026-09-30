@@ -15,7 +15,7 @@
  */
 
 import { existsSync } from '../internal/host-path.ts';
-import { build as viteBuild, type InlineConfig } from 'vite';
+import { type Alias, build as viteBuild, type InlineConfig } from 'vite';
 import { dirname, isAbsolute, join, relative, resolve } from '../internal/host-path.ts';
 import { fromFileUrl } from '../internal/host-path.ts';
 import { extractCustomElementTags, generateClientEntry } from '../vite/internal/ssg/index.ts';
@@ -46,7 +46,7 @@ import { analyzeModuleSemantics, compiledElementPlugin } from '@openelement/elem
 import { ISLAND_ADMISSION } from '../vite/internal/protocol/island-admission.ts';
 import { ROUTER_MODULE_VOCABULARY } from '../vite/internal/protocol/module-vocabulary.ts';
 import { compilerBehaviorDeclarations } from '../vite/internal/ssg/client-admission.ts';
-import { sortAliasEntries } from '../vite/alias-utils.ts';
+import { resolveThroughAliases, sortAliasEntries } from '../vite/alias-utils.ts';
 import { formatError } from '@openelement/element';
 import { createLogger } from '@openelement/element';
 import {
@@ -252,20 +252,29 @@ type ViteInlineConfigWithManifest = Omit<InlineConfig, 'build'> & {
 
 /**
  * The real module path a package-side island's declared specifier resolves
- * to, through the same import map the build's resolver uses (#1471): local
- * root-relative specifiers resolve against the root, bare specifiers
- * against the enclosing deno.json files. A specifier with no file target
- * (npm/jsr packages) returns null and keeps the declared specifier as the
- * island's module identity — joined by the exact-match rule in
- * client-asset-manifest.ts, never a substring first-hit.
+ * to, through the same resolution chain the build's resolver uses (#1471):
+ * the deno.json import map (enforce:'pre' runs ahead of the alias plugin),
+ * then the Vite alias table the build ships as `resolve.alias` — workspace
+ * packages have no import-map entry and resolve purely through those
+ * aliases. A specifier with no file target (npm/jsr packages) returns null
+ * and keeps the declared specifier as the island's module identity — joined
+ * by the exact-match rule in client-asset-manifest.ts, never a substring
+ * first-hit.
  */
-function packageIslandSourcePath(root: string, modulePath: string): string | null {
+function packageIslandSourcePath(
+  root: string,
+  modulePath: string,
+  aliases: ReadonlyArray<Alias>,
+): string | null {
   if (modulePath.startsWith('/') || modulePath.startsWith('.')) {
     return resolve(root, modulePath);
   }
   const mapped = lookupInDenoJson(modulePath, root);
-  if (!mapped) return null;
-  return convertImportMapTarget(mapped.target, mapped.denoJsonDir);
+  if (mapped) {
+    const converted = convertImportMapTarget(mapped.target, mapped.denoJsonDir);
+    if (converted) return converted;
+  }
+  return resolveThroughAliases(aliases, modulePath);
 }
 
 async function buildClient(ctx: OpenElementBuildContext): Promise<ClientAssetManifest | null> {
@@ -390,7 +399,7 @@ async function buildClient(ctx: OpenElementBuildContext): Promise<ClientAssetMan
   const islandSourcePath = (modulePath: string): string | null => {
     const cached = islandSourcePathCache.get(modulePath);
     if (cached !== undefined) return cached;
-    const resolved = packageIslandSourcePath(root, modulePath);
+    const resolved = packageIslandSourcePath(root, modulePath, serializedAlias);
     islandSourcePathCache.set(modulePath, resolved);
     return resolved;
   };
