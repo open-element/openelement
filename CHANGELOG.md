@@ -9,6 +9,153 @@ lives in:
 - [`docs/release/release-state.json`](./docs/release/release-state.json)
 - [`docs/release/public-interface-snapshot.json`](./docs/release/public-interface-snapshot.json)
 
+## 1.0.0-alpha.6
+
+**Architecture-debt repayment: a typed server runtime, one serializer kernel,
+and manifest-driven client asset injection.** This train restructures internal
+seams — generated-entry growth, serializer forks, compiler/Router coupling,
+chunk-name-derived identity, release-name leakage into artifacts — under
+[ADR-0160](./docs/adr/ADR-0160-architecture-debt-repayment.md) (stages S0–S6,
+Amendments 1–3). The source line is `1.0.0-alpha.6`; npm publication is a
+separate, gated step, so
+[`docs/release/release-state.json`](./docs/release/release-state.json) keeps
+registry truth at the verified alpha.5 state (`@alpha` = `1.0.0-alpha.5`)
+until the post-publish sync.
+
+### Highlights
+
+- **Typed server runtime (#1470).** The request-time semantics that lived
+  inside generated-entry template strings — response-header channel with
+  protocol-header precedence and multi-value `Set-Cookie`, the streamed
+  route's late-mutation gate, CSP auto-nonce, the page/document/render seams,
+  the action POST protocol (CSRF floor, named-action dispatch, RFC 9457
+  problem documents, PRG, body limit, 303 coercion) and the streaming pump —
+  moved into typecheckable modules exported from the public
+  `@openelement/router/server-runtime` subpath. Generated entries are
+  reduced to imports, route-descriptor data and wiring, enforced by a
+  dedicated gate (standalone parse, no runtime bodies in codegen, client
+  graph never reaching server runtime).
+- **One serializer kernel (#1469).** The server serializer and the runtime
+  seed serializer — two parallel Part Program tree walkers — collapsed into
+  one host-free kernel (`serialize-program.ts`) with every execution-mode
+  difference an explicit seam. A differential parity harness replayed the
+  full corpus through both implementations requiring byte-identical output
+  before the legacy walkers were deleted.
+- **Manifest-driven client asset injection (#1471).** A `ClientAssetManifest`
+  protocol joins island declarations with the Phase 2 build manifest and
+  Rollup module metadata; a chunk is matched by the module ids it contains,
+  never by parsing chunk file names. Build order becomes SSR → client → SSG,
+  script tags are serialized at document time from one resolved
+  `clientScripts` field, and the post-build HTML-rewriting injection pass is
+  deleted. Package-island identity is exact-match through the same import
+  map and alias table the build ships; each package island ships as its own
+  `island-<tag>-<hash>.js` chunk.
+- **Compiler decoupled from Router (ADR-0160 rule c).** Island admission and
+  module-scan vocabulary became injected plain-data descriptors; the default
+  semantic core admits none and fails closed. The dead `defineIsland`
+  vocabulary entries were removed with recorded forensics.
+- **Artifacts carry protocol versions, not release names (rule e).** Shipped
+  source no longer carries the retired 0.23/0.40/0.42/0.44 trains; streaming
+  admission budgets are named once in an import-free policy module; the
+  Site's version truth derives from `release-state.json` and is
+  cross-asserted at bump time and by the offline release gate.
+- **Single-duty module splits (#1473).** The 2,779-line compiled Part
+  Program executor, the 2,381-line compile facade and the 999-line Vite
+  plugin decomposed into single-duty modules (every moved block
+  byte-verified against the pre-split file); the `ParserPort` seam records
+  where a future parser backend swaps in.
+- **ui: instance state and experimental tiers.** `readInstanceState` /
+  `writeInstanceState` join the public surface (barrel re-export plus a
+  side-effect-free `./instance-state` subpath). The ui manifest now records
+  a per-class status and the API reference renders it.
+- **Qualification harness (#1472).** The scaffold → workspace-alias → build
+  → static-serve → Playwright ritual that three harnesses implemented
+  privately moved to `tests/lib/qualify-harness/`; the candidate-evidence
+  producer split into single-duty record, fresh-clone, aggregate and
+  validate modules.
+
+### Fixes
+
+- **Client asset manifest fails closed (Amendment 3).** Exactly one manifest
+  record may claim the client entry — two or more fail
+  `OE_CLIENT_ASSET_ENTRY_AMBIGUOUS` naming every candidate. One delivery tag
+  is owned by exactly one island entry — a second claimant fails
+  `OE_CLIENT_ASSET_ISLAND_TAG_DUPLICATE` whatever asset either side would
+  resolve to. The SSG join throws `OE_CLIENT_ASSET_ISLAND_UNMAPPED` for an
+  admitted island with no manifest record, and the pass writes the complete
+  per-page manifest set or nothing. A missing, malformed or entry-less
+  client manifest and an admitted island resolving to no asset are named
+  `OE_CLIENT_ASSET_*` failures instead of warn-and-continue or a silent
+  empty entry; the postprocessor validates only the selected
+  (`islandTagNames`) metadata, so an unselected island cannot fail the join.
+- **Workspace package islands resolve through the alias table.** A
+  workspace-member specifier such as the Site's `@openelement/ui/open-button`
+  resolves to its real module path (import map, then `resolve.alias` with
+  @rollup/plugin-alias matching semantics) and joins by exact identity; the
+  pre-repair build silently mis-attributed those islands to the client entry
+  chunk.
+- **A streamed-seed type mismatch has its own code.** The mismatch in
+  `connectedCallback` reports `OE_STREAM_TYPE_MISMATCH` instead of reusing
+  `OE_PROGRAM_MISSING`, so a host can tell seed contract drift from a
+  missing compiled program.
+- **SSG stays nonce-free.** The CSP auto-nonce is gated off hono/ssg
+  prerender passes.
+
+### Compatibility
+
+- **This is an alpha prerelease.** Alpha trains do not carry a stable
+  compatibility promise; breaking changes between alphas are possible, and
+  npm `latest` stays on the stable 0.43 line. The `@alpha` dist-tag still
+  resolves to `1.0.0-alpha.5` until this train is published.
+- **Regenerate build output.** Generated entries and manifests changed shape
+  in this train — generated server entries import the typed runtime (native
+  server bytes moved 27507 → 14231, lit 25562 → 14344; client entries only
+  gained the serialized idle-fallback constant), `dist/server/client-script.js`
+  became `client-assets.js`, and package island chunks are re-cut and named
+  `island-<tag>-<hash>.js`. Rebuild rather than reusing pre-alpha6 `dist`
+  trees.
+- **Invalid or ambiguous island declarations now fail the build.** Silent
+  warn-and-continue paths are gone: a missing client entry, an unrecorded or
+  ambiguously-owned island tag, and an admitted island with no asset are
+  errors. A build that was previously green by silently mis-attributing a
+  package island will now fail with a named `OE_CLIENT_ASSET_*` code.
+- **Six ui components are experimental.** `open-card`, `open-callout`,
+  `open-dialog`, `open-dropdown`, `open-tabs` and `open-input` carry no
+  compatibility promise until each has standalone adoption evidence; the
+  other four ui components are pinned stable.
+- **Public surface additions.** `@openelement/router/server-runtime` (the
+  generated entries' request-time runtime, documented in the Router README),
+  the ui `./instance-state` subpath, `ClientScriptDescriptor` /
+  `ResolvedDocument.clientScripts`, `ModuleSemanticsOptions` /
+  `ModuleVocabularyDescriptor`, and the `STREAM_*` policy constants on the
+  element authoring leaf. No prior public export was removed in this train.
+
+### Validation
+
+Run on this candidate branch (`release/1.0.0-alpha.6`):
+
+- `deno task --cwd tools/repo release:state-machine:check` (offline) and
+  `release:registry-check` (read-only npm) — both green; the six version
+  points verified consistent at `1.0.0-alpha.6`.
+- Element suite 429 tests and Router suite 970 tests green; the
+  release-state suite 12 tests green.
+- `deno task fmt`, `deno task check` (fmt:check, lint, typecheck,
+  markdownlint) and `tools/repo#generate:all` green and drift-free.
+- Release-train static steps green, including every generator, boundary,
+  provenance and link check, the Site build with all `www` consistency
+  checks (doc figures re-baselined against the alpha6 build), coverage
+  thresholds, the static-only and light-probe fixtures, and the Nitro Node
+  and Workers proofs.
+- Browser and packed qualification on this branch: the three-engine
+  fixture browser gates (native, Lit, ui dogfood), the three-engine
+  Element conformance matrix, starter-smoke across three engines, the
+  packed-tarball consumer gates at `1.0.0-alpha.6` (lit renderer app green
+  on all 9 cells; Router route/framework modes; element and ui packed
+  consumers), and the npm publish dry-run. The full three-engine Site E2E
+  suite and the remaining train steps are carried by the merged train's
+  exact-SHA CI evidence (#1474) and re-verified by the release dispatch on
+  the final candidate SHA before anything publishes.
+
 ## 1.0.0-alpha.5
 
 **Rendered as data resolves: part-level streaming, WC admission tiers, runtime
