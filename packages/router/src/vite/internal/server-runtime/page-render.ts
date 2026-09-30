@@ -11,9 +11,9 @@
  * The dangerous-key set is injected, not imported: the narrow runtime reads
  * mirror the generated helpers exactly, and the caller binds the policy —
  * since #1470 block e that caller is the generated-app factory (app.ts),
- * which imports the canonical list (packages/element/src/internal/core/
- * security.ts DANGEROUS_KEYS, re-exported by the kernel-free /authoring
- * leaf) and hands it to {@linkcode createPagePropsRuntime}; the generated
+ * which imports the canonical DANGEROUS_KEYS constant re-exported by the
+ * kernel-free /authoring leaf and hands it to
+ * {@linkcode createPagePropsRuntime}; the generated
  * entry carries no serialized copy of it.
  *
  * Route modules are author-shaped and reach this module as opaque records —
