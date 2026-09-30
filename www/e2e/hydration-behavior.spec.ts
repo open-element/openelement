@@ -120,19 +120,28 @@ test.describe('open-button form piercing', () => {
     const result = await page.evaluate(async () => {
       // open-button is not used by the homepage, so load its island chunk
       // directly. The chunk URL hash is discovered from the island loader
-      // source to survive rebuilds.
+      // source to survive rebuilds. Package islands group under the island
+      // naming (`island-<tag>-<hash>.js`, #1471 exact identity join); the
+      // unprefixed shape stays tolerated for a module that ends up unnamed.
       const loaderSource = await (await fetch('/client/islands/client.js')).text();
-      const chunkMatch = loaderSource.match(/(?:\.\/|islands\/)(open-button-[\w-]+\.js)/);
+      const chunkMatch = loaderSource.match(
+        /(?:\.\/|islands\/)((?:island-)?open-button-[\w-]+\.js)/,
+      );
       if (!chunkMatch) return { error: 'open-button chunk URL not found in island loader' };
 
       const mod = await import(`/client/islands/${chunkMatch[1]}`) as Record<string, unknown>;
-      // Island chunks wrapped by the runtime expose a `.t` namespace; plain
-      // ui-package chunks (like open-button) export the class directly.
-      const ns = mod.t as { default?: CustomElementConstructor } | undefined;
+      // Island chunks wrapped by the runtime expose a `.t` namespace (the same
+      // unwrap the island loader applies); plain ui-package chunks export the
+      // class directly.
+      const ns = mod.t as
+        | (Record<string, CustomElementConstructor | undefined> & {
+          default?: CustomElementConstructor;
+        })
+        | undefined;
       // #638: package island chunks dropped `export default`; the constructor
       // is exported under the CEM class name `OpenButton`.
       const ButtonCtor = (mod as Record<string, CustomElementConstructor | undefined>).OpenButton ??
-        ns?.default ?? (mod.default as CustomElementConstructor | undefined);
+        ns?.OpenButton ?? ns?.default ?? (mod.default as CustomElementConstructor | undefined);
       if (!ButtonCtor) return { error: 'open-button chunk has no OpenButton export' };
       if (!customElements.get('open-button')) {
         customElements.define('open-button', ButtonCtor);
