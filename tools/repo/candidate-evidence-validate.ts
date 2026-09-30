@@ -9,8 +9,9 @@
  * the pure checks for the CLI. Moved out of candidate-evidence.ts verbatim:
  * checks, failure texts, and exit behavior are unchanged.
  *
- * The job-record shapes (`JobResult`/`LoadedJob`) stay on the record
- * foundation in candidate-evidence.ts and are imported here as types only.
+ * The job-record shapes (`JobResult`/`LoadedJob`) live on the record
+ * foundation in candidate-evidence-record.ts and are imported here as types
+ * only.
  */
 
 import { dirname, join } from '@std/path';
@@ -41,8 +42,8 @@ import {
   SITE_E2E_REPORT_BUNDLE_PATH,
   type SiteE2eRollup,
 } from './candidate-evidence-site-e2e.ts';
-import type { JobResult, LoadedJob } from './candidate-evidence.ts';
-import { required } from './candidate-evidence.ts';
+import type { JobResult, LoadedJob } from './candidate-evidence-record.ts';
+import { required } from './candidate-evidence-record.ts';
 
 /** Artifact age policy shared by the CLI validate path. */
 export const ARTIFACT_RETENTION_DAYS = 14;

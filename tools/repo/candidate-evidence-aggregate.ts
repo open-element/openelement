@@ -11,10 +11,10 @@
  * and failure behavior are unchanged.
  *
  * The process primitives (`required`, `expectedSha`) and the job-record
- * shapes stay on the record foundation in candidate-evidence.ts and are
- * imported from there (types only where possible); the CLI shell imports
- * `aggregate` back, which is the one intentional module cycle and is safe
- * because every cross-module call happens after both modules initialize.
+ * shapes live on the record foundation in candidate-evidence-record.ts and
+ * are imported from there (types only where possible); the CLI shell imports
+ * `aggregate` from this module one-way, so the shell-to-lane cycle the #1473
+ * extraction had left in place is gone — no module cycle remains.
  */
 
 import { dirname, join, relative } from '@std/path';
@@ -31,8 +31,8 @@ import {
   SITE_E2E_REPORT_FILE,
   type SiteE2eRollup,
 } from './candidate-evidence-site-e2e.ts';
-import type { JobResult, LoadedJob } from './candidate-evidence.ts';
-import { expectedSha, required } from './candidate-evidence.ts';
+import type { JobResult, LoadedJob } from './candidate-evidence-record.ts';
+import { expectedSha, required } from './candidate-evidence-record.ts';
 
 /**
  * Compose the bundle's per-job records from the downloaded producer records

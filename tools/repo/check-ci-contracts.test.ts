@@ -353,9 +353,11 @@ Deno.test('ci contract: Site E2E evidence is owned by the fresh-clone lane', asy
     /jobs\.find\(\(\{ job \}\) => job\.job === 'fresh-clone'\)[\s\S]{0,200}siteE2e/.test(aggregate),
     'aggregation must read the Site E2E sidecar from the fresh-clone job',
   );
-  // The producer's per-job extras staging stayed on candidate-evidence.ts, so
-  // the no-reintroduction guard reads it there.
-  const evidence = await Deno.readTextFile(join(repoRoot, 'tools/repo/candidate-evidence.ts'));
+  // The producer's per-job extras staging lives on candidate-evidence-record.ts
+  // (alpha6 record split), so the no-reintroduction guard reads it there.
+  const evidence = await Deno.readTextFile(
+    join(repoRoot, 'tools/repo/candidate-evidence-record.ts'),
+  );
   assert(
     !/job === 'source-matrix'[\s\S]{0,40}sourceExtras/.test(evidence),
     'the source-matrix producer must no longer stage Site E2E evidence',
