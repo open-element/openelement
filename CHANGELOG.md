@@ -139,16 +139,22 @@ Run on this candidate branch (`release/1.0.0-alpha.6`):
   points verified consistent at `1.0.0-alpha.6`.
 - Element suite 429 tests and Router suite 970 tests green; the
   release-state suite 12 tests green.
-- `deno task release:check` green end to end: the 47-step release train
-  including the Site build and every `www` check (doc figures re-baselined
-  against the alpha6 build), coverage thresholds, all deploy/framework
-  fixture gates, the three-engine Element browser matrix and Site E2E suite
-  (1083 tests across Chromium/Firefox/WebKit), Nitro Node and Workers
-  proofs, the packed-consumer qualification at `1.0.0-alpha.6` (lit renderer
-  app green on all 9 cells; Router route/framework modes; element and ui
-  packed consumers), and the npm publish dry-run.
 - `deno task fmt`, `deno task check` (fmt:check, lint, typecheck,
   markdownlint) and `tools/repo#generate:all` green and drift-free.
+- Release-train static steps green, including every generator, boundary,
+  provenance and link check, the Site build with all `www` consistency
+  checks (doc figures re-baselined against the alpha6 build), coverage
+  thresholds, the static-only and light-probe fixtures, and the Nitro Node
+  and Workers proofs.
+- Browser and packed qualification on this branch: the three-engine
+  fixture browser gates (native, Lit, ui dogfood), the three-engine
+  Element conformance matrix, starter-smoke across three engines, the
+  packed-tarball consumer gates at `1.0.0-alpha.6` (lit renderer app green
+  on all 9 cells; Router route/framework modes; element and ui packed
+  consumers), and the npm publish dry-run. The full three-engine Site E2E
+  suite and the remaining train steps are carried by the merged train's
+  exact-SHA CI evidence (#1474) and re-verified by the release dispatch on
+  the final candidate SHA before anything publishes.
 
 ## 1.0.0-alpha.5
 
