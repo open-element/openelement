@@ -141,6 +141,21 @@ Workers fixtures. Import the mount from the explicit subpath:
 import { createOpenElementNitroHandler } from '@openelement/router/nitro-mount';
 ```
 
+## Server runtime subpath
+
+The generated server entries import their request-time runtime from
+`@openelement/router/server-runtime`: the generated-app factory
+(`createGeneratedApp` — the Hono app, its WinterCG bridge, the composed
+handler exports, and the page-render bindings), the response-header channel
+with its commitment gate, the CSP auto-nonce, the page SSR renderer seam, the
+action POST protocol, and the streaming pump. The logic lives in typecheckable
+modules instead of codegen template strings, so it stays visible to `deno
+check` and directly unit-testable.
+
+Applications never import this subpath directly — the entries the Vite
+pipeline generates do. It is exported for type-aware tooling and for hosts
+that assemble the same server seams by hand.
+
 ## Lit renderer subpaths
 
 Framework Mode ships two renderer integrations; the default is the compiled
