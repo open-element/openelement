@@ -1,10 +1,11 @@
 /** Route-catalog sitemap enumeration unit tests (Beta.2.2, #1327). */
 import { assert, assertEquals } from '@std/assert';
 import { join } from '@std/path';
+import { SITE_LOCALES, type SiteLocale } from '../../site-config.ts';
 import { enumeratePublicRoutes, renderRobotsTxt, renderSitemapXml } from './site-sitemap.ts';
 import { articleLastmodByRoute } from './site-lastmod.ts';
 
-const LOCALES = ['en', 'zh'] as const;
+const LOCALES: readonly SiteLocale[] = SITE_LOCALES;
 
 Deno.test('enumeratePublicRoutes: static catalog + blog enumeration, both locales', () => {
   const { routes, failures } = enumeratePublicRoutes({

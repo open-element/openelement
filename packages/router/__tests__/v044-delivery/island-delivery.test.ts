@@ -73,6 +73,7 @@ Deno.test('v0.44 media delivery loads once when the query first matches', () => 
   const listeners: Array<(event: { matches: boolean }) => void> = [];
   let loaded = 0;
   const scheduler = createIslandScheduler({
+    idleFallbackTimeoutMs: 25,
     log: { warn: () => {} },
     win: {
       CustomEvent: class {

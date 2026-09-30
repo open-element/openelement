@@ -37,6 +37,7 @@ import type {
   SsrAdmissionPlan,
   StaticComponentDecl,
 } from './internal/protocol/ssg.ts';
+import type { ClientAssetManifest } from './internal/protocol/client-assets.ts';
 import {
   DEFAULT_COMPONENTS_DIR,
   DEFAULT_ISLANDS_DIR,
@@ -170,6 +171,13 @@ export class OpenElementBuildContext {
   /** Canonical production plan computed once after Phase 1 discovery. */
   buildPlan: BuildPlan | null = null;
 
+  /**
+   * Phase 2 output (#1471): the client asset manifest — compile-time island
+   * identity joined with the client build manifest and Rollup module
+   * metadata. Null until the client build produces a client bundle.
+   */
+  clientAssetManifest: ClientAssetManifest | null = null;
+
   /** Canonical result consumed by release evidence and deployment adapters. */
   buildArtifacts: BuildArtifacts | null = null;
   /** Phase 1: Route scanning & build metadata */
@@ -230,8 +238,9 @@ export class OpenElementBuildContext {
 
   /** Mark a phase as complete, enforcing ordering constraints. */
   markComplete(phase: Phase): void {
-    // Phase 2 (client build) requires Phase 1 (route scanning) only.
-    // Phase 2 runs after Phase 3 (SSG); it does NOT require Phase 3.
+    // Phases 2 (client build) and 3 (SSG) each require Phase 1 only —
+    // closeBundle runs them 1 → 2 → 3 (#1471), so the SSG render pass and
+    // the request-time artifact carry the final client asset addresses.
     if (phase === 2 && !this.completed.has(1)) {
       throw new Error('Phase 2 requires Phase 1 to be completed first');
     }
@@ -278,6 +287,7 @@ export class OpenElementBuildContext {
   reset(): void {
     this.completed.clear();
     this.buildPlan = null;
+    this.clientAssetManifest = null;
     this.buildArtifacts = null;
 
     const userResolveAlias = this.phase1.userResolveAlias;

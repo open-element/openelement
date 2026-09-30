@@ -114,7 +114,7 @@ export interface RouteEntry {
   tagName?: string;
   /**
    * True when the route module's default export is a definePage() definition
-   * (0.42.0-alpha.17, #960 — registration decoupling). The generated entry
+   * (#960 — registration decoupling). The generated entry
    * registers the page class under the path-derived fallback tag and IGNORES
    * the tagName export for registration: on a definePage route the export
    * only names a content element. Plain element routes keep tagName as their
@@ -124,8 +124,8 @@ export interface RouteEntry {
   /** Source text captured during scanning when includeSource is enabled. */
   source?: string;
   /**
-   * True when the page route source carries data-open-enhance (0.42.0-alpha.5,
-   * #569): the client entry must ship the form-enhancement layer even when the
+   * True when the page route source carries data-open-enhance (#569): the
+   * client entry must ship the form-enhancement layer even when the
    * app has zero islands.
    */
   hasEnhancedForms?: boolean;

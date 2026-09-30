@@ -1,5 +1,5 @@
 /**
- * Source-aware diagnostics for the v0.44 compiler boundary.
+ * Source-aware diagnostics for the compiler boundary.
  *
  * Diagnostics are deliberately small and serializable. The Vite adapter turns
  * the formatted error into its build error, while compiler tests can inspect

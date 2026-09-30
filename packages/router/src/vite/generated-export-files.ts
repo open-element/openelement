@@ -1,5 +1,5 @@
 // GENERATED FILE — do not edit by hand.
-// Regenerate with the repository task: generate:export-files
+// Regenerate via the repository's "generate:all" tooling task.
 // Source of truth: the "exports" field of each workspace package manifest.
 export const OPENELEMENT_EXPORT_FILES: Record<string, Record<string, string>> = {
   'create': {
@@ -29,10 +29,12 @@ export const OPENELEMENT_EXPORT_FILES: Record<string, Record<string, string>> = 
     'nitro-mount': 'src/nitro-mount.ts',
     'router': 'src/router.ts',
     'router/client': 'src/router-client.ts',
+    'server-runtime': 'src/vite/internal/server-runtime/mod.ts',
     'vite': 'src/vite/index.ts',
   },
   'ui': {
     '.': 'src/index.ts',
+    'instance-state': 'src/instance-state.ts',
     'open-badge': 'src/open-badge.tsx',
     'open-button': 'src/open-button.tsx',
     'open-callout': 'src/open-callout.tsx',

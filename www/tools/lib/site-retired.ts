@@ -26,7 +26,7 @@ import { fromFileUrl, join } from '@std/path';
 import { scanRoutes } from '../../../packages/router/src/vite/internal/ssg/route-scanner.ts';
 import { fileToRoutePath } from '../../lib/route-path.ts';
 import { slugifyHeadingId, stripHtmlToText } from '../../app/site-ui/article-body.ts';
-import { SITE_LOCALES } from '../../site-config.ts';
+import { SITE_LOCALES, type SiteLocale } from '../../site-config.ts';
 
 const repoRoot = fromFileUrl(new URL('../../../', import.meta.url));
 const routesRel = 'www/app/routes';
@@ -154,7 +154,7 @@ function stripFragment(path: string): { route: string; fragment: string } {
 }
 
 /** Content file backing a collection route, for fragment verification. */
-function contentFileFor(route: string, locale: 'en' | 'zh'): string | null {
+function contentFileFor(route: string, locale: SiteLocale): string | null {
   const suffix = locale === 'zh' ? '.zh.md' : '.md';
   if (route === '/architecture') {
     return join(repoRoot, `www/content/docs/architecture/architecture${suffix}`);
@@ -174,7 +174,7 @@ function contentFileFor(route: string, locale: 'en' | 'zh'): string | null {
  * path probes both; the ordered `docs/` first keeps today's layout
  * authoritative when both exist.
  */
-function contentFileCandidates(route: string, locale: 'en' | 'zh'): string[] {
+function contentFileCandidates(route: string, locale: SiteLocale): string[] {
   const suffix = locale === 'zh' ? '.zh.md' : '.md';
   const roots = ['www/content/docs', 'www/content'];
   if (route === '/architecture') {

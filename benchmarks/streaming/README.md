@@ -7,8 +7,13 @@ non-streamed GET paths with the same simulated slow loader:
 deno task --cwd tests/fixtures/router-native-framework build
 deno run --allow-read --allow-write --allow-net --allow-env --allow-sys --allow-run \
   benchmarks/streaming/measure.ts --samples 10 --delay 100 \
-  --out benchmarks/streaming/alpha5-local.json
+  --out .artifacts/stream-alpha5-local.json
 ```
+
+**Manual benchmark**: nothing invokes this script automatically — `deno task
+bench` and CI never run it. Its output is local evidence: write it to the
+gitignored `.artifacts/` tree or another explicit `--out` path, never into
+the repository.
 
 The raw result records each Chromium FCP and the time when Playwright observes
 the owning Part's text, with a fresh page per sample and alternating route

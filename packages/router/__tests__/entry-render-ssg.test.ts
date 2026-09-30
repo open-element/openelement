@@ -65,15 +65,18 @@ function wrapInDocument(content, opts) {
 function __ssr(tag, props) { return tag + (props.context.locale ? ":" + props.context.locale : ""); }
 function __pageProps(routeModule, context) { return { context: context }; }
 function __pageErrorProps(routeModule, error, context) { return { error: error, context: context }; }
+function __clientScriptDescriptors() { return [{ type: "module", src: "/client/islands/client.js" }]; }
 // Faithful miniature of @openelement/router/document resolvePageDocument (#1326):
 // resolver heads receive the same context object; lang carries the locale;
-// links default to []. Resolution policy itself is unit-tested in
+// links default to []; the render wiring's client-script descriptors ride the
+// resolved document (#1471). Resolution policy itself is unit-tested in
 // packages/router/__tests__/document.test.ts and end-to-end in the app-flow
 // fixtures; here we only pin the renderRoute wiring.
-function __resolvePageDocument(head, context) {
+function __resolvePageDocument(head, context, clientScripts) {
   const resolved = typeof head === "function" ? head(context) : head;
   const doc = Object.assign({ links: [] }, resolved);
   if (context && context.locale) doc.lang = context.locale;
+  if (clientScripts && clientScripts.length > 0) doc.clientScripts = clientScripts;
   return doc;
 }
 function __renderAppShell(pageHtml, routePath) { ${options.renderAppShellBody} }

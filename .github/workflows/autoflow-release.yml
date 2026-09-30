@@ -55,8 +55,10 @@ jobs:
           RELEASE_VERSION: ${{ inputs.version }}
         run: |
           test "$(git rev-parse HEAD)" = "$CANDIDATE_SHA"
-          test "$(deno eval "console.log(JSON.parse(Deno.readTextFileSync('packages/element/deno.json')).version)")" = "$RELEASE_VERSION"
-          test "$(deno eval "console.log(JSON.parse(Deno.readTextFileSync('packages/router/deno.json')).version)")" = "$RELEASE_VERSION"
+          # The dispatch version must be what ALL retained package manifests
+          # carry (element/router/create/ui), validated against the release
+          # line contract; no deno eval.
+          deno run --allow-read tools/repo/check-release-version.ts "$RELEASE_VERSION"
       # Release accepts only successful, non-expired CI evidence bound to the
       # exact candidate SHA — never a hand-written or copied status. The
       # artifact is validated by recomputing every log/manifest hash.

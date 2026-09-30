@@ -22,10 +22,15 @@ import type {
   SsgRenderSummary,
   SsrBundle,
 } from '../protocol/ssg.ts';
+import {
+  EMPTY_CLIENT_ASSET_MANIFEST,
+  serializeClientAssetsModule,
+} from '../protocol/client-assets.ts';
 import { createLogger } from '@openelement/element';
 import { expandDynamicRoutes, expandI18nLocales } from './ssg-dynamic.ts';
 import { findHtmlFiles, renderRequestTimeServerModule } from './ssg-helpers.ts';
 import { formatJson, normalizeSeparators } from '@openelement/element/build-utils';
+import { buildError, SsgRenderErrorCode } from '../../../internal/error-codes.ts';
 import { DEFAULT_OUT_DIR } from './../paths.ts';
 
 const log = createLogger('ssg-render');
@@ -54,7 +59,8 @@ export async function ssgRender(
   // ── Dynamic route expansion via bundle.getStaticPaths() ──────
   const routeInfo: RouteInfoEntry[] = module.routeInfo ?? [];
   if (!module.routeInfo || !Array.isArray(module.routeInfo)) {
-    throw new Error(
+    throw buildError(
+      SsgRenderErrorCode.ROUTE_INFO_MISSING,
       'SSR bundle does not export routeInfo; SSG cannot generate routes.',
     );
   }
@@ -66,12 +72,13 @@ export async function ssgRender(
     | undefined;
 
   if (routeInfo.length === 0) {
-    throw new Error(
+    throw buildError(
+      SsgRenderErrorCode.ROUTE_INFO_EMPTY,
       '[openElement] SSG failed: routeInfo is empty. No routes were exported by the SSR bundle.',
     );
   }
 
-  // ── Request-time route partition (0.42.0-alpha.1) ──
+  // ── Request-time route partition ──
   // renderIntent.mode was inert metadata before this line: 'dynamic' routes
   // are no longer prerendered — they are served at request time by the
   // generated server entry and recorded in server-manifest.json.
@@ -122,7 +129,8 @@ export async function ssgRender(
   const outputDir = join(root, outDir);
   const app = module.default as SsgHonoApp | undefined;
   if (!app) {
-    throw new Error(
+    throw buildError(
+      SsgRenderErrorCode.APP_MISSING,
       'SSR bundle loaded but no Hono app found (no default export)',
     );
   }
@@ -225,11 +233,13 @@ export async function ssgRender(
         requestTimeRoutes.map((r) => ({ path: r.path })),
       ),
     );
-    // Placeholder: Phase 2 overwrites this with the real island client entry
-    // URL when the project has islands (build.ts writeRequestTimeClientScript).
+    // Placeholder: Phase 2's client asset manifest overwrites this with the
+    // real record when the project ships a client bundle (build.ts
+    // writeRequestTimeClientAssets). Structured data only — no injection
+    // logic (#1471).
     Deno.writeTextFileSync(
-      join(serverDir, 'client-script.js'),
-      `export const clientScriptSrc = '';\n`,
+      join(serverDir, 'client-assets.js'),
+      serializeClientAssetsModule(EMPTY_CLIENT_ASSET_MANIFEST),
     );
     // Local preview is served by the start CLI from TypeScript source
     // (Deno.serve over the shared fetch handler); production deploys go
@@ -260,7 +270,8 @@ export async function ssgRender(
     log.error(
       `Static route non-200 results: ${pageNon200.length} page(s) dropped (not written): ${detail}`,
     );
-    throw new Error(
+    throw buildError(
+      SsgRenderErrorCode.STATIC_NON_200,
       `SSG failed: ${pageNon200.length} static route(s) returned non-200 ` +
         `(pages not written): ${detail}`,
     );

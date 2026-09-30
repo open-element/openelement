@@ -154,7 +154,7 @@ async function readConfigObject(
 }
 
 /** The first `.ts` path a task command references, if any. */
-function scriptInCommand(command: string): string | undefined {
+export function scriptInCommand(command: string): string | undefined {
   // The LAST `.ts` argument: commands may route through run-in.ts first.
   const matches = [...command.matchAll(/(?:^|\s)([A-Za-z0-9._/-]+\.ts)(?=\s|$)/g)];
   return matches.at(-1)?.[1];

@@ -20,3 +20,25 @@ export { ERROR_PREFIX, OpenElementError } from './internal/core/errors.ts';
 export { HYDRATION_STRATEGIES } from './internal/protocol/framework.ts';
 export type { HydrationStrategy } from './internal/protocol/framework.ts';
 export { ACTION_FETCH_HEADER, PROBLEM_JSON_MEDIA_TYPE } from './internal/protocol/data.ts';
+// Streamed-route policy constants (internal/protocol/policy.ts and
+// stream-frame-policy.ts, both import-free): the single-source admission
+// budgets and frame deny lists the router's typed stream runtime imports
+// kernel-free (#1470 block d) — the same leaf transport as the protocol
+// constants above, so no consumer of them ever reaches the runtime barrel.
+// MAX_ACTION_BODY_BYTES joins for the same reason (#1470 block e): the typed
+// action runtime binds the canonical body-limit budget directly instead of
+// receiving a serialized copy through the generated entry.
+export {
+  MAX_ACTION_BODY_BYTES,
+  STREAM_MAX_FIELDS,
+  STREAM_MAX_OWNERS,
+  STREAM_MAX_PAYLOAD_LENGTH,
+  STREAM_MAX_SEED_PROPERTIES,
+  STREAM_TIMEOUT_MS,
+} from './internal/protocol/policy.ts';
+export {
+  STREAM_FRAME_FORBIDDEN_TAGS,
+  STREAM_FRAME_UNSAFE_URL,
+  STREAM_FRAME_URL_ATTRIBUTES,
+  STREAM_FRAME_URL_CONTROL_MAX,
+} from './internal/protocol/stream-frame-policy.ts';

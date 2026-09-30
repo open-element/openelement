@@ -77,7 +77,7 @@ without giving up any release-time proof.
   request-time fixture gate, and the Element browser gate (Chromium). The
   separate packed producer owns `tools/release#gate:packed`; the independent
   fresh-clone lane runs source and packed once each with cold Deno/npm caches.
-  A green `deno task gate:ci` runs source plus packed locally.
+  A green `deno task verify:core` runs source plus packed locally.
 - `tools/repo#gate:release` — the release train: Site build and every `www`
   check, coverage, all deploy/framework fixture gates, the boundary and
   provenance scans, the generator/floor/classification gates, the

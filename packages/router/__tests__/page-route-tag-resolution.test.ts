@@ -19,7 +19,10 @@
  */
 import { assertEquals, assertStringIncludes } from '@std/assert';
 import { buildEntryDescriptor, renderEntry } from '../src/vite/internal/ssg/index.ts';
-import { renderRuntimeHelpers } from '../src/vite/internal/ssg/entry-render-runtime.ts';
+import {
+  resolveCompiledPageTag,
+  resolveLitPageTag,
+} from '../src/vite/internal/server-runtime/renderer-runtime.ts';
 import type { RouteEntry } from '../src/vite/internal/protocol/framework.ts';
 
 const definePageRoutes: RouteEntry[] = [
@@ -73,65 +76,73 @@ Deno.test('renderEntry: styled 404 route renders through the compiled-program ta
   assertStringIncludes(code, 'let __tag = __resolvePageTag($pageNotFound, "el-404");');
 });
 
-interface ResolvePageTagHarness {
-  resolvePageTag(routeModule: unknown, fallback: string): string;
-}
-
-async function loadHarness(): Promise<ResolvePageTagHarness> {
-  const helpers = renderRuntimeHelpers({ default: false, layouts: {} }, []);
-  const harness = `
-const customElements = { get() { return undefined; } };
-const escapeHtml = (value) => String(value);
-const __locales = ["en"];
-const __getDefaultLocale = () => "en";
-const __navSections = [];
-const __headerNav = [];
-function renderDsd() { return { html: "" }; }
-${helpers}
-export function resolvePageTag(routeModule, fallback) { return __resolvePageTag(routeModule, fallback); }
-`;
-  const mod = await import('data:text/javascript;charset=utf-8,' + encodeURIComponent(harness));
-  return mod as ResolvePageTagHarness;
-}
-
-Deno.test('__resolvePageTag: compiled program tag wins over the path-derived fallback (#1276)', async () => {
-  const harness = await loadHarness();
+// The generated entry imports the resolvers from
+// @openelement/router/server-runtime and binds them per the renderer adapter
+// (ADR-0160 rule a); the assertions below execute the shipped module directly.
+Deno.test('resolveCompiledPageTag: compiled program tag wins over the path-derived fallback (#1276)', () => {
   // The definePage route module default-exports the compiled page class
   // (definePage returns the class), whose __partProgram.tag is the @element
   // tag — this is the mismatch shape from the B1.3 qualification.
   const routeModule = { default: { __partProgram: { tag: 'workspace-records-page' } } };
-  assertEquals(harness.resolvePageTag(routeModule, 'workspace-records'), 'workspace-records-page');
+  assertEquals(resolveCompiledPageTag(routeModule, 'workspace-records'), 'workspace-records-page');
 });
 
-Deno.test('__resolvePageTag: matching program and fallback tags resolve identically', async () => {
-  const harness = await loadHarness();
+Deno.test('resolveCompiledPageTag: matching program and fallback tags resolve identically', () => {
   const routeModule = { default: { __partProgram: { tag: 'login' } } };
-  assertEquals(harness.resolvePageTag(routeModule, 'login'), 'login');
+  assertEquals(resolveCompiledPageTag(routeModule, 'login'), 'login');
 });
 
-Deno.test('__resolvePageTag: no compiled program keeps the path-derived fallback (#1276)', async () => {
-  const harness = await loadHarness();
+Deno.test('resolveCompiledPageTag: no compiled program keeps the path-derived fallback (#1276)', () => {
   assertEquals(
-    harness.resolvePageTag({ default: class {} }, 'workspace-records'),
+    resolveCompiledPageTag({ default: class {} }, 'workspace-records'),
     'workspace-records',
   );
   assertEquals(
-    harness.resolvePageTag({ default: undefined }, 'workspace-records'),
+    resolveCompiledPageTag({ default: undefined }, 'workspace-records'),
     'workspace-records',
   );
-  assertEquals(harness.resolvePageTag(undefined, 'workspace-records'), 'workspace-records');
+  assertEquals(resolveCompiledPageTag(undefined, 'workspace-records'), 'workspace-records');
 });
 
-Deno.test('__resolvePageTag: malformed program tags keep the path-derived fallback (#1276)', async () => {
-  const harness = await loadHarness();
+Deno.test('resolveCompiledPageTag: malformed program tags keep the path-derived fallback (#1276)', () => {
   // Not a custom-element tag (no hyphen) or not a string at all: never let a
   // malformed program tag reach the registration/render call sites.
   assertEquals(
-    harness.resolvePageTag({ default: { __partProgram: { tag: 'nohyphen' } } }, 'x-page'),
+    resolveCompiledPageTag({ default: { __partProgram: { tag: 'nohyphen' } } }, 'x-page'),
     'x-page',
   );
   assertEquals(
-    harness.resolvePageTag({ default: { __partProgram: { tag: 42 } } }, 'x-page'),
+    resolveCompiledPageTag({ default: { __partProgram: { tag: 42 } } }, 'x-page'),
     'x-page',
   );
+});
+
+Deno.test('resolveLitPageTag: the openElementPageTag static wins over the fallback (#1339)', () => {
+  const routeModule = { default: { openElementPageTag: 'lit-notes-page' } };
+  assertEquals(resolveLitPageTag(routeModule, 'notes'), 'lit-notes-page');
+  assertEquals(resolveLitPageTag({ default: { openElementPageTag: 'notes' } }, 'notes'), 'notes');
+  assertEquals(resolveLitPageTag({ default: { openElementPageTag: 7 } }, 'notes'), 'notes');
+  assertEquals(resolveLitPageTag({ default: class {} }, 'notes'), 'notes');
+  assertEquals(resolveLitPageTag(undefined, 'notes'), 'notes');
+});
+
+Deno.test('the generated entry imports the tag resolvers per renderer and never forks the call sites', () => {
+  const nativeEntry = renderEntry(buildEntryDescriptor(definePageRoutes));
+  assertStringIncludes(
+    nativeEntry,
+    "import { resolveCompiledPageTag as __resolvePageTag } from '@openelement/router/server-runtime'",
+  );
+  assertEquals(nativeEntry.includes('resolveLitPageTag'), false);
+
+  const litEntry = renderEntry(
+    buildEntryDescriptor(definePageRoutes, { renderer: 'lit', appShell: false }),
+  );
+  assertStringIncludes(
+    litEntry,
+    "import { resolveLitPageTag as __resolvePageTag } from '@openelement/router/server-runtime'",
+  );
+  assertEquals(litEntry.includes('resolveCompiledPageTag'), false);
+  // The binding call sites (registration, handler, routeInfo) stay renderer-
+  // neutral: one canonical `__resolvePageTag(module, fallback)` expression.
+  assertStringIncludes(litEntry, `let __tag = ${RESOLUTION_EXPR}`);
 });

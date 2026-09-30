@@ -3,7 +3,7 @@
 
 import { element, OpenElement } from '@openelement/element';
 import { compiledStyle } from '../site-ui/compiled-style.ts';
-import { readIslandState, writeIslandState } from '../site-ui/island-state.ts';
+import { readInstanceState, writeInstanceState } from '@openelement/ui/instance-state';
 import { defineIslandConfig } from '@openelement/router';
 
 export const openElement = defineIslandConfig({ hydrate: 'load', ssr: true });
@@ -23,7 +23,7 @@ export default class CinematicScroll extends OpenElement {
     if (!film) return;
     const reduced = globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
     const update = () => {
-      writeIslandState(this, 'frame', 0);
+      writeInstanceState(this, 'frame', 0);
       const rect = film.getBoundingClientRect();
       const distance = Math.max(1, film.offsetHeight - innerHeight);
       const progress = Math.min(1, Math.max(0, -rect.top / distance));
@@ -33,8 +33,8 @@ export default class CinematicScroll extends OpenElement {
       film.style.setProperty('--scene-progress', String(Math.min(6, progress * 4.2)));
     };
     const schedule = () => {
-      const frame = readIslandState(this, 'frame', () => 0);
-      if (!frame) writeIslandState(this, 'frame', requestAnimationFrame(update));
+      const frame = readInstanceState(this, 'frame', () => 0);
+      if (!frame) writeInstanceState(this, 'frame', requestAnimationFrame(update));
     };
     const pointer = (event: PointerEvent) => {
       if (event.pointerType !== 'mouse' || innerWidth < 800) return;
@@ -45,17 +45,17 @@ export default class CinematicScroll extends OpenElement {
     addEventListener('resize', schedule, { passive: true });
     addEventListener('pointermove', pointer, { passive: true });
     update();
-    writeIslandState(this, 'cleanup', () => {
+    writeInstanceState(this, 'cleanup', () => {
       removeEventListener('scroll', schedule);
       removeEventListener('resize', schedule);
       removeEventListener('pointermove', pointer);
-      cancelAnimationFrame(readIslandState(this, 'frame', () => 0));
+      cancelAnimationFrame(readInstanceState(this, 'frame', () => 0));
     });
   }
 
   override disconnectedCallback(): void {
-    readIslandState<(() => void) | undefined>(this, 'cleanup', () => undefined)?.();
-    writeIslandState(this, 'cleanup', undefined);
+    readInstanceState<(() => void) | undefined>(this, 'cleanup', () => undefined)?.();
+    writeInstanceState(this, 'cleanup', undefined);
     super.disconnectedCallback();
   }
 

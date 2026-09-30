@@ -4,8 +4,14 @@ import { dirname, extname, resolve } from '../../../internal/host-path.ts';
 import { compileElementProgram, stableModuleId } from '@openelement/element/compiler';
 import { isDangerousKey } from '@openelement/element/authoring';
 import type { StreamRouteManifest } from '../protocol/ssg.ts';
+import { ISLAND_ADMISSION } from '../protocol/island-admission.ts';
 import { safeReadFile } from './route-scanner-fs.ts';
-import { STREAM_FRAME_FORBIDDEN_TAGS, unsafeStreamFrameAttribute } from '@openelement/element';
+import {
+  STREAM_FRAME_FORBIDDEN_TAGS,
+  STREAM_MAX_FIELDS,
+  STREAM_MAX_OWNERS,
+  unsafeStreamFrameAttribute,
+} from '@openelement/element';
 
 type Program = ReturnType<typeof compileElementProgram>['program'];
 
@@ -291,14 +297,14 @@ function manifestForProgram(
     result.push({ field, signal: field, owners });
   }
   // Build-time mirror of the runtime/browser seed and frame budget
-  // (__streamFields rejects fields > 32 / owners > 64; the browser seed
-  // contract caps fields at 32 and pending Parts at 64). Failing here keeps
+  // (STREAM_MAX_FIELDS / STREAM_MAX_OWNERS — the generated __streamFields and
+  // the browser seed contract enforce the same numbers). Failing here keeps
   // the error actionable instead of a silent browser rejection at hydration.
   const ownerTotal = result.reduce((count, entry) => count + entry.owners.length, 0);
-  if (result.length > 32 || ownerTotal > 64) {
+  if (result.length > STREAM_MAX_FIELDS || ownerTotal > STREAM_MAX_OWNERS) {
     throw new Error(
       `[openElement] stream route ${route} exceeds the bounded deferred budget: ` +
-        `${result.length} fields (max 32), ${ownerTotal} Part owners (max 64). ` +
+        `${result.length} fields (max ${STREAM_MAX_FIELDS}), ${ownerTotal} Part owners (max ${STREAM_MAX_OWNERS}). ` +
         'Defer fewer fields, reduce the deferred sinks per field, or split the page.',
     );
   }
@@ -487,6 +493,10 @@ export async function scanStreamManifest(
   const program = compileElementProgram(
     pageSource!,
     stableModuleId(pageFile!, resolve(projectRoot), workspaceRoot),
+    // A page module may colocate the island delivery policy statement with
+    // its compiled class; the compiler admits it only through the injected
+    // descriptor.
+    { staticSidecars: [ISLAND_ADMISSION] },
   ).program;
   if (program.metadata.className !== pageClass.name?.text) {
     diagnostic(

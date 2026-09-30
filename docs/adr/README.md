@@ -21,3 +21,7 @@ Evidence cited by an active ADR follows the same policy: ADR-0120's commissioned
 - [ADR-0154-alpha-baseline-removals.md](./ADR-0154-alpha-baseline-removals.md)
 - [ADR-0155-client-only-entry-subpath.md](./ADR-0155-client-only-entry-subpath.md)
 - [ADR-0156-tree-sha-evidence-reuse.md](./ADR-0156-tree-sha-evidence-reuse.md)
+- [ADR-0157-web-component-admission-tiers.md](./ADR-0157-web-component-admission-tiers.md)
+- [ADR-0158-streaming-server-executor.md](./ADR-0158-streaming-server-executor.md)
+- [ADR-0159-part-backfill-and-late-claim.md](./ADR-0159-part-backfill-and-late-claim.md)
+- [ADR-0160-architecture-debt-repayment.md](./ADR-0160-architecture-debt-repayment.md)

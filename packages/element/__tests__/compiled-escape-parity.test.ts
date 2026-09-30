@@ -1,21 +1,33 @@
 /**
- * Claim-parity guard for the attribute-escape contract (issue #1220, L1).
+ * Kernel contract for the compiled serializers' escape contracts (issue
+ * #1220, L1; #1272 B1.1/F3; issue #1469, ADR-0160 rule b).
  *
- * The compiled server serializer (server/index.ts) and the runtime seed
- * serializer (runtime.ts) emit DSD/seed HTML through ONE shared escapeAttr
- * implementation (internal/core/html-escape.ts). Before the convergence the
- * runtime escaped only `&` and `"` while the server also escaped `<`, `>`,
- * and `'`, so the same program produced different bytes on the two paths and
- * claim parity could drift. This test replays an attribute corpus through
- * both call sites and requires byte-identical output.
+ * There is ONE tree-walking serializer
+ * (`internal/compiled/serializer/serialize-program.ts`); the server serializer
+ * (server/index.ts) and the runtime seed serializer (runtime.ts) delegate
+ * their walk to it. Before #1469 this file guarded the convergence of two
+ * parallel walkers: the runtime escaped only `&` and `"` while the server
+ * also escaped `<`, `>`, and `'`, so the same program produced different
+ * bytes on the two paths and claim parity could drift. The byte pins stay:
+ * every corpus replays through both entry points, requires byte-identical
+ * output (both walk the same kernel), and pins the canonical escape contracts
+ * directly. A structural guard keeps the single-walker boundary from
+ * regrowing a private walker in either execution module.
  */
 
-import { assertEquals, assertStringIncludes } from '@std/assert';
+import { assert, assertEquals, assertStringIncludes } from '@std/assert';
 import { serializeToHtml as serializeRuntime } from '../src/internal/compiled/runtime.ts';
 import { serializeToHtml as serializeServer } from '../src/internal/compiled/server/index.ts';
 import { escapeAttr } from '../src/internal/core/html-escape.ts';
 import { escapeText } from '../src/internal/compiled/escape-text.ts';
 import { testProgram } from './compiled-runtime/test-program.ts';
+
+const REPO_ROOT = new URL('../../../', import.meta.url);
+
+const EXECUTION_SITES = [
+  'packages/element/src/internal/compiled/runtime.ts',
+  'packages/element/src/internal/compiled/server/index.ts',
+];
 
 const CORPUS: readonly string[] = [
   `a&b"c<d>e'f`,
@@ -78,10 +90,10 @@ Deno.test('escape parity: canonical contract escapes & < > " and \'', () => {
  *
  * Text nodes use a REDUCED escape contract (`&`, `<`, `>` only — quotes are
  * pass-through in text content) owned by one shared helper,
- * `internal/compiled/escape-text.ts`, consumed by both serializers. Before the
- * convergence each serializer carried a private copy and no test bound the
- * two at byte level for text output; a drift confined to `>` escaping in text
- * nodes would have been silent. This corpus requires byte-identical text
+ * `internal/compiled/escape-text.ts`, consumed by the shared kernel. Before
+ * the convergence each serializer carried a private copy and no test bound
+ * the two at byte level for text output; a drift confined to `>` escaping in
+ * text nodes would have been silent. This corpus requires byte-identical text
  * output across both serializers and pins the shared contract.
  */
 const TEXT_CORPUS: readonly string[] = [
@@ -141,4 +153,35 @@ Deno.test('escape parity: text Part corpus is byte-identical across both seriali
 Deno.test('escape parity: text contract escapes & < > and passes quotes and non-ASCII through', () => {
   assertEquals(escapeText(`a&b"c<d>e'f`), 'a&amp;b"c&lt;d&gt;e\'f');
   assertEquals(escapeText(`unicode é ‹› „ “`), `unicode é ‹› „ “`);
+});
+
+/**
+ * Single-walker boundary (issue #1469, ADR-0160 rule b): both execution
+ * modules route serialization through the shared kernel and carry no private
+ * template walk. The kernel is the only module that walks the template and
+ * assembles serialized output; a second serialize walker in an execution
+ * module is a lane failure. (The claim/fresh paths legitimately construct
+ * comment markers for DOM creation — that is not a serializer.)
+ */
+Deno.test('escape parity: both execution modules delegate the walk to the shared kernel', async () => {
+  for (const path of EXECUTION_SITES) {
+    const source = await Deno.readTextFile(new URL(path, REPO_ROOT));
+    assert(
+      source.includes('serializer/serialize-program.ts'),
+      `${path}: serialization must import the shared kernel`,
+    );
+    for (
+      const privateWalker of [
+        'function serializeNode(',
+        'function serializeElement(',
+        'function serializeChildren(',
+      ]
+    ) {
+      assertEquals(
+        source.includes(privateWalker),
+        false,
+        `${path}: private template walk regrew (${JSON.stringify(privateWalker)})`,
+      );
+    }
+  }
 });

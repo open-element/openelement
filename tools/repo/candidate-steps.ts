@@ -2,8 +2,10 @@
  * Canonical candidate job/step contract (schema v2).
  *
  * One source of truth for what each candidate job must run and from which
- * directory. The producer (`candidate-evidence.ts`) emits these argv values and
- * the validator matches received evidence against the same contracts, so a
+ * directory. The producers (candidate-evidence-record.ts for the workspace
+ * lanes, candidate-evidence-fresh-clone.ts for the fresh-clone lane) emit
+ * these argv values and the validator matches received evidence against the
+ * same contracts, so a
  * step name can never be paired with a different command, and a fresh-clone
  * step can never claim a directory it did not run in.
  *

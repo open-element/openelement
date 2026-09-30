@@ -6,12 +6,15 @@
  * the semantic core, module-analysis.ts) decides whether a decorator,
  * heritage clause or factory call is an OpenElement intrinsic: the identifier
  * must be a runtime named import of the intrinsic from its canonical module
- * ('@openelement/element', '@openelement/router'), aliases followed. A bare or
+ * ('@openelement/element'), aliases followed. A bare or
  * global spelling NEVER admits an intrinsic; unrelated same-name bindings
  * (third-party imports, local declarations, ambient declares) never enter the
  * grammar; unsupported or ambiguous provenance (type-only imports, namespace
  * access, conflicting duplicates, relative-module re-exports) fails closed
  * with a source-located diagnostic instead of being silently admitted.
+ * Sidecar bindings (the island policy statement) are admitted only through
+ * host-injected 'static-sidecar' descriptors — the core ships none by
+ * default (#1468).
  *
  * Admission levels under test:
  *   - analyzeModuleSemantics: the descriptive module scan (scanner admission)
@@ -24,10 +27,40 @@ import {
   CompiledElementError,
   compileElementProgram,
 } from '../src/internal/compiler/semantic-core/compile.ts';
-import { analyzeModuleSemantics } from '../src/internal/compiler/semantic-core/module-analysis.ts';
+import {
+  analyzeModuleSemantics,
+  type ModuleVocabularyDescriptor,
+  type StaticSidecarDescriptor,
+} from '../src/internal/compiler/semantic-core/module-analysis.ts';
 import { compileElementModule } from '../src/internal/compiler/plugin.ts';
 
 const FILE = '/project/app/islands/provenance.tsx';
+
+/**
+ * The router registration vocabulary a host framework injects (#1473): the
+ * module scan ships no router knowledge, so the router's registration factory
+ * is recognized only through this explicit descriptor. (`defineIsland` is
+ * retired vocabulary — removed from both packages in v0.44 — and is
+ * deliberately absent here and in the router's own list.)
+ */
+const ROUTER_VOCABULARY: readonly ModuleVocabularyDescriptor[] = [
+  {
+    moduleSpecifier: '@openelement/router',
+    exportName: 'defineElement',
+    kind: 'element-registration',
+  },
+];
+
+/**
+ * The island sidecar descriptor a host framework injects (#1468): the
+ * semantic core ships no router knowledge, so island policy admission is
+ * exercised through this explicit descriptor.
+ */
+const ISLAND_SIDECAR: StaticSidecarDescriptor = {
+  moduleSpecifier: '@openelement/router',
+  exportName: 'defineIslandConfig',
+  kind: 'static-sidecar',
+};
 
 function compileError(source: string, file = FILE): CompiledElementError {
   try {
@@ -126,7 +159,9 @@ Deno.test('provenance: aliased computed, trustedHtml and defineIslandConfig stay
     '  }',
     '}',
   ].join('\n');
-  const { code, program } = compileElementProgram(source, FILE);
+  const { code, program } = compileElementProgram(source, FILE, {
+    staticSidecars: [ISLAND_SIDECAR],
+  });
   assertEquals(program.root.kind, 'shadow-open');
   const upper = program.metadata.properties.find((p) => p.name === 'upper');
   assertEquals(upper?.computed, true);
@@ -395,6 +430,82 @@ Deno.test('provenance: the island policy statement requires the canonical define
   ].join('\n');
   const error = compileError(source);
   assertStringIncludes(String(error), 'OEC9008');
+  // Injection does not soften the bare-spelling edge: an unbound spelling is
+  // never the policy statement, descriptor or not.
+  assertThrows(
+    () => compileElementProgram(source, FILE, { staticSidecars: [ISLAND_SIDECAR] }),
+    CompiledElementError,
+    'OEC9008',
+  );
+});
+
+Deno.test('provenance: the island sidecar is admitted only through the injected descriptor', () => {
+  const imported = [
+    "import { element, OpenElement } from '@openelement/element';",
+    "import { defineIslandConfig } from '@openelement/router';",
+    "export const openElement = defineIslandConfig({ hydrate: 'load', ssr: true });",
+    "@element('oe-injected-island-config')",
+    'export class InjectedIslandConfig extends OpenElement {',
+    '  render() { return <main>ok</main>; }',
+    '}',
+  ].join('\n');
+
+  // Element default (no injection) admits no island sidecar: the canonically
+  // imported statement stays outside the compiled module grammar (OEC9008)
+  // at both the plugin gate and the compiler boundary.
+  const error = compileError(imported);
+  assertStringIncludes(String(error), 'OEC9008');
+  assertThrows(() => compileElementModule(imported, FILE), CompiledElementError, 'OEC9008');
+
+  // With the host descriptor injected, the plugin gate and the compiler
+  // boundary share the same admission and copy the statement verbatim.
+  const options = { staticSidecars: [ISLAND_SIDECAR] };
+  const gated = compileElementModule(imported, FILE, options);
+  assert(gated !== null, 'the injected descriptor must admit the island policy statement');
+  assertStringIncludes(gated.code, 'export const openElement = defineIslandConfig(');
+  const { code } = compileElementProgram(imported, FILE, options);
+  assertStringIncludes(code, 'export const openElement = defineIslandConfig(');
+
+  // The fail-closed provenance edges are descriptor-scoped, not
+  // spelling-scoped: namespace access, type-only imports, default imports,
+  // relative re-exports and foreign same-name bindings never admit the
+  // statement, even under injection.
+  const withEdge = (importLine: string, statement: string) =>
+    [
+      "import { element, OpenElement } from '@openelement/element';",
+      importLine,
+      statement,
+      "@element('oe-island-edge')",
+      'export class IslandEdge extends OpenElement {',
+      '  render() { return <main>ok</main>; }',
+      '}',
+    ].join('\n');
+  const edges: Array<[string, string]> = [
+    [
+      "import * as router from '@openelement/router';",
+      "export const openElement = router.defineIslandConfig({ hydrate: 'load' });",
+    ],
+    [
+      "import { type defineIslandConfig } from '@openelement/router';",
+      "export const openElement = defineIslandConfig({ hydrate: 'load' });",
+    ],
+    [
+      "import defineIslandConfig from '@openelement/router';",
+      "export const openElement = defineIslandConfig({ hydrate: 'load' });",
+    ],
+    [
+      "import { defineIslandConfig } from './island-config.ts';",
+      "export const openElement = defineIslandConfig({ hydrate: 'load' });",
+    ],
+    [
+      "import { defineIslandConfig } from '@third-party/islands';",
+      "export const openElement = defineIslandConfig({ hydrate: 'load' });",
+    ],
+  ];
+  for (const [importLine, statement] of edges) {
+    const edgeError = compileError(withEdge(importLine, statement));
+    assertStringIncludes(String(edgeError), 'OEC9008');
+  }
 });
 
 Deno.test('provenance: module analysis drops bare-spelling defineElement but keeps bound imports', () => {
@@ -405,13 +516,25 @@ Deno.test('provenance: module analysis drops bare-spelling defineElement but kee
   assertEquals(bare.definedCustomElementTags, []);
   assertEquals(bare.usesExportedTagName, false);
 
+  const boundSource = [
+    "import { defineElement } from '@openelement/router';",
+    "export const tagName = 'oe-bound-defined';",
+    'defineElement(tagName, {});',
+  ].join('\n');
+  // Default scan (no injected vocabulary): the router factory is unknown —
+  // fail closed.
+  const unadmitted = analyzeModuleSemantics(
+    boundSource,
+    '/project/app/routes/unadmitted.tsx',
+  );
+  assertEquals(unadmitted.definedCustomElementTags, []);
+  assertEquals(unadmitted.usesExportedTagName, false);
+  // Host-injected vocabulary: the bound import is recognized (aliases
+  // followed, canonical specifier).
   const bound = analyzeModuleSemantics(
-    [
-      "import { defineElement } from '@openelement/router';",
-      "export const tagName = 'oe-bound-defined';",
-      'defineElement(tagName, {});',
-    ].join('\n'),
+    boundSource,
     '/project/app/routes/bound.tsx',
+    { vocabulary: ROUTER_VOCABULARY },
   );
   assertEquals(bound.usesExportedTagName, true);
 });

@@ -5,6 +5,7 @@ import type { IslandDecl } from '../protocol/ssg.ts';
 import { formatError, isValidTagName, OpenElementError } from '@openelement/element';
 import { createLogger } from '@openelement/element';
 import { normalizeSeparators, pathToTagName } from '@openelement/element/build-utils';
+import { hasControlCharacter } from '../../../internal/control-characters.ts';
 import { join } from '../../../internal/host-path.ts';
 import { safeReadDir, safeReadFile, safeStat } from './route-scanner-fs.ts';
 import {
@@ -345,13 +346,7 @@ function parseStaticIslandConfig(
         !isValidTagName(tag) ||
         (deliveryTags !== undefined && !deliveryTags.includes(tag)) ||
         exportName.trim() === '' ||
-        (() => {
-          for (let index = 0; index < exportName.length; index++) {
-            const code = exportName.charCodeAt(index);
-            if (code <= 0x1f || code === 0x7f) return true;
-          }
-          return false;
-        })()
+        hasControlCharacter(exportName)
       ) {
         throw staticOpenElementError(`openElement.exportNames has an invalid entry for "${tag}"`);
       }

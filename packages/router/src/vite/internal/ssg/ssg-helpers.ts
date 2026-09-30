@@ -88,7 +88,7 @@ export async function stableHash(str: string): Promise<string> {
     .join('');
 }
 
-// ─── Request-time server entry module (0.42.0-alpha.1) ────────────────────
+// ─── Request-time server entry module ────────────────────
 
 /** One request-time route as recorded in server-manifest.json. */
 interface RequestTimeRoutePattern {
@@ -148,7 +148,7 @@ if (typeof globalThis.URLPattern === 'undefined') {
   );
 }
 import { openElementHandler, __setRequestTimeClientScript } from './entry.js';
-import { clientScriptSrc } from './client-script.js';
+import { clientAssets } from './client-assets.js';
 
 // The entry's openElementHandler export already
 // carries the composed middleware.use fetch middleware chain when configured,
@@ -164,13 +164,14 @@ const nitroHandler = async (event) => {
   });
 };
 
-// Island hydration parity with static pages: the static pipeline injects the
-// island client entry into prerendered HTML post-build, which request-time
-// rendering bypasses. Hand the entry the client script URL once at startup;
-// the entry embeds the tag at render time through wrapInDocument's script
-// descriptors, so a per-request CSP nonce (middleware.csp.nonce) reaches it.
-// An empty clientScriptSrc (no client bundle shipped) embeds nothing.
-__setRequestTimeClientScript(clientScriptSrc);
+// Island hydration parity with static pages: the SSG build hands the entry
+// the same client entry URL from the structured client asset manifest
+// (#1471) before prerendering, so request-time rendering embeds the same
+// tag the static pages carry — both at document time, through the resolved
+// document's script descriptors, so a per-request CSP nonce
+// (middleware.csp.nonce) reaches it.
+// An empty clientAssets.entry (no client bundle shipped) embeds nothing.
+__setRequestTimeClientScript(clientAssets.entry);
 
 // Request-time admission predicate (#1215): DERIVED from the request-time
 // route table — a boolean OR over the route URLPatterns (#856).

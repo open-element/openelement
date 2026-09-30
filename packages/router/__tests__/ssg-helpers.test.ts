@@ -42,14 +42,17 @@ Deno.test('resolveDynamicRoutePath rejects traversal segments inside catch-all v
 
 Deno.test('request-time client script rides the entry setter — no response splicing (#1103)', () => {
   const code = renderRequestTimeServerModule([]);
-  // The generated server module hands clientScriptSrc to the SSR entry at
-  // startup; the entry embeds the tag at render time through wrapInDocument
-  // (CSP-nonce-safe). No post-hoc HTML splicing remains.
+  // The generated server module reads the structured client asset manifest
+  // (#1471) and hands the entry URL to the SSR entry at startup; the entry
+  // embeds the tag at render time through wrapInDocument (CSP-nonce-safe).
+  // No post-hoc HTML splicing remains.
   assertStringIncludes(
     code,
     "import { openElementHandler, __setRequestTimeClientScript } from './entry.js';",
   );
-  assertStringIncludes(code, '__setRequestTimeClientScript(clientScriptSrc);');
+  assertStringIncludes(code, "import { clientAssets } from './client-assets.js';");
+  assertStringIncludes(code, '__setRequestTimeClientScript(clientAssets.entry);');
+  assertEquals(code.includes('clientScriptSrc'), false);
   assertEquals(code.includes('insertBeforeBodyClose'), false);
   assertEquals(code.includes('withClientScript'), false);
   assertEquals(code.includes("from '@openelement/"), false);

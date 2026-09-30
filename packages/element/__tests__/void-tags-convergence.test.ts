@@ -21,9 +21,9 @@ const REEXPORTERS = [
   'packages/element/src/internal/protocol/part-program.ts',
 ];
 const CONSUMERS = [
-  'packages/element/src/internal/compiled/runtime.ts',
+  'packages/element/src/internal/compiled/serializer/serialize-program.ts',
   'packages/element/src/internal/compiled/server/shared.ts',
-  'packages/element/src/internal/compiler/semantic-core/compile.ts',
+  'packages/element/src/internal/compiler/semantic-core/lower-program.ts',
 ];
 
 /** The full HTML Standard void-element set (param included). */

@@ -2,14 +2,40 @@ import { assertEquals } from '@std/assert';
 import {
   analyzeModuleSemantics,
   type ModuleSemanticFacts,
+  type ModuleVocabularyDescriptor,
 } from '../src/internal/compiler/semantic-core/module-analysis.ts';
 
 type SemanticCase = {
   name: string;
   source: string;
   fileName?: string;
+  /** Host vocabulary injected for this case; omitted runs the default scan. */
+  vocabulary?: readonly ModuleVocabularyDescriptor[];
   expected: Partial<ModuleSemanticFacts>;
 };
+
+/**
+ * The router vocabulary a host injects, mirrored here because element tests
+ * cannot import the router package. Matches
+ * router/src/vite/internal/protocol/module-vocabulary.ts.
+ */
+const ROUTER_VOCABULARY: readonly ModuleVocabularyDescriptor[] = [
+  {
+    moduleSpecifier: '@openelement/router',
+    exportName: 'definePage',
+    kind: 'page-definition',
+  },
+  {
+    moduleSpecifier: '@openelement/router/lit',
+    exportName: 'defineLitPage',
+    kind: 'page-definition',
+  },
+  {
+    moduleSpecifier: '@openelement/router',
+    exportName: 'defineElement',
+    kind: 'element-registration',
+  },
+];
 
 function emptyFacts(): ModuleSemanticFacts {
   return {
@@ -51,6 +77,7 @@ const semanticCases: SemanticCase[] = [
   },
   {
     name: 'recognizes directly imported definePage',
+    vocabulary: ROUTER_VOCABULARY,
     source: `
       import { definePage } from '@openelement/router';
       export default definePage({ render() { return <main />; } });
@@ -59,11 +86,20 @@ const semanticCases: SemanticCase[] = [
   },
   {
     name: 'recognizes aliased definePage from the app package',
+    vocabulary: ROUTER_VOCABULARY,
     source: `
       import { definePage as makePage } from '@openelement/router';
       export default makePage({ render() { return <main />; } });
     `,
     expected: { definePage: true },
+  },
+  {
+    name: 'default scan does not know the router page factory (fail closed)',
+    source: `
+      import { definePage } from '@openelement/router';
+      export default definePage({ render() { return <main />; } });
+    `,
+    expected: {},
   },
   {
     name: 'does not treat strings or comments mentioning definePage as a page export',
@@ -112,29 +148,49 @@ const semanticCases: SemanticCase[] = [
     },
   },
   {
-    name: 'recognizes defineElement and defineIsland aliases from both packages',
+    name: 'recognizes defineElement aliases from both packages',
+    vocabulary: ROUTER_VOCABULARY,
     source: `
-      import {
-        defineElement as appElement,
-        defineIsland as appIsland,
-      } from '@openelement/router';
+      import { defineElement as appElement } from '@openelement/router';
+      import { defineElement as elementElement } from '@openelement/element';
+      appElement('oe-app-element', {});
+      elementElement('oe-element-element', {});
+    `,
+    expected: {
+      definedCustomElementTags: ['oe-app-element', 'oe-element-element'],
+    },
+  },
+  {
+    name: 'default scan knows only the element defineElement — defineIsland is retired vocabulary',
+    source: `
       import {
         defineElement as elementElement,
         defineIsland as elementIsland,
       } from '@openelement/element';
-      appElement('oe-app-element', {});
-      appIsland('oe-app-island', {});
+      import {
+        defineElement as appElement,
+        defineIsland as appIsland,
+      } from '@openelement/router';
       elementElement('oe-element-element', {});
       elementIsland('oe-element-island', {});
+      appElement('oe-app-element', {});
+      appIsland('oe-app-island', {});
     `,
     expected: {
-      definedCustomElementTags: [
-        'oe-app-element',
-        'oe-app-island',
-        'oe-element-element',
-        'oe-element-island',
-      ],
+      // The default scan fails closed on every retired or foreign factory:
+      // defineIsland left both packages' authoring surface in v0.44, and the
+      // router's defineElement rides host-injected vocabulary only.
+      definedCustomElementTags: ['oe-element-element'],
     },
+  },
+  {
+    name: 'injected router vocabulary no longer admits defineIsland (retired v0.44)',
+    vocabulary: ROUTER_VOCABULARY,
+    source: `
+      import { defineIsland as legacyIsland } from '@openelement/router';
+      legacyIsland('oe-legacy-island', {});
+    `,
+    expected: {},
   },
   {
     name: 'recognizes customElements.define',
@@ -146,6 +202,7 @@ const semanticCases: SemanticCase[] = [
   },
   {
     name: 'recognizes exported tagName use by identifier',
+    vocabulary: ROUTER_VOCABULARY,
     source: `
       import { defineElement } from '@openelement/router';
       export const tagName = 'oe-identifier-use';
@@ -158,6 +215,7 @@ const semanticCases: SemanticCase[] = [
   },
   {
     name: 'recognizes exported tagName use by matching literal definition',
+    vocabulary: ROUTER_VOCABULARY,
     source: `
       import { defineElement } from '@openelement/router';
       export const tagName = 'oe-literal-use';
@@ -235,6 +293,7 @@ const semanticCases: SemanticCase[] = [
   },
   {
     name: 'collects custom tags while excluding intrinsic HTML tags',
+    vocabulary: ROUTER_VOCABULARY,
     source: `
       import { defineElement } from '@openelement/router';
       defineElement('oe-defined', {});
@@ -293,6 +352,7 @@ for (const testCase of semanticCases) {
     const actual = analyzeModuleSemantics(
       testCase.source,
       testCase.fileName ?? `/matrix/${testCase.name}.tsx`,
+      { vocabulary: testCase.vocabulary },
     );
     assertEquals(actual, { ...emptyFacts(), ...testCase.expected }, testCase.name);
   });
@@ -311,7 +371,10 @@ Deno.test('analyzeModuleSemantics is deterministic across repeated analysis', ()
   `;
   const outputs = Array.from(
     { length: 5 },
-    () => analyzeModuleSemantics(source, '/matrix/repeatable.tsx'),
+    () =>
+      analyzeModuleSemantics(source, '/matrix/repeatable.tsx', {
+        vocabulary: ROUTER_VOCABULARY,
+      }),
   );
 
   for (const output of outputs.slice(1)) {

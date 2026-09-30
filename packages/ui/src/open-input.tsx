@@ -4,6 +4,9 @@
  * Minimal input field following Swiss International Style.
  * Clean borders, subtle focus states.
  *
+ * Experimental (owner ruling C1, #1468): no compatibility promise — may
+ * change or be removed before 1.0.
+ *
  * Compiled authoring. Attribute-backed properties drive the
  * compiled sinks (type/placeholder/label/name/value/disabled/required/error);
  * the form contract (setFormValue, validity mirroring, custom states) stays

@@ -89,6 +89,7 @@ interface ElementRecord {
   description: string;
   layer: string;
   hydrate: string;
+  status: string;
   module: string;
   attributes: unknown[];
   events: unknown[];
@@ -596,6 +597,7 @@ export async function buildApiReference(): Promise<ApiReferenceBuild> {
       description: String(declaration.description ?? ''),
       layer: String(openElement.layer ?? ''),
       hydrate: String(openElement.hydrate ?? ''),
+      status: String(openElement.status ?? ''),
       module: String(openElement.module ?? ''),
       attributes: (declaration.attributes ?? []) as unknown[],
       events: (declaration.events ?? []) as unknown[],

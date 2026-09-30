@@ -30,6 +30,7 @@ export {
   KernelErrorCode,
   OpenElementError,
   ProgramErrorCode,
+  raiseFrameworkError,
   RuntimeErrorCode,
   ServerErrorCode,
   StyleErrorCode,

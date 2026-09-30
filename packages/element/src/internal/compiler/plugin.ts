@@ -27,7 +27,11 @@ import {
   compileElementProgram,
   type CompileElementResult,
 } from './semantic-core/compile.ts';
-import { analyzeModuleSemantics } from './semantic-core/module-analysis.ts';
+import {
+  analyzeModuleSemantics,
+  type SemanticCoreOptions,
+  type StaticSidecarDescriptor,
+} from './semantic-core/module-analysis.ts';
 import { diagnosticPluginError } from './semantic-core/diagnostics/index.ts';
 import { typeCheckEmittedModule } from './semantic-core/type-check.ts';
 
@@ -65,15 +69,20 @@ export function hasElementDecoratorApplication(code: string, id: string): boolea
  * application, so marker-mentioning and foreign-binding modules pass through
  * untouched. Modules whose @element spelling carries unsupported or ambiguous
  * provenance are compiled anyway so the compiler boundary fails closed with
- * the OEC9027 provenance diagnostic.
+ * the OEC9027 provenance diagnostic. `options.staticSidecars` admits
+ * host-declared sidecar policy statements; the default core admits none.
  */
-export function compileElementModule(code: string, id: string): CompileElementResult | null {
+export function compileElementModule(
+  code: string,
+  id: string,
+  options: SemanticCoreOptions = {},
+): CompileElementResult | null {
   if (!isCompiledElementModule(code, id)) return null;
   const facts = analyzeModuleSemantics(code, id);
   if (!facts.compiledElementDecorator && facts.unsupportedElementDecorator === undefined) {
     return null;
   }
-  return compileElementProgram(code, id);
+  return compileElementProgram(code, id, options);
 }
 
 /**
@@ -136,6 +145,13 @@ export interface CompiledElementPluginOptions {
   typeCheckEmitted?: boolean;
   /** Specifier → candidate files map used when `typeCheckEmitted` is on. */
   resolutionPaths?: Record<string, string[]>;
+  /**
+   * Static-sidecar descriptors the host application admits into the compiled
+   * module grammar (e.g. its island delivery policy factory). The default
+   * core knows none: without an injected descriptor a module carrying a
+   * sidecar policy statement fails closed with OEC9008.
+   */
+  staticSidecars?: readonly StaticSidecarDescriptor[];
 }
 
 /**
@@ -162,7 +178,9 @@ export function compiledElementPlugin(options: CompiledElementPluginOptions = {}
     transform(code, id) {
       try {
         const moduleId = stableModuleId(id, viteRoot, workspaceRoot);
-        const compiled = compileElementModule(code, moduleId);
+        const compiled = compileElementModule(code, moduleId, {
+          staticSidecars: options.staticSidecars,
+        });
         if (!compiled) return null;
         if (options.typeCheckEmitted) {
           const diagnostics = typeCheckEmittedModule(compiled.code, moduleId, {

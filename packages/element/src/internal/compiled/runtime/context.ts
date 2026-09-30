@@ -16,11 +16,11 @@ import {
 } from '../../core/signal-context.ts';
 import type { Unsubscribe } from '../../protocol/signal.ts';
 // Single error dialect (#1386 item 3): context lifecycle failures carry codes.
-import { ContextErrorCode, frameworkError } from '../../protocol/errors.ts';
+import { ContextErrorCode, raiseFrameworkError } from '../../protocol/errors.ts';
 
 /** Raise one context-service lifecycle failure with its catalogued code. */
 function fail(code: string, message: string): never {
-  throw frameworkError(code, message, { phase: 'csr' });
+  raiseFrameworkError('csr', code, message);
 }
 
 interface ContextConsumer {

@@ -104,18 +104,33 @@ export function renderMiddleware(lines: string[], mw: MiddlewareDecl): void {
             )
             : basePolicy + "; script-src 'nonce-NONCE_PLACEHOLDER'";
           lines.push(
-            `// CSP with auto-nonce: generates a per-request nonce and adds it to script tags`,
+            `// CSP with auto-nonce: nonce creation and policy instantiation come from`,
+          );
+          lines.push(
+            `// @openelement/router/server-runtime; the template below`,
+          );
+          lines.push(`// is generated data derived from middleware.csp.`);
+          lines.push(
+            `// hono/ssg prerender passes bind no nonce: static bytes cannot be`,
+          );
+          lines.push(
+            `// per-request, so the prerendered output serializes nonce-free and`,
+          );
+          lines.push(
+            `// the SSG CSP injector's policy-only meta remains the static shape.`,
           );
           lines.push(`app.use('*', async (c, next) => {`);
-          lines.push(`  const nonce = crypto.randomUUID().replace(/-/g, '')`);
-          lines.push(`  c.set('cspNonce', nonce)`);
           lines.push(
-            `  const policy = ${
-              quoteGeneratedJavaScriptValue(policyTemplate)
-            }.replace('NONCE_PLACEHOLDER', nonce)`,
+            `  const nonce = __ssgPrerenderPass(c.env) ? undefined : __cspCreateNonce()`,
           );
+          lines.push(
+            `  const policy = nonce ? __cspApplyNonce(${
+              quoteGeneratedJavaScriptValue(policyTemplate)
+            }, nonce) : undefined`,
+          );
+          lines.push(`  if (nonce) c.set('cspNonce', nonce)`);
           lines.push(`  await next()`);
-          lines.push(`  c.header('${headerName}', policy)`);
+          lines.push(`  if (policy) c.header('${headerName}', policy)`);
           lines.push(`})`);
         } else {
           lines.push(`app.use('*', async (c, next) => {`);

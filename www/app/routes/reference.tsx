@@ -2,6 +2,7 @@
 import { definePage } from '@openelement/router';
 import { siteHead } from '@openelement/site-ui/head.ts';
 import { contentLocale } from '@openelement/site-ui/locale.ts';
+import type { SiteLocale } from '../../site-config.ts';
 import { OPENELEMENT_VERSION, sourceLineStamp } from '../data/version.ts';
 import { apiReference } from '../data/_generated-api-reference.ts';
 import ReferencePage, {
@@ -16,7 +17,7 @@ export const meta = { section: 'Reference', label: 'API Reference', order: 5 };
 /** The consumer-package count is generated truth, never a hand-written number. */
 const packageCount = apiReference.packages.length;
 
-type Locale = 'en' | 'zh';
+type Locale = SiteLocale;
 
 /**
  * Authored bilingual presentation copy, keyed by generated package id. The
@@ -246,6 +247,7 @@ function projectElementEntries(labels: {
   events: string;
   slots: string;
   parts: string;
+  experimental: string;
 }): ApiElementItem[] {
   return apiReference.elements.map((element) => ({
     key: element.anchor,
@@ -256,6 +258,7 @@ function projectElementEntries(labels: {
     layer: element.layer,
     hydrate: element.hydrate,
     module: element.module,
+    status: element.status === 'experimental' ? labels.experimental : '',
     attributes: detailLine(element.attributes),
     events: detailLine(element.events),
     slots: detailLine(element.slots),
@@ -311,6 +314,7 @@ const content = {
     eventsLabel: 'Events',
     slotsLabel: 'Slots',
     partsLabel: 'CSS parts',
+    experimentalLabel: 'experimental',
     s5Index: '05 / config options',
     s5Title: 'The application options type, one row per member.',
     s5Copy:
@@ -360,6 +364,7 @@ const content = {
     eventsLabel: '事件',
     slotsLabel: '插槽',
     partsLabel: 'CSS parts',
+    experimentalLabel: '实验性',
     s5Index: '05 / 配置选项',
     s5Title: '应用选项类型，逐成员一行。',
     s5Copy:
@@ -472,6 +477,7 @@ export default definePage(ReferencePage, {
         events: t.eventsLabel,
         slots: t.slotsLabel,
         parts: t.partsLabel,
+        experimental: t.experimentalLabel,
       }),
     };
   },

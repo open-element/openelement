@@ -4,6 +4,9 @@
  * Dialog component using native <dialog> element + popover API.
  * Per WHATWG HTML Living Standard sections 4.11.4 (dialog) and 6.9.2 (popover).
  *
+ * Experimental (owner ruling C1, #1468): no compatibility promise — may
+ * change or be removed before 1.0.
+ *
  * Compiled authoring. The `open` boolean property drives the
  * compiled bool sink on the inner <dialog>; the top-layer/modal choreography
  * (showModal/show/close) stays imperative in methods. Modal-session state lives

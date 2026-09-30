@@ -13,6 +13,7 @@
     "./open-callout": "./src/open-callout.tsx",
     "./open-dropdown": "./src/open-dropdown.tsx",
     "./open-tabs": "./src/open-tabs.tsx",
+    "./instance-state": "./src/instance-state.ts",
     "./open-props-tokens": "./src/open-props-tokens.ts",
     "./open-props-tokens.js": "./src/open-props-tokens.ts"
   },

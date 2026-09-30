@@ -83,6 +83,7 @@ Deno.test('#605 load and only buckets fire open:ready immediately', async () => 
   const readyEvents: ReadyEvent[] = [];
   const scheduler = createIslandScheduler({
     log: { warn: () => {} },
+    idleFallbackTimeoutMs: 25,
     win: makeWin(),
     doc: makeDoc(new FakeElement('body'), readyEvents),
     map: mapWith(['x-load', 'x-only']),
@@ -103,6 +104,7 @@ Deno.test('#605 idle bucket fires open:ready when idle time arrives', () => {
   let idleCallback: (() => void) | null = null;
   createIslandScheduler({
     log: { warn: () => {} },
+    idleFallbackTimeoutMs: 25,
     win: makeWin({ requestIdleCallback: (fn: () => void) => (idleCallback = fn) }),
     doc: makeDoc(new FakeElement('body'), readyEvents),
     map: mapWith(['x-idle']),
@@ -115,10 +117,37 @@ Deno.test('#605 idle bucket fires open:ready when idle time arrives', () => {
   assertEquals(readyEvents, [{ strategy: 'idle', islands: ['x-idle'] }]);
 });
 
+Deno.test('#605 idle fallback defers through setTimeout with the injected policy timeout', () => {
+  const readyEvents: ReadyEvent[] = [];
+  const scheduled: [() => void, number][] = [];
+  createIslandScheduler({
+    log: { warn: () => {} },
+    idleFallbackTimeoutMs: 25,
+    // Neither requestIdleCallback nor requestAnimationFrame exists: the
+    // injected element policy constant (IDLE_FALLBACK_TIMEOUT_MS) is the delay.
+    win: makeWin({
+      setTimeout: (fn: () => void, delay?: number) => {
+        scheduled.push([fn, delay ?? 0]);
+        return 0;
+      },
+    }),
+    doc: makeDoc(new FakeElement('body'), readyEvents),
+    map: mapWith(['x-idle']),
+    strategies: STRATEGIES({ idle: ['x-idle'] }),
+    onIslandLoaded: null,
+  });
+  assertEquals(readyEvents, []);
+  assertEquals(scheduled.length, 1);
+  assertEquals(scheduled[0][1], 25);
+  scheduled[0][0]();
+  assertEquals(readyEvents, [{ strategy: 'idle', islands: ['x-idle'] }]);
+});
+
 Deno.test('#605 empty buckets never fire open:ready', () => {
   const readyEvents: ReadyEvent[] = [];
   createIslandScheduler({
     log: { warn: () => {} },
+    idleFallbackTimeoutMs: 25,
     win: makeWin(),
     doc: makeDoc(new FakeElement('body'), readyEvents),
     map: {},
@@ -160,6 +189,7 @@ Deno.test('#606 visible scheduling finds islands inside shadow roots (deep query
   let loaded = 0;
   createIslandScheduler({
     log: { warn: () => {} },
+    idleFallbackTimeoutMs: 25,
     win: makeWin({ IntersectionObserver: FakeIO }),
     doc: makeDoc(page, readyEvents),
     map: {
@@ -183,6 +213,7 @@ Deno.test('#606 visible without IntersectionObserver loads every visible tag', (
   const loaded: string[] = [];
   createIslandScheduler({
     log: { warn: () => {} },
+    idleFallbackTimeoutMs: 25,
     win: makeWin(), // no IntersectionObserver
     doc: makeDoc(new FakeElement('body'), readyEvents),
     map: {
@@ -203,6 +234,7 @@ Deno.test('#584 onIslandLoaded runs (macrotask-deferred) after an island module 
   const timeouts: (() => void)[] = [];
   createIslandScheduler({
     log: { warn: () => {} },
+    idleFallbackTimeoutMs: 25,
     win: makeWin({ setTimeout: (fn: () => void) => timeouts.push(fn) }),
     doc: makeDoc(new FakeElement('body'), []),
     map: {
@@ -251,6 +283,7 @@ Deno.test('#1039 detached visible island is released and a reinsert gets a fresh
   let loaded = 0;
   const scheduler = createIslandScheduler({
     log: { warn: () => {} },
+    idleFallbackTimeoutMs: 25,
     win: makeWin({ IntersectionObserver: FakeIO }),
     doc: makeDoc(page, readyEvents),
     map: {

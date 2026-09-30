@@ -80,7 +80,7 @@ function files(root: string): string[] {
 
 /**
  * Request-time route evidence for the build manifest, derived from the
- * emitted dist/server/server-manifest.json (0.42.0-alpha.1).
+ * emitted dist/server/server-manifest.json.
  * Returns {} for pure-static builds so their evidence shape is unchanged.
  */
 function readRequestTimeRouteEvidence(outputDir: string): { requestTimeRoutes?: string[] } {

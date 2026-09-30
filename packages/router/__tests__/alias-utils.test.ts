@@ -1,5 +1,9 @@
 import { assertEquals } from '@std/assert';
-import { normalizeViteAliases, sortAliasEntries } from '../src/vite/alias-utils.ts';
+import {
+  normalizeViteAliases,
+  resolveThroughAliases,
+  sortAliasEntries,
+} from '../src/vite/alias-utils.ts';
 
 // #1067: `{ react: 'preact' }` — a bare package name is a module specifier,
 // not a root-relative path; resolving it against root corrupted the mapping.
@@ -106,4 +110,59 @@ Deno.test('sortAliasEntries orders longer string finds first without mutating in
 
   assertEquals(sorted.map((alias) => alias.replacement), ['/c', '/d', '/a', '/b']);
   assertEquals(input[0].find, '@open');
+});
+
+// #1471 follow-up: package islands resolve their declared specifier through
+// the same alias table the build ships as resolve.alias — workspace packages
+// have no import-map entry, so the alias rewrite IS their module identity.
+Deno.test('resolveThroughAliases matches string finds exactly and at segment boundaries', () => {
+  // The caller passes the same sorted table the build ships as resolve.alias
+  // (longer finds first), so the subpath alias wins over the parent.
+  const aliases = sortAliasEntries([
+    { find: '@openelement/ui', replacement: '/repo/packages/ui/src/index.ts' },
+    { find: '@openelement/ui/open-button', replacement: '/repo/packages/ui/src/open-button.tsx' },
+  ]);
+
+  assertEquals(
+    resolveThroughAliases(aliases, '@openelement/ui/open-button'),
+    '/repo/packages/ui/src/open-button.tsx',
+  );
+  assertEquals(
+    resolveThroughAliases(aliases, '@openelement/ui'),
+    '/repo/packages/ui/src/index.ts',
+  );
+  // Boundary rule: a longer specifier under the parent find rewrites as
+  // replacement + remainder (first-occurrence replace, plugin-alias parity).
+  assertEquals(
+    resolveThroughAliases(aliases, '@openelement/ui/unexported'),
+    '/repo/packages/ui/src/index.ts/unexported',
+  );
+  // First match wins in table order — an unsorted table resolves the
+  // subpath through the parent find.
+  assertEquals(
+    resolveThroughAliases([...aliases].reverse(), '@openelement/ui/open-button'),
+    '/repo/packages/ui/src/index.ts/open-button',
+  );
+  // A same-suffix specifier is not identity: the find must align on `/`.
+  assertEquals(resolveThroughAliases(aliases, 'x@openelement/ui'), null);
+  assertEquals(resolveThroughAliases(aliases, '@openelement/ui-other'), null);
+});
+
+Deno.test('resolveThroughAliases applies RegExp finds by test-and-replace', () => {
+  const aliases = [{ find: /^@app\/(.*)$/, replacement: '/repo/src/$1.tsx' }];
+
+  assertEquals(resolveThroughAliases(aliases, '@app/widgets/card'), '/repo/src/widgets/card.tsx');
+  assertEquals(resolveThroughAliases(aliases, 'other'), null);
+});
+
+Deno.test('resolveThroughAliases refuses rewrites that are not absolute module paths', () => {
+  // A bare-specifier replacement ({ react: 'preact' }) is a specifier, not a
+  // file path — the caller must keep the declared specifier as identity.
+  assertEquals(resolveThroughAliases([{ find: 'react', replacement: 'preact' }], 'react'), null);
+  // A virtual id (\0-prefixed) is not a filesystem module either.
+  assertEquals(
+    resolveThroughAliases([{ find: 'virtual:x', replacement: '\0virtual:x' }], 'virtual:x'),
+    null,
+  );
+  assertEquals(resolveThroughAliases([], '@openelement/ui/open-button'), null);
 });

@@ -1,5 +1,5 @@
 /**
- * Canonical component-authoring facade for openElement (0.44) — the default
+ * Canonical component-authoring facade for openElement — the default
  * entry, with the compiled claim executor installed.
  *
  * This is the entry for any page whose components can hydrate server-rendered
