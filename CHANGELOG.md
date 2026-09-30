@@ -9,6 +9,140 @@ lives in:
 - [`docs/release/release-state.json`](./docs/release/release-state.json)
 - [`docs/release/public-interface-snapshot.json`](./docs/release/public-interface-snapshot.json)
 
+## 1.0.0-alpha.6
+
+**Architecture-debt repayment: typed server runtime, one serializer,
+manifest-driven injection.** This train restructures the internal seams that
+accrued across the alpha line — generated-entry growth, serializer forks,
+compiler/Router coupling, chunk-name-derived identity, release-name leakage
+into artifacts — without moving product semantics
+([ADR-0160](./docs/adr/ADR-0160-architecture-debt-repayment.md), accepted
+2026-09-29, stages S0–S6). The source line is `1.0.0-alpha.6`; npm
+publication is a separate, gated step, so
+[`docs/release/release-state.json`](./docs/release/release-state.json) keeps
+registry truth at the verified alpha.5 state (`@alpha` = `1.0.0-alpha.5`,
+4/4 packages complete) until the post-publish sync. **No migration
+steps**: serialization bytes are unchanged, and every generated-output delta
+is pre-recorded in ADR-0160's "Admitted output deltas" with its oracle
+evidence before it lands.
+
+- **Router — a typed server runtime replaces codegen template strings
+  (#1470, ADR-0160 rule a):** the request-time semantics that lived inside
+  generated-entry template strings — the response-header channel with its
+  protocol-header precedence and multi-value `Set-Cookie` handling, the
+  streamed route's late-mutation gate, the CSP auto-nonce, the page/document/
+  render seams, the action POST protocol (CSRF floor, named-action dispatch,
+  RFC 9457 problem documents, PRG, body limit, 303 coercion) and the
+  streaming pump (abort fan-out, bounded manifest and payload budgets,
+  timeout sweep, Part backfill frames, the no-JS tail) — now live in
+  typecheckable modules exported from `@openelement/router/server-runtime`
+  and imported by the generated entries. The generated entry is reduced to
+  imports, route-descriptor data and wiring; a dedicated gate enforces that
+  boundary (standalone `deno check` parse of the emitted entry, no runtime
+  bodies in codegen, client graph never reaching server runtime). Generated
+  server entries roughly halve (native 27507 → 14231 bytes, lit 25562 →
+  14344; client entries move only the recorded idle-fallback constant
+  wiring), and the migration was evidence-led: the 29-step request-time
+  parity oracle ran green on both dev and Nitro runtimes after each block,
+  catching one real wiring divergence before it landed.
+- **Element — one serializer kernel (#1469, ADR-0160 rule b):** the two
+  parallel Part Program tree walkers — the server serializer and the runtime
+  seed serializer — collapse into one host-free, DOM-free,
+  module-state-free kernel (`serialize-program.ts`) where every
+  execution-mode difference is an explicit seam; the server and seed entry
+  points delegate through thin adapters. A differential parity harness
+  replayed the full corpus (static and dynamic attributes, bool/class/style
+  sinks, prop JSON, void tags, `when`/`each` Regions, item slots, slot
+  projection, trusted HTML, unsafe-program rejections, DSD modes, nested
+  custom elements, deferred pending seeds) through both implementations and
+  required byte-identical output before the legacy walkers were deleted.
+  Serialization bytes are unchanged.
+- **Router — client asset injection is manifest-driven and fails closed
+  (#1471, ADR-0160 rules d and the T1/T2 closure):** a `ClientAssetManifest`
+  protocol (entry, islands keyed by compile-time delivery tag, shared
+  assets) joins the island declarations with the Phase 2 build manifest and
+  Rollup module metadata — a chunk is matched by the module ids it contains,
+  never by parsing output chunk file names. The build order becomes SSR →
+  client → SSG so prerendered and request-time documents carry final asset
+  addresses; script tags are serialized at document time from one resolved
+  `clientScripts` field across every render channel, and the post-build
+  HTML-rewriting injection pass is deleted. The boundaries are hard gates: a
+  missing, malformed or entry-less client manifest and an admitted island
+  that resolves to no asset are named `OE_CLIENT_ASSET_*` failures instead
+  of warn-and-continue or a silent empty entry; pure-static builds still
+  emit zero client JS.
+- **Router — package-island identity is exact-match:** module identity no
+  longer substring-matches chunk paths. The resolver and the client build's
+  chunk grouping share one rule (segment-boundary equality or trailing-path
+  match, extension-insensitive); zero and multiple matches both fail
+  (`ISLAND_UNMAPPED` / `ISLAND_IDENTITY_AMBIGUOUS`), and declared
+  specifiers resolve through the same import map and `resolve.alias` table
+  the build itself ships, so workspace packages and npm/jsr packages get one
+  identity each. The pre-closure build had been silently mis-attributing the
+  Site's `@openelement/ui` islands to the client entry chunk; that
+  mis-attribution is now a named failure, and the identity join names
+  package island chunks `island-<tag>-<hash>.js`.
+- **Compiler — the semantic core does not know Router (ADR-0160 rule c):**
+  island admission and the module-scan vocabulary become injected
+  plain-data descriptors (a `static-sidecar` admission descriptor and a
+  `ModuleVocabularyDescriptor` list); the default core admits none and fails
+  closed, and Router owns its descriptors in exactly one place, injecting
+  them at every compile call site. The dead `defineIsland` vocabulary
+  entries are removed with recorded forensics — neither package exports the
+  binding, and a legacy call site now surfaces as a foreign tag instead of
+  being silently excluded.
+- **Element — artifacts carry protocol versions, not release names
+  (ADR-0160 rule e):** shipped source no longer carries the retired
+  0.23/0.40/0.42/0.44 release trains; generated banners stamp protocol
+  versions (Part Program format, compiled module ABI) from central
+  constants, `version-bump` fails closed on reintroduction, and the Site's
+  version truth derives from `release-state.json` through the generated
+  release-line module, cross-asserted at bump time and by the offline
+  release gate. The streaming admission budgets (field/owner/seed counts,
+  payload length, stream and idle timeouts, composition depth, action body
+  limit) are named once in an import-free policy module instead of bare
+  literals repeated at every enforcement site.
+- **Element — the compiled runtime and semantic core split into single-duty
+  modules (#1473):** the 2,779-line compiled Part Program executor and the
+  2,381-line compile facade decompose into single-duty modules with every
+  moved block byte-verified against the pre-split file; the narrow
+  `ParserPort` seam records where a future parser backend swaps in. The
+  Router's 999-line Vite plugin splits into hook families with plugin names
+  and hook order unchanged; the element error factories converge on one
+  phase-parameterized factory; a new `OE_STREAM_TYPE_MISMATCH` code
+  separates a streamed-seed contract drift from a missing compiled program.
+- **ui — instance state on the public surface; six components marked
+  experimental:** `readInstanceState`/`writeInstanceState` join the public
+  surface (barrel re-export plus a side-effect-free `./instance-state`
+  subpath), while `open-card`, `open-callout`, `open-dialog`,
+  `open-dropdown`, `open-tabs` and `open-input` carry no compatibility
+  promise until each has standalone adoption evidence — the ui manifest
+  records the per-class status and the API reference renders it.
+- **Qualification harness — one shared scaffold (#1472):** the
+  scaffold → workspace-alias → build → static-serve → Playwright ritual
+  that three harnesses each implemented privately moves to
+  `tests/lib/qualify-harness/`, and the candidate-evidence producer splits
+  into single-duty record, fresh-clone, aggregate and validate modules.
+  The extraction was verified at pre-refactor depth: interop and
+  third-party qualification evidence line-identical modulo checkout paths,
+  starter dist artifacts byte-identical, starter-smoke Playwright projects
+  green 12+24 on Chromium/Firefox/WebKit.
+- **ADR-0160 closure (Amendment 2):** the manifest failure contract, the
+  package-island identity contract, the `defineIsland` vocabulary verdict
+  and the S6 responsibility boundary are recorded; closure output-delta
+  reconciliation shows the framework fixture trees byte-identical against
+  the pre-closure baseline with every earlier difference mapped to a
+  recorded entry.
+
+**Verification highlights:** element suite 429 tests and Router suite 970
+tests green; the 29-step request-time parity oracle green on both dev and
+Nitro runtimes after every migration block; the serializer differential and
+escape-parity corpora byte-identical; the stream-manifest, renderer-scope,
+SSG-admission, lit-graph-boundary and registry-marker oracles green with
+assertions intact; stream-browser tests on real Chromium against the
+byte-identical bootstrap; `deno task verify:core` (source plus packed) is
+the local candidate verification for this train.
+
 ## 1.0.0-alpha.5
 
 **Rendered as data resolves: part-level streaming, WC admission tiers, runtime
