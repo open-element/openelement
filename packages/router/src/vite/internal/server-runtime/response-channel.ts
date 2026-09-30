@@ -147,3 +147,25 @@ export function createCspNonce(): string {
 export function applyCspNonce(policyTemplate: string, nonce: string): string {
   return policyTemplate.replace('NONCE_PLACEHOLDER', nonce);
 }
+
+/**
+ * The env key hono/ssg's `toSSG` sets to `true` on every build-time dispatch
+ * (both the per-route info probe and every page render — hono
+ * helper/ssg/ssg.js passes `{ [SSG_CONTEXT]: true }` as the request env).
+ * hono exports the predicate (`isSSGContext`) but not the constant, so the
+ * value is pinned here and covered by the unit tests beside this module.
+ */
+const HONO_SSG_CONTEXT = 'HONO_SSG_CONTEXT';
+
+/**
+ * True when the dispatch is an hono/ssg prerender pass. Static build output
+ * cannot carry per-request state — the SSG nonce contract (nonce.ts: SSG
+ * output carries none, static bytes cannot be per-request) — so the CSP
+ * auto-nonce binds nothing on this pass: the handlers' `c.get('cspNonce')`
+ * stays undefined and `wrapInDocument` serializes the client script tags
+ * nonce-free while the SSG CSP injector writes the policy-only meta.
+ */
+export function isSsgPrerenderDispatch(env: unknown): boolean {
+  return typeof env === 'object' && env !== null &&
+    (env as Record<string, unknown>)[HONO_SSG_CONTEXT] === true;
+}

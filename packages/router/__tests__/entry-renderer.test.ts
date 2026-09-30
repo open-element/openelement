@@ -123,14 +123,21 @@ Deno.test('renderEntry: CSP with nonce generates per-request nonce', () => {
   // ADR-0160 rule a: nonce creation and policy instantiation are calls into
   // the imported @openelement/router/server-runtime module; the template is
   // generated data (the nonce semantics themselves are pinned by
-  // server-runtime-response-channel.test.ts).
-  assertStringIncludes(code, 'const nonce = __cspCreateNonce()');
-  assertStringIncludes(code, "c.set('cspNonce'");
+  // server-runtime-response-channel.test.ts). The hono/ssg prerender pass
+  // binds no nonce — static bytes cannot be per-request — so binding is
+  // gated on __ssgPrerenderPass(c.env) and both the context variable and
+  // the CSP header only materialize for request-time dispatches.
+  assertStringIncludes(
+    code,
+    'const nonce = __ssgPrerenderPass(c.env) ? undefined : __cspCreateNonce()',
+  );
+  assertStringIncludes(code, "if (nonce) c.set('cspNonce', nonce)");
+  assertStringIncludes(code, "if (policy) c.header('Content-Security-Policy', policy)");
   // v0.3.1: NONCE_PLACEHOLDER template approach (fixes missing closing quote bug)
   assertStringIncludes(code, 'NONCE_PLACEHOLDER');
   assertStringIncludes(
     code,
-    `__cspApplyNonce("default-src 'self'; script-src 'nonce-NONCE_PLACEHOLDER'", nonce)`,
+    `const policy = nonce ? __cspApplyNonce("default-src 'self'; script-src 'nonce-NONCE_PLACEHOLDER'", nonce) : undefined`,
   );
 });
 

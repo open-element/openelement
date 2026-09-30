@@ -110,16 +110,27 @@ export function renderMiddleware(lines: string[], mw: MiddlewareDecl): void {
             `// @openelement/router/server-runtime (ADR-0160 rule a); the template below`,
           );
           lines.push(`// is generated data derived from middleware.csp.`);
-          lines.push(`app.use('*', async (c, next) => {`);
-          lines.push(`  const nonce = __cspCreateNonce()`);
-          lines.push(`  c.set('cspNonce', nonce)`);
           lines.push(
-            `  const policy = __cspApplyNonce(${
-              quoteGeneratedJavaScriptValue(policyTemplate)
-            }, nonce)`,
+            `// hono/ssg prerender passes bind no nonce: static bytes cannot be`,
           );
+          lines.push(
+            `// per-request, so the prerendered output serializes nonce-free and`,
+          );
+          lines.push(
+            `// the SSG CSP injector's policy-only meta remains the static shape.`,
+          );
+          lines.push(`app.use('*', async (c, next) => {`);
+          lines.push(
+            `  const nonce = __ssgPrerenderPass(c.env) ? undefined : __cspCreateNonce()`,
+          );
+          lines.push(
+            `  const policy = nonce ? __cspApplyNonce(${
+              quoteGeneratedJavaScriptValue(policyTemplate)
+            }, nonce) : undefined`,
+          );
+          lines.push(`  if (nonce) c.set('cspNonce', nonce)`);
           lines.push(`  await next()`);
-          lines.push(`  c.header('${headerName}', policy)`);
+          lines.push(`  if (policy) c.header('${headerName}', policy)`);
           lines.push(`})`);
         } else {
           lines.push(`app.use('*', async (c, next) => {`);

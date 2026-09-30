@@ -15,6 +15,7 @@ import {
   applyCspNonce,
   createCspNonce,
   createStreamHeaderChannel,
+  isSsgPrerenderDispatch,
   mergeChannelHeaders,
   PROTOCOL_HEADERS,
 } from '../src/vite/internal/server-runtime/response-channel.ts';
@@ -207,4 +208,19 @@ Deno.test('applyCspNonce appends a script-src when the policy declares none', ()
     applyCspNonce('NONCE_PLACEHOLDER and NONCE_PLACEHOLDER', 'n1'),
     'n1 and NONCE_PLACEHOLDER',
   );
+});
+
+Deno.test('isSsgPrerenderDispatch matches exactly the hono/ssg env marker', () => {
+  // hono/ssg dispatches every build-time request with this env (ssg.js
+  // passes `{ [SSG_CONTEXT]: true }` — the probe and every page render).
+  assert(isSsgPrerenderDispatch({ HONO_SSG_CONTEXT: true }));
+  // Request-time dispatches never carry it: no env, the app's deployment
+  // bindings, or any other value must keep the per-request nonce bound.
+  assertEquals(isSsgPrerenderDispatch(undefined), false);
+  assertEquals(isSsgPrerenderDispatch({}), false);
+  assertEquals(isSsgPrerenderDispatch({ SOME_DEPLOYMENT_VAR: 'x' }), false);
+  assertEquals(isSsgPrerenderDispatch({ HONO_SSG_CONTEXT: 'true' }), false);
+  assertEquals(isSsgPrerenderDispatch({ HONO_SSG_CONTEXT: 1 }), false);
+  assertEquals(isSsgPrerenderDispatch('HONO_SSG_CONTEXT'), false);
+  assertEquals(isSsgPrerenderDispatch(null), false);
 });

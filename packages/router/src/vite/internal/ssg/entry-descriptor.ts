@@ -246,9 +246,16 @@ export function buildEntryDescriptor(
     imports.push({ from: 'hono/secure-headers', names: ['secureHeaders'] });
   }
   // The CSP auto-nonce is the same imported-runtime seam: the middleware
-  // emission below only references __cspCreateNonce/__cspApplyNonce, and the
-  // policy template stays generated data derived from middleware.csp.
+  // emission below only references __ssgPrerenderPass/__cspCreateNonce/
+  // __cspApplyNonce, and the policy template stays generated data derived
+  // from middleware.csp. The prerender-pass gate keeps per-request nonces
+  // out of static bytes (the SSG nonce contract — SSG output carries none).
   if (mw?.csp?.nonce) {
+    imports.push({
+      from: '@openelement/router/server-runtime',
+      names: ['isSsgPrerenderDispatch'],
+      alias: '__ssgPrerenderPass',
+    });
     imports.push({
       from: '@openelement/router/server-runtime',
       names: ['createCspNonce'],

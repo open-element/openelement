@@ -33,6 +33,7 @@ export {
   applyCspNonce,
   createCspNonce,
   createStreamHeaderChannel,
+  isSsgPrerenderDispatch,
   mergeChannelHeaders,
   PROTOCOL_HEADERS,
 } from './response-channel.ts';
