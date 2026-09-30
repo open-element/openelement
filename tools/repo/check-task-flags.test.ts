@@ -89,6 +89,28 @@ Deno.test('task wiring: release:check invokes the registry task, not an internal
   );
 });
 
+Deno.test('task wiring: release:check generates site data before the registry check', async () => {
+  const releaseCheck = (await tasks('deno.json'))['release:check'];
+  assert(releaseCheck, 'release:check must exist');
+  const generate = releaseCheck.indexOf('tools/repo#generate:all');
+  const registry = releaseCheck.indexOf('tools/repo#release:registry-check');
+  assert(generate !== -1, 'release:check must run the generators (generate:all)');
+  assert(
+    registry !== -1,
+    'release:check must run the registry check (tools/repo#release:registry-check)',
+  );
+  // The registry check reads the ignored derived module
+  // www/app/data/_generated-release-line.ts, and the release workflow runs
+  // from a clean checkout where that module does not exist until the
+  // generators have run — so generate:all must come first or the protected
+  // release run fails before publication.
+  assert(
+    generate < registry,
+    'release:check must generate site data before release:registry-check ' +
+      '(it reads _generated-release-line.ts, absent on a clean checkout)',
+  );
+});
+
 Deno.test('task wiring: gate:source generates site data before typecheck', async () => {
   const gateSource = (await tasks('tools/repo/deno.json'))['gate:source'];
   assert(gateSource, 'gate:source must exist');

@@ -211,11 +211,19 @@ Deno.test('task contract: release:check is the release train plus the packed gat
   assertEquals(
     gateSteps('release:check'),
     [
+      // First, and explicitly before release:registry-check: that step reads
+      // the ignored derived module www/app/data/_generated-release-line.ts
+      // (check-release-state-machine.ts), which only generate:all
+      // materializes on a clean checkout — the release workflow starts from
+      // one, so generating later (or not first) fails the run pre-publish.
+      'tools/repo#generate:all',
       'tools/repo#release:registry-check',
       'tools/repo#gate:release',
       'tools/release#gate:packed',
       'tools/release#publish:npm:dry-run',
     ],
-    'release:check is what qualifies a release candidate; it must include the trimmed gate:release steps',
+    'release:check is what qualifies a release candidate on a clean checkout; ' +
+      'it must generate the derived site data the registry check reads, then ' +
+      'include the trimmed gate:release steps',
   );
 });
