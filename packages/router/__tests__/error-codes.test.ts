@@ -15,6 +15,7 @@ import type { PagePropsContext } from '../src/index.ts';
 import {
   authoringError,
   buildError,
+  ClientAssetErrorCode,
   DeliveryErrorCode,
   DescriptorErrorCode,
   DocumentErrorCode,
@@ -28,6 +29,7 @@ import { validateIslandMediaQuery } from '../src/vite/internal/ssg/delivery.ts';
 import { validateIslandModuleSpecifier } from '../src/vite/internal/ssg/entry-generators.ts';
 import { buildEntryDescriptor } from '../src/vite/internal/ssg/entry-descriptor.ts';
 import { ssgRender } from '../src/vite/internal/ssg/ssg-render.ts';
+import { readViteClientManifest } from '../src/vite/client-asset-manifest.ts';
 import type { SsgRenderOptions, SsrBundle } from '../src/vite/internal/protocol/ssg.ts';
 
 const TABLES = {
@@ -37,6 +39,7 @@ const TABLES = {
   DeliveryErrorCode,
   IslandEntryErrorCode,
   DescriptorErrorCode,
+  ClientAssetErrorCode,
   SsgRenderErrorCode,
   DocumentErrorCode,
 };
@@ -132,5 +135,15 @@ Deno.test('error codes: the SSG render pipeline reports build-phase codes', asyn
     'does not export routeInfo',
   );
   assertEquals(error.code, SsgRenderErrorCode.ROUTE_INFO_MISSING);
+  assertEquals(error.phase, 'build');
+});
+
+Deno.test('error codes: the client asset manifest reports build-phase codes', async () => {
+  const error = await assertRejects(
+    () => readViteClientManifest('/nonexistent/dist/client/.vite/manifest.json'),
+    OpenElementError,
+    '/nonexistent/dist/client/.vite/manifest.json',
+  );
+  assertEquals(error.code, ClientAssetErrorCode.MANIFEST_READ);
   assertEquals(error.phase, 'build');
 });

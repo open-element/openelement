@@ -1,11 +1,15 @@
-import { assertEquals } from '@std/assert';
+import { assert, assertEquals, assertRejects, assertThrows } from '@std/assert';
 import { join } from '@std/path';
 import {
   buildClientAssetManifest,
   collectClientBuildChunks,
   findClientEntryFile,
+  moduleIdentityMatches,
+  packageIslandChunkName,
   readViteClientManifest,
 } from '../src/vite/client-asset-manifest.ts';
+import { OpenElementError } from '@openelement/element';
+import { ClientAssetErrorCode } from '../src/internal/error-codes.ts';
 import {
   EMPTY_CLIENT_ASSET_MANIFEST,
   serializeClientAssetsModule,
@@ -22,6 +26,7 @@ function island(overrides: Partial<ClientIslandDeliveryEntry> = {}): ClientIslan
 }
 
 const ROOT = '/proj';
+const MANIFEST_PATH = '/proj/dist/client/.vite/manifest.json';
 
 Deno.test('findClientEntryFile reads the virtual client entry from the build manifest', () => {
   assertEquals(
@@ -34,13 +39,35 @@ Deno.test('findClientEntryFile reads the virtual client entry from the build man
   assertEquals(findClientEntryFile({ 'app/islands/counter.ts': { file: 'islands/x.js' } }), null);
 });
 
-Deno.test('readViteClientManifest returns null for a missing or malformed manifest', async () => {
-  assertEquals(await readViteClientManifest(join('/nonexistent', 'manifest.json')), null);
+Deno.test('readViteClientManifest fails closed when the manifest is missing', async () => {
+  const error = await assertRejects(
+    () => readViteClientManifest(join('/nonexistent', 'manifest.json')),
+    OpenElementError,
+  );
+  assertEquals(error.code, ClientAssetErrorCode.MANIFEST_READ);
+  // The failure names the manifest path and the reason.
+  assert(
+    error.message.includes(join('/nonexistent', 'manifest.json')),
+    `error must carry the manifest path, got: ${error.message}`,
+  );
+  assert(
+    error.message.includes('reason:'),
+    `error must carry the failure reason: ${error.message}`,
+  );
+});
+
+Deno.test('readViteClientManifest fails closed when the manifest is corrupted', async () => {
   const dir = await Deno.makeTempDir();
   try {
     const path = join(dir, 'manifest.json');
     await Deno.writeTextFile(path, '{ not json');
-    assertEquals(await readViteClientManifest(path), null);
+    const error = await assertRejects(
+      () => readViteClientManifest(path),
+      OpenElementError,
+    );
+    assertEquals(error.code, ClientAssetErrorCode.MANIFEST_MALFORMED);
+    assert(error.message.includes(path), `error must carry the manifest path: ${error.message}`);
+    // A valid manifest still parses.
     await Deno.writeTextFile(path, JSON.stringify({ entry: { file: 'islands/client.js' } }));
     const manifest = await readViteClientManifest(path);
     assertEquals(manifest, { entry: { file: 'islands/client.js' } });
@@ -102,6 +129,7 @@ Deno.test('buildClientAssetManifest maps islands by Rollup module id, not by out
       },
       { fileName: 'islands/client.js', modules: {} },
     ],
+    manifestPath: MANIFEST_PATH,
   });
   assertEquals(manifest.entry, '/client/islands/client.js');
   assertEquals(manifest.islands['open-counter'], {
@@ -144,6 +172,7 @@ Deno.test('buildClientAssetManifest keeps island identity when islands share one
       sharedChunk,
       { fileName: 'islands/client.js', modules: {} },
     ],
+    manifestPath: MANIFEST_PATH,
   });
   assertEquals(manifest.islands['open-counter'], {
     file: '/client/islands/pair-Xy34zw.js',
@@ -169,12 +198,15 @@ Deno.test('buildClientAssetManifest falls back to the Vite manifest source key',
       'app/islands/counter.ts': { file: 'islands/island-counter-Qr56.js' },
     },
     chunks: [],
+    manifestPath: MANIFEST_PATH,
   });
   assertEquals(manifest.entry, '/app/client/islands/client.js');
   assertEquals(manifest.islands['open-counter'].file, '/app/client/islands/island-counter-Qr56.js');
 });
 
-Deno.test('buildClientAssetManifest matches package islands by declared module-path fragment', () => {
+Deno.test('buildClientAssetManifest matches package islands by exact module identity', () => {
+  // Declared specifiers are extensionless; emitted ids carry the extension —
+  // the segment-boundary identity rule bridges exactly that difference.
   const manifest = buildClientAssetManifest({
     root: ROOT,
     base: '/',
@@ -201,10 +233,47 @@ Deno.test('buildClientAssetManifest matches package islands by declared module-p
       },
       { fileName: 'islands/client.js', modules: {} },
     ],
+    manifestPath: MANIFEST_PATH,
   });
   assertEquals(
     manifest.islands['open-callout'].file,
     '/client/islands/island-open-callout-Zz00.js',
+  );
+});
+
+Deno.test('buildClientAssetManifest does not substring-match a package island identity', () => {
+  // A lookalike file (`my-open-callout.js`) must never satisfy the identity
+  // `open-callout.js` — the old substring first-hit shipped the wrong file.
+  const error = assertThrows(
+    () =>
+      buildClientAssetManifest({
+        root: ROOT,
+        base: '/',
+        islands: [{
+          entry: island({
+            tagName: 'open-callout',
+            modulePath: 'open-callout.js',
+            isPackage: true,
+          }),
+          sourceFile: null,
+        }],
+        viteManifest: {
+          'virtual:open-client-entry': { file: 'islands/client.js', isEntry: true },
+        },
+        chunks: [{
+          fileName: 'islands/island-open-callout-Zz00.js',
+          modules: {
+            '/proj/node_modules/@acme/ui/my-open-callout.js': {},
+          },
+        }],
+        manifestPath: MANIFEST_PATH,
+      }),
+    OpenElementError,
+  );
+  assertEquals(error.code, ClientAssetErrorCode.ISLAND_UNMAPPED);
+  assert(
+    error.message.includes('open-callout'),
+    `error must carry the island identity: ${error.message}`,
   );
 });
 
@@ -230,6 +299,7 @@ Deno.test('buildClientAssetManifest maps delivery tags and export names onto one
       fileName: 'islands/island-card-AA11.js',
       modules: { '/proj/app/islands/card.ts': {} },
     }],
+    manifestPath: MANIFEST_PATH,
   });
   assertEquals(
     manifest.islands['open-card'],
@@ -253,6 +323,7 @@ Deno.test('buildClientAssetManifest lists shared chunks sorted, excluding entry 
       fileName: 'islands/island-counter-BB22.js',
       modules: { '/proj/app/islands/counter.ts': {} },
     }],
+    manifestPath: MANIFEST_PATH,
   });
   assertEquals(manifest.shared, [
     '/client/islands/lit-runtime-DD44.js',
@@ -269,8 +340,198 @@ Deno.test('buildClientAssetManifest falls back to the entry chunk when an island
       'virtual:open-client-entry': { file: 'islands/client.js', isEntry: true },
     },
     chunks: [{ fileName: 'islands/client.js', modules: {} }],
+    manifestPath: MANIFEST_PATH,
   });
   assertEquals(manifest.islands['open-counter'].file, '/client/islands/client.js');
+});
+
+// ─── Fail-closed: the manifest the join requires (#1471, alpha6 T1) ─────
+
+Deno.test('buildClientAssetManifest fails when the manifest records no client entry', () => {
+  // An admitted island with no "virtual:open-client-entry" record: Phase 2
+  // fails instead of shipping entry: '' and dropping the island silently.
+  const error = assertThrows(
+    () =>
+      buildClientAssetManifest({
+        root: ROOT,
+        base: '/',
+        islands: [{ entry: island(), sourceFile: join(ROOT, 'app/islands/counter.ts') }],
+        viteManifest: {
+          'app/islands/counter.ts': { file: 'islands/island-counter-Ab12.js' },
+        },
+        chunks: [],
+        manifestPath: MANIFEST_PATH,
+      }),
+    OpenElementError,
+  );
+  assertEquals(error.code, ClientAssetErrorCode.ENTRY_MISSING);
+  assert(error.message.includes(MANIFEST_PATH), `error names the manifest: ${error.message}`);
+  assert(
+    error.message.includes('virtual:open-client-entry'),
+    `error names the missing record: ${error.message}`,
+  );
+});
+
+Deno.test('enhanced-forms-only fails when the manifest records no client entry', () => {
+  // #569: an island-free app with data-open-enhance forms still needs the
+  // client entry — its absence fails instead of shipping entry: ''.
+  const error = assertThrows(
+    () =>
+      buildClientAssetManifest({
+        root: ROOT,
+        base: '/',
+        islands: [],
+        viteManifest: {},
+        chunks: [],
+        manifestPath: MANIFEST_PATH,
+      }),
+    OpenElementError,
+  );
+  assertEquals(error.code, ClientAssetErrorCode.ENTRY_MISSING);
+  assert(error.message.includes(MANIFEST_PATH), `error names the manifest: ${error.message}`);
+});
+
+Deno.test('admitted island without a chunk mapping fails instead of being dropped', () => {
+  // The old code `continue`d past an island whose identity mapped to no
+  // emitted module (and no entry fallback) — now the island identity and
+  // the reason are named and Phase 2 fails.
+  const error = assertThrows(
+    () =>
+      buildClientAssetManifest({
+        root: ROOT,
+        base: '/',
+        islands: [{
+          entry: island({
+            tagName: 'open-callout',
+            modulePath: '@acme/ui/open-callout',
+            isPackage: true,
+          }),
+          sourceFile: null,
+        }],
+        viteManifest: {
+          'virtual:open-client-entry': { file: 'islands/client.js', isEntry: true },
+        },
+        chunks: [{ fileName: 'islands/client.js', modules: {} }],
+        manifestPath: MANIFEST_PATH,
+      }),
+    OpenElementError,
+  );
+  assertEquals(error.code, ClientAssetErrorCode.ISLAND_UNMAPPED);
+  assert(
+    error.message.includes('open-callout'),
+    `error carries the island identity: ${error.message}`,
+  );
+  assert(
+    error.message.includes('@acme/ui/open-callout'),
+    `error carries the declared identity: ${error.message}`,
+  );
+});
+
+// ─── Fail-closed: package island identity is exact (#1471, alpha6 T2) ───
+
+Deno.test('two packages shipping the same-named relative module fail as ambiguous', () => {
+  // @acme/ui and @other/ui both declare `open-callout.js`; the graph emits
+  // both files. Neither island can claim one of them — the build fails
+  // naming the identity and every candidate module.
+  const error = assertThrows(
+    () =>
+      buildClientAssetManifest({
+        root: ROOT,
+        base: '/',
+        islands: [
+          {
+            entry: island({
+              tagName: 'open-a',
+              modulePath: 'open-callout.js',
+              isPackage: true,
+            }),
+            sourceFile: null,
+          },
+          {
+            entry: island({
+              tagName: 'open-b',
+              modulePath: 'open-callout.js',
+              isPackage: true,
+            }),
+            sourceFile: null,
+          },
+        ],
+        viteManifest: {
+          'virtual:open-client-entry': { file: 'islands/client.js', isEntry: true },
+        },
+        chunks: [
+          {
+            fileName: 'islands/island-open-a-Aa11.js',
+            modules: { '/proj/node_modules/@acme/ui/open-callout.js': {} },
+          },
+          {
+            fileName: 'islands/island-open-b-Bb22.js',
+            modules: { '/proj/node_modules/@other/ui/open-callout.js': {} },
+          },
+        ],
+        manifestPath: MANIFEST_PATH,
+      }),
+    OpenElementError,
+  );
+  assertEquals(error.code, ClientAssetErrorCode.ISLAND_IDENTITY_AMBIGUOUS);
+  assert(
+    error.message.includes('open-callout.js'),
+    `error carries the declared identity: ${error.message}`,
+  );
+  assert(
+    error.message.includes('@acme/ui/open-callout.js') &&
+      error.message.includes('@other/ui/open-callout.js'),
+    `error carries every candidate module: ${error.message}`,
+  );
+});
+
+Deno.test('packageIslandChunkName groups by the same identity rule the resolver joins on', () => {
+  const islands = [{ tagName: 'open-callout', identity: '@acme/ui/open-callout' }];
+  // Extensionless declared specifier ↔ emitted id with extension.
+  assertEquals(
+    packageIslandChunkName('/proj/node_modules/@acme/ui/open-callout.js', islands),
+    'island-open-callout',
+  );
+  // A module at a different path is a different module even when its file
+  // name ends with the same basename.
+  assertEquals(
+    packageIslandChunkName('/proj/node_modules/@acme/ui/other/open-callout.js', islands),
+    undefined,
+  );
+  // An unrelated module joins no island chunk.
+  assertEquals(packageIslandChunkName('/proj/app/islands/counter.ts', islands), undefined);
+  // Islands sharing one identity (one capability module, several tags) share
+  // the chunk instead of failing it.
+  assertEquals(
+    packageIslandChunkName('/proj/node_modules/@acme/ui/open-callout.js', [
+      { tagName: 'open-a', identity: '@acme/ui/open-callout' },
+      { tagName: 'open-b', identity: '@acme/ui/open-callout' },
+    ]),
+    'island-open-a',
+  );
+  // Two distinct identities claiming one module fail closed.
+  const error = assertThrows(
+    () =>
+      packageIslandChunkName('/proj/node_modules/@acme/ui/open-callout.js', [
+        { tagName: 'open-a', identity: 'ui/open-callout' },
+        { tagName: 'open-b', identity: '@acme/ui/open-callout' },
+      ]),
+    OpenElementError,
+  );
+  assertEquals(error.code, ClientAssetErrorCode.ISLAND_IDENTITY_AMBIGUOUS);
+});
+
+Deno.test('moduleIdentityMatches is segment-exact and extension-insensitive', () => {
+  const matches = moduleIdentityMatches;
+  assert(matches('/proj/node_modules/@acme/ui/open-callout.js', '@acme/ui/open-callout'));
+  assert(matches('/proj/node_modules/@acme/ui/open-callout.js', 'open-callout.js'));
+  assert(matches('/proj/src/open-card.tsx', '/proj/src/open-card.tsx'));
+  // Segment boundary: a longer basename is a different module.
+  assert(!matches('/proj/node_modules/@acme/ui/my-open-callout.js', 'open-callout.js'));
+  // Path boundary: a longer tail is a different module.
+  assert(!matches('/proj/node_modules/@acme/ui/open-callout/extra.js', 'open-callout.js'));
+  // Query suffixes never leak into the comparison.
+  assert(matches('/proj/src/counter.ts?commonjs-exports', 'counter.ts'));
 });
 
 Deno.test('serializeClientAssetsModule emits pure structured data', () => {

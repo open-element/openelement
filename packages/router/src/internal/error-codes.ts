@@ -119,6 +119,27 @@ export const SsgRenderErrorCode = {
 } as const;
 
 /**
+ * Stable codes for the Phase 2 client asset manifest
+ * (`vite/client-asset-manifest.ts`). Phase `build`: the client build's
+ * manifest is the single join between compile-time island identity and the
+ * emitted client assets, so a missing, corrupted, or incomplete record —
+ * and an admitted island that cannot be attributed to exactly one emitted
+ * module — fails the build instead of shipping silent identities.
+ */
+export const ClientAssetErrorCode = {
+  /** dist/client/.vite/manifest.json is missing or unreadable. */
+  MANIFEST_READ: 'OE_CLIENT_ASSET_MANIFEST_READ',
+  /** The manifest exists but is not the JSON record the join requires. */
+  MANIFEST_MALFORMED: 'OE_CLIENT_ASSET_MANIFEST_MALFORMED',
+  /** The manifest records no emitted client entry file. */
+  ENTRY_MISSING: 'OE_CLIENT_ASSET_ENTRY_MISSING',
+  /** An admitted island matches no emitted module in the build graph. */
+  ISLAND_UNMAPPED: 'OE_CLIENT_ASSET_ISLAND_UNMAPPED',
+  /** An island identity matches several emitted modules (ambiguous package). */
+  ISLAND_IDENTITY_AMBIGUOUS: 'OE_CLIENT_ASSET_ISLAND_IDENTITY_AMBIGUOUS',
+} as const;
+
+/**
  * Stable codes for the Document seam (`document.ts`). Phase `validation`:
  * the head is authored data, resolved per render, and a malformed field is
  * rejected the same way at build time and request time.

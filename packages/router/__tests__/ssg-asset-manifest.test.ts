@@ -37,6 +37,7 @@ import type { ClientIslandDeliveryEntry } from '../src/vite/internal/ssg/deliver
 
 const ROOT = '/proj';
 const BASE = '/';
+const MANIFEST_PATH = '/proj/dist/client/.vite/manifest.json';
 
 function island(overrides: Partial<ClientIslandDeliveryEntry> = {}): ClientIslandDeliveryEntry {
   return {
@@ -65,7 +66,14 @@ function manifest(
   viteManifest: Record<string, ViteClientManifestEntry>,
   chunks: ClientBuildChunk[],
 ): ClientAssetManifest {
-  return buildClientAssetManifest({ root: ROOT, base: BASE, islands, viteManifest, chunks });
+  return buildClientAssetManifest({
+    root: ROOT,
+    base: BASE,
+    islands,
+    viteManifest,
+    chunks,
+    manifestPath: MANIFEST_PATH,
+  });
 }
 
 type ClientAssetIslandLike = ReturnType<typeof input>;

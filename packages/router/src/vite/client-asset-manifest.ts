@@ -7,10 +7,17 @@
  * Rollup output chunks' module metadata. Island identity is never derived
  * from output chunk file names — a chunk is matched by the module ids it
  * contains, so islands that share a chunk keep their identity.
+ *
+ * The join fails closed: a missing or corrupted build manifest, a missing
+ * client entry, and an admitted island that cannot be attributed to exactly
+ * one emitted module are Phase 2 build failures (OE_CLIENT_ASSET_* codes) —
+ * a silently dropped or mis-attributed island identity would ship pages
+ * whose client scripts never load.
  */
 
 import { join, relative } from '../internal/host-path.ts';
 import { normalizeSeparators } from '@openelement/element/build-utils';
+import { buildError, ClientAssetErrorCode } from '../internal/error-codes.ts';
 import type { ClientAssetManifest, ClientIslandAsset } from './internal/protocol/client-assets.ts';
 import {
   type ClientIslandDeliveryEntry,
@@ -35,21 +42,37 @@ export interface ClientBuildChunk {
 export interface ClientAssetIslandInput {
   /** The client entry generated for this island (identity + strategy). */
   entry: ClientIslandDeliveryEntry;
-  /** Absolute source path (local islands); null when only a module path is declared. */
+  /**
+   * Absolute source path (local islands and import-map-resolved package
+   * islands); null when only the declared module specifier is available.
+   */
   sourceFile: string | null;
 }
 
-/** Read dist/client/.vite/manifest.json; null when the build shipped none. */
+/** Read dist/client/.vite/manifest.json. Missing and corrupted files fail. */
 export async function readViteClientManifest(
   manifestPath: string,
-): Promise<Record<string, ViteClientManifestEntry> | null> {
+): Promise<Record<string, ViteClientManifestEntry>> {
+  let text: string;
   try {
-    return JSON.parse(await Deno.readTextFile(manifestPath)) as Record<
-      string,
-      ViteClientManifestEntry
-    >;
-  } catch {
-    return null;
+    text = await Deno.readTextFile(manifestPath);
+  } catch (cause) {
+    throw buildError(
+      ClientAssetErrorCode.MANIFEST_READ,
+      `Client asset manifest is missing: ${manifestPath} cannot be read — ` +
+        `the Phase 2 client build must ship ${manifestPath} (reason: ${(cause as Error).message})`,
+      { cause: cause as Error },
+    );
+  }
+  try {
+    return JSON.parse(text) as Record<string, ViteClientManifestEntry>;
+  } catch (cause) {
+    throw buildError(
+      ClientAssetErrorCode.MANIFEST_MALFORMED,
+      `Client asset manifest is corrupted: ${manifestPath} is not valid JSON ` +
+        `(reason: ${(cause as Error).message})`,
+      { cause: cause as Error },
+    );
   }
 }
 
@@ -102,11 +125,92 @@ function normalizeModuleId(id: string): string {
   return normalizeSeparators(id.split('?', 1)[0]);
 }
 
+const MODULE_EXTENSION = /\.[cm]?[jt]sx?$/;
+
+/**
+ * The package-island module identity rule, shared by the client asset
+ * manifest resolver and the client build's chunk grouping: the identity
+ * string equals the real module id, or is its exact trailing path —
+ * segment-boundary aligned, insensitive to the module extension (declared
+ * package specifiers are extensionless; emitted ids carry one). A bare
+ * substring hit is not identity: `open-callout.js` would otherwise match
+ * every package that ships a file of that name.
+ */
+export function moduleIdentityMatches(moduleId: string, identity: string): boolean {
+  const id = normalizeModuleId(moduleId).replace(MODULE_EXTENSION, '');
+  const wanted = normalizeModuleId(identity).replace(MODULE_EXTENSION, '');
+  return id === wanted || id.endsWith(`/${wanted}`);
+}
+
+/**
+ * Resolve one package island's module identity to the unique real module id
+ * in the emitted graph. Zero matches and several matches both fail: a
+ * silent first-hit would ship another package's file under this island's
+ * identity, and a silent fallback would deliver a different module than the
+ * declared specifier names.
+ */
+export function resolveIslandModuleId(
+  fileByModuleId: Map<string, string>,
+  identity: string,
+  islandLabel: string,
+): string {
+  const matches: string[] = [];
+  for (const id of fileByModuleId.keys()) {
+    if (moduleIdentityMatches(id, identity)) matches.push(id);
+  }
+  if (matches.length === 1) return matches[0];
+  if (matches.length === 0) {
+    throw buildError(
+      ClientAssetErrorCode.ISLAND_UNMAPPED,
+      `Admitted island "${islandLabel}" declares module identity "${identity}" but no emitted ` +
+        `client module matches it — the Phase 2 client build shipped no chunk carrying this module`,
+    );
+  }
+  throw buildError(
+    ClientAssetErrorCode.ISLAND_IDENTITY_AMBIGUOUS,
+    `Admitted island "${islandLabel}" declares module identity "${identity}" which matches ` +
+      `${matches.length} emitted client modules: ${matches.join(', ')} — ` +
+      `declare the full package specifier so the island identity is unique`,
+  );
+}
+
+/**
+ * The client chunk grouping decision for one module id, using the same
+ * identity rule as the asset manifest resolver. Returns the island chunk
+ * name, undefined when the module belongs to no package island, and fails
+ * closed when distinct island identities claim the same module. Islands
+ * that share one identity (one capability module delivering several tags)
+ * intentionally share the chunk.
+ */
+export function packageIslandChunkName(
+  moduleId: string,
+  islands: ReadonlyArray<{ tagName: string; identity: string }>,
+): string | undefined {
+  const identities = new Map<string, string>();
+  for (const island of islands) {
+    if (moduleIdentityMatches(moduleId, island.identity)) {
+      if (!identities.has(island.identity)) identities.set(island.identity, island.tagName);
+    }
+  }
+  if (identities.size === 0) return undefined;
+  if (identities.size > 1) {
+    throw buildError(
+      ClientAssetErrorCode.ISLAND_IDENTITY_AMBIGUOUS,
+      `Module ${moduleId} is claimed by ${identities.size} distinct package island identities ` +
+        `(${[...identities.keys()].join(', ')}) — the client chunk grouping cannot attribute it; ` +
+        `declare the full package specifier so each island identity is unique`,
+    );
+  }
+  const [tagName] = [...identities.values()];
+  return `island-${tagName}`;
+}
+
 function resolveIslandChunkFile(
   root: string,
   island: ClientAssetIslandInput,
   fileByModuleId: Map<string, string>,
   fileByManifestKey: Map<string, string>,
+  manifestPath: string,
 ): string | null {
   if (island.sourceFile) {
     const direct = fileByModuleId.get(normalizeSeparators(island.sourceFile));
@@ -115,17 +219,29 @@ function resolveIslandChunkFile(
     // source path — the same compile-time identity, hash-agnostic.
     return fileByManifestKey.get(normalizeSeparators(relative(root, island.sourceFile))) ?? null;
   }
-  // Package islands declare a path fragment of their real module id — the
-  // same identity join the client build's chunk grouping uses.
-  for (const [id, file] of fileByModuleId) {
-    if (id.includes(island.entry.modulePath)) return file;
+  // Package islands declare a module specifier as identity — the same
+  // identity the client build's chunk grouping used. It must resolve to
+  // exactly one emitted module; zero and several matches both fail.
+  const id = resolveIslandModuleId(
+    fileByModuleId,
+    island.entry.modulePath,
+    `${island.entry.tagName} (${island.entry.modulePath})`,
+  );
+  const file = fileByModuleId.get(id);
+  if (!file) {
+    throw buildError(
+      ClientAssetErrorCode.ISLAND_UNMAPPED,
+      `Admitted island "${island.entry.tagName}" resolved to module ${id} which carries no ` +
+        `emitted file in the client build (manifest: ${manifestPath})`,
+    );
   }
-  return null;
+  return file;
 }
 
 /**
  * Build the client asset manifest from the client build's outputs.
- * Pure function: compile-time island identity in, structured manifest out.
+ * Fails closed: compile-time island identity in, structured manifest out,
+ * with no silent identity drops — every admitted island must resolve.
  */
 export function buildClientAssetManifest(options: {
   root: string;
@@ -133,11 +249,20 @@ export function buildClientAssetManifest(options: {
   islands: ClientAssetIslandInput[];
   viteManifest: Record<string, ViteClientManifestEntry>;
   chunks: ClientBuildChunk[];
+  /** The manifest's path, named in every failure this builder raises. */
+  manifestPath: string;
 }): ClientAssetManifest {
-  const { root, base, islands, viteManifest, chunks } = options;
+  const { root, base, islands, viteManifest, chunks, manifestPath } = options;
   const assetUrl = (file: string) => `${base}client/${file}`;
 
   const entryFile = findClientEntryFile(viteManifest);
+  if (!entryFile) {
+    throw buildError(
+      ClientAssetErrorCode.ENTRY_MISSING,
+      `Client asset manifest is incomplete: ${manifestPath} records no client entry — ` +
+        `the "virtual:open-client-entry" record must carry the emitted entry file`,
+    );
+  }
 
   // Rollup module metadata: module id -> containing chunk file. A module
   // that shares a chunk with other islands keeps its identity here.
@@ -160,11 +285,16 @@ export function buildClientAssetManifest(options: {
   const islandAssets: Record<string, ClientIslandAsset> = {};
   const islandFiles = new Set<string>();
   for (const island of islands) {
-    const file = resolveIslandChunkFile(root, island, fileByModuleId, fileByManifestKey) ??
+    const file = resolveIslandChunkFile(
+      root,
+      island,
+      fileByModuleId,
+      fileByManifestKey,
+      manifestPath,
+    ) ??
       // An island without a chunk of its own rides the client entry chunk —
       // the same fallback the post-build chunk map applies.
       entryFile;
-    if (!file) continue;
     const asset: ClientIslandAsset = {
       file: assetUrl(file),
       strategy: island.entry.strategy,
@@ -186,14 +316,14 @@ export function buildClientAssetManifest(options: {
   const shared = new Set<string>();
   for (const file of fileByManifestKey.values()) {
     if (!file.endsWith('.js')) continue;
-    if (entryFile !== null && file === entryFile) continue;
+    if (file === entryFile) continue;
     const url = assetUrl(file);
     if (islandFiles.has(url)) continue;
     shared.add(url);
   }
 
   return {
-    entry: entryFile ? assetUrl(entryFile) : '',
+    entry: assetUrl(entryFile),
     islands: islandAssets,
     shared: [...shared].sort(),
   };
@@ -206,14 +336,14 @@ export async function createClientAssetManifest(options: {
   islands: ClientAssetIslandInput[];
   manifestPath: string;
   buildResult: unknown;
-}): Promise<ClientAssetManifest | null> {
+}): Promise<ClientAssetManifest> {
   const viteManifest = await readViteClientManifest(join(options.manifestPath));
-  if (!viteManifest) return null;
   return buildClientAssetManifest({
     root: options.root,
     base: options.base,
     islands: options.islands,
     viteManifest,
     chunks: collectClientBuildChunks(options.buildResult),
+    manifestPath: options.manifestPath,
   });
 }
