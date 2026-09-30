@@ -140,6 +140,193 @@ S3 rewrites that test as part of its design.
   `docs/release/public-interface-snapshot.json`; `./server-runtime` was
   already a declared export).
 
+## Amendment 2 — closure: the manifest failure contract, the island-identity contract, the defineIsland verdict, and the S6 boundary (2026-09-30)
+
+Records the lane's closure stage (the #1471/#1473 tail). No oracle assertion
+changes; no new admitted output delta (the reconciliation with the S0 baseline
+closes this amendment).
+
+### The client asset manifest failure contract (#1471 closure item T1)
+
+The Phase 2 client asset manifest is a hard gate, not a best-effort join.
+`readViteClientManifest` no longer catches to null and `buildClient` no longer
+warns-and-continues: a missing or unreadable `dist/client/.vite/manifest.json`
+fails with `OE_CLIENT_ASSET_MANIFEST_READ`, a malformed one with
+`OE_CLIENT_ASSET_MANIFEST_MALFORMED` — each naming the manifest path and the
+underlying reason. A manifest that records no `virtual:open-client-entry` file
+fails with `OE_CLIENT_ASSET_ENTRY_MISSING` (islands and enhanced-forms-only
+alike) instead of shipping `entry: ''`. An admitted island that resolves to no
+emitted asset fails with `OE_CLIENT_ASSET_ISLAND_UNMAPPED` instead of the
+former silent `continue`. Failures carry the stable codes of
+`packages/router/src/internal/error-codes.ts` (`ClientAssetErrorCode`), are
+pinned by `error-codes.test.ts`, and propagate through the existing Phase 2
+error path (`buildError`); the message text names the manifest path, the
+island label, and the identity string so a failure is diagnosable without a
+debugger. Pure-static and zero-admitted-island builds still emit zero client
+JS (`static-only-build.test.ts`). Rationale: rule (d) — a join that can
+silently miss is identity derived from artifacts again at exactly the failure
+case — and P4: the build boundary fails closed.
+
+### The package-island identity contract (#1471 closure item T2)
+
+Package-island module identity is exact, never a substring first-hit. The
+former resolver matched `id.includes(modulePath)` and returned the first hit,
+and the client build's chunk grouping substring-matched the same way.
+`moduleIdentityMatches` (`packages/router/src/vite/client-asset-manifest.ts`)
+is now the one rule shared by the manifest resolver and the chunk grouping
+(`packageIslandChunkName` — the native `manualChunks` branch and the lit
+codeSplitting group name): after query-stripping and separator normalization,
+segment-boundary equality or trailing-path match, extension-insensitive. Zero
+matches fail (`OE_CLIENT_ASSET_ISLAND_UNMAPPED`); several matches fail
+(`OE_CLIENT_ASSET_ISLAND_IDENTITY_AMBIGUOUS` — "declare the full package
+specifier so the island identity is unique"); distinct island identities
+claiming one module fail the chunk grouping the same way. A declared
+`modulePath` is not assumed globally unique (two packages can ship the same
+relative name; import-map targets resolve outside the specifier string):
+`buildClient` resolves each package specifier through the same resolution the
+build uses and joins on the real module path when one exists; npm/jsr
+specifiers keep the declared specifier as identity under the same exact rule.
+Both directions of the rule are tested in the shared module's suite — no test
+helper reimplements the matching.
+
+Comply-or-explain, recorded rather than worked around: the resolution half
+keeps that promise only for deno.json-`imports`-mapped specifiers.
+`packageIslandSourcePath` consults `lookupInDenoJson` (`imports` maps), not
+the workspace-member resolution the build itself uses
+(`workspace-alias.ts` `generateWorkspaceAliases` over deno.json `workspace` +
+member `exports`). For a workspace-member package island — the official
+Site's `packageIslands: ['@openelement/ui']` — the declared specifier
+therefore cannot resolve to a real module path, and under exact-match
+semantics it can never match an emitted module id: `site:build` fails
+`OE_CLIENT_ASSET_ISLAND_UNMAPPED` for `open-button (@openelement/ui/open-button)`
+at closure HEAD, where the pre-closure build was green. The pre-closure green
+was itself the defect the exact rule exists to stop: the pre-closure island
+manifests attribute `open-button`/`open-theme-toggle` to
+`/client/islands/client.js` (the entry-chunk fallback absorbing a join that
+never matched) while dedicated `open-button-*.js` chunks sat unused in the
+same output tree — silent mis-attribution, P6's exact case. The fail-closed
+direction is correct and stays; the missing workspace-member resolution is an
+open repair for the implementation lane (extend the specifier resolution to
+the workspace-alias source, or the equivalent), recorded here so the closure
+does not pass the red site build off as green. Not fixed in this docs-only
+closure stage.
+
+### defineIsland: final decision (removed)
+
+The module-scan vocabularies on both sides registered `defineIsland` as an
+element-registration factory — element `CORE_VOCABULARY` and the router
+`ROUTER_MODULE_VOCABULARY`. Verdict: dead vocabulary admitting an import no
+package exports; both entries are removed, each with a comment recording the
+verdict (`semantic-core/module-analysis.ts`, `vite/internal/protocol/module-vocabulary.ts`).
+Evidence: the element package retired the `defineIsland()` runtime in v0.44
+(f0610f102 deleted the `internal/core/island.ts` where it lived); the router
+never exported the name (`index.ts` exports `defineIslandConfig` only;
+`authoring.test.ts` pins `'defineIsland'` in `appSurface === false`); the
+public-interface snapshot carries no bare `defineIsland`; repo-wide search
+finds zero real call sites — docs, www content, create templates, test
+fixtures, and the www app all use `defineIslandConfig`; the only textual
+callers were the vocabulary's own tests. The entries came over mechanically
+from the pre-split semantic core of the era when the runtime existed. No
+valid program can import the removed binding, so scan outcomes for authored
+routes cannot change; the default scan and the router-injected scan now fail
+closed on the unresolvable import (regression pins in
+`module-analysis.test.ts`), and a legacy `defineIsland` call site surfaces as
+a foreign tag (visibility-only) instead of being silently excluded
+(`foreign-tag-scanner.test.ts`). The `defineIslandConfig` policy statement
+(static sidecar) and the `defineElement` registrations are untouched. No
+public surface moves: `CORE_VOCABULARY` is module-private,
+`module-vocabulary.ts` is vite-internal, and the interface snapshot is
+unchanged.
+
+### S6: final responsibility boundary
+
+All seven #1473 items landed; the boundary the lane leaves behind:
+
+1. `compiled/runtime.ts` (2,833 lines) → the `runtime/` family (kernel,
+   program-kernel, context, fresh-dom, claim + claim-install/claim-recovery/
+   claim-seam, pre-upgrade-events, parts, regions, error-boundary) plus
+   `serializer/serialize-program.ts`; `runtime.ts` remains as re-export. The
+   pre-upgrade double bookkeeping is one layer now (S6a).
+2. `semantic-core/compile.ts` (2,371 lines) → parse-module / analyze-module /
+   lower-program / emit-program / emit-module / compiler-diagnostics.
+   `parse-module` is the narrow parse seam (`ParserPort`): the one module
+   that depends on the TypeScript parsing API, with written retirement
+   conditions for the oxc/tsgo swap — the single implementation point a
+   backend change touches (S6b). Semantic analysis takes the injected
+   vocabulary, keeping rule (c)'s direction.
+3. `vite/plugin.ts` (999 lines) → `plugin.ts` composes hooks only;
+   plugin-config / plugin-scanners / plugin-hmr / plugin-watch /
+   plugin-virtual-modules carry the hook families. Plugin names, hook sets,
+   and returned plugin order unchanged (S6c).
+4. `tools/repo/candidate-evidence.ts` (2,049 lines): S6c split the four
+   spawn-free duties (aggregate / validate / tarballs / site-e2e) and kept
+   the job-record and fresh-clone duties in the shell per the S6c owner
+   ruling (a write-hook false positive on the verbatim argument-list
+   `Deno.Command` helpers). Closure item T4 completed the split:
+   `candidate-evidence-record.ts` owns the StepResult/JobResult/LoadedJob
+   record shapes, the process primitives, the SHA-free log bookkeeping, and
+   the workspace `--job` producer (the check-ci-contracts no-reintroduction
+   guard followed the producer); `candidate-evidence-fresh-clone.ts` owns the
+   fresh-clone lane and its Site E2E staging. The CLI file keeps only the
+   `import.meta.main` dispatch and compatibility re-exports; aggregate and
+   validate import the record foundation directly, dissolving the
+   shell-to-lane cycle left by #1473 without adding one. All moved code is
+   verbatim (diff-audited); shapes, failure texts, path roles, SHA/sidecar
+   bindings, and exit behavior unchanged.
+5. The element pre-upgrade double bookkeeping merged with item 1 (S6a).
+6. The `fail()` micro-factories converge on one phase-parameterized
+   `raiseFrameworkError` (call-site message text unchanged); the
+   control-character scan loops unify on the canonical `hasControlCharacter`
+   helper (rejection messages unchanged; critical-assets keeps its distinct
+   CSS-allowing predicate); `.zcodeignore` joined `.gitignore` rather than
+   growing a sync script (S6c).
+7. Pure move + re-export held throughout: no public export moves in S6 or
+   closure (the public-interface snapshot is unchanged by them).
+
+### Closure output-delta reconciliation
+
+Declaration: the closure stage (T1–T4) adds no new output delta on any
+successful build, and no entry joins "Admitted output deltas". Evidence run
+at closure HEAD (2026-09-30, same machine as the S0 baseline):
+
+- Fixtures: `tests/fixtures/router-native-framework` and
+  `tests/fixtures/router-lit-framework` rebuilt at closure HEAD and at the
+  pre-closure commit bf57d945c — per-file SHA-1 over both `dist` trees
+  identical in all 14 + 21 files. Zero closure delta.
+- Oracles: `request-time-parity` (all 29 steps), `stream-manifest`,
+  `renderer-scope-parity`, `lit-graph-boundary`, `ssg-admission-parity`,
+  `compiler-open-core-boundary`, `generated-entry-gate`,
+  `registry-marker-drift`, and the `renderer-adapter` byte pins — run as one
+  targeted batch, 38 passed (29 steps), 0 failed, assertions intact.
+- Targeted closure suites: client-asset-manifest + error-codes +
+  ssg-asset-manifest + static-only-build (40 passed); module-analysis +
+  compiler-intrinsic-provenance (46); foreign-tag-scanner + authoring (35);
+  check-ci-contracts (21); candidate-evidence + evidence-reuse (59).
+
+Reconciliation against the S0 baseline (b53399fdf, `.artifacts/alpha6-baseline/`):
+every fixture-tree difference maps to a recorded entry — `server/entry.js`
+(S3a–e, S4b), `server/index.js` + the `client-assets.js` data module (S4a),
+the rendered-HTML script shape (S4b; the retired injector's empty placeholder
+line is the only 404.html difference), the client entry (S4), and
+`client/.vite/manifest.json` mirroring the chunk hashes. One class sits
+outside the artifact classes rule (f) freezes and is recorded here rather
+than left implicit: the client island chunks that bundle the element runtime
+kernel (native `island-note-counter`/`island-stream-lit-probe`, lit
+`island-note-counter`) carry pre-closure, behavior-preserving byte movement —
+the S1 error-catalog enum entry `OE_STREAM_TYPE_MISMATCH` (beb6a2648) and the
+S6c fail-factory convergence (90250dd4b) are visible in the bundle text;
+rendered HTML, manifests, and generated entries are all accounted for above.
+On the site tree, the pre-closure rebuild differs from the baseline by 68
+rendered pages + 404.html (the S4b script shape), the 70 island manifests
+(S4b's manifest-record sourcing — including the ui-island entry-chunk
+attribution documented in the identity contract above), the client entry and
+island chunks (S4 plus the kernel movement), and pagefind artifacts
+re-derived from the changed pages, with www content edits of the lane folded
+in (the S1 reference-page chip, 13105b234 + 8a92fd22a, and the generated
+error-reference repoint, 31d357d8d). The site build at closure HEAD is not an
+output delta at all — it fails closed per the identity-contract disclosure
+above and is handed to the implementation lane.
+
 ## Verification
 
 - The oracle suite is green, unweakened, at every stage boundary.
