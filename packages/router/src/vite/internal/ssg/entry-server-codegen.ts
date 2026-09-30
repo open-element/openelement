@@ -107,7 +107,7 @@ export function renderMiddleware(lines: string[], mw: MiddlewareDecl): void {
             `// CSP with auto-nonce: nonce creation and policy instantiation come from`,
           );
           lines.push(
-            `// @openelement/router/server-runtime (ADR-0160 rule a); the template below`,
+            `// @openelement/router/server-runtime; the template below`,
           );
           lines.push(`// is generated data derived from middleware.csp.`);
           lines.push(

@@ -13,7 +13,7 @@
  *
  * The island client script is NOT post-processed here: since #1471 the
  * document renderer embeds the final script tags at render time from the
- * client asset manifest (ADR-0160 rule d — identity-driven injection, no
+ * client asset manifest (#1471 — identity-driven injection, no
  * chunk-name surgery, no HTML rewriting for scripts).
  */
 
