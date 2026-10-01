@@ -107,6 +107,43 @@ const BOUNDARY_SPECIFIER_PATTERN =
 export const DECLARATION_LEAK_PATTERN =
   /compiler|router(?:\/src)?\/vite|router\/cli(?:[/.]|$)|\bvite\b|^node:|workspace:/;
 
+/**
+ * Type-bearing module specifiers of one declaration file: `import ... from`
+ * and `export ... from` edges. Side-effect-only imports (no import clause)
+ * are excluded — they carry no consumer type surface, and the vp generator
+ * emits them faithfully into `.d.ts` where the previous generator (deno pack)
+ * dropped them, so a packed declaration graph may now reference an optional
+ * peer (e.g. `@lit-labs/ssr/lib/install-global-dom-shim.js`) purely for
+ * module-order fidelity. Leak scans must still see every specifier; only the
+ * resolution walk uses this edge set.
+ */
+export function declarationTypeEdges(text: string): string[] {
+  const source = ts.createSourceFile(
+    'graph.d.ts',
+    text,
+    ts.ScriptTarget.ESNext,
+    true,
+    ts.ScriptKind.TS,
+  );
+  const edges: string[] = [];
+  const visit = (node: ts.Node): void => {
+    if (
+      ts.isImportDeclaration(node) && node.importClause !== undefined &&
+      ts.isStringLiteral(node.moduleSpecifier)
+    ) {
+      edges.push(node.moduleSpecifier.text);
+    } else if (
+      ts.isExportDeclaration(node) && node.moduleSpecifier !== undefined &&
+      ts.isStringLiteral(node.moduleSpecifier)
+    ) {
+      edges.push(node.moduleSpecifier.text);
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(source);
+  return edges;
+}
+
 async function run(
   command: string,
   args: string[],
@@ -1006,8 +1043,12 @@ function walkRouterDeclarations(tmp: string): string {
     if (seen.has(path)) return;
     seen.add(path);
     const text = Deno.readTextFileSync(path);
+    // Leak scan sees every specifier, including side-effect-only imports.
     for (const { fileName } of ts.preProcessFile(text).importedFiles) {
       if (DECLARATION_LEAK_PATTERN.test(fileName)) leaks.push(`${path} -> ${fileName}`);
+    }
+    // Resolution walk follows type-bearing edges only (see declarationTypeEdges).
+    for (const fileName of declarationTypeEdges(text)) {
       const resolved = ts.resolveModuleName(fileName, path, {
         moduleResolution: ts.ModuleResolutionKind.Bundler,
         module: ts.ModuleKind.ESNext,

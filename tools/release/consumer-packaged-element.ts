@@ -4,6 +4,7 @@ import { join, resolve } from '@std/path';
 import { chromium, firefox, webkit } from '@playwright/test';
 import ts from 'typescript';
 import { PACKAGE_VERSION } from '../repo/project-constants.ts';
+import { declarationTypeEdges } from './consumer-packaged-shared.ts';
 import { VITE_DEV_PIN } from '../repo/deps-vite-check.ts';
 
 const root = resolve(import.meta.dirname!, '../..');
@@ -88,6 +89,12 @@ export default {plugins:[element(), {name:'proof-module-boundary',generateBundle
         !/compiler|router\/src\/(?:vite|cli)|\bvite\b|^node:|workspace:/.test(fileName),
         `Browser declaration leak: ${path} -> ${fileName}`,
       );
+    }
+    // Resolution follows type-bearing edges only (see declarationTypeEdges in
+    // consumer-packaged-shared.ts): the vp generator emits side-effect-only
+    // imports into .d.ts that the previous generator dropped, and they carry
+    // no consumer type surface.
+    for (const fileName of declarationTypeEdges(text)) {
       const resolved = ts.resolveModuleName(fileName, path, {
         moduleResolution: ts.ModuleResolutionKind.Bundler,
         module: ts.ModuleKind.ESNext,
