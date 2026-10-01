@@ -10,6 +10,9 @@ symlinked under `node_modules/@openelement/`, and the verified recipe
 re-wrapped by the release coordinator (`tools/release/publish-npm.ts`) after
 payload assembly (dist → `src/`, publish-scoped non-module files, synthesized
 manifest), metadata, dependency, peer-dependency, and Create bin assembly.
+The repo toolchain outside the generator (task runner, test runner, permission
+model) still requires **Deno 2.9** per the pinned `.dvmrc`; the vp swap
+replaced the artifact generator only, not the repo's Deno floor.
 The coordinator never transpiles the normal module graph, never rewrites
 normal relative extensions, never constructs normal exports, and never
 deletes files the assembly step excludes. `vp pack` (under

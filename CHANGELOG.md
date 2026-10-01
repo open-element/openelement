@@ -9,6 +9,91 @@ lives in:
 - [`docs/release/release-state.json`](./docs/release/release-state.json)
 - [`docs/release/public-interface-snapshot.json`](./docs/release/public-interface-snapshot.json)
 
+## 1.0.0-alpha.7
+
+**vp toolchain train: the release toolchain swaps engines; product behavior
+stays put.** The packed-artifact generator moves from `deno pack` to the
+pinned `vp pack` pipeline, the format/lint engines move from deno fmt / deno
+lint to oxfmt 0.70.0 + oxlint 1.85.0 with a one-time repo-wide reformat, and
+the element compiler's JSX text whitespace handling is re-based onto the
+exact React contract. The source line is `1.0.0-alpha.7`; npm publication is
+a separate, gated step, so
+[`docs/release/release-state.json`](./docs/release/release-state.json) keeps
+registry truth at the verified alpha.6 state (`@alpha` = `1.0.0-alpha.6`)
+until the post-publish sync.
+
+### Highlights
+
+- **Packed-artifact generator: `deno pack` → `vp pack` (#1496).** The npm
+  tarballs for all four packages are produced by the pinned `vite-plus`
+  `vp pack` pipeline with explicit client-runtime entries,
+  `fixedExtension: false` and `treeshake: false`, replacing the `deno pack`
+  invocation. The packed-artifact pin gates were re-baselined to the vp
+  output (re-baseline #1), and the vp pipeline emits per-package pack
+  summaries for the candidate-evidence recorder.
+- **Format/lint engines: deno fmt / deno lint → oxfmt + oxlint (#1497).**
+  `deno task fmt` / `fmt:check` / `lint` now run oxfmt 0.70.0 and oxlint
+  1.85.0 as pinned npm deps. The former deno_lint effective set (86 rules)
+  was mapped with zero silent loss — 66 rules verbatim, 8 under oxlint
+  names, 2 option-tuned, 12 documented unmapped — and the task-contract
+  checks now pin the ox engines, rejecting any task that shells out to the
+  retired `deno fmt` / `deno lint`. A one-time repo-wide JS/TS reformat
+  (570 files, pure format diff) re-baselined the tree (re-baseline #2);
+  format-coupled surfaces (`packages/element/__fixtures__/`,
+  `tests/fixtures/*/app/`) keep their audited bytes via oxfmt ignores. The
+  markdown leg is transitionally ungated by the formatter;
+  markdownlint-cli2 still gates prose.
+- **JSX text whitespace follows the React contract (#1498).** The element
+  compiler's JSX text lowering — formerly "collapse every whitespace run to
+  one space" — now implements the `cleanJSXElementLiteralChild` rules the
+  React toolchain itself applies (node-boundary stripping, interior
+  newline-folding, sibling-delimiting-run removal). Multiline JSX layout
+  produced by React-family formatters (oxfmt/Prettier included) now
+  serializes identically to the inline layout
+  (`40⏎<span>4</span>` renders `404`, not `40 4`), removing the
+  formatter-versus-renderer coupling the A2 reformat had to work around.
+- **Pre-train debt riders (#1495).** Server-runtime and build-time errors
+  are cataloged with stable OEC codes (25 codes across 128 call sites,
+  rendered into the generated error reference); element's
+  `preUpgradeCaptures` are regrouped by root to stop page-lifetime
+  retention; the island media-query bound is shared instead of forked; the
+  retired content-dates writer ritual and dead dev triggers were dropped
+  from the repo docs and git hooks.
+
+### Compatibility
+
+- **This is an alpha prerelease.** Alpha trains do not carry a stable
+  compatibility promise; breaking changes between alphas are possible, and
+  npm `latest` stays on the stable 0.43 line. The `@alpha` dist-tag still
+  resolves to `1.0.0-alpha.6` until this train is published.
+- **Packed artifact bytes changed.** The vp generator re-cuts the published
+  tarball internals (`fixedExtension: false`, no treeshake); anything
+  pinning packed artifact hashes or sizes must re-baseline against this
+  train's output. No public API changed; the public-interface snapshot is
+  untouched.
+- **JSX whitespace semantics changed at the edges.** Source whose rendered
+  output relied on the old collapse-everything rule may differ where
+  newline-separated inline siblings previously gained an inter-node space
+  (React semantics remove it). Formatted-source layout is now
+  rendering-inert.
+- **`deno fmt` / `deno lint` are retired as repo engines.** One
+  formatting delta against pre-alpha7 trees is expected; `.oxfmtrc.json`
+  carries the former deno style (printWidth 100, spaces, single quotes).
+
+### Validation
+
+Run on this candidate branch (`alpha7-toolchain`):
+
+- version-bump six-point consistency at `1.0.0-alpha.7` (dry run reviewed,
+  then applied with `--write`, which regenerates the four fixture locks via
+  `fixtures:locks:update`).
+- `release:state-machine:check` green offline and against the live registry
+  (read-only npm); the release-state suite 12 tests green.
+- `deno task --cwd tools/repo generate:all` (9 generators) green and
+  drift-free; `deno task check` (oxfmt --check, oxlint, typecheck,
+  markdownlint) green.
+- Element suite 442 tests and Router suite 974 tests green.
+
 ## 1.0.0-alpha.6
 
 **Architecture-debt repayment: a typed server runtime, one serializer kernel,
