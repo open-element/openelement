@@ -1,7 +1,12 @@
 /**
  * Pre-upgrade event capture/replay (claim-activation helpers), plus the one
- * page-lifetime capture registry the facade installs (single bookkeeping
- * layer — the registry lives here, not beside the Events family).
+ * facade capture registry (single bookkeeping layer — the registry lives
+ * here, not beside the Events family). Registry retention is organized BY
+ * ROOT: a bounded shared pending pool holds records until their claim root
+ * adopts them into its own WeakMap-keyed bucket; replay and release then
+ * touch only that bucket, and every registry map is a WeakMap, so entries
+ * live exactly as long as their key (no page-lifetime retention, no
+ * page-lifetime entry table).
  */
 
 import type { CompiledClaimOptions } from './claim.ts';
@@ -260,6 +265,77 @@ function rebuildCaptureIndex(
 }
 
 /**
+ * Bounded per-target retention unit — the shape every pre-upgrade record
+ * container shares (a standalone capture queue, the facade's shared pending
+ * pool, and one claimed root's bucket). One latest record per target/type
+ * (per-target dedup), hard capped, with detached records swept under
+ * pressure and removals expressible as order-preserving takes.
+ */
+export interface PreUpgradeRecordStore {
+  /** Retained records in capture order. */
+  readonly events: PreUpgradeEvent[];
+  /** Retain one latest record per target/type; drops the newcomer at the cap. */
+  replaceFor(record: PreUpgradeEvent): void;
+  /** Remove and return the matching records, order preserved. */
+  takeWhere(
+    predicate: (record: PreUpgradeEvent) => boolean,
+  ): PreUpgradeEvent[];
+  /** Deterministically drop every retained record. */
+  clear(): void;
+}
+
+/** Index-aware insert: one slot per target/type, positions kept current. */
+function upsertCaptureRecord(
+  events: PreUpgradeEvent[],
+  index: Map<EventTarget, Map<string, number>>,
+  record: PreUpgradeEvent,
+): void {
+  index.get(record.target)?.set(record.type, events.length) ??
+    index.set(record.target, new Map([[record.type, events.length]]));
+  events.push(record);
+}
+
+function createPreUpgradeRecordStore(): PreUpgradeRecordStore {
+  const events: PreUpgradeEvent[] = [];
+  const index = new Map<EventTarget, Map<string, number>>();
+  return {
+    events,
+    replaceFor(record: PreUpgradeEvent): void {
+      const position = index.get(record.target)?.get(record.type);
+      if (position !== undefined && events[position]?.target === record.target) {
+        events[position] = record;
+        return;
+      }
+      if (events.length >= MAX_PRE_UPGRADE_CAPTURED_EVENTS) {
+        // One detached sweep before failing closed: a burst of removals
+        // (navigation / morph) must free budget for genuinely pending islands.
+        pruneDetachedTargets(events, index);
+        if (events.length >= MAX_PRE_UPGRADE_CAPTURED_EVENTS) return;
+      }
+      upsertCaptureRecord(events, index, record);
+    },
+    takeWhere(
+      predicate: (record: PreUpgradeEvent) => boolean,
+    ): PreUpgradeEvent[] {
+      const taken: PreUpgradeEvent[] = [];
+      const kept: PreUpgradeEvent[] = [];
+      for (const record of events) {
+        (predicate(record) ? taken : kept).push(record);
+      }
+      if (taken.length === 0) return taken;
+      events.length = 0;
+      for (const record of kept) events.push(record);
+      rebuildCaptureIndex(events, index);
+      return taken;
+    },
+    clear(): void {
+      events.length = 0;
+      index.clear();
+    },
+  };
+}
+
+/**
  * Capture the bounded pre-upgrade interaction set on an owning root. One
  * latest event per target/type is retained, matching the one-click-per-host
  * queue contract while keeping replay deterministic and finite.
@@ -278,27 +354,15 @@ function rebuildCaptureIndex(
 export function capturePreUpgradeEvents(
   root: EventTarget,
   eventTypes: readonly string[] = [...SUPPORTED_PRE_UPGRADE_EVENTS],
-  options: { accept?: (event: Event, target: EventTarget) => boolean } = {},
+  options: {
+    accept?: (event: Event, target: EventTarget) => boolean;
+    /** Internal seam: record into a caller-owned store (the facade's shared
+     * pending pool) instead of a capture-private queue. */
+    store?: PreUpgradeRecordStore;
+  } = {},
 ): PreUpgradeEventCapture {
-  const events: PreUpgradeEvent[] = [];
-  const index = new Map<EventTarget, Map<string, number>>();
+  const store = options.store ?? createPreUpgradeRecordStore();
   const listeners: Array<{ type: string; listener: EventListener }> = [];
-  const replaceFor = (record: PreUpgradeEvent): void => {
-    const position = index.get(record.target)?.get(record.type);
-    if (position !== undefined && events[position]?.target === record.target) {
-      events[position] = record;
-      return;
-    }
-    if (events.length >= MAX_PRE_UPGRADE_CAPTURED_EVENTS) {
-      // One detached sweep before failing closed: a burst of removals
-      // (navigation / morph) must free budget for genuinely pending islands.
-      pruneDetachedTargets(events, index);
-      if (events.length >= MAX_PRE_UPGRADE_CAPTURED_EVENTS) return;
-    }
-    index.get(record.target)?.set(record.type, events.length) ??
-      index.set(record.target, new Map([[record.type, events.length]]));
-    events.push(record);
-  };
   for (const type of eventTypes) {
     if (!SUPPORTED_PRE_UPGRADE_EVENTS.has(type)) continue;
     const listener: EventListener = (event) => {
@@ -317,14 +381,14 @@ export function capturePreUpgradeEvents(
       // (swept, never held to page end).
       // Opt-in pending-owner filter (facade document capture only).
       if (options.accept && !options.accept(event as Event, target)) return;
-      replaceFor({ target, type, event, seq: ++preUpgradeCaptureSequence });
+      store.replaceFor({ target, type, event, seq: ++preUpgradeCaptureSequence });
     };
     root.addEventListener(type, listener, { capture: true });
     listeners.push({ type, listener });
   }
   let stopped = false;
   return {
-    events,
+    events: store.events,
     stop(): void {
       if (stopped) return;
       stopped = true;
@@ -476,10 +540,77 @@ export function releasePreUpgradeEvents(root: Node, captured: readonly PreUpgrad
 
 // ─── Facade capture registry (claim replay seam) ─────────────────────
 
-const preUpgradeCaptures = new Map<
+/**
+ * The facade's shared pending pool. Every facade capture records into this
+ * one bounded store (same cap and per-target dedup as any capture queue), so
+ * a claimed root has a single place to adopt from and the page-wide pending
+ * set stays bounded no matter how many capture roots install listeners.
+ * Records leave only by adoption into a claim root's bucket or by the
+ * detached sweep; nothing here is keyed by target, so there is no
+ * page-lifetime entry table to grow.
+ */
+const preUpgradePendingRecords = createPreUpgradeRecordStore();
+
+/**
+ * Listener sets for the facade captures, keyed by the capture root the
+ * listeners are installed on (usually the document). WeakMap, not Map: a
+ * capture root removed before its islands activate no longer pins its entry,
+ * so the remove-before-activation leak is a structural property instead of a
+ * cleanup duty. The fixed listener set itself is page-lifetime by design and
+ * was never the leak; the retained records live in the bounded pool above
+ * and the per-root buckets below, never here.
+ */
+const preUpgradeCaptureRoots = new WeakMap<
   EventTarget,
   { capture: PreUpgradeEventCapture; declared: Set<string> }
 >();
+
+/**
+ * Per-claim-root record ownership (the M1 data model). A claimed root adopts
+ * its records exactly once out of the shared pool into its own bounded
+ * per-target bucket; from then on replay and release touch ONLY this root's
+ * bucket — O(the root's own share), never the page-wide pool — and release
+ * deterministically empties it. Keyed by root in a WeakMap: the bucket lives
+ * and dies with its root by construction. That keying is the memory
+ * guarantee; JS cannot observe GC, so nothing asserts collection behavior.
+ */
+interface PreUpgradeRootBucket {
+  readonly store: PreUpgradeRecordStore;
+  /** True once the root has claimed its share of the shared pool. */
+  adopted: boolean;
+}
+const preUpgradeRootBuckets = new WeakMap<object, PreUpgradeRootBucket>();
+
+/**
+ * The root's own bucket, claiming its share of the shared pool on first
+ * touch. Adoption is the one-time ownership handoff that makes per-root
+ * replay possible at all: records are captured before their claim root
+ * exists (delayed/lazy upgrade, #1170 — the upgraded element replaces the
+ * un-upgraded host), so a root must claim its share when it first arrives,
+ * sweeping detached records in the same pass. Afterwards the pool holds only
+ * records owned by still-pending roots, which adopt them at their own
+ * activation.
+ */
+function adoptRootBucket(root: Node): PreUpgradeRecordStore {
+  let bucket = preUpgradeRootBuckets.get(root as object);
+  if (!bucket) {
+    bucket = { store: createPreUpgradeRecordStore(), adopted: false };
+    preUpgradeRootBuckets.set(root as object, bucket);
+  }
+  if (bucket.adopted) return bucket.store;
+  bucket.adopted = true;
+  // Detached records can never hydrate: sweep them first so removals free
+  // their slot for genuinely pending islands.
+  preUpgradePendingRecords.takeWhere((record) => isDetachedTarget(record.target));
+  for (
+    const record of preUpgradePendingRecords.takeWhere((candidate) =>
+      isInsideRoot(root, candidate.target)
+    )
+  ) {
+    bucket.store.replaceFor(record);
+  }
+  return bucket.store;
+}
 
 /**
  * Install the bounded pre-upgrade interaction capture on an owning root
@@ -501,10 +632,11 @@ const preUpgradeCaptures = new Map<
  * interactions under a still-pending DECLARED island tag enter the queue —
  * ordinary events and undeclared third-party custom elements are skipped
  * (nested pending declared islands still capture through their own unsettled
- * host). With no tags declared the legacy dash heuristic applies. The queue
- * additionally carries a hard capacity cap (fail closed) and every release
- * sweeps detached targets, so post-hydration traffic and removals never grow
- * retention.
+ * host). With no tags declared the legacy dash heuristic applies. The shared
+ * queue carries a hard capacity cap (fail closed), detached records are
+ * swept when a claim root adopts its share (and under queue pressure), and
+ * each activation decision deterministically empties that root's own bucket,
+ * so post-hydration traffic and removals never grow retention.
  */
 export function ensurePreHydrationClickCapture(
   root?: EventTarget,
@@ -513,7 +645,7 @@ export function ensurePreHydrationClickCapture(
   const target = root ??
     (typeof document !== 'undefined' ? (document as unknown as EventTarget) : undefined);
   if (!target || typeof target.addEventListener !== 'function') return;
-  const existing = preUpgradeCaptures.get(target);
+  const existing = preUpgradeCaptureRoots.get(target);
   if (existing) {
     if (pendingTags) {
       for (const tag of pendingTags) {
@@ -532,27 +664,37 @@ export function ensurePreHydrationClickCapture(
   // same Set are visible to the filter without reinstalling listeners.
   const accept = (event: Event, eventTarget: EventTarget): boolean =>
     acceptPendingIslandEvent(event, eventTarget, declared);
-  preUpgradeCaptures.set(
-    target,
-    { capture: capturePreUpgradeEvents(target, undefined, { accept }), declared },
-  );
+  preUpgradeCaptureRoots.set(target, {
+    capture: capturePreUpgradeEvents(target, undefined, {
+      accept,
+      store: preUpgradePendingRecords,
+    }),
+    declared,
+  });
 }
 
 /** Replay captured pre-upgrade events owned by a successfully claimed root. */
 export function replayPreUpgradeCaptures(root: Node): void {
-  for (const { capture } of preUpgradeCaptures.values()) {
-    replayPreUpgradeEvents(root, capture.events);
-  }
+  replayPreUpgradeEvents(root, adoptRootBucket(root).events);
 }
 
 /**
- * Per-element release at the activation decision — success or failure: drop
- * exactly this root's captured records (the strong event-target references)
- * from every shared capture. The shared listener set stays installed for
- * elements that have not yet activated; their records are left pending.
+ * Per-element release at the activation decision — success or failure:
+ * deterministically empty this root's own bucket, dropping its strong
+ * event-target references in the same tick. Other roots' buckets and the
+ * pool's still-pending records (#1170) are untouched. The shared listener
+ * set stays installed for elements that have not yet activated.
  */
 export function releasePreUpgradeCapturesFor(root: Node): void {
-  for (const { capture } of preUpgradeCaptures.values()) {
-    releasePreUpgradeEvents(root, capture.events);
-  }
+  adoptRootBucket(root).clear();
+}
+
+/**
+ * Test-only structural introspection: how many records the registry retains
+ * for `root`'s own bucket right now (0 for a released or never-adopted
+ * root). Retention is pinned by state assertions like this one — the WeakMap
+ * keying above is the memory guarantee itself.
+ */
+export function preUpgradeRetainedRecordCount(root: Node): number {
+  return preUpgradeRootBuckets.get(root as object)?.store.events.length ?? 0;
 }
