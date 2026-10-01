@@ -1,5 +1,5 @@
 {
-  "generatedFrom": "git log --follow --format=%cs per source file",
+  "generatedFrom": "hand-maintained: last meaningful update per article and locale, validated against www/content/docs by check:content-dates",
   "articles": {
     "architecture/architecture": {
       "en": "2026-09-19",
