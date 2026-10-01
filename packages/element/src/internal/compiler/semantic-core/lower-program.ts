@@ -120,8 +120,55 @@ const CONDITION_TOKEN_OPS: Partial<Record<ts.SyntaxKind, ConditionOperator>> = {
   [ts.SyntaxKind.ExclamationEqualsEqualsToken]: 'not-equals',
 };
 
+/**
+ * React-contract JSX text cleaning (owner ruling 2026-10-02): the facebook/jsx
+ * whitespace rules exactly as the React toolchain implements them (Babel's
+ * `cleanJSXElementLiteralChild`, TypeScript's JSX transformer). Applied per
+ * JSXText node, three rules fall out:
+ *   R1 (node boundaries) — a leading/trailing whitespace run touching a
+ *     newline is stripped; a whitespace-only node containing a newline cleans
+ *     to '' (the caller drops it);
+ *   R2 (node interior) — a whitespace run containing a newline folds to a
+ *     single space; a run of spaces/tabs not touching a newline is preserved
+ *     verbatim;
+ *   R3 (between elements) — a sibling-delimiting whitespace run with a
+ *     newline cleans to '' (removed); a run without a newline survives
+ *     verbatim (the one-space form oxfmt/Prettier emit between inline
+ *     siblings renders as a single space).
+ * This makes React-family formatters (oxfmt included) safe on OE JSX: the
+ * multiline layout they produce serializes identically to the inline layout
+ * under React semantics (`40⏎<span>4</span>` renders `404`, not `40 4`).
+ *
+ * The input must be the parser's canonical `JsxText.text` — NOT
+ * `getText(sourceFile)`, which drops the leading whitespace of a run abutting
+ * a tag (node pos vs start gap) and would silently narrow the run before the
+ * rules apply. The TypeScript JSX transformer cleans this same value.
+ */
+function cleanJsxText(raw: string): string {
+  const lines = raw.split(/\r\n|\n|\r/);
+  let lastNonEmptyLine = 0;
+  for (let i = 0; i < lines.length; i++) {
+    if (/[^ \t]/.test(lines[i])) lastNonEmptyLine = i;
+  }
+  let text = '';
+  for (let i = 0; i < lines.length; i++) {
+    const isFirstLine = i === 0;
+    const isLastLine = i === lines.length - 1;
+    const isLastNonEmptyLine = i === lastNonEmptyLine;
+    let line = lines[i].replace(/\t/g, ' ');
+    if (!isFirstLine) line = line.replace(/^ +/, '');
+    if (!isLastLine) line = line.replace(/ +$/, '');
+    if (line) {
+      if (!isLastNonEmptyLine) line += ' ';
+      text += line;
+    }
+  }
+  return text;
+}
+
+/** Meaningful under the same React contract the emission applies. */
 function hasMeaningfulJsxChild(sf: ts.SourceFile, child: ts.JsxChild): boolean {
-  if (ts.isJsxText(child)) return child.getText(sf).trim().length > 0;
+  if (ts.isJsxText(child)) return cleanJsxText(child.text).length > 0;
   if (ts.isJsxExpression(child)) {
     if (!child.expression) return false;
     const literal = literalValue(child.expression, sf);
@@ -478,8 +525,8 @@ export class Lowering {
     for (const child of children) {
       const childPath = [...path, lowered.length];
       if (ts.isJsxText(child)) {
-        const value = child.getText(this.sf).replace(/\s+/g, ' ');
-        if (value.trim().length === 0) continue;
+        const value = cleanJsxText(child.text);
+        if (value === '') continue;
         lowered.push({ k: 'text', value });
         continue;
       }
@@ -980,8 +1027,8 @@ export class Lowering {
     for (const child of rawChildren) {
       const childPath = [...path, children.length];
       if (ts.isJsxText(child)) {
-        const text = child.getText(this.sf).replace(/\s+/g, ' ');
-        if (text.trim()) children.push({ k: 'text', value: text });
+        const text = cleanJsxText(child.text);
+        if (text !== '') children.push({ k: 'text', value: text });
         continue;
       }
       if (ts.isJsxExpression(child) && child.expression) {
