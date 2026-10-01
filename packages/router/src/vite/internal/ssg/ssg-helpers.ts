@@ -6,6 +6,7 @@
  */
 
 import { normalizeRoutePatternForURLPattern } from '@openelement/router/router';
+import { buildError, SsgDynamicErrorCode } from '../../../internal/error-codes.ts';
 import { quoteGeneratedJavaScriptValue } from './codegen-literals.ts';
 import { walkHtmlFileEntries } from '../html-files.ts';
 
@@ -31,7 +32,8 @@ export function resolveDynamicRoutePath(
   for (const name of paramNames) {
     const raw = params[name];
     if (raw === undefined || raw === null || raw === '') {
-      throw new Error(
+      throw buildError(
+        SsgDynamicErrorCode.PARAM_MISSING,
         `Missing value for route parameter "${name}" in ${routePath}`,
       );
     }
@@ -49,7 +51,8 @@ export function resolveDynamicRoutePath(
       /[\\\0]/.test(value) ||
       (!isCatchAll && value.includes('/'))
     ) {
-      throw new Error(
+      throw buildError(
+        SsgDynamicErrorCode.PARAM_UNSAFE,
         `Unsafe value for route parameter "${name}" in ${routePath}: ${value}`,
       );
     }

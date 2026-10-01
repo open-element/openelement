@@ -11,6 +11,7 @@ import type { ClientIslandEntry, IslandDeliveryStrategy } from '../protocol/ssg.
 export type { IslandDeliveryStrategy } from '../protocol/ssg.ts';
 import { HYDRATION_STRATEGIES, isValidTagName } from '@openelement/element';
 import { hasControlCharacter } from '../../../internal/control-characters.ts';
+import { isInvalidIslandMedia } from '../../../internal/island-media.ts';
 import { buildError, DeliveryErrorCode } from '../../../internal/error-codes.ts';
 
 // Derived from the element protocol's single-source strategy list (same
@@ -52,7 +53,7 @@ export function validateIslandMediaQuery(media: unknown, context = 'island'): st
     );
   }
   const normalized = media.trim();
-  if (normalized.length > 512 || hasControlCharacter(normalized)) {
+  if (isInvalidIslandMedia(normalized)) {
     throw buildError(
       DeliveryErrorCode.MEDIA_QUERY,
       `Invalid island media query for ${context}: unsafe or oversized value`,

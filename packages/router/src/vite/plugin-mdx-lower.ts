@@ -16,6 +16,7 @@
 
 import { marked } from 'marked';
 import { normalizeSeparators, pathToTagName } from '@openelement/element/build-utils';
+import { buildError, MdxErrorCode } from '../internal/error-codes.ts';
 import { basename, relative, resolve } from '../internal/host-path.ts';
 import { validateSafeUrl } from './head-injection.ts';
 
@@ -25,7 +26,8 @@ function jsxText(value: string): string {
 }
 
 function failMdx(filePath: string, reason: string): never {
-  throw new Error(
+  throw buildError(
+    MdxErrorCode.STATIC_CONTRACT,
     `[openElement] MDX page ${filePath}: ${reason}. ` +
       'The MDX contract is the static Markdown subset — raw HTML, JSX ' +
       'expressions and ESM statements are outside it; move ' +

@@ -6,6 +6,7 @@ import { formatError, isValidTagName, OpenElementError } from '@openelement/elem
 import { createLogger } from '@openelement/element';
 import { normalizeSeparators, pathToTagName } from '@openelement/element/build-utils';
 import { hasControlCharacter } from '../../../internal/control-characters.ts';
+import { buildError, PackageIslandErrorCode } from '../../../internal/error-codes.ts';
 import { join } from '../../../internal/host-path.ts';
 import { safeReadDir, safeReadFile, safeStat } from './route-scanner-fs.ts';
 import {
@@ -137,7 +138,8 @@ export function buildPackageIslandDecls(
         const openElement = d.openElement;
         const modulePath = openElement?.module;
         if (!modulePath) {
-          throw new Error(
+          throw buildError(
+            PackageIslandErrorCode.MODULE_MISSING,
             `Package manifest declaration "${d.tagName}" is missing openElement.module`,
           );
         }
@@ -173,10 +175,16 @@ export function buildPackageIslandDecls(
           ? undefined
           : validateIslandMediaQuery(delivery.media, d.tagName);
         if (hydrate === 'media' && media === undefined) {
-          throw new Error(`Package island "${d.tagName}" uses media delivery without media`);
+          throw buildError(
+            PackageIslandErrorCode.MEDIA_WITHOUT_DELIVERY,
+            `Package island "${d.tagName}" uses media delivery without media`,
+          );
         }
         if (hydrate !== 'media' && media !== undefined) {
-          throw new Error(`Package island "${d.tagName}" declares media without media delivery`);
+          throw buildError(
+            PackageIslandErrorCode.DELIVERY_WITHOUT_MEDIA,
+            `Package island "${d.tagName}" declares media without media delivery`,
+          );
         }
         return {
           tagName: d.tagName,

@@ -47,6 +47,7 @@ import type { RouteEntry, SpecialFileType } from '../protocol/framework.ts';
 import { createLogger } from '@openelement/element';
 import { normalizeSeparators, pathToTagName } from '@openelement/element/build-utils';
 import { dirname, join, resolve } from '../../../internal/host-path.ts';
+import { buildError, RouteScanErrorCode } from '../../../internal/error-codes.ts';
 import { safeReadDir, safeReadFile, safeStat } from './route-scanner-fs.ts';
 import { analyzeModuleSemantics } from '@openelement/element/compiler';
 import { ROUTER_MODULE_VOCABULARY } from '../protocol/module-vocabulary.ts';
@@ -319,7 +320,8 @@ export async function scanRoutes(
               isDefinePage && tagName !== undefined && tagName === fileToTagName(relativePath) &&
               semantics.usesExportedTagName
             ) {
-              throw new Error(
+              throw buildError(
+                RouteScanErrorCode.TAG_SHADOW,
                 `Route module ${resolve(fullPath)} self-registers content element '${tagName}', ` +
                   `which equals the route's fallback registration tag — the content element ` +
                   `would shadow the page class (#952 rule) and the definePage render would be ` +
@@ -391,7 +393,8 @@ export async function scanRoutes(
       );
       const previous = seenPaths.get(shape);
       if (previous) {
-        throw new Error(
+        throw buildError(
+          RouteScanErrorCode.EQUIVALENT_FILES,
           `Equivalent route files: '${previous}' and '${entry.filePath}' produce '${shape}'`,
         );
       }
@@ -401,7 +404,8 @@ export async function scanRoutes(
     for (const entry of entries) {
       const existing = seenVarNames.get(entry.varName);
       if (existing !== undefined) {
-        throw new Error(
+        throw buildError(
+          RouteScanErrorCode.VAR_NAME_COLLISION,
           `Route variable name collision: '${existing}' and '${entry.filePath}' both map to ` +
             `identifier '${entry.varName}' (pathToVarName folds '/', '-', '_' to '_'). ` +
             `Rename one of the route files.`,

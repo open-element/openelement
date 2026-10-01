@@ -20,6 +20,7 @@ import { isDangerousKey, isValidTagName, OpenElementError } from '@openelement/e
 import { HYDRATION_STRATEGIES } from '@openelement/element/authoring';
 import type { HydrationStrategy } from '@openelement/element/authoring';
 import { hasControlCharacter } from './internal/control-characters.ts';
+import { isInvalidIslandMedia, ISLAND_MEDIA_QUERY_MAX_LENGTH } from './internal/island-media.ts';
 import { authoringError, IslandErrorCode, PageErrorCode } from './internal/error-codes.ts';
 
 /**
@@ -605,18 +606,11 @@ function validateIslandMedia(media: unknown): string {
     );
   }
   const value = media.trim();
-  if (value.length > 512) {
+  if (isInvalidIslandMedia(value)) {
     throw authoringError(
       IslandErrorCode.HYDRATE,
       `${ERROR_PREFIX} defineIslandConfig() media contains an unsafe or oversized query. ` +
-        'Keep the query under 512 characters and free of control characters.',
-    );
-  }
-  if (hasControlCharacter(value)) {
-    throw authoringError(
-      IslandErrorCode.HYDRATE,
-      `${ERROR_PREFIX} defineIslandConfig() media contains an unsafe or oversized query. ` +
-        'Keep the query under 512 characters and free of control characters.',
+        `Keep the query under ${ISLAND_MEDIA_QUERY_MAX_LENGTH} characters and free of control characters.`,
     );
   }
   return value;

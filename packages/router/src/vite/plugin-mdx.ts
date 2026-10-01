@@ -21,6 +21,7 @@
  */
 
 import type { Plugin } from 'vite';
+import { buildError, MdxErrorCode } from '../internal/error-codes.ts';
 
 /** Options for the `.mdx` route plugin ({@linkcode mdxPlugin}). */
 export interface OpenMdxPluginOptions {
@@ -42,7 +43,8 @@ let lowerPromise: Promise<LowerModule> | undefined;
 function loadLower(): Promise<LowerModule> {
   lowerPromise ??= import('./plugin-mdx-lower.ts').catch((cause: unknown) => {
     if (cause instanceof Error && /marked/.test(cause.message)) {
-      throw new Error(
+      throw buildError(
+        MdxErrorCode.OPTIONAL_PEER_MISSING,
         '[openElement] MDX routes require the optional peer dependency "marked" ' +
           '(declared by @openelement/router). Install it into your app: add ' +
           '"marked": "npm:marked@^15.0.0" to the deno.json imports ' +
@@ -76,7 +78,10 @@ export function mdxPlugin(options: OpenMdxPluginOptions = {}): Plugin {
       try {
         return await Deno.readTextFile(filePath);
       } catch {
-        throw new Error(`[openElement] Unable to read MDX page: ${filePath}`);
+        throw buildError(
+          MdxErrorCode.PAGE_UNREADABLE,
+          `[openElement] Unable to read MDX page: ${filePath}`,
+        );
       }
     },
 

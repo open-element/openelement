@@ -16,6 +16,7 @@
  */
 
 import { join } from '../../../internal/host-path.ts';
+import { buildError, SsgDynamicErrorCode } from '../../../internal/error-codes.ts';
 import type {
   RouteInfoEntry,
   SsgPageOutput,
@@ -84,7 +85,8 @@ function handleRenderFailure(
   error: unknown,
 ): void {
   if (policy === 'fail') {
-    throw new Error(
+    throw buildError(
+      SsgDynamicErrorCode.RENDER_FAILED,
       `[openElement] SSG failed: ${context}: ${formatError(error)}`,
     );
   }
@@ -125,7 +127,8 @@ async function writeRenderedPage(
   // Failures throw so the caller can apply the fail/warn policy uniformly
   // with renderRoute() throws. A 500 page is never a build artifact.
   if (outcome.kind === 'failure') {
-    throw new Error(
+    throw buildError(
+      SsgDynamicErrorCode.RENDER_STATUS,
       `render failed (status ${outcome.status})` +
         (outcome.messages.length > 0 ? `: ${outcome.messages.join('; ')}` : ''),
     );
