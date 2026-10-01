@@ -72,9 +72,11 @@ function providerRecord<T>(host: HTMLElement, context: Context<T>, initial: T): 
   const listener: EventListener = (event) => {
     const request = event as ContextRequest<T>;
     if (
-      request.context !== context.key || typeof request.callback !== 'function' ||
+      request.context !== context.key ||
+      typeof request.callback !== 'function' ||
       typeof request.subscribe !== 'boolean'
-    ) return;
+    )
+      return;
     event.stopImmediatePropagation();
     const current = value.value;
     if (!request.subscribe) {
@@ -104,11 +106,7 @@ function providerRecord<T>(host: HTMLElement, context: Context<T>, initial: T): 
 }
 
 /** Provide a plain protocol value; the provider Signal remains OE-private. */
-export function provideContext<T>(
-  host: HTMLElement,
-  context: Context<T>,
-  value: T,
-): Unsubscribe {
+export function provideContext<T>(host: HTMLElement, context: Context<T>, value: T): Unsubscribe {
   const provider = providerRecord(host, context, value);
   provider.value.value = value;
   return provider.dispose;

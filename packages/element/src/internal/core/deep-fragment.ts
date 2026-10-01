@@ -69,27 +69,41 @@ export function ensureDeepFragmentNavigation(options: DeepFragmentOptions = {}):
   installed = true;
 
   const scrollCurrent = () => scrollToHash(location.hash, 'auto');
-  document.addEventListener('click', (event) => {
-    const mouse = event as MouseEvent;
-    if (
-      event.defaultPrevented || mouse.button !== 0 || mouse.metaKey || mouse.ctrlKey ||
-      mouse.shiftKey || mouse.altKey
-    ) return;
-    const anchor = anchorFromEvent(mouse);
-    if (!anchor || anchor.target || anchor.hasAttribute('download')) return;
-    const url = new URL(anchor.href, location.href);
-    const fragmentId = decodeFragmentId(url.hash);
-    if (
-      !url.hash || url.origin !== location.origin || url.pathname !== location.pathname ||
-      url.search !== location.search || fragmentId === null || document.getElementById(fragmentId)
-    ) return;
-    const reduced = typeof matchMedia === 'function' &&
-      matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const target = scrollToHash(url.hash, reduced ? 'auto' : 'smooth');
-    if (!target) return;
-    event.preventDefault();
-    history.pushState(null, '', url.hash);
-  }, true);
+  document.addEventListener(
+    'click',
+    (event) => {
+      const mouse = event as MouseEvent;
+      if (
+        event.defaultPrevented ||
+        mouse.button !== 0 ||
+        mouse.metaKey ||
+        mouse.ctrlKey ||
+        mouse.shiftKey ||
+        mouse.altKey
+      )
+        return;
+      const anchor = anchorFromEvent(mouse);
+      if (!anchor || anchor.target || anchor.hasAttribute('download')) return;
+      const url = new URL(anchor.href, location.href);
+      const fragmentId = decodeFragmentId(url.hash);
+      if (
+        !url.hash ||
+        url.origin !== location.origin ||
+        url.pathname !== location.pathname ||
+        url.search !== location.search ||
+        fragmentId === null ||
+        document.getElementById(fragmentId)
+      )
+        return;
+      const reduced =
+        typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+      const target = scrollToHash(url.hash, reduced ? 'auto' : 'smooth');
+      if (!target) return;
+      event.preventDefault();
+      history.pushState(null, '', url.hash);
+    },
+    true,
+  );
 
   addEventListener('hashchange', scrollCurrent);
   addEventListener('popstate', scrollCurrent);

@@ -20,7 +20,7 @@ if (import.meta.main) {
   } catch (error) {
     console.error(
       `Build failed: ${
-        error instanceof Error ? error.stack ?? formatError(error) : formatError(error)
+        error instanceof Error ? (error.stack ?? formatError(error)) : formatError(error)
       }`,
     );
     if (error instanceof Error && error.cause) console.error('Caused by:', error.cause);

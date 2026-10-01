@@ -42,18 +42,17 @@ const SAFE_ROOT_SPECIFIER_RE = /^\/[A-Za-z0-9_./@-]+$/;
 const SAFE_FS_SPECIFIER_RE = /^\/@fs\/(?:[A-Za-z]:\/)?[A-Za-z0-9_./@-]+$/;
 const SAFE_BARE_SPECIFIER_RE =
   /^(?:@[a-z0-9_.-]+\/[a-z0-9_.-]+|[a-z0-9_.-]+)(?:\/[A-Za-z0-9_./@-]+)?$/;
-const VALID_STRATEGIES = new Set<string>([
-  ...HYDRATION_STRATEGIES,
-  ...ISLAND_DELIVERY_STRATEGIES,
-]);
+const VALID_STRATEGIES = new Set<string>([...HYDRATION_STRATEGIES, ...ISLAND_DELIVERY_STRATEGIES]);
 
 declare const admittedIslandModuleSpecifier: unique symbol;
 export type AdmittedIslandModuleSpecifier = string & {
   readonly [admittedIslandModuleSpecifier]: true;
 };
 
-export interface AdmittedClientIslandEntry
-  extends Omit<ClientIslandDeliveryEntry, 'modulePath' | 'strategy'> {
+export interface AdmittedClientIslandEntry extends Omit<
+  ClientIslandDeliveryEntry,
+  'modulePath' | 'strategy'
+> {
   modulePath: AdmittedIslandModuleSpecifier;
   strategy: IslandDeliveryStrategy;
 }
@@ -70,10 +69,7 @@ export function validateIslandModuleSpecifier(modulePath: string): void {
     modulePath.startsWith('//') ||
     hasTraversalSegment(modulePath)
   ) {
-    throw buildError(
-      IslandEntryErrorCode.MODULE_PATH,
-      `Invalid island modulePath: ${modulePath}`,
-    );
+    throw buildError(IslandEntryErrorCode.MODULE_PATH, `Invalid island modulePath: ${modulePath}`);
   }
   if (
     !SAFE_RELATIVE_SPECIFIER_RE.test(modulePath) &&
@@ -81,10 +77,7 @@ export function validateIslandModuleSpecifier(modulePath: string): void {
     !SAFE_FS_SPECIFIER_RE.test(modulePath) &&
     !SAFE_BARE_SPECIFIER_RE.test(modulePath)
   ) {
-    throw buildError(
-      IslandEntryErrorCode.MODULE_PATH,
-      `Invalid island modulePath: ${modulePath}`,
-    );
+    throw buildError(IslandEntryErrorCode.MODULE_PATH, `Invalid island modulePath: ${modulePath}`);
   }
 }
 
@@ -123,9 +116,10 @@ export function validateClientIslandEntry(
     deliveryEntry.tagNames,
     entry.tagName,
   );
-  const media = deliveryEntry.media === undefined
-    ? undefined
-    : validateIslandMediaQuery(deliveryEntry.media, entry.tagName);
+  const media =
+    deliveryEntry.media === undefined
+      ? undefined
+      : validateIslandMediaQuery(deliveryEntry.media, entry.tagName);
   if (entry.strategy === 'media' && media === undefined) {
     throw buildError(
       IslandEntryErrorCode.MEDIA,

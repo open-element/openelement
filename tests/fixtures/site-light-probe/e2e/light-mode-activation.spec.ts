@@ -71,7 +71,9 @@ test('fixture build: the probe chunk stays a dynamic import', () => {
 });
 
 test.describe('light-mode in-place activation', () => {
-  test('SSR light island activates in place after a delayed upgrade, replaying the pre-upgrade click exactly once', async ({ page }) => {
+  test('SSR light island activates in place after a delayed upgrade, replaying the pre-upgrade click exactly once', async ({
+    page,
+  }) => {
     const mismatchWarnings: string[] = [];
     page.on('console', (msg) => {
       if (msg.type() === 'warning' && msg.text().includes('SSR/hydration mismatch')) {
@@ -115,8 +117,8 @@ test.describe('light-mode in-place activation', () => {
       const counter = page.locator('open-light-probe .probe-count');
       await expect(counter).toHaveText('0');
 
-      const notUpgraded = await page.evaluate(() =>
-        customElements.get('open-light-probe') === undefined
+      const notUpgraded = await page.evaluate(
+        () => customElements.get('open-light-probe') === undefined,
       );
       expect(notUpgraded).toBe(true);
 

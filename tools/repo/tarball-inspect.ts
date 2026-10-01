@@ -19,8 +19,12 @@ export interface TarEntry {
 const BLOCK = 512;
 
 function unsafePath(path: string): boolean {
-  return path === '' || path.startsWith('/') || path.includes('\\') ||
-    path.split('/').some((segment) => segment === '' || segment === '.' || segment === '..');
+  return (
+    path === '' ||
+    path.startsWith('/') ||
+    path.includes('\\') ||
+    path.split('/').some((segment) => segment === '' || segment === '.' || segment === '..')
+  );
 }
 
 function octal(bytes: Uint8Array): number {
@@ -46,11 +50,8 @@ export function parseTar(archive: Uint8Array): TarEntry[] {
     }
     entries.push({
       path,
-      type: typeflag === '0' || typeflag === '\0'
-        ? 'file'
-        : typeflag === '5'
-        ? 'directory'
-        : 'other',
+      type:
+        typeflag === '0' || typeflag === '\0' ? 'file' : typeflag === '5' ? 'directory' : 'other',
       size,
       data: archive.subarray(offset + BLOCK, offset + BLOCK + size),
     });
@@ -61,9 +62,9 @@ export function parseTar(archive: Uint8Array): TarEntry[] {
 
 /** Gunzip (Web Standard) and parse a `.tgz`. */
 export async function parseTarGz(bytes: Uint8Array): Promise<TarEntry[]> {
-  const stream = new Blob([bytes as BlobPart]).stream().pipeThrough(
-    new DecompressionStream('gzip'),
-  );
+  const stream = new Blob([bytes as BlobPart])
+    .stream()
+    .pipeThrough(new DecompressionStream('gzip'));
   const raw = new Uint8Array(await new Response(stream).arrayBuffer());
   return parseTar(raw);
 }

@@ -51,17 +51,31 @@ Deno.test('stream manifest binds two loader fields to independent compiled Part 
     assertEquals(manifest.program.version, 1);
     assertEquals(manifest.program.tag, 'stream-page');
     assertEquals(manifest.program.sha256.length, 64);
-    assertEquals(manifest.fields.map((entry) => entry.field), ['first', 'second']);
-    assertEquals(manifest.fields.map((entry) => entry.signal), ['first', 'second']);
-    assertEquals(manifest.fields.map((entry) => entry.owners.map((owner) => owner.index)), [[0], [
-      1,
-    ]]);
-    assertEquals(manifest.fields.map((entry) => entry.owners[0].location), ['p0', 'p1']);
-    assertEquals(manifest.fields.map((entry) => entry.owners[0].kind), ['part', 'part']);
     assertEquals(
-      manifest.fields.every((entry) =>
-        entry.owners[0].source.file.endsWith('components/page.tsx') &&
-        entry.owners[0].source.start.line > 0
+      manifest.fields.map((entry) => entry.field),
+      ['first', 'second'],
+    );
+    assertEquals(
+      manifest.fields.map((entry) => entry.signal),
+      ['first', 'second'],
+    );
+    assertEquals(
+      manifest.fields.map((entry) => entry.owners.map((owner) => owner.index)),
+      [[0], [1]],
+    );
+    assertEquals(
+      manifest.fields.map((entry) => entry.owners[0].location),
+      ['p0', 'p1'],
+    );
+    assertEquals(
+      manifest.fields.map((entry) => entry.owners[0].kind),
+      ['part', 'part'],
+    );
+    assertEquals(
+      manifest.fields.every(
+        (entry) =>
+          entry.owners[0].source.file.endsWith('components/page.tsx') &&
+          entry.owners[0].source.start.line > 0,
       ),
       true,
     );
@@ -73,9 +87,9 @@ Deno.test('stream manifest binds two loader fields to independent compiled Part 
     const emitted = ts.transpileModule(emittedTs, {
       compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
     }).outputText;
-    const compiledModule = await import(
+    const compiledModule = (await import(
       `data:text/javascript;charset=utf-8,${encodeURIComponent(emitted)}`
-    ) as {
+    )) as {
       default: {
         __partProgram: ReturnType<typeof compileElementProgram>['program'];
         __compiledProperties: unknown;
@@ -162,55 +176,78 @@ Deno.test('bounded when/each Regions own their deferred field independently', as
   );
   await fixture(async (dir) => {
     const fields = (await scanRoutes(dir))[0].streamManifest!.fields;
-    assertEquals(fields.map((field) => field.owners[0].kind), ['region', 'part']);
-    assertEquals(fields.map((field) => field.owners[0].index), [0, 1]);
+    assertEquals(
+      fields.map((field) => field.owners[0].kind),
+      ['region', 'part'],
+    );
+    assertEquals(
+      fields.map((field) => field.owners[0].index),
+      [0, 1],
+    );
   }, whenPage);
-  const eachPage = page.replace(
-    "type: String, attribute: false, reflect: false }) first = ''",
-    'type: Array, attribute: false, reflect: false }) first = []',
-  ).replace(
-    '<h1>{this.first}</h1>',
-    '<ul>{this.first.map(item => <li key={item.id}>{item.title}</li>)}</ul>',
-  );
+  const eachPage = page
+    .replace(
+      "type: String, attribute: false, reflect: false }) first = ''",
+      'type: Array, attribute: false, reflect: false }) first = []',
+    )
+    .replace(
+      '<h1>{this.first}</h1>',
+      '<ul>{this.first.map(item => <li key={item.id}>{item.title}</li>)}</ul>',
+    );
   await fixture(async (dir) => {
     const fields = (await scanRoutes(dir))[0].streamManifest!.fields;
-    assertEquals(fields.map((field) => field.owners[0].kind), ['region', 'part']);
-  }, eachPage);
-  await fixture(async (dir) => {
-    const error = await assertRejects(() => scanRoutes(dir)) as Error;
-    assertStringIncludes(
-      error.message,
-      'each p0 has an opaque host, unsafe frame tag/attribute, or item attribute',
+    assertEquals(
+      fields.map((field) => field.owners[0].kind),
+      ['region', 'part'],
     );
-  }, eachPage.replace('key={item.id}', 'key={item.id} title={item.title}'));
-  await fixture(async (dir) => {
-    const error = await assertRejects(() => scanRoutes(dir)) as Error;
-    assertStringIncludes(error.message, 'unsafe frame tag/attribute');
-    assertStringIncludes(error.message, 'first');
-  }, whenPage.replace('<h1>on</h1>', '<template><b>on</b></template>'));
+  }, eachPage);
   await fixture(
     async (dir) => {
-      const error = await assertRejects(() => scanRoutes(dir)) as Error;
+      const error = (await assertRejects(() => scanRoutes(dir))) as Error;
+      assertStringIncludes(
+        error.message,
+        'each p0 has an opaque host, unsafe frame tag/attribute, or item attribute',
+      );
+    },
+    eachPage.replace('key={item.id}', 'key={item.id} title={item.title}'),
+  );
+  await fixture(
+    async (dir) => {
+      const error = (await assertRejects(() => scanRoutes(dir))) as Error;
       assertStringIncludes(error.message, 'unsafe frame tag/attribute');
       assertStringIncludes(error.message, 'first');
     },
-    eachPage.replace('<li key={item.id}>', '<iframe key={item.id}>').replace(
-      '</li>',
-      '</iframe>',
-    ),
+    whenPage.replace('<h1>on</h1>', '<template><b>on</b></template>'),
   );
-  await fixture(async (dir) => {
-    const error = await assertRejects(() => scanRoutes(dir)) as Error;
-    assertStringIncludes(error.message, 'unsafe frame tag/attribute');
-  }, whenPage.replace('<h1>on</h1>', '<a href="javascript:alert(1)">on</a>'));
-  await fixture(async (dir) => {
-    const error = await assertRejects(() => scanRoutes(dir)) as Error;
-    assertStringIncludes(error.message, 'unsafe frame tag/attribute');
-  }, whenPage.replace('<h1>on</h1>', '<a href="java\tscript:alert(1)">on</a>'));
-  await fixture(async (dir) => {
-    const error = await assertRejects(() => scanRoutes(dir)) as Error;
-    assertStringIncludes(error.message, 'unsafe frame tag/attribute');
-  }, whenPage.replace('<h1>on</h1>', '<span data-oe-frame="spoof">on</span>'));
+  await fixture(
+    async (dir) => {
+      const error = (await assertRejects(() => scanRoutes(dir))) as Error;
+      assertStringIncludes(error.message, 'unsafe frame tag/attribute');
+      assertStringIncludes(error.message, 'first');
+    },
+    eachPage.replace('<li key={item.id}>', '<iframe key={item.id}>').replace('</li>', '</iframe>'),
+  );
+  await fixture(
+    async (dir) => {
+      const error = (await assertRejects(() => scanRoutes(dir))) as Error;
+      assertStringIncludes(error.message, 'unsafe frame tag/attribute');
+    },
+    whenPage.replace('<h1>on</h1>', '<a href="javascript:alert(1)">on</a>'),
+  );
+  await fixture(
+    async (dir) => {
+      const error = (await assertRejects(() => scanRoutes(dir))) as Error;
+      assertStringIncludes(error.message, 'unsafe frame tag/attribute');
+    },
+    whenPage.replace('<h1>on</h1>', '<a href="java\tscript:alert(1)">on</a>'),
+  );
+  await fixture(
+    async (dir) => {
+      const error = (await assertRejects(() => scanRoutes(dir))) as Error;
+      assertStringIncludes(error.message, 'unsafe frame tag/attribute');
+    },
+    whenPage.replace('<h1>on</h1>', '<span data-oe-frame="spoof">on</span>'),
+  );
 });
 
 Deno.test('stream admission rejects unsupported authoring and sinks with route, field and source', async () => {
@@ -244,13 +281,13 @@ Deno.test('stream admission rejects unsupported authoring and sinks with route, 
     ],
     [
       'HTML sink',
-      page.replace(
-        'property }',
-        'property, trustedHtml, type TrustedHtml }',
-      ).replace(
-        "type: String, attribute: false, reflect: false }) first = ''",
-        "type: Object, attribute: false, reflect: false }) first: TrustedHtml = trustedHtml('')",
-      ).replace('<h1>{this.first}</h1>', '<div innerHTML={this.first} trustedHtml></div>'),
+      page
+        .replace('property }', 'property, trustedHtml, type TrustedHtml }')
+        .replace(
+          "type: String, attribute: false, reflect: false }) first = ''",
+          "type: Object, attribute: false, reflect: false }) first: TrustedHtml = trustedHtml('')",
+        )
+        .replace('<h1>{this.first}</h1>', '<div innerHTML={this.first} trustedHtml></div>'),
       route,
       'first',
       'html sink',
@@ -264,26 +301,26 @@ Deno.test('stream admission rejects unsupported authoring and sinks with route, 
     ],
     [
       'computed consumer',
-      page.replace(
-        'render()',
-        '@property({ type: String, attribute: false, reflect: false }) total = computed(() => this.first);\n  render()',
-      ).replace('property }', 'property, computed }').replace(
-        '{this.first}</h1>',
-        '{this.total}</h1>',
-      ),
+      page
+        .replace(
+          'render()',
+          '@property({ type: String, attribute: false, reflect: false }) total = computed(() => this.first);\n  render()',
+        )
+        .replace('property }', 'property, computed }')
+        .replace('{this.first}</h1>', '{this.total}</h1>'),
       route,
       'first',
       'computed total',
     ],
     [
       'computed chain',
-      page.replace(
-        'render()',
-        '@property({ type: String, attribute: false, reflect: false }) total = computed(() => this.first);\n  @property({ type: String, attribute: false, reflect: false }) doubled = computed(() => this.total);\n  render()',
-      ).replace('property }', 'property, computed }').replace(
-        '{this.first}</h1>',
-        '{this.doubled}</h1>',
-      ),
+      page
+        .replace(
+          'render()',
+          '@property({ type: String, attribute: false, reflect: false }) total = computed(() => this.first);\n  @property({ type: String, attribute: false, reflect: false }) doubled = computed(() => this.total);\n  render()',
+        )
+        .replace('property }', 'property, computed }')
+        .replace('{this.first}</h1>', '{this.doubled}</h1>'),
       route,
       '',
       'computed field may not read computed field',
@@ -311,10 +348,9 @@ Deno.test('stream admission rejects unsupported authoring and sinks with route, 
     [
       'missing page field',
       page,
-      route.replace("'first', 'second'", "'absent', 'second'").replace(
-        "first: Promise.resolve('a')",
-        "absent: Promise.resolve('a')",
-      ),
+      route
+        .replace("'first', 'second'", "'absent', 'second'")
+        .replace("first: Promise.resolve('a')", "absent: Promise.resolve('a')"),
       'absent',
       'no declared compiled page property',
     ],
@@ -432,7 +468,7 @@ Deno.test('stream admission rejects unsupported authoring and sinks with route, 
   for (const [name, pageSource, routeSource, field, reason] of cases) {
     await fixture(
       async (dir) => {
-        const error = await assertRejects(() => scanRoutes(dir)) as Error;
+        const error = (await assertRejects(() => scanRoutes(dir))) as Error;
         assertStringIncludes(error.message, reason, name);
         if (field) assertStringIncludes(error.message, `field ${field}`, name);
       },
@@ -443,10 +479,9 @@ Deno.test('stream admission rejects unsupported authoring and sinks with route, 
 });
 
 Deno.test('a static head object and an aliased definePage import keep the default projection', async () => {
-  const source = route.replace(
-    'import { definePage }',
-    'import { definePage as pageDefinition }',
-  ).replace('definePage(Page, {', "pageDefinition(Page, {\n  head: { title: 'Known' },");
+  const source = route
+    .replace('import { definePage }', 'import { definePage as pageDefinition }')
+    .replace('definePage(Page, {', "pageDefinition(Page, {\n  head: { title: 'Known' },");
   await fixture(
     async (dir) => {
       assertEquals((await scanRoutes(dir))[0].streamManifest?.fields.length, 2);
@@ -457,24 +492,22 @@ Deno.test('a static head object and an aliased definePage import keep the defaul
 });
 
 Deno.test('stream admission requires the loader named export used by the generated entry', async () => {
-  for (
-    const unexported of [
-      route.replace('export const loader', 'const loader'),
-      route.replace(
-        "export const loader = () => ({ first: Promise.resolve('a'), second: Promise.resolve('b') });",
-        "function loader() { return { first: Promise.resolve('a'), second: Promise.resolve('b') }; }",
-      ),
-      route.replace(
-        "export const loader = () => ({ first: Promise.resolve('a'), second: Promise.resolve('b') });",
-        "export default function loader() { return { first: Promise.resolve('a'), second: Promise.resolve('b') }; }",
-      ),
-      route.replace('export const loader', 'const loader') + '\nexport type { loader };',
-      route.replace('export const loader', 'const loader') + '\nexport { type loader };',
-    ]
-  ) {
+  for (const unexported of [
+    route.replace('export const loader', 'const loader'),
+    route.replace(
+      "export const loader = () => ({ first: Promise.resolve('a'), second: Promise.resolve('b') });",
+      "function loader() { return { first: Promise.resolve('a'), second: Promise.resolve('b') }; }",
+    ),
+    route.replace(
+      "export const loader = () => ({ first: Promise.resolve('a'), second: Promise.resolve('b') });",
+      "export default function loader() { return { first: Promise.resolve('a'), second: Promise.resolve('b') }; }",
+    ),
+    route.replace('export const loader', 'const loader') + '\nexport type { loader };',
+    route.replace('export const loader', 'const loader') + '\nexport { type loader };',
+  ]) {
     await fixture(
       async (dir) => {
-        const error = await assertRejects(() => scanRoutes(dir)) as Error;
+        const error = (await assertRejects(() => scanRoutes(dir))) as Error;
         assertStringIncludes(error.message, 'stream route /, field defer');
         assertStringIncludes(error.message, 'loader must be a named export');
       },
@@ -487,10 +520,7 @@ Deno.test('stream admission requires the loader named export used by the generat
       assertEquals((await scanRoutes(dir))[0].streamManifest?.fields.length, 2);
     },
     page,
-    route.replace(
-      'export const loader',
-      'const loader',
-    ) + '\nexport { loader };',
+    route.replace('export const loader', 'const loader') + '\nexport { loader };',
   );
 });
 
@@ -519,12 +549,18 @@ ${descriptor}`;
     async (dir) => {
       const routes = await scanRoutes(dir);
       const manifest = routes[0].streamManifest!;
-      assertEquals(manifest.fields.map((entry) => entry.field), ['first', 'second']);
-      assertEquals(manifest.fields.map((entry) => entry.owners.map((owner) => owner.index)), [
-        [0],
-        [1],
-      ]);
-      assertEquals(manifest.fields.map((entry) => entry.owners[0].kind), ['part', 'part']);
+      assertEquals(
+        manifest.fields.map((entry) => entry.field),
+        ['first', 'second'],
+      );
+      assertEquals(
+        manifest.fields.map((entry) => entry.owners.map((owner) => owner.index)),
+        [[0], [1]],
+      );
+      assertEquals(
+        manifest.fields.map((entry) => entry.owners[0].kind),
+        ['part', 'part'],
+      );
       assertEquals(manifest.program.tag, 'stream-page');
       assertEquals(manifest.program.sha256.length, 64);
       const desc = buildEntryDescriptor(routes, { ssg: true });
@@ -538,7 +574,10 @@ ${descriptor}`;
   await fixture(
     async (dir) => {
       const manifest = (await scanRoutes(dir))[0].streamManifest!;
-      assertEquals(manifest.fields.map((entry) => entry.field), ['first', 'second']);
+      assertEquals(
+        manifest.fields.map((entry) => entry.field),
+        ['first', 'second'],
+      );
       assertEquals(
         manifest.fields.map((entry) => entry.owners.map((owner) => owner.index)),
         [[0], [1]],
@@ -551,7 +590,7 @@ ${descriptor}`;
   // the aliased loader never produces still fails the build.
   await fixture(
     async (dir) => {
-      const error = await assertRejects(() => scanRoutes(dir)) as Error;
+      const error = (await assertRejects(() => scanRoutes(dir))) as Error;
       assertStringIncludes(error.message, 'field second');
       assertStringIncludes(error.message, 'missing from literal loader object');
     },
@@ -561,7 +600,7 @@ ${descriptor}`;
   // The alias is admitted only when it names a local binding.
   await fixture(
     async (dir) => {
-      const error = await assertRejects(() => scanRoutes(dir)) as Error;
+      const error = (await assertRejects(() => scanRoutes(dir))) as Error;
       assertStringIncludes(error.message, 'stream route /, field defer');
       assertStringIncludes(error.message, 'requires a route loader');
     },
@@ -573,7 +612,7 @@ ${descriptor}`,
   // undefined, so admission stays closed.
   await fixture(
     async (dir) => {
-      const error = await assertRejects(() => scanRoutes(dir)) as Error;
+      const error = (await assertRejects(() => scanRoutes(dir))) as Error;
       assertStringIncludes(error.message, 'loader must be a named export');
     },
     page,
@@ -585,7 +624,7 @@ ${descriptor}`,
   // rejected against the aliased loader body, not silently skipped.
   await fixture(
     async (dir) => {
-      const error = await assertRejects(() => scanRoutes(dir)) as Error;
+      const error = (await assertRejects(() => scanRoutes(dir))) as Error;
       assertStringIncludes(error.message, 'loader object spread');
     },
     page,
@@ -615,7 +654,7 @@ export { a as loader, b as loader };
 ${descriptor}`;
   await fixture(
     async (dir) => {
-      const error = await assertRejects(() => scanRoutes(dir)) as Error;
+      const error = (await assertRejects(() => scanRoutes(dir))) as Error;
       assertStringIncludes(error.message, 'exports `loader` more than once');
       assertStringIncludes(error.message, 'at most once');
     },
@@ -632,15 +671,21 @@ export class OtherPage extends OpenElement {
   render() { return <main>{this.first}</main>; }
 }
 `;
-  await fixture(async (dir) => {
-    const error = await assertRejects(() => scanRoutes(dir)) as Error;
-    assertStringIncludes(error.message, 'stream route /, field first');
-    assertStringIncludes(error.message, 'declares 2 classes');
-  }, page.replace("@element('stream-page'", secondClass + "\n@element('stream-page'"));
-  await fixture(async (dir) => {
-    const error = await assertRejects(() => scanRoutes(dir)) as Error;
-    assertStringIncludes(error.message, 'imported page class does not own');
-  }, page.replace('export default class StreamPage', 'export class StreamPage'));
+  await fixture(
+    async (dir) => {
+      const error = (await assertRejects(() => scanRoutes(dir))) as Error;
+      assertStringIncludes(error.message, 'stream route /, field first');
+      assertStringIncludes(error.message, 'declares 2 classes');
+    },
+    page.replace("@element('stream-page'", secondClass + "\n@element('stream-page'"),
+  );
+  await fixture(
+    async (dir) => {
+      const error = (await assertRejects(() => scanRoutes(dir))) as Error;
+      assertStringIncludes(error.message, 'imported page class does not own');
+    },
+    page.replace('export default class StreamPage', 'export class StreamPage'),
+  );
   await fixture(
     async (dir) => {
       assertEquals((await scanRoutes(dir))[0].streamManifest?.program.tag, 'stream-page');
@@ -659,13 +704,15 @@ Deno.test('generated entry rejects opaque stream descriptors before serving GET'
       "export default definePage(Page, {\n  renderIntent: { mode: 'dynamic', stream: { defer: ['first', 'second'] } },\n});",
       "const descriptor = { renderIntent: { mode: 'dynamic', stream: { defer: ['first', 'second'] } } };\nexport default definePage(Page, descriptor);",
     ),
-    route.replace(
-      "renderIntent: { mode: 'dynamic', stream: { defer: ['first', 'second'] } },",
-      'renderIntent: intent,',
-    ).replace(
-      'export default definePage(Page, {',
-      "const intent = { mode: 'dynamic', stream: { defer: ['first', 'second'] } };\nexport default definePage(Page, {",
-    ),
+    route
+      .replace(
+        "renderIntent: { mode: 'dynamic', stream: { defer: ['first', 'second'] } },",
+        'renderIntent: intent,',
+      )
+      .replace(
+        'export default definePage(Page, {',
+        "const intent = { mode: 'dynamic', stream: { defer: ['first', 'second'] } };\nexport default definePage(Page, {",
+      ),
   ];
   for (const source of indirectRoutes) {
     await fixture(
@@ -748,11 +795,7 @@ Deno.test('streaming requires the project-wide app shell to be off, and the gate
       { ssg: true, appShell: false, layouts: { post: shell } },
       'Streaming routes: / (index.tsx)',
     ],
-    [
-      'layouts.default',
-      { ssg: true, layouts: { default: shell, post: false } },
-      'whole project',
-    ],
+    ['layouts.default', { ssg: true, layouts: { default: shell, post: false } }, 'whole project'],
   ];
   for (const [name, options, expected] of cases) {
     await fixture(async (dir) => {
@@ -793,7 +836,7 @@ Deno.test('streaming requires the project-wide app shell to be off, and the gate
 Deno.test('stream route params and opaque wrappers fail closed', async () => {
   await fixture(
     async (dir) => {
-      const error = await assertRejects(() => scanRoutes(dir)) as Error;
+      const error = (await assertRejects(() => scanRoutes(dir))) as Error;
       assertStringIncludes(error.message, 'collides with an injected route param property');
     },
     page,
@@ -803,13 +846,16 @@ Deno.test('stream route params and opaque wrappers fail closed', async () => {
   await fixture(async (dir) => {
     const routes = await scanRoutes(dir);
     const error = assertThrows(() =>
-      buildEntryDescriptor([...routes, {
-        path: '/_renderer',
-        filePath: '_renderer.ts',
-        type: 'special',
-        varName: 'Renderer',
-        special: 'renderer',
-      }])
+      buildEntryDescriptor([
+        ...routes,
+        {
+          path: '/_renderer',
+          filePath: '_renderer.ts',
+          type: 'special',
+          varName: 'Renderer',
+          special: 'renderer',
+        },
+      ]),
     ) as Error;
     assertStringIncludes(error.message, 'opaque renderer wrapper');
   });
@@ -821,12 +867,12 @@ function budgetFixture(
   ownersPerField: number,
 ): { pageSource: string; routeSource: string } {
   const names = Array.from({ length: fieldCount }, (_, index) => `f${index}`);
-  const props = names.map((name) =>
-    `  @property({ type: String, attribute: false, reflect: false }) ${name} = '';`
-  ).join('\n');
-  const sinks = names.map((name) =>
-    Array.from({ length: ownersPerField }, () => `<p>\${this.${name}}</p>`).join('')
-  ).join('');
+  const props = names
+    .map((name) => `  @property({ type: String, attribute: false, reflect: false }) ${name} = '';`)
+    .join('\n');
+  const sinks = names
+    .map((name) => Array.from({ length: ownersPerField }, () => `<p>\${this.${name}}</p>`).join(''))
+    .join('');
   const pageSource = `
 import { element, OpenElement, property } from '@openelement/element';
 @element('stream-page', { root: 'light' })
@@ -837,13 +883,13 @@ ${props}
   const routeSource = `
 import { definePage } from '@openelement/router';
 import Page from '../components/page.tsx';
-export const loader = () => ({ ${
-    names.map((name) => `${name}: Promise.resolve('x')`).join(', ')
-  } });
+export const loader = () => ({ ${names
+    .map((name) => `${name}: Promise.resolve('x')`)
+    .join(', ')} });
 export default definePage(Page, {
-  renderIntent: { mode: 'dynamic', stream: { defer: [${
-    names.map((name) => `'${name}'`).join(', ')
-  }] } },
+  renderIntent: { mode: 'dynamic', stream: { defer: [${names
+    .map((name) => `'${name}'`)
+    .join(', ')}] } },
 });`;
   return { pageSource, routeSource };
 }
@@ -852,7 +898,7 @@ Deno.test('stream admission enforces the build-time field/owner budget aligned w
   // Negative: 33 fields are rejected at build time.
   await fixture(
     async (dir) => {
-      const error = await assertRejects(() => scanRoutes(dir)) as Error;
+      const error = (await assertRejects(() => scanRoutes(dir))) as Error;
       assertStringIncludes(error.message, 'bounded deferred budget');
       assertStringIncludes(error.message, '33 fields (max 32), 33 Part owners');
     },
@@ -862,7 +908,7 @@ Deno.test('stream admission enforces the build-time field/owner budget aligned w
   // Negative: 65 owners on one field are rejected at build time.
   await fixture(
     async (dir) => {
-      const error = await assertRejects(() => scanRoutes(dir)) as Error;
+      const error = (await assertRejects(() => scanRoutes(dir))) as Error;
       assertStringIncludes(error.message, 'bounded deferred budget');
       assertStringIncludes(error.message, '1 fields (max 32), 65 Part owners (max 64)');
     },

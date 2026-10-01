@@ -125,9 +125,9 @@ export function notFound(message = 'Not Found'): never {
 
 /** Type guard for {@linkcode OpenElementRedirect}, including its duck-typed cross-realm shape. */
 export function isOpenElementRedirect(error: unknown): error is OpenElementRedirect {
-  return error instanceof OpenElementRedirect ||
-    (
-      typeof error === 'object' &&
+  return (
+    error instanceof OpenElementRedirect ||
+    (typeof error === 'object' &&
       error !== null &&
       (error as { name?: unknown }).name === 'OpenElementRedirect' &&
       typeof (error as { location?: unknown }).location === 'string' &&
@@ -135,20 +135,20 @@ export function isOpenElementRedirect(error: unknown): error is OpenElementRedir
       // decision 0121 (#583): the duck-typed branch honors the same whitelist —
       // a shaped object must not smuggle an arbitrary status into the
       // redirect channel.
-      REDIRECT_STATUSES.has((error as { status: number }).status)
-    );
+      REDIRECT_STATUSES.has((error as { status: number }).status))
+  );
 }
 
 /** Type guard for {@linkcode OpenElementNotFound}, including its duck-typed cross-realm shape. */
 export function isOpenElementNotFound(error: unknown): error is OpenElementNotFound {
-  return error instanceof OpenElementNotFound ||
-    (
-      typeof error === 'object' &&
+  return (
+    error instanceof OpenElementNotFound ||
+    (typeof error === 'object' &&
       error !== null &&
       (error as { name?: unknown }).name === 'OpenElementNotFound' &&
       typeof (error as { status?: unknown }).status === 'number' &&
-      (error as { status: number }).status === 404
-    );
+      (error as { status: number }).status === 404)
+  );
 }
 
 /**
@@ -182,14 +182,14 @@ export function fail<Data>(status: number, data: Data): OpenElementActionFailure
 
 /** Type guard for {@linkcode OpenElementActionFailure}, including its duck-typed cross-realm shape. */
 export function isActionFailure(error: unknown): error is OpenElementActionFailure {
-  return error instanceof OpenElementActionFailure ||
-    (
-      typeof error === 'object' &&
+  return (
+    error instanceof OpenElementActionFailure ||
+    (typeof error === 'object' &&
       error !== null &&
       (error as { name?: unknown }).name === 'OpenElementActionFailure' &&
       typeof (error as { status?: unknown }).status === 'number' &&
-      'data' in (error as Record<string, unknown>)
-    );
+      'data' in (error as Record<string, unknown>))
+  );
 }
 
 /**
@@ -321,10 +321,7 @@ export type PagePropsProjector<
 export type PageErrorProjector<
   Data = unknown,
   Params extends Record<string, string> = Record<string, string>,
-> = (
-  error: unknown,
-  context: PagePropsContext<Data, Params>,
-) => Record<string, unknown>;
+> = (error: unknown, context: PagePropsContext<Data, Params>) => Record<string, unknown>;
 
 /**
  * Resolves a page's head from the request-scoped context (Beta.2.2, #1326).
@@ -373,13 +370,7 @@ export type PageComponentConstructor<
   openElementPage: OpenElementPageDescriptor<Data, Params>;
 };
 
-const PAGE_DESCRIPTOR_FIELDS = new Set([
-  'route',
-  'head',
-  'renderIntent',
-  'props',
-  'error',
-]);
+const PAGE_DESCRIPTOR_FIELDS = new Set(['route', 'head', 'renderIntent', 'props', 'error']);
 
 /**
  * Attach a page descriptor to a compiled page element class.
@@ -494,13 +485,18 @@ export function definePage<
   const stream = descriptor?.renderIntent?.stream;
   if (stream !== undefined) {
     if (
-      renderMode !== 'dynamic' || typeof stream !== 'object' || stream === null ||
-      Array.isArray(stream) || Object.keys(stream).some((key) => key !== 'defer') ||
-      !Array.isArray(stream.defer) || stream.defer.length === 0 ||
-      stream.defer.some((field) =>
-        typeof field !== 'string' || !/^[a-zA-Z_$][\w$]*$/.test(field) ||
-        isDangerousKey(field)
-      ) || new Set(stream.defer).size !== stream.defer.length
+      renderMode !== 'dynamic' ||
+      typeof stream !== 'object' ||
+      stream === null ||
+      Array.isArray(stream) ||
+      Object.keys(stream).some((key) => key !== 'defer') ||
+      !Array.isArray(stream.defer) ||
+      stream.defer.length === 0 ||
+      stream.defer.some(
+        (field) =>
+          typeof field !== 'string' || !/^[a-zA-Z_$][\w$]*$/.test(field) || isDangerousKey(field),
+      ) ||
+      new Set(stream.defer).size !== stream.defer.length
     ) {
       throw authoringError(
         PageErrorCode.RENDER_MODE,
@@ -544,9 +540,10 @@ export function definePage<
  * projected onto. The generated server runtime enforces the same rule with a
  * serialized copy of the canonical DANGEROUS_KEYS list.
  */
-export function projectPageProps(
-  context: { params?: Record<string, string>; data?: unknown },
-): Record<string, unknown> {
+export function projectPageProps(context: {
+  params?: Record<string, string>;
+  data?: unknown;
+}): Record<string, unknown> {
   const props: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(context.params ?? {})) {
     if (isDangerousKey(key)) continue;
@@ -697,11 +694,11 @@ export function defineIslandConfig(config: IslandConfig): IslandConfig {
     );
   }
   const tags = config.tags === undefined ? undefined : validateIslandTags(config.tags, 'tags');
-  const tagNames = config.tagNames === undefined
-    ? undefined
-    : validateIslandTags(config.tagNames, 'tagNames');
+  const tagNames =
+    config.tagNames === undefined ? undefined : validateIslandTags(config.tagNames, 'tagNames');
   if (
-    tags && tagNames &&
+    tags &&
+    tagNames &&
     (tags.length !== tagNames.length || tags.some((tag, index) => tag !== tagNames[index]))
   ) {
     throw authoringError(

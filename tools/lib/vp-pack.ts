@@ -206,7 +206,8 @@ export function stagingPackageJsonFor(
     peerDependencies[name] = publishRange(parsed);
   }
   const hasPeers = Object.keys(peerDependencies).length > 0;
-  const hasPeerMeta = sourceManifest.peerDependenciesMeta !== undefined &&
+  const hasPeerMeta =
+    sourceManifest.peerDependenciesMeta !== undefined &&
     Object.keys(sourceManifest.peerDependenciesMeta).length > 0;
   return {
     name: pkg.name,
@@ -321,7 +322,10 @@ export async function notIgnoredFiles(dir: string): Promise<Set<string>> {
     throw new Error(`[vp-pack] git ls-files failed in ${dir}:\n${result.stderr}`);
   }
   return new Set(
-    result.stdout.split('\n').map((line) => line.trim()).filter((line) => line !== ''),
+    result.stdout
+      .split('\n')
+      .map((line) => line.trim())
+      .filter((line) => line !== ''),
   );
 }
 

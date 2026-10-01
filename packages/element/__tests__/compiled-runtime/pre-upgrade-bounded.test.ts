@@ -37,9 +37,8 @@ const {
   MAX_PRE_UPGRADE_CAPTURED_EVENTS,
 } = await import('../../src/internal/compiled/runtime.ts');
 
-const { OpenElement, ensurePreHydrationClickCapture, renderDsd } = await import(
-  '../../src/index.ts'
-);
+const { OpenElement, ensurePreHydrationClickCapture, renderDsd } =
+  await import('../../src/index.ts');
 
 // oxlint-disable-next-line no-explicit-any
 type AnyElement = any;
@@ -207,12 +206,14 @@ function defineCounter(tag: string): void {
   const program = testProgram({
     tag,
     rootMode: 'light',
-    template: [{
-      k: 'el',
-      tag: 'button',
-      attrs: [['type', 'button']],
-      children: [{ k: 'part', index: 0 }],
-    }],
+    template: [
+      {
+        k: 'el',
+        tag: 'button',
+        attrs: [['type', 'button']],
+        children: [{ k: 'part', index: 0 }],
+      },
+    ],
     parts: [
       { k: 'text', index: 0, signal: 'count' },
       {
@@ -224,14 +225,16 @@ function defineCounter(tag: string): void {
         path: [0],
       },
     ],
-    properties: [{
-      name: 'count',
-      attribute: 'count',
-      type: 'number',
-      converter: 'number',
-      reflect: false,
-      default: 0,
-    }],
+    properties: [
+      {
+        name: 'count',
+        attribute: 'count',
+        type: 'number',
+        converter: 'number',
+        reflect: false,
+        default: 0,
+      },
+    ],
   });
   class BoundedCounter extends OpenElement {
     static __partProgram = program;
@@ -366,11 +369,7 @@ Deno.test('declared: 64 undeclared third-party targets add nothing, the declared
     } finally {
       cleanup(host);
     }
-    assertEquals(
-      capture.events.length,
-      1,
-      'the real replay was never evicted by foreign pressure',
-    );
+    assertEquals(capture.events.length, 1, 'the real replay was never evicted by foreign pressure');
   } finally {
     capture.stop();
     cleanup(...foreign);

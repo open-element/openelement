@@ -76,13 +76,7 @@ export interface NativePageRendererDeps {
  */
 export function createNativePageRenderer(deps: NativePageRendererDeps): PageSsrRenderer {
   const { renderDsd, customElements, ssrRenderableTags } = deps;
-  return (
-    tag,
-    props = {},
-    sourceInfo = {},
-    __depth = 0,
-    projectedChildren,
-  ): string => {
+  return (tag, props = {}, sourceInfo = {}, __depth = 0, projectedChildren): string => {
     // Validate tag name - must be a valid Custom Element (contains hyphen)
     if (!tag || !tag.includes('-')) {
       throw serveError(
@@ -93,7 +87,8 @@ export function createNativePageRenderer(deps: NativePageRendererDeps): PageSsrR
     if (__depth > 8) {
       throw serveError(
         RendererErrorCode.DEPTH_BOUND,
-        '[openElement] Nested element expansion exceeded the depth bound at <' + tag +
+        '[openElement] Nested element expansion exceeded the depth bound at <' +
+          tag +
           '>; cyclic island nesting is not renderable.',
       );
     }
@@ -101,7 +96,8 @@ export function createNativePageRenderer(deps: NativePageRendererDeps): PageSsrR
     if (!Cls) {
       throw serveError(
         RendererErrorCode.TAG_UNREGISTERED,
-        '[openElement] <' + tag +
+        '[openElement] <' +
+          tag +
           '> is not registered in the SSR registry. Generated entries register every admitted route/island class explicitly; an unknown OpenElement host cannot be server-rendered (client-only and foreign tags pass through per the admission plan).',
       );
     }
@@ -162,10 +158,7 @@ export function resolveCompiledPageTag(routeModule: unknown, fallbackTag: string
  * Part Program in the lit path); the path-derived tag stays the fallback.
  */
 export function resolveLitPageTag(routeModule: unknown, fallbackTag: string): string {
-  const module = routeModule as
-    | { default?: { openElementPageTag?: unknown } }
-    | undefined
-    | null;
+  const module = routeModule as { default?: { openElementPageTag?: unknown } } | undefined | null;
   const tag = module?.default?.openElementPageTag;
   if (typeof tag === 'string' && tag.includes('-')) return tag;
   return fallbackTag;

@@ -52,12 +52,7 @@ import { publishPackage } from './npm-publisher.ts';
 export { deriveAllDependencies, deriveDependencies, type DeriveDepsIo } from './npm-manifest.ts';
 export { npmPublishTag, publishPackage, type PublishPackageIo } from './npm-publisher.ts';
 
-const COMMANDS = new Set([
-  'pack',
-  'pack:dry-run',
-  'publish:npm',
-  'publish:npm:dry-run',
-]);
+const COMMANDS = new Set(['pack', 'pack:dry-run', 'publish:npm', 'publish:npm:dry-run']);
 
 function cleanStaleTarballs(packages: PackageInfo[]): void {
   for (const pkg of packages) {
@@ -224,9 +219,9 @@ export async function packPackage(
     });
     if (summary.errors.length > 0) {
       throw new Error(
-        `[npm] ${pkg.name}: vp pack errors (repo-fixable, failing closed):\n${
-          summary.errors.join('\n')
-        }`,
+        `[npm] ${pkg.name}: vp pack errors (repo-fixable, failing closed):\n${summary.errors.join(
+          '\n',
+        )}`,
       );
     }
     if (summary.disallowedUnresolved.length > 0) {
@@ -237,9 +232,9 @@ export async function packPackage(
     }
     if (summary.unexpectedWarnings.length > 0) {
       throw new Error(
-        `[npm] ${pkg.name}: vp pack unexpected warnings (repo-fixable, failing closed):\n${
-          summary.unexpectedWarnings.join('\n')
-        }`,
+        `[npm] ${pkg.name}: vp pack unexpected warnings (repo-fixable, failing closed):\n${summary.unexpectedWarnings.join(
+          '\n',
+        )}`,
       );
     }
 
@@ -263,32 +258,29 @@ export async function packPackage(
       });
       const pkgJsonPath = `${pkgRoot}/package.json`;
       const rawManifest = await hashFileTree(tmp);
-      const rawPackageJson = JSON.parse(
-        Deno.readTextFileSync(pkgJsonPath),
-      ) as Record<string, unknown>;
+      const rawPackageJson = JSON.parse(Deno.readTextFileSync(pkgJsonPath)) as Record<
+        string,
+        unknown
+      >;
       const pkgJson = JSON.parse(Deno.readTextFileSync(pkgJsonPath));
       const rawPayload = findRawTypeScriptPayload(pkgRoot);
       if (rawPayload.length > 0) {
         throw new Error(
-          `[npm] ${pkg.name}: raw TypeScript in tarball (fix publish input, never silently strip):\n${
-            rawPayload.join('\n')
-          }`,
+          `[npm] ${pkg.name}: raw TypeScript in tarball (fix publish input, never silently strip):\n${rawPayload.join(
+            '\n',
+          )}`,
         );
       }
       const absoluteUrls = findAbsoluteFileUrlPayload(pkgRoot);
       if (absoluteUrls.length > 0) {
         throw new Error(
-          `[npm] ${pkg.name}: packed modules embed absolute file:// URLs (failing closed):\n${
-            absoluteUrls.join('\n')
-          }`,
+          `[npm] ${pkg.name}: packed modules embed absolute file:// URLs (failing closed):\n${absoluteUrls.join(
+            '\n',
+          )}`,
         );
       }
       applyPackageJsonOverrides(pkg, pkgJson);
-      for (
-        const [name, value] of Object.entries(
-          sourceManifest.peerDependencies ?? {},
-        )
-      ) {
+      for (const [name, value] of Object.entries(sourceManifest.peerDependencies ?? {})) {
         const parsed = parseNpmSpec(value, `${pkg.name} peer dependency`);
         if (!parsed) {
           throw new Error(`Invalid npm peer dependency ${name}=${value}`);
@@ -309,9 +301,8 @@ export async function packPackage(
       // Keep the two products independently installable. Route Mode does not
       // install Element; framework consumers opt into Element explicitly.
       // Standalone Element authors likewise install Vite tooling without Router.
-      const optionalWorkspacePeers = pkg.name === '@openelement/router'
-        ? ['@openelement/element']
-        : [];
+      const optionalWorkspacePeers =
+        pkg.name === '@openelement/router' ? ['@openelement/element'] : [];
       for (const name of optionalWorkspacePeers) {
         const version = pkgJson.dependencies[name];
         if (version) {
@@ -326,11 +317,7 @@ export async function packPackage(
           };
         }
       }
-      for (
-        const [name, metadata] of Object.entries(
-          pkgJson.peerDependenciesMeta ?? {},
-        )
-      ) {
+      for (const [name, metadata] of Object.entries(pkgJson.peerDependenciesMeta ?? {})) {
         if ((metadata as { optional?: boolean }).optional) {
           delete pkgJson.dependencies[name];
         }
@@ -364,16 +351,16 @@ export async function packPackage(
       );
       if (declarationGraph.escaped.length > 0) {
         throw new Error(
-          `[npm] ${pkg.name}: public declaration edges escape the package root (failing closed):\n${
-            declarationGraph.escaped.map((edge) => `${edge.from} -> ${edge.specifier}`).join('\n')
-          }`,
+          `[npm] ${pkg.name}: public declaration edges escape the package root (failing closed):\n${declarationGraph.escaped
+            .map((edge) => `${edge.from} -> ${edge.specifier}`)
+            .join('\n')}`,
         );
       }
       if (declarationGraph.missing.length > 0) {
         throw new Error(
-          `[npm] ${pkg.name}: public declarations reference missing declaration files (failing closed):\n${
-            declarationGraph.missing.map((edge) => `${edge.from} -> ${edge.specifier}`).join('\n')
-          }`,
+          `[npm] ${pkg.name}: public declarations reference missing declaration files (failing closed):\n${declarationGraph.missing
+            .map((edge) => `${edge.from} -> ${edge.specifier}`)
+            .join('\n')}`,
         );
       }
       // Per-package pack summary in the evidence contract format: the
@@ -431,8 +418,10 @@ async function gitRef(ref: string): Promise<string> {
 
 async function sha256File(path: string): Promise<string> {
   const digest = await crypto.subtle.digest('SHA-256', await Deno.readFile(path));
-  return 'sha256:' +
-    [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
+  return (
+    'sha256:' +
+    [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('')
+  );
 }
 
 export interface ReleasePackageOutcome {
@@ -496,11 +485,8 @@ export async function publishRelease(
     }
   }
   const publishedCount = outcomes.filter((outcome) => outcome.published).length;
-  let result: ReleaseReceipt['result'] = publishedCount === outcomes.length
-    ? 'published'
-    : publishedCount > 0
-    ? 'partial'
-    : 'failed';
+  let result: ReleaseReceipt['result'] =
+    publishedCount === outcomes.length ? 'published' : publishedCount > 0 ? 'partial' : 'failed';
 
   if (result === 'published') {
     try {
@@ -514,9 +500,15 @@ export async function publishRelease(
   } else {
     io.log(
       `[npm] partial publish: published=${
-        outcomes.filter((o) => o.published).map((o) => o.name).join(',') || 'none'
+        outcomes
+          .filter((o) => o.published)
+          .map((o) => o.name)
+          .join(',') || 'none'
       }; missing=${
-        outcomes.filter((o) => !o.published).map((o) => o.name).join(',') || 'none'
+        outcomes
+          .filter((o) => !o.published)
+          .map((o) => o.name)
+          .join(',') || 'none'
       } (registry verification skipped; re-run to resume)`,
     );
   }
@@ -543,8 +535,8 @@ export async function publishRelease(
 function assertVersionConsistency(packages: PackageInfo[]): void {
   const versions = packagesByVersion(packages);
   if (versions.size <= 1) return;
-  const lines = [...versions.entries()].map(([version, names]) =>
-    `  ${version || '<missing>'}: ${names.join(', ')}`
+  const lines = [...versions.entries()].map(
+    ([version, names]) => `  ${version || '<missing>'}: ${names.join(', ')}`,
   );
   throw new Error(`Package versions are not consistent:\n${lines.join('\n')}`);
 }

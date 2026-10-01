@@ -110,7 +110,9 @@ async function renderVirtualEntry(
     Deno.chdir(origCwd);
     try {
       Deno.removeSync(tmp, { recursive: true });
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
   }
 }
 
@@ -135,17 +137,15 @@ Deno.test('openPlugin: defaults islandsDir to app/islands', async () => {
 });
 
 Deno.test('openPlugin: respects custom routesDir', async () => {
-  const code = await renderVirtualEntry(
-    { routesDir: 'src/pages' },
-    (tmp) => writeRouteIndex(join(tmp, 'src', 'pages')),
+  const code = await renderVirtualEntry({ routesDir: 'src/pages' }, (tmp) =>
+    writeRouteIndex(join(tmp, 'src', 'pages')),
   );
   assertStringIncludes(code, '/src/pages/index.ts');
 });
 
 Deno.test('openPlugin: respects custom islandsDir', async () => {
-  const code = await renderVirtualEntry(
-    { islandsDir: 'src/widgets' },
-    (tmp) => writeIsland(join(tmp, 'src', 'widgets')),
+  const code = await renderVirtualEntry({ islandsDir: 'src/widgets' }, (tmp) =>
+    writeIsland(join(tmp, 'src', 'widgets')),
   );
   assertStringIncludes(code, '/src/widgets/my-counter.ts');
 });
@@ -438,10 +438,12 @@ Deno.test('openPlugin: inject.stylesheets string form', () => {
 Deno.test('openPlugin: inject.stylesheets object form with integrity', () => {
   const plugins = createOpenPlugin({
     inject: {
-      stylesheets: [{
-        href: 'https://cdn.example.com/app.css',
-        integrity: 'sha384-abc',
-      }],
+      stylesheets: [
+        {
+          href: 'https://cdn.example.com/app.css',
+          integrity: 'sha384-abc',
+        },
+      ],
     },
   });
   assertExists(plugins);

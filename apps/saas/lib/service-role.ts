@@ -35,9 +35,8 @@ export async function serviceRoleRpc<T>(
   fetchImpl: typeof fetch = fetch,
 ): Promise<T> {
   const url = typeof env.SUPABASE_URL === 'string' ? env.SUPABASE_URL : '';
-  const key = typeof env.SUPABASE_SERVICE_ROLE_KEY === 'string'
-    ? env.SUPABASE_SERVICE_ROLE_KEY
-    : '';
+  const key =
+    typeof env.SUPABASE_SERVICE_ROLE_KEY === 'string' ? env.SUPABASE_SERVICE_ROLE_KEY : '';
   if (!url || !key) throw new Error('service-role Supabase configuration unavailable');
   const response = await fetchImpl(`${url}/rest/v1/rpc/${name}`, {
     method: 'POST',
@@ -50,5 +49,5 @@ export async function serviceRoleRpc<T>(
   });
   if (!response.ok) throw new Error(`${name} failed (${response.status})`);
   if (response.status === 204) return undefined as T;
-  return await response.json() as T;
+  return (await response.json()) as T;
 }

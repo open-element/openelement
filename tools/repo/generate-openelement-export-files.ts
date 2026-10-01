@@ -39,14 +39,15 @@ async function resolverPackages(): Promise<string[]> {
     throw new Error('deno.json workspace must be an array of package paths');
   }
 
-  return rootConfig.workspace.filter((entry: unknown) =>
-    typeof entry === 'string' && entry.startsWith('./packages/')
-  ).map((entry: unknown) => {
-    if (typeof entry !== 'string' || !/^\.\/packages\/[^/]+$/u.test(entry)) {
-      throw new Error(`unsupported workspace package path: ${String(entry)}`);
-    }
-    return entry.slice('./packages/'.length);
-  }).sort();
+  return rootConfig.workspace
+    .filter((entry: unknown) => typeof entry === 'string' && entry.startsWith('./packages/'))
+    .map((entry: unknown) => {
+      if (typeof entry !== 'string' || !/^\.\/packages\/[^/]+$/u.test(entry)) {
+        throw new Error(`unsupported workspace package path: ${String(entry)}`);
+      }
+      return entry.slice('./packages/'.length);
+    })
+    .sort();
 }
 
 function stripLeadingSlash(value: string): string {
@@ -87,9 +88,7 @@ function render(map: Record<string, PackageExports>): string {
   // the repository-internal script path a consumer cannot open.
   lines.push('// Regenerate via the repository\'s "generate:all" tooling task.');
   lines.push('// Source of truth: the "exports" field of each workspace package manifest.');
-  lines.push(
-    'export const OPENELEMENT_EXPORT_FILES: Record<string, Record<string, string>> = {',
-  );
+  lines.push('export const OPENELEMENT_EXPORT_FILES: Record<string, Record<string, string>> = {');
   for (const pkg of packages) {
     lines.push(`  ${JSON.stringify(pkg)}: {`);
     const subpaths = Object.keys(map[pkg]).sort();

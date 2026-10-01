@@ -35,11 +35,7 @@ export function allPackageAliases(repoRoot: string): Map<string, string> {
     if (typeof exportsField === 'string') {
       entries.push([packageName, toFileUrl(join(pkgDir, exportsField)).href]);
     } else if (exportsField && typeof exportsField === 'object') {
-      for (
-        const [subpath, target] of Object.entries(
-          exportsField as Record<string, string>,
-        )
-      ) {
+      for (const [subpath, target] of Object.entries(exportsField as Record<string, string>)) {
         const specifier = subpath === '.' ? packageName : `${packageName}${subpath.slice(1)}`;
         entries.push([specifier, toFileUrl(join(pkgDir, target)).href]);
       }

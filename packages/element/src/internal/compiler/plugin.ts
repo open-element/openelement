@@ -195,7 +195,8 @@ export function compiledElementPlugin(options: CompiledElementPluginOptions = {}
             this.error({
               id,
               loc: { file: id, line: first.line - 1, column: first.character - 1 },
-              message: `[open:compiled-element] the compiler emitted a module that does not ` +
+              message:
+                `[open:compiled-element] the compiler emitted a module that does not ` +
                 `type-check (${diagnostics.length} diagnostic(s); TS${first.code}: ` +
                 `${first.message}). This is a compiler defect — report it with the authored ` +
                 'module that triggered it.',

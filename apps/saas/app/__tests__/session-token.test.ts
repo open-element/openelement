@@ -10,11 +10,13 @@ const request = (origin = 'https://app.test') =>
     headers: { origin },
   });
 
-function client(overrides: {
-  session?: { access_token: string; expires_at?: number } | null;
-  user?: { id: string } | null;
-  responseHeaders?: Headers;
-} = {}): (
+function client(
+  overrides: {
+    session?: { access_token: string; expires_at?: number } | null;
+    user?: { id: string } | null;
+    responseHeaders?: Headers;
+  } = {},
+): (
   env: Record<string, unknown>,
   request: Request,
   responseHeaders: Headers,

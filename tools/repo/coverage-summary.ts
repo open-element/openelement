@@ -22,10 +22,7 @@ interface FileCoverage {
 
 /** Only versioned, publishable runtime sources belong in the release coverage gate. */
 export function isProductionPackageSource(path: string): boolean {
-  return (
-    (isPackageSource(path) || isToolsLibSource(path)) &&
-    !path.includes('/__tests__/')
-  );
+  return (isPackageSource(path) || isToolsLibSource(path)) && !path.includes('/__tests__/');
 }
 
 /** Publishable package runtime source under packages/<name>/src. */
@@ -99,7 +96,7 @@ function metric(values: boolean[]): CoverageMetric {
   return {
     covered,
     total: values.length,
-    percentage: values.length ? covered / values.length * 100 : 0,
+    percentage: values.length ? (covered / values.length) * 100 : 0,
   };
 }
 
@@ -115,12 +112,14 @@ export interface CoverableCounts {
  * fixture trees, generated modules, and pure declaration files.
  */
 export function isCoverageTreeExcluded(path: string): boolean {
-  return path.includes('/__tests__/') ||
+  return (
+    path.includes('/__tests__/') ||
     path.includes('/__fixtures__/') ||
     path.includes('/fixtures/') ||
     /\.(test|spec)\.tsx?$/u.test(path) ||
     /\.d\.ts$/u.test(path) ||
-    /(^|\/)generated[-_.]/u.test(path);
+    /(^|\/)generated[-_.]/u.test(path)
+  );
 }
 
 /**
@@ -159,8 +158,10 @@ export function lcovFilePaths(lcov: string): Set<string> {
 }
 
 function hasDeclareModifier(node: ts.Node): boolean {
-  return ts.canHaveModifiers(node) &&
-    (ts.getModifiers(node) ?? []).some((m) => m.kind === ts.SyntaxKind.DeclareKeyword);
+  return (
+    ts.canHaveModifiers(node) &&
+    (ts.getModifiers(node) ?? []).some((m) => m.kind === ts.SyntaxKind.DeclareKeyword)
+  );
 }
 
 /**
@@ -204,19 +205,27 @@ export function countCoverableElements(source: string, path = 'source.ts'): Cove
     }
 
     if (
-      (ts.isFunctionDeclaration(node) || ts.isFunctionExpression(node) ||
-        ts.isArrowFunction(node) || ts.isMethodDeclaration(node) ||
-        ts.isGetAccessorDeclaration(node) || ts.isSetAccessorDeclaration(node) ||
-        ts.isConstructorDeclaration(node)) && node.body
+      (ts.isFunctionDeclaration(node) ||
+        ts.isFunctionExpression(node) ||
+        ts.isArrowFunction(node) ||
+        ts.isMethodDeclaration(node) ||
+        ts.isGetAccessorDeclaration(node) ||
+        ts.isSetAccessorDeclaration(node) ||
+        ts.isConstructorDeclaration(node)) &&
+      node.body
     ) {
       functions++;
     }
 
     if (
-      ts.isIfStatement(node) || ts.isConditionalExpression(node) ||
-      ts.isForStatement(node) || ts.isForInStatement(node) ||
-      ts.isForOfStatement(node) || ts.isWhileStatement(node) ||
-      ts.isDoStatement(node) || ts.isCatchClause(node)
+      ts.isIfStatement(node) ||
+      ts.isConditionalExpression(node) ||
+      ts.isForStatement(node) ||
+      ts.isForInStatement(node) ||
+      ts.isForOfStatement(node) ||
+      ts.isWhileStatement(node) ||
+      ts.isDoStatement(node) ||
+      ts.isCatchClause(node)
     ) {
       branches += 2;
     } else if (ts.isCaseClause(node) || ts.isDefaultClause(node)) {
@@ -241,7 +250,7 @@ function extendMetric(base: CoverageMetric, extraTotal: number): CoverageMetric 
   return {
     covered: base.covered,
     total,
-    percentage: total ? base.covered / total * 100 : 0,
+    percentage: total ? (base.covered / total) * 100 : 0,
   };
 }
 

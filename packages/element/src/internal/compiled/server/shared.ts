@@ -164,10 +164,12 @@ function validateStaticNodes(
 function validatePart(part: ProgramPart, index: number): void {
   const path = `parts[${index}]`;
   if (part.index !== index) fail(path, `index must equal its position (${index})`);
-  const fixedPathOk = part.k !== 'text' && part.k !== 'when' && part.k !== 'each'
-    ? 'path' in part && part.path.length > 0 &&
-      part.path.every((value) => Number.isInteger(value) && value >= 0)
-    : true;
+  const fixedPathOk =
+    part.k !== 'text' && part.k !== 'when' && part.k !== 'each'
+      ? 'path' in part &&
+        part.path.length > 0 &&
+        part.path.every((value) => Number.isInteger(value) && value >= 0)
+      : true;
   switch (part.k) {
     case 'text':
       if (!part.signal) fail(path, 'text Part needs a non-empty signal name');
@@ -282,11 +284,12 @@ function validateLocations(program: PartProgramV1): void {
       if (target.children.length > 0) {
         fail(`parts[${part.index}]`, 'html sink target must be a childless element');
       }
-      const duplicate = program.parts.some((other) =>
-        other !== part && other.k === 'html' &&
-        other.path.length === part.path.length && other.path.every((value, i) =>
-          value === part.path[i]
-        )
+      const duplicate = program.parts.some(
+        (other) =>
+          other !== part &&
+          other.k === 'html' &&
+          other.path.length === part.path.length &&
+          other.path.every((value, i) => value === part.path[i]),
       );
       if (duplicate) fail(`parts[${part.index}]`, 'multiple html Parts own one DOM sink');
       return;
@@ -298,12 +301,13 @@ function validateLocations(program: PartProgramV1): void {
           `${part.k} Part duplicates static attribute ${JSON.stringify(part.name)}`,
         );
       }
-      const duplicate = program.parts.some((other) =>
-        other !== part && other.k === part.k &&
-        (other as typeof part).name.toLowerCase() === part.name.toLowerCase() &&
-        other.path.length === part.path.length && other.path.every((value, i) =>
-          value === part.path[i]
-        )
+      const duplicate = program.parts.some(
+        (other) =>
+          other !== part &&
+          other.k === part.k &&
+          (other as typeof part).name.toLowerCase() === part.name.toLowerCase() &&
+          other.path.length === part.path.length &&
+          other.path.every((value, i) => value === part.path[i]),
       );
       if (duplicate) fail(`parts[${part.index}]`, `multiple ${part.k} Parts own one DOM sink`);
     } else if (part.k === 'class' || part.k === 'style') {
@@ -314,19 +318,22 @@ function validateLocations(program: PartProgramV1): void {
           `${part.k} Part duplicates static attribute ${JSON.stringify(name)}`,
         );
       }
-      const duplicate = program.parts.some((other) =>
-        other !== part && other.k === part.k &&
-        other.path.length === part.path.length && other.path.every((value, i) =>
-          value === part.path[i]
-        )
+      const duplicate = program.parts.some(
+        (other) =>
+          other !== part &&
+          other.k === part.k &&
+          other.path.length === part.path.length &&
+          other.path.every((value, i) => value === part.path[i]),
       );
       if (duplicate) fail(`parts[${part.index}]`, `multiple ${part.k} Parts own one DOM sink`);
     } else if (part.k === 'event') {
-      const duplicate = program.parts.some((other) =>
-        other !== part && other.k === 'event' && other.event === part.event &&
-        other.path.length === part.path.length && other.path.every((value, i) =>
-          value === part.path[i]
-        )
+      const duplicate = program.parts.some(
+        (other) =>
+          other !== part &&
+          other.k === 'event' &&
+          other.event === part.event &&
+          other.path.length === part.path.length &&
+          other.path.every((value, i) => value === part.path[i]),
       );
       if (duplicate) fail(`parts[${part.index}]`, 'multiple event Parts own one DOM event sink');
     }
@@ -465,6 +472,9 @@ export function rawTextElement(tag: string): boolean {
 
 export function attributeNameIsSafe(name: string): boolean {
   const lower = name.toLowerCase();
-  return ATTRIBUTE_NAME_RE.test(name) && !lower.startsWith('on') &&
-    forbiddenSinkReason('attr', name) === null;
+  return (
+    ATTRIBUTE_NAME_RE.test(name) &&
+    !lower.startsWith('on') &&
+    forbiddenSinkReason('attr', name) === null
+  );
 }

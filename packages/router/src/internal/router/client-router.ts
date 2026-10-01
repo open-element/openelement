@@ -123,17 +123,13 @@ export function createRouter(options: RouterOptions): RouterInstance {
   // guard-veto restore marker (#1036) and disposal. See navigation-state.ts.
   const navigationState = new NavigationState();
   const streamControlKey = Symbol.for('openelement.stream-control.v1');
-  const nativeNavigation = mode === 'history' && typeof navigation !== 'undefined'
-    ? navigation
-    : undefined;
+  const nativeNavigation =
+    mode === 'history' && typeof navigation !== 'undefined' ? navigation : undefined;
 
   /** Registered listeners keyed by event type, to support dispose. */
   const listeners: Array<{ type: string; handler: EventListener }> = [];
 
-  function addCleanupListener(
-    type: string,
-    handler: EventListener,
-  ): void {
+  function addCleanupListener(type: string, handler: EventListener): void {
     listeners.push({ type, handler });
     addEventListener(type, handler);
   }
@@ -262,11 +258,15 @@ export function createRouter(options: RouterOptions): RouterInstance {
         return; // blocked
       }
       if (typeof result === 'string') {
-        return commitNavigation(result, {
-          replace: navOptions.replace,
-          depth: depth + 1,
-          restoreOnBlock: navOptions.restoreOnBlock,
-        }, ticket);
+        return commitNavigation(
+          result,
+          {
+            replace: navOptions.replace,
+            depth: depth + 1,
+            restoreOnBlock: navOptions.restoreOnBlock,
+          },
+          ticket,
+        );
       }
     }
 
@@ -350,11 +350,15 @@ export function createRouter(options: RouterOptions): RouterInstance {
           // along so the check keeps holding across the redirect target's own
           // guard await as well — a newer ticket still supersedes it there.
           if (!navigationState.owns(ticket)) return;
-          await commitNavigation(result, {
-            replace: true,
-            depth: 1,
-            restoreOnBlock: true,
-          }, ticket);
+          await commitNavigation(
+            result,
+            {
+              replace: true,
+              depth: 1,
+              restoreOnBlock: true,
+            },
+            ticket,
+          );
           return;
         }
       }
@@ -384,7 +388,7 @@ export function createRouter(options: RouterOptions): RouterInstance {
     // render untouched (#1343 review).
     const ticket = navigationState.issue('browser');
     browserNavigationQueue = browserNavigationQueue
-      .then(() => navigationState.owns(ticket) ? commitBrowserNavigation(ticket) : undefined)
+      .then(() => (navigationState.owns(ticket) ? commitBrowserNavigation(ticket) : undefined))
       .catch((err) => {
         if (!navigationState.owns(ticket)) return;
         // Intentional fail-open: a rejected guard or a router error must not
@@ -452,7 +456,8 @@ export function createRouter(options: RouterOptions): RouterInstance {
           probe.origin === location.origin &&
           probe.pathname === location.pathname &&
           probe.search === location.search
-        ) return;
+        )
+          return;
       } catch {
         // Malformed destination URL falls through to normal handling below.
       }
@@ -462,10 +467,13 @@ export function createRouter(options: RouterOptions): RouterInstance {
     // the same download anchor. Preserve the originating element's policy.
     const downloadLink = event.sourceElement?.hasAttribute('download') ?? false;
     if (
-      !event.canIntercept || event.downloadRequest !== null || downloadLink ||
+      !event.canIntercept ||
+      event.downloadRequest !== null ||
+      downloadLink ||
       target.origin !== location.origin ||
       !resolveTarget(target)
-    ) return;
+    )
+      return;
     const ticket = navigationState.issue('native');
     if (isOwn) {
       // The programmatic guard passed before this intercept; browser-driven
@@ -473,12 +481,16 @@ export function createRouter(options: RouterOptions): RouterInstance {
       retireOwnedStream(ticket);
       options.onPending?.();
     }
-    event.signal.addEventListener('abort', () => {
-      // An aborted navigation request (a newer navigation superseded this one,
-      // or the user moved on) retires its ticket: the intercept handler below
-      // must not commit it.
-      if (navigationState.owns(ticket)) navigationState.supersede();
-    }, { once: true });
+    event.signal.addEventListener(
+      'abort',
+      () => {
+        // An aborted navigation request (a newer navigation superseded this one,
+        // or the user moved on) retires its ticket: the intercept handler below
+        // must not commit it.
+        if (navigationState.owns(ticket)) navigationState.supersede();
+      },
+      { once: true },
+    );
     event.intercept({
       handler: async () => {
         if (event.signal.aborted || !navigationState.owns(ticket)) return;

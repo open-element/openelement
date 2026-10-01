@@ -79,14 +79,8 @@ Deno.test('public entry points never import the Preact adapter or test engine', 
       source.includes('@preact/signals-core'),
       `${file} must not import @preact/signals-core directly`,
     );
-    assertFalse(
-      source.includes('preact-engine'),
-      `${file} must not reach into the Preact adapter`,
-    );
-    assertFalse(
-      source.includes('test-engine'),
-      `${file} must not reference a non-shipped engine`,
-    );
+    assertFalse(source.includes('preact-engine'), `${file} must not reach into the Preact adapter`);
+    assertFalse(source.includes('test-engine'), `${file} must not reference a non-shipped engine`);
   }
 });
 

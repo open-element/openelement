@@ -19,7 +19,7 @@ class FakeNode {
     if (!this.parentNode) return null;
     const siblings = this.parentNode.childNodes;
     const index = siblings.indexOf(this);
-    return index >= 0 ? siblings[index + 1] ?? null : null;
+    return index >= 0 ? (siblings[index + 1] ?? null) : null;
   }
   appendChild(node: FakeNode): void {
     this.insertBefore(node, null);
@@ -101,14 +101,19 @@ function shadowTemplate(...content: FakeNode[]): FakeElement {
 }
 
 function isDsdTemplate(node: FakeNode): boolean {
-  return node instanceof FakeElement && node.tagName === 'TEMPLATE' &&
-    node.hasAttribute('shadowrootmode');
+  return (
+    node instanceof FakeElement &&
+    node.tagName === 'TEMPLATE' &&
+    node.hasAttribute('shadowrootmode')
+  );
 }
 
-function makeHarness(options: {
-  tags?: string[];
-  islandIntact?: () => boolean;
-} = {}) {
+function makeHarness(
+  options: {
+    tags?: string[];
+    islandIntact?: () => boolean;
+  } = {},
+) {
   const incomingQueue: { title: string; body: FakeElement }[] = [];
   const instantiated: FakeNode[] = [];
   const doc = { title: '', body: el('body') };
@@ -153,9 +158,7 @@ Deno.test('morph: a preserved slot-fallback app shell receives the new route doc
 
   const host = el('app-shell');
   const liveShadow = new FakeNode();
-  liveShadow.appendChild(
-    el('main', el('slot', el('contact-page', el('p', text('before'))))),
-  );
+  liveShadow.appendChild(el('main', el('slot', el('contact-page', el('p', text('before'))))));
   host.shadowRoot = liveShadow;
   doc.body.appendChild(host);
 
@@ -165,9 +168,7 @@ Deno.test('morph: a preserved slot-fallback app shell receives the new route doc
       'body',
       el(
         'app-shell',
-        shadowTemplate(
-          el('main', el('slot', el('contact-page', el('p', text('after'))))),
-        ),
+        shadowTemplate(el('main', el('slot', el('contact-page', el('p', text('after')))))),
       ),
     ),
   });
@@ -209,11 +210,7 @@ Deno.test('morph: the light-DOM pass never inserts an inert DSD template into a 
   assertEquals(morphedTwice, true, 'second morph applies');
 
   const leaked = host.childNodes.filter(isDsdTemplate);
-  assertEquals(
-    leaked.length,
-    0,
-    'host light DOM must not retain a template[shadowrootmode] node',
-  );
+  assertEquals(leaked.length, 0, 'host light DOM must not retain a template[shadowrootmode] node');
   // The shadow tree itself IS morphed from the template content.
   const shadowText = (liveShadow.childNodes[0] as FakeElement).childNodes[0] as FakeText;
   assertEquals(shadowText.data, 'shadow v2', 'shadow content follows the incoming template');

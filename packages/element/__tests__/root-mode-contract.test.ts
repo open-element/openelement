@@ -17,8 +17,8 @@ import { element, OpenElement } from '@openelement/element';
 export default class RootModeProbe extends OpenElement {
   render() { return <div>probe</div>; }
 }`;
-  return compileElementProgram(source, '/project/app/components/root-mode-probe.tsx').program
-    .root.kind;
+  return compileElementProgram(source, '/project/app/components/root-mode-probe.tsx').program.root
+    .kind;
 }
 
 Deno.test('root mode: no option compiles to the light default', () => {

@@ -40,7 +40,8 @@ import { readInstanceState, writeInstanceState } from './instance-state.ts';
  */
 @element('open-code-block', { root: 'shadow-open' })
 export class OpenCodeBlock extends OpenElement {
-  static override styles: StyleSheetLike[] = [recipe(`
+  static override styles: StyleSheetLike[] = [
+    recipe(`
     :host {
       display: block;
       position: relative;
@@ -144,7 +145,8 @@ export class OpenCodeBlock extends OpenElement {
     .token.bold, .token.important { font-weight: 700; }
     .token.italic { font-style: italic; }
     .token.entity { cursor: help; }
-  `)];
+  `),
+  ];
 
   /** The copy button label — compiled text sink ('Copy'/'Copied!'/'Failed'). */
   @property({ reflect: false, attribute: false })
@@ -200,7 +202,8 @@ export class OpenCodeBlock extends OpenElement {
       return;
     }
 
-    const pre = this.querySelector(':scope > pre') ||
+    const pre =
+      this.querySelector(':scope > pre') ||
       Array.from(this.children).find((c) => c.tagName === 'PRE');
     if (!pre) return;
     const codeEl = pre.querySelector('code');
@@ -225,12 +228,9 @@ export class OpenCodeBlock extends OpenElement {
       return;
     }
     writeInstanceState(this, 'highlightRetries', 0);
-    const highlightedHtml =
-      (p as { highlight: (code: string, grammar: unknown, lang: string) => string }).highlight(
-        raw,
-        grammar,
-        lang,
-      );
+    const highlightedHtml = (
+      p as { highlight: (code: string, grammar: unknown, lang: string) => string }
+    ).highlight(raw, grammar, lang);
     this.injectHighlighted(highlightedHtml, lang);
   }
 

@@ -83,16 +83,18 @@ export function createIslandScheduler(deps: IslandSchedulerDeps): IslandSchedule
   function load(tag: string): void {
     const factory = map[tag];
     if (factory) {
-      factory().then(() => {
-        // #584: late-hydrating islands create their shadow roots after the
-        // ready-time scan; let the enhance layer rescan so enhanced forms
-        // inside them are heard.
-        if (deps.onIslandLoaded) {
-          win.setTimeout(() => {
-            if (deps.onIslandLoaded) deps.onIslandLoaded();
-          }, 0);
-        }
-      }).catch((e: unknown) => log.warn(tag, e));
+      factory()
+        .then(() => {
+          // #584: late-hydrating islands create their shadow roots after the
+          // ready-time scan; let the enhance layer rescan so enhanced forms
+          // inside them are heard.
+          if (deps.onIslandLoaded) {
+            win.setTimeout(() => {
+              if (deps.onIslandLoaded) deps.onIslandLoaded();
+            }, 0);
+          }
+        })
+        .catch((e: unknown) => log.warn(tag, e));
       map[tag] = null;
     }
   }
@@ -170,16 +172,19 @@ export function createIslandScheduler(deps: IslandSchedulerDeps): IslandSchedule
         // gets a fresh observer (#562).
         if (observedEls.has(el)) return;
         const Observer = win.IntersectionObserver;
-        const obs = new Observer((entries) => {
-          entries.forEach((entry) => {
-            if (entry.isIntersecting) {
-              load(tag);
-              dispatchReady('visible', [tag]);
-              obs.disconnect();
-              observedEls.delete(el);
-            }
-          });
-        }, { rootMargin: '200px' });
+        const obs = new Observer(
+          (entries) => {
+            entries.forEach((entry) => {
+              if (entry.isIntersecting) {
+                load(tag);
+                dispatchReady('visible', [tag]);
+                obs.disconnect();
+                observedEls.delete(el);
+              }
+            });
+          },
+          { rootMargin: '200px' },
+        );
         observedEls.set(el, obs);
         obs.observe(el);
       });
@@ -223,7 +228,8 @@ export function createIslandScheduler(deps: IslandSchedulerDeps): IslandSchedule
       idleTags.forEach(load);
       dispatchReady('idle', idleTags);
     };
-    const schedule: (fn: () => void) => unknown = win.requestIdleCallback ||
+    const schedule: (fn: () => void) => unknown =
+      win.requestIdleCallback ||
       win.requestAnimationFrame ||
       ((fn) => win.setTimeout(fn, deps.idleFallbackTimeoutMs));
     schedule(deferred);

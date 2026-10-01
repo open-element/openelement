@@ -117,11 +117,13 @@ export default class PageContributing extends OpenElement {
           <div class='setup-col'>
             <p class='section-label'>{this.setupLabel}</p>
             <open-code-block>
-              <pre><code>{`git clone https://github.com/open-element/openelement.git
+              <pre>
+                <code>{`git clone https://github.com/open-element/openelement.git
 cd openelement
 deno install
 deno task test
-deno task dev`}</code></pre>
+deno task dev`}</code>
+              </pre>
             </open-code-block>
             <p class='setup-copy'>
               {this.setupCopyBefore}
@@ -155,7 +157,9 @@ deno task dev`}</code></pre>
             <ul class='checklist'>
               {this.checklist.map((item) => (
                 <li key={item.id}>
-                  <span class={item.checkboxClass} aria-hidden='true'>{item.mark}</span>
+                  <span class={item.checkboxClass} aria-hidden='true'>
+                    {item.mark}
+                  </span>
                   <span>{item.text}</span>
                 </li>
               ))}
@@ -168,7 +172,9 @@ deno task dev`}</code></pre>
           <p class='section-label help-header'>{this.helpLabel}</p>
           {this.helpRows.map((item) => (
             <div class='help-row' key={item.id}>
-              <span class='help-index' aria-hidden='true'>{item.index}</span>
+              <span class='help-index' aria-hidden='true'>
+                {item.index}
+              </span>
               <span class='help-title'>{item.title}</span>
               <p class='help-copy'>{item.copy}</p>
             </div>

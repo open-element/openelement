@@ -3,9 +3,7 @@ import { isActionFailure, isOpenElementRedirect } from '@openelement/router';
 
 // v0.44: route logic lives in app/route-logic/ so tests never evaluate the
 // compiled page class (decorators are compile-time-only input).
-const { createMagicLinkAction, magicLinkLoader } = await import(
-  '../route-logic/magic-link.ts'
-);
+const { createMagicLinkAction, magicLinkLoader } = await import('../route-logic/magic-link.ts');
 type MagicLinkAuthClient = import('../route-logic/magic-link.ts').MagicLinkAuthClient;
 
 function client(error: { message: string } | null = null): () => MagicLinkAuthClient {

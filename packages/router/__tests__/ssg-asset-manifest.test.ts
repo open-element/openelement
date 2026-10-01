@@ -133,11 +133,13 @@ Deno.test('matrix 1 — a content-hash change re-keys the tag to the new asset, 
       ...Object.fromEntries([ENTRY_RECORD]),
       'app/islands/counter.ts': { file: 'islands/island-counter-Ab12cd.js' },
     },
-    [{
-      fileName: 'islands/island-counter-Ab12cd.js',
-      facadeModuleId: `${ROOT}/app/islands/counter.ts`,
-      modules,
-    }],
+    [
+      {
+        fileName: 'islands/island-counter-Ab12cd.js',
+        facadeModuleId: `${ROOT}/app/islands/counter.ts`,
+        modules,
+      },
+    ],
   );
   assertEquals(before.islands['open-counter'].file, '/client/islands/island-counter-Ab12cd.js');
 
@@ -149,19 +151,19 @@ Deno.test('matrix 1 — a content-hash change re-keys the tag to the new asset, 
       ...Object.fromEntries([ENTRY_RECORD]),
       'app/islands/counter.ts': { file: 'islands/island-counter-Xy98wa.js' },
     },
-    [{
-      fileName: 'islands/island-counter-Xy98wa.js',
-      facadeModuleId: `${ROOT}/app/islands/counter.ts`,
-      modules,
-    }],
+    [
+      {
+        fileName: 'islands/island-counter-Xy98wa.js',
+        facadeModuleId: `${ROOT}/app/islands/counter.ts`,
+        modules,
+      },
+    ],
   );
   assertEquals(after.islands['open-counter'].file, '/client/islands/island-counter-Xy98wa.js');
   assertEquals(after.islands['open-counter'].strategy, 'idle');
 
   // The rendered document carries the fresh address at render time.
-  const doc = resolvePageDocument(undefined, ctx(), [
-    { type: 'module', src: after.entry },
-  ]);
+  const doc = resolvePageDocument(undefined, ctx(), [{ type: 'module', src: after.entry }]);
   assertScriptAtBodyEnd(renderDocument(doc), after.entry);
 });
 
@@ -179,11 +181,13 @@ Deno.test('matrix 2a — Rolldown default naming: a full rename cannot move the 
       ...Object.fromEntries([ENTRY_RECORD]),
       'app/islands/counter.ts': { file: 'islands/chunk-9f3e2a.js' },
     },
-    [{
-      fileName: 'islands/chunk-9f3e2a.js',
-      facadeModuleId: `${ROOT}/app/islands/counter.ts`,
-      modules,
-    }],
+    [
+      {
+        fileName: 'islands/chunk-9f3e2a.js',
+        facadeModuleId: `${ROOT}/app/islands/counter.ts`,
+        modules,
+      },
+    ],
   );
   assertEquals(renamed.islands['open-counter'].file, '/client/islands/chunk-9f3e2a.js');
 
@@ -204,16 +208,15 @@ Deno.test('matrix 2b — manualChunks naming: renaming across naming schemes kee
       ...Object.fromEntries([ENTRY_RECORD]),
       'app/islands/counter.ts': { file: 'islands/island-open-counter-Qq77.js' },
     },
-    [{
-      fileName: 'islands/island-open-counter-Qq77.js',
-      facadeModuleId: `${ROOT}/app/islands/counter.ts`,
-      modules,
-    }],
+    [
+      {
+        fileName: 'islands/island-open-counter-Qq77.js',
+        facadeModuleId: `${ROOT}/app/islands/counter.ts`,
+        modules,
+      },
+    ],
   );
-  assertEquals(
-    manual.islands['open-counter'].file,
-    '/client/islands/island-open-counter-Qq77.js',
-  );
+  assertEquals(manual.islands['open-counter'].file, '/client/islands/island-open-counter-Qq77.js');
 
   const shared = manifest(
     [input()],
@@ -221,11 +224,13 @@ Deno.test('matrix 2b — manualChunks naming: renaming across naming schemes kee
       ...Object.fromEntries([ENTRY_RECORD]),
       'app/islands/counter.ts': { file: 'islands/vendor-common-Ww22.js' },
     },
-    [{
-      fileName: 'islands/vendor-common-Ww22.js',
-      facadeModuleId: `${ROOT}/app/islands/counter.ts`,
-      modules,
-    }],
+    [
+      {
+        fileName: 'islands/vendor-common-Ww22.js',
+        facadeModuleId: `${ROOT}/app/islands/counter.ts`,
+        modules,
+      },
+    ],
   );
   assertEquals(shared.islands['open-counter'].file, '/client/islands/vendor-common-Ww22.js');
 });
@@ -237,19 +242,23 @@ Deno.test('matrix 3 — manualChunks off: default chunk naming keys through faca
   // and the facade module id — not any naming convention — carries identity.
   const modules = { [`${ROOT}/app/islands/counter.ts`]: {} };
   const result = manifest(
-    [input(
-      { tagName: 'open-gadget', modulePath: '/app/islands/gadget.ts' },
-      join(ROOT, 'app/islands/gadget.ts'),
-    )],
+    [
+      input(
+        { tagName: 'open-gadget', modulePath: '/app/islands/gadget.ts' },
+        join(ROOT, 'app/islands/gadget.ts'),
+      ),
+    ],
     {
       ...Object.fromEntries([ENTRY_RECORD]),
       'app/islands/gadget.ts': { file: 'islands/gadget-Dd55.js' },
     },
-    [{
-      fileName: 'islands/gadget-Dd55.js',
-      facadeModuleId: `${ROOT}/app/islands/gadget.ts`,
-      modules,
-    }],
+    [
+      {
+        fileName: 'islands/gadget-Dd55.js',
+        facadeModuleId: `${ROOT}/app/islands/gadget.ts`,
+        modules,
+      },
+    ],
   );
   assertEquals(result.islands['open-gadget'].file, '/client/islands/gadget-Dd55.js');
   assertEquals(result.entry, '/client/islands/client.js');
@@ -266,11 +275,13 @@ Deno.test('matrix 4 — a new shared chunk lands in shared[] and leaves island m
       ...Object.fromEntries([ENTRY_RECORD]),
       'app/islands/counter.ts': { file: 'islands/island-counter-Ab12.js' },
     },
-    [{
-      fileName: 'islands/island-counter-Ab12.js',
-      facadeModuleId: `${ROOT}/app/islands/counter.ts`,
-      modules,
-    }],
+    [
+      {
+        fileName: 'islands/island-counter-Ab12.js',
+        facadeModuleId: `${ROOT}/app/islands/counter.ts`,
+        modules,
+      },
+    ],
   );
 
   // The next build extracts a vendor chunk (e.g. a new dependency).
@@ -281,11 +292,13 @@ Deno.test('matrix 4 — a new shared chunk lands in shared[] and leaves island m
       'app/islands/counter.ts': { file: 'islands/island-counter-Ab12.js' },
       'node_modules/.deno/flexsearch@0.8/dist.js': { file: 'islands/flexsearch-Cc33.js' },
     },
-    [{
-      fileName: 'islands/island-counter-Ab12.js',
-      facadeModuleId: `${ROOT}/app/islands/counter.ts`,
-      modules,
-    }],
+    [
+      {
+        fileName: 'islands/island-counter-Ab12.js',
+        facadeModuleId: `${ROOT}/app/islands/counter.ts`,
+        modules,
+      },
+    ],
   );
   assertEquals(after.islands, before.islands);
   assertEquals(after.shared, ['/client/islands/flexsearch-Cc33.js']);
@@ -294,11 +307,9 @@ Deno.test('matrix 4 — a new shared chunk lands in shared[] and leaves island m
 // ─── 5. island 无独立 chunk（走 client.js 兜底） ──────────────────────
 
 Deno.test('matrix 5 — an island without its own chunk rides the client entry fallback', () => {
-  const result = manifest(
-    [input()],
-    { ...Object.fromEntries([ENTRY_RECORD]) },
-    [{ fileName: 'islands/client.js', modules: {} }],
-  );
+  const result = manifest([input()], { ...Object.fromEntries([ENTRY_RECORD]) }, [
+    { fileName: 'islands/client.js', modules: {} },
+  ]);
   assertEquals(result.islands['open-counter'].file, '/client/islands/client.js');
 
   // The document and the island manifest both resolve to the fallback URL.
@@ -370,16 +381,20 @@ Deno.test('matrix 8 — lit: same document-time injection over the lit adapter a
   // A lit project's island is typically a package module: identity joins on
   // the declared module-path fragment, never the chunk name.
   const result = manifest(
-    [{
-      entry: island({ tagName: 'open-callout', modulePath: 'open-callout.js' }),
-      sourceFile: null,
-    }],
+    [
+      {
+        entry: island({ tagName: 'open-callout', modulePath: 'open-callout.js' }),
+        sourceFile: null,
+      },
+    ],
     { ...Object.fromEntries([ENTRY_RECORD]) },
-    [{
-      fileName: 'islands/island-open-callout-Bb44.js',
-      facadeModuleId: null,
-      modules: { [`${ROOT}/node_modules/@acme/ui/open-callout.js`]: {} },
-    }],
+    [
+      {
+        fileName: 'islands/island-open-callout-Bb44.js',
+        facadeModuleId: null,
+        modules: { [`${ROOT}/node_modules/@acme/ui/open-callout.js`]: {} },
+      },
+    ],
   );
   assertEquals(result.islands['open-callout'].file, '/client/islands/island-open-callout-Bb44.js');
 
@@ -457,16 +472,14 @@ Deno.test('matrix — postProcessClientIslandBuild honors the manifest on a real
 
 Deno.test('matrix — clientScripts validation: malformed wiring fails loudly, empty lists omit the field', () => {
   // Framework wiring bugs must fail the render, not silently drop scripts.
-  for (
-    const bad of [
-      [{}, 'must carry a src or an inline code body'],
-      [{ src: '' }, 'src must be a non-empty string'],
-      [{ src: 42 }, 'src must be a non-empty string'],
-      [{ code: 7 }, 'code must be a string'],
-      'not-an-object',
-      null,
-    ] as unknown[]
-  ) {
+  for (const bad of [
+    [{}, 'must carry a src or an inline code body'],
+    [{ src: '' }, 'src must be a non-empty string'],
+    [{ src: 42 }, 'src must be a non-empty string'],
+    [{ code: 7 }, 'code must be a string'],
+    'not-an-object',
+    null,
+  ] as unknown[]) {
     assertThrowsClientScripts(bad);
   }
   // An empty descriptor list is meaningless presence: the field is omitted

@@ -92,9 +92,8 @@ Deno.test('composeFetchMiddleware: post-processing sees the handler response', a
 
 Deno.test('composeFetchMiddleware: handler errors propagate through the chain', async () => {
   const passthrough: Middleware = (_request, next) => next();
-  const handler = composeFetchMiddleware(
-    [passthrough],
-    () => Promise.reject(new Error('boom from handler')),
+  const handler = composeFetchMiddleware([passthrough], () =>
+    Promise.reject(new Error('boom from handler')),
   );
   const error = await handler(new Request('https://example.com/live')).catch((err) => err);
   assertStringIncludes(String(error), 'boom from handler');
@@ -107,13 +106,10 @@ Deno.test('composeFetchMiddleware: runtime context threads past the chain to the
     seen.push('mw');
     return await next();
   };
-  const handler = composeFetchMiddleware(
-    [middleware],
-    (request: Request, context: Ctx) => {
-      seen.push(`handler:${context.env.TARGET ?? 'missing'}`);
-      return Promise.resolve(new Response(new URL(request.url).pathname));
-    },
-  );
+  const handler = composeFetchMiddleware([middleware], (request: Request, context: Ctx) => {
+    seen.push(`handler:${context.env.TARGET ?? 'missing'}`);
+    return Promise.resolve(new Response(new URL(request.url).pathname));
+  });
   const response = await handler(new Request('https://example.com/live'), {
     env: { TARGET: 'reached' },
   });

@@ -28,9 +28,8 @@ import { testProgram } from './test-program.ts';
 // The facade captures its HTMLElement base at module evaluation time.
 const dom = installFacadeDom();
 
-const { OpenElement, ensurePreHydrationClickCapture, renderDsd } = await import(
-  '../../src/index.ts'
-);
+const { OpenElement, ensurePreHydrationClickCapture, renderDsd } =
+  await import('../../src/index.ts');
 
 // oxlint-disable-next-line no-explicit-any
 type AnyElement = any;
@@ -44,12 +43,14 @@ function activationProgram(spec: ActivationSpec) {
   return testProgram({
     tag: spec.tag,
     rootMode: spec.rootMode,
-    template: [{
-      k: 'el',
-      tag: 'button',
-      attrs: [['type', 'button']],
-      children: [{ k: 'part', index: 0 }],
-    }],
+    template: [
+      {
+        k: 'el',
+        tag: 'button',
+        attrs: [['type', 'button']],
+        children: [{ k: 'part', index: 0 }],
+      },
+    ],
     parts: [
       { k: 'text', index: 0, signal: 'count' },
       {
@@ -61,14 +62,16 @@ function activationProgram(spec: ActivationSpec) {
         path: [0],
       },
     ],
-    properties: [{
-      name: 'count',
-      attribute: 'count',
-      type: 'number',
-      converter: 'number',
-      reflect: false,
-      default: 0,
-    }],
+    properties: [
+      {
+        name: 'count',
+        attribute: 'count',
+        type: 'number',
+        converter: 'number',
+        reflect: false,
+        default: 0,
+      },
+    ],
   });
 }
 
@@ -116,9 +119,9 @@ function mountDsd(tag: string, beforeConnect?: (element: FacadeElement) => void)
 }
 
 function captureListenerCount(target: AnyElement): number {
-  return (target.listeners.get('click') ?? [])
-    .filter((listener: { capture: boolean }) => listener.capture)
-    .length;
+  return (target.listeners.get('click') ?? []).filter(
+    (listener: { capture: boolean }) => listener.capture,
+  ).length;
 }
 
 /**
@@ -224,10 +227,7 @@ Deno.test('activation: open shadow DSD claim fires onDsdHydrated only', () => {
   });
   assertEquals(element.hydrated, 1);
   assertEquals(element.rendered, 0);
-  assertStrictEquals(
-    (element.shadowRoot as unknown as AnyElement).childNodes[0],
-    claimedButton,
-  );
+  assertStrictEquals((element.shadowRoot as unknown as AnyElement).childNodes[0], claimedButton);
 });
 
 Deno.test('activation: open shadow CSR fires onCsrRendered only', () => {

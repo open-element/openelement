@@ -71,9 +71,8 @@ export function createMorphWebkitFix(deps: WebkitFixDeps): MorphWebkitFix {
       const all = roots[i].querySelectorAll('*');
       for (let j = 0; j < all.length; j++) {
         const el = all[j];
-        const ctor = el.localName.indexOf('-') !== -1
-          ? win.customElements.get(el.localName)
-          : undefined;
+        const ctor =
+          el.localName.indexOf('-') !== -1 ? win.customElements.get(el.localName) : undefined;
         if (ctor && !(el instanceof ctor)) {
           const parent = el.parentNode;
           if (!parent) continue;

@@ -111,11 +111,12 @@ function isIslandHostTag(node: unknown): boolean {
   try {
     const element = node as { localName?: unknown; tagName?: unknown };
     if (!element || typeof element !== 'object') return false;
-    const rawName = typeof element.localName === 'string'
-      ? element.localName
-      : typeof element.tagName === 'string'
-      ? element.tagName.toLowerCase()
-      : '';
+    const rawName =
+      typeof element.localName === 'string'
+        ? element.localName
+        : typeof element.tagName === 'string'
+          ? element.tagName.toLowerCase()
+          : '';
     return rawName.includes('-');
   } catch {
     return false;
@@ -197,7 +198,7 @@ export function acceptPendingIslandEvent(
     if (hasDeclared) {
       const lookup = Array.isArray(declaredTags)
         ? new Set(declaredTags.map((tag) => tag.toLowerCase()))
-        : declaredTags as ReadonlySet<string>;
+        : (declaredTags as ReadonlySet<string>);
       for (const node of path) {
         const tag = tagNameOf(node);
         if (!tag || !lookup.has(tag)) continue;
@@ -277,9 +278,7 @@ export interface PreUpgradeRecordStore {
   /** Retain one latest record per target/type; drops the newcomer at the cap. */
   replaceFor(record: PreUpgradeEvent): void;
   /** Remove and return the matching records, order preserved. */
-  takeWhere(
-    predicate: (record: PreUpgradeEvent) => boolean,
-  ): PreUpgradeEvent[];
+  takeWhere(predicate: (record: PreUpgradeEvent) => boolean): PreUpgradeEvent[];
   /** Deterministically drop every retained record. */
   clear(): void;
 }
@@ -314,9 +313,7 @@ function createPreUpgradeRecordStore(): PreUpgradeRecordStore {
       }
       upsertCaptureRecord(events, index, record);
     },
-    takeWhere(
-      predicate: (record: PreUpgradeEvent) => boolean,
-    ): PreUpgradeEvent[] {
+    takeWhere(predicate: (record: PreUpgradeEvent) => boolean): PreUpgradeEvent[] {
       const taken: PreUpgradeEvent[] = [];
       const kept: PreUpgradeEvent[] = [];
       for (const record of events) {
@@ -402,8 +399,9 @@ export function capturePreUpgradeEvents(
 }
 
 function isNodeValue(value: unknown): value is Node {
-  return typeof value === 'object' && value !== null && 'nodeType' in value &&
-    'childNodes' in value;
+  return (
+    typeof value === 'object' && value !== null && 'nodeType' in value && 'childNodes' in value
+  );
 }
 
 /**
@@ -458,10 +456,7 @@ export function preUpgradeEventList(
  * activation stay pending too: the live island already handled them, and a
  * later pass for the same root (morph reconnect) must not re-handle them.
  */
-export function replayPreUpgradeEvents(
-  root: Node,
-  captured: readonly PreUpgradeEvent[],
-): number {
+export function replayPreUpgradeEvents(root: Node, captured: readonly PreUpgradeEvent[]): number {
   // Pin this root's first-activation cutoff. Records captured after the pin
   // are interactions a live island already handled: replaying them on a
   // later pass for the same root (morph reconnect) would double-handle one
@@ -493,22 +488,23 @@ export function replayPreUpgradeEvents(
     // document before its island hydrated replays nowhere (never throws,
     // never delivers to a recycled node, never retries on a later upgrade).
     if (
-      isNodeValue(target) && typeof target.isConnected === 'boolean' &&
+      isNodeValue(target) &&
+      typeof target.isConnected === 'boolean' &&
       target.isConnected === false
     ) {
       continue;
     }
     if (typeof target.dispatchEvent !== 'function') continue;
-    const event = record.event ?? (
-      typeof globalThis.Event === 'function'
+    const event =
+      record.event ??
+      (typeof globalThis.Event === 'function'
         ? new Event(record.type, {
-          bubbles: true,
-          cancelable: true,
-          composed: true,
-          ...record.init,
-        })
-        : undefined
-    );
+            bubbles: true,
+            cancelable: true,
+            composed: true,
+            ...record.init,
+          })
+        : undefined);
     if (!event) continue;
     target.dispatchEvent(event);
     replayed++;
@@ -602,11 +598,9 @@ function adoptRootBucket(root: Node): PreUpgradeRecordStore {
   // Detached records can never hydrate: sweep them first so removals free
   // their slot for genuinely pending islands.
   preUpgradePendingRecords.takeWhere((record) => isDetachedTarget(record.target));
-  for (
-    const record of preUpgradePendingRecords.takeWhere((candidate) =>
-      isInsideRoot(root, candidate.target)
-    )
-  ) {
+  for (const record of preUpgradePendingRecords.takeWhere((candidate) =>
+    isInsideRoot(root, candidate.target),
+  )) {
     bucket.store.replaceFor(record);
   }
   return bucket.store;
@@ -642,8 +636,8 @@ export function ensurePreHydrationClickCapture(
   root?: EventTarget,
   pendingTags?: readonly string[],
 ): void {
-  const target = root ??
-    (typeof document !== 'undefined' ? (document as unknown as EventTarget) : undefined);
+  const target =
+    root ?? (typeof document !== 'undefined' ? (document as unknown as EventTarget) : undefined);
   if (!target || typeof target.addEventListener !== 'function') return;
   const existing = preUpgradeCaptureRoots.get(target);
   if (existing) {

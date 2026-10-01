@@ -69,7 +69,7 @@ const visiblePosts = posts
   .filter((post) => post.frontmatter.type !== 'adr')
   .sort((a, b) => b.frontmatter.date.localeCompare(a.frontmatter.date));
 
-function postTags(post: typeof posts[number]): string[] {
+function postTags(post: (typeof posts)[number]): string[] {
   return post.frontmatter.tags ?? [];
 }
 
@@ -91,7 +91,7 @@ export default definePage(BlogIndexPage, {
   props({ locale }) {
     const resolved = contentLocale(locale ?? 'en');
     const t = content[resolved];
-    const langLabel = (post: typeof posts[number]) =>
+    const langLabel = (post: (typeof posts)[number]) =>
       (post.frontmatter.lang ?? 'en') === 'zh' ? '中文' : 'EN';
     const featured = visiblePosts[0];
     const rows: BlogIndexRow[] = visiblePosts.slice(1, 5).map((post, index) => ({
@@ -115,8 +115,8 @@ export default definePage(BlogIndexPage, {
       featuredHref: featured ? localizePath(`/blog/${featured.slug}`, resolved) : '',
       featuredKicker: featured
         ? `${t.featuredPrefix} — ${featured.frontmatter.date}${
-          postTags(featured)[0] ? ` · ${postTags(featured)[0]}` : ''
-        } · ${langLabel(featured)}`
+            postTags(featured)[0] ? ` · ${postTags(featured)[0]}` : ''
+          } · ${langLabel(featured)}`
         : '',
       featuredTitle: featured?.frontmatter.title ?? '',
       featuredExcerpt: featured?.frontmatter.excerpt ?? '',

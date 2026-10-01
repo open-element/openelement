@@ -49,19 +49,19 @@ type ProgramPartInput =
   | { k: 'html'; signal: string; path: number[] }
   | { k: 'ref'; ref: string; path: number[] }
   | {
-    k: 'event';
-    event: string;
-    handler: string;
-    action: ProgramEventAction;
-    path: number[];
-  }
+      k: 'event';
+      event: string;
+      handler: string;
+      action: ProgramEventAction;
+      path: number[];
+    }
   | {
-    k: 'when';
-    signal: string;
-    test: ProgramCondition;
-    on: ProgramTreeNode[];
-    off: ProgramTreeNode[];
-  }
+      k: 'when';
+      signal: string;
+      test: ProgramCondition;
+      on: ProgramTreeNode[];
+      off: ProgramTreeNode[];
+    }
   | { k: 'each'; signal: string; key: string; field?: string; item: ProgramTreeNode[] };
 
 const BOOLEAN_ATTRIBUTES = new Set([
@@ -230,8 +230,14 @@ export class Lowering {
       this.addSource(`r${index}`, 'region', node);
     }
     if (
-      part.k === 'text' || part.k === 'prop' || part.k === 'attr' || part.k === 'bool' ||
-      part.k === 'class' || part.k === 'style' || part.k === 'html' || part.k === 'when' ||
+      part.k === 'text' ||
+      part.k === 'prop' ||
+      part.k === 'attr' ||
+      part.k === 'bool' ||
+      part.k === 'class' ||
+      part.k === 'style' ||
+      part.k === 'html' ||
+      part.k === 'when' ||
       part.k === 'each'
     ) {
       this.dependencies.push({
@@ -246,7 +252,8 @@ export class Lowering {
   private fieldAccess(expr: ts.Expression): string | null {
     const value = unwrapExpression(expr);
     if (
-      ts.isPropertyAccessExpression(value) && value.expression.kind === ts.SyntaxKind.ThisKeyword &&
+      ts.isPropertyAccessExpression(value) &&
+      value.expression.kind === ts.SyntaxKind.ThisKeyword &&
       this.fieldNames.has(value.name.text)
     ) {
       return value.name.text;
@@ -257,7 +264,8 @@ export class Lowering {
   private methodAccess(expr: ts.Expression): string | null {
     const value = unwrapExpression(expr);
     if (
-      ts.isPropertyAccessExpression(value) && value.expression.kind === ts.SyntaxKind.ThisKeyword &&
+      ts.isPropertyAccessExpression(value) &&
+      value.expression.kind === ts.SyntaxKind.ThisKeyword &&
       this.methodNames.has(value.name.text)
     ) {
       return value.name.text;
@@ -321,7 +329,8 @@ export class Lowering {
       if (ts.isJsxSpreadAttribute(prop)) continue;
       if (this.normalizeAttributeName(prop.name.getText(this.sf)) !== 'trustedHtml') continue;
       const init = prop.initializer;
-      trustedHtmlCapability = init === undefined ||
+      trustedHtmlCapability =
+        init === undefined ||
         (ts.isJsxExpression(init) && init.expression?.kind === ts.SyntaxKind.TrueKeyword);
       if (!trustedHtmlCapability) {
         this.fail(prop, 'OEC9026', 'trustedHtml capability marker must be the literal true');
@@ -334,8 +343,11 @@ export class Lowering {
       const name = this.normalizeAttributeName(prop.name.getText(this.sf));
       const init = prop.initializer;
       if (name === 'trustedHtml') continue;
-      const isDynamicEvent = /^on[A-Z]/.test(name) && init !== undefined &&
-        ts.isJsxExpression(init) && init.expression !== undefined;
+      const isDynamicEvent =
+        /^on[A-Z]/.test(name) &&
+        init !== undefined &&
+        ts.isJsxExpression(init) &&
+        init.expression !== undefined;
       if (isCustomHost && (isDynamicEvent || /^on[A-Z]/.test(name))) {
         this.fail(prop, 'OEC9017', `custom-element host <${tag}> may not carry event handlers`);
       }
@@ -348,7 +360,9 @@ export class Lowering {
       if (
         name === 'innerHTML' &&
         !(
-          init !== undefined && ts.isJsxExpression(init) && init.expression !== undefined &&
+          init !== undefined &&
+          ts.isJsxExpression(init) &&
+          init.expression !== undefined &&
           this.fieldAccess(unwrapExpression(init.expression)) !== null
         )
       ) {
@@ -420,15 +434,7 @@ export class Lowering {
           this.addPart({ k: 'prop', signal: field, name, path }, path, prop, elementId);
           continue;
         }
-        this.lowerDynamicAttribute(
-          name,
-          field,
-          tag,
-          path,
-          prop,
-          elementId,
-          trustedHtmlCapability,
-        );
+        this.lowerDynamicAttribute(name, field, tag, path, prop, elementId, trustedHtmlCapability);
         continue;
       }
       const literal = literalValue(expr, this.sf);
@@ -444,19 +450,22 @@ export class Lowering {
         this.fail(prop, 'OEC9011', `attribute "${name}" only accepts primitive literal values`);
       }
       if (literal === false || literal === null) continue;
-      attrs.push([name, literal === true ? '' : text ?? '']);
+      attrs.push([name, literal === true ? '' : (text ?? '')]);
     }
 
-    const hasHtmlSink = this.parts.some((part) =>
-      part.k === 'html' && part.path.length === path.length &&
-      part.path.every((value, index) => value === path[index])
+    const hasHtmlSink = this.parts.some(
+      (part) =>
+        part.k === 'html' &&
+        part.path.length === path.length &&
+        part.path.every((value, index) => value === path[index]),
     );
     if (trustedHtmlCapability && !hasHtmlSink) {
       this.fail(sourceNode, 'OEC9026', 'trustedHtml capability marker requires an innerHTML sink');
     }
     if (
       !isCustomHost &&
-      hasHtmlSink && children.some((child) => hasMeaningfulJsxChild(this.sf, child))
+      hasHtmlSink &&
+      children.some((child) => hasMeaningfulJsxChild(this.sf, child))
     ) {
       this.fail(
         sourceNode,
@@ -753,8 +762,11 @@ export class Lowering {
       const value = literalValue(condition.right, this.sf);
       const op = CONDITION_TOKEN_OPS[condition.operatorToken.kind];
       if (
-        signal && op && value !== undefined &&
-        typeof value !== 'object' && conditionLiteralAllowed(op, value)
+        signal &&
+        op &&
+        value !== undefined &&
+        typeof value !== 'object' &&
+        conditionLiteralAllowed(op, value)
       ) {
         return { signal, op, value };
       }
@@ -788,7 +800,8 @@ export class Lowering {
   private lowerEach(expr: ts.CallExpression, near: ts.Node, path: number[]): ProgramTreeNode {
     const callee = expr.expression;
     if (
-      !ts.isPropertyAccessExpression(callee) || callee.name.text !== 'map' ||
+      !ts.isPropertyAccessExpression(callee) ||
+      callee.name.text !== 'map' ||
       expr.arguments.length !== 1
     ) {
       this.fail(near, 'OEC9013', 'list Regions support exactly this.<property>.map(...)');
@@ -797,7 +810,8 @@ export class Lowering {
     if (!signal) this.fail(near, 'OEC9013', 'list Regions must map over this.<property>');
     const arrow = expr.arguments[0];
     if (
-      !ts.isArrowFunction(arrow) || arrow.parameters.length !== 1 ||
+      !ts.isArrowFunction(arrow) ||
+      arrow.parameters.length !== 1 ||
       !ts.isIdentifier(arrow.parameters[0].name)
     ) {
       this.fail(near, 'OEC9013', 'list Region mapper must be a single-parameter arrow function');
@@ -819,14 +833,18 @@ export class Lowering {
       if (prop.name.getText(this.sf) !== 'key') continue;
       if (key !== null) this.fail(prop, 'OEC9014', 'list Region items may declare key only once');
       if (
-        !prop.initializer || !ts.isJsxExpression(prop.initializer) || !prop.initializer.expression
+        !prop.initializer ||
+        !ts.isJsxExpression(prop.initializer) ||
+        !prop.initializer.expression
       ) {
         this.fail(prop, 'OEC9014', 'key must be key={<item>.<field>}');
       }
       const keyExpr = unwrapExpression(prop.initializer.expression);
       if (
-        ts.isPropertyAccessExpression(keyExpr) && ts.isIdentifier(keyExpr.expression) &&
-        keyExpr.expression.text === param && isIdentifier(keyExpr.name.text)
+        ts.isPropertyAccessExpression(keyExpr) &&
+        ts.isIdentifier(keyExpr.expression) &&
+        keyExpr.expression.text === param &&
+        isIdentifier(keyExpr.name.text)
       ) {
         key = keyExpr.name.text;
       } else {
@@ -922,8 +940,10 @@ export class Lowering {
       // omits it, anything else serializes with String()).
       const attrExpr = unwrapExpression(prop.initializer.expression);
       if (
-        ts.isPropertyAccessExpression(attrExpr) && ts.isIdentifier(attrExpr.expression) &&
-        attrExpr.expression.text === param && isIdentifier(attrExpr.name.text)
+        ts.isPropertyAccessExpression(attrExpr) &&
+        ts.isIdentifier(attrExpr.expression) &&
+        attrExpr.expression.text === param &&
+        isIdentifier(attrExpr.name.text)
       ) {
         itemFields.push(attrExpr.name.text);
         iattrs.push([name, attrExpr.name.text]);
@@ -942,7 +962,7 @@ export class Lowering {
         this.fail(prop, 'OEC9011', 'item template attributes must use primitive literals');
       }
       if (literal === false || literal === null) continue;
-      attrs.push([name, literal === true ? '' : text ?? '']);
+      attrs.push([name, literal === true ? '' : (text ?? '')]);
     }
     const children: ProgramTreeNode[] = [];
     const rawChildren = ts.isJsxElement(element) ? [...element.children] : [];
@@ -967,8 +987,10 @@ export class Lowering {
       if (ts.isJsxExpression(child) && child.expression) {
         const expr = unwrapExpression(child.expression);
         if (
-          ts.isPropertyAccessExpression(expr) && ts.isIdentifier(expr.expression) &&
-          expr.expression.text === param && isIdentifier(expr.name.text)
+          ts.isPropertyAccessExpression(expr) &&
+          ts.isIdentifier(expr.expression) &&
+          expr.expression.text === param &&
+          isIdentifier(expr.name.text)
         ) {
           itemFields.push(expr.name.text);
           children.push({ k: 'ival', field: expr.name.text });

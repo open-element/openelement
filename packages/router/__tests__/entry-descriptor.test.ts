@@ -73,7 +73,7 @@ Deno.test('buildEntryDescriptor: array CORS origin is preserved', () => {
 });
 
 Deno.test('buildEntryDescriptor: function CORS origin fails with a migration error (Alpha.1)', () => {
-  const originFn = (origin: string) => origin.endsWith('.example.com') ? origin : '';
+  const originFn = (origin: string) => (origin.endsWith('.example.com') ? origin : '');
   assertThrows(
     () =>
       buildEntryDescriptor(sampleRoutes, {
@@ -176,25 +176,29 @@ Deno.test('buildEntryDescriptor: static components are explicit and rendered int
 Deno.test('buildEntryDescriptor: compiler-proven interaction becomes one client admission input', () => {
   const desc = buildEntryDescriptor(sampleRoutes, {
     upgradeStrategy: 'visible',
-    staticComponents: [{
-      tagName: 'open-menu-button',
-      modulePath: '/app/components/menu-button.tsx',
-      compilerInteractionEvents: ['click', 'keydown'],
-    }],
+    staticComponents: [
+      {
+        tagName: 'open-menu-button',
+        modulePath: '/app/components/menu-button.tsx',
+        compilerInteractionEvents: ['click', 'keydown'],
+      },
+    ],
   });
   const code = renderEntry(desc);
 
   assertEquals(desc.staticComponents, []);
-  assertEquals(desc.islands, [{
-    tagName: 'open-menu-button',
-    modulePath: '/app/components/menu-button.tsx',
-    hydrate: 'visible',
-    ssr: true,
-    dsd: true,
-    authoring: 'basic-element',
-    source: 'nested',
-    reason: 'compiler-proven interaction events: click, keydown',
-  }]);
+  assertEquals(desc.islands, [
+    {
+      tagName: 'open-menu-button',
+      modulePath: '/app/components/menu-button.tsx',
+      hydrate: 'visible',
+      ssr: true,
+      dsd: true,
+      authoring: 'basic-element',
+      source: 'nested',
+      reason: 'compiler-proven interaction events: click, keydown',
+    },
+  ]);
   assertEquals(desc.ssrAdmissionPlan.renderableTags, ['open-menu-button']);
   assertStringIncludes(code, 'import * as __island_open_menu_button');
   assertStringIncludes(code, '"open-menu-button"');
@@ -294,7 +298,10 @@ Deno.test('renderEntry: no process.env call in output', () => {
 
   // Check that process.env is not used as a runtime call (only in comments is fine)
   const codeLines = code.split('\n').filter((l) => !l.trimStart().startsWith('//'));
-  assertEquals(codeLines.some((l) => l.includes('process.env')), false);
+  assertEquals(
+    codeLines.some((l) => l.includes('process.env')),
+    false,
+  );
 });
 
 Deno.test('renderEntry: custom CORS origin renders correctly', () => {
@@ -306,7 +313,10 @@ Deno.test('renderEntry: custom CORS origin renders correctly', () => {
   assertStringIncludes(code, '"https://example.com"');
   // Verify no process.env call in non-comment lines
   const codeLines = code.split('\n').filter((l) => !l.trimStart().startsWith('//'));
-  assertEquals(codeLines.some((l) => l.includes('process.env')), false);
+  assertEquals(
+    codeLines.some((l) => l.includes('process.env')),
+    false,
+  );
 });
 
 Deno.test('renderEntry: document config renders correctly', () => {
@@ -326,10 +336,12 @@ Deno.test('renderEntry: document config renders correctly', () => {
 // Integration test: buildEntryDescriptor + renderEntry end-to-end
 
 Deno.test('buildEntryDescriptor + renderEntry: end-to-end produces runnable code', () => {
-  const code = renderEntry(buildEntryDescriptor(sampleRoutes, {
-    routesDir: 'app/routes',
-    islandsDir: 'app/islands',
-  }));
+  const code = renderEntry(
+    buildEntryDescriptor(sampleRoutes, {
+      routesDir: 'app/routes',
+      islandsDir: 'app/islands',
+    }),
+  );
 
   // ADR-0160 rule a (#1470 block e): Hono assembly is the factory's.
   assertFalse(code.includes("from 'hono'"));
@@ -339,7 +351,10 @@ Deno.test('buildEntryDescriptor + renderEntry: end-to-end produces runnable code
   assertStringIncludes(code, '__pageHandlers["/about"].GET = [');
   // No process.env call in non-comment lines
   const codeLines = code.split('\n').filter((l) => !l.trimStart().startsWith('//'));
-  assertEquals(codeLines.some((l) => l.includes('process.env')), false);
+  assertEquals(
+    codeLines.some((l) => l.includes('process.env')),
+    false,
+  );
 });
 
 // v0.5 Trust Release regression tests
@@ -496,10 +511,7 @@ Deno.test('renderEntry: definePage route binds its tag through the compiled prog
   // content-element tag never appears — a module-self-registered content
   // element can no longer shadow the definePage render (the #960 failure
   // mode).
-  assertStringIncludes(
-    code,
-    '__registerSsrComponent(__resolvePageTag($pageIndex, "index-page")',
-  );
+  assertStringIncludes(code, '__registerSsrComponent(__resolvePageTag($pageIndex, "index-page")');
   assertEquals(code.includes('__registerSsrComponent("home-page"'), false);
   assertEquals(code.includes('__resolvePageTag($pageIndex, "home-page"'), false);
   assertStringIncludes(code, 'let __tag = __resolvePageTag($pageIndex, "index-page")');

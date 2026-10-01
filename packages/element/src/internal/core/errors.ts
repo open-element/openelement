@@ -136,7 +136,9 @@ export function reportError(error: OpenElementError): void {
   if (_telemetryHook) {
     try {
       _telemetryHook(error);
-    } catch { /* must not throw */ }
+    } catch {
+      /* must not throw */
+    }
   } else {
     console.error(`[openElement:${error.code}] ${error.message}`);
   }

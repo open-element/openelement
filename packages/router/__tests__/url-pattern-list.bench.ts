@@ -21,7 +21,8 @@ async function main(): Promise<void> {
     stdout: 'piped',
   }).output();
   if (!source.success) throw new Error('Baseline source unavailable');
-  const baselineCode = new TextDecoder().decode(source.stdout)
+  const baselineCode = new TextDecoder()
+    .decode(source.stdout)
     .replace(
       '@openelement/element/build-utils',
       new URL('../src/internal/router/route-pattern.ts', import.meta.url).href,
@@ -64,19 +65,18 @@ async function main(): Promise<void> {
         const oldBuildMs = performance.now() - oldBuild;
         const current = new RouteTable(records, NativeURLPattern);
         const linear = (url: URL) => entries.find(([pattern]) => pattern.exec(url.href));
-        for (
-          const path of [`/shared/catalog/${count - 1}/details`, '/shared/catalog/missing/details']
-        ) {
+        for (const path of [
+          `/shared/catalog/${count - 1}/details`,
+          '/shared/catalog/missing/details',
+        ]) {
           const url = new URL(path, 'https://localhost');
           const times: Record<string, number> = {};
-          for (
-            const [name, match] of Object.entries({
-              original: () => old.match(path),
-              linear: () => linear(url),
-              ownedList: () => list.match(url),
-              table: () => current.match(url),
-            })
-          ) {
+          for (const [name, match] of Object.entries({
+            original: () => old.match(path),
+            linear: () => linear(url),
+            ownedList: () => list.match(url),
+            table: () => current.match(url),
+          })) {
             match();
             const samples = [];
             for (let sample = 0; sample < 5; sample++) {

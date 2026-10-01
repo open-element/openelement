@@ -293,13 +293,15 @@ export interface DeferredDsdExecutor {
   readonly owner: DeferredServerOwner;
   readonly seed: Record<
     string,
-    { state: 'resolved'; type: string; value: unknown } | {
-      state: 'pending';
-      type: string;
-    } | {
-      state: 'missing';
-      type: string;
-    }
+    | { state: 'resolved'; type: string; value: unknown }
+    | {
+        state: 'pending';
+        type: string;
+      }
+    | {
+        state: 'missing';
+        type: string;
+      }
   >;
   resolvedValue(field: string, value: unknown): unknown;
   serializeResolved(field: string, value: unknown): string[];
@@ -357,23 +359,26 @@ export async function createDeferredDsdExecutor(
   const program = ctor.__partProgram;
   if (!program) failUncompiled(ctor, '<unknown>');
   if (
-    !options.manifest || !Array.isArray(options.manifest.fields) ||
-    !options.manifest.program || typeof options.manifest.program.sha256 !== 'string'
+    !options.manifest ||
+    !Array.isArray(options.manifest.fields) ||
+    !options.manifest.program ||
+    typeof options.manifest.program.sha256 !== 'string'
   ) {
-    throw new OpenElementError(
-      '[openElement] deferred route manifest is malformed.',
-      { code: FacadeErrorCode.PROGRAM_MISSING, phase: 'ssr' },
-    );
+    throw new OpenElementError('[openElement] deferred route manifest is malformed.', {
+      code: FacadeErrorCode.PROGRAM_MISSING,
+      phase: 'ssr',
+    });
   }
   const { sourceMap: _sourceMap, ...wireProgram } = program;
   const bytes = new TextEncoder().encode(JSON.stringify(wireProgram));
   const digest = await crypto.subtle.digest('SHA-256', bytes);
-  const sha256 = [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join(
-    '',
-  );
+  const sha256 = [...new Uint8Array(digest)]
+    .map((byte) => byte.toString(16).padStart(2, '0'))
+    .join('');
   const manifest = options.manifest;
   if (
-    manifest.program.version !== program.version || manifest.program.tag !== program.tag ||
+    manifest.program.version !== program.version ||
+    manifest.program.tag !== program.tag ||
     manifest.program.sha256 !== sha256
   ) {
     throw new OpenElementError(
@@ -385,9 +390,9 @@ export async function createDeferredDsdExecutor(
     ? ctor.__compiledProperties
     : program.metadata.properties;
   if (
-    properties.some((record) =>
-      record.name === '__proto__' || record.name === 'constructor' ||
-      record.name === 'prototype'
+    properties.some(
+      (record) =>
+        record.name === '__proto__' || record.name === 'constructor' || record.name === 'prototype',
     )
   ) {
     throw new OpenElementError(
@@ -418,7 +423,9 @@ export async function createDeferredDsdExecutor(
   const selectedParts: number[] = [];
   for (const field of manifest.fields) {
     if (
-      !field.field || field.signal !== field.field || pending.has(field.field) ||
+      !field.field ||
+      field.signal !== field.field ||
+      pending.has(field.field) ||
       !propertyNames.has(field.field)
     ) {
       throw new OpenElementError(
@@ -438,7 +445,8 @@ export async function createDeferredDsdExecutor(
     for (const owner of field.owners) {
       const part = program.parts[owner.index];
       if (
-        !part || part.index !== owner.index ||
+        !part ||
+        part.index !== owner.index ||
         (part.k !== 'text' && part.k !== 'when' && part.k !== 'each') ||
         part.signal !== field.signal ||
         owner.kind !== (part.k === 'text' ? 'part' : 'region')
@@ -498,11 +506,12 @@ export async function createDeferredDsdExecutor(
     ]);
     hostAttrs.push(['data-oe-stream-instance', options.instanceId]);
   }
-  const mode = program.root.kind === 'light'
-    ? 'light'
-    : program.root.kind === 'shadow-open'
-    ? 'open'
-    : 'closed';
+  const mode =
+    program.root.kind === 'light'
+      ? 'light'
+      : program.root.kind === 'shadow-open'
+        ? 'open'
+        : 'closed';
   const owner: DeferredServerOwner = {
     program,
     version: program.version,
@@ -517,9 +526,8 @@ export async function createDeferredDsdExecutor(
       mode,
       hostAttrs,
       dsd: ctor.delegatesFocus === true ? { delegatesFocus: true } : undefined,
-      styleCss: mode === 'light' && styleCss
-        ? scopeCompiledLightCss(program.tag, styleCss)
-        : styleCss,
+      styleCss:
+        mode === 'light' && styleCss ? scopeCompiledLightCss(program.tag, styleCss) : styleCss,
     },
   );
   return {
@@ -529,20 +537,20 @@ export async function createDeferredDsdExecutor(
     resolvedValue(field, value) {
       const record = deferredProperties.get(field);
       if (!record) {
-        throw new OpenElementError(
-          `[openElement] unknown deferred field "${field}".`,
-          { code: FacadeErrorCode.PROGRAM_MISSING, phase: 'ssr' },
-        );
+        throw new OpenElementError(`[openElement] unknown deferred field "${field}".`, {
+          code: FacadeErrorCode.PROGRAM_MISSING,
+          phase: 'ssr',
+        });
       }
       return jsonSeed(value === null ? null : coerceServerProp(record, value), field);
     },
     serializeResolved(field, value) {
       const entry = manifest.fields.find((candidate) => candidate.field === field);
       if (!entry) {
-        throw new OpenElementError(
-          `[openElement] unknown deferred field "${field}".`,
-          { code: FacadeErrorCode.PROGRAM_MISSING, phase: 'ssr' },
-        );
+        throw new OpenElementError(`[openElement] unknown deferred field "${field}".`, {
+          code: FacadeErrorCode.PROGRAM_MISSING,
+          phase: 'ssr',
+        });
       }
       const record = deferredProperties.get(field)!;
       const seededValue = value === null ? null : coerceServerProp(record, value);
@@ -578,7 +586,9 @@ function renderDsdAtDepth(
   }
   const resolvedClass = (options.componentClass ??
     (typeof input === 'string'
-      ? (typeof customElements !== 'undefined' ? customElements.get(input) : undefined)
+      ? typeof customElements !== 'undefined'
+        ? customElements.get(input)
+        : undefined
       : input)) as CompiledComponentConstructor | undefined;
   if (!resolvedClass) {
     throw new OpenElementError(
@@ -609,11 +619,12 @@ function renderDsdAtDepth(
     ...seededAttrs,
   ];
 
-  const mode = program.root.kind === 'light'
-    ? 'light'
-    : program.root.kind === 'shadow-open'
-    ? 'open'
-    : 'closed';
+  const mode =
+    program.root.kind === 'light'
+      ? 'light'
+      : program.root.kind === 'shadow-open'
+        ? 'open'
+        : 'closed';
   const host: CompiledProgramHost = { signals, handlers: {} };
   const staticStyleCss = collectStaticStyleCss(resolvedClass);
   const admitted = new Set(options.ssrRenderableTags ?? []);
@@ -625,58 +636,66 @@ function renderDsdAtDepth(
     // matching shadowrootdelegatesfocus marker or the claimed shadow root
     // silently loses focus delegation.
     dsd: resolvedClass.delegatesFocus === true ? { delegatesFocus: true } : undefined,
-    styleCss: mode === 'light' && staticStyleCss
-      ? scopeCompiledLightCss(tag, staticStyleCss)
-      : staticStyleCss,
+    styleCss:
+      mode === 'light' && staticStyleCss
+        ? scopeCompiledLightCss(tag, staticStyleCss)
+        : staticStyleCss,
     projectedChildren: options.projectedChildren,
-    renderNestedElement: admitted.size === 0 ? undefined : (nested) => {
-      if (!admitted.has(nested.tag)) return undefined;
-      const nestedClass = typeof customElements === 'undefined'
+    renderNestedElement:
+      admitted.size === 0
         ? undefined
-        : customElements.get(nested.tag) as CompiledComponentConstructor | undefined;
-      if (!nestedClass?.__partProgram) {
-        throw new OpenElementError(
-          `[openElement] admitted nested component <${nested.tag}> is not registered with a compiled Part Program.`,
-          { code: FacadeErrorCode.PROGRAM_MISSING, phase: 'ssr' },
-        );
-      }
-      const nestedProperties = Array.isArray(nestedClass.__compiledProperties)
-        ? nestedClass.__compiledProperties
-        : nestedClass.__partProgram.metadata.properties;
-      const nestedProps: Record<string, unknown> = { ...nested.properties };
-      const propertyAttributes = new Set<string>();
-      for (const record of nestedProperties) {
-        propertyAttributes.add(record.name);
-        if (record.attribute !== null) propertyAttributes.add(record.attribute);
-        if (record.name in nestedProps) continue;
-        const attribute = nested.attributes.find(([name]) =>
-          name === record.name || name === record.attribute
-        );
-        // Boolean attributes are true by presence, including the canonical
-        // static JSX encoding `name=""`. Do not feed the empty serialized
-        // value through Boolean("") or the nested host loses its state.
-        if (attribute) {
-          nestedProps[record.name] = record.type === 'boolean'
-            ? true
-            : coerceServerProp(record, attribute[1]);
-        }
-      }
-      const passthrough = nested.attributes.filter(([name]) => !propertyAttributes.has(name));
-      const nestedMode = nestedClass.__partProgram.root.kind;
-      const rendered = renderDsdAtDepth(nested.tag, {
-        componentClass: nestedClass,
-        props: nestedProps,
-        sourceInfo: options.sourceInfo,
-        ssrRenderableTags: options.ssrRenderableTags,
-        hostAttrs: passthrough,
-        projectedChildren: nestedMode === 'light' ? nested.projectedChildren : undefined,
-      }, depth + 1).html;
-      if (nestedMode === 'light') return rendered;
-      const closing = `</${nested.tag}>`;
-      return nested.children === ''
-        ? rendered
-        : rendered.slice(0, -closing.length) + nested.children + closing;
-    },
+        : (nested) => {
+            if (!admitted.has(nested.tag)) return undefined;
+            const nestedClass =
+              typeof customElements === 'undefined'
+                ? undefined
+                : (customElements.get(nested.tag) as CompiledComponentConstructor | undefined);
+            if (!nestedClass?.__partProgram) {
+              throw new OpenElementError(
+                `[openElement] admitted nested component <${nested.tag}> is not registered with a compiled Part Program.`,
+                { code: FacadeErrorCode.PROGRAM_MISSING, phase: 'ssr' },
+              );
+            }
+            const nestedProperties = Array.isArray(nestedClass.__compiledProperties)
+              ? nestedClass.__compiledProperties
+              : nestedClass.__partProgram.metadata.properties;
+            const nestedProps: Record<string, unknown> = { ...nested.properties };
+            const propertyAttributes = new Set<string>();
+            for (const record of nestedProperties) {
+              propertyAttributes.add(record.name);
+              if (record.attribute !== null) propertyAttributes.add(record.attribute);
+              if (record.name in nestedProps) continue;
+              const attribute = nested.attributes.find(
+                ([name]) => name === record.name || name === record.attribute,
+              );
+              // Boolean attributes are true by presence, including the canonical
+              // static JSX encoding `name=""`. Do not feed the empty serialized
+              // value through Boolean("") or the nested host loses its state.
+              if (attribute) {
+                nestedProps[record.name] =
+                  record.type === 'boolean' ? true : coerceServerProp(record, attribute[1]);
+              }
+            }
+            const passthrough = nested.attributes.filter(([name]) => !propertyAttributes.has(name));
+            const nestedMode = nestedClass.__partProgram.root.kind;
+            const rendered = renderDsdAtDepth(
+              nested.tag,
+              {
+                componentClass: nestedClass,
+                props: nestedProps,
+                sourceInfo: options.sourceInfo,
+                ssrRenderableTags: options.ssrRenderableTags,
+                hostAttrs: passthrough,
+                projectedChildren: nestedMode === 'light' ? nested.projectedChildren : undefined,
+              },
+              depth + 1,
+            ).html;
+            if (nestedMode === 'light') return rendered;
+            const closing = `</${nested.tag}>`;
+            return nested.children === ''
+              ? rendered
+              : rendered.slice(0, -closing.length) + nested.children + closing;
+          },
   });
 
   return {
@@ -702,8 +721,8 @@ export function renderDsd(
   const { projectedChildren, ...publicOptions } = options;
   const normalizedProjectedChildren = projectedChildren
     ? new Map(
-      [...projectedChildren].map(([slot, value]) => [slot, trustedHtmlValue(value)] as const),
-    )
+        [...projectedChildren].map(([slot, value]) => [slot, trustedHtmlValue(value)] as const),
+      )
     : undefined;
   return renderDsdAtDepth(input, {
     ...publicOptions,

@@ -202,9 +202,10 @@ export class CompiledElementKernel {
         ...this.#options,
         onUpdateError: (error) => this.errors.capture(error, this.#element),
       };
-      this.#instance = mode === 'fresh'
-        ? createFreshDom(this.#program, host, root, this.#lifecycle)
-        : this.#claim(host, root, styleCount);
+      this.#instance =
+        mode === 'fresh'
+          ? createFreshDom(this.#program, host, root, this.#lifecycle)
+          : this.#claim(host, root, styleCount);
       this.context.connect();
       if (this.errors.hasError) this.errors.reset();
       this.#activation = { mode, root };
@@ -304,12 +305,18 @@ export class CompiledElementKernel {
         '[compiled-claim] streamed host has no matching typed seed for its Part Program.',
       );
     }
-    return executor(this.#program, host, root, {
-      expectStaticStyle: styleCount > 0,
-      streamParts: stream?.parts,
-      pendingParts: stream ? [...stream.pending] : undefined,
-      recovery: stream ? 'owning' : 'throw',
-    }, this.#lifecycle);
+    return executor(
+      this.#program,
+      host,
+      root,
+      {
+        expectStaticStyle: styleCount > 0,
+        streamParts: stream?.parts,
+        pendingParts: stream ? [...stream.pending] : undefined,
+        recovery: stream ? 'owning' : 'throw',
+      },
+      this.#lifecycle,
+    );
   }
 
   #resolveRoot(): CompiledStyleRoot {

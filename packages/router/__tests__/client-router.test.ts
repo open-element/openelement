@@ -61,10 +61,12 @@ function concreteMatch(
 }
 
 function matcherEngines(routes: RouteConfig[]): MatcherEngine[] {
-  return [{
-    name: 'native',
-    table: new RouteTable(routes, NativeURLPattern),
-  }];
+  return [
+    {
+      name: 'native',
+      table: new RouteTable(routes, NativeURLPattern),
+    },
+  ];
 }
 
 const semanticRoutes: RouteConfig[] = [
@@ -231,11 +233,9 @@ Deno.test('RouteTable and URLPattern engines agree on the semantic corpus', () =
       assertEquals(result, canonical, `${testCase.name}: ${name} differs from native`);
     }
 
-    const publicResult = concreteMatch(matchRoute(
-      testCase.pathname,
-      testCase.search,
-      semanticRoutes,
-    ));
+    const publicResult = concreteMatch(
+      matchRoute(testCase.pathname, testCase.search, semanticRoutes),
+    );
     const compiledResult = concreteMatch(compiled.match(testCase.pathname, testCase.search));
     assertEquals(publicResult, canonical, `${testCase.name}: public matchRoute differs`);
     assertEquals(compiledResult, canonical, `${testCase.name}: compiled matcher differs`);
@@ -266,16 +266,11 @@ Deno.test('RouteTable rejects malformed URLPattern patterns consistently', () =>
     '/foo/?bar',
     '/foo/:name{(?:a}',
   ];
-  const constructors: Array<[string, URLPatternConstructor]> = [
-    ['native', NativeURLPattern],
-  ];
+  const constructors: Array<[string, URLPatternConstructor]> = [['native', NativeURLPattern]];
 
   for (const path of malformedPatterns) {
     for (const [, Pattern] of constructors) {
-      assertThrows(
-        () => new RouteTable([{ path, tagName: 'bad-page' }], Pattern),
-        TypeError,
-      );
+      assertThrows(() => new RouteTable([{ path, tagName: 'bad-page' }], Pattern), TypeError);
     }
     const routes: RouteConfig[] = [{ path, tagName: 'bad-page' }];
     assertThrows(() => compileRouteMatcher(routes), TypeError);
@@ -312,11 +307,11 @@ Deno.test('RouteTable classifies methods, HEAD, base paths, and trailing-slash p
     ].map((resolution) =>
       resolution.kind === 'match'
         ? {
-          kind: resolution.kind,
-          route: resolution.route.tagName,
-          params: Object.fromEntries(Object.entries(resolution.params)),
-        }
-        : resolution
+            kind: resolution.kind,
+            route: resolution.route.tagName,
+            params: Object.fromEntries(Object.entries(resolution.params)),
+          }
+        : resolution,
     );
     assertEquals(actual as unknown, expected as unknown);
   }
@@ -377,11 +372,13 @@ Deno.test('client router dispose removes event listeners and double dispose is s
 });
 
 Deno.test('client router guard redirect limit rejects redirect loops', async () => {
-  const loop: RouteConfig[] = [{
-    path: '/loop',
-    tagName: 'loop-page',
-    guard: () => Promise.resolve('/loop'),
-  }];
+  const loop: RouteConfig[] = [
+    {
+      path: '/loop',
+      tagName: 'loop-page',
+      guard: () => Promise.resolve('/loop'),
+    },
+  ];
   const originalLocation = Object.getOwnPropertyDescriptor(globalThis, 'location');
   const originalHistory = Object.getOwnPropertyDescriptor(globalThis, 'history');
   Object.defineProperty(globalThis, 'location', {
@@ -412,7 +409,7 @@ Deno.test('client router guard redirect limit rejects redirect loops', async () 
 
 Deno.test('client router dispose invalidates a pending programmatic guard', async () => {
   let resolveGuard!: (value: boolean) => void;
-  const guard = new Promise<boolean>((resolve) => resolveGuard = resolve);
+  const guard = new Promise<boolean>((resolve) => (resolveGuard = resolve));
   const browser = installFakeBrowser('/public');
   let changes = 0;
   const router = createRouter({
@@ -441,7 +438,7 @@ Deno.test('client router dispose invalidates a pending programmatic guard', asyn
 
 Deno.test('client router dispose invalidates a pending browser guard', async () => {
   let resolveGuard!: (value: boolean) => void;
-  const guard = new Promise<boolean>((resolve) => resolveGuard = resolve);
+  const guard = new Promise<boolean>((resolve) => (resolveGuard = resolve));
   const browser = installFakeBrowser('/public');
   let changes = 0;
   const router = createRouter({
@@ -538,7 +535,10 @@ function installFakeBrowser(initialUrl: string): FakeBrowser {
     listeners.set(type, [...(listeners.get(type) ?? []), listener]);
   }) as typeof globalThis.addEventListener;
   globalThis.removeEventListener = ((type: string, listener: EventListener) => {
-    listeners.set(type, (listeners.get(type) ?? []).filter((entry) => entry !== listener));
+    listeners.set(
+      type,
+      (listeners.get(type) ?? []).filter((entry) => entry !== listener),
+    );
   }) as typeof globalThis.removeEventListener;
   return {
     applied,
@@ -1023,7 +1023,10 @@ function installFakeHistoryStack(initialEntries: string[]) {
     listeners.set(type, [...(listeners.get(type) ?? []), listener]);
   }) as typeof globalThis.addEventListener;
   globalThis.removeEventListener = ((type: string, listener: EventListener) => {
-    listeners.set(type, (listeners.get(type) ?? []).filter((entry) => entry !== listener));
+    listeners.set(
+      type,
+      (listeners.get(type) ?? []).filter((entry) => entry !== listener),
+    );
   }) as typeof globalThis.removeEventListener;
   return {
     entries,
@@ -1162,7 +1165,7 @@ Deno.test('client router dispose mid-redirect-chain commits nothing and unhooks 
         tagName: 'b-page',
         guard: () => {
           guardCalls.push('b');
-          return new Promise<string>((resolve) => resolveB = resolve);
+          return new Promise<string>((resolve) => (resolveB = resolve));
         },
       },
       { path: '/c', tagName: 'c-page' },
@@ -1217,7 +1220,7 @@ Deno.test('client router dispose invalidates a pending hash-mode browser guard (
         tagName: 'protected-page',
         guard: () => {
           guardCalls++;
-          return new Promise<boolean>((resolve) => resolveGuard = resolve);
+          return new Promise<boolean>((resolve) => (resolveGuard = resolve));
         },
       },
     ],
@@ -1401,7 +1404,10 @@ function installFakeNavigation() {
       listeners.set(type, [...(listeners.get(type) ?? []), listener]);
     },
     removeEventListener(type: string, listener: EventListener) {
-      listeners.set(type, (listeners.get(type) ?? []).filter((entry) => entry !== listener));
+      listeners.set(
+        type,
+        (listeners.get(type) ?? []).filter((entry) => entry !== listener),
+      );
     },
     // Synchronous settle: these tests drive the navigate event the browser
     // would fire by hand (firePendingOwnNavigation), so the promise never has
@@ -1491,9 +1497,7 @@ Deno.test('native fragment-only navigation stays browser-owned without cancellin
   let guards = 0;
   const router = createRouter({
     mode: 'history',
-    routes: [
-      { path: '/a', tagName: 'a-page', guard: () => (guards++, Promise.resolve(true)) },
-    ],
+    routes: [{ path: '/a', tagName: 'a-page', guard: () => (guards++, Promise.resolve(true)) }],
     onPending: () => void pending++,
     onChange: () => void pending++,
   });
@@ -1806,7 +1810,7 @@ Deno.test('Navigation API: a guard-vetoed traverse leaves the queued newer navig
         tagName: 'blocked-page',
         guard: () => {
           guards++;
-          return new Promise<boolean>((resolve) => releaseGuard = () => resolve(false));
+          return new Promise<boolean>((resolve) => (releaseGuard = () => resolve(false)));
         },
       },
       { path: '/open', tagName: 'open-page' },
@@ -1906,7 +1910,7 @@ Deno.test('Navigation API: a programmatic navigation superseded mid-guard never 
       {
         path: '/slow',
         tagName: 'slow-page',
-        guard: () => new Promise<boolean>((resolve) => releaseSlowGuard = () => resolve(true)),
+        guard: () => new Promise<boolean>((resolve) => (releaseSlowGuard = () => resolve(true))),
       },
       { path: '/fast', tagName: 'fast-page' },
     ],

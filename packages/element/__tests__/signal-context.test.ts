@@ -64,15 +64,12 @@ Deno.test('signal-context: vanilla provider supplies plain values to an OE consu
   const provider = document.createElement('x-provider');
   const consumer = document.createElement('x-consumer');
   provider.appendChild(consumer);
-  provider.addEventListener(
-    CONTEXT_REQUEST_EVENT,
-    (event: unknown) => {
-      const request = event as ContextRequest<string>;
-      if (request.context !== context.key) return;
-      (event as Event).stopImmediatePropagation();
-      request.callback('vanilla');
-    },
-  );
+  provider.addEventListener(CONTEXT_REQUEST_EVENT, (event: unknown) => {
+    const request = event as ContextRequest<string>;
+    if (request.context !== context.key) return;
+    (event as Event).stopImmediatePropagation();
+    request.callback('vanilla');
+  });
 
   assertEquals(consumeContext(context, asElement(consumer)).value, 'vanilla');
 });
@@ -86,7 +83,7 @@ Deno.test('signal-context: OE provider supplies plain values to a vanilla consum
   provideContext(asElement(provider), context, 'open-element');
   let value = 'missing';
   consumer.dispatchEvent(
-    new ContextRequestEvent<string>(context.key, asElement(consumer), (next) => value = next),
+    new ContextRequestEvent<string>(context.key, asElement(consumer), (next) => (value = next)),
   );
   assertEquals(value, 'open-element');
 });

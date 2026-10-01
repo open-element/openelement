@@ -23,11 +23,7 @@ interface MorphAlignDeps {
 }
 
 export interface MorphAlign {
-  morphDocument: (
-    html: string,
-    form: HTMLFormElement | null,
-    regionName: string | null,
-  ) => boolean;
+  morphDocument: (html: string, form: HTMLFormElement | null, regionName: string | null) => boolean;
 }
 
 export function createMorphAlign(deps: MorphAlignDeps): MorphAlign {
@@ -92,8 +88,11 @@ export function createMorphAlign(deps: MorphAlignDeps): MorphAlign {
   }
 
   function isShadowRootTemplate(n: Node): boolean {
-    return n.nodeType === 1 && (n as Element).tagName === 'TEMPLATE' &&
-      (n as Element).hasAttribute('shadowrootmode');
+    return (
+      n.nodeType === 1 &&
+      (n as Element).tagName === 'TEMPLATE' &&
+      (n as Element).hasAttribute('shadowrootmode')
+    );
   }
 
   function shadowTemplate(el: Element): HTMLTemplateElement | null {
@@ -126,8 +125,10 @@ export function createMorphAlign(deps: MorphAlignDeps): MorphAlign {
   }
 
   function compatible(a: Node, b: Node): boolean {
-    return a.nodeType === b.nodeType &&
-      (a.nodeType !== 1 || (a as Element).tagName === (b as Element).tagName);
+    return (
+      a.nodeType === b.nodeType &&
+      (a.nodeType !== 1 || (a as Element).tagName === (b as Element).tagName)
+    );
   }
 
   function morphChildren(oldParent: Node, newParent: Node): void {
@@ -160,7 +161,10 @@ export function createMorphAlign(deps: MorphAlignDeps): MorphAlign {
       if (isShadowRootTemplate(n)) continue;
       let o: Node | null = null;
       if (
-        n.nodeType === 1 && n.id && oldById[n.id] && usedOld.indexOf(oldById[n.id]) === -1 &&
+        n.nodeType === 1 &&
+        n.id &&
+        oldById[n.id] &&
+        usedOld.indexOf(oldById[n.id]) === -1 &&
         compatible(oldById[n.id], n)
       ) {
         o = oldById[n.id];
@@ -168,11 +172,9 @@ export function createMorphAlign(deps: MorphAlignDeps): MorphAlign {
         let c = ref;
         while (c) {
           if (
-            usedOld.indexOf(c) === -1 && compatible(c, n) &&
-            !(
-              c.nodeType === 1 && (c as HTMLElement).id &&
-              oldById[(c as HTMLElement).id] === c
-            )
+            usedOld.indexOf(c) === -1 &&
+            compatible(c, n) &&
+            !(c.nodeType === 1 && (c as HTMLElement).id && oldById[(c as HTMLElement).id] === c)
           ) {
             o = c;
             break;
@@ -231,8 +233,10 @@ export function createMorphAlign(deps: MorphAlignDeps): MorphAlign {
     if (isIsland) {
       const newTemplate = shadowTemplate(newElement);
       if (
-        (oldElement as HTMLElement).shadowRoot && newTemplate &&
-        !hasProjectedLightContent(oldElement) && !hasProjectedLightContent(newElement) &&
+        (oldElement as HTMLElement).shadowRoot &&
+        newTemplate &&
+        !hasProjectedLightContent(oldElement) &&
+        !hasProjectedLightContent(newElement) &&
         containsSlot((oldElement as HTMLElement).shadowRoot as ShadowRoot)
       ) {
         // A compiled app shell currently carries its route as <slot>
@@ -242,10 +246,7 @@ export function createMorphAlign(deps: MorphAlignDeps): MorphAlign {
         // shadow tree from the incoming template while preserving the shell
         // host and its activation state.
         syncAttrs(oldElement, newElement);
-        morphChildren(
-          (oldElement as HTMLElement).shadowRoot as ShadowRoot,
-          newTemplate.content,
-        );
+        morphChildren((oldElement as HTMLElement).shadowRoot as ShadowRoot, newTemplate.content);
         return;
       }
       if (islandIntact(oldElement, newElement)) return;
@@ -309,8 +310,8 @@ export function createMorphAlign(deps: MorphAlignDeps): MorphAlign {
         if (host) name = host.getAttribute('data-open-region');
       }
       if (name) {
-        const selector = '[data-open-region="' +
-          (win.CSS && win.CSS.escape ? win.CSS.escape(name) : name) + '"]';
+        const selector =
+          '[data-open-region="' + (win.CSS && win.CSS.escape ? win.CSS.escape(name) : name) + '"]';
         const root = (form.getRootNode ? form.getRootNode() : doc) as ParentNode;
         const oldScope = root.querySelector ? root.querySelector(selector) : null;
         const newScope = findDeep(incoming.body, selector);

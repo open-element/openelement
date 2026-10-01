@@ -55,9 +55,7 @@ export async function runStep(
   if (!status.success && options.allowFailure !== true) {
     if (stdout.trim()) console.error(stdout.trim());
     if (stderr.trim()) console.error(stderr.trim());
-    throw new Error(
-      `command failed with exit code ${status.code}: ${command} ${args.join(' ')}`,
-    );
+    throw new Error(`command failed with exit code ${status.code}: ${command} ${args.join(' ')}`);
   }
   return { stdout, stderr };
 }

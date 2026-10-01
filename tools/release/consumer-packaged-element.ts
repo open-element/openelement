@@ -32,8 +32,7 @@ try {
       private: true,
       type: 'module',
       dependencies: {
-        '@openelement/element':
-          `file:${root}/packages/element/openelement-element-${PACKAGE_VERSION}.tgz`,
+        '@openelement/element': `file:${root}/packages/element/openelement-element-${PACKAGE_VERSION}.tgz`,
       },
       devDependencies: {
         vite: VITE_DEV_PIN,
@@ -70,10 +69,10 @@ export default {plugins:[element(), {name:'proof-module-boundary',generateBundle
     '--fetch-timeout=30000',
   ]);
   assert(
-    !await Deno.stat(join(author, 'node_modules/@openelement/router')).then(
+    !(await Deno.stat(join(author, 'node_modules/@openelement/router')).then(
       () => true,
       () => false,
-    ),
+    )),
     'Router must not be installed',
   );
   await run(['node', 'node_modules/vite/bin/vite.js', 'build']);
@@ -95,25 +94,30 @@ export default {plugins:[element(), {name:'proof-module-boundary',generateBundle
     // imports into .d.ts that the previous generator dropped, and they carry
     // no consumer type surface.
     for (const fileName of declarationTypeEdges(text)) {
-      const resolved = ts.resolveModuleName(fileName, path, {
-        moduleResolution: ts.ModuleResolutionKind.Bundler,
-        module: ts.ModuleKind.ESNext,
-      }, {
-        fileExists: (name) => {
-          try {
-            return Deno.statSync(name).isFile;
-          } catch {
-            return false;
-          }
+      const resolved = ts.resolveModuleName(
+        fileName,
+        path,
+        {
+          moduleResolution: ts.ModuleResolutionKind.Bundler,
+          module: ts.ModuleKind.ESNext,
         },
-        readFile: (name) => {
-          try {
-            return Deno.readTextFileSync(name);
-          } catch {
-            return undefined;
-          }
+        {
+          fileExists: (name) => {
+            try {
+              return Deno.statSync(name).isFile;
+            } catch {
+              return false;
+            }
+          },
+          readFile: (name) => {
+            try {
+              return Deno.readTextFileSync(name);
+            } catch {
+              return undefined;
+            }
+          },
         },
-      }).resolvedModule;
+      ).resolvedModule;
       assert(resolved, `Unresolved browser declaration: ${path} -> ${fileName}`);
       await declarations(resolved.resolvedFileName);
     }
@@ -126,9 +130,11 @@ export default {plugins:[element(), {name:'proof-module-boundary',generateBundle
   );
   const js = await Deno.readTextFile(join(author, 'dist/counter.js'));
   assert(
-    ts.preProcessFile(js).importedFiles.every(({ fileName }) =>
-      !/workspace:|@openelement\/router\/(?:vite|cli)|^node:/.test(fileName)
-    ),
+    ts
+      .preProcessFile(js)
+      .importedFiles.every(
+        ({ fileName }) => !/workspace:|@openelement\/router\/(?:vite|cli)|^node:/.test(fileName),
+      ),
     'compiled browser artifact boundary',
   );
   await Deno.writeTextFile(join(consumer, 'counter.js'), js);

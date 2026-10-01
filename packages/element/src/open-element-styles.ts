@@ -20,9 +20,7 @@ export const themeManager = new OpenElementThemeManager();
 
 export type CompiledStyleRoot = HTMLElement | ShadowRoot;
 
-function asStyleList(
-  component?: StyleSheetLike | StyleSheetLike[],
-): StyleSheetLike[] {
+function asStyleList(component?: StyleSheetLike | StyleSheetLike[]): StyleSheetLike[] {
   return [
     ...new Set([
       ...themeManager.getStyles(),
@@ -96,7 +94,9 @@ export class CompiledStyleScope {
     style.textContent = [
       globalCss,
       componentCss ? scopeCompiledLightCss(root.tagName.toLowerCase(), componentCss) : '',
-    ].filter(Boolean).join('\n');
+    ]
+      .filter(Boolean)
+      .join('\n');
     if (style.parentNode !== parent) parent.appendChild(style);
     this.#lightStyle = style;
   }

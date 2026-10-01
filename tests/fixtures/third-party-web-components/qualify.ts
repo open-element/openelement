@@ -144,9 +144,7 @@ interface SlotFirstEvidence {
   identityPreserved: boolean;
 }
 
-export async function verifyBrowser(
-  distDir: string,
-): Promise<{
+export async function verifyBrowser(distDir: string): Promise<{
   capabilities: Record<string, BrowserCapabilityEvidence>;
   slotFirst: Record<string, SlotFirstEvidence>;
   browserVersion: string;
@@ -155,8 +153,9 @@ export async function verifyBrowser(
   try {
     const slotFirst: Record<string, SlotFirstEvidence> = {};
     const slotText = new Map(
-      CORPUS.filter((entry) => entry.expect.lightDomChildren.length > 0)
-        .map((entry) => [entry.tag, entry.expect.lightDomChildren[0]] as const),
+      CORPUS.filter((entry) => entry.expect.lightDomChildren.length > 0).map(
+        (entry) => [entry.tag, entry.expect.lightDomChildren[0]] as const,
+      ),
     );
     const noJs = await session.browser.newContext({ javaScriptEnabled: false });
     try {
@@ -166,10 +165,11 @@ export async function verifyBrowser(
         const host = rawPage.locator(tag).first();
         slotFirst[tag] = {
           contentWithoutJs: (await host.textContent())?.includes(expected) === true,
-          undefinedStyle: await rawPage.locator(`${tag}:not(:defined)`).count() > 0 &&
-            await host.evaluate((node) =>
-              getComputedStyle(node).outlineColor === 'rgb(0, 120, 80)'
-            ),
+          undefinedStyle:
+            (await rawPage.locator(`${tag}:not(:defined)`).count()) > 0 &&
+            (await host.evaluate(
+              (node) => getComputedStyle(node).outlineColor === 'rgb(0, 120, 80)',
+            )),
           definedStyle: false,
           capturedBeforeUpgrade: false,
           hostPreserved: false,
@@ -209,9 +209,11 @@ export async function verifyBrowser(
         if (captured.size === tags.length) watch.disconnect();
       });
       watch.observe(document, { childList: true, subtree: true });
-      (globalThis as typeof globalThis & {
-        __wcBeforeUpgrade?: Map<string, { host: Element; child: Node }>;
-      }).__wcBeforeUpgrade = captured;
+      (
+        globalThis as typeof globalThis & {
+          __wcBeforeUpgrade?: Map<string, { host: Element; child: Node }>;
+        }
+      ).__wcBeforeUpgrade = captured;
     });
     await page.goto(`${session.origin}/third-party-wc/`);
 
@@ -241,9 +243,9 @@ export async function verifyBrowser(
         expectedTags,
       );
       throw new Error(
-        `custom-element registration failed; missing=${missing.join(',')}; browserErrors=${
-          browserErrors.join(' | ')
-        }`,
+        `custom-element registration failed; missing=${missing.join(',')}; browserErrors=${browserErrors.join(
+          ' | ',
+        )}`,
       );
     }
 
@@ -304,16 +306,20 @@ export async function verifyBrowser(
       return {
         eventCount,
         litSlot: lit.textContent?.includes('Lit slot label') ?? false,
-        litHostContainsOpenElement: !!openChild &&
+        litHostContainsOpenElement:
+          !!openChild &&
           openChild.shadowRoot?.textContent?.includes('openElement child inside Lit'),
         shoelaceReady: !!root.querySelector('sl-dialog'),
-        materialReady: !!root.querySelector('md-filled-button') &&
+        materialReady:
+          !!root.querySelector('md-filled-button') &&
           !!root.querySelector('md-outlined-text-field') &&
           !!root.querySelector('md-switch'),
-        nativeBadgeShadow: !!(root.querySelector('wc-native-badge') as HTMLElement)
-          ?.shadowRoot?.querySelector('slot'),
-        fastReady: !!(root.querySelector('wc-fast-counter') as HTMLElement)
-          ?.shadowRoot?.querySelector('#fast-button'),
+        nativeBadgeShadow: !!(
+          root.querySelector('wc-native-badge') as HTMLElement
+        )?.shadowRoot?.querySelector('slot'),
+        fastReady: !!(
+          root.querySelector('wc-fast-counter') as HTMLElement
+        )?.shadowRoot?.querySelector('#fast-button'),
         ionicReady: !!(root.querySelector('ion-button') as HTMLElement)?.shadowRoot,
       };
     });
@@ -337,8 +343,8 @@ export async function verifyBrowser(
         ?.shadowRoot?.querySelector('third-party-wc')
         ?.shadowRoot?.querySelector('wc-fixture')?.shadowRoot;
       if (!root) throw new Error('fixture root unavailable for capability evidence');
-      const eventLog = (window as Window & { __thirdPartyWcEventLog?: string[] })
-        .__thirdPartyWcEventLog ?? [];
+      const eventLog =
+        (window as Window & { __thirdPartyWcEventLog?: string[] }).__thirdPartyWcEventLog ?? [];
       const probe = (
         tag: string,
         options: { slot?: string; attributeProperty?: boolean; event?: string } = {},
@@ -436,21 +442,25 @@ export async function verifyBrowser(
     }
     for (const tag of slotText.keys()) {
       const host = page.locator(tag).first();
-      slotFirst[tag].definedStyle = await page.locator(`${tag}:defined`).count() > 0 &&
-        await host.evaluate((node) => getComputedStyle(node).outlineColor === 'rgb(80, 80, 80)');
+      slotFirst[tag].definedStyle =
+        (await page.locator(`${tag}:defined`).count()) > 0 &&
+        (await host.evaluate((node) => getComputedStyle(node).outlineColor === 'rgb(80, 80, 80)'));
       const identity = await page.evaluate((name) => {
-        const before = (globalThis as typeof globalThis & {
-          __wcBeforeUpgrade?: Map<string, { host: Element; child: Node }>;
-        }).__wcBeforeUpgrade?.get(name);
-        const root = document.querySelector('app-shell')?.shadowRoot
-          ?.querySelector('third-party-wc')?.shadowRoot
-          ?.querySelector('wc-fixture')?.shadowRoot;
+        const before = (
+          globalThis as typeof globalThis & {
+            __wcBeforeUpgrade?: Map<string, { host: Element; child: Node }>;
+          }
+        ).__wcBeforeUpgrade?.get(name);
+        const root = document
+          .querySelector('app-shell')
+          ?.shadowRoot?.querySelector('third-party-wc')
+          ?.shadowRoot?.querySelector('wc-fixture')?.shadowRoot;
         const current = root?.querySelector(name);
         return {
           capturedBeforeUpgrade: !!before,
           hostPreserved: !!before && current === before.host,
-          identityPreserved: !!before && current === before.host &&
-            current.firstChild === before.child,
+          identityPreserved:
+            !!before && current === before.host && current.firstChild === before.child,
         };
       }, tag);
       Object.assign(slotFirst[tag], identity);
@@ -472,25 +482,23 @@ async function verifySsrHtml(appDir: string): Promise<void> {
   // SSR form: foreign tags remain opaque hosts; three slot-first Lit probes
   // have server-born children, while the other labels are attached by the
   // fixture after activation. The legacy data-eid marker is not emitted.
-  for (
-    const expected of [
-      '<wc-fixture',
-      '<wc-lit-counter',
-      '<sl-button',
-      '<sl-switch',
-      '<sl-dialog',
-      '<md-filled-button',
-      '<md-outlined-text-field',
-      '<md-switch',
-      '<wc-native-badge',
-      '<wc-fast-counter',
-      '<ion-button',
-      'label="Lit counter"',
-      'variant="primary"',
-      'label="Shoelace Dialog"',
-      'value="interop"',
-    ]
-  ) {
+  for (const expected of [
+    '<wc-fixture',
+    '<wc-lit-counter',
+    '<sl-button',
+    '<sl-switch',
+    '<sl-dialog',
+    '<md-filled-button',
+    '<md-outlined-text-field',
+    '<md-switch',
+    '<wc-native-badge',
+    '<wc-fast-counter',
+    '<ion-button',
+    'label="Lit counter"',
+    'variant="primary"',
+    'label="Shoelace Dialog"',
+    'value="interop"',
+  ]) {
     if (!html.includes(expected)) {
       throw new Error(`SSR output missing ${expected}`);
     }
@@ -734,8 +742,15 @@ interface SsrFormObservation {
 
 /** True when `char` can follow an element name inside its tag (`<name`+char). */
 function endsElementName(char: string | undefined): boolean {
-  return char === undefined || char === '>' || char === '/' || char === ' ' ||
-    char === '\t' || char === '\n' || char === '\r';
+  return (
+    char === undefined ||
+    char === '>' ||
+    char === '/' ||
+    char === ' ' ||
+    char === '\t' ||
+    char === '\n' ||
+    char === '\r'
+  );
 }
 
 /**
@@ -790,11 +805,12 @@ function observeSsrForm(html: string, entry: CorpusEntry): SsrFormObservation {
   const openTag = new RegExp(`<${escapeRegExp(entry.tag)}(\\s[^>]*)?>`);
   const match = openTag.exec(html);
   const tagPresent = match !== null;
-  const dsdTemplate = tagPresent &&
+  const dsdTemplate =
+    tagPresent &&
     new RegExp(`<${escapeRegExp(entry.tag)}(\\s[^>]*)?>\\s*<template shadowrootmode`).test(html);
   const dataEid = tagPresent && /\bdata-eid=/.test(match![0]);
   const lightDomChildren = entry.expect.lightDomChildren.filter((child) =>
-    hostOuterHtml(html, entry.tag).includes(child)
+    hostOuterHtml(html, entry.tag).includes(child),
   );
   return { tagPresent, lightDomChildren, dsdTemplate, dataEid };
 }
@@ -809,16 +825,20 @@ async function main(): Promise<void> {
     const entryJs = await Deno.readTextFile(join(appDir, 'dist', 'server', 'entry.js'));
     const plan = extractSsrAdmissionPlan(entryJs);
     const decisionByTag = new Map(plan.decisions.map((d) => [d.tagName, d]));
-    const { capabilities: browser, slotFirst, browserVersion } = await verifyBrowser(
-      join(appDir, 'dist'),
+    const {
+      capabilities: browser,
+      slotFirst,
+      browserVersion,
+    } = await verifyBrowser(join(appDir, 'dist'));
+    const metadataProbes = await Promise.all(
+      METADATA_PROBES.map(async (probe) => ({
+        library: probe.library,
+        format: probe.format,
+        path: probe.path.replace(/^node_modules\//, ''),
+        available: await pathExists(join(appDir, probe.path)),
+        expected: probe.expected,
+      })),
     );
-    const metadataProbes = await Promise.all(METADATA_PROBES.map(async (probe) => ({
-      library: probe.library,
-      format: probe.format,
-      path: probe.path.replace(/^node_modules\//, ''),
-      available: await pathExists(join(appDir, probe.path)),
-      expected: probe.expected,
-    })));
 
     const failures: string[] = [];
     for (const probe of metadataProbes) {
@@ -839,9 +859,9 @@ async function main(): Promise<void> {
       if (!form.tagPresent) failures.push(`${entry.tag}: tag missing from SSR HTML`);
       if (form.lightDomChildren.length !== e.lightDomChildren.length) {
         failures.push(
-          `${entry.tag}: light-DOM children ${JSON.stringify(form.lightDomChildren)} != expected ${
-            JSON.stringify(e.lightDomChildren)
-          }`,
+          `${entry.tag}: light-DOM children ${JSON.stringify(form.lightDomChildren)} != expected ${JSON.stringify(
+            e.lightDomChildren,
+          )}`,
         );
       }
       if (form.dsdTemplate !== e.dsdTemplate) {
@@ -858,8 +878,10 @@ async function main(): Promise<void> {
 
       const browserCapabilities = browser[entry.tag];
       if (
-        !browserCapabilities || !browserCapabilities.registered ||
-        !browserCapabilities.upgraded || !browserCapabilities.shadowRoot ||
+        !browserCapabilities ||
+        !browserCapabilities.registered ||
+        !browserCapabilities.upgraded ||
+        !browserCapabilities.shadowRoot ||
         browserCapabilities.slotContent === false ||
         browserCapabilities.attributeProperty === false ||
         browserCapabilities.eventObserved === false
@@ -882,7 +904,8 @@ async function main(): Promise<void> {
 
     const hash = async (text: string): Promise<string> =>
       [...new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text)))]
-        .map((byte) => byte.toString(16).padStart(2, '0')).join('');
+        .map((byte) => byte.toString(16).padStart(2, '0'))
+        .join('');
     const tierReport = {
       schemaVersion: 1,
       basis: 'observed SSR HTML and Chromium upgrade; not an adapter declaration',
@@ -893,50 +916,51 @@ async function main(): Promise<void> {
         deno: Deno.version.deno,
         chromium: browserVersion,
       },
-      entries: entries.filter((entry) => entry.tag !== 'wc-fixture').map((entry) => {
-        const slot = slotFirst[entry.tag];
-        const t0Failures = [
-          ...(!entry.ssrForm.tagPresent ? ['host missing from SSR'] : []),
-          ...(entry.ssrForm.dsdTemplate ? ['unexpected foreign DSD'] : []),
-          ...(!slot?.contentWithoutJs ? ['slot-first no-JS content not proved'] : []),
-          ...(!slot?.undefinedStyle || !slot?.definedStyle
-            ? [':defined styling transition not proved']
-            : []),
-          ...(!slot?.capturedBeforeUpgrade
-            ? ['pre-upgrade identity not captured']
-            : !slot.identityPreserved
-            ? ['host or child identity lost on upgrade']
-            : []),
-          // 'browser upgrade not proved' covers the upgrade probes only.
-          // Hydration-safety nullness (a capture gap) and a real identity
-          // loss are both already reported above — counting them here again
-          // would double-charge a single missing probe as a failed upgrade.
-          ...(!entry.browserCapabilities.registered || !entry.browserCapabilities.upgraded
-            ? ['browser upgrade not proved']
-            : []),
-        ];
-        return {
-          tag: entry.tag,
-          resolvedLibrary: THIRD_PARTY_IMPORTS[
-            entry.library as keyof typeof THIRD_PARTY_IMPORTS
-          ] ?? entry.library,
-          highestPassedTier: t0Failures.length === 0 ? 'T0' : null,
-          t0Failures,
-          observations: {
-            ssrForm: entry.ssrForm,
-            browser: entry.browserCapabilities,
-            slotFirst: slot ?? null,
-          },
-          higherTiers: { T1: 'not run', T2: 'not run', T3: 'not applicable to foreign tag' },
-        };
-      }),
+      entries: entries
+        .filter((entry) => entry.tag !== 'wc-fixture')
+        .map((entry) => {
+          const slot = slotFirst[entry.tag];
+          const t0Failures = [
+            ...(!entry.ssrForm.tagPresent ? ['host missing from SSR'] : []),
+            ...(entry.ssrForm.dsdTemplate ? ['unexpected foreign DSD'] : []),
+            ...(!slot?.contentWithoutJs ? ['slot-first no-JS content not proved'] : []),
+            ...(!slot?.undefinedStyle || !slot?.definedStyle
+              ? [':defined styling transition not proved']
+              : []),
+            ...(!slot?.capturedBeforeUpgrade
+              ? ['pre-upgrade identity not captured']
+              : !slot.identityPreserved
+                ? ['host or child identity lost on upgrade']
+                : []),
+            // 'browser upgrade not proved' covers the upgrade probes only.
+            // Hydration-safety nullness (a capture gap) and a real identity
+            // loss are both already reported above — counting them here again
+            // would double-charge a single missing probe as a failed upgrade.
+            ...(!entry.browserCapabilities.registered || !entry.browserCapabilities.upgraded
+              ? ['browser upgrade not proved']
+              : []),
+          ];
+          return {
+            tag: entry.tag,
+            resolvedLibrary:
+              THIRD_PARTY_IMPORTS[entry.library as keyof typeof THIRD_PARTY_IMPORTS] ??
+              entry.library,
+            highestPassedTier: t0Failures.length === 0 ? 'T0' : null,
+            t0Failures,
+            observations: {
+              ssrForm: entry.ssrForm,
+              browser: entry.browserCapabilities,
+              slotFirst: slot ?? null,
+            },
+            higherTiers: { T1: 'not run', T2: 'not run', T3: 'not applicable to foreign tag' },
+          };
+        }),
     };
     const record = {
       schemaVersion: 2,
       // No timestamp: output stays deterministic and diffable in CI logs.
       source: 'tests/fixtures/third-party-web-components/qualify.ts',
-      note:
-        'Pins admission, SSR form, metadata availability, and browser interoperability probes; client-only is an explicit supported path, not an SSR claim.',
+      note: 'Pins admission, SSR form, metadata availability, and browser interoperability probes; client-only is an explicit supported path, not an SSR claim.',
       metadataProbes,
       entries,
       slotFirst,

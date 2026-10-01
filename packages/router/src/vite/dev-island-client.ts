@@ -91,8 +91,8 @@ export function devIslandClientPlugin(
       const islandsDir = options.islandsDir || DEFAULT_ISLANDS_DIR;
       // #569: an island-free app with data-open-enhance forms still needs the
       // client entry — it carries the form-enhancement layer.
-      const enhancedForms = (ctx.phase1.cachedRoutes ?? []).some((route) =>
-        route.type === 'page' && route.hasEnhancedForms === true
+      const enhancedForms = (ctx.phase1.cachedRoutes ?? []).some(
+        (route) => route.type === 'page' && route.hasEnhancedForms === true,
       );
       const islandEntries = buildClientIslandEntries({
         root,

@@ -56,12 +56,12 @@ export function createVirtualEntryPlugin(state: OpenPluginState): Plugin {
         const entryCode = state.entryDescriptor
           ? renderEntry(state.entryDescriptor)
           : generateEntry(
-            state,
-            state.ctx.phase1.cachedRoutes || [],
-            state.ctx.phase1.islandTagNames,
-            state.ctx.phase1.packageManifests,
-            state.ctx.phase1.islandFiles,
-          );
+              state,
+              state.ctx.phase1.cachedRoutes || [],
+              state.ctx.phase1.islandTagNames,
+              state.ctx.phase1.packageManifests,
+              state.ctx.phase1.islandFiles,
+            );
         return `import '${VIRTUAL_POLYFILL_ID}';\n` + entryCode;
       }
     },

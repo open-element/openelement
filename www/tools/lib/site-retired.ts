@@ -102,9 +102,10 @@ export async function loadBaselineManifest(): Promise<BaselineManifest> {
 }
 
 /** Retired routes for the current tree, from the committed baseline snapshot. */
-export async function retiredRoutes(): Promise<
-  { manifest: BaselineManifest; retired: Set<string> }
-> {
+export async function retiredRoutes(): Promise<{
+  manifest: BaselineManifest;
+  retired: Set<string>;
+}> {
   const manifest = await loadBaselineManifest();
   const head = await routePathsIn(join(repoRoot, routesRel));
   const retired = new Set(manifest.routes.filter((route) => !head.has(route)));
@@ -119,16 +120,20 @@ export function parseRedirectTable(parsed: unknown, sourceLabel: string): Redire
   for (const entry of list as unknown[]) {
     const { from, to, toZh, status } = entry as Partial<RedirectMapping>;
     if (
-      typeof from !== 'string' || !from.startsWith('/') || from.startsWith('/zh/') ||
-      typeof to !== 'string' || !to.startsWith('/') || to.startsWith('/zh/') ||
+      typeof from !== 'string' ||
+      !from.startsWith('/') ||
+      from.startsWith('/zh/') ||
+      typeof to !== 'string' ||
+      !to.startsWith('/') ||
+      to.startsWith('/zh/') ||
       (toZh !== undefined &&
         (typeof toZh !== 'string' || !toZh.startsWith('/') || toZh.startsWith('/zh/'))) ||
       status !== 301
     ) {
       throw new Error(
-        `${sourceLabel}: bad mapping (want unprefixed from/to/toZh and status 301): ${
-          JSON.stringify(entry)
-        }`,
+        `${sourceLabel}: bad mapping (want unprefixed from/to/toZh and status 301): ${JSON.stringify(
+          entry,
+        )}`,
       );
     }
     mappings.push(toZh === undefined ? { from, to, status } : { from, to, toZh, status });
@@ -286,7 +291,10 @@ export async function historicalRoutePaths(): Promise<Set<string>> {
   const tags = await git(['tag', '--list', 'v*']);
   const routes = new Set<string>();
   if (tags.code !== 0) return routes;
-  for (const tag of tags.out.split('\n').map((line) => line.trim()).filter(Boolean)) {
+  for (const tag of tags.out
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)) {
     for (const dir of ['www/app/routes', 'apps/site/app/routes']) {
       const listed = await git(['ls-tree', '-r', '--name-only', tag, '--', dir]);
       if (listed.code !== 0) continue;
@@ -302,9 +310,11 @@ export async function historicalRoutePaths(): Promise<Set<string>> {
 }
 
 /** Validate the baseline snapshot against the redirect table and fragments. */
-export async function collectRetiredUrlFailures(): Promise<
-  { failures: string[]; baselineSha: string; retiredCount: number }
-> {
+export async function collectRetiredUrlFailures(): Promise<{
+  failures: string[];
+  baselineSha: string;
+  retiredCount: number;
+}> {
   const { manifest, retired } = await retiredRoutes();
   const mappings = await loadRedirectTable();
   const head = await routePathsIn(join(repoRoot, routesRel));
@@ -323,7 +333,7 @@ export async function collectRetiredUrlFailures(): Promise<
     // serve both locales). Both sides validate independently.
     const targets = SITE_LOCALES.map((locale) => ({
       locale,
-      raw: locale === 'zh' ? mapping.toZh ?? mapping.to : mapping.to,
+      raw: locale === 'zh' ? (mapping.toZh ?? mapping.to) : mapping.to,
     }));
     for (const { locale, raw } of targets) {
       const { route, fragment } = stripFragment(raw);

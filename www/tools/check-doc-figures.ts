@@ -28,9 +28,10 @@ function check(name: string, expected: number, actual: number, tolerance = 0): v
   // below already use. Content changes still move the exact html-count,
   // locs, and manifest rows. Retirement condition: when the island build
   // is deterministic across runner images again, restore the exact compare.
-  const ok = tolerance > 0
-    ? Math.abs(expected - actual) <= Math.ceil(expected * tolerance)
-    : expected === actual;
+  const ok =
+    tolerance > 0
+      ? Math.abs(expected - actual) <= Math.ceil(expected * tolerance)
+      : expected === actual;
   if (!ok) failures.push(`${name}: doc says ${expected}, dist measures ${actual}`);
 }
 
@@ -55,8 +56,8 @@ for await (const entry of walk(dist, { includeDirs: false })) {
 const distHtml = [...distFiles.keys()].filter((path) => path.endsWith('.html'));
 const sitemap = await Deno.readTextFile(join(dist, 'sitemap.xml'));
 const sitemapLocs = (sitemap.match(/<loc>/g) ?? []).length;
-const manifestPaths = [...distFiles.keys()].filter((path) =>
-  path.startsWith('island-manifests/') && path.endsWith('.json')
+const manifestPaths = [...distFiles.keys()].filter(
+  (path) => path.startsWith('island-manifests/') && path.endsWith('.json'),
 );
 const manifests = await Promise.all(
   manifestPaths.map(async (path) => JSON.parse(await Deno.readTextFile(join(dist, path)))),
@@ -83,8 +84,8 @@ for (const [rel, abs] of distFiles) {
   }
 }
 function chunkStem(docName: string): string {
-  const hits = [...chunkSize.keys()].filter((stem) =>
-    stem === docName || stem.startsWith(`${docName}-`)
+  const hits = [...chunkSize.keys()].filter(
+    (stem) => stem === docName || stem.startsWith(`${docName}-`),
   );
   if (hits.length !== 1) {
     failures.push(`chunk ${docName}: want exactly one dist file, found ${hits.length}`);
@@ -160,10 +161,10 @@ for (const docPath of docs) {
     check(scope + 'manifest entries', Number(pair[2]), manifestEntries);
   }
   const railOrder = [...text.matchAll(/open-page-rail[`\s]+(?:on|出现在)\s*(\d+)/g)].map((m) =>
-    Number(m[1])
+    Number(m[1]),
   );
   const codeOrder = [...text.matchAll(/open-code-block[`\s]+(?:on|出现在)\s*(\d+)/g)].map((m) =>
-    Number(m[1])
+    Number(m[1]),
   );
   if (railOrder.length > 0) {
     check(scope + 'rail pages', railOrder[0], tagCounts.get('open-page-rail') ?? -2);
@@ -171,11 +172,9 @@ for (const docPath of docs) {
   if (codeOrder.length > 0) {
     check(scope + 'code-block pages', codeOrder[0], tagCounts.get('open-code-block') ?? -2);
   }
-  for (
-    const row of text.matchAll(
-      /\|\s*`([^`(|]+?)`(?:\([^)]*\))?\s*\|\s*([\d,]+)\s*\|\s*([\d,]+)\s*\|/g,
-    )
-  ) {
+  for (const row of text.matchAll(
+    /\|\s*`([^`(|]+?)`(?:\([^)]*\))?\s*\|\s*([\d,]+)\s*\|\s*([\d,]+)\s*\|/g,
+  )) {
     const name = row[1].trim();
     if (!/^(client\.js|island-|open-)/.test(name)) continue;
     // client.js embeds checkout-absolute island paths in its error strings,

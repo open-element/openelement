@@ -55,11 +55,7 @@ export interface ActionHonoContext {
   header(name: string, value: string): void;
   get(key: string): unknown;
   json(object: unknown, status?: number, headers?: Record<string, string>): Response;
-  text(
-    text: string,
-    status?: number,
-    headers?: Record<string, string>,
-  ): Response;
+  text(text: string, status?: number, headers?: Record<string, string>): Response;
   redirect(location: string, status?: number): Response;
   /** The response under construction (read by the middleware bridge fallback). */
   readonly res: Response;
@@ -116,14 +112,18 @@ export async function runActionProtocol(
     return undefined;
   })();
   const module = routeModule as ActionRouteModule | undefined | null;
-  const namedActions = typeof module?.actions === 'object' && module?.actions !== null
-    ? module.actions as Record<string, unknown>
-    : {};
-  const actionFn = actionName !== undefined
-    ? (Object.prototype.hasOwnProperty.call(namedActions, actionName)
-      ? namedActions[actionName]
-      : undefined)
-    : (typeof module?.action === 'function' ? module.action : undefined);
+  const namedActions =
+    typeof module?.actions === 'object' && module?.actions !== null
+      ? (module.actions as Record<string, unknown>)
+      : {};
+  const actionFn =
+    actionName !== undefined
+      ? Object.prototype.hasOwnProperty.call(namedActions, actionName)
+        ? namedActions[actionName]
+        : undefined
+      : typeof module?.action === 'function'
+        ? module.action
+        : undefined;
   state.isFetch = context.req.header(ACTION_FETCH_HEADER) === 'true';
 
   const env = (loadContext.env ?? {}) as Record<string, unknown>;
@@ -138,10 +138,14 @@ export async function runActionProtocol(
         const target = new URL(context.req.url);
         const loopback = (host: string) =>
           host === 'localhost' || host === '127.0.0.1' || host === '[::1]';
-        crossSite = source.origin !== target.origin && !(
-          source.protocol === 'http:' && target.protocol === 'http:' &&
-          loopback(source.hostname) && loopback(target.hostname)
-        );
+        crossSite =
+          source.origin !== target.origin &&
+          !(
+            source.protocol === 'http:' &&
+            target.protocol === 'http:' &&
+            loopback(source.hostname) &&
+            loopback(target.hostname)
+          );
       } catch {
         crossSite = true;
       }
@@ -160,11 +164,13 @@ export async function runActionProtocol(
     // deliberately left to that rule.
     if (!crossSite && !origin && !fetchSite) {
       const contentType = (context.req.header('content-type') || '').toLowerCase();
-      const browserFormBody = contentType.indexOf('application/x-www-form-urlencoded') === 0 ||
+      const browserFormBody =
+        contentType.indexOf('application/x-www-form-urlencoded') === 0 ||
         contentType.indexOf('multipart/form-data') === 0;
       if (browserFormBody) {
         const accept = (context.req.header('accept') || '').toLowerCase();
-        const browserNavigation = (context.req.header('upgrade-insecure-requests') || '') === '1' ||
+        const browserNavigation =
+          (context.req.header('upgrade-insecure-requests') || '') === '1' ||
           accept.indexOf('text/html') !== -1;
         if (browserNavigation) crossSite = true;
       }
@@ -172,30 +178,31 @@ export async function runActionProtocol(
     if (crossSite) {
       const response = state.isFetch
         ? context.json(
-          {
-            type: 'about:blank',
-            title: 'Forbidden',
-            status: 403,
-            detail: 'Cross-site form submission rejected',
-          },
-          403,
-          { 'Content-Type': PROBLEM_JSON_MEDIA_TYPE },
-        )
+            {
+              type: 'about:blank',
+              title: 'Forbidden',
+              status: 403,
+              detail: 'Cross-site form submission rejected',
+            },
+            403,
+            { 'Content-Type': PROBLEM_JSON_MEDIA_TYPE },
+          )
         : context.text('Forbidden', 403);
       return { response };
     }
   }
 
   if (typeof actionFn !== 'function') {
-    const message = actionName !== undefined
-      ? 'No action named "' + actionName + '" on this route.'
-      : 'This route does not accept submissions.';
+    const message =
+      actionName !== undefined
+        ? 'No action named "' + actionName + '" on this route.'
+        : 'This route does not accept submissions.';
     const response = state.isFetch
       ? context.json(
-        { type: 'about:blank', title: 'Not Found', status: 404, detail: message },
-        404,
-        { 'Content-Type': PROBLEM_JSON_MEDIA_TYPE },
-      )
+          { type: 'about:blank', title: 'Not Found', status: 404, detail: message },
+          404,
+          { 'Content-Type': PROBLEM_JSON_MEDIA_TYPE },
+        )
       : renderStatusPage('404 Not Found', message, 404);
     return { response };
   }
@@ -207,10 +214,10 @@ export async function runActionProtocol(
     const message = 'Could not parse the form body.';
     const response = state.isFetch
       ? context.json(
-        { type: 'about:blank', title: 'Bad Request', status: 400, detail: message },
-        400,
-        { 'Content-Type': PROBLEM_JSON_MEDIA_TYPE },
-      )
+          { type: 'about:blank', title: 'Bad Request', status: 400, detail: message },
+          400,
+          { 'Content-Type': PROBLEM_JSON_MEDIA_TYPE },
+        )
       : renderStatusPage('400 Bad Request', message, 400);
     return { response };
   }
@@ -323,14 +330,14 @@ export function actionErrorResponse(
       status: 500,
       detail: production
         ? 'Internal Server Error'
-        // Same scrub expression the emitted handler carried: a truthy
-        // `message` property wins verbatim, anything else degrades to the
-        // thrown value itself.
-        : String(
-          error && (error as { message?: unknown }).message
-            ? (error as { message: unknown }).message
-            : error,
-        ),
+        : // Same scrub expression the emitted handler carried: a truthy
+          // `message` property wins verbatim, anything else degrades to the
+          // thrown value itself.
+          String(
+            error && (error as { message?: unknown }).message
+              ? (error as { message: unknown }).message
+              : error,
+          ),
     },
     500,
     { 'Content-Type': PROBLEM_JSON_MEDIA_TYPE },

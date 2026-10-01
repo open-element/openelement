@@ -54,16 +54,20 @@ function regionName(part: ProgramEachPart | ProgramWhenPart): string {
  */
 export function expectsArrayMessage(where: string, part: ProgramEachPart, value: unknown): string {
   const received = value === null ? 'null' : Array.isArray(value) ? 'array' : typeof value;
-  return `${where}: the list Region over ${regionName(part)} expects an array, got ` +
+  return (
+    `${where}: the list Region over ${regionName(part)} expects an array, got ` +
     `${received} — it renders ${regionName(part)}.map(...), so initialize that property to [] ` +
-    `instead of null/undefined.`;
+    `instead of null/undefined.`
+  );
 }
 
 /** Two items in one list Region derived the same item key. */
 function duplicateKeyMessage(ctx: MountContext, part: ProgramEachPart, key: string): string {
-  return `${origin(ctx)}: duplicate key in the list Region over ${regionName(part)} — two items ` +
+  return (
+    `${origin(ctx)}: duplicate key in the list Region over ${regionName(part)} — two items ` +
     `share ${JSON.stringify(part.key)} = ${key}. A key is the item's DOM identity and must be ` +
-    `unique within one list; give each item a unique ${part.key}.`;
+    `unique within one list; give each item a unique ${part.key}.`
+  );
 }
 
 export interface WhenRegion {
@@ -294,7 +298,12 @@ export function buildEach(
     region.byKey.set(key, stored);
     nodes.push(...entry.nodes);
   }
-  subscribeWrites(ctx, scope, part.signal, guardedUpdate(ctx, (next) => updateEach(region, next)));
+  subscribeWrites(
+    ctx,
+    scope,
+    part.signal,
+    guardedUpdate(ctx, (next) => updateEach(region, next)),
+  );
   return [anchor, ...nodes, end];
 }
 
@@ -439,12 +448,16 @@ function moveEntries(
     const position = previousPositions.get(entry);
     const nodes = entry.nodes;
     if (
-      position === undefined || !mounted.has(entry) || nodes.length === 0 ||
-      nodes.some((node, nodeIndex) =>
-        node.parentNode !== parent ||
-        (nodeIndex > 0 && nodes[nodeIndex - 1].nextSibling !== node)
+      position === undefined ||
+      !mounted.has(entry) ||
+      nodes.length === 0 ||
+      nodes.some(
+        (node, nodeIndex) =>
+          node.parentNode !== parent ||
+          (nodeIndex > 0 && nodes[nodeIndex - 1].nextSibling !== node),
       )
-    ) continue;
+    )
+      continue;
     let low = 0;
     let high = tails.length;
     while (low < high) {
@@ -514,7 +527,7 @@ export function updateEach(region: EachRegion, value: unknown): void {
     if (!entry || entry.item === descriptor.item) continue;
     descriptor.projection = {
       values: entry.valueSlots.map((slot) =>
-        displayValue(itemValue(region.part, descriptor.item, slot.field))
+        displayValue(itemValue(region.part, descriptor.item, slot.field)),
       ),
       attrs: entry.attrSlots.map((slot) => itemAttrValue(descriptor.item, slot.field)),
     };

@@ -25,7 +25,8 @@ const STATE = {
 };
 
 const SITE = 'export const OPENELEMENT_VERSION = `v${SOURCE_VERSION}`;\n';
-const RELEASE_LINE = "export const SOURCE_VERSION = '1.0.0-alpha.5';\n" +
+const RELEASE_LINE =
+  "export const SOURCE_VERSION = '1.0.0-alpha.5';\n" +
   'export const SOURCE_LINE_PUBLISHED = true;\n' +
   "export const ALPHA_RESOLVES_TO = '1.0.0-alpha.5';\n";
 
@@ -49,7 +50,7 @@ Deno.test('www release anchor: a stale generated module is rejected', () => {
     failures.some((f) =>
       f.includes(
         'SOURCE_VERSION 1.0.0-alpha.4 must equal release-state sourceVersion 1.0.0-alpha.5',
-      )
+      ),
     ),
     true,
   );
@@ -63,7 +64,7 @@ Deno.test('www release anchor: SOURCE_LINE_PUBLISHED mirrors the @alpha dist-tag
     packages: STATE.packages.map((entry) =>
       entry.name === '@openelement/router'
         ? { ...entry, registry: { ...entry.registry, alpha: '1.0.0-alpha.4' } }
-        : entry
+        : entry,
     ),
   };
   const failures = wwwReleaseAnchorFailures(partialState, SITE, RELEASE_LINE);

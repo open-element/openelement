@@ -54,8 +54,10 @@ const encoder = new TextEncoder();
 
 async function sha256(text: string): Promise<string> {
   const digest = await crypto.subtle.digest('SHA-256', encoder.encode(text));
-  return 'sha256:' +
-    [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
+  return (
+    'sha256:' +
+    [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('')
+  );
 }
 
 const TOOL_VERSIONS = {
@@ -130,10 +132,12 @@ async function fixture(): Promise<Fixture> {
   const manifests: Record<string, string> = {};
   for (const name of REQUIRED_PACKAGE_TARBALLS) {
     const short = name.replace('@openelement/', '');
-    archives[`tarballs/openelement-${short}-${VERSION}.tgz`] = await createDeterministicTarGz([{
-      path: 'package/package.json',
-      data: encoder.encode(JSON.stringify({ name, version: VERSION })),
-    }]);
+    archives[`tarballs/openelement-${short}-${VERSION}.tgz`] = await createDeterministicTarGz([
+      {
+        path: 'package/package.json',
+        data: encoder.encode(JSON.stringify({ name, version: VERSION })),
+      },
+    ]);
   }
   const tarballs: Record<string, string> = {};
   const tarballFiles: Record<string, string> = {};
@@ -164,27 +168,31 @@ async function fixture(): Promise<Fixture> {
   // is derived from these bytes, so the recompute guard accepts it.
   const sitePassed = SITE_E2E_MIN_PASSED_PER_PROJECT;
   const siteTotal = sitePassed * REQUIRED_SITE_BROWSERS.length;
-  const siteReportBytes = encoder.encode(JSON.stringify(
-    {
-      config: {
-        configFile: `/runner/work/openelement/${SITE_E2E_CONFIG_FILE}`,
-        grep: {},
-        projects: REQUIRED_SITE_BROWSERS.map((name) => ({ name })),
+  const siteReportBytes = encoder.encode(
+    JSON.stringify(
+      {
+        config: {
+          configFile: `/runner/work/openelement/${SITE_E2E_CONFIG_FILE}`,
+          grep: {},
+          projects: REQUIRED_SITE_BROWSERS.map((name) => ({ name })),
+        },
+        suites: [
+          {
+            specs: REQUIRED_SITE_BROWSERS.map((browser) => ({
+              tests: Array.from({ length: sitePassed }, () => ({
+                projectName: browser,
+                status: 'expected',
+                results: [{ status: 'passed' }],
+              })),
+            })),
+          },
+        ],
+        stats: { expected: siteTotal, skipped: 0, unexpected: 0, flaky: 0 },
       },
-      suites: [{
-        specs: REQUIRED_SITE_BROWSERS.map((browser) => ({
-          tests: Array.from({ length: sitePassed }, () => ({
-            projectName: browser,
-            status: 'expected',
-            results: [{ status: 'passed' }],
-          })),
-        })),
-      }],
-      stats: { expected: siteTotal, skipped: 0, unexpected: 0, flaky: 0 },
-    },
-    null,
-    2,
-  ));
+      null,
+      2,
+    ),
+  );
   const siteE2e = {
     ran: true,
     projects: Object.fromEntries(
@@ -218,7 +226,7 @@ async function fixture(): Promise<Fixture> {
         ? `${cleanProofLine(SHA, TREE, phase as 'before' | 'after')}\n`
         : `${key} ok\n`;
       const hash = await sha256(logs[key]);
-      const startedAt = new Date(baseTime + (tick++) * 1000).toISOString();
+      const startedAt = new Date(baseTime + tick++ * 1000).toISOString();
       rawSteps.push({
         name,
         command,
@@ -242,18 +250,19 @@ async function fixture(): Promise<Fixture> {
         logSha256: hash,
       });
     }
-    const extras = job === 'fresh-clone'
-      ? { isolation: FRESH_CLONE_ISOLATION, siteE2e }
-      : job === 'packed'
-      ? {
-        packageVersion: VERSION,
-        tarballs,
-        tarballFiles,
-        packDiagnostics,
-        artifactCheck: true,
-        consumers: [...REQUIRED_PACKED_CONSUMERS],
-      }
-      : {};
+    const extras =
+      job === 'fresh-clone'
+        ? { isolation: FRESH_CLONE_ISOLATION, siteE2e }
+        : job === 'packed'
+          ? {
+              packageVersion: VERSION,
+              tarballs,
+              tarballFiles,
+              packDiagnostics,
+              artifactCheck: true,
+              consumers: [...REQUIRED_PACKED_CONSUMERS],
+            }
+          : {};
     const jobRecord = {
       schemaVersion: CANDIDATE_EVIDENCE_SCHEMA_VERSION,
       job,
@@ -357,12 +366,7 @@ Deno.test('packed tarballs travel with job evidence and are hash-checked on aggr
       '@openelement/example': `tarballs/openelement-example-${VERSION}.tgz`,
     });
     const carried = `${recorded}/${first.files['@openelement/example']}`;
-    const second = await stageTarballEvidence(
-      packages,
-      () => carried,
-      aggregated,
-      first.hashes,
-    );
+    const second = await stageTarballEvidence(packages, () => carried, aggregated, first.hashes);
     assertEquals(second, first);
     assertEquals(
       await Deno.readFile(`${aggregated}/${second.files['@openelement/example']}`),
@@ -389,10 +393,12 @@ async function validPackedStore(version = VERSION) {
   for (const name of REQUIRED_PACKAGE_TARBALLS) {
     const short = name.replace('@openelement/', '');
     const path = `tarballs/openelement-${short}-${version}.tgz`;
-    const bytes = await createDeterministicTarGz([{
-      path: 'package/package.json',
-      data: encoder.encode(JSON.stringify({ name, version })),
-    }]);
+    const bytes = await createDeterministicTarGz([
+      {
+        path: 'package/package.json',
+        data: encoder.encode(JSON.stringify({ name, version })),
+      },
+    ]);
     archives.set(path, bytes);
     tarballFiles[name] = path;
     tarballs[name] = await sha256BytesLocal(bytes);
@@ -479,7 +485,7 @@ Deno.test('packed validation fails when archive bytes are tampered', async () =>
   const tampered = new Uint8Array(original);
   tampered[0] ^= 0xff;
   const tamperedRead = (candidate: string) =>
-    Promise.resolve(candidate === path ? tampered : archives.get(candidate) ?? null);
+    Promise.resolve(candidate === path ? tampered : (archives.get(candidate) ?? null));
   const failures = await collectPackedTarballFailures(extras, { read: tamperedRead });
   assert(
     failures.some((failure) => failure.includes('sha256')),
@@ -566,10 +572,12 @@ Deno.test('packed validation rejects divergent package versions', async () => {
   const { extras, archives } = await validPackedStore();
   const victim = '@openelement/router';
   const driftedVersion = '1.0.0-alpha.2';
-  const drifted = await createDeterministicTarGz([{
-    path: 'package/package.json',
-    data: encoder.encode(JSON.stringify({ name: victim, version: driftedVersion })),
-  }]);
+  const drifted = await createDeterministicTarGz([
+    {
+      path: 'package/package.json',
+      data: encoder.encode(JSON.stringify({ name: victim, version: driftedVersion })),
+    },
+  ]);
   const path = extras.tarballFiles[victim];
   archives.set(path, drifted);
   extras.tarballs[victim] = await sha256BytesLocal(drifted);
@@ -583,8 +591,10 @@ Deno.test('packed validation rejects divergent package versions', async () => {
 
 async function sha256BytesLocal(bytes: Uint8Array): Promise<string> {
   const digest = await crypto.subtle.digest('SHA-256', Uint8Array.from(bytes));
-  return 'sha256:' +
-    [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
+  return (
+    'sha256:' +
+    [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('')
+  );
 }
 
 function clone<T>(value: T): T {
@@ -598,8 +608,8 @@ function bundleJob(bundle: Record<string, unknown>, name: string): Record<string
 }
 
 function bundleStep(bundle: Record<string, unknown>, job: string, name: string) {
-  const step = (bundleJob(bundle, job).steps as Array<Record<string, unknown>>).find((entry) =>
-    entry.name === name
+  const step = (bundleJob(bundle, job).steps as Array<Record<string, unknown>>).find(
+    (entry) => entry.name === name,
   );
   if (!step) throw new Error(`step ${job}/${name} missing`);
   return step;
@@ -635,54 +645,118 @@ Deno.test('valid schema-v2 bundle and jobs pass the strict contract', async () =
 Deno.test('top-level identity and lifecycle fields are strict', async () => {
   const f = await shared();
   const cases: Array<[string, (b: Record<string, unknown>) => void, string]> = [
-    ['result-FAIL', (b) => {
-      b.result = 'FAIL';
-    }, 'result'],
-    ['result-missing', (b) => {
-      delete b.result;
-    }, 'result'],
-    ['trackedClean-false', (b) => {
-      b.trackedClean = false;
-    }, 'trackedClean'],
-    ['trackedClean-missing', (b) => {
-      delete b.trackedClean;
-    }, 'trackedClean'],
-    ['requiredOk-false', (b) => {
-      b.requiredOk = false;
-    }, 'requiredOk'],
-    ['requiredOk-missing', (b) => {
-      delete b.requiredOk;
-    }, 'requiredOk'],
-    ['schemaVersion-1', (b) => {
-      b.schemaVersion = 1;
-    }, 'schemaVersion'],
-    ['schemaVersion-999', (b) => {
-      b.schemaVersion = 999;
-    }, 'schemaVersion'],
-    ['schemaVersion-missing', (b) => {
-      delete b.schemaVersion;
-    }, 'schemaVersion'],
-    ['toolVersions-missing', (b) => {
-      delete b.toolVersions;
-    }, 'toolVersions'],
-    ['toolVersions-bad-type', (b) => {
-      b.toolVersions = 'nope';
-    }, 'toolVersions'],
-    ['packageVersion-missing', (b) => {
-      delete b.packageVersion;
-    }, 'packageVersion'],
-    ['packageVersion-bad', (b) => {
-      b.packageVersion = 'latest';
-    }, 'packageVersion'],
-    ['unknown-field', (b) => {
-      b.extra = true;
-    }, 'unknown fields'],
-    ['sha-short', (b) => {
-      b.sha = 'abc';
-    }, 'sha'],
-    ['generatedAt-bad', (b) => {
-      b.generatedAt = 'not-a-date';
-    }, 'generatedAt'],
+    [
+      'result-FAIL',
+      (b) => {
+        b.result = 'FAIL';
+      },
+      'result',
+    ],
+    [
+      'result-missing',
+      (b) => {
+        delete b.result;
+      },
+      'result',
+    ],
+    [
+      'trackedClean-false',
+      (b) => {
+        b.trackedClean = false;
+      },
+      'trackedClean',
+    ],
+    [
+      'trackedClean-missing',
+      (b) => {
+        delete b.trackedClean;
+      },
+      'trackedClean',
+    ],
+    [
+      'requiredOk-false',
+      (b) => {
+        b.requiredOk = false;
+      },
+      'requiredOk',
+    ],
+    [
+      'requiredOk-missing',
+      (b) => {
+        delete b.requiredOk;
+      },
+      'requiredOk',
+    ],
+    [
+      'schemaVersion-1',
+      (b) => {
+        b.schemaVersion = 1;
+      },
+      'schemaVersion',
+    ],
+    [
+      'schemaVersion-999',
+      (b) => {
+        b.schemaVersion = 999;
+      },
+      'schemaVersion',
+    ],
+    [
+      'schemaVersion-missing',
+      (b) => {
+        delete b.schemaVersion;
+      },
+      'schemaVersion',
+    ],
+    [
+      'toolVersions-missing',
+      (b) => {
+        delete b.toolVersions;
+      },
+      'toolVersions',
+    ],
+    [
+      'toolVersions-bad-type',
+      (b) => {
+        b.toolVersions = 'nope';
+      },
+      'toolVersions',
+    ],
+    [
+      'packageVersion-missing',
+      (b) => {
+        delete b.packageVersion;
+      },
+      'packageVersion',
+    ],
+    [
+      'packageVersion-bad',
+      (b) => {
+        b.packageVersion = 'latest';
+      },
+      'packageVersion',
+    ],
+    [
+      'unknown-field',
+      (b) => {
+        b.extra = true;
+      },
+      'unknown fields',
+    ],
+    [
+      'sha-short',
+      (b) => {
+        b.sha = 'abc';
+      },
+      'sha',
+    ],
+    [
+      'generatedAt-bad',
+      (b) => {
+        b.generatedAt = 'not-a-date';
+      },
+      'generatedAt',
+    ],
   ];
   for (const [label, mutate, expected] of cases) {
     const bundle = clone(f.bundle);
@@ -697,36 +771,76 @@ Deno.test('top-level identity and lifecycle fields are strict', async () => {
 Deno.test('job identity, time, and toolchain fields are strict', async () => {
   const f = await shared();
   const cases: Array<[string, (job: Record<string, unknown>) => void, string]> = [
-    ['schemaVersion', (j) => {
-      j.schemaVersion = 1;
-    }, 'schemaVersion'],
-    ['trackedClean', (j) => {
-      j.trackedClean = false;
-    }, 'trackedClean'],
-    ['trackedClean-missing', (j) => {
-      delete j.trackedClean;
-    }, 'trackedClean'],
-    ['result', (j) => {
-      j.result = 'FAIL';
-    }, 'result'],
-    ['generatedAt-bad', (j) => {
-      j.generatedAt = 'not-a-date';
-    }, 'generatedAt'],
-    ['generatedAt-missing', (j) => {
-      delete j.generatedAt;
-    }, 'generatedAt'],
-    ['toolVersions-missing', (j) => {
-      delete j.toolVersions;
-    }, 'toolVersions'],
-    ['unknown-field', (j) => {
-      j.extra = 1;
-    }, 'unknown job fields'],
-    ['sha', (j) => {
-      j.sha = 'c'.repeat(40);
-    }, 'sha'],
-    ['tree', (j) => {
-      j.tree = 'd'.repeat(40);
-    }, 'tree'],
+    [
+      'schemaVersion',
+      (j) => {
+        j.schemaVersion = 1;
+      },
+      'schemaVersion',
+    ],
+    [
+      'trackedClean',
+      (j) => {
+        j.trackedClean = false;
+      },
+      'trackedClean',
+    ],
+    [
+      'trackedClean-missing',
+      (j) => {
+        delete j.trackedClean;
+      },
+      'trackedClean',
+    ],
+    [
+      'result',
+      (j) => {
+        j.result = 'FAIL';
+      },
+      'result',
+    ],
+    [
+      'generatedAt-bad',
+      (j) => {
+        j.generatedAt = 'not-a-date';
+      },
+      'generatedAt',
+    ],
+    [
+      'generatedAt-missing',
+      (j) => {
+        delete j.generatedAt;
+      },
+      'generatedAt',
+    ],
+    [
+      'toolVersions-missing',
+      (j) => {
+        delete j.toolVersions;
+      },
+      'toolVersions',
+    ],
+    [
+      'unknown-field',
+      (j) => {
+        j.extra = 1;
+      },
+      'unknown job fields',
+    ],
+    [
+      'sha',
+      (j) => {
+        j.sha = 'c'.repeat(40);
+      },
+      'sha',
+    ],
+    [
+      'tree',
+      (j) => {
+        j.tree = 'd'.repeat(40);
+      },
+      'tree',
+    ],
   ];
   for (const [label, mutate, expected] of cases) {
     const bundle = clone(f.bundle);
@@ -738,8 +852,9 @@ Deno.test('job identity, time, and toolchain fields are strict', async () => {
     );
   }
   const staleBundle = clone(f.bundle);
-  staleBundle.generatedAt = new Date(Date.parse(f.bundle.generatedAt as string) - 60_000)
-    .toISOString();
+  staleBundle.generatedAt = new Date(
+    Date.parse(f.bundle.generatedAt as string) - 60_000,
+  ).toISOString();
   assert(
     (await failuresFor(staleBundle, f)).some((x) => x.includes('after the bundle generatedAt')),
   );
@@ -755,25 +870,43 @@ Deno.test('job identity, time, and toolchain fields are strict', async () => {
 
 Deno.test('aggregate must match the actual job and step set', async () => {
   const f = await shared();
-  for (
-    const [label, mutate, expected] of [
-      ['missing', (b: Record<string, unknown>) => {
+  for (const [label, mutate, expected] of [
+    [
+      'missing',
+      (b: Record<string, unknown>) => {
         delete b.aggregate;
-      }, 'aggregate'],
-      ['zero', (b: Record<string, unknown>) => {
+      },
+      'aggregate',
+    ],
+    [
+      'zero',
+      (b: Record<string, unknown>) => {
         (b.aggregate as Record<string, unknown>).recomputedLogHashes = 0;
-      }, 'recomputedLogHashes'],
-      ['inputs-missing', (b: Record<string, unknown>) => {
+      },
+      'recomputedLogHashes',
+    ],
+    [
+      'inputs-missing',
+      (b: Record<string, unknown>) => {
         (b.aggregate as Record<string, unknown>).inputs = [];
-      }, 'aggregate.inputs'],
-      ['inputs-reordered', (b: Record<string, unknown>) => {
+      },
+      'aggregate.inputs',
+    ],
+    [
+      'inputs-reordered',
+      (b: Record<string, unknown>) => {
         (b.aggregate as Record<string, unknown>).inputs = [...JOB_NAMES].reverse();
-      }, 'aggregate.inputs'],
-      ['unknown-field', (b: Record<string, unknown>) => {
+      },
+      'aggregate.inputs',
+    ],
+    [
+      'unknown-field',
+      (b: Record<string, unknown>) => {
         (b.aggregate as Record<string, unknown>).extra = 1;
-      }, 'aggregate has unknown fields'],
-    ] as const
-  ) {
+      },
+      'aggregate has unknown fields',
+    ],
+  ] as const) {
     const bundle = clone(f.bundle);
     mutate(bundle);
     assert(
@@ -817,12 +950,14 @@ Deno.test('tarball bytes, files, and manifest are cross-verified', async () => {
     sha256: await sha256('{}\n'),
   };
   assert(
-    (await collectBundleFailures(emptyManifest, {
-      expectedSha: SHA,
-      expectedTree: TREE,
-      read: (path) =>
-        path === 'tarball-manifest.json' ? Promise.resolve(encoder.encode('{}\n')) : f.read(path),
-    })).some((x) => x.includes('contents must equal')),
+    (
+      await collectBundleFailures(emptyManifest, {
+        expectedSha: SHA,
+        expectedTree: TREE,
+        read: (path) =>
+          path === 'tarball-manifest.json' ? Promise.resolve(encoder.encode('{}\n')) : f.read(path),
+      })
+    ).some((x) => x.includes('contents must equal')),
   );
 
   const threeWay = clone(f.bundle);
@@ -845,19 +980,23 @@ Deno.test('tarball package name and version come from the archive bytes', async 
   wrongVersion.packageVersion = '9.9.9';
   assert((await failuresFor(wrongVersion, f)).some((x) => x.includes('package version')));
   const wrongName = clone(f.bundle);
-  const bytes = await createDeterministicTarGz([{
-    path: 'package/package.json',
-    data: encoder.encode(JSON.stringify({ name: '@evil/wrong', version: VERSION })),
-  }]);
+  const bytes = await createDeterministicTarGz([
+    {
+      path: 'package/package.json',
+      data: encoder.encode(JSON.stringify({ name: '@evil/wrong', version: VERSION })),
+    },
+  ]);
   assert(
-    (await collectBundleFailures(wrongName, {
-      expectedSha: SHA,
-      expectedTree: TREE,
-      read: (path) =>
-        path === 'tarballs/openelement-element-1.0.0-alpha.1.tgz'
-          ? Promise.resolve(bytes)
-          : f.read(path),
-    })).some((x) => x.includes('package name')),
+    (
+      await collectBundleFailures(wrongName, {
+        expectedSha: SHA,
+        expectedTree: TREE,
+        read: (path) =>
+          path === 'tarballs/openelement-element-1.0.0-alpha.1.tgz'
+            ? Promise.resolve(bytes)
+            : f.read(path),
+      })
+    ).some((x) => x.includes('package name')),
   );
 });
 
@@ -869,33 +1008,53 @@ Deno.test('pack diagnostics are parsed and cross-checked', async () => {
     sha256: await sha256('{}\n'),
   };
   assert(
-    (await collectBundleFailures(emptyDiagnostics, {
-      expectedSha: SHA,
-      expectedTree: TREE,
-      read: (path) =>
-        path === 'pack-diagnostics.json' ? Promise.resolve(encoder.encode('{}\n')) : f.read(path),
-    })).some((x) => x.includes('must be an array')),
+    (
+      await collectBundleFailures(emptyDiagnostics, {
+        expectedSha: SHA,
+        expectedTree: TREE,
+        read: (path) =>
+          path === 'pack-diagnostics.json' ? Promise.resolve(encoder.encode('{}\n')) : f.read(path),
+      })
+    ).some((x) => x.includes('must be an array')),
   );
 
-  for (
-    const [label, mutate, expected] of [
-      ['wrong-package', (entries: Array<Record<string, unknown>>) => {
+  for (const [label, mutate, expected] of [
+    [
+      'wrong-package',
+      (entries: Array<Record<string, unknown>>) => {
         entries[0].package = '@evil/fake';
-      }, 'must list exactly'],
-      ['errors', (entries: Array<Record<string, unknown>>) => {
+      },
+      'must list exactly',
+    ],
+    [
+      'errors',
+      (entries: Array<Record<string, unknown>>) => {
         entries[0].errors = 1;
-      }, 'errors must be 0'],
-      ['unexpected', (entries: Array<Record<string, unknown>>) => {
+      },
+      'errors must be 0',
+    ],
+    [
+      'unexpected',
+      (entries: Array<Record<string, unknown>>) => {
         entries[0].unexpectedWarnings = 1;
-      }, 'unexpectedWarnings must be 0'],
-      ['negative-closure', (entries: Array<Record<string, unknown>>) => {
+      },
+      'unexpectedWarnings must be 0',
+    ],
+    [
+      'negative-closure',
+      (entries: Array<Record<string, unknown>>) => {
         entries[0].declarationClosure = -1;
-      }, 'declarationClosure'],
-      ['string-declarations', (entries: Array<Record<string, unknown>>) => {
+      },
+      'declarationClosure',
+    ],
+    [
+      'string-declarations',
+      (entries: Array<Record<string, unknown>>) => {
         entries[0].publicDeclarations = '1';
-      }, 'publicDeclarations'],
-    ] as const
-  ) {
+      },
+      'publicDeclarations',
+    ],
+  ] as const) {
     const diagnostics = REQUIRED_PACKAGE_TARBALLS.map((pkg) => ({
       package: pkg,
       errors: 0,
@@ -909,14 +1068,16 @@ Deno.test('pack diagnostics are parsed and cross-checked', async () => {
     const bundle = clone(f.bundle);
     bundle.packDiagnostics = { path: 'pack-diagnostics.json', sha256: await sha256(content) };
     assert(
-      (await collectBundleFailures(bundle, {
-        expectedSha: SHA,
-        expectedTree: TREE,
-        read: (path) =>
-          path === 'pack-diagnostics.json'
-            ? Promise.resolve(encoder.encode(content))
-            : f.read(path),
-      })).some((x) => x.includes(expected)),
+      (
+        await collectBundleFailures(bundle, {
+          expectedSha: SHA,
+          expectedTree: TREE,
+          read: (path) =>
+            path === 'pack-diagnostics.json'
+              ? Promise.resolve(encoder.encode(content))
+              : f.read(path),
+        })
+      ).some((x) => x.includes(expected)),
       `expected rejection for diagnostics ${label}`,
     );
   }
@@ -925,46 +1086,98 @@ Deno.test('pack diagnostics are parsed and cross-checked', async () => {
 Deno.test('step argv, cwd, timing, and logs are strict', async () => {
   const f = await shared();
   const cases: Array<[string, (b: Record<string, unknown>) => void, string]> = [
-    ['command-wrong-task', (b) => {
-      bundleStep(b, 'fresh-clone', 'task-gate-source').command = ['deno', 'task', 'check'];
-    }, 'task-gate-source'],
-    ['command-empty-argv', (b) => {
-      bundleStep(b, 'fast-checks', 'lint').command = [];
-    }, 'argv'],
-    ['command-empty-element', (b) => {
-      bundleStep(b, 'fast-checks', 'lint').command = [''];
-    }, 'argv'],
-    ['cwd-wrong', (b) => {
-      bundleStep(b, 'fast-checks', 'lint').cwd = EVIDENCE_ROLES.clone;
-    }, 'cwd must be'],
-    ['cwd-missing', (b) => {
-      delete bundleStep(b, 'fast-checks', 'lint').cwd;
-    }, 'cwd'],
-    ['startedAt-bad', (b) => {
-      bundleStep(b, 'fast-checks', 'lint').startedAt = 'nope';
-    }, 'startedAt'],
-    ['duration-fraction', (b) => {
-      bundleStep(b, 'fast-checks', 'lint').durationMs = 0.5;
-    }, 'durationMs'],
-    ['exitCode-missing', (b) => {
-      delete bundleStep(b, 'fast-checks', 'lint').exitCode;
-    }, 'exitCode'],
-    ['exitCode-nonzero', (b) => {
-      bundleStep(b, 'fast-checks', 'lint').exitCode = 1;
-    }, 'exitCode'],
-    ['result-fail', (b) => {
-      bundleStep(b, 'fast-checks', 'lint').result = 'FAIL';
-    }, 'result'],
-    ['log-path-traversal', (b) => {
-      bundleStep(b, 'fast-checks', 'lint').logSource = '../../etc/passwd.log';
-    }, 'log path'],
-    ['log-hash', (b) => {
-      bundleStep(b, 'fast-checks', 'lint').logSha256 = `sha256:${'0'.repeat(64)}`;
-    }, 'log hash mismatch'],
-    ['clean-line-missing', (b) => {
-      const step = bundleStep(b, 'fast-checks', 'workspace-clean-before');
-      step.logSha256 = `sha256:${'2'.repeat(64)}`;
-    }, 'log hash mismatch'],
+    [
+      'command-wrong-task',
+      (b) => {
+        bundleStep(b, 'fresh-clone', 'task-gate-source').command = ['deno', 'task', 'check'];
+      },
+      'task-gate-source',
+    ],
+    [
+      'command-empty-argv',
+      (b) => {
+        bundleStep(b, 'fast-checks', 'lint').command = [];
+      },
+      'argv',
+    ],
+    [
+      'command-empty-element',
+      (b) => {
+        bundleStep(b, 'fast-checks', 'lint').command = [''];
+      },
+      'argv',
+    ],
+    [
+      'cwd-wrong',
+      (b) => {
+        bundleStep(b, 'fast-checks', 'lint').cwd = EVIDENCE_ROLES.clone;
+      },
+      'cwd must be',
+    ],
+    [
+      'cwd-missing',
+      (b) => {
+        delete bundleStep(b, 'fast-checks', 'lint').cwd;
+      },
+      'cwd',
+    ],
+    [
+      'startedAt-bad',
+      (b) => {
+        bundleStep(b, 'fast-checks', 'lint').startedAt = 'nope';
+      },
+      'startedAt',
+    ],
+    [
+      'duration-fraction',
+      (b) => {
+        bundleStep(b, 'fast-checks', 'lint').durationMs = 0.5;
+      },
+      'durationMs',
+    ],
+    [
+      'exitCode-missing',
+      (b) => {
+        delete bundleStep(b, 'fast-checks', 'lint').exitCode;
+      },
+      'exitCode',
+    ],
+    [
+      'exitCode-nonzero',
+      (b) => {
+        bundleStep(b, 'fast-checks', 'lint').exitCode = 1;
+      },
+      'exitCode',
+    ],
+    [
+      'result-fail',
+      (b) => {
+        bundleStep(b, 'fast-checks', 'lint').result = 'FAIL';
+      },
+      'result',
+    ],
+    [
+      'log-path-traversal',
+      (b) => {
+        bundleStep(b, 'fast-checks', 'lint').logSource = '../../etc/passwd.log';
+      },
+      'log path',
+    ],
+    [
+      'log-hash',
+      (b) => {
+        bundleStep(b, 'fast-checks', 'lint').logSha256 = `sha256:${'0'.repeat(64)}`;
+      },
+      'log hash mismatch',
+    ],
+    [
+      'clean-line-missing',
+      (b) => {
+        const step = bundleStep(b, 'fast-checks', 'workspace-clean-before');
+        step.logSha256 = `sha256:${'2'.repeat(64)}`;
+      },
+      'log hash mismatch',
+    ],
   ];
   for (const [label, mutate, expected] of cases) {
     const bundle = clone(f.bundle);
@@ -982,21 +1195,22 @@ Deno.test('step argv, cwd, timing, and logs are strict', async () => {
   const step = bundleStep(noLine, 'fast-checks', 'workspace-clean-before');
   step.logSha256 = await sha256(content);
   assert(
-    (await collectBundleFailures(noLine, {
-      expectedSha: SHA,
-      expectedTree: TREE,
-      read: (path) =>
-        path === 'ci/fast-checks/logs/workspace-clean-before.log'
-          ? Promise.resolve(encoder.encode(content))
-          : f.read(path),
-    })).some((x) => x.includes('missing the canonical clean-proof PASS line')),
+    (
+      await collectBundleFailures(noLine, {
+        expectedSha: SHA,
+        expectedTree: TREE,
+        read: (path) =>
+          path === 'ci/fast-checks/logs/workspace-clean-before.log'
+            ? Promise.resolve(encoder.encode(content))
+            : f.read(path),
+      })
+    ).some((x) => x.includes('missing the canonical clean-proof PASS line')),
   );
 
   const missingStep = clone(f.bundle);
-  (bundleJob(missingStep, 'fast-checks').steps as Array<unknown>) =
-    (bundleJob(missingStep, 'fast-checks').steps as Array<Record<string, unknown>>).filter((
-      entry,
-    ) => entry.name !== 'workspace-clean-after');
+  (bundleJob(missingStep, 'fast-checks').steps as Array<unknown>) = (
+    bundleJob(missingStep, 'fast-checks').steps as Array<Record<string, unknown>>
+  ).filter((entry) => entry.name !== 'workspace-clean-after');
   assert((await failuresFor(missingStep, f)).some((x) => x.includes('required step missing')));
 
   const duplicateStep = clone(f.bundle);
@@ -1015,53 +1229,83 @@ Deno.test('step argv, cwd, timing, and logs are strict', async () => {
 Deno.test('fresh-clone path binding rejects every decoy', async () => {
   const f = await shared();
   const cases: Array<[string, (b: Record<string, unknown>) => void, string]> = [
-    ['clone-source-decoy', (b) => {
-      bundleStep(b, 'fresh-clone', 'clone').command = [
-        'git',
-        'clone',
-        '--no-hardlinks',
-        '$DECOY',
-        EVIDENCE_ROLES.clone,
-      ];
-    }, 'clone'],
-    ['clone-destination-decoy', (b) => {
-      bundleStep(b, 'fresh-clone', 'clone').command = [
-        'git',
-        'clone',
-        '--no-hardlinks',
-        EVIDENCE_ROLES.source,
-        '/tmp/decoy-clone',
-      ];
-    }, 'clone'],
-    ['checkout-other-dir', (b) => {
-      bundleStep(b, 'fresh-clone', 'git-checkout').command = [
-        'git',
-        '-C',
-        '/tmp/decoy-clone',
-        'checkout',
-        SHA,
-      ];
-    }, 'git-checkout must run against'],
-    ['later-cwd-decoy', (b) => {
-      bundleStep(b, 'fresh-clone', 'install').cwd = '/tmp/decoy-clone';
-    }, 'cwd must be'],
-    ['isolation-missing', (b) => {
-      delete (bundleJob(b, 'fresh-clone').extras as Record<string, unknown>).isolation;
-    }, 'isolation'],
-    ['isolation-drifted', (b) => {
-      ((bundleJob(b, 'fresh-clone').extras as Record<string, unknown>).isolation as Record<
-        string,
-        unknown
-      >)
-        .denoDir = '/workspace/.deno';
-    }, 'denoDir'],
-    ['isolation-extra', (b) => {
-      ((bundleJob(b, 'fresh-clone').extras as Record<string, unknown>).isolation as Record<
-        string,
-        unknown
-      >)
-        .extra = 'field';
-    }, 'unknown fields'],
+    [
+      'clone-source-decoy',
+      (b) => {
+        bundleStep(b, 'fresh-clone', 'clone').command = [
+          'git',
+          'clone',
+          '--no-hardlinks',
+          '$DECOY',
+          EVIDENCE_ROLES.clone,
+        ];
+      },
+      'clone',
+    ],
+    [
+      'clone-destination-decoy',
+      (b) => {
+        bundleStep(b, 'fresh-clone', 'clone').command = [
+          'git',
+          'clone',
+          '--no-hardlinks',
+          EVIDENCE_ROLES.source,
+          '/tmp/decoy-clone',
+        ];
+      },
+      'clone',
+    ],
+    [
+      'checkout-other-dir',
+      (b) => {
+        bundleStep(b, 'fresh-clone', 'git-checkout').command = [
+          'git',
+          '-C',
+          '/tmp/decoy-clone',
+          'checkout',
+          SHA,
+        ];
+      },
+      'git-checkout must run against',
+    ],
+    [
+      'later-cwd-decoy',
+      (b) => {
+        bundleStep(b, 'fresh-clone', 'install').cwd = '/tmp/decoy-clone';
+      },
+      'cwd must be',
+    ],
+    [
+      'isolation-missing',
+      (b) => {
+        delete (bundleJob(b, 'fresh-clone').extras as Record<string, unknown>).isolation;
+      },
+      'isolation',
+    ],
+    [
+      'isolation-drifted',
+      (b) => {
+        (
+          (bundleJob(b, 'fresh-clone').extras as Record<string, unknown>).isolation as Record<
+            string,
+            unknown
+          >
+        ).denoDir = '/workspace/.deno';
+      },
+      'denoDir',
+    ],
+    [
+      'isolation-extra',
+      (b) => {
+        (
+          (bundleJob(b, 'fresh-clone').extras as Record<string, unknown>).isolation as Record<
+            string,
+            unknown
+          >
+        ).extra = 'field';
+      },
+      'unknown fields',
+    ],
   ];
   for (const [label, mutate, expected] of cases) {
     const bundle = clone(f.bundle);
@@ -1076,8 +1320,8 @@ Deno.test('fresh-clone path binding rejects every decoy', async () => {
 Deno.test('job-name, SHA/tree, and duplicate/unknown jobs are rejected', async () => {
   const f = await shared();
   const missing = clone(f.bundle);
-  missing.jobs = (missing.jobs as Array<Record<string, unknown>>).filter((job) =>
-    job.job !== 'packed'
+  missing.jobs = (missing.jobs as Array<Record<string, unknown>>).filter(
+    (job) => job.job !== 'packed',
   );
   assert(
     (await failuresFor(missing, f)).some((x) => x.includes('required job result missing: packed')),
@@ -1128,7 +1372,7 @@ async function reuseJob(
   record.reused = { runId: options.runId ?? 42, sha: SOURCE_SHA };
   for (const step of record.steps as Array<Record<string, unknown>>) {
     step.command = (step.command as string[]).map((element) =>
-      element === SHA ? SOURCE_SHA : element
+      element === SHA ? SOURCE_SHA : element,
     );
     const name = step.name as string;
     if (!name.startsWith('workspace-clean-') || !withLogs) continue;
@@ -1197,7 +1441,7 @@ Deno.test('reuse: the aggregator carries the stamp into the bundle it composes',
     record.reused = { runId: 42, sha: sourceSha };
     for (const step of record.steps as Array<Record<string, unknown>>) {
       step.command = (step.command as string[]).map((element) =>
-        element === SHA ? sourceSha : element
+        element === SHA ? sourceSha : element,
       );
       const name = step.name as string;
       if (!name.startsWith('workspace-clean-')) continue;
@@ -1277,12 +1521,14 @@ Deno.test('reuse: the site E2E sidecar and logs follow the source commit', async
   // commit is refused: the logs are the audit trail of the run that ran.
   const wrongLog = clone(f.bundle);
   const replayedWrongLog = await reuseJob(wrongLog, 'fresh-clone', { runId: 42 });
-  replayedWrongLog.overlays['ci/fresh-clone/logs/workspace-clean-before.log'] = `${
-    cleanProofLine(SHA, TREE, 'before')
-  }\n`;
+  replayedWrongLog.overlays['ci/fresh-clone/logs/workspace-clean-before.log'] = `${cleanProofLine(
+    SHA,
+    TREE,
+    'before',
+  )}\n`;
   assert(
     (await failuresWith(wrongLog, f, replayedWrongLog.overlays)).some((x) =>
-      x.includes('clean-proof')
+      x.includes('clean-proof'),
     ),
     'a reused job must be audited against ITS OWN commit for log lines',
   );
@@ -1303,16 +1549,14 @@ Deno.test('reuse: a reused job claiming the candidate commit is rejected', async
 
 Deno.test('reuse: a malformed or disagreeing stamp is rejected', async () => {
   const f = await shared();
-  for (
-    const [label, stamp, expected] of [
-      ['not-an-object', 'yes', 'reused must be an object'],
-      ['bad-runId', { runId: 0, sha: SOURCE_SHA }, 'reused.runId'],
-      ['bad-sha', { runId: 42, sha: 'nope' }, 'reused.sha'],
-      ['extra-field', { runId: 42, sha: SOURCE_SHA, extra: 1 }, 'unknown fields'],
-      // A stamp naming a different commit than the record cannot be traced.
-      ['disagreeing-sha', { runId: 42, sha: '9'.repeat(40) }, '!= job sha'],
-    ] as const
-  ) {
+  for (const [label, stamp, expected] of [
+    ['not-an-object', 'yes', 'reused must be an object'],
+    ['bad-runId', { runId: 0, sha: SOURCE_SHA }, 'reused.runId'],
+    ['bad-sha', { runId: 42, sha: 'nope' }, 'reused.sha'],
+    ['extra-field', { runId: 42, sha: SOURCE_SHA, extra: 1 }, 'unknown fields'],
+    // A stamp naming a different commit than the record cannot be traced.
+    ['disagreeing-sha', { runId: 42, sha: '9'.repeat(40) }, '!= job sha'],
+  ] as const) {
     const bundle = clone(f.bundle);
     const job = bundleJob(bundle, 'fast-checks');
     job.sha = SOURCE_SHA;
@@ -1320,9 +1564,9 @@ Deno.test('reuse: a malformed or disagreeing stamp is rejected', async () => {
     const failures = await failuresFor(bundle, f);
     assert(
       failures.some((x) => x.includes(expected)),
-      `${label}: expected a failure mentioning ${JSON.stringify(expected)}, got ${
-        failures.join(' | ')
-      }`,
+      `${label}: expected a failure mentioning ${JSON.stringify(expected)}, got ${failures.join(
+        ' | ',
+      )}`,
     );
   }
 });
@@ -1366,26 +1610,25 @@ Deno.test('collectJobFailures rejects old-style and decoy fresh clones', async (
       'task-gate-packed',
       'task-site-build',
       'task-site-e2e',
-    ]
-      .includes(step.name)
+    ].includes(step.name),
   );
   assert(
     (await collectJobFailures(oldStyle as never, SHA, TREE)).some((x) =>
-      x.includes('required step missing: workspace-clean-before')
+      x.includes('required step missing: workspace-clean-before'),
     ),
   );
 
   const decoy = cloneJobs();
   const decoyFresh = decoy.find((entry) => entry.job.job === 'fresh-clone');
   if (!decoyFresh) throw new Error('fresh fixture missing');
-  const checkout = (decoyFresh.job.steps as Array<Record<string, unknown>>).find((step) =>
-    step.name === 'git-checkout'
+  const checkout = (decoyFresh.job.steps as Array<Record<string, unknown>>).find(
+    (step) => step.name === 'git-checkout',
   );
   if (!checkout) throw new Error('git-checkout fixture missing');
   (checkout.command as string[])[2] = '/tmp/decoy-clone';
   assert(
     (await collectJobFailures(decoy as never, SHA, TREE)).some((x) =>
-      x.includes('git-checkout must run against')
+      x.includes('git-checkout must run against'),
     ),
   );
 
@@ -1394,27 +1637,27 @@ Deno.test('collectJobFailures rejects old-style and decoy fresh clones', async (
   const noSiteProof = cloneJobs();
   const noSiteFresh = noSiteProof.find((entry) => entry.job.job === 'fresh-clone');
   if (!noSiteFresh) throw new Error('fresh fixture missing');
-  noSiteFresh.job.steps = (noSiteFresh.job.steps as Array<{ name: string }>).filter((step) =>
-    step.name !== 'task-site-e2e'
+  noSiteFresh.job.steps = (noSiteFresh.job.steps as Array<{ name: string }>).filter(
+    (step) => step.name !== 'task-site-e2e',
   );
   assert(
     (await collectJobFailures(noSiteProof as never, SHA, TREE)).some((x) =>
-      x.includes('required step missing: task-site-e2e')
+      x.includes('required step missing: task-site-e2e'),
     ),
   );
 
   const failed = cloneJobs();
   const failedFresh = failed.find((entry) => entry.job.job === 'fresh-clone');
   if (!failedFresh) throw new Error('fresh fixture missing');
-  const packed = (failedFresh.job.steps as Array<Record<string, unknown>>).find((step) =>
-    step.name === 'task-gate-packed'
+  const packed = (failedFresh.job.steps as Array<Record<string, unknown>>).find(
+    (step) => step.name === 'task-gate-packed',
   );
   if (!packed) throw new Error('packed fixture missing');
   packed.result = 'FAIL';
   packed.exitCode = 1;
   assert(
     (await collectJobFailures(failed as never, SHA, TREE)).some((x) =>
-      x.includes('task-gate-packed')
+      x.includes('task-gate-packed'),
     ),
   );
 });
@@ -1458,9 +1701,10 @@ Deno.test('rollup checks are unchanged and strict', () => {
       reportSha256: 'a'.repeat(64),
       candidateSha: SHA,
       projects: Object.fromEntries(
-        REQUIRED_SITE_BROWSERS.map((
+        REQUIRED_SITE_BROWSERS.map((browser) => [
           browser,
-        ) => [browser, { passed: floor, failed: 0, skipped: 0, flaky: 0 }]),
+          { passed: floor, failed: 0, skipped: 0, flaky: 0 },
+        ]),
       ),
     },
   };
@@ -1470,9 +1714,10 @@ Deno.test('rollup checks are unchanged and strict', () => {
   skipped.siteE2e.passed = 0;
   skipped.siteE2e.expected = 3;
   skipped.siteE2e.projects = Object.fromEntries(
-    REQUIRED_SITE_BROWSERS.map((
+    REQUIRED_SITE_BROWSERS.map((browser) => [
       browser,
-    ) => [browser, { passed: 0, failed: 0, skipped: 1, flaky: 0 }]),
+      { passed: 0, failed: 0, skipped: 1, flaky: 0 },
+    ]),
   );
   assert(collectRollupFailures(skipped).some((x) => x.includes('skipped=1')));
 });
@@ -1480,11 +1725,13 @@ Deno.test('rollup checks are unchanged and strict', () => {
 function tinySiteReport(configFile: string) {
   return {
     config: { configFile, grep: {} },
-    suites: [{
-      specs: REQUIRED_SITE_BROWSERS.map((browser) => ({
-        tests: [{ projectName: browser, status: 'expected', results: [{ status: 'passed' }] }],
-      })),
-    }],
+    suites: [
+      {
+        specs: REQUIRED_SITE_BROWSERS.map((browser) => ({
+          tests: [{ projectName: browser, status: 'expected', results: [{ status: 'passed' }] }],
+        })),
+      },
+    ],
     stats: { expected: REQUIRED_SITE_BROWSERS.length },
   };
 }
@@ -1572,13 +1819,19 @@ Deno.test('site e2e recompute guard fails closed on stale, forged, or missing ev
     { ...siteE2e, candidateSha: 'c'.repeat(40) },
     { readReport: read, expectedSha: SHA },
   );
-  assert(stale.some((x) => x.includes('candidateSha')), stale.join(' | '));
+  assert(
+    stale.some((x) => x.includes('candidateSha')),
+    stale.join(' | '),
+  );
 
   const forgedTotal = await collectSiteE2eRecomputeFailures(
     { ...siteE2e, passed: siteE2e.passed + 1 },
     { readReport: read, expectedSha: SHA },
   );
-  assert(forgedTotal.some((x) => x.includes('!= recomputed')), forgedTotal.join(' | '));
+  assert(
+    forgedTotal.some((x) => x.includes('!= recomputed')),
+    forgedTotal.join(' | '),
+  );
 
   const forgedProjects = clone(siteE2e);
   forgedProjects.projects.chromium.passed += 1;
@@ -1595,13 +1848,19 @@ Deno.test('site e2e recompute guard fails closed on stale, forged, or missing ev
     { ...siteE2e, reportSha256: '0'.repeat(64) },
     { readReport: read, expectedSha: SHA },
   );
-  assert(badHash.some((x) => x.includes('reportSha256 does not match')), badHash.join(' | '));
+  assert(
+    badHash.some((x) => x.includes('reportSha256 does not match')),
+    badHash.join(' | '),
+  );
 
   const missing = await collectSiteE2eRecomputeFailures(siteE2e, {
     readReport: () => Promise.resolve(null),
     expectedSha: SHA,
   });
-  assert(missing.some((x) => x.includes('raw Playwright report missing')), missing.join(' | '));
+  assert(
+    missing.some((x) => x.includes('raw Playwright report missing')),
+    missing.join(' | '),
+  );
 
   const otherConfig = { ...report, config: { ...report.config, configFile: '/x/e2e/other.ts' } };
   const otherBytes = encoder.encode(JSON.stringify(otherConfig));
@@ -1610,7 +1869,10 @@ Deno.test('site e2e recompute guard fails closed on stale, forged, or missing ev
     readReport: () => Promise.resolve(otherBytes),
     expectedSha: SHA,
   });
-  assert(wrongConfig.some((x) => x.includes('configFile')), wrongConfig.join(' | '));
+  assert(
+    wrongConfig.some((x) => x.includes('configFile')),
+    wrongConfig.join(' | '),
+  );
 });
 
 function rollupSiteE2e(bundle: Record<string, unknown>): Record<string, unknown> {
@@ -1633,7 +1895,10 @@ Deno.test('bundle validation recomputes the site e2e sidecar from the staged raw
   site.passed = (site.passed as number) + 1;
   site.expected = (site.expected as number) + 1;
   const forgedFailures = await failuresFor(forged, f);
-  assert(forgedFailures.some((x) => x.includes('!= recomputed')), forgedFailures.join(' | '));
+  assert(
+    forgedFailures.some((x) => x.includes('!= recomputed')),
+    forgedFailures.join(' | '),
+  );
 
   const badHash = clone(f.bundle);
   rollupSiteE2e(badHash).reportSha256 = '0'.repeat(64);
@@ -1641,11 +1906,11 @@ Deno.test('bundle validation recomputes the site e2e sidecar from the staged raw
 
   const noReport: Fixture = {
     ...f,
-    read: (path) => path === SITE_E2E_REPORT_BUNDLE_PATH ? Promise.resolve(null) : f.read(path),
+    read: (path) => (path === SITE_E2E_REPORT_BUNDLE_PATH ? Promise.resolve(null) : f.read(path)),
   };
   assert(
     (await failuresFor(clone(f.bundle), noReport)).some((x) =>
-      x.includes('raw Playwright report missing')
+      x.includes('raw Playwright report missing'),
     ),
   );
 });
@@ -1689,8 +1954,8 @@ async function stageScratchSiteE2e(
       );
     }
     const rollup = await stageCloneSiteE2e(cloneDir, outDir, SHA, options);
-    const stagedText = await Deno.readTextFile(join(outDir, SITE_E2E_REPORT_FILE)).catch(() =>
-      null
+    const stagedText = await Deno.readTextFile(join(outDir, SITE_E2E_REPORT_FILE)).catch(
+      () => null,
     );
     return { rollup, stagedText };
   } finally {
@@ -1767,11 +2032,13 @@ Deno.test('stageCloneSiteE2e: a red run stages the report and never fakes a pass
     [],
   );
   assert(
-    (await collectRollupFailures({
-      artifactCheck: true,
-      consumers: REQUIRED_PACKED_CONSUMERS as unknown as string[],
-      siteE2e: staged.rollup,
-    })).some((failure) => failure.includes('Site E2E')),
+    (
+      await collectRollupFailures({
+        artifactCheck: true,
+        consumers: REQUIRED_PACKED_CONSUMERS as unknown as string[],
+        siteE2e: staged.rollup,
+      })
+    ).some((failure) => failure.includes('Site E2E')),
     'a red Site E2E rollup must not validate',
   );
 

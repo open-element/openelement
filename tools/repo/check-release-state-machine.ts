@@ -125,15 +125,11 @@ export function validateReleaseState(
       failures.push('www COMMON_PUBLISHED_VERSION must be null (no common stable version)');
     }
   } else if (commonMatch[2] !== state.commonCompleteVersion) {
-    failures.push(
-      `www COMMON_PUBLISHED_VERSION must be ${state.commonCompleteVersion}`,
-    );
+    failures.push(`www COMMON_PUBLISHED_VERSION must be ${state.commonCompleteVersion}`);
   }
   for (const entry of state.packages) {
     if (!siteVersionSource.includes(`'${entry.name}': 'v${entry.registry.latest}'`)) {
-      failures.push(
-        `www PUBLISHED_LATEST must record ${entry.name} v${entry.registry.latest}`,
-      );
+      failures.push(`www PUBLISHED_LATEST must record ${entry.name} v${entry.registry.latest}`);
     }
   }
   return failures;
@@ -194,7 +190,8 @@ export function validateRegistryEvidence(
       );
     }
     if (
-      prerelease.publishedPackages.includes(entry.name) && !versions.includes(prerelease.version)
+      prerelease.publishedPackages.includes(entry.name) &&
+      !versions.includes(prerelease.version)
     ) {
       failures.push(
         `${entry.name} is recorded as published at ${prerelease.version} but is absent`,
@@ -227,9 +224,7 @@ export function validateRegistryEvidence(
 }
 
 async function readState(): Promise<ReleaseStateV3> {
-  return JSON.parse(
-    await Deno.readTextFile('docs/release/release-state.json'),
-  ) as ReleaseStateV3;
+  return JSON.parse(await Deno.readTextFile('docs/release/release-state.json')) as ReleaseStateV3;
 }
 
 async function workspaceVersions(): Promise<Map<string, string>> {

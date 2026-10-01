@@ -196,8 +196,9 @@ function headingSegments(html: string): string[] {
  * one id next to the generated one and render two.
  */
 function removeIdAttribute(attrs: string): string {
-  const spans = scanAttributeSpans(attrs, 0, attrs.length)
-    .filter((span) => span.name.toLowerCase() === 'id');
+  const spans = scanAttributeSpans(attrs, 0, attrs.length).filter(
+    (span) => span.name.toLowerCase() === 'id',
+  );
   let out = attrs;
   for (const idSpan of spans.reverse()) {
     let removeStart = idSpan.start;
@@ -236,10 +237,12 @@ export function stripHtmlToText(html: string): string {
  * later `Foo` heading.
  */
 export function slugifyHeadingId(label: string, usedIds: Set<string>): string {
-  const stem = label.toLowerCase().normalize('NFKD').replace(/[^\p{L}\p{N}]+/gu, '-').replace(
-    /(^-|-$)/g,
-    '',
-  ) || 'section';
+  const stem =
+    label
+      .toLowerCase()
+      .normalize('NFKD')
+      .replace(/[^\p{L}\p{N}]+/gu, '-')
+      .replace(/(^-|-$)/g, '') || 'section';
   let candidate = stem;
   let suffix = 2;
   while (usedIds.has(candidate)) {
@@ -286,7 +289,10 @@ export function prepareArticle(
             if (stripped === label) break;
             label = stripped;
           }
-          label = label.replace(/[<>]/g, '').replace(/&[^;]+;/g, ' ').trim();
+          label = label
+            .replace(/[<>]/g, '')
+            .replace(/&[^;]+;/g, ' ')
+            .trim();
           const id = slugifyHeadingId(label, usedIds);
           outline.push({ id, label, level: Number(depth) as 2 | 3 });
           const cleanAttrs = removeIdAttribute(String(attrs));

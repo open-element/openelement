@@ -27,19 +27,17 @@ Deno.test('parseLineVersion parses stable and prerelease line versions', () => {
 });
 
 Deno.test('parseLineVersion rejects non-line versions', () => {
-  for (
-    const bad of [
-      '1.2',
-      'v1.2.3',
-      '1.2.3+build',
-      '1.2.3-alpha..1',
-      '1.2.3-alpha.01',
-      '01.2.3',
-      ' 1.2.3',
-      '1.2.3 ',
-      '9007199254740993.0.0',
-    ]
-  ) {
+  for (const bad of [
+    '1.2',
+    'v1.2.3',
+    '1.2.3+build',
+    '1.2.3-alpha..1',
+    '1.2.3-alpha.01',
+    '01.2.3',
+    ' 1.2.3',
+    '1.2.3 ',
+    '9007199254740993.0.0',
+  ]) {
     assertThrows(() => parseLineVersion(bad), Error, 'Invalid semver', bad);
     assertEquals(tryParseLineVersion(bad), undefined, bad);
   }
@@ -67,14 +65,13 @@ Deno.test('previousPrereleaseVersion walks identifiers on the same line', () => 
 });
 
 Deno.test('formatLineVersion round-trips losslessly parsed identifiers', () => {
-  for (
-    const version of [
-      '1.2.3-alpha',
-      '1.2.3-alpha.1.x',
-      '0.44.0-beta.2.10',
-      '1.2.3-12345678901234567890',
-    ]
-  ) assertEquals(formatLineVersion(parseLineVersion(version)), version);
+  for (const version of [
+    '1.2.3-alpha',
+    '1.2.3-alpha.1.x',
+    '0.44.0-beta.2.10',
+    '1.2.3-12345678901234567890',
+  ])
+    assertEquals(formatLineVersion(parseLineVersion(version)), version);
 });
 
 Deno.test('assertPublicReleaseVersion admits the current public alpha and rejects malformed input', () => {

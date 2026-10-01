@@ -24,7 +24,9 @@ import { deepFirstExpr, deepQueryFirstFn } from './helpers.ts';
 const PORT = process.env.UI_DOGFOOD_E2E_PORT ?? '4197';
 
 test.describe('root boundaries', () => {
-  test('open ui primitive exposes its shadow root; light and closed roots hold their contracts', async ({ page }) => {
+  test('open ui primitive exposes its shadow root; light and closed roots hold their contracts', async ({
+    page,
+  }) => {
     await page.goto('/boundaries');
     await page.waitForFunction(() => customElements.get('open-badge') !== undefined);
 

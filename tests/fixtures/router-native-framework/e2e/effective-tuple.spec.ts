@@ -80,7 +80,11 @@ async function nativeSubmit(browser: Browser, selector: string): Promise<void> {
 }
 
 test.describe('effective submission tuple (#1339 §5)', () => {
-  test('urlencoded default: enhanced and native are byte-identical on the wire', async ({ page, request, browser }) => {
+  test('urlencoded default: enhanced and native are byte-identical on the wire', async ({
+    page,
+    request,
+    browser,
+  }) => {
     await wireReset(request);
     const countBefore = await actionCount(request);
     await enhancedSubmit(page, '#urlenc-submit', '__preUrlenc');
@@ -105,7 +109,11 @@ test.describe('effective submission tuple (#1339 §5)', () => {
     expect(await actionCount(request)).toBe(countBefore + 2);
   });
 
-  test('urlencoded newline parity: a textarea serializes %0D%0A byte-identically on both paths', async ({ page, request, browser }) => {
+  test('urlencoded newline parity: a textarea serializes %0D%0A byte-identically on both paths', async ({
+    page,
+    request,
+    browser,
+  }) => {
     // Mixed newlines in one value: lone LF, lone CR and an existing CRLF all
     // become exactly one CRLF on the wire (the platform urlencoded newline
     // rule). The enhanced path must produce the same raw bytes as the native
@@ -148,7 +156,11 @@ test.describe('effective submission tuple (#1339 §5)', () => {
     await context.close();
   });
 
-  test('multipart (form enctype): boundary is real, fields survive, paths agree', async ({ page, request, browser }) => {
+  test('multipart (form enctype): boundary is real, fields survive, paths agree', async ({
+    page,
+    request,
+    browser,
+  }) => {
     await wireReset(request);
     await enhancedSubmit(page, '#multipart-submit', '__preMultipart');
     const enhanced = await wireLast(request);
@@ -189,7 +201,11 @@ test.describe('effective submission tuple (#1339 §5)', () => {
     expect(native!.rawBody).toContain('via override');
   });
 
-  test('text/plain is never intercepted: native submission on both paths', async ({ page, request, browser }) => {
+  test('text/plain is never intercepted: native submission on both paths', async ({
+    page,
+    request,
+    browser,
+  }) => {
     const actionHeaderRequests: string[] = [];
     page.on('request', (r) => {
       if (r.headers()['x-openelement-action']) actionHeaderRequests.push(r.url());
@@ -201,8 +217,8 @@ test.describe('effective submission tuple (#1339 §5)', () => {
     // natively; whatever the server answers, the page performs a real
     // navigation (the tuple-probes action expects a form body, so the native
     // text/plain submission need not produce the ?sent=1 PRG target).
-    const posted = page.waitForResponse((r) =>
-      r.request().method() === 'POST' && r.url().includes('/tuple-probes')
+    const posted = page.waitForResponse(
+      (r) => r.request().method() === 'POST' && r.url().includes('/tuple-probes'),
     );
     await page.click('#tp-submit');
     await posted;
@@ -219,8 +235,8 @@ test.describe('effective submission tuple (#1339 §5)', () => {
     const context = await browser.newContext({ javaScriptEnabled: false });
     const plainPage = await context.newPage();
     await plainPage.goto('/tuple-probes');
-    const nativePosted = plainPage.waitForResponse((r) =>
-      r.request().method() === 'POST' && r.url().includes('/tuple-probes')
+    const nativePosted = plainPage.waitForResponse(
+      (r) => r.request().method() === 'POST' && r.url().includes('/tuple-probes'),
     );
     await plainPage.click('#tp-submit');
     await nativePosted;
@@ -231,7 +247,11 @@ test.describe('effective submission tuple (#1339 §5)', () => {
     await context.close();
   });
 
-  test('submitter formmethod=get on a POST form: native GET navigation, never intercepted', async ({ page, request, browser }) => {
+  test('submitter formmethod=get on a POST form: native GET navigation, never intercepted', async ({
+    page,
+    request,
+    browser,
+  }) => {
     const actionHeaderRequests: string[] = [];
     page.on('request', (r) => {
       if (r.headers()['x-openelement-action']) actionHeaderRequests.push(r.url());
@@ -255,7 +275,11 @@ test.describe('effective submission tuple (#1339 §5)', () => {
     expect(await wireLast(request)).toBeNull();
   });
 
-  test('submitter formmethod=post on a GET form: enhanced POST, byte-identical to native', async ({ page, request, browser }) => {
+  test('submitter formmethod=post on a GET form: enhanced POST, byte-identical to native', async ({
+    page,
+    request,
+    browser,
+  }) => {
     await wireReset(request);
     const countBefore = await actionCount(request);
     await enhancedSubmit(page, '#gp-submit', '__preGetPost');
@@ -275,7 +299,10 @@ test.describe('effective submission tuple (#1339 §5)', () => {
     expect(native!.rawBody).toBe(enhanced!.rawBody);
   });
 
-  test('method=dialog closes the dialog natively and is never fetch()ed', async ({ page, request }) => {
+  test('method=dialog closes the dialog natively and is never fetch()ed', async ({
+    page,
+    request,
+  }) => {
     const actionHeaderRequests: string[] = [];
     page.on('request', (r) => {
       if (r.headers()['x-openelement-action']) actionHeaderRequests.push(r.url());
@@ -290,7 +317,10 @@ test.describe('effective submission tuple (#1339 §5)', () => {
     expect(await wireLast(request)).toBeNull();
   });
 
-  test("submitter formtarget=_blank keeps the browser's new-tab behavior", async ({ page, request }) => {
+  test("submitter formtarget=_blank keeps the browser's new-tab behavior", async ({
+    page,
+    request,
+  }) => {
     const actionHeaderRequests: string[] = [];
     page.on('request', (r) => {
       if (r.headers()['x-openelement-action']) actionHeaderRequests.push(r.url());

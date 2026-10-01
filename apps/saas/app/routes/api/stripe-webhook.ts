@@ -57,7 +57,7 @@ export async function readBoundedRawBody(
         };
         const onAbort = () =>
           finish(() =>
-            reject(request.signal.reason ?? new DOMException('Request aborted', 'AbortError'))
+            reject(request.signal.reason ?? new DOMException('Request aborted', 'AbortError')),
           );
         const timer = setTimeout(
           () => finish(() => reject(new WebhookBodyReadTimeoutError())),
@@ -109,7 +109,10 @@ export function createStripeWebhook(fetchImpl: typeof fetch = fetch) {
     const livemode = serverSecret(env, 'STRIPE_LIVEMODE');
     const queue = env.PAYMENT_EVENT_QUEUE as PaymentQueue | undefined;
     if (
-      !webhookSecret || !supabaseUrl || !serviceRoleKey || !queue ||
+      !webhookSecret ||
+      !supabaseUrl ||
+      !serviceRoleKey ||
+      !queue ||
       !['true', 'false'].includes(livemode)
     ) {
       logPayment('error', { event: 'stripe_webhook_rejected', reason: 'webhook_unavailable' });

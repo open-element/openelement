@@ -25,7 +25,9 @@ const FOOTER_COLUMNS_EN = ['Product', 'Resources', 'Company', 'Legal'] as const;
 const FOOTER_COLUMNS_ZH = ['产品', '资源', '项目', '法律'] as const;
 
 test.describe('Site chrome: docs sidebar', () => {
-  test('guide pages render the filtered section sidebar with the active page marked', async ({ page }) => {
+  test('guide pages render the filtered section sidebar with the active page marked', async ({
+    page,
+  }) => {
     await page.setViewportSize(DESKTOP);
     await page.goto('/guide/getting-started');
     await page.waitForLoadState('networkidle');
@@ -43,9 +45,9 @@ test.describe('Site chrome: docs sidebar', () => {
     await expect(sidebar.locator('[aria-current="page"]')).toHaveCount(1);
 
     // Sidebar link targets are real in-site routes (or explicit externals).
-    const hrefs = await sidebar.getByRole('link').evaluateAll((links) =>
-      links.map((link) => link.getAttribute('href') ?? '')
-    );
+    const hrefs = await sidebar
+      .getByRole('link')
+      .evaluateAll((links) => links.map((link) => link.getAttribute('href') ?? ''));
     expect(hrefs.length).toBeGreaterThan(5);
     for (const href of hrefs) {
       expect(href.startsWith('/') || href.startsWith('https://')).toBe(true);
@@ -81,7 +83,9 @@ test.describe('Site chrome: docs sidebar', () => {
     await expect(page.getByRole('navigation', { name: 'Documentation navigation' })).toBeHidden();
   });
 
-  test('zh guide pages localize the sidebar landmark, labels, and link targets', async ({ page }) => {
+  test('zh guide pages localize the sidebar landmark, labels, and link targets', async ({
+    page,
+  }) => {
     await page.setViewportSize(DESKTOP);
     await page.goto('/zh/guide/getting-started');
     await page.waitForLoadState('networkidle');
@@ -100,7 +104,9 @@ test.describe('Site chrome: docs sidebar', () => {
     await expect(sidebar.getByRole('link', { name: 'Getting Started' })).toHaveCount(0);
   });
 
-  test('mobile reading layouts expose the sidebar through a native disclosure', async ({ page }) => {
+  test('mobile reading layouts expose the sidebar through a native disclosure', async ({
+    page,
+  }) => {
     await page.setViewportSize(MOBILE);
     await page.goto('/guide/getting-started');
     await page.waitForLoadState('networkidle');
@@ -217,7 +223,9 @@ test.describe('Site chrome: skip link and language switcher', () => {
 test.describe('Site chrome: header repository link', () => {
   const REPOSITORY = 'https://github.com/open-element/openelement';
 
-  test('the header exposes one labeled repository link beside the theme toggle', async ({ page }) => {
+  test('the header exposes one labeled repository link beside the theme toggle', async ({
+    page,
+  }) => {
     await page.setViewportSize(DESKTOP);
     await page.goto('/guide/getting-started');
     await page.waitForLoadState('networkidle');
@@ -283,7 +291,7 @@ test.describe('Site chrome: reading rail scrollspy', () => {
     const unresolved = await page.evaluate(() =>
       [...document.querySelectorAll('open-page-rail .desktop-outline nav.links a[href^="#"]')]
         .map((a) => a.getAttribute('href')!.slice(1))
-        .filter((id) => document.getElementById(id) === null)
+        .filter((id) => document.getElementById(id) === null),
     );
     expect(unresolved).toEqual([]);
 

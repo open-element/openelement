@@ -21,12 +21,13 @@ import { assert, assertEquals } from '@std/assert';
 import { dirname, join } from '@std/path';
 
 const repoRoot = join(dirname(new URL(import.meta.url).pathname), '..', '..');
-const rootConfig = JSON.parse(
-  await Deno.readTextFile(join(repoRoot, 'deno.json')),
-) as { tasks: Record<string, string>; workspace?: string[] };
-const repoConfig = JSON.parse(
-  await Deno.readTextFile(join(repoRoot, 'tools/repo/deno.json')),
-) as { tasks: Record<string, string> };
+const rootConfig = JSON.parse(await Deno.readTextFile(join(repoRoot, 'deno.json'))) as {
+  tasks: Record<string, string>;
+  workspace?: string[];
+};
+const repoConfig = JSON.parse(await Deno.readTextFile(join(repoRoot, 'tools/repo/deno.json'))) as {
+  tasks: Record<string, string>;
+};
 const releaseConfig = JSON.parse(
   await Deno.readTextFile(join(repoRoot, 'tools/release/deno.json')),
 ) as { tasks: Record<string, string> };
@@ -77,7 +78,9 @@ Deno.test('task contract: verify runs every verify:core step', () => {
 });
 
 Deno.test('task contract: verify adds only the documented local-only steps', () => {
-  const extras = gateSteps('verify').filter((step) => !coreSteps.includes(step)).sort();
+  const extras = gateSteps('verify')
+    .filter((step) => !coreSteps.includes(step))
+    .sort();
   assertEquals(
     extras,
     ['check', 'saas:verify', 'saas:workers', 'test'],

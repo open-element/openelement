@@ -55,10 +55,7 @@ Deno.test('lit renderer: entry forks tag resolution and page render (no page-dat
     buildEntryDescriptor(litRoutes, { renderer: 'lit', appShell: false, ssg: true }),
   );
   // First import installs the lit DOM shim before any route module evaluates.
-  assertEquals(
-    litEntry.startsWith("import '@lit-labs/ssr/lib/install-global-dom-shim.js';"),
-    true,
-  );
+  assertEquals(litEntry.startsWith("import '@lit-labs/ssr/lib/install-global-dom-shim.js';"), true);
   // The lit forks bind through the typed runtime seam (ADR-0160 rule a): the
   // lit page-tag resolver is an import and the lit page renderer is bound
   // inside the generated-app factory via the pageRuntime config (#1470
@@ -97,7 +94,10 @@ Deno.test('lit renderer: client entry installs hydrate-support first and stays e
   );
   const importLines = client.split('\n').filter((line) => line.startsWith('import '));
   assertEquals(importLines[0], "import '@lit-labs/ssr-client/lit-element-hydrate-support.js';");
-  assertEquals(importLines.some((line) => line.includes('@openelement/element')), false);
+  assertEquals(
+    importLines.some((line) => line.includes('@openelement/element')),
+    false,
+  );
   assertStringIncludes(client, 'createEnhanceClient');
   assertStringIncludes(client, '__liftDeferHydration');
   // The header comment names the native claim helpers to document their

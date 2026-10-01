@@ -78,30 +78,36 @@ export function computeSubmissionTuple(
   // #598: form.action IDL returns an <input name="action"> element when
   // present — always resolve the action ATTRIBUTE (or the document URL).
   const actionOverride = submitterOverride('action');
-  const action = actionOverride !== null
-    ? (submitter as HTMLButtonElement).formAction
-    : (form.getAttribute('action')
-      ? new URL(form.getAttribute('action') as string, baseUrl).href
-      : documentUrl);
+  const action =
+    actionOverride !== null
+      ? (submitter as HTMLButtonElement).formAction
+      : form.getAttribute('action')
+        ? new URL(form.getAttribute('action') as string, baseUrl).href
+        : documentUrl;
   const rawMethod = submitterOverride('method') ?? form.getAttribute('method') ?? '';
   const methodUpper = rawMethod.toUpperCase();
-  const method: SubmissionMethod = methodUpper === 'POST'
-    ? 'POST'
-    : methodUpper === 'DIALOG'
-    ? 'DIALOG'
-    : 'GET';
-  const rawEnctype = (submitterOverride('enctype') ?? form.getAttribute('enctype') ?? '')
-    .toLowerCase();
-  const enctype: SubmissionEnctype = rawEnctype === 'multipart/form-data'
-    ? 'multipart/form-data'
-    : rawEnctype === 'text/plain'
-    ? 'text/plain'
-    : 'application/x-www-form-urlencoded';
+  const method: SubmissionMethod =
+    methodUpper === 'POST' ? 'POST' : methodUpper === 'DIALOG' ? 'DIALOG' : 'GET';
+  const rawEnctype = (
+    submitterOverride('enctype') ??
+    form.getAttribute('enctype') ??
+    ''
+  ).toLowerCase();
+  const enctype: SubmissionEnctype =
+    rawEnctype === 'multipart/form-data'
+      ? 'multipart/form-data'
+      : rawEnctype === 'text/plain'
+        ? 'text/plain'
+        : 'application/x-www-form-urlencoded';
   // HTML's get-an-element's-target algorithm: an absent target inherits
   // the first document base target; an explicitly empty target stays empty.
-  const target = submitterOverride('target') ?? form.getAttribute('target') ??
-    form.ownerDocument?.querySelector('base[target]')?.getAttribute('target') ?? '';
-  const noValidate = (submitter ? submitter.hasAttribute('formnovalidate') : false) ||
+  const target =
+    submitterOverride('target') ??
+    form.getAttribute('target') ??
+    form.ownerDocument?.querySelector('base[target]')?.getAttribute('target') ??
+    '';
+  const noValidate =
+    (submitter ? submitter.hasAttribute('formnovalidate') : false) ||
     form.hasAttribute('novalidate');
   return { submitter, action, method, enctype, target, noValidate };
 }
@@ -162,7 +168,9 @@ export function createFormEnhance(deps: FormEnhanceDeps): FormEnhance {
   function markEnhancedNav(): void {
     try {
       win.sessionStorage.setItem(NAV_KEY, '1');
-    } catch { /* privacy modes */ }
+    } catch {
+      /* privacy modes */
+    }
   }
   function hasEnhancedNav(): boolean {
     try {
@@ -214,7 +222,8 @@ export function createFormEnhance(deps: FormEnhanceDeps): FormEnhance {
     // this same ownership check to successes AND failures, before any DOM,
     // URL or fallback-reload side effect. Fragment navigation keeps ownership.
     const isCurrent = (): boolean =>
-      seq === formState.__openElementSeq && form.isConnected !== false &&
+      seq === formState.__openElementSeq &&
+      form.isConnected !== false &&
       form.ownerDocument === submittedDocument &&
       win.location.href.split('#')[0] === submittedPage;
     // #544: the submitter's name/value is part of the body — the body never
@@ -244,81 +253,88 @@ export function createFormEnhance(deps: FormEnhanceDeps): FormEnhance {
       body = params.toString();
       headers['content-type'] = 'application/x-www-form-urlencoded';
     }
-    const regionName = (submitter && submitter.getAttribute('data-open-region-target')) ||
+    const regionName =
+      (submitter && submitter.getAttribute('data-open-region-target')) ||
       form.getAttribute('data-open-region-target');
-    win.fetch(tuple.action, {
-      method: 'POST',
-      body: body,
-      headers: headers,
-    }).then((response) => {
-      return response.text().then((html) => {
-        return {
-          html: html,
-          url: response.url,
-          status: response.status,
-          type: response.headers.get('content-type') || '',
-        };
-      });
-    }).then((result) => {
-      formState.__openElementBusy = false;
-      if (!isCurrent()) return;
-      const target = new URL(result.url, win.location.href);
-      // #555: cross-origin targets are real navigations, never pushState.
-      if (target.origin !== win.location.origin) {
-        win.location.assign(target.href);
-        return;
-      }
-      // #552: only 200/422 HTML responses morph; anything else (500, empty,
-      // non-HTML) navigates so the real page shows instead of morphing an
-      // error page into place. #974: an empty 200 text/html body would morph
-      // the live page to blank — an empty body navigates too.
-      const morphable = (result.status === 200 || result.status === 422) &&
-        result.type.indexOf('text/html') !== -1 && result.html.trim() !== '';
-      if (morphable) {
-        // Cancelable failure hook before the default morph.
-        if (result.status === 422) {
-          const proceed = form.dispatchEvent(
-            new win.CustomEvent('open:action-failure', {
-              cancelable: true,
-              detail: { status: result.status, form: form, response: result },
-            }),
-          );
-          if (!proceed) return;
-        }
-        if (morphDocument(result.html, form, regionName)) {
-          scanSubmitRoots(doc);
-          observeVisible();
-          // #565: the fragment never travels over the wire; keep the local one
-          // when the target is the same page.
-          const samePage = target.pathname === win.location.pathname &&
-            target.search === win.location.search;
-          const finalUrl = target.href + (samePage && !target.hash ? win.location.hash : '');
-          if (finalUrl !== win.location.href) {
-            markEnhancedNav();
-            win.history.pushState({}, '', finalUrl);
-          }
+    win
+      .fetch(tuple.action, {
+        method: 'POST',
+        body: body,
+        headers: headers,
+      })
+      .then((response) => {
+        return response.text().then((html) => {
+          return {
+            html: html,
+            url: response.url,
+            status: response.status,
+            type: response.headers.get('content-type') || '',
+          };
+        });
+      })
+      .then((result) => {
+        formState.__openElementBusy = false;
+        if (!isCurrent()) return;
+        const target = new URL(result.url, win.location.href);
+        // #555: cross-origin targets are real navigations, never pushState.
+        if (target.origin !== win.location.origin) {
+          win.location.assign(target.href);
           return;
         }
-      }
-      win.location.assign(target.href);
-    }).catch((err: unknown) => {
-      formState.__openElementBusy = false;
-      if (!isCurrent()) return;
-      // #585: give the app a hook before the reload fallback — a transient
-      // failure must not silently discard in-flight input elsewhere on the
-      // page. preventDefault() suppresses the reload.
-      const proceed = form.dispatchEvent(
-        new win.CustomEvent('open:action-error', {
-          cancelable: true,
-          detail: { error: err, form: form },
-        }),
-      );
-      // #589: the fallback is invisible without a trace — say why.
-      if (proceed) {
-        log.warn('enhanced submit failed; reloading the page', err);
-        win.location.reload();
-      }
-    });
+        // #552: only 200/422 HTML responses morph; anything else (500, empty,
+        // non-HTML) navigates so the real page shows instead of morphing an
+        // error page into place. #974: an empty 200 text/html body would morph
+        // the live page to blank — an empty body navigates too.
+        const morphable =
+          (result.status === 200 || result.status === 422) &&
+          result.type.indexOf('text/html') !== -1 &&
+          result.html.trim() !== '';
+        if (morphable) {
+          // Cancelable failure hook before the default morph.
+          if (result.status === 422) {
+            const proceed = form.dispatchEvent(
+              new win.CustomEvent('open:action-failure', {
+                cancelable: true,
+                detail: { status: result.status, form: form, response: result },
+              }),
+            );
+            if (!proceed) return;
+          }
+          if (morphDocument(result.html, form, regionName)) {
+            scanSubmitRoots(doc);
+            observeVisible();
+            // #565: the fragment never travels over the wire; keep the local one
+            // when the target is the same page.
+            const samePage =
+              target.pathname === win.location.pathname && target.search === win.location.search;
+            const finalUrl = target.href + (samePage && !target.hash ? win.location.hash : '');
+            if (finalUrl !== win.location.href) {
+              markEnhancedNav();
+              win.history.pushState({}, '', finalUrl);
+            }
+            return;
+          }
+        }
+        win.location.assign(target.href);
+      })
+      .catch((err: unknown) => {
+        formState.__openElementBusy = false;
+        if (!isCurrent()) return;
+        // #585: give the app a hook before the reload fallback — a transient
+        // failure must not silently discard in-flight input elsewhere on the
+        // page. preventDefault() suppresses the reload.
+        const proceed = form.dispatchEvent(
+          new win.CustomEvent('open:action-error', {
+            cancelable: true,
+            detail: { error: err, form: form },
+          }),
+        );
+        // #589: the fallback is invisible without a trace — say why.
+        if (proceed) {
+          log.warn('enhanced submit failed; reloading the page', err);
+          win.location.reload();
+        }
+      });
   }
 
   attachSubmit(doc);

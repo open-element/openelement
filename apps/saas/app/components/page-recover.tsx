@@ -19,9 +19,11 @@ export default class RecoverPage extends OpenElement {
       <main>
         <h1>Recover password</h1>
         <p id='error'>{this.errorText}</p>
-        {this.sent > 0
-          ? <p id='message'>If the account exists, a recovery email has been sent.</p>
-          : <span></span>}
+        {this.sent > 0 ? (
+          <p id='message'>If the account exists, a recovery email has been sent.</p>
+        ) : (
+          <span></span>
+        )}
         <form method='post'>
           <label>
             Email <input type='email' name='email' required />

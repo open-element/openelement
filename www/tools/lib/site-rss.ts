@@ -108,25 +108,30 @@ export function renderBlogFeedXml(
   options: { hostname?: string } = {},
 ): string {
   const hostname = options.hostname ?? SITE_ORIGIN;
-  const items = posts.map((post) => {
-    const url = blogPostUrl(post.slug, hostname);
-    const pubDate = rssPubDate(post.frontmatter.date);
-    if (pubDate === undefined) {
-      // feedFailures() is the fail-closed gate in front of this renderer; an
-      // item without a pubDate would silently lose its date instead.
-      throw new Error(
-        `blog post '${post.slug}' has no publishable date (got '${post.frontmatter.date}')`,
+  const items = posts
+    .map((post) => {
+      const url = blogPostUrl(post.slug, hostname);
+      const pubDate = rssPubDate(post.frontmatter.date);
+      if (pubDate === undefined) {
+        // feedFailures() is the fail-closed gate in front of this renderer; an
+        // item without a pubDate would silently lose its date instead.
+        throw new Error(
+          `blog post '${post.slug}' has no publishable date (got '${post.frontmatter.date}')`,
+        );
+      }
+      return (
+        `    <item>\n` +
+        `      <title>${escapeXml(post.frontmatter.title)}</title>\n` +
+        `      <link>${escapeXml(url)}</link>\n` +
+        `      <guid isPermaLink="true">${escapeXml(url)}</guid>\n` +
+        `      <description>${escapeXml(post.frontmatter.excerpt ?? '')}</description>\n` +
+        `      <pubDate>${escapeXml(pubDate)}</pubDate>\n` +
+        `    </item>`
       );
-    }
-    return `    <item>\n` +
-      `      <title>${escapeXml(post.frontmatter.title)}</title>\n` +
-      `      <link>${escapeXml(url)}</link>\n` +
-      `      <guid isPermaLink="true">${escapeXml(url)}</guid>\n` +
-      `      <description>${escapeXml(post.frontmatter.excerpt ?? '')}</description>\n` +
-      `      <pubDate>${escapeXml(pubDate)}</pubDate>\n` +
-      `    </item>`;
-  }).join('\n');
-  const channel = `  <channel>\n` +
+    })
+    .join('\n');
+  const channel =
+    `  <channel>\n` +
     `    <title>${escapeXml(SITE_FEED_TITLE)}</title>\n` +
     `    <link>${escapeXml(siteUrl('/blog', hostname))}</link>\n` +
     `    <description>${escapeXml(SITE_FEED_DESCRIPTION)}</description>\n` +

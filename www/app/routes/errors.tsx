@@ -95,9 +95,10 @@ function projectCodes(locale: Locale): ErrorCodeItem[] {
     code: record.code,
     family: t.family(record.code, locale),
     gloss: record.summary,
-    variants: record.messages.length > 1
-      ? `${t.variantsLabel(record.messages.length)}: ${record.messages.join(' · ')}`
-      : '',
+    variants:
+      record.messages.length > 1
+        ? `${t.variantsLabel(record.messages.length)}: ${record.messages.join(' · ')}`
+        : '',
     sites: record.occurrences.map((site) => `${site.path}:${site.line}`).join(' · '),
     runtime: 'false',
   }));

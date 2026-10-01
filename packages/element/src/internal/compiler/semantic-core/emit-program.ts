@@ -31,19 +31,22 @@ function assertPathSafety(program: PartProgramV1): void {
     for (const target of part.path) {
       for (let sibling = 0; sibling < target; sibling++) {
         if (nodes[sibling]?.k === 'part') {
-          const source = program.sourceMap.records.find((record) => record.id === `p${part.index}`)
-            ?.source;
-          throw new CompiledElementError([{
-            code: 'OEC9015',
-            message:
-              `${part.k} part path [${part.path.join(',')}] is preceded by a dynamic anchor; ` +
-              'path-addressed fixed sinks must appear before any dynamic anchor sibling',
-            file: source?.file ?? program.sourceMap.file,
-            line: source?.start.line ?? 1,
-            character: source?.start.column ?? 1,
-            start: source?.start.offset ?? 0,
-            end: source?.end.offset ?? 0,
-          }]);
+          const source = program.sourceMap.records.find(
+            (record) => record.id === `p${part.index}`,
+          )?.source;
+          throw new CompiledElementError([
+            {
+              code: 'OEC9015',
+              message:
+                `${part.k} part path [${part.path.join(',')}] is preceded by a dynamic anchor; ` +
+                'path-addressed fixed sinks must appear before any dynamic anchor sibling',
+              file: source?.file ?? program.sourceMap.file,
+              line: source?.start.line ?? 1,
+              character: source?.start.column ?? 1,
+              start: source?.start.offset ?? 0,
+              end: source?.end.offset ?? 0,
+            },
+          ]);
         }
       }
       const next = nodes[target];
@@ -89,19 +92,23 @@ export function buildPartProgram(input: EmitProgramInput): EmitProgramResult {
       ...(field.computed ? { computed: true as const, deps: field.computed.deps } : {}),
     })),
     observedAttributes: fields.flatMap((field) =>
-      field.attribute === null ? [] : [field.attribute]
+      field.attribute === null ? [] : [field.attribute],
     ),
     cem: {
       tagName: tag,
       className,
       declaration: { name: className, module: fileName },
       attributes: fields.flatMap((field) =>
-        field.attribute === null ? [] : [{
-          name: field.attribute,
-          fieldName: field.name,
-          type: field.type,
-          reflect: field.reflect,
-        }]
+        field.attribute === null
+          ? []
+          : [
+              {
+                name: field.attribute,
+                fieldName: field.name,
+                type: field.type,
+                reflect: field.reflect,
+              },
+            ],
       ),
       members: fields.map((field) => ({
         name: field.name,

@@ -26,14 +26,12 @@ function jobBlock(text: string, job: string): string {
 }
 
 Deno.test('ci contract: required jobs stay blocking', () => {
-  for (
-    const job of [
-      'autoflow-ci',
-      'node-serve-smoke',
-      'packed-consumer-matrix',
-      'bfcache-chrome',
-    ]
-  ) {
+  for (const job of [
+    'autoflow-ci',
+    'node-serve-smoke',
+    'packed-consumer-matrix',
+    'bfcache-chrome',
+  ]) {
     const block = jobBlock(workflow, job);
     assert(
       !/continue-on-error:\s*true/.test(block),
@@ -44,18 +42,16 @@ Deno.test('ci contract: required jobs stay blocking', () => {
 
 Deno.test('ci contract: release guide names individually required ruleset checks', () => {
   const normalizedReleasing = releasing.replace(/\s+/gu, ' ');
-  for (
-    const check of [
-      '21775463',
-      '`fast-checks`',
-      '`source-matrix`',
-      '`fresh-clone`',
-      '`packed-consumers`',
-      '`dependency-review`',
-      '`CodeQL`',
-      'strict required status-check policy',
-    ]
-  ) {
+  for (const check of [
+    '21775463',
+    '`fast-checks`',
+    '`source-matrix`',
+    '`fresh-clone`',
+    '`packed-consumers`',
+    '`dependency-review`',
+    '`CodeQL`',
+    'strict required status-check policy',
+  ]) {
     assert(
       normalizedReleasing.includes(check),
       `releasing guide must name required check ${check}`,
@@ -166,15 +162,13 @@ Deno.test('ci contract: candidate evidence bundle ships JSON and every log/manif
     ),
     'the candidate artifact name must stay SHA/run-bound',
   );
-  for (
-    const path of [
-      '.artifacts/candidate-evidence.json',
-      '.artifacts/tarball-manifest.json',
-      '.artifacts/pack-diagnostics.json',
-      '.artifacts/tarballs',
-      '.artifacts/ci',
-    ]
-  ) {
+  for (const path of [
+    '.artifacts/candidate-evidence.json',
+    '.artifacts/tarball-manifest.json',
+    '.artifacts/pack-diagnostics.json',
+    '.artifacts/tarballs',
+    '.artifacts/ci',
+  ]) {
     assert(aggregate.includes(path), `candidate artifact must include ${path}`);
   }
   assert(
@@ -194,10 +188,7 @@ Deno.test('ci contract: release workflow permissions cover its GitHub API use', 
     /actions:\s*read/.test(releasing),
     'release must grant actions: read to read workflow runs and artifacts',
   );
-  assert(
-    /contents:\s*read/.test(releasing),
-    'release must keep contents: read',
-  );
+  assert(/contents:\s*read/.test(releasing), 'release must keep contents: read');
   assert(
     /id-token:\s*write/.test(releasing),
     'release must keep id-token: write for npm Trusted Publishing',
@@ -275,10 +266,7 @@ Deno.test('ci contract: packed-consumer matrix pins the two release OSes', () =>
 });
 
 Deno.test('ci contract: Deno dependencies are audited, never auto-merged', () => {
-  assert(
-    /contents:\s*read/.test(dependencyAudit),
-    'dependency-audit must stay read-only',
-  );
+  assert(/contents:\s*read/.test(dependencyAudit), 'dependency-audit must stay read-only');
   assert(
     /deno outdated/.test(dependencyAudit) && /deno audit/.test(dependencyAudit),
     'dependency-audit must run the Deno outdated and vulnerability audits',
@@ -326,9 +314,7 @@ Deno.test('ci contract: BFCache runs a blocking Chrome-channel lane', async () =
     freshClone.includes('candidate:evidence:fresh'),
     'the fresh-clone lane records the candidate Site E2E sidecar',
   );
-  const candidateSteps = await Deno.readTextFile(
-    join(repoRoot, 'tools/repo/candidate-steps.ts'),
-  );
+  const candidateSteps = await Deno.readTextFile(join(repoRoot, 'tools/repo/candidate-steps.ts'));
   assert(
     /name:\s*'task-site-e2e'/.test(candidateSteps) &&
       /name:\s*'task-site-build'/.test(candidateSteps),
@@ -385,12 +371,10 @@ Deno.test('ci contract: SaaS is decoupled from the core candidate gate', async (
   // on the release train, where the deploy-proof steps now live. It must not
   // be in neither gate.
   const gateRelease = repoConfig.tasks['gate:release'];
-  for (
-    const step of [
-      'tests/fixtures/router-nitro#proof:workers',
-      'tests/fixtures/router-nitro#proof:node',
-    ]
-  ) {
+  for (const step of [
+    'tests/fixtures/router-nitro#proof:workers',
+    'tests/fixtures/router-nitro#proof:node',
+  ]) {
     assert(
       gateRelease.includes(step),
       `the Router deploy proof '${step}' must remain wired into gate:release`,
@@ -429,8 +413,9 @@ Deno.test('ci contract: partial publish receipts are persisted as recovery recor
     'the receipt upload must not upload the whole .artifacts tree',
   );
   assert(
-    /release-receipt-\$\{\{\s*inputs\.candidate_sha\s*\}\}-\$\{\{\s*github\.run_id\s*\}\}-\$\{\{\s*github\.run_attempt\s*\}\}/
-      .test(block),
+    /release-receipt-\$\{\{\s*inputs\.candidate_sha\s*\}\}-\$\{\{\s*github\.run_id\s*\}\}-\$\{\{\s*github\.run_attempt\s*\}\}/.test(
+      block,
+    ),
     'the receipt artifact name must bind the candidate SHA and run id/attempt',
   );
   assert(
@@ -449,9 +434,7 @@ Deno.test('ci contract: the requeue companion re-runs a failed CI run exactly on
   // #1409: webkit fails deterministically PER RUNNER, so the only retry that
   // can change the outcome is a re-run on fresh runners — and exactly one of
   // them, or a genuine failure would be retried forever.
-  const requeue = await Deno.readTextFile(
-    join(repoRoot, '.github/workflows/requeue-once.yml'),
-  );
+  const requeue = await Deno.readTextFile(join(repoRoot, '.github/workflows/requeue-once.yml'));
   assert(
     /workflow_run:/.test(requeue) && /workflows:\s*\['AutoFlow CI'\]/.test(requeue),
     'the requeue must trigger on the AutoFlow CI workflow_run event',
@@ -460,18 +443,12 @@ Deno.test('ci contract: the requeue companion re-runs a failed CI run exactly on
     /types:\s*\[completed\]/.test(requeue),
     'the requeue must wait for completion: an in-progress run cannot be re-run',
   );
-  assert(
-    /conclusion\s*==\s*'failure'/.test(requeue),
-    'only a failed run may be requeued',
-  );
+  assert(/conclusion\s*==\s*'failure'/.test(requeue), 'only a failed run may be requeued');
   assert(
     /run_attempt\s*==\s*1/.test(requeue),
     'only attempt 1 may be requeued; a second failure is the verdict',
   );
-  assert(
-    /rerun-failed-jobs/.test(requeue),
-    'the requeue must call the rerun-failed-jobs endpoint',
-  );
+  assert(/rerun-failed-jobs/.test(requeue), 'the requeue must call the rerun-failed-jobs endpoint');
   // Scope discipline: actions: write is the whole point, and nothing else.
   const writeScopes = [...requeue.matchAll(/^\s{4,6}([a-z-]+):\s*write\s*$/gm)].map((m) => m[1]);
   assertEquals(writeScopes, ['actions'], 'only actions may be a write scope');
@@ -479,9 +456,7 @@ Deno.test('ci contract: the requeue companion re-runs a failed CI run exactly on
 });
 
 Deno.test('ci contract: the nightly JFB workflow measures, never gates', async () => {
-  const nightly = await Deno.readTextFile(
-    join(repoRoot, '.github/workflows/jfb-nightly.yml'),
-  );
+  const nightly = await Deno.readTextFile(join(repoRoot, '.github/workflows/jfb-nightly.yml'));
   assert(
     /continue-on-error:\s*true/.test(nightly),
     'benchmark numbers move with the runner; a nightly measurement must not gate anything',
@@ -556,8 +531,9 @@ Deno.test('ci contract: tree-SHA evidence reuse is fail-closed and single-source
     const lastIf = head.lastIndexOf('if:');
     assert(
       lastIf >= 0 &&
-        /needs\.reuse\.outputs\.reused\s*!=\s*'true'\s*\|\|\s*steps\.claim\.outcome\s*!=\s*'success'/
-          .test(head.slice(lastIf)),
+        /needs\.reuse\.outputs\.reused\s*!=\s*'true'\s*\|\|\s*steps\.claim\.outcome\s*!=\s*'success'/.test(
+          head.slice(lastIf),
+        ),
       `${job}'s gate must run unless the decision AND the claim both succeeded`,
     );
     // The claim is present, guarded to the reused branch, and NON-FATAL: a
@@ -587,8 +563,7 @@ Deno.test('ci contract: tree-SHA evidence reuse is fail-closed and single-source
     // otherwise another run's files (or a stale artifact) reach this lane's
     // evidence upload.
     assert(
-      /steps\.claim\.outcome\s*!=\s*'success'/.test(block) &&
-        /rm -rf \.artifacts\/ci/.test(block),
+      /steps\.claim\.outcome\s*!=\s*'success'/.test(block) && /rm -rf \.artifacts\/ci/.test(block),
       `${job} must discard the unclaimable download before its fallback gate`,
     );
   }
@@ -615,8 +590,7 @@ Deno.test('ci contract: tree-SHA evidence reuse is fail-closed and single-source
     'the aggregate must wait for the reuse decision instead of racing it',
   );
   assert(
-    /candidate:evidence:reuse:resolve/.test(reuse) &&
-      /candidate:evidence:reuse:claim/.test(claim),
+    /candidate:evidence:reuse:resolve/.test(reuse) && /candidate:evidence:reuse:claim/.test(claim),
     'both reuse tasks must be wired to their tools',
   );
   const repoConfig = JSON.parse(

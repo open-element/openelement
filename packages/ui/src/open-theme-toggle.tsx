@@ -30,7 +30,8 @@ export class OpenThemeToggle extends OpenElement {
   // semantic token sheets are already injected as page-level <style> by
   // vite.config.ts — CSS custom properties cascade from :root naturally.
   // Only adopt the component-specific sheet.
-  static override styles: StyleSheetLike[] = [recipe(`
+  static override styles: StyleSheetLike[] = [
+    recipe(`
     :host {
       display: inline-block;
     }
@@ -79,7 +80,8 @@ export class OpenThemeToggle extends OpenElement {
     .theme-toggle[data-theme='light'] .icon-moon {
       display: block;
     }
-  `)];
+  `),
+  ];
 
   /** The resolved theme — drives the compiled data-theme sink on the button. */
   @property({ reflect: false })

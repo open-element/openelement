@@ -73,12 +73,10 @@ function collectInternalDeps(dir: string, exports: unknown, self: string): strin
 
   // Scan src/ if present.
   try {
-    for (
-      const entry of walkSync(srcDir, {
-        includeDirs: false,
-        skip: [/^node_modules$/, /^dist$/],
-      })
-    ) {
+    for (const entry of walkSync(srcDir, {
+      includeDirs: false,
+      skip: [/^node_modules$/, /^dist$/],
+    })) {
       if (!entry.name.endsWith('.ts') && !entry.name.endsWith('.tsx')) continue;
       const text = Deno.readTextFileSync(entry.path);
       for (const specifier of extractOpenImports(text)) {
@@ -286,9 +284,9 @@ export function releasePublishOrder(packages: PackageInfo[]): PackageInfo[] {
   ];
   const topological = sortPackages(packages);
   const rank = new Map(releasePriority.map((name, index) => [name, index]));
-  const ordered = [...topological].sort((a, b) =>
-    (rank.get(a.name) ?? Number.MAX_SAFE_INTEGER) -
-    (rank.get(b.name) ?? Number.MAX_SAFE_INTEGER)
+  const ordered = [...topological].sort(
+    (a, b) =>
+      (rank.get(a.name) ?? Number.MAX_SAFE_INTEGER) - (rank.get(b.name) ?? Number.MAX_SAFE_INTEGER),
   );
   const position = new Map(ordered.map((pkg, index) => [pkg.name, index]));
 

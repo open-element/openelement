@@ -56,11 +56,7 @@ export class ElementFormController {
     this.#internals?.setFormValue(value, state);
   }
 
-  setValidity(
-    flags?: ValidityStateFlags,
-    message?: string,
-    anchor?: HTMLElement,
-  ): void {
+  setValidity(flags?: ValidityStateFlags, message?: string, anchor?: HTMLElement): void {
     if (!this.#internals) return;
     if (flags && Object.keys(flags).length > 0) this.#internals.setValidity(flags, message, anchor);
     else this.#internals.setValidity({});

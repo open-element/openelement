@@ -17,8 +17,7 @@ const content = {
       'The openElement release register — current per-package npm dist-tags — plus the repository CHANGELOG.md historical archive. Machine-checked release truth lives in docs/release/release-state.json.',
     eyebrow: 'Changelog',
     pageTitle: 'The register, then the archive.',
-    lede:
-      'The register reflects the current per-package npm dist-tags. The archive below renders the repository CHANGELOG.md unchanged; machine-checked release truth lives in docs/release/release-state.json.',
+    lede: 'The register reflects the current per-package npm dist-tags. The archive below renders the repository CHANGELOG.md unchanged; machine-checked release truth lives in docs/release/release-state.json.',
     metaPrefix: 'Current per-package npm latest:',
     metaSuffix: '.',
     railLabels: ['Published', 'Stable line', 'Withdrawn', 'Historical archive'],
@@ -49,8 +48,7 @@ const content = {
       'openElement 发布登记表——当前各包 npm dist-tags——以及仓库 CHANGELOG.md 历史归档。机器校验的发布真值见 docs/release/release-state.json。',
     eyebrow: '更新日志',
     pageTitle: '先登记表，再归档。',
-    lede:
-      '登记表反映当前各包的 npm dist-tags。下方归档原样渲染仓库 CHANGELOG.md；机器校验的发布真值见 docs/release/release-state.json。',
+    lede: '登记表反映当前各包的 npm dist-tags。下方归档原样渲染仓库 CHANGELOG.md；机器校验的发布真值见 docs/release/release-state.json。',
     metaPrefix: '当前各包的 npm latest 分别为：',
     metaSuffix: '。',
     railLabels: ['已发布', '稳定线', '已撤回', '历史归档'],
@@ -77,9 +75,11 @@ const content = {
   },
 } as const;
 
-function loadChangelogHtml(
-  copy: { loadError: string; archiveSource: string; langNotice: string },
-): string {
+function loadChangelogHtml(copy: {
+  loadError: string;
+  archiveSource: string;
+  langNotice: string;
+}): string {
   let changelogPath: URL | undefined;
   let cursor = new URL('.', import.meta.url);
   for (let depth = 0; depth < 8 && !changelogPath; depth++) {
@@ -98,10 +98,7 @@ function loadChangelogHtml(
       // CHANGELOG.md links are repository-relative so they resolve on GitHub;
       // on the built site they would 404 (#1159 link truth), so project them
       // onto the canonical GitHub tree before rendering.
-      .replaceAll(
-        '](./',
-        '](https://github.com/open-element/openelement/tree/main/',
-      );
+      .replaceAll('](./', '](https://github.com/open-element/openelement/tree/main/');
     // CHANGELOG.md is a first-party repository file: trustedHtml trust level.
     // Do not feed untrusted Markdown here without sanitizing it first.
     const archive = marked.parse(markdown, { async: false }) as string;
@@ -109,9 +106,10 @@ function loadChangelogHtml(
     // with the same lang-notice pattern the blog uses (page-blog-post.tsx),
     // and carry the content language on the wrapper since page-changelog.tsx
     // owns the outer container.
-    const notice = copy.langNotice === ''
-      ? ''
-      : `<p class="lang-notice" role="note" style="max-width:640px;margin:0 0 var(--size-4);padding:var(--size-2) var(--size-3);border-inline-start:var(--border-size-2) solid var(--violet-5);color:var(--text-secondary);font-size:var(--font-size-0);line-height:1.65;">${copy.langNotice}</p>`;
+    const notice =
+      copy.langNotice === ''
+        ? ''
+        : `<p class="lang-notice" role="note" style="max-width:640px;margin:0 0 var(--size-4);padding:var(--size-2) var(--size-3);border-inline-start:var(--border-size-2) solid var(--violet-5);color:var(--text-secondary);font-size:var(--font-size-0);line-height:1.65;">${copy.langNotice}</p>`;
     return `<p class="archive-source">${copy.archiveSource}</p>${notice}<div lang="en">${archive}</div>`;
   } catch {
     return copy.loadError;

@@ -142,11 +142,7 @@ Deno.test('full denominator: fake LCOV plus fake tree yields 0%-weighted summary
       missedPath,
       'export function missed(x: number): number {\n  if (x) return 1;\n  return 0;\n}\n',
     );
-    const lcov = [
-      `SF:${coveredPath}`,
-      'DA:1,1',
-      'end_of_record',
-    ].join('\n');
+    const lcov = [`SF:${coveredPath}`, 'DA:1,1', 'end_of_record'].join('\n');
 
     const profiled = lcovFilePaths(lcov);
     const uncovered = [];

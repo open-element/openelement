@@ -70,7 +70,7 @@ export abstract class FacadeNodeBase {
     if (!this.parentNode) return null;
     const siblings = this.parentNode.childNodes;
     const index = siblings.indexOf(this as unknown as FacadeNode);
-    return index < 0 ? null : siblings[index + 1] ?? null;
+    return index < 0 ? null : (siblings[index + 1] ?? null);
   }
 
   getRootNode(): FacadeNode {
@@ -226,7 +226,10 @@ export class FacadeText extends FacadeNodeBase {
 export class FacadeComment extends FacadeNodeBase {
   readonly nodeType = 8;
 
-  constructor(ownerDocument: FacadeDocument, readonly data: string) {
+  constructor(
+    ownerDocument: FacadeDocument,
+    readonly data: string,
+  ) {
     super(ownerDocument);
   }
 }
@@ -235,7 +238,10 @@ export class FacadeShadowRoot extends FacadeNodeBase {
   readonly nodeType = 11;
   adoptedStyleSheets: unknown[] = [];
 
-  constructor(ownerDocument: FacadeDocument, readonly host: FacadeElement) {
+  constructor(
+    ownerDocument: FacadeDocument,
+    readonly host: FacadeElement,
+  ) {
     super(ownerDocument);
   }
 
@@ -271,8 +277,7 @@ export class FacadeElement extends FacadeNodeBase {
     const doc = ownerDocument ?? installedDocument;
     if (!doc) throw new Error('facade-dom: installFacadeDom() must run first');
     super(doc);
-    const tag = tagName ??
-      (new.target as unknown as { __localName?: string }).__localName ?? 'div';
+    const tag = tagName ?? (new.target as unknown as { __localName?: string }).__localName ?? 'div';
     this.localName = tag.toLowerCase();
     this.tagName = tag.toUpperCase();
   }
@@ -285,7 +290,7 @@ export class FacadeElement extends FacadeNodeBase {
     const attributes = this.attributes;
     return new Proxy({} as Record<string, string>, {
       get: (_target, prop) =>
-        typeof prop === 'string' ? attributes.get(`data-${prop}`) ?? undefined : undefined,
+        typeof prop === 'string' ? (attributes.get(`data-${prop}`) ?? undefined) : undefined,
       set: (_target, prop, value) => {
         if (typeof prop === 'string') this.setAttribute(`data-${prop}`, String(value));
         return true;
@@ -324,7 +329,8 @@ export class FacadeElement extends FacadeNodeBase {
   }
 
   #notifyAttribute(name: string, oldValue: string | null, newValue: string | null): void {
-    const observed = defineTimeObservedAttributes.get(this.constructor) ??
+    const observed =
+      defineTimeObservedAttributes.get(this.constructor) ??
       (this.constructor as unknown as { observedAttributes?: string[] }).observedAttributes;
     if (observed?.includes(name)) {
       const element = this as unknown as {
@@ -376,8 +382,8 @@ export class FacadeElement extends FacadeNodeBase {
     const listeners = this.listeners.get(type);
     if (!listeners) return;
     const capture = options?.capture === true;
-    const index = listeners.findIndex((listener) =>
-      listener.fn === fn && listener.capture === capture
+    const index = listeners.findIndex(
+      (listener) => listener.fn === fn && listener.capture === capture,
     );
     if (index >= 0) listeners.splice(index, 1);
   }
@@ -490,9 +496,7 @@ class FacadeMutationObserver {
 function notifyMutationObservers(target: FacadeElement, attributeName: string): void {
   const byCallback = new Map<
     ObserverRecord['callback'],
-    Array<
-      { type: string; attributeName: string; target: unknown }
-    >
+    Array<{ type: string; attributeName: string; target: unknown }>
   >();
   for (const record of observerRegistry) {
     if (record.target !== target) continue;
@@ -616,7 +620,8 @@ export function installFacadeDom(): FacadeDom {
     class {
       cssRules: Array<{ cssText: string }> = [];
       replaceSync(text: string): void {
-        this.cssRules = text.split('}')
+        this.cssRules = text
+          .split('}')
           .map((rule) => rule.trim())
           .filter((rule) => rule.length > 0)
           .map((rule) => ({ cssText: `${rule}}` }));
@@ -657,8 +662,8 @@ export function toHtml(node: FacadeNode): string {
   }
   const tag = node.localName;
   const attrs = [...node.attributes.entries()]
-    .map(([name, value]) =>
-      ` ${name}="${value.replaceAll('&', '&amp;').replaceAll('"', '&quot;')}"`
+    .map(
+      ([name, value]) => ` ${name}="${value.replaceAll('&', '&amp;').replaceAll('"', '&quot;')}"`,
     )
     .join('');
   if (VOID_TAGS.has(tag)) return `<${tag}${attrs}>`;
@@ -666,10 +671,11 @@ export function toHtml(node: FacadeNode): string {
 }
 
 function unescapeText(value: string): string {
-  return value.replaceAll('&lt;', '<').replaceAll('&gt;', '>').replaceAll('&quot;', '"').replaceAll(
-    '&amp;',
-    '&',
-  );
+  return value
+    .replaceAll('&lt;', '<')
+    .replaceAll('&gt;', '>')
+    .replaceAll('&quot;', '"')
+    .replaceAll('&amp;', '&');
 }
 
 /**
@@ -723,7 +729,9 @@ export function mountSerialized(
   for (const [name, value] of parsedHost.attributes) element.setAttribute(name, value);
 
   const first = parsedHost.childNodes[0];
-  const isDsd = first instanceof FacadeElement && first.localName === 'template' &&
+  const isDsd =
+    first instanceof FacadeElement &&
+    first.localName === 'template' &&
     first.hasAttribute('shadowrootmode');
   if (isDsd) {
     const mode = first.getAttribute('shadowrootmode') === 'closed' ? 'closed' : 'open';

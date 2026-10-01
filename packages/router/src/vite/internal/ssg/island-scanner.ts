@@ -92,24 +92,10 @@ export function expandIslandDeliveryDecl(island: IslandDecl): IslandDecl[] {
   };
   const hasDeliveryTags = delivery.tags !== undefined || delivery.tagNames !== undefined;
   const tags = hasDeliveryTags
-    ? resolveIslandDeliveryTags(
-      island.tagName,
-      delivery.tags,
-      delivery.tagNames,
-      island.tagName,
-    )
+    ? resolveIslandDeliveryTags(island.tagName, delivery.tags, delivery.tagNames, island.tagName)
     : [island.tagName];
-  const exportNames = validateIslandDeliveryExportNames(
-    delivery.exportNames,
-    tags,
-    island.tagName,
-  );
-  const {
-    tags: _tags,
-    tagNames: _tagNames,
-    exportNames: _exportNames,
-    ...base
-  } = delivery;
+  const exportNames = validateIslandDeliveryExportNames(delivery.exportNames, tags, island.tagName);
+  const { tags: _tags, tagNames: _tagNames, exportNames: _exportNames, ...base } = delivery;
   return tags.map((tagName) => ({
     ...base,
     tagName,
@@ -171,9 +157,10 @@ export function buildPackageIslandDecls(
           delivery.hydrate as IslandDeliveryStrategy | undefined,
           upgradeStrategy,
         );
-        const media = delivery.media === undefined
-          ? undefined
-          : validateIslandMediaQuery(delivery.media, d.tagName);
+        const media =
+          delivery.media === undefined
+            ? undefined
+            : validateIslandMediaQuery(delivery.media, d.tagName);
         if (hydrate === 'media' && media === undefined) {
           throw buildError(
             PackageIslandErrorCode.MEDIA_WITHOUT_DELIVERY,
@@ -200,7 +187,7 @@ export function buildPackageIslandDecls(
           ...(exportNames === undefined ? {} : { exportNames }),
           ...resolveIslandSsrDsd(openElement ?? {}),
         };
-      })
+      }),
   );
   return decls;
 }
@@ -270,7 +257,8 @@ function locateDefineIslandConfigCall(initializer: ts.Expression): ts.CallExpres
   let wrapped = false;
   for (;;) {
     if (
-      ts.isCallExpression(node) && ts.isIdentifier(node.expression) &&
+      ts.isCallExpression(node) &&
+      ts.isIdentifier(node.expression) &&
       node.expression.text === 'defineIslandConfig'
     ) {
       if (wrapped) {
@@ -281,7 +269,8 @@ function locateDefineIslandConfigCall(initializer: ts.Expression): ts.CallExpres
       return node;
     }
     if (
-      !ts.isPropertyAccessExpression(node) && !ts.isElementAccessExpression(node) &&
+      !ts.isPropertyAccessExpression(node) &&
+      !ts.isElementAccessExpression(node) &&
       !ts.isCallExpression(node)
     ) {
       throw staticOpenElementError('openElement export must call defineIslandConfig(...)');
@@ -314,9 +303,9 @@ function parseStaticIslandConfig(
     if (key === 'ssr' || key === 'dsd') {
       if (raw.kind !== ts.SyntaxKind.TrueKeyword && raw.kind !== ts.SyntaxKind.FalseKeyword) {
         throw staticOpenElementError(
-          `openElement.${key} must be a static literal, got dynamic value "${
-            raw.getText(sourceFile)
-          }"`,
+          `openElement.${key} must be a static literal, got dynamic value "${raw.getText(
+            sourceFile,
+          )}"`,
         );
       }
       meta[key] = raw.kind === ts.SyntaxKind.TrueKeyword;
@@ -398,7 +387,8 @@ export function readIslandConfig(source: string): StaticIslandConfig | null {
     }
     for (const declaration of statement.declarationList.declarations) {
       if (
-        ts.isIdentifier(declaration.name) && declaration.name.text === 'openElement' &&
+        ts.isIdentifier(declaration.name) &&
+        declaration.name.text === 'openElement' &&
         declaration.initializer !== undefined
       ) {
         initializer = declaration.initializer;
@@ -426,10 +416,7 @@ export function readIslandConfig(source: string): StaticIslandConfig | null {
  * Windows, but these segments become module specifiers and tag names, so they
  * are normalized here (#460); join() still reads them back fine on Windows.
  */
-export async function scanIslands(
-  islandsDir: string,
-  relativeDir: string = '',
-): Promise<string[]> {
+export async function scanIslands(islandsDir: string, relativeDir: string = ''): Promise<string[]> {
   const files: string[] = [];
   const entries = await safeReadDir(islandsDir);
 
@@ -515,11 +502,12 @@ export async function scanIslandMeta(
       ...(islandConfig.tags === undefined ? {} : { tags: islandConfig.tags }),
       ...(islandConfig.tagNames === undefined ? {} : { tagNames: islandConfig.tagNames }),
       ...(islandConfig.exportNames === undefined ? {} : { exportNames: islandConfig.exportNames }),
-      reason: hydrate === 'only'
-        ? 'local island exports openElement.hydrate=only'
-        : islandConfig.ssr === false
-        ? 'local island exports openElement.ssr=false'
-        : undefined,
+      reason:
+        hydrate === 'only'
+          ? 'local island exports openElement.hydrate=only'
+          : islandConfig.ssr === false
+            ? 'local island exports openElement.ssr=false'
+            : undefined,
     };
   }
 
@@ -550,7 +538,7 @@ export async function scanPackageManifests(
     // @vite-ignore suppresses unanalyzable-dynamic-import JSR warning.
     let mod: Record<string, unknown>;
     try {
-      mod = await import(/* @vite-ignore */ pkg) as Record<string, unknown>;
+      mod = (await import(/* @vite-ignore */ pkg)) as Record<string, unknown>;
     } catch (e) {
       if (isBrowserOnlyPackageImportError(e)) {
         log.warn(
@@ -582,14 +570,11 @@ export async function scanPackageManifests(
         );
       }
     } else {
-      throw new OpenElementError(
-        `Package ${pkg} does not export a manifest`,
-        {
-          code: 'PACKAGE_MANIFEST_ERROR',
-          statusCode: 500,
-          recoverable: false,
-        },
-      );
+      throw new OpenElementError(`Package ${pkg} does not export a manifest`, {
+        code: 'PACKAGE_MANIFEST_ERROR',
+        statusCode: 500,
+        recoverable: false,
+      });
     }
   }
 

@@ -32,69 +32,86 @@ Deno.test('Element server owns nested composition, slots, DSD, and foreign passt
   const rail = testProgram({
     tag: 'oe-page-rail',
     rootMode: 'shadow-open',
-    template: [{
-      k: 'el',
-      tag: 'nav',
-      attrs: [],
-      children: [{ k: 'text', value: 'Start' }],
-    }],
+    template: [
+      {
+        k: 'el',
+        tag: 'nav',
+        attrs: [],
+        children: [{ k: 'text', value: 'Start' }],
+      },
+    ],
     parts: [],
   });
   const shell = testProgram({
     tag: 'oe-reading-shell',
     rootMode: 'light',
-    template: [{
-      k: 'el',
-      tag: 'article',
-      attrs: [],
-      children: [{
+    template: [
+      {
         k: 'el',
-        tag: 'header',
+        tag: 'article',
         attrs: [],
-        children: [{
-          k: 'el',
-          tag: 'slot',
-          attrs: [['name', 'meta']],
-          children: [{ k: 'text', value: 'Fallback meta' }],
-        }],
-      }, {
-        k: 'el',
-        tag: 'main',
-        attrs: [],
-        children: [{
-          k: 'el',
-          tag: 'slot',
-          attrs: [],
-          children: [{ k: 'text', value: 'Fallback body' }],
-        }],
-      }],
-    }],
+        children: [
+          {
+            k: 'el',
+            tag: 'header',
+            attrs: [],
+            children: [
+              {
+                k: 'el',
+                tag: 'slot',
+                attrs: [['name', 'meta']],
+                children: [{ k: 'text', value: 'Fallback meta' }],
+              },
+            ],
+          },
+          {
+            k: 'el',
+            tag: 'main',
+            attrs: [],
+            children: [
+              {
+                k: 'el',
+                tag: 'slot',
+                attrs: [],
+                children: [{ k: 'text', value: 'Fallback body' }],
+              },
+            ],
+          },
+        ],
+      },
+    ],
     parts: [],
   });
   const page = testProgram({
     tag: 'oe-guide-page',
     rootMode: 'shadow-open',
-    template: [{
-      k: 'el',
-      tag: 'oe-reading-shell',
-      attrs: [],
-      children: [{
+    template: [
+      {
         k: 'el',
-        tag: 'span',
-        attrs: [['slot', 'meta']],
-        children: [{ k: 'text', value: 'Projected meta' }],
-      }, {
-        k: 'el',
-        tag: 'oe-page-rail',
+        tag: 'oe-reading-shell',
         attrs: [],
-        children: [],
-      }, {
-        k: 'el',
-        tag: 'x-third-party',
-        attrs: [],
-        children: [{ k: 'text', value: 'foreign' }],
-      }],
-    }],
+        children: [
+          {
+            k: 'el',
+            tag: 'span',
+            attrs: [['slot', 'meta']],
+            children: [{ k: 'text', value: 'Projected meta' }],
+          },
+          {
+            k: 'el',
+            tag: 'oe-page-rail',
+            attrs: [],
+            children: [],
+          },
+          {
+            k: 'el',
+            tag: 'x-third-party',
+            attrs: [],
+            children: [{ k: 'text', value: 'foreign' }],
+          },
+        ],
+      },
+    ],
     parts: [],
   });
 
@@ -109,10 +126,7 @@ Deno.test('Element server owns nested composition, slots, DSD, and foreign passt
     }).html;
     assertEquals((html.match(/<oe-reading-shell/g) ?? []).length, 1);
     assertEquals((html.match(/<oe-page-rail/g) ?? []).length, 1);
-    assertStringIncludes(
-      html,
-      '<slot name="meta"><span slot="meta">Projected meta</span></slot>',
-    );
+    assertStringIncludes(html, '<slot name="meta"><span slot="meta">Projected meta</span></slot>');
     assertEquals(html.includes('Fallback meta'), false);
     assertStringIncludes(
       html,
@@ -131,14 +145,16 @@ Deno.test('Trusted HTML remains opaque to nested component composition', () => {
   const parent = testProgram({
     tag: 'oe-html-parent',
     rootMode: 'shadow-open',
-    properties: [{
-      name: 'body',
-      attribute: null,
-      type: 'object',
-      converter: 'object',
-      reflect: false,
-      default: null,
-    }],
+    properties: [
+      {
+        name: 'body',
+        attribute: null,
+        type: 'object',
+        converter: 'object',
+        reflect: false,
+        default: null,
+      },
+    ],
     template: [{ k: 'el', tag: 'div', attrs: [], children: [] }],
     parts: [{ k: 'html', index: 0, signal: 'body', path: [0] }],
   });
@@ -158,26 +174,30 @@ Deno.test('nested compiled boolean host attributes preserve presence semantics',
   const child = testProgram({
     tag: 'oe-boolean-child',
     rootMode: 'light',
-    properties: [{
-      name: 'active',
-      attribute: 'active',
-      type: 'boolean',
-      converter: 'boolean',
-      reflect: true,
-      default: false,
-    }],
+    properties: [
+      {
+        name: 'active',
+        attribute: 'active',
+        type: 'boolean',
+        converter: 'boolean',
+        reflect: true,
+        default: false,
+      },
+    ],
     template: [{ k: 'el', tag: 'slot', attrs: [], children: [] }],
     parts: [],
   });
   const parent = testProgram({
     tag: 'oe-boolean-parent',
     rootMode: 'shadow-open',
-    template: [{
-      k: 'el',
-      tag: 'oe-boolean-child',
-      attrs: [['active', '']],
-      children: [],
-    }],
+    template: [
+      {
+        k: 'el',
+        tag: 'oe-boolean-child',
+        attrs: [['active', '']],
+        children: [],
+      },
+    ],
     parts: [],
   });
 
@@ -202,9 +222,7 @@ Deno.test('public light-child projection rejects forged TrustedHtml values', () 
     () => {
       renderDsd('oe-safe-shell', {
         componentClass: compiledClass(shell),
-        projectedChildren: new Map([
-          ['', { html: '<script>forged</script>' }],
-        ]),
+        projectedChildren: new Map([['', { html: '<script>forged</script>' }]]),
       });
     },
     Error,

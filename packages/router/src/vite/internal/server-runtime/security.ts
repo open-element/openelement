@@ -80,8 +80,8 @@ export function installSsrRegistryGuard(): SsrRegistryGuard {
     SSR_REGISTRY_ORIGINAL_DEFINE
   ] as MinimalRegistry['define'] | undefined;
   if (!originalDefine) {
-    (registry as unknown as Record<string, unknown>)[SSR_REGISTRY_ORIGINAL_DEFINE] = registry.define
-      .bind(registry);
+    (registry as unknown as Record<string, unknown>)[SSR_REGISTRY_ORIGINAL_DEFINE] =
+      registry.define.bind(registry);
     registry.define = (name: string, ctor: unknown, options?: ElementDefinitionOptions) => {
       const stubbed = (registry as unknown as Record<string, unknown>)[SSR_REGISTRY_STUB_MARKER];
       if (!stubbed && registry.get(name)) return;

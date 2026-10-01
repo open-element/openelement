@@ -15,10 +15,12 @@ async function readShellState(page: Page) {
   // The logo is the site-name link in the banner landmark; the primary nav
   // links are its labelled navigation landmark. Both are user-visible
   // semantics — no class or shadow-walk queries needed.
-  const homeHref = await page.getByRole('banner')
+  const homeHref = await page
+    .getByRole('banner')
     .getByRole('link', { name: 'openElement' })
     .getAttribute('href');
-  const navHrefs = await page.getByRole('navigation', { name: /Primary navigation|主导航/ })
+  const navHrefs = await page
+    .getByRole('navigation', { name: /Primary navigation|主导航/ })
     .getByRole('link')
     .evaluateAll((links) => links.map((link) => link.getAttribute('href')));
   return {
@@ -149,7 +151,10 @@ test.describe('i18n SSG Output', () => {
     // main landmark: the header language switcher legitimately links to the
     // zh twin, while the regression was post content/navigation linking into
     // /zh/blog.
-    const hrefs = await page.getByRole('main').first().getByRole('link')
+    const hrefs = await page
+      .getByRole('main')
+      .first()
+      .getByRole('link')
       .evaluateAll((links) => links.map((link) => link.getAttribute('href')));
     const zhHrefs = hrefs.filter((href) => href?.startsWith('/zh/blog'));
     expect(zhHrefs).toEqual([]);

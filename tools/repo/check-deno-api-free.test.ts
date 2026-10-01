@@ -49,8 +49,7 @@ Deno.test('deno-api-free catches globalThis.Deno, destructuring, aliases, and np
 });
 
 Deno.test('deno-api-free bars node imports even in chartered host tooling', () => {
-  const hostSource =
-    `import { join } from 'node:path';\nimport { contentType } from '@std/media-types';\nDeno.cwd();\n`;
+  const hostSource = `import { join } from 'node:path';\nimport { contentType } from '@std/media-types';\nDeno.cwd();\n`;
   const hostIssues = scanDenoApiSource('packages/router/src/cli/build.ts', hostSource, {
     hostTooling: true,
   });
@@ -110,10 +109,7 @@ Deno.test('deno-api-free classifies product, Deno-host, and Node-host paths', ()
     npm: 'allow',
   });
   assertEquals(policyFor('tools/repo/check-esm-boundary.ts').kind, 'deno-host');
-  assertEquals(
-    policyFor('tests/fixtures/router-native-framework/e2e/server.ts').kind,
-    'node-host',
-  );
+  assertEquals(policyFor('tests/fixtures/router-native-framework/e2e/server.ts').kind, 'node-host');
   assertEquals(policyFor('benchmarks/jfb/harness/run.ts').kind, 'node-host');
   assertEquals(policyFor('www/e2e/playwright.config.ts').kind, 'node-host');
   assertEquals(policyFor('README.md').kind, 'skip');
@@ -128,13 +124,10 @@ Deno.test('deno-api-free never skips a package src tree the policy table missed'
     denoApis: 'ban',
     npm: 'chartered',
   });
-  assertEquals(
-    packagePolicyFailures([{ name: '@openelement/newpkg', dir: 'packages/newpkg' }]),
-    [
-      'packages/newpkg: no PACKAGE_POLICIES entry for @openelement/newpkg; ' +
+  assertEquals(packagePolicyFailures([{ name: '@openelement/newpkg', dir: 'packages/newpkg' }]), [
+    'packages/newpkg: no PACKAGE_POLICIES entry for @openelement/newpkg; ' +
       'review the package runtime boundary and add an explicit policy',
-    ],
-  );
+  ]);
   assertEquals(
     packagePolicyFailures([{ name: '@openelement/router', dir: 'packages/router' }]),
     [],
@@ -159,13 +152,13 @@ Deno.test('deno-api-free fails stale allowlist entries', () => {
     ['stale allowlist entry (path no longer exists): gone.ts'],
   );
   assertEquals(
-    allowlistCoverageFailures(
-      [{ path: 'kept/', reason: 'test' }],
-      (path) => path === 'kept',
-    ),
+    allowlistCoverageFailures([{ path: 'kept/', reason: 'test' }], (path) => path === 'kept'),
     [],
   );
-  assertEquals(NODE_HOST_ALLOWLIST.every((entry) => entry.reason !== ''), true);
+  assertEquals(
+    NODE_HOST_ALLOWLIST.every((entry) => entry.reason !== ''),
+    true,
+  );
 });
 
 Deno.test('deno-api-free expands directory allowlist entries for CI output', () => {

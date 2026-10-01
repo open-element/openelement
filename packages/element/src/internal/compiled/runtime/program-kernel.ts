@@ -168,8 +168,14 @@ export function guardedUpdate(
 
 export function isFixedPart(part: PartProgramV1['parts'][number]): part is ProgramFixedPart {
   return (
-    part.k === 'attr' || part.k === 'prop' || part.k === 'bool' || part.k === 'class' ||
-    part.k === 'style' || part.k === 'html' || part.k === 'event' || part.k === 'ref'
+    part.k === 'attr' ||
+    part.k === 'prop' ||
+    part.k === 'bool' ||
+    part.k === 'class' ||
+    part.k === 'style' ||
+    part.k === 'html' ||
+    part.k === 'event' ||
+    part.k === 'ref'
   );
 }
 

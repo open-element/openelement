@@ -26,7 +26,9 @@ import type { AppShellPlan, ResolvedAppShell } from '../protocol/ssg.ts';
  */
 export function localizeShellHref(href: string, locale: string, defaultLocale: string): string {
   if (
-    typeof href !== 'string' || locale === defaultLocale || !href.startsWith('/') ||
+    typeof href !== 'string' ||
+    locale === defaultLocale ||
+    !href.startsWith('/') ||
     href.startsWith('//')
   ) {
     return href;
@@ -46,7 +48,10 @@ export type StatusHtmlRenderer = (title: unknown, message: unknown) => string;
  */
 export function createStatusHtml(escapeHtml: (value: string) => string): StatusHtmlRenderer {
   return (title, message) =>
-    '<main><h1>' + escapeHtml(String(title)) + '</h1><p>' + escapeHtml(String(message)) +
+    '<main><h1>' +
+    escapeHtml(String(title)) +
+    '</h1><p>' +
+    escapeHtml(String(message)) +
     '</p></main>';
 }
 
@@ -145,12 +150,7 @@ export function createAppShellRuntime(deps: AppShellRuntimeDeps): AppShellRuntim
       layoutProps,
       { route: routePath },
       0,
-      new Map([[
-        '',
-        trustedHtml(
-          content,
-        ),
-      ]]),
+      new Map([['', trustedHtml(content)]]),
     );
   }
 

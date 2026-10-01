@@ -60,10 +60,12 @@ Deno.test('workspace shadow check reads the real workspace member list', async (
   const real = await readWorkspaceMembers();
   // Only packages declare a name; app/tool/fixture members do not, and a
   // member without a name has no node_modules path to shadow.
-  assertEquals(
-    real.map((member) => member.name).sort(),
-    ['@openelement/create', '@openelement/element', '@openelement/router', '@openelement/ui'],
-  );
+  assertEquals(real.map((member) => member.name).sort(), [
+    '@openelement/create',
+    '@openelement/element',
+    '@openelement/router',
+    '@openelement/ui',
+  ]);
   assert(
     real.every((member) => member.dir.startsWith('packages/')),
     'the named members are the four consumer packages',

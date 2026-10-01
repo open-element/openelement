@@ -35,15 +35,11 @@ export const SITE_DIST = 'www/dist';
 
 const repoRoot = fromFileUrl(new URL('../../', import.meta.url));
 
-export async function checkBuiltLinks(
-  dist = join(repoRoot, SITE_DIST),
-): Promise<LinkFailure[]> {
+export async function checkBuiltLinks(dist = join(repoRoot, SITE_DIST)): Promise<LinkFailure[]> {
   const failures: LinkFailure[] = [];
   const files = new Set<string>();
   const htmlFiles: string[] = [];
-  for await (
-    const entry of walk(dist, { includeDirs: false, skip: [/(^|\/)pagefind(\/|$)/] })
-  ) {
+  for await (const entry of walk(dist, { includeDirs: false, skip: [/(^|\/)pagefind(\/|$)/] })) {
     files.add(entry.path.slice(dist.length + 1));
     if (entry.path.endsWith('.html')) htmlFiles.push(entry.path);
   }
@@ -191,8 +187,7 @@ export async function checkBuiltLinks(
       if (!anchorsFragment(html, record.anchor)) {
         failures.push({
           file: page,
-          message:
-            `generated searchRecord anchor '#${record.anchor}' (${record.title}) is not rendered`,
+          message: `generated searchRecord anchor '#${record.anchor}' (${record.title}) is not rendered`,
         });
       }
     }

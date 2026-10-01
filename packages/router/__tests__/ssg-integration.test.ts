@@ -130,11 +130,7 @@ Deno.test('SSG integration', { permissions: { read: true, write: true } }, async
   );
 
   await t.step('injectCspMeta - adds <meta http-equiv="Content-Security-Policy"> to head', () => {
-    injectCspMeta(
-      join(FIXTURES_DIR, 'dist'),
-      "default-src 'self'; script-src 'self'",
-      false,
-    );
+    injectCspMeta(join(FIXTURES_DIR, 'dist'), "default-src 'self'; script-src 'self'", false);
 
     const html = Deno.readTextFileSync(join(FIXTURES_DIR, 'dist', 'index.html'));
     assertStringIncludes(html, '<meta http-equiv="Content-Security-Policy"');

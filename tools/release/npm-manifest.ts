@@ -32,21 +32,8 @@ const PACKAGE_KEYWORDS: Record<string, string[]> = {
     'signals',
     'ssg',
   ],
-  '@openelement/router': [
-    'openelement',
-    'web-components',
-    'router',
-    'ssg',
-    'vite',
-    'nitro',
-  ],
-  '@openelement/create': [
-    'openelement',
-    'web-components',
-    'scaffolding',
-    'generator',
-    'starter',
-  ],
+  '@openelement/router': ['openelement', 'web-components', 'router', 'ssg', 'vite', 'nitro'],
+  '@openelement/create': ['openelement', 'web-components', 'scaffolding', 'generator', 'starter'],
   '@openelement/ui': [
     'openelement',
     'web-components',
@@ -101,10 +88,7 @@ const ENGINES: Record<string, Record<string, string>> = {
  * cluster (ADR-0155's −9.4 KB).
  */
 const SIDE_EFFECTS: Record<string, false | string[]> = {
-  '@openelement/element': [
-    './src/index.js',
-    './src/internal/compiled/runtime/claim-install.js',
-  ],
+  '@openelement/element': ['./src/index.js', './src/internal/compiled/runtime/claim-install.js'],
   '@openelement/router': false,
   '@openelement/create': ['./src/cli.js'],
   '@openelement/ui': false,
@@ -226,9 +210,7 @@ export function assertOnlyApprovedManifestChanges(
     }
   }
   const changed = new Set<string>();
-  for (
-    const key of new Set([...Object.keys(rawPackageJson), ...Object.keys(finalPackageJson)])
-  ) {
+  for (const key of new Set([...Object.keys(rawPackageJson), ...Object.keys(finalPackageJson)])) {
     if (JSON.stringify(rawPackageJson[key]) !== JSON.stringify(finalPackageJson[key])) {
       changed.add(key);
     }
@@ -271,10 +253,7 @@ const defaultDeriveDepsIo: DeriveDepsIo = {
         if (entry.isDirectory) {
           if (entry.name === 'node_modules' || entry.name === 'dist') continue;
           scan(path);
-        } else if (
-          entry.isFile &&
-          (entry.name.endsWith('.ts') || entry.name.endsWith('.tsx'))
-        ) {
+        } else if (entry.isFile && (entry.name.endsWith('.ts') || entry.name.endsWith('.tsx'))) {
           files.push(Deno.readTextFileSync(path));
         }
       }
@@ -292,16 +271,12 @@ export function parseNpmSpec(
   value: string,
   label: string,
 ): { name: string; version: string } | null {
-  const match = value.match(
-    /^npm:(@[^/]+\/[^@/]+|[^@/]+)(?:@(\^?[\d.]+(?:-[\w.]+)?))?/,
-  );
+  const match = value.match(/^npm:(@[^/]+\/[^@/]+|[^@/]+)(?:@(\^?[\d.]+(?:-[\w.]+)?))?/);
   if (!match) return null;
   const name = match[1];
   const version = match[2]?.replace(/^\^/, '');
   if (!version) {
-    throw new Error(
-      `npm dependency '${name}' (${label}) has no version; add an explicit version.`,
-    );
+    throw new Error(`npm dependency '${name}' (${label}) has no version; add an explicit version.`);
   }
   return { name, version };
 }
@@ -313,8 +288,7 @@ export function parseNpmSpec(
  * external dep keeps the caret policy.
  */
 export function publishRange(spec: { name: string; version: string }): string {
-  return spec.name === '@openelement/url-pattern-list' ||
-      spec.name === 'typescript'
+  return spec.name === '@openelement/url-pattern-list' || spec.name === 'typescript'
     ? spec.version
     : `^${spec.version}`;
 }
@@ -380,17 +354,11 @@ export function deriveDependencies(
 // Import-map aliases keep their bare key in emitted source, so packed
 // artifacts retain that key. Direct package names (such as TypeScript) need
 // no alias and are installed under their published name.
-function dependencyKey(
-  key: string,
-  spec: { name: string },
-): string {
+function dependencyKey(key: string, spec: { name: string }): string {
   return !key.includes(':') && key !== spec.name ? key : spec.name;
 }
 
-function dependencyRange(
-  key: string,
-  spec: { name: string; version: string },
-): string {
+function dependencyRange(key: string, spec: { name: string; version: string }): string {
   return !key.includes(':') && key !== spec.name
     ? `npm:${spec.name}@${publishRange(spec)}`
     : publishRange(spec);
@@ -402,9 +370,7 @@ export function deriveAllDependencies(
 ): Map<string, Record<string, string>> {
   const rootImports = io.readRootJson().imports ?? {};
   return new Map(
-    packages.map((
-      pkg,
-    ) => [pkg.name, deriveDependencies(pkg, packages, io, rootImports)]),
+    packages.map((pkg) => [pkg.name, deriveDependencies(pkg, packages, io, rootImports)]),
   );
 }
 

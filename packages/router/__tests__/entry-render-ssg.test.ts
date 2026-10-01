@@ -24,9 +24,13 @@ const routes: RouteEntry[] = [
 interface RenderedPage {
   html: string;
   status?: number;
-  errors: Array<
-    { code: string; severity: string; phase: string; tagName: string; message: string }
-  >;
+  errors: Array<{
+    code: string;
+    severity: string;
+    phase: string;
+    tagName: string;
+    message: string;
+  }>;
   componentCount: number;
   renderTimeMs: number;
 }
@@ -42,8 +46,10 @@ async function loadGeneratedRenderRoute(options: {
   prod?: boolean;
 }): Promise<(path: string, opts?: Record<string, unknown>) => Promise<RenderedPage>> {
   const desc = buildEntryDescriptor(routes, { ssg: true });
-  const section = renderSsgSection(desc)
-    .replaceAll('import.meta.env.PROD', options.prod ? 'true' : 'false');
+  const section = renderSsgSection(desc).replaceAll(
+    'import.meta.env.PROD',
+    options.prod ? 'true' : 'false',
+  );
 
   const harness = `
 const $boom_route = {

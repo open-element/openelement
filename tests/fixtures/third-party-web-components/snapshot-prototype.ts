@@ -68,16 +68,12 @@ async function main(): Promise<void> {
     const app = await prepareFixtureApp(root);
     const dist = join(app, 'dist');
     const chunk = await oneClientChunk(dist);
-    const config = JSON.parse(
-      await Deno.readTextFile(join(app, 'deno.json')),
-    ) as {
+    const config = JSON.parse(await Deno.readTextFile(join(app, 'deno.json'))) as {
       imports: Record<string, string>;
     };
     const resolvedPackage = config.imports.lit;
     if (!/^npm:lit@\d+\.\d+\.\d+$/.test(resolvedPackage)) {
-      throw new Error(
-        `T1 fixture must pin an exact Lit version: ${resolvedPackage}`,
-      );
+      throw new Error(`T1 fixture must pin an exact Lit version: ${resolvedPackage}`);
     }
     const sourceDir = join(dist, 'lit-snapshot-source');
     await Deno.mkdir(sourceDir, { recursive: true });
@@ -92,17 +88,16 @@ async function main(): Promise<void> {
       const page = await browser!.newPage();
       try {
         await page.goto(`${server!.origin}/lit-snapshot-source/`);
-        await page.waitForFunction((name) =>
-          !!customElements.get(name) &&
-          !!document.querySelector(name)?.shadowRoot?.querySelector(
-            '#lit-button',
-          ), tag);
+        await page.waitForFunction(
+          (name) =>
+            !!customElements.get(name) &&
+            !!document.querySelector(name)?.shadowRoot?.querySelector('#lit-button'),
+          tag,
+        );
         return await page.evaluate((name) => {
           const shadow = document.querySelector(name)?.shadowRoot;
           if (!shadow || shadow.querySelector('script,iframe,object,embed')) {
-            throw new Error(
-              'snapshot is missing or contains executable markup',
-            );
+            throw new Error('snapshot is missing or contains executable markup');
           }
           for (const element of shadow.querySelectorAll('*')) {
             for (const attribute of element.attributes) {
@@ -113,10 +108,7 @@ async function main(): Promise<void> {
           }
           const template = document.createElement('template');
           template.innerHTML = shadow.innerHTML;
-          const walker = document.createTreeWalker(
-            template.content,
-            NodeFilter.SHOW_COMMENT,
-          );
+          const walker = document.createTreeWalker(template.content, NodeFilter.SHOW_COMMENT);
           const volatile: Comment[] = [];
           while (walker.nextNode()) {
             const comment = walker.currentNode as Comment;
@@ -131,21 +123,13 @@ async function main(): Promise<void> {
     };
     const first = await capture();
     const second = await capture();
-    assertEquals(
-      first,
-      second,
-      'independent browser captures must agree structurally',
-    );
+    assertEquals(first, second, 'independent browser captures must agree structurally');
     assertStringIncludes(first, 'Snapshot:');
     const inputs = {
       tag,
       resolvedPackage,
-      chunkSha256: await sha256(
-        await Deno.readFile(join(dist, 'client', 'islands', chunk)),
-      ),
-      toolSha256: await sha256(
-        await Deno.readFile(fromFileUrl(import.meta.url)),
-      ),
+      chunkSha256: await sha256(await Deno.readFile(join(dist, 'client', 'islands', chunk))),
+      toolSha256: await sha256(await Deno.readFile(fromFileUrl(import.meta.url))),
       fixtureSha256: await sha256(
         await Deno.readFile(join(fixtureDir, 'app', 'client', 'wc-client.ts')),
       ),
@@ -178,14 +162,9 @@ async function main(): Promise<void> {
       const page = await noJs.newPage();
       await page.goto(`${server.origin}/lit-snapshot/`);
       const button = await page.locator(`${tag} #lit-button`).textContent();
-      const slot = await page.locator(`${tag} span[slot="label"]`)
-        .textContent();
+      const slot = await page.locator(`${tag} span[slot="label"]`).textContent();
       zeroJsVisible = button?.includes('Snapshot:') === true && slot === label;
-      assertEquals(
-        zeroJsVisible,
-        true,
-        'DSD demo must be readable with JavaScript disabled',
-      );
+      assertEquals(zeroJsVisible, true, 'DSD demo must be readable with JavaScript disabled');
     } finally {
       await noJs.close();
     }
@@ -211,8 +190,7 @@ async function main(): Promise<void> {
         const element = document.querySelector(name) as HTMLElement & {
           updateComplete?: Promise<boolean>;
         };
-        return !!element?.shadowRoot?.querySelector('#lit-button') &&
-          !!element.updateComplete;
+        return !!element?.shadowRoot?.querySelector('#lit-button') && !!element.updateComplete;
       }, tag);
       await upgrade.evaluate(async (name) => {
         const element = document.querySelector(name) as HTMLElement & {
@@ -226,12 +204,15 @@ async function main(): Promise<void> {
         const button = buttons[0];
         return {
           buttonCount: buttons.length,
-          sameButton: buttons.length === 1 &&
-            button === (globalThis as typeof globalThis & {
-                __snapshotButton?: Element;
-              }).__snapshotButton,
-          focusKept: buttons.length === 1 &&
-            element.shadowRoot?.activeElement === button,
+          sameButton:
+            buttons.length === 1 &&
+            button ===
+              (
+                globalThis as typeof globalThis & {
+                  __snapshotButton?: Element;
+                }
+              ).__snapshotButton,
+          focusKept: buttons.length === 1 && element.shadowRoot?.activeElement === button,
         };
       }, tag);
       upgradeButtonCount = observation.buttonCount;
@@ -268,12 +249,11 @@ async function main(): Promise<void> {
     // still MISS — the hit above is key-addressed, not "any file exists".
     const bumpedInputs = { ...inputs, resolvedPackage: 'npm:lit@3.3.4' };
     const bumpedKey = await sha256(JSON.stringify(bumpedInputs));
-    const versionBumpCacheMiss = bumpedKey !== key &&
+    const versionBumpCacheMiss =
+      bumpedKey !== key &&
       (await readSnapshotRecord(join(cache, `${bumpedKey}.json`))) === undefined;
     if (!versionBumpCacheMiss) {
-      throw new Error(
-        'a simulated version change must miss the snapshot cache',
-      );
+      throw new Error('a simulated version change must miss the snapshot cache');
     }
 
     const report = {
@@ -288,9 +268,10 @@ async function main(): Promise<void> {
       upgradePreservedButton,
       upgradePreservedFocus,
       highestPassedTier: null,
-      tierReason: upgradePreservedButton && upgradePreservedFocus
-        ? 'two clean builds and full adapter admission have not been proved'
-        : `browser upgrade produced ${upgradeButtonCount} shadow buttons or lost focus`,
+      tierReason:
+        upgradePreservedButton && upgradePreservedFocus
+          ? 'two clean builds and full adapter admission have not been proved'
+          : `browser upgrade produced ${upgradeButtonCount} shadow buttons or lost focus`,
       initialMiss,
       verifiedCacheHit,
       simulatedVersionBump: {

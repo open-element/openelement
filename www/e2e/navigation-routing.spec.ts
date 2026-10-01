@@ -49,14 +49,16 @@ test.describe('Link Navigation', () => {
 
     // getByRole('link') pierces open shadow roots natively — no hand-rolled
     // deep query required to cover links inside component shadow DOM.
-    const hrefs = await page.getByRole('link')
+    const hrefs = await page
+      .getByRole('link')
       .evaluateAll((links) => links.map((link) => link.getAttribute('href')));
-    const internalLinks = hrefs.filter((href): href is string =>
-      !!href &&
-      !href.startsWith('http') &&
-      !href.startsWith('mailto') &&
-      !href.startsWith('#') &&
-      !href.startsWith('//')
+    const internalLinks = hrefs.filter(
+      (href): href is string =>
+        !!href &&
+        !href.startsWith('http') &&
+        !href.startsWith('mailto') &&
+        !href.startsWith('#') &&
+        !href.startsWith('//'),
     );
 
     expect(internalLinks.length).toBeGreaterThan(0);
@@ -66,11 +68,12 @@ test.describe('Link Navigation', () => {
     await page.goto('/');
     await page.waitForLoadState('networkidle');
 
-    const guideLinks = await page.getByRole('link')
+    const guideLinks = await page
+      .getByRole('link')
       .evaluateAll((links) =>
         links
           .map((link) => link.getAttribute('href'))
-          .filter((href): href is string => !!href && href.includes('/guide/'))
+          .filter((href): href is string => !!href && href.includes('/guide/')),
       );
 
     expect(guideLinks.length).toBeGreaterThan(0);
@@ -82,7 +85,9 @@ test.describe('Link Navigation', () => {
     expect(url).toContain('/guide/');
   });
 
-  test('home-to-guide navigation loads the compiled route inside the app shell', async ({ page }) => {
+  test('home-to-guide navigation loads the compiled route inside the app shell', async ({
+    page,
+  }) => {
     await page.goto('/');
     await page.waitForLoadState('networkidle');
 
@@ -144,11 +149,13 @@ test.describe('Blog Pages', () => {
     await page.waitForLoadState('networkidle');
 
     // Blog index should have links to individual posts.
-    const blogLinks = await page.locator('blog-index').getByRole('link')
+    const blogLinks = await page
+      .locator('blog-index')
+      .getByRole('link')
       .evaluateAll((links) =>
         links
           .map((link) => link.getAttribute('href'))
-          .filter((href): href is string => !!href && /^\/blog\/.+/.test(href))
+          .filter((href): href is string => !!href && /^\/blog\/.+/.test(href)),
       );
 
     expect(blogLinks.length).toBeGreaterThan(0);
@@ -160,11 +167,14 @@ test.describe('Blog Pages', () => {
 
     // Follow the first post link the index actually renders — never assume a
     // slug pattern.
-    const firstPostLink = await page.locator('blog-index').getByRole('link')
-      .evaluateAll((links) =>
-        links
-          .map((link) => link.getAttribute('href'))
-          .find((href) => !!href && /^\/blog\/.+/.test(href)) ?? null
+    const firstPostLink = await page
+      .locator('blog-index')
+      .getByRole('link')
+      .evaluateAll(
+        (links) =>
+          links
+            .map((link) => link.getAttribute('href'))
+            .find((href) => !!href && /^\/blog\/.+/.test(href)) ?? null,
       );
 
     expect(firstPostLink).not.toBeNull();

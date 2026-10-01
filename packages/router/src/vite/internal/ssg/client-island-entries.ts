@@ -76,36 +76,32 @@ export function buildClientIslandEntries(options: {
         reason: meta?.reason,
       };
     }),
-    ...[...compilerBehaviorDecls, ...packageIslandDecls].map(
-      (island) => {
-        const delivery = island as IslandDecl & {
-          media?: string;
-          tags?: readonly string[];
-          tagNames?: readonly string[];
-          exportNames?: Readonly<Record<string, string>>;
-        };
-        const strategy = resolveIslandHydrate(
-          (island as IslandDecl & { hydrate?: IslandDeliveryStrategy }).hydrate,
-          upgradeStrategy,
-        ) as IslandDeliveryStrategy;
-        return ({
-          tagName: island.tagName,
-          modulePath: island.modulePath,
-          isPackage: island.source === 'package' || island.isPackage === true,
-          // #638: forward the named export so the client factory reads
-          // mod[exportName] (UI package chunks dropped `export default`).
-          exportName: island.exportName,
-          strategy,
-          ...(strategy === 'media' && delivery.media !== undefined
-            ? { media: delivery.media }
-            : {}),
-          ...(delivery.tags !== undefined ? { tags: delivery.tags } : {}),
-          ...(delivery.tagNames !== undefined ? { tagNames: delivery.tagNames } : {}),
-          ...(delivery.exportNames !== undefined ? { exportNames: delivery.exportNames } : {}),
-          ...resolveIslandSsrDsd(island),
-          reason: island.reason,
-        });
-      },
-    ),
+    ...[...compilerBehaviorDecls, ...packageIslandDecls].map((island) => {
+      const delivery = island as IslandDecl & {
+        media?: string;
+        tags?: readonly string[];
+        tagNames?: readonly string[];
+        exportNames?: Readonly<Record<string, string>>;
+      };
+      const strategy = resolveIslandHydrate(
+        (island as IslandDecl & { hydrate?: IslandDeliveryStrategy }).hydrate,
+        upgradeStrategy,
+      ) as IslandDeliveryStrategy;
+      return {
+        tagName: island.tagName,
+        modulePath: island.modulePath,
+        isPackage: island.source === 'package' || island.isPackage === true,
+        // #638: forward the named export so the client factory reads
+        // mod[exportName] (UI package chunks dropped `export default`).
+        exportName: island.exportName,
+        strategy,
+        ...(strategy === 'media' && delivery.media !== undefined ? { media: delivery.media } : {}),
+        ...(delivery.tags !== undefined ? { tags: delivery.tags } : {}),
+        ...(delivery.tagNames !== undefined ? { tagNames: delivery.tagNames } : {}),
+        ...(delivery.exportNames !== undefined ? { exportNames: delivery.exportNames } : {}),
+        ...resolveIslandSsrDsd(island),
+        reason: island.reason,
+      };
+    }),
   ];
 }

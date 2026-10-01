@@ -59,8 +59,13 @@ const samples = Number(option('--samples', '10'));
 const delay = Number(option('--delay', '100'));
 const out = option('--out');
 if (
-  !out || !Number.isInteger(samples) || samples < 2 || samples > 100 ||
-  !Number.isInteger(delay) || delay < 5 || delay > 100
+  !out ||
+  !Number.isInteger(samples) ||
+  samples < 2 ||
+  samples > 100 ||
+  !Number.isInteger(delay) ||
+  delay < 5 ||
+  delay > 100
 ) {
   throw new Error('pass --out <path>, --samples 2..100 and --delay 5..100');
 }
@@ -113,12 +118,12 @@ try {
           await page.waitForFunction(
             ({ tag, message }) =>
               document.querySelector(tag)?.shadowRoot?.querySelector('#delayed')?.textContent ===
-                message,
+              message,
             { tag, message },
           );
           const partReadyProxyMs = await page.evaluate(() => performance.now());
-          await page.waitForFunction(() =>
-            performance.getEntriesByName('first-contentful-paint').length > 0
+          await page.waitForFunction(
+            () => performance.getEntriesByName('first-contentful-paint').length > 0,
           );
           const fcpMs = await page.evaluate(
             () => performance.getEntriesByName('first-contentful-paint')[0].startTime,
@@ -151,9 +156,7 @@ try {
       }
       const summary = (mode: 'stream' | 'off') => ({
         fcpMedianMs: median(observations.map((pair) => pair[mode]!.fcpMs)),
-        partReadyProxyMedianMs: median(
-          observations.map((pair) => pair[mode]!.partReadyProxyMs),
-        ),
+        partReadyProxyMedianMs: median(observations.map((pair) => pair[mode]!.partReadyProxyMs)),
       });
       const report = {
         schemaVersion: 1,
@@ -186,9 +189,7 @@ try {
       };
       await Deno.mkdir(dirname(out), { recursive: true });
       await Deno.writeTextFile(out, `${JSON.stringify(report, null, 2)}\n`);
-      console.log(
-        `stream comparison: ${samples} samples/mode, FCP and Part-ready proxy -> ${out}`,
-      );
+      console.log(`stream comparison: ${samples} samples/mode, FCP and Part-ready proxy -> ${out}`);
     } finally {
       await context.close();
     }

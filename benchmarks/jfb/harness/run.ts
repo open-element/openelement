@@ -207,7 +207,7 @@ async function runCpuBenchmark(
 }
 
 async function measureMemory(page: BrowserPage): Promise<number> {
-  return await page.evaluate(`
+  return (await page.evaluate(`
     (async () => {
       const gc = window.gc;
       if (gc) gc({ type: 'major', execution: 'sync', flavor: 'last-resort' });
@@ -215,7 +215,7 @@ async function measureMemory(page: BrowserPage): Promise<number> {
       if (gc) gc({ type: 'major', execution: 'sync', flavor: 'last-resort' });
       return performance.memory ? performance.memory.usedJSHeapSize : -1;
     })()
-  `) as number;
+  `)) as number;
 }
 
 async function runMemBenchmark(
@@ -245,8 +245,11 @@ interface RunOptions {
 }
 
 async function commandVersion(command: string, args: string[]): Promise<string> {
-  const result = await new Deno.Command(command, { args, stdout: 'piped', stderr: 'piped' })
-    .output();
+  const result = await new Deno.Command(command, {
+    args,
+    stdout: 'piped',
+    stderr: 'piped',
+  }).output();
   return result.success ? new TextDecoder().decode(result.stdout).trim() : 'unavailable';
 }
 
@@ -299,27 +302,27 @@ export async function runHarness(options: RunOptions = {}): Promise<Record<strin
     'vanillajs',
     ...buildReport.comparators.filter((c) => c.built).map((c) => c.id),
   ];
-  const runSpecs = implementationRunSpecs(built).filter((spec) =>
-    !options.implementations || options.implementations.includes(spec.id)
+  const runSpecs = implementationRunSpecs(built).filter(
+    (spec) => !options.implementations || options.implementations.includes(spec.id),
   );
   const iterations = options.iterations ?? CPU_ITERATIONS;
   const browserName = options.browser ?? 'chromium';
 
   const playwright = await import('@playwright/test');
-  const browserType =
-    (playwright as unknown as Record<string, { launch(o?: object): Promise<BrowserInstance> }>)[
-      browserName
-    ];
-  const launchArgs = browserName === 'chromium'
-    ? [
-      '--js-flags=--expose-gc',
-      '--enable-precise-memory-info',
-      '--disable-background-timer-throttling',
-      '--disable-backgrounding-occluded-windows',
-      '--disable-renderer-backgrounding',
-      '--window-size=1280,800',
-    ]
-    : [];
+  const browserType = (
+    playwright as unknown as Record<string, { launch(o?: object): Promise<BrowserInstance> }>
+  )[browserName];
+  const launchArgs =
+    browserName === 'chromium'
+      ? [
+          '--js-flags=--expose-gc',
+          '--enable-precise-memory-info',
+          '--disable-background-timer-throttling',
+          '--disable-backgrounding-occluded-windows',
+          '--disable-renderer-backgrounding',
+          '--window-size=1280,800',
+        ]
+      : [];
   const browser = await browserType.launch({ args: launchArgs });
   const browserVersion = browser.version();
 
@@ -331,10 +334,10 @@ export async function runHarness(options: RunOptions = {}): Promise<Record<strin
       const type = path.endsWith('.html')
         ? 'text/html'
         : path.endsWith('.js')
-        ? 'text/javascript'
-        : path.endsWith('.css')
-        ? 'text/css'
-        : 'application/octet-stream';
+          ? 'text/javascript'
+          : path.endsWith('.css')
+            ? 'text/css'
+            : 'application/octet-stream';
       return new Response(file, { headers: { 'content-type': type, 'cache-control': 'no-store' } });
     } catch {
       return new Response('not found', { status: 404 });
@@ -365,7 +368,7 @@ export async function runHarness(options: RunOptions = {}): Promise<Record<strin
               `(async () => { const d = performance.now(); while (performance.now() - d < 10000) { const h = document.querySelector('main-element'); if (h && h.shadowRoot && h.shadowRoot.getElementById('run')) return; await new Promise(r => setTimeout(r, 25)); } throw new Error('shadow app did not boot'); })()`,
             );
           }
-          samples.push(...await runCpuBenchmark(page, runSpec.root, bench));
+          samples.push(...(await runCpuBenchmark(page, runSpec.root, bench)));
           await page.close();
         }
         cpu.push({

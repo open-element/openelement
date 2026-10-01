@@ -155,19 +155,17 @@ Deno.test('fail() re-render channel: native callers receive the classified outco
 });
 
 Deno.test('fail() fetch channel answers the ActionResult JSON with degraded unserializable data', async () => {
-  for (
-    const data of [
-      undefined,
-      () => 'nope',
-      Symbol('sym'),
-      1n,
-      (() => {
-        const circular: Record<string, unknown> = {};
-        circular.self = circular;
-        return circular;
-      })(),
-    ]
-  ) {
+  for (const data of [
+    undefined,
+    () => 'nope',
+    Symbol('sym'),
+    1n,
+    (() => {
+      const circular: Record<string, unknown> = {};
+      circular.self = circular;
+      return circular;
+    })(),
+  ]) {
     const { context, state } = formPost({
       origin: 'https://pages.example.test',
       fetchHeader: true,
@@ -261,13 +259,7 @@ Deno.test('a route without any action export is a defined 404, not a render', as
     origin: 'https://pages.example.test',
     fetchHeader: true,
   });
-  const execution = await runActionProtocol(
-    context,
-    {},
-    { env: {} },
-    statusPage,
-    state,
-  );
+  const execution = await runActionProtocol(context, {}, { env: {} }, statusPage, state);
   assertEquals(await execution.response!.json(), {
     type: 'about:blank',
     title: 'Not Found',
@@ -337,7 +329,7 @@ Deno.test('same-origin posts pass; the http loopback allowance covers host varie
     method: 'POST',
     headers: {
       'content-type': 'application/x-www-form-urlencoded',
-      'origin': 'http://localhost:3000',
+      origin: 'http://localhost:3000',
     },
     body: 'message=hello',
   });
@@ -392,12 +384,10 @@ Deno.test('same-site Fetch Metadata without a matching origin fails closed', asy
 });
 
 Deno.test('browser-shaped form body without Origin or Fetch Metadata fails closed (#1382)', async () => {
-  for (
-    const evidence of [
-      { upgradeInsecureRequests: '1' },
-      { accept: 'text/html,application/xhtml+xml' },
-    ]
-  ) {
+  for (const evidence of [
+    { upgradeInsecureRequests: '1' },
+    { accept: 'text/html,application/xhtml+xml' },
+  ]) {
     const { context, state } = formPost({ fetchHeader: true, ...evidence });
     const execution = await runActionProtocol(
       context,
@@ -568,12 +558,9 @@ Deno.test('createActionBodyLimit passes an under-limit body through to next()', 
     body: 'message=ok',
   });
   let reachedNext = false;
-  await (limit as (c: unknown, next: () => unknown) => Promise<unknown>)(
-    { req: { raw } },
-    () => {
-      reachedNext = true;
-    },
-  );
+  await (limit as (c: unknown, next: () => unknown) => Promise<unknown>)({ req: { raw } }, () => {
+    reachedNext = true;
+  });
   assertEquals(reachedNext, true);
 });
 
@@ -607,7 +594,7 @@ Deno.test('the Hono bridge middleware keeps onion order and the response fallbac
     return new Response('own');
   });
   assertEquals(
-    await (await own(request, {}, () => new Response('downstream')) as Response).text(),
+    await ((await own(request, {}, () => new Response('downstream'))) as Response).text(),
     'own',
   );
 
@@ -615,13 +602,9 @@ Deno.test('the Hono bridge middleware keeps onion order and the response fallbac
   // the context's own response.
   const pass = bridge.asFetchMiddleware((_c, next) => next());
   assertEquals(
-    await (await pass(request, {}, () => new Response('downstream')) as Response).text(),
+    await ((await pass(request, {}, () => new Response('downstream'))) as Response).text(),
     'downstream',
   );
-  const fallback = await pass(
-    request,
-    {},
-    () => undefined,
-  ) as Response;
+  const fallback = (await pass(request, {}, () => undefined)) as Response;
   assertEquals(fallback, context.res);
 });

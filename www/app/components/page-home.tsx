@@ -174,20 +174,27 @@ export default class PageHome extends OpenElement {
               <open-dragon-live-gaze></open-dragon-live-gaze>
             </div>
             <div class='hero-foot'>
-              <p class='lede'>
-                {this.lede}
-              </p>
+              <p class='lede'>{this.lede}</p>
               <div class='actions'>
-                <a class='action primary' href={this.startBuildingHref}>{this.startBuilding}</a>
-                <a class='action link' href='#element'>{this.watchUnfold}</a>
+                <a class='action primary' href={this.startBuildingHref}>
+                  {this.startBuilding}
+                </a>
+                <a class='action link' href='#element'>
+                  {this.watchUnfold}
+                </a>
               </div>
-              <span class='scroll-cue' aria-hidden='true'>Scroll</span>
+              <span class='scroll-cue' aria-hidden='true'>
+                Scroll
+              </span>
             </div>
           </div>
           <div class='spec-strip'>
             <div class='spec-cell'>
               <small>{this.specVersion}</small>
-              <strong>{this.registryPrefix}{this.registryNote}</strong>
+              <strong>
+                {this.registryPrefix}
+                {this.registryNote}
+              </strong>
               <small>{this.commonVersionNote}</small>
             </div>
             <div class='spec-cell'>
@@ -213,7 +220,9 @@ export default class PageHome extends OpenElement {
         </section>
 
         <section class='scene scene-split' id='element'>
-          <span class='scene-outlined' aria-hidden='true'>01</span>
+          <span class='scene-outlined' aria-hidden='true'>
+            01
+          </span>
           <div class='scene-copy'>
             <p class='scene-index'>{this.sceneElementIndex}</p>
             <figure class='scene-figure' aria-hidden='true'>
@@ -223,9 +232,7 @@ export default class PageHome extends OpenElement {
               {this.sceneElementLead}
               <span class='accent'>{this.sceneElementAccent}</span>
             </h2>
-            <p>
-              {this.sceneElementCopy}
-            </p>
+            <p>{this.sceneElementCopy}</p>
             <div class='badges'>
               <span class='badge'>{this.badgeRuntime}</span>
               <span class='badge'>{this.badgeAuthoring}</span>
@@ -233,7 +240,8 @@ export default class PageHome extends OpenElement {
           </div>
           <div class='scene-art'>
             <open-code-block>
-              <pre><code>{`import { element, OpenElement, property } from '@openelement/element'
+              <pre>
+                <code>{`import { element, OpenElement, property } from '@openelement/element'
 
 @element('open-counter', { root: 'shadow-open' })
 export class OpenCounter extends OpenElement {
@@ -248,7 +256,8 @@ export class OpenCounter extends OpenElement {
 }
 
 // SSR: <open-counter count="0"> + DSD shadow root.
-// No JavaScript required for first paint.`}</code></pre>
+// No JavaScript required for first paint.`}</code>
+              </pre>
             </open-code-block>
           </div>
         </section>
@@ -263,9 +272,7 @@ export class OpenCounter extends OpenElement {
             <span class='accent'>{this.sceneDsdAccent}</span>
           </h2>
           <div class='scene-copy'>
-            <p>
-              {this.sceneDsdCopy}
-            </p>
+            <p>{this.sceneDsdCopy}</p>
           </div>
           <div class='flood-panels'>
             <div class='flood-panel'>
@@ -277,7 +284,9 @@ export class OpenCounter extends OpenElement {
   </template>`}
               </code>
             </div>
-            <span class='flood-arrow' aria-hidden='true'>⟶</span>
+            <span class='flood-arrow' aria-hidden='true'>
+              ⟶
+            </span>
             <div class='flood-panel solid'>
               <small>{this.floodBrowser}</small>
               <span class='shadow-outline'>#shadow-root (open)</span>
@@ -299,14 +308,14 @@ export class OpenCounter extends OpenElement {
             <span class='accent'>{this.sceneIslandsAccent}</span>
           </h2>
           <div class='scene-copy'>
-            <p>
-              {this.sceneIslandsCopy}
-            </p>
+            <p>{this.sceneIslandsCopy}</p>
           </div>
           <div class='strategies'>
             {this.strategies.map((strategy) => (
               <div key={strategy.key} class={strategy.className}>
-                <span class='glyph' aria-hidden='true'>{strategy.glyph}</span>
+                <span class='glyph' aria-hidden='true'>
+                  {strategy.glyph}
+                </span>
                 <strong>
                   {strategy.name}
                   <span class='tag-default'>{strategy.tag}</span>
@@ -332,7 +341,9 @@ export class OpenCounter extends OpenElement {
               <div key={output.key} class={output.className}>
                 <span class='name'>{output.name}</span>
                 <span class='desc'>{output.description}</span>
-                <span class='arrow' aria-hidden='true'>→</span>
+                <span class='arrow' aria-hidden='true'>
+                  →
+                </span>
               </div>
             ))}
           </div>
@@ -347,8 +358,12 @@ export class OpenCounter extends OpenElement {
           </div>
           <p class='command-note'>{this.beginNote}</p>
           <div class='actions'>
-            <a class='action primary' href={this.getStartedHref}>{this.getStarted}</a>
-            <a class='action' href={this.docsHref}>{this.readGuide}</a>
+            <a class='action primary' href={this.getStartedHref}>
+              {this.getStarted}
+            </a>
+            <a class='action' href={this.docsHref}>
+              {this.readGuide}
+            </a>
           </div>
         </section>
 

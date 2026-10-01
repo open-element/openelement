@@ -82,9 +82,7 @@ if (prunePublic) {
   await removeIfExists(`${root}/${out}/public/${prunePublic}`);
 }
 if (!(await exists(`${root}/${out}/nitro.json`))) {
-  console.error(
-    `Nitro build produced no manifest at ${root}/${out}/nitro.json`,
-  );
+  console.error(`Nitro build produced no manifest at ${root}/${out}/nitro.json`);
   Deno.exit(1);
 }
 console.log(`nitro build ok: preset=${preset} out=${root}/${out}`);

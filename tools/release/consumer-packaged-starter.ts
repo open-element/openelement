@@ -70,10 +70,13 @@ async function run(
   // so track the timeout explicitly to report it instead of an empty failure.
   const controller = new AbortController();
   let timedOut = false;
-  const timeoutId = timeoutMs === undefined ? undefined : setTimeout(() => {
-    timedOut = true;
-    controller.abort();
-  }, timeoutMs);
+  const timeoutId =
+    timeoutMs === undefined
+      ? undefined
+      : setTimeout(() => {
+          timedOut = true;
+          controller.abort();
+        }, timeoutMs);
   try {
     const result = await new Deno.Command(command, {
       args,
@@ -137,28 +140,24 @@ function reservePort(): number {
 // --packaged-import-map-check leg.
 
 function isBareSpecifier(specifier: string): boolean {
-  return !specifier.startsWith('.') &&
+  return (
+    !specifier.startsWith('.') &&
     !specifier.startsWith('/') &&
     !specifier.startsWith('file:') &&
     !specifier.startsWith('http:') &&
     !specifier.startsWith('https:') &&
     !specifier.startsWith('data:') &&
     !specifier.startsWith('node:') &&
-    !specifier.startsWith('npm:');
+    !specifier.startsWith('npm:')
+  );
 }
 
-function isMappedSpecifier(
-  specifier: string,
-  importMap: Record<string, string>,
-): boolean {
+function isMappedSpecifier(specifier: string, importMap: Record<string, string>): boolean {
   if (Object.hasOwn(importMap, specifier)) return true;
   return Object.keys(importMap).some((key) => key.endsWith('/') && specifier.startsWith(key));
 }
 
-function findMissingGeneratedImports(
-  source: string,
-  importMap: Record<string, string>,
-): string[] {
+function findMissingGeneratedImports(source: string, importMap: Record<string, string>): string[] {
   const specifiers = new Set<string>();
   for (const { value } of extractStaticModuleSpecifiers(source)) {
     if (isBareSpecifier(value)) specifiers.add(value);
@@ -443,7 +442,7 @@ try {
 
   const starter = join(tmp, 'starter');
   const configPath = join(starter, 'deno.json');
-  const config = await readJson(configPath) as {
+  const config = (await readJson(configPath)) as {
     imports: Record<string, string>;
     nodeModulesDir?: string;
   };
@@ -474,8 +473,7 @@ try {
     '@openelement/router/vite': `npm:@openelement/router@${PACKAGE_VERSION}/vite`,
     '@openelement/element': `npm:@openelement/element@${PACKAGE_VERSION}`,
     '@openelement/element/jsx-runtime': `npm:@openelement/element@${PACKAGE_VERSION}/jsx-runtime`,
-    '@openelement/element/jsx-dev-runtime':
-      `npm:@openelement/element@${PACKAGE_VERSION}/jsx-dev-runtime`,
+    '@openelement/element/jsx-dev-runtime': `npm:@openelement/element@${PACKAGE_VERSION}/jsx-dev-runtime`,
   };
   for (const [key, expected] of Object.entries(expectedImports)) {
     if (config.imports[key] !== expected) {
@@ -493,7 +491,11 @@ try {
     .map((spec) => spec.slice('npm:'.length))
     .filter((spec) => {
       const name = spec.startsWith('@')
-        ? spec.split('/').slice(0, 2).join('/').replace(/@[^/]*$/u, '')
+        ? spec
+            .split('/')
+            .slice(0, 2)
+            .join('/')
+            .replace(/@[^/]*$/u, '')
         : spec.split('@')[0];
       return !existsSync(join(tmp, 'node_modules', ...name.split('/')));
     });
@@ -581,7 +583,9 @@ try {
   const pageRoutes = manifestRoutes.filter((route) => route.kind === 'page');
   const apiRoutes = manifestRoutes.filter((route) => route.kind === 'api');
   if (
-    buildEvidence.success !== true || pageRoutes.length !== 6 || apiRoutes.length !== 1 ||
+    buildEvidence.success !== true ||
+    pageRoutes.length !== 6 ||
+    apiRoutes.length !== 1 ||
     (buildEvidence.pages ?? []).some((page) => (page.errors?.length ?? 0) > 0)
   ) {
     throw new Error(
@@ -625,7 +629,7 @@ try {
   const ssrBundle = await Deno.readTextFile(ssrBundlePath);
   const missingGeneratedImports = findMissingGeneratedImports(ssrBundle, generatedImportMap);
   const missingProductImports = missingGeneratedImports.filter((specifier) =>
-    specifier.startsWith('@openelement/')
+    specifier.startsWith('@openelement/'),
   );
   if (missingProductImports.length > 0) {
     throw new Error(

@@ -39,14 +39,12 @@ export type MagicLinkClientFactory = (
   responseHeaders: Headers,
 ) => MagicLinkAuthClient;
 export function createMagicLinkAction(createClient: MagicLinkClientFactory = createServerSupabase) {
-  return async function action(
-    ctx: {
-      formData: FormData;
-      env: RateLimitEnv;
-      request: Request;
-      responseHeaders: Headers;
-    },
-  ): Promise<OpenElementActionFailure<MagicLinkActionData>> {
+  return async function action(ctx: {
+    formData: FormData;
+    env: RateLimitEnv;
+    request: Request;
+    responseHeaders: Headers;
+  }): Promise<OpenElementActionFailure<MagicLinkActionData>> {
     if (!(await authRequestAllowed(ctx.env, ctx.request, 'magic-link'))) {
       return fail(429, { error: 'too many attempts; retry later' });
     }
@@ -57,8 +55,11 @@ export function createMagicLinkAction(createClient: MagicLinkClientFactory = cre
       'next',
       safeInternalNext(String(ctx.formData.get('next') ?? '/notes')),
     );
-    const { error } = await createClient(ctx.env, ctx.request, ctx.responseHeaders).auth
-      .signInWithOtp({ email, options: { emailRedirectTo: callback.href } });
+    const { error } = await createClient(
+      ctx.env,
+      ctx.request,
+      ctx.responseHeaders,
+    ).auth.signInWithOtp({ email, options: { emailRedirectTo: callback.href } });
     if (error) return fail(422, { error: publicAuthError(error), email });
     // Success is PRG (#1060): fail() accepts only 4xx, so the confirmation
     // state lives behind ?sent=1 instead of a 200 fail().

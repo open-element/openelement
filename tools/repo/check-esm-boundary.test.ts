@@ -4,10 +4,12 @@ import { firstCodeLine, scanCjsSyntax, scanExportsConditions } from './check-esm
 
 Deno.test('esm gate accepts pure ESM modules', () => {
   assertEquals(
-    scanCjsSyntax([{
-      path: 'packages/router/src/index.ts',
-      text: `import { handler } from './x.js';\nexport const y = 1;\n`,
-    }]),
+    scanCjsSyntax([
+      {
+        path: 'packages/router/src/index.ts',
+        text: `import { handler } from './x.js';\nexport const y = 1;\n`,
+      },
+    ]),
     [],
   );
   assertEquals(
@@ -24,10 +26,12 @@ Deno.test('esm gate flags CJS syntax, tracked extensions, and require conditions
   ]);
   assertEquals(violations.length, 3);
   assertEquals(
-    scanExportsConditions([{
-      path: 'p/package.json',
-      exports: { '.': { import: './a.js', require: './a.cjs' } },
-    }]).length,
+    scanExportsConditions([
+      {
+        path: 'p/package.json',
+        exports: { '.': { import: './a.js', require: './a.cjs' } },
+      },
+    ]).length,
     1,
   );
 });

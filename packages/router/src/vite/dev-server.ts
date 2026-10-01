@@ -24,9 +24,7 @@ type HonoDevServerModule = typeof import('@hono/vite-dev-server');
 
 type ProxiedHook = 'config' | 'configResolved' | 'configureServer' | 'handleHotUpdate';
 
-export function lazyHonoDevServer(
-  options: (mod: HonoDevServerModule) => DevServerOptions,
-): Plugin {
+export function lazyHonoDevServer(options: (mod: HonoDevServerModule) => DevServerOptions): Plugin {
   let pending: Promise<Plugin> | undefined;
   const load = (): Promise<Plugin> => {
     pending ??= (async () => {
@@ -48,17 +46,18 @@ export function lazyHonoDevServer(
   };
 
   const proxy = <H extends ProxiedHook>(hook: H): NonNullable<Plugin[H]> =>
-    (async function (this: unknown, ...args: unknown[]) {
+    async function (this: unknown, ...args: unknown[]) {
       const plugin = await load();
       const candidate = plugin[hook] as unknown;
-      const fn = typeof candidate === 'function'
-        ? candidate
-        : (candidate && typeof candidate === 'object' && 'handler' in candidate
-          ? (candidate as { handler: unknown }).handler
-          : undefined);
+      const fn =
+        typeof candidate === 'function'
+          ? candidate
+          : candidate && typeof candidate === 'object' && 'handler' in candidate
+            ? (candidate as { handler: unknown }).handler
+            : undefined;
       if (typeof fn !== 'function') return undefined;
       return (fn as (this: unknown, ...hookArgs: unknown[]) => unknown).apply(this, args);
-    }) as unknown as NonNullable<Plugin[H]>;
+    } as unknown as NonNullable<Plugin[H]>;
 
   return {
     name: '@hono/vite-dev-server',

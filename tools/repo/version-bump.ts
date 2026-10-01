@@ -55,8 +55,8 @@ export const PACKAGE_CONFIGS: readonly string[] = [
 export const VERSION_SOURCE = 'packages/create/src/version.ts';
 
 /** Every registered fixture lock, repo-relative. */
-export const LOCK_FILES: readonly string[] = FIXTURE_LOCKS.map((entry) =>
-  `tests/fixtures/${entry.fixture}/deno.lock`
+export const LOCK_FILES: readonly string[] = FIXTURE_LOCKS.map(
+  (entry) => `tests/fixtures/${entry.fixture}/deno.lock`,
 );
 
 /** The published packages' source trees scanned for historical release names. */
@@ -262,10 +262,7 @@ export async function planVersionBump(
  * anchor audit rides the same cross-assertion). Returns one message per point
  * that does not (empty when the tree is consistent).
  */
-export async function inconsistencyFailures(
-  root: string,
-  expected: string,
-): Promise<string[]> {
+export async function inconsistencyFailures(root: string, expected: string): Promise<string[]> {
   const failures: string[] = [];
   for (const path of PACKAGE_CONFIGS) {
     const version = readConfigVersion(await Deno.readTextFile(join(root, path)));
@@ -289,7 +286,7 @@ export async function inconsistencyFailures(
     if (!text.includes('jsr:@openelement/')) continue;
     failures.push(`${path}: no @${expected} workspace link`);
   }
-  failures.push(...await wwwReleaseAnchorDrift(root));
+  failures.push(...(await wwwReleaseAnchorDrift(root)));
   return failures;
 }
 
@@ -359,9 +356,7 @@ async function main(): Promise<void> {
     return;
   }
 
-  console.log(
-    `version-bump: ${plan.currentVersion} -> ${target} (${write ? 'WRITE' : 'dry run'})`,
-  );
+  console.log(`version-bump: ${plan.currentVersion} -> ${target} (${write ? 'WRITE' : 'dry run'})`);
   for (const edit of plan.edits) console.log(renderDiff(edit));
   for (const edit of plan.lockEdits) console.log(renderDiff(edit));
   console.log(

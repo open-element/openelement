@@ -75,13 +75,11 @@ async function collectTsFiles(dir: string): Promise<string[]> {
   const files: string[] = [];
 
   try {
-    for await (
-      const { path } of walk(dir, {
-        includeDirs: false,
-        skip: [/(^|\/)node_modules(\/|$)/, /(^|\/)dist(\/|$)/],
-        exts: ['ts'],
-      })
-    ) {
+    for await (const { path } of walk(dir, {
+      includeDirs: false,
+      skip: [/(^|\/)node_modules(\/|$)/, /(^|\/)dist(\/|$)/],
+      exts: ['ts'],
+    })) {
       files.push(path);
     }
   } catch {
@@ -116,19 +114,16 @@ export function collectWorkspaceSpecifiers(packages: PackageInfo[]): Set<string>
   return specifiers;
 }
 
-async function validateRootImportMap(
-  packages: PackageInfo[],
-  failures: string[],
-): Promise<void> {
-  const rootConfig = await readJson('deno.json') as {
+async function validateRootImportMap(packages: PackageInfo[], failures: string[]): Promise<void> {
+  const rootConfig = (await readJson('deno.json')) as {
     imports?: Record<string, string>;
   };
   const imports = rootConfig.imports ?? {};
   const packageNames = packages.map((pkg) => pkg.name).sort((a, b) => b.length - a.length);
 
   for (const specifier of Object.keys(imports)) {
-    const packageName = packageNames.find((name) =>
-      specifier === name || specifier.startsWith(`${name}/`)
+    const packageName = packageNames.find(
+      (name) => specifier === name || specifier.startsWith(`${name}/`),
     );
     if (!packageName) continue;
     failures.push(
@@ -195,12 +190,12 @@ export function packageSetFailures(actual: string[], expected: readonly string[]
   const actualSet = new Set(actual);
   const expectedSet = new Set(expected);
   return [
-    ...expected.filter((name) => !actualSet.has(name)).map((name) =>
-      `missing retained package: ${name}`
-    ),
-    ...actual.filter((name) => !expectedSet.has(name)).map((name) =>
-      `unowned workspace package: ${name}`
-    ),
+    ...expected
+      .filter((name) => !actualSet.has(name))
+      .map((name) => `missing retained package: ${name}`),
+    ...actual
+      .filter((name) => !expectedSet.has(name))
+      .map((name) => `unowned workspace package: ${name}`),
   ];
 }
 
@@ -224,18 +219,15 @@ function surfaceSourceFiles(root: string): string[] {
 function forbiddenImportFailures(file: string, source: string, forbidden: string[]): string[] {
   const imports = extractOpenImports(source);
   return forbidden.flatMap((packageName) =>
-    imports.some((specifier) =>
-        specifier === packageName || specifier.startsWith(`${packageName}/`)
-      )
+    imports.some(
+      (specifier) => specifier === packageName || specifier.startsWith(`${packageName}/`),
+    )
       ? [`${file}: forbidden product-boundary import ${packageName}`]
-      : []
+      : [],
   );
 }
 
-async function validatePackageSurface(
-  packages: PackageInfo[],
-  failures: string[],
-): Promise<void> {
+async function validatePackageSurface(packages: PackageInfo[], failures: string[]): Promise<void> {
   failures.push(
     ...packageSetFailures(
       packages.map((pkg) => pkg.name),
@@ -291,23 +283,20 @@ export function createVersionFailures(createVersionSource: string): string[] {
   if (match[1] !== PACKAGE_VERSION) {
     return [
       `packages/create/src/version.ts: CREATE_VERSION ${match[1]} does not match ` +
-      `docs/release/release-state.json sourceVersion ${PACKAGE_VERSION}`,
+        `docs/release/release-state.json sourceVersion ${PACKAGE_VERSION}`,
     ];
   }
   return [];
 }
 
-async function validatePackageConfigs(
-  packages: PackageInfo[],
-  failures: string[],
-): Promise<void> {
+async function validatePackageConfigs(packages: PackageInfo[], failures: string[]): Promise<void> {
   failures.push(
     ...createVersionFailures(await Deno.readTextFile('packages/create/src/version.ts')),
   );
 
   for (const pkg of packages) {
     const configPath = join(pkg.dir, 'deno.json');
-    const config = await readJson(configPath) as {
+    const config = (await readJson(configPath)) as {
       name?: unknown;
       version?: unknown;
       exports?: unknown;
@@ -410,7 +399,8 @@ async function main(): Promise<void> {
       const source = await Deno.readTextFile(file);
       for (const specifier of extractOpenImports(source)) {
         if (!isDeclaredImport(specifier, pkg, workspaceSpecifiers)) {
-          const msg = `${file} imports "${specifier}" but no workspace package exports it ` +
+          const msg =
+            `${file} imports "${specifier}" but no workspace package exports it ` +
             `and ${pkg.dir}/deno.json does not declare it.`;
           console.error(`  FAIL: ${msg}`);
           failures.push(msg);
@@ -418,7 +408,8 @@ async function main(): Promise<void> {
         const base = normalizeDep(specifier, pkg.name);
         if (base !== null && base.startsWith('@openelement/')) {
           if (!isAllowedDependencyDirection(pkg.name, base)) {
-            const msg = `Dependency direction violation: ${pkg.name} must not depend on ${base} ` +
+            const msg =
+              `Dependency direction violation: ${pkg.name} must not depend on ${base} ` +
               `(${file} imports "${specifier}"). Allowed: ${
                 ALLOWED_DEPENDENCY_DIRECTION[pkg.name]?.join(', ') || 'none'
               }.`;

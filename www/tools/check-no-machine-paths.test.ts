@@ -10,30 +10,26 @@ Deno.test('isTextArtifact: binary bytes are not text', () => {
 });
 
 Deno.test('findMachinePath: real machine paths are found', () => {
-  for (
-    const [input, label] of [
-      ['/Users/alice/projects/app.js', 'macOS home path'],
-      ['/home/runner/work/repo/build.js', 'Linux home path'],
-      ['/private/tmp/checkout/x.css', 'private temp path'],
-      ['/var/folders/xy/x.ts', 'macOS temp path'],
-      ['C:\\projects\\app\\dist\\x.js', 'Windows drive path'],
-      ['c:/ci/work/repo/y.js', 'Windows drive path'],
-    ] as const
-  ) {
+  for (const [input, label] of [
+    ['/Users/alice/projects/app.js', 'macOS home path'],
+    ['/home/runner/work/repo/build.js', 'Linux home path'],
+    ['/private/tmp/checkout/x.css', 'private temp path'],
+    ['/var/folders/xy/x.ts', 'macOS temp path'],
+    ['C:\\projects\\app\\dist\\x.js', 'Windows drive path'],
+    ['c:/ci/work/repo/y.js', 'Windows drive path'],
+  ] as const) {
     const hit = findMachinePath(input);
     assertEquals(hit?.label, label, input);
   }
 });
 
 Deno.test('findMachinePath: Linux CI roots are caught', () => {
-  for (
-    const [input, label] of [
-      ['/tmp/oe-build/checkout/openelement/www/dist/x.js', 'Linux temp path'],
-      ['/builds/org/repo/www/dist/x.js', 'CI builds path'],
-      ['/root/repo/www/dist/x.js', 'Linux root home path'],
-      ['/opt/hostedtoolcache/node/20.11.0/x64/bin/node', 'hosted toolcache path'],
-    ] as const
-  ) {
+  for (const [input, label] of [
+    ['/tmp/oe-build/checkout/openelement/www/dist/x.js', 'Linux temp path'],
+    ['/builds/org/repo/www/dist/x.js', 'CI builds path'],
+    ['/root/repo/www/dist/x.js', 'Linux root home path'],
+    ['/opt/hostedtoolcache/node/20.11.0/x64/bin/node', 'hosted toolcache path'],
+  ] as const) {
     const hit = findMachinePath(input);
     assertEquals(hit?.label, label, input);
   }

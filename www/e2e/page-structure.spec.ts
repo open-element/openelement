@@ -85,9 +85,9 @@ test.describe('Unified page structure', () => {
     const featured = page.locator('blog-index .featured');
     await expect(featured).toHaveAttribute('href', /\/blog\/.+/);
     await expect(featured.locator('h2')).toBeVisible();
-    const hrefs = await page.locator('blog-index a[href^="/blog/"]').evaluateAll((links) =>
-      links.map((link) => link.getAttribute('href') ?? '')
-    );
+    const hrefs = await page
+      .locator('blog-index a[href^="/blog/"]')
+      .evaluateAll((links) => links.map((link) => link.getAttribute('href') ?? ''));
     expect(hrefs.length).toBeGreaterThan(0);
     for (const href of hrefs) {
       const res = await request.get(href);
@@ -106,32 +106,29 @@ test.describe('Unified page structure', () => {
   test('former hero pages render content-first, without a mega hero', async ({ page }) => {
     // The editorial mega hero pushed all content below the fold; these pages
     // now lead with the compact reading-shell/article header (#1087 cleanup).
-    for (
-      const route of [
-        '/reference',
-        '/roadmap',
-        '/architecture',
-        '/architecture/design-system',
-      ]
-    ) {
+    for (const route of [
+      '/reference',
+      '/roadmap',
+      '/architecture',
+      '/architecture/design-system',
+    ]) {
       await page.goto(route);
       await expect(page.locator('h1:visible')).toHaveCount(1);
     }
   });
 
-  test('data-driven entry pages compose their body with shared section frames', async ({ page }) => {
-    for (
-      const route of [
-        '/reference',
-        '/roadmap',
-      ]
-    ) {
+  test('data-driven entry pages compose their body with shared section frames', async ({
+    page,
+  }) => {
+    for (const route of ['/reference', '/roadmap']) {
       await page.goto(route);
       expect(await page.locator('open-section-frame').count()).toBeGreaterThan(0);
     }
   });
 
-  test('compiled light section frames project named and default content in place', async ({ page }) => {
+  test('compiled light section frames project named and default content in place', async ({
+    page,
+  }) => {
     await page.goto('/reference');
     const frames = page.locator('reference-page open-section-frame[data-oe-light]');
     // Light DOM only: the locator 'reference-page open-section-frame' is a
@@ -145,7 +142,9 @@ test.describe('Unified page structure', () => {
     await expect(frames.nth(1).locator('.frame .body .registry')).toBeVisible();
   });
 
-  test('reference renders the generated export and element reference with stable anchors (#1307)', async ({ page }) => {
+  test('reference renders the generated export and element reference with stable anchors (#1307)', async ({
+    page,
+  }) => {
     await page.goto('/reference');
     // Every generated searchRecord anchor resolves to a rendered entry.
     // (adapter-vite anchors retired with the package; use a current export.)
@@ -170,7 +169,9 @@ test.describe('Unified page structure', () => {
     expect(await visual.locator(':scope > *').count()).toBeGreaterThan(0);
   });
 
-  test('blog articles SSR their outline and deterministic navigation without mojibake', async ({ page }) => {
+  test('blog articles SSR their outline and deterministic navigation without mojibake', async ({
+    page,
+  }) => {
     // The baseline's dispatch post; ADR pages are excluded from prev/next and
     // render an empty (hidden) pager.
     await page.goto('/zh/blog/1-0-0-alpha-1-baseline');
@@ -184,7 +185,7 @@ test.describe('Unified page structure', () => {
     // locale (zh here).
     const pager = page.getByRole('navigation', { name: '页面导航' });
     await expect(pager).toHaveCount(1);
-    if (await pager.locator('a:visible').count() > 0) {
+    if ((await pager.locator('a:visible').count()) > 0) {
       await expect(pager).toBeVisible();
     } else {
       await expect(pager).toBeHidden();
@@ -228,7 +229,9 @@ test.describe('Unified page structure', () => {
     expect(pageErrors).toEqual([]);
   });
 
-  test('reading information remains complete without IntersectionObserver or View Transitions', async ({ page }) => {
+  test('reading information remains complete without IntersectionObserver or View Transitions', async ({
+    page,
+  }) => {
     await page.addInitScript(() => {
       Object.defineProperty(window, 'IntersectionObserver', {
         value: undefined,
@@ -245,7 +248,8 @@ test.describe('Unified page structure', () => {
     // persistent desktop outline links are the ones outside the mobile
     // details drawer (the drawer duplicates the same fragments on small
     // viewports).
-    const outlineLinks = page.getByRole('complementary', { name: 'On this page' })
+    const outlineLinks = page
+      .getByRole('complementary', { name: 'On this page' })
       .locator('a[href^="#"]:not(details a)');
     // #start plus this page's six h2 sections, all present in the SSR
     // payload — the outline does not wait for a client observer. The count is

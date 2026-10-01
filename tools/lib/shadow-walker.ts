@@ -34,10 +34,7 @@ export function deepQueryFirstInPage(
  * All elements matching `selector`, in document order, piercing open shadow
  * roots (a shadow root's content is visited in place of its host).
  */
-export function deepQueryAllInPage(
-  root: Document | ShadowRoot,
-  selector: string,
-): Element[] {
+export function deepQueryAllInPage(root: Document | ShadowRoot, selector: string): Element[] {
   const matches: Element[] = [];
   const visit = (node: Document | ShadowRoot): void => {
     const all = node.querySelectorAll('*');

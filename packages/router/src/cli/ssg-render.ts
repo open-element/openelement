@@ -10,9 +10,7 @@ import type { SsgRenderEvidence } from '../vite/internal/protocol/ssg.ts';
 import { printBuildManifest } from '../vite/build-manifest.ts';
 import type { OpenElementBuildContext } from '../vite/build-context.ts';
 
-export function createSsgRenderEvidence(
-  ctx?: OpenElementBuildContext,
-): SsgRenderEvidence {
+export function createSsgRenderEvidence(ctx?: OpenElementBuildContext): SsgRenderEvidence {
   if (!ctx) return {};
 
   return {

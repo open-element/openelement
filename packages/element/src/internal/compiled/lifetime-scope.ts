@@ -45,11 +45,9 @@ export class LifetimeScope {
 
   connect(): void {
     if (this.#disposed) {
-      throw frameworkError(
-        KernelErrorCode.DISPOSED,
-        'cannot activate a disposed LifetimeScope',
-        { phase: 'csr' },
-      );
+      throw frameworkError(KernelErrorCode.DISPOSED, 'cannot activate a disposed LifetimeScope', {
+        phase: 'csr',
+      });
     }
     this.#active = true;
   }
@@ -103,7 +101,9 @@ export class LifetimeScope {
     this.#children.clear();
     for (const cleanup of this.#cleanups.splice(0).reverse()) attempt(cleanup);
     const rangeCleanups = this.#rangeCleanups.splice(0).reverse();
-    if (detachOwnedNodes) { for (const cleanup of rangeCleanups) attempt(cleanup); }
+    if (detachOwnedNodes) {
+      for (const cleanup of rangeCleanups) attempt(cleanup);
+    }
     if (this.#parent) this.#parent.#children.delete(this);
     if (hasError) throw firstError;
   }

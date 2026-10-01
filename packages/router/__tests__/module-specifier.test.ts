@@ -17,20 +17,14 @@ Deno.test('fsPathToModuleSpecifier keeps POSIX absolute paths unchanged', () => 
 
 Deno.test('fsPathToModuleSpecifier rewrites Win32 paths under root as root-relative', () => {
   assertEquals(
-    fsPathToModuleSpecifier(
-      'C:\\Users\\u\\proj\\app\\islands\\counter.ts',
-      'C:\\Users\\u\\proj',
-    ),
+    fsPathToModuleSpecifier('C:\\Users\\u\\proj\\app\\islands\\counter.ts', 'C:\\Users\\u\\proj'),
     '/app/islands/counter.ts',
   );
 });
 
 Deno.test('fsPathToModuleSpecifier accepts mixed separators and trailing root slash', () => {
   assertEquals(
-    fsPathToModuleSpecifier(
-      'C:/Users/u/proj/app/islands/nested\\deep.tsx',
-      'C:\\Users\\u\\proj\\',
-    ),
+    fsPathToModuleSpecifier('C:/Users/u/proj/app/islands/nested\\deep.tsx', 'C:\\Users\\u\\proj\\'),
     '/app/islands/nested/deep.tsx',
   );
 });

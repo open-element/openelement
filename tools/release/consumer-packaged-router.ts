@@ -115,14 +115,12 @@ console.log('packed Router Route Mode PASS');
 `,
   );
   await run('npm', ['install', '--ignore-scripts', '--no-audit', '--no-fund'], tmp);
-  for (
-    const absent of [
-      'node_modules/@openelement/element',
-      'node_modules/preact',
-      'node_modules/lit',
-      'node_modules/@lit-labs/ssr',
-    ]
-  ) {
+  for (const absent of [
+    'node_modules/@openelement/element',
+    'node_modules/preact',
+    'node_modules/lit',
+    'node_modules/@lit-labs/ssr',
+  ]) {
     if (existsSync(join(tmp, absent))) {
       throw new Error(`Route Mode installed optional runtime: ${absent}`);
     }

@@ -23,8 +23,10 @@ export function validateProjectName(name: string): string | null {
     return 'Project name must be lowercase (npm package names cannot contain uppercase letters).';
   }
   if (!PROJECT_NAME_PATTERN.test(name)) {
-    return 'Project name must start with a lowercase letter or number and may only contain ' +
-      'lowercase letters, numbers, dots, underscores, and hyphens.';
+    return (
+      'Project name must start with a lowercase letter or number and may only contain ' +
+      'lowercase letters, numbers, dots, underscores, and hyphens.'
+    );
   }
   return null;
 }
@@ -51,9 +53,9 @@ export function assertUnifiedProductVersions(versions: ProductVersions): Product
   const observed = [...new Set(Object.values(versions))];
   if (observed.length !== 1) {
     throw new Error(
-      `Create requires the support-package same-version release invariant; observed ${
-        observed.join(', ')
-      }`,
+      `Create requires the support-package same-version release invariant; observed ${observed.join(
+        ', ',
+      )}`,
     );
   }
   return versions;
@@ -125,16 +127,18 @@ export async function buildTemplates(
     ['$' + '{v.vite}']: VITE_STARTER_PIN,
     ['$' + '{name}']: projectName,
   };
-  const entries = await Promise.all(TEMPLATE_FILES.map(async ([source, target]) => {
-    let content = await Deno.readTextFile(new URL(source, templatesBase));
-    for (const [token, value] of Object.entries(tokens)) {
-      if (content.includes(token)) content = content.split(token).join(value);
-    }
-    if (content.includes('${v.') || content.includes('${name}')) {
-      throw new Error(`Unresolved scaffold token in starter template: ${source}`);
-    }
-    return [target, content] as const;
-  }));
+  const entries = await Promise.all(
+    TEMPLATE_FILES.map(async ([source, target]) => {
+      let content = await Deno.readTextFile(new URL(source, templatesBase));
+      for (const [token, value] of Object.entries(tokens)) {
+        if (content.includes(token)) content = content.split(token).join(value);
+      }
+      if (content.includes('${v.') || content.includes('${name}')) {
+        throw new Error(`Unresolved scaffold token in starter template: ${source}`);
+      }
+      return [target, content] as const;
+    }),
+  );
   // Code-unit comparison (not localeCompare): deterministic across host
   // locales and matches the test's toSorted() expectation, including
   // uppercase targets like README.md.

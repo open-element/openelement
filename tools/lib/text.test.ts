@@ -57,24 +57,24 @@ Deno.test('stripComments: comment-like text after a string on one line survives'
 });
 
 Deno.test('stripCommentsLine: // inside a string literal does not open a comment (#826)', () => {
-  assertEquals(
-    stripCommentsLine('const a = "https://openelement.org"; const b = 2;', false),
-    { line: 'const a = "https://openelement.org"; const b = 2;', inBlock: false },
-  );
+  assertEquals(stripCommentsLine('const a = "https://openelement.org"; const b = 2;', false), {
+    line: 'const a = "https://openelement.org"; const b = 2;',
+    inBlock: false,
+  });
 });
 
 Deno.test('stripCommentsLine: real line comment after a string is still stripped', () => {
-  assertEquals(
-    stripCommentsLine('const a = "x"; // drop', false),
-    { line: 'const a = "x"; ', inBlock: false },
-  );
+  assertEquals(stripCommentsLine('const a = "x"; // drop', false), {
+    line: 'const a = "x"; ',
+    inBlock: false,
+  });
 });
 
 Deno.test('stripCommentsLine: /* inside a string literal does not open a block', () => {
-  assertEquals(
-    stripCommentsLine('const a = "/* not a block"; // drop', false),
-    { line: 'const a = "/* not a block"; ', inBlock: false },
-  );
+  assertEquals(stripCommentsLine('const a = "/* not a block"; // drop', false), {
+    line: 'const a = "/* not a block"; ',
+    inBlock: false,
+  });
 });
 
 Deno.test('stripCommentsLine: block comment state still tracked across lines', () => {

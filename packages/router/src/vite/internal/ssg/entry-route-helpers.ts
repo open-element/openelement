@@ -52,11 +52,11 @@ export function renderMatchingRenderersFn(lines: string[], renderers: RendererDe
       lines.push(`  renderers.push(${renderer.varName}.default);`);
     } else {
       lines.push(
-        `  if (routePath === ${
-          quoteGeneratedJavaScriptValue(renderer.scope)
-        } || routePath.startsWith(${
-          quoteGeneratedJavaScriptValue(renderer.scope + '/')
-        })) renderers.push(${renderer.varName}.default);`,
+        `  if (routePath === ${quoteGeneratedJavaScriptValue(
+          renderer.scope,
+        )} || routePath.startsWith(${quoteGeneratedJavaScriptValue(
+          renderer.scope + '/',
+        )})) renderers.push(${renderer.varName}.default);`,
       );
     }
   }

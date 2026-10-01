@@ -15,7 +15,9 @@ function makeTempDir(): string {
 function cleanup(dir: string) {
   try {
     Deno.removeSync(dir, { recursive: true });
-  } catch { /* ignore */ }
+  } catch {
+    /* ignore */
+  }
 }
 
 // ─── scanClientBuild ─────────────────────────────────
@@ -158,10 +160,7 @@ Deno.test('printBuildManifest: island budget warning', () => {
   try {
     const islandsDir = join(tmp, 'dist', 'client', 'islands');
     Deno.mkdirSync(islandsDir, { recursive: true });
-    Deno.writeTextFileSync(
-      join(islandsDir, 'island-big-a1b2.js'),
-      'x'.repeat(51 * 1024),
-    );
+    Deno.writeTextFileSync(join(islandsDir, 'island-big-a1b2.js'), 'x'.repeat(51 * 1024));
 
     const manifest = printBuildManifest({ root: tmp, outDir: 'dist', phase: 2 });
     assertExists(manifest.warnings.find((w) => w.includes('exceeds') && w.includes('island-big')));
@@ -217,8 +216,8 @@ Deno.test('printBuildManifest: HTML page budget warning', () => {
 
     const manifest = printBuildManifest({ root: tmp, outDir: 'dist', phase: 3 });
     assertExists(
-      manifest.warnings.find((w) =>
-        w.includes('huge.html') && w.includes('advisory') && w.includes('HTML budget')
+      manifest.warnings.find(
+        (w) => w.includes('huge.html') && w.includes('advisory') && w.includes('HTML budget'),
       ),
     );
   } finally {
@@ -321,10 +320,7 @@ Deno.test('formatSize: large file displays in MB range', () => {
     const islandsDir = join(tmp, 'dist', 'client', 'islands');
     Deno.mkdirSync(islandsDir, { recursive: true });
     // 2MB file to trigger MB display format
-    Deno.writeTextFileSync(
-      join(islandsDir, 'island-huge-a1b2.js'),
-      'x'.repeat(2 * 1024 * 1024),
-    );
+    Deno.writeTextFileSync(join(islandsDir, 'island-huge-a1b2.js'), 'x'.repeat(2 * 1024 * 1024));
 
     const manifest = printBuildManifest({ root: tmp, outDir: 'dist', phase: 2 });
     assertEquals(manifest.islands.length, 1);

@@ -20,9 +20,9 @@ export type { OpenElementRequestHandler, RuntimeContext };
  * optional prerender iterator through unchanged so a host integration only
  * implements the {@link RuntimeAdapter} contract it needs.
  */
-export function createRuntimeAdapter<
-  Env extends Record<string, unknown> = Record<string, unknown>,
->(options: RuntimeAdapterOptions<Env>): RuntimeAdapter<Env> {
+export function createRuntimeAdapter<Env extends Record<string, unknown> = Record<string, unknown>>(
+  options: RuntimeAdapterOptions<Env>,
+): RuntimeAdapter<Env> {
   return {
     name: options.name,
     fetch: options.fetch,
@@ -49,7 +49,9 @@ export function composeFetchMiddleware<Args extends unknown[]>(
   handler: (request: Request, ...args: Args) => Promise<Response>,
 ): (request: Request, ...args: Args) => Promise<Response> {
   return middleware.reduceRight<(request: Request, ...args: Args) => Promise<Response>>(
-    (next, mw) => (request, ...args) => mw(request, () => next(request, ...args)),
+    (next, mw) =>
+      (request, ...args) =>
+        mw(request, () => next(request, ...args)),
     handler,
   );
 }

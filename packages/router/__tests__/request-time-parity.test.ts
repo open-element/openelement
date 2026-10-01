@@ -34,9 +34,8 @@ type ServerHandle = { base: string; close: () => Promise<void> };
 async function bootBuildServer(): Promise<ServerHandle> {
   const entry = await import(toFileUrl(serverEntryPath).href);
   const handle = entry.default as (event: { req: Request }) => Promise<Response>;
-  const server = Deno.serve(
-    { port: 0, hostname: '127.0.0.1' },
-    (request) => handle({ req: request }),
+  const server = Deno.serve({ port: 0, hostname: '127.0.0.1' }, (request) =>
+    handle({ req: request }),
   );
   const addr = server.addr as Deno.NetAddr;
   return {
@@ -69,25 +68,27 @@ async function bootDevServer(): Promise<ServerHandle> {
       // error-to-500 mapping a standalone dev server gets from Vite's overlay
       // error middleware, so dev/build parity is asserted on the real
       // semantic: a contained 500.
-      plugins: [{
-        name: 'open-test:error-to-500',
-        configureServer(errorServer) {
-          return () => {
-            errorServer.middlewares.use(
-              (
-                error: unknown,
-                _req: unknown,
-                response: { statusCode: number; end: (body: string) => void },
-                _next: unknown,
-              ) => {
-                console.error('[dev] request error:', error);
-                response.statusCode = 500;
-                response.end('Internal Server Error');
-              },
-            );
-          };
+      plugins: [
+        {
+          name: 'open-test:error-to-500',
+          configureServer(errorServer) {
+            return () => {
+              errorServer.middlewares.use(
+                (
+                  error: unknown,
+                  _req: unknown,
+                  response: { statusCode: number; end: (body: string) => void },
+                  _next: unknown,
+                ) => {
+                  console.error('[dev] request error:', error);
+                  response.statusCode = 500;
+                  response.end('Internal Server Error');
+                },
+              );
+            };
+          },
         },
-      }],
+      ],
       // Vite probes wildcard addresses before binding its standalone server,
       // even when `host` is loopback. Run the exact Hono/Vite middleware stack
       // behind our own loopback-only server so this contract remains safe in
@@ -120,7 +121,7 @@ async function bootDevServer(): Promise<ServerHandle> {
     close: async () => {
       try {
         await new Promise<void>((resolve, reject) => {
-          httpServer.close((error) => error ? reject(error) : resolve());
+          httpServer.close((error) => (error ? reject(error) : resolve()));
         });
       } finally {
         await server.close();
@@ -350,7 +351,7 @@ Deno.test({
               body: 'kind=big',
             });
             assertEquals(json.status, 422, `${name}: big fetch status`);
-            const body = await json.json() as {
+            const body = (await json.json()) as {
               type?: string;
               status?: number;
               data?: unknown;
@@ -409,7 +410,7 @@ Deno.test({
               body: 'kind=symbol-key',
             });
             assertEquals(json.status, 422, `${name}: symbol-key fetch status`);
-            const body = await json.json() as {
+            const body = (await json.json()) as {
               type?: string;
               status?: number;
               data?: unknown;
@@ -536,12 +537,10 @@ Deno.test({
       // branch; the previous rule set allowed this shape (see #938/#921 E2E).
       await t.step('browser-shaped POST without Origin → 403, both channels (#1382)', async () => {
         for (const [name, base] of Object.entries(both)) {
-          for (
-            const browserEvidence of [
-              { 'upgrade-insecure-requests': '1' },
-              { accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8' },
-            ] as Array<Record<string, string>>
-          ) {
+          for (const browserEvidence of [
+            { 'upgrade-insecure-requests': '1' },
+            { accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8' },
+          ] as Array<Record<string, string>>) {
             // Native (no-JS) multipart form navigation.
             const multipart = new FormData();
             multipart.set('message', 'cross-site-probe');
@@ -577,7 +576,7 @@ Deno.test({
               'application/problem+json',
               `${name}: fetch channel 403 content-type`,
             );
-            const problem = await json.json() as { status?: number; detail?: string };
+            const problem = (await json.json()) as { status?: number; detail?: string };
             assertEquals(problem.status, 403, `${name}: fetch channel problem status`);
             assertEquals(
               problem.detail,
@@ -766,7 +765,7 @@ Deno.test({
           'application/problem+json',
           'build: fetch 413 content-type',
         );
-        const problem = await json.json() as { type?: string; title?: string; status?: number };
+        const problem = (await json.json()) as { type?: string; title?: string; status?: number };
         assertEquals(problem.type, 'about:blank', 'build: fetch 413 problem type');
         assertEquals(problem.title, 'Payload Too Large', 'build: fetch 413 problem title');
         assertEquals(problem.status, 413, 'build: fetch 413 problem status');
@@ -788,7 +787,7 @@ Deno.test({
             'application/problem+json',
             `${name}: JSON 404 content-type`,
           );
-          const body = await response.json() as {
+          const body = (await response.json()) as {
             type?: string;
             title?: string;
             status?: number;
@@ -874,9 +873,8 @@ Deno.test({
                   if (quadrant === 0 || quadrant === 2) {
                     // Native channel: valid → 303, fail → 422 re-render.
                     const target = quadrant === 0 ? '/form' : '/fail-unserializable';
-                    const fields: Record<string, string> = quadrant === 0
-                      ? { message: marker }
-                      : { kind: 'circular' };
+                    const fields: Record<string, string> =
+                      quadrant === 0 ? { message: marker } : { kind: 'circular' };
                     const response = await fetch(`${base}${target}`, formBody(fields));
                     return { quadrant, marker, response };
                   }
@@ -907,7 +905,7 @@ Deno.test({
                   await response.body?.cancel();
                 } else if (quadrant === 1) {
                   assertEquals(response.status, 200, `${name}/${marker}: fetch valid status`);
-                  const body = await response.json() as {
+                  const body = (await response.json()) as {
                     type?: string;
                     status?: number;
                     location?: string;
@@ -928,7 +926,7 @@ Deno.test({
                   );
                 } else {
                   assertEquals(response.status, 422, `${name}/${marker}: fetch fail status`);
-                  const body = await response.json() as { type?: string; data?: unknown };
+                  const body = (await response.json()) as { type?: string; data?: unknown };
                   assertEquals(body.type, 'failure', `${name}/${marker}: fetch fail shape`);
                   assertEquals(body.data, null, `${name}/${marker}: fetch fail degrades to null`);
                 }

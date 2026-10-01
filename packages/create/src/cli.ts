@@ -85,9 +85,10 @@ async function main(): Promise<void> {
       console.info(`  created ${path}`);
     }
   } catch (error) {
-    const detail = error instanceof Deno.errors.PermissionDenied
-      ? `Permission denied. Check write permissions for ${targetDir}.`
-      : errorMessage(error);
+    const detail =
+      error instanceof Deno.errors.PermissionDenied
+        ? `Permission denied. Check write permissions for ${targetDir}.`
+        : errorMessage(error);
     throw new Error(
       `Failed to write project files in "${name}": ${detail} ` +
         'Remove the partially created directory before retrying.',

@@ -28,11 +28,10 @@ export interface WorkspaceRecordsData {
   error?: string;
 }
 
-export interface WorkspaceRecordsQuery extends
-  PromiseLike<{
-    data: WorkspaceRecord[] | null;
-    error: { message: string } | null;
-  }> {
+export interface WorkspaceRecordsQuery extends PromiseLike<{
+  data: WorkspaceRecord[] | null;
+  error: { message: string } | null;
+}> {
   eq(column: string, value: string): WorkspaceRecordsQuery;
   ilike(column: string, pattern: string): WorkspaceRecordsQuery;
   or(expression: string): WorkspaceRecordsQuery;
@@ -54,8 +53,7 @@ export type WorkspaceRecordsClientFactory = (
 ) => WorkspaceRecordsClient;
 
 export function createWorkspaceRecordsLoader(
-  createClient: WorkspaceRecordsClientFactory =
-    createServerSupabase as unknown as WorkspaceRecordsClientFactory,
+  createClient: WorkspaceRecordsClientFactory = createServerSupabase as unknown as WorkspaceRecordsClientFactory,
 ) {
   return async function workspaceRecordsLoader(
     ctx: LoaderContext<Record<string, string>>,
@@ -63,10 +61,13 @@ export function createWorkspaceRecordsLoader(
     const input = parseWorkspaceListInput(new URL(ctx.request.url));
     if (!input) return { denied: false, invalid: true };
     const supabase = createClient(ctx.env, ctx.request, ctx.responseHeaders);
-    const { data: { user } } = await supabase.auth.getUser();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
     if (!user) throw redirect('/login');
 
-    let query = supabase.from('workspace_records')
+    let query = supabase
+      .from('workspace_records')
       .select('id, title, status, created_at')
       .eq('workspace_id', input.workspaceId);
     if (input.status) query = query.eq('status', input.status);
@@ -84,9 +85,10 @@ export function createWorkspaceRecordsLoader(
     const rows = data ?? [];
     const records = rows.slice(0, WORKSPACE_PAGE_SIZE);
     const last = records.at(-1);
-    const nextCursor = rows.length > WORKSPACE_PAGE_SIZE && last
-      ? encodeWorkspaceCursor({ createdAt: last.created_at, id: last.id })
-      : undefined;
+    const nextCursor =
+      rows.length > WORKSPACE_PAGE_SIZE && last
+        ? encodeWorkspaceCursor({ createdAt: last.created_at, id: last.id })
+        : undefined;
     const nextUrl = new URL(ctx.request.url);
     if (nextCursor) nextUrl.searchParams.set('cursor', nextCursor);
     return {

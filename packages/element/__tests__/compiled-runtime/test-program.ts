@@ -249,19 +249,23 @@ export function testProgram(spec: TestProgramSpec): PartProgram {
     sourceFile,
     properties,
     observedAttributes: properties.flatMap((property) =>
-      property.attribute === null ? [] : [property.attribute]
+      property.attribute === null ? [] : [property.attribute],
     ),
     cem: {
       tagName: spec.tag,
       className,
       declaration: { name: className, module: sourceFile },
       attributes: properties.flatMap((property) =>
-        property.attribute === null ? [] : [{
-          name: property.attribute,
-          fieldName: property.name,
-          type: property.type,
-          reflect: property.reflect,
-        }]
+        property.attribute === null
+          ? []
+          : [
+              {
+                name: property.attribute,
+                fieldName: property.name,
+                type: property.type,
+                reflect: property.reflect,
+              },
+            ],
       ),
       members: properties.map((property) => ({
         name: property.name,

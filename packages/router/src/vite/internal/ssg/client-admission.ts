@@ -24,8 +24,8 @@ export function compilerBehaviorDeclarations(
       dsd: true,
       authoring: 'basic-element',
       source: 'nested',
-      reason: `compiler-proven interaction events: ${
-        component.compilerInteractionEvents.join(', ')
-      }`,
+      reason: `compiler-proven interaction events: ${component.compilerInteractionEvents.join(
+        ', ',
+      )}`,
     }));
 }

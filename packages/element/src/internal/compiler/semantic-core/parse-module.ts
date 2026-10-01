@@ -44,11 +44,12 @@ export const typescriptParser: ParserPort = {
       true,
       ts.ScriptKind.TSX,
     );
-    const syntaxDiagnostics = ts.transpileModule(source, {
-      fileName,
-      reportDiagnostics: true,
-      compilerOptions: { jsx: ts.JsxEmit.ReactJSX, target: ts.ScriptTarget.ES2022 },
-    }).diagnostics ?? [];
+    const syntaxDiagnostics =
+      ts.transpileModule(source, {
+        fileName,
+        reportDiagnostics: true,
+        compilerOptions: { jsx: ts.JsxEmit.ReactJSX, target: ts.ScriptTarget.ES2022 },
+      }).diagnostics ?? [];
     return { sourceFile, syntaxDiagnostics };
   },
 };

@@ -93,32 +93,36 @@ class DragonLiveGazeController {
 
     // Center first for the fastest live first paint, then the rest outward
     // from center — the cursor always travels through near-center frames.
-    this.#load(CENTER, () => {
-      if (!this.#connected || this.#epoch !== epoch) return;
-      this.#attrFrame = CENTER;
-      host.setAttribute('data-frame', String(CENTER));
-      this.#stage?.classList.add('live');
-      this.#wake();
-      for (let d = 1; d < FRAME_COUNT; d++) {
-        if (CENTER - d >= 0) this.#load(CENTER - d);
-        if (CENTER + d < FRAME_COUNT) this.#load(CENTER + d);
-      }
-      // Progressive full decode in the background: without it, a fast sweep
-      // can hit a loaded-but-undecoded frame and pay a synchronous main-
-      // thread decode — that is the mid-gesture stutter.
-      const pump = (): void => {
-        const next = this.#state.findIndex((state, index) =>
-          state === 2 && !this.#decoding.has(index)
-        );
-        if (next === -1) {
-          if (this.#state.some((state) => state === 1)) this.#schedule(pump, 400, epoch);
-          return;
+    this.#load(
+      CENTER,
+      () => {
+        if (!this.#connected || this.#epoch !== epoch) return;
+        this.#attrFrame = CENTER;
+        host.setAttribute('data-frame', String(CENTER));
+        this.#stage?.classList.add('live');
+        this.#wake();
+        for (let d = 1; d < FRAME_COUNT; d++) {
+          if (CENTER - d >= 0) this.#load(CENTER - d);
+          if (CENTER + d < FRAME_COUNT) this.#load(CENTER + d);
         }
-        this.#ensureDecoded(next);
-        this.#schedule(pump, 60, epoch);
-      };
-      this.#schedule(pump, 800, epoch);
-    }, epoch);
+        // Progressive full decode in the background: without it, a fast sweep
+        // can hit a loaded-but-undecoded frame and pay a synchronous main-
+        // thread decode — that is the mid-gesture stutter.
+        const pump = (): void => {
+          const next = this.#state.findIndex(
+            (state, index) => state === 2 && !this.#decoding.has(index),
+          );
+          if (next === -1) {
+            if (this.#state.some((state) => state === 1)) this.#schedule(pump, 400, epoch);
+            return;
+          }
+          this.#ensureDecoded(next);
+          this.#schedule(pump, 60, epoch);
+        };
+        this.#schedule(pump, 800, epoch);
+      },
+      epoch,
+    );
 
     const finePointer = globalThis.matchMedia?.('(pointer: fine)').matches ?? false;
     // Capability media queries are only a coarse snapshot and Firefox can
@@ -283,7 +287,8 @@ class DragonLiveGazeController {
     if (this.#state[index] !== 2 || !img || this.#decoding.has(index)) return;
     this.#decoding.add(index);
     const epoch = this.#epoch;
-    img.decode()
+    img
+      .decode()
       .then(() => {
         if (this.#connected && this.#epoch === epoch) this.#state[index] = 3;
       })
@@ -324,9 +329,8 @@ class DragonLiveGazeController {
     const width = globalThis.innerWidth || 1;
     const norm = Math.max(0, Math.min(1, event.clientX / width));
     // Piecewise through the frontal frame so a centered cursor is dead-on.
-    this.#target = norm <= 0.5
-      ? norm * 2 * CENTER
-      : CENTER + (norm - 0.5) * 2 * (FRAME_COUNT - 1 - CENTER);
+    this.#target =
+      norm <= 0.5 ? norm * 2 * CENTER : CENTER + (norm - 0.5) * 2 * (FRAME_COUNT - 1 - CENTER);
     this.#lastPointer = performance.now();
     if (this.#idling) this.#leaveIdle();
     this.#wake();
@@ -476,7 +480,8 @@ class DragonLiveGazeController {
         // never visibly repeating) plus small saccade darts.
         this.#idleAmp = Math.min(1, this.#idleAmp + dt / 2.5);
         const t = now / 1000;
-        const wander = 0.55 * Math.sin(2 * Math.PI * 0.043 * t) +
+        const wander =
+          0.55 * Math.sin(2 * Math.PI * 0.043 * t) +
           0.3 * Math.sin(2 * Math.PI * 0.117 * t + 1.7) +
           0.15 * Math.sin(2 * Math.PI * 0.231 * t + 4.2);
         if (this.#idleAmp > 0.6 && now >= this.#nextSaccade) {

@@ -22,26 +22,30 @@ import { testProgram } from './test-program.ts';
 
 const KERNEL_PROGRAM = testProgram({
   tag: 'oe-kernel-test',
-  template: [{
-    k: 'el',
-    tag: 'div',
-    attrs: [['data-static', 'yes']],
-    children: [{ k: 'part', index: 0 }],
-  }],
+  template: [
+    {
+      k: 'el',
+      tag: 'div',
+      attrs: [['data-static', 'yes']],
+      children: [{ k: 'part', index: 0 }],
+    },
+  ],
   parts: [{ k: 'text', index: 0, signal: 'message' }],
 });
 
 const KERNEL_EACH_PROGRAM = testProgram({
   tag: 'oe-kernel-each-test',
   template: [{ k: 'el', tag: 'ul', attrs: [], children: [{ k: 'part', index: 0 }] }],
-  parts: [{
-    k: 'each',
-    index: 0,
-    signal: 'items',
-    key: 'id',
-    field: 'text',
-    item: [{ k: 'el', tag: 'li', attrs: [], children: [{ k: 'ival', field: 'text' }] }],
-  }],
+  parts: [
+    {
+      k: 'each',
+      index: 0,
+      signal: 'items',
+      key: 'id',
+      field: 'text',
+      item: [{ k: 'el', tag: 'li', attrs: [], children: [{ k: 'ival', field: 'text' }] }],
+    },
+  ],
 });
 
 function elementChild(root: { childNodes: ArrayLike<unknown> }): TestElement {
@@ -127,8 +131,7 @@ Deno.test('compiled kernel claims a supplied existing closed root and reports cl
     KERNEL_PROGRAM,
     { signals: { message }, handlers: {} },
     closedRoot as unknown as Node,
-  )
-    .dispose();
+  ).dispose();
   const claimedDiv = closedRoot.childNodes[0];
 
   const kernel = new CompiledElementKernel(element as unknown as HTMLElement, KERNEL_PROGRAM, {
@@ -189,7 +192,7 @@ Deno.test('compiled kernel applies styles into open and closed shadow roots', ()
       signals: { message },
       handlers: {},
       rootMode: mode,
-      root: mode === 'closed' ? attached as unknown as ShadowRoot : undefined,
+      root: mode === 'closed' ? (attached as unknown as ShadowRoot) : undefined,
       styles: sheet,
     });
 
@@ -225,15 +228,17 @@ Deno.test('compiled kernel claims fixed Parts after the serialized static style 
   let clicks = 0;
   const program = testProgram({
     tag: 'oe-kernel-test',
-    template: [{
-      k: 'el',
-      tag: 'div',
-      attrs: [],
-      children: [
-        { k: 'el', tag: 'button', attrs: [], children: [{ k: 'text', value: '+' }] },
-        { k: 'part', index: 0 },
-      ],
-    }],
+    template: [
+      {
+        k: 'el',
+        tag: 'div',
+        attrs: [],
+        children: [
+          { k: 'el', tag: 'button', attrs: [], children: [{ k: 'text', value: '+' }] },
+          { k: 'part', index: 0 },
+        ],
+      },
+    ],
     parts: [
       { k: 'text', index: 0, signal: 'message' },
       {
@@ -246,10 +251,14 @@ Deno.test('compiled kernel claims fixed Parts after the serialized static style 
       },
     ],
   });
-  createFreshDom(program, {
-    signals: { message },
-    handlers: { increment: () => clicks++ },
-  }, root as unknown as Node).dispose();
+  createFreshDom(
+    program,
+    {
+      signals: { message },
+      handlers: { increment: () => clicks++ },
+    },
+    root as unknown as Node,
+  ).dispose();
   const style = document.createElement('style');
   style.setAttribute('data-oe-static-styles', '');
   root.insertBefore(style, root.childNodes[0]);
@@ -362,7 +371,7 @@ Deno.test('compiled form and error controllers remain element-local', () => {
   let resets = 0;
   let restored = '';
   form.onReset(() => resets++);
-  form.onRestore((state, mode) => restored = `${state}:${mode}`);
+  form.onRestore((state, mode) => (restored = `${state}:${mode}`));
   form.formResetCallback();
   form.formStateRestoreCallback('saved', 'restore');
   assertEquals(formCalls[0], ['value', 'value', 'state']);
@@ -374,7 +383,7 @@ Deno.test('compiled form and error controllers remain element-local', () => {
   let recovered = 0;
   const boundary = new CompiledErrorBoundary({
     maxRetries: 1,
-    onError: (error) => reported = error.message,
+    onError: (error) => (reported = error.message),
   });
   boundary.capture(new Error('compiled boom'));
   assert(boundary.hasError);
@@ -396,16 +405,12 @@ Deno.test('kernel boundary captures a failing signal update (#1375)', () => {
   const element = document.createElement('oe-kernel-each-test');
   const items = signal<unknown>([{ id: 'a', text: 'alpha' }]);
   const reported: string[] = [];
-  const kernel = new CompiledElementKernel(
-    element as unknown as HTMLElement,
-    KERNEL_EACH_PROGRAM,
-    {
-      signals: { items },
-      handlers: {},
-      rootMode: 'open',
-      errorBoundary: { onError: (error) => reported.push(error.message) },
-    },
-  );
+  const kernel = new CompiledElementKernel(element as unknown as HTMLElement, KERNEL_EACH_PROGRAM, {
+    signals: { items },
+    handlers: {},
+    rootMode: 'open',
+    errorBoundary: { onError: (error) => reported.push(error.message) },
+  });
   kernel.connect();
   const root = kernel.root;
   assert(root !== undefined);
@@ -430,7 +435,10 @@ Deno.test('kernel boundary captures a failing signal update (#1375)', () => {
 
   // Same capture for a duplicate-key write: rejected before any mutation; the
   // message names the authored key field and the colliding key value.
-  items.value = [{ id: 'a', text: 'one' }, { id: 'a', text: 'two' }];
+  items.value = [
+    { id: 'a', text: 'one' },
+    { id: 'a', text: 'two' },
+  ];
   assertEquals(reported.length, 2);
   assertStringIncludes(kernel.errors.error?.message ?? '', 'duplicate key');
   assertStringIncludes(kernel.errors.error?.message ?? '', '"id"');

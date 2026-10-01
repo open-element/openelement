@@ -21,10 +21,7 @@ import type { OpenPluginState } from './plugin-config.ts';
 const log = createLogger('router-vite');
 
 /** Create the `configureServer` hook of `open:core` over the shared state. */
-export function createConfigureServerHook(state: OpenPluginState): Pick<
-  Plugin,
-  'configureServer'
-> {
+export function createConfigureServerHook(state: OpenPluginState): Pick<Plugin, 'configureServer'> {
   return {
     configureServer(server: ViteDevServer) {
       const absoluteRoutesDir = resolve(Deno.cwd(), state.resolvedOptions.routesDir!);
@@ -76,24 +73,26 @@ export function createConfigureServerHook(state: OpenPluginState): Pick<
         if (rescanTimer) clearTimeout(rescanTimer);
         rescanTimer = setTimeout(() => {
           rescanTimer = undefined;
-          rescanQueue = rescanQueue.then(async () => {
-            const scanRoutesNow = routeDirty;
-            const scanIslandsNow = islandDirty;
-            routeDirty = false;
-            islandDirty = false;
-            if (scanRoutesNow) await rescanRoutes(state);
-            if (scanIslandsNow) await rescanIslands(state);
-            invalidateVirtualEntries([
-              RESOLVED_ENTRY_ID,
-              ...(scanIslandsNow ? [RESOLVED_CLIENT_ENTRY_ID] : []),
-            ]);
-            log.info(`Sources changed: ${relative(Deno.cwd(), latestChangedFile)} - reloading`);
-            server.hot.send({ type: 'full-reload' });
-          }).catch((err: unknown) => {
-            // A broken source must not poison the queue: the next edit chains
-            // after this handled rejection and gets a fresh rescan attempt.
-            log.error(`Descriptor rescan failed: ${formatError(err)}`);
-          });
+          rescanQueue = rescanQueue
+            .then(async () => {
+              const scanRoutesNow = routeDirty;
+              const scanIslandsNow = islandDirty;
+              routeDirty = false;
+              islandDirty = false;
+              if (scanRoutesNow) await rescanRoutes(state);
+              if (scanIslandsNow) await rescanIslands(state);
+              invalidateVirtualEntries([
+                RESOLVED_ENTRY_ID,
+                ...(scanIslandsNow ? [RESOLVED_CLIENT_ENTRY_ID] : []),
+              ]);
+              log.info(`Sources changed: ${relative(Deno.cwd(), latestChangedFile)} - reloading`);
+              server.hot.send({ type: 'full-reload' });
+            })
+            .catch((err: unknown) => {
+              // A broken source must not poison the queue: the next edit chains
+              // after this handled rejection and gets a fresh rescan attempt.
+              log.error(`Descriptor rescan failed: ${formatError(err)}`);
+            });
         }, 25);
       };
 
@@ -149,9 +148,7 @@ export function createConfigureServerHook(state: OpenPluginState): Pick<
         }
         // No restart hook (older Vite): surface the need instead of serving
         // stale options.
-        log.warn(
-          'Restart `deno task dev` to apply the new openelement.config.ts options.',
-        );
+        log.warn('Restart `deno task dev` to apply the new openelement.config.ts options.');
       };
       if (state.resolvedConfigFile !== null) server.watcher.add(state.resolvedConfigFile);
       server.watcher.on('change', onAppConfigChanged);

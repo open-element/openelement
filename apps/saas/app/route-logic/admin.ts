@@ -44,7 +44,10 @@ export interface AdminClient {
     }>;
   };
   from(name: string): {
-    select(column: string, options: { count: 'exact'; head: true }): Promise<{
+    select(
+      column: string,
+      options: { count: 'exact'; head: true },
+    ): Promise<{
       count: number | null;
       error: { message: string } | null;
     }>;
@@ -52,21 +55,29 @@ export interface AdminClient {
       error: { message: string } | null;
     }>;
   };
-  rpc(name: string, body?: Record<string, string>): Promise<{
+  rpc(
+    name: string,
+    body?: Record<string, string>,
+  ): Promise<{
     data: unknown;
     error: { message: string } | null;
   }>;
 }
 
 export function createAdminLoader(
-  createClient: (env: Record<string, string>, request: Request, headers: Headers) => AdminClient =
-    createServerSupabase as never,
+  createClient: (
+    env: Record<string, string>,
+    request: Request,
+    headers: Headers,
+  ) => AdminClient = createServerSupabase as never,
 ) {
   return async function adminLoader(
     ctx: LoaderContext<Record<string, string>>,
   ): Promise<AdminData> {
     const supabase = createClient(ctx.env, ctx.request, ctx.responseHeaders);
-    const { data: { user } } = await supabase.auth.getUser();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
     requireAdmin(user);
     const [{ count, error }, deadLetters, paymentDeadLetters] = await Promise.all([
       supabase.from('notes').select('id', { count: 'exact', head: true }),
@@ -84,14 +95,19 @@ export function createAdminLoader(
 }
 
 export function createPaymentReplayAction(
-  createClient: (env: Record<string, string>, request: Request, headers: Headers) => AdminClient =
-    createServerSupabase as never,
+  createClient: (
+    env: Record<string, string>,
+    request: Request,
+    headers: Headers,
+  ) => AdminClient = createServerSupabase as never,
 ) {
   return async function replayPayment(
     ctx: ActionContext<Record<string, string>>,
   ): Promise<OpenElementActionFailure<{ error: string }>> {
     const supabase = createClient(ctx.env, ctx.request, ctx.responseHeaders);
-    const { data: { user } } = await supabase.auth.getUser();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
     requireAdmin(user);
     const eventId = String(ctx.formData.get('event_id') ?? '');
     if (!/^evt_[A-Za-z0-9_]+$/.test(eventId)) {
@@ -109,14 +125,19 @@ export function createPaymentReplayAction(
 }
 
 export function createReplayAction(
-  createClient: (env: Record<string, string>, request: Request, headers: Headers) => AdminClient =
-    createServerSupabase as never,
+  createClient: (
+    env: Record<string, string>,
+    request: Request,
+    headers: Headers,
+  ) => AdminClient = createServerSupabase as never,
 ) {
   return async function replay(
     ctx: ActionContext<Record<string, string>>,
   ): Promise<OpenElementActionFailure<{ error: string }>> {
     const supabase = createClient(ctx.env, ctx.request, ctx.responseHeaders);
-    const { data: { user } } = await supabase.auth.getUser();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
     requireAdmin(user);
     const id = String(ctx.formData.get('id') ?? '');
     if (!UUID_PATTERN.test(id)) {
@@ -151,8 +172,7 @@ export function adminPageProps(context: PagePropsContext<AdminData>): Record<str
     })),
     paymentRows: (data?.paymentDeadLetters ?? []).map((item) => ({
       id: item.provider_event_id,
-      line:
-        `${item.provider_event_id} — ${item.event_type} — ${item.processing_state} (deliveries:${item.delivery_count})`,
+      line: `${item.provider_event_id} — ${item.event_type} — ${item.processing_state} (deliveries:${item.delivery_count})`,
     })),
   };
 }

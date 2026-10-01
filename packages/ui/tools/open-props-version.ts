@@ -27,9 +27,9 @@ export function parseOpenPropsVersion(imports: unknown, sourceLabel: string): st
   const match = MAPPING.exec(base);
   if (!match) {
     throw new Error(
-      `${sourceLabel}: 'open-props' must map to npm:open-props@<version> (got ${
-        JSON.stringify(base)
-      })`,
+      `${sourceLabel}: 'open-props' must map to npm:open-props@<version> (got ${JSON.stringify(
+        base,
+      )})`,
     );
   }
   const version = match[1];
@@ -41,9 +41,9 @@ export function parseOpenPropsVersion(imports: unknown, sourceLabel: string): st
     const subMatch = MAPPING.exec(target);
     if (!subMatch) {
       throw new Error(
-        `${sourceLabel}: '${specifier}' must map to npm:open-props@<version>/... (got ${
-          JSON.stringify(target)
-        })`,
+        `${sourceLabel}: '${specifier}' must map to npm:open-props@<version>/... (got ${JSON.stringify(
+          target,
+        )})`,
       );
     }
     if (subMatch[1] !== version) {

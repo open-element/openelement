@@ -32,20 +32,24 @@ export default class CheckoutPage extends OpenElement {
           <input type='hidden' name='attempt_id' value={this.attemptId} />
           <button type='submit'>Pay with Stripe</button>
         </form>
-        {this.resultSuccess > 0
-          ? (
-            <p id='checkout-result'>
-              Checkout returned. Payment status is confirmed by webhook only.
-            </p>
-          )
-          : <span></span>}
-        {this.resultCancelled > 0
-          ? <p id='checkout-result'>Checkout was cancelled.</p>
-          : <span></span>}
+        {this.resultSuccess > 0 ? (
+          <p id='checkout-result'>
+            Checkout returned. Payment status is confirmed by webhook only.
+          </p>
+        ) : (
+          <span></span>
+        )}
+        {this.resultCancelled > 0 ? (
+          <p id='checkout-result'>Checkout was cancelled.</p>
+        ) : (
+          <span></span>
+        )}
         <p id='action-error'>{this.actionErrorText}</p>
         <h2>Your orders</h2>
         <ul id='orders'>
-          {this.orderRows.map((order) => <li key={order.id}>{order.line}</li>)}
+          {this.orderRows.map((order) => (
+            <li key={order.id}>{order.line}</li>
+          ))}
         </ul>
       </main>
     );

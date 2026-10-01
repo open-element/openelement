@@ -100,7 +100,10 @@ export class FText extends FNodeBase {
 export class FComment extends FNodeBase {
   readonly nodeType = 8;
 
-  constructor(ownerDocument: FDocument, readonly data: string) {
+  constructor(
+    ownerDocument: FDocument,
+    readonly data: string,
+  ) {
     super(ownerDocument);
   }
 }
@@ -231,10 +234,11 @@ function escapeAttribute(value: string): string {
 }
 
 function unescapeText(value: string): string {
-  return value.replaceAll('&lt;', '<').replaceAll('&gt;', '>').replaceAll('&quot;', '"').replaceAll(
-    '&amp;',
-    '&',
-  );
+  return value
+    .replaceAll('&lt;', '<')
+    .replaceAll('&gt;', '>')
+    .replaceAll('&quot;', '"')
+    .replaceAll('&amp;', '&');
 }
 
 export function toHtml(node: FNode): string {

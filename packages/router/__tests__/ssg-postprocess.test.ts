@@ -52,7 +52,9 @@ async function pageManifestPath(outputDir: string, route: string): Promise<strin
 function cleanup(dir: string) {
   try {
     Deno.removeSync(dir, { recursive: true });
-  } catch { /* ignore */ }
+  } catch {
+    /* ignore */
+  }
 }
 
 // ─── islandChunkMapFromAssetManifest (identity-driven chunk resolution) ──
@@ -174,9 +176,10 @@ Deno.test('postProcessClientIslandBuild writes per-page manifests with manifest-
     await postProcessClientIslandBuild(ctxView(manifest, tmp));
 
     // The island identity resolves through the manifest, chunk URL intact.
-    const homeManifest = JSON.parse(
-      Deno.readTextFileSync(await pageManifestPath(dist, '/')),
-    ) as { route: string; islands: Array<{ tagName: string; chunkUrl: string; strategy: string }> };
+    const homeManifest = JSON.parse(Deno.readTextFileSync(await pageManifestPath(dist, '/'))) as {
+      route: string;
+      islands: Array<{ tagName: string; chunkUrl: string; strategy: string }>;
+    };
     assertEquals(homeManifest.route, '/');
     const counter = homeManifest.islands.find((entry) => entry.tagName === 'open-counter');
     assertExists(counter);
@@ -329,20 +332,17 @@ Deno.test('postProcessClientIslandBuild validates only the local metadata Phase 
       },
       clientAssetManifest: manifest,
     });
-    const pageManifest = JSON.parse(
-      Deno.readTextFileSync(await pageManifestPath(dist, '/')),
-    ) as {
+    const pageManifest = JSON.parse(Deno.readTextFileSync(await pageManifestPath(dist, '/'))) as {
       islands: Array<{ tagName: string; chunkUrl: string; strategy: string; layer: string }>;
     };
-    assertEquals(
-      pageManifest.islands,
-      [{
+    assertEquals(pageManifest.islands, [
+      {
         tagName: 'open-counter',
         chunkUrl: '/client/islands/island-counter-Ab12.js',
         strategy: 'idle',
         layer: 'dsd-interactive',
-      }],
-    );
+      },
+    ]);
   } finally {
     cleanup(tmp);
   }
@@ -535,10 +535,7 @@ Deno.test('injectViewTransitionMeta recurses into subdirectories', () => {
     injectViewTransitionMeta(tmp);
 
     assertStringIncludes(Deno.readTextFileSync(join(tmp, 'index.html')), 'view-transition');
-    assertStringIncludes(
-      Deno.readTextFileSync(join(tmp, 'guide', 'page.html')),
-      'view-transition',
-    );
+    assertStringIncludes(Deno.readTextFileSync(join(tmp, 'guide', 'page.html')), 'view-transition');
   } finally {
     cleanup(tmp);
   }
@@ -619,15 +616,15 @@ Deno.test('buildSpeculationRulesJson generates heuristic prerender rules from ro
   assertExists(parsed.prerender);
   // Home page is a list rule (source + urls, no where)
   assert(
-    parsed.prerender.some((r: { source?: string; urls?: string[] }) =>
-      r.source === 'list' && r.urls?.includes('/')
+    parsed.prerender.some(
+      (r: { source?: string; urls?: string[] }) => r.source === 'list' && r.urls?.includes('/'),
     ),
     'Home page should be a list rule with / in urls',
   );
   // Top-level page produces a document rule (where.href_matches)
   assert(
-    parsed.prerender.some((r: { where?: { href_matches: string } }) =>
-      r.where?.href_matches === '/about'
+    parsed.prerender.some(
+      (r: { where?: { href_matches: string } }) => r.where?.href_matches === '/about',
     ),
     'Top-level page should produce an /about document rule',
   );
@@ -804,19 +801,13 @@ Deno.test('injectSpeculationRules recurses into subdirectories', () => {
   try {
     Deno.mkdirSync(join(tmp, 'blog'));
     Deno.writeTextFileSync(join(tmp, 'index.html'), '<html><body></body></html>');
-    Deno.writeTextFileSync(
-      join(tmp, 'blog', 'post.html'),
-      '<html><body></body></html>',
-    );
+    Deno.writeTextFileSync(join(tmp, 'blog', 'post.html'), '<html><body></body></html>');
 
     const rulesJson = JSON.stringify({ prefetch: [{ where: { href_matches: '/*' } }] }, null, 2);
     injectSpeculationRules(tmp, rulesJson);
 
     assertStringIncludes(Deno.readTextFileSync(join(tmp, 'index.html')), 'speculationrules');
-    assertStringIncludes(
-      Deno.readTextFileSync(join(tmp, 'blog', 'post.html')),
-      'speculationrules',
-    );
+    assertStringIncludes(Deno.readTextFileSync(join(tmp, 'blog', 'post.html')), 'speculationrules');
   } finally {
     cleanup(tmp);
   }

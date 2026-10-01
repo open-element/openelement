@@ -30,9 +30,7 @@ const RUNTIME_FREE_PACKAGES = new Set([
  * (the create CLI runs under Deno) but must stay free of Node APIs, the same
  * `node:*`/process/Buffer bar every packed artifact carries.
  */
-const NODE_FREE_PACKAGES = new Set([
-  '@openelement/create',
-]);
+const NODE_FREE_PACKAGES = new Set(['@openelement/create']);
 
 /**
  * Host-side tooling trees inside runtime-free packages: the packed artifacts
@@ -53,9 +51,9 @@ const HOST_TOOLING_PATH_ALLOWLIST: Record<string, RegExp> = {
  * packed module. npm is the only public registry.
  */
 function isForbiddenBridgeSpecifier(specifier: string): boolean {
-  return specifier.startsWith('@std/') ||
-    specifier.startsWith('@jsr/') ||
-    specifier.startsWith('jsr:');
+  return (
+    specifier.startsWith('@std/') || specifier.startsWith('@jsr/') || specifier.startsWith('jsr:')
+  );
 }
 
 const RUNTIME_EXTENSIONS = new Set(['.js', '.mjs', '.cjs']);
@@ -105,10 +103,7 @@ const FORBIDDEN_LEGACY_PATHS: Record<string, ReadonlyArray<string>> = {
 const FORBIDDEN_LEGACY_SOURCE_PATTERNS: Record<string, ReadonlyArray<[RegExp, string]>> = {
   '@openelement/element': [
     [/\bDATA_SSR_PROPS\b/u, 'dead data-ssr-props channel export (#836, removed in 0.44)'],
-    [
-      /['"]data-(?:eid|signal)(?:-[^'"]*)?['"]/u,
-      'legacy marker-based hydration attribute',
-    ],
+    [/['"]data-(?:eid|signal)(?:-[^'"]*)?['"]/u, 'legacy marker-based hydration attribute'],
     [/['"]oe-(?:branch|for-item):/u, 'legacy branch/list hydration comment marker'],
   ],
 };
@@ -142,13 +137,22 @@ function isModuleScanPath(path: string): boolean {
 
 function dependencyName(specifier: string): string | null {
   if (
-    specifier.startsWith('.') || specifier.startsWith('/') || specifier.startsWith('node:') ||
-    specifier.startsWith('data:') || specifier.startsWith('file:') ||
+    specifier.startsWith('.') ||
+    specifier.startsWith('/') ||
+    specifier.startsWith('node:') ||
+    specifier.startsWith('data:') ||
+    specifier.startsWith('file:') ||
     specifier.startsWith('http:') ||
     specifier.startsWith('https:')
-  ) return null;
+  )
+    return null;
   const bare = specifier.startsWith('npm:') ? specifier.slice('npm:'.length) : specifier;
-  if (bare.startsWith('@')) return bare.split('/').slice(0, 2).join('/').replace(/@[^/]*$/u, '');
+  if (bare.startsWith('@'))
+    return bare
+      .split('/')
+      .slice(0, 2)
+      .join('/')
+      .replace(/@[^/]*$/u, '');
   return bare.split('/')[0].split('@')[0];
 }
 
@@ -159,9 +163,9 @@ function manifestImportViolations(
 ): ArtifactViolation[] {
   const declared = new Set<string>([
     packageName,
-    ...Object.keys(packageJson.dependencies as Record<string, string> ?? {}),
-    ...Object.keys(packageJson.peerDependencies as Record<string, string> ?? {}),
-    ...Object.keys(packageJson.optionalDependencies as Record<string, string> ?? {}),
+    ...Object.keys((packageJson.dependencies as Record<string, string>) ?? {}),
+    ...Object.keys((packageJson.peerDependencies as Record<string, string>) ?? {}),
+    ...Object.keys((packageJson.optionalDependencies as Record<string, string>) ?? {}),
   ]);
   const violations: ArtifactViolation[] = [];
   for (const entry of walkSync(packageRoot, { includeDirs: false, skip: [/^node_modules$/] })) {
@@ -215,10 +219,8 @@ function pushPackageJsonViolations(
       message: 'package.json must expose an exports map',
     });
   }
-  for (
-    const section of ['dependencies', 'peerDependencies', 'optionalDependencies'] as const
-  ) {
-    for (const key of Object.keys(packageJson[section] as Record<string, string> ?? {})) {
+  for (const section of ['dependencies', 'peerDependencies', 'optionalDependencies'] as const) {
+    for (const key of Object.keys((packageJson[section] as Record<string, string>) ?? {})) {
       if (key.startsWith('@jsr/')) {
         violations.push({
           path: `${packageName}/package.json`,
@@ -252,11 +254,8 @@ function scanRuntimeFile(
   const firstCodeLine = text.split('\n').find((l) => l.trim() !== '') ?? '';
   const hostScanAllowed = !firstCodeLine.trim().startsWith('// deno-api-free:ignore');
   const lines = stripComments(text).split('\n');
-  const hostPatterns = hostPolicy === 'runtime-free'
-    ? HOST_PATTERNS
-    : hostPolicy === 'node-free'
-    ? NODE_PATTERNS
-    : [];
+  const hostPatterns =
+    hostPolicy === 'runtime-free' ? HOST_PATTERNS : hostPolicy === 'node-free' ? NODE_PATTERNS : [];
 
   for (let index = 0; index < lines.length; index++) {
     const line = lines[index];
@@ -300,12 +299,10 @@ export function scanExtractedPackage(packageName: string, packageRoot: string): 
   const forbiddenPaths = FORBIDDEN_LEGACY_PATHS[packageName] ?? [];
   const forbiddenSourcePatterns = FORBIDDEN_LEGACY_SOURCE_PATTERNS[packageName] ?? [];
   const files = new Set<string>();
-  for (
-    const entry of walkSync(packageRoot, {
-      includeDirs: false,
-      skip: [/^node_modules$/],
-    })
-  ) {
+  for (const entry of walkSync(packageRoot, {
+    includeDirs: false,
+    skip: [/^node_modules$/],
+  })) {
     const relative = entry.path.slice(packageRoot.length + 1);
     files.add(relative);
     if (isRawTypeScript(relative)) {
@@ -321,9 +318,7 @@ export function scanExtractedPackage(packageName: string, packageRoot: string): 
         message: 'dead v0.43 residue must not be published (#1273/B2.13)',
       });
     }
-    if (
-      forbiddenSourcePatterns.length > 0 && SOURCE_SCAN_EXTENSIONS.has(extension(entry.path))
-    ) {
+    if (forbiddenSourcePatterns.length > 0 && SOURCE_SCAN_EXTENSIONS.has(extension(entry.path))) {
       const text = stripComments(Deno.readTextFileSync(entry.path));
       for (const [pattern, message] of forbiddenSourcePatterns) {
         if (pattern.test(text)) {
@@ -333,9 +328,12 @@ export function scanExtractedPackage(packageName: string, packageRoot: string): 
     }
     if (
       packageName === '@openelement/router' &&
-      relative.split('/').some((segment) =>
-        segment === '__tests__' || segment === '__fixtures__' || segment === 'fixtures'
-      )
+      relative
+        .split('/')
+        .some(
+          (segment) =>
+            segment === '__tests__' || segment === '__fixtures__' || segment === 'fixtures',
+        )
     ) {
       violations.push({
         path: `${packageName}/${relative}`,
@@ -344,10 +342,12 @@ export function scanExtractedPackage(packageName: string, packageRoot: string): 
     }
     if (!RUNTIME_EXTENSIONS.has(extension(entry.path))) continue;
     const hostPolicy: HostPolicy = RUNTIME_FREE_PACKAGES.has(packageName)
-      ? (HOST_TOOLING_PATH_ALLOWLIST[packageName]?.test(relative) ? 'none' : 'runtime-free')
+      ? HOST_TOOLING_PATH_ALLOWLIST[packageName]?.test(relative)
+        ? 'none'
+        : 'runtime-free'
       : nodeFreePackage
-      ? 'node-free'
-      : 'none';
+        ? 'node-free'
+        : 'none';
     violations.push(...scanRuntimeFile(packageRoot, entry.path, packageName, hostPolicy));
   }
 
@@ -369,9 +369,7 @@ export function scanExtractedPackage(packageName: string, packageRoot: string): 
     const notice = files.has('THIRD_PARTY_NOTICES.md')
       ? Deno.readTextFileSync(`${packageRoot}/THIRD_PARTY_NOTICES.md`)
       : '';
-    for (
-      const required of ['open-props 1.7.23', 'Copyright (c) 2021 Adam Argyle', 'MIT License']
-    ) {
+    for (const required of ['open-props 1.7.23', 'Copyright (c) 2021 Adam Argyle', 'MIT License']) {
       if (!notice.includes(required)) {
         violations.push({
           path: `${packageName}/THIRD_PARTY_NOTICES.md`,

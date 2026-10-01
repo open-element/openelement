@@ -58,10 +58,15 @@ Deno.test('stageCompiledPackWorkspace stages strictly-typed compiler output', as
     const compiled = compilePackageElementModules(fixture.dir);
     assertEquals(compiled.length, 1);
 
-    const staged = await stageCompiledPackWorkspace(target, [target], {
-      imports: { '@openelement/element': 'npm:@openelement/element@0.0.0-test' },
-      compilerOptions: { strict: true },
-    }, compiled);
+    const staged = await stageCompiledPackWorkspace(
+      target,
+      [target],
+      {
+        imports: { '@openelement/element': 'npm:@openelement/element@0.0.0-test' },
+        compilerOptions: { strict: true },
+      },
+      compiled,
+    );
     try {
       const stagedComponent = Deno.readTextFileSync(join(staged.packDir, 'src', 'demo-widget.tsx'));
       assertStringIncludes(
@@ -82,14 +87,16 @@ Deno.test('stageCompiledPackWorkspace stages strictly-typed compiler output', as
       try {
         Deno.statSync(join(staged.packDir, 'stray.tgz'));
         strayPresent = true;
-      } catch { /* expected absent */ }
+      } catch {
+        /* expected absent */
+      }
       assert(!strayPresent, 'stale .tgz must not be staged');
 
       // Strictness is never relaxed: the staged member keeps its own
       // config untouched so emission regressions fail the pack typecheck.
-      const memberConfig = JSON.parse(
-        Deno.readTextFileSync(join(staged.packDir, 'deno.json')),
-      ) as { compilerOptions?: Record<string, unknown> };
+      const memberConfig = JSON.parse(Deno.readTextFileSync(join(staged.packDir, 'deno.json'))) as {
+        compilerOptions?: Record<string, unknown>;
+      };
       assertEquals(memberConfig.compilerOptions?.noImplicitOverride, undefined);
       assertEquals(memberConfig.compilerOptions?.noImplicitAny, undefined);
 

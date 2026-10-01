@@ -27,7 +27,7 @@ abstract class TestNodeBase {
   get nextSibling(): TestNode | null {
     if (!this.parentNode) return null;
     const index = this.parentNode.childNodes.indexOf(this as unknown as TestNode);
-    return index >= 0 ? this.parentNode.childNodes[index + 1] ?? null : null;
+    return index >= 0 ? (this.parentNode.childNodes[index + 1] ?? null) : null;
   }
 
   getRootNode(): TestNodeBase {
@@ -94,7 +94,10 @@ export class TestText extends TestNodeBase {
 export class TestComment extends TestNodeBase {
   readonly nodeType = 8;
 
-  constructor(ownerDocument: TestDocument, readonly data: string) {
+  constructor(
+    ownerDocument: TestDocument,
+    readonly data: string,
+  ) {
     super(ownerDocument);
   }
 }
@@ -156,11 +159,7 @@ export class TestElement extends TestNodeBase {
     return [...this.attributes.keys()];
   }
 
-  addEventListener(
-    type: string,
-    fn: (event: unknown) => void,
-    options?: { once?: boolean },
-  ): void {
+  addEventListener(type: string, fn: (event: unknown) => void, options?: { once?: boolean }): void {
     const listeners = this.listeners.get(type) ?? new Set<TestListener>();
     listeners.add({ fn, once: options?.once === true });
     this.listeners.set(type, listeners);
@@ -175,7 +174,7 @@ export class TestElement extends TestNodeBase {
   }
 
   dispatch(type: string): void {
-    const listeners = [...this.listeners.get(type) ?? []];
+    const listeners = [...(this.listeners.get(type) ?? [])];
     for (const listener of listeners) {
       listener.fn({ type });
       if (listener.once) this.listeners.get(type)?.delete(listener);
@@ -183,7 +182,7 @@ export class TestElement extends TestNodeBase {
   }
 
   dispatchEvent(event: Event): boolean {
-    for (const listener of [...this.listeners.get(event.type) ?? []]) {
+    for (const listener of [...(this.listeners.get(event.type) ?? [])]) {
       listener.fn(event);
       if (listener.once) this.listeners.get(event.type)?.delete(listener);
       if (event.cancelBubble) break;
@@ -209,7 +208,10 @@ export class TestShadowRoot extends TestNodeBase {
   readonly nodeType = 11;
   readonly adoptedStyleSheets: unknown[] = [];
 
-  constructor(ownerDocument: TestDocument, readonly host: TestElement) {
+  constructor(
+    ownerDocument: TestDocument,
+    readonly host: TestElement,
+  ) {
     super(ownerDocument);
   }
 
@@ -282,8 +284,8 @@ export function toHtml(node: TestNode): string {
   if (node instanceof TestComment) return `<!--${node.data}-->`;
   const tag = node.tagName.toLowerCase();
   const attrs = [...node.attributes.entries()]
-    .map(([name, value]) =>
-      ` ${name}="${value.replaceAll('&', '&amp;').replaceAll('"', '&quot;')}"`
+    .map(
+      ([name, value]) => ` ${name}="${value.replaceAll('&', '&amp;').replaceAll('"', '&quot;')}"`,
     )
     .join('');
   if (VOID_TAGS.has(tag)) return `<${tag}${attrs}>`;
@@ -291,10 +293,11 @@ export function toHtml(node: TestNode): string {
 }
 
 function unescapeText(value: string): string {
-  return value.replaceAll('&lt;', '<').replaceAll('&gt;', '>').replaceAll('&quot;', '"').replaceAll(
-    '&amp;',
-    '&',
-  );
+  return value
+    .replaceAll('&lt;', '<')
+    .replaceAll('&gt;', '>')
+    .replaceAll('&quot;', '"')
+    .replaceAll('&amp;', '&');
 }
 
 /** Small deterministic parser for serializer output used only by claim tests. */

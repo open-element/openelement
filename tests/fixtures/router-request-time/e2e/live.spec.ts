@@ -146,7 +146,9 @@ test.describe('action protocol (ADR-0120, 0.42.0-alpha.2)', () => {
 });
 
 test.describe('fetch middleware module contract (ADR-0123, #858, Alpha.1)', () => {
-  test('middleware modules compose in onion order around request-time routes', async ({ request }) => {
+  test('middleware modules compose in onion order around request-time routes', async ({
+    request,
+  }) => {
     const response = await request.get('/live?x=mw-e2e');
     expect(response.ok()).toBe(true);
     // inner.ts post-processes first; outer.ts (factory-exported) wraps it.
@@ -161,7 +163,9 @@ test.describe('fetch middleware module contract (ADR-0123, #858, Alpha.1)', () =
     expect(response.headers()['x-fixture-cookie-proof']).toBe('hono-cookie-parser');
   });
 
-  test('short-circuit skips the handler, still wrapped by the outer middleware', async ({ request }) => {
+  test('short-circuit skips the handler, still wrapped by the outer middleware', async ({
+    request,
+  }) => {
     const response = await request.get('/live?mw-short=1');
     expect(response.status()).toBe(418);
     expect(await response.text()).toBe('fixture short-circuit');
@@ -248,14 +252,18 @@ test.describe('validation recipes (0.42.0-alpha.4)', () => {
 });
 
 test.describe('protocol hardening (ADR-0121, 0.42.0-alpha.5)', () => {
-  test('prototype keys are not actions: ?/constructor is a defined 404 (#542)', async ({ request }) => {
+  test('prototype keys are not actions: ?/constructor is a defined 404 (#542)', async ({
+    request,
+  }) => {
     const response = await request.post('/form?/constructor', { form: { message: 'x' } });
     expect(response.status()).toBe(404);
     const toString = await request.post('/form?/toString', { form: { message: 'x' } });
     expect(toString.status()).toBe(404);
   });
 
-  test('fetch callers receive an RFC 9457 problem+json 404 for unknown named actions (#549, #863)', async ({ request }) => {
+  test('fetch callers receive an RFC 9457 problem+json 404 for unknown named actions (#549, #863)', async ({
+    request,
+  }) => {
     const response = await request.post('/form?/nope', {
       form: { message: 'x' },
       headers: { 'x-openelement-action': 'true' },
@@ -271,7 +279,9 @@ test.describe('protocol hardening (ADR-0121, 0.42.0-alpha.5)', () => {
     });
   });
 
-  test('fetch callers receive an RFC 9457 problem+json 404 for action-less routes (#549, #863)', async ({ request }) => {
+  test('fetch callers receive an RFC 9457 problem+json 404 for action-less routes (#549, #863)', async ({
+    request,
+  }) => {
     const response = await request.post('/live', {
       form: { x: '1' },
       headers: { 'x-openelement-action': 'true' },
@@ -286,7 +296,9 @@ test.describe('protocol hardening (ADR-0121, 0.42.0-alpha.5)', () => {
     });
   });
 
-  test('the default PRG strips the action marker and keeps other query params (#548)', async ({ request }) => {
+  test('the default PRG strips the action marker and keeps other query params (#548)', async ({
+    request,
+  }) => {
     const response = await request.post('/ping?/ping&keep=1', {
       form: { intent: 'ping' },
       maxRedirects: 0,
@@ -304,7 +316,9 @@ test.describe('protocol hardening (ADR-0121, 0.42.0-alpha.5)', () => {
     expect(response.headers()['location']).toBe('/ping?moved=1');
   });
 
-  test('an action returning a Response is a contract violation, never a response (#541)', async ({ request }) => {
+  test('an action returning a Response is a contract violation, never a response (#541)', async ({
+    request,
+  }) => {
     const response = await request.post('/ping?/raw', { form: {} });
     expect(response.status()).toBe(500);
     expect(await response.text()).not.toContain('<h1>raw</h1>');
@@ -320,7 +334,9 @@ test.describe('protocol hardening (ADR-0121, 0.42.0-alpha.5)', () => {
     expect(body.status).toBe(500);
   });
 
-  test('request-time GET 200s are revalidatable (private, no-cache); POST channels stay no-store and vary on the action header (#550)', async ({ request }) => {
+  test('request-time GET 200s are revalidatable (private, no-cache); POST channels stay no-store and vary on the action header (#550)', async ({
+    request,
+  }) => {
     const get = await request.get('/live?x=cache');
     // #943: GET 200s are revalidatable (private, no-cache) for bfcache/scroll
     // restore; no-store is reserved for the POST/error channels below.
@@ -369,7 +385,9 @@ test.describe('protocol hardening (ADR-0121, 0.42.0-alpha.5)', () => {
     expect(body.detail).toBe('Internal Server Error');
   });
 
-  test('a thrown action renders the error boundary on the HTML channel (#551)', async ({ request }) => {
+  test('a thrown action renders the error boundary on the HTML channel (#551)', async ({
+    request,
+  }) => {
     const response = await request.post('/boom?/explode', { form: {} });
     expect(response.status()).toBe(500);
     expect(await response.text()).toContain('boom boundary: boom-action');
@@ -386,7 +404,9 @@ test.describe('protocol hardening (ADR-0121, 0.42.0-alpha.5)', () => {
 });
 
 test.describe('morph continuity hardening (ADR-0121, 0.42.0-alpha.5)', () => {
-  test('region-scoped morph updates only the region and keeps outside islands (#553)', async ({ page }) => {
+  test('region-scoped morph updates only the region and keeps outside islands (#553)', async ({
+    page,
+  }) => {
     await page.goto('/regions');
     const count = page.locator('live-counter #count');
     await page.locator('live-counter #increment').click();
@@ -419,8 +439,8 @@ test.describe('morph continuity hardening (ADR-0121, 0.42.0-alpha.5)', () => {
     });
     await page.click('#missing');
     // Navigation wipes the JS context; a morph would have kept it.
-    await page.waitForFunction(() =>
-      (window as never as { __stillHere?: number }).__stillHere === undefined
+    await page.waitForFunction(
+      () => (window as never as { __stillHere?: number }).__stillHere === undefined,
     );
     await expect(page.locator('#banner')).toHaveText('echo=');
   });
@@ -443,14 +463,15 @@ test.describe('morph continuity hardening (ADR-0121, 0.42.0-alpha.5)', () => {
     await page.evaluate(() => {
       const form = document.querySelector('form-page')!.shadowRoot!.querySelector('form')!;
       form.addEventListener('open:action-failure', (event) => {
-        (window as unknown as { __failureStatus: number }).__failureStatus =
-          (event as CustomEvent).detail.status;
+        (window as unknown as { __failureStatus: number }).__failureStatus = (
+          event as CustomEvent
+        ).detail.status;
         event.preventDefault();
       });
     });
     await page.click('#submit');
-    await page.waitForFunction(() =>
-      (window as never as { __failureStatus?: number }).__failureStatus === 422
+    await page.waitForFunction(
+      () => (window as never as { __failureStatus?: number }).__failureStatus === 422,
     );
     // preventDefault skipped the morph: the error paragraph never appeared.
     await expect(page.locator('#error')).toHaveCount(0);
@@ -463,8 +484,8 @@ test.describe('morph continuity hardening (ADR-0121, 0.42.0-alpha.5)', () => {
       (window as unknown as { __stillHere: number }).__stillHere = 1;
     });
     await page.click('#boom-submit');
-    await page.waitForFunction(() =>
-      (window as never as { __stillHere?: number }).__stillHere === undefined
+    await page.waitForFunction(
+      () => (window as never as { __stillHere?: number }).__stillHere === undefined,
     );
     await expect(page.locator('#boundary')).toContainText('boom boundary');
   });
@@ -476,10 +497,12 @@ test.describe('morph continuity hardening (ADR-0121, 0.42.0-alpha.5)', () => {
     expect(page.url()).toContain('#top');
   });
 
-  test('the enhanced submit includes the submitter name/value in the body (#544)', async ({ page }) => {
+  test('the enhanced submit includes the submitter name/value in the body (#544)', async ({
+    page,
+  }) => {
     await page.goto('/ping');
-    const post = page.waitForResponse((r) =>
-      r.request().method() === 'POST' && r.url().includes('/ping')
+    const post = page.waitForResponse(
+      (r) => r.request().method() === 'POST' && r.url().includes('/ping'),
     );
     await page.click('#ping');
     const response = await post;
@@ -489,7 +512,9 @@ test.describe('morph continuity hardening (ADR-0121, 0.42.0-alpha.5)', () => {
     await expect(page.locator('#intent-error')).toHaveCount(0);
   });
 
-  test('island state survives a list prepend (#554; positional morph in v0.44)', async ({ page }) => {
+  test('island state survives a list prepend (#554; positional morph in v0.44)', async ({
+    page,
+  }) => {
     await page.goto('/items');
     // v0.44 grammar note: the compiled each-Region item template carries one
     // {item.<field>} text slot and no per-item attribute slots, so rows can
@@ -555,8 +580,8 @@ test.describe('param routes and the generated matcher (#556)', () => {
 test.describe('round-2 morph client fixes (0.42.0-alpha.6)', () => {
   test('an explicit form action wins over the page URL (#576)', async ({ page }) => {
     await page.goto('/ping');
-    const post = page.waitForResponse((r) =>
-      r.request().method() === 'POST' && r.url().includes('/form')
+    const post = page.waitForResponse(
+      (r) => r.request().method() === 'POST' && r.url().includes('/form'),
     );
     await page.click('#to-form');
     const response = await post;
@@ -565,7 +590,9 @@ test.describe('round-2 morph client fixes (0.42.0-alpha.6)', () => {
     await expect(page.locator('#error')).toHaveText('message is required');
   });
 
-  test('back after a reload following an enhanced submit reloads again (#578)', async ({ page }) => {
+  test('back after a reload following an enhanced submit reloads again (#578)', async ({
+    page,
+  }) => {
     await page.goto('/form');
     await page.fill('#message', 'nav-guard');
     await page.click('#submit');
@@ -585,7 +612,9 @@ test.describe('round-2 morph client fixes (0.42.0-alpha.6)', () => {
     }
   });
 
-  test('a morphed-in island instance shows the server render and hydrates (#579)', async ({ page }) => {
+  test('a morphed-in island instance shows the server render and hydrates (#579)', async ({
+    page,
+  }) => {
     await page.goto('/items');
     await page.click('#prepend');
     await page.waitForURL('**/items?items=new*');
@@ -600,7 +629,9 @@ test.describe('round-2 morph client fixes (0.42.0-alpha.6)', () => {
     await expect(count).toHaveText('1');
   });
 
-  test('rows keep order and island state through a reverse (#580; positional morph in v0.44)', async ({ page }) => {
+  test('rows keep order and island state through a reverse (#580; positional morph in v0.44)', async ({
+    page,
+  }) => {
     await page.goto('/items');
     const rowA = page.locator('ul > li', { has: page.getByText('a', { exact: true }) });
     await rowA.locator('live-counter #increment').click();
@@ -650,8 +681,9 @@ test.describe('round-2 morph client fixes (0.42.0-alpha.6)', () => {
     await post;
     // Enhancement intercepted (fetch + morph): the JS context survives; a
     // native POST would have wiped it.
-    expect(await page.evaluate(() => (window as never as { __stillHere?: number }).__stillHere))
-      .toBe(1);
+    expect(
+      await page.evaluate(() => (window as never as { __stillHere?: number }).__stillHere),
+    ).toBe(1);
     await expect(page.locator('#error')).toHaveText('message is required');
   });
 });
@@ -673,7 +705,10 @@ test.describe('morph/enhance robustness (0.42.0-alpha.13, #603-#606)', () => {
     expect(activeId).toBe('message');
   });
 
-  test('focus is restored by id when the focused control is replaced (#603)', async ({ page, request }) => {
+  test('focus is restored by id when the focused control is replaced (#603)', async ({
+    page,
+    request,
+  }) => {
     const html = await (await request.get('/form')).text();
     // The server "re-renders" the message field as a textarea (same id): the
     // morph must replace the input, then refocus the successor by id.
@@ -703,15 +738,18 @@ test.describe('morph/enhance robustness (0.42.0-alpha.13, #603-#606)', () => {
     expect(active).toEqual({ id: 'message', tag: 'TEXTAREA' });
     // The text selection (caret at end of 'draft') was restored too.
     const caret = await page.evaluate(() => {
-      const el = document.querySelector('form-page')!.shadowRoot!.querySelector(
-        '#message',
-      ) as HTMLTextAreaElement;
+      const el = document
+        .querySelector('form-page')!
+        .shadowRoot!.querySelector('#message') as HTMLTextAreaElement;
       return el.selectionStart;
     });
     expect(caret).toBe(5);
   });
 
-  test('user-touched form controls keep their live state across a morph (#603)', async ({ page, request }) => {
+  test('user-touched form controls keep their live state across a morph (#603)', async ({
+    page,
+    request,
+  }) => {
     const html = await (await request.get('/form')).text();
     // Live page (injected below): checkbox WITHOUT checked, server-set with
     // value v1. Server response: checkbox WITH checked (it echoed the form
@@ -802,7 +840,10 @@ test.describe('morph/enhance robustness (0.42.0-alpha.13, #603-#606)', () => {
     expect(Math.abs((await page.evaluate(() => globalThis.scrollY)) - 800)).toBeLessThan(2);
   });
 
-  test('a morph instantiates nested DSD templates recursively (#604)', async ({ page, request }) => {
+  test('a morph instantiates nested DSD templates recursively (#604)', async ({
+    page,
+    request,
+  }) => {
     const html = await (await request.get('/form')).text();
     // Island-in-island: an outer DSD host whose shadow content carries a
     // live-counter with its own DSD template (the island's real markup, so
@@ -810,7 +851,8 @@ test.describe('morph/enhance robustness (0.42.0-alpha.13, #603-#606)', () => {
     // to querySelectorAll; without recursion it stays inert.
     const islandMatch = html.match(/<live-counter>[\s\S]*?<\/live-counter>/);
     expect(islandMatch).toBeTruthy();
-    const nested = '<nested-host><template shadowrootmode="open"><p id="outer-marker">outer</p>' +
+    const nested =
+      '<nested-host><template shadowrootmode="open"><p id="outer-marker">outer</p>' +
       islandMatch![0] +
       '</template></nested-host>';
     const intercepted = html.replace('<live-counter>', nested + '<live-counter>');
@@ -872,7 +914,8 @@ test.describe('morph/enhance robustness (0.42.0-alpha.13, #603-#606)', () => {
   strategies: { load: [], idle: [], visible: ['x-vis'], only: [] },
   onIslandLoaded: null,
 });`,
-      }));
+      }),
+    );
     await page.route('**/virtual-island.js', (route) => {
       islandFetches++;
       return route.fulfill({
@@ -893,7 +936,8 @@ test.describe('morph/enhance robustness (0.42.0-alpha.13, #603-#606)', () => {
 <script>window.__ready = []; document.addEventListener('open:ready', function (e) { window.__ready.push(e.detail.strategy); });</script>
 <script type="module" src="/virtual-entry.js"></script>
 </body></html>`,
-      }));
+      }),
+    );
     await page.goto('/sandbox');
     // The island lives inside the page host's DSD shadow root — a light-DOM
     // querySelectorAll (the removed defineIsland path) never found it.

@@ -86,7 +86,8 @@ export function compileElementProgram(
   const lowering = new Lowering(sf, analyzed.fields, methodNames);
   const renderStatements = analyzed.render.body?.statements ?? [];
   if (
-    renderStatements.length !== 1 || !ts.isReturnStatement(renderStatements[0]) ||
+    renderStatements.length !== 1 ||
+    !ts.isReturnStatement(renderStatements[0]) ||
     !renderStatements[0].expression
   ) {
     fail(analyzed.render, 'OEC9007', 'render() must be a single return of one JSX element');

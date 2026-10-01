@@ -40,11 +40,15 @@ export default class WorkspaceRecordsPage extends OpenElement {
           <input type='hidden' name='status' value={this.filterStatus} />
           <input type='hidden' name='q' value={this.filterTitlePrefix} />
           <input type='hidden' name='cursor' value={this.nextCursor} />
-          <button id='next-page' type='submit'>Next page</button>
+          <button id='next-page' type='submit'>
+            Next page
+          </button>
         </form>
         {this.invalid > 0 ? <p id='invalid'>Valid workspace required.</p> : <span></span>}
         <ul id='workspace-records'>
-          {this.recordRows.map((record) => <li key={record.id}>{record.line}</li>)}
+          {this.recordRows.map((record) => (
+            <li key={record.id}>{record.line}</li>
+          ))}
         </ul>
       </main>
     );

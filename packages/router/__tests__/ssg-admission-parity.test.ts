@@ -75,18 +75,21 @@ function buildDevDescriptor() {
 /** Mirrors the SSG descriptor built by build-ssg.ts from Phase 1 ctx data. */
 function buildSsgDescriptor(ctx: OpenElementBuildContext) {
   ctx.phase1.cemClassifications = cemClassifications;
-  return buildSsgEntryDescriptor({
-    routes,
-    routesDir: 'app/routes',
-    islandsDir: 'app/islands',
-    islandTagNames: [],
-    islandFiles: [],
-    islandMeta: {},
-    staticComponents: [],
-    packageManifests,
-    cemClassifications: ctx.phase1.cemClassifications,
-    upgradeStrategy: 'idle',
-  }, ctx);
+  return buildSsgEntryDescriptor(
+    {
+      routes,
+      routesDir: 'app/routes',
+      islandsDir: 'app/islands',
+      islandTagNames: [],
+      islandFiles: [],
+      islandMeta: {},
+      staticComponents: [],
+      packageManifests,
+      cemClassifications: ctx.phase1.cemClassifications,
+      upgradeStrategy: 'idle',
+    },
+    ctx,
+  );
 }
 
 Deno.test('admission parity: CEM-admitted package island gets the same decision in dev and SSG entries', () => {
@@ -126,9 +129,7 @@ Deno.test('admission parity: evidence decisions match the plan that rendered the
 
   const evidence = createSsgRenderEvidence(ctx);
   assertEquals(evidence.admissionDecisions, ssgDescriptor.ssrAdmissionPlan.decisions);
-  const evidenceDecision = evidence.admissionDecisions?.find(
-    (d) => d.tagName === 'cem-pkg-island',
-  );
+  const evidenceDecision = evidence.admissionDecisions?.find((d) => d.tagName === 'cem-pkg-island');
   assertEquals(evidenceDecision?.renderPath, 'ssr+client');
   assertStringIncludes(evidenceDecision?.reason ?? '', 'CEM ssr-capable');
 });

@@ -94,13 +94,17 @@ function exact(expected: readonly string[]): ArgvMatcher {
   return (argv) => {
     const normalized = normalizeArgv(argv);
     if (normalized.length !== expected.length) {
-      return `expected argv ${JSON.stringify(expected)} (${expected.length} elements), ` +
-        `got ${JSON.stringify(argv)}`;
+      return (
+        `expected argv ${JSON.stringify(expected)} (${expected.length} elements), ` +
+        `got ${JSON.stringify(argv)}`
+      );
     }
     for (let index = 0; index < expected.length; index++) {
       if (normalized[index] !== expected[index]) {
-        return `argv[${index}] must be ${JSON.stringify(expected[index])}, ` +
-          `got ${JSON.stringify(normalized[index])}`;
+        return (
+          `argv[${index}] must be ${JSON.stringify(expected[index])}, ` +
+          `got ${JSON.stringify(normalized[index])}`
+        );
       }
     }
     return null;
@@ -108,11 +112,7 @@ function exact(expected: readonly string[]): ArgvMatcher {
 }
 
 /** `clean-proof.ts` invocation that binds a job to a clean exact SHA/tree. */
-export function cleanProofArgv(
-  sha: string,
-  tree: string,
-  phase: 'before' | 'after',
-): string[] {
+export function cleanProofArgv(sha: string, tree: string, phase: 'before' | 'after'): string[] {
   return [
     'deno',
     'run',
@@ -131,11 +131,7 @@ export function cleanProofArgv(
 }
 
 /** Canonical line a clean-proof log must contain for that phase. */
-export function cleanProofLine(
-  sha: string,
-  tree: string,
-  phase: 'before' | 'after',
-): string {
+export function cleanProofLine(sha: string, tree: string, phase: 'before' | 'after'): string {
   return `clean-proof PASS phase=${phase} sha=${sha} tree=${tree}`;
 }
 
@@ -175,17 +171,30 @@ export const STATIC_JOB_STEPS: Record<
 
 /** Fresh-clone argv builders using shared roles; the producer maps paths. */
 export const freshCloneCommands = {
-  clone:
-    (): string[] => ['git', 'clone', '--no-hardlinks', EVIDENCE_ROLES.source, EVIDENCE_ROLES.clone],
+  clone: (): string[] => [
+    'git',
+    'clone',
+    '--no-hardlinks',
+    EVIDENCE_ROLES.source,
+    EVIDENCE_ROLES.clone,
+  ],
   checkout: (sha: string): string[] => ['git', '-C', EVIDENCE_ROLES.clone, 'checkout', sha],
   install: (denoExe: string): string[] => [denoExe, 'install'],
   check: (denoExe: string): string[] => [denoExe, 'task', 'check'],
-  gateSource: (
-    denoExe: string,
-  ): string[] => [denoExe, 'task', '--cwd', 'tools/repo', 'gate:source'],
-  gatePacked: (
-    denoExe: string,
-  ): string[] => [denoExe, 'task', '--cwd', 'tools/release', 'gate:packed'],
+  gateSource: (denoExe: string): string[] => [
+    denoExe,
+    'task',
+    '--cwd',
+    'tools/repo',
+    'gate:source',
+  ],
+  gatePacked: (denoExe: string): string[] => [
+    denoExe,
+    'task',
+    '--cwd',
+    'tools/release',
+    'gate:packed',
+  ],
   siteBuild: (denoExe: string): string[] => [denoExe, 'task', 'site:build'],
   siteE2e: (denoExe: string): string[] => [denoExe, 'task', '--cwd', 'www', 'e2e:browsers'],
 } as const;
@@ -203,17 +212,19 @@ export const FRESH_CLONE_STEPS: readonly StepContract[] = [
     match: (argv, context) => {
       const normalized = normalizeArgv(argv);
       if (
-        normalized.length !== 5 || normalized[0] !== 'git' || normalized[1] !== '-C' ||
+        normalized.length !== 5 ||
+        normalized[0] !== 'git' ||
+        normalized[1] !== '-C' ||
         normalized[3] !== 'checkout'
       ) {
-        return `expected 'git -C ${EVIDENCE_ROLES.clone} checkout <sha>', got ${
-          JSON.stringify(argv)
-        }`;
+        return `expected 'git -C ${EVIDENCE_ROLES.clone} checkout <sha>', got ${JSON.stringify(
+          argv,
+        )}`;
       }
       if (normalized[2] !== EVIDENCE_ROLES.clone) {
-        return `git-checkout must run against ${EVIDENCE_ROLES.clone}, got ${
-          JSON.stringify(normalized[2])
-        }`;
+        return `git-checkout must run against ${EVIDENCE_ROLES.clone}, got ${JSON.stringify(
+          normalized[2],
+        )}`;
       }
       if (normalized[4] !== context.sha) {
         return `git-checkout target ${normalized[4]} != evidence sha ${context.sha}`;

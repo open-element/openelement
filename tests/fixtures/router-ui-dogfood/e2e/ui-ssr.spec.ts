@@ -38,7 +38,9 @@ test.describe('ui dogfood SSR/DSD output', () => {
     expect(html).toContain('<div slot="panel">Gamma panel content</div>');
   });
 
-  test('/dropdown emits open-dropdown DSD with a native popover content region', async ({ request }) => {
+  test('/dropdown emits open-dropdown DSD with a native popover content region', async ({
+    request,
+  }) => {
     const response = await request.get('/dropdown');
     expect(response.ok()).toBe(true);
     const html = await response.text();
@@ -47,7 +49,9 @@ test.describe('ui dogfood SSR/DSD output', () => {
     expect(html).toContain('<button slot="trigger" id="dropdown-trigger" type="button">');
   });
 
-  test('/form emits open-input DSD with the form contract markup and the island entry', async ({ request }) => {
+  test('/form emits open-input DSD with the form contract markup and the island entry', async ({
+    request,
+  }) => {
     const response = await request.get('/form');
     expect(response.ok()).toBe(true);
     const html = await response.text();

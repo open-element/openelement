@@ -41,7 +41,7 @@ async function sourceFiles(dir: URL): Promise<URL[]> {
   const out: URL[] = [];
   for await (const entry of Deno.readDir(dir)) {
     const child = new URL(`${entry.name}${entry.isDirectory ? '/' : ''}`, dir);
-    if (entry.isDirectory) out.push(...await sourceFiles(child));
+    if (entry.isDirectory) out.push(...(await sourceFiles(child)));
     else if (entry.name.endsWith('.ts')) out.push(child);
   }
   return out;
@@ -164,9 +164,7 @@ Deno.test('#1386: frameworkError carries code, severity, phase and recoverable',
 });
 
 Deno.test('#1386: the runtime raisers report their code through the wire entries', async () => {
-  const { createFreshDom, serializeToHtml } = await import(
-    '../src/internal/compiled/runtime.ts'
-  );
+  const { createFreshDom, serializeToHtml } = await import('../src/internal/compiled/runtime.ts');
   const { testProgram } = await import('./compiled-runtime/test-program.ts');
   const { signal } = await import('../src/internal/signal/framework.ts');
   const { TestDocument } = await import('./compiled-runtime/test-dom.ts');
@@ -175,34 +173,34 @@ Deno.test('#1386: the runtime raisers report their code through the wire entries
     tag: 'oe-dialect-proof',
     sourceFile: '/app/components/dialect-proof.tsx',
     template: [{ k: 'el', tag: 'ul', attrs: [], children: [{ k: 'part', index: 0 }] }],
-    parts: [{
-      k: 'each',
-      index: 0,
-      signal: 'rows',
-      key: 'id',
-      field: 'label',
-      item: [{ k: 'el', tag: 'li', attrs: [], children: [{ k: 'ival', field: 'label' }] }],
-    }],
+    parts: [
+      {
+        k: 'each',
+        index: 0,
+        signal: 'rows',
+        key: 'id',
+        field: 'label',
+        item: [{ k: 'el', tag: 'li', attrs: [], children: [{ k: 'ival', field: 'label' }] }],
+      },
+    ],
   });
   const document = new TestDocument();
 
   // A non-array list Region: both executors raise the same code for the same
   // failing authoring decision.
   const notArray = { signals: { rows: signal<unknown>('nope') }, handlers: {} };
-  for (
-    const [label, run] of [
-      ['serializeToHtml', () => serializeToHtml(program, notArray as never)],
-      [
-        'createFreshDom',
-        () =>
-          createFreshDom(
-            program,
-            notArray as never,
-            document.createElement('oe-dialect-proof') as unknown as Node,
-          ),
-      ],
-    ] as const
-  ) {
+  for (const [label, run] of [
+    ['serializeToHtml', () => serializeToHtml(program, notArray as never)],
+    [
+      'createFreshDom',
+      () =>
+        createFreshDom(
+          program,
+          notArray as never,
+          document.createElement('oe-dialect-proof') as unknown as Node,
+        ),
+    ],
+  ] as const) {
     let thrown: unknown;
     try {
       run();
@@ -218,7 +216,12 @@ Deno.test('#1386: the runtime raisers report their code through the wire entries
 
   // A duplicate item key: the server and the client agree on the key code.
   const duplicate = {
-    signals: { rows: signal<unknown>([{ id: 'a', label: 'x' }, { id: 'a', label: 'y' }]) },
+    signals: {
+      rows: signal<unknown>([
+        { id: 'a', label: 'x' },
+        { id: 'a', label: 'y' },
+      ]),
+    },
     handlers: {},
   };
   let keyThrown: unknown;
@@ -253,9 +256,8 @@ Deno.test('#1386: a claim mismatch is an OpenElementError with the released code
 });
 
 Deno.test('#1386: the compiled program grammar raises catchable codes per failure family', async () => {
-  const { assertCompiledProgram, CompiledProgramValidationError } = await import(
-    '../src/internal/compiled/server/index.ts'
-  );
+  const { assertCompiledProgram, CompiledProgramValidationError } =
+    await import('../src/internal/compiled/server/index.ts');
   // Every grammar rejection is the same class with the same code, so a host
   // catches the whole boundary as one thing.
   let grammarThrown: unknown;
@@ -270,9 +272,8 @@ Deno.test('#1386: the compiled program grammar raises catchable codes per failur
   assertInstanceOf(grammarThrown, CompiledProgramValidationError);
 
   // The wire program validator raises the program family's code.
-  const wireProtocol: typeof import('../src/internal/protocol/part-program.ts') = await import(
-    '../src/internal/protocol/part-program.ts'
-  );
+  const wireProtocol: typeof import('../src/internal/protocol/part-program.ts') =
+    await import('../src/internal/protocol/part-program.ts');
   let wireThrown: unknown;
   try {
     wireProtocol.validatePartProgram({ tag: 'div' });
@@ -284,9 +285,8 @@ Deno.test('#1386: the compiled program grammar raises catchable codes per failur
 });
 
 Deno.test('#1386: the compiler reports a failed compile as one catchable code', async () => {
-  const { CompiledElementError, compileElementProgram } = await import(
-    '../src/internal/compiler/semantic-core/compile.ts'
-  );
+  const { CompiledElementError, compileElementProgram } =
+    await import('../src/internal/compiler/semantic-core/compile.ts');
   let thrown: unknown;
   try {
     compileElementProgram('const notAClass = 1;', '/app/components/broken.tsx');
@@ -301,16 +301,14 @@ Deno.test('#1386: the compiler reports a failed compile as one catchable code', 
   assert((thrown as InstanceType<typeof CompiledElementError>).diagnostics.length > 0);
   assertEquals(
     (thrown as InstanceType<typeof CompiledElementError>).diagnostics.every((record) =>
-      /^OEC\d{4}$/.test(record.code)
+      /^OEC\d{4}$/.test(record.code),
     ),
     true,
   );
 });
 
 Deno.test('#1386: lifecycle raisers carry their own family codes', async () => {
-  const { CompiledContextService } = await import(
-    '../src/internal/compiled/runtime/context.ts'
-  );
+  const { CompiledContextService } = await import('../src/internal/compiled/runtime/context.ts');
   let thrown: unknown;
   try {
     const service = new CompiledContextService({} as HTMLElement);

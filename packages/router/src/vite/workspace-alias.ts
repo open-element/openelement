@@ -66,9 +66,10 @@ export function detectWorkspaceAliasHijack(appRoot: string): WorkspaceAliasHijac
   const imports = appCfg.imports as Record<string, string> | undefined;
   if (!imports) return null;
   const pinned = Object.entries(imports)
-    .filter(([specifier, target]) =>
-      specifier.startsWith('@openelement/') &&
-      (target.startsWith('npm:') || target.startsWith('jsr:'))
+    .filter(
+      ([specifier, target]) =>
+        specifier.startsWith('@openelement/') &&
+        (target.startsWith('npm:') || target.startsWith('jsr:')),
     )
     .map(([specifier, target]) => ({ specifier, target }));
   if (pinned.length === 0) return null;
@@ -79,9 +80,7 @@ export function detectWorkspaceAliasHijack(appRoot: string): WorkspaceAliasHijac
   // A workspace member declares its dependency through the workspace itself.
   const rootCfg = readJsonc(resolve(workspaceRoot, 'deno.json'));
   const members: string[] = (rootCfg?.workspace as string[]) || [];
-  if (
-    members.some((member) => resolve(workspaceRoot, member) === dir)
-  ) {
+  if (members.some((member) => resolve(workspaceRoot, member) === dir)) {
     return null;
   }
 
@@ -90,9 +89,9 @@ export function detectWorkspaceAliasHijack(appRoot: string): WorkspaceAliasHijac
 
 /** The fail-closed error for {@linkcode detectWorkspaceAliasHijack}. */
 export function workspaceAliasHijackError(hijack: WorkspaceAliasHijack): Error {
-  const details = hijack.pinned.map((entry) => `  ${entry.specifier} -> ${entry.target}`).join(
-    '\n',
-  );
+  const details = hijack.pinned
+    .map((entry) => `  ${entry.specifier} -> ${entry.target}`)
+    .join('\n');
   return new Error(
     `[openElement] This app is built inside a Deno workspace, so the workspace's ` +
       `@openelement/* aliases would silently replace the versions it declares:\n${details}\n` +
@@ -122,10 +121,7 @@ export function generateWorkspaceAliases(workspaceRoot: string): AliasEntry[] {
     if (!memberCfg) continue;
 
     const name = memberCfg.name as string | undefined;
-    const exports = memberCfg.exports as
-      | Record<string, string>
-      | string
-      | undefined;
+    const exports = memberCfg.exports as Record<string, string> | string | undefined;
     if (!name || !exports) continue;
 
     if (typeof exports === 'string') {

@@ -46,12 +46,7 @@ export interface ModuleSemanticFacts {
  * {@link StaticSidecarDescriptor}s, never through compiler-side knowledge of
  * another package.
  */
-export type IntrinsicName =
-  | 'element'
-  | 'property'
-  | 'OpenElement'
-  | 'computed'
-  | 'trustedHtml';
+export type IntrinsicName = 'element' | 'property' | 'OpenElement' | 'computed' | 'trustedHtml';
 
 const INTRINSIC_MODULES: Readonly<Record<IntrinsicName, readonly string[]>> = {
   element: ['@openelement/element'],
@@ -245,7 +240,8 @@ export function createModuleIntrinsicBindings(
     // intrinsic, which is what keeps lexical shadowing and same-name local
     // functions/classes out of the grammar.
     if (
-      (ts.isFunctionDeclaration(statement) || ts.isClassDeclaration(statement) ||
+      (ts.isFunctionDeclaration(statement) ||
+        ts.isClassDeclaration(statement) ||
         ts.isEnumDeclaration(statement)) &&
       statement.name
     ) {
@@ -277,9 +273,9 @@ export function createModuleIntrinsicBindings(
       return {
         canonical: false,
         unsupported:
-          `conflicting module-scope bindings for "${name}" (${
-            bindings.map(describe).join('; ')
-          }); ` +
+          `conflicting module-scope bindings for "${name}" (${bindings
+            .map(describe)
+            .join('; ')}); ` +
           `import ${bindingName} once from its canonical module '${modules.join("' or '")}'`,
       };
     }
@@ -288,9 +284,9 @@ export function createModuleIntrinsicBindings(
       if (modules.includes(binding.module)) {
         return {
           canonical: false,
-          unsupported: `"${name}" is a ${
-            describe(binding)
-          }; ${bindingName} requires a runtime named import`,
+          unsupported: `"${name}" is a ${describe(
+            binding,
+          )}; ${bindingName} requires a runtime named import`,
         };
       }
       return { canonical: false };
@@ -325,13 +321,16 @@ export function createModuleIntrinsicBindings(
         return resolveIdentifier(expression.text, intrinsic, INTRINSIC_MODULES[intrinsic]);
       }
       if (
-        ts.isPropertyAccessExpression(expression) && ts.isIdentifier(expression.expression) &&
+        ts.isPropertyAccessExpression(expression) &&
+        ts.isIdentifier(expression.expression) &&
         expression.name.text === intrinsic
       ) {
         const namespace = expression.expression.text;
         const bindings = imports.get(namespace) ?? [];
         if (
-          !locals.has(namespace) && bindings.length === 1 && bindings[0].form === 'namespace' &&
+          !locals.has(namespace) &&
+          bindings.length === 1 &&
+          bindings[0].form === 'namespace' &&
           INTRINSIC_MODULES[intrinsic].includes(bindings[0].module)
         ) {
           return {
@@ -350,7 +349,8 @@ export function createModuleIntrinsicBindings(
         if (
           resolveIdentifier(expression.text, descriptor.exportName, [descriptor.moduleSpecifier])
             .canonical
-        ) return true;
+        )
+          return true;
       }
       return false;
     },
@@ -358,9 +358,13 @@ export function createModuleIntrinsicBindings(
       if (locals.has(localName)) return false;
       const modules = typeof module === 'string' ? [module] : module;
       const bindings = imports.get(localName) ?? [];
-      return bindings.length === 1 && bindings[0].form === 'named' &&
-        modules.includes(bindings[0].module) && bindings[0].imported === imported &&
-        !bindings[0].typeOnly;
+      return (
+        bindings.length === 1 &&
+        bindings[0].form === 'named' &&
+        modules.includes(bindings[0].module) &&
+        bindings[0].imported === imported &&
+        !bindings[0].typeOnly
+      );
     },
   };
 }
@@ -400,19 +404,21 @@ export function analyzeModuleSemantics(
   );
   const imports = createModuleIntrinsicBindings(sourceFile);
   const vocabulary = [...CORE_VOCABULARY, ...(options.vocabulary ?? [])];
-  const pageDefinitionBindings = vocabulary.filter((descriptor) =>
-    descriptor.kind === 'page-definition'
+  const pageDefinitionBindings = vocabulary.filter(
+    (descriptor) => descriptor.kind === 'page-definition',
   );
-  const registrationBindings = vocabulary.filter((descriptor) =>
-    descriptor.kind === 'element-registration'
+  const registrationBindings = vocabulary.filter(
+    (descriptor) => descriptor.kind === 'element-registration',
   );
   const relativeImports = new Set<string>();
   for (const statement of sourceFile.statements) {
     if (
       (ts.isImportDeclaration(statement) || ts.isExportDeclaration(statement)) &&
-      statement.moduleSpecifier && ts.isStringLiteral(statement.moduleSpecifier) &&
+      statement.moduleSpecifier &&
+      ts.isStringLiteral(statement.moduleSpecifier) &&
       statement.moduleSpecifier.text.startsWith('.')
-    ) relativeImports.add(statement.moduleSpecifier.text);
+    )
+      relativeImports.add(statement.moduleSpecifier.text);
   }
 
   let exportedTagName: string | undefined;
@@ -433,15 +439,18 @@ export function analyzeModuleSemantics(
     ) {
       for (const declaration of statement.declarationList.declarations) {
         if (
-          ts.isIdentifier(declaration.name) && declaration.name.text === 'tagName' &&
+          ts.isIdentifier(declaration.name) &&
+          declaration.name.text === 'tagName' &&
           declaration.initializer &&
           (ts.isStringLiteral(declaration.initializer) ||
             ts.isNoSubstitutionTemplateLiteral(declaration.initializer))
-        ) exportedTagName = declaration.initializer.text;
+        )
+          exportedTagName = declaration.initializer.text;
       }
     }
     if (
-      ts.isExportAssignment(statement) && ts.isCallExpression(statement.expression) &&
+      ts.isExportAssignment(statement) &&
+      ts.isCallExpression(statement.expression) &&
       ts.isIdentifier(statement.expression.expression)
     ) {
       // A default-exported page-definition factory call marks the module as a
@@ -455,26 +464,25 @@ export function analyzeModuleSemantics(
             pageFactory,
             descriptor.moduleSpecifier,
             descriptor.exportName,
-          )
+          ),
         )
-      ) definePage = true;
+      )
+        definePage = true;
     }
 
     if (!ts.isClassDeclaration(statement)) continue;
-    const isDefault = statement.modifiers?.some((modifier) =>
-      modifier.kind === ts.SyntaxKind.DefaultKeyword
+    const isDefault = statement.modifiers?.some(
+      (modifier) => modifier.kind === ts.SyntaxKind.DefaultKeyword,
     );
-    const heritage = statement.heritageClauses?.find((clause) =>
-      clause.token === ts.SyntaxKind.ExtendsKeyword
+    const heritage = statement.heritageClauses?.find(
+      (clause) => clause.token === ts.SyntaxKind.ExtendsKeyword,
     )?.types[0]?.expression;
     // Provenance-only (#1209): a bare `OpenElement` spelling never counts; the
     // heritage identifier must bind the canonical import (aliases followed).
-    const extendsOpenElement = heritage !== undefined &&
-      imports.resolveIntrinsic(heritage, 'OpenElement').canonical;
+    const extendsOpenElement =
+      heritage !== undefined && imports.resolveIntrinsic(heritage, 'OpenElement').canonical;
     for (const decorator of ts.getDecorators(statement) ?? []) {
-      if (
-        !ts.isCallExpression(decorator.expression)
-      ) {
+      if (!ts.isCallExpression(decorator.expression)) {
         continue;
       }
       const resolution = imports.resolveIntrinsic(decorator.expression.expression, 'element');
@@ -499,8 +507,10 @@ export function analyzeModuleSemantics(
     if (ts.isCallExpression(node)) {
       const expression = node.expression;
       if (
-        expression.kind === ts.SyntaxKind.ImportKeyword && node.arguments.length === 1 &&
-        ts.isStringLiteral(node.arguments[0]) && node.arguments[0].text.startsWith('.')
+        expression.kind === ts.SyntaxKind.ImportKeyword &&
+        node.arguments.length === 1 &&
+        ts.isStringLiteral(node.arguments[0]) &&
+        node.arguments[0].text.startsWith('.')
       ) {
         relativeImports.add(node.arguments[0].text);
       }
@@ -515,22 +525,25 @@ export function analyzeModuleSemantics(
               expression.text,
               descriptor.moduleSpecifier,
               descriptor.exportName,
-            )
+            ),
           )
         ) {
           const tag = stringArgument(node);
           if (tag && isCustomElementTag(tag)) defined.add(tag);
           if (tag !== undefined && tag === exportedTagName) usesExportedTagName = true;
           if (
-            node.arguments[0] && ts.isIdentifier(node.arguments[0]) &&
+            node.arguments[0] &&
+            ts.isIdentifier(node.arguments[0]) &&
             node.arguments[0].text === 'tagName'
-          ) usesExportedTagName = true;
+          )
+            usesExportedTagName = true;
         }
-        const isElementJsxFactory = imports.isRuntimeNamedImport(
-          expression.text,
-          '@openelement/element/jsx-runtime',
-          'jsx',
-        ) ||
+        const isElementJsxFactory =
+          imports.isRuntimeNamedImport(
+            expression.text,
+            '@openelement/element/jsx-runtime',
+            'jsx',
+          ) ||
           imports.isRuntimeNamedImport(
             expression.text,
             '@openelement/element/jsx-runtime',
@@ -546,17 +559,19 @@ export function analyzeModuleSemantics(
           if (tag && isCustomElementTag(tag)) referenced.add(tag);
         }
       } else if (
-        ts.isPropertyAccessExpression(expression) && expression.expression.getText(sourceFile) ===
-          'customElements' &&
+        ts.isPropertyAccessExpression(expression) &&
+        expression.expression.getText(sourceFile) === 'customElements' &&
         expression.name.text === 'define'
       ) {
         const tag = stringArgument(node);
         if (tag && isCustomElementTag(tag)) defined.add(tag);
         if (tag !== undefined && tag === exportedTagName) usesExportedTagName = true;
         if (
-          node.arguments[0] && ts.isIdentifier(node.arguments[0]) &&
+          node.arguments[0] &&
+          ts.isIdentifier(node.arguments[0]) &&
           node.arguments[0].text === 'tagName'
-        ) usesExportedTagName = true;
+        )
+          usesExportedTagName = true;
       }
     }
     if (ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) {

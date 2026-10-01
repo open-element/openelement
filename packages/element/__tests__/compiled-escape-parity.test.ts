@@ -114,9 +114,7 @@ Deno.test('escape parity: static text corpus is byte-identical across both seria
   for (const value of TEXT_CORPUS) {
     const program = testProgram({
       tag: 'x-parity',
-      template: [
-        { k: 'el', tag: 'div', attrs: [], children: [{ k: 'text', value }] },
-      ],
+      template: [{ k: 'el', tag: 'div', attrs: [], children: [{ k: 'text', value }] }],
       parts: [],
     });
     const runtime = serializeRuntime(program, hostWith(undefined) as unknown as RuntimeHost);
@@ -134,9 +132,7 @@ Deno.test('escape parity: text Part corpus is byte-identical across both seriali
   for (const value of TEXT_CORPUS) {
     const program = testProgram({
       tag: 'x-parity',
-      template: [
-        { k: 'el', tag: 'div', attrs: [], children: [{ k: 'part', index: 0 }] },
-      ],
+      template: [{ k: 'el', tag: 'div', attrs: [], children: [{ k: 'part', index: 0 }] }],
       parts: [{ k: 'text', index: 0, signal: 'v' }],
     });
     const runtime = serializeRuntime(program, hostWith(value) as unknown as RuntimeHost);
@@ -170,13 +166,11 @@ Deno.test('escape parity: both execution modules delegate the walk to the shared
       source.includes('serializer/serialize-program.ts'),
       `${path}: serialization must import the shared kernel`,
     );
-    for (
-      const privateWalker of [
-        'function serializeNode(',
-        'function serializeElement(',
-        'function serializeChildren(',
-      ]
-    ) {
+    for (const privateWalker of [
+      'function serializeNode(',
+      'function serializeElement(',
+      'function serializeChildren(',
+    ]) {
       assertEquals(
         source.includes(privateWalker),
         false,

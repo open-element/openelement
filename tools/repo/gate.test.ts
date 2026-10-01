@@ -14,7 +14,10 @@ Deno.test('gate: green steps all pass with per-step results', async () => {
   );
   assert(ok);
   assertEquals(seen, ['a', 'b']);
-  assertEquals(results.map((r) => r.name), ['a', 'b']);
+  assertEquals(
+    results.map((r) => r.name),
+    ['a', 'b'],
+  );
   assert(results.every((r) => r.ok));
   assert(lines.some((l) => l.startsWith('PASS a')));
   assert(lines.some((l) => l.startsWith('PASS b')));

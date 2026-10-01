@@ -53,9 +53,7 @@ export interface HeadConventionInput {
  * default, or exports an invalid entry: a head module that cannot be read is a
  * build failure, never a silently head-less document.
  */
-export async function resolveHeadConvention(
-  input: HeadConventionInput,
-): Promise<string[]> {
+export async function resolveHeadConvention(input: HeadConventionInput): Promise<string[]> {
   const { root, relativePath } = input;
   const file = join(root, relativePath);
   if (!existsSync(file)) {
@@ -88,8 +86,7 @@ export async function resolveHeadConvention(
           // would drag component code — which needs the compiled-element
           // transform — into a data module.
           external: (id: string) =>
-            !id.startsWith('.') && !id.startsWith('/') &&
-            !id.startsWith('\0') && !isAbsolute(id),
+            !id.startsWith('.') && !id.startsWith('/') && !id.startsWith('\0') && !isAbsolute(id),
           output: { format: 'esm', entryFileNames: '[name].js' },
         },
       },
@@ -117,7 +114,7 @@ export async function resolveHeadConvention(
 
   let module: { default?: unknown };
   try {
-    module = await import(`${toFileUrl(emitted)}?t=${Date.now()}`) as { default?: unknown };
+    module = (await import(`${toFileUrl(emitted)}?t=${Date.now()}`)) as { default?: unknown };
   } catch (error) {
     throw new OpenElementError(
       `[openElement] ${relativePath} could not be evaluated: ${

@@ -10,10 +10,7 @@ import { join } from '@std/path';
 import { runStep } from './command-run.ts';
 
 /** Absolute path of a Router CLI subcommand source file in the repository. */
-export function routerCliPath(
-  repoRoot: string,
-  subcommand: 'build' | 'start',
-): string {
+export function routerCliPath(repoRoot: string, subcommand: 'build' | 'start'): string {
   return join(repoRoot, 'packages', 'router', 'src', 'cli', `${subcommand}.ts`);
 }
 
@@ -24,9 +21,11 @@ export function routerCliPath(
  */
 export function routerBuildTask(repoRoot: string): string {
   const cliPath = JSON.stringify(routerCliPath(repoRoot, 'build'));
-  return 'deno run --unstable-sloppy-imports --config deno.json --allow-read' +
+  return (
+    'deno run --unstable-sloppy-imports --config deno.json --allow-read' +
     ' --allow-write --allow-env --allow-net --allow-run --allow-sys' +
-    ` --allow-ffi --no-prompt ${cliPath}`;
+    ` --allow-ffi --no-prompt ${cliPath}`
+  );
 }
 
 /** Run the scaffolded app's own `build` task. */
@@ -53,7 +52,8 @@ export async function findFile(root: string, name: string): Promise<string | nul
  */
 export async function findServerEntry(distDir: string): Promise<string> {
   const serverEntryPath = join(distDir, 'server', 'entry.js');
-  return await Deno.stat(serverEntryPath).then(() => serverEntryPath)
+  return await Deno.stat(serverEntryPath)
+    .then(() => serverEntryPath)
     .catch(async () => {
       const found = await findFile(distDir, 'entry.js');
       if (!found) {

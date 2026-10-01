@@ -52,7 +52,9 @@ test.describe('hybrid page: static GET + request-time POST (ADR-0120 amendment)'
     expect(dynamic.headers()['cache-control']).toBe('private, no-cache');
   });
 
-  test('b/f. POST to the hybrid path succeeds (303 PRG), with no-store POST semantics', async ({ request }) => {
+  test('b/f. POST to the hybrid path succeeds (303 PRG), with no-store POST semantics', async ({
+    request,
+  }) => {
     const response = await request.post('/guestbook', {
       form: { note: 'hello-hybrid' },
       maxRedirects: 0,
@@ -106,7 +108,9 @@ test.describe('hybrid page: static GET + request-time POST (ADR-0120 amendment)'
     await context.close();
   });
 
-  test('e. fetch callers receive the ActionResult union on the hybrid path', async ({ request }) => {
+  test('e. fetch callers receive the ActionResult union on the hybrid path', async ({
+    request,
+  }) => {
     const failure = await request.post('/guestbook', {
       form: { note: '' },
       headers: { 'x-openelement-action': 'true' },

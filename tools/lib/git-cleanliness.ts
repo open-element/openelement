@@ -2,9 +2,7 @@ import { normalize } from '@std/path';
 
 const RELEASE_EVIDENCE_PATHS = Object.freeze({
   prefixes: ['docs/release/', 'vendor/', 'www/app/data/_generated-'],
-  exact: [
-    'deno.lock',
-  ],
+  exact: ['deno.lock'],
 });
 
 function normalizeGitPath(path: string): string {
@@ -19,14 +17,16 @@ export function parsePorcelainPath(line: string): string {
 
 function isReleaseEvidencePath(path: string): boolean {
   const normalized = normalizeGitPath(path);
-  return RELEASE_EVIDENCE_PATHS.exact.includes(normalized) ||
-    RELEASE_EVIDENCE_PATHS.prefixes.some((prefix) => normalized.startsWith(prefix));
+  return (
+    RELEASE_EVIDENCE_PATHS.exact.includes(normalized) ||
+    RELEASE_EVIDENCE_PATHS.prefixes.some((prefix) => normalized.startsWith(prefix))
+  );
 }
 
 export function filterNonEvidenceDirty(status: string): string[] {
-  return status.split(/\r?\n/).filter((line) =>
-    line.trim() !== '' && !isReleaseEvidencePath(parsePorcelainPath(line))
-  );
+  return status
+    .split(/\r?\n/)
+    .filter((line) => line.trim() !== '' && !isReleaseEvidencePath(parsePorcelainPath(line)));
 }
 
 /**

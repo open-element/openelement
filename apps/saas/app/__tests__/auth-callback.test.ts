@@ -25,7 +25,7 @@ Deno.test('callback rejects missing and expired codes without reflecting details
 });
 Deno.test('callback success rejects an encoded external next and redirects internally', async () => {
   const thrown = await assertRejects(() =>
-    createCallbackLoader(client())(context('?code=ok&next=%252F%252Fevil.example'))
+    createCallbackLoader(client())(context('?code=ok&next=%252F%252Fevil.example')),
   );
   assertEquals(isOpenElementRedirect(thrown), true);
   assertEquals(

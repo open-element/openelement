@@ -35,10 +35,10 @@ function deepEqualUnordered(a: unknown, b: unknown): boolean {
     if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`;
     if (value !== null && typeof value === 'object') {
       const record = value as Record<string, unknown>;
-      return `{${
-        Object.keys(record).sort().map((key) => `${JSON.stringify(key)}:${canonical(record[key])}`)
-          .join(',')
-      }}`;
+      return `{${Object.keys(record)
+        .sort()
+        .map((key) => `${JSON.stringify(key)}:${canonical(record[key])}`)
+        .join(',')}}`;
     }
     return JSON.stringify(value) ?? 'null';
   };
@@ -74,9 +74,9 @@ export async function collectSiteE2eRecomputeFailures(
   const failures: string[] = [];
   if (options.expectedSha !== undefined && siteE2e?.candidateSha !== options.expectedSha) {
     failures.push(
-      `Site E2E candidateSha ${
-        JSON.stringify(siteE2e?.candidateSha ?? null)
-      } != candidate ${options.expectedSha} (stale or foreign sidecar)`,
+      `Site E2E candidateSha ${JSON.stringify(
+        siteE2e?.candidateSha ?? null,
+      )} != candidate ${options.expectedSha} (stale or foreign sidecar)`,
     );
   }
   const bytes = await options.readReport();
@@ -121,9 +121,9 @@ export async function collectSiteE2eRecomputeFailures(
   }
   if (siteE2e?.expected !== report.stats?.expected) {
     failures.push(
-      `Site E2E sidecar expected=${JSON.stringify(siteE2e?.expected)} != report stats.expected ${
-        JSON.stringify(report.stats?.expected ?? null)
-      }`,
+      `Site E2E sidecar expected=${JSON.stringify(siteE2e?.expected)} != report stats.expected ${JSON.stringify(
+        report.stats?.expected ?? null,
+      )}`,
     );
   }
   // The retry count is a fact the report states itself, so bind it too: a
@@ -131,17 +131,17 @@ export async function collectSiteE2eRecomputeFailures(
   // ones they do.
   if (totals.flaky !== (report.stats?.flaky ?? 0)) {
     failures.push(
-      `Site E2E recomputed flaky=${totals.flaky} != report stats.flaky ${
-        JSON.stringify(report.stats?.flaky ?? null)
-      }`,
+      `Site E2E recomputed flaky=${totals.flaky} != report stats.flaky ${JSON.stringify(
+        report.stats?.flaky ?? null,
+      )}`,
     );
   }
   const configFile = normalizeReportConfigFile(report.config?.configFile);
   if (siteE2e?.configFile !== configFile) {
     failures.push(
-      `Site E2E sidecar configFile ${
-        JSON.stringify(siteE2e?.configFile ?? null)
-      } != report config ${JSON.stringify(configFile)}`,
+      `Site E2E sidecar configFile ${JSON.stringify(
+        siteE2e?.configFile ?? null,
+      )} != report config ${JSON.stringify(configFile)}`,
     );
   }
   const grep = report.config?.grep ?? {};
@@ -199,9 +199,9 @@ export async function stageCloneSiteE2e(
   } catch (cause) {
     if (!required) return unrecordable(cause);
     throw new Error(
-      `fresh clone did not produce the Site E2E sidecar and raw report the candidate proof requires: ${
-        String(cause)
-      }`,
+      `fresh clone did not produce the Site E2E sidecar and raw report the candidate proof requires: ${String(
+        cause,
+      )}`,
     );
   }
   // The runner removes the previous report before every run, so the bytes
@@ -221,10 +221,10 @@ export async function stageCloneSiteE2e(
   // never recorded.
   const failures = [
     ...auditSiteE2e(result),
-    ...await collectSiteE2eRecomputeFailures(result, {
+    ...(await collectSiteE2eRecomputeFailures(result, {
       readReport: () => Promise.resolve(reportBytes),
       expectedSha: expectedCommit,
-    }),
+    })),
   ];
   if (failures.length > 0) {
     throw new Error(`Site E2E evidence is not recordable:\n${failures.join('\n')}`);

@@ -171,29 +171,31 @@ export class OpenInput extends OpenElement {
 
   @property({ reflect: false, attribute: false, type: String })
   inputClass: ReadonlySignal<string> = computed(() =>
-    this.error === '' ? 'control input' : 'control input input--error'
+    this.error === '' ? 'control input' : 'control input input--error',
   );
 
   @property({ reflect: false, attribute: false, type: String })
-  idAttr: ReadonlySignal<string | null> = computed(() => this.inputId === '' ? null : this.inputId);
+  idAttr: ReadonlySignal<string | null> = computed(() =>
+    this.inputId === '' ? null : this.inputId,
+  );
 
   @property({ reflect: false, attribute: false, type: String })
   errorIdAttr: ReadonlySignal<string | null> = computed(() =>
-    this.inputId === '' ? null : `${this.inputId}-error`
+    this.inputId === '' ? null : `${this.inputId}-error`,
   );
 
   @property({ reflect: false, attribute: false, type: String })
   ariaInvalidAttr: ReadonlySignal<string | null> = computed(() =>
-    this.error === '' ? null : 'true'
+    this.error === '' ? null : 'true',
   );
 
   /** The required-marker text (' *' when required) — a computed string sink. */
   @property({ reflect: false, attribute: false, type: String })
-  requiredMark: ReadonlySignal<string> = computed(() => this.required ? ' *' : '');
+  requiredMark: ReadonlySignal<string> = computed(() => (this.required ? ' *' : ''));
 
   @property({ reflect: false, attribute: false, type: String })
   describedByAttr: ReadonlySignal<string | null> = computed(() =>
-    this.error === '' || this.inputId === '' ? null : `${this.inputId}-error`
+    this.error === '' || this.inputId === '' ? null : `${this.inputId}-error`,
   );
 
   render(): unknown {
@@ -252,11 +254,7 @@ export class OpenInput extends OpenElement {
     this.updateStates();
   }
 
-  override attributeChangedCallback(
-    name: string,
-    old: string | null,
-    val: string | null,
-  ): void {
+  override attributeChangedCallback(name: string, old: string | null, val: string | null): void {
     super.attributeChangedCallback(name, old, val);
     if (old === val) return;
     if (name === 'value') {
@@ -302,9 +300,7 @@ export class OpenInput extends OpenElement {
     if (this.required && this.value === '') {
       // No anchor: bubble placement is UA-dependent. Reuse the inner input's
       // localized message when present.
-      const inner = this.shadowRoot?.querySelector('input') as
-        | HTMLInputElement
-        | null;
+      const inner = this.shadowRoot?.querySelector('input') as HTMLInputElement | null;
       internals.setValidity(
         { valueMissing: true },
         inner?.validationMessage || 'Please fill out this field.',
@@ -342,15 +338,11 @@ export class OpenInput extends OpenElement {
   }
 
   private handleFocus(): void {
-    this.dispatchEvent(
-      new CustomEvent('open-focus', { bubbles: true, composed: true }),
-    );
+    this.dispatchEvent(new CustomEvent('open-focus', { bubbles: true, composed: true }));
   }
 
   private handleBlur(): void {
-    this.dispatchEvent(
-      new CustomEvent('open-blur', { bubbles: true, composed: true }),
-    );
+    this.dispatchEvent(new CustomEvent('open-blur', { bubbles: true, composed: true }));
   }
 
   override formResetCallback(): void {

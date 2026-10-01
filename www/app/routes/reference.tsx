@@ -34,8 +34,7 @@ type AuthoredPackageCopy = {
 const authoredCopy: Record<string, AuthoredPackageCopy> = {
   element: {
     copy: {
-      en:
-        'The supported Custom Element authoring surface for JSX, DSD, hydration, signals and styles.',
+      en: 'The supported Custom Element authoring surface for JSX, DSD, hydration, signals and styles.',
       zh: '受支持的 Custom Element 创作面，覆盖 JSX、DSD、hydration、signals 与样式。',
     },
     notes: {
@@ -54,8 +53,7 @@ const authoredCopy: Record<string, AuthoredPackageCopy> = {
   },
   router: {
     copy: {
-      en:
-        'The application and build surface: pages, routes, islands, request/render semantics, Vite integration, static generation and Nitro output.',
+      en: 'The application and build surface: pages, routes, islands, request/render semantics, Vite integration, static generation and Nitro output.',
       zh: '应用与构建面：页面、路由、island、请求/渲染语义、Vite 集成、静态生成与 Nitro 输出。',
     },
     notes: {
@@ -198,8 +196,8 @@ function projectReferenceEntries(labels: {
         signature: exported.signature,
         options: optionLine(exported.options),
         source: `${exported.source.path}:${exported.source.line}`,
-      }))
-    )
+      })),
+    ),
   );
 }
 
@@ -230,12 +228,13 @@ function projectConfigOptions(requiredLabel: string, optionalLabel: string): Api
 function detailLine(details: readonly GeneratedElementDetail[]): string {
   return details
     .map((detail) => {
-      const name = detail.name === '' ? '(default)' : detail.name ?? '';
+      const name = detail.name === '' ? '(default)' : (detail.name ?? '');
       const type = typeof detail.type === 'string' && detail.type !== '' ? `: ${detail.type}` : '';
       const fallback = typeof detail.default === 'string' ? ` = ${detail.default}` : '';
-      const description = typeof detail.description === 'string' && detail.description !== ''
-        ? ` — ${detail.description}`
-        : '';
+      const description =
+        typeof detail.description === 'string' && detail.description !== ''
+          ? ` — ${detail.description}`
+          : '';
       return `${name}${type}${fallback}${description}`;
     })
     .join('; ');
@@ -272,7 +271,7 @@ function projectElementEntries(labels: {
 
 /** Subpath display labels projected into the fixed chip grammar (5 slots). */
 function subpathChips(supportedSubpaths: readonly string[]): string[] {
-  const labels = supportedSubpaths.map((subpath) => subpath === '.' ? 'root' : subpath);
+  const labels = supportedSubpaths.map((subpath) => (subpath === '.' ? 'root' : subpath));
   if (labels.length <= 5) return labels;
   return [...labels.slice(0, 4), `+${labels.length - 4} more`];
 }
@@ -280,15 +279,13 @@ function subpathChips(supportedSubpaths: readonly string[]): string[] {
 const content = {
   en: {
     headTitle: 'API Reference',
-    headDescription:
-      `The supported openElement API surface: ${packageCount} consumer packages, every documented export and every custom element, generated from repository truth.`,
+    headDescription: `The supported openElement API surface: ${packageCount} consumer packages, every documented export and every custom element, generated from repository truth.`,
     pageTitle: 'API Reference',
     lede: (v: string) =>
       `The ${v} surface covers only the ${packageCount} consumer packages. Retired alpha packages and internal subpaths are not authoring surfaces.`,
     s1Index: '01 / interface rule',
     s1Title: 'Authoring starts at product packages.',
-    s1Copy:
-      `Current documentation, starters and dogfood use the ${packageCount} supported interfaces. Loader, action and form semantics are frozen at 0.42.0 (ADR-0122); framework session, active cache and streaming are outside the current contract and have no assigned version.`,
+    s1Copy: `Current documentation, starters and dogfood use the ${packageCount} supported interfaces. Loader, action and form semantics are frozen at 0.42.0 (ADR-0122); framework session, active cache and streaming are outside the current contract and have no assigned version.`,
     s2Index: '02 / supported surface',
     s2Title: `${packageCount} packages, one application path.`,
     s2Copy:
@@ -331,15 +328,13 @@ const content = {
   },
   zh: {
     headTitle: 'API 参考',
-    headDescription:
-      `openElement 受支持的 API 面：${packageCount} 个面向使用者的包、全部记录在案的导出与 Custom Element，由仓库真值生成。`,
+    headDescription: `openElement 受支持的 API 面：${packageCount} 个面向使用者的包、全部记录在案的导出与 Custom Element，由仓库真值生成。`,
     pageTitle: 'API 参考',
     lede: (v: string) =>
       `${v} 的创作面只覆盖 ${packageCount} 个面向使用者的包。已退役的 alpha 包与内部子路径都不是创作面。`,
     s1Index: '01 / 接口规则',
     s1Title: '创作从产品包开始。',
-    s1Copy:
-      `当前文档、starter 与 dogfood 都使用这 ${packageCount} 个受支持的接口。Loader、action 与表单语义已在 0.42.0 冻结（ADR-0122）；框架 session、active cache 与 streaming 不在当前契约内，且尚未分配版本。`,
+    s1Copy: `当前文档、starter 与 dogfood 都使用这 ${packageCount} 个受支持的接口。Loader、action 与表单语义已在 0.42.0 冻结（ADR-0122）；框架 session、active cache 与 streaming 不在当前契约内，且尚未分配版本。`,
     s2Index: '02 / 受支持的产品面',
     s2Title: `${packageCount} 个包，一条应用路径。`,
     s2Copy: '每个包对应一个明确的使用者决策；被吸收的实现包保持私有。',

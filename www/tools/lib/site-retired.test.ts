@@ -7,12 +7,15 @@ import {
 } from './site-retired.ts';
 
 Deno.test('parseRedirectTable: accepts the canonical table shape', () => {
-  const mappings = parseRedirectTable({
-    redirects: [
-      { from: '/apilist', to: '/reference', status: 301 },
-      { from: '/a', to: '/b#frag', toZh: '/b#译文', status: 301 },
-    ],
-  }, 'fixture');
+  const mappings = parseRedirectTable(
+    {
+      redirects: [
+        { from: '/apilist', to: '/reference', status: 301 },
+        { from: '/a', to: '/b#frag', toZh: '/b#译文', status: 301 },
+      ],
+    },
+    'fixture',
+  );
   assertEquals(mappings, [
     { from: '/apilist', to: '/reference', status: 301 },
     { from: '/a', to: '/b#frag', toZh: '/b#译文', status: 301 },
@@ -38,11 +41,14 @@ Deno.test('parseRedirectTable: rejects every malformed shape', () => {
 });
 
 Deno.test('parseBaselineManifest: accepts the snapshot shape', () => {
-  const manifest = parseBaselineManifest({
-    baseline: { ref: 'origin/main', sha: 'abc123' },
-    routes: ['/', '/a'],
-    retiredTitles: ['Old Page'],
-  }, 'fixture');
+  const manifest = parseBaselineManifest(
+    {
+      baseline: { ref: 'origin/main', sha: 'abc123' },
+      routes: ['/', '/a'],
+      retiredTitles: ['Old Page'],
+    },
+    'fixture',
+  );
   assertEquals(manifest.routes, ['/', '/a']);
   assertEquals(manifest.retiredTitles, ['Old Page']);
 });

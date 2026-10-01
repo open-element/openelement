@@ -64,6 +64,7 @@ class ShimStyleSheet implements StyleSheetLike {
 }
 
 /** Cross-realm StyleSheet constructor: the native CSSStyleSheet or the internal shim. */
-export const StyleSheet: new () => StyleSheetLike = typeof globalThis.CSSStyleSheet === 'function'
-  ? globalThis.CSSStyleSheet as unknown as new () => StyleSheetLike
-  : ShimStyleSheet;
+export const StyleSheet: new () => StyleSheetLike =
+  typeof globalThis.CSSStyleSheet === 'function'
+    ? (globalThis.CSSStyleSheet as unknown as new () => StyleSheetLike)
+    : ShimStyleSheet;

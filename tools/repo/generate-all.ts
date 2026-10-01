@@ -12,7 +12,7 @@ import { generatorEntries, readWorkspaces } from './workspace-tasks.ts';
 const repoRoot = fromFileUrl(new URL('../../', import.meta.url));
 const workspaces = await readWorkspaces(repoRoot);
 const entries = generatorEntries(workspaces).sort((a, b) =>
-  `${a.workspace}#${a.taskKey}`.localeCompare(`${b.workspace}#${b.taskKey}`)
+  `${a.workspace}#${a.taskKey}`.localeCompare(`${b.workspace}#${b.taskKey}`),
 );
 
 if (entries.length === 0) {
@@ -35,7 +35,7 @@ for (const { workspace, taskKey } of entries) {
   }
 }
 console.log(
-  `generate:all: ${entries.length} generator task(s) ok (${
-    entries.map(({ workspace, taskKey }) => `${workspace}#${taskKey}`).join(', ')
-  })`,
+  `generate:all: ${entries.length} generator task(s) ok (${entries
+    .map(({ workspace, taskKey }) => `${workspace}#${taskKey}`)
+    .join(', ')})`,
 );

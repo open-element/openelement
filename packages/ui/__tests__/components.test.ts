@@ -229,7 +229,10 @@ Deno.test('open-input: input events write the value attribute and dispatch open-
   el.handleInput({ target: { value: 'abc' } } as unknown as Event);
   el.handleChange({ target: { value: 'abc' } } as unknown as Event);
   assertEquals(el.getAttribute('value'), 'abc');
-  assertEquals(seen, [{ type: 'input', value: 'abc' }, { type: 'change', value: 'abc' }]);
+  assertEquals(seen, [
+    { type: 'input', value: 'abc' },
+    { type: 'change', value: 'abc' },
+  ]);
 });
 
 Deno.test('open-input: activation assigns realm-unique control ids', async () => {

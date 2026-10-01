@@ -56,13 +56,13 @@ Deno.test('findClientEntryFile fails closed when several records claim the clien
   const records = (order: 'virtual-first' | 'copy-first') =>
     order === 'virtual-first'
       ? {
-        'virtual:open-client-entry': { file: 'islands/client.js', isEntry: true },
-        'app/_client/open-client-entry.ts': { file: 'islands/client-2.js' },
-      }
+          'virtual:open-client-entry': { file: 'islands/client.js', isEntry: true },
+          'app/_client/open-client-entry.ts': { file: 'islands/client-2.js' },
+        }
       : {
-        'app/_client/open-client-entry.ts': { file: 'islands/client-2.js' },
-        'virtual:open-client-entry': { file: 'islands/client.js', isEntry: true },
-      };
+          'app/_client/open-client-entry.ts': { file: 'islands/client-2.js' },
+          'virtual:open-client-entry': { file: 'islands/client.js', isEntry: true },
+        };
   for (const order of ['virtual-first', 'copy-first'] as const) {
     const error = assertThrows(
       () => findClientEntryFile(records(order), MANIFEST_PATH),
@@ -120,10 +120,7 @@ Deno.test('readViteClientManifest fails closed when the manifest is corrupted', 
   try {
     const path = join(dir, 'manifest.json');
     await Deno.writeTextFile(path, '{ not json');
-    const error = await assertRejects(
-      () => readViteClientManifest(path),
-      OpenElementError,
-    );
+    const error = await assertRejects(() => readViteClientManifest(path), OpenElementError);
     assertEquals(error.code, ClientAssetErrorCode.MANIFEST_MALFORMED);
     assert(error.message.includes(path), `error must carry the manifest path: ${error.message}`);
     // A valid manifest still parses.
@@ -169,10 +166,12 @@ Deno.test('buildClientAssetManifest maps islands by Rollup module id, not by out
   const manifest = buildClientAssetManifest({
     root: ROOT,
     base: '/',
-    islands: [{
-      entry: island({ strategy: 'load' }),
-      sourceFile: join(ROOT, 'app/islands/counter.ts'),
-    }],
+    islands: [
+      {
+        entry: island({ strategy: 'load' }),
+        sourceFile: join(ROOT, 'app/islands/counter.ts'),
+      },
+    ],
     viteManifest: {
       'virtual:open-client-entry': { file: 'islands/client.js', isEntry: true },
       'app/islands/counter.ts': {
@@ -227,10 +226,7 @@ Deno.test('buildClientAssetManifest keeps island identity when islands share one
       'virtual:open-client-entry': { file: 'islands/client.js', isEntry: true },
       'app/islands/counter.ts': { file: 'islands/pair-Xy34zw.js' },
     },
-    chunks: [
-      sharedChunk,
-      { fileName: 'islands/client.js', modules: {} },
-    ],
+    chunks: [sharedChunk, { fileName: 'islands/client.js', modules: {} }],
     manifestPath: MANIFEST_PATH,
   });
   assertEquals(manifest.islands['open-counter'], {
@@ -308,23 +304,27 @@ Deno.test('buildClientAssetManifest does not substring-match a package island id
       buildClientAssetManifest({
         root: ROOT,
         base: '/',
-        islands: [{
-          entry: island({
-            tagName: 'open-callout',
-            modulePath: 'open-callout.js',
-            isPackage: true,
-          }),
-          sourceFile: null,
-        }],
+        islands: [
+          {
+            entry: island({
+              tagName: 'open-callout',
+              modulePath: 'open-callout.js',
+              isPackage: true,
+            }),
+            sourceFile: null,
+          },
+        ],
         viteManifest: {
           'virtual:open-client-entry': { file: 'islands/client.js', isEntry: true },
         },
-        chunks: [{
-          fileName: 'islands/island-open-callout-Zz00.js',
-          modules: {
-            '/proj/node_modules/@acme/ui/my-open-callout.js': {},
+        chunks: [
+          {
+            fileName: 'islands/island-open-callout-Zz00.js',
+            modules: {
+              '/proj/node_modules/@acme/ui/my-open-callout.js': {},
+            },
           },
-        }],
+        ],
         manifestPath: MANIFEST_PATH,
       }),
     OpenElementError,
@@ -354,16 +354,15 @@ Deno.test('buildClientAssetManifest maps delivery tags and export names onto one
       'virtual:open-client-entry': { file: 'islands/client.js', isEntry: true },
       'app/islands/card.ts': { file: 'islands/island-card-AA11.js' },
     },
-    chunks: [{
-      fileName: 'islands/island-card-AA11.js',
-      modules: { '/proj/app/islands/card.ts': {} },
-    }],
+    chunks: [
+      {
+        fileName: 'islands/island-card-AA11.js',
+        modules: { '/proj/app/islands/card.ts': {} },
+      },
+    ],
     manifestPath: MANIFEST_PATH,
   });
-  assertEquals(
-    manifest.islands['open-card'],
-    manifest.islands['open-card-panel'],
-  );
+  assertEquals(manifest.islands['open-card'], manifest.islands['open-card-panel']);
 });
 
 // ─── Fail-closed: delivery-tag ownership is one-to-one ─────────────────
@@ -388,19 +387,18 @@ Deno.test('a delivery tag claimed by two islands fails even when both would ship
           'virtual:open-client-entry': { file: 'islands/client.js', isEntry: true },
           'app/islands/counter.ts': { file: 'islands/island-counter-Ab12.js' },
         },
-        chunks: [{
-          fileName: 'islands/island-counter-Ab12.js',
-          modules: { '/proj/app/islands/counter.ts': {} },
-        }],
+        chunks: [
+          {
+            fileName: 'islands/island-counter-Ab12.js',
+            modules: { '/proj/app/islands/counter.ts': {} },
+          },
+        ],
         manifestPath: MANIFEST_PATH,
       }),
     OpenElementError,
   );
   assertEquals(error.code, ClientAssetErrorCode.ISLAND_TAG_DUPLICATE);
-  assert(
-    error.message.includes('open-counter'),
-    `error names the contested tag: ${error.message}`,
-  );
+  assert(error.message.includes('open-counter'), `error names the contested tag: ${error.message}`);
 });
 
 Deno.test('a delivery tag claimed by two islands fails across alias lists and strategies', () => {
@@ -436,13 +434,16 @@ Deno.test('a delivery tag claimed by two islands fails across alias lists and st
           'app/islands/card.ts': { file: 'islands/island-card-AA11.js' },
           'app/islands/panel.ts': { file: 'islands/island-panel-BB22.js' },
         },
-        chunks: [{
-          fileName: 'islands/island-card-AA11.js',
-          modules: { '/proj/app/islands/card.ts': {} },
-        }, {
-          fileName: 'islands/island-panel-BB22.js',
-          modules: { '/proj/app/islands/panel.ts': {} },
-        }],
+        chunks: [
+          {
+            fileName: 'islands/island-card-AA11.js',
+            modules: { '/proj/app/islands/card.ts': {} },
+          },
+          {
+            fileName: 'islands/island-panel-BB22.js',
+            modules: { '/proj/app/islands/panel.ts': {} },
+          },
+        ],
         manifestPath: MANIFEST_PATH,
       }),
     OpenElementError,
@@ -468,10 +469,12 @@ Deno.test('buildClientAssetManifest lists shared chunks sorted, excluding entry 
       'node_modules/.deno/lit@3/core.js': { file: 'islands/lit-runtime-DD44.js' },
       'app/styles.css': { file: 'assets/styles-EE55.css' },
     },
-    chunks: [{
-      fileName: 'islands/island-counter-BB22.js',
-      modules: { '/proj/app/islands/counter.ts': {} },
-    }],
+    chunks: [
+      {
+        fileName: 'islands/island-counter-BB22.js',
+        modules: { '/proj/app/islands/counter.ts': {} },
+      },
+    ],
     manifestPath: MANIFEST_PATH,
   });
   assertEquals(manifest.shared, [
@@ -549,14 +552,16 @@ Deno.test('admitted island without a chunk mapping fails instead of being droppe
       buildClientAssetManifest({
         root: ROOT,
         base: '/',
-        islands: [{
-          entry: island({
-            tagName: 'open-callout',
-            modulePath: '@acme/ui/open-callout',
-            isPackage: true,
-          }),
-          sourceFile: null,
-        }],
+        islands: [
+          {
+            entry: island({
+              tagName: 'open-callout',
+              modulePath: '@acme/ui/open-callout',
+              isPackage: true,
+            }),
+            sourceFile: null,
+          },
+        ],
         viteManifest: {
           'virtual:open-client-entry': { file: 'islands/client.js', isEntry: true },
         },

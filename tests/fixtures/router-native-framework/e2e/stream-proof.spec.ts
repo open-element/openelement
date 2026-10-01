@@ -14,7 +14,9 @@ test('generated streaming route flushes a shell before the delayed Part', async 
   );
 });
 
-test('same delayed data without stream opt-in produces a complete ordinary document', async ({ request }) => {
+test('same delayed data without stream opt-in produces a complete ordinary document', async ({
+  request,
+}) => {
   const response = await request.get('/stream-proof-off?delay=100');
   expect(response.status()).toBe(200);
   expect(response.headers()['x-stream-proof']).toBe('front-gate');
@@ -26,13 +28,13 @@ test('same delayed data without stream opt-in produces a complete ordinary docum
 
 test('with JavaScript a late frame fills the owning Part in place', async ({ page }) => {
   await page.goto('/stream-proof?delay=100');
-  await expect(page.locator('stream-proof-page #delayed')).toHaveText(
-    'Rendered as data resolves',
-  );
+  await expect(page.locator('stream-proof-page #delayed')).toHaveText('Rendered as data resolves');
   await expect(page.locator('body')).not.toContainText('Content unavailable.');
 });
 
-test('late failure remains an in-stream error, while action remains a redirect', async ({ request }) => {
+test('late failure remains an in-stream error, while action remains a redirect', async ({
+  request,
+}) => {
   const failed = await request.get('/stream-proof?fail=1');
   expect(failed.status()).toBe(200);
   expect(await failed.text()).toContain('outcome&quot;:&quot;error');
@@ -51,9 +53,9 @@ test('streamed Part remains readable without JavaScript', async ({ browser }) =>
   try {
     const page = await context.newPage();
     await page.goto('/stream-proof');
-    await expect.poll(() => page.locator('body').innerText()).toContain(
-      'Rendered as data resolves',
-    );
+    await expect
+      .poll(() => page.locator('body').innerText())
+      .toContain('Rendered as data resolves');
     await expect(page.locator('stream-proof-page button')).toBeVisible();
     // ADR-0159 specifies an arrival-order no-JS tail, not an in-place Part.
     await expect(page.locator('stream-proof-page #delayed')).toBeEmpty();

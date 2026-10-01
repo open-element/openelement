@@ -136,9 +136,7 @@ export function injectPropsSafe(
     try {
       target[key] = value;
     } catch (e) {
-      log.debug(
-        `Cannot set read-only property "${key}" on <${tagName}>: ${formatError(e)}`,
-      );
+      log.debug(`Cannot set read-only property "${key}" on <${tagName}>: ${formatError(e)}`);
     }
   }
 }

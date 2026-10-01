@@ -56,9 +56,9 @@ export async function readWorkspaces(repoRoot: string): Promise<WorkspaceTasks[]
   for (const member of members) {
     if (typeof member !== 'string' || member.trim() === '') {
       throw new Error(
-        `${display(rootPath)}: workspace entries must be non-empty strings (got ${
-          JSON.stringify(member)
-        })`,
+        `${display(rootPath)}: workspace entries must be non-empty strings (got ${JSON.stringify(
+          member,
+        )})`,
       );
     }
     const dir = resolve(rootDir, member);
@@ -80,17 +80,15 @@ export async function readWorkspaces(repoRoot: string): Promise<WorkspaceTasks[]
     } catch {
       // Missing directories are diagnosed below with a clear message.
     }
-    for (
-      const key of physicalIdentity !== undefined
-        ? [identity, `real:${physicalIdentity}`]
-        : [identity]
-    ) {
+    for (const key of physicalIdentity !== undefined
+      ? [identity, `real:${physicalIdentity}`]
+      : [identity]) {
       const previous = seen.get(key);
       if (previous !== undefined) {
         throw new Error(
-          `${
-            display(rootPath)
-          }: duplicate workspace identity '${identity}' (raw entries '${previous}' and '${member}')`,
+          `${display(
+            rootPath,
+          )}: duplicate workspace identity '${identity}' (raw entries '${previous}' and '${member}')`,
         );
       }
       seen.set(key, member);
@@ -198,8 +196,10 @@ export async function discoverScriptFiles(
 ): Promise<Array<{ workspace: string; script: string; abs: string }>> {
   const out: Array<{ workspace: string; script: string; abs: string }> = [];
   const isCandidate = (name: string) =>
-    name.endsWith('.ts') && !name.endsWith('.test.ts') &&
-    (name.startsWith('generate-') || name.startsWith('emit-')) && name !== 'generate-all.ts';
+    name.endsWith('.ts') &&
+    !name.endsWith('.test.ts') &&
+    (name.startsWith('generate-') || name.startsWith('emit-')) &&
+    name !== 'generate-all.ts';
   for (const ws of workspaces) {
     const locations = [ws.dir, join(ws.dir, 'tools')];
     for (const [index, dir] of locations.entries()) {
@@ -208,13 +208,11 @@ export async function discoverScriptFiles(
       } catch {
         continue;
       }
-      for await (
-        const entry of walk(dir, {
-          includeDirs: false,
-          exts: ['.ts'],
-          maxDepth: index === 0 ? 1 : Infinity,
-        })
-      ) {
+      for await (const entry of walk(dir, {
+        includeDirs: false,
+        exts: ['.ts'],
+        maxDepth: index === 0 ? 1 : Infinity,
+      })) {
         if (!isCandidate(entry.name)) continue;
         out.push({
           workspace: ws.workspace,

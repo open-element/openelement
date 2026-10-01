@@ -1,7 +1,8 @@
 import { compiledStyle } from '../site-ui/compiled-style.ts';
 import { mastheadStyles } from './page-styles.ts';
 
-export const pageDocsStyles = [compiledStyle(`
+export const pageDocsStyles = [
+  compiledStyle(`
   :host {
     display: block;
     color: var(--text-primary);
@@ -191,4 +192,5 @@ export const pageDocsStyles = [compiledStyle(`
       display: none;
     }
   }
-`)];
+`),
+];

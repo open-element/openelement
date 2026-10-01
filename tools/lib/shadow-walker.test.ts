@@ -11,7 +11,10 @@ class FakeNode {
   children: FakeNode[] = [];
   shadowRoot: FakeNode | null = null;
 
-  constructor(readonly selector: string, readonly id = '') {}
+  constructor(
+    readonly selector: string,
+    readonly id = '',
+  ) {}
 
   with(...children: FakeNode[]): this {
     this.children = children;
@@ -74,14 +77,16 @@ Deno.test('deepQueryFirstInPage returns null when nothing matches', () => {
 
 Deno.test('deepQueryAllInPage filters a light-DOM selector', () => {
   const found = deepQueryAllInPage(page.asRoot(), 'open-input');
-  assertEquals((found as unknown as FakeNode[]).map((node) => node.id), ['light']);
+  assertEquals(
+    (found as unknown as FakeNode[]).map((node) => node.id),
+    ['light'],
+  );
 });
 
 Deno.test('deepQueryAllInPage sweeps shadow content in document order', () => {
   const found = deepQueryAllInPage(page.asRoot(), '*');
-  assertEquals((found as unknown as FakeNode[]).map((node) => node.id), [
-    'host',
-    'inner',
-    'light',
-  ]);
+  assertEquals(
+    (found as unknown as FakeNode[]).map((node) => node.id),
+    ['host', 'inner', 'light'],
+  );
 });

@@ -177,7 +177,7 @@ export class RouteTable<T extends RouteRecord> {
           ...route,
           ...(route.methods ? { methods: Object.freeze([...route.methods]) } : {}),
           ...(route.pattern ? { pattern: Object.freeze({ ...route.pattern }) } : {}),
-        })
+        }),
       ),
     );
     const ids = new Set<string>();

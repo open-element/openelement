@@ -27,7 +27,7 @@ export type ComponentLayer = 'dsd-static' | 'dsd-interactive' | 'pure-island' | 
  * re-exported from the element root for app and build adapters. */
 export const HYDRATION_STRATEGIES = ['load', 'idle', 'visible', 'only'] as const;
 /** Island hydration trigger: 'load' | 'idle' | 'visible' | 'only'. */
-export type HydrationStrategy = typeof HYDRATION_STRATEGIES[number];
+export type HydrationStrategy = (typeof HYDRATION_STRATEGIES)[number];
 export type StrategySource = 'default' | 'manifest' | 'component' | 'route';
 
 // --- Blog / Content / i18n build types ----------------------------
@@ -92,11 +92,14 @@ export interface LocalePath {
  * {@link FrameworkOptions.middleware.use} entry) plus the compiled shell
  * properties the router injects per route.
  */
-export type AppShellConfig = false | 'default' | {
-  tagName: string;
-  import: string;
-  props?: Record<string, unknown>;
-};
+export type AppShellConfig =
+  | false
+  | 'default'
+  | {
+      tagName: string;
+      import: string;
+      props?: Record<string, unknown>;
+    };
 type LayoutsConfig = Record<string, AppShellConfig | undefined>;
 
 /**
@@ -201,24 +204,24 @@ export interface FrameworkOptions {
     stylesheets?: Array<
       | string
       | {
-        href: string;
-        integrity?: string;
-        crossorigin?: 'anonymous' | 'use-credentials';
-        attrs?: Record<string, string | number | boolean>;
-      }
+          href: string;
+          integrity?: string;
+          crossorigin?: 'anonymous' | 'use-credentials';
+          attrs?: Record<string, string | number | boolean>;
+        }
     >;
     /** Scripts emitted into the document; each entry is a src or a script record with type/async/defer/integrity/crossorigin/attrs. */
     scripts?: Array<
       | string
       | {
-        src: string;
-        type?: string;
-        async?: boolean;
-        defer?: boolean;
-        integrity?: string;
-        crossorigin?: 'anonymous' | 'use-credentials';
-        attrs?: Record<string, string | number | boolean>;
-      }
+          src: string;
+          type?: string;
+          async?: boolean;
+          defer?: boolean;
+          integrity?: string;
+          crossorigin?: 'anonymous' | 'use-credentials';
+          attrs?: Record<string, string | number | boolean>;
+        }
     >;
     /**
      * @dangerous fragments injected as-is. Trust boundary (same level as
@@ -253,12 +256,14 @@ export interface FrameworkOptions {
   /** Enable the View Transitions API for client navigations. Defaults to true. */
   viewTransition?: boolean;
   /** Speculation Rules emission: `true` uses framework defaults, or pass prerender/prefetch URL lists, exclusions and an eagerness. */
-  speculation?: boolean | {
-    prerender?: string[];
-    prefetch?: string[];
-    exclude?: string[];
-    eagerness?: 'immediate' | 'moderate' | 'conservative';
-  };
+  speculation?:
+    | boolean
+    | {
+        prerender?: string[];
+        prefetch?: string[];
+        exclude?: string[];
+        eagerness?: 'immediate' | 'moderate' | 'conservative';
+      };
   /** Request-time middleware switches, composed outside the framework handler. */
   middleware?: {
     /** Enable the built-in CORS middleware. */

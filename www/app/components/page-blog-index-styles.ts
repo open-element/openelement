@@ -1,7 +1,8 @@
 import { compiledStyle } from '../site-ui/compiled-style.ts';
 import { mastheadStyles } from './page-styles.ts';
 
-export const pageBlogIndexStyles = [compiledStyle(`
+export const pageBlogIndexStyles = [
+  compiledStyle(`
   :host {
     display: block;
     color: var(--text-primary);
@@ -233,4 +234,5 @@ export const pageBlogIndexStyles = [compiledStyle(`
       justify-self: start;
     }
   }
-`)];
+`),
+];

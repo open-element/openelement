@@ -13,15 +13,17 @@ import { testProgram } from './test-program.ts';
 
 const FIXED_PROGRAM = testProgram({
   tag: 'oe-fixed-parts',
-  template: [{
-    k: 'el',
-    tag: 'div',
-    attrs: [['data-static', 'yes']],
-    children: [
-      { k: 'el', tag: 'input', attrs: [], children: [] },
-      { k: 'el', tag: 'button', attrs: [], children: [{ k: 'text', value: 'go' }] },
-    ],
-  }],
+  template: [
+    {
+      k: 'el',
+      tag: 'div',
+      attrs: [['data-static', 'yes']],
+      children: [
+        { k: 'el', tag: 'input', attrs: [], children: [] },
+        { k: 'el', tag: 'button', attrs: [], children: [{ k: 'text', value: 'go' }] },
+      ],
+    },
+  ],
   parts: [
     { k: 'attr', index: 0, signal: 'title', name: 'title', path: [0] },
     { k: 'prop', index: 1, signal: 'value', name: 'value', path: [0, 0] },
@@ -182,12 +184,7 @@ Deno.test('TrustedHtml is required across serialization, fresh DOM, claim, and u
     'requires a value created by trustedHtml()',
   );
   assertThrows(
-    () =>
-      createFreshDom(
-        program,
-        plain,
-        asNode(new TestDocument().createElement('host')),
-      ),
+    () => createFreshDom(program, plain, asNode(new TestDocument().createElement('host'))),
     Error,
     'requires a value created by trustedHtml()',
   );
@@ -225,7 +222,7 @@ Deno.test('fixed Part errors are explicit and unsupported claim shapes fail clos
     parts: FIXED_PROGRAM.parts.map((part) =>
       part.k === 'event'
         ? { ...part, handler: 'missingHandler', action: { kind: 'method', name: 'missingHandler' } }
-        : part
+        : part,
     ),
   };
   validatePartProgram(missingHandlerProgram);
@@ -282,9 +279,9 @@ Deno.test('a fixed-Part path of [0] targets the sole template root; an empty pat
 
   const emptyPath = {
     ...program,
-    parts: program.parts.map((part) => part.k === 'attr' ? { ...part, path: [] } : part),
+    parts: program.parts.map((part) => (part.k === 'attr' ? { ...part, path: [] } : part)),
     locations: program.locations.map((location) =>
-      location.kind === 'sink' ? { ...location, path: [] } : location
+      location.kind === 'sink' ? { ...location, path: [] } : location,
     ),
   };
   assertThrows(() => validatePartProgram(emptyPath), Error, 'path must target an element');

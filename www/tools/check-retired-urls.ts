@@ -27,8 +27,9 @@ if (Deno.args.includes('--refresh')) {
   console.log(
     retiredCount === 0
       ? 'no retired urls'
-      : `retired urls ok: ${retiredCount} retired, all mapped (baseline ${
-        baselineSha.slice(0, 12)
-      }).`,
+      : `retired urls ok: ${retiredCount} retired, all mapped (baseline ${baselineSha.slice(
+          0,
+          12,
+        )}).`,
   );
 }

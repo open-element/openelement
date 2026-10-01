@@ -38,8 +38,9 @@ function readSitemapRoutes(): string[] {
       `public IA coverage requires the built sitemap at ${SITEMAP_PATH} — run \`deno task build\` first (${error})`,
     );
   }
-  const routes = [...xml.matchAll(/<loc>https:\/\/openelement\.org([^<]*)<\/loc>/g)]
-    .map((match) => match[1] || '/');
+  const routes = [...xml.matchAll(/<loc>https:\/\/openelement\.org([^<]*)<\/loc>/g)].map(
+    (match) => match[1] || '/',
+  );
   if (routes.length === 0) {
     throw new Error(`sitemap at ${SITEMAP_PATH} lists no routes — the public IA is empty`);
   }

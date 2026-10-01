@@ -119,9 +119,10 @@ function resolve(
   const lineText = code.split('\n')[position.line - 1];
   // Segments sit at the first mapped token of a line: query at the column of
   // columnNeedle when given, otherwise at the needle's first non-space char.
-  const column = columnNeedle !== undefined
-    ? lineText.indexOf(columnNeedle)
-    : position.column + (needle.length - needle.trimStart().length);
+  const column =
+    columnNeedle !== undefined
+      ? lineText.indexOf(columnNeedle)
+      : position.column + (needle.length - needle.trimStart().length);
   return originalPositionFor(trace, { line: position.line, column });
 }
 
@@ -131,9 +132,10 @@ function expectSource(needle: string, occurrence = 1, columnNeedle?: string) {
   return {
     source: FILE,
     line: position.line,
-    column: columnNeedle === undefined
-      ? position.column
-      : SOURCE.split('\n')[position.line - 1].indexOf(columnNeedle),
+    column:
+      columnNeedle === undefined
+        ? position.column
+        : SOURCE.split('\n')[position.line - 1].indexOf(columnNeedle),
   };
 }
 
@@ -324,16 +326,22 @@ Deno.test('A10.2 MANDATORY: two generated `this.count++;` event handlers map to 
   const second = resolve(trace, code, '__compiledEvent1(): void { this.count++; }', 1);
   const firstArrow = positionOf(SOURCE, '() => this.count++', 1);
   const secondArrow = positionOf(SOURCE, '() => this.count++', 2);
-  assertEquals({ source: first.source, line: first.line, column: first.column }, {
-    source: FILE,
-    line: firstArrow.line,
-    column: firstArrow.column,
-  });
-  assertEquals({ source: second.source, line: second.line, column: second.column }, {
-    source: FILE,
-    line: secondArrow.line,
-    column: secondArrow.column,
-  });
+  assertEquals(
+    { source: first.source, line: first.line, column: first.column },
+    {
+      source: FILE,
+      line: firstArrow.line,
+      column: firstArrow.column,
+    },
+  );
+  assertEquals(
+    { source: second.source, line: second.line, column: second.column },
+    {
+      source: FILE,
+      line: secondArrow.line,
+      column: secondArrow.column,
+    },
+  );
   assertNotEquals(
     first.line,
     second.line,
@@ -390,11 +398,14 @@ Deno.test('A10.2 Vite boundary: compileElementModule hands the real map to the h
   const trace = traceOf(result.map);
   const resolved = resolve(trace, result.code, '__compiledEvent1(): void { this.count++; }', 1);
   const secondArrow = positionOf(SOURCE, '() => this.count++', 2);
-  assertEquals({ source: resolved.source, line: resolved.line, column: resolved.column }, {
-    source: FILE,
-    line: secondArrow.line,
-    column: secondArrow.column,
-  });
+  assertEquals(
+    { source: resolved.source, line: resolved.line, column: resolved.column },
+    {
+      source: FILE,
+      line: secondArrow.line,
+      column: secondArrow.column,
+    },
+  );
   // The Router-side open:core hook's map composition (inline comment stripped,
   // map object returned to Vite) is pinned adapter-side in
   // packages/router/__tests__/compiler-open-core-boundary.test.ts.

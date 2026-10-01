@@ -25,21 +25,7 @@ import { openPropsTokenSheet } from '@openelement/ui';
  * of this list. 901 is the 900 desktop complement (min-width side).
  */
 export const SITE_BREAKPOINT_TIERS = [
-  480,
-  520,
-  640,
-  700,
-  720,
-  760,
-  768,
-  860,
-  900,
-  901,
-  940,
-  1040,
-  1100,
-  1120,
-  1200,
+  480, 520, 640, 700, 720, 760, 768, 860, 900, 901, 940, 1040, 1100, 1120, 1200,
 ] as const;
 export const siteCSS = `
 :root,
@@ -189,13 +175,11 @@ const rootTokens = [...openPropsTokenSheet.cssRules].map((rule) => rule.cssText)
  * Inter, code JetBrains Mono) plus the Instrument Serif accent; the two text
  * faces are also preloaded in app/head.tsx (critical-path hardening, #1088).
  */
-const fontFaces =
-  `@font-face{font-family:'JetBrains Mono';font-style:normal;font-weight:100 800;font-display:swap;src:url('/assets/fonts/jetbrains-mono-latin-variable.woff2') format('woff2')}@font-face{font-family:'Instrument Serif';font-style:normal;font-weight:400;font-display:swap;src:url('/assets/fonts/instrument-serif-latin-regular.woff2') format('woff2')}@font-face{font-family:'Instrument Serif';font-style:italic;font-weight:400;font-display:swap;src:url('/assets/fonts/instrument-serif-latin-italic.woff2') format('woff2')}@font-face{font-family:'Inter Variable';font-style:normal;font-weight:100 900;font-display:swap;src:url('/assets/fonts/inter-latin-variable.woff2') format('woff2')}`;
+const fontFaces = `@font-face{font-family:'JetBrains Mono';font-style:normal;font-weight:100 800;font-display:swap;src:url('/assets/fonts/jetbrains-mono-latin-variable.woff2') format('woff2')}@font-face{font-family:'Instrument Serif';font-style:normal;font-weight:400;font-display:swap;src:url('/assets/fonts/instrument-serif-latin-regular.woff2') format('woff2')}@font-face{font-family:'Instrument Serif';font-style:italic;font-weight:400;font-display:swap;src:url('/assets/fonts/instrument-serif-latin-italic.woff2') format('woff2')}@font-face{font-family:'Inter Variable';font-style:normal;font-weight:100 900;font-display:swap;src:url('/assets/fonts/inter-latin-variable.woff2') format('woff2')}`;
 
 /**
  * The complete document-level style body: faces first (so the preloaded files
  * are usable at first paint), then the open-props tokens, then the body
  * baseline and the site rules. app/head.tsx wraps this in one <style> entry.
  */
-export const documentStyle =
-  `${fontFaces}${rootTokens}body{font-family:var(--font-sans);-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}${siteCSS}`;
+export const documentStyle = `${fontFaces}${rootTokens}body{font-family:var(--font-sans);-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}${siteCSS}`;

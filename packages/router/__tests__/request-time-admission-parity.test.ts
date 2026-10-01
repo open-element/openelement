@@ -214,9 +214,9 @@ async function loadAdmissionPredicate(
         routes.filter((route) => route.requestTime).map(({ path }) => ({ path })),
       ),
     );
-    const mod = await import(
-      `file://${join(dir, 'index.js')}?case=${caseIndex}`
-    ) as { isRequestTimePath?: unknown };
+    const mod = (await import(`file://${join(dir, 'index.js')}?case=${caseIndex}`)) as {
+      isRequestTimePath?: unknown;
+    };
     assertEquals(
       typeof mod.isRequestTimePath,
       'function',
@@ -242,9 +242,13 @@ async function loadAdmissionPredicate(
 function derivedAdmission(routes: CorpusRoute[], pathname: string): boolean {
   return routes
     .filter((route) => route.requestTime)
-    .some((route) =>
-      new URLPattern({ pathname: normalizeRoutePatternForURLPattern(route.path) })
-        .exec({ protocol: 'https', hostname: 'localhost', pathname }) !== null
+    .some(
+      (route) =>
+        new URLPattern({ pathname: normalizeRoutePatternForURLPattern(route.path) }).exec({
+          protocol: 'https',
+          hostname: 'localhost',
+          pathname,
+        }) !== null,
     );
 }
 
@@ -257,23 +261,24 @@ function derivedAdmission(routes: CorpusRoute[], pathname: string): boolean {
  */
 function honoEntryFor(routes: CorpusRoute[]): Hono {
   const app = new Hono();
-  const routeMiddleware = createRouteMiddleware(routes.map((route) => ({
-    path: route.path,
-    handlers: Object.fromEntries(
-      (route.methods ?? ['GET']).map((
-        method,
-      ) => [
-        method,
-        (_request: Request, context: { params: Record<string, string> }) =>
-          Response.json({ path: route.path, params: context.params }),
-      ]),
-    ),
-  })));
+  const routeMiddleware = createRouteMiddleware(
+    routes.map((route) => ({
+      path: route.path,
+      handlers: Object.fromEntries(
+        (route.methods ?? ['GET']).map((method) => [
+          method,
+          (_request: Request, context: { params: Record<string, string> }) =>
+            Response.json({ path: route.path, params: context.params }),
+        ]),
+      ),
+    })),
+  );
   app.all('*', (c, next) =>
     routeMiddleware(c.req.raw, async () => {
       await next();
       return c.res;
-    }));
+    }),
+  );
   return app;
 }
 
@@ -319,7 +324,7 @@ Deno.test({
           } else {
             assertEquals(response.status, 200, `Hono status for ${label}`);
             if (method !== 'HEAD') {
-              const body = await response.json() as {
+              const body = (await response.json()) as {
                 path: string;
                 params: Record<string, string>;
               };

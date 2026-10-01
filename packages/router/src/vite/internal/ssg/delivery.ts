@@ -63,8 +63,9 @@ export function validateIslandMediaQuery(media: unknown, context = 'island'): st
 }
 
 export function isIslandDeliveryStrategy(value: unknown): value is IslandDeliveryStrategy {
-  return typeof value === 'string' &&
-    (ISLAND_DELIVERY_STRATEGIES as readonly string[]).includes(value);
+  return (
+    typeof value === 'string' && (ISLAND_DELIVERY_STRATEGIES as readonly string[]).includes(value)
+  );
 }
 
 /** Validate a one-to-many tag list without executing an island module. */
@@ -110,9 +111,8 @@ export function resolveIslandDeliveryTags(
     );
   }
   const validatedTags = tags === undefined ? undefined : validateIslandDeliveryTags(tags, context);
-  const validatedTagNames = tagNames === undefined
-    ? undefined
-    : validateIslandDeliveryTags(tagNames, context);
+  const validatedTagNames =
+    tagNames === undefined ? undefined : validateIslandDeliveryTags(tagNames, context);
   if (validatedTags && validatedTagNames) {
     if (
       validatedTags.length !== validatedTagNames.length ||

@@ -11,7 +11,8 @@ type CompiledComputed<T> = ReturnType<typeof computed<T>> & T;
 
 @element('open-reading-shell')
 export default class OpenReadingShell extends OpenElement {
-  static override styles = [compiledStyle(`
+  static override styles = [
+    compiledStyle(`
   :host{display:block}
   .shell{width:min(1180px,calc(100% - 3rem));margin:auto;padding:clamp(2rem,5vh,4rem) 0 clamp(4rem,9vh,7rem);display:grid;grid-template-columns:minmax(0,1fr);gap:clamp(1.5rem,4vw,3rem)}
   :host([rail]) .shell{grid-template-columns:minmax(0,1fr) 220px}
@@ -64,7 +65,8 @@ export default class OpenReadingShell extends OpenElement {
     .rail{position:static;margin-block-start:var(--size-6)}
     .rail-label{display:none}
   }
-`)];
+`),
+  ];
 
   @property({ reflect: true })
   rail = false;
@@ -99,9 +101,9 @@ export default class OpenReadingShell extends OpenElement {
   // Region branches must be fully static (OEC9012), so both breadcrumb forms
   // stay in the tree and toggle through `hidden` like the pager links below.
   @property({ reflect: false, attribute: false })
-  hideBreadcrumbLink = computed(() => !(this.metadata?.breadcrumbHref));
+  hideBreadcrumbLink = computed(() => !this.metadata?.breadcrumbHref);
   @property({ reflect: false, attribute: false })
-  hideBreadcrumbText = computed(() => !!(this.metadata?.breadcrumbHref));
+  hideBreadcrumbText = computed(() => !!this.metadata?.breadcrumbHref);
   @property({ reflect: false, attribute: false })
   breadcrumbLabel = computed(() => readingChromeStrings(this.locale).breadcrumb);
   @property({ reflect: false, attribute: false })
@@ -118,10 +120,11 @@ export default class OpenReadingShell extends OpenElement {
   @property({ reflect: false, attribute: false })
   hideMetaRow = computed(() => !(this.metadata?.version && this.metadata?.updated));
   @property({ reflect: false, attribute: false })
-  freshnessPrefix = computed(() =>
-    `${readingChromeStrings(this.locale).appliesTo} ${this.metadata?.version ?? ''}${
-      readingChromeStrings(this.locale).freshnessSeparator
-    }${readingChromeStrings(this.locale).updated} `
+  freshnessPrefix = computed(
+    () =>
+      `${readingChromeStrings(this.locale).appliesTo} ${this.metadata?.version ?? ''}${
+        readingChromeStrings(this.locale).freshnessSeparator
+      }${readingChromeStrings(this.locale).updated} `,
   );
   @property({ reflect: false, attribute: false })
   metaUpdated = computed(() => this.metadata?.updated ?? '');
@@ -131,7 +134,7 @@ export default class OpenReadingShell extends OpenElement {
   date = computed(() => this.metadata?.date ?? '');
   @property({ reflect: false, attribute: false, type: Array })
   tags = computed(() =>
-    (this.metadata?.tags ?? []).map((tag) => ({ key: tag, label: tag }))
+    (this.metadata?.tags ?? []).map((tag) => ({ key: tag, label: tag })),
   ) as CompiledComputed<ReadingTag[]>;
   @property({ reflect: false, attribute: false })
   previousHref = computed(() => this.navigation?.previous?.href ?? this.previous);
@@ -169,8 +172,12 @@ export default class OpenReadingShell extends OpenElement {
                     {this.breadcrumb}
                   </a>
                   <span hidden={this.hideBreadcrumbText}>{this.breadcrumb}</span>
-                  <span class='crumb-sep' aria-hidden='true'>/</span>
-                  <span class='crumb-current' aria-current='page'>{this.pageTitle}</span>
+                  <span class='crumb-sep' aria-hidden='true'>
+                    /
+                  </span>
+                  <span class='crumb-current' aria-current='page'>
+                    {this.pageTitle}
+                  </span>
                 </nav>
                 <h1 class='title' data-pagefind-meta='title'>
                   {this.pageTitle}
@@ -183,7 +190,9 @@ export default class OpenReadingShell extends OpenElement {
                 </p>
                 <p class='meta-row'>
                   <time>{this.date}</time>
-                  {this.tags.map((tag) => <span key={tag.key}>{tag.label}</span>)}
+                  {this.tags.map((tag) => (
+                    <span key={tag.key}>{tag.label}</span>
+                  ))}
                 </p>
               </div>
             </slot>

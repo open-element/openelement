@@ -45,21 +45,15 @@ Deno.test('semantic compiler accepts the complete JSON-safe property literal gra
   const first = compileElementProgram(source, '/project/app/components/literals.tsx');
   const second = compileElementProgram(source, '/project/app/components/literals.tsx');
   assertEquals(first.program, second.program);
-  assertEquals(first.program.metadata.properties.map((property) => property.type), [
-    'number',
-    'array',
-    'object',
-    'boolean',
-    'string',
-  ]);
+  assertEquals(
+    first.program.metadata.properties.map((property) => property.type),
+    ['number', 'array', 'object', 'boolean', 'string'],
+  );
 });
 
 Deno.test('semantic compiler rejects malformed computed declarations at their source', () => {
   const cases: Array<[string, string]> = [
-    [
-      `@property({ reflect: false, attribute: false }) derived = computed();`,
-      'exactly one',
-    ],
+    [`@property({ reflect: false, attribute: false }) derived = computed();`, 'exactly one'],
     [
       `@property({ reflect: false, attribute: false }) derived = computed((value) => value);`,
       'may not declare parameters',

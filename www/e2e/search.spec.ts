@@ -4,13 +4,15 @@ test.describe('Search', () => {
   test('pagefind index is generated and non-empty', async ({ request }) => {
     const res = await request.get('/pagefind/pagefind-entry.json');
     expect(res.ok()).toBe(true);
-    const entry = await res.json() as {
+    const entry = (await res.json()) as {
       languages?: Record<string, { page_count: number }>;
     };
     // The index derives from the built HTML, so stale/removed routes cannot
     // appear by construction; assert coverage instead of path liveness.
-    const pageCount = Object.values(entry.languages ?? {})
-      .reduce((total, lang) => total + lang.page_count, 0);
+    const pageCount = Object.values(entry.languages ?? {}).reduce(
+      (total, lang) => total + lang.page_count,
+      0,
+    );
     expect(pageCount).toBeGreaterThan(0);
   });
 
@@ -23,7 +25,8 @@ test.describe('Search', () => {
     await expect(searchField).toBeVisible();
     await searchField.pressSequentially('routing');
     // First search pays the Pagefind wasm/index load; allow extra time.
-    const firstResult = page.getByRole('region', { name: 'Search results' })
+    const firstResult = page
+      .getByRole('region', { name: 'Search results' })
       .getByRole('link')
       .first();
     await expect(firstResult).toBeVisible({ timeout: 15_000 });
@@ -48,7 +51,8 @@ test.describe('Search', () => {
     await page.keyboard.type('routing');
     await expect(input).toHaveValue('routing');
 
-    const firstResult = page.getByRole('region', { name: 'Search results' })
+    const firstResult = page
+      .getByRole('region', { name: 'Search results' })
       .getByRole('link')
       .first();
     // First search pays the Pagefind wasm/index load; allow extra time.
@@ -58,7 +62,9 @@ test.describe('Search', () => {
     expect(firstHref).not.toBe('/guide/routing');
   });
 
-  test('search overlay is anchored to viewport when opened from layout header', async ({ page }) => {
+  test('search overlay is anchored to viewport when opened from layout header', async ({
+    page,
+  }) => {
     await page.goto('/');
     await page.waitForLoadState('networkidle');
     await page.waitForFunction(() => customElements.get('open-search'));
@@ -119,7 +125,7 @@ test.describe('Search', () => {
     await expect(dialog).toBeHidden();
 
     const beforeTheme = await page.evaluate(() =>
-      document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark'
+      document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark',
     );
     const expectedTheme = beforeTheme === 'light' ? 'dark' : 'light';
 

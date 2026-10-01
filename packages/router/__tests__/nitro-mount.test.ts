@@ -97,13 +97,15 @@ Deno.test('nitro mount: exposes h3 v2 context.params through runtime and request
 
   assertEquals(await response.text(), 'notes');
 
-  assertEquals(contexts, [{
-    path: '/reader/notes',
-    method: 'PUT',
-    params: { slug: 'notes' },
-    envName: 'nitro-env',
-    platform: 'workers',
-  }]);
+  assertEquals(contexts, [
+    {
+      path: '/reader/notes',
+      method: 'PUT',
+      params: { slug: 'notes' },
+      envName: 'nitro-env',
+      platform: 'workers',
+    },
+  ]);
 });
 
 Deno.test('nitro mount: extracts the Cloudflare Workers env from req.runtime.cloudflare.env', async () => {

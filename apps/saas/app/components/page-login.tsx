@@ -45,16 +45,26 @@ export default class LoginPage extends OpenElement {
         </form>
         <section id='oauth'>
           <form method='post' action='/login?/oauth'>
-            {this.oauthGoogle > 0
-              ? <button type='submit' name='provider' value='google'>Continue with Google</button>
-              : <span></span>}
-            {this.oauthGithub > 0
-              ? <button type='submit' name='provider' value='github'>Continue with GitHub</button>
-              : <span></span>}
+            {this.oauthGoogle > 0 ? (
+              <button type='submit' name='provider' value='google'>
+                Continue with Google
+              </button>
+            ) : (
+              <span></span>
+            )}
+            {this.oauthGithub > 0 ? (
+              <button type='submit' name='provider' value='github'>
+                Continue with GitHub
+              </button>
+            ) : (
+              <span></span>
+            )}
           </form>
-          {this.oauthNone > 0
-            ? <p id='oauth-not-configured'>OAuth providers: not configured</p>
-            : <span></span>}
+          {this.oauthNone > 0 ? (
+            <p id='oauth-not-configured'>OAuth providers: not configured</p>
+          ) : (
+            <span></span>
+          )}
         </section>
         <p>
           <a href='/signup'>Create account</a> · <a href='/magic-link'>Use a Magic Link</a> ·{' '}

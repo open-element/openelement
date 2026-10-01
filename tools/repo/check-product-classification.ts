@@ -91,8 +91,7 @@ export function stripParentheticals(clause: string): string {
     }
     if (char !== ')' && char !== '）') continue;
     const top = open.at(-1);
-    const pairs = (top?.char === '(' && char === ')') ||
-      (top?.char === '（' && char === '）');
+    const pairs = (top?.char === '(' && char === ')') || (top?.char === '（' && char === '）');
     if (!top || !pairs) continue;
     open.pop();
     for (let span = top.index; span <= index; span++) masked[span] = ' ';
@@ -101,11 +100,8 @@ export function stripParentheticals(clause: string): string {
 }
 
 function countNegations(segment: string): number {
-  const cleaned = segment
-    .replace(POSITIVE_NOT_ONLY, '')
-    .replace(ZH_POSITIVE_NOT_ONLY, '');
-  return (cleaned.match(EN_NEGATION)?.length ?? 0) +
-    (cleaned.match(ZH_NEGATION)?.length ?? 0);
+  const cleaned = segment.replace(POSITIVE_NOT_ONLY, '').replace(ZH_POSITIVE_NOT_ONLY, '');
+  return (cleaned.match(EN_NEGATION)?.length ?? 0) + (cleaned.match(ZH_NEGATION)?.length ?? 0);
 }
 
 /** Segment before `index` up to the last boundary (or the window start). */
@@ -160,9 +156,7 @@ export interface ClassificationSource {
  * negated something other than a core term ("SaaS is not independent; it is a
  * core product").
  */
-export function scanProductClassification(
-  sources: readonly ClassificationSource[],
-): string[] {
+export function scanProductClassification(sources: readonly ClassificationSource[]): string[] {
   const failures: string[] = [];
   for (const { path, text } of sources) {
     for (const sentence of text.split(/[.!?。！？\n]+/u)) {
@@ -213,17 +207,8 @@ export async function readProductDocs(repoRoot: string): Promise<ClassificationR
       failures.push(`${relative}: required product-contract document is unreadable`);
     }
   }
-  const optional = new Set<string>([
-    `${repoRoot}/CHANGELOG.md`,
-    `${repoRoot}/apps/saas/README.md`,
-  ]);
-  for (
-    const root of [
-      `${repoRoot}/docs`,
-      `${repoRoot}/packages`,
-      `${repoRoot}/www/content`,
-    ]
-  ) {
+  const optional = new Set<string>([`${repoRoot}/CHANGELOG.md`, `${repoRoot}/apps/saas/README.md`]);
+  for (const root of [`${repoRoot}/docs`, `${repoRoot}/packages`, `${repoRoot}/www/content`]) {
     try {
       for await (const entry of walk(root, { exts: ['.md'], includeDirs: false })) {
         optional.add(entry.path);

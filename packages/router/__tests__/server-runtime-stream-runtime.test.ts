@@ -63,7 +63,10 @@ function executor(): StreamExecutorView {
 }
 
 function escapeAttr(value: string): string {
-  return value.replaceAll('&', '&amp;').replaceAll('"', '&quot;').replaceAll('<', '&lt;')
+  return value
+    .replaceAll('&', '&amp;')
+    .replaceAll('"', '&quot;')
+    .replaceAll('<', '&lt;')
     .replaceAll('>', '&gt;');
 }
 
@@ -154,8 +157,14 @@ Deno.test('stream front gate attaches both observers per declared field', async 
     manifest(2),
   );
   await new Promise((resolve) => setTimeout(resolve, 0)); // settlement lands on the microtask queue
-  assertEquals(records.map((record) => record.settled), [true, true]);
-  assertEquals(records.map((record) => record.failed), [false, true]);
+  assertEquals(
+    records.map((record) => record.settled),
+    [true, true],
+  );
+  assertEquals(
+    records.map((record) => record.failed),
+    [false, true],
+  );
   assertEquals(records[0].value, 'ok');
   assertEquals((records[1].error as Error).message, 'no');
 });
@@ -207,13 +216,15 @@ Deno.test('deferred-shell gate delegates to the entry executor import on a match
   });
   const executorView = await gate('/', routeModule, { first: 'v' }, 'instance-9', 'token-9');
   assertEquals(executorView, produced);
-  assertEquals(calls, [{
-    componentClass: routeModule.default,
-    props: { first: 'v' },
-    manifest: manifest(1),
-    instanceId: 'instance-9',
-    documentToken: 'token-9',
-  }]);
+  assertEquals(calls, [
+    {
+      componentClass: routeModule.default,
+      props: { first: 'v' },
+      manifest: manifest(1),
+      instanceId: 'instance-9',
+      documentToken: 'token-9',
+    },
+  ]);
 });
 
 Deno.test('stream body commits the shell with its typed seed attribute first', async () => {

@@ -184,15 +184,13 @@ Deno.test('compiled-element v1 - fixture transforms through the Vite hook', asyn
   });
 
   await t.step('emitted code contains no VNode/binding/hydration fallback vocabulary', () => {
-    for (
-      const token of [
-        'VNode',
-        'BindingDescriptor',
-        'hydrationScope',
-        'HydrationScope',
-        'createElement(',
-      ]
-    ) {
+    for (const token of [
+      'VNode',
+      'BindingDescriptor',
+      'hydrationScope',
+      'HydrationScope',
+      'createElement(',
+    ]) {
       assertEquals(emitted!.includes(token), false, `generated code must not contain ${token}`);
     }
     assertStringIncludes(emitted!, 'the runtime JSX render path is not available');
@@ -439,9 +437,8 @@ Deno.test('compiled-element v1 - unsupported syntax fails closed with located di
   await t.step(
     'list Regions admit multi-field item slots and fail closed on non-item expressions',
     async () => {
-      const { compileElementProgram } = await import(
-        '../src/internal/compiler/semantic-core/compile.ts'
-      );
+      const { compileElementProgram } =
+        await import('../src/internal/compiler/semantic-core/compile.ts');
       // alpha.8: item templates carry one ival/iattr slot per item field — a row
       // may bind {item.text} twice and per-item attributes (id, href, ...).
       const source = [
@@ -455,10 +452,12 @@ Deno.test('compiled-element v1 - unsupported syntax fails closed with located di
         '}',
       ].join('\n');
       const program = compileElementProgram(source, '/project/app/islands/multi-field.tsx').program;
-      const each = program.parts.find((part: { k: string }) => part.k === 'each') as {
-        field?: string;
-        item: unknown[];
-      } | undefined;
+      const each = program.parts.find((part: { k: string }) => part.k === 'each') as
+        | {
+            field?: string;
+            item: unknown[];
+          }
+        | undefined;
       assert(each, 'each Region must exist');
       assertEquals(
         each.field,
@@ -517,7 +516,10 @@ Deno.test('compiled-element alpha.1 - canonical program records and decorator lo
 
   assertEquals(program.version, 1);
   assertEquals(program.root, { id: 'root', kind: 'light', nodes: ['e0'] });
-  assertEquals(program.parts.map((part: { k: string }) => part.k), ['bool', 'event', 'text']);
+  assertEquals(
+    program.parts.map((part: { k: string }) => part.k),
+    ['bool', 'event', 'text'],
+  );
   assertEquals(program.parts[0].location, {
     id: 'p0',
     kind: 'sink',
@@ -551,8 +553,8 @@ Deno.test('compiled-element alpha.1 - canonical program records and decorator lo
   // provenance stays on the in-memory program artifact.
   const compiled = compileElementModule(source, id);
   assert(
-    compiled?.program.sourceMap.records.some((record) =>
-      record.id === 'p0' && record.source.file === id
+    compiled?.program.sourceMap.records.some(
+      (record) => record.id === 'p0' && record.source.file === id,
     ),
   );
   assertStringIncludes(
@@ -583,21 +585,13 @@ Deno.test('compiled-element alpha.1 - program validation fails closed on unsafe 
     locations: Array<{ id: string; path: number[]; tag?: string }>;
   };
   shiftedElementLocation.locations[0].path = [0, 99];
-  assertThrows(
-    () => validatePartProgram(shiftedElementLocation),
-    Error,
-    'locations[0] element',
-  );
+  assertThrows(() => validatePartProgram(shiftedElementLocation), Error, 'locations[0] element');
 
   const renamedElementLocation = structuredClone(program) as {
     locations: Array<{ id: string; path: number[]; tag?: string }>;
   };
   renamedElementLocation.locations[0].tag = 'span';
-  assertThrows(
-    () => validatePartProgram(renamedElementLocation),
-    Error,
-    'locations[0] element',
-  );
+  assertThrows(() => validatePartProgram(renamedElementLocation), Error, 'locations[0] element');
 
   const mismatchedItemField = structuredClone(program) as {
     parts: Array<{
@@ -605,21 +599,13 @@ Deno.test('compiled-element alpha.1 - program validation fails closed on unsafe 
     }>;
   };
   mismatchedItemField.parts[4].item![0].children![0].field = 'id';
-  assertThrows(
-    () => validatePartProgram(mismatchedItemField),
-    Error,
-    'must use item field',
-  );
+  assertThrows(() => validatePartProgram(mismatchedItemField), Error, 'must use item field');
 
   const mismatchedRegionSource = structuredClone(program) as {
     regions: Array<{ source: string }>;
   };
   mismatchedRegionSource.regions[0].source = 'p0';
-  assertThrows(
-    () => validatePartProgram(mismatchedRegionSource),
-    Error,
-    'regions[0]',
-  );
+  assertThrows(() => validatePartProgram(mismatchedRegionSource), Error, 'regions[0]');
 
   const unknownPart = structuredClone(program) as { parts: Array<{ k: string }> };
   unknownPart.parts[0].k = 'future';
@@ -627,9 +613,8 @@ Deno.test('compiled-element alpha.1 - program validation fails closed on unsafe 
 });
 
 Deno.test('compiled-element alpha.8 - canonical page/island authoring grammar', async (t) => {
-  const { compileElementProgram, CompiledElementError } = await import(
-    '../src/internal/compiler/semantic-core/compile.ts'
-  );
+  const { compileElementProgram, CompiledElementError } =
+    await import('../src/internal/compiler/semantic-core/compile.ts');
 
   const prelude = [
     "import { element, OpenElement, property } from '@openelement/element';",
@@ -646,11 +631,9 @@ Deno.test('compiled-element alpha.8 - canonical page/island authoring grammar', 
       '  render() { return <main><h1>{this.label}</h1></main>; }',
       '}',
     ].join('\n');
-    const { code, program } = compileElementProgram(
-      source,
-      '/project/app/routes/alpha8.tsx',
-      { staticSidecars: [ISLAND_SIDECAR] },
-    );
+    const { code, program } = compileElementProgram(source, '/project/app/routes/alpha8.tsx', {
+      staticSidecars: [ISLAND_SIDECAR],
+    });
     assertEquals(program.root.kind, 'shadow-open');
     assertStringIncludes(code, 'export default class Alpha8Page extends OpenElement {');
     // The island delivery policy is copied verbatim into the compiled module.
@@ -715,11 +698,9 @@ Deno.test('compiled-element alpha.8 - canonical page/island authoring grammar', 
     const expectFailure = (source: string, code: string, fragment: string) => {
       let thrown: unknown;
       try {
-        compileElementProgram(
-          source,
-          '/project/app/components/bad.tsx',
-          { staticSidecars: [ISLAND_SIDECAR] },
-        );
+        compileElementProgram(source, '/project/app/components/bad.tsx', {
+          staticSidecars: [ISLAND_SIDECAR],
+        });
       } catch (error) {
         thrown = error;
       }
@@ -804,15 +785,18 @@ Deno.test('compiled-element alpha.8 - canonical page/island authoring grammar', 
         source,
         '/project/app/components/computed.tsx',
       );
-      const meta = program.metadata.properties.find((p: { name: string }) =>
-        p.name === 'noLabel'
+      const meta = program.metadata.properties.find(
+        (p: { name: string }) => p.name === 'noLabel',
       ) as {
         computed?: boolean;
         deps?: string[];
       };
       assertEquals(meta.computed, true);
       assertEquals(meta.deps, ['label']);
-      assert(program.parts.some((p: { k: string }) => p.k === 'html'), 'html Part must exist');
+      assert(
+        program.parts.some((p: { k: string }) => p.k === 'html'),
+        'html Part must exist',
+      );
       assertStringIncludes(code, 'static override delegatesFocus: boolean = true;');
       assertStringIncludes(code, 'static override formAssociated: boolean = true;');
       assertStringIncludes(code, 'static __computedFields: {');
@@ -880,9 +864,8 @@ Deno.test('compiled-element alpha.8 - canonical page/island authoring grammar', 
 });
 
 Deno.test('compiled-element alpha.9 - trusted HTML sink admission matrix', async (t) => {
-  const { compileElementProgram, CompiledElementError } = await import(
-    '../src/internal/compiler/semantic-core/compile.ts'
-  );
+  const { compileElementProgram, CompiledElementError } =
+    await import('../src/internal/compiler/semantic-core/compile.ts');
 
   const validPrelude = [
     "import { element, OpenElement, property, trustedHtml, type TrustedHtml } from '@openelement/element';",
@@ -966,10 +949,7 @@ Deno.test('compiled-element alpha.9 - trusted HTML sink admission matrix', async
   });
 
   await t.step('rejects an innerHTML sink without the marker', () => {
-    expectOec9026(
-      'alpha9-missing-marker',
-      sourceFor('<div innerHTML={this.bodyHtml}></div>'),
-    );
+    expectOec9026('alpha9-missing-marker', sourceFor('<div innerHTML={this.bodyHtml}></div>'));
   });
 
   await t.step('rejects trustedHtml={false}', () => {
@@ -1003,9 +983,8 @@ Deno.test('compiled-element alpha.9 - trusted HTML sink admission matrix', async
 });
 
 Deno.test('compiled-element strict emission - generated statics carry explicit types for native pack', async (t) => {
-  const { compileElementProgram } = await import(
-    '../src/internal/compiler/semantic-core/compile.ts'
-  );
+  const { compileElementProgram } =
+    await import('../src/internal/compiler/semantic-core/compile.ts');
 
   await t.step('module-local constants are referenced through typeof (no API growth)', () => {
     const source = [

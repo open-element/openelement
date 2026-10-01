@@ -118,15 +118,13 @@ const content = {
         id: 'corpus',
         index: '01',
         title: 'Third-party WC corpus',
-        copy:
-          'Lit / FAST / Stencil components that render through our DSD smoke pipeline, with evidence.',
+        copy: 'Lit / FAST / Stencil components that render through our DSD smoke pipeline, with evidence.',
       },
       {
         id: 'dogfood',
         index: '02',
         title: 'Dogfood something real',
-        copy:
-          'Build an application on the stable line and file what breaks. That is the pilot now.',
+        copy: 'Build an application on the stable line and file what breaks. That is the pilot now.',
       },
       {
         id: 'docs',

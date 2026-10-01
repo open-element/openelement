@@ -49,18 +49,14 @@ export function renderMiddleware(lines: string[], mw: MiddlewareDecl): void {
         // Module form: the entry imports the user's origin callback module and
         // passes its default export to cors() — referenced, never serialized.
         lines.push(
-          `import * as __cors_origin_module from ${
-            quoteGeneratedJavaScriptValue(corsOriginModule)
-          };`,
+          `import * as __cors_origin_module from ${quoteGeneratedJavaScriptValue(
+            corsOriginModule,
+          )};`,
         );
-        lines.push(
-          `app.use('*', cors({ origin: __cors_origin_module.default, ${CORS_ALLOW} }))`,
-        );
+        lines.push(`app.use('*', cors({ origin: __cors_origin_module.default, ${CORS_ALLOW} }))`);
       } else if (corsOrigin !== undefined) {
         const originStr = renderCorsOrigin(corsOrigin);
-        lines.push(
-          `app.use('*', cors({ origin: ${originStr}, ${CORS_ALLOW} }))`,
-        );
+        lines.push(`app.use('*', cors({ origin: ${originStr}, ${CORS_ALLOW} }))`);
       } else {
         // #1411: the advisory is a production concern, so the dev server
         // (warnOnDefaultCors: false) generates the same handler silently.
@@ -98,35 +94,20 @@ export function renderMiddleware(lines: string[], mw: MiddlewareDecl): void {
           const basePolicy: string = cspConfig.policy || '';
           const hasScriptSrc = /script-src/i.test(basePolicy);
           const policyTemplate = hasScriptSrc
-            ? basePolicy.replace(
-              /script-src\s+([^;]*)/i,
-              "script-src 'nonce-NONCE_PLACEHOLDER' $1",
-            )
+            ? basePolicy.replace(/script-src\s+([^;]*)/i, "script-src 'nonce-NONCE_PLACEHOLDER' $1")
             : basePolicy + "; script-src 'nonce-NONCE_PLACEHOLDER'";
-          lines.push(
-            `// CSP with auto-nonce: nonce creation and policy instantiation come from`,
-          );
-          lines.push(
-            `// @openelement/router/server-runtime; the template below`,
-          );
+          lines.push(`// CSP with auto-nonce: nonce creation and policy instantiation come from`);
+          lines.push(`// @openelement/router/server-runtime; the template below`);
           lines.push(`// is generated data derived from middleware.csp.`);
-          lines.push(
-            `// hono/ssg prerender passes bind no nonce: static bytes cannot be`,
-          );
-          lines.push(
-            `// per-request, so the prerendered output serializes nonce-free and`,
-          );
-          lines.push(
-            `// the SSG CSP injector's policy-only meta remains the static shape.`,
-          );
+          lines.push(`// hono/ssg prerender passes bind no nonce: static bytes cannot be`);
+          lines.push(`// per-request, so the prerendered output serializes nonce-free and`);
+          lines.push(`// the SSG CSP injector's policy-only meta remains the static shape.`);
           lines.push(`app.use('*', async (c, next) => {`);
+          lines.push(`  const nonce = __ssgPrerenderPass(c.env) ? undefined : __cspCreateNonce()`);
           lines.push(
-            `  const nonce = __ssgPrerenderPass(c.env) ? undefined : __cspCreateNonce()`,
-          );
-          lines.push(
-            `  const policy = nonce ? __cspApplyNonce(${
-              quoteGeneratedJavaScriptValue(policyTemplate)
-            }, nonce) : undefined`,
+            `  const policy = nonce ? __cspApplyNonce(${quoteGeneratedJavaScriptValue(
+              policyTemplate,
+            )}, nonce) : undefined`,
           );
           lines.push(`  if (nonce) c.set('cspNonce', nonce)`);
           lines.push(`  await next()`);
@@ -180,9 +161,9 @@ export function renderApiRoute(lines: string[], route: ApiRouteDecl): void {
     `} else if (${route.varName}.default && typeof ${route.varName}.default === 'object') {`,
   );
   lines.push(
-    `  __apiRouteRecords.push({ id: ${
-      quoteGeneratedJavaScriptValue(route.filePath)
-    }, path: ${pathLiteral}, handlers: ${route.varName}.default })`,
+    `  __apiRouteRecords.push({ id: ${quoteGeneratedJavaScriptValue(
+      route.filePath,
+    )}, path: ${pathLiteral}, handlers: ${route.varName}.default })`,
   );
   lines.push(`} else {`);
   lines.push(

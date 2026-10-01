@@ -78,16 +78,18 @@ export function stripCssComments(
  *  inside strings. `code` is the caller's error code for unterminated
  *  comments; the blacklist throw itself stays at the call site. */
 export function foldCssForCheck(css: string, context: string, code: string): string {
-  return stripCssComments(css, context, code, '')
-    .replace(/\\([0-9a-fA-F]{1,6})\s?/g, (_m, hex: string) => {
-      const parsed = Number.parseInt(hex, 16);
-      return parsed === 0 || parsed > 0x10FFFF ? '\uFFFD' : String.fromCodePoint(parsed);
-    })
-    .replace(/\\(.)/g, '$1')
-    // Escape sequences can decode to whitespace (`java\9 script`, `java\a script`),
-    // which would otherwise split a blacklisted keyword; the URL validator
-    // strips the same set (WHATWG URL), so the fold must too.
-    .replace(/[\t\n\r\f]/g, '');
+  return (
+    stripCssComments(css, context, code, '')
+      .replace(/\\([0-9a-fA-F]{1,6})\s?/g, (_m, hex: string) => {
+        const parsed = Number.parseInt(hex, 16);
+        return parsed === 0 || parsed > 0x10ffff ? '\uFFFD' : String.fromCodePoint(parsed);
+      })
+      .replace(/\\(.)/g, '$1')
+      // Escape sequences can decode to whitespace (`java\9 script`, `java\a script`),
+      // which would otherwise split a blacklisted keyword; the URL validator
+      // strips the same set (WHATWG URL), so the fold must too.
+      .replace(/[\t\n\r\f]/g, '')
+  );
 }
 
 /**

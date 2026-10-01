@@ -106,18 +106,16 @@ export interface DocumentWrapOptions {
  * Adds DOCTYPE, head (title, meta, preload), and body.
  * Supports CSP nonce and dev scripts (e.g. Vite client, route module registration).
  */
-export function wrapInDocument(
-  html: string,
-  options: DocumentWrapOptions = {},
-): string {
+export function wrapInDocument(html: string, options: DocumentWrapOptions = {}): string {
   const { prefix, suffix } = documentStreamParts(options);
   return prefix + html + suffix;
 }
 
 /** The same document serialization boundary, with only body wrappers left open. */
-export function documentStreamParts(
-  options: DocumentWrapOptions = {},
-): { prefix: string; suffix: string } {
+export function documentStreamParts(options: DocumentWrapOptions = {}): {
+  prefix: string;
+  suffix: string;
+} {
   // Per-render warning scope: the same headExtras key can warn again on the
   // next SSG page/request instead of being suppressed for the whole process
   // (#643).
@@ -150,12 +148,10 @@ export function documentStreamParts(
   const linkTags = buildLinkTags(links);
   const linkBlock = linkTags.length > 0 ? '\n' + linkTags.join('\n') : '';
   const structuredDataTags = buildStructuredDataTags(structuredData, validNonce);
-  const structuredDataBlock = structuredDataTags.length > 0
-    ? '\n' + structuredDataTags.join('\n') + '\n'
-    : '';
-  const dangerousHeadBlock = dangerouslyHeadFragments.length > 0
-    ? '\n  ' + dangerouslyHeadFragments.join('\n  ')
-    : '';
+  const structuredDataBlock =
+    structuredDataTags.length > 0 ? '\n' + structuredDataTags.join('\n') + '\n' : '';
+  const dangerousHeadBlock =
+    dangerouslyHeadFragments.length > 0 ? '\n  ' + dangerouslyHeadFragments.join('\n  ') : '';
 
   const safeTitle = escapeHtml(title);
   const safeLang = escapeAttr(lang);
@@ -187,10 +183,7 @@ export function documentStreamParts(
  * retired string-splice injectors emitted; with one, every tag carries
  * `nonce="..."`. Entries without src or code are meaningless and skipped.
  */
-function buildScriptTags(
-  scripts: DocumentScriptDescriptor[],
-  nonce: string | undefined,
-): string {
+function buildScriptTags(scripts: DocumentScriptDescriptor[], nonce: string | undefined): string {
   const tags: string[] = [];
   for (const script of scripts) {
     if (!script || (!script.src && !script.code)) continue;
@@ -314,9 +307,7 @@ function sanitizeHeadExtras(
       if (stripped === safeHeadExtras) break;
       safeHeadExtras = stripped;
     }
-    log.warn(
-      'headExtras contained on* event handler attributes which were stripped for security.',
-    );
+    log.warn('headExtras contained on* event handler attributes which were stripped for security.');
   }
   return safeHeadExtras;
 }
@@ -353,9 +344,10 @@ function validateHeadExtrasBalance(headExtras: string): void {
  * `meta.tags` is not a documented dangerous channel, so CMS-fed metadata must
  * fail the render instead of being skipped (#1373).
  */
-function buildMetaTags(
-  meta?: { description?: string; tags?: Array<Record<string, string | number | boolean>> },
-): string[] {
+function buildMetaTags(meta?: {
+  description?: string;
+  tags?: Array<Record<string, string | number | boolean>>;
+}): string[] {
   const metaTags: string[] = [];
   if (meta?.description) {
     const safeDesc = escapeAttrValue(meta.description);
@@ -368,9 +360,9 @@ function buildMetaTags(
           if (!isSafeAttributeName(key)) {
             throw frameworkError(
               AuthoringErrorCode.UNSAFE_META_ATTRIBUTE,
-              `wrapInDocument: unsafe meta attribute name: ${
-                JSON.stringify(key)
-              }. Meta tag keys must be valid HTML attribute names and must not be event handlers.`,
+              `wrapInDocument: unsafe meta attribute name: ${JSON.stringify(
+                key,
+              )}. Meta tag keys must be valid HTML attribute names and must not be event handlers.`,
               { phase: 'validation', statusCode: 400 },
             );
           }
@@ -388,9 +380,7 @@ function buildMetaTags(
  * entry without both rel and href is meaningless and skipped — meaning-level
  * validation (which links a page declares) is resolvePageDocument's job.
  */
-function buildLinkTags(
-  links: Array<{ rel: string; href: string; hreflang?: string }>,
-): string[] {
+function buildLinkTags(links: Array<{ rel: string; href: string; hreflang?: string }>): string[] {
   const linkTags: string[] = [];
   for (const link of links) {
     if (!link || !link.rel || !link.href) continue;

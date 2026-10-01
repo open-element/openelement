@@ -3,9 +3,17 @@ import { join } from '@std/path';
 import { execute, parseRunInArgs } from './run-in.ts';
 
 Deno.test('run-in: parses root, env, and command', () => {
-  const options = parseRunInArgs(
-    ['--root', 'fixtures/x', '--env', 'A=1', '--env', 'B=2=3', '--', 'npm', 'ci'],
-  );
+  const options = parseRunInArgs([
+    '--root',
+    'fixtures/x',
+    '--env',
+    'A=1',
+    '--env',
+    'B=2=3',
+    '--',
+    'npm',
+    'ci',
+  ]);
   assertEquals(options, {
     root: 'fixtures/x',
     env: { A: '1', B: '2=3' },

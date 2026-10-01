@@ -45,12 +45,10 @@ export function auditDenoFloor(input: {
   if (/2\.8 is the declared support floor/u.test(input.createReadme)) {
     failures.push('packages/create/README.md must not declare an older support floor');
   }
-  for (
-    const [label, text] of [
-      ['docs/maintainers/pack-post-processing.md', input.packPostProcessing],
-      ['docs/maintainers/deno-pack-diagnostic-exception.md', input.diagnosticException],
-    ] as const
-  ) {
+  for (const [label, text] of [
+    ['docs/maintainers/pack-post-processing.md', input.packPostProcessing],
+    ['docs/maintainers/deno-pack-diagnostic-exception.md', input.diagnosticException],
+  ] as const) {
     if (!text.includes(`Deno ${floor}`)) {
       failures.push(`${label} must reference Deno ${floor}`);
     }
@@ -106,13 +104,11 @@ if (import.meta.main) {
   }
   const packageReadmes: Array<{ path: string; text: string }> = [];
   try {
-    for await (
-      const entry of walk(`${repoRoot}/packages`, {
-        exts: ['.md'],
-        includeDirs: false,
-        match: [/README\.md$/u],
-      })
-    ) {
+    for await (const entry of walk(`${repoRoot}/packages`, {
+      exts: ['.md'],
+      includeDirs: false,
+      match: [/README\.md$/u],
+    })) {
       packageReadmes.push({
         path: entry.path.replace(`${repoRoot}/`, ''),
         text: await Deno.readTextFile(entry.path),

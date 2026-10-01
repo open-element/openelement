@@ -94,9 +94,9 @@ export class StubNode {
 
   get textContent(): string {
     if (this.nodeType === 3) return this.data;
-    return this.childNodes.map((child) => (child as unknown as StubNode).textContent ?? '').join(
-      '',
-    );
+    return this.childNodes
+      .map((child) => (child as unknown as StubNode).textContent ?? '')
+      .join('');
   }
 
   set textContent(value: string) {
@@ -190,25 +190,24 @@ export function installDomStubs(): () => void {
       return new StubTextNode(text);
     },
   } as unknown as Document;
-  (globalThis as { requestAnimationFrame?: typeof requestAnimationFrame })
-    .requestAnimationFrame = (
-      callback,
-    ) => {
-      callback(performance.now());
-      return 1;
-    };
-  (globalThis as { cancelAnimationFrame?: typeof cancelAnimationFrame })
-    .cancelAnimationFrame = () => {};
+  (globalThis as { requestAnimationFrame?: typeof requestAnimationFrame }).requestAnimationFrame = (
+    callback,
+  ) => {
+    callback(performance.now());
+    return 1;
+  };
+  (globalThis as { cancelAnimationFrame?: typeof cancelAnimationFrame }).cancelAnimationFrame =
+    () => {};
 
   return () => {
     (globalThis as { customElements?: CustomElementRegistry }).customElements =
       previousCustomElements;
     (globalThis as { HTMLElement?: typeof HTMLElement }).HTMLElement = previousHTMLElement;
     (globalThis as { document?: Document }).document = previousDocument;
-    (globalThis as { requestAnimationFrame?: typeof requestAnimationFrame })
-      .requestAnimationFrame = previousRaf;
-    (globalThis as { cancelAnimationFrame?: typeof cancelAnimationFrame })
-      .cancelAnimationFrame = previousCancelRaf;
+    (globalThis as { requestAnimationFrame?: typeof requestAnimationFrame }).requestAnimationFrame =
+      previousRaf;
+    (globalThis as { cancelAnimationFrame?: typeof cancelAnimationFrame }).cancelAnimationFrame =
+      previousCancelRaf;
   };
 }
 

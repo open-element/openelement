@@ -110,12 +110,7 @@ export default class ErrorsPage extends OpenElement {
                 <span>{this.headSites}</span>
               </div>
               {this.codes.map((code) => (
-                <div
-                  class='code-row'
-                  id={code.code}
-                  data-runtime={code.runtime}
-                  key={code.key}
-                >
+                <div class='code-row' id={code.code} data-runtime={code.runtime} key={code.key}>
                   <div>
                     <span class='code-id'>{code.code}</span>
                     <span class='code-family'>{code.family}</span>

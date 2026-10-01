@@ -130,10 +130,10 @@ if (import.meta.main) {
       const type = path.endsWith('.html')
         ? 'text/html'
         : path.endsWith('.js')
-        ? 'text/javascript'
-        : path.endsWith('.css')
-        ? 'text/css'
-        : 'application/octet-stream';
+          ? 'text/javascript'
+          : path.endsWith('.css')
+            ? 'text/css'
+            : 'application/octet-stream';
       return new Response(file, { headers: { 'content-type': type, 'cache-control': 'no-store' } });
     } catch {
       return new Response('not found', { status: 404 });
@@ -142,10 +142,12 @@ if (import.meta.main) {
   const baseUrl = `http://localhost:${server.addr.port}`;
 
   const playwright = await import('@playwright/test');
-  const browserType = (playwright as unknown as Record<
-    string,
-    { launch(o?: object): Promise<{ newPage(): Promise<BrowserPage>; close(): Promise<void> }> }
-  >)['chromium'];
+  const browserType = (
+    playwright as unknown as Record<
+      string,
+      { launch(o?: object): Promise<{ newPage(): Promise<BrowserPage>; close(): Promise<void> }> }
+    >
+  )['chromium'];
   const browser = await browserType.launch({
     args: [
       '--js-flags=--expose-gc',

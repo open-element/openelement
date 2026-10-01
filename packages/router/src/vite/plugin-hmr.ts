@@ -24,10 +24,9 @@ import type { OpenPluginState } from './plugin-config.ts';
  * shape edit during HMR, and no module-global cache may leak a program
  * between Vite builds.
  */
-export function createCompilerHooks(state: OpenPluginState): Pick<
-  Plugin,
-  'transform' | 'handleHotUpdate'
-> {
+export function createCompilerHooks(
+  state: OpenPluginState,
+): Pick<Plugin, 'transform' | 'handleHotUpdate'> {
   // The shape excludes the program sourceMap: source offsets shift on ANY
   // edit (including behavior-only method-body edits), so comparing them
   // would force a full reload for every keystroke instead of only for

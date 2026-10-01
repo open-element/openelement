@@ -72,7 +72,7 @@ Deno.test('signup sanitizes provider failures', async () => {
 
 Deno.test('signup with an immediate session redirects to next', async () => {
   const error = await assertRejects(() =>
-    createSignupAction(client({ session: { access_token: 'token' } }))(context(credentials()))
+    createSignupAction(client({ session: { access_token: 'token' } }))(context(credentials())),
   );
   assert(isOpenElementRedirect(error));
   assertEquals((error as { location?: string }).location, '/notes');

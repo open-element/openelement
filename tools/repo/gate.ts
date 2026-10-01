@@ -83,9 +83,8 @@ async function defaultSpawn(step: string): Promise<number> {
     console.error((error as Error).message);
     return 127;
   }
-  const args = parsed.dir === null
-    ? ['task', parsed.task]
-    : ['task', '--cwd', parsed.dir, parsed.task];
+  const args =
+    parsed.dir === null ? ['task', parsed.task] : ['task', '--cwd', parsed.dir, parsed.task];
   const child = new Deno.Command(Deno.execPath(), {
     args,
     cwd: repoRoot,

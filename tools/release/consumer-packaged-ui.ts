@@ -72,7 +72,7 @@ try {
       dependencies: {
         '@openelement/ui': `file:${uiTarball}`,
         '@openelement/element': `file:${elementTarball}`,
-        'typescript': '6.0.3',
+        typescript: '6.0.3',
       },
     }),
   );
@@ -175,10 +175,15 @@ if (manifest.packageName !== '@openelement/ui') throw new Error('unexpected UI m
     const text = Deno.readTextFileSync(path);
     for (const { fileName } of ts.preProcessFile(text).importedFiles) {
       if (DECLARATION_LEAK_PATTERN.test(fileName)) problems.push(`${path} -> ${fileName}`);
-      const resolved = ts.resolveModuleName(fileName, path, {
-        moduleResolution: ts.ModuleResolutionKind.Bundler,
-        module: ts.ModuleKind.ESNext,
-      }, host).resolvedModule;
+      const resolved = ts.resolveModuleName(
+        fileName,
+        path,
+        {
+          moduleResolution: ts.ModuleResolutionKind.Bundler,
+          module: ts.ModuleKind.ESNext,
+        },
+        host,
+      ).resolvedModule;
       if (!resolved) {
         problems.push(`${path} -> ${fileName} (unresolved)`);
         continue;

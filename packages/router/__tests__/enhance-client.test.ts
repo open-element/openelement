@@ -347,10 +347,10 @@ Deno.test('#599: concurrent submits on different forms never drop a response (pe
 
   fireSubmit(formA);
   fireSubmit(formB);
-  assertEquals(deferred.map((d) => d.url), [
-    'https://fixture.local/form-a',
-    'https://fixture.local/form-b',
-  ]);
+  assertEquals(
+    deferred.map((d) => d.url),
+    ['https://fixture.local/form-a', 'https://fixture.local/form-b'],
+  );
 
   // B lands first, A second — the reverse of submission order.
   deferred[1].resolve();
@@ -359,10 +359,7 @@ Deno.test('#599: concurrent submits on different forms never drop a response (pe
   await new Promise((resolve) => setTimeout(resolve, 0));
 
   // Both 500 responses take the navigation path; neither was dropped.
-  assertEquals(navigations, [
-    'https://fixture.local/form-b',
-    'https://fixture.local/form-a',
-  ]);
+  assertEquals(navigations, ['https://fixture.local/form-b', 'https://fixture.local/form-a']);
 });
 
 // The submit interceptor computes the platform's effective submission tuple
@@ -535,10 +532,7 @@ Deno.test('tuple: urlencoded bodies normalize newlines in names AND values (nati
   fireSubmit(form);
   await Promise.resolve();
   assertEquals(fetches.length, 1);
-  assertEquals(
-    fetches[0].init.body,
-    'multi%0D%0Aline=a%0D%0Ab&cr=a%0D%0Ab&crlf=a%0D%0Ab',
-  );
+  assertEquals(fetches[0].init.body, 'multi%0D%0Aline=a%0D%0Ab&cr=a%0D%0Ab&crlf=a%0D%0Ab');
   assertEquals(fetches[0].init.headers['content-type'], 'application/x-www-form-urlencoded');
 });
 
@@ -603,7 +597,7 @@ Deno.test('computeSubmissionTuple: platform defaults and validation state', () =
 Deno.test('late form failures cannot navigate after the submitting page exits', async () => {
   let finish!: (value: unknown) => void;
   const { win, fireSubmit, navigations } = makeHarness({
-    fetchFn: () => new Promise((resolve) => finish = resolve),
+    fetchFn: () => new Promise((resolve) => (finish = resolve)),
   });
   const form = new FakeFormElement();
   form.setAttribute('method', 'post');
@@ -623,7 +617,7 @@ Deno.test('late form failures cannot navigate after the submitting page exits', 
 Deno.test('fragment changes retain the pending form result', async () => {
   let finish!: (value: unknown) => void;
   const { win, fireSubmit, navigations } = makeHarness({
-    fetchFn: () => new Promise((resolve) => finish = resolve),
+    fetchFn: () => new Promise((resolve) => (finish = resolve)),
   });
   const form = new FakeFormElement();
   form.setAttribute('method', 'post');

@@ -55,7 +55,8 @@ Deno.test('workspace loader bounds pages and emits a stable keyset cursor', asyn
     },
   } as unknown as ReturnType<WorkspaceRecordsClient['from']> extends {
     select(columns: string): infer Query;
-  } ? Query
+  }
+    ? Query
     : never;
   const factory = (): WorkspaceRecordsClient => ({
     auth: { getUser: () => Promise.resolve({ data: { user: { id: 'user-a' } } }) },

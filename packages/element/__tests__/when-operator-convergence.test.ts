@@ -41,18 +41,20 @@ function whenProgram(op: string, value: number | string | boolean | null) {
   return testProgram({
     tag: 'oe-when-guard',
     template: [{ k: 'el', tag: 'div', attrs: [], children: [{ k: 'part', index: 0 }] }],
-    parts: [{
-      k: 'when',
-      index: 0,
-      signal: 'count',
-      test: {
+    parts: [
+      {
+        k: 'when',
+        index: 0,
         signal: 'count',
-        op: op as ConditionOperator,
-        value: value as number | string | boolean,
+        test: {
+          signal: 'count',
+          op: op as ConditionOperator,
+          value: value as number | string | boolean,
+        },
+        on: [{ k: 'text', value: 'on' }],
+        off: [{ k: 'text', value: 'off' }],
       },
-      on: [{ k: 'text', value: 'on' }],
-      off: [{ k: 'text', value: 'off' }],
-    }],
+    ],
   });
 }
 

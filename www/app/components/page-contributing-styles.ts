@@ -1,7 +1,8 @@
 import { compiledStyle } from '../site-ui/compiled-style.ts';
 import { mastheadStyles } from './page-styles.ts';
 
-export const pageContributingStyles = [compiledStyle(`
+export const pageContributingStyles = [
+  compiledStyle(`
   :host {
     display: block;
     color: var(--text-primary);
@@ -287,4 +288,5 @@ export const pageContributingStyles = [compiledStyle(`
       gap: var(--size-2);
     }
   }
-`)];
+`),
+];

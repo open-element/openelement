@@ -349,9 +349,8 @@ export function handleCompiledAttributeChange(
   if (!record) return;
   const sig = state.signals[record.name];
   if (!sig) return;
-  (element as unknown as Record<string, unknown>)[record.name] = newValue === null
-    ? record.default
-    : convertFromAttribute(record, newValue);
+  (element as unknown as Record<string, unknown>)[record.name] =
+    newValue === null ? record.default : convertFromAttribute(record, newValue);
   // Real signals suppress equal-value notifications: when removal restores
   // the value the signal already holds, the accessor's short-circuit skips
   // the mirror — restore it explicitly (legacy reflect-removal contract).

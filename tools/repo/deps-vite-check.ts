@@ -89,8 +89,7 @@ function viteSpecifierViolations(
     if (value !== VITE_TEMPLATE_TOKEN) {
       out.push({
         where: `${path} ${slot}.${key}`,
-        message:
-          `template vite specifier must be the '${VITE_TEMPLATE_TOKEN}' token (canonical pin: ${VITE_DEV_PIN})`,
+        message: `template vite specifier must be the '${VITE_TEMPLATE_TOKEN}' token (canonical pin: ${VITE_DEV_PIN})`,
       });
     }
     return out;
@@ -177,10 +176,12 @@ export function checkBundlerImports(files: { path: string; text: string }[]): Vi
 export function checkTemplateViteText(path: string, text: string): ViteViolation[] {
   if (!path.endsWith('.tmpl')) return [];
   return /npm:vite@\d/.test(text)
-    ? [{
-      where: path,
-      message: `literal vite pin in template; use the '${VITE_TEMPLATE_TOKEN}' token`,
-    }]
+    ? [
+        {
+          where: path,
+          message: `literal vite pin in template; use the '${VITE_TEMPLATE_TOKEN}' token`,
+        },
+      ]
     : [];
 }
 
@@ -192,16 +193,20 @@ export function checkTemplateViteText(path: string, text: string): ViteViolation
 export function checkStarterVitePin(versionSource: string): ViteViolation[] {
   const match = versionSource.match(/VITE_STARTER_PIN = '([^']+)'/u);
   if (!match) {
-    return [{
-      where: 'packages/create/src/version.ts',
-      message: 'VITE_STARTER_PIN anchor missing',
-    }];
+    return [
+      {
+        where: 'packages/create/src/version.ts',
+        message: 'VITE_STARTER_PIN anchor missing',
+      },
+    ];
   }
   if (match[1] !== VITE_DEV_PIN) {
-    return [{
-      where: 'packages/create/src/version.ts',
-      message: `VITE_STARTER_PIN ${match[1]} does not match canonical VITE_DEV_PIN ${VITE_DEV_PIN}`,
-    }];
+    return [
+      {
+        where: 'packages/create/src/version.ts',
+        message: `VITE_STARTER_PIN ${match[1]} does not match canonical VITE_DEV_PIN ${VITE_DEV_PIN}`,
+      },
+    ];
   }
   return [];
 }

@@ -17,9 +17,7 @@ export const SITE_DIST = 'www/dist';
 const repoRoot = fromFileUrl(new URL('../../', import.meta.url));
 const siteRoot = join(repoRoot, 'www', '');
 
-export async function generateSiteRss(
-  dist = join(repoRoot, SITE_DIST),
-): Promise<string> {
+export async function generateSiteRss(dist = join(repoRoot, SITE_DIST)): Promise<string> {
   const blogOptions = { ...blogCollection, contentDir: join(siteRoot, blogCollection.contentDir) };
   const posts = prepareBlogPosts(await loadCollectionData('blog', blogOptions));
   const failures = feedFailures(posts);

@@ -95,14 +95,7 @@ export async function ssgRender(
         : ''),
   );
 
-  await expandDynamicRoutes(
-    dynamicRoutes,
-    renderRoute,
-    getStaticPaths,
-    options,
-    root,
-    outDir,
-  );
+  await expandDynamicRoutes(dynamicRoutes, renderRoute, getStaticPaths, options, root, outDir);
 
   // ── Main SSG via Hono's toSSG() ────────────────────────────
   const { toSSG } = await import('hono/ssg');
@@ -152,9 +145,7 @@ export async function ssgRender(
   const eligibleStaticPaths = routeInfo
     .filter((r) => r.rendering !== 'dynamic' && !r.isDynamic)
     .map((r) => r.path);
-  const preservedHostRoutes = (app.routes ?? []).filter(
-    (r) => r.path !== '*' && r.path !== '/*',
-  );
+  const preservedHostRoutes = (app.routes ?? []).filter((r) => r.path !== '*' && r.path !== '/*');
   // Dedupe only against host entries hono/ssg would itself discover
   // (filterStaticGenerateRoutes: method GET/ALL, non-middleware handler).
   // An exact-path middleware (`app.use('/about', …)`, method ALL, arity 2) or
@@ -163,9 +154,11 @@ export async function ssgRender(
   // page from the build while the build reported success (review, #1343).
   const preservedPaths = new Set(
     preservedHostRoutes
-      .filter((r) =>
-        (r.method === 'GET' || r.method === 'ALL') &&
-        typeof r.handler === 'function' && r.handler.length <= 1
+      .filter(
+        (r) =>
+          (r.method === 'GET' || r.method === 'ALL') &&
+          typeof r.handler === 'function' &&
+          r.handler.length <= 1,
       )
       .map((r) => r.path),
   );
@@ -221,17 +214,12 @@ export async function ssgRender(
         hasAction: r.hasAction === true,
       })),
     };
-    Deno.writeTextFileSync(
-      join(serverDir, 'server-manifest.json'),
-      formatJson(serverManifest),
-    );
+    Deno.writeTextFileSync(join(serverDir, 'server-manifest.json'), formatJson(serverManifest));
     Deno.writeTextFileSync(
       join(serverDir, 'index.js'),
       // Admission predicate derivation (#1215): only the route paths reach the
       // generated module — params/precedence stay with the canonical entry.
-      renderRequestTimeServerModule(
-        requestTimeRoutes.map((r) => ({ path: r.path })),
-      ),
+      renderRequestTimeServerModule(requestTimeRoutes.map((r) => ({ path: r.path }))),
     );
     // Placeholder: Phase 2's client asset manifest overwrites this with the
     // real record when the project ships a client bundle (build.ts
@@ -245,10 +233,7 @@ export async function ssgRender(
     // (Deno.serve over the shared fetch handler); production deploys go
     // through the Nitro mount. No second production server is generated.
     // index.js/entry.js are ESM .js files; mark the server dir as ESM.
-    Deno.writeTextFileSync(
-      join(serverDir, 'package.json'),
-      '{ "type": "module" }\n',
-    );
+    Deno.writeTextFileSync(join(serverDir, 'package.json'), '{ "type": "module" }\n');
     log.info(
       `Request-time server -> ${join(serverDir, 'index.js')} ` +
         `(${requestTimeRoutes.length} request-time route(s)` +
@@ -353,9 +338,10 @@ export async function ssgRender(
   }
 
   if (options.speculation) {
-    const specOpts = typeof options.speculation === 'boolean'
-      ? {}
-      : (options.speculation as Record<string, unknown>);
+    const specOpts =
+      typeof options.speculation === 'boolean'
+        ? {}
+        : (options.speculation as Record<string, unknown>);
     const rulesJson = buildSpeculationRulesJson(
       specOpts,
       routeInfo.map((r) => ({ path: r.path, type: 'page' as const })),

@@ -71,7 +71,7 @@ async function raceOnce(jwt: string, userId: string): Promise<RaceResult> {
     await response.body?.cancel();
     return { ok: true, message: '' };
   }
-  const body = await response.json().catch(() => ({} as { message?: string }));
+  const body = await response.json().catch(() => ({}) as { message?: string });
   return { ok: false, message: String(body.message ?? `http ${response.status}`) };
 }
 
@@ -128,18 +128,20 @@ try {
   assert(finalBytes <= QUOTA_BYTES, `final bytes ${finalBytes} exceed quota`);
   assert(finalBytes === succeeded * RACE_SIZE_BYTES, 'final bytes do not match successes');
 
-  console.log(JSON.stringify({
-    check: 'attachment-quota-race',
-    result: 'pass',
-    concurrency: CONCURRENCY,
-    succeeded,
-    failed: failed.length,
-    failureSemantics: 'attachment quota exceeded',
-    finalBytes,
-    quotaBytes: QUOTA_BYTES,
-    startedAt: startedAt.toISOString(),
-    finishedAt: new Date().toISOString(),
-  }));
+  console.log(
+    JSON.stringify({
+      check: 'attachment-quota-race',
+      result: 'pass',
+      concurrency: CONCURRENCY,
+      succeeded,
+      failed: failed.length,
+      failureSemantics: 'attachment quota exceeded',
+      finalBytes,
+      quotaBytes: QUOTA_BYTES,
+      startedAt: startedAt.toISOString(),
+      finishedAt: new Date().toISOString(),
+    }),
+  );
 } finally {
   // Always-run cleanup: reservation rows first, then the throwaway user (its
   // ON DELETE CASCADE would take the rows, but explicit order keeps the real

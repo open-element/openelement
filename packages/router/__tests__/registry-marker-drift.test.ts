@@ -116,8 +116,14 @@ Deno.test('registry guard: stub registry lets re-definition win, ownership track
     registry['element:x-foreign'] = Foreign;
     guard.register('x-foreign', class Other {});
     assertEquals(registry['element:x-foreign'], Foreign);
-    assertArrayIncludes(raw.map(([name]) => name), ['x-page']);
-    assertEquals(raw.some(([, ctor]) => ctor === Foreign), false);
+    assertArrayIncludes(
+      raw.map(([name]) => name),
+      ['x-page'],
+    );
+    assertEquals(
+      raw.some(([, ctor]) => ctor === Foreign),
+      false,
+    );
   } finally {
     (globalThis as { customElements?: unknown }).customElements = fake;
   }
@@ -144,7 +150,10 @@ Deno.test('registry guard: dev re-evaluation overwrites its OWN tag through the 
     class Fresh {}
     guard.register('x-page', Fresh);
     assertEquals(registry['element:x-page'], Fresh);
-    assertEquals(raw.some(([, ctor]) => ctor === Fresh), true);
+    assertEquals(
+      raw.some(([, ctor]) => ctor === Fresh),
+      true,
+    );
   } finally {
     (globalThis as { customElements?: unknown }).customElements = fake;
   }

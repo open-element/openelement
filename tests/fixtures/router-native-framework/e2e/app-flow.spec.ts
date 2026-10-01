@@ -34,7 +34,10 @@ async function noteRowCount(request: APIRequestContext): Promise<number> {
 }
 
 test.describe('SSR and native claim', () => {
-  test('JS disabled: /notes is a full-document SSR render of both seed notes', async ({ browser, request }) => {
+  test('JS disabled: /notes is a full-document SSR render of both seed notes', async ({
+    browser,
+    request,
+  }) => {
     // The wire format: the page host carries a DSD template with both rows and
     // the island's own DSD subtree — no client JS is needed to render.
     const html = await (await request.get('/notes')).text();
@@ -53,7 +56,9 @@ test.describe('SSR and native claim', () => {
     await context.close();
   });
 
-  test('JS on: each note renders exactly once and the island activates in place', async ({ page }) => {
+  test('JS on: each note renders exactly once and the island activates in place', async ({
+    page,
+  }) => {
     await page.goto('/notes');
     // No duplicated SSR+CSR render: exactly one occurrence per seed note.
     await expect(page.getByText('Seed note one', { exact: true })).toHaveCount(1);
@@ -77,65 +82,68 @@ test.describe('SSR and native claim', () => {
 });
 
 test.describe('create flow (JS on)', () => {
-  test(
-    '422 re-render, then PRG success with the created flash',
-    async ({ page, request }, info) => {
-      const countBefore = await actionCount(request);
-      const rowsBefore = await noteRowCount(request);
-      const title = `Valid title ${info.project.name}`;
+  test('422 re-render, then PRG success with the created flash', async ({
+    page,
+    request,
+  }, info) => {
+    const countBefore = await actionCount(request);
+    const rowsBefore = await noteRowCount(request);
+    const title = `Valid title ${info.project.name}`;
 
-      await page.goto('/notes/new');
-      // --- invalid: server-side validation after a native-valid submission ---
-      const failedPost = page.waitForResponse((r) =>
-        r.request().method() === 'POST' && r.url().includes('/notes/new')
-      );
-      await page.fill('#title', 'ab');
-      await page.click('#submit');
-      const failure = await failedPost;
-      expect(failure.status()).toBe(422);
-      // Exactly one action ran for this submission.
-      expect(Number(failure.headers()['x-action-count'])).toBe(countBefore + 1);
+    await page.goto('/notes/new');
+    // --- invalid: server-side validation after a native-valid submission ---
+    const failedPost = page.waitForResponse(
+      (r) => r.request().method() === 'POST' && r.url().includes('/notes/new'),
+    );
+    await page.fill('#title', 'ab');
+    await page.click('#submit');
+    const failure = await failedPost;
+    expect(failure.status()).toBe(422);
+    // Exactly one action ran for this submission.
+    expect(Number(failure.headers()['x-action-count'])).toBe(countBefore + 1);
 
-      // Still on /notes/new; the error is morphed in and the title echo survives.
-      await expect(page).toHaveURL(/\/notes\/new$/);
-      await expect(page.locator('#error')).toHaveText('title must be at least 3 characters');
-      await expect(page.locator('#title')).toHaveValue('ab');
-      // The submitter reached the action even on the failure path.
-      await expect(page.locator('#last-intent')).toHaveText('intent=create');
+    // Still on /notes/new; the error is morphed in and the title echo survives.
+    await expect(page).toHaveURL(/\/notes\/new$/);
+    await expect(page.locator('#error')).toHaveText('title must be at least 3 characters');
+    await expect(page.locator('#title')).toHaveValue('ab');
+    // The submitter reached the action even on the failure path.
+    await expect(page.locator('#last-intent')).toHaveText('intent=create');
 
-      // The store is unchanged: a fresh request still lists the old rows.
-      expect(await noteRowCount(request)).toBe(rowsBefore);
+    // The store is unchanged: a fresh request still lists the old rows.
+    expect(await noteRowCount(request)).toBe(rowsBefore);
 
-      // --- valid: PRG to the detail page with the created flash ---
-      const createdPost = page.waitForResponse((r) =>
-        r.request().method() === 'POST' && r.url().includes('/notes/new')
-      );
-      await page.fill('#title', title);
-      await page.fill('#body', 'Created through the enhanced path.');
-      await page.click('#submit');
-      const created = await createdPost;
-      expect(created.status()).toBe(303);
-      expect(created.headers()['location']).toMatch(/^\/notes\/note-\d+\?created=1$/);
-      // The 303 carries x-action-count (proven at the HTTP layer in the error/
-      // not-found suite) — WebKit does not surface custom headers of fetch
-      // redirect-chain responses to Playwright, so the counter delta is asserted
-      // through a fresh request instead.
-      expect(await actionCount(request)).toBe(countBefore + 2);
+    // --- valid: PRG to the detail page with the created flash ---
+    const createdPost = page.waitForResponse(
+      (r) => r.request().method() === 'POST' && r.url().includes('/notes/new'),
+    );
+    await page.fill('#title', title);
+    await page.fill('#body', 'Created through the enhanced path.');
+    await page.click('#submit');
+    const created = await createdPost;
+    expect(created.status()).toBe(303);
+    expect(created.headers()['location']).toMatch(/^\/notes\/note-\d+\?created=1$/);
+    // The 303 carries x-action-count (proven at the HTTP layer in the error/
+    // not-found suite) — WebKit does not surface custom headers of fetch
+    // redirect-chain responses to Playwright, so the counter delta is asserted
+    // through a fresh request instead.
+    expect(await actionCount(request)).toBe(countBefore + 2);
 
-      await page.waitForURL(/\/notes\/note-\d+\?created=1$/);
-      await expect(page.locator('#note-title')).toHaveText(title);
-      await expect(page.locator('#flash-created')).toHaveText('created=1');
+    await page.waitForURL(/\/notes\/note-\d+\?created=1$/);
+    await expect(page.locator('#note-title')).toHaveText(title);
+    await expect(page.locator('#flash-created')).toHaveText('created=1');
 
-      // The list now shows one more row, and the detail loader reports it.
-      expect(await noteRowCount(request)).toBe(rowsBefore + 1);
-      const detail = await request.get(created.headers()['location']!);
-      expect(Number(detail.headers()['x-note-count'])).toBe(rowsBefore + 1);
-    },
-  );
+    // The list now shows one more row, and the detail loader reports it.
+    expect(await noteRowCount(request)).toBe(rowsBefore + 1);
+    const detail = await request.get(created.headers()['location']!);
+    expect(Number(detail.headers()['x-note-count'])).toBe(rowsBefore + 1);
+  });
 });
 
 test.describe('native validation ordering (JS on)', () => {
-  test('an empty required title blocks the submit before any request fires', async ({ page, request }) => {
+  test('an empty required title blocks the submit before any request fires', async ({
+    page,
+    request,
+  }) => {
     const countBefore = await actionCount(request);
     const posts: string[] = [];
     await page.goto('/notes/new');
@@ -157,12 +165,12 @@ test.describe('native validation ordering (JS on)', () => {
             active = active.shadowRoot.activeElement;
           }
           return active ? active.id : null;
-        })
+        }),
       )
       .toBe('title');
-    const valueMissing = await page.locator('#title').evaluate(
-      (el) => (el as HTMLInputElement).validity.valueMissing,
-    );
+    const valueMissing = await page
+      .locator('#title')
+      .evaluate((el) => (el as HTMLInputElement).validity.valueMissing);
     expect(valueMissing).toBe(true);
 
     expect(posts).toEqual([]);
@@ -191,8 +199,8 @@ test.describe('back/forward after an enhanced submit', () => {
     });
     await page.goBack();
     await page.waitForURL(/\/notes\/new$/);
-    await page.waitForFunction(() =>
-      (window as never as { __preBack?: number }).__preBack === undefined
+    await page.waitForFunction(
+      () => (window as never as { __preBack?: number }).__preBack === undefined,
     );
     await expect(page.locator('h1')).toHaveText('new note');
     await expect(page.locator('#error')).toHaveCount(0);
@@ -202,8 +210,8 @@ test.describe('back/forward after an enhanced submit', () => {
     });
     await page.goForward();
     await page.waitForURL(/\/notes\/note-\d+\?created=1$/);
-    await page.waitForFunction(() =>
-      (window as never as { __preForward?: number }).__preForward === undefined
+    await page.waitForFunction(
+      () => (window as never as { __preForward?: number }).__preForward === undefined,
     );
     await expect(page.locator('#note-title')).toHaveText(title);
     await expect(page.locator('#flash-created')).toHaveText('created=1');
@@ -251,7 +259,10 @@ test.describe('JS-disabled native POST matrix', () => {
 });
 
 test.describe('SSG/request-time separation', () => {
-  test('the static home page keeps the build-time count after runtime mutations', async ({ page, request }) => {
+  test('the static home page keeps the build-time count after runtime mutations', async ({
+    page,
+    request,
+  }) => {
     // The store has been mutated by earlier tests in this project run; the
     // prerendered artifact still carries the seed count captured at build time.
     const html = await (await request.get('/')).text();
@@ -277,7 +288,10 @@ test.describe('error and not-found channels', () => {
     expect(await response.text()).toContain('boom boundary: boom-loader');
   });
 
-  test('an unknown note id is a loader-notFound 404 carrying the message', async ({ browser, request }) => {
+  test('an unknown note id is a loader-notFound 404 carrying the message', async ({
+    browser,
+    request,
+  }) => {
     const response = await request.get('/notes/does-not-exist');
     expect(response.status()).toBe(404);
     expect(await response.text()).toContain('note not found: does-not-exist');
@@ -291,7 +305,10 @@ test.describe('error and not-found channels', () => {
     await context.close();
   });
 
-  test('an unmatched path renders the custom styled 404 page with status 404', async ({ browser, request }) => {
+  test('an unmatched path renders the custom styled 404 page with status 404', async ({
+    browser,
+    request,
+  }) => {
     const response = await request.get('/no-such-page');
     expect(response.status()).toBe(404);
     expect(await response.text()).toContain('app-flow-native styled not found');
@@ -327,8 +344,8 @@ test.describe('error and not-found channels', () => {
 test.describe('submitter name/value', () => {
   test('the named submitter reaches the action on the enhanced path', async ({ page }, info) => {
     await page.goto('/notes/new');
-    const post = page.waitForResponse((r) =>
-      r.request().method() === 'POST' && r.url().includes('/notes/new')
+    const post = page.waitForResponse(
+      (r) => r.request().method() === 'POST' && r.url().includes('/notes/new'),
     );
     await page.fill('#title', `Submitter note ${info.project.name}`);
     await page.click('#submit');
@@ -340,19 +357,18 @@ test.describe('submitter name/value', () => {
     await expect(page.locator('#last-intent')).toHaveText('intent=create');
   });
 
-  test(
-    'the named submitter reaches the action on the JS-disabled path',
-    async ({ browser }, info) => {
-      const context = await browser.newContext({ javaScriptEnabled: false });
-      const page = await context.newPage();
-      await page.goto('/notes/new');
-      await page.fill('#title', `Native submitter note ${info.project.name}`);
-      await page.click('#submit');
-      await page.waitForURL(/\/notes\/note-\d+\?created=1$/);
-      await expect(page.locator('#last-intent')).toHaveText('intent=create');
-      await context.close();
-    },
-  );
+  test('the named submitter reaches the action on the JS-disabled path', async ({
+    browser,
+  }, info) => {
+    const context = await browser.newContext({ javaScriptEnabled: false });
+    const page = await context.newPage();
+    await page.goto('/notes/new');
+    await page.fill('#title', `Native submitter note ${info.project.name}`);
+    await page.click('#submit');
+    await page.waitForURL(/\/notes\/note-\d+\?created=1$/);
+    await expect(page.locator('#last-intent')).toHaveText('intent=create');
+    await context.close();
+  });
 });
 
 // ─── Resolved Document (#1326) ─────────────────────────────────────────────
@@ -361,7 +377,9 @@ test.describe('submitter name/value', () => {
 // build-time canonical; neither 404 channel emits a canonical.
 
 test.describe('resolved document (#1326)', () => {
-  test('detail head resolves from loader data: title, canonical, hreflang alternates', async ({ request }) => {
+  test('detail head resolves from loader data: title, canonical, hreflang alternates', async ({
+    request,
+  }) => {
     const response = await request.get('/notes/seed-1');
     expect(response.ok()).toBe(true);
     const html = await response.text();

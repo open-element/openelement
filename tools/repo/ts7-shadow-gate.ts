@@ -111,8 +111,8 @@ async function run(
       signal: controller.signal,
       env,
     }).output();
-    const output = new TextDecoder().decode(result.stdout) +
-      new TextDecoder().decode(result.stderr);
+    const output =
+      new TextDecoder().decode(result.stdout) + new TextDecoder().decode(result.stderr);
     if (timedOut) {
       return {
         success: false,
@@ -207,12 +207,7 @@ try {
   await cell('manifest', ['pack'], async () => {
     const elementTar = tarballs.get('@openelement/element');
     if (!elementTar) throw new Error('@openelement/element is missing from the package graph');
-    const shown = await run(
-      'tar',
-      ['-xzOf', elementTar, 'package/package.json'],
-      repoRoot,
-      30_000,
-    );
+    const shown = await run('tar', ['-xzOf', elementTar, 'package/package.json'], repoRoot, 30_000);
     if (!shown.success) throw new Error(`tar failed:\n${shown.output}`);
     const pkgJson = JSON.parse(shown.output) as {
       dependencies?: Record<string, string>;
@@ -290,15 +285,13 @@ try {
     if (!installed.success) throw new Error(`npm install failed:\n${installed.output}`);
     // Invoke the launchers by explicit package path, never node_modules/.bin:
     // the consumer root owns TS7 while Element owns its pinned TS6 dependency.
-    for (
-      const required of [
-        'node_modules/typescript/bin/tsc',
-        'node_modules/@openelement/element/node_modules/typescript/bin/tsc',
-        'node_modules/@openelement/element',
-        'node_modules/@openelement/router',
-        'node_modules/@openelement/create',
-      ]
-    ) {
+    for (const required of [
+      'node_modules/typescript/bin/tsc',
+      'node_modules/@openelement/element/node_modules/typescript/bin/tsc',
+      'node_modules/@openelement/element',
+      'node_modules/@openelement/router',
+      'node_modules/@openelement/create',
+    ]) {
       if (!existsSync(join(tmp, required))) {
         throw new Error(`consumer install incomplete: missing ${required}`);
       }
@@ -310,9 +303,7 @@ try {
       60_000,
     );
     if (!version.success || !version.output.includes(`Version ${TS7_VERSION}`)) {
-      throw new Error(
-        `TS7 tsc did not report Version ${TS7_VERSION}:\n${version.output}`,
-      );
+      throw new Error(`TS7 tsc did not report Version ${TS7_VERSION}:\n${version.output}`);
     }
     return `consumer installed; tsc reports TS ${TS7_VERSION}, Element-owned baseline TS ${TS6_VERSION}`;
   });
@@ -341,7 +332,11 @@ try {
   // Diagnostics carry absolute temp paths; normalize before comparing the
   // two checkers so only real diagnostic differences surface.
   const normalize = (output: string): string =>
-    output.replaceAll(tmp, '<consumer>').split('\n').filter((line) => line.trim() !== '').sort()
+    output
+      .replaceAll(tmp, '<consumer>')
+      .split('\n')
+      .filter((line) => line.trim() !== '')
+      .sort()
       .join('\n');
 
   const ts7Check: TscRun = await tsc('tsc', ['-p', 'tsconfig.check.json']);
@@ -375,12 +370,10 @@ try {
     const ts6Emit = await tsc('tsc6', ['-p', 'tsconfig.emit.json']);
     const legs: string[] = [];
     let divergence = false;
-    for (
-      const [label, ts7, ts6] of [
-        ['typecheck', ts7Check, ts6Check],
-        ['declaration-emit', ts7Emit, ts6Emit],
-      ] as const
-    ) {
+    for (const [label, ts7, ts6] of [
+      ['typecheck', ts7Check, ts6Check],
+      ['declaration-emit', ts7Emit, ts6Emit],
+    ] as const) {
       if (ts7.success !== ts6.success || normalize(ts7.output) !== normalize(ts6.output)) {
         divergence = true;
         legs.push(

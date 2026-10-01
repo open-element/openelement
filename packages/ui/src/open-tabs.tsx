@@ -27,7 +27,8 @@ import { readInstanceState, writeInstanceState } from './instance-state.ts';
 
 @element('open-tabs', { root: 'shadow-open' })
 export class OpenTabs extends OpenElement {
-  static override styles: StyleSheetLike[] = [recipe(`
+  static override styles: StyleSheetLike[] = [
+    recipe(`
     :host {
       display: block;
     }
@@ -61,7 +62,8 @@ export class OpenTabs extends OpenElement {
       padding-block: var(--size-4);
       color: var(--text-secondary);
     }
-  `)];
+  `),
+  ];
 
   /** Active tab index — compiled signal; the decorate effect subscribes. */
   @property({ reflect: false, attribute: false })
@@ -74,11 +76,7 @@ export class OpenTabs extends OpenElement {
   render(): unknown {
     return (
       <div>
-        <div
-          class='tabs'
-          role='tablist'
-          onKeydown={this.onKeydown}
-        >
+        <div class='tabs' role='tablist' onKeydown={this.onKeydown}>
           <slot name='tab'></slot>
         </div>
         <slot name='panel'></slot>
@@ -129,15 +127,16 @@ export class OpenTabs extends OpenElement {
     const count = this.count();
     if (count === 0) return;
     const key = e.key;
-    const next = key === 'Home'
-      ? 0
-      : key === 'End'
-      ? count - 1
-      : key === 'ArrowLeft'
-      ? (this.active - 1 + count) % count
-      : key === 'ArrowRight'
-      ? (this.active + 1) % count
-      : undefined;
+    const next =
+      key === 'Home'
+        ? 0
+        : key === 'End'
+          ? count - 1
+          : key === 'ArrowLeft'
+            ? (this.active - 1 + count) % count
+            : key === 'ArrowRight'
+              ? (this.active + 1) % count
+              : undefined;
     if (next === undefined) return;
     e.preventDefault();
     this.select(next);

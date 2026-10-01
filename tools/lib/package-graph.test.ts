@@ -32,11 +32,7 @@ Deno.test('extractOpenImports finds static, type and dynamic imports', () => {
     import { y } from 'npm:react';
   `;
   const imports = extractOpenImports(source).sort();
-  assertEquals(imports, [
-    '@openelement/create',
-    '@openelement/element',
-    '@openelement/router',
-  ]);
+  assertEquals(imports, ['@openelement/create', '@openelement/element', '@openelement/router']);
 });
 
 Deno.test('extractOpenImports ignores comments and nested template text', () => {
@@ -163,10 +159,9 @@ Deno.test('readPackage does not report source self-imports as dependencies', asy
     );
     await Deno.writeTextFile(
       `${dir}/src/index.ts`,
-      [
-        "export * from '@openelement/router/model';",
-        "export * from '@openelement/element';",
-      ].join('\n'),
+      ["export * from '@openelement/router/model';", "export * from '@openelement/element';"].join(
+        '\n',
+      ),
     );
 
     const info = await readPackage(dir);

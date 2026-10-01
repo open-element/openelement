@@ -115,15 +115,17 @@ Deno.test('oauth providers are configured only by an explicit true flag', () => 
       SUPABASE_OAUTH_GOOGLE_ENABLED: 'true',
       SUPABASE_OAUTH_GITHUB_ENABLED: 'true',
     }),
-    [{ id: 'google', label: 'Google' }, { id: 'github', label: 'GitHub' }],
+    [
+      { id: 'google', label: 'Google' },
+      { id: 'github', label: 'GitHub' },
+    ],
   );
 });
 
 Deno.test('login loader exposes only the configured oauth providers', async () => {
-  assertEquals(
-    await createLoginLoader()({ env: { SUPABASE_OAUTH_GITHUB_ENABLED: 'true' } }),
-    { oauthProviders: [{ id: 'github', label: 'GitHub' }] },
-  );
+  assertEquals(await createLoginLoader()({ env: { SUPABASE_OAUTH_GITHUB_ENABLED: 'true' } }), {
+    oauthProviders: [{ id: 'github', label: 'GitHub' }],
+  });
 });
 
 Deno.test('login projects the not-configured placeholder without any provider flag', () => {
@@ -142,7 +144,10 @@ Deno.test('login projects the not-configured placeholder without any provider fl
 Deno.test('login projects one flag per configured provider instead of the placeholder', () => {
   const props = loginPageProps({
     data: {
-      oauthProviders: [{ id: 'google', label: 'Google' }, { id: 'github', label: 'GitHub' }],
+      oauthProviders: [
+        { id: 'google', label: 'Google' },
+        { id: 'github', label: 'GitHub' },
+      ],
     },
     actionData: undefined,
     params: {},
@@ -168,7 +173,10 @@ Deno.test('login SSR renders the provider branches and placeholder from the proj
     props: loginPageProps({
       ...base,
       data: {
-        oauthProviders: [{ id: 'google', label: 'Google' }, { id: 'github', label: 'GitHub' }],
+        oauthProviders: [
+          { id: 'google', label: 'Google' },
+          { id: 'github', label: 'GitHub' },
+        ],
       },
     }),
   });
@@ -198,19 +206,19 @@ Deno.test('oauth action redirects to the provider url when configured', async ()
   const thrown = await assertRejects(() =>
     createOAuthAction(
       oauthClient({ url: 'https://accounts.google.com/o/oauth2/v2/auth?x=1' }, calls),
-    )(
-      context(data, { SUPABASE_OAUTH_GOOGLE_ENABLED: 'true' }),
-    )
+    )(context(data, { SUPABASE_OAUTH_GOOGLE_ENABLED: 'true' })),
   );
   assert(isOpenElementRedirect(thrown));
   assertEquals(
     (thrown as { location?: string }).location,
     'https://accounts.google.com/o/oauth2/v2/auth?x=1',
   );
-  assertEquals(calls, [{
-    provider: 'google',
-    redirectTo: 'https://app.test/auth/callback',
-  }]);
+  assertEquals(calls, [
+    {
+      provider: 'google',
+      redirectTo: 'https://app.test/auth/callback',
+    },
+  ]);
 });
 
 Deno.test('oauth action sanitizes provider failures and missing urls', async () => {

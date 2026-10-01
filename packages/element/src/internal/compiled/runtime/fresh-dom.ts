@@ -91,19 +91,17 @@ export function mountNodes(
           itemAttrSlots?.push({ element: el, name, field });
         }
       }
-      for (
-        const child of mountNodes(
-          ctx,
-          scope,
-          doc,
-          node.children,
-          item,
-          itemPart,
-          itemValueSlots,
-          el,
-          itemAttrSlots,
-        )
-      ) {
+      for (const child of mountNodes(
+        ctx,
+        scope,
+        doc,
+        node.children,
+        item,
+        itemPart,
+        itemValueSlots,
+        el,
+        itemAttrSlots,
+      )) {
         el.appendChild(child);
       }
       out.push(el);

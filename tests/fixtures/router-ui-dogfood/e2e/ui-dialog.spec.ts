@@ -69,14 +69,16 @@ test.describe('open-dialog', () => {
     await waitForDialogs(page);
   });
 
-  test('SSR-rendered open attribute becomes a top-layer modal at hydration (#1030)', async ({ page }) => {
+  test('SSR-rendered open attribute becomes a top-layer modal at hydration (#1030)', async ({
+    page,
+  }) => {
     const host = page.locator('#ssr-open-dialog');
     await expect
       .poll(() =>
         page.evaluate(
           `${deepFirstExpr('#ssr-open-dialog')}` +
             `?.shadowRoot?.querySelector('dialog')?.matches(':modal') ?? false`,
-        )
+        ),
       )
       .toBe(true);
     await expect(host).toHaveAttribute('open', '');
@@ -97,7 +99,9 @@ test.describe('open-dialog', () => {
     expect(closed).toEqual({ stateClosed: true, modal: false, open: false });
   });
 
-  test('trigger opens a modal dialog; Tab stays contained; Escape closes and returns focus', async ({ page }) => {
+  test('trigger opens a modal dialog; Tab stays contained; Escape closes and returns focus', async ({
+    page,
+  }) => {
     await closeSsrOpenDialog(page);
     const trigger = page.locator('#dialog-trigger');
     await trigger.focus();
@@ -138,7 +142,9 @@ test.describe('open-dialog', () => {
     expect(await page.evaluate(deepActiveDescriptor)).toBe('dialog-trigger');
   });
 
-  test('close affordance closes once and dispatches exactly one open-dialog-close', async ({ page }) => {
+  test('close affordance closes once and dispatches exactly one open-dialog-close', async ({
+    page,
+  }) => {
     await closeSsrOpenDialog(page);
     await page.evaluate(() => {
       (window as unknown as { __closeEvents: number }).__closeEvents = 0;
@@ -157,9 +163,10 @@ test.describe('open-dialog', () => {
     const state = await page.evaluate(() => ({
       events: (window as unknown as { __closeEvents: number }).__closeEvents,
       stateClosed:
-        document.querySelector('dialog-page')?.shadowRoot?.querySelector('open-dialog')?.matches(
-          ':state(closed)',
-        ) ?? false,
+        document
+          .querySelector('dialog-page')
+          ?.shadowRoot?.querySelector('open-dialog')
+          ?.matches(':state(closed)') ?? false,
     }));
     expect(state.events).toBe(1);
     expect(state.stateClosed).toBe(true);

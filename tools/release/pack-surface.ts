@@ -124,9 +124,9 @@ export function findMetadataViolations(
     violations.push({
       packageName,
       path: 'package.json',
-      message: `${field} must be ${JSON.stringify(expected)}, got ${
-        JSON.stringify(packageJson[field] ?? null)
-      }`,
+      message: `${field} must be ${JSON.stringify(expected)}, got ${JSON.stringify(
+        packageJson[field] ?? null,
+      )}`,
     });
   };
   if (packageJson.homepage !== metadata.homepage) fail('homepage', metadata.homepage);
@@ -134,7 +134,8 @@ export function findMetadataViolations(
     fail('keywords', metadata.keywords);
   }
   if (
-    metadata.engines && JSON.stringify(packageJson.engines) !== JSON.stringify(metadata.engines)
+    metadata.engines &&
+    JSON.stringify(packageJson.engines) !== JSON.stringify(metadata.engines)
   ) {
     fail('engines', metadata.engines);
   }
@@ -294,11 +295,13 @@ export function scanPackedPackage(
   const violations: PackSurfaceViolation[] = [];
   const manifestText = files.get('package/package.json');
   if (!manifestText) {
-    return [{
-      packageName,
-      path: 'package.json',
-      message: 'packed archive is missing package/package.json',
-    }];
+    return [
+      {
+        packageName,
+        path: 'package.json',
+        message: 'packed archive is missing package/package.json',
+      },
+    ];
   }
   const packageJson = JSON.parse(manifestText) as Record<string, unknown>;
   const metadata = packedMetadata(packageName);
@@ -365,7 +368,8 @@ export function findUndeclaredSeamInstalls(
       violations.push({
         packageName,
         path,
-        message: `module-scope seam install is declared side-effect-free and would be ` +
+        message:
+          `module-scope seam install is declared side-effect-free and would be ` +
           `tree-shaken away: ${install} (declare '${path}' in sideEffects)`,
       });
     }
@@ -442,7 +446,7 @@ async function main(): Promise<void> {
   const packages = releasePublishOrder(await readPackages());
   const violations: PackSurfaceViolation[] = [];
   for (const pkg of packages) {
-    violations.push(...await scanTarball(pkg));
+    violations.push(...(await scanTarball(pkg)));
   }
 
   if (violations.length > 0) {

@@ -18,37 +18,43 @@ interface Row {
 const program = testProgram({
   tag: 'oe-keyed-moves',
   template: [{ k: 'el', tag: 'ul', attrs: [], children: [{ k: 'part', index: 0 }] }],
-  parts: [{
-    k: 'each',
-    index: 0,
-    signal: 'items',
-    key: 'id',
-    field: 'text',
-    item: [{
-      k: 'el',
-      tag: 'li',
-      attrs: [],
-      iattrs: [['data-id', 'id']],
-      children: [{ k: 'ival', field: 'text' }],
-    }],
-  }],
+  parts: [
+    {
+      k: 'each',
+      index: 0,
+      signal: 'items',
+      key: 'id',
+      field: 'text',
+      item: [
+        {
+          k: 'el',
+          tag: 'li',
+          attrs: [],
+          iattrs: [['data-id', 'id']],
+          children: [{ k: 'ival', field: 'text' }],
+        },
+      ],
+    },
+  ],
 });
 
 const multiNodeProgram = testProgram({
   tag: 'oe-keyed-ranges',
   template: [{ k: 'el', tag: 'div', attrs: [], children: [{ k: 'part', index: 0 }] }],
-  parts: [{
-    k: 'each',
-    index: 0,
-    signal: 'items',
-    key: 'id',
-    field: 'text',
-    item: [
-      { k: 'text', value: '[' },
-      { k: 'ival', field: 'text' },
-      { k: 'text', value: ']' },
-    ],
-  }],
+  parts: [
+    {
+      k: 'each',
+      index: 0,
+      signal: 'items',
+      key: 'id',
+      field: 'text',
+      item: [
+        { k: 'text', value: '[' },
+        { k: 'ival', field: 'text' },
+        { k: 'text', value: ']' },
+      ],
+    },
+  ],
 });
 
 function host(items: ReturnType<typeof signal<Row[]>>): CompiledRuntimeHost {
@@ -84,12 +90,18 @@ Deno.test('#1455: a distant swap moves only two keyed rows', () => {
   assertStrictEquals(rows(root)[500], original[500]);
   assertStrictEquals(rows(root)[1], original[998]);
   assertStrictEquals(rows(root)[998], original[1]);
-  assertEquals(rows(root).map((row) => row.getAttribute('data-id')), swapped.map((row) => row.id));
+  assertEquals(
+    rows(root).map((row) => row.getAttribute('data-id')),
+    swapped.map((row) => row.id),
+  );
 
   doc.resetCounts();
   items.value = initial.slice();
   assertEquals(doc.counts.insertions, 2);
-  assertEquals(rows(root).every((row, index) => row === original[index]), true);
+  assertEquals(
+    rows(root).every((row, index) => row === original[index]),
+    true,
+  );
   instance.dispose();
 });
 
@@ -105,7 +117,7 @@ Deno.test('#1455: reordered suffixes retain keyed identity through mixed edits',
   const originals = new Map(rows(root).map((row) => [row.getAttribute('data-id'), row]));
   let current = source.slice();
   let seed = 1455;
-  const nextRandom = () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 2 ** 32);
+  const nextRandom = () => (seed = (seed * 1664525 + 1013904223) >>> 0) / 2 ** 32;
   try {
     for (let step = 0; step < 80; step++) {
       const next = current.slice();
@@ -120,7 +132,10 @@ Deno.test('#1455: reordered suffixes retain keyed identity through mixed edits',
         [next[a], next[b]] = [next[b], next[a]];
       }
       items.value = next;
-      assertEquals(rows(root).map((row) => row.getAttribute('data-id')), next.map((row) => row.id));
+      assertEquals(
+        rows(root).map((row) => row.getAttribute('data-id')),
+        next.map((row) => row.id),
+      );
       for (const row of rows(root)) {
         const original = originals.get(row.getAttribute('data-id'));
         if (original?.parentNode) assertStrictEquals(row, original);
@@ -153,13 +168,18 @@ Deno.test('#1455: multi-node entries move as ordered ranges and retain direct sl
     ...original.slice(4, 7),
     ...original.slice(10),
   ];
-  assertEquals(actual.every((node, index) => node === expected[index]), true);
+  assertEquals(
+    actual.every((node, index) => node === expected[index]),
+    true,
+  );
 
   items.value = [c, b, { id: 'A', text: '' }, d, { id: 'E', text: 'E' }];
   items.value = [d, { id: 'A', text: 'again' }, c, b];
   assertEquals(
-    actual.filter((node) => node.nodeType === 3)
-      .map((node) => (node as { data: string }).data).join(''),
+    actual
+      .filter((node) => node.nodeType === 3)
+      .map((node) => (node as { data: string }).data)
+      .join(''),
     '[D][again][C][B]',
   );
   instance.dispose();
@@ -205,7 +225,10 @@ Deno.test('#1455: insert, delete and reorder retain surviving rows without extra
   for (const { next, moves, removals } of steps) {
     doc.resetCounts();
     items.value = next;
-    assertEquals(rows(root).map((row) => row.getAttribute('data-id')), next.map((row) => row.id));
+    assertEquals(
+      rows(root).map((row) => row.getAttribute('data-id')),
+      next.map((row) => row.id),
+    );
     assertEquals(doc.counts.insertions, moves, next.map((row) => row.id).join(','));
     assertEquals(doc.counts.removals, removals, next.map((row) => row.id).join(','));
     for (const row of rows(root)) {
@@ -220,19 +243,25 @@ Deno.test('#1455: empty direct entries can gain text while moving past existing 
   const direct = testProgram({
     tag: 'oe-keyed-empty',
     template: [{ k: 'el', tag: 'div', attrs: [], children: [{ k: 'part', index: 0 }] }],
-    parts: [{
-      k: 'each',
-      index: 0,
-      signal: 'items',
-      key: 'id',
-      field: 'text',
-      item: [{ k: 'ival', field: 'text' }],
-    }],
+    parts: [
+      {
+        k: 'each',
+        index: 0,
+        signal: 'items',
+        key: 'id',
+        field: 'text',
+        item: [{ k: 'ival', field: 'text' }],
+      },
+    ],
   });
-  const items = signal([{ id: 'a', text: '' }, { id: 'b', text: 'B' }, {
-    id: 'c',
-    text: 'C',
-  }]);
+  const items = signal([
+    { id: 'a', text: '' },
+    { id: 'b', text: 'B' },
+    {
+      id: 'c',
+      text: 'C',
+    },
+  ]);
   const doc = new FDocument();
   const root = doc.createElement('host');
   const instance = createFreshDom(direct, host(items), root as unknown as Node);
@@ -240,21 +269,29 @@ Deno.test('#1455: empty direct entries can gain text while moving past existing 
   const bNode = list.childNodes[1];
   const cNode = list.childNodes[2];
   doc.resetCounts();
-  items.value = [{ id: 'c', text: 'C' }, { id: 'a', text: 'A' }, { id: 'b', text: 'B' }];
+  items.value = [
+    { id: 'c', text: 'C' },
+    { id: 'a', text: 'A' },
+    { id: 'b', text: 'B' },
+  ];
   assertEquals(
-    list.childNodes.filter((node) => node.nodeType === 3).map((node) =>
-      (node as { data: string }).data
-    ),
+    list.childNodes
+      .filter((node) => node.nodeType === 3)
+      .map((node) => (node as { data: string }).data),
     ['C', 'A', 'B'],
   );
   assertStrictEquals(list.childNodes[1], cNode);
   assertStrictEquals(list.childNodes[3], bNode);
   assertEquals(doc.counts.texts, 1);
-  items.value = [{ id: 'b', text: 'B' }, { id: 'a', text: '' }, { id: 'c', text: 'C' }];
+  items.value = [
+    { id: 'b', text: 'B' },
+    { id: 'a', text: '' },
+    { id: 'c', text: 'C' },
+  ];
   assertEquals(
-    list.childNodes.filter((node) => node.nodeType === 3).map((node) =>
-      (node as { data: string }).data
-    ),
+    list.childNodes
+      .filter((node) => node.nodeType === 3)
+      .map((node) => (node as { data: string }).data),
     ['B', 'C'],
   );
   instance.dispose();
@@ -264,28 +301,42 @@ Deno.test('#1455: a reused trailing slot stays with its range after reorder and 
   const trailing = testProgram({
     tag: 'oe-keyed-trailing',
     template: [{ k: 'el', tag: 'div', attrs: [], children: [{ k: 'part', index: 0 }] }],
-    parts: [{
-      k: 'each',
-      index: 0,
-      signal: 'items',
-      key: 'id',
-      field: 'text',
-      item: [{ k: 'text', value: '[' }, { k: 'ival', field: 'text' }],
-    }],
+    parts: [
+      {
+        k: 'each',
+        index: 0,
+        signal: 'items',
+        key: 'id',
+        field: 'text',
+        item: [
+          { k: 'text', value: '[' },
+          { k: 'ival', field: 'text' },
+        ],
+      },
+    ],
   });
-  const items = signal([{ id: 'a', text: '' }, { id: 'b', text: 'B' }, {
-    id: 'c',
-    text: 'C',
-  }]);
+  const items = signal([
+    { id: 'a', text: '' },
+    { id: 'b', text: 'B' },
+    {
+      id: 'c',
+      text: 'C',
+    },
+  ]);
   const doc = new FDocument();
   const root = doc.createElement('host');
   const instance = createFreshDom(trailing, host(items), root as unknown as Node);
   const list = root.childNodes[0] as FElement;
-  items.value = [{ id: 'c', text: 'C' }, { id: 'a', text: 'A' }, { id: 'b', text: 'B' }];
+  items.value = [
+    { id: 'c', text: 'C' },
+    { id: 'a', text: 'A' },
+    { id: 'b', text: 'B' },
+  ];
   assertEquals(
-    list.childNodes.filter((node) => node.nodeType === 3).map((node) =>
-      (node as { data: string }).data
-    ).join(''),
+    list.childNodes
+      .filter((node) => node.nodeType === 3)
+      .map((node) => (node as { data: string }).data)
+      .join(''),
     '[C[A[B',
   );
   instance.dispose();

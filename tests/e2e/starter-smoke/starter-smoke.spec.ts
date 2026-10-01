@@ -12,9 +12,7 @@ const PAPER = 'rgb(250, 249, 246)';
 
 test('computed body background is the design-token paper, not the UA default', async ({ page }) => {
   await page.goto('/');
-  const background = await page.evaluate(
-    () => getComputedStyle(document.body).backgroundColor,
-  );
+  const background = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
   expect(background).toBe(PAPER);
 });
 
@@ -33,7 +31,7 @@ test('header nav links are spaced apart (not jammed)', async ({ page }) => {
     els.map((el) => {
       const r = el.getBoundingClientRect();
       return { left: r.left, right: r.right };
-    })
+    }),
   );
   expect(blog.left - home.right).toBeGreaterThan(4);
 });

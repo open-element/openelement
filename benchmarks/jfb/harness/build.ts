@@ -230,9 +230,11 @@ async function buildOe(buildDir: string): Promise<BuildReport['oe']> {
       '    // router makes per page; here the sandbox config is hand-written, so',
       '    // it states the decision directly.',
       "    alias: { '@openelement/element': " +
-      JSON.stringify(join(repoRoot, 'packages/element/src/client-only.ts')) + ', ' +
-      "'@openelement/element/client-only': " +
-      JSON.stringify(join(repoRoot, 'packages/element/src/client-only.ts')) + ' },',
+        JSON.stringify(join(repoRoot, 'packages/element/src/client-only.ts')) +
+        ', ' +
+        "'@openelement/element/client-only': " +
+        JSON.stringify(join(repoRoot, 'packages/element/src/client-only.ts')) +
+        ' },',
       '  },',
       '  build: {',
       "    outDir: r('../oe'),",
@@ -247,12 +249,11 @@ async function buildOe(buildDir: string): Promise<BuildReport['oe']> {
       '',
     ].join('\n'),
   );
-  await runCommand('node', [
-    join(repoRoot, 'node_modules/vite/bin/vite.js'),
-    'build',
-    '--config',
-    'vite.config.ts',
-  ], srcDir);
+  await runCommand(
+    'node',
+    [join(repoRoot, 'node_modules/vite/bin/vite.js'), 'build', '--config', 'vite.config.ts'],
+    srcDir,
+  );
   await Deno.copyFile(oeIndexPath, join(buildDir, 'oe', 'index.html'));
   const bundle = await Deno.stat(join(buildDir, 'oe', 'main.js'));
   return {
@@ -308,7 +309,9 @@ async function buildComparator(
         await Deno.readTextFile(join(sandbox, 'node_modules', name, 'package.json')),
       ) as { version?: string };
       if (manifest.version) resolvedVersions[name] = manifest.version;
-    } catch { /* transitive-only */ }
+    } catch {
+      /* transitive-only */
+    }
   }
   const bundleStat = await Deno.stat(join(outDir, 'dist/main.js'));
   return { id: spec.id, built: true, bundleBytes: bundleStat.size, resolvedVersions };

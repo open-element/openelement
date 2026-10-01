@@ -83,7 +83,10 @@ function trackedFiles(): string[] {
   if (!output.success) {
     throw new Error('check-no-allow-all: git ls-files failed (tests must run inside the repo)');
   }
-  return new TextDecoder().decode(output.stdout).split('\0').filter((entry) => entry.length > 0);
+  return new TextDecoder()
+    .decode(output.stdout)
+    .split('\0')
+    .filter((entry) => entry.length > 0);
 }
 
 function extensionOf(path: string): string {
@@ -137,8 +140,8 @@ export const CONSUMER_SCAFFOLD_PATTERN =
 /** True when (path, line) is exactly one of the ruled exempt lines. */
 export function isConsumerScaffoldExempt(path: string, line: string): boolean {
   const trimmed = line.trim();
-  return CONSUMER_SCAFFOLD_EXEMPT_LINES.some((entry) =>
-    entry.path === path && entry.line === trimmed
+  return CONSUMER_SCAFFOLD_EXEMPT_LINES.some(
+    (entry) => entry.path === path && entry.line === trimmed,
   );
 }
 
@@ -210,18 +213,14 @@ Deno.test('permissions: no broad Deno flags in any tracked first-party text', ()
       if (shouldSkipUnreadableFile(error)) continue;
       // Unreadable is NOT clean: failing closed keeps a permission/IO problem
       // from turning the whole scan into a silent pass.
-      throw new Error(
-        `check-no-allow-all: cannot read tracked file ${path}: ${String(error)}`,
-      );
+      throw new Error(`check-no-allow-all: cannot read tracked file ${path}: ${String(error)}`);
     }
     const lines = text.split('\n');
     for (let index = 0; index < lines.length; index++) {
       const line = lines[index];
       const verdict = classifyLine(path, line, isCode);
       if (verdict.kind === 'violation') {
-        violations.push(
-          `${path}:${index + 1}: ${verdict.note ?? ''}${line.trim().slice(0, 140)}`,
-        );
+        violations.push(`${path}:${index + 1}: ${verdict.note ?? ''}${line.trim().slice(0, 140)}`);
       }
     }
   }

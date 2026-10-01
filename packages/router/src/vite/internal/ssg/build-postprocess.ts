@@ -50,25 +50,18 @@ export interface BuildContextView {
   clientAssetManifest?: ClientAssetManifest | null;
 }
 
-type DeliveryIslandMeta = Partial<IslandDecl> & IslandDeliveryMeta & {
-  hydrate?: IslandDeliveryStrategy;
-};
+type DeliveryIslandMeta = Partial<IslandDecl> &
+  IslandDeliveryMeta & {
+    hydrate?: IslandDeliveryStrategy;
+  };
 
 function expandLocalIslandMeta(
   tagName: string,
   rawMeta: Partial<IslandDecl>,
 ): Array<[string, DeliveryIslandMeta]> {
   const meta = rawMeta as DeliveryIslandMeta;
-  const tags = resolveIslandDeliveryTags(
-    tagName,
-    meta.tags,
-    meta.tagNames,
-    tagName,
-  );
-  return tags.map((deliveredTag) => [
-    deliveredTag,
-    { ...meta, tagName: deliveredTag },
-  ]);
+  const tags = resolveIslandDeliveryTags(tagName, meta.tags, meta.tagNames, tagName);
+  return tags.map((deliveredTag) => [deliveredTag, { ...meta, tagName: deliveredTag }]);
 }
 
 /**
@@ -141,17 +134,15 @@ export async function postProcessClientIslandBuild(ctx: BuildContextView): Promi
     ...(ctx.phase1.packageIslandDecls || []),
   ];
   const packageMetas = declaredMetas.flatMap((island) =>
-    expandIslandDeliveryDecl(island).map((expanded) =>
-      [expanded.tagName, expanded as DeliveryIslandMeta] as [string, DeliveryIslandMeta]
-    )
+    expandIslandDeliveryDecl(island).map(
+      (expanded) =>
+        [expanded.tagName, expanded as DeliveryIslandMeta] as [string, DeliveryIslandMeta],
+    ),
   );
   const islandMetas: Array<[string, DeliveryIslandMeta]> = [...localMetas, ...packageMetas];
   const islandTagNames = [...new Set(islandMetas.map(([tag]) => tag))].sort();
 
-  const chunkMap = islandChunkMapFromAssetManifest(
-    ctx.clientAssetManifest,
-    islandTagNames,
-  );
+  const chunkMap = islandChunkMapFromAssetManifest(ctx.clientAssetManifest, islandTagNames);
 
   const strategyMap = Object.fromEntries(
     islandMetas.map(([tag, meta]) => [
@@ -185,8 +176,8 @@ export async function cleanSsrArtifacts(ctx: BuildContextView): Promise<void> {
 
   try {
     const assetsDir = join(root, outDir, 'assets');
-    const entries = await Array.fromAsync(Deno.readDir(assetsDir), (e) => e.name).catch(() =>
-      [] as string[]
+    const entries = await Array.fromAsync(Deno.readDir(assetsDir), (e) => e.name).catch(
+      () => [] as string[],
     );
     const toDelete = entries.filter(
       (f) =>

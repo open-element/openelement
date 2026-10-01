@@ -66,10 +66,7 @@ test.describe('DSD Layers', () => {
     // Intentional code examples may mention DSD syntax. Only fail when raw DSD
     // markup leaks into ordinary page text outside code and inert containers.
     const leakedDsdText = await page.evaluate(() => {
-      const walker = document.createTreeWalker(
-        document.body,
-        NodeFilter.SHOW_TEXT,
-      );
+      const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
       const leaked: string[] = [];
 
       for (let node = walker.nextNode(); node; node = walker.nextNode()) {

@@ -14,21 +14,24 @@ const program = testProgram({
   rootMode: 'shadow-open',
   template: [{ k: 'el', tag: 'p', attrs: [], children: [{ k: 'part', index: 0 }] }],
   parts: [{ k: 'text', index: 0, signal: 'title' }],
-  properties: [{
-    name: 'title',
-    attribute: null,
-    type: 'string',
-    converter: 'string',
-    reflect: false,
-    default: 'default',
-  }, {
-    name: 'count',
-    attribute: 'count',
-    type: 'number',
-    converter: 'number',
-    reflect: false,
-    default: 0,
-  }],
+  properties: [
+    {
+      name: 'title',
+      attribute: null,
+      type: 'string',
+      converter: 'string',
+      reflect: false,
+      default: 'default',
+    },
+    {
+      name: 'count',
+      attribute: 'count',
+      type: 'number',
+      converter: 'number',
+      reflect: false,
+      default: 0,
+    },
+  ],
 }) as PartProgramV1;
 
 class Page {}
@@ -38,9 +41,7 @@ Object.assign(Page, {
   styles: { cssRules: [{ cssText: 'p { color: red; }' }] },
 });
 
-async function manifestFor(
-  selectedProgram: PartProgramV1 = program,
-): Promise<DeferredDsdManifest> {
+async function manifestFor(selectedProgram: PartProgramV1 = program): Promise<DeferredDsdManifest> {
   const { sourceMap: _sourceMap, ...wireProgram } = selectedProgram;
   const hash = await crypto.subtle.digest(
     'SHA-256',
@@ -120,14 +121,16 @@ Deno.test('deferred DSD bridge never reads pending properties and follows compil
     rootMode: 'light',
     template: [{ k: 'el', tag: 'p', attrs: [], children: [{ k: 'part', index: 0 }] }],
     parts: [{ k: 'text', index: 0, signal: 'title' }],
-    properties: [{
-      name: 'title',
-      attribute: null,
-      type: 'string',
-      converter: 'string',
-      reflect: false,
-      default: '',
-    }],
+    properties: [
+      {
+        name: 'title',
+        attribute: null,
+        type: 'string',
+        converter: 'string',
+        reflect: false,
+        default: '',
+      },
+    ],
   }) as PartProgramV1;
   class LightPage {}
   Object.assign(LightPage, {
@@ -168,28 +171,32 @@ Deno.test('deferred seed distinguishes absent default, explicit null, and pendin
     rootMode: 'light',
     template: [{ k: 'el', tag: 'p', attrs: [], children: [{ k: 'part', index: 0 }] }],
     parts: [{ k: 'text', index: 0, signal: 'title' }],
-    properties: [{
-      name: 'title',
-      attribute: null,
-      type: 'string',
-      converter: 'string',
-      reflect: false,
-      default: '',
-    }, {
-      name: 'optional',
-      attribute: null,
-      type: 'string',
-      converter: 'string',
-      reflect: false,
-      default: 'fallback',
-    }, {
-      name: 'nullable',
-      attribute: null,
-      type: 'string',
-      converter: 'string',
-      reflect: false,
-      default: 'fallback',
-    }],
+    properties: [
+      {
+        name: 'title',
+        attribute: null,
+        type: 'string',
+        converter: 'string',
+        reflect: false,
+        default: '',
+      },
+      {
+        name: 'optional',
+        attribute: null,
+        type: 'string',
+        converter: 'string',
+        reflect: false,
+        default: 'fallback',
+      },
+      {
+        name: 'nullable',
+        attribute: null,
+        type: 'string',
+        converter: 'string',
+        reflect: false,
+        default: 'fallback',
+      },
+    ],
   }) as PartProgramV1;
   class MissingPage {}
   Object.assign(MissingPage, {
@@ -223,9 +230,7 @@ Deno.test('deferred seed enforces the browser 64-property budget fail-loud at se
         default: '',
       })),
     }) as PartProgramV1;
-  const manifestForField = async (
-    selectedProgram: PartProgramV1,
-  ): Promise<DeferredDsdManifest> => {
+  const manifestForField = async (selectedProgram: PartProgramV1): Promise<DeferredDsdManifest> => {
     const { sourceMap: _sourceMap, ...wireProgram } = selectedProgram;
     const hash = await crypto.subtle.digest(
       'SHA-256',
@@ -235,9 +240,9 @@ Deno.test('deferred seed enforces the browser 64-property budget fail-loud at se
       program: {
         version: selectedProgram.version,
         tag: selectedProgram.tag,
-        sha256: [...new Uint8Array(hash)].map((byte) => byte.toString(16).padStart(2, '0')).join(
-          '',
-        ),
+        sha256: [...new Uint8Array(hash)]
+          .map((byte) => byte.toString(16).padStart(2, '0'))
+          .join(''),
       },
       fields: [{ field: 'p0', signal: 'p0', owners: [{ kind: 'part', index: 0 }] }],
     };
@@ -281,22 +286,26 @@ Deno.test('deferred bridge applies the streamed-frame policy to hand-written man
       tag: 'oe-deferred-policy',
       rootMode: 'light',
       template: [{ k: 'el', tag: 'p', attrs: [], children: [{ k: 'part', index: 0 }] }],
-      parts: [{
-        k: 'when',
-        index: 0,
-        signal: 'enabled',
-        test: { signal: 'enabled', op: 'truthy', value: true },
-        on,
-        off: [],
-      }],
-      properties: [{
-        name: 'enabled',
-        attribute: null,
-        type: 'boolean' as const,
-        converter: 'boolean' as const,
-        reflect: false,
-        default: false,
-      }],
+      parts: [
+        {
+          k: 'when',
+          index: 0,
+          signal: 'enabled',
+          test: { signal: 'enabled', op: 'truthy', value: true },
+          on,
+          off: [],
+        },
+      ],
+      properties: [
+        {
+          name: 'enabled',
+          attribute: null,
+          type: 'boolean' as const,
+          converter: 'boolean' as const,
+          reflect: false,
+          default: false,
+        },
+      ],
     }) as PartProgramV1;
   const classFor = (selectedProgram: PartProgramV1) => {
     class PolicyPage {}
@@ -321,14 +330,17 @@ Deno.test('deferred bridge applies the streamed-frame policy to hand-written man
             program: {
               version: program.version,
               tag: program.tag,
-              sha256: [...new Uint8Array(hash)].map((byte) => byte.toString(16).padStart(2, '0'))
+              sha256: [...new Uint8Array(hash)]
+                .map((byte) => byte.toString(16).padStart(2, '0'))
                 .join(''),
             },
-            fields: [{
-              field: 'enabled',
-              signal: 'enabled',
-              owners: [{ kind: 'region', index: 0 }],
-            }],
+            fields: [
+              {
+                field: 'enabled',
+                signal: 'enabled',
+                owners: [{ kind: 'region', index: 0 }],
+              },
+            ],
           },
           instanceId: 'policy-instance',
         }),
@@ -349,59 +361,99 @@ Deno.test('deferred bridge applies the streamed-frame policy to hand-written man
     [{ k: 'el', tag: 'b', attrs: [['data-oe-frame', 'spoof']], children: [] }],
     'opaque',
   );
-  await reject([{
-    k: 'el',
-    tag: 'a',
-    attrs: [['href', 'javascript:alert(1)']],
-    children: [],
-  }], 'opaque');
-  await reject([{
-    k: 'el',
-    tag: 'a',
-    attrs: [['href', 'java\tscript:alert(1)']],
-    children: [],
-  }], 'opaque');
+  await reject(
+    [
+      {
+        k: 'el',
+        tag: 'a',
+        attrs: [['href', 'javascript:alert(1)']],
+        children: [],
+      },
+    ],
+    'opaque',
+  );
+  await reject(
+    [
+      {
+        k: 'el',
+        tag: 'a',
+        attrs: [['href', 'java\tscript:alert(1)']],
+        children: [],
+      },
+    ],
+    'opaque',
+  );
   // Entity obfuscation: the compiler keeps static attribute strings verbatim
   // (no entity decoding into the AST), so admission decodes the standard
   // entity set before the URL check — including the uppercase-hex and
   // semicolon-less numeric forms an HTML parser decodes.
-  await reject([{
-    k: 'el',
-    tag: 'a',
-    attrs: [['href', 'javascript&#58;alert(1)']],
-    children: [],
-  }], 'opaque');
-  await reject([{
-    k: 'el',
-    tag: 'a',
-    attrs: [['href', 'javascript&colon;alert(1)']],
-    children: [],
-  }], 'opaque');
-  await reject([{
-    k: 'el',
-    tag: 'a',
-    attrs: [['href', 'java&Tab;script:alert(1)']],
-    children: [],
-  }], 'opaque');
-  await reject([{
-    k: 'el',
-    tag: 'a',
-    attrs: [['href', 'javascript&#X3A;alert(1)']],
-    children: [],
-  }], 'opaque');
-  await reject([{
-    k: 'el',
-    tag: 'a',
-    attrs: [['href', 'javascript&#58alert(1)']],
-    children: [],
-  }], 'opaque');
+  await reject(
+    [
+      {
+        k: 'el',
+        tag: 'a',
+        attrs: [['href', 'javascript&#58;alert(1)']],
+        children: [],
+      },
+    ],
+    'opaque',
+  );
+  await reject(
+    [
+      {
+        k: 'el',
+        tag: 'a',
+        attrs: [['href', 'javascript&colon;alert(1)']],
+        children: [],
+      },
+    ],
+    'opaque',
+  );
+  await reject(
+    [
+      {
+        k: 'el',
+        tag: 'a',
+        attrs: [['href', 'java&Tab;script:alert(1)']],
+        children: [],
+      },
+    ],
+    'opaque',
+  );
+  await reject(
+    [
+      {
+        k: 'el',
+        tag: 'a',
+        attrs: [['href', 'javascript&#X3A;alert(1)']],
+        children: [],
+      },
+    ],
+    'opaque',
+  );
+  await reject(
+    [
+      {
+        k: 'el',
+        tag: 'a',
+        attrs: [['href', 'javascript&#58alert(1)']],
+        children: [],
+      },
+    ],
+    'opaque',
+  );
   // Nested unsafe content is caught through the recursion too.
-  await reject([{
-    k: 'el',
-    tag: 'span',
-    attrs: [],
-    children: [{ k: 'el', tag: 'object', attrs: [], children: [] }],
-  }], 'opaque');
+  await reject(
+    [
+      {
+        k: 'el',
+        tag: 'span',
+        attrs: [],
+        children: [{ k: 'el', tag: 'object', attrs: [], children: [] }],
+      },
+    ],
+    'opaque',
+  );
 });
 
 Deno.test('deferred bridge enforces the build-aligned field/owner budget on hand-written manifests', async () => {
@@ -413,12 +465,14 @@ Deno.test('deferred bridge enforces the build-aligned field/owner budget on hand
     });
     return BudgetPage as unknown as CustomElementConstructor;
   };
-  const anchorTemplate = (count: number) => [{
-    k: 'el' as const,
-    tag: 'p',
-    attrs: [] as Array<[string, string]>,
-    children: Array.from({ length: count }, (_, index) => ({ k: 'part' as const, index })),
-  }];
+  const anchorTemplate = (count: number) => [
+    {
+      k: 'el' as const,
+      tag: 'p',
+      attrs: [] as Array<[string, string]>,
+      children: Array.from({ length: count }, (_, index) => ({ k: 'part' as const, index })),
+    },
+  ];
   const stringProperty = (name: string) => ({
     name,
     attribute: null,
@@ -432,19 +486,18 @@ Deno.test('deferred bridge enforces the build-aligned field/owner budget on hand
     fields: DeferredDsdManifest['fields'],
   ): Promise<DeferredDsdManifest> => {
     const { sourceMap: _sourceMap, ...wireProgram } = selectedProgram;
-    return crypto.subtle.digest(
-      'SHA-256',
-      new TextEncoder().encode(JSON.stringify(wireProgram)),
-    ).then((hash) => ({
-      program: {
-        version: selectedProgram.version,
-        tag: selectedProgram.tag,
-        sha256: [...new Uint8Array(hash)].map((byte) => byte.toString(16).padStart(2, '0')).join(
-          '',
-        ),
-      },
-      fields,
-    }));
+    return crypto.subtle
+      .digest('SHA-256', new TextEncoder().encode(JSON.stringify(wireProgram)))
+      .then((hash) => ({
+        program: {
+          version: selectedProgram.version,
+          tag: selectedProgram.tag,
+          sha256: [...new Uint8Array(hash)]
+            .map((byte) => byte.toString(16).padStart(2, '0'))
+            .join(''),
+        },
+        fields,
+      }));
   };
 
   // Negative: 33 deferred fields are rejected at the public boundary.
@@ -494,11 +547,13 @@ Deno.test('deferred bridge enforces the build-aligned field/owner budget on hand
     async () => {
       await createDeferredDsdExecutor({
         componentClass: classFor(owners65),
-        manifest: await manifestFor(owners65, [{
-          field: 'p0',
-          signal: 'p0',
-          owners: Array.from({ length: 65 }, (_, index) => ({ kind: 'part' as const, index })),
-        }]),
+        manifest: await manifestFor(owners65, [
+          {
+            field: 'p0',
+            signal: 'p0',
+            owners: Array.from({ length: 65 }, (_, index) => ({ kind: 'part' as const, index })),
+          },
+        ]),
         instanceId: 'owner-budget-65',
       });
     },

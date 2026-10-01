@@ -80,9 +80,9 @@ export function checkRunnerArgs(args: readonly string[]): string | null {
       if (inlineValue === undefined) index++;
       continue;
     }
-    return `site-e2e: argument ${
-      JSON.stringify(arg)
-    } is not allowlisted for candidate proof (positional test filters and unknown flags shrink the suite)`;
+    return `site-e2e: argument ${JSON.stringify(
+      arg,
+    )} is not allowlisted for candidate proof (positional test filters and unknown flags shrink the suite)`;
   }
   return null;
 }
@@ -93,7 +93,9 @@ async function gitHead(): Promise<string> {
     cwd: repoRoot,
     stdout: 'piped',
     stderr: 'null',
-  }).output().catch(() => null);
+  })
+    .output()
+    .catch(() => null);
   return output?.success ? new TextDecoder().decode(output.stdout).trim() : '';
 }
 
@@ -171,7 +173,8 @@ async function main(): Promise<void> {
     // summary is not derived from these bytes, so fail closed instead of
     // writing a sidecar the recompute would accept.
     if (
-      result.expected + result.flaky !== (report.stats?.expected ?? 0) + (report.stats?.flaky ?? 0)
+      result.expected + result.flaky !==
+      (report.stats?.expected ?? 0) + (report.stats?.flaky ?? 0)
     ) {
       throw new Error(
         `flaky accounting diverges from the raw report stats: sidecar expected=${result.expected}+flaky=${result.flaky}, report expected=${

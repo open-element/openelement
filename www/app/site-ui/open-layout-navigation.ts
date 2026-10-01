@@ -55,7 +55,7 @@ export interface HeaderNavLink {
 
 /** Project a bilingual label pair onto the render locale (en default). */
 function localizedLabel(label: string, labelZh: string | undefined, locale: string): string {
-  return locale === 'zh' ? labelZh ?? label : label;
+  return locale === 'zh' ? (labelZh ?? label) : label;
 }
 
 export function isSafeLayoutUrl(url: string): boolean {
@@ -66,7 +66,8 @@ export function isSafeLayoutUrl(url: string): boolean {
     trimmed.startsWith('#') ||
     trimmed.startsWith('./') ||
     trimmed.startsWith('../')
-  ) return true;
+  )
+    return true;
 
   try {
     const parsed = new URL(trimmed, 'https://openelement.org/');
@@ -116,11 +117,12 @@ export function localeSwitchPath(
     if (segment.startsWith(':') || segment.startsWith('[')) break;
     staticSegments.push(segment);
   }
-  const safeBare = staticSegments.length === segments.length
-    ? bare
-    : staticSegments.length > 0
-    ? `/${staticSegments.join('/')}`
-    : '/';
+  const safeBare =
+    staticSegments.length === segments.length
+      ? bare
+      : staticSegments.length > 0
+        ? `/${staticSegments.join('/')}`
+        : '/';
   return localizeLayoutPath(safeBare, other, locales, defaultLocale);
 }
 
@@ -136,7 +138,7 @@ export function localeSwitchScopeNote(currentLocale: string): string {
 
 export function filterNavSections(items: NavSection[], currentPath: string): NavSection[] {
   const named = items.map((section) =>
-    section.section ? section : { ...section, section: FALLBACK_SECTION }
+    section.section ? section : { ...section, section: FALLBACK_SECTION },
   );
   for (const [prefix, sections] of Object.entries(SECTION_MAP)) {
     if (currentPath.startsWith(prefix)) {
@@ -217,9 +219,11 @@ export function decorateHeaderNav(
     const href = external
       ? raw
       : raw
-      ? localizeLayoutPath(raw, locale, localeList, defaultLocale)
-      : '';
-    const isCurrent = !external && href !== '' &&
+        ? localizeLayoutPath(raw, locale, localeList, defaultLocale)
+        : '';
+    const isCurrent =
+      !external &&
+      href !== '' &&
       (localizedCurrent === href || (href !== '/' && localizedCurrent.startsWith(`${href}/`)));
     return {
       key: href || link.label,
@@ -270,8 +274,8 @@ export function buildSidebarRows(
       const href = external
         ? safe
         : safe
-        ? localizeLayoutPath(safe, locale, localeList, defaultLocale)
-        : false;
+          ? localizeLayoutPath(safe, locale, localeList, defaultLocale)
+          : false;
       rows.push({
         key: `link:${safe || item.label}`,
         kind: 'link',

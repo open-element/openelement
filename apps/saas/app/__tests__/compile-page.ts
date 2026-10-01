@@ -15,19 +15,19 @@ const ELEMENT_URL = import.meta.resolve('@openelement/element');
 const APP_URL = import.meta.resolve('@openelement/router');
 
 /** Compile + import the default-exported compiled class of one component module. */
-export async function compileComponentClass(
-  sourceUrl: string,
-): Promise<CustomElementConstructor> {
+export async function compileComponentClass(sourceUrl: string): Promise<CustomElementConstructor> {
   const absoluteSource = new URL(sourceUrl, import.meta.url);
   const source = await Deno.readTextFile(absoluteSource);
   // Island modules colocate the island delivery policy statement with the
   // class; the compiler admits it only through the injected descriptor (#1468).
   const { code } = compileElementProgram(source, sourceUrl, {
-    staticSidecars: [{
-      moduleSpecifier: '@openelement/router',
-      exportName: 'defineIslandConfig',
-      kind: 'static-sidecar',
-    }],
+    staticSidecars: [
+      {
+        moduleSpecifier: '@openelement/router',
+        exportName: 'defineIslandConfig',
+        kind: 'static-sidecar',
+      },
+    ],
   });
   // The emitted module imports the framework packages by bare specifier;
   // re-point them at the monorepo sources, and rebase the component's

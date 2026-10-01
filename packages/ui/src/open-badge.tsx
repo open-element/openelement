@@ -12,7 +12,8 @@ import { recipe } from './component-recipes.ts';
 
 @element('open-badge', { root: 'shadow-open' })
 export class OpenBadge extends OpenElement {
-  static override styles: StyleSheetLike[] = [recipe(`
+  static override styles: StyleSheetLike[] = [
+    recipe(`
     :host {
       display: inline-flex;
       vertical-align: middle;
@@ -64,7 +65,8 @@ export class OpenBadge extends OpenElement {
       min-height: var(--size-5);
       padding-inline: var(--size-2);
     }
-  `)];
+  `),
+  ];
 
   @property({ reflect: true })
   tone = 'neutral';

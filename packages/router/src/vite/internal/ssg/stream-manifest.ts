@@ -22,10 +22,11 @@ function property(
   object: ts.ObjectLiteralExpression,
   name: string,
 ): ts.PropertyAssignment | undefined {
-  return object.properties.find((entry): entry is ts.PropertyAssignment =>
-    ts.isPropertyAssignment(entry) &&
-    (ts.isIdentifier(entry.name) || ts.isStringLiteral(entry.name)) &&
-    entry.name.text === name
+  return object.properties.find(
+    (entry): entry is ts.PropertyAssignment =>
+      ts.isPropertyAssignment(entry) &&
+      (ts.isIdentifier(entry.name) || ts.isStringLiteral(entry.name)) &&
+      entry.name.text === name,
   );
 }
 
@@ -34,9 +35,11 @@ function propertyName(node: ts.PropertyName): string | undefined {
 }
 
 function hasMember(object: ts.ObjectLiteralExpression, name: string): boolean {
-  return object.properties.some((entry) =>
-    (ts.isPropertyAssignment(entry) || ts.isMethodDeclaration(entry)) &&
-    (ts.isIdentifier(entry.name) || ts.isStringLiteral(entry.name)) && entry.name.text === name
+  return object.properties.some(
+    (entry) =>
+      (ts.isPropertyAssignment(entry) || ts.isMethodDeclaration(entry)) &&
+      (ts.isIdentifier(entry.name) || ts.isStringLiteral(entry.name)) &&
+      entry.name.text === name,
   );
 }
 
@@ -54,12 +57,7 @@ function position(sf: ts.SourceFile, node: ts.Node): string {
   return `${sf.fileName}:${line + 1}:${character + 1}`;
 }
 
-function diagnostic(
-  route: string,
-  field: string,
-  at: string,
-  reason: string,
-): never {
+function diagnostic(route: string, field: string, at: string, reason: string): never {
   throw new Error(
     `[openElement] stream route ${route}, field ${field} at ${at}: ${reason}. ` +
       'Keep the field front-gate, bind directly to a nonreflecting page property, ' +
@@ -69,12 +67,13 @@ function diagnostic(
 
 /** True when the module declares a function/variable binding of this name. */
 function declaresBinding(sf: ts.SourceFile, name: string): boolean {
-  return sf.statements.some((statement) =>
-    ts.isFunctionDeclaration(statement) && statement.name?.text === name ||
-    ts.isVariableStatement(statement) &&
-      statement.declarationList.declarations.some((entry) =>
-        ts.isIdentifier(entry.name) && entry.name.text === name
-      )
+  return sf.statements.some(
+    (statement) =>
+      (ts.isFunctionDeclaration(statement) && statement.name?.text === name) ||
+      (ts.isVariableStatement(statement) &&
+        statement.declarationList.declarations.some(
+          (entry) => ts.isIdentifier(entry.name) && entry.name.text === name,
+        )),
   );
 }
 
@@ -96,9 +95,13 @@ function loaderBindingNames(sf: ts.SourceFile): Set<string> {
   let exportedAsLoader = 0;
   for (const statement of sf.statements) {
     if (
-      !ts.isExportDeclaration(statement) || statement.isTypeOnly || statement.moduleSpecifier ||
-      !statement.exportClause || !ts.isNamedExports(statement.exportClause)
-    ) continue;
+      !ts.isExportDeclaration(statement) ||
+      statement.isTypeOnly ||
+      statement.moduleSpecifier ||
+      !statement.exportClause ||
+      !ts.isNamedExports(statement.exportClause)
+    )
+      continue;
     for (const entry of statement.exportClause.elements) {
       if (entry.isTypeOnly || entry.name.text !== 'loader') continue;
       exportedAsLoader += 1;
@@ -126,30 +129,30 @@ function staticLoaderFields(
   for (const statement of sf.statements) {
     if (!ts.isVariableStatement(statement) && !ts.isFunctionDeclaration(statement)) continue;
     const declaration = ts.isVariableStatement(statement)
-      ? statement.declarationList.declarations.find((entry) =>
-        ts.isIdentifier(entry.name) && loaderNames.has(entry.name.text)
-      )
+      ? statement.declarationList.declarations.find(
+          (entry) => ts.isIdentifier(entry.name) && loaderNames.has(entry.name.text),
+        )
       : statement.name && loaderNames.has(statement.name.text)
-      ? statement
-      : undefined;
+        ? statement
+        : undefined;
     if (!declaration) continue;
     const body = ts.isFunctionDeclaration(declaration) ? declaration.body : declaration.initializer;
-    const result = body && (ts.isArrowFunction(body) || ts.isFunctionExpression(body))
-      ? body.body
-      : body;
-    const expression = result && ts.isBlock(result)
-      ? result.statements.length === 1 && ts.isReturnStatement(result.statements[0])
-        ? result.statements[0].expression
-        : undefined
-      : result;
+    const result =
+      body && (ts.isArrowFunction(body) || ts.isFunctionExpression(body)) ? body.body : body;
+    const expression =
+      result && ts.isBlock(result)
+        ? result.statements.length === 1 && ts.isReturnStatement(result.statements[0])
+          ? result.statements[0].expression
+          : undefined
+        : result;
     const object = expression && unwrap(expression);
     if (!object || !ts.isObjectLiteralExpression(object)) return undefined;
     const spread = object.properties.find(ts.isSpreadAssignment);
     if (spread) {
       diagnostic(route, field, position(sf, spread), 'loader object spread has unknowable fields');
     }
-    const computedKey = object.properties.find((entry) =>
-      'name' in entry && entry.name && ts.isComputedPropertyName(entry.name)
+    const computedKey = object.properties.find(
+      (entry) => 'name' in entry && entry.name && ts.isComputedPropertyName(entry.name),
     );
     if (computedKey) {
       diagnostic(
@@ -161,11 +164,12 @@ function staticLoaderFields(
     }
     return new Set(
       object.properties.flatMap((entry) =>
-        (ts.isPropertyAssignment(entry) || ts.isShorthandPropertyAssignment(entry) ||
-            ts.isMethodDeclaration(entry)) &&
-          (ts.isIdentifier(entry.name) || ts.isStringLiteral(entry.name))
+        (ts.isPropertyAssignment(entry) ||
+          ts.isShorthandPropertyAssignment(entry) ||
+          ts.isMethodDeclaration(entry)) &&
+        (ts.isIdentifier(entry.name) || ts.isStringLiteral(entry.name))
           ? [entry.name.text]
-          : []
+          : [],
       ),
     );
   }
@@ -175,37 +179,44 @@ function staticLoaderFields(
 function hasExportedLoader(sf: ts.SourceFile): boolean {
   for (const statement of sf.statements) {
     if (
-      ts.isExportDeclaration(statement) && !statement.isTypeOnly && !statement.moduleSpecifier &&
-      statement.exportClause && ts.isNamedExports(statement.exportClause) &&
-      statement.exportClause.elements.some((entry) =>
-        !entry.isTypeOnly && entry.name.text === 'loader'
+      ts.isExportDeclaration(statement) &&
+      !statement.isTypeOnly &&
+      !statement.moduleSpecifier &&
+      statement.exportClause &&
+      ts.isNamedExports(statement.exportClause) &&
+      statement.exportClause.elements.some(
+        (entry) => !entry.isTypeOnly && entry.name.text === 'loader',
       )
-    ) return true;
+    )
+      return true;
     if (
-      (ts.isFunctionDeclaration(statement) && statement.name?.text === 'loader' ||
-        ts.isVariableStatement(statement) &&
-          statement.declarationList.declarations.some((entry) =>
-            ts.isIdentifier(entry.name) && entry.name.text === 'loader'
-          )) &&
-      (ts.getModifiers(statement) ?? []).some((modifier) =>
-        modifier.kind === ts.SyntaxKind.ExportKeyword
+      ((ts.isFunctionDeclaration(statement) && statement.name?.text === 'loader') ||
+        (ts.isVariableStatement(statement) &&
+          statement.declarationList.declarations.some(
+            (entry) => ts.isIdentifier(entry.name) && entry.name.text === 'loader',
+          ))) &&
+      (ts.getModifiers(statement) ?? []).some(
+        (modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword,
       ) &&
-      !(ts.getModifiers(statement) ?? []).some((modifier) =>
-        modifier.kind === ts.SyntaxKind.DefaultKeyword
+      !(ts.getModifiers(statement) ?? []).some(
+        (modifier) => modifier.kind === ts.SyntaxKind.DefaultKeyword,
       )
-    ) return true;
+    )
+      return true;
   }
   return false;
 }
 
 function hasOpaqueNode(nodes: Program['template']): boolean {
-  return nodes.some((node) =>
-    node.k === 'el' &&
-    (node.tag.includes('-') || node.tag === 'slot' ||
-      FORBIDDEN_FRAME_TAGS.has(node.tag) ||
-      (node.iattrs?.length ?? 0) > 0 ||
-      node.attrs.some(([name, value]) => unsafeStreamFrameAttribute(name, value)) ||
-      hasOpaqueNode(node.children))
+  return nodes.some(
+    (node) =>
+      node.k === 'el' &&
+      (node.tag.includes('-') ||
+        node.tag === 'slot' ||
+        FORBIDDEN_FRAME_TAGS.has(node.tag) ||
+        (node.iattrs?.length ?? 0) > 0 ||
+        node.attrs.some(([name, value]) => unsafeStreamFrameAttribute(name, value)) ||
+        hasOpaqueNode(node.children)),
   );
 }
 
@@ -215,9 +226,12 @@ function anchorPathIsOpaque(program: Program, path: number[]): boolean {
     const node = nodes[index];
     if (!node || node.k !== 'el') return true;
     if (
-      node.tag.includes('-') || node.tag === 'slot' || FORBIDDEN_FRAME_TAGS.has(node.tag) ||
+      node.tag.includes('-') ||
+      node.tag === 'slot' ||
+      FORBIDDEN_FRAME_TAGS.has(node.tag) ||
       node.attrs.some(([name]) => name === 'slot')
-    ) return true;
+    )
+      return true;
     nodes = node.children;
   }
   return false;
@@ -330,8 +344,8 @@ export async function scanStreamManifest(
   workspaceRoot?: string,
 ): Promise<StreamRouteManifest | undefined> {
   const sf = ts.createSourceFile(file, source, ts.ScriptTarget.ES2022, true, ts.ScriptKind.TSX);
-  const exported = sf.statements.find((entry): entry is ts.ExportAssignment =>
-    ts.isExportAssignment(entry) && !entry.isExportEquals
+  const exported = sf.statements.find(
+    (entry): entry is ts.ExportAssignment => ts.isExportAssignment(entry) && !entry.isExportEquals,
   );
   if (!exported || !ts.isCallExpression(exported.expression)) return undefined;
   const call = exported.expression;
@@ -341,13 +355,15 @@ export async function scanStreamManifest(
     const specifier = statement.moduleSpecifier.text;
     const named = statement.importClause?.namedBindings;
     if (!named || !ts.isNamedImports(named)) return [];
-    return named.elements.filter((entry) =>
-      entry.name.text === call.expression.getText(sf) &&
-      ((entry.propertyName?.text ?? entry.name.text) === 'definePage' &&
-          specifier === '@openelement/router' ||
-        (entry.propertyName?.text ?? entry.name.text) === 'defineLitPage' &&
-          specifier === '@openelement/router/lit')
-    )
+    return named.elements
+      .filter(
+        (entry) =>
+          entry.name.text === call.expression.getText(sf) &&
+          (((entry.propertyName?.text ?? entry.name.text) === 'definePage' &&
+            specifier === '@openelement/router') ||
+            ((entry.propertyName?.text ?? entry.name.text) === 'defineLitPage' &&
+              specifier === '@openelement/router/lit')),
+      )
       .map((entry) => entry.propertyName?.text ?? entry.name.text);
   })[0];
   if (!binding) return undefined;
@@ -359,28 +375,30 @@ export async function scanStreamManifest(
   if (binding !== 'definePage') fail('only native compiled pages support stream.defer');
   if (
     !descriptor ||
-    descriptor.properties.some((entry) =>
-      !ts.isPropertyAssignment(entry) && !ts.isMethodDeclaration(entry)
+    descriptor.properties.some(
+      (entry) => !ts.isPropertyAssignment(entry) && !ts.isMethodDeclaration(entry),
     )
   ) {
     fail('descriptor must be a literal object without spreads');
   }
-  const head = property(descriptor, 'head') &&
-    objectValue(property(descriptor, 'head')?.initializer);
+  const head =
+    property(descriptor, 'head') && objectValue(property(descriptor, 'head')?.initializer);
   if (
     hasMember(descriptor, 'props') ||
-    hasMember(descriptor, 'head') && (!head ||
-        head.properties.some((entry) =>
-          !ts.isPropertyAssignment(entry) || propertyName(entry.name) === undefined
-        ))
+    (hasMember(descriptor, 'head') &&
+      (!head ||
+        head.properties.some(
+          (entry) => !ts.isPropertyAssignment(entry) || propertyName(entry.name) === undefined,
+        )))
   ) {
     fail('custom props projection and request-dependent head are not admitted');
   }
   if (
     intent.properties.length !== 2 ||
-    intent.properties.some((entry) =>
-      !ts.isPropertyAssignment(entry) ||
-      !['mode', 'stream'].includes(propertyName(entry.name) ?? '')
+    intent.properties.some(
+      (entry) =>
+        !ts.isPropertyAssignment(entry) ||
+        !['mode', 'stream'].includes(propertyName(entry.name) ?? ''),
     )
   ) {
     fail('renderIntent must contain only literal mode and stream assignments');
@@ -389,21 +407,26 @@ export async function scanStreamManifest(
     !property(intent, 'mode') ||
     !ts.isStringLiteral(property(intent, 'mode')!.initializer) ||
     (property(intent, 'mode')!.initializer as ts.StringLiteral).text !== 'dynamic'
-  ) fail("stream requires literal mode: 'dynamic'");
+  )
+    fail("stream requires literal mode: 'dynamic'");
   const stream = objectValue(property(intent, 'stream')?.initializer);
   if (!stream || stream.properties.length !== 1 || !property(stream, 'defer')) {
     fail('stream must contain only a literal defer array');
   }
   const defer = property(stream!, 'defer')!.initializer;
   if (
-    !ts.isArrayLiteralExpression(defer) || defer.elements.length === 0 ||
-    defer.elements.some((entry) =>
-      !ts.isStringLiteral(entry) || !/^[a-zA-Z_$][\w$]*$/.test(entry.text) ||
-      isDangerousKey(entry.text)
+    !ts.isArrayLiteralExpression(defer) ||
+    defer.elements.length === 0 ||
+    defer.elements.some(
+      (entry) =>
+        !ts.isStringLiteral(entry) ||
+        !/^[a-zA-Z_$][\w$]*$/.test(entry.text) ||
+        isDangerousKey(entry.text),
     )
-  ) fail('defer must be a nonempty list of literal safe property names');
-  const fields = (defer as ts.ArrayLiteralExpression).elements.map((entry) =>
-    (entry as ts.StringLiteral).text
+  )
+    fail('defer must be a nonempty list of literal safe property names');
+  const fields = (defer as ts.ArrayLiteralExpression).elements.map(
+    (entry) => (entry as ts.StringLiteral).text,
   );
   if (new Set(fields).size !== fields.length) fail('duplicate defer field');
   // One binding set serves both admission and the literal-field check, so an
@@ -430,12 +453,16 @@ export async function scanStreamManifest(
   const pageArgName = (pageArg as ts.Identifier).text;
   const imported = sf.statements.filter(ts.isImportDeclaration).find((statement) => {
     const clause = statement.importClause;
-    return clause?.name?.text === pageArgName ||
-      (clause?.namedBindings && ts.isNamedImports(clause.namedBindings) &&
-        clause.namedBindings.elements.some((entry) => entry.name.text === pageArgName));
+    return (
+      clause?.name?.text === pageArgName ||
+      (clause?.namedBindings &&
+        ts.isNamedImports(clause.namedBindings) &&
+        clause.namedBindings.elements.some((entry) => entry.name.text === pageArgName))
+    );
   }) as ts.ImportDeclaration | undefined;
   if (
-    !imported || !ts.isStringLiteral(imported.moduleSpecifier) ||
+    !imported ||
+    !ts.isStringLiteral(imported.moduleSpecifier) ||
     !imported.moduleSpecifier.text.startsWith('.')
   ) {
     fail('page class must be a local static import');
@@ -472,16 +499,19 @@ export async function scanStreamManifest(
     );
   }
   const clause = imported!.importClause!;
-  const named = clause.namedBindings && ts.isNamedImports(clause.namedBindings)
-    ? clause.namedBindings.elements.find((entry) => entry.name.text === pageArgName)
-    : undefined;
+  const named =
+    clause.namedBindings && ts.isNamedImports(clause.namedBindings)
+      ? clause.namedBindings.elements.find((entry) => entry.name.text === pageArgName)
+      : undefined;
   const pageClass = classes[0];
   const modifiers = ts.getModifiers(pageClass) ?? [];
   const isDefault = modifiers.some((modifier) => modifier.kind === ts.SyntaxKind.DefaultKeyword);
   if (
-    clause.name?.text === pageArgName ? !isDefault : !named ||
-      isDefault ||
-      (named.propertyName?.text ?? named.name.text) !== pageClass.name?.text
+    clause.name?.text === pageArgName
+      ? !isDefault
+      : !named ||
+        isDefault ||
+        (named.propertyName?.text ?? named.name.text) !== pageClass.name?.text
   ) {
     diagnostic(
       route,

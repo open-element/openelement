@@ -28,7 +28,10 @@ Deno.test('open-ui - index exports manifest (WC Package Protocol)', async () => 
   assertExists(mod.manifest, 'manifest export should exist');
   assertEquals(typeof mod.manifest, 'object');
   assertEquals(mod.manifest.packageName, '@openelement/ui');
-  assertEquals(mod.manifest.declarations.map((decl) => decl.tagName), EXPECTED_TAGS);
+  assertEquals(
+    mod.manifest.declarations.map((decl) => decl.tagName),
+    EXPECTED_TAGS,
+  );
 });
 
 Deno.test('open-ui - explicit registration is complete and idempotent', async () => {

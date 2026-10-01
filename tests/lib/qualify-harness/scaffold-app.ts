@@ -65,10 +65,7 @@ export async function scaffoldApp(options: ScaffoldAppOptions): Promise<string> 
     for (const relativePath of options.copySources.files) {
       const destination = join(appDir, relativePath);
       await Deno.mkdir(dirname(destination), { recursive: true });
-      await Deno.copyFile(
-        pathFromRoot(options.copySources.fromRoot, relativePath),
-        destination,
-      );
+      await Deno.copyFile(pathFromRoot(options.copySources.fromRoot, relativePath), destination);
     }
   }
   return appDir;

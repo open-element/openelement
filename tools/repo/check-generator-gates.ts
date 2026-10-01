@@ -28,11 +28,12 @@ import {
 
 const repoRoot = fromFileUrl(new URL('../../', import.meta.url));
 const workspaces = await readWorkspaces(repoRoot);
-const repoTasks = (
-  JSON.parse(await Deno.readTextFile(join(repoRoot, 'tools/repo/deno.json'))) as {
-    tasks?: Record<string, string>;
-  }
-).tasks ?? {};
+const repoTasks =
+  (
+    JSON.parse(await Deno.readTextFile(join(repoRoot, 'tools/repo/deno.json'))) as {
+      tasks?: Record<string, string>;
+    }
+  ).tasks ?? {};
 /**
  * The two gate layers a check task may be wired into: `gate:source` is what
  * every pull request runs, `gate:release` is the release train (the steps
@@ -62,13 +63,12 @@ const rows: string[] = [];
 for (const ws of workspaces) {
   const generators = generatorEntries([ws]);
   for (const entry of generators) {
-    const checkTask = Object.keys(ws.tasks).find((key) =>
-      ws.tasks[key].includes(entry.script) && ws.tasks[key].includes('--check')
-    ) ?? '(none)';
+    const checkTask =
+      Object.keys(ws.tasks).find(
+        (key) => ws.tasks[key].includes(entry.script) && ws.tasks[key].includes('--check'),
+      ) ?? '(none)';
     const inGate = checkTask === '(none)' ? undefined : gateOf(`${ws.workspace}#${checkTask}`);
-    rows.push(
-      `generate | ${ws.workspace} | ${entry.script} | ${checkTask} | ${inGate ?? 'NO'}`,
-    );
+    rows.push(`generate | ${ws.workspace} | ${entry.script} | ${checkTask} | ${inGate ?? 'NO'}`);
     if (checkTask === '(none)') {
       failures.push(`${ws.workspace}/${entry.script}: no --check task wired`);
     } else if (inGate === undefined) {

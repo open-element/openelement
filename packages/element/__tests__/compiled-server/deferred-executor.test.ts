@@ -9,18 +9,20 @@ import { testProgram } from '../compiled-runtime/test-program.ts';
 
 const program = testProgram({
   tag: 'oe-stream-page',
-  template: [{
-    k: 'el',
-    tag: 'main',
-    attrs: [],
-    children: [
-      { k: 'text', value: 'Before ' },
-      { k: 'part', index: 0 },
-      { k: 'el', tag: 'section', attrs: [], children: [{ k: 'part', index: 1 }] },
-      { k: 'part', index: 2 },
-      { k: 'text', value: ' After' },
-    ],
-  }],
+  template: [
+    {
+      k: 'el',
+      tag: 'main',
+      attrs: [],
+      children: [
+        { k: 'text', value: 'Before ' },
+        { k: 'part', index: 0 },
+        { k: 'el', tag: 'section', attrs: [], children: [{ k: 'part', index: 1 }] },
+        { k: 'part', index: 2 },
+        { k: 'text', value: ' After' },
+      ],
+    },
+  ],
   parts: [
     { k: 'text', index: 0, signal: 'title' },
     {
@@ -28,14 +30,14 @@ const program = testProgram({
       index: 1,
       signal: 'enabled',
       test: { signal: 'enabled', op: 'truthy', value: true },
-      on: [{
-        k: 'el',
-        tag: 'strong',
-        attrs: [['title', 'a&"']],
-        children: [
-          { k: 'text', value: 'Ready <&>' },
-        ],
-      }],
+      on: [
+        {
+          k: 'el',
+          tag: 'strong',
+          attrs: [['title', 'a&"']],
+          children: [{ k: 'text', value: 'Ready <&>' }],
+        },
+      ],
       off: [{ k: 'text', value: 'Off & waiting' }],
     },
     {
@@ -43,15 +45,15 @@ const program = testProgram({
       index: 2,
       signal: 'items',
       key: 'id',
-      item: [{
-        k: 'el',
-        tag: 'a',
-        attrs: [['href', '/next?x=1&y=2']],
-        iattrs: [
-          ['title', 'label'],
-        ],
-        children: [{ k: 'ival', field: 'label' }],
-      }],
+      item: [
+        {
+          k: 'el',
+          tag: 'a',
+          attrs: [['href', '/next?x=1&y=2']],
+          iattrs: [['title', 'label']],
+          children: [{ k: 'ival', field: 'label' }],
+        },
+      ],
     },
   ],
 });
@@ -115,10 +117,15 @@ Deno.test('deferred server mode reads only fast signals and preserves regular SS
     '<oe-stream-page data-oe-light><main>Before <!--oe:p0-->&lt;hello &amp; "world"&gt;<section><!--oe:p1--><strong title="a&amp;&quot;">Ready &lt;&amp;&gt;</strong><!--oe:/p1--></section><!--oe:p2--><a href="/next?x=1&amp;y=2" title="A&lt;&amp;&quot;&#39;">A&lt;&amp;"\'</a><!--oe:/p2--> After</main></oe-stream-page>',
   );
   assertEquals(
-    createDeferredServerExecutor(program, resolvedHost, {
-      owner: identity,
-      pendingParts: [],
-    }, { mode: 'light' }).shell,
+    createDeferredServerExecutor(
+      program,
+      resolvedHost,
+      {
+        owner: identity,
+        pendingParts: [],
+      },
+      { mode: 'light' },
+    ).shell,
     serializeCompiledProgram(program, resolvedHost, { mode: 'light' }),
   );
 });
@@ -223,12 +230,17 @@ Deno.test('deferred executor rejects unknown, duplicate, ineligible and foreign 
   );
   const mixed = testProgram({
     tag: 'oe-mixed',
-    template: [{
-      k: 'el',
-      tag: 'p',
-      attrs: [],
-      children: [{ k: 'part', index: 0 }, { k: 'part', index: 1 }],
-    }],
+    template: [
+      {
+        k: 'el',
+        tag: 'p',
+        attrs: [],
+        children: [
+          { k: 'part', index: 0 },
+          { k: 'part', index: 1 },
+        ],
+      },
+    ],
     parts: [
       { k: 'text', index: 0, signal: 'title' },
       { k: 'text', index: 1, signal: 'title' },
@@ -246,14 +258,16 @@ Deno.test('deferred executor rejects unknown, duplicate, ineligible and foreign 
   const opaque = testProgram({
     tag: 'oe-opaque',
     template: [{ k: 'part', index: 0 }],
-    parts: [{
-      k: 'when',
-      index: 0,
-      signal: 'enabled',
-      test: { signal: 'enabled', op: 'truthy', value: true },
-      on: [{ k: 'el', tag: 'oe-foreign', attrs: [], children: [] }],
-      off: [],
-    }],
+    parts: [
+      {
+        k: 'when',
+        index: 0,
+        signal: 'enabled',
+        test: { signal: 'enabled', op: 'truthy', value: true },
+        on: [{ k: 'el', tag: 'oe-foreign', attrs: [], children: [] }],
+        off: [],
+      },
+    ],
   });
   assertThrows(
     () =>
@@ -278,10 +292,15 @@ Deno.test('nested instances with the same Part index have distinct owners', () =
     owner: outerOwner,
     pendingParts: [0],
   });
-  const nested = createDeferredServerExecutor(child, resolvedHost, {
-    owner: childOwner,
-    pendingParts: [0],
-  }, { mode: 'light' });
+  const nested = createDeferredServerExecutor(
+    child,
+    resolvedHost,
+    {
+      owner: childOwner,
+      pendingParts: [0],
+    },
+    { mode: 'light' },
+  );
   assertStringIncludes(
     nested.shell,
     '<oe-child data-oe-light><!--oe:p0--><!--oe:/p0--></oe-child>',

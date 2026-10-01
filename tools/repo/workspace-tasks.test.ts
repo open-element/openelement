@@ -39,16 +39,22 @@ const rootConfig = (workspace: unknown) => JSON.stringify({ workspace }, null, 2
 const workspaceConfig = (tasks: unknown) => JSON.stringify({ tasks }, null, 2);
 
 Deno.test('readWorkspaces: reads every member with its task graph', async () => {
-  await withFixture({
-    'deno.json': rootConfig(['./alpha', './beta']),
-    'alpha/deno.json': workspaceConfig({ 'generate:x': 'deno run --allow-read x.ts' }),
-    'beta/deno.json': JSON.stringify({}),
-  }, async (root) => {
-    const workspaces = await readWorkspaces(root);
-    assertEquals(workspaces.map((ws) => ws.workspace), ['alpha', 'beta']);
-    assertEquals(workspaces[0].tasks['generate:x'], 'deno run --allow-read x.ts');
-    assertEquals(workspaces[1].tasks, {});
-  });
+  await withFixture(
+    {
+      'deno.json': rootConfig(['./alpha', './beta']),
+      'alpha/deno.json': workspaceConfig({ 'generate:x': 'deno run --allow-read x.ts' }),
+      'beta/deno.json': JSON.stringify({}),
+    },
+    async (root) => {
+      const workspaces = await readWorkspaces(root);
+      assertEquals(
+        workspaces.map((ws) => ws.workspace),
+        ['alpha', 'beta'],
+      );
+      assertEquals(workspaces[0].tasks['generate:x'], 'deno run --allow-read x.ts');
+      assertEquals(workspaces[1].tasks, {});
+    },
+  );
 });
 
 Deno.test('readWorkspaces: malformed root configuration fails closed', async () => {
@@ -73,33 +79,54 @@ Deno.test('readWorkspaces: malformed root configuration fails closed', async () 
 
 Deno.test('readWorkspaces: broken workspaces fail closed with their path', async () => {
   const cases: Array<[string, Record<string, string>]> = [
-    ['missing directory', {
-      'deno.json': rootConfig(['./alpha']),
-    }],
-    ['missing deno.json', {
-      'deno.json': rootConfig(['./alpha']),
-      'alpha/.keep': '',
-    }],
-    ['invalid JSON', {
-      'deno.json': rootConfig(['./alpha']),
-      'alpha/deno.json': '{ not json',
-    }],
-    ['config not an object', {
-      'deno.json': rootConfig(['./alpha']),
-      'alpha/deno.json': '[]',
-    }],
-    ['tasks not an object', {
-      'deno.json': rootConfig(['./alpha']),
-      'alpha/deno.json': JSON.stringify({ tasks: [] }),
-    }],
-    ['empty task name', {
-      'deno.json': rootConfig(['./alpha']),
-      'alpha/deno.json': JSON.stringify({ tasks: { '': 'deno run x.ts' } }),
-    }],
-    ['command not a string', {
-      'deno.json': rootConfig(['./alpha']),
-      'alpha/deno.json': JSON.stringify({ tasks: { 'generate:x': 1 } }),
-    }],
+    [
+      'missing directory',
+      {
+        'deno.json': rootConfig(['./alpha']),
+      },
+    ],
+    [
+      'missing deno.json',
+      {
+        'deno.json': rootConfig(['./alpha']),
+        'alpha/.keep': '',
+      },
+    ],
+    [
+      'invalid JSON',
+      {
+        'deno.json': rootConfig(['./alpha']),
+        'alpha/deno.json': '{ not json',
+      },
+    ],
+    [
+      'config not an object',
+      {
+        'deno.json': rootConfig(['./alpha']),
+        'alpha/deno.json': '[]',
+      },
+    ],
+    [
+      'tasks not an object',
+      {
+        'deno.json': rootConfig(['./alpha']),
+        'alpha/deno.json': JSON.stringify({ tasks: [] }),
+      },
+    ],
+    [
+      'empty task name',
+      {
+        'deno.json': rootConfig(['./alpha']),
+        'alpha/deno.json': JSON.stringify({ tasks: { '': 'deno run x.ts' } }),
+      },
+    ],
+    [
+      'command not a string',
+      {
+        'deno.json': rootConfig(['./alpha']),
+        'alpha/deno.json': JSON.stringify({ tasks: { 'generate:x': 1 } }),
+      },
+    ],
   ];
   for (const [label, files] of cases) {
     await withFixture(files, async (root) => {
@@ -117,63 +144,78 @@ Deno.test('readWorkspaces: duplicate detection uses canonical workspace identity
     ['./alpha', 'foo/../alpha'],
   ];
   for (const members of duplicateCases) {
-    await withFixture({
-      'deno.json': rootConfig(members),
-      'alpha/deno.json': workspaceConfig({}),
-    }, async (root) => {
-      await assertRejects(
-        () => readWorkspaces(root),
-        Error,
-        'duplicate workspace identity',
-        JSON.stringify(members),
-      );
-    });
+    await withFixture(
+      {
+        'deno.json': rootConfig(members),
+        'alpha/deno.json': workspaceConfig({}),
+      },
+      async (root) => {
+        await assertRejects(
+          () => readWorkspaces(root),
+          Error,
+          'duplicate workspace identity',
+          JSON.stringify(members),
+        );
+      },
+    );
   }
   // Distinct identities still read normally, and the returned label is the
   // canonical repository-relative form.
-  await withFixture({
-    'deno.json': rootConfig(['./alpha', 'beta']),
-    'alpha/deno.json': workspaceConfig({}),
-    'beta/deno.json': workspaceConfig({}),
-  }, async (root) => {
-    const workspaces = await readWorkspaces(root);
-    assertEquals(workspaces.map((ws) => ws.workspace), ['alpha', 'beta']);
-  });
+  await withFixture(
+    {
+      'deno.json': rootConfig(['./alpha', 'beta']),
+      'alpha/deno.json': workspaceConfig({}),
+      'beta/deno.json': workspaceConfig({}),
+    },
+    async (root) => {
+      const workspaces = await readWorkspaces(root);
+      assertEquals(
+        workspaces.map((ws) => ws.workspace),
+        ['alpha', 'beta'],
+      );
+    },
+  );
 });
 
 Deno.test('readWorkspaces: failure never degrades into a partial list', async () => {
-  await withFixture({
-    'deno.json': rootConfig(['./good', './broken']),
-    'good/deno.json': workspaceConfig({ 'generate:x': 'deno run --allow-read x.ts' }),
-    'broken/deno.json': '{ nope',
-  }, async (root) => {
-    await assertRejects(
-      () => readWorkspaces(root),
-      Error,
-      'broken',
-      'a broken member must reject the whole read, not return [good]',
-    );
-  });
+  await withFixture(
+    {
+      'deno.json': rootConfig(['./good', './broken']),
+      'good/deno.json': workspaceConfig({ 'generate:x': 'deno run --allow-read x.ts' }),
+      'broken/deno.json': '{ nope',
+    },
+    async (root) => {
+      await assertRejects(
+        () => readWorkspaces(root),
+        Error,
+        'broken',
+        'a broken member must reject the whole read, not return [good]',
+      );
+    },
+  );
 });
 
 Deno.test('generator and emitter discovery derive from the task graph', async () => {
-  await withFixture({
-    'deno.json': rootConfig(['./pkg']),
-    'pkg/deno.json': workspaceConfig({
-      'generate:foo': 'deno run --allow-read --allow-write tools/generate-foo.ts',
-      'check:foo': 'deno run --allow-read tools/generate-foo.ts --check',
-      'emit:bar': 'deno run --allow-read tools/emit-bar.ts',
-      'build': 'deno run --allow-read build.ts',
-    }),
-  }, async (root) => {
-    const workspaces = await readWorkspaces(root);
-    assertEquals(generatorEntries(workspaces), [
-      { workspace: 'pkg', taskKey: 'generate:foo', script: 'tools/generate-foo.ts' },
-    ]);
-    assertEquals(emitterEntries(workspaces), [
-      { workspace: 'pkg', taskKey: 'emit:bar', script: 'tools/emit-bar.ts' },
-    ]);
-  });
+  await withFixture(
+    {
+      'deno.json': rootConfig(['./pkg']),
+      'pkg/deno.json': workspaceConfig({
+        'generate:foo': 'deno run --allow-read --allow-write tools/generate-foo.ts',
+        'check:foo': 'deno run --allow-read tools/generate-foo.ts --check',
+        'emit:bar': 'deno run --allow-read tools/emit-bar.ts',
+        build: 'deno run --allow-read build.ts',
+      }),
+    },
+    async (root) => {
+      const workspaces = await readWorkspaces(root);
+      assertEquals(generatorEntries(workspaces), [
+        { workspace: 'pkg', taskKey: 'generate:foo', script: 'tools/generate-foo.ts' },
+      ]);
+      assertEquals(emitterEntries(workspaces), [
+        { workspace: 'pkg', taskKey: 'emit:bar', script: 'tools/emit-bar.ts' },
+      ]);
+    },
+  );
 });
 
 Deno.test('generate-all and generator-gates share the canonical discovery', async () => {
@@ -186,22 +228,28 @@ Deno.test('generate-all and generator-gates share the canonical discovery', asyn
 });
 
 Deno.test('readWorkspaces: symlinked members resolving to one directory are duplicates', async () => {
-  await withFixture({
-    'deno.json': rootConfig(['alpha', 'alias']),
-    'alpha/deno.json': workspaceConfig({}),
-  }, async (root) => {
-    await Deno.symlink(join(root, 'alpha'), join(root, 'alias'), { type: 'dir' });
-    await assertRejects(() => readWorkspaces(root), Error, 'duplicate workspace identity');
-  });
+  await withFixture(
+    {
+      'deno.json': rootConfig(['alpha', 'alias']),
+      'alpha/deno.json': workspaceConfig({}),
+    },
+    async (root) => {
+      await Deno.symlink(join(root, 'alpha'), join(root, 'alias'), { type: 'dir' });
+      await assertRejects(() => readWorkspaces(root), Error, 'duplicate workspace identity');
+    },
+  );
 });
 
 Deno.test('readWorkspaces: diagnostics use repository-relative paths', async () => {
-  await withFixture({
-    'deno.json': rootConfig(['alpha']),
-  }, async (root) => {
-    const error = await assertRejects(() => readWorkspaces(root), Error);
-    const message = (error as Error).message;
-    assertEquals(message.includes(root), false, `message leaks the checkout path: ${message}`);
-    assert(message.includes('alpha'), `message lacks the member path: ${message}`);
-  });
+  await withFixture(
+    {
+      'deno.json': rootConfig(['alpha']),
+    },
+    async (root) => {
+      const error = await assertRejects(() => readWorkspaces(root), Error);
+      const message = (error as Error).message;
+      assertEquals(message.includes(root), false, `message leaks the checkout path: ${message}`);
+      assert(message.includes('alpha'), `message lacks the member path: ${message}`);
+    },
+  );
 });

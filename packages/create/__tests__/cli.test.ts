@@ -70,14 +70,16 @@ Deno.test('starter exposes only product imports and the standard lifecycle', () 
     denoJson.imports['@openelement/element/jsx-dev-runtime'],
     'npm:@openelement/element@${v.element}/jsx-dev-runtime',
   );
-  assertEquals(
-    Object.keys(denoJson.tasks).sort(),
-    ['build', 'check', 'dev', 'preview', 'start', 'test'],
-  );
+  assertEquals(Object.keys(denoJson.tasks).sort(), [
+    'build',
+    'check',
+    'dev',
+    'preview',
+    'start',
+    'test',
+  ]);
   assert(
-    String(denoJson.imports['@openelement/router/nitro-mount'] || '').includes(
-      'nitro-mount',
-    ),
+    String(denoJson.imports['@openelement/router/nitro-mount'] || '').includes('nitro-mount'),
     'starter import map must include router/nitro-mount (#601)',
   );
   assert(
@@ -129,8 +131,10 @@ Deno.test('Alpha README never emits an untagged create install command', () => {
 });
 
 Deno.test('Create and all support-distribution packages share one release version', () => {
-  const versions = ['router', 'create', 'element'].map((name) =>
-    JSON.parse(Deno.readTextFileSync(join(packageDir, '..', name, 'deno.json'))).version as string
+  const versions = ['router', 'create', 'element'].map(
+    (name) =>
+      JSON.parse(Deno.readTextFileSync(join(packageDir, '..', name, 'deno.json')))
+        .version as string,
   );
   assertEquals([...new Set(versions)], [resolveVersions().router]);
 });
@@ -210,10 +214,7 @@ Deno.test('generated starter pins every OpenElement import to the exact release'
 
 Deno.test('starter pins vite exactly and type-checks app-shell', async () => {
   const raw = JSON.parse(readTemplate('deno.json.tmpl'));
-  assertFalse(
-    '@deno/vite-plugin' in raw.imports,
-    'starter must not depend on @deno/vite-plugin',
-  );
+  assertFalse('@deno/vite-plugin' in raw.imports, 'starter must not depend on @deno/vite-plugin');
   // The raw template injects the pin through the ${v.vite} token (deps:vite-check
   // owns the raw-template token rule and the VITE_STARTER_PIN anchor); the
   // generated starter is what must carry the exact pin.
@@ -246,19 +247,17 @@ Deno.test('starter pins vite exactly and type-checks app-shell', async () => {
 });
 
 Deno.test('starter templates use the compiled element authoring surface (v0.44)', () => {
-  for (
-    const path of [
-      'app/components/page-home.tsx',
-      'app/components/page-freshness.tsx',
-      'app/components/page-404.tsx',
-      'app/components/page-contact.tsx',
-      'app/components/page-blog-index.tsx',
-      'app/components/page-blog-welcome.tsx',
-      'app/islands/app-shell.tsx',
-      'app/islands/my-counter.tsx',
-      'app/islands/only-ticker.tsx',
-    ]
-  ) {
+  for (const path of [
+    'app/components/page-home.tsx',
+    'app/components/page-freshness.tsx',
+    'app/components/page-404.tsx',
+    'app/components/page-contact.tsx',
+    'app/components/page-blog-index.tsx',
+    'app/components/page-blog-welcome.tsx',
+    'app/islands/app-shell.tsx',
+    'app/islands/my-counter.tsx',
+    'app/islands/only-ticker.tsx',
+  ]) {
     const source = readTemplate(path);
     // Compiled modules: @element decorator on an OpenElement subclass, bound
     // by a canonical named import of the compile-time-only intrinsic from
@@ -320,16 +319,14 @@ Deno.test('starter pages own their styles via static styles, not the global base
   // The tokens file keeps only true globals (design tokens + body/::selection
   // baseline); per-page rules live in each page's `static styles` (inlined into
   // SSR as @scope(<page-tag>) for light roots).
-  for (
-    const tag of [
-      'index-page',
-      'blog-index',
-      'blog-welcome',
-      'freshness-page',
-      'el-404',
-      'contact-page',
-    ]
-  ) {
+  for (const tag of [
+    'index-page',
+    'blog-index',
+    'blog-welcome',
+    'freshness-page',
+    'el-404',
+    'contact-page',
+  ]) {
     assertFalse(tokens.includes(`${tag}{`), `the tokens file must not scope rules under ${tag}`);
     assertFalse(tokens.includes(`${tag} `), `the tokens file must not scope rules under ${tag}`);
   }
@@ -337,17 +334,15 @@ Deno.test('starter pages own their styles via static styles, not the global base
   assert(tokens.includes('::selection {'), tokens);
 
   const styles = readTemplate('app/components/page-styles.ts');
-  for (
-    const exportName of [
-      'postListStyles',
-      'homePageStyles',
-      'blogIndexStyles',
-      'blogWelcomeStyles',
-      'freshnessPageStyles',
-      'notFoundPageStyles',
-      'contactPageStyles',
-    ]
-  ) {
+  for (const exportName of [
+    'postListStyles',
+    'homePageStyles',
+    'blogIndexStyles',
+    'blogWelcomeStyles',
+    'freshnessPageStyles',
+    'notFoundPageStyles',
+    'contactPageStyles',
+  ]) {
     assert(
       styles.includes(`export const ${exportName}`),
       `page-styles.ts must export ${exportName}`,
@@ -414,15 +409,13 @@ Deno.test('starter owns a concrete --brand token without a UI package dependency
 });
 
 Deno.test('TypeScript starter sources are pack-safe template payloads', () => {
-  for (
-    const path of [
-      'vite.config.ts',
-      'app/head.tsx',
-      'app/islands/app-shell.tsx',
-      'app/components/page-home.tsx',
-      'app/routes/api/health.ts',
-    ]
-  ) {
+  for (const path of [
+    'vite.config.ts',
+    'app/head.tsx',
+    'app/islands/app-shell.tsx',
+    'app/components/page-home.tsx',
+    'app/routes/api/health.ts',
+  ]) {
     const logicalPath = join(packageDir, 'templates', path);
     assertFalse(existsSync(logicalPath), `raw TypeScript source must not be packed: ${path}`);
     assert(existsSync(`${logicalPath}.tmpl`), `missing template payload: ${path}.tmpl`);
@@ -450,9 +443,9 @@ Deno.test('starter openelement.config.ts keeps framework options in one home', (
   for (const key of written) {
     assert(
       OPEN_ELEMENT_CONFIG_KEYS.includes(key),
-      `starter config writes unknown key "${key}"; accepted: ${
-        OPEN_ELEMENT_CONFIG_KEYS.join(', ')
-      }`,
+      `starter config writes unknown key "${key}"; accepted: ${OPEN_ELEMENT_CONFIG_KEYS.join(
+        ', ',
+      )}`,
     );
   }
   // The raw-head channel has no home in the config file, and the retired inline
@@ -549,10 +542,7 @@ Deno.test({
         join(tmpRoot, 'readonly'),
         'sample-app',
       );
-      assert(
-        stderr.includes('Permission denied') || stderr.includes('Failed to'),
-        stderr,
-      );
+      assert(stderr.includes('Permission denied') || stderr.includes('Failed to'), stderr);
       assert(stderr.includes('sample-app'), stderr);
       assertCleanError(stderr);
     } finally {

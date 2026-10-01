@@ -346,10 +346,7 @@ export interface RouteInfoEntry {
 export interface SsrBundle {
   default: unknown;
   routeInfo?: RouteInfoEntry[];
-  renderRoute?: (
-    path: string,
-    opts?: Record<string, unknown>,
-  ) => Promise<SsgPageOutput>;
+  renderRoute?: (path: string, opts?: Record<string, unknown>) => Promise<SsgPageOutput>;
   getStaticPaths?: (path: string) => Promise<Array<Record<string, string>>>;
   [key: string]: unknown;
 }

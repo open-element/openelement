@@ -469,14 +469,14 @@ export default defineConfig({
 const LIT_LEG: PackedAppLegSpec = {
   renderer: 'lit',
   externals: {
-    'lit': '3.3.3',
+    lit: '3.3.3',
     '@lit-labs/ssr': '4.1.0',
     '@lit-labs/ssr-client': '1.1.8',
   },
   importMapExtras: {
     '@openelement/router/lit': `npm:@openelement/router@${PACKAGE_VERSION}/lit`,
     '@openelement/router/lit-ssr': `npm:@openelement/router@${PACKAGE_VERSION}/lit-ssr`,
-    'lit': 'npm:lit@3.3.3',
+    lit: 'npm:lit@3.3.3',
     '@lit-labs/ssr': 'npm:@lit-labs/ssr@4.1.0',
     '@lit-labs/ssr-client': 'npm:@lit-labs/ssr-client@1.1.8',
   },

@@ -132,8 +132,8 @@ Deno.test('SSR Admission: duplicate tag -> rejectedTags', () => {
   assertEquals(plan.renderableTags.includes('local-ssr-false'), false);
   assertEquals(plan.clientOnlyTags.includes('local-ssr-false'), false);
 
-  const decision = plan.decisions.find((d) =>
-    d.tagName === 'local-ssr-false' && d.renderPath === 'rejected'
+  const decision = plan.decisions.find(
+    (d) => d.tagName === 'local-ssr-false' && d.renderPath === 'rejected',
   );
   assertExists(decision);
   assertEquals(decision.reason, 'duplicate custom element tag');
@@ -160,12 +160,7 @@ Deno.test('SSR Admission: parent with client-child -> parent renderable, child c
 });
 
 Deno.test('SSR Admission: mixed islands -> correct categorization', () => {
-  const islands: IslandDecl[] = [
-    localSsrTrue,
-    localSsrFalse,
-    packageSsrTrue,
-    packageSsrFalse,
-  ];
+  const islands: IslandDecl[] = [localSsrTrue, localSsrFalse, packageSsrTrue, packageSsrFalse];
   const plan = buildSsrAdmissionPlan(islands);
 
   assertEquals(plan.renderableTags.length, 2);

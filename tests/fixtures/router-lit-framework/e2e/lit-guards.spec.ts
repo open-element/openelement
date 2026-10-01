@@ -74,13 +74,16 @@ async function markerIntact(page: Page, name: string): Promise<void> {
 }
 
 test.describe('control: the enhance layer is live on /guards', () => {
-  test('a same-origin enhanced POST is intercepted and morphs in place', async ({ page, request }) => {
+  test('a same-origin enhanced POST is intercepted and morphs in place', async ({
+    page,
+    request,
+  }) => {
     const countBefore = await actionCount(request);
     await page.goto('/guards');
     await markWindow(page, '__prePlain');
 
-    const enhancedPost = page.waitForResponse((r) =>
-      r.request().method() === 'POST' && r.url().includes('/guards')
+    const enhancedPost = page.waitForResponse(
+      (r) => r.request().method() === 'POST' && r.url().includes('/guards'),
     );
     await page.click('#plain-submit');
     const response = await enhancedPost;
@@ -192,7 +195,11 @@ test.describe('plain links keep browser behavior', () => {
 });
 
 test.describe('effective submission tuple (#1339 §5)', () => {
-  test('urlencoded default: enhanced and native are byte-identical on the wire', async ({ page, request, browser }) => {
+  test('urlencoded default: enhanced and native are byte-identical on the wire', async ({
+    page,
+    request,
+    browser,
+  }) => {
     await wireReset(request);
     const countBefore = await actionCount(request);
 
@@ -229,7 +236,11 @@ test.describe('effective submission tuple (#1339 §5)', () => {
     expect(await actionCount(request)).toBe(countBefore + 2);
   });
 
-  test('urlencoded newline parity: a textarea serializes %0D%0A byte-identically on both paths', async ({ page, request, browser }) => {
+  test('urlencoded newline parity: a textarea serializes %0D%0A byte-identically on both paths', async ({
+    page,
+    request,
+    browser,
+  }) => {
     const typed = 'alpha\nbeta\rgamma\r\ndelta';
     const expectedBody = 'note=alpha%0D%0Abeta%0D%0Agamma%0D%0Adelta&intent=nl';
 

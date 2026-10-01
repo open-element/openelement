@@ -30,11 +30,8 @@ test('island state survives back/forward (bfcache, #943)', async ({ page }) => {
   await expect
     .poll(() =>
       page.evaluate(() =>
-        Boolean(
-          (globalThis as unknown as { __bfcacheRestored?: boolean })
-            .__bfcacheRestored,
-        )
-      )
+        Boolean((globalThis as unknown as { __bfcacheRestored?: boolean }).__bfcacheRestored),
+      ),
     )
     .toBe(true);
   await expect(page.locator('my-counter #count')).toHaveText('1');

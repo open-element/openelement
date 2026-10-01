@@ -42,29 +42,33 @@ Deno.test('jfb spec reproduces stock store semantics (model check)', () => {
 });
 
 Deno.test('jfb spec matches stock warmup counts and benchmark set', () => {
-  assertEquals(CPU_BENCHMARKS.map((spec) => spec.id), [
-    '01_run1k',
-    '02_replace1k',
-    '03_update10th',
-    '04_select1k',
-    '05_swap1k',
-    '06_remove1k',
-    '07_create10k',
-    '08_append1k',
-    '09_clear1k',
-  ]);
+  assertEquals(
+    CPU_BENCHMARKS.map((spec) => spec.id),
+    [
+      '01_run1k',
+      '02_replace1k',
+      '03_update10th',
+      '04_select1k',
+      '05_swap1k',
+      '06_remove1k',
+      '07_create10k',
+      '08_append1k',
+      '09_clear1k',
+    ],
+  );
   // Stock warmupCount values from webdriver-ts benchmarksCommon.ts.
-  assertEquals(CPU_BENCHMARKS.map((spec) => spec.warmupCount), [5, 5, 3, 1, 5, 5, 5, 5, 5]);
+  assertEquals(
+    CPU_BENCHMARKS.map((spec) => spec.warmupCount),
+    [5, 5, 3, 1, 5, 5, 5, 5, 5],
+  );
   // Stock select benchmark records additionalNumberOfRuns: 10.
   assertEquals(CPU_BENCHMARKS.find((spec) => spec.id === '04_select1k')?.subRuns, 10);
   assert(CPU_ITERATIONS >= 5, 'iteration count must be meaningful');
   // Memory probes: three stock (21/22/25) plus the labeled OE extension.
-  assertEquals(MEM_BENCHMARKS.map((spec) => spec.id), [
-    '21_ready-memory',
-    '22_run1k-memory',
-    '25_run-clear-memory',
-    '26_run10k-memory',
-  ]);
+  assertEquals(
+    MEM_BENCHMARKS.map((spec) => spec.id),
+    ['21_ready-memory', '22_run1k-memory', '25_run-clear-memory', '26_run10k-memory'],
+  );
   assertEquals(MEM_BENCHMARKS.filter((spec) => spec.stock).length, 3);
 });
 
@@ -103,7 +107,7 @@ Deno.test('oe implementation granularity: one component, one keyed region, plain
   assertEquals(each.key, 'id', 'rows are keyed by the stock row id');
 
   const walk = (nodes: ProgramTreeNode[]): ProgramElementNode[] =>
-    nodes.flatMap((node) => node.k === 'el' ? [node, ...walk(node.children)] : []);
+    nodes.flatMap((node) => (node.k === 'el' ? [node, ...walk(node.children)] : []));
   const itemElements = walk(each.item);
   assertEquals(each.item[0].k, 'el');
   assertEquals(
@@ -189,21 +193,25 @@ function validEvidence() {
       },
       iterations: { cpu: 10, cpuStock: 15, mem: 5 },
     },
-    results: [{
-      id: 'oe',
-      stock: false,
-      pageErrors: [],
-      cpu: [{
-        id: '01_run1k',
-        samplesMs: [1.2, 1.1],
-        medianMs: 1.1,
-        meanMs: 1.15,
-        minMs: 1.1,
-        maxMs: 1.2,
-      }],
-      cpuGeomeanMs: 1.1,
-      memory: [],
-    }],
+    results: [
+      {
+        id: 'oe',
+        stock: false,
+        pageErrors: [],
+        cpu: [
+          {
+            id: '01_run1k',
+            samplesMs: [1.2, 1.1],
+            medianMs: 1.1,
+            meanMs: 1.15,
+            minMs: 1.1,
+            maxMs: 1.2,
+          },
+        ],
+        cpuGeomeanMs: 1.1,
+        memory: [],
+      },
+    ],
   };
 }
 

@@ -24,9 +24,9 @@ export interface CreateRequestContextOptions<
 }
 
 /** Build the canonical OpenElement request context from a platform request event. */
-export function createRequestContext<
-  Env extends Record<string, unknown> = Record<string, unknown>,
->(options: CreateRequestContextOptions<Env>): OpenElementRequestContext<Env> {
+export function createRequestContext<Env extends Record<string, unknown> = Record<string, unknown>>(
+  options: CreateRequestContextOptions<Env>,
+): OpenElementRequestContext<Env> {
   const url = new URL(options.request.url);
   return {
     request: options.request,

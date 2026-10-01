@@ -90,14 +90,16 @@ export function buildPlugin(
       }
 
       // Serialize SSR noExternal patterns (RegExp -> marker objects)
-      const ssrNoExternal = ((options.ssr?.noExternal ||
-        (config.ssr as { noExternal?: (string | RegExp)[] } | undefined)?.noExternal) || [])
-        .map((item) => {
-          if (item instanceof RegExp) {
-            return { __type: 'RegExp', source: item.source, flags: item.flags };
-          }
-          return item;
-        });
+      const ssrNoExternal = (
+        options.ssr?.noExternal ||
+        (config.ssr as { noExternal?: (string | RegExp)[] } | undefined)?.noExternal ||
+        []
+      ).map((item) => {
+        if (item instanceof RegExp) {
+          return { __type: 'RegExp', source: item.source, flags: item.flags };
+        }
+        return item;
+      });
 
       // --- Write to OpenElementBuildContext ----------
       ctx.populatePhase3(
@@ -106,8 +108,8 @@ export function buildPlugin(
         ssrNoExternal as (string | { __type: 'RegExp'; source: string; flags: string })[],
       );
 
-      const totalIslands = (ctx.phase1.islandTagNames?.length || 0) +
-        (ctx.phase1.packageIslandDecls?.length || 0);
+      const totalIslands =
+        (ctx.phase1.islandTagNames?.length || 0) + (ctx.phase1.packageIslandDecls?.length || 0);
 
       log.info('Phase 1 complete - SSR bundle and metadata written to build context');
 
@@ -123,8 +125,8 @@ export function buildPlugin(
       // tag at document time (#1471, S4b).
       const ssgIslandTagNames = [...(ctx.phase1.islandTagNames ?? [])];
       const ssgIslandFiles = [...(ctx.phase1.islandFiles ?? [])];
-      const hasEnhancedForms = (ctx.phase1.cachedRoutes ?? []).some((route) =>
-        route.type === 'page' && route.hasEnhancedForms === true
+      const hasEnhancedForms = (ctx.phase1.cachedRoutes ?? []).some(
+        (route) => route.type === 'page' && route.hasEnhancedForms === true,
       );
       if (totalIslands > 0 || hasEnhancedForms) {
         await runClientIslandBuild(ctx);
@@ -133,17 +135,20 @@ export function buildPlugin(
       log.info('[3/3] Static site generation...');
       try {
         const { buildSSG } = await import('../cli/build-ssg.ts');
-        await buildSSG({
-          routes: ctx.phase1.cachedRoutes,
-          islandTagNames: ssgIslandTagNames,
-          islandFiles: ssgIslandFiles,
-          islandMeta: ctx.phase1.islandMeta,
-          staticComponents: ctx.phase1.staticComponents,
-          packageManifests: ctx.phase1.packageManifests,
-          cemClassifications: ctx.phase1.cemClassifications,
-          foreignTags: ctx.phase1.foreignTags,
-          dynamicRouteFailure: options.ssg?.dynamicRouteFailure,
-        }, ctx);
+        await buildSSG(
+          {
+            routes: ctx.phase1.cachedRoutes,
+            islandTagNames: ssgIslandTagNames,
+            islandFiles: ssgIslandFiles,
+            islandMeta: ctx.phase1.islandMeta,
+            staticComponents: ctx.phase1.staticComponents,
+            packageManifests: ctx.phase1.packageManifests,
+            cemClassifications: ctx.phase1.cemClassifications,
+            foreignTags: ctx.phase1.foreignTags,
+            dynamicRouteFailure: options.ssg?.dynamicRouteFailure,
+          },
+          ctx,
+        );
         ctx.markComplete(3);
         log.info('[3/3] Static site generation - complete');
       } catch (error) {

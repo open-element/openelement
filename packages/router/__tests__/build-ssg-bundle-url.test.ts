@@ -19,7 +19,7 @@ Deno.test('build-ssg: SSR bundle import URL survives spaces, #, ? and non-ASCII 
   try {
     const entryPath = join(dir, 'entry.js');
     await Deno.writeTextFile(entryPath, 'export default 42;');
-    const module = await import(ssrBundleImportUrl(entryPath)) as { default: unknown };
+    const module = (await import(ssrBundleImportUrl(entryPath))) as { default: unknown };
     assertEquals(module.default, 42);
   } finally {
     await Deno.remove(base, { recursive: true });

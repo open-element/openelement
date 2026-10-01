@@ -187,10 +187,11 @@ async function collectRoutes(): Promise<ArticleRoute[]> {
     });
     routes.push(...routeSetFor(collection, entries));
   }
-  return routes.sort((a, b) =>
-    collectionNames.indexOf(a.collection) - collectionNames.indexOf(b.collection) ||
-    a.order - b.order ||
-    (a.slug < b.slug ? -1 : 1)
+  return routes.sort(
+    (a, b) =>
+      collectionNames.indexOf(a.collection) - collectionNames.indexOf(b.collection) ||
+      a.order - b.order ||
+      (a.slug < b.slug ? -1 : 1),
   );
 }
 
@@ -354,19 +355,17 @@ async function main(): Promise<void> {
       dirExists = false;
     }
     if (!dirExists) continue;
-    for await (
-      const entry of walk(join(siteRoot, dir), {
-        includeDirs: false,
-        maxDepth,
-        followSymlinks: false,
-      })
-    ) {
+    for await (const entry of walk(join(siteRoot, dir), {
+      includeDirs: false,
+      maxDepth,
+      followSymlinks: false,
+    })) {
       // Editor/OS droppings (.DS_Store) are not route sources; everything else
       // is held to the ownership rule below.
       if (entry.name.startsWith('.')) continue;
       const rel = relative(siteRoot, entry.path);
       if (expected.has(rel)) continue;
-      const source = entry.isSymlink ? '' : await readIfPresent(entry.path) ?? '';
+      const source = entry.isSymlink ? '' : ((await readIfPresent(entry.path)) ?? '');
       if (!entry.isSymlink && source.startsWith(generatedHeader)) stale.push(rel);
       else unexpected.push(rel);
     }

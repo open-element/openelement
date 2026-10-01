@@ -31,10 +31,7 @@ import { readPackages } from '../lib/package-graph.ts';
 /** Non-package source roots covered by the pure-ESM boundary. Package src
  * trees are discovered from the workspace (readPackages) so a new package is
  * scanned automatically instead of escaping the gate. */
-const EXTRA_SOURCE_ROOTS = [
-  'packages/create/templates',
-  'tools',
-];
+const EXTRA_SOURCE_ROOTS = ['packages/create/templates', 'tools'];
 
 const CJS_PATTERNS: { pattern: RegExp; message: string }[] = [
   { pattern: /\brequire\s*\(\s*['"]/, message: 'CommonJS require()' },
@@ -99,7 +96,11 @@ async function trackedFiles(): Promise<string[]> {
   });
   const { code, stdout } = await command.output();
   if (code !== 0) throw new Error('git ls-files failed');
-  return new TextDecoder().decode(stdout).split('\n').map((line) => line.trim()).filter(Boolean);
+  return new TextDecoder()
+    .decode(stdout)
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean);
 }
 
 function inSourceRoot(path: string, roots: readonly string[]): boolean {
@@ -128,7 +129,10 @@ if (import.meta.main) {
   for (const path of files) {
     if (!inSourceRoot(path, sourceRoots)) continue;
     if (
-      path.endsWith('.ts') || path.endsWith('.tsx') || path.endsWith('.js') || path.endsWith('.mjs')
+      path.endsWith('.ts') ||
+      path.endsWith('.tsx') ||
+      path.endsWith('.js') ||
+      path.endsWith('.mjs')
     ) {
       try {
         syntaxFiles.push({ path, text: await Deno.readTextFile(path) });

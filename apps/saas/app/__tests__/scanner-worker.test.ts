@@ -22,11 +22,13 @@ function successfulFetch(code: number) {
     const url = String(input);
     calls.push({ url, init });
     if (url.endsWith('/rpc/authorize_attachment_scan')) {
-      return Promise.resolve(Response.json({
-        object_key: objectKey,
-        byte_size: 4,
-        content_type: 'application/pdf',
-      }));
+      return Promise.resolve(
+        Response.json({
+          object_key: objectKey,
+          byte_size: 4,
+          content_type: 'application/pdf',
+        }),
+      );
     }
     if (url.includes('/storage/v1/object/authenticated/')) {
       return Promise.resolve(
@@ -35,10 +37,12 @@ function successfulFetch(code: number) {
         }),
       );
     }
-    return Promise.resolve(Response.json({
-      process_info: { progress_percentage: 100, result: code === 0 ? 'Allowed' : 'Blocked' },
-      scan_results: { progress_percentage: 100, scan_all_result_i: code },
-    }));
+    return Promise.resolve(
+      Response.json({
+        process_info: { progress_percentage: 100, result: code === 0 ? 'Allowed' : 'Blocked' },
+        scan_results: { progress_percentage: 100, scan_all_result_i: code },
+      }),
+    );
   };
   return { fetchImpl, calls };
 }
@@ -48,11 +52,14 @@ Deno.test('private scanner validates the reservation before downloading and scan
   const response = await createScannerWorker(fetchImpl).fetch(request(), env);
   assertEquals(response.status, 200);
   assertEquals(await response.json(), { verdict: 'clean' });
-  assertEquals(calls.map(({ url }) => new URL(url).pathname), [
-    '/rest/v1/rpc/authorize_attachment_scan',
-    '/storage/v1/object/authenticated/notes-attachments/owner/private-object.pdf',
-    '/file/sync',
-  ]);
+  assertEquals(
+    calls.map(({ url }) => new URL(url).pathname),
+    [
+      '/rest/v1/rpc/authorize_attachment_scan',
+      '/storage/v1/object/authenticated/notes-attachments/owner/private-object.pdf',
+      '/file/sync',
+    ],
+  );
   assertEquals(JSON.parse(String(calls[0].init?.body)), {
     target_reservation_id: reservationId,
     target_object_key: objectKey,
@@ -108,11 +115,13 @@ Deno.test('private scanner rejects cross-object substitution before Storage acce
   let calls = 0;
   const response = await createScannerWorker((_input, _init) => {
     calls++;
-    return Promise.resolve(Response.json({
-      object_key: 'owner/different.pdf',
-      byte_size: 4,
-      content_type: 'application/pdf',
-    }));
+    return Promise.resolve(
+      Response.json({
+        object_key: 'owner/different.pdf',
+        byte_size: 4,
+        content_type: 'application/pdf',
+      }),
+    );
   }).fetch(request(), env);
   assertEquals(response.status, 503);
   assertEquals(calls, 1);
@@ -125,11 +134,13 @@ Deno.test('private scanner rejects oversized or mismatched object bytes', async 
       calls++;
       const url = String(input);
       if (url.endsWith('/rpc/authorize_attachment_scan')) {
-        return Promise.resolve(Response.json({
-          object_key: objectKey,
-          byte_size: declared,
-          content_type: 'application/pdf',
-        }));
+        return Promise.resolve(
+          Response.json({
+            object_key: objectKey,
+            byte_size: declared,
+            content_type: 'application/pdf',
+          }),
+        );
       }
       return Promise.resolve(
         new Response(new Uint8Array([1, 2, 3, 4]), {
@@ -143,20 +154,18 @@ Deno.test('private scanner rejects oversized or mismatched object bytes', async 
 });
 
 Deno.test('private scanner treats malformed, incomplete, and provider failures as retryable', async () => {
-  for (
-    const provider of [
-      new Response('unavailable', { status: 503 }),
-      Response.json({ scan_results: { progress_percentage: 50, scan_all_result_i: 0 } }),
-      Response.json({
-        process_info: { progress_percentage: 100 },
-        scan_results: { progress_percentage: 100, scan_all_result_i: 3 },
-      }),
-      Response.json({
-        process_info: { progress_percentage: 100, result: 'Blocked' },
-        scan_results: { progress_percentage: 100, scan_all_result_i: 0 },
-      }),
-    ]
-  ) {
+  for (const provider of [
+    new Response('unavailable', { status: 503 }),
+    Response.json({ scan_results: { progress_percentage: 50, scan_all_result_i: 0 } }),
+    Response.json({
+      process_info: { progress_percentage: 100 },
+      scan_results: { progress_percentage: 100, scan_all_result_i: 3 },
+    }),
+    Response.json({
+      process_info: { progress_percentage: 100, result: 'Blocked' },
+      scan_results: { progress_percentage: 100, scan_all_result_i: 0 },
+    }),
+  ]) {
     const base = successfulFetch(0);
     const response = await createScannerWorker((input, init) => {
       if (String(input).endsWith('/file/sync')) return Promise.resolve(provider.clone());
@@ -168,10 +177,13 @@ Deno.test('private scanner treats malformed, incomplete, and provider failures a
 });
 
 Deno.test('private scanner converts upstream timeout into retryable failure', async () => {
-  const response = await createScannerWorker((_input, init) =>
-    new Promise((_resolve, reject) => {
-      init?.signal?.addEventListener('abort', () => reject(init.signal?.reason), { once: true });
-    }), { timeoutMs: 1 }).fetch(request(), env);
+  const response = await createScannerWorker(
+    (_input, init) =>
+      new Promise((_resolve, reject) => {
+        init?.signal?.addEventListener('abort', () => reject(init.signal?.reason), { once: true });
+      }),
+    { timeoutMs: 1 },
+  ).fetch(request(), env);
   assertEquals(response.status, 503);
 });
 
@@ -184,7 +196,7 @@ Deno.test('scanner orchestration times out a provider that ignores AbortSignal',
     provider: {
       name: 'stalled-provider',
       scan(_input, signal) {
-        signal.addEventListener('abort', () => aborted = true, { once: true });
+        signal.addEventListener('abort', () => (aborted = true), { once: true });
         return new Promise(() => {});
       },
     },

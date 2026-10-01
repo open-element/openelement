@@ -44,7 +44,10 @@ export interface CheckoutSupabaseClient {
   ): PromiseLike<{ data: unknown; error: { message: string } | null }>;
   from(table: 'orders'): {
     select(columns: string): {
-      order(column: string, options: { ascending: boolean }): PromiseLike<{
+      order(
+        column: string,
+        options: { ascending: boolean },
+      ): PromiseLike<{
         data: CheckoutData['orders'] | null;
         error: { message: string } | null;
       }>;
@@ -68,9 +71,12 @@ function safeResult(request: Request): CheckoutData['result'] {
 export function createCheckoutLoader(createClient: ClientFactory = createServerSupabase) {
   return async function loader(ctx: LoaderContext<Record<string, unknown>>): Promise<CheckoutData> {
     const client = createClient(ctx.env, ctx.request, ctx.responseHeaders);
-    const { data: { user } } = await client.auth.getUser();
+    const {
+      data: { user },
+    } = await client.auth.getUser();
     if (!user) throw redirect('/login');
-    const { data, error } = await client.from('orders')
+    const { data, error } = await client
+      .from('orders')
       .select('id,status,amount_total,currency')
       .order('created_at', { ascending: false });
     return {
@@ -97,7 +103,9 @@ export function createCheckoutAction(
       return fail(422, { error: 'invalid checkout attempt' });
     }
     const client = createClient(ctx.env, ctx.request, ctx.responseHeaders);
-    const { data: { user } } = await client.auth.getUser();
+    const {
+      data: { user },
+    } = await client.auth.getUser();
     if (!user) return fail(401, { error: 'sign-in required to checkout', attemptId });
 
     const reserved = await client.rpc('create_checkout_order', {
@@ -128,17 +136,28 @@ export function createCheckoutAction(
         body: checkoutSessionBody(config, orderId, checkoutIntegrationSuffix(attemptId)),
       });
       if (!response.ok) throw new Error('Stripe Checkout creation failed');
-      const session = await response.json() as { id?: unknown; url?: unknown; livemode?: unknown };
+      const session = (await response.json()) as {
+        id?: unknown;
+        url?: unknown;
+        livemode?: unknown;
+      };
       if (
-        typeof session.id !== 'string' || session.livemode !== config.livemode ||
+        typeof session.id !== 'string' ||
+        session.livemode !== config.livemode ||
         typeof session.url !== 'string'
-      ) throw new Error('Stripe Checkout response mismatch');
+      )
+        throw new Error('Stripe Checkout response mismatch');
       // Throws on non-2xx/missing config, landing in the catch below just
       // like the former boolean serviceRpc's `!attached` branch did.
-      await serviceRoleRpc(ctx.env, 'attach_checkout_session', {
-        order_id: orderId,
-        checkout_session_id: session.id,
-      }, fetchImpl);
+      await serviceRoleRpc(
+        ctx.env,
+        'attach_checkout_session',
+        {
+          order_id: orderId,
+          checkout_session_id: session.id,
+        },
+        fetchImpl,
+      );
       checkoutUrl = verifiedCheckoutUrl(session.url, config.checkoutHost);
     } catch {
       // Best-effort compensation; a failed mark must not mask the 409.
@@ -147,8 +166,7 @@ export function createCheckoutAction(
         'mark_checkout_creation_failed',
         { order_id: orderId },
         fetchImpl,
-      )
-        .catch(() => {});
+      ).catch(() => {});
       return fail(409, { error: 'checkout is temporarily unavailable; retry safely', attemptId });
     }
     throw redirect(checkoutUrl);
@@ -173,9 +191,9 @@ export function checkoutPageProps(
     resultCancelled: data?.result === 'cancelled' ? 1 : 0,
     orderRows: (data?.orders ?? []).map((order) => ({
       id: order.id,
-      line: `${order.currency.toUpperCase()} ${
-        (order.amount_total / 100).toFixed(2)
-      } — ${order.status}`,
+      line: `${order.currency.toUpperCase()} ${(order.amount_total / 100).toFixed(
+        2,
+      )} — ${order.status}`,
     })),
   };
 }

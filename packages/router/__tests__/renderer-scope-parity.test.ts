@@ -33,9 +33,7 @@ function rendererDecls(scopes: readonly string[]): RendererDecl[] {
  * variable is bound to `{ default: <unique marker> }` so the returned array
  * identifies exactly which renderers the generated matcher selected.
  */
-function evaluateGeneratedMatcher(
-  renderers: RendererDecl[],
-): (routePath: string) => unknown[] {
+function evaluateGeneratedMatcher(renderers: RendererDecl[]): (routePath: string) => unknown[] {
   const lines: string[] = [];
   renderMatchingRenderersFn(lines, renderers);
   const declarations = renderers
@@ -87,9 +85,9 @@ Deno.test('renderer scope parity: generated __matchingRenderers mirrors renderer
       assertEquals(
         actual,
         expected,
-        `scope mirror diverged for scopes=${JSON.stringify(scopes)} routePath=${
-          JSON.stringify(routePath)
-        }`,
+        `scope mirror diverged for scopes=${JSON.stringify(scopes)} routePath=${JSON.stringify(
+          routePath,
+        )}`,
       );
     }
   }

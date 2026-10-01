@@ -68,23 +68,18 @@ Deno.test('resolvePageDocument: a resolver receives the request-scoped context',
     locale: 'zh',
   });
   let received: PagePropsContext | undefined;
-  const document = resolvePageDocument(
-    (c) => {
-      received = c;
-      const data = c.data as NoteData | undefined;
-      return {
-        title: data?.note.title ?? 'Note',
-        canonical: `https://example.com/notes/${c.params.id}`,
-      };
-    },
-    context,
-  );
+  const document = resolvePageDocument((c) => {
+    received = c;
+    const data = c.data as NoteData | undefined;
+    return {
+      title: data?.note.title ?? 'Note',
+      canonical: `https://example.com/notes/${c.params.id}`,
+    };
+  }, context);
   assertEquals(received, context);
   assertEquals(document.title, 'First note');
   assertEquals(document.lang, 'zh');
-  assertEquals(document.links, [
-    { rel: 'canonical', href: 'https://example.com/notes/n1' },
-  ]);
+  assertEquals(document.links, [{ rel: 'canonical', href: 'https://example.com/notes/n1' }]);
 });
 
 Deno.test('resolvePageDocument: an undefined head resolves to an empty document carrying the locale', () => {
@@ -140,13 +135,10 @@ Deno.test('resolvePageDocument: resolution is pure, deterministic, and does not 
 
 Deno.test('resolvePageDocument: the resolver runs once per resolution, not per field', () => {
   let calls = 0;
-  resolvePageDocument(
-    () => {
-      calls += 1;
-      return { title: 'Counted' };
-    },
-    ctx(),
-  );
+  resolvePageDocument(() => {
+    calls += 1;
+    return { title: 'Counted' };
+  }, ctx());
   assertEquals(calls, 1);
 });
 

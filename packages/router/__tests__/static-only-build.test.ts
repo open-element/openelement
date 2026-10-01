@@ -54,13 +54,17 @@ Deno.test('static-only build: no dist/server, mdx route prerendered (#953, #954)
   await ensureFixtureBuild();
 
   assertEquals(
-    await Deno.stat(join(distDir, 'index.html')).then(() => true).catch(() => false),
+    await Deno.stat(join(distDir, 'index.html'))
+      .then(() => true)
+      .catch(() => false),
     true,
     'index.html should exist after build',
   );
   // #953: pure-static projects must not ship the build-time SSR bundle.
   assertEquals(
-    await Deno.stat(join(distDir, 'server')).then(() => true).catch(() => false),
+    await Deno.stat(join(distDir, 'server'))
+      .then(() => true)
+      .catch(() => false),
     false,
     'pure-static build must not emit dist/server',
   );
@@ -81,7 +85,9 @@ Deno.test('static-only build: zero islands, zero enhanced forms, zero client JS'
 
   for (const absent of ['client', 'island-manifests']) {
     assertEquals(
-      await Deno.stat(join(distDir, absent)).then(() => true).catch(() => false),
+      await Deno.stat(join(distDir, absent))
+        .then(() => true)
+        .catch(() => false),
       false,
       `pure-static build must not emit dist/${absent}`,
     );
@@ -152,7 +158,9 @@ Deno.test({
         args: ['-f', `npm:vite preview --port ${freePort}`],
         stdout: 'null',
         stderr: 'null',
-      }).output().catch(() => undefined);
+      })
+        .output()
+        .catch(() => undefined);
     }
   },
 });

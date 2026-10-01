@@ -76,11 +76,12 @@ export class JfbOeTable extends OpenElement {
     let action: 'select' | 'remove' | undefined;
     while (node) {
       if (node.tagName === 'A') {
-        action = node.parentElement?.tagName === 'TD' &&
-            node.parentElement.previousElementSibling !== null &&
-            node.parentElement.previousElementSibling.previousElementSibling === null
-          ? 'select'
-          : 'remove';
+        action =
+          node.parentElement?.tagName === 'TD' &&
+          node.parentElement.previousElementSibling !== null &&
+          node.parentElement.previousElementSibling.previousElementSibling === null
+            ? 'select'
+            : 'remove';
         break;
       }
       if (node.tagName === 'TABLE') return;

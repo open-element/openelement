@@ -56,11 +56,7 @@ Deno.test('createOpenPlugin() plugins have names starting with open:', () => {
   // All openElement plugins should have the open: prefix
   for (const name of names) {
     if (name === '@hono/vite-dev-server') continue; // external
-    assertEquals(
-      name.startsWith('open:'),
-      true,
-      `Plugin "${name}" should start with "open:"`,
-    );
+    assertEquals(name.startsWith('open:'), true, `Plugin "${name}" should start with "open:"`);
   }
 });
 
@@ -180,7 +176,7 @@ Deno.test('createOpenPlugin() corePlugin.config captures resolve.alias', async (
 Deno.test('createOpenPlugin() corePlugin.config returns rollupOptions with build trigger input', async () => {
   const plugins = createOpenPlugin();
   const corePlugin = plugins.find((p) => p.name === 'open:core')!;
-  const result = await (corePlugin.config as Function)({} as never) as Record<string, unknown>;
+  const result = (await (corePlugin.config as Function)({} as never)) as Record<string, unknown>;
   const build = result.build as Record<string, unknown>;
   const rollupOptions = build.rollupOptions as Record<string, unknown>;
   const input = rollupOptions.input as string[];
@@ -336,7 +332,9 @@ Deno.test('createOpenPlugin() corePlugin.buildStart scans routes and islands', a
   } finally {
     try {
       Deno.removeSync(tmp, { recursive: true });
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
   }
 });
 
@@ -359,7 +357,9 @@ Deno.test('createOpenPlugin() corePlugin.buildStart handles empty directories gr
   } finally {
     try {
       Deno.removeSync(tmp, { recursive: true });
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
   }
 });
 
@@ -394,7 +394,9 @@ Deno.test('createOpenPlugin() corePlugin.buildStart with packageIslands config',
   } finally {
     try {
       Deno.removeSync(tmp, { recursive: true });
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
   }
 });
 

@@ -26,15 +26,16 @@ export const openElement = defineIslandConfig({ hydrate: 'idle', ssr: true });
 
 @element('open-hero-polish')
 export default class HeroPolish extends OpenElement {
-  static override styles = [compiledStyle(
-    `:host{position:absolute;width:1px;height:1px;overflow:hidden;pointer-events:none}`,
-  )];
+  static override styles = [
+    compiledStyle(
+      `:host{position:absolute;width:1px;height:1px;overflow:hidden;pointer-events:none}`,
+    ),
+  ];
   override connectedCallback(): void {
     super.connectedCallback();
     const root = this.getRootNode();
-    const scope: ShadowRoot | HTMLElement = root instanceof ShadowRoot
-      ? root
-      : this.parentElement ?? document.body;
+    const scope: ShadowRoot | HTMLElement =
+      root instanceof ShadowRoot ? root : (this.parentElement ?? document.body);
     const hero = scope.querySelector<HTMLElement>('.hero-main');
     if (!hero) return;
     const reduced = globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
@@ -129,8 +130,8 @@ export default class HeroPolish extends OpenElement {
         tx = event.clientX;
         ty = event.clientY;
         const rect = hero.getBoundingClientRect();
-        const nowInside = tx >= rect.left && tx <= rect.right && ty >= rect.top &&
-          ty <= rect.bottom;
+        const nowInside =
+          tx >= rect.left && tx <= rect.right && ty >= rect.top && ty <= rect.bottom;
         if (nowInside !== inside) {
           inside = nowInside;
           cursor.classList.toggle('on', inside);

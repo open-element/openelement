@@ -66,7 +66,7 @@ export class OpenDropdown extends OpenElement {
   /** The content half of the anchor pair, applied via the style sink. */
   @property({ reflect: false, attribute: false, type: String })
   anchorStyle: ReadonlySignal<string> = computed(() =>
-    this.anchorName === '' ? '' : `position-anchor: ${this.anchorName}`
+    this.anchorName === '' ? '' : `position-anchor: ${this.anchorName}`,
   );
 
   render(): unknown {
@@ -80,12 +80,7 @@ export class OpenDropdown extends OpenElement {
         >
           <slot name='trigger'></slot>
         </span>
-        <div
-          class='overlay content'
-          part='content'
-          popover='auto'
-          style={this.anchorStyle}
-        >
+        <div class='overlay content' part='content' popover='auto' style={this.anchorStyle}>
           <slot></slot>
         </div>
       </div>
@@ -153,10 +148,8 @@ export class OpenDropdown extends OpenElement {
         if (!previous.isConnected) return;
         const active = deepActiveElement();
         if (active === previous) return;
-        const focusInside = active !== null &&
-          (this.contains(active) || content.contains(active));
-        const dropped = !active || active === document.body ||
-          active === document.documentElement;
+        const focusInside = active !== null && (this.contains(active) || content.contains(active));
+        const dropped = !active || active === document.body || active === document.documentElement;
         if (!focusInside && !dropped) return;
         previous.focus();
       });
@@ -176,11 +169,7 @@ export class OpenDropdown extends OpenElement {
 
   private onTriggerPointerDown(): void {
     const content = this.shadowRoot?.querySelector<HTMLElement>('.content');
-    writeInstanceState(
-      this,
-      'openAtPointerDown',
-      content?.matches(':popover-open') ?? false,
-    );
+    writeInstanceState(this, 'openAtPointerDown', content?.matches(':popover-open') ?? false);
   }
 
   private toggle(): void {

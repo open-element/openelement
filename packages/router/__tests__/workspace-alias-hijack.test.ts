@@ -57,10 +57,10 @@ Deno.test('hijack guard: a registry-pinned app inside a checkout is refused', as
     assert(hijack, 'a scaffolded app inside the checkout must be detected');
     assertEquals(hijack.appRoot, appDir);
     assertEquals(hijack.workspaceRoot, repo.root);
-    assertEquals(hijack.pinned.map((entry) => entry.specifier), [
-      '@openelement/router',
-      '@openelement/element',
-    ]);
+    assertEquals(
+      hijack.pinned.map((entry) => entry.specifier),
+      ['@openelement/router', '@openelement/element'],
+    );
 
     const message = workspaceAliasHijackError(hijack).message;
     // The error must name the state, both paths, and the fix.
@@ -158,10 +158,7 @@ Deno.test('hijack guard: openElement() refuses to build such an app (#1415 Findi
         thrown = error;
       }
       assert(thrown instanceof Error, 'openElement() must refuse the hijacked app');
-      assert(
-        (thrown as Error).message.includes('silently replace'),
-        (thrown as Error).message,
-      );
+      assert((thrown as Error).message.includes('silently replace'), (thrown as Error).message);
     } finally {
       Deno.chdir(origCwd);
     }

@@ -39,14 +39,18 @@ function camelToKebab(value: string): string {
 }
 
 export function isSafeAttributeName(value: string): boolean {
-  return /^[A-Za-z_:][A-Za-z0-9_.:-]*$/.test(value) && !/^on/i.test(value) &&
-    forbiddenSinkReason('attr', value) === null;
+  return (
+    /^[A-Za-z_:][A-Za-z0-9_.:-]*$/.test(value) &&
+    !/^on/i.test(value) &&
+    forbiddenSinkReason('attr', value) === null
+  );
 }
 
 export function unwrapExpression(expr: ts.Expression): ts.Expression {
   let current = expr;
   while (
-    ts.isParenthesizedExpression(current) || ts.isAsExpression(current) ||
+    ts.isParenthesizedExpression(current) ||
+    ts.isAsExpression(current) ||
     ts.isTypeAssertionExpression(current)
   ) {
     current = current.expression;
@@ -88,9 +92,10 @@ export function literalValue(
     for (const property of value.properties) {
       if (!ts.isPropertyAssignment(property)) return undefined;
       const name = property.name;
-      const key = ts.isIdentifier(name) || ts.isStringLiteral(name) || ts.isNumericLiteral(name)
-        ? name.text
-        : undefined;
+      const key =
+        ts.isIdentifier(name) || ts.isStringLiteral(name) || ts.isNumericLiteral(name)
+          ? name.text
+          : undefined;
       if (key === undefined || key === '__proto__') return undefined;
       const entry = literalValue(property.initializer, sf);
       if (entry === undefined) return undefined;
@@ -153,7 +158,10 @@ function propertyTypeFromConstructor(
 ): { label: PropertyValueType; constructorName: CompiledField['typeConstructor'] } {
   const name = expr.getText(sf);
   if (
-    name !== 'String' && name !== 'Number' && name !== 'Boolean' && name !== 'Array' &&
+    name !== 'String' &&
+    name !== 'Number' &&
+    name !== 'Boolean' &&
+    name !== 'Array' &&
     name !== 'Object'
   ) {
     return fail(
@@ -211,7 +219,8 @@ function parseComputedInitializer(
   if (!ts.isBlock(arrow.body)) {
     // expression body — the supported form
   } else if (
-    arrow.body.statements.length === 1 && ts.isReturnStatement(arrow.body.statements[0]) &&
+    arrow.body.statements.length === 1 &&
+    ts.isReturnStatement(arrow.body.statements[0]) &&
     arrow.body.statements[0].expression
   ) {
     fail(
@@ -254,7 +263,8 @@ function parseComputedInitializer(
   let bodyText = body.getText(sf);
   for (const replacement of replacements.sort((a, b) => b.start - a.start)) {
     const offset = body.getStart(sf);
-    bodyText = bodyText.slice(0, replacement.start - offset) +
+    bodyText =
+      bodyText.slice(0, replacement.start - offset) +
       `__s.${replacement.name}.value` +
       bodyText.slice(replacement.end - offset);
   }
@@ -324,7 +334,8 @@ function propertyFields(
       // fails with OEC9010), so styles never inline.
       if (
         modifiers.some((modifier) => modifier.kind === ts.SyntaxKind.StaticKeyword) &&
-        ts.isIdentifier(member.name) && member.name.text === 'styles' &&
+        ts.isIdentifier(member.name) &&
+        member.name.text === 'styles' &&
         (ts.getDecorators(member) ?? []).length === 0
       ) {
         if (!member.initializer) {
@@ -341,19 +352,23 @@ function propertyFields(
         stylesTypeText = member.type ? `: ${member.type.getText(sf)}` : undefined;
         continue;
       }
-      const accessibilityModifiers = modifiers.filter((modifier) =>
-        modifier.kind === ts.SyntaxKind.PublicKeyword ||
-        modifier.kind === ts.SyntaxKind.ProtectedKeyword ||
-        modifier.kind === ts.SyntaxKind.PrivateKeyword
+      const accessibilityModifiers = modifiers.filter(
+        (modifier) =>
+          modifier.kind === ts.SyntaxKind.PublicKeyword ||
+          modifier.kind === ts.SyntaxKind.ProtectedKeyword ||
+          modifier.kind === ts.SyntaxKind.PrivateKeyword,
       );
-      const hasUnsupportedModifier = modifiers.some((modifier) =>
-        modifier.kind !== ts.SyntaxKind.PublicKeyword &&
-        modifier.kind !== ts.SyntaxKind.ProtectedKeyword &&
-        modifier.kind !== ts.SyntaxKind.PrivateKeyword
+      const hasUnsupportedModifier = modifiers.some(
+        (modifier) =>
+          modifier.kind !== ts.SyntaxKind.PublicKeyword &&
+          modifier.kind !== ts.SyntaxKind.ProtectedKeyword &&
+          modifier.kind !== ts.SyntaxKind.PrivateKeyword,
       );
       if (
         hasUnsupportedModifier ||
-        accessibilityModifiers.length > 1 || member.questionToken || member.exclamationToken
+        accessibilityModifiers.length > 1 ||
+        member.questionToken ||
+        member.exclamationToken
       ) {
         fail(
           member,
@@ -412,11 +427,10 @@ function propertyFields(
         computedFieldNames,
         fail,
       );
-      const trustedHtmlInit = !computedInit &&
-        isTrustedHtmlInitializer(member.initializer, intrinsics, fail);
-      const defaultValue = computedInit || trustedHtmlInit
-        ? null
-        : literalValue(member.initializer, sf);
+      const trustedHtmlInit =
+        !computedInit && isTrustedHtmlInitializer(member.initializer, intrinsics, fail);
+      const defaultValue =
+        computedInit || trustedHtmlInit ? null : literalValue(member.initializer, sf);
       if (defaultValue === undefined) {
         fail(member.initializer, 'OEC9020', 'property defaults must be serializable literals');
       }
@@ -510,13 +524,14 @@ function propertyFields(
         type: inferred.label,
         converter,
         typeConstructor: inferred.constructorName,
-        accessibility: accessibilityModifiers.length === 0
-          ? ''
-          : accessibilityModifiers[0].kind === ts.SyntaxKind.PublicKeyword
-          ? 'public'
-          : accessibilityModifiers[0].kind === ts.SyntaxKind.ProtectedKeyword
-          ? 'protected'
-          : 'private',
+        accessibility:
+          accessibilityModifiers.length === 0
+            ? ''
+            : accessibilityModifiers[0].kind === ts.SyntaxKind.PublicKeyword
+              ? 'public'
+              : accessibilityModifiers[0].kind === ts.SyntaxKind.ProtectedKeyword
+                ? 'protected'
+                : 'private',
         typeText: member.type ? `: ${member.type.getText(sf)}` : '',
         initializerText: member.initializer.getText(sf),
         defaultValue,
@@ -528,12 +543,14 @@ function propertyFields(
     if (ts.isMethodDeclaration(member)) {
       const modifiers = ts.getModifiers(member) ?? [];
       if (
-        modifiers.some((modifier) =>
-          modifier.kind === ts.SyntaxKind.StaticKeyword ||
-          modifier.kind === ts.SyntaxKind.AbstractKeyword ||
-          modifier.kind === ts.SyntaxKind.DeclareKeyword ||
-          modifier.kind === ts.SyntaxKind.AccessorKeyword
-        ) || !member.body
+        modifiers.some(
+          (modifier) =>
+            modifier.kind === ts.SyntaxKind.StaticKeyword ||
+            modifier.kind === ts.SyntaxKind.AbstractKeyword ||
+            modifier.kind === ts.SyntaxKind.DeclareKeyword ||
+            modifier.kind === ts.SyntaxKind.AccessorKeyword,
+        ) ||
+        !member.body
       ) {
         fail(member, 'OEC9006', 'compiled methods must be concrete instance methods');
       }
@@ -577,10 +594,12 @@ function propertyFields(
 }
 
 function isDeclareStatement(statement: ts.Statement): boolean {
-  return ts.canHaveModifiers(statement) &&
-    (ts.getModifiers(statement) ?? []).some((modifier) =>
-      modifier.kind === ts.SyntaxKind.DeclareKeyword
-    );
+  return (
+    ts.canHaveModifiers(statement) &&
+    (ts.getModifiers(statement) ?? []).some(
+      (modifier) => modifier.kind === ts.SyntaxKind.DeclareKeyword,
+    )
+  );
 }
 
 /**
@@ -602,9 +621,7 @@ function isIslandConfigStatement(
 ): boolean {
   if (!ts.isVariableStatement(statement)) return false;
   const modifiers = ts.getModifiers(statement) ?? [];
-  if (
-    modifiers.length !== 1 || modifiers[0].kind !== ts.SyntaxKind.ExportKeyword
-  ) {
+  if (modifiers.length !== 1 || modifiers[0].kind !== ts.SyntaxKind.ExportKeyword) {
     return false;
   }
   const declarations = statement.declarationList.declarations;
@@ -617,7 +634,8 @@ function isIslandConfigStatement(
   if (!initializer || !ts.isCallExpression(initializer)) return false;
   if (!intrinsics.isStaticSidecarCallee(initializer.expression)) return false;
   if (
-    initializer.arguments.length !== 1 || !ts.isObjectLiteralExpression(initializer.arguments[0])
+    initializer.arguments.length !== 1 ||
+    !ts.isObjectLiteralExpression(initializer.arguments[0])
   ) {
     return false;
   }
@@ -668,10 +686,14 @@ export function analyzeCompiledModule(
   const passthroughStatements: ts.Statement[] = [];
   for (const statement of sf.statements) {
     if (
-      ts.isImportDeclaration(statement) || ts.isClassDeclaration(statement) ||
-      ts.isInterfaceDeclaration(statement) || ts.isTypeAliasDeclaration(statement) ||
-      ts.isModuleDeclaration(statement) || isDeclareStatement(statement)
-    ) continue;
+      ts.isImportDeclaration(statement) ||
+      ts.isClassDeclaration(statement) ||
+      ts.isInterfaceDeclaration(statement) ||
+      ts.isTypeAliasDeclaration(statement) ||
+      ts.isModuleDeclaration(statement) ||
+      isDeclareStatement(statement)
+    )
+      continue;
     // alpha.8: the island delivery policy is the one runtime statement a
     // compiled module may carry; it is validated and copied verbatim below.
     if (isIslandConfigStatement(statement, intrinsics)) {
@@ -689,9 +711,11 @@ export function analyzeCompiledModule(
   const decorated = classes.filter((node) =>
     (ts.getDecorators(node) ?? []).some((decorator) => {
       const expr = decorator.expression;
-      return ts.isCallExpression(expr) &&
-        intrinsics.resolveIntrinsic(expr.expression, 'element').canonical;
-    })
+      return (
+        ts.isCallExpression(expr) &&
+        intrinsics.resolveIntrinsic(expr.expression, 'element').canonical
+      );
+    }),
   );
   if (classes.length !== 1 || decorated.length !== 1) {
     // Unsupported/ambiguous provenance on an @element-spelled decorator fails
@@ -702,11 +726,7 @@ export function analyzeCompiledModule(
         if (!ts.isCallExpression(expr)) continue;
         const resolution = intrinsics.resolveIntrinsic(expr.expression, 'element');
         if (resolution.unsupported) {
-          fail(
-            decorator,
-            'OEC9027',
-            `unsupported @element provenance: ${resolution.unsupported}`,
-          );
+          fail(decorator, 'OEC9027', `unsupported @element provenance: ${resolution.unsupported}`);
         }
       }
     }
@@ -729,8 +749,8 @@ export function analyzeCompiledModule(
   const classModifiers = ts.getModifiers(classNode) ?? [];
   // alpha.8: the canonical route/island module default-exports its compiled
   // class, so `export default class` is admitted alongside `export class`.
-  const isDefaultExport = classModifiers.some((modifier) =>
-    modifier.kind === ts.SyntaxKind.DefaultKeyword
+  const isDefaultExport = classModifiers.some(
+    (modifier) => modifier.kind === ts.SyntaxKind.DefaultKeyword,
   );
   const modifiersValid = isDefaultExport
     ? classModifiers.length === 2 &&
@@ -747,12 +767,14 @@ export function analyzeCompiledModule(
   const decorator = classDecorators[0];
   const expr = decorator.expression;
   if (
-    !ts.isCallExpression(expr) || !intrinsics.resolveIntrinsic(expr.expression, 'element').canonical
+    !ts.isCallExpression(expr) ||
+    !intrinsics.resolveIntrinsic(expr.expression, 'element').canonical
   ) {
     fail(decorator, 'OEC9004', 'unknown decorator on an OpenElement class; use only @element');
   }
   if (
-    expr.arguments.length < 1 || expr.arguments.length > 2 ||
+    expr.arguments.length < 1 ||
+    expr.arguments.length > 2 ||
     !ts.isStringLiteral(expr.arguments[0])
   ) {
     fail(
@@ -823,15 +845,14 @@ export function analyzeCompiledModule(
       );
     }
   }
-  const heritage = classNode.heritageClauses?.find((clause) =>
-    clause.token === ts.SyntaxKind.ExtendsKeyword
+  const heritage = classNode.heritageClauses?.find(
+    (clause) => clause.token === ts.SyntaxKind.ExtendsKeyword,
   );
   // Provenance (#1209): the base class must bind the canonical OpenElement
   // import (aliases followed); a same-name local class, a foreign import or a
   // namespace-qualified reference never enters the grammar.
-  const heritageExpression = heritage?.types.length === 1
-    ? unwrapExpression(heritage.types[0].expression)
-    : undefined;
+  const heritageExpression =
+    heritage?.types.length === 1 ? unwrapExpression(heritage.types[0].expression) : undefined;
   const heritageResolution = heritageExpression
     ? intrinsics.resolveIntrinsic(heritageExpression, 'OpenElement')
     : undefined;
@@ -841,7 +862,8 @@ export function analyzeCompiledModule(
       'OEC9003',
       `compiled classes must extend the canonical OpenElement import from '@openelement/element' ` +
         `(found ${heritage?.types[0]?.expression.getText(sf) ?? 'no base class'}` +
-        (heritageResolution?.unsupported ? `; ${heritageResolution.unsupported}` : '') + ')',
+        (heritageResolution?.unsupported ? `; ${heritageResolution.unsupported}` : '') +
+        ')',
     );
   }
   const openElementLocalName = heritageResolution.localName!;

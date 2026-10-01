@@ -23,18 +23,13 @@ import {
 // (#869-2.5) so a release can never skip a number.
 // ---------------------------------------------------------------------------
 
-const DEFAULT_REGISTRY_DELAYS_MS = [
-  0,
-  5_000,
-  10_000,
-  20_000,
-  30_000,
-  45_000,
-  60_000,
-] as const;
+const DEFAULT_REGISTRY_DELAYS_MS = [0, 5_000, 10_000, 20_000, 30_000, 45_000, 60_000] as const;
 
 export class NpmViewError extends Error {
-  constructor(message: string, readonly retryable: boolean) {
+  constructor(
+    message: string,
+    readonly retryable: boolean,
+  ) {
     super(message);
     this.name = 'NpmViewError';
   }
@@ -43,10 +38,7 @@ export class NpmViewError extends Error {
 type NpmReleaseQuery = (specifier: string, field: string) => Promise<string>;
 
 /** Run `npm view <specifier> <field> --json` and parse the JSON string value. */
-export async function npmView(
-  specifier: string,
-  field: string,
-): Promise<string> {
+export async function npmView(specifier: string, field: string): Promise<string> {
   const output = await new Deno.Command('npm', {
     args: ['view', specifier, field, '--json'],
     stdout: 'piped',
@@ -55,28 +47,19 @@ export async function npmView(
   const stderr = new TextDecoder().decode(output.stderr);
   if (!output.success) {
     const retryable = !/\b(?:E401|E403)\b/u.test(stderr);
-    throw new NpmViewError(
-      `npm view ${specifier} ${field} failed: ${stderr.trim()}`,
-      retryable,
-    );
+    throw new NpmViewError(`npm view ${specifier} ${field} failed: ${stderr.trim()}`, retryable);
   }
   let value: unknown;
   try {
     value = JSON.parse(new TextDecoder().decode(output.stdout)) as unknown;
   } catch (error) {
-    throw new NpmViewError(
-      `Invalid npm JSON for ${specifier} ${field}: ${error}`,
-      false,
-    );
+    throw new NpmViewError(`Invalid npm JSON for ${specifier} ${field}: ${error}`, false);
   }
   if (typeof value !== 'string') {
     // Array-valued fields (e.g. `versions`) keep their JSON encoding so the
     // string contract holds; callers JSON.parse it back (predecessor check).
     if (Array.isArray(value)) return JSON.stringify(value);
-    throw new NpmViewError(
-      `Unexpected npm value for ${specifier} ${field}`,
-      false,
-    );
+    throw new NpmViewError(`Unexpected npm value for ${specifier} ${field}`, false);
   }
   return value;
 }
@@ -99,9 +82,7 @@ export function prereleaseTag(version: string): PrereleaseChannel | null {
   if (parsed && parsed.prerelease === undefined) return null;
   const channel = prereleaseChannel(version);
   if (channel) return channel;
-  throw new Error(
-    `Expected version x.y.z or x.y.z-alpha|beta|rc.n, got: ${version}`,
-  );
+  throw new Error(`Expected version x.y.z or x.y.z-alpha|beta|rc.n, got: ${version}`);
 }
 
 // #869-2.5: the version immediately before the target on the same line, so a
@@ -115,9 +96,7 @@ async function verifyField(
   specifier: string,
   field: string,
   expected: string,
-  options: Required<
-    Pick<VerifyNpmReleaseOptions, 'query' | 'sleep' | 'delaysMs'>
-  >,
+  options: Required<Pick<VerifyNpmReleaseOptions, 'query' | 'sleep' | 'delaysMs'>>,
 ): Promise<void> {
   let lastObserved = '<not queried>';
   let lastDiagnostic = '';
@@ -144,20 +123,16 @@ async function verifyField(
   );
 }
 
-export async function verifyNpmRelease(
-  options: VerifyNpmReleaseOptions,
-): Promise<void> {
+export async function verifyNpmRelease(options: VerifyNpmReleaseOptions): Promise<void> {
   const tag = prereleaseTag(options.version);
   const runtime = {
     query: options.query,
-    sleep: options.sleep ??
-      ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))),
+    sleep:
+      options.sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))),
     delaysMs: options.delaysMs ?? DEFAULT_REGISTRY_DELAYS_MS,
   };
   if (runtime.delaysMs.length === 0 || runtime.delaysMs[0] !== 0) {
-    throw new Error(
-      'Registry retry schedule must start with an immediate attempt.',
-    );
+    throw new Error('Registry retry schedule must start with an immediate attempt.');
   }
 
   // #869-2.5: no version skips — the predecessor on the same line must
@@ -221,9 +196,7 @@ export async function verifyNpmRelease(
         options.version,
         runtime,
       );
-      options.log?.(
-        `${packageName}@${options.version}: latest dist-tag verified (stable)`,
-      );
+      options.log?.(`${packageName}@${options.version}: latest dist-tag verified (stable)`);
     }
   }
 }

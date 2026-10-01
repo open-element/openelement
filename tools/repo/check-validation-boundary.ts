@@ -8,11 +8,7 @@
 import { walkSync } from '@std/fs/walk';
 import { extractStaticModuleSpecifiers } from '../lib/typescript-ast.ts';
 
-const SOURCE_ROOTS = [
-  'packages/element/src',
-  'packages/router/src',
-  'packages/create/src',
-];
+const SOURCE_ROOTS = ['packages/element/src', 'packages/router/src', 'packages/create/src'];
 
 // Bare or npm:-prefixed zod/valibot, including subpaths (valibot/mini). A
 // published import would flow into the npm tarball dependencies
@@ -22,8 +18,9 @@ const VALIDATION_LIBRARY_SPECIFIER = /^(?:npm:)?(?:zod|valibot)(?:@|\/|$)/;
 export function findValidationLibraryImports(source: string, path = 'source.ts'): string[] {
   return extractStaticModuleSpecifiers(source, path)
     .filter((specifier) => VALIDATION_LIBRARY_SPECIFIER.test(specifier.value))
-    .map((specifier) =>
-      `${path}:${specifier.line}: schema-validation library import: ${specifier.value}`
+    .map(
+      (specifier) =>
+        `${path}:${specifier.line}: schema-validation library import: ${specifier.value}`,
     );
 }
 

@@ -11,16 +11,18 @@ import { testProgram } from './test-program.ts';
 
 const REGION_PROGRAM = testProgram({
   tag: 'oe-regions',
-  template: [{
-    k: 'el',
-    tag: 'div',
-    attrs: [],
-    children: [
-      { k: 'part', index: 0 },
-      { k: 'part', index: 1 },
-      { k: 'el', tag: 'ul', attrs: [], children: [{ k: 'part', index: 2 }] },
-    ],
-  }],
+  template: [
+    {
+      k: 'el',
+      tag: 'div',
+      attrs: [],
+      children: [
+        { k: 'part', index: 0 },
+        { k: 'part', index: 1 },
+        { k: 'el', tag: 'ul', attrs: [], children: [{ k: 'part', index: 2 }] },
+      ],
+    },
+  ],
   parts: [
     { k: 'text', index: 0, signal: 'message' },
     {
@@ -113,14 +115,16 @@ Deno.test('item value slots create their text node when an item becomes non-empt
   const program = testProgram({
     tag: 'oe-item-values',
     template: [{ k: 'el', tag: 'ul', attrs: [], children: [{ k: 'part', index: 0 }] }],
-    parts: [{
-      k: 'each',
-      index: 0,
-      signal: 'items',
-      key: 'id',
-      field: 'text',
-      item: [{ k: 'el', tag: 'li', attrs: [], children: [{ k: 'ival', field: 'text' }] }],
-    }],
+    parts: [
+      {
+        k: 'each',
+        index: 0,
+        signal: 'items',
+        key: 'id',
+        field: 'text',
+        item: [{ k: 'el', tag: 'li', attrs: [], children: [{ k: 'ival', field: 'text' }] }],
+      },
+    ],
   });
   const host = { signals: { items }, handlers: {} } as unknown as CompiledRuntimeHost;
   const doc = new TestDocument();
@@ -132,10 +136,7 @@ Deno.test('item value slots create their text node when an item becomes non-empt
   );
 
   items.value = [{ id: 'a', text: 'now visible' }];
-  assertEquals(
-    toHtml(root),
-    '<host><ul><!--oe:p0--><li>now visible</li><!--oe:/p0--></ul></host>',
-  );
+  assertEquals(toHtml(root), '<host><ul><!--oe:p0--><li>now visible</li><!--oe:/p0--></ul></host>');
   items.value = [{ id: 'a', text: '' }];
   assertEquals(
     ((root.childNodes[0] as TestElement).childNodes[1] as TestElement).childNodes.length,
@@ -166,18 +167,27 @@ Deno.test('item value slots create their text node when an item becomes non-empt
 });
 
 Deno.test('direct item value slots keep empty and multi-node item ranges ordered', () => {
-  const items = signal([{ id: 'a', text: '' }, { id: 'b', text: 'B' }]);
+  const items = signal([
+    { id: 'a', text: '' },
+    { id: 'b', text: 'B' },
+  ]);
   const program = testProgram({
     tag: 'oe-direct-item-values',
     template: [{ k: 'el', tag: 'div', attrs: [], children: [{ k: 'part', index: 0 }] }],
-    parts: [{
-      k: 'each',
-      index: 0,
-      signal: 'items',
-      key: 'id',
-      field: 'text',
-      item: [{ k: 'text', value: '[' }, { k: 'ival', field: 'text' }, { k: 'text', value: ']' }],
-    }],
+    parts: [
+      {
+        k: 'each',
+        index: 0,
+        signal: 'items',
+        key: 'id',
+        field: 'text',
+        item: [
+          { k: 'text', value: '[' },
+          { k: 'ival', field: 'text' },
+          { k: 'text', value: ']' },
+        ],
+      },
+    ],
   });
   const host = { signals: { items }, handlers: {} } as unknown as CompiledRuntimeHost;
   const doc = new TestDocument();
@@ -203,14 +213,16 @@ Deno.test('Region update errors propagate when the host has no update-error sink
   const program = testProgram({
     tag: 'oe-unguarded-each',
     template: [{ k: 'el', tag: 'ul', attrs: [], children: [{ k: 'part', index: 0 }] }],
-    parts: [{
-      k: 'each',
-      index: 0,
-      signal: 'items',
-      key: 'id',
-      field: 'text',
-      item: [{ k: 'el', tag: 'li', attrs: [], children: [{ k: 'ival', field: 'text' }] }],
-    }],
+    parts: [
+      {
+        k: 'each',
+        index: 0,
+        signal: 'items',
+        key: 'id',
+        field: 'text',
+        item: [{ k: 'el', tag: 'li', attrs: [], children: [{ k: 'ival', field: 'text' }] }],
+      },
+    ],
   });
   const host = { signals: { items }, handlers: {} } as unknown as CompiledRuntimeHost;
   const doc = new TestDocument();
@@ -230,19 +242,24 @@ Deno.test('Region update errors propagate when the host has no update-error sink
 });
 
 Deno.test('each validates every reused item projection before mutating and keeps its subscription', () => {
-  const items = signal<unknown>([{ id: 'a', text: 'A' }, { id: 'b', text: 'B' }]);
+  const items = signal<unknown>([
+    { id: 'a', text: 'A' },
+    { id: 'b', text: 'B' },
+  ]);
   const errors: unknown[] = [];
   const program = testProgram({
     tag: 'oe-each-update-preflight',
     template: [{ k: 'el', tag: 'ul', attrs: [], children: [{ k: 'part', index: 0 }] }],
-    parts: [{
-      k: 'each',
-      index: 0,
-      signal: 'items',
-      key: 'id',
-      field: 'text',
-      item: [{ k: 'el', tag: 'li', attrs: [], children: [{ k: 'ival', field: 'text' }] }],
-    }],
+    parts: [
+      {
+        k: 'each',
+        index: 0,
+        signal: 'items',
+        key: 'id',
+        field: 'text',
+        item: [{ k: 'el', tag: 'li', attrs: [], children: [{ k: 'ival', field: 'text' }] }],
+      },
+    ],
   });
   const host = {
     signals: { items },
@@ -265,7 +282,10 @@ Deno.test('each validates every reused item projection before mutating and keeps
   assertEquals(errors.length, 1);
   assertEquals(toHtml(root), before);
 
-  items.value = [{ id: 'a', text: 'A2' }, { id: 'b', text: 'B2' }];
+  items.value = [
+    { id: 'a', text: 'A2' },
+    { id: 'b', text: 'B2' },
+  ];
   assertEquals(toHtml(root).includes('<li>A2</li><li>B2</li>'), true);
   instance.dispose();
 });

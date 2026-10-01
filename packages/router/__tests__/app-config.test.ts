@@ -68,19 +68,22 @@ function errorCodeOf(fn: () => unknown): string {
 Deno.test('defineConfig: identity helper, accepted key set is the documented surface', () => {
   const config = defineConfig({ renderer: 'native' });
   assertEquals(config, { renderer: 'native' });
-  assertEquals([...OPEN_ELEMENT_CONFIG_KEYS], [
-    'renderer',
-    'dirs',
-    'appShell',
-    'packageIslands',
-    'head',
-    'styles',
-    'i18n',
-    'viewTransition',
-    'speculation',
-    'build',
-    'middleware',
-  ]);
+  assertEquals(
+    [...OPEN_ELEMENT_CONFIG_KEYS],
+    [
+      'renderer',
+      'dirs',
+      'appShell',
+      'packageIslands',
+      'head',
+      'styles',
+      'i18n',
+      'viewTransition',
+      'speculation',
+      'build',
+      'middleware',
+    ],
+  );
   // `inject` is the framework's raw-HTML channel and deliberately has no home
   // in the config file: structured head content is `head` + `app/head.tsx`.
   assertFalse(OPEN_ELEMENT_CONFIG_KEYS.includes('inject'));
@@ -154,7 +157,7 @@ Deno.test('app config: non-empty file + inline options is a hard conflict', asyn
         configFile,
         importedConfig: defineConfig({ renderer: 'lit' }),
         inlineOptions: { head: { title: 'inline' } },
-      })
+      }),
     );
     assertEquals(code, 'CONFIG_CONFLICT');
     let message = '';
@@ -254,7 +257,7 @@ Deno.test('app config: type violations fail closed with the offending key named'
         root: Deno.cwd(),
         configFile: '/tmp/openelement.config.ts',
         importedConfig: value,
-      })
+      }),
     );
     assertEquals(code, 'CONFIG_INVALID', JSON.stringify(value));
   }
@@ -267,7 +270,7 @@ Deno.test('app config: a non-object default export fails closed', () => {
         root: Deno.cwd(),
         configFile: '/tmp/openelement.config.ts',
         importedConfig: value,
-      })
+      }),
     );
     assertEquals(code, 'CONFIG_INVALID', JSON.stringify(value));
   }
@@ -330,7 +333,7 @@ Deno.test('app config: styles.tokens pointing at a missing file fails closed', a
         root: app.root,
         configFile: configFileIn(app.root),
         importedConfig: defineConfig({ styles: { tokens: 'app/styles/missing.css' } }),
-      })
+      }),
     );
     assertEquals(code, 'CONFIG_INVALID');
   });
@@ -417,15 +420,12 @@ Deno.test('config: resolveDirs shares a base so the conventions follow the move'
   );
   // A partial override that leaves the three roots without a shared leading
   // segment moves only the overridden root; the conventions stay at `app`.
-  assertEquals(
-    resolveDirs({ routes: 'src/pages' }),
-    {
-      routes: 'src/pages',
-      islands: 'app/islands',
-      components: 'app/components',
-      base: 'app',
-    },
-  );
+  assertEquals(resolveDirs({ routes: 'src/pages' }), {
+    routes: 'src/pages',
+    islands: 'app/islands',
+    components: 'app/components',
+    base: 'app',
+  });
   // A trailing slash is filesystem noise, not a different root.
   assertEquals(resolveDirs({ routes: 'src/routes/' }).routes, 'src/routes');
 });
@@ -579,11 +579,7 @@ Deno.test('app config: a head.stylesheets entry cannot smuggle a javascript: URL
     configFile: '/tmp/openelement.config.ts',
     importedConfig: defineConfig({ head: { stylesheets: ['javascript:alert(1)'] } }),
   });
-  assertThrows(
-    () => buildHeadExtras({ inject: resolved.options.inject }),
-    Error,
-    'javascript:',
-  );
+  assertThrows(() => buildHeadExtras({ inject: resolved.options.inject }), Error, 'javascript:');
 });
 
 Deno.test('app config: structural head content lives in app/head.tsx, not in the config', () => {
@@ -631,9 +627,9 @@ Deno.test('starter template: openelement.config.ts validates against the accepte
   for (const key of written) {
     assert(
       OPEN_ELEMENT_CONFIG_KEYS.includes(key),
-      `starter config writes unknown key "${key}"; accepted: ${
-        OPEN_ELEMENT_CONFIG_KEYS.join(', ')
-      }`,
+      `starter config writes unknown key "${key}"; accepted: ${OPEN_ELEMENT_CONFIG_KEYS.join(
+        ', ',
+      )}`,
     );
   }
   // The starter ships the token stylesheet and the shell the conventions read.
@@ -649,19 +645,15 @@ Deno.test('app config: a build whose head comes from inject.scripts still builds
   // serialized head channel is OUTPUT, not input. Re-validating it rejected the
   // <script> tags the plugin itself generated from inject.scripts, so every app
   // using the structured script API failed to build.
-  const plugins = openElement(
-    {
-      inject: { scripts: [{ src: '/assets/prism-init.js', defer: true }] },
-    } as Parameters<typeof openElement>[0],
-  );
+  const plugins = openElement({
+    inject: { scripts: [{ src: '/assets/prism-init.js', defer: true }] },
+  } as Parameters<typeof openElement>[0]);
   assert(plugins.length >= 7, 'openElement() must not throw on structured scripts');
-  const withFragments = openElement(
-    {
-      inject: {
-        scripts: [{ src: '/assets/prism-init.js', defer: true }],
-        headFragments: ['<meta name="x" content="1">'],
-      },
-    } as Parameters<typeof openElement>[0],
-  );
+  const withFragments = openElement({
+    inject: {
+      scripts: [{ src: '/assets/prism-init.js', defer: true }],
+      headFragments: ['<meta name="x" content="1">'],
+    },
+  } as Parameters<typeof openElement>[0]);
   assert(withFragments.length >= 7);
 });

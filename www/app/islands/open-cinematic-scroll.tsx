@@ -10,15 +10,16 @@ export const openElement = defineIslandConfig({ hydrate: 'load', ssr: true });
 
 @element('open-cinematic-scroll')
 export default class CinematicScroll extends OpenElement {
-  static override styles = [compiledStyle(
-    `:host{position:absolute;width:1px;height:1px;overflow:hidden;pointer-events:none}`,
-  )];
+  static override styles = [
+    compiledStyle(
+      `:host{position:absolute;width:1px;height:1px;overflow:hidden;pointer-events:none}`,
+    ),
+  ];
   override connectedCallback(): void {
     super.connectedCallback();
     const root = this.getRootNode();
-    const scope: ShadowRoot | HTMLElement = root instanceof ShadowRoot
-      ? root
-      : this.parentElement ?? document.body;
+    const scope: ShadowRoot | HTMLElement =
+      root instanceof ShadowRoot ? root : (this.parentElement ?? document.body);
     const film = scope.querySelector<HTMLElement>('.cinematic-v2');
     if (!film) return;
     const reduced = globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
@@ -38,8 +39,8 @@ export default class CinematicScroll extends OpenElement {
     };
     const pointer = (event: PointerEvent) => {
       if (event.pointerType !== 'mouse' || innerWidth < 800) return;
-      film.style.setProperty('--pointer-x', String((event.clientX / innerWidth - .5) * 2));
-      film.style.setProperty('--pointer-y', String((event.clientY / innerHeight - .5) * 2));
+      film.style.setProperty('--pointer-x', String((event.clientX / innerWidth - 0.5) * 2));
+      film.style.setProperty('--pointer-y', String((event.clientY / innerHeight - 0.5) * 2));
     };
     addEventListener('scroll', schedule, { passive: true });
     addEventListener('resize', schedule, { passive: true });

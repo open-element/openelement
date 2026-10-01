@@ -37,7 +37,10 @@ export function failAt(sf: ts.SourceFile): CompilerFail {
   };
 }
 
-export function sourceRange(sf: ts.SourceFile, node: ts.Node): {
+export function sourceRange(
+  sf: ts.SourceFile,
+  node: ts.Node,
+): {
   file: string;
   start: { offset: number; line: number; column: number };
   end: { offset: number; line: number; column: number };

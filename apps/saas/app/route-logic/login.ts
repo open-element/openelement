@@ -44,8 +44,9 @@ const OAUTH_PROVIDERS: readonly (OAuthProvider & { envFlag: string })[] = [
  * dashboard/client credentials were never set up.
  */
 export function configuredOAuthProviders(env: Record<string, unknown>): OAuthProvider[] {
-  return OAUTH_PROVIDERS.filter((provider) => env[provider.envFlag] === 'true')
-    .map(({ id, label }) => ({ id, label }));
+  return OAUTH_PROVIDERS.filter((provider) => env[provider.envFlag] === 'true').map(
+    ({ id, label }) => ({ id, label }),
+  );
 }
 
 export interface LoginLoaderData {

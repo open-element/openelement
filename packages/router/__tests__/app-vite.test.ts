@@ -27,11 +27,7 @@ Deno.test('openElement() plugins have names starting with open:', () => {
   const plugins = openElement();
   for (const p of plugins) {
     if (p.name === '@hono/vite-dev-server') continue;
-    assertEquals(
-      p.name.startsWith('open:'),
-      true,
-      `Plugin "${p.name}" should start with "open:"`,
-    );
+    assertEquals(p.name.startsWith('open:'), true, `Plugin "${p.name}" should start with "open:"`);
   }
 });
 
@@ -89,7 +85,9 @@ async function renderUmbrellaEntry(
     Deno.chdir(origCwd);
     try {
       Deno.removeSync(tmp, { recursive: true });
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
   }
 }
 
@@ -133,15 +131,13 @@ Deno.test('openElement() packageIslands are scanned during buildStart', async ()
     assertExists(buildStart, 'buildStart hook must exist');
     // A configured packageIsland that cannot be imported must surface as a
     // route-scan failure, proving the option is wired into buildStart.
-    await assertRejects(
-      () => (buildStart as () => Promise<void>)(),
-      Error,
-      '@nonexistent/package',
-    );
+    await assertRejects(() => (buildStart as () => Promise<void>)(), Error, '@nonexistent/package');
   } finally {
     Deno.chdir(origCwd);
     try {
       Deno.removeSync(tmp, { recursive: true });
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
   }
 });

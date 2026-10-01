@@ -38,40 +38,36 @@ interface RoadmapListItem {
 }
 
 const entries: Record<SiteLocale, TimelineEntry[]> = {
-  'en': [
+  en: [
     {
-      'version': 'v1.0.0-alpha.1',
-      'theme': 'Public Alpha admission',
-      'copy':
-        'Start real application use with the public baseline: independently consumable Element and Router with Native/Lit application flows. Element and Router are the public core, Create is the supported entry, UI is experimental. 1.0 Alpha is a fresh baseline with no supported migration from 0.x.',
-      'state': 'baseline',
-      'stamp': 'BASELINE',
+      version: 'v1.0.0-alpha.1',
+      theme: 'Public Alpha admission',
+      copy: 'Start real application use with the public baseline: independently consumable Element and Router with Native/Lit application flows. Element and Router are the public core, Create is the supported entry, UI is experimental. 1.0 Alpha is a fresh baseline with no supported migration from 0.x.',
+      state: 'baseline',
+      stamp: 'BASELINE',
     },
     {
-      'version': 'v1.0 RC / Stable',
-      'theme': 'Separately admitted releases',
-      'copy':
-        'Freeze contracts and dependencies after Alpha evidence; require at least fourteen days of RC soak, install/upgrade/security qualification and human GO. Element and Router do not mandate a package count.',
-      'state': 'planned',
-      'status': 'unscheduled',
+      version: 'v1.0 RC / Stable',
+      theme: 'Separately admitted releases',
+      copy: 'Freeze contracts and dependencies after Alpha evidence; require at least fourteen days of RC soak, install/upgrade/security qualification and human GO. Element and Router do not mandate a package count.',
+      state: 'planned',
+      status: 'unscheduled',
     },
   ],
-  'zh': [
+  zh: [
     {
-      'version': 'v1.0.0-alpha.1',
-      'theme': '公开 Alpha 准入',
-      'copy':
-        '从公开基线开始在真实应用中使用可独立消费的 Element 与 Router，验证 Native/Lit 应用流程。Element 与 Router 是公共核心，Create 是正式入口，UI 为实验性能力。1.0 Alpha 是新基线，不提供从 0.x 的受支持迁移。',
-      'state': 'baseline',
-      'stamp': 'BASELINE',
+      version: 'v1.0.0-alpha.1',
+      theme: '公开 Alpha 准入',
+      copy: '从公开基线开始在真实应用中使用可独立消费的 Element 与 Router，验证 Native/Lit 应用流程。Element 与 Router 是公共核心，Create 是正式入口，UI 为实验性能力。1.0 Alpha 是新基线，不提供从 0.x 的受支持迁移。',
+      state: 'baseline',
+      stamp: 'BASELINE',
     },
     {
-      'version': 'v1.0 RC / Stable',
-      'theme': '分别准入',
-      'copy':
-        'Alpha 证据充分后冻结接口与依赖，完成至少十四天 RC 持续运行及安装、升级、安全验证后取得人工 GO。两个产品不强制两个发布包。',
-      'state': 'planned',
-      'status': '未定日期',
+      version: 'v1.0 RC / Stable',
+      theme: '分别准入',
+      copy: 'Alpha 证据充分后冻结接口与依赖，完成至少十四天 RC 持续运行及安装、升级、安全验证后取得人工 GO。两个产品不强制两个发布包。',
+      state: 'planned',
+      status: '未定日期',
     },
   ],
 };
@@ -260,9 +256,10 @@ export default definePage(RoadmapPage, {
       // There is no four-package published version (Router has no 0.43.x),
       // so COMMON_PUBLISHED_VERSION is null and no timeline row is marked
       // current from registry state.
-      const stamp = COMMON_PUBLISHED_VERSION !== null && phase.version === COMMON_PUBLISHED_VERSION
-        ? 'CURRENT'
-        : phase.stamp;
+      const stamp =
+        COMMON_PUBLISHED_VERSION !== null && phase.version === COMMON_PUBLISHED_VERSION
+          ? 'CURRENT'
+          : phase.stamp;
       return {
         key: phase.version,
         rowClass: `tl-row tl-${phase.state}`,

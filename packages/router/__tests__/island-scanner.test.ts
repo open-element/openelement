@@ -23,11 +23,7 @@ Deno.test('readIslandConfig: throws on dynamic ssr value (#771)', () => {
 const isProd = true;
 export const openElement = defineIslandConfig({ ssr: isProd });
 `;
-  assertThrows(
-    () => readIslandConfig(source),
-    Error,
-    'openElement.ssr must be a static literal',
-  );
+  assertThrows(() => readIslandConfig(source), Error, 'openElement.ssr must be a static literal');
 });
 
 Deno.test('readIslandConfig: throws on dynamic hydrate value (#771)', () => {
@@ -46,11 +42,7 @@ Deno.test('readIslandConfig: throws on computed dsd value (#771)', () => {
   const source = `import { defineIslandConfig } from '@openelement/router';
 export const openElement = defineIslandConfig({ dsd: !import.meta.env?.DEV });
 `;
-  assertThrows(
-    () => readIslandConfig(source),
-    Error,
-    'openElement.dsd must be a static literal',
-  );
+  assertThrows(() => readIslandConfig(source), Error, 'openElement.dsd must be a static literal');
 });
 
 Deno.test('readIslandConfig: throws on unsupported hydrate literal', () => {

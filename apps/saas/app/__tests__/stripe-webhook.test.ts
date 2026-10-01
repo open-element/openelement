@@ -32,11 +32,7 @@ async function signature(payload = body, at = timestamp): Promise<string> {
     ['sign'],
   );
   const digest = new Uint8Array(
-    await crypto.subtle.sign(
-      'HMAC',
-      key,
-      new TextEncoder().encode(`${at}.${payload}`),
-    ),
+    await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(`${at}.${payload}`)),
   );
   return [...digest].map((byte) => byte.toString(16).padStart(2, '0')).join('');
 }
@@ -54,20 +50,20 @@ Deno.test('Stripe signature rejects changed bodies, stale/future timestamps and 
   await assertRejects(() =>
     verifyStripeSignature(`${body} `, `t=${timestamp},v1=${valid}`, secret, {
       nowSeconds: timestamp,
-    })
+    }),
   );
   await assertRejects(() =>
     verifyStripeSignature(body, `t=${timestamp},v1=${valid}`, secret, {
       nowSeconds: timestamp + 301,
-    })
+    }),
   );
   await assertRejects(() =>
     verifyStripeSignature(body, `t=${timestamp},v1=${valid}`, secret, {
       nowSeconds: timestamp - 301,
-    })
+    }),
   );
   await assertRejects(() =>
-    verifyStripeSignature(body, `t=${timestamp},v0=${valid}`, secret, { nowSeconds: timestamp })
+    verifyStripeSignature(body, `t=${timestamp},v0=${valid}`, secret, { nowSeconds: timestamp }),
   );
 });
 
@@ -265,10 +261,7 @@ Deno.test('bounded Stripe body reader accepts exactly the cap and rejects one by
     // Left open like a drip-feeding sender so the cancel has work to prove.
     body: bodyOf([400, 400, 1], false, () => cancelled++),
   });
-  await assertRejects(
-    () => readBoundedRawBody(overCap, 800, 60_000),
-    WebhookBodyTooLargeError,
-  );
+  await assertRejects(() => readBoundedRawBody(overCap, 800, 60_000), WebhookBodyTooLargeError);
   await Promise.resolve();
   assertEquals(cancelled, 1);
 });
@@ -289,10 +282,7 @@ Deno.test('bounded Stripe body reader stops pulling an unbounded source at the c
     method: 'POST',
     body: infinite,
   });
-  await assertRejects(
-    () => readBoundedRawBody(request, 1_000, 60_000),
-    WebhookBodyTooLargeError,
-  );
+  await assertRejects(() => readBoundedRawBody(request, 1_000, 60_000), WebhookBodyTooLargeError);
   await Promise.resolve();
   assertEquals(cancelled, 1);
   // One eager self-fill plus one pull per read until 1024 > 1000; an
@@ -426,7 +416,7 @@ Deno.test('Stripe webhook returns retryable failure when Queue handoff fails', a
   const now = Math.floor(Date.now() / 1000);
   const valid = await signature(body, now);
   const handler = createStripeWebhook(() =>
-    Promise.resolve(Response.json({ processing_state: 'received' }))
+    Promise.resolve(Response.json({ processing_state: 'received' })),
   );
   const response = await handler({
     request: new Request('https://app.test/api/stripe-webhook', {
@@ -492,7 +482,7 @@ Deno.test('Stripe webhook logs correlate by event id and never leak payload or s
     });
   try {
     const accepted = await createStripeWebhook(() =>
-      Promise.resolve(Response.json({ processing_state: 'received' }))
+      Promise.resolve(Response.json({ processing_state: 'received' })),
     )({ request: post(`t=${now},v1=${valid}`), env });
     assertEquals(accepted.status, 200);
 
@@ -503,7 +493,7 @@ Deno.test('Stripe webhook logs correlate by event id and never leak payload or s
     assertEquals(rejected.status, 400);
 
     const notDurable = await createStripeWebhook(() =>
-      Promise.resolve(new Response('', { status: 503 }))
+      Promise.resolve(new Response('', { status: 503 })),
     )({ request: post(`t=${now},v1=${valid}`), env });
     assertEquals(notDurable.status, 503);
   } finally {
@@ -523,15 +513,13 @@ Deno.test('Stripe webhook logs correlate by event id and never leak payload or s
   assertEquals(notDurableLog?.provider_event_id, 'evt_pii');
 
   const all = lines.join('\n');
-  for (
-    const sentinel of [
-      '4242424242424242',
-      'cardholder@example.com',
-      'Card Holder',
-      'service-role-sentinel',
-      piiBody,
-    ]
-  ) {
+  for (const sentinel of [
+    '4242424242424242',
+    'cardholder@example.com',
+    'Card Holder',
+    'service-role-sentinel',
+    piiBody,
+  ]) {
     assertEquals(all.includes(sentinel), false, `payment log leaked: ${sentinel}`);
   }
 });

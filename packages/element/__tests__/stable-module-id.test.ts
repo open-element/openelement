@@ -21,51 +21,57 @@ async function fixtureRepo(
 }
 
 Deno.test('stableModuleId: anchors on the workspace root, not path substrings', async () => {
-  await fixtureRepo({
-    'www/app/islands/open-layout.tsx': '// island\n',
-    'packages/element/src/x.ts': '// module\n',
-  }, (root) => {
-    assertEquals(
-      stableModuleId(`${root}/www/app/islands/open-layout.tsx`, undefined, root),
-      'www/app/islands/open-layout.tsx',
-    );
-    assertEquals(
-      stableModuleId(`${root}/packages/element/src/x.ts`, undefined, root),
-      'packages/element/src/x.ts',
-    );
-  });
+  await fixtureRepo(
+    {
+      'www/app/islands/open-layout.tsx': '// island\n',
+      'packages/element/src/x.ts': '// module\n',
+    },
+    (root) => {
+      assertEquals(
+        stableModuleId(`${root}/www/app/islands/open-layout.tsx`, undefined, root),
+        'www/app/islands/open-layout.tsx',
+      );
+      assertEquals(
+        stableModuleId(`${root}/packages/element/src/x.ts`, undefined, root),
+        'packages/element/src/x.ts',
+      );
+    },
+  );
 });
 
 Deno.test('stableModuleId: an unrelated path segment never becomes the anchor', async () => {
   // A checkout living under a directory called www must not get identity
   // relative to that directory; only the explicit root may cut the path.
-  await fixtureRepo({
-    'packages/element/src/x.ts': '// module\n',
-  }, (root) => {
-    const nested = join(root, 'srv', 'www', 'openelement');
-    const file = join(nested, 'packages/element/src/x.ts');
-    assertEquals(
-      stableModuleId(file, undefined, nested),
-      'packages/element/src/x.ts',
-    );
-  });
+  await fixtureRepo(
+    {
+      'packages/element/src/x.ts': '// module\n',
+    },
+    (root) => {
+      const nested = join(root, 'srv', 'www', 'openelement');
+      const file = join(nested, 'packages/element/src/x.ts');
+      assertEquals(stableModuleId(file, undefined, nested), 'packages/element/src/x.ts');
+    },
+  );
 });
 
 Deno.test('stableModuleId: the explicit root wins; linked files fall back to the workspace', async () => {
-  await fixtureRepo({
-    'www/app/islands/open-layout.tsx': '// island\n',
-    'packages/ui/src/open-button.tsx': '// linked package\n',
-  }, (root) => {
-    const wwwRoot = `${root}/www`;
-    assertEquals(
-      stableModuleId(`${root}/www/app/islands/open-layout.tsx`, wwwRoot, root),
-      'app/islands/open-layout.tsx',
-    );
-    assertEquals(
-      stableModuleId(`${root}/packages/ui/src/open-button.tsx`, wwwRoot, root),
-      'packages/ui/src/open-button.tsx',
-    );
-  });
+  await fixtureRepo(
+    {
+      'www/app/islands/open-layout.tsx': '// island\n',
+      'packages/ui/src/open-button.tsx': '// linked package\n',
+    },
+    (root) => {
+      const wwwRoot = `${root}/www`;
+      assertEquals(
+        stableModuleId(`${root}/www/app/islands/open-layout.tsx`, wwwRoot, root),
+        'app/islands/open-layout.tsx',
+      );
+      assertEquals(
+        stableModuleId(`${root}/packages/ui/src/open-button.tsx`, wwwRoot, root),
+        'packages/ui/src/open-button.tsx',
+      );
+    },
+  );
 });
 
 Deno.test('stableModuleId: paths outside any known root pass through unchanged', () => {

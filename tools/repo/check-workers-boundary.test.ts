@@ -20,8 +20,7 @@ Deno.test('workers boundary: accepts the nodeCompat shim graph', () => {
     MANIFEST,
     modules({
       'index.mjs': `import './_route.mjs';\nimport './_libs/h3.mjs';\nexport default {};`,
-      '_route.mjs':
-        `import process from 'node:process';\nimport { Buffer } from 'node:buffer';\nexport {};`,
+      '_route.mjs': `import process from 'node:process';\nimport { Buffer } from 'node:buffer';\nexport {};`,
       '_libs/h3.mjs': `export const h3 = true;`,
     }),
   );
@@ -82,8 +81,7 @@ Deno.test('workers boundary: rejects bare global process.env in the dependency g
     MANIFEST,
     modules({
       'index.mjs': `import './_libs/vendor.mjs';\nexport default {};`,
-      '_libs/vendor.mjs':
-        `export function mode() {\n  return process.env.NODE_ENV;\n}\nconst alt = process["env"];`,
+      '_libs/vendor.mjs': `export function mode() {\n  return process.env.NODE_ENV;\n}\nconst alt = process["env"];`,
     }),
   );
   assertStringIncludes(violations.join('\n'), '_libs/vendor.mjs:2: bare global process.env');

@@ -113,7 +113,10 @@ class FText extends FNodeBase {
 
 class FComment extends FNodeBase {
   readonly nodeType = 8;
-  constructor(ownerDocument: FDocument, readonly data: string) {
+  constructor(
+    ownerDocument: FDocument,
+    readonly data: string,
+  ) {
     super(ownerDocument);
   }
 }
@@ -198,10 +201,11 @@ function escapeText(value: string): string {
   return value.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
 }
 function unescapeText(value: string): string {
-  return value.replaceAll('&lt;', '<').replaceAll('&gt;', '>').replaceAll('&quot;', '"').replaceAll(
-    '&amp;',
-    '&',
-  );
+  return value
+    .replaceAll('&lt;', '<')
+    .replaceAll('&gt;', '>')
+    .replaceAll('&quot;', '"')
+    .replaceAll('&amp;', '&');
 }
 
 /** Serialize the fake tree with the same observable shape as SSR output. */
@@ -211,8 +215,8 @@ function toHtml(node: FNode): string {
   const el = node as FElement;
   const tag = el.tagName.toLowerCase();
   const attrs = Array.from(el.attributes.entries())
-    .map(([name, value]) =>
-      ` ${name}="${value.replaceAll('&', '&amp;').replaceAll('"', '&quot;')}"`
+    .map(
+      ([name, value]) => ` ${name}="${value.replaceAll('&', '&amp;').replaceAll('"', '&quot;')}"`,
     )
     .join('');
   if (VOID_TAGS.has(tag)) return `<${tag}${attrs}>`;
@@ -453,9 +457,7 @@ Deno.test('compiled part program v1 - one program, three execution modes', async
   await t.step('program evidence: bytes and instruction count', () => {
     const programBytes = new TextEncoder().encode(programJson).length;
     assertEquals(program.parts.length, 5);
-    console.log(
-      JSON.stringify({ proof: 'element-program', programBytes, instructionCount: 5 }),
-    );
+    console.log(JSON.stringify({ proof: 'element-program', programBytes, instructionCount: 5 }));
   });
 
   let ssrHtml = '';
@@ -652,13 +654,11 @@ Deno.test('compiled part program v1 - one program, three execution modes', async
 
     const unknownInstruction = JSON.parse(programJson);
     unknownInstruction.parts[0].k = 'future';
-    for (
-      const [invalid, diagnostic] of [
-        [broken, 'parts[0].index must equal its position'],
-        [wrongVersion, 'version'],
-        [unknownInstruction, 'parts[0]'],
-      ] as const
-    ) {
+    for (const [invalid, diagnostic] of [
+      [broken, 'parts[0].index must equal its position'],
+      [wrongVersion, 'version'],
+      [unknownInstruction, 'parts[0]'],
+    ] as const) {
       const { host } = makeHost({ subs: 0 });
       const freshDoc = new FDocument();
       const freshRoot = freshDoc.createElement('host');
@@ -676,21 +676,21 @@ Deno.test('compiled part program v1 - one program, three execution modes', async
     // 0.43-equivalent: full subtree re-allocation + full marker walk per update.
     const proxyDoc = new FDocument();
     build043Equivalent(proxyDoc, INITIAL_STATE);
-    const proxyBuildAllocations = proxyDoc.counts.elements + proxyDoc.counts.texts +
-      proxyDoc.counts.comments;
+    const proxyBuildAllocations =
+      proxyDoc.counts.elements + proxyDoc.counts.texts + proxyDoc.counts.comments;
     const proxyBuildWalk = proxyDoc.counts.walkVisits;
     proxyDoc.resetCounts();
     build043Equivalent(proxyDoc, { ...INITIAL_STATE, count: 1 });
-    const proxyUpdateAllocations = proxyDoc.counts.elements + proxyDoc.counts.texts +
-      proxyDoc.counts.comments;
+    const proxyUpdateAllocations =
+      proxyDoc.counts.elements + proxyDoc.counts.texts + proxyDoc.counts.comments;
     const proxyUpdateWalk = proxyDoc.counts.walkVisits;
 
     const summary = {
       proof: 'element-runtime-measurements',
       compiled: {
         instructionCount: 5,
-        freshAllocations: FRESH_ALLOCATIONS.elements + FRESH_ALLOCATIONS.texts +
-          FRESH_ALLOCATIONS.comments,
+        freshAllocations:
+          FRESH_ALLOCATIONS.elements + FRESH_ALLOCATIONS.texts + FRESH_ALLOCATIONS.comments,
         claimAllocations: 0,
         activationSubscriptions: FRESH_ACTIVATION.subs,
         activationListeners: FRESH_ACTIVATION.listenerAdds,

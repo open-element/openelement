@@ -12,7 +12,8 @@ import { resolve } from '@std/path';
 import { type PackageInfo, readPackages, releasePublishOrder } from '../lib/package-graph.ts';
 
 const SNAPSHOT = 'docs/release/public-interface-snapshot.json';
-const TYPE_FLAGS = ts.TypeFormatFlags.NoTruncation |
+const TYPE_FLAGS =
+  ts.TypeFormatFlags.NoTruncation |
   ts.TypeFormatFlags.UseAliasDefinedOutsideCurrentScope |
   ts.TypeFormatFlags.WriteTypeArgumentsOfSignature;
 
@@ -54,25 +55,31 @@ function workspacePaths(packages: PackageInfo[]): Record<string, string[]> {
 }
 
 function isPrivate(symbol: ts.Symbol): boolean {
-  return (symbol.declarations ?? []).some((declaration) =>
-    ts.canHaveModifiers(declaration) &&
-    ts.getModifiers(declaration)?.some((modifier) => modifier.kind === ts.SyntaxKind.PrivateKeyword)
+  return (symbol.declarations ?? []).some(
+    (declaration) =>
+      ts.canHaveModifiers(declaration) &&
+      ts
+        .getModifiers(declaration)
+        ?.some((modifier) => modifier.kind === ts.SyntaxKind.PrivateKeyword),
   );
 }
 
 function isReadonly(symbol: ts.Symbol): boolean {
-  return (symbol.declarations ?? []).some((declaration) =>
-    ts.canHaveModifiers(declaration) &&
-    ts.getModifiers(declaration)?.some((modifier) =>
-      modifier.kind === ts.SyntaxKind.ReadonlyKeyword
-    )
+  return (symbol.declarations ?? []).some(
+    (declaration) =>
+      ts.canHaveModifiers(declaration) &&
+      ts
+        .getModifiers(declaration)
+        ?.some((modifier) => modifier.kind === ts.SyntaxKind.ReadonlyKeyword),
   );
 }
 
 function publicSymbolName(symbol: ts.Symbol): string {
   const declaration = symbol.valueDeclaration ?? symbol.declarations?.[0];
   if (
-    declaration && 'name' in declaration && declaration.name &&
+    declaration &&
+    'name' in declaration &&
+    declaration.name &&
     ts.isComputedPropertyName(declaration.name as ts.Node)
   ) {
     return (declaration.name as ts.ComputedPropertyName).getText();
@@ -89,46 +96,54 @@ function signatureShape(
 ): string {
   const declaration = signature.getDeclaration();
   const typeParameters = signature.getTypeParameters() ?? [];
-  const generics = typeParameters.length === 0 ? '' : `<${
-    typeParameters.map((parameter) => {
-      const constraint = parameter.getConstraint();
-      const fallback = parameter.getDefault();
-      return [
-        checker.typeToString(parameter, declaration, TYPE_FLAGS),
-        constraint ? `extends ${typeShape(checker, constraint, packageDir, seen, depth + 1)}` : '',
-        fallback ? `=${typeShape(checker, fallback, packageDir, seen, depth + 1)}` : '',
-      ].filter(Boolean).join(' ');
-    }).join(',')
-  }>`;
-  const parameters = signature.getParameters().map((parameter) => {
-    const parameterDeclaration = parameter.valueDeclaration ?? parameter.declarations?.[0];
-    const type = parameterDeclaration
-      ? checker.getTypeOfSymbolAtLocation(parameter, parameterDeclaration)
-      : checker.getAnyType();
-    const optional = (parameter.flags & ts.SymbolFlags.Optional) !== 0 ? '?' : '';
-    const rest = parameterDeclaration && ts.isParameter(parameterDeclaration) &&
+  const generics =
+    typeParameters.length === 0
+      ? ''
+      : `<${typeParameters
+          .map((parameter) => {
+            const constraint = parameter.getConstraint();
+            const fallback = parameter.getDefault();
+            return [
+              checker.typeToString(parameter, declaration, TYPE_FLAGS),
+              constraint
+                ? `extends ${typeShape(checker, constraint, packageDir, seen, depth + 1)}`
+                : '',
+              fallback ? `=${typeShape(checker, fallback, packageDir, seen, depth + 1)}` : '',
+            ]
+              .filter(Boolean)
+              .join(' ');
+          })
+          .join(',')}>`;
+  const parameters = signature
+    .getParameters()
+    .map((parameter) => {
+      const parameterDeclaration = parameter.valueDeclaration ?? parameter.declarations?.[0];
+      const type = parameterDeclaration
+        ? checker.getTypeOfSymbolAtLocation(parameter, parameterDeclaration)
+        : checker.getAnyType();
+      const optional = (parameter.flags & ts.SymbolFlags.Optional) !== 0 ? '?' : '';
+      const rest =
+        parameterDeclaration &&
+        ts.isParameter(parameterDeclaration) &&
         parameterDeclaration.dotDotDotToken
-      ? '...'
-      : '';
-    return `${rest}${parameter.getName()}${optional}:${
-      typeShape(
+          ? '...'
+          : '';
+      return `${rest}${parameter.getName()}${optional}:${typeShape(
         checker,
         type,
         packageDir,
         seen,
         depth + 1,
-      )
-    }`;
-  }).join(',');
-  return `${generics}(${parameters})=>${
-    typeShape(
-      checker,
-      signature.getReturnType(),
-      packageDir,
-      seen,
-      depth + 1,
-    )
-  }`;
+      )}`;
+    })
+    .join(',');
+  return `${generics}(${parameters})=>${typeShape(
+    checker,
+    signature.getReturnType(),
+    packageDir,
+    seen,
+    depth + 1,
+  )}`;
 }
 
 function typeShape(
@@ -140,16 +155,16 @@ function typeShape(
 ): string {
   if (depth > 20) return checker.typeToString(type, undefined, TYPE_FLAGS);
   if (type.isUnion()) {
-    return `union(${
-      type.types.map((part) => typeShape(checker, part, packageDir, new Set(seen), depth + 1))
-        .sort().join('|')
-    })`;
+    return `union(${type.types
+      .map((part) => typeShape(checker, part, packageDir, new Set(seen), depth + 1))
+      .sort()
+      .join('|')})`;
   }
   if (type.isIntersection()) {
-    return `intersection(${
-      type.types.map((part) => typeShape(checker, part, packageDir, new Set(seen), depth + 1))
-        .sort().join('&')
-    })`;
+    return `intersection(${type.types
+      .map((part) => typeShape(checker, part, packageDir, new Set(seen), depth + 1))
+      .sort()
+      .join('&')})`;
   }
 
   const typeId = (type as ts.Type & { id?: number }).id;
@@ -165,9 +180,9 @@ function typeShape(
 
   if (checker.isTupleType(type)) {
     const arguments_ = checker.getTypeArguments(type as ts.TypeReference);
-    return `tuple(${
-      arguments_.map((item) => typeShape(checker, item, packageDir, nextSeen, depth + 1)).join(',')
-    })`;
+    return `tuple(${arguments_
+      .map((item) => typeShape(checker, item, packageDir, nextSeen, depth + 1))
+      .join(',')})`;
   }
   if (checker.isArrayType(type)) {
     const [item] = checker.getTypeArguments(type as ts.TypeReference);
@@ -181,11 +196,9 @@ function typeShape(
   if (!local && !anonymous) return checker.typeToString(type, undefined, TYPE_FLAGS);
 
   const parts: string[] = [];
-  for (
-    const property of checker.getPropertiesOfType(type).sort((a, b) =>
-      a.getName().localeCompare(b.getName())
-    )
-  ) {
+  for (const property of checker
+    .getPropertiesOfType(type)
+    .sort((a, b) => a.getName().localeCompare(b.getName()))) {
     if (isPrivate(property) || property.getName().startsWith('#')) continue;
     const declaration = property.valueDeclaration ?? property.declarations?.[0];
     if (!declaration) continue;
@@ -195,15 +208,15 @@ function typeShape(
     const propertyType = checker.getTypeOfSymbolAtLocation(property, declaration);
     const optional = (property.flags & ts.SymbolFlags.Optional) !== 0 ? '?' : '';
     const readonly = isReadonly(property) ? 'readonly ' : '';
-    parts.push(`${readonly}${publicSymbolName(property)}${optional}:${
-      typeShape(
+    parts.push(
+      `${readonly}${publicSymbolName(property)}${optional}:${typeShape(
         checker,
         propertyType,
         packageDir,
         nextSeen,
         depth + 1,
-      )
-    }`);
+      )}`,
+    );
   }
   for (const signature of checker.getSignaturesOfType(type, ts.SignatureKind.Call)) {
     parts.push(`call:${signatureShape(checker, signature, packageDir, nextSeen, depth + 1)}`);
@@ -213,9 +226,13 @@ function typeShape(
   }
   for (const index of checker.getIndexInfosOfType(type)) {
     parts.push(
-      `index:${typeShape(checker, index.keyType, packageDir, nextSeen, depth + 1)}=>${
-        typeShape(checker, index.type, packageDir, nextSeen, depth + 1)
-      }`,
+      `index:${typeShape(checker, index.keyType, packageDir, nextSeen, depth + 1)}=>${typeShape(
+        checker,
+        index.type,
+        packageDir,
+        nextSeen,
+        depth + 1,
+      )}`,
     );
   }
   if (parts.length === 0) return checker.typeToString(type, undefined, TYPE_FLAGS);
@@ -226,9 +243,7 @@ export async function publicInterfaceShape(
   entryFile: string,
   packageDir: string,
   paths: Record<string, string[]> = {},
-): Promise<
-  { publicShapeSha256: string; publicSymbols: string[]; localAnyTypeAliases: string[] }
-> {
+): Promise<{ publicShapeSha256: string; publicSymbols: string[]; localAnyTypeAliases: string[] }> {
   const resolvedEntry = resolve(entryFile);
   const program = ts.createProgram([resolvedEntry], {
     allowImportingTsExtensions: true,
@@ -249,42 +264,57 @@ export async function publicInterfaceShape(
   if (!moduleSymbol) throw new Error(`TypeScript did not resolve module ${entryFile}`);
 
   const localAnyTypeAliases: string[] = [];
-  const publicSymbols = checker.getExportsOfModule(moduleSymbol).map((exportSymbol) => {
-    const target = resolveAlias(checker, exportSymbol);
-    const declaration = target.valueDeclaration ?? target.declarations?.[0] ?? source;
-    const shapes: string[] = [];
-    if ((target.flags & ts.SymbolFlags.Value) !== 0) {
-      shapes.push(`value:${
-        typeShape(
-          checker,
-          checker.getTypeOfSymbolAtLocation(target, declaration),
-          packageDir,
-        )
-      }`);
-    }
-    if (
-      (target.flags & (ts.SymbolFlags.Type | ts.SymbolFlags.Interface | ts.SymbolFlags.TypeAlias |
-        ts.SymbolFlags.Class | ts.SymbolFlags.Enum)) !== 0
-    ) {
-      const declaredShape = typeShape(checker, checker.getDeclaredTypeOfSymbol(target), packageDir);
-      // A local type alias collapsing to `any` means an import failed to
-      // resolve — a resolution defect, not a contract. Reported so the
-      // --write path can refuse to pin a degraded baseline.
-      if (
-        (target.flags & ts.SymbolFlags.TypeAlias) !== 0 &&
-        declaredShape === 'any' &&
-        (target.declarations ?? []).some((item) => isInsidePackage(item, packageDir))
-      ) {
-        localAnyTypeAliases.push(exportSymbol.getName());
+  const publicSymbols = checker
+    .getExportsOfModule(moduleSymbol)
+    .map((exportSymbol) => {
+      const target = resolveAlias(checker, exportSymbol);
+      const declaration = target.valueDeclaration ?? target.declarations?.[0] ?? source;
+      const shapes: string[] = [];
+      if ((target.flags & ts.SymbolFlags.Value) !== 0) {
+        shapes.push(
+          `value:${typeShape(
+            checker,
+            checker.getTypeOfSymbolAtLocation(target, declaration),
+            packageDir,
+          )}`,
+        );
       }
-      shapes.push(`type:${declaredShape}`);
-    }
-    if ((target.flags & ts.SymbolFlags.Namespace) !== 0) {
-      const members = checker.getExportsOfModule(target).map((member) => member.getName()).sort();
-      shapes.push(`namespace:${members.join(',')}`);
-    }
-    return `${exportSymbol.getName()}=${shapes.sort().join('|')}`;
-  }).sort();
+      if (
+        (target.flags &
+          (ts.SymbolFlags.Type |
+            ts.SymbolFlags.Interface |
+            ts.SymbolFlags.TypeAlias |
+            ts.SymbolFlags.Class |
+            ts.SymbolFlags.Enum)) !==
+        0
+      ) {
+        const declaredShape = typeShape(
+          checker,
+          checker.getDeclaredTypeOfSymbol(target),
+          packageDir,
+        );
+        // A local type alias collapsing to `any` means an import failed to
+        // resolve — a resolution defect, not a contract. Reported so the
+        // --write path can refuse to pin a degraded baseline.
+        if (
+          (target.flags & ts.SymbolFlags.TypeAlias) !== 0 &&
+          declaredShape === 'any' &&
+          (target.declarations ?? []).some((item) => isInsidePackage(item, packageDir))
+        ) {
+          localAnyTypeAliases.push(exportSymbol.getName());
+        }
+        shapes.push(`type:${declaredShape}`);
+      }
+      if ((target.flags & ts.SymbolFlags.Namespace) !== 0) {
+        const members = checker
+          .getExportsOfModule(target)
+          .map((member) => member.getName())
+          .sort();
+        shapes.push(`namespace:${members.join(',')}`);
+      }
+      return `${exportSymbol.getName()}=${shapes.sort().join('|')}`;
+    })
+    .sort();
   const publicShapeSha256 = await sha256Hex(publicSymbols.join('\n'));
   return { publicShapeSha256, publicSymbols, localAnyTypeAliases };
 }
@@ -296,40 +326,45 @@ async function main(): Promise<void> {
   const degraded: string[] = [];
   const snapshot = {
     schema: 2,
-    packages: await Promise.all(packages.map(async (pkg) => {
-      const exports = typeof pkg.exports === 'string' ? { '.': pkg.exports } : pkg.exports;
-      const declarations = await Promise.all(
-        Object.entries(exports ?? {}).map(async ([path, source]) => {
-          const entry = resolve(pkg.dir, String(source).replace(/^\.\//, ''));
-          const shape = await publicInterfaceShape(entry, pkg.dir, paths);
-          for (const alias of shape.localAnyTypeAliases) {
-            degraded.push(`${pkg.name} ${path}: ${alias}`);
-          }
-          return [path, {
-            publicShapeSha256: shape.publicShapeSha256,
-            publicSymbols: shape.publicSymbols,
-          }] as const;
-        }),
-      );
-      return {
-        name: pkg.name,
-        exports: Object.fromEntries(Object.entries(exports ?? {}).sort()),
-        declarations: Object.fromEntries(declarations.sort()),
-      };
-    })),
+    packages: await Promise.all(
+      packages.map(async (pkg) => {
+        const exports = typeof pkg.exports === 'string' ? { '.': pkg.exports } : pkg.exports;
+        const declarations = await Promise.all(
+          Object.entries(exports ?? {}).map(async ([path, source]) => {
+            const entry = resolve(pkg.dir, String(source).replace(/^\.\//, ''));
+            const shape = await publicInterfaceShape(entry, pkg.dir, paths);
+            for (const alias of shape.localAnyTypeAliases) {
+              degraded.push(`${pkg.name} ${path}: ${alias}`);
+            }
+            return [
+              path,
+              {
+                publicShapeSha256: shape.publicShapeSha256,
+                publicSymbols: shape.publicSymbols,
+              },
+            ] as const;
+          }),
+        );
+        return {
+          name: pkg.name,
+          exports: Object.fromEntries(Object.entries(exports ?? {}).sort()),
+          declarations: Object.fromEntries(declarations.sort()),
+        };
+      }),
+    ),
   };
   const text = formatJson(snapshot);
   if (write) {
     if (degraded.length > 0) {
       throw new Error(
         `Refusing to write ${SNAPSHOT}: local type aliases resolved to \`any\` ` +
-          `(unresolved imports — fix dependency resolution instead of pinning a degraded baseline):\n  ${
-            degraded.sort().join('\n  ')
-          }`,
+          `(unresolved imports — fix dependency resolution instead of pinning a degraded baseline):\n  ${degraded
+            .sort()
+            .join('\n  ')}`,
       );
     }
     await Deno.writeTextFile(SNAPSHOT, text);
-  } else if (await Deno.readTextFile(SNAPSHOT) !== text) {
+  } else if ((await Deno.readTextFile(SNAPSHOT)) !== text) {
     throw new Error(`${SNAPSHOT} drifted; run deno task interface:snapshot:write`);
   }
   console.log(

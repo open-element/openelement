@@ -121,12 +121,13 @@ export async function fetchNotesSnapshot(options: {
     response = await reconcile(fresh);
   }
   if (!response.ok) throw new Error(`Notes reconciliation failed with HTTP ${response.status}`);
-  const payload = await response.json() as unknown;
+  const payload = (await response.json()) as unknown;
   if (!Array.isArray(payload)) throw new Error('Notes reconciliation returned a non-array');
   const snapshot: LiveNoteEvent[] = [];
   for (const row of payload) {
     if (
-      typeof row === 'object' && row !== null &&
+      typeof row === 'object' &&
+      row !== null &&
       typeof (row as { id?: unknown }).id === 'string' &&
       typeof (row as { body?: unknown }).body === 'string' &&
       typeof (row as { created_at?: unknown }).created_at === 'string'
@@ -247,10 +248,8 @@ function validAccessToken(
   state: NotesLiveState,
   force = false,
 ): Promise<string | null> {
-  if (
-    !force && state.accessToken &&
-    !shouldRefreshAccessToken(state.accessTokenExpiresAt)
-  ) return Promise.resolve(state.accessToken);
+  if (!force && state.accessToken && !shouldRefreshAccessToken(state.accessTokenExpiresAt))
+    return Promise.resolve(state.accessToken);
   if (state.accessTokenRefresh) return state.accessTokenRefresh;
   state.accessTokenRefresh = requestNotesAccessToken()
     .then((fresh) => {

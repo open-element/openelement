@@ -3,10 +3,7 @@ import { OpenElementThemeManager } from '../src/open-element-theme.ts';
 
 Deno.test('OpenElement public module stays a pure re-export seam', async () => {
   const source = await Deno.readTextFile(new URL('../src/open-element.ts', import.meta.url));
-  assertStringIncludes(
-    source,
-    "export { OpenElement } from './open-element-implementation.ts';",
-  );
+  assertStringIncludes(source, "export { OpenElement } from './open-element-implementation.ts';");
 });
 
 Deno.test('OpenElementThemeManager registers styles idempotently and resets', () => {

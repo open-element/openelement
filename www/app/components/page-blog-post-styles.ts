@@ -2,8 +2,11 @@ import { articleContentStyles } from '../site-ui/article-body.ts';
 import { compiledStyle } from '../site-ui/compiled-style.ts';
 import { pageStyles } from './page-styles.ts';
 
-export const pageBlogPostStyles = [compiledStyle(
-  pageStyles + articleContentStyles('.blog-content') + `
+export const pageBlogPostStyles = [
+  compiledStyle(
+    pageStyles +
+      articleContentStyles('.blog-content') +
+      `
     :host { display: block; }
     .is-hidden { display: none; }
     .crumb { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--size-2); margin: 0 0 var(--size-4); color: var(--text-muted); font-family: var(--font-mono); font-size: var(--font-size-00); font-weight: var(--font-weight-8); letter-spacing: 0.1em; text-transform: uppercase; }
@@ -25,4 +28,5 @@ export const pageBlogPostStyles = [compiledStyle(
     .next-dispatch a:hover { color: var(--violet-8); }
     .not-found { text-align: center; padding: var(--size-12) var(--size-4); color: var(--text-secondary); }
   `,
-)];
+  ),
+];

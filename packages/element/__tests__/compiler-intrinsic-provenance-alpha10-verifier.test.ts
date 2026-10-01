@@ -25,10 +25,7 @@ const FILE = '/project/app/islands/alpha10-verifier-impostor.tsx';
 const NEAR_MISS_SPECIFIER = '@openelement/element' + 's';
 
 function assertProgramFailsClosed(source: string, code: string): CompiledElementError {
-  const error = assertThrows(
-    () => compileElementProgram(source, FILE),
-    CompiledElementError,
-  );
+  const error = assertThrows(() => compileElementProgram(source, FILE), CompiledElementError);
   assertStringIncludes(error.message, code, `expected ${code} in: ${error.message}`);
   return error;
 }
@@ -55,11 +52,7 @@ Deno.test('alpha10-verifier provenance: default-import spelling of element fails
     'export class Impostor extends OpenElement { render() { return <div/>; } }',
   ].join('\n');
 
-  assertThrows(
-    () => compileElementModule(source, FILE),
-    CompiledElementError,
-    'OEC9027',
-  );
+  assertThrows(() => compileElementModule(source, FILE), CompiledElementError, 'OEC9027');
   const error = assertProgramFailsClosed(source, 'OEC9027');
   assertStringIncludes(error.message, 'default import');
 });
