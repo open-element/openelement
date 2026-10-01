@@ -19,6 +19,8 @@
  * (entry-render-runtime.ts).
  */
 
+import { RendererErrorCode, serveError } from '../../../internal/error-codes.ts';
+
 /** Opaque capability marking HTML the application has explicitly vetted as trusted. */
 export interface TrustedHtmlValue {
   readonly html: string;
@@ -83,19 +85,22 @@ export function createNativePageRenderer(deps: NativePageRendererDeps): PageSsrR
   ): string => {
     // Validate tag name - must be a valid Custom Element (contains hyphen)
     if (!tag || !tag.includes('-')) {
-      throw new Error(
+      throw serveError(
+        RendererErrorCode.TAG_INVALID,
         '[openElement] Invalid custom element tag: ' + String(tag) + '. Must contain a hyphen.',
       );
     }
     if (__depth > 8) {
-      throw new Error(
+      throw serveError(
+        RendererErrorCode.DEPTH_BOUND,
         '[openElement] Nested element expansion exceeded the depth bound at <' + tag +
           '>; cyclic island nesting is not renderable.',
       );
     }
     const Cls = customElements.get(tag);
     if (!Cls) {
-      throw new Error(
+      throw serveError(
+        RendererErrorCode.TAG_UNREGISTERED,
         '[openElement] <' + tag +
           '> is not registered in the SSR registry. Generated entries register every admitted route/island class explicitly; an unknown OpenElement host cannot be server-rendered (client-only and foreign tags pass through per the admission plan).',
       );

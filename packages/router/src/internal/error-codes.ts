@@ -1,18 +1,21 @@
 /**
- * @openelement/router — application-authoring and build-pipeline error codes.
+ * @openelement/router — application-authoring, build-pipeline, and
+ * serve-runtime error codes.
  *
  * Every failure raised by the authoring surface (`definePage`,
  * `defineIslandConfig`), the serve CLI, the island-delivery build pipeline,
- * and the Document seam carries a stable code, a phase and a severity,
- * exactly like the element package's `OpenElementError` contract (decision
- * 0053). Before this module those throws were bare `Error`s, so a host could
- * not classify a failure, and the CLI could not decide what to show without
- * pattern-matching message text.
+ * the Document seam, the `.mdx` pipeline, the route/island scanners, the
+ * dynamic prerender, and the generated entry's server runtime carries a
+ * stable code, a phase and a severity, exactly like the element package's
+ * `OpenElementError` contract (decision 0053). Before this module those
+ * throws were bare `Error`s, so a host could not classify a failure, and the
+ * CLI could not decide what to show without pattern-matching message text.
  *
  * Phase follows the surface that raises the code: `validation` for the
  * authoring descriptors and the Document head contract (each one rejects an
- * author's data before any render work starts), and `build` for the SSG
- * pipeline's build-time admission checks. One table per raising surface, so a
+ * author's data before any render work starts), `build` for the SSG
+ * pipeline's build-time admission checks, and `ssr` for the generated
+ * entry's request-time/startup runtime. One table per raising surface, so a
  * code points at one place in the pipeline.
  */
 
@@ -160,6 +163,119 @@ export const DocumentErrorCode = {
 } as const;
 
 /**
+ * Stable codes for the streaming pump
+ * (`vite/internal/server-runtime/stream-runtime.ts`). Phase `ssr`: these
+ * fire while the generated entry serves a streamed route — the payload
+ * encoder, the deferred-field front gate, the timeout sweep, the Part
+ * backfill pump, and the per-route shell gate.
+ */
+export const StreamErrorCode = {
+  /** A seed attribute or Part frame encodes past the payload bound. */
+  PAYLOAD_BOUND: 'OE_STREAM_PAYLOAD_BOUND',
+  /** The loader data is not one plain object. */
+  LOADER_NOT_OBJECT: 'OE_STREAM_LOADER_NOT_OBJECT',
+  /** The route manifest declares past the field/Part budget. */
+  MANIFEST_BUDGET: 'OE_STREAM_MANIFEST_BUDGET',
+  /** A manifest-declared deferred field is absent from the loader data. */
+  FIELD_MISSING: 'OE_STREAM_FIELD_MISSING',
+  /** The loader data carries a thenable the manifest does not declare. */
+  THENABLE_UNDECLARED: 'OE_STREAM_THENABLE_UNDECLARED',
+  /** A deferred field did not settle within the policy timeout. */
+  DEFERRED_TIMEOUT: 'OE_STREAM_DEFERRED_TIMEOUT',
+  /** A resolved deferred range serializes past the payload bound. */
+  RANGE_BOUND: 'OE_STREAM_RANGE_BOUND',
+  /** The route, its build manifest, and its compiled Part Program disagree. */
+  ROUTE_PROGRAM_MISMATCH: 'OE_STREAM_ROUTE_PROGRAM_MISMATCH',
+} as const;
+
+/**
+ * Stable codes for the dispatch-table startup guards
+ * (`vite/internal/server-runtime/route-dispatch.ts`). Phase `ssr`: these
+ * reject a route whose compiled shape contradicts its renderer or its build
+ * manifest while the generated entry wires its dispatch table.
+ */
+export const DispatchErrorCode = {
+  /** A stream route is registered under the lit renderer, which cannot stream. */
+  LIT_STREAM_UNSUPPORTED: 'OE_DISPATCH_LIT_STREAM',
+  /** A stream route's literal declaration has no matching build manifest/program. */
+  STREAM_DECLARATION_MISMATCH: 'OE_DISPATCH_STREAM_DECLARATION',
+} as const;
+
+/**
+ * Stable codes for the page SSR renderer seam
+ * (`vite/internal/server-runtime/renderer-runtime.ts`). Phase `ssr`: the
+ * native renderer fails closed before any render work starts.
+ */
+export const RendererErrorCode = {
+  /** A host tag is not a valid custom element name. */
+  TAG_INVALID: 'OE_RENDERER_TAG_INVALID',
+  /** Nested island expansion exceeded the depth bound (cyclic composition). */
+  DEPTH_BOUND: 'OE_RENDERER_DEPTH_BOUND',
+  /** A host tag is not registered in the SSR registry. */
+  TAG_UNREGISTERED: 'OE_RENDERER_TAG_UNREGISTERED',
+} as const;
+
+/**
+ * Stable codes for the `.mdx` route pipeline (`vite/plugin-mdx.ts` and its
+ * lowering module `vite/plugin-mdx-lower.ts`). Phase `build`: one code per
+ * way an MDX route fails the build — the optional `marked` peer missing, the
+ * route file unreadable, and the source outside the static Markdown subset.
+ */
+export const MdxErrorCode = {
+  /** An `.mdx` route exists but the optional `marked` peer is not installed. */
+  OPTIONAL_PEER_MISSING: 'OE_MDX_OPTIONAL_PEER_MISSING',
+  /** The `.mdx` route file cannot be read from disk. */
+  PAGE_UNREADABLE: 'OE_MDX_PAGE_UNREADABLE',
+  /** The MDX source uses raw HTML, JSX, or ESM outside the static subset. */
+  STATIC_CONTRACT: 'OE_MDX_STATIC_CONTRACT',
+} as const;
+
+/**
+ * Stable codes for the package-island manifest admission
+ * (`vite/internal/ssg/island-scanner.ts`). Phase `build`: these reject a
+ * package manifest declaration the island build could not honor.
+ */
+export const PackageIslandErrorCode = {
+  /** A package manifest declaration carries no `openElement.module`. */
+  MODULE_MISSING: 'OE_PACKAGE_ISLAND_MODULE_MISSING',
+  /** The declaration resolves `hydrate: 'media'` but declares no media query. */
+  MEDIA_WITHOUT_DELIVERY: 'OE_PACKAGE_ISLAND_MEDIA_WITHOUT_DELIVERY',
+  /** The declaration carries a media query but does not use media delivery. */
+  DELIVERY_WITHOUT_MEDIA: 'OE_PACKAGE_ISLAND_DELIVERY_WITHOUT_MEDIA',
+} as const;
+
+/**
+ * Stable codes for the route-file scanner
+ * (`vite/internal/ssg/route-scanner.ts`). Phase `build`: these reject a
+ * routes tree whose file grammar would generate a broken or shadowed entry.
+ */
+export const RouteScanErrorCode = {
+  /** A content element's tag equals its definePage route's fallback tag (#971). */
+  TAG_SHADOW: 'OE_ROUTE_SCAN_TAG_SHADOW',
+  /** Two route files fold to the same bracket-grammar shape (#1029). */
+  EQUIVALENT_FILES: 'OE_ROUTE_SCAN_EQUIVALENT_FILES',
+  /** Two route files fold to the same generated identifier (#1029). */
+  VAR_NAME_COLLISION: 'OE_ROUTE_SCAN_VAR_NAME_COLLISION',
+} as const;
+
+/**
+ * Stable codes for the dynamic-route prerender pipeline
+ * (`vite/internal/ssg/ssg-dynamic.ts`, with the route-parameter admission of
+ * `vite/internal/ssg/ssg-helpers.ts`). Phase `build`: a failed dynamic page
+ * is a failed build (or a skipped page under the `warn` policy).
+ */
+export const SsgDynamicErrorCode = {
+  /** A route parameter has no value to substitute. */
+  PARAM_MISSING: 'OE_SSG_PARAM_MISSING',
+  /** A route parameter value fails the traversal/control-character screen. */
+  PARAM_UNSAFE: 'OE_SSG_PARAM_UNSAFE',
+  /** The dynamic render pass failed and the failure policy is `fail`. */
+  RENDER_FAILED: 'OE_SSG_RENDER_FAILED',
+  /** A rendered page returned a failure status instead of page HTML. */
+  RENDER_STATUS: 'OE_SSG_RENDER_STATUS',
+} as const;
+
+/**
  * One authoring-contract failure: `OpenElementError` with the shared
  * `validation` phase and `error` severity, so callers classify by code and
  * never by message text.
@@ -190,5 +306,21 @@ export function buildError(
     severity: 'error',
     recoverable: false,
     ...(options.cause ? { cause: options.cause } : {}),
+  });
+}
+
+/**
+ * One serve-runtime failure: `OpenElementError` with the shared `ssr` phase
+ * and `error` severity, so a request-time (or generated-entry startup)
+ * failure is catchable by code exactly like the authoring and build
+ * surfaces. The message text is carried verbatim from the raising site —
+ * the wire frames and the CLI keep matching on it.
+ */
+export function serveError(code: string, message: string): OpenElementError {
+  return new OpenElementError(message, {
+    code,
+    phase: 'ssr',
+    severity: 'error',
+    recoverable: false,
   });
 }

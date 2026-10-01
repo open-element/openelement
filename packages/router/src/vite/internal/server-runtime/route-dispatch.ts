@@ -11,6 +11,7 @@
 
 import { ACTION_FETCH_HEADER } from './action-runtime.ts';
 import type { ActionHonoContext } from './action-runtime.ts';
+import { DispatchErrorCode, serveError } from '../../../internal/error-codes.ts';
 import type { PageRouteModule, StreamRouteManifestLike } from './types.ts';
 
 /**
@@ -22,7 +23,8 @@ import type { PageRouteModule, StreamRouteManifestLike } from './types.ts';
 export function assertLitStreamRoute(module: unknown, route: string, file: string): void {
   const stream = readStreamIntent(module);
   if (stream === undefined) return;
-  throw new Error(
+  throw serveError(
+    DispatchErrorCode.LIT_STREAM_UNSUPPORTED,
     '[openElement] Lit renderer does not support stream route ' + route + ' at ' + file + '.',
   );
 }
@@ -49,7 +51,8 @@ export function assertCompiledStreamRoute(
     !manifest || !Array.isArray(defer) || JSON.stringify(defer) !== JSON.stringify(expected) ||
     !program || program.version !== manifest.program.version || program.tag !== manifest.program.tag
   ) {
-    throw new Error(
+    throw serveError(
+      DispatchErrorCode.STREAM_DECLARATION_MISMATCH,
       '[openElement] stream route ' + route + ', field ' +
         (defer?.[0] ?? expected?.[0] ?? 'defer') + ' at ' + file +
         ': stream declaration has no matching compiled route manifest/program. Use a literal descriptor and renderIntent, or disable streaming.',

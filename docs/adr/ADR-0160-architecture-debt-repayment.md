@@ -403,6 +403,88 @@ chunks.
   that previously produced silently wrong or partial output into build
   failures.
 
+## Amendment 4 — error-code cataloging: the server runtime and the build-time admission surfaces join the catalog, with a recorded non-goal boundary (2026-10-01)
+
+- Amends: nothing already recorded. This amendment lands the error-code
+  cataloging of the generated entry's server runtime and a first tranche of
+  build-time user-visible throws — exactly the surfaces the change record
+  below names — and records, as a boundary, the disposition of every bare
+  `Error` throw it leaves behind. The tranche is NOT the full set of
+  author-facing build-time throws in the package; the boundary bullet
+  enumerates what stayed bare, including author-facing sites this amendment
+  did not convert.
+- Change record: `packages/router/src/internal/error-codes.ts` grows seven
+  tables, one per raising surface, and one factory. `StreamErrorCode`
+  (`OE_STREAM_*`, eight codes — the streaming pump: payload bounds, the
+  deferred-field front gate, the timeout sweep, the range bound, and the
+  per-route shell gate), `DispatchErrorCode` (two — the lit-stream and
+  stream-declaration startup guards), `RendererErrorCode` (three — the page
+  SSR renderer seam's fail-closed checks), `MdxErrorCode` (three — the
+  optional `marked` peer, the unreadable page, and the static-subset
+  contract via `plugin-mdx.ts`/`plugin-mdx-lower.ts`),
+  `PackageIslandErrorCode` (three — the package-island manifest admission in
+  `island-scanner.ts`), `RouteScanErrorCode` (three — the tag-shadow
+  (#971) and file-fold (#1029) admissions in `route-scanner.ts`), and
+  `SsgDynamicErrorCode` (four — the route-parameter admission of
+  `ssg-helpers.ts` and the dynamic-prerender failure/status exits of
+  `ssg-dynamic.ts`). The `serveError` factory is the `buildError`/`authoringError`
+  companion for the request-time phase: phase `ssr`, severity `error`,
+  non-recoverable. The 26 conversions carry their message text VERBATIM —
+  the wire frames, the problem+json channel, and every test that matches on
+  message substrings are untouched, so clients matching on message keep
+  working; the `code` field is purely additive. The streaming timeout
+  record (`record.error`) now carries `OE_STREAM_DEFERRED_TIMEOUT`; its
+  terminal wire frame is unchanged (it never serialized the message).
+  One converted site (`island-scanner.ts`'s missing-`openElement.module`
+  throw) sits behind a preceding filter and is fail-closed by construction;
+  it is converted because its message targets the package author and the
+  code keeps that audience addressable, not because it is reachable.
+- Non-goal boundary (deliberate, and exhaustive as of this amendment): every
+  remaining bare `throw new Error(...)` in `packages/router/src` — 23 sites
+  at this amendment's HEAD — stays bare `Error`, in one of three classes
+  (line numbers are as of this amendment):
+  1. Internal invariants and error wrappers (report programmer error or
+     re-raise, not a classified user failure): `vite/build-context.ts:245,248`
+     (the phase-ordering invariants), `internal/router/client-router.ts:236`,
+     `internal/ssg/postprocess.ts:43` (the `insertAfterHead` structural
+     assumption), `vite/build.ts:190` (the BuildPlan error wrapper),
+     `lit.ts:72`, `vite/dev-server.ts:37`, and `cli/build-ssg.ts:347`.
+  2. Generated-code template-string guards (execute in consumer runtimes
+     that cannot import the catalog): `cli/build-client.ts:576` (the
+     generated `renderToString` stub), `internal/ssg/entry-codegen.ts:184`,
+     `entry-server-codegen.ts:177,189`, `entry-client-codegen.ts:41,135`,
+     `entry-render-ssg.ts:90`, and the generated `dist/server/index.js`
+     URLPattern banner at `internal/ssg/ssg-helpers.ts:149`.
+  3. Author-facing build-time admission throws this amendment did NOT
+     convert — recorded explicitly so the "first tranche" claim above is not
+     read as covering them; they are cataloging candidates for a later pass,
+     not classified failures today: `internal/ssg/stream-manifest.ts:63`
+     (the stream-field admission `diagnostic()` — field/program mismatches
+     with the author action guidance), `:111` (a stream route exporting
+     `loader` more than once), `:305` (the deferred field/Part budget with
+     its "Defer fewer fields…" guidance),
+     `internal/ssg/static-component-scanner.ts:89` (one static component tag
+     declared by two modules),
+     `internal/ssg/entry-server-codegen.ts:43` (the CORS `origin "*"` with
+     credentials misconfiguration — a user configuration error raised
+     host-side during entry emission, not a template-string guard),
+     `internal/ssg/entry-client-codegen.ts:89` (conflicting island
+     capability declarations — host-side, between an invariant and an
+     author-visible error), and `internal/ssg/renderer-adapter.ts:126`
+     (`selectRendererAdapter` — the in-file comment calls it internal mode
+     selection, but the message names the author's `renderer` config).
+     These sites are intentionally NOT converted by this amendment; converting
+     one later requires amending this boundary with the reason.
+- Rituals: the tables stay internal (no declared subpath re-exports them),
+  so `docs/release/public-interface-snapshot.json` is unchanged by the
+  catalog growth and the snapshot ritual was run to confirm it;
+  `generate:all` re-runs the error-reference/error-codes generators, which
+  read the Page/Island/Serve/element tables and the OEC literals — the
+  `/errors` catalog projection is unchanged by these new tables, matching
+  the precedent of the `ClientAssetErrorCode` family (Amendments 2–3), and
+  the new codes are pinned by `error-codes.test.ts` raiser proofs through
+  the real raisers instead.
+
 ## Verification
 
 - The oracle suite is green, unweakened, at every stage boundary.

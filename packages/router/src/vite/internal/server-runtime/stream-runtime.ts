@@ -45,6 +45,7 @@ import {
   STREAM_TIMEOUT_MS,
 } from '@openelement/element/authoring';
 import { isOpenElementNotFound, isOpenElementRedirect } from '../../../authoring.ts';
+import { serveError, StreamErrorCode } from '../../../internal/error-codes.ts';
 import type { StreamRouteManifest } from '../protocol/ssg.ts';
 
 /** One declared deferred field's settlement record (the pump's queue unit). */
@@ -146,7 +147,7 @@ export function createStreamRequestScope(original: Request): StreamRequestScope 
 function streamJson(value: unknown): string {
   const text = JSON.stringify(value);
   if (text === undefined || text.length > STREAM_MAX_PAYLOAD_LENGTH) {
-    throw new Error('stream payload exceeds the bound');
+    throw serveError(StreamErrorCode.PAYLOAD_BOUND, 'stream payload exceeds the bound');
   }
   return text.replace(/[<>&\u2028\u2029]/g, (char) =>
     ({
@@ -199,12 +200,15 @@ export function streamFields(
     (Object.getPrototypeOf(data) !== Object.prototype && Object.getPrototypeOf(data) !== null)
   ) {
     observeThenables(data);
-    throw new Error('stream loader must return one object');
+    throw serveError(StreamErrorCode.LOADER_NOT_OBJECT, 'stream loader must return one object');
   }
   const ownerTotal = manifest.fields.reduce((count, field) => count + field.owners.length, 0);
   if (manifest.fields.length > STREAM_MAX_FIELDS || ownerTotal > STREAM_MAX_OWNERS) {
     observeThenables(data);
-    throw new Error('stream manifest exceeds the bounded field/Part budget');
+    throw serveError(
+      StreamErrorCode.MANIFEST_BUDGET,
+      'stream manifest exceeds the bounded field/Part budget',
+    );
   }
   const declared = new Set(manifest.fields.map((entry) => entry.field));
   const loaderData = data as Record<string, unknown>;
@@ -239,7 +243,10 @@ export function streamFields(
   for (const entry of manifest.fields) {
     if (!Object.prototype.hasOwnProperty.call(loaderData, entry.field)) {
       observeThenables(data);
-      throw new Error('missing declared deferred field ' + entry.field);
+      throw serveError(
+        StreamErrorCode.FIELD_MISSING,
+        'missing declared deferred field ' + entry.field,
+      );
     }
   }
   for (const [field, value] of Object.entries(loaderData)) {
@@ -247,7 +254,10 @@ export function streamFields(
       // Observe every thenable, not just this one: the loader may carry
       // several undeclared promises and this loop reports the first.
       observeThenables(data);
-      throw new Error('undeclared thenable loader field ' + field);
+      throw serveError(
+        StreamErrorCode.THENABLE_UNDECLARED,
+        'undeclared thenable loader field ' + field,
+      );
     }
   }
   return records;
@@ -312,7 +322,7 @@ export function createStreamBody(config: StreamBodyConfig): StreamBodyFn {
       for (const record of pending) {
         record.settled = true;
         record.failed = true;
-        record.error = new Error('deferred field timed out');
+        record.error = serveError(StreamErrorCode.DEFERRED_TIMEOUT, 'deferred field timed out');
         queued.push(record);
       }
       pending.clear();
@@ -376,7 +386,7 @@ export function createStreamBody(config: StreamBodyConfig): StreamBodyFn {
               };
               const encoded = streamJson(frame);
               if (html.length > STREAM_MAX_PAYLOAD_LENGTH) {
-                throw new Error('deferred range exceeds the bound');
+                throw serveError(StreamErrorCode.RANGE_BOUND, 'deferred range exceeds the bound');
               }
               return '<template data-oe-frame="' + escapeAttr(encoded) + '">' + html +
                 '</template><noscript>' + html + '</noscript>';
@@ -485,7 +495,8 @@ export function createDeferredPageShell(
       Cls.__partProgram.tag !== manifest.program.tag ||
       Cls.__partProgram.version !== manifest.program.version
     ) {
-      throw new Error(
+      throw serveError(
+        StreamErrorCode.ROUTE_PROGRAM_MISMATCH,
         '[openElement] stream route ' + route +
           ' has no matching compiled route manifest/program.',
       );
