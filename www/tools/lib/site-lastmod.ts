@@ -1,13 +1,14 @@
 /**
  * Per-route source dates for sitemap <lastmod>.
  *
- * The canonical source is `www/lib/content-dates.json` (the committed
- * manifest that `check-content-dates.ts` recomputes from Git history). The
- * route -> article mapping mirrors `articleRoutePath` used by the pages
- * themselves: the collection overview article lives at the collection root
- * and every other article at `<basePath>/<slug>`, with locale-prefixed
- * routes taking that locale's stamp. Routes without a known source date are
- * absent from the map so the renderer omits <lastmod> instead of guessing.
+ * The canonical source is `www/lib/content-dates.json`, the committed
+ * hand-maintained manifest that `check-content-dates.ts` validates against
+ * the docs tree. The route -> article mapping mirrors `articleRoutePath` used
+ * by the pages themselves: the collection overview article lives at the
+ * collection root and every other article at `<basePath>/<slug>`, with
+ * locale-prefixed routes taking that locale's stamp. Routes without a known
+ * source date are absent from the map so the renderer omits <lastmod>
+ * instead of guessing.
  */
 import { fromFileUrl, join } from '@std/path';
 import { SITE_DEFAULT_LOCALE, SITE_LOCALES } from '../../site-config.ts';

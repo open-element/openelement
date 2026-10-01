@@ -73,7 +73,7 @@ without giving up any release-time proof.
 
 - `tools/repo#gate:source` — the PR source layer (nine steps): `generate:all`,
   `typecheck`, the Element and Router unit suites, markdown lint, the
-  content-dates timing check, the public-interface snapshot, the
+  content-dates manifest check, the public-interface snapshot, the
   request-time fixture gate, and the Element browser gate (Chromium). The
   separate packed producer owns `tools/release#gate:packed`; the independent
   fresh-clone lane runs source and packed once each with cold Deno/npm caches.

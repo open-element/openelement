@@ -17,7 +17,7 @@
  * including this one, so the rule is described here in words only.
  */
 
-import { assert } from '@std/assert';
+import { assert, assertEquals } from '@std/assert';
 import { dirname, join } from '@std/path';
 
 const repoRoot = join(dirname(new URL(import.meta.url).pathname), '..', '..');
@@ -169,4 +169,32 @@ Deno.test('task permissions: create template keeps scoped vite permissions', () 
       `template#${name} must keep --allow-ffi (vite native binding; removal reintroduces the FFI prompt)`,
     );
   }
+});
+
+Deno.test('task permissions: content-dates validation is read-only', () => {
+  const tasks = taskMap('www/deno.json');
+  const command = tasks['check:content-dates'];
+  assert(command, 'www/deno.json#check:content-dates must exist');
+  // Inspect the inner invocation only: the outer one necessarily holds
+  // --allow-run to spawn run-in.ts.
+  const [, inner = ''] = command.split(/\s--\s/);
+  assert(inner, 'check:content-dates must delegate through run-in.ts');
+  assert(
+    inner.includes('--allow-read'),
+    'check:content-dates must read the docs tree and the manifest',
+  );
+  for (
+    const flag of ['--allow-write', '--allow-run', '--allow-env', '--allow-net', '--allow-ffi']
+  ) {
+    assert(
+      !inner.includes(flag),
+      `check:content-dates must not carry ${flag}: the manifest is hand-maintained ` +
+        'and the check only reads the docs tree',
+    );
+  }
+  assertEquals(
+    tasks['write:content-dates'],
+    undefined,
+    'the manifest is hand-maintained: there is no regeneration task to write it',
+  );
 });

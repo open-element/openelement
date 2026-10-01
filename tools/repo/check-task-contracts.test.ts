@@ -142,8 +142,9 @@ Deno.test('task contract: gate:release carries the steps trimmed out of the PR l
   // Every trimmed step must land in the release train, or the two-tier split
   // silently drops coverage instead of deferring it.
   const required = [
-    // Site build and every www check except the content-dates timing trap
-    // (which stays in the PR layer: it is cheap and catches a ritual mistake).
+    // Site build and every www check except the content-dates manifest check
+    // (which stays in the PR layer: it is cheap and catches an article added
+    // without a manifest entry).
     'site:build',
     'www#check:api-reference',
     'www#check:errors',
