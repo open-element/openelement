@@ -1,13 +1,28 @@
 # Deno pack diagnostic exception (`Could not generate types`)
 
-Status: **active, narrowly scoped, time-boxed by upstream**
+Status: **RETIRED (A1 toolchain swap)** — see "Retirement" below. Kept for
+the audit trail; do not reintroduce the classifier.
+
 Upstream issue: <https://github.com/denoland/deno/issues/36829> (open; no fix released as of 2026-09-14)
 
-This document is the normative source for the only `deno pack` diagnostic the
-release pipeline is allowed to classify as an upstream private-module warning.
-`.artifacts/` holds repro logs only; it is never the truth source.
+## Retirement
 
-## The allowed diagnostic shape
+The A1 swap replaced `deno pack` with `vp pack` as the sole npm payload
+generator (tools/lib/vp-pack.ts). vite-plus does not emit the
+`Could not generate types` diagnostic at all, and the pipeline's pack-log
+classifier for it (`classifyPackLog` + `PACK_KNOWN_PAIR` in
+tools/release/publish-npm.ts) was deleted with the swap. Declaration
+integrity is now proven exclusively by the structural checks that remain:
+every public types target exists, and the relative declaration edges close
+inside the package root (`buildDeclarationClosure`).
+
+Reintroduction condition (should deno pack ever return as a generator): the
+full exception text below, plus a closure-based argument for any new warning
+shape, re-verified against the then-current Deno version.
+
+---
+
+## The allowed diagnostic shape (historical)
 
 Exactly one line shape may be classified as a known upstream warning:
 

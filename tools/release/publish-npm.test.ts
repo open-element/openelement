@@ -1,14 +1,12 @@
 import { assertEquals, assertRejects, assertThrows } from '@std/assert';
+import { classifyVpPackLog } from '../lib/vp-pack.ts';
 import {
-  classifyPackLog,
   deriveAllDependencies,
   deriveDependencies,
   type DeriveDepsIo,
   findAbsoluteFileUrlPayload,
   findRawTypeScriptPayload,
   npmPublishTag,
-  packArgs,
-  packRelativePath,
   publishPackage,
   type PublishPackageIo,
   publishRelease,
@@ -172,16 +170,6 @@ Deno.test('findRawTypeScriptPayload flags sources but keeps declarations and tem
   } finally {
     await Deno.remove(root, { recursive: true });
   }
-});
-
-Deno.test('packArgs pins deterministic path hygiene with --no-source-maps', () => {
-  assertEquals(packArgs('pkg-1.0.0.tgz'), [
-    'pack',
-    '--output',
-    'pkg-1.0.0.tgz',
-    '--allow-dirty',
-    '--no-source-maps',
-  ]);
 });
 
 Deno.test('findAbsoluteFileUrlPayload fails closed on machine paths in inline maps', async () => {
@@ -501,74 +489,36 @@ Deno.test('previousPrerelease returns the predecessor on the same line', () => {
   assertEquals(previousPrerelease('0.41.0'), null);
 });
 
-Deno.test('classifyPackLog flags fast-check errors and missing-explicit mentions', () => {
-  const parsed = classifyPackLog(
-    '  71 modules collected\n' +
-      'error[missing-explicit-type]: missing explicit type in the public API\n' +
-      'some line mentioning missing-explicit-return-type inline\n',
+Deno.test('classifyVpPackLog classifies errors, unexpected warnings and undeclared unresolved imports', () => {
+  const parsed = classifyVpPackLog(
+    "src/a.ts (1:1) [UNRESOLVED_IMPORT] Could not resolve 'lit' in src/a.ts\n" +
+      "src/b.ts (2:2) [UNRESOLVED_IMPORT] Could not resolve 'undeclared-pkg' in src/b.ts\n" +
+      'ERROR something broke\n' +
+      'warn: deprecated option used\n',
+    { has: (specifier) => ['lit', '@openelement/element'].includes(specifier) },
   );
-  assertEquals(parsed.errors.length, 2);
-  assertEquals(parsed.typeWarnings, []);
-  assertEquals(parsed.unexpectedWarnings, []);
+  assertEquals(parsed.errors, ['ERROR something broke']);
+  assertEquals(parsed.unexpectedWarnings, ['warn: deprecated option used']);
+  assertEquals(parsed.unresolvedImports.sort(), ['lit', 'undeclared-pkg']);
+  assertEquals(parsed.disallowedUnresolved, ['undeclared-pkg']);
 });
 
-Deno.test('classifyPackLog pairs exact private-module warnings, flags the rest', () => {
-  const parsed = classifyPackLog(
-    "Could not generate types for 'file:///pkg/src/internal/helper.ts'. Types will not be included for this module.\n" +
-      '  2 modules collected\n' +
-      'a slow type was detected somewhere\n' +
-      'unsupported feature x\n' +
-      'build failed badly\n' +
-      'some warning about chunks\n',
-  );
-  assertEquals(parsed.errors, []);
-  assertEquals(parsed.typeWarnings.map((warning) => warning.file), [
-    'file:///pkg/src/internal/helper.ts',
-  ]);
-  assertEquals(parsed.unexpectedWarnings.length, 4);
-});
-
-Deno.test('classifyPackLog leaves clean pack output empty', () => {
+Deno.test('classifyVpPackLog leaves clean vp pack output empty', () => {
   assertEquals(
-    classifyPackLog('  71 modules collected\n  2 assets collected\nDry run ok\n'),
-    { errors: [], typeWarnings: [], unexpectedWarnings: [] },
+    classifyVpPackLog(
+      'ℹ dist/index.js 1.2 kB\n✔ Build complete in 1s\n',
+      { has: () => false },
+    ),
+    { errors: [], unexpectedWarnings: [], unresolvedImports: [], disallowedUnresolved: [] },
   );
 });
 
-Deno.test('packRelativePath scopes warned files to the packed directory', () => {
-  assertEquals(
-    packRelativePath('/tmp/stage/ui', 'file:///tmp/stage/ui/src/internal/helper.ts'),
-    'src/internal/helper.ts',
+Deno.test('classifyVpPackLog treats ANSI-colored output like plain text', () => {
+  const parsed = classifyVpPackLog(
+    '\x1b[31mERROR\x1b[0m boom\n',
+    { has: () => false },
   );
-  assertEquals(packRelativePath('/tmp/stage/ui', '/tmp/stage/ui/src/a.ts'), 'src/a.ts');
-  assertEquals(packRelativePath('/tmp/stage/ui', 'file:///tmp/other/src/a.ts'), null);
-  assertEquals(packRelativePath('/tmp/stage/ui', '/tmp/stage/ui2/src/a.ts'), null);
-  assertEquals(
-    packRelativePath('/var/folders/x/y', 'file:///private/var/folders/x/y/src/a.ts'),
-    'src/a.ts',
-  );
-  // Windows: pack's cwd is backslashed, the warned file is a drive-letter URL.
-  assertEquals(
-    packRelativePath(
-      'D:\\a\\openelement\\openelement/packages/element',
-      'file:///D:/a/openelement/openelement/packages/element/src/internal/compiled/escape-text.ts',
-    ),
-    'src/internal/compiled/escape-text.ts',
-  );
-  assertEquals(
-    packRelativePath(
-      'd:/a/openelement/packages/element',
-      'D:\\a\\openelement\\packages\\element\\src\\a.ts',
-    ),
-    'src/a.ts',
-  );
-  assertEquals(
-    packRelativePath(
-      'D:\\a\\openelement\\packages\\element',
-      'file:///C:/elsewhere/packages/element/src/a.ts',
-    ),
-    null,
-  );
+  assertEquals(parsed.errors, ['ERROR boom']);
 });
 
 // ─── Post-publish release flow (receipt + partial publish) ───────────
