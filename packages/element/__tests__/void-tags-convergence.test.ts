@@ -63,10 +63,7 @@ Deno.test('VOID_TAGS has one definition; the runtime and protocol re-export it',
   assert(owner.includes('export const VOID_TAGS'), `${OWNER}: must own the definition`);
   for (const path of REEXPORTERS) {
     const source = await Deno.readTextFile(new URL(path, REPO_ROOT));
-    assert(
-      !/VOID_TAGS[^=]*=\s*new Set\(/.test(source),
-      `${path}: must not redefine VOID_TAGS`,
-    );
+    assert(!/VOID_TAGS[^=]*=\s*new Set\(/.test(source), `${path}: must not redefine VOID_TAGS`);
     assert(
       /void-tags\.ts/.test(source) && /\bVOID_TAGS\b/.test(source),
       `${path}: must import/re-export the canonical VOID_TAGS owner`,

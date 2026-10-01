@@ -36,7 +36,8 @@ import { CALLOUT_TYPE_ICONS, recipe } from './component-recipes.ts';
 
 @element('open-callout', { root: 'shadow-open' })
 export class OpenCallout extends OpenElement {
-  static override styles: StyleSheetLike[] = [recipe(`
+  static override styles: StyleSheetLike[] = [
+    recipe(`
     :host { display: block; }
     .callout {
       padding: var(--size-3) var(--size-4);
@@ -63,7 +64,8 @@ export class OpenCallout extends OpenElement {
       font-size: var(--font-size-1); line-height: var(--font-lineheight-4); color: var(--text-secondary);
     }
     .callout-body ::slotted(p) { margin: 0; }
-  `)];
+  `),
+  ];
 
   @property({ reflect: true })
   type = 'info';
@@ -73,8 +75,8 @@ export class OpenCallout extends OpenElement {
 
   /** Type icon text — derived from the `type` attribute via the shared map. */
   @property({ reflect: false, attribute: false, type: String })
-  icon: ReadonlySignal<string> = computed(() =>
-    CALLOUT_TYPE_ICONS[this.type] ?? CALLOUT_TYPE_ICONS.info
+  icon: ReadonlySignal<string> = computed(
+    () => CALLOUT_TYPE_ICONS[this.type] ?? CALLOUT_TYPE_ICONS.info,
   );
 
   /** True when no label is set: the header row collapses out of the layout. */
@@ -85,7 +87,9 @@ export class OpenCallout extends OpenElement {
     return (
       <div class='callout' part='container'>
         <div class='callout-header' hidden={this.headerHidden}>
-          <span class='callout-icon' part='icon'>{this.icon}</span>
+          <span class='callout-icon' part='icon'>
+            {this.icon}
+          </span>
           <span class='callout-title'>{this.label}</span>
         </div>
         <div class='callout-body' part='content'>

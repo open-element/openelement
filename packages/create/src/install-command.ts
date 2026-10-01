@@ -44,7 +44,7 @@ export function createInstallCommand(
   options: { tag?: string } = {},
 ): string {
   const tag = options.tag ?? CREATE_INSTALL_TAG;
-  return `deno run ${
-    CREATE_INSTALL_PERMISSIONS.join(' ')
-  } ${CREATE_PACKAGE_SPECIFIER}@${tag} ${projectName}`;
+  return `deno run ${CREATE_INSTALL_PERMISSIONS.join(
+    ' ',
+  )} ${CREATE_PACKAGE_SPECIFIER}@${tag} ${projectName}`;
 }

@@ -47,8 +47,12 @@ export function auditSafeRelativePath(value: unknown): string[] {
 
 export async function sha256Bytes(bytes: Uint8Array): Promise<string> {
   const digest = await crypto.subtle.digest('SHA-256', Uint8Array.from(bytes));
-  return 'sha256:' +
-    Array.from(new Uint8Array(digest)).map((byte) => byte.toString(16).padStart(2, '0')).join('');
+  return (
+    'sha256:' +
+    Array.from(new Uint8Array(digest))
+      .map((byte) => byte.toString(16).padStart(2, '0'))
+      .join('')
+  );
 }
 
 interface TarballEvidencePackage {
@@ -107,7 +111,7 @@ export async function collectPackedTarballFailures(
       `packed packageVersion must be an x.y.z(-label) string, got ${JSON.stringify(version)}`,
     );
   }
-  const tarballs = isRecord(extras.tarballs) ? extras.tarballs as Record<string, unknown> : {};
+  const tarballs = isRecord(extras.tarballs) ? (extras.tarballs as Record<string, unknown>) : {};
   const tarballKeys = Object.keys(tarballs).sort();
   const expectedKeys = [...REQUIRED_PACKAGE_TARBALLS].sort();
   if (tarballKeys.join(',') !== expectedKeys.join(',')) {
@@ -123,7 +127,9 @@ export async function collectPackedTarballFailures(
       failures.push(`packed tarball ${name}: missing or malformed sha256`);
     }
   }
-  const files = isRecord(extras.tarballFiles) ? extras.tarballFiles as Record<string, unknown> : {};
+  const files = isRecord(extras.tarballFiles)
+    ? (extras.tarballFiles as Record<string, unknown>)
+    : {};
   const fileKeys = Object.keys(files).sort();
   if (fileKeys.join(',') !== expectedKeys.join(',')) {
     failures.push(
@@ -150,9 +156,7 @@ export async function collectPackedTarballFailures(
     if (typeof version === 'string' && PACKAGE_VERSION_PATTERN.test(version)) {
       const expectedPath = `tarballs/${npmTarballName({ name, version })}`;
       if (relativePath !== expectedPath) {
-        failures.push(
-          `packed tarballFiles.${name}: must be ${expectedPath}, got ${relativePath}`,
-        );
+        failures.push(`packed tarballFiles.${name}: must be ${expectedPath}, got ${relativePath}`);
         continue;
       }
     }
@@ -175,8 +179,8 @@ export async function collectPackedTarballFailures(
     }
     if (typeof version === 'string' && PACKAGE_VERSION_PATTERN.test(version)) {
       failures.push(
-        ...(await auditTarballPackage(bytes, name, version)).map((failure) =>
-          `packed tarball ${name}: ${failure}`
+        ...(await auditTarballPackage(bytes, name, version)).map(
+          (failure) => `packed tarball ${name}: ${failure}`,
         ),
       );
     }
@@ -193,14 +197,16 @@ export async function carryPackedTarballs(
   extras: unknown,
   readPacked: (path: string) => Promise<Uint8Array | null>,
   outDir: string,
-): Promise<
-  { tarballs: Record<string, string>; tarballFiles: Record<string, string>; packageVersion: string }
-> {
+): Promise<{
+  tarballs: Record<string, string>;
+  tarballFiles: Record<string, string>;
+  packageVersion: string;
+}> {
   if (!isRecord(extras)) throw new Error('packed job: extras must be an object');
   const packageVersion = extras.packageVersion;
-  const recorded = isRecord(extras.tarballs) ? extras.tarballs as Record<string, string> : {};
+  const recorded = isRecord(extras.tarballs) ? (extras.tarballs as Record<string, string>) : {};
   const carried = isRecord(extras.tarballFiles)
-    ? extras.tarballFiles as Record<string, string>
+    ? (extras.tarballFiles as Record<string, string>)
     : {};
   const expectedKeys = [...REQUIRED_PACKAGE_TARBALLS].sort();
   if (Object.keys(recorded).sort().join(',') !== expectedKeys.join(',')) {
@@ -219,9 +225,9 @@ export async function carryPackedTarballs(
   }
   if (typeof packageVersion !== 'string' || !PACKAGE_VERSION_PATTERN.test(packageVersion)) {
     throw new Error(
-      `packed job: packageVersion must be an x.y.z(-label) string, got ${
-        JSON.stringify(packageVersion)
-      }`,
+      `packed job: packageVersion must be an x.y.z(-label) string, got ${JSON.stringify(
+        packageVersion,
+      )}`,
     );
   }
   const tarballFiles: Record<string, string> = {};
@@ -229,14 +235,16 @@ export async function carryPackedTarballs(
   for (const packageName of REQUIRED_PACKAGE_TARBALLS) {
     const sourcePath = carried[packageName];
     if (
-      typeof sourcePath !== 'string' || sourcePath === '' || sourcePath.startsWith('/') ||
+      typeof sourcePath !== 'string' ||
+      sourcePath === '' ||
+      sourcePath.startsWith('/') ||
       sourcePath.includes('\\') ||
       sourcePath.split('/').some((segment) => segment === '' || segment === '.' || segment === '..')
     ) {
       throw new Error(
-        `packed job: tarballFiles.${packageName} path must be a safe relative POSIX path, got ${
-          JSON.stringify(sourcePath)
-        }`,
+        `packed job: tarballFiles.${packageName} path must be a safe relative POSIX path, got ${JSON.stringify(
+          sourcePath,
+        )}`,
       );
     }
     if (!sourcePath.startsWith('tarballs/') || !sourcePath.endsWith('.tgz')) {

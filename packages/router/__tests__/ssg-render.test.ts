@@ -70,11 +70,7 @@ Deno.test('resolveDynamicRoutePath rejects path traversal params', () => {
 });
 
 Deno.test('resolveDynamicRoutePath rejects missing params', () => {
-  assertThrows(
-    () => resolveDynamicRoutePath('/blog/:slug', ['slug'], {}),
-    Error,
-    'Missing value',
-  );
+  assertThrows(() => resolveDynamicRoutePath('/blog/:slug', ['slug'], {}), Error, 'Missing value');
 });
 
 Deno.test('ssgRender - rejects when module has no default export', async () => {
@@ -88,20 +84,14 @@ Deno.test('ssgRender - rejects when module has no default export', async () => {
 
 Deno.test('ssgRender - throws when routeInfo is empty', async () => {
   const bundle = createMockBundle({ routeInfo: [] });
-  await assertRejects(
-    () => ssgRender(bundle, defaultOptions),
-    Error,
-    'routeInfo is empty',
-  );
+  await assertRejects(() => ssgRender(bundle, defaultOptions), Error, 'routeInfo is empty');
 });
 
 Deno.test('ssgRender - never emits an ISR manifest (#1217: ISR removed in v0.44)', async () => {
   const outDir = './dist-test-ssg-render-no-isr';
   await Deno.remove(outDir, { recursive: true }).catch(() => {});
   const bundle = createMockBundle({
-    routeInfo: [
-      { path: '/', tagName: 'index-page', isDynamic: false, paramNames: [] },
-    ],
+    routeInfo: [{ path: '/', tagName: 'index-page', isDynamic: false, paramNames: [] }],
   });
 
   await ssgRender(bundle, { ...defaultOptions, outDir });
@@ -127,14 +117,12 @@ Deno.test('ssgRender - getStaticPaths failure aborts build under fail policy (de
       { path: '/blog/:slug', tagName: 'blog-page', isDynamic: true, paramNames: ['slug'] },
     ],
     renderRoute: (() =>
-      Promise.resolve(
-        {
-          html: '<html><body>test</body></html>',
-          errors: [],
-          componentCount: 0,
-          renderTimeMs: 0,
-        } as SsgPageOutput,
-      )) as SsrBundle['renderRoute'],
+      Promise.resolve({
+        html: '<html><body>test</body></html>',
+        errors: [],
+        componentCount: 0,
+        renderTimeMs: 0,
+      } as SsgPageOutput)) as SsrBundle['renderRoute'],
     getStaticPaths: (() => Promise.reject(new Error('fail'))) as SsrBundle['getStaticPaths'],
   });
   await assertRejects(
@@ -150,14 +138,12 @@ Deno.test('ssgRender - getStaticPaths failure logs and continues under warn poli
       { path: '/blog/:slug', tagName: 'blog-page', isDynamic: true, paramNames: ['slug'] },
     ],
     renderRoute: (() =>
-      Promise.resolve(
-        {
-          html: '<html><body>test</body></html>',
-          errors: [],
-          componentCount: 0,
-          renderTimeMs: 0,
-        } as SsgPageOutput,
-      )) as SsrBundle['renderRoute'],
+      Promise.resolve({
+        html: '<html><body>test</body></html>',
+        errors: [],
+        componentCount: 0,
+        renderTimeMs: 0,
+      } as SsgPageOutput)) as SsrBundle['renderRoute'],
     getStaticPaths: (() => Promise.reject(new Error('fail'))) as SsrBundle['getStaticPaths'],
   });
   await ssgRender(bundle, { ...defaultOptions, dynamicRouteFailure: 'warn' });
@@ -169,14 +155,12 @@ Deno.test('ssgRender - handles empty getStaticPaths gracefully', async () => {
       { path: '/blog/:slug', tagName: 'blog-page', isDynamic: true, paramNames: ['slug'] },
     ],
     renderRoute: (() =>
-      Promise.resolve(
-        {
-          html: '<html><body>test</body></html>',
-          errors: [],
-          componentCount: 0,
-          renderTimeMs: 0,
-        } as SsgPageOutput,
-      )) as SsrBundle['renderRoute'],
+      Promise.resolve({
+        html: '<html><body>test</body></html>',
+        errors: [],
+        componentCount: 0,
+        renderTimeMs: 0,
+      } as SsgPageOutput)) as SsrBundle['renderRoute'],
     getStaticPaths: (() => Promise.resolve([])) as SsrBundle['getStaticPaths'],
   });
   await ssgRender(bundle, defaultOptions);
@@ -203,10 +187,7 @@ Deno.test('ssgRender - output mkdir failure aborts the build with the fs error (
     await Deno.writeTextFile(`${root}/dist`, 'blocker');
     const bundle = createMockBundle();
 
-    const error = await assertRejects(
-      () => ssgRender(bundle, { root, outDir: './dist' }),
-      Error,
-    );
+    const error = await assertRejects(() => ssgRender(bundle, { root, outDir: './dist' }), Error);
     assertStringIncludes(String(error), 'dist');
   } finally {
     await Deno.remove(root, { recursive: true }).catch(() => {});
@@ -270,25 +251,23 @@ Deno.test('ssgRender - dynamic-route defined 500 output fails the pipeline and w
       Promise.resolve({
         html: '<html><body>500 Internal Server Error</body></html>',
         status: 500,
-        errors: [{
-          code: 'OPEN_ELEMENT_RENDER_RENDER_FAILED',
-          severity: 'error',
-          phase: 'render',
-          tagName: 'blog-page',
-          message: 'render exploded',
-          recoverable: false,
-        }],
+        errors: [
+          {
+            code: 'OPEN_ELEMENT_RENDER_RENDER_FAILED',
+            severity: 'error',
+            phase: 'render',
+            tagName: 'blog-page',
+            message: 'render exploded',
+            recoverable: false,
+          },
+        ],
         componentCount: 0,
         renderTimeMs: 0,
       } as SsgPageOutput)) as SsrBundle['renderRoute'],
     getStaticPaths: (() => Promise.resolve([{ slug: 'a' }])) as SsrBundle['getStaticPaths'],
   });
 
-  await assertRejects(
-    () => ssgRender(bundle, { ...defaultOptions, outDir }),
-    Error,
-    '/blog/a',
-  );
+  await assertRejects(() => ssgRender(bundle, { ...defaultOptions, outDir }), Error, '/blog/a');
   assertEquals(await pathExists(`${outDir}/blog/a/index.html`), false);
   await Deno.remove(outDir, { recursive: true }).catch(() => {});
 });
@@ -310,26 +289,28 @@ Deno.test('ssgRender - dynamic-route failure in warn mode skips the failed page'
       const slug = (opts?.params as Record<string, string>).slug;
       return Promise.resolve(
         slug === 'a'
-          ? {
-            html: '<html><body>ok</body></html>',
-            errors: [],
-            componentCount: 0,
-            renderTimeMs: 0,
-          } as SsgPageOutput
-          : {
-            html: '<html><body>500 Internal Server Error</body></html>',
-            status: 500,
-            errors: [{
-              code: 'OPEN_ELEMENT_RENDER_RENDER_FAILED',
-              severity: 'error',
-              phase: 'render',
-              tagName: 'blog-page',
-              message: 'render exploded',
-              recoverable: false,
-            }],
-            componentCount: 0,
-            renderTimeMs: 0,
-          } as SsgPageOutput,
+          ? ({
+              html: '<html><body>ok</body></html>',
+              errors: [],
+              componentCount: 0,
+              renderTimeMs: 0,
+            } as SsgPageOutput)
+          : ({
+              html: '<html><body>500 Internal Server Error</body></html>',
+              status: 500,
+              errors: [
+                {
+                  code: 'OPEN_ELEMENT_RENDER_RENDER_FAILED',
+                  severity: 'error',
+                  phase: 'render',
+                  tagName: 'blog-page',
+                  message: 'render exploded',
+                  recoverable: false,
+                },
+              ],
+              componentCount: 0,
+              renderTimeMs: 0,
+            } as SsgPageOutput),
       );
     }) as SsrBundle['renderRoute'],
     getStaticPaths: (() =>
@@ -491,9 +472,7 @@ Deno.test('ssgRender - pure-static projects emit no server artifacts', async () 
 // ─── 0.42.0-alpha.1 (ADR-0120): generated request-time server entry ───────
 
 Deno.test('request-time server entry serves the SSR bundle at request time', async () => {
-  const { renderRequestTimeServerModule } = await import(
-    '../src/vite/internal/ssg/ssg-helpers.ts'
-  );
+  const { renderRequestTimeServerModule } = await import('../src/vite/internal/ssg/ssg-helpers.ts');
   const { join, toFileUrl } = await import('@std/path');
 
   const dir = await Deno.makeTempDir();
@@ -522,7 +501,7 @@ export default app;
       `export const clientAssets = { entry: '', islands: {}, shared: [] };\n`,
     );
 
-    const mod = await import(toFileUrl(join(dir, 'index.js')).href) as {
+    const mod = (await import(toFileUrl(join(dir, 'index.js')).href)) as {
       default: (event: { req: Request }) => Promise<Response>;
     };
     const response = await mod.default({ req: new Request('http://localhost/live?x=42') });
@@ -536,9 +515,7 @@ export default app;
 });
 
 Deno.test('request-time server entry wires the island client script into the entry render', async () => {
-  const { renderRequestTimeServerModule } = await import(
-    '../src/vite/internal/ssg/ssg-helpers.ts'
-  );
+  const { renderRequestTimeServerModule } = await import('../src/vite/internal/ssg/ssg-helpers.ts');
   const { join, toFileUrl } = await import('@std/path');
 
   const dir = await Deno.makeTempDir();
@@ -563,7 +540,7 @@ export default app;
       `export const clientAssets = { entry: '/client/entry-abc123.js', islands: {}, shared: [] };\n`,
     );
 
-    const mod = await import(toFileUrl(join(dir, 'index.js')).href + '?with-script') as {
+    const mod = (await import(toFileUrl(join(dir, 'index.js')).href + '?with-script')) as {
       default: (event: { req: Request }) => Promise<Response>;
     };
     const response = await mod.default({ req: new Request('http://localhost/live') });
@@ -578,9 +555,7 @@ export default app;
 });
 
 Deno.test('request-time server entry isRequestTimePath admits request-time paths (#556, narrowed #1215)', async () => {
-  const { renderRequestTimeServerModule } = await import(
-    '../src/vite/internal/ssg/ssg-helpers.ts'
-  );
+  const { renderRequestTimeServerModule } = await import('../src/vite/internal/ssg/ssg-helpers.ts');
   const { join, toFileUrl } = await import('@std/path');
 
   const dir = await Deno.makeTempDir();
@@ -608,7 +583,7 @@ export default app;
       `export const clientAssets = { entry: '', islands: {}, shared: [] };\n`,
     );
 
-    const mod = await import(toFileUrl(join(dir, 'index.js')).href + '?admission') as {
+    const mod = (await import(toFileUrl(join(dir, 'index.js')).href + '?admission')) as {
       isRequestTimePath: (pathname: string) => boolean;
     };
     // Admission is a boolean predicate — no winner, no params (#1215).
@@ -655,7 +630,8 @@ Deno.test('SSG discovers static pages from route records behind the unified HTTP
     routeMiddleware(c.req.raw, async () => {
       await next();
       return c.res;
-    }));
+    }),
+  );
   try {
     await ssgRender(
       createMockBundle({
@@ -710,7 +686,8 @@ Deno.test('SSG keeps canonical pages discoverable behind exact-path host middlew
     routeMiddleware(c.req.raw, async () => {
       await next();
       return c.res;
-    }));
+    }),
+  );
   try {
     await ssgRender(
       createMockBundle({
@@ -753,7 +730,8 @@ Deno.test('SSG keeps canonical pages discoverable behind method-only host routes
     routeMiddleware(c.req.raw, async () => {
       await next();
       return c.res;
-    }));
+    }),
+  );
   try {
     await ssgRender(
       createMockBundle({

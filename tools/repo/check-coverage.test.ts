@@ -5,9 +5,10 @@ import {
   runTestSuiteWithCrashRetry,
 } from './check-coverage.ts';
 
-function scriptedRunner(
-  codes: number[],
-): { runner: () => Promise<{ code: number }>; calls: () => number } {
+function scriptedRunner(codes: number[]): {
+  runner: () => Promise<{ code: number }>;
+  calls: () => number;
+} {
   let calls = 0;
   return {
     runner: () => {

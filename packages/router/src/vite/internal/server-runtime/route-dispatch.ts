@@ -48,13 +48,21 @@ export function assertCompiledStreamRoute(
   const expected = manifest?.fields.map((field) => field.field);
   const program = readPartProgram(module);
   if (
-    !manifest || !Array.isArray(defer) || JSON.stringify(defer) !== JSON.stringify(expected) ||
-    !program || program.version !== manifest.program.version || program.tag !== manifest.program.tag
+    !manifest ||
+    !Array.isArray(defer) ||
+    JSON.stringify(defer) !== JSON.stringify(expected) ||
+    !program ||
+    program.version !== manifest.program.version ||
+    program.tag !== manifest.program.tag
   ) {
     throw serveError(
       DispatchErrorCode.STREAM_DECLARATION_MISMATCH,
-      '[openElement] stream route ' + route + ', field ' +
-        (defer?.[0] ?? expected?.[0] ?? 'defer') + ' at ' + file +
+      '[openElement] stream route ' +
+        route +
+        ', field ' +
+        (defer?.[0] ?? expected?.[0] ?? 'defer') +
+        ' at ' +
+        file +
         ': stream declaration has no matching compiled route manifest/program. Use a literal descriptor and renderIntent, or disable streaming.',
     );
   }

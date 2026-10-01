@@ -37,7 +37,7 @@ const dom = installFacadeDom();
 const { OpenElement, renderDsd } = await import('@openelement/element');
 const { PartProgramClaimError } = await import('../src/internal/compiled/runtime.ts');
 
-// deno-lint-ignore no-explicit-any
+// oxlint-disable-next-line no-explicit-any
 type AnyElement = any;
 
 let tagCounter = 0;
@@ -46,12 +46,17 @@ function uniqueTag(prefix: string): string {
 }
 
 const LIGHT_PROGRAM = {
-  template: [{
-    k: 'el' as const,
-    tag: 'button',
-    attrs: [['type', 'button']] as Array<[string, string]>,
-    children: [{ k: 'text' as const, value: 'count: ' }, { k: 'part' as const, index: 0 }],
-  }],
+  template: [
+    {
+      k: 'el' as const,
+      tag: 'button',
+      attrs: [['type', 'button']] as Array<[string, string]>,
+      children: [
+        { k: 'text' as const, value: 'count: ' },
+        { k: 'part' as const, index: 0 },
+      ],
+    },
+  ],
   parts: [
     { k: 'text' as const, index: 0, signal: 'count' },
     {
@@ -63,14 +68,16 @@ const LIGHT_PROGRAM = {
       path: [0],
     },
   ],
-  properties: [{
-    name: 'count',
-    attribute: 'count',
-    type: 'number' as const,
-    converter: 'number' as const,
-    reflect: true,
-    default: 0,
-  }],
+  properties: [
+    {
+      name: 'count',
+      attribute: 'count',
+      type: 'number' as const,
+      converter: 'number' as const,
+      reflect: true,
+      default: 0,
+    },
+  ],
 };
 
 function defineLightCounter(tag: string): CustomElementConstructor {

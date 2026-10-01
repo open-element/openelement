@@ -310,13 +310,8 @@ export function buildClientAssetManifest(options: {
   // order the island list iterates in.
   const tagOwners = new Map<string, string>();
   for (const island of islands) {
-    const file = resolveIslandChunkFile(
-      root,
-      island,
-      fileByModuleId,
-      fileByManifestKey,
-      manifestPath,
-    ) ??
+    const file =
+      resolveIslandChunkFile(root, island, fileByModuleId, fileByManifestKey, manifestPath) ??
       // An island without a chunk of its own rides the client entry chunk —
       // the same fallback the post-build chunk map applies.
       entryFile;
@@ -326,14 +321,12 @@ export function buildClientAssetManifest(options: {
     };
     if (island.entry.strategy === 'load') asset.preload = true;
     const islandLabel = `${island.entry.tagName} (${island.entry.modulePath})`;
-    for (
-      const tag of resolveIslandDeliveryTags(
-        island.entry.tagName,
-        island.entry.tags,
-        island.entry.tagNames,
-        island.entry.tagName,
-      )
-    ) {
+    for (const tag of resolveIslandDeliveryTags(
+      island.entry.tagName,
+      island.entry.tags,
+      island.entry.tagNames,
+      island.entry.tagName,
+    )) {
       const owner = tagOwners.get(tag);
       if (owner !== undefined) {
         throw buildError(

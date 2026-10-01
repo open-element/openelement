@@ -22,14 +22,16 @@ function eachProgram(): ReturnType<typeof testProgram> {
     tag: 'oe-message-proof',
     sourceFile: '/app/components/message-proof.tsx',
     template: [{ k: 'el', tag: 'ul', attrs: [], children: [{ k: 'part', index: 0 }] }],
-    parts: [{
-      k: 'each',
-      index: 0,
-      signal: 'rows',
-      key: 'id',
-      field: 'label',
-      item: [{ k: 'el', tag: 'li', attrs: [], children: [{ k: 'ival', field: 'label' }] }],
-    }],
+    parts: [
+      {
+        k: 'each',
+        index: 0,
+        signal: 'rows',
+        key: 'id',
+        field: 'label',
+        item: [{ k: 'el', tag: 'li', attrs: [], children: [{ k: 'ival', field: 'label' }] }],
+      },
+    ],
   });
 }
 
@@ -48,7 +50,10 @@ Deno.test('#1413 runtime messages: a non-array list Region names the module and 
 
 Deno.test('#1413 runtime messages: null and undefined list values are named precisely', () => {
   const program = eachProgram();
-  const cases: Array<[unknown, string]> = [[null, 'null'], [undefined, 'undefined']];
+  const cases: Array<[unknown, string]> = [
+    [null, 'null'],
+    [undefined, 'undefined'],
+  ];
   for (const [value, expected] of cases) {
     const rows = signal<unknown>(value);
     const host = { signals: { rows }, handlers: {} } as unknown as CompiledRuntimeHost;
@@ -59,7 +64,10 @@ Deno.test('#1413 runtime messages: null and undefined list values are named prec
 
 Deno.test('#1413 runtime messages: a duplicate item key names the key field and value', () => {
   const program = eachProgram();
-  const rows = signal<unknown>([{ id: 'a', label: 'one' }, { id: 'a', label: 'two' }]);
+  const rows = signal<unknown>([
+    { id: 'a', label: 'one' },
+    { id: 'a', label: 'two' },
+  ]);
   const host = { signals: { rows }, handlers: {} } as unknown as CompiledRuntimeHost;
   const document = new TestDocument();
   const root = document.createElement('oe-message-proof');
@@ -67,10 +75,7 @@ Deno.test('#1413 runtime messages: a duplicate item key names the key field and 
   // Keyed identity is a client concern: the SSR serializer emits the items
   // order-preserving, while the fresh-DOM builder rejects the collision
   // before it builds a single node from the ambiguous list.
-  const error = assertThrows(
-    () => createFreshDom(program, host, root as unknown as Node),
-    Error,
-  );
+  const error = assertThrows(() => createFreshDom(program, host, root as unknown as Node), Error);
   assertStringIncludes(error.message, '/app/components/message-proof.tsx');
   assertStringIncludes(error.message, 'duplicate key');
   assertStringIncludes(error.message, 'this.rows');
@@ -97,10 +102,7 @@ Deno.test('#1413 runtime messages: a non-object list item names the key field', 
   const document = new TestDocument();
   const root = document.createElement('oe-message-proof');
 
-  const error = assertThrows(
-    () => createFreshDom(program, host, root as unknown as Node),
-    Error,
-  );
+  const error = assertThrows(() => createFreshDom(program, host, root as unknown as Node), Error);
   // The shared EachKeyError reason is authored text: the reader learns which
   // field must exist, not which part index raised it.
   assertStringIncludes(error.message, 'keyed list must be an object');
@@ -114,10 +116,7 @@ Deno.test('#1413 runtime messages: fresh-DOM mount and SSR report identically', 
   const document = new TestDocument();
   const root = document.createElement('oe-message-proof');
 
-  const fresh = assertThrows(
-    () => createFreshDom(program, host, root as unknown as Node),
-    Error,
-  );
+  const fresh = assertThrows(() => createFreshDom(program, host, root as unknown as Node), Error);
   const ssr = assertThrows(() => serializeToHtml(program, host), Error);
   // Both execution modes are the same failure for the author: one vocabulary.
   assertStringIncludes(fresh.message, 'this.rows');

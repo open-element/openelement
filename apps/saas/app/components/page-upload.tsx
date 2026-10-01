@@ -28,11 +28,7 @@ export default class UploadPage extends OpenElement {
         <p id='who'>{this.whoText}</p>
         <p id='error'>{this.errorText}</p>
         <p id='action-error'>{this.actionErrorText}</p>
-        <form
-          method='post'
-          action='/upload?/upload'
-          enctype='multipart/form-data'
-        >
+        <form method='post' action='/upload?/upload' enctype='multipart/form-data'>
           <p>
             <label>
               File <input type='file' name='file' required />
@@ -41,7 +37,9 @@ export default class UploadPage extends OpenElement {
           <button type='submit'>Upload</button>
         </form>
         <ul id='files'>
-          {this.fileRows.map((file) => <li key={file.id}>{file.line}</li>)}
+          {this.fileRows.map((file) => (
+            <li key={file.id}>{file.line}</li>
+          ))}
         </ul>
         <form method='post' action='/upload?/delete'>
           <p>

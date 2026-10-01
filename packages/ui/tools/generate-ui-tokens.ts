@@ -110,8 +110,7 @@ for (const name of wanted) {
 // Replacer function, not a replacement string: upstream values flow through
 // untouched even if one ever contains a $-pattern.
 const cssBody = semantic.replace(ANCHOR, () => upstreamBlock.trim());
-const generatedCss =
-  `/**\n * GENERATED — do not edit; source: open-props@${OPEN_PROPS_VERSION} (MIT) + semantic-tokens.css.\n * Regenerate with: deno task generate:ui-tokens\n */\n\n${cssBody}`;
+const generatedCss = `/**\n * GENERATED — do not edit; source: open-props@${OPEN_PROPS_VERSION} (MIT) + semantic-tokens.css.\n * Regenerate with: deno task generate:ui-tokens\n */\n\n${cssBody}`;
 
 if (generatedCss.includes('`') || generatedCss.includes('${') || generatedCss.includes('\\')) {
   throw new Error('generated CSS must stay free of template-literal metacharacters');

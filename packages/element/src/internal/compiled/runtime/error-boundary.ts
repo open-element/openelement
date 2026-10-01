@@ -4,16 +4,13 @@ import type { ErrorSeverity } from '../../protocol/errors.ts';
 function toBoundaryError(error: unknown): OpenElementError {
   if (error instanceof OpenElementError) return error;
   const cause = error instanceof Error ? error : undefined;
-  return new OpenElementError(
-    cause?.message ?? String(error),
-    {
-      code: ErrorCode.BOUNDARY_CAUGHT,
-      severity: 'error' as ErrorSeverity,
-      phase: 'render',
-      recoverable: true,
-      cause,
-    },
-  );
+  return new OpenElementError(cause?.message ?? String(error), {
+    code: ErrorCode.BOUNDARY_CAUGHT,
+    severity: 'error' as ErrorSeverity,
+    phase: 'render',
+    recoverable: true,
+    cause,
+  });
 }
 
 export interface CompiledErrorBoundaryOptions {

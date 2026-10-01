@@ -137,23 +137,19 @@ Deno.test('task permissions: --allow-ffi only on audited tasks', () => {
 });
 
 Deno.test('task permissions: FFI-free unit suites deny FFI and never prompt', () => {
-  for (
-    const [path, name] of [
-      ['packages/element/deno.json', 'test'],
-      ['packages/ui/deno.json', 'test'],
-      ['packages/create/deno.json', 'test'],
-    ] as const
-  ) {
+  for (const [path, name] of [
+    ['packages/element/deno.json', 'test'],
+    ['packages/ui/deno.json', 'test'],
+    ['packages/create/deno.json', 'test'],
+  ] as const) {
     const command = taskMap(path)[name];
     assert(command.includes('--deny-ffi'), `${path}#${name} must carry --deny-ffi`);
     assert(command.includes('--no-prompt'), `${path}#${name} must carry --no-prompt`);
   }
-  for (
-    const [path, name] of [
-      ['deno.json', 'test'],
-      ['packages/router/deno.json', 'test'],
-    ] as const
-  ) {
+  for (const [path, name] of [
+    ['deno.json', 'test'],
+    ['packages/router/deno.json', 'test'],
+  ] as const) {
     const command = taskMap(path)[name];
     assert(command.includes('--no-prompt'), `${path}#${name} must carry --no-prompt`);
   }
@@ -183,9 +179,13 @@ Deno.test('task permissions: content-dates validation is read-only', () => {
     inner.includes('--allow-read'),
     'check:content-dates must read the docs tree and the manifest',
   );
-  for (
-    const flag of ['--allow-write', '--allow-run', '--allow-env', '--allow-net', '--allow-ffi']
-  ) {
+  for (const flag of [
+    '--allow-write',
+    '--allow-run',
+    '--allow-env',
+    '--allow-net',
+    '--allow-ffi',
+  ]) {
     assert(
       !inner.includes(flag),
       `check:content-dates must not carry ${flag}: the manifest is hand-maintained ` +

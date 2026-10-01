@@ -13,14 +13,15 @@
 import { findPort, serveStatic } from '../../tools/lib/static-server.ts';
 
 const args = Object.fromEntries(
-  Deno.args.reduce<string[]>((acc, arg, i, arr) => {
-    if (arg.startsWith('--')) {
-      const key = arg.slice(2);
-      const value = arr[i + 1] ?? '';
-      acc.push(key, value);
-    }
-    return acc;
-  }, [])
+  Deno.args
+    .reduce<string[]>((acc, arg, i, arr) => {
+      if (arg.startsWith('--')) {
+        const key = arg.slice(2);
+        const value = arr[i + 1] ?? '';
+        acc.push(key, value);
+      }
+      return acc;
+    }, [])
     .map((v, i, a) => (i % 2 === 0 ? [v, a[i + 1]] : null))
     .filter((pair): pair is [string, string] => pair !== null),
 );

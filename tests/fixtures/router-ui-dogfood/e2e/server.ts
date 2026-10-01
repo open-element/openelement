@@ -21,9 +21,8 @@ for (let i = 0; i < Deno.args.length; i += 2) {
 const PORT = Number(args.port ?? '4197');
 const ROOT = resolve(Deno.cwd(), args.dir ?? '../dist');
 
-Deno.serve(
-  { port: PORT, hostname: '127.0.0.1' },
-  (request) => dispatchRequest(request, { distDir: ROOT, serverMod: null }),
+Deno.serve({ port: PORT, hostname: '127.0.0.1' }, (request) =>
+  dispatchRequest(request, { distDir: ROOT, serverMod: null }),
 );
 
 console.log(`ui-dogfood fixture server -> http://127.0.0.1:${PORT} (root: ${ROOT})`);

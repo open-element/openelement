@@ -79,11 +79,12 @@ export default definePage(PageBlogPost, {
     // locale does not match the post's language, say so instead of letting
     // the locale prefix imply a translation.
     const postLang = post.frontmatter.lang ?? 'en';
-    const langNotice = postLang === resolved
-      ? ''
-      : resolved === 'en'
-      ? 'This dispatch is published in Chinese (中文原文).'
-      : '本文以英文原文发布（English original）。';
+    const langNotice =
+      postLang === resolved
+        ? ''
+        : resolved === 'en'
+          ? 'This dispatch is published in Chinese (中文原文).'
+          : '本文以英文原文发布（English original）。';
     const article = prepareArticle(post.html, resolved);
     const visiblePosts = posts
       .filter((candidate) => candidate.frontmatter.type !== 'adr')
@@ -122,8 +123,8 @@ export default definePage(PageBlogPost, {
       nextDispatchText: next
         ? `${next.frontmatter.title} →`
         : resolved === 'en'
-        ? 'Back to all dispatches →'
-        : '返回全部文章 →',
+          ? 'Back to all dispatches →'
+          : '返回全部文章 →',
     };
   },
 });

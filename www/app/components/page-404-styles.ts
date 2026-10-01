@@ -1,6 +1,7 @@
 import { compiledStyle } from '../site-ui/compiled-style.ts';
 
-export const page404Styles = [compiledStyle(`
+export const page404Styles = [
+  compiledStyle(`
   :host {
     display: block;
     color: var(--text-primary);
@@ -152,4 +153,5 @@ export const page404Styles = [compiledStyle(`
       animation: none;
     }
   }
-`)];
+`),
+];

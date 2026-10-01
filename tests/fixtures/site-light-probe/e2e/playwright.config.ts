@@ -38,8 +38,7 @@ export default defineConfig({
   // Auto-start the fixture's static server. `exec` prevents the shell
   // Playwright launches from orphaning Deno when the suite finishes.
   webServer: {
-    command:
-      `exec deno run --config ../../../../deno.json --allow-read --allow-net --allow-env --deny-ffi --no-prompt static-server.ts --port ${PORT} --dir ../dist`,
+    command: `exec deno run --config ../../../../deno.json --allow-read --allow-net --allow-env --deny-ffi --no-prompt static-server.ts --port ${PORT} --dir ../dist`,
     url: baseURL,
     reuseExistingServer: false,
     timeout: 120_000,

@@ -30,11 +30,9 @@ const REPO_ROOT = new URL('../../../', import.meta.url).pathname;
  *  excluded — inline `type` specifiers in a value import keep the edge). */
 function extractSpecifiers(source: string): string[] {
   const specs = new Set<string>();
-  for (
-    const match of source.matchAll(
-      /(?:^|[;}])([\s]*)(?:import|export)\s+(?!type[\s{])(?:[^'"]*?\s+from\s+)?['"]([^'"]+)['"]/gm,
-    )
-  ) {
+  for (const match of source.matchAll(
+    /(?:^|[;}])([\s]*)(?:import|export)\s+(?!type[\s{])(?:[^'"]*?\s+from\s+)?['"]([^'"]+)['"]/gm,
+  )) {
     specs.add(match[2]);
   }
   return [...specs];
@@ -166,7 +164,7 @@ Deno.test('negative control: the native server entry graph DOES reach the kernel
   const nativeEntry = renderEntry(buildEntryDescriptor(litRoutes, { ssg: true }));
   const graph = walkModuleGraph(graphRootsFromGenerated(nativeEntry));
   const reachesKernel = [...graph.seen].some((file) =>
-    KERNEL.some((pattern) => pattern.test(file))
+    KERNEL.some((pattern) => pattern.test(file)),
   );
   assertEquals(reachesKernel, true, 'the walk must find the Native kernel when it is present');
 });

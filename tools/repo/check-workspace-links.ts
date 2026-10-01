@@ -99,10 +99,7 @@ export async function readWorkspaceMembers(root = '.'): Promise<WorkspaceMember[
 }
 
 /** Inspect what node_modules holds for one member name. */
-export async function readNodeModulesEntry(
-  name: string,
-  root = '.',
-): Promise<NodeModulesEntry> {
+export async function readNodeModulesEntry(name: string, root = '.'): Promise<NodeModulesEntry> {
   const path = resolve(root, NODE_MODULES_DIR, name);
   let stats: Deno.FileInfo;
   try {

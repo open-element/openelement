@@ -50,10 +50,7 @@ export function collectUsedTags(source: string): Set<string> {
  * islands, package-manifest declarations, route registration tags) and is not
  * defined by any of the scanned sources themselves.
  */
-export function discoverForeignTags(
-  sources: string[],
-  knownTags: ReadonlySet<string>,
-): string[] {
+export function discoverForeignTags(sources: string[], knownTags: ReadonlySet<string>): string[] {
   const used = new Set<string>();
   const defined = new Set<string>();
   for (const source of sources) {

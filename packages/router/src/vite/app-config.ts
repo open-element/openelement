@@ -119,7 +119,7 @@ export function detectAppConfigFile(root: string): string | null {
  * its own invalidation.
  */
 export async function importAppConfigModule(filePath: string): Promise<unknown> {
-  const module = await import(`${toFileUrl(filePath)}?t=${Date.now()}`) as { default?: unknown };
+  const module = (await import(`${toFileUrl(filePath)}?t=${Date.now()}`)) as { default?: unknown };
   if (module.default === undefined) {
     throw new OpenElementError(
       `[openElement] ${OPEN_ELEMENT_CONFIG_FILE} must default-export a config object: ` +
@@ -174,11 +174,7 @@ function metaTag(attrs: Record<string, string>): string {
 }
 
 type HeadConfig = NonNullable<OpenElementUserConfig['head']>;
-type HeadFragmentEmitter = (
-  head: HeadConfig,
-  title: string | null,
-  fragments: string[],
-) => void;
+type HeadFragmentEmitter = (head: HeadConfig, title: string | null, fragments: string[]) => void;
 
 const HEAD_FRAGMENT_EMITTERS = {
   favicon(head, _title, fragments) {
@@ -228,11 +224,11 @@ function assertHeadSurfaceHandled(): void {
   const unhandled = OPEN_ELEMENT_HEAD_KEYS.filter((key) => !handled.has(key));
   if (unhandled.length > 0) {
     throw new OpenElementError(
-      `[openElement] openelement.config.ts head key(s) ${
-        unhandled.join(', ')
-      } are accepted by the schema but not read by the loader. Accepted head keys: ${
-        OPEN_ELEMENT_HEAD_KEYS.join(', ')
-      }. Wire the key into app-config.ts or remove it from the schema.`,
+      `[openElement] openelement.config.ts head key(s) ${unhandled.join(
+        ', ',
+      )} are accepted by the schema but not read by the loader. Accepted head keys: ${OPEN_ELEMENT_HEAD_KEYS.join(
+        ', ',
+      )}. Wire the key into app-config.ts or remove it from the schema.`,
       { code: 'CONFIG_INVALID', severity: 'error', phase: 'build', recoverable: false },
     );
   }
@@ -276,9 +272,8 @@ export function resolveAppConfig(input: ResolveAppConfigInput): ResolvedAppConfi
       throw frameworkOptionsConflict();
     }
   }
-  const overrides: OpenElementUserConfig = fileConfig && hasUserConfigEntries(fileConfig)
-    ? fileConfig
-    : {};
+  const overrides: OpenElementUserConfig =
+    fileConfig && hasUserConfigEntries(fileConfig) ? fileConfig : {};
 
   // --- source roots: `dirs` moves the framework's lookups, and the file
   // conventions follow the shared base of the three roots (config.ts).
@@ -399,18 +394,18 @@ export function resolveAppConfig(input: ResolveAppConfigInput): ResolvedAppConfi
   // config surface deliberately has no separate key for that derivation.
   const headScripts = HEAD_INJECT_FIELDS.scripts(headBlock?.scripts);
   const headStylesheets = HEAD_INJECT_FIELDS.stylesheets(headBlock?.stylesheets);
-  const packageIslands = overrides.packageIslands ?? inline['packageIslands'] as
-    | string[]
-    | undefined;
-  const derivedNoExternal = packageIslands && packageIslands.length > 0
-    ? packageIslands
-    : undefined;
+  const packageIslands =
+    overrides.packageIslands ?? (inline['packageIslands'] as string[] | undefined);
+  const derivedNoExternal =
+    packageIslands && packageIslands.length > 0 ? packageIslands : undefined;
   const inlineFragments = inlineInject?.headFragments ?? [];
   const inlineScripts = inlineInject?.scripts ?? [];
   const inlineStylesheets = inlineInject?.stylesheets ?? [];
   if (
-    headFragments.length > 0 || inlineInject !== undefined ||
-    headScripts !== undefined || headStylesheets !== undefined
+    headFragments.length > 0 ||
+    inlineInject !== undefined ||
+    headScripts !== undefined ||
+    headStylesheets !== undefined
   ) {
     options.inject = {
       ...inlineInject,

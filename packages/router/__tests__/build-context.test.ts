@@ -57,11 +57,14 @@ Deno.test('OpenElementBuildContext populatePhase3 sets phase3 invariants', () =>
   };
   const config = { root: '/project', base: '/base/', command: 'build' as const };
 
-  ctx.populatePhase3(options, config as never, [{
-    __type: 'RegExp',
-    source: '@openelement/.*',
-    flags: '',
-  }, 'lit']);
+  ctx.populatePhase3(options, config as never, [
+    {
+      __type: 'RegExp',
+      source: '@openelement/.*',
+      flags: '',
+    },
+    'lit',
+  ]);
 
   assertEquals(ctx.phase3.root, '/project');
   assertEquals(ctx.phase3.outDir, 'custom-dist');
@@ -84,11 +87,7 @@ Deno.test('OpenElementBuildContext populatePhase3 sets phase3 invariants', () =>
 Deno.test('OpenElementBuildContext phase ordering is enforced', () => {
   const ctx = new OpenElementBuildContext({});
 
-  assertThrows(
-    () => ctx.markComplete(3),
-    Error,
-    'Phase 3 requires Phase 1 to be completed first',
-  );
+  assertThrows(() => ctx.markComplete(3), Error, 'Phase 3 requires Phase 1 to be completed first');
 
   ctx.markComplete(1);
   assertEquals(ctx.isComplete(1), true);

@@ -93,10 +93,12 @@ Deno.test('article routes: content that cannot become a route module fails close
   // A route with no navigation order cannot be placed in the sidebar.
   assertThrows(
     () =>
-      routeSetFor('guide', [{
-        slug: 'unordered',
-        frontmatter: { order: 'first' },
-      }]),
+      routeSetFor('guide', [
+        {
+          slug: 'unordered',
+          frontmatter: { order: 'first' },
+        },
+      ]),
     Error,
     'frontmatter.order must be a number',
   );
@@ -125,24 +127,27 @@ Deno.test('article routes: two content files claiming one generated file fail cl
   // caught by the same mechanism, not by a second code path.
   assertThrows(
     () =>
-      planFiles([{
-        collection: 'guide',
-        slug: 'a-2',
-        routeFile: 'a-2.tsx',
-        componentFile: 'guide-a-2.tsx',
-        elementTag: 'guide-a-2',
-        className: 'GuideA2Page',
-        order: 1,
-      }, {
-        collection: 'guide',
-        slug: 'a-2-alias',
-        routeFile: 'a-2-alias.tsx',
-        // A duplicated binding name: two elements, one file.
-        componentFile: 'guide-a-2.tsx',
-        elementTag: 'guide-a-2-alias',
-        className: 'GuideA2AliasPage',
-        order: 2,
-      }]),
+      planFiles([
+        {
+          collection: 'guide',
+          slug: 'a-2',
+          routeFile: 'a-2.tsx',
+          componentFile: 'guide-a-2.tsx',
+          elementTag: 'guide-a-2',
+          className: 'GuideA2Page',
+          order: 1,
+        },
+        {
+          collection: 'guide',
+          slug: 'a-2-alias',
+          routeFile: 'a-2-alias.tsx',
+          // A duplicated binding name: two elements, one file.
+          componentFile: 'guide-a-2.tsx',
+          elementTag: 'guide-a-2-alias',
+          className: 'GuideA2AliasPage',
+          order: 2,
+        },
+      ]),
     Error,
     'app/components/article-routes/guide-a-2.tsx',
   );
@@ -168,10 +173,11 @@ Deno.test('article routes: the plan covers only managed article paths', () => {
   // The managed directories are exactly the article collection route dirs plus
   // the binding dir — the non-article surface (/blog, /docs, /reference, …) is
   // never walked, written or deleted.
-  assertEquals(
-    [...managedDirectories().keys()].sort(),
-    ['app/components/article-routes', 'app/routes/architecture', 'app/routes/guide'],
-  );
+  assertEquals([...managedDirectories().keys()].sort(), [
+    'app/components/article-routes',
+    'app/routes/architecture',
+    'app/routes/guide',
+  ]);
 });
 
 Deno.test('article routes: the emitted modules name their content source', () => {

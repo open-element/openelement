@@ -74,7 +74,7 @@ export const ROUTER_CLIENT_RUNTIME_ENTRIES = [
 /** Strip ANSI color escapes for stable log scans. */
 export function stripPackAnsi(text: string): string {
   // Intentional ANSI color stripping for log scans.
-  // deno-lint-ignore no-control-regex
+  // oxlint-disable-next-line no-control-regex
   return text.replace(/\x1b\[[0-9;]*m/g, '');
 }
 
@@ -206,7 +206,8 @@ export function stagingPackageJsonFor(
     peerDependencies[name] = publishRange(parsed);
   }
   const hasPeers = Object.keys(peerDependencies).length > 0;
-  const hasPeerMeta = sourceManifest.peerDependenciesMeta !== undefined &&
+  const hasPeerMeta =
+    sourceManifest.peerDependenciesMeta !== undefined &&
     Object.keys(sourceManifest.peerDependenciesMeta).length > 0;
   return {
     name: pkg.name,
@@ -321,7 +322,10 @@ export async function notIgnoredFiles(dir: string): Promise<Set<string>> {
     throw new Error(`[vp-pack] git ls-files failed in ${dir}:\n${result.stderr}`);
   }
   return new Set(
-    result.stdout.split('\n').map((line) => line.trim()).filter((line) => line !== ''),
+    result.stdout
+      .split('\n')
+      .map((line) => line.trim())
+      .filter((line) => line !== ''),
   );
 }
 

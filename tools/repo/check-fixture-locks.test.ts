@@ -48,10 +48,7 @@ Deno.test('fixture locks: shared universes must be byte-identical', () => {
 
   const drifted = new Map(files);
   drifted.set('b', { lock: '{"version":"5","specifiers":{"x":1}}', config });
-  assertStringIncludes(
-    sharedUniverseFailures(ENTRIES, drifted)[0],
-    'lockfiles differ',
-  );
+  assertStringIncludes(sharedUniverseFailures(ENTRIES, drifted)[0], 'lockfiles differ');
 
   const importsDrifted = new Map(files);
   importsDrifted.set('b', {

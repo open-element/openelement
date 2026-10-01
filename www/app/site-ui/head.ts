@@ -66,9 +66,8 @@ export function siteHead(input: SiteHeadInput): PageHead {
       { property: 'og:url', content: canonical },
       {
         property: 'og:image:alt',
-        content: locale === 'zh'
-          ? 'openElement —— 组合而生的 Web。'
-          : 'openElement — The Web, composed.',
+        content:
+          locale === 'zh' ? 'openElement —— 组合而生的 Web。' : 'openElement — The Web, composed.',
       },
     ],
   };

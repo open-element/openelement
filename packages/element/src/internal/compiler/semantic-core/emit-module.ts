@@ -33,16 +33,17 @@ function rewriteImportForGeneratedModule(
   if (!clause) return statement.getText(sf);
   const bindings = clause.namedBindings;
   if (!bindings || !ts.isNamedImports(bindings)) return statement.getText(sf);
-  const kept = bindings.elements.filter((element) =>
-    !isCompileTimeOnlyImport(module, element.propertyName?.text ?? element.name.text)
+  const kept = bindings.elements.filter(
+    (element) => !isCompileTimeOnlyImport(module, element.propertyName?.text ?? element.name.text),
   );
   if (kept.length === bindings.elements.length) return statement.getText(sf);
   const parts: string[] = [];
   if (clause.name) parts.push(clause.name.text);
   if (kept.length > 0) {
-    const specifiers = kept.map((element) =>
-      `${element.isTypeOnly ? 'type ' : ''}` +
-      `${element.propertyName ? `${element.propertyName.text} as ` : ''}${element.name.text}`
+    const specifiers = kept.map(
+      (element) =>
+        `${element.isTypeOnly ? 'type ' : ''}` +
+        `${element.propertyName ? `${element.propertyName.text} as ` : ''}${element.name.text}`,
     );
     parts.push(`{ ${specifiers.join(', ')} }`);
   }
@@ -184,7 +185,12 @@ export function emitCompiledModule(input: EmitModuleInput): EmitModuleResult {
   /** Push a verbatim copy of a node's text (optionally line-prefixed). */
   const pushVerbatim = (text: string, node: ts.Node, prefix = '', name?: string): void => {
     const firstGeneratedLine = codeLines.length + 1;
-    push(text.split('\n').map((line) => prefix + line).join('\n'));
+    push(
+      text
+        .split('\n')
+        .map((line) => prefix + line)
+        .join('\n'),
+    );
     mapLineAt(firstGeneratedLine, prefix.length, node, name);
     mapContinuationLines(text, firstGeneratedLine, node, prefix.length);
   };
@@ -234,7 +240,8 @@ export function emitCompiledModule(input: EmitModuleInput): EmitModuleResult {
     if (
       !ts.isStringLiteral(statement.moduleSpecifier) ||
       statement.moduleSpecifier.text !== '@openelement/element'
-    ) continue;
+    )
+      continue;
     const bindings = statement.importClause?.namedBindings;
     if (!bindings || !ts.isNamedImports(bindings)) continue;
     for (const element of bindings.elements) {
@@ -362,8 +369,8 @@ export function emitCompiledModule(input: EmitModuleInput): EmitModuleResult {
     };
     push('  static __computedFields: {');
     for (const field of computedFields) {
-      const params = field.computed!.deps
-        .map((dep) => `${dep}: ${signalType}<${signalValueType(dep)}>`)
+      const params = field
+        .computed!.deps.map((dep) => `${dep}: ${signalType}<${signalValueType(dep)}>`)
         .join(', ');
       push(`    ${field.name}: (__s: { ${params} }) => ${computedReturnType(field)};`);
     }
@@ -430,8 +437,6 @@ export function emitCompiledModule(input: EmitModuleInput): EmitModuleResult {
   // The one map story at this boundary: real v3 segments, with the Part
   // Program provenance records carried as supplementary metadata only.
   const map = segments.build(fileName, source, program.sourceMap);
-  push(
-    `//# sourceMappingURL=data:application/json;base64,${encodeBase64(JSON.stringify(map))}`,
-  );
+  push(`//# sourceMappingURL=data:application/json;base64,${encodeBase64(JSON.stringify(map))}`);
   return { code: codeLines.join('\n') + '\n', map };
 }

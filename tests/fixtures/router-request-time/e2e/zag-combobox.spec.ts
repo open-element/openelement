@@ -56,13 +56,15 @@ function deepActivePart(page: import('@playwright/test').Page) {
 }
 
 function selectCounts(page: import('@playwright/test').Page) {
-  return page.evaluate(() =>
-    (globalThis as { __zagSelectCounts?: Record<string, number> }).__zagSelectCounts ?? {}
+  return page.evaluate(
+    () => (globalThis as { __zagSelectCounts?: Record<string, number> }).__zagSelectCounts ?? {},
   );
 }
 
 test.describe('zag combobox spike (#1149)', () => {
-  test('SSR imports Zag server-side and renders readable, form-meaningful markup before JS', async ({ request }) => {
+  test('SSR imports Zag server-side and renders readable, form-meaningful markup before JS', async ({
+    request,
+  }) => {
     // A 200 here is itself evidence item 1: the request-time server bundle
     // inlines @zag-js/combobox + @zag-js/vanilla (the route imports the
     // islands), so rendering succeeded with no browser globals available.
@@ -100,7 +102,9 @@ test.describe('zag combobox spike (#1149)', () => {
     await context.close();
   });
 
-  test('two shadow instances are scoped: interacting with one leaves the other untouched', async ({ page }) => {
+  test('two shadow instances are scoped: interacting with one leaves the other untouched', async ({
+    page,
+  }) => {
     await page.goto('/combobox');
     const aInput = page.locator(`${shadowHost('shadow-a')} input[data-part="input"]`);
     const bInput = page.locator(`${shadowHost('shadow-b')} input[data-part="input"]`);
@@ -130,7 +134,9 @@ test.describe('zag combobox spike (#1149)', () => {
     await expect(bContent).toBeHidden();
   });
 
-  test('keyboard, typeahead, escape, blur, focus restoration, disabled option, ARIA contract', async ({ page }) => {
+  test('keyboard, typeahead, escape, blur, focus restoration, disabled option, ARIA contract', async ({
+    page,
+  }) => {
     await page.goto('/combobox');
     const host = shadowHost('shadow-a');
     const input = page.locator(`${host} input[data-part="input"]`);
@@ -202,7 +208,9 @@ test.describe('zag combobox spike (#1149)', () => {
     await expect(input).toHaveAttribute('aria-expanded', 'false');
   });
 
-  test('light-mode in-place activation composes with ADR-0142 (node identity, value, focus)', async ({ page }) => {
+  test('light-mode in-place activation composes with ADR-0142 (node identity, value, focus)', async ({
+    page,
+  }) => {
     const mismatchWarnings: string[] = [];
     page.on('console', (msg) => {
       if (msg.type() === 'warning' && msg.text().includes('SSR/hydration mismatch')) {
@@ -235,18 +243,20 @@ test.describe('zag combobox spike (#1149)', () => {
       await expect(host).toHaveAttribute('data-oe-light', '');
       const input = page.locator('zag-combobox-light input[data-part="input"]');
       await expect(input).toBeVisible();
-      expect(await page.evaluate(() => customElements.get('zag-combobox-light') === undefined))
-        .toBe(true);
+      expect(
+        await page.evaluate(() => customElements.get('zag-combobox-light') === undefined),
+      ).toBe(true);
 
       // Shadow islands hydrate normally while the light chunk is held.
-      await expect(page.locator(`${shadowHost('shadow-a')} input[data-part="input"]`))
-        .toHaveAttribute('role', 'combobox');
+      await expect(
+        page.locator(`${shadowHost('shadow-a')} input[data-part="input"]`),
+      ).toHaveAttribute('role', 'combobox');
 
       // Capture node identity, then type + focus before the upgrade.
       await page.evaluate(() => {
-        const host = document.querySelector('combobox-page')!.shadowRoot!.querySelector(
-          'zag-combobox-light',
-        )!;
+        const host = document
+          .querySelector('combobox-page')!
+          .shadowRoot!.querySelector('zag-combobox-light')!;
         (window as unknown as { __pre: { host: Element; input: HTMLInputElement } }).__pre = {
           host,
           input: host.querySelector('input[data-part="input"]') as HTMLInputElement,
@@ -262,9 +272,9 @@ test.describe('zag combobox spike (#1149)', () => {
       const post = await page.evaluate(() => {
         const pre = (window as unknown as { __pre: { host: Element; input: HTMLInputElement } })
           .__pre;
-        const host = document.querySelector('combobox-page')!.shadowRoot!.querySelector(
-          'zag-combobox-light',
-        );
+        const host = document
+          .querySelector('combobox-page')!
+          .shadowRoot!.querySelector('zag-combobox-light');
         let active: Element | null = document.activeElement;
         while (active?.shadowRoot?.activeElement) active = active.shadowRoot.activeElement;
         return {
@@ -303,7 +313,9 @@ test.describe('zag combobox spike (#1149)', () => {
     }
   });
 
-  test('same-turn DOM move and disconnect/reconnect do not duplicate listeners', async ({ page }) => {
+  test('same-turn DOM move and disconnect/reconnect do not duplicate listeners', async ({
+    page,
+  }) => {
     await page.goto('/combobox');
     const host = shadowHost('shadow-a');
     const input = page.locator(`${host} input[data-part="input"]`);
@@ -315,10 +327,7 @@ test.describe('zag combobox spike (#1149)', () => {
     await input.focus(); // DOM focus, not click — see WebKit note above.
     await input.pressSequentially('appl');
     await page.keyboard.press('ArrowDown');
-    await expect(input).toHaveAttribute(
-      'aria-activedescendant',
-      'combobox:shadow-a:option:apple',
-    );
+    await expect(input).toHaveAttribute('aria-activedescendant', 'combobox:shadow-a:option:apple');
     await page.keyboard.press('Enter');
     await expect(input).toHaveValue('Apple');
     expect((await selectCounts(page))['shadow-a']).toBe(1);
@@ -336,10 +345,7 @@ test.describe('zag combobox spike (#1149)', () => {
     await input.fill('');
     await input.pressSequentially('ban');
     await page.keyboard.press('ArrowDown');
-    await expect(input).toHaveAttribute(
-      'aria-activedescendant',
-      'combobox:shadow-a:option:banana',
-    );
+    await expect(input).toHaveAttribute('aria-activedescendant', 'combobox:shadow-a:option:banana');
     await page.keyboard.press('Enter');
     await expect(input).toHaveValue('Banana');
     expect((await selectCounts(page))['shadow-a']).toBe(2);
@@ -363,24 +369,23 @@ test.describe('zag combobox spike (#1149)', () => {
     await input.fill('');
     await input.pressSequentially('appl');
     await page.keyboard.press('ArrowDown');
-    await expect(input).toHaveAttribute(
-      'aria-activedescendant',
-      'combobox:shadow-a:option:apple',
-    );
+    await expect(input).toHaveAttribute('aria-activedescendant', 'combobox:shadow-a:option:apple');
     await page.keyboard.press('Enter');
     await expect(input).toHaveValue('Apple');
     expect((await selectCounts(page))['shadow-a']).toBe(3);
   });
 
-  test('controlled prop update flows through the machine and reflects in the DOM', async ({ page }) => {
+  test('controlled prop update flows through the machine and reflects in the DOM', async ({
+    page,
+  }) => {
     await page.goto('/combobox');
     const bInput = page.locator(`${shadowHost('shadow-b')} input[data-part="input"]`);
     await expect(bInput).toHaveAttribute('role', 'combobox');
 
     const snapshot = await page.evaluate(() => {
-      const hostEl = document.querySelector('combobox-page')!.shadowRoot!.querySelector(
-        'zag-combobox[machine-id="shadow-b"]',
-      ) as unknown as {
+      const hostEl = document
+        .querySelector('combobox-page')!
+        .shadowRoot!.querySelector('zag-combobox[machine-id="shadow-b"]') as unknown as {
         demoSetControlledValue(value: string): void;
         demoSnapshot(): { value: string[]; valueAsString: string; inputValue: string };
       };
@@ -429,7 +434,9 @@ test.describe('zag combobox spike (#1149)', () => {
     await expect(page.locator('#selected-echo')).toHaveText('selected=Orange');
   });
 
-  test('a light island created at document scope works (getRootNode = Document)', async ({ page }) => {
+  test('a light island created at document scope works (getRootNode = Document)', async ({
+    page,
+  }) => {
     await page.goto('/combobox');
     // Wait until the light island class is defined (chunk loaded on load strategy).
     await page.waitForFunction(() => customElements.get('zag-combobox-light') !== undefined);

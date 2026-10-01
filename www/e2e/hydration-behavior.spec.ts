@@ -32,8 +32,8 @@ function isProbeError(result: unknown): result is ProbeError {
 async function waitForHydratedSearch(page: Page): Promise<void> {
   await page.goto('/');
   await page.waitForLoadState('networkidle');
-  await page.waitForFunction(() =>
-    !!customElements.get('open-search') && !!customElements.get('open-theme-toggle')
+  await page.waitForFunction(
+    () => !!customElements.get('open-search') && !!customElements.get('open-theme-toggle'),
   );
   // Role locators pierce the open shadow roots natively; the accessible name
   // is the user-visible contract, not an implementation class.
@@ -78,10 +78,7 @@ test.describe('compiled activation on shipped islands', () => {
     const activatedOverlay = await overlay.elementHandle();
     expect(activatedOverlay).not.toBeNull();
     expect(
-      await ssrOverlay!.evaluate(
-        (node, candidate) => node === candidate,
-        activatedOverlay,
-      ),
+      await ssrOverlay!.evaluate((node, candidate) => node === candidate, activatedOverlay),
     ).toBe(true);
   });
 
@@ -105,16 +102,15 @@ test.describe('compiled activation on shipped islands', () => {
     const reconnectedOverlay = await overlay.elementHandle();
     expect(reconnectedOverlay).not.toBeNull();
     expect(
-      await ssrOverlay!.evaluate(
-        (node, candidate) => node === candidate,
-        reconnectedOverlay,
-      ),
+      await ssrOverlay!.evaluate((node, candidate) => node === candidate, reconnectedOverlay),
     ).toBe(true);
   });
 });
 
 test.describe('open-button form piercing', () => {
-  test('shadow-DOM submit click reaches the outer form as a composed submit event', async ({ page }) => {
+  test('shadow-DOM submit click reaches the outer form as a composed submit event', async ({
+    page,
+  }) => {
     await waitForHydratedSearch(page);
 
     const result = await page.evaluate(async () => {
@@ -129,19 +125,22 @@ test.describe('open-button form piercing', () => {
       );
       if (!chunkMatch) return { error: 'open-button chunk URL not found in island loader' };
 
-      const mod = await import(`/client/islands/${chunkMatch[1]}`) as Record<string, unknown>;
+      const mod = (await import(`/client/islands/${chunkMatch[1]}`)) as Record<string, unknown>;
       // Island chunks wrapped by the runtime expose a `.t` namespace (the same
       // unwrap the island loader applies); plain ui-package chunks export the
       // class directly.
       const ns = mod.t as
         | (Record<string, CustomElementConstructor | undefined> & {
-          default?: CustomElementConstructor;
-        })
+            default?: CustomElementConstructor;
+          })
         | undefined;
       // #638: package island chunks dropped `export default`; the constructor
       // is exported under the CEM class name `OpenButton`.
-      const ButtonCtor = (mod as Record<string, CustomElementConstructor | undefined>).OpenButton ??
-        ns?.OpenButton ?? ns?.default ?? (mod.default as CustomElementConstructor | undefined);
+      const ButtonCtor =
+        (mod as Record<string, CustomElementConstructor | undefined>).OpenButton ??
+        ns?.OpenButton ??
+        ns?.default ??
+        (mod.default as CustomElementConstructor | undefined);
       if (!ButtonCtor) return { error: 'open-button chunk has no OpenButton export' };
       if (!customElements.get('open-button')) {
         customElements.define('open-button', ButtonCtor);

@@ -113,10 +113,7 @@ Deno.test('foreign-tag scan: defineIsland calls are no longer openElement-author
 });
 
 Deno.test('foreign-tag scan: discovers foreign tags in island and page JSX', () => {
-  const foreign = discoverForeignTags(
-    [ISLAND_SOURCE, PAGE_SOURCE],
-    new Set(['my-island']),
-  );
+  const foreign = discoverForeignTags([ISLAND_SOURCE, PAGE_SOURCE], new Set(['my-island']));
   assertEquals(foreign, ['demo-native-badge', 'md-switch', 'sl-button']);
 });
 

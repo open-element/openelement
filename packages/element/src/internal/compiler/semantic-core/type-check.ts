@@ -134,11 +134,9 @@ export function typeCheckEmittedModule(
     // `noEmit` is set, so a write request is a defect; failing loudly beats
     // silently reporting a clean check for a program that tried to emit.
     writeFile: () => {
-      throw frameworkError(
-        CompilerErrorCode.INVALID_SOURCE,
-        'typeCheckEmittedModule never emits',
-        { phase: 'build' },
-      );
+      throw frameworkError(CompilerErrorCode.INVALID_SOURCE, 'typeCheckEmittedModule never emits', {
+        phase: 'build',
+      });
     },
   };
 
@@ -147,26 +145,29 @@ export function typeCheckEmittedModule(
     options: compilerOptions,
     host,
   });
-  return ts.getPreEmitDiagnostics(program)
-    // A clean compile of the emitted module is the whole question, so only
-    // diagnostics that belong to the emitted files are reported. Ancillary
-    // complaints about the CALLER's resolution (a missing package the caller
-    // chose not to map) would otherwise be indistinguishable from an emitted
-    // module that does not type-check.
-    .filter((diagnostic) => {
-      return diagnostic.file !== undefined && virtualFiles.has(diagnostic.file.fileName);
-    })
-    .map((diagnostic) => {
-      const file = diagnostic.file as ts.SourceFile;
-      const position = file.getLineAndCharacterOfPosition(diagnostic.start ?? 0);
-      return {
-        code: diagnostic.code,
-        message: ts.flattenDiagnosticMessageText(diagnostic.messageText, ' '),
-        file: file.fileName,
-        line: position.line + 1,
-        character: position.character + 1,
-      };
-    });
+  return (
+    ts
+      .getPreEmitDiagnostics(program)
+      // A clean compile of the emitted module is the whole question, so only
+      // diagnostics that belong to the emitted files are reported. Ancillary
+      // complaints about the CALLER's resolution (a missing package the caller
+      // chose not to map) would otherwise be indistinguishable from an emitted
+      // module that does not type-check.
+      .filter((diagnostic) => {
+        return diagnostic.file !== undefined && virtualFiles.has(diagnostic.file.fileName);
+      })
+      .map((diagnostic) => {
+        const file = diagnostic.file as ts.SourceFile;
+        const position = file.getLineAndCharacterOfPosition(diagnostic.start ?? 0);
+        return {
+          code: diagnostic.code,
+          message: ts.flattenDiagnosticMessageText(diagnostic.messageText, ' '),
+          file: file.fileName,
+          line: position.line + 1,
+          character: position.character + 1,
+        };
+      })
+  );
 }
 
 /**

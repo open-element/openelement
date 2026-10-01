@@ -30,14 +30,19 @@ Deno.test('queue scan acknowledges only after scanner verdict and atomic RPC', a
   let acked = 0;
   let retried = 0;
   try {
-    await consumeAttachmentScans({
-      queue: 'openelement-attachment-scan',
-      messages: [{
-        body: { type: 'attachment.scan', reservationId: 'r1', objectKey: 'u/o' },
-        ack: () => acked++,
-        retry: () => retried++,
-      }],
-    }, env());
+    await consumeAttachmentScans(
+      {
+        queue: 'openelement-attachment-scan',
+        messages: [
+          {
+            body: { type: 'attachment.scan', reservationId: 'r1', objectKey: 'u/o' },
+            ack: () => acked++,
+            retry: () => retried++,
+          },
+        ],
+      },
+      env(),
+    );
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -52,11 +57,13 @@ Deno.test('queue scan retries invalid scanner responses without acknowledging', 
   await consumeAttachmentScans(
     {
       queue: 'openelement-attachment-scan',
-      messages: [{
-        body: { type: 'attachment.scan', reservationId: 'r1', objectKey: 'u/o' },
-        ack: () => acked++,
-        retry: () => retried++,
-      }],
+      messages: [
+        {
+          body: { type: 'attachment.scan', reservationId: 'r1', objectKey: 'u/o' },
+          ack: () => acked++,
+          retry: () => retried++,
+        },
+      ],
     },
     env({
       ATTACHMENT_SCANNER: { fetch: () => Promise.resolve(Response.json({ verdict: 'unknown' })) },
@@ -76,14 +83,19 @@ Deno.test('DLQ acknowledges only after durable dead-letter persistence', async (
   let acked = 0;
   let retried = 0;
   try {
-    await consumeAttachmentScanDeadLetters({
-      queue: 'openelement-attachment-scan-dlq',
-      messages: [{
-        body: { type: 'attachment.scan', reservationId: 'r1', objectKey: 'u/o' },
-        ack: () => acked++,
-        retry: () => retried++,
-      }],
-    }, env());
+    await consumeAttachmentScanDeadLetters(
+      {
+        queue: 'openelement-attachment-scan-dlq',
+        messages: [
+          {
+            body: { type: 'attachment.scan', reservationId: 'r1', objectKey: 'u/o' },
+            ack: () => acked++,
+            retry: () => retried++,
+          },
+        ],
+      },
+      env(),
+    );
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -98,14 +110,19 @@ Deno.test('DLQ retries when durable persistence is unavailable', async () => {
   let acked = 0;
   let retried = 0;
   try {
-    await consumeAttachmentScanDeadLetters({
-      queue: 'openelement-attachment-scan-dlq',
-      messages: [{
-        body: { type: 'attachment.scan', reservationId: 'r1', objectKey: 'u/o' },
-        ack: () => acked++,
-        retry: () => retried++,
-      }],
-    }, env());
+    await consumeAttachmentScanDeadLetters(
+      {
+        queue: 'openelement-attachment-scan-dlq',
+        messages: [
+          {
+            body: { type: 'attachment.scan', reservationId: 'r1', objectKey: 'u/o' },
+            ack: () => acked++,
+            retry: () => retried++,
+          },
+        ],
+      },
+      env(),
+    );
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -142,23 +159,27 @@ Deno.test('Cron removes stale objects before releasing quota and requeues pendin
     throw new Error(`unexpected request: ${url}`);
   };
   try {
-    await reconcileAttachments(env({
-      ATTACHMENT_SCAN_QUEUE: {
-        send: (message) => {
-          queued.push(message);
-          return Promise.resolve();
+    await reconcileAttachments(
+      env({
+        ATTACHMENT_SCAN_QUEUE: {
+          send: (message) => {
+            queued.push(message);
+            return Promise.resolve();
+          },
         },
-      },
-    }));
+      }),
+    );
   } finally {
     globalThis.fetch = originalFetch;
   }
   assertEquals(operations, ['storage:DELETE', 'release']);
-  assertEquals(queued, [{
-    type: 'attachment.scan',
-    reservationId: 'pending-1',
-    objectKey: 'u/pending',
-  }]);
+  assertEquals(queued, [
+    {
+      type: 'attachment.scan',
+      reservationId: 'pending-1',
+      objectKey: 'u/pending',
+    },
+  ]);
 });
 
 Deno.test('Cron retains an abandoned reservation across Storage failure and releases it on retry', async () => {
@@ -197,7 +218,8 @@ Deno.test('Cron retains an abandoned reservation across Storage failure and rele
     if (
       url.endsWith('/rpc/list_pending_attachment_scans') ||
       url.endsWith('/rpc/list_requested_attachment_scan_replays')
-    ) return Promise.resolve(Response.json([]));
+    )
+      return Promise.resolve(Response.json([]));
     throw new Error(`unexpected request: ${url}`);
   };
   try {
@@ -231,7 +253,8 @@ Deno.test('Cron converges an interrupted attachment deletion', async () => {
       url.endsWith('/rpc/list_stale_attachment_reservations') ||
       url.endsWith('/rpc/list_pending_attachment_scans') ||
       url.endsWith('/rpc/list_requested_attachment_scan_replays')
-    ) return Promise.resolve(Response.json([]));
+    )
+      return Promise.resolve(Response.json([]));
     throw new Error(`unexpected request: ${url}`);
   };
   try {
@@ -249,9 +272,9 @@ Deno.test('Cron retains a deletion tombstone across Storage failure and converge
   globalThis.fetch = (input) => {
     const url = String(input);
     if (url.endsWith('/rpc/list_pending_attachment_deletions')) {
-      return Promise.resolve(Response.json(
-        completed ? [] : [{ id: 'deleting-retry', object_key: 'u/deleting-retry' }],
-      ));
+      return Promise.resolve(
+        Response.json(completed ? [] : [{ id: 'deleting-retry', object_key: 'u/deleting-retry' }]),
+      );
     }
     if (url.includes('/storage/v1/object/')) {
       storageAttempts++;
@@ -269,7 +292,8 @@ Deno.test('Cron retains a deletion tombstone across Storage failure and converge
       url.endsWith('/rpc/list_stale_attachment_reservations') ||
       url.endsWith('/rpc/list_pending_attachment_scans') ||
       url.endsWith('/rpc/list_requested_attachment_scan_replays')
-    ) return Promise.resolve(Response.json([]));
+    )
+      return Promise.resolve(Response.json([]));
     throw new Error(`unexpected request: ${url}`);
   };
   try {
@@ -294,10 +318,12 @@ Deno.test('Cron isolates one enqueue failure so later pending scans still run', 
       return Promise.resolve(Response.json([]));
     }
     if (url.endsWith('/rpc/list_pending_attachment_scans')) {
-      return Promise.resolve(Response.json([
-        { id: 'bad', object_key: 'u/bad' },
-        { id: 'good', object_key: 'u/good' },
-      ]));
+      return Promise.resolve(
+        Response.json([
+          { id: 'bad', object_key: 'u/bad' },
+          { id: 'good', object_key: 'u/good' },
+        ]),
+      );
     }
     if (url.endsWith('/rpc/list_requested_attachment_scan_replays')) {
       return Promise.resolve(Response.json([]));
@@ -305,17 +331,19 @@ Deno.test('Cron isolates one enqueue failure so later pending scans still run', 
     throw new Error(`unexpected request: ${url}`);
   };
   try {
-    await reconcileAttachments(env({
-      ATTACHMENT_SCAN_QUEUE: {
-        send: (message) => {
-          if (message.reservationId === 'bad') {
-            return Promise.reject(new Error('queue unavailable'));
-          }
-          queued.push(message.reservationId);
-          return Promise.resolve();
+    await reconcileAttachments(
+      env({
+        ATTACHMENT_SCAN_QUEUE: {
+          send: (message) => {
+            if (message.reservationId === 'bad') {
+              return Promise.reject(new Error('queue unavailable'));
+            }
+            queued.push(message.reservationId);
+            return Promise.resolve();
+          },
         },
-      },
-    }));
+      }),
+    );
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -337,11 +365,15 @@ Deno.test('Cron marks replay only after Queue handoff succeeds', async () => {
       return Promise.resolve(Response.json([]));
     }
     if (url.endsWith('/rpc/list_requested_attachment_scan_replays')) {
-      return Promise.resolve(Response.json([{
-        id: 'dlq-1',
-        reservation_id: 'reservation-1',
-        object_key: 'u/replay',
-      }]));
+      return Promise.resolve(
+        Response.json([
+          {
+            id: 'dlq-1',
+            reservation_id: 'reservation-1',
+            object_key: 'u/replay',
+          },
+        ]),
+      );
     }
     if (url.endsWith('/rpc/mark_attachment_scan_replayed')) {
       operations.push('marked');
@@ -350,14 +382,16 @@ Deno.test('Cron marks replay only after Queue handoff succeeds', async () => {
     throw new Error(`unexpected request: ${url}`);
   };
   try {
-    await reconcileAttachments(env({
-      ATTACHMENT_SCAN_QUEUE: {
-        send: () => {
-          operations.push('sent');
-          return Promise.resolve();
+    await reconcileAttachments(
+      env({
+        ATTACHMENT_SCAN_QUEUE: {
+          send: () => {
+            operations.push('sent');
+            return Promise.resolve();
+          },
         },
-      },
-    }));
+      }),
+    );
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -379,10 +413,12 @@ Deno.test('Cron leaves a failed replay request durable and continues later rows'
       return Promise.resolve(Response.json([]));
     }
     if (url.endsWith('/rpc/list_requested_attachment_scan_replays')) {
-      return Promise.resolve(Response.json([
-        { id: 'bad', reservation_id: 'bad', object_key: 'u/bad' },
-        { id: 'good', reservation_id: 'good', object_key: 'u/good' },
-      ]));
+      return Promise.resolve(
+        Response.json([
+          { id: 'bad', reservation_id: 'bad', object_key: 'u/bad' },
+          { id: 'good', reservation_id: 'good', object_key: 'u/good' },
+        ]),
+      );
     }
     if (url.endsWith('/rpc/mark_attachment_scan_replayed')) {
       marked.push((JSON.parse(String(init?.body)) as { dead_letter_id: string }).dead_letter_id);
@@ -391,14 +427,16 @@ Deno.test('Cron leaves a failed replay request durable and continues later rows'
     throw new Error(`unexpected request: ${url}`);
   };
   try {
-    await reconcileAttachments(env({
-      ATTACHMENT_SCAN_QUEUE: {
-        send: (message) =>
-          message.reservationId === 'bad'
-            ? Promise.reject(new Error('queue unavailable'))
-            : Promise.resolve(),
-      },
-    }));
+    await reconcileAttachments(
+      env({
+        ATTACHMENT_SCAN_QUEUE: {
+          send: (message) =>
+            message.reservationId === 'bad'
+              ? Promise.reject(new Error('queue unavailable'))
+              : Promise.resolve(),
+        },
+      }),
+    );
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -415,14 +453,19 @@ Deno.test('payment Queue acknowledges only after the durable processor succeeds'
   let acked = 0;
   let retried = 0;
   try {
-    await consumePaymentEvents({
-      queue: 'openelement-payment-events',
-      messages: [{
-        body: { type: 'payment.process', eventId: 'evt_paid' },
-        ack: () => acked++,
-        retry: () => retried++,
-      }],
-    }, env());
+    await consumePaymentEvents(
+      {
+        queue: 'openelement-payment-events',
+        messages: [
+          {
+            body: { type: 'payment.process', eventId: 'evt_paid' },
+            ack: () => acked++,
+            retry: () => retried++,
+          },
+        ],
+      },
+      env(),
+    );
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -436,14 +479,19 @@ Deno.test('payment DLQ retries until the dead letter is durable', async () => {
   let acked = 0;
   let retried = 0;
   try {
-    await consumePaymentEventDeadLetters({
-      queue: 'openelement-payment-events-dlq',
-      messages: [{
-        body: { type: 'payment.process', eventId: 'evt_failed' },
-        ack: () => acked++,
-        retry: () => retried++,
-      }],
-    }, env());
+    await consumePaymentEventDeadLetters(
+      {
+        queue: 'openelement-payment-events-dlq',
+        messages: [
+          {
+            body: { type: 'payment.process', eventId: 'evt_failed' },
+            ack: () => acked++,
+            retry: () => retried++,
+          },
+        ],
+      },
+      env(),
+    );
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -456,10 +504,12 @@ Deno.test('payment Cron queues received events and marks replay only after hando
   globalThis.fetch = (input, init) => {
     const url = String(input);
     if (url.endsWith('/rpc/list_pending_payment_events')) {
-      return Promise.resolve(Response.json([
-        { provider_event_id: 'evt_received', processing_state: 'received' },
-        { provider_event_id: 'evt_replay', processing_state: 'replay_requested' },
-      ]));
+      return Promise.resolve(
+        Response.json([
+          { provider_event_id: 'evt_received', processing_state: 'received' },
+          { provider_event_id: 'evt_replay', processing_state: 'replay_requested' },
+        ]),
+      );
     }
     if (url.endsWith('/rpc/mark_payment_event_replay_enqueued')) {
       operations.push(`mark:${JSON.parse(String(init?.body)).target_event_id}`);
@@ -468,14 +518,16 @@ Deno.test('payment Cron queues received events and marks replay only after hando
     throw new Error(`unexpected request: ${url}`);
   };
   try {
-    await reconcilePayments(env({
-      PAYMENT_EVENT_QUEUE: {
-        send: (message) => {
-          operations.push(`send:${message.eventId}`);
-          return Promise.resolve();
+    await reconcilePayments(
+      env({
+        PAYMENT_EVENT_QUEUE: {
+          send: (message) => {
+            operations.push(`send:${message.eventId}`);
+            return Promise.resolve();
+          },
         },
-      },
-    }));
+      }),
+    );
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -498,9 +550,9 @@ Deno.test('payment lifecycle logs correlate by event id and stay redacted', asyn
       return Promise.resolve(new Response(null, { status: 503 }));
     }
     if (url.endsWith('/rpc/list_pending_payment_events')) {
-      return Promise.resolve(Response.json([
-        { provider_event_id: 'evt_received', processing_state: 'received' },
-      ]));
+      return Promise.resolve(
+        Response.json([{ provider_event_id: 'evt_received', processing_state: 'received' }]),
+      );
     }
     throw new Error(`unexpected request: ${url}`);
   };
@@ -531,8 +583,7 @@ Deno.test('payment lifecycle logs correlate by event id and stay redacted', asyn
     'evt_ok',
   );
   assertEquals(
-    entries.find((entry) => entry.event === 'payment_event_dead_letter_failed')
-      ?.provider_event_id,
+    entries.find((entry) => entry.event === 'payment_event_dead_letter_failed')?.provider_event_id,
     'evt_dead',
   );
   const reconciliation = entries.find((entry) => entry.event === 'payment_reconciliation');
@@ -566,12 +617,16 @@ Deno.test('Cron delegates attachment replay state and audit to one atomic RPC', 
       return Promise.resolve(Response.json([]));
     }
     if (url.endsWith('/rpc/list_requested_attachment_scan_replays')) {
-      return Promise.resolve(Response.json([{
-        id: 'dlq-1',
-        reservation_id: 'reservation-1',
-        object_key: 'u/replay',
-        replay_requested_by: 'admin-9',
-      }]));
+      return Promise.resolve(
+        Response.json([
+          {
+            id: 'dlq-1',
+            reservation_id: 'reservation-1',
+            object_key: 'u/replay',
+            replay_requested_by: 'admin-9',
+          },
+        ]),
+      );
     }
     if (url.endsWith('/rpc/mark_attachment_scan_replayed')) {
       operations.push({
@@ -587,10 +642,12 @@ Deno.test('Cron delegates attachment replay state and audit to one atomic RPC', 
   } finally {
     globalThis.fetch = originalFetch;
   }
-  assertEquals(operations, [{
-    rpc: 'mark_attachment_scan_replayed',
-    body: { dead_letter_id: 'dlq-1' },
-  }]);
+  assertEquals(operations, [
+    {
+      rpc: 'mark_attachment_scan_replayed',
+      body: { dead_letter_id: 'dlq-1' },
+    },
+  ]);
 });
 
 Deno.test('payment Cron delegates replay state and audit to one atomic RPC', async () => {
@@ -599,11 +656,15 @@ Deno.test('payment Cron delegates replay state and audit to one atomic RPC', asy
   globalThis.fetch = (input, init) => {
     const url = String(input);
     if (url.endsWith('/rpc/list_pending_payment_events')) {
-      return Promise.resolve(Response.json([{
-        provider_event_id: 'evt_replay',
-        processing_state: 'replay_requested',
-        replay_requested_by: 'admin-9',
-      }]));
+      return Promise.resolve(
+        Response.json([
+          {
+            provider_event_id: 'evt_replay',
+            processing_state: 'replay_requested',
+            replay_requested_by: 'admin-9',
+          },
+        ]),
+      );
     }
     if (url.endsWith('/rpc/mark_payment_event_replay_enqueued')) {
       operations.push({
@@ -619,10 +680,12 @@ Deno.test('payment Cron delegates replay state and audit to one atomic RPC', asy
   } finally {
     globalThis.fetch = originalFetch;
   }
-  assertEquals(operations, [{
-    rpc: 'mark_payment_event_replay_enqueued',
-    body: { target_event_id: 'evt_replay' },
-  }]);
+  assertEquals(operations, [
+    {
+      rpc: 'mark_payment_event_replay_enqueued',
+      body: { target_event_id: 'evt_replay' },
+    },
+  ]);
 });
 
 Deno.test('payment Cron isolates an atomic replay mark failure and continues later rows', async () => {
@@ -631,10 +694,12 @@ Deno.test('payment Cron isolates an atomic replay mark failure and continues lat
   globalThis.fetch = (input, init) => {
     const url = String(input);
     if (url.endsWith('/rpc/list_pending_payment_events')) {
-      return Promise.resolve(Response.json([
-        { provider_event_id: 'evt_bad', processing_state: 'replay_requested' },
-        { provider_event_id: 'evt_good', processing_state: 'replay_requested' },
-      ]));
+      return Promise.resolve(
+        Response.json([
+          { provider_event_id: 'evt_bad', processing_state: 'replay_requested' },
+          { provider_event_id: 'evt_good', processing_state: 'replay_requested' },
+        ]),
+      );
     }
     if (url.endsWith('/rpc/mark_payment_event_replay_enqueued')) {
       const eventId = JSON.parse(String(init?.body)).target_event_id;
@@ -644,14 +709,16 @@ Deno.test('payment Cron isolates an atomic replay mark failure and continues lat
     throw new Error(`unexpected request: ${url}`);
   };
   try {
-    await reconcilePayments(env({
-      PAYMENT_EVENT_QUEUE: {
-        send: (message) => {
-          operations.push(`send:${message.eventId}`);
-          return Promise.resolve();
+    await reconcilePayments(
+      env({
+        PAYMENT_EVENT_QUEUE: {
+          send: (message) => {
+            operations.push(`send:${message.eventId}`);
+            return Promise.resolve();
+          },
         },
-      },
-    }));
+      }),
+    );
   } finally {
     globalThis.fetch = originalFetch;
   }

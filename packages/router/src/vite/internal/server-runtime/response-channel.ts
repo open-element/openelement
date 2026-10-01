@@ -166,6 +166,9 @@ const HONO_SSG_CONTEXT = 'HONO_SSG_CONTEXT';
  * nonce-free while the SSG CSP injector writes the policy-only meta.
  */
 export function isSsgPrerenderDispatch(env: unknown): boolean {
-  return typeof env === 'object' && env !== null &&
-    (env as Record<string, unknown>)[HONO_SSG_CONTEXT] === true;
+  return (
+    typeof env === 'object' &&
+    env !== null &&
+    (env as Record<string, unknown>)[HONO_SSG_CONTEXT] === true
+  );
 }

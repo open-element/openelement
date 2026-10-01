@@ -71,24 +71,14 @@ Deno.test('streamed-frame policy: attribute predicate screens names and URL valu
 });
 
 Deno.test('streamed-frame policy: exported deny lists match the documented contract', () => {
-  assertEquals([...STREAM_FRAME_FORBIDDEN_TAGS], [
-    'script',
-    'style',
-    'template',
-    'iframe',
-    'object',
-    'embed',
-    'base',
-    'meta',
-    'link',
-  ]);
-  assertEquals([...STREAM_FRAME_URL_ATTRIBUTES], [
-    'href',
-    'src',
-    'action',
-    'formaction',
-    'xlink:href',
-  ]);
+  assertEquals(
+    [...STREAM_FRAME_FORBIDDEN_TAGS],
+    ['script', 'style', 'template', 'iframe', 'object', 'embed', 'base', 'meta', 'link'],
+  );
+  assertEquals(
+    [...STREAM_FRAME_URL_ATTRIBUTES],
+    ['href', 'src', 'action', 'formaction', 'xlink:href'],
+  );
   assertEquals(STREAM_FRAME_URL_CONTROL_MAX, 32);
   assertEquals(STREAM_FRAME_UNSAFE_URL.source, '^(javascript|vbscript|data):');
   assertEquals(STREAM_FRAME_UNSAFE_URL.flags, 'i');

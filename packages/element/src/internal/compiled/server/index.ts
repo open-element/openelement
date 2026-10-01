@@ -189,7 +189,8 @@ function serializeDsdAttributes(options: CompiledDsdOptions | undefined): string
     }
   }
   if (
-    options.slotAssignment !== undefined && options.slotAssignment !== 'named' &&
+    options.slotAssignment !== undefined &&
+    options.slotAssignment !== 'named' &&
     options.slotAssignment !== 'manual'
   ) {
     throw new CompiledProgramValidationError(
@@ -224,15 +225,9 @@ function itemTemplateFields(
   return out;
 }
 
-function itemsFor(
-  part: ProgramEachPart,
-  value: unknown,
-): Array<Record<string, unknown>> {
+function itemsFor(part: ProgramEachPart, value: unknown): Array<Record<string, unknown>> {
   if (part.key === undefined) {
-    throw new CompiledProgramValidationError(
-      `parts[${part.index}]`,
-      'each Region needs key',
-    );
+    throw new CompiledProgramValidationError(`parts[${part.index}]`, 'each Region needs key');
   }
   const keyField = part.key;
   const requiredFields = itemTemplateFields(part.item);
@@ -296,10 +291,7 @@ function itemsFor(
   return items;
 }
 
-function whenIsActive(
-  part: ProgramWhenPart,
-  value: unknown,
-): boolean {
+function whenIsActive(part: ProgramWhenPart, value: unknown): boolean {
   try {
     // Canonical condition evaluation (#1372) — shared with the client
     // executors; do not reintroduce a private comparison.
@@ -404,10 +396,7 @@ function serializedProgramContent(
   options: CompiledServerOptions,
   pending?: ReadonlySet<number>,
 ): string {
-  return serializeProgramTemplate(
-    program,
-    serializerSeams(host, options, new Set(), pending),
-  );
+  return serializeProgramTemplate(program, serializerSeams(host, options, new Set(), pending));
 }
 
 /** Serialize only the program-owned root content, with deterministic markers. */
@@ -504,12 +493,14 @@ const STREAM_FRAME_FORBIDDEN_TAG_SET: ReadonlySet<string> = new Set(STREAM_FRAME
  * this check covers the shared policy over the program's static shape only.
  */
 function hasOpaqueRegionNode(nodes: readonly ProgramTreeNode[]): boolean {
-  return nodes.some((node) =>
-    node.k === 'el' &&
-    (node.tag.includes('-') || node.tag === 'slot' ||
-      STREAM_FRAME_FORBIDDEN_TAG_SET.has(node.tag) ||
-      node.attrs.some(([name, value]) => unsafeStreamFrameAttribute(name, value)) ||
-      hasOpaqueRegionNode(node.children))
+  return nodes.some(
+    (node) =>
+      node.k === 'el' &&
+      (node.tag.includes('-') ||
+        node.tag === 'slot' ||
+        STREAM_FRAME_FORBIDDEN_TAG_SET.has(node.tag) ||
+        node.attrs.some(([name, value]) => unsafeStreamFrameAttribute(name, value)) ||
+        hasOpaqueRegionNode(node.children)),
   );
 }
 
@@ -527,13 +518,16 @@ export function createDeferredServerExecutor(
   const program = assertCompiledProgram(raw);
   const { owner } = selection;
   if (
-    owner.program !== raw || owner.version !== PART_PROGRAM_VERSION ||
-    !owner.instanceId || typeof owner.instanceId !== 'string'
+    owner.program !== raw ||
+    owner.version !== PART_PROGRAM_VERSION ||
+    !owner.instanceId ||
+    typeof owner.instanceId !== 'string'
   ) {
     throw new CompiledProgramValidationError('owner', 'wrong program, version, or instance');
   }
   if (
-    (options.mode ?? 'open') === 'closed' || options.renderNestedElement ||
+    (options.mode ?? 'open') === 'closed' ||
+    options.renderNestedElement ||
     options.projectedChildren
   ) {
     throw new CompiledProgramValidationError(
@@ -557,10 +551,13 @@ export function createDeferredServerExecutor(
       );
     }
     if (
-      program.parts.some((other) =>
-        other !== part && 'signal' in other && other.signal === part.signal &&
-        (other.k !== 'text' && other.k !== 'when' && other.k !== 'each' ||
-          !selection.pendingParts.includes(other.index))
+      program.parts.some(
+        (other) =>
+          other !== part &&
+          'signal' in other &&
+          other.signal === part.signal &&
+          ((other.k !== 'text' && other.k !== 'when' && other.k !== 'each') ||
+            !selection.pendingParts.includes(other.index)),
       )
     ) {
       throw new CompiledProgramValidationError(
@@ -569,8 +566,8 @@ export function createDeferredServerExecutor(
       );
     }
     if (
-      part.k === 'when' && (hasOpaqueRegionNode(part.on) || hasOpaqueRegionNode(part.off)) ||
-      part.k === 'each' && hasOpaqueRegionNode(part.item)
+      (part.k === 'when' && (hasOpaqueRegionNode(part.on) || hasOpaqueRegionNode(part.off))) ||
+      (part.k === 'each' && hasOpaqueRegionNode(part.item))
     ) {
       throw new CompiledProgramValidationError(
         `parts[${index}]`,
@@ -585,7 +582,9 @@ export function createDeferredServerExecutor(
     shell,
     serializeResolved(candidate, index, value) {
       if (
-        candidate !== owner || candidate.program !== raw || candidate.version !== program.version
+        candidate !== owner ||
+        candidate.program !== raw ||
+        candidate.version !== program.version
       ) {
         throw new CompiledProgramValidationError('owner', 'wrong deferred Part owner');
       }

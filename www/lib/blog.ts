@@ -79,5 +79,8 @@ export function toBlogPost(entry: CollectionEntry): BlogPost {
  * date-prefixed names, which is the convention this collection enforces.
  */
 export function prepareBlogPosts(entries: CollectionEntry[]): BlogPost[] {
-  return entries.filter((entry) => !entry.frontmatter.draft).reverse().map(toBlogPost);
+  return entries
+    .filter((entry) => !entry.frontmatter.draft)
+    .reverse()
+    .map(toBlogPost);
 }

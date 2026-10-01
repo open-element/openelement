@@ -14,7 +14,7 @@ async function sourceFiles(dir: URL): Promise<URL[]> {
   const out: URL[] = [];
   for await (const entry of Deno.readDir(dir)) {
     const child = new URL(`${entry.name}${entry.isDirectory ? '/' : ''}`, dir);
-    if (entry.isDirectory) out.push(...await sourceFiles(child));
+    if (entry.isDirectory) out.push(...(await sourceFiles(child)));
     else if (entry.name.endsWith('.ts')) out.push(child);
   }
   return out;

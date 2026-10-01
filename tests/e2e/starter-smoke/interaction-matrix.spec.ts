@@ -77,8 +77,7 @@ test.describe('hydration timing', () => {
     await page.addInitScript(() => {
       const original = globalThis.requestIdleCallback;
       globalThis.requestIdleCallback = ((fn: unknown) =>
-        globalThis.setTimeout(() =>
-          (fn as () => void)(), 2500)) as typeof original;
+        globalThis.setTimeout(() => (fn as () => void)(), 2500)) as typeof original;
     });
     await page.goto('/');
     const counter = page.locator('my-counter');
@@ -110,12 +109,13 @@ test.describe('hydration timing', () => {
   // interacted before hydration must not exhaust the bounded pre-upgrade
   // queue — the real idle island click still replays exactly once. Uses only
   // public DOM APIs (no test-only internals).
-  test('third-party pressure does not block idle replay (declared-island scoping)', async ({ page }) => {
+  test('third-party pressure does not block idle replay (declared-island scoping)', async ({
+    page,
+  }) => {
     await page.addInitScript(() => {
       const original = globalThis.requestIdleCallback;
       globalThis.requestIdleCallback = ((fn: unknown) =>
-        globalThis.setTimeout(() =>
-          (fn as () => void)(), 2500)) as typeof original;
+        globalThis.setTimeout(() => (fn as () => void)(), 2500)) as typeof original;
     });
     await page.goto('/');
     const counter = page.locator('my-counter');

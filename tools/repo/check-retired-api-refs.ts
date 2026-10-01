@@ -52,9 +52,7 @@ const collect = (file: string) => {
   files.push(file);
 };
 for (const dir of SCAN_DIRS) {
-  for await (
-    const entry of walk(dir, { exts: ['.md', '.mdx', '.ts', '.tsx', '.tmpl'] })
-  ) {
+  for await (const entry of walk(dir, { exts: ['.md', '.mdx', '.ts', '.tsx', '.tmpl'] })) {
     collect(entry.path);
   }
 }
@@ -105,10 +103,15 @@ async function deriveRetiredSymbols(): Promise<Set<string>> {
     stdin: 'null',
     stdout: 'piped',
     stderr: 'null',
-  }).output().catch(() => undefined);
+  })
+    .output()
+    .catch(() => undefined);
   if (!tags || tags.code !== 0) return retired;
   let base: SnapshotLike | undefined;
-  for (const tag of new TextDecoder().decode(tags.stdout).split('\n').map((t) => t.trim())) {
+  for (const tag of new TextDecoder()
+    .decode(tags.stdout)
+    .split('\n')
+    .map((t) => t.trim())) {
     if (!tag) continue;
     const raw = await gitShow(tag);
     if (!raw) continue;
@@ -132,7 +135,7 @@ async function deriveRetiredSymbols(): Promise<Set<string>> {
   for (const name of symbolNames(base)) {
     // Identifiers only; short or all-lowercase names collide with prose.
     if (name.length < 6 || !/^[A-Za-z][A-Za-z0-9]*$/.test(name)) continue;
-    if (!(/[A-Z]/.test(name))) continue;
+    if (!/[A-Z]/.test(name)) continue;
     if (!currentNames.has(name)) retired.add(name);
   }
   return retired;
@@ -157,7 +160,8 @@ for (const file of files) {
   for (const line of text.split('\n')) {
     const previous = logical[logical.length - 1];
     if (
-      line.trimStart().startsWith('>') && previous !== undefined &&
+      line.trimStart().startsWith('>') &&
+      previous !== undefined &&
       previous.trimStart().startsWith('>')
     ) {
       logical[logical.length - 1] = `${previous} ${line}`;
@@ -169,8 +173,8 @@ for (const file of files) {
     if (text.includes(token)) {
       // A retired list that names the token as retired is documentation,
       // not teaching: allow "Retired:" / "已退役" lines only.
-      const offending = logical.filter((line) =>
-        line.includes(token) && !/Retired:|已退役|retired/i.test(line)
+      const offending = logical.filter(
+        (line) => line.includes(token) && !/Retired:|已退役|retired/i.test(line),
       );
       if (offending.length > 0) {
         console.error(`${file}: retired reference '${token}' (${offending.length} line(s))`);
@@ -181,7 +185,10 @@ for (const file of files) {
   for (const statement of text.matchAll(NAMED_IMPORT)) {
     const specifier = statement[2];
     for (const raw of statement[1].split(',')) {
-      const name = raw.replace(/^\s*type\s+/, '').split(/\s+as\s+/)[0].trim();
+      const name = raw
+        .replace(/^\s*type\s+/, '')
+        .split(/\s+as\s+/)[0]
+        .trim();
       if (name && RETIRED_SYMBOLS.has(name)) {
         console.error(`${file}: retired symbol '${name}' imported from '${specifier}'`);
         failures += 1;

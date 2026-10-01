@@ -58,8 +58,11 @@ function normalize(path: string): string {
  */
 function bindingDeclaresProcess(name: ts.BindingName): boolean {
   if (ts.isIdentifier(name)) return name.text === 'process';
-  return name.elements.some((element) =>
-    ts.isBindingElement(element) && ts.isIdentifier(element.name) && element.name.text === 'process'
+  return name.elements.some(
+    (element) =>
+      ts.isBindingElement(element) &&
+      ts.isIdentifier(element.name) &&
+      element.name.text === 'process',
   );
 }
 
@@ -68,14 +71,18 @@ function scopeBindsProcess(scope: ts.Node): boolean {
     return true;
   }
   if (
-    ts.isCatchClause(scope) && scope.variableDeclaration !== undefined &&
+    ts.isCatchClause(scope) &&
+    scope.variableDeclaration !== undefined &&
     bindingDeclaresProcess(scope.variableDeclaration.name)
   ) {
     return true;
   }
   if (
-    !ts.isSourceFile(scope) && !ts.isBlock(scope) && !ts.isModuleBlock(scope) &&
-    !ts.isCaseClause(scope) && !ts.isDefaultClause(scope)
+    !ts.isSourceFile(scope) &&
+    !ts.isBlock(scope) &&
+    !ts.isModuleBlock(scope) &&
+    !ts.isCaseClause(scope) &&
+    !ts.isDefaultClause(scope)
   ) {
     return false;
   }
@@ -97,7 +104,8 @@ function scopeBindsProcess(scope: ts.Node): boolean {
         return true;
       }
       if (
-        named !== undefined && ts.isNamedImports(named) &&
+        named !== undefined &&
+        ts.isNamedImports(named) &&
         named.elements.some((element) => element.name.text === 'process')
       ) {
         return true;
@@ -125,12 +133,15 @@ function extractBareProcessEnvLines(source: string, path: string): number[] {
   const visit = (node: ts.Node): void => {
     let processRef: ts.Identifier | undefined;
     if (
-      ts.isPropertyAccessExpression(node) && node.name.text === 'env' &&
-      ts.isIdentifier(node.expression) && node.expression.text === 'process'
+      ts.isPropertyAccessExpression(node) &&
+      node.name.text === 'env' &&
+      ts.isIdentifier(node.expression) &&
+      node.expression.text === 'process'
     ) {
       processRef = node.expression;
     } else if (
-      ts.isElementAccessExpression(node) && ts.isIdentifier(node.expression) &&
+      ts.isElementAccessExpression(node) &&
+      ts.isIdentifier(node.expression) &&
       node.expression.text === 'process' &&
       ts.isStringLiteralLike(node.argumentExpression) &&
       node.argumentExpression.text === 'env'

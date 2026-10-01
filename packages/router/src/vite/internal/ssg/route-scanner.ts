@@ -173,9 +173,11 @@ function pathToVarName(path: string): string {
 // inline lookup replaces 2-case switch
 function getSpecialFileType(fileName: string): SpecialFileType | null {
   const baseName = fileName.replace(/\.[^.]+$/, '');
-  return ({ _renderer: 'renderer', _middleware: 'middleware' } as Record<string, SpecialFileType>)[
-    baseName
-  ] ?? null;
+  return (
+    ({ _renderer: 'renderer', _middleware: 'middleware' } as Record<string, SpecialFileType>)[
+      baseName
+    ] ?? null
+  );
 }
 
 /**
@@ -317,7 +319,9 @@ export async function scanRoutes(
             // the page. This shape has never worked correctly; fail the build
             // with the rename guidance instead of letting it ship silently.
             if (
-              isDefinePage && tagName !== undefined && tagName === fileToTagName(relativePath) &&
+              isDefinePage &&
+              tagName !== undefined &&
+              tagName === fileToTagName(relativePath) &&
               semantics.usesExportedTagName
             ) {
               throw buildError(
@@ -344,7 +348,7 @@ export async function scanRoutes(
           // requires attribute shape (= or >) so prose mentioning the
           // attribute (e.g. guide pages) does not pull the layer in. #577:
           // follow relative imports so forms inside shared components count.
-          ...(source !== undefined && await sourceTreeHasEnhancedForms(fullPath, source)
+          ...(source !== undefined && (await sourceTreeHasEnhancedForms(fullPath, source))
             ? { hasEnhancedForms: true }
             : {}),
           ...(options.includeSource && source !== undefined ? { source } : {}),
@@ -365,12 +369,12 @@ export async function scanRoutes(
     return a.path < b.path
       ? -1
       : a.path > b.path
-      ? 1
-      : a.filePath < b.filePath
-      ? -1
-      : a.filePath > b.filePath
-      ? 1
-      : 0;
+        ? 1
+        : a.filePath < b.filePath
+          ? -1
+          : a.filePath > b.filePath
+            ? 1
+            : 0;
   });
 
   // #1029: pathToVarName folds '/', '-', and '_' into '_', so paths like
@@ -386,10 +390,9 @@ export async function scanRoutes(
       // Only compare the scanner's bracket-file grammar; no regex-language
       // equivalence or arbitrary overlap rejection is attempted.
       const shape = parseRouteFilePath(
-        entry.filePath.replace(/\[\.\.\.[^\]]+\]/g, '[...param]').replace(
-          /\[(?!\.\.\.)[^\]]+\]/g,
-          '[param]',
-        ),
+        entry.filePath
+          .replace(/\[\.\.\.[^\]]+\]/g, '[...param]')
+          .replace(/\[(?!\.\.\.)[^\]]+\]/g, '[param]'),
       );
       const previous = seenPaths.get(shape);
       if (previous) {

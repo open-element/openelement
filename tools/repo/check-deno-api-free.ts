@@ -182,9 +182,10 @@ export function packagePolicyFailures(
 ): string[] {
   return packages
     .filter((pkg) => PACKAGE_POLICIES[pkg.name] === undefined)
-    .map((pkg) =>
-      `${pkg.dir}: no PACKAGE_POLICIES entry for ${pkg.name}; ` +
-      'review the package runtime boundary and add an explicit policy'
+    .map(
+      (pkg) =>
+        `${pkg.dir}: no PACKAGE_POLICIES entry for ${pkg.name}; ` +
+        'review the package runtime boundary and add an explicit policy',
     );
 }
 
@@ -361,9 +362,10 @@ export function allowlistCoverageFailures(
   return failures;
 }
 
-export function scanTree(
-  files: { path: string; text: string }[],
-): { violations: string[]; scanned: number } {
+export function scanTree(files: { path: string; text: string }[]): {
+  violations: string[];
+  scanned: number;
+} {
   const violations: string[] = [];
   let scanned = 0;
   for (const file of files) {

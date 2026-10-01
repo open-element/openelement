@@ -248,10 +248,11 @@ Deno.test('definePage() admits route.layout (string | false) and rejects other t
 });
 
 Deno.test('projectPageProps() defaults to params + loader-data record entries', () => {
-  assertEquals(
-    projectPageProps({ params: { id: '42' }, data: { title: 'Hello', n: 1 } }),
-    { id: '42', title: 'Hello', n: 1 },
-  );
+  assertEquals(projectPageProps({ params: { id: '42' }, data: { title: 'Hello', n: 1 } }), {
+    id: '42',
+    title: 'Hello',
+    n: 1,
+  });
   // Non-record loader data contributes nothing (arrays are positional, not named).
   assertEquals(projectPageProps({ params: { id: '7' }, data: ['a'] }), { id: '7' });
   assertEquals(projectPageProps({}), {});
@@ -484,8 +485,9 @@ Deno.test('#1413 authoring errors: defineIslandConfig() failure modes carry code
     assertEquals(thrown.severity, 'error');
     // The remediation sentence: what to change, not only what failed.
     assert(
-      /write |add |use one of|use only|remove |either |e\.g\.|make them identical|declare only one/i
-        .test(thrown.message),
+      /write |add |use one of|use only|remove |either |e\.g\.|make them identical|declare only one/i.test(
+        thrown.message,
+      ),
       `${code} must carry remediation guidance, got: ${thrown.message}`,
     );
   }

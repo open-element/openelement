@@ -86,12 +86,7 @@ export function buildTextPart(
 }
 
 /** Resolve a compiler-owned static path without any selector/discovery walk. */
-export function resolvePath(
-  root: Node,
-  path: number[],
-  where: string,
-  rootOffset = 0,
-): Element {
+export function resolvePath(root: Node, path: number[], where: string, rootOffset = 0): Element {
   // Program paths are relative to the template node list: the first index
   // selects a child of the mount root (the sole template root element lives at
   // path [0]). The validator rejects empty paths, so every path walks at least
@@ -255,12 +250,7 @@ function installEventPart(
   scope.add(() => element.removeEventListener(part.event, listener));
 }
 
-function installRefPart(
-  ctx: MountContext,
-  root: Node,
-  part: ProgramRefPart,
-  rootOffset = 0,
-): void {
+function installRefPart(ctx: MountContext, root: Node, part: ProgramRefPart, rootOffset = 0): void {
   const element = resolvePath(root, part.path, 'ref Part', rootOffset);
   const scope = ctx.rootScope.child();
   const ref = ctx.host.refs?.[part.ref];
@@ -288,8 +278,12 @@ export function attachFixedParts(
 ): void {
   for (const part of ctx.program.parts) {
     if (
-      part.k === 'attr' || part.k === 'prop' || part.k === 'bool' || part.k === 'class' ||
-      part.k === 'style' || part.k === 'html'
+      part.k === 'attr' ||
+      part.k === 'prop' ||
+      part.k === 'bool' ||
+      part.k === 'class' ||
+      part.k === 'style' ||
+      part.k === 'html'
     ) {
       installValuePart(ctx, root, part, mode, rootOffset);
     } else if (part.k === 'event') {

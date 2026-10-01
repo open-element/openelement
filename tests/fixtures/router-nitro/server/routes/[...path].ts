@@ -38,13 +38,16 @@ const openElementHandler = createOpenElementNitroHandler({
       case '/error':
         return html('<main data-route="error"><h1>Error boundary</h1></main>', headers, 500);
       case '/api/proof':
-        return Response.json({
-          ok: true,
-          framework: 'openElement',
-          runtime: 'nitro',
-          path: url.pathname,
-          env: context?.env?.OPEN_ELEMENT_PROOF,
-        }, { headers });
+        return Response.json(
+          {
+            ok: true,
+            framework: 'openElement',
+            runtime: 'nitro',
+            path: url.pathname,
+            env: context?.env?.OPEN_ELEMENT_PROOF,
+          },
+          { headers },
+        );
       case '/island':
         return html(
           [
@@ -96,35 +99,40 @@ function streamTransportProof(request: Request, headers: Headers): Response {
   headers.append('set-cookie', 'stream-proof=1; HttpOnly; SameSite=Lax');
   const encoder = new TextEncoder();
   let stage = 0;
-  const stream = new ReadableStream<Uint8Array>({
-    async pull(controller) {
-      if (request.signal.aborted) {
-        controller.close();
-        return;
-      }
-      if (stage++ === 0) {
-        controller.enqueue(encoder.encode(
-          '<!doctype html><html><body><main data-route="stream"><!--oe:p0--><!--oe:/p0--></main>',
-        ));
-      } else {
-        await new Promise((resolve) => setTimeout(resolve, 10));
-        if (!request.signal.aborted) {
-          controller.enqueue(encoder.encode(
-            '<template data-oe-transport-proof>Loaded</template><noscript>Loaded</noscript></body></html>',
-          ));
+  const stream = new ReadableStream<Uint8Array>(
+    {
+      async pull(controller) {
+        if (request.signal.aborted) {
+          controller.close();
+          return;
         }
-        controller.close();
-      }
+        if (stage++ === 0) {
+          controller.enqueue(
+            encoder.encode(
+              '<!doctype html><html><body><main data-route="stream"><!--oe:p0--><!--oe:/p0--></main>',
+            ),
+          );
+        } else {
+          await new Promise((resolve) => setTimeout(resolve, 10));
+          if (!request.signal.aborted) {
+            controller.enqueue(
+              encoder.encode(
+                '<template data-oe-transport-proof>Loaded</template><noscript>Loaded</noscript></body></html>',
+              ),
+            );
+          }
+          controller.close();
+        }
+      },
     },
-  }, { highWaterMark: 0 });
+    { highWaterMark: 0 },
+  );
   return new Response(stream, { status: 200, headers });
 }
 
 // Nitro v3 (h3 v2) is fetch-native: the route event's `req` is already a
 // standard Request, so the route is a pure pass-through to the mounted
 // handler (#857). The per-request env arrives via the handler options above.
-export default function openElementNitroProofRoute(event: {
-  req: Request;
-}): Promise<Response> {
+export default function openElementNitroProofRoute(event: { req: Request }): Promise<Response> {
   return openElementHandler(event);
 }

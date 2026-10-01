@@ -216,12 +216,7 @@ export default class ReferencePage extends OpenElement {
       // pagefind stops indexing every page that lacks the attribute. The shell
       // already renders the one <main> landmark (#main-content).
       <div data-pagefind-body>
-        <open-reading-shell
-          rail
-          footer
-          metadata={this.metadata}
-          locale={this.locale}
-        >
+        <open-reading-shell rail footer metadata={this.metadata} locale={this.locale}>
           <div slot='rail'>
             <open-page-rail items={this.railItems} locale={this.locale}></open-page-rail>
           </div>

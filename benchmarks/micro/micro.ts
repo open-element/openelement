@@ -334,9 +334,7 @@ export function runMicroSuite(options: MicroOptions = {}): MicroSuiteResult {
   // mean an empty class list; claim treats empty as absent.
   const normalizeEmptyClass = (html: string): string =>
     html.replaceAll(' class=""', '').replaceAll(' class>', '>');
-  if (
-    normalizeEmptyClass(freshHtml) !== `<host>${normalizeEmptyClass(serializedHtml)}</host>`
-  ) {
+  if (normalizeEmptyClass(freshHtml) !== `<host>${normalizeEmptyClass(serializedHtml)}</host>`) {
     throw new Error('[micro] fresh DOM diverges from SSR output');
   }
 
@@ -442,7 +440,8 @@ export function runMicroSuite(options: MicroOptions = {}): MicroSuiteResult {
     provenance: {
       openElementSha: options.openElementSha ?? 'unknown',
       deno: Deno.version.deno,
-      note: 'fake-DOM kernel/region numbers isolate algorithmic behavior (no layout/paint); ' +
+      note:
+        'fake-DOM kernel/region numbers isolate algorithmic behavior (no layout/paint); ' +
         'browser-inclusive numbers come from the JFB harness local output ' +
         '(.artifacts/jfb-evidence.json)',
     },

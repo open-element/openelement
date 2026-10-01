@@ -93,7 +93,7 @@ Deno.test('deriveDependencies resolves an internal workspace dependency from sou
 Deno.test('deriveDependencies materializes a root-mapped npm dependency used by source', () => {
   const localIo: DeriveDepsIo = {
     ...io,
-    readRootJson: () => ({ imports: { 'react': 'npm:react@^18.2.0' } }),
+    readRootJson: () => ({ imports: { react: 'npm:react@^18.2.0' } }),
     readSrcFiles: () => [`import { y } from 'react';`],
   };
   const deps = deriveDependencies(pkg('@openelement/element', '1.0.0'), [], localIo);
@@ -104,7 +104,7 @@ Deno.test('deriveDependencies keeps direct TypeScript 6 exact in the package man
   const localIo: DeriveDepsIo = {
     ...io,
     readPkgJson: () => ({
-      imports: { 'typescript': 'npm:typescript@6.0.3' },
+      imports: { typescript: 'npm:typescript@6.0.3' },
     }),
   };
   const deps = deriveDependencies(pkg('@openelement/element', '1.0.0'), [], localIo);
@@ -114,7 +114,7 @@ Deno.test('deriveDependencies keeps direct TypeScript 6 exact in the package man
 Deno.test('deriveDependencies keeps direct root-mapped TypeScript 6 exact', () => {
   const localIo: DeriveDepsIo = {
     ...io,
-    readRootJson: () => ({ imports: { 'typescript': 'npm:typescript@6.0.3' } }),
+    readRootJson: () => ({ imports: { typescript: 'npm:typescript@6.0.3' } }),
     readSrcFiles: () => [`import ts from 'typescript';`],
   };
   const deps = deriveDependencies(pkg('@openelement/element', '1.0.0'), [], localIo);
@@ -124,7 +124,7 @@ Deno.test('deriveDependencies keeps direct root-mapped TypeScript 6 exact', () =
 Deno.test('deriveDependencies throws when a root-mapped npm dependency has no version', () => {
   const localIo: DeriveDepsIo = {
     ...io,
-    readRootJson: () => ({ imports: { 'react': 'npm:react' } }),
+    readRootJson: () => ({ imports: { react: 'npm:react' } }),
     readSrcFiles: () => [`import { y } from 'react';`],
   };
   assertThrows(
@@ -144,10 +144,7 @@ Deno.test('deriveAllDependencies reads root imports once for the full package gr
     },
     readSrcFiles: () => ["import 'react';"],
   };
-  const packages = [
-    pkg('@openelement/element', '1.0.0'),
-    pkg('@openelement/router', '1.0.0'),
-  ];
+  const packages = [pkg('@openelement/element', '1.0.0'), pkg('@openelement/router', '1.0.0')];
   const dependencies = deriveAllDependencies(packages, localIo);
   assertEquals(rootReads, 1);
   assertEquals(dependencies.get('@openelement/element'), { react: '^18.2.0' });
@@ -216,9 +213,7 @@ Deno.test('publishPackage skips an immutable version that already exists', async
   await publishPackage(pkg('@openelement/element', '0.41.0-alpha.13'), false, publishIo);
 
   assertEquals(published, []);
-  assertEquals(logs, [
-    '[npm] @openelement/element@0.41.0-alpha.13 already published; skipping.',
-  ]);
+  assertEquals(logs, ['[npm] @openelement/element@0.41.0-alpha.13 already published; skipping.']);
 });
 
 Deno.test('publishPackage does not move latest after a prerelease publish (#607)', async () => {
@@ -298,9 +293,7 @@ Deno.test('publishPackage skips after an E403 only when the version is actually 
   await publishPackage(pkg('@openelement/element', '0.41.0'), false, publishIo);
 
   assertEquals(queries, 2);
-  assertEquals(logs, [
-    '[npm] @openelement/element@0.41.0 already published; skipping.',
-  ]);
+  assertEquals(logs, ['[npm] @openelement/element@0.41.0 already published; skipping.']);
 });
 
 Deno.test('publishPackage propagates an E403 when the version is not actually published (#1038)', async () => {
@@ -379,7 +372,10 @@ Deno.test('verifyNpmRelease default retry schedule covers npm propagation delays
     },
   });
   assertEquals(sleeps, [5_000, 10_000, 20_000, 30_000, 45_000, 60_000]);
-  assertEquals(sleeps.reduce((total, delay) => total + delay, 0), 170_000);
+  assertEquals(
+    sleeps.reduce((total, delay) => total + delay, 0),
+    170_000,
+  );
 });
 
 Deno.test('verifyNpmRelease does not require latest === prerelease (#607)', async () => {
@@ -391,9 +387,7 @@ Deno.test('verifyNpmRelease does not require latest === prerelease (#607)', asyn
     sleep: () => Promise.resolve(),
     query: (_specifier, field) => {
       if (field === 'versions') return Promise.resolve(VERSIONS_FIELD(['0.41.0-alpha.12']));
-      return Promise.resolve(
-        field === 'dist-tags.latest' ? '0.41.2' : '0.41.0-alpha.13',
-      );
+      return Promise.resolve(field === 'dist-tags.latest' ? '0.41.2' : '0.41.0-alpha.13');
     },
   });
 });
@@ -505,19 +499,13 @@ Deno.test('classifyVpPackLog classifies errors, unexpected warnings and undeclar
 
 Deno.test('classifyVpPackLog leaves clean vp pack output empty', () => {
   assertEquals(
-    classifyVpPackLog(
-      'ℹ dist/index.js 1.2 kB\n✔ Build complete in 1s\n',
-      { has: () => false },
-    ),
+    classifyVpPackLog('ℹ dist/index.js 1.2 kB\n✔ Build complete in 1s\n', { has: () => false }),
     { errors: [], unexpectedWarnings: [], unresolvedImports: [], disallowedUnresolved: [] },
   );
 });
 
 Deno.test('classifyVpPackLog treats ANSI-colored output like plain text', () => {
-  const parsed = classifyVpPackLog(
-    '\x1b[31mERROR\x1b[0m boom\n',
-    { has: () => false },
-  );
+  const parsed = classifyVpPackLog('\x1b[31mERROR\x1b[0m boom\n', { has: () => false });
   assertEquals(parsed.errors, ['ERROR boom']);
 });
 
@@ -562,7 +550,10 @@ Deno.test('publishRelease verifies every package and writes a bound receipt', as
   const { io, receipt, verified } = releaseIo();
   const result = await publishRelease(releasePackages(), io);
   assertEquals(result.result, 'published');
-  assertEquals(result.packages.every((entry) => entry.published && entry.verified), true);
+  assertEquals(
+    result.packages.every((entry) => entry.published && entry.verified),
+    true,
+  );
   assertEquals(result.sha, 'a'.repeat(40));
   assertEquals(result.tree, 'b'.repeat(40));
   assertEquals(Object.keys(result.tarballs).length, 4);
@@ -583,10 +574,7 @@ Deno.test('publishRelease records a partial publish and does not claim success',
   const router = result.packages.find((entry) => entry.name === '@openelement/router');
   assertEquals(router?.published, false);
   assertEquals(router?.error?.includes('E403'), true);
-  assertEquals(
-    result.packages.filter((entry) => entry.published).length,
-    3,
-  );
+  assertEquals(result.packages.filter((entry) => entry.published).length, 3);
   assertEquals(receipt()?.result, 'partial');
 });
 
@@ -596,8 +584,14 @@ Deno.test('publishRelease fails closed when registry verification fails', async 
   });
   const result = await publishRelease(releasePackages(), io);
   assertEquals(result.result, 'failed');
-  assertEquals(result.packages.every((entry) => entry.published), true);
-  assertEquals(result.packages.every((entry) => !entry.verified), true);
+  assertEquals(
+    result.packages.every((entry) => entry.published),
+    true,
+  );
+  assertEquals(
+    result.packages.every((entry) => !entry.verified),
+    true,
+  );
   assertEquals(result.packages[0].error?.includes('dist-tag beta moved'), true);
   assertEquals(receipt()?.result, 'failed');
 });

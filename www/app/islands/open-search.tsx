@@ -122,7 +122,9 @@ export default class OpenSearch extends OpenElement {
               aria-live='polite'
               onClick={this.closeSearchFromResults}
             >
-              <div class='empty' hidden={this.hideEmpty}>{this.message}</div>
+              <div class='empty' hidden={this.hideEmpty}>
+                {this.message}
+              </div>
               <div class='skeleton' hidden={this.hideSkeleton} aria-hidden='true'>
                 <span></span>
                 <span></span>

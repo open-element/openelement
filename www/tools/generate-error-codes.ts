@@ -77,7 +77,8 @@ function normalizeMessage(text: string): string {
 function unwrapExpression(node: ts.Expression): ts.Expression {
   let current = node;
   while (
-    ts.isAsExpression(current) || ts.isSatisfiesExpression(current) ||
+    ts.isAsExpression(current) ||
+    ts.isSatisfiesExpression(current) ||
     ts.isParenthesizedExpression(current)
   ) {
     current = current.expression;
@@ -96,8 +97,7 @@ function renderStaticText(node: ts.Node | undefined): string {
   if (!node) return '';
   if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) return node.text;
   if (ts.isTemplateExpression(node)) {
-    return node.head.text +
-      node.templateSpans.map((span) => `…${span.literal.text}`).join('');
+    return node.head.text + node.templateSpans.map((span) => `…${span.literal.text}`).join('');
   }
   if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.PlusToken) {
     return renderStaticText(node.left) + renderStaticText(node.right);
@@ -123,12 +123,17 @@ function messageAfter(node: ts.Node): string {
   }
   // Diagnostic-object shape: { code: 'OECXXXX', message: ... }
   if (
-    parent && ts.isPropertyAssignment(parent) && ts.isIdentifier(parent.name) &&
-    parent.name.text === 'code' && parent.parent && ts.isObjectLiteralExpression(parent.parent)
+    parent &&
+    ts.isPropertyAssignment(parent) &&
+    ts.isIdentifier(parent.name) &&
+    parent.name.text === 'code' &&
+    parent.parent &&
+    ts.isObjectLiteralExpression(parent.parent)
   ) {
     for (const property of parent.parent.properties) {
       if (
-        ts.isPropertyAssignment(property) && ts.isIdentifier(property.name) &&
+        ts.isPropertyAssignment(property) &&
+        ts.isIdentifier(property.name) &&
         property.name.text === 'message'
       ) {
         const text = renderStaticText(unwrapExpression(property.initializer));
@@ -146,7 +151,8 @@ function collectCodes(
   out: Map<string, CodeOccurrence[]>,
 ): void {
   const visit = (node: ts.Node): void => {
-    const isCodeLiteral = (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) &&
+    const isCodeLiteral =
+      (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) &&
       OEC_CODE.test(node.text);
     if (isCodeLiteral) {
       const line = source.getLineAndCharacterOfPosition(node.getStart()).line + 1;
@@ -167,7 +173,8 @@ function collectRuntimeCodes(text: string, path: string, failures: string[]): Ru
   const codes: RuntimeCode[] = [];
   const visit = (node: ts.Node): void => {
     if (
-      ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) &&
+      ts.isVariableDeclaration(node) &&
+      ts.isIdentifier(node.name) &&
       node.name.text === 'ErrorCode' &&
       node.initializer
     ) {
@@ -186,13 +193,14 @@ function collectRuntimeCodes(text: string, path: string, failures: string[]): Ru
             failures.push(`${path}: ErrorCode.${property.name.text} has no static value`);
             continue;
           }
-          const summary = ts.getJSDocCommentsAndTags(property)
+          const summary = ts
+            .getJSDocCommentsAndTags(property)
             .map((doc) =>
               ts.isJSDoc(doc)
                 ? ts.displayPartsToString(doc.comment).replace(/\s+/g, ' ').trim()
                 : typeof (doc as ts.JSDocTag).comment === 'string'
-                ? String((doc as ts.JSDocTag).comment)
-                : ''
+                  ? String((doc as ts.JSDocTag).comment)
+                  : '',
             )
             .filter((text) => text !== '')
             .join(' ');
@@ -212,9 +220,10 @@ export async function buildErrorCodes(): Promise<ErrorCodesBuild> {
   const occurrences = new Map<string, CodeOccurrence[]>();
 
   for (const info of packages) {
-    for await (
-      const entry of walk(join(info.dir, 'src'), { includeDirs: false, exts: ['.ts', '.tsx'] })
-    ) {
+    for await (const entry of walk(join(info.dir, 'src'), {
+      includeDirs: false,
+      exts: ['.ts', '.tsx'],
+    })) {
       const path = entry.path.slice(repoRoot.length).replace(/^\//, '');
       const text = await Deno.readTextFile(entry.path);
       const source = ts.createSourceFile(
@@ -228,31 +237,34 @@ export async function buildErrorCodes(): Promise<ErrorCodesBuild> {
     }
   }
 
-  const diagnostics: DiagnosticCode[] = [...occurrences.entries()].map(([code, sites]) => {
-    const sorted = [...sites].sort((a, b) =>
-      a.path === b.path ? a.line - b.line : a.path.localeCompare(b.path)
-    );
-    const messages = [...new Set(sorted.map((site) => site.message).filter((m) => m !== ''))]
-      .sort();
-    // The gloss is the message the code actually raises most often — the
-    // shape most call sites agree on — with ties going to the first in
-    // sorted order, so the table never invents a description.
-    const counts = new Map<string, number>();
-    for (const message of sorted.map((site) => site.message)) {
-      if (message === '') continue;
-      counts.set(message, (counts.get(message) ?? 0) + 1);
-    }
-    let summary = '';
-    let best = 0;
-    for (const message of messages) {
-      const count = counts.get(message) ?? 0;
-      if (count > best) {
-        summary = message;
-        best = count;
+  const diagnostics: DiagnosticCode[] = [...occurrences.entries()]
+    .map(([code, sites]) => {
+      const sorted = [...sites].sort((a, b) =>
+        a.path === b.path ? a.line - b.line : a.path.localeCompare(b.path),
+      );
+      const messages = [
+        ...new Set(sorted.map((site) => site.message).filter((m) => m !== '')),
+      ].sort();
+      // The gloss is the message the code actually raises most often — the
+      // shape most call sites agree on — with ties going to the first in
+      // sorted order, so the table never invents a description.
+      const counts = new Map<string, number>();
+      for (const message of sorted.map((site) => site.message)) {
+        if (message === '') continue;
+        counts.set(message, (counts.get(message) ?? 0) + 1);
       }
-    }
-    return { code, summary, messages, occurrences: sorted };
-  }).sort((a, b) => a.code.localeCompare(b.code));
+      let summary = '';
+      let best = 0;
+      for (const message of messages) {
+        const count = counts.get(message) ?? 0;
+        if (count > best) {
+          summary = message;
+          best = count;
+        }
+      }
+      return { code, summary, messages, occurrences: sorted };
+    })
+    .sort((a, b) => a.code.localeCompare(b.code));
 
   if (diagnostics.length === 0) {
     failures.push('no OEC diagnostic codes found in the retained packages');
@@ -333,12 +345,14 @@ export function renderErrorCodesModule(build: ErrorCodesBuild): string {
     diagnostics: build.diagnostics,
     runtime: build.runtime,
   };
-  return '// Auto-generated by www/tools/generate-error-codes.ts (#1414) — do not edit\n' +
+  return (
+    '// Auto-generated by www/tools/generate-error-codes.ts (#1414) — do not edit\n' +
     '// Source of truth: the OEC code literals in packages/<name>/src and the\n' +
     '// ErrorCode constants in packages/element/src/internal/protocol/errors.ts.\n' +
     '// Regenerate with `deno task --cwd www generate:error-codes`; the file is\n' +
     '// untracked and rebuilt before test/site:build.\n' +
-    `export const errorCodes = ${formatJson(payload).trimEnd()} as const;\n`;
+    `export const errorCodes = ${formatJson(payload).trimEnd()} as const;\n`
+  );
 }
 
 if (import.meta.main) {

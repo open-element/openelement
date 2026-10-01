@@ -36,7 +36,9 @@ export default class AdminPage extends OpenElement {
         <p id='note-count'>{this.noteCountText}</p>
         <h2>Attachment scan dead letters</h2>
         <ul id='attachment-dead-letters'>
-          {this.attachmentRows.map((item) => <li key={item.id}>{item.line}</li>)}
+          {this.attachmentRows.map((item) => (
+            <li key={item.id}>{item.line}</li>
+          ))}
         </ul>
         <form method='post' action='/admin?/replay'>
           <p>
@@ -48,7 +50,9 @@ export default class AdminPage extends OpenElement {
         </form>
         <h2>Payment event dead letters</h2>
         <ul id='payment-dead-letters'>
-          {this.paymentRows.map((item) => <li key={item.id}>{item.line}</li>)}
+          {this.paymentRows.map((item) => (
+            <li key={item.id}>{item.line}</li>
+          ))}
         </ul>
         <form method='post' action='/admin?/replayPayment'>
           <p>

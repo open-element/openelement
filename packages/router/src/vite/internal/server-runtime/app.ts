@@ -104,10 +104,7 @@ export interface GeneratedApp {
    * The WinterCG request handler: `app.fetch` with the fetch-middleware
    * onion composed around it when `middleware.use` is configured (#858).
    */
-  handler: (
-    request: Request,
-    context?: { env?: unknown; platform?: unknown },
-  ) => Promise<Response>;
+  handler: (request: Request, context?: { env?: unknown; platform?: unknown }) => Promise<Response>;
   /** Dev-server boundary export, present only with `middleware.use` (#858). */
   devFetch?: {
     fetch: (request: Request, env: unknown, executionContext: unknown) => Promise<Response>;
@@ -178,9 +175,10 @@ export function createGeneratedApp(config: GeneratedAppConfig): GeneratedApp {
       ),
     );
   const fetchMiddleware = config.fetchMiddleware ?? [];
-  const handler = fetchMiddleware.length > 0
-    ? composeFetchMiddleware([...fetchMiddleware], baseHandler)
-    : baseHandler;
+  const handler =
+    fetchMiddleware.length > 0
+      ? composeFetchMiddleware([...fetchMiddleware], baseHandler)
+      : baseHandler;
 
   const generated: GeneratedApp = {
     app,
@@ -188,15 +186,15 @@ export function createGeneratedApp(config: GeneratedAppConfig): GeneratedApp {
     handler,
     ...(fetchMiddleware.length > 0
       ? {
-        devFetch: {
-          // The dev server (@hono/vite-dev-server) reads this named export
-          // instead of the default Hono app when middleware.use is configured
-          // (see plugin.ts); it adapts the (request, env, executionCtx) call
-          // shape onto the same composed handler every other runtime uses.
-          fetch: (request: Request, env: unknown, executionContext: unknown) =>
-            handler(request, { env: env || {}, platform: executionContext }),
-        },
-      }
+          devFetch: {
+            // The dev server (@hono/vite-dev-server) reads this named export
+            // instead of the default Hono app when middleware.use is configured
+            // (see plugin.ts); it adapts the (request, env, executionCtx) call
+            // shape onto the same composed handler every other runtime uses.
+            fetch: (request: Request, env: unknown, executionContext: unknown) =>
+              handler(request, { env: env || {}, platform: executionContext }),
+          },
+        }
       : {}),
     runtimeAdapter: {
       ...createRuntimeAdapter({ name: 'openelement-hono', fetch: handler }),
@@ -222,13 +220,14 @@ export function createGeneratedApp(config: GeneratedAppConfig): GeneratedApp {
   // #1470 block e).
   const page = config.pageRuntime;
   if (page) {
-    const ssr = page.mode === 'native'
-      ? createNativePageRenderer({
-        renderDsd: page.renderDsd!,
-        customElements: page.customElements!,
-        ssrRenderableTags: page.ssrRenderableTags,
-      })
-      : createLitPageRenderer({ renderLitPageToHtml: page.renderLitPageToHtml! });
+    const ssr =
+      page.mode === 'native'
+        ? createNativePageRenderer({
+            renderDsd: page.renderDsd!,
+            customElements: page.customElements!,
+            ssrRenderableTags: page.ssrRenderableTags,
+          })
+        : createLitPageRenderer({ renderLitPageToHtml: page.renderLitPageToHtml! });
     const appShell = createAppShellRuntime({
       ssr,
       trustedHtml: page.trustedHtml,

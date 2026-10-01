@@ -8,9 +8,7 @@ import type { OpenElementRequestContext } from './model.ts';
  * The mount only wires the OpenElement runtime context around the standard
  * Request → Response seam.
  */
-export interface NitroRequestEvent<
-  Env extends Record<string, unknown> = Record<string, unknown>,
-> {
+export interface NitroRequestEvent<Env extends Record<string, unknown> = Record<string, unknown>> {
   req: Request;
   context?: { params?: Record<string, string> };
   env?: Env;
@@ -71,16 +69,14 @@ export function createOpenElementNitroHandler<
     // so `event.env` is undefined in real deployments (spike evidence, #981).
     // Prefer the runtime channel, then an explicit event.env, then the mount
     // options.
-    const runtimeEnv = (request as Request & { runtime?: { cloudflare?: { env?: Env } } })
-      .runtime?.cloudflare?.env;
+    const runtimeEnv = (request as Request & { runtime?: { cloudflare?: { env?: Env } } }).runtime
+      ?.cloudflare?.env;
     const context: RuntimeContext<Env> = {
       env: runtimeEnv ?? event.env ?? options.env,
       platform: event.platform ?? options.platform,
       params: event.context?.params,
     };
-    await options.onBeforeRequestContext?.(
-      createNitroRequestContext(request, context),
-    );
+    await options.onBeforeRequestContext?.(createNitroRequestContext(request, context));
     return options.handler(request, context);
   };
 }

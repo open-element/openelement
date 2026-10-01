@@ -183,7 +183,7 @@ async function qualificationMain(): Promise<void> {
   const report: QualificationReport = {
     environment: Object.fromEntries(
       ['CI', 'GITHUB_ACTIONS', 'GITHUB_RUN_ID', 'RUNNER_ARCH', 'RUNNER_OS'].flatMap((key) =>
-        Deno.env.get(key) === undefined ? [] : [[key, Deno.env.get(key)!]]
+        Deno.env.get(key) === undefined ? [] : [[key, Deno.env.get(key)!]],
       ),
     ),
     mode: options.mode,
@@ -248,9 +248,10 @@ async function qualificationMain(): Promise<void> {
           {
             imports: {
               ...Object.fromEntries(
-                ['element', 'router'].map((
-                  pkg,
-                ) => [`@openelement/${pkg}`, `npm:@openelement/${pkg}@${options.version}`]),
+                ['element', 'router'].map((pkg) => [
+                  `@openelement/${pkg}`,
+                  `npm:@openelement/${pkg}@${options.version}`,
+                ]),
               ),
               '@openelement/router/vite': `npm:@openelement/router@${options.version}/vite`,
             },
@@ -291,9 +292,7 @@ async function qualificationMain(): Promise<void> {
         JSON.stringify(
           {
             dependencies: Object.fromEntries(
-              ['element', 'router'].map((
-                pkg,
-              ) => [`@openelement/${pkg}`, options.version]),
+              ['element', 'router'].map((pkg) => [`@openelement/${pkg}`, options.version]),
             ),
             private: true,
             type: 'module',
@@ -337,9 +336,8 @@ export function parseConsumerSmokeOptions(
 ): ConsumerSmokeOptions {
   const local = args.includes('--local');
   const versionIndex = args.indexOf('--version');
-  const versionArg = versionIndex !== -1 && versionIndex + 1 < args.length
-    ? args[versionIndex + 1]
-    : null;
+  const versionArg =
+    versionIndex !== -1 && versionIndex + 1 < args.length ? args[versionIndex + 1] : null;
   // An empty --version (e.g. an unset workflow input) falls back to the
   // workspace version instead of counting as an explicit npm version.
   const version = versionArg || packageVersion;
@@ -509,7 +507,9 @@ async function denoNpmSmoke(version: string, projectRoot: string, local: boolean
   } finally {
     try {
       await Deno.remove(tmpDir, { recursive: true });
-    } catch { /* ok */ }
+    } catch {
+      /* ok */
+    }
   }
 }
 
@@ -537,9 +537,9 @@ async function nodeEsmSmoke(version: string, projectRoot: string, local: boolean
     const dep = local ? 'file:./openelement-element.tgz' : `^${version}`;
     const localDeps = local
       ? {
-        '@openelement/element': 'file:./openelement-element.tgz',
-        '@preact/signals-core': '^1.12.1',
-      }
+          '@openelement/element': 'file:./openelement-element.tgz',
+          '@preact/signals-core': '^1.12.1',
+        }
       : { '@openelement/element': dep };
 
     await Deno.writeTextFile(
@@ -565,7 +565,9 @@ async function nodeEsmSmoke(version: string, projectRoot: string, local: boolean
   } finally {
     try {
       await Deno.remove(tmpDir, { recursive: true });
-    } catch { /* ok */ }
+    } catch {
+      /* ok */
+    }
   }
 }
 
@@ -591,7 +593,7 @@ async function exactVersionStarterSmoke(version: string): Promise<void> {
       tmpDir,
     );
     if (!create.success) throw new Error(`starter generation failed:\n${create.output}`);
-    const config = await readJson(`${tmpDir}/starter/deno.json`) as {
+    const config = (await readJson(`${tmpDir}/starter/deno.json`)) as {
       imports: Record<string, string>;
     };
     for (const pkg of ['router', 'element']) {
@@ -655,12 +657,12 @@ export function classifyRegistryResponse(
     return unknown(`malformed registry response for ${name}@${version}; not valid JSON`);
   }
   if (
-    typeof parsed !== 'object' || parsed === null || Array.isArray(parsed) ||
+    typeof parsed !== 'object' ||
+    parsed === null ||
+    Array.isArray(parsed) ||
     (parsed as { version?: unknown }).version !== version
   ) {
-    return unknown(
-      `registry response for ${name}@${version} does not confirm version ${version}`,
-    );
+    return unknown(`registry response for ${name}@${version} does not confirm version ${version}`);
   }
   return pass(`${name}@${version} confirmed on npm (registry 200, version payload match)`);
 }

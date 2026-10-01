@@ -19,25 +19,31 @@ const tag = 'oe-stream-facade-test';
 const program = testProgram({
   tag,
   rootMode: 'light',
-  template: [{
-    k: 'el',
-    tag: 'main',
-    attrs: [],
-    children: [{ k: 'text', value: 'Start ' }, { k: 'part', index: 0 }],
-  }],
+  template: [
+    {
+      k: 'el',
+      tag: 'main',
+      attrs: [],
+      children: [
+        { k: 'text', value: 'Start ' },
+        { k: 'part', index: 0 },
+      ],
+    },
+  ],
   parts: [{ k: 'text', index: 0, signal: 'title' }],
-  properties: [{
-    name: 'title',
-    attribute: null,
-    type: 'string',
-    converter: 'string',
-    reflect: false,
-    default: '',
-  }],
+  properties: [
+    {
+      name: 'title',
+      attribute: null,
+      type: 'string',
+      converter: 'string',
+      reflect: false,
+      default: '',
+    },
+  ],
 });
-const ctor = class extends OpenElement {} as unknown as
-  & CustomElementConstructor
-  & Record<string, unknown>;
+const ctor = class extends OpenElement {} as unknown as CustomElementConstructor &
+  Record<string, unknown>;
 ctor.__partProgram = program;
 ctor.__compiledProperties = program.metadata.properties;
 ctor.__elementMetadata = program.metadata;

@@ -107,13 +107,19 @@ export function registryFailures(
   const registered = new Set(entries.map((entry) => entry.fixture));
   const found = new Set(discovered);
   return [
-    ...discovered.filter((fixture) => !registered.has(fixture)).map((fixture) =>
-      `unregistered fixture lockfile: tests/fixtures/${fixture}/deno.lock ` +
-      '(review the universe and add it to FIXTURE_LOCKS)'
-    ),
-    ...entries.filter((entry) => !found.has(entry.fixture)).map((entry) =>
-      `registered fixture lockfile is missing: tests/fixtures/${entry.fixture}/deno.lock`
-    ),
+    ...discovered
+      .filter((fixture) => !registered.has(fixture))
+      .map(
+        (fixture) =>
+          `unregistered fixture lockfile: tests/fixtures/${fixture}/deno.lock ` +
+          '(review the universe and add it to FIXTURE_LOCKS)',
+      ),
+    ...entries
+      .filter((entry) => !found.has(entry.fixture))
+      .map(
+        (entry) =>
+          `registered fixture lockfile is missing: tests/fixtures/${entry.fixture}/deno.lock`,
+      ),
   ];
 }
 
@@ -200,17 +206,19 @@ export async function updateLocks(
   // must restart from a deleted lock to stay byte-identical.
   const shared = new Set(
     entries.flatMap((entry) =>
-      entry.sharedUniverseWith ? [entry.fixture, entry.sharedUniverseWith] : []
+      entry.sharedUniverseWith ? [entry.fixture, entry.sharedUniverseWith] : [],
     ),
   );
   for (const entry of entries) {
     const cwd = `tests/fixtures/${entry.fixture}`;
-    const taskSpecifiers = entry.fixture === 'router-nitro'
-      ? []
-      : taskNpmSpecifiers(await Deno.readTextFile(`${cwd}/deno.json`).catch(() => ''));
-    const args = entry.fixture === 'router-nitro'
-      ? ['task', 'proof:node']
-      : ['cache', entry.entrypoint, ...taskSpecifiers];
+    const taskSpecifiers =
+      entry.fixture === 'router-nitro'
+        ? []
+        : taskNpmSpecifiers(await Deno.readTextFile(`${cwd}/deno.json`).catch(() => ''));
+    const args =
+      entry.fixture === 'router-nitro'
+        ? ['task', 'proof:node']
+        : ['cache', entry.entrypoint, ...taskSpecifiers];
     console.log(`[fixtures:locks] ${cwd}: ${regenerateCommand(entry, taskSpecifiers)}`);
     if (shared.has(entry.fixture) && entry.fixture !== 'router-nitro') {
       await Deno.remove(`${cwd}/deno.lock`).catch(() => {});
@@ -258,16 +266,17 @@ async function main(): Promise<void> {
 
   console.log(`Fixture lock universes (${FIXTURE_LOCKS.length} registered):`);
   for (const entry of FIXTURE_LOCKS) {
-    const shared = entry.sharedUniverseWith === undefined
-      ? ''
-      : ` [shared with ${entry.sharedUniverseWith}]`;
+    const shared =
+      entry.sharedUniverseWith === undefined ? '' : ` [shared with ${entry.sharedUniverseWith}]`;
     console.log(`  ${entry.fixture}${shared} — ${entry.purpose}`);
-    const config = files.get(entry.fixture)?.config ??
-      await Deno.readTextFile(`tests/fixtures/${entry.fixture}/deno.json`).catch(() => '');
+    const config =
+      files.get(entry.fixture)?.config ??
+      (await Deno.readTextFile(`tests/fixtures/${entry.fixture}/deno.json`).catch(() => ''));
     console.log(
-      `    regenerate: ${
-        regenerateCommand(entry, taskNpmSpecifiers(config))
-      } (cwd tests/fixtures/${entry.fixture})`,
+      `    regenerate: ${regenerateCommand(
+        entry,
+        taskNpmSpecifiers(config),
+      )} (cwd tests/fixtures/${entry.fixture})`,
     );
   }
 

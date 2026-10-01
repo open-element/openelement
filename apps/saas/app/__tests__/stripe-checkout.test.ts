@@ -16,14 +16,12 @@ const env = {
 
 Deno.test('Checkout configuration requires an exact application origin', () => {
   assertEquals(checkoutConfiguration(env).appOrigin, 'https://app.test');
-  for (
-    const origin of [
-      'https://app.test/path',
-      'http://app.test',
-      'https://app.test/',
-      'ftp://localhost',
-    ]
-  ) {
+  for (const origin of [
+    'https://app.test/path',
+    'http://app.test',
+    'https://app.test/',
+    'ftp://localhost',
+  ]) {
     assertThrows(() => checkoutConfiguration({ ...env, APP_ORIGIN: origin }));
   }
   assertThrows(() => checkoutConfiguration({ ...env, STRIPE_SECRET_KEY: 'sk_live_wrong' }));
@@ -36,8 +34,7 @@ Deno.test('Checkout configuration requires an exact application origin', () => {
       ...env,
       STRIPE_LIVEMODE: 'true',
       STRIPE_SECRET_KEY: 'rk_live_restricted',
-    })
-      .livemode,
+    }).livemode,
     true,
   );
   assertThrows(() => checkoutConfiguration({ ...env, STRIPE_CHECKOUT_HOST: 'evil.example/path' }));
@@ -46,7 +43,10 @@ Deno.test('Checkout configuration requires an exact application origin', () => {
 Deno.test('Checkout request uses dynamic methods and remains webhook-correlated', () => {
   const body = checkoutSessionBody(checkoutConfiguration(env), 'order-1', 'abcdefgh');
   assertEquals(body.get('mode'), 'payment');
-  assertEquals([...body.keys()].some((key) => key.startsWith('payment_method_types')), false);
+  assertEquals(
+    [...body.keys()].some((key) => key.startsWith('payment_method_types')),
+    false,
+  );
   assertEquals(body.has('managed_payments[enabled]'), false);
   assertEquals(body.get('integration_identifier'), 'openelement_reference_abcdefgh');
   assertEquals(body.get('line_items[0][price]'), 'price_fixed');
@@ -61,14 +61,14 @@ Deno.test('Checkout retries serialize an identical body for one persisted attemp
   const attemptId = '123e4567-e89b-42d3-a456-426614174000';
   const suffix = checkoutIntegrationSuffix(attemptId);
   const first = checkoutSessionBody(config, 'order-1', suffix).toString();
-  const second = checkoutSessionBody(config, 'order-1', checkoutIntegrationSuffix(attemptId))
-    .toString();
+  const second = checkoutSessionBody(
+    config,
+    'order-1',
+    checkoutIntegrationSuffix(attemptId),
+  ).toString();
   assertEquals(/^[a-z]{8}$/.test(suffix), true);
   assertEquals(second, first);
-  assertEquals(
-    checkoutIntegrationSuffix('123e4567-e89b-42d3-a456-426614174001') === suffix,
-    false,
-  );
+  assertEquals(checkoutIntegrationSuffix('123e4567-e89b-42d3-a456-426614174001') === suffix, false);
 });
 
 Deno.test('Checkout redirect accepts only the configured HTTPS host', () => {

@@ -32,12 +32,17 @@ import { renderActionRoute, renderPageRoute } from '../src/vite/internal/ssg/ent
 const program = testProgram({
   tag: 'oe-stream-handler',
   rootMode: 'light',
-  template: [{
-    k: 'el',
-    tag: 'main',
-    attrs: [],
-    children: [{ k: 'part', index: 0 }, { k: 'part', index: 1 }],
-  }],
+  template: [
+    {
+      k: 'el',
+      tag: 'main',
+      attrs: [],
+      children: [
+        { k: 'part', index: 0 },
+        { k: 'part', index: 1 },
+      ],
+    },
+  ],
   parts: [
     { k: 'text', index: 0, signal: 'first' },
     { k: 'text', index: 1, signal: 'second' },
@@ -65,8 +70,7 @@ async function manifest(): Promise<StreamRouteManifest> {
     program: {
       version: program.version,
       tag: program.tag,
-      sha256: [...new Uint8Array(hash)].map((byte) => byte.toString(16).padStart(2, '0'))
-        .join(''),
+      sha256: [...new Uint8Array(hash)].map((byte) => byte.toString(16).padStart(2, '0')).join(''),
     },
     fields: ['first', 'second'].map((field, index) => ({
       field,
@@ -110,7 +114,7 @@ async function handler(timeoutMs?: number, streamManifest?: StreamRouteManifest)
     defaultTagName: 'oe-stream-handler',
     tagName: 'oe-stream-handler',
     importPath: '/app/routes/index.tsx',
-    streamManifest: streamManifest ?? await manifest(),
+    streamManifest: streamManifest ?? (await manifest()),
   };
   const config = { title: 'Stream', lang: 'en', headExtras: '', allowHeadExtrasScripts: false };
   const lines: string[] = [];
@@ -200,7 +204,7 @@ async function handler(timeoutMs?: number, streamManifest?: StreamRouteManifest)
       req: { raw: request, path: '/' },
       env: {},
       header: (name: string, value: string) => headers.set(name, value),
-      get: (name: string) => name === 'cspNonce' ? 'nonce123' : undefined,
+      get: (name: string) => (name === 'cspNonce' ? 'nonce123' : undefined),
       body: (body: ReadableStream<Uint8Array>, status: number, extra: HeadersInit) =>
         new Response(body, { status, headers: new Headers([...headers, ...new Headers(extra)]) }),
       html: (body: string, status = 200) =>
@@ -445,9 +449,9 @@ function streamCloseProbe(): {
     },
   });
   const ProbedStream = function (this: unknown, source: unknown, strategy?: unknown): unknown {
-    const underlying = wrap(source as UnderlyingGenericSource) as unknown as UnderlyingSource<
-      Uint8Array
-    >;
+    const underlying = wrap(
+      source as UnderlyingGenericSource,
+    ) as unknown as UnderlyingSource<Uint8Array>;
     return new Native(underlying, strategy as QueuingStrategy<Uint8Array>);
   };
   (globalThis as unknown as { ReadableStream: unknown }).ReadableStream = ProbedStream;
@@ -587,7 +591,7 @@ Deno.test('late loader success cannot overwrite a queued timeout error for a slo
     await new Promise<void>((resolve) =>
       loaderSignal.addEventListener('abort', () => resolve(), {
         once: true,
-      })
+      }),
     );
   }
   second.resolve('settled-after-timeout');

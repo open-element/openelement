@@ -14,8 +14,10 @@ function normalizeAliasReplacement(root: string, replacement: string): string {
   // `{ react: 'preact' }`): pass it through untouched so Vite resolves it as
   // a module import instead of a root-relative file path (#1067).
   if (!replacement.includes('/') && !replacement.includes('\\')) return replacement;
-  return replacement.startsWith('/') || /^[A-Za-z]:/.test(replacement) ||
-      replacement.startsWith('file:') || replacement.startsWith('\0')
+  return replacement.startsWith('/') ||
+    /^[A-Za-z]:/.test(replacement) ||
+    replacement.startsWith('file:') ||
+    replacement.startsWith('\0')
     ? replacement
     : resolve(root, replacement);
 }
@@ -50,10 +52,7 @@ function isAbsoluteModulePath(id: string): boolean {
  * replacement cannot serve as a compile-time module identity, and the caller
  * must keep the declared specifier instead of guessing a path.
  */
-export function resolveAliasSourcePath(
-  alias: Alias,
-  specifier: string,
-): string | null {
+export function resolveAliasSourcePath(alias: Alias, specifier: string): string | null {
   if (alias.find instanceof RegExp) {
     if (!alias.find.test(specifier)) return null;
     const rewritten = specifier.replace(alias.find, alias.replacement);
@@ -113,18 +112,14 @@ const OPENELEMENT_SOURCE_SUBPATHS: Record<string, OpenElementSourceSubpaths> = O
 function expandOpenElementSourceAliases(aliases: Alias[]): Alias[] {
   const out = [...aliases];
   const existing = new Set(
-    out.flatMap((alias) => typeof alias.find === 'string' ? [alias.find] : []),
+    out.flatMap((alias) => (typeof alias.find === 'string' ? [alias.find] : [])),
   );
 
   for (const alias of aliases) {
     if (typeof alias.find !== 'string' || typeof alias.replacement !== 'string') continue;
     const subpaths = OPENELEMENT_SOURCE_SUBPATHS[alias.find];
     if (!subpaths) continue;
-    if (
-      !alias.replacement.replace(/\\/g, '/').endsWith(
-        `/src/${subpaths.rootFile}`,
-      )
-    ) continue;
+    if (!alias.replacement.replace(/\\/g, '/').endsWith(`/src/${subpaths.rootFile}`)) continue;
 
     const sourceDir = dirname(alias.replacement);
     for (const [subpath, fileName] of Object.entries(subpaths.files)) {
@@ -155,7 +150,7 @@ export function normalizeViteAliases(
     normalized = aliases.map((alias) =>
       typeof alias.replacement === 'string'
         ? { ...alias, replacement: normalizeAliasReplacement(root, alias.replacement) }
-        : alias
+        : alias,
     );
   } else {
     normalized = Object.entries(aliases).map(([find, replacement]) => ({

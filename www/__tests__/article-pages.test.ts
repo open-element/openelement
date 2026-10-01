@@ -50,10 +50,7 @@ for (const route of articleRoutes) {
       new URL(`../app/components/article-routes/${componentFile}`, import.meta.url),
     );
     assertStringIncludes(routeSource, 'export default definePage(');
-    assertStringIncludes(
-      routeSource,
-      `projectArticlePage('${collection}', '${slug}', locale)`,
-    );
+    assertStringIncludes(routeSource, `projectArticlePage('${collection}', '${slug}', locale)`);
     assert(
       !routeSource.includes('export const meta'),
       `${collection}/${slug} must not duplicate nav metadata; declare it in the frontmatter`,
@@ -100,9 +97,9 @@ Deno.test('managed article directories hold exactly the generated routes', async
       .map((route) => route.routeFile)
       .sort();
     const onDisk: string[] = [];
-    for await (
-      const entry of Deno.readDir(new URL(`../app/routes/${collection}/`, import.meta.url))
-    ) {
+    for await (const entry of Deno.readDir(
+      new URL(`../app/routes/${collection}/`, import.meta.url),
+    )) {
       if (entry.isFile && entry.name.endsWith('.tsx')) onDisk.push(entry.name);
     }
     assertEquals(
@@ -111,15 +108,17 @@ Deno.test('managed article directories hold exactly the generated routes', async
       `app/routes/${collection}/ must hold exactly the routes the content emits`,
     );
     const bindings: string[] = [];
-    for await (
-      const entry of Deno.readDir(new URL('../app/components/article-routes/', import.meta.url))
-    ) {
+    for await (const entry of Deno.readDir(
+      new URL('../app/components/article-routes/', import.meta.url),
+    )) {
       if (entry.isFile && entry.name.startsWith(`${collection}-`)) bindings.push(entry.name);
     }
     assertEquals(
       bindings.sort(),
-      articleRoutes.filter((route) => route.collection === collection)
-        .map((route) => route.componentFile).sort(),
+      articleRoutes
+        .filter((route) => route.collection === collection)
+        .map((route) => route.componentFile)
+        .sort(),
       'app/components/article-routes/ must hold exactly the generated bindings',
     );
   }
@@ -141,9 +140,9 @@ Deno.test('the article route table is generated, never hand-maintained', async (
 Deno.test('content covers every route in both locales', async () => {
   for (const collection of collections) {
     const pages = await loadContentPages(collection);
-    for (
-      const { slug, order } of articleRoutes.filter((route) => route.collection === collection)
-    ) {
+    for (const { slug, order } of articleRoutes.filter(
+      (route) => route.collection === collection,
+    )) {
       for (const locale of ['en', 'zh'] as const) {
         const page = pages.find((p) => p.slug === slug && p.locale === locale);
         assertExists(page, `content/${collection} missing ${slug} (${locale})`);
@@ -181,9 +180,7 @@ Deno.test('content has no route the generated table misses', async () => {
   for (const collection of collections) {
     const pages = await loadContentPages(collection);
     const fromContent = [
-      ...new Set(
-        pages.filter((page) => (page.locale ?? 'en') === 'en').map((page) => page.slug),
-      ),
+      ...new Set(pages.filter((page) => (page.locale ?? 'en') === 'en').map((page) => page.slug)),
     ].sort();
     const fromTable = articleRoutes
       .filter((route) => route.collection === collection)
@@ -233,7 +230,9 @@ Deno.test('configuration keeps the middleware-use anchor target', async () => {
 });
 
 Deno.test('content collection loading succeeds for all collections', async () => {
-  const count = (await Promise.all(collections.map(loadContentPages)))
-    .reduce((total, pages) => total + pages.length, 0);
+  const count = (await Promise.all(collections.map(loadContentPages))).reduce(
+    (total, pages) => total + pages.length,
+    0,
+  );
   assertEquals(count, articleRoutes.length * 2, 'every route needs en + zh content');
 });

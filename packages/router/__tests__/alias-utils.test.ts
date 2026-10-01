@@ -21,9 +21,13 @@ Deno.test('normalizeViteAliases still resolves relative replacements against roo
 });
 
 Deno.test('normalizeViteAliases expands retained Element public subpaths', () => {
-  const aliases = normalizeViteAliases({
-    '@openelement/element': './packages/element/src/index.ts',
-  }, '/repo') ?? [];
+  const aliases =
+    normalizeViteAliases(
+      {
+        '@openelement/element': './packages/element/src/index.ts',
+      },
+      '/repo',
+    ) ?? [];
 
   assertEquals(
     aliases.find((alias) => alias.find === '@openelement/element/jsx-runtime')?.replacement,
@@ -37,14 +41,21 @@ Deno.test('normalizeViteAliases expands retained Element public subpaths', () =>
     aliases.find((alias) => alias.find === '@openelement/element/build-utils')?.replacement,
     '/repo/packages/element/src/build-utils.ts',
   );
-  assertEquals(aliases.some((alias) => String(alias.find).includes('@openelement/core')), false);
+  assertEquals(
+    aliases.some((alias) => String(alias.find).includes('@openelement/core')),
+    false,
+  );
 });
 
 Deno.test('normalizeViteAliases keeps explicit retained subpath aliases authoritative', () => {
-  const aliases = normalizeViteAliases([
-    { find: '@openelement/element', replacement: '/repo/packages/element/src/index.ts' },
-    { find: '@openelement/element/jsx-runtime', replacement: '/custom/jsx-runtime.ts' },
-  ], '/repo') ?? [];
+  const aliases =
+    normalizeViteAliases(
+      [
+        { find: '@openelement/element', replacement: '/repo/packages/element/src/index.ts' },
+        { find: '@openelement/element/jsx-runtime', replacement: '/custom/jsx-runtime.ts' },
+      ],
+      '/repo',
+    ) ?? [];
 
   assertEquals(
     aliases.filter((alias) => alias.find === '@openelement/element/jsx-runtime').length,
@@ -60,10 +71,14 @@ Deno.test('normalizeViteAliases keeps explicit retained subpath aliases authorit
 // generated from each package's deno.json "exports"), so dropped export
 // entries must not reappear here.
 Deno.test('normalizeViteAliases drops subpaths removed from deno.json exports', () => {
-  const aliases = normalizeViteAliases({
-    '@openelement/router': './packages/router/src/index.ts',
-    '@openelement/element': './packages/element/src/index.ts',
-  }, '/repo') ?? [];
+  const aliases =
+    normalizeViteAliases(
+      {
+        '@openelement/router': './packages/router/src/index.ts',
+        '@openelement/element': './packages/element/src/index.ts',
+      },
+      '/repo',
+    ) ?? [];
   const finds = aliases.map((alias) => String(alias.find));
 
   // packages/router/src/hono.ts was deleted; the export entry is gone too.
@@ -74,9 +89,13 @@ Deno.test('normalizeViteAliases drops subpaths removed from deno.json exports', 
 });
 
 Deno.test('normalizeViteAliases expands Router subpaths from the generated export map', () => {
-  const aliases = normalizeViteAliases({
-    '@openelement/router': './packages/router/src/index.ts',
-  }, '/repo') ?? [];
+  const aliases =
+    normalizeViteAliases(
+      {
+        '@openelement/router': './packages/router/src/index.ts',
+      },
+      '/repo',
+    ) ?? [];
 
   for (const subpath of ['http', 'document', 'lit', 'lit-ssr']) {
     assertEquals(
@@ -87,9 +106,13 @@ Deno.test('normalizeViteAliases expands Router subpaths from the generated expor
 });
 
 Deno.test('normalizeViteAliases preserves nested export subpaths', () => {
-  const aliases = normalizeViteAliases({
-    '@openelement/router': './packages/router/src/index.ts',
-  }, '/repo') ?? [];
+  const aliases =
+    normalizeViteAliases(
+      {
+        '@openelement/router': './packages/router/src/index.ts',
+      },
+      '/repo',
+    ) ?? [];
 
   assertEquals(
     aliases.find((alias) => alias.find === '@openelement/router/cli/start')?.replacement,
@@ -108,7 +131,10 @@ Deno.test('sortAliasEntries orders longer string finds first without mutating in
   ];
   const sorted = sortAliasEntries(input);
 
-  assertEquals(sorted.map((alias) => alias.replacement), ['/c', '/d', '/a', '/b']);
+  assertEquals(
+    sorted.map((alias) => alias.replacement),
+    ['/c', '/d', '/a', '/b'],
+  );
   assertEquals(input[0].find, '@open');
 });
 
@@ -127,10 +153,7 @@ Deno.test('resolveThroughAliases matches string finds exactly and at segment bou
     resolveThroughAliases(aliases, '@openelement/ui/open-button'),
     '/repo/packages/ui/src/open-button.tsx',
   );
-  assertEquals(
-    resolveThroughAliases(aliases, '@openelement/ui'),
-    '/repo/packages/ui/src/index.ts',
-  );
+  assertEquals(resolveThroughAliases(aliases, '@openelement/ui'), '/repo/packages/ui/src/index.ts');
   // Boundary rule: a longer specifier under the parent find rewrites as
   // replacement + remainder (first-occurrence replace, plugin-alias parity).
   assertEquals(

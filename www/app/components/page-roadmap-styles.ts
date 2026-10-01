@@ -1,6 +1,7 @@
 import { compiledStyle } from '../site-ui/compiled-style.ts';
 
-export const pageRoadmapStyles = [compiledStyle(`
+export const pageRoadmapStyles = [
+  compiledStyle(`
   :host {
     display: block;
     color: var(--text-primary);
@@ -313,4 +314,5 @@ export const pageRoadmapStyles = [compiledStyle(`
       padding-inline-start: var(--size-6);
     }
   }
-`)];
+`),
+];

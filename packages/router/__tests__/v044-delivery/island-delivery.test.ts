@@ -38,19 +38,25 @@ Deno.test('v0.44 island delivery emits one scheduler for multi-element media isl
 });
 
 Deno.test('v0.44 compiler behavior metadata controls exact client output', () => {
-  const declarations = compilerBehaviorDeclarations([
-    {
-      tagName: 'oe-static-card',
-      modulePath: '/app/components/static-card.tsx',
-      compilerInteractionEvents: [],
-    },
-    {
-      tagName: 'oe-menu-button',
-      modulePath: '/app/components/menu-button.tsx',
-      compilerInteractionEvents: ['click', 'keydown'],
-    },
-  ], 'idle');
-  assertEquals(declarations.map((entry) => entry.tagName), ['oe-menu-button']);
+  const declarations = compilerBehaviorDeclarations(
+    [
+      {
+        tagName: 'oe-static-card',
+        modulePath: '/app/components/static-card.tsx',
+        compilerInteractionEvents: [],
+      },
+      {
+        tagName: 'oe-menu-button',
+        modulePath: '/app/components/menu-button.tsx',
+        compilerInteractionEvents: ['click', 'keydown'],
+      },
+    ],
+    'idle',
+  );
+  assertEquals(
+    declarations.map((entry) => entry.tagName),
+    ['oe-menu-button'],
+  );
 
   const entries = buildClientIslandEntries({
     root: '/project',
@@ -119,13 +125,15 @@ Deno.test('v0.44 media delivery loads once when the query first matches', () => 
 });
 
 Deno.test('v0.44 one capability module registers many native element constructors once', () => {
-  const code = generateClientEntry([{
-    tagName: 'oe-clock',
-    tags: ['oe-clock', 'oe-calendar'],
-    modulePath: './clock.ts',
-    strategy: 'load',
-    exportNames: { 'oe-clock': 'Clock', 'oe-calendar': 'Calendar' },
-  }]);
+  const code = generateClientEntry([
+    {
+      tagName: 'oe-clock',
+      tags: ['oe-clock', 'oe-calendar'],
+      modulePath: './clock.ts',
+      strategy: 'load',
+      exportNames: { 'oe-clock': 'Clock', 'oe-calendar': 'Calendar' },
+    },
+  ]);
 
   assertEquals((code.match(/import\(["']\.\/clock\.ts["']\)/g) ?? []).length, 1);
   assertStringIncludes(code, 'mod["Clock"]');
@@ -161,10 +169,7 @@ Deno.test('v0.44 island metadata remains static and carries delivery aliases', (
   assertEquals(escapedMedia?.media, '(min-width: 40rem)');
 
   assertThrows(
-    () =>
-      readIslandConfig(
-        'export const openElement = defineIslandConfig({ tags: dynamicTags });',
-      ),
+    () => readIslandConfig('export const openElement = defineIslandConfig({ tags: dynamicTags });'),
     Error,
     'openElement.tags must be an array of string literals',
   );
@@ -178,9 +183,7 @@ Deno.test('v0.44 island metadata remains static and carries delivery aliases', (
   );
   assertThrows(
     () =>
-      readIslandConfig(
-        "export const openElement = defineIslandConfig({ hydrate: 'load' }).value;",
-      ),
+      readIslandConfig("export const openElement = defineIslandConfig({ hydrate: 'load' }).value;"),
     Error,
     'one static object literal',
   );
@@ -198,7 +201,10 @@ Deno.test('v0.44 SSR admission expands one capability declaration per delivered 
 
   assertEquals(plan.renderableTags, ['oe-clock', 'oe-calendar']);
   assertEquals(plan.clientOnlyTags, []);
-  assertEquals(plan.decisions.map((decision) => decision.tagName), ['oe-clock', 'oe-calendar']);
+  assertEquals(
+    plan.decisions.map((decision) => decision.tagName),
+    ['oe-clock', 'oe-calendar'],
+  );
 });
 
 Deno.test('v0.44 compiler source records pass through the Vite source map', () => {
@@ -388,19 +394,16 @@ Deno.test('v0.44 client delivery follows islands imported through a route compon
 
     const ctx = new OpenElementBuildContext({});
     ctx.phase3.routesDir = 'app/routes';
-    ctx.phase1.cachedRoutes = [{
-      path: '/',
-      filePath: 'index.tsx',
-      type: 'page',
-      varName: 'route_index',
-    }];
+    ctx.phase1.cachedRoutes = [
+      {
+        path: '/',
+        filePath: 'index.tsx',
+        type: 'page',
+        varName: 'route_index',
+      },
+    ];
 
-    const reachable = findReachableIslandTags(
-      ctx,
-      root,
-      'dist',
-      ['oe-used', 'oe-unused'],
-    );
+    const reachable = findReachableIslandTags(ctx, root, 'dist', ['oe-used', 'oe-unused']);
     assertEquals([...reachable], ['oe-used']);
   } finally {
     await Deno.remove(root, { recursive: true });
@@ -434,12 +437,14 @@ Deno.test('v0.44 client delivery keeps an explicitly imported island capability'
 
     const ctx = new OpenElementBuildContext({});
     ctx.phase3.routesDir = 'app/routes';
-    ctx.phase1.cachedRoutes = [{
-      path: '/',
-      filePath: 'index.tsx',
-      type: 'page',
-      varName: 'route_index',
-    }];
+    ctx.phase1.cachedRoutes = [
+      {
+        path: '/',
+        filePath: 'index.tsx',
+        type: 'page',
+        varName: 'route_index',
+      },
+    ];
 
     const reachable = findReachableIslandTags(ctx, root, 'dist', ['oe-late-child']);
     assertEquals([...reachable], ['oe-late-child']);

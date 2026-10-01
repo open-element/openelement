@@ -14,7 +14,10 @@ interface FakeAttr {
 }
 
 class FakeNode {
-  constructor(public nodeType: number, public childNodes: FakeNode[] = []) {}
+  constructor(
+    public nodeType: number,
+    public childNodes: FakeNode[] = [],
+  ) {}
 }
 
 class FakeText extends FakeNode {
@@ -196,7 +199,7 @@ Deno.test('WebKit morph helpers instantiate nested DSD and repair skipped custom
   const root = { querySelectorAll: () => [skipped, ordinary] };
   const win = {
     customElements: {
-      get: (tag: string) => tag === 'third-party-wc' ? ExpectedElement : undefined,
+      get: (tag: string) => (tag === 'third-party-wc' ? ExpectedElement : undefined),
     },
   };
   const webkit = createMorphWebkitFix({ win: win as unknown as Window & typeof globalThis });
@@ -226,7 +229,12 @@ Deno.test('SSR artifact cleanup removes server-only chunks and preserves client 
       phase1: { islandTagNames: [], packageIslandDecls: [], islandMeta: {} },
     });
     for (const file of removed) {
-      assertEquals(await Deno.stat(join(assets, file)).then(() => true).catch(() => false), false);
+      assertEquals(
+        await Deno.stat(join(assets, file))
+          .then(() => true)
+          .catch(() => false),
+        false,
+      );
     }
     for (const file of kept) assertEquals((await Deno.stat(join(assets, file))).isFile, true);
 
@@ -248,19 +256,17 @@ Deno.test('client-island postprocess handles a static page with no islands', asy
       join(dist, 'index.html'),
       '<!doctype html><html><body>static</body></html>',
     );
-    await postProcessClientIslandBuild(
-      {
-        phase3: { root, outDir: 'dist', base: '/', upgradeStrategy: 'idle' },
-        phase1: { islandTagNames: [], packageIslandDecls: [], islandMeta: {} },
-        // A static page with no islands: the manifest carries an entry only
-        // (Phase 2 ran for enhanced forms) or nothing at all.
-        clientAssetManifest: {
-          entry: '/client/islands/client.js',
-          islands: {},
-          shared: [],
-        },
+    await postProcessClientIslandBuild({
+      phase3: { root, outDir: 'dist', base: '/', upgradeStrategy: 'idle' },
+      phase1: { islandTagNames: [], packageIslandDecls: [], islandMeta: {} },
+      // A static page with no islands: the manifest carries an entry only
+      // (Phase 2 ran for enhanced forms) or nothing at all.
+      clientAssetManifest: {
+        entry: '/client/islands/client.js',
+        islands: {},
+        shared: [],
       },
-    );
+    });
     // #1471/S4b: no post-build script surgery — the document renderer
     // embedded the script tags at render time, so the pass leaves the HTML
     // byte-identical and only records the per-page island manifests.

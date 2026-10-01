@@ -66,28 +66,29 @@ export default class NotesPage extends OpenElement {
         <form method='post' action='/notes?/create' data-open-enhance>
           <p>
             <label>
-              Title{' '}
-              <input
-                name='title'
-                maxlength={120}
-                value={this.titleEcho}
-                required
-              />
+              Title <input name='title' maxlength={120} value={this.titleEcho} required />
             </label>
           </p>
           <p>
             <label>
-              Body <textarea name='body' maxlength={10000}>{this.bodyEcho}</textarea>
+              Body{' '}
+              <textarea name='body' maxlength={10000}>
+                {this.bodyEcho}
+              </textarea>
             </label>
           </p>
           <button type='submit'>Create note</button>
         </form>
         <ul id='notes'>
-          {this.noteRows.map((note) => <li key={note.id}>{note.line}</li>)}
+          {this.noteRows.map((note) => (
+            <li key={note.id}>{note.line}</li>
+          ))}
         </ul>
         <form method='get' action='/notes'>
           <input type='hidden' name='cursor' value={this.nextCursor} />
-          <button id='next-notes-page' type='submit'>Next page</button>
+          <button id='next-notes-page' type='submit'>
+            {'Next page'}
+          </button>
         </form>
         <notes-live
           liveurl={this.liveUrl}
@@ -95,8 +96,7 @@ export default class NotesPage extends OpenElement {
           liveuserid={this.liveUserId}
           livetoken={this.liveAccessToken}
           livetokenexpiresat={this.liveAccessTokenExpiresAt}
-        >
-        </notes-live>
+        ></notes-live>
         <form method='post' action='/notes?/logout'>
           <button type='submit'>Sign out</button>
         </form>

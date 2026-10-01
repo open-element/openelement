@@ -1,6 +1,7 @@
 import { compiledStyle } from './compiled-style.ts';
 
-export const openStandardsVisualStyles = [compiledStyle(`
+export const openStandardsVisualStyles = [
+  compiledStyle(`
   :host {
     display: block;
   }
@@ -244,4 +245,5 @@ export const openStandardsVisualStyles = [compiledStyle(`
       grid-template-columns: 1fr;
     }
   }
-`)];
+`),
+];

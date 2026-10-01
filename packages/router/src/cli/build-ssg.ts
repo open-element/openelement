@@ -236,7 +236,8 @@ async function buildSSG(
   const islandTagNames = options.islandTagNames || ctx.phase1.islandTagNames || [];
   const islandMeta = options.islandMeta || ctx.phase1.islandMeta || {};
   const packageManifests = options.packageManifests || ctx.phase1.packageManifests || [];
-  const metadataResolveAlias = options.resolveAlias ||
+  const metadataResolveAlias =
+    options.resolveAlias ||
     (ctx.phase1.userResolveAlias as Record<string, string> | import('vite').Alias[] | undefined);
 
   // Read options from ctx
@@ -253,22 +254,25 @@ async function buildSSG(
 
   // Generate SSG entry code (all statically imported — no cycle with the
   // internal/ssg barrel, #847).
-  const routes = options.routes ?? await scanRoutes(routesDir, '', {
-    root,
-    workspaceRoot: findWorkspaceRoot(Deno.cwd()) ?? undefined,
-  });
-  const staticComponents = options.staticComponents ?? await scanStaticComponents({
-    root,
-    routesDir,
-    islandsDir,
-    routes,
-  });
+  const routes =
+    options.routes ??
+    (await scanRoutes(routesDir, '', {
+      root,
+      workspaceRoot: findWorkspaceRoot(Deno.cwd()) ?? undefined,
+    }));
+  const staticComponents =
+    options.staticComponents ??
+    (await scanStaticComponents({
+      root,
+      routesDir,
+      islandsDir,
+      routes,
+    }));
 
   const islandsRoot = join(root, islandsDir);
-  const ssgIslandFiles = options.islandFiles ?? await scanIslands(islandsRoot);
-  const ssgIslandTagNames = islandTagNames.length > 0
-    ? islandTagNames
-    : ssgIslandFiles.map((f) => fileToTagName(f));
+  const ssgIslandFiles = options.islandFiles ?? (await scanIslands(islandsRoot));
+  const ssgIslandTagNames =
+    islandTagNames.length > 0 ? islandTagNames : ssgIslandFiles.map((f) => fileToTagName(f));
   const ssgIslandMeta: Record<string, Partial<IslandDecl>> = Object.keys(islandMeta).length > 0
     ? islandMeta
     : await scanIslandMeta(islandsRoot, ssgIslandFiles);
@@ -278,35 +282,38 @@ async function buildSSG(
   // the descriptor used for rendering.
   // alpha.18 (R2-H2): cemClassifications come from Phase 1 (plugin.ts
   // buildStart auto-detection) so the SSG plan matches the dev/SSR plan.
-  const ssgDescriptor = buildSsgEntryDescriptor({
-    routes,
-    routesDir,
-    islandsDir,
-    middleware: options.middleware,
-    islandTagNames: ssgIslandTagNames,
-    islandFiles: ssgIslandFiles,
-    islandMeta: ssgIslandMeta,
-    staticComponents,
-    packageManifests,
-    cemClassifications: options.cemClassifications || ctx.phase1.cemClassifications || [],
-    // #979: foreign tags come from the same Phase 1 scan so the SSG plan
-    // matches the dev/SSR plan (single descriptor instantiation, alpha.17 B1).
-    foreignTags: options.foreignTags || ctx.phase1.foreignTags || [],
-    headExtras: options.headExtras,
-    allowHeadExtrasScripts: options.allowHeadExtrasScripts,
-    html: options.html,
-    upgradeStrategy: options.upgradeStrategy || 'idle',
-    appShell,
-    layouts,
-    renderer,
-    i18n: ctx.plugins.i18nOptions ?? undefined,
-  }, ctx);
+  const ssgDescriptor = buildSsgEntryDescriptor(
+    {
+      routes,
+      routesDir,
+      islandsDir,
+      middleware: options.middleware,
+      islandTagNames: ssgIslandTagNames,
+      islandFiles: ssgIslandFiles,
+      islandMeta: ssgIslandMeta,
+      staticComponents,
+      packageManifests,
+      cemClassifications: options.cemClassifications || ctx.phase1.cemClassifications || [],
+      // #979: foreign tags come from the same Phase 1 scan so the SSG plan
+      // matches the dev/SSR plan (single descriptor instantiation, alpha.17 B1).
+      foreignTags: options.foreignTags || ctx.phase1.foreignTags || [],
+      headExtras: options.headExtras,
+      allowHeadExtrasScripts: options.allowHeadExtrasScripts,
+      html: options.html,
+      upgradeStrategy: options.upgradeStrategy || 'idle',
+      appShell,
+      layouts,
+      renderer,
+      i18n: ctx.plugins.i18nOptions ?? undefined,
+    },
+    ctx,
+  );
 
   // #1339: the native banner imports StyleSheet from @openelement/element;
   // the lit DOM shim (first entry import, entry-orchestrator.ts) provides
   // CSSStyleSheet itself, so the lit entry needs no polyfill banner.
-  const ssgEntryCode = (renderer === 'lit' ? '' : generateSsrPolyfillBanner() + '\n') +
-    renderEntry(ssgDescriptor);
+  const ssgEntryCode =
+    (renderer === 'lit' ? '' : generateSsrPolyfillBanner() + '\n') + renderEntry(ssgDescriptor);
   // Deno import map resolution handles bare specifiers (e.g. @acme/components/open-callout)
   // via createDenoImportMapResolvePlugin() in the Phase 3 viteBuild plugins below.
 
@@ -478,7 +485,7 @@ async function buildSSG(
 
     // Load the SSR bundle and run SSG rendering pipeline
     const ssrBundlePath = resolve(ssrOutDir, 'entry.js');
-    const module = await import(ssrBundleImportUrl(ssrBundlePath)) as Record<string, unknown>;
+    const module = (await import(ssrBundleImportUrl(ssrBundlePath))) as Record<string, unknown>;
 
     if (!module.default) {
       throw new SsrRenderError('virtual:open-ssg-entry', new Error('Failed to load Hono app'));
@@ -491,9 +498,11 @@ async function buildSSG(
     // then resolves it into the document and serializes the final script
     // tag at document time. No post-build HTML injection. An empty entry
     // (no client bundle shipped) embeds nothing.
-    const setRequestTimeClientScript = (module as {
-      __setRequestTimeClientScript?: (src: string | null | undefined) => void;
-    }).__setRequestTimeClientScript;
+    const setRequestTimeClientScript = (
+      module as {
+        __setRequestTimeClientScript?: (src: string | null | undefined) => void;
+      }
+    ).__setRequestTimeClientScript;
     setRequestTimeClientScript?.(ctx.clientAssetManifest?.entry ?? null);
     if (ctx.clientAssetManifest?.entry) {
       log.info(`Client scripts embedded at render time from: ${ctx.clientAssetManifest.entry}`);

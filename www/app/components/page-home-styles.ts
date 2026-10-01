@@ -1,6 +1,7 @@
 import { compiledStyle } from '../site-ui/compiled-style.ts';
 
-export const pageHomeStyles = [compiledStyle(`
+export const pageHomeStyles = [
+  compiledStyle(`
   :host { display:block; color:var(--text-primary); background:var(--bg-base); }
   * { box-sizing:border-box; }
   h1,h2,h3,p { margin:0; }
@@ -225,4 +226,5 @@ export const pageHomeStyles = [compiledStyle(`
     .links a { border-inline-end:0; border-block-end:1px solid var(--border); }
     .links a:last-child { border-block-end:0; }
   }
-`)];
+`),
+];

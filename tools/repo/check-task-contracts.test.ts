@@ -21,12 +21,13 @@ import { assert, assertEquals } from '@std/assert';
 import { dirname, join } from '@std/path';
 
 const repoRoot = join(dirname(new URL(import.meta.url).pathname), '..', '..');
-const rootConfig = JSON.parse(
-  await Deno.readTextFile(join(repoRoot, 'deno.json')),
-) as { tasks: Record<string, string> };
-const repoConfig = JSON.parse(
-  await Deno.readTextFile(join(repoRoot, 'tools/repo/deno.json')),
-) as { tasks: Record<string, string> };
+const rootConfig = JSON.parse(await Deno.readTextFile(join(repoRoot, 'deno.json'))) as {
+  tasks: Record<string, string>;
+  workspace?: string[];
+};
+const repoConfig = JSON.parse(await Deno.readTextFile(join(repoRoot, 'tools/repo/deno.json'))) as {
+  tasks: Record<string, string>;
+};
 const releaseConfig = JSON.parse(
   await Deno.readTextFile(join(repoRoot, 'tools/release/deno.json')),
 ) as { tasks: Record<string, string> };
@@ -77,7 +78,9 @@ Deno.test('task contract: verify runs every verify:core step', () => {
 });
 
 Deno.test('task contract: verify adds only the documented local-only steps', () => {
-  const extras = gateSteps('verify').filter((step) => !coreSteps.includes(step)).sort();
+  const extras = gateSteps('verify')
+    .filter((step) => !coreSteps.includes(step))
+    .sort();
   assertEquals(
     extras,
     ['check', 'saas:verify', 'saas:workers', 'test'],
@@ -227,4 +230,31 @@ Deno.test('task contract: release:check is the release train plus the packed gat
       'it must generate the derived site data the registry check reads, then ' +
       'include the trimmed gate:release steps',
   );
+});
+
+Deno.test('task contract: fmt/lint run the ox engines and deno fmt/lint stays retired', async () => {
+  // The format/lint engine is pinned once, here: fmt:check must stay the
+  // check-mode spelling of fmt, and lint must be the oxlint CLI. A change to
+  // any of these bodies is an engine swap and must update this contract.
+  assertEquals(rootConfig.tasks['fmt'], 'oxfmt', 'fmt is oxfmt in write mode');
+  assertEquals(rootConfig.tasks['fmt:check'], 'oxfmt --check', 'fmt:check is oxfmt check mode');
+  assertEquals(rootConfig.tasks['lint'], 'oxlint', 'lint is the oxlint CLI');
+  // The retired deno fmt/deno lint engines must not survive in any
+  // workspace task body: a task silently re-adding them would split the
+  // repository across two formatters/linters with diverging style and rules.
+  const manifests = [join(repoRoot, 'deno.json')];
+  for (const member of rootConfig.workspace ?? []) {
+    manifests.push(join(repoRoot, member, 'deno.json'));
+  }
+  for (const manifest of manifests) {
+    const config = JSON.parse(await Deno.readTextFile(manifest)) as {
+      tasks?: Record<string, string>;
+    };
+    for (const [name, command] of Object.entries(config.tasks ?? {})) {
+      assert(
+        !/(^|\s)deno (fmt|lint)(\s|'|$)/.test(command),
+        `${manifest} task '${name}' shells out to the retired deno fmt/deno lint engine: ${command}`,
+      );
+    }
+  }
 });

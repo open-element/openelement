@@ -25,9 +25,7 @@ export interface WorkspaceSourceAlias {
 }
 
 /** The workspace package export mapping as absolute source paths. */
-export function workspaceSourceAliases(
-  repoRoot: string,
-): WorkspaceSourceAlias[] {
+export function workspaceSourceAliases(repoRoot: string): WorkspaceSourceAlias[] {
   return [...allPackageAliases(repoRoot)].map(([specifier, url]) => ({
     specifier,
     sourcePath: fromFileUrl(url),
@@ -60,12 +58,12 @@ export async function applyWorkspaceAliases(
     imports?: Record<string, string>;
     tasks?: Record<string, string>;
   }>(denoJsonPath);
-  const imports = denoJson.imports ??= {};
+  const imports = (denoJson.imports ??= {});
   Object.assign(imports, options.extraImports);
   for (const [specifier, url] of allPackageAliases(options.repoRoot)) {
     imports[specifier] = url;
   }
-  const tasks = denoJson.tasks ??= {};
+  const tasks = (denoJson.tasks ??= {});
   tasks.build = routerBuildTask(options.repoRoot);
   await Deno.writeTextFile(denoJsonPath, jsonText(denoJson));
 
@@ -77,14 +75,15 @@ export async function applyWorkspaceAliases(
         // Vite reads the replacement as a path: keep it slash-separated so a
         // Windows checkout cannot split the alias across separators.
         const replacement = sourcePath.replaceAll('\\', '/');
-        return `{ find: ${JSON.stringify(specifier)}, replacement: ${
-          JSON.stringify(replacement)
-        } }`;
+        return `{ find: ${JSON.stringify(specifier)}, replacement: ${JSON.stringify(
+          replacement,
+        )} }`;
       }),
-      ...(options.externalViteAliases ?? []).map((find) =>
-        `{ find: ${JSON.stringify(find)}, replacement: ${
-          JSON.stringify(join(appDir, 'node_modules', ...find.split('/')))
-        } }`
+      ...(options.externalViteAliases ?? []).map(
+        (find) =>
+          `{ find: ${JSON.stringify(find)}, replacement: ${JSON.stringify(
+            join(appDir, 'node_modules', ...find.split('/')),
+          )} }`,
       ),
     ].join(',\n      ');
     viteText = viteText.replace(
@@ -103,10 +102,7 @@ export async function applyWorkspaceAliases(
  * rides on stdin (`deno run -`) instead of `deno eval`, which would run with
  * implicit --all permissions.
  */
-export async function primeAppNodeModules(
-  appDir: string,
-  specifier: string,
-): Promise<void> {
+export async function primeAppNodeModules(appDir: string, specifier: string): Promise<void> {
   await runStep(
     Deno.execPath(),
     [

@@ -104,10 +104,7 @@ export async function aggregate(inputDir: string, output: string): Promise<void>
   const expected = expectedSha();
   const [headSha, headTree] = [
     await required('git', ['rev-parse', 'HEAD']),
-    await required(
-      'git',
-      ['rev-parse', 'HEAD^{tree}'],
-    ),
+    await required('git', ['rev-parse', 'HEAD^{tree}']),
   ];
   if (headSha !== expected) throw new Error(`HEAD ${headSha} != expected ${expected}`);
   const jobs = await loadJobs(inputDir);
@@ -126,13 +123,13 @@ export async function aggregate(inputDir: string, output: string): Promise<void>
   };
   const rollupFailures = collectRollupFailures(rollup);
   rollupFailures.push(
-    ...await collectSiteE2eRecomputeFailures(rollup.siteE2e, {
+    ...(await collectSiteE2eRecomputeFailures(rollup.siteE2e, {
       readReport: () => fresh.read(SITE_E2E_REPORT_FILE),
       // The sidecar is bound to the commit that RAN the suite. When the
       // fresh-clone lane reused a tree-identical package, that is the source
       // commit, and the tree binding above is what licenses it (#1425).
       expectedSha: jobProofSha(fresh.job, expected),
-    }),
+    })),
   );
   if (rollupFailures.length > 0) {
     console.error(`candidate aggregation FAILED:\n${rollupFailures.join('\n')}`);
@@ -191,9 +188,9 @@ export async function aggregate(inputDir: string, output: string): Promise<void>
   });
   if (assemblyFailures.length > 0) {
     console.error(
-      `candidate aggregation FAILED while validating the assembled bundle:\n${
-        assemblyFailures.join('\n')
-      }`,
+      `candidate aggregation FAILED while validating the assembled bundle:\n${assemblyFailures.join(
+        '\n',
+      )}`,
     );
     Deno.exit(1);
   }

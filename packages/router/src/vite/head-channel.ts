@@ -39,17 +39,17 @@ import { OPEN_ELEMENT_HEAD_SCRIPT_KEYS, type OpenElementHeadScript } from '../co
  */
 export type HeadEntry =
   | {
-    /** `<meta …>`; `content`/`name`/`property`/`charset` are the usual keys. */
-    meta: Record<string, string>;
-  }
+      /** `<meta …>`; `content`/`name`/`property`/`charset` are the usual keys. */
+      meta: Record<string, string>;
+    }
   | {
-    /** `<link …>`; `rel` and `href` are required. */
-    link: Record<string, string>;
-  }
+      /** `<link …>`; `rel` and `href` are required. */
+      link: Record<string, string>;
+    }
   | {
-    /** One inline `<style>` block; the CSS text is validated, never parsed as markup. */
-    style: string;
-  };
+      /** One inline `<style>` block; the CSS text is validated, never parsed as markup. */
+      style: string;
+    };
 
 /** The default export shape of `app/head.tsx`. */
 export type HeadConvention = readonly HeadEntry[];
@@ -79,10 +79,7 @@ function describe(value: unknown): string {
  * unsafe attribute name fails the build rather than being dropped: a silently
  * missing `integrity` is a security regression the author cannot see.
  */
-function serializeAttrs(
-  attrs: Record<string, string>,
-  context: string,
-): string {
+function serializeAttrs(attrs: Record<string, string>, context: string): string {
   const tokens: string[] = [];
   for (const [name, value] of Object.entries(attrs)) {
     if (!isSafeAttributeName(name)) {
@@ -146,9 +143,7 @@ function serializeStyle(css: unknown, context: string): string {
  * Validate the `app/head.tsx` default export. Throws {@linkcode OpenElementError}
  * with `CONFIG_INVALID`; every unknown shape is named, never skipped.
  */
-export function assertValidHeadConvention(
-  value: unknown,
-): asserts value is HeadConvention {
+export function assertValidHeadConvention(value: unknown): asserts value is HeadConvention {
   const context = 'app/head.tsx';
   if (!Array.isArray(value)) {
     throw headError(
@@ -189,9 +184,9 @@ export function assertValidHeadConvention(
     for (const [name, attribute] of Object.entries(values)) {
       if (typeof attribute !== 'string') {
         throw headError(
-          `${entryContext}.${kind} attribute "${name}" must be a string; got ${
-            describe(attribute)
-          }.`,
+          `${entryContext}.${kind} attribute "${name}" must be a string; got ${describe(
+            attribute,
+          )}.`,
           'CONFIG_INVALID',
         );
       }
@@ -246,18 +241,18 @@ export function headScriptsToInject(
     const context = `head.scripts[${index}]`;
     if (typeof script !== 'object' || script === null || Array.isArray(script)) {
       throw headError(
-        `${context} must be an object ({ src, defer?, crossOrigin?, integrity? }); got ${
-          describe(script)
-        }.`,
+        `${context} must be an object ({ src, defer?, crossOrigin?, integrity? }); got ${describe(
+          script,
+        )}.`,
         'CONFIG_INVALID',
       );
     }
     for (const key of Object.keys(script)) {
       if (!OPEN_ELEMENT_HEAD_SCRIPT_KEYS.includes(key)) {
         throw headError(
-          `Unknown ${context} key "${key}". Accepted keys: ${
-            OPEN_ELEMENT_HEAD_SCRIPT_KEYS.join(', ')
-          }.`,
+          `Unknown ${context} key "${key}". Accepted keys: ${OPEN_ELEMENT_HEAD_SCRIPT_KEYS.join(
+            ', ',
+          )}.`,
           'CONFIG_UNKNOWN_KEY',
         );
       }
@@ -276,13 +271,14 @@ export function headScriptsToInject(
     }
     const crossOrigin = script.crossOrigin;
     if (
-      crossOrigin !== undefined && crossOrigin !== 'anonymous' &&
+      crossOrigin !== undefined &&
+      crossOrigin !== 'anonymous' &&
       crossOrigin !== 'use-credentials'
     ) {
       throw headError(
-        `${context}.crossOrigin must be "anonymous" or "use-credentials"; got ${
-          describe(crossOrigin)
-        }.`,
+        `${context}.crossOrigin must be "anonymous" or "use-credentials"; got ${describe(
+          crossOrigin,
+        )}.`,
         'CONFIG_INVALID',
       );
     }

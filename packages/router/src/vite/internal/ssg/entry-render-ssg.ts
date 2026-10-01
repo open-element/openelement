@@ -29,12 +29,8 @@ export function renderSsgSection(desc: EntryDescriptor): string {
   const lines: string[] = [];
 
   lines.push('');
-  lines.push(
-    '// - DSD-first rendering API -',
-  );
-  lines.push(
-    '// build-ssg.ts calls these - never touches customElements directly.',
-  );
+  lines.push('// - DSD-first rendering API -');
+  lines.push('// build-ssg.ts calls these - never touches customElements directly.');
   lines.push('');
 
   // --- routeInfo: structured route metadata ---
@@ -42,12 +38,15 @@ export function renderSsgSection(desc: EntryDescriptor): string {
   for (const r of desc.pageRoutes) {
     const tagNameExpr = pageRouteTagExpr(r.varName, r.tagName);
     lines.push(
-      `  { path: ${quoteGeneratedJavaScriptValue(r.path)}, filePath: ${
-        quoteGeneratedJavaScriptValue(r.filePath)
-      }, tagName: ${tagNameExpr}, module: ${r.varName}, isDynamic: ${!!r
-        .isDynamic}, paramNames: [${
-        (r.paramNames || []).map(quoteGeneratedJavaScriptValue).join(', ')
-      }], rendering: (__pageDefinition(${r.varName}).renderIntent?.mode || "static"), hasAction: (typeof ${r.varName}.action === "function" || (typeof ${r.varName}.actions === "object" && ${r.varName}.actions !== null))${
+      `  { path: ${quoteGeneratedJavaScriptValue(r.path)}, filePath: ${quoteGeneratedJavaScriptValue(
+        r.filePath,
+      )}, tagName: ${tagNameExpr}, module: ${r.varName}, isDynamic: ${!!r.isDynamic}, paramNames: [${(
+        r.paramNames || []
+      )
+        .map(quoteGeneratedJavaScriptValue)
+        .join(
+          ', ',
+        )}], rendering: (__pageDefinition(${r.varName}).renderIntent?.mode || "static"), hasAction: (typeof ${r.varName}.action === "function" || (typeof ${r.varName}.actions === "object" && ${r.varName}.actions !== null))${
         r.streamManifest
           ? `, streamManifest: __streamManifests[${quoteGeneratedJavaScriptValue(r.path)}]`
           : ''
@@ -75,12 +74,8 @@ export function renderSsgSection(desc: EntryDescriptor): string {
   // --- renderRoute ---
   lines.push('/**');
   lines.push(' * Render a route to structured output with diagnostics (v0.15.3).');
-  lines.push(
-    ' * Returns { html, errors, componentCount, renderTimeMs } on success.',
-  );
-  lines.push(
-    ' * Loader/render failures produce a defined result instead of throwing:',
-  );
+  lines.push(' * Returns { html, errors, componentCount, renderTimeMs } on success.');
+  lines.push(' * Loader/render failures produce a defined result instead of throwing:');
   lines.push(' * redirect (3xx), not-found (404) or a 500 page with the caught error');
   lines.push(' * collected into errors as a RenderError.');
   lines.push(' */');
@@ -89,9 +84,7 @@ export function renderSsgSection(desc: EntryDescriptor): string {
   lines.push(
     "  if (!info) throw new Error('[openElement] renderRoute: route not found: ' + routePath);",
   );
-  lines.push(
-    '  const { params = {}, locale, title, lang, headExtras } = options;',
-  );
+  lines.push('  const { params = {}, locale, title, lang, headExtras } = options;');
   lines.push('  const page = __pageDefinition(info.module);');
   lines.push('  const routeMeta = __routeMeta(info.module);');
   lines.push('  const loadContext = {');
@@ -123,13 +116,9 @@ export function renderSsgSection(desc: EntryDescriptor): string {
   lines.push('    if (locale) props.locale = locale;');
   lines.push('    let content = __ssr(info.tagName, props, { route: routePath });');
   lines.push('    for (const renderer of __matchingRenderers(routePath)) {');
-  lines.push(
-    '      content = await renderer.wrap(content, __rendererContext(routePath, params));',
-  );
+  lines.push('      content = await renderer.wrap(content, __rendererContext(routePath, params));');
   lines.push('    }');
-  lines.push(
-    '    content = __renderAppShell(content, routePath, { locale, routeMeta });',
-  );
+  lines.push('    content = __renderAppShell(content, routePath, { locale, routeMeta });');
   lines.push(
     '    const renderTimeMs = typeof performance !== "undefined" ? performance.now() - startTime : 0;',
   );
@@ -137,14 +126,12 @@ export function renderSsgSection(desc: EntryDescriptor): string {
     '    const componentCount = (content.match(/<template shadowrootmode="open"/g) || []).length;',
   );
   lines.push('    const fullHtml = wrapInDocument(content, {');
-  for (
-    const optionLine of documentWrapOptionsLines({
-      titleExpr: `title || __doc.title || ${quoteGeneratedJavaScriptValue(desc.document.title)}`,
-      langExpr: `lang || __doc.lang || ${quoteGeneratedJavaScriptValue(desc.document.lang)}`,
-      headExtrasExpr: 'headExtrasValue',
-      allowHeadExtrasScripts: desc.document.allowHeadExtrasScripts,
-    })
-  ) {
+  for (const optionLine of documentWrapOptionsLines({
+    titleExpr: `title || __doc.title || ${quoteGeneratedJavaScriptValue(desc.document.title)}`,
+    langExpr: `lang || __doc.lang || ${quoteGeneratedJavaScriptValue(desc.document.lang)}`,
+    headExtrasExpr: 'headExtrasValue',
+    allowHeadExtrasScripts: desc.document.allowHeadExtrasScripts,
+  })) {
     lines.push(`      ${optionLine}`);
   }
   lines.push('    });');
@@ -194,9 +181,7 @@ export function renderSsgSection(desc: EntryDescriptor): string {
   lines.push('      severity: "error",');
   lines.push('      phase: "render",');
   lines.push('      tagName: info.tagName,');
-  lines.push(
-    '      message: String(error && error.message ? error.message : error),',
-  );
+  lines.push('      message: String(error && error.message ? error.message : error),');
   lines.push('      recoverable: false,');
   lines.push('    };');
   lines.push(
@@ -219,14 +204,12 @@ export function renderSsgSection(desc: EntryDescriptor): string {
     '        const errorComponentCount = (errorContent.match(/<template shadowrootmode="open"/g) || []).length;',
   );
   lines.push('        const errorHtml = wrapInDocument(errorContent, {');
-  for (
-    const optionLine of documentWrapOptionsLines({
-      titleExpr: `title || __doc.title || ${quoteGeneratedJavaScriptValue(desc.document.title)}`,
-      langExpr: `lang || __doc.lang || ${quoteGeneratedJavaScriptValue(desc.document.lang)}`,
-      headExtrasExpr: 'headExtrasValue',
-      allowHeadExtrasScripts: desc.document.allowHeadExtrasScripts,
-    })
-  ) {
+  for (const optionLine of documentWrapOptionsLines({
+    titleExpr: `title || __doc.title || ${quoteGeneratedJavaScriptValue(desc.document.title)}`,
+    langExpr: `lang || __doc.lang || ${quoteGeneratedJavaScriptValue(desc.document.lang)}`,
+    headExtrasExpr: 'headExtrasValue',
+    allowHeadExtrasScripts: desc.document.allowHeadExtrasScripts,
+  })) {
     lines.push(`          ${optionLine}`);
   }
   lines.push('        });');
@@ -275,9 +258,7 @@ export function renderSsgSection(desc: EntryDescriptor): string {
     lines.push("  // Dispatch to the route module's getStaticPaths()");
     for (const r of dynamicRoutes) {
       lines.push(`  if (routePath === ${quoteGeneratedJavaScriptValue(r.path)}) {`);
-      lines.push(
-        `    if (typeof ${r.varName}.getStaticPaths === 'function') {`,
-      );
+      lines.push(`    if (typeof ${r.varName}.getStaticPaths === 'function') {`);
       lines.push(`      return await ${r.varName}.getStaticPaths();`);
       lines.push(`    }`);
       lines.push(`    return [];`);

@@ -162,8 +162,11 @@ export class NavigationState {
     const armed = this.#restoreHref;
     if (armed === null) return false;
     this.#restoreHref = null;
-    return candidate.info === undefined && candidate.navigationType === 'replace' &&
-      candidate.destinationHref === armed;
+    return (
+      candidate.info === undefined &&
+      candidate.navigationType === 'replace' &&
+      candidate.destinationHref === armed
+    );
   }
 
   /** Disposal: no ticket owns intent afterwards and no restore stays armed. */

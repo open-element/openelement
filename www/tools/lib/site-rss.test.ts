@@ -141,16 +141,12 @@ Deno.test('feedFailures: unpublishable dates, duplicate and empty slugs fail clo
   assert(failures.some((failure) => failure.includes("no publishable date (got 'someday')")));
   assert(
     failures.some((failure) =>
-      failure.includes("duplicate feed guid for blog post 'not-a-dated-filename'")
+      failure.includes("duplicate feed guid for blog post 'not-a-dated-filename'"),
     ),
   );
   assert(failures.some((failure) => failure.includes('without a slug')));
   // The renderer refuses the same post rather than emitting a dateless item.
-  assertThrows(
-    () => renderBlogFeedXml(broken),
-    Error,
-    "no publishable date (got 'someday')",
-  );
+  assertThrows(() => renderBlogFeedXml(broken), Error, "no publishable date (got 'someday')");
 });
 
 Deno.test('site feed: the real blog collection renders one item per published post', async () => {
@@ -176,9 +172,14 @@ Deno.test('feedFailures: calendar dates round-trip and impossible days fail clos
       { slug: 'dated-post', frontmatter: { title: 'Dated', date }, content: '', html: '' },
     ]);
 
-  for (
-    const date of ['2026-02-29', '2025-02-29', '1900-02-29', '2026-04-31', '2026-13-45', 'someday']
-  ) {
+  for (const date of [
+    '2026-02-29',
+    '2025-02-29',
+    '1900-02-29',
+    '2026-04-31',
+    '2026-13-45',
+    'someday',
+  ]) {
     assert(
       failureFor(date).some((failure) => failure.includes(`no publishable date (got '${date}')`)),
       `calendar-impossible date must fail closed: ${date}`,

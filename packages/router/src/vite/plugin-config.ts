@@ -86,8 +86,8 @@ function computeHeadExtras(options: FrameworkOptions): {
   ].filter((part): part is string => Boolean(part));
   return {
     headExtras: headExtrasParts.length > 0 ? headExtrasParts.join('\n  ') : undefined,
-    allowHeadExtrasScripts: legacyHead.allowHeadExtrasScripts ||
-      criticalHead.allowHeadExtrasScripts,
+    allowHeadExtrasScripts:
+      legacyHead.allowHeadExtrasScripts || criticalHead.allowHeadExtrasScripts,
   };
 }
 
@@ -238,9 +238,9 @@ async function resolveAndApplyAppConfig(
   }
   if (resolved.conventions.length > 0) {
     log.info(
-      `openelement.config.ts conventions: ${
-        resolved.conventions.map((use) => `${use.path} (${use.provides})`).join(', ')
-      }`,
+      `openelement.config.ts conventions: ${resolved.conventions
+        .map((use) => `${use.path} (${use.provides})`)
+        .join(', ')}`,
     );
   }
 }
@@ -273,8 +273,8 @@ export function createOpenPluginState(
     allowHeadExtrasScripts: allowHeadExtrasValue,
   };
 
-  const inlineOptionsPresent = internal.inlineOptionsPresent ??
-    hasInlineFrameworkOptions(options as Record<string, unknown>);
+  const inlineOptionsPresent =
+    internal.inlineOptionsPresent ?? hasInlineFrameworkOptions(options as Record<string, unknown>);
 
   const ctx = externalCtx || new OpenElementBuildContext(resolvedOptions);
 
@@ -333,10 +333,7 @@ export function createConfigHooks(
         );
       }
 
-      const aliases = state.ctx.phase1.userResolveAlias as
-        | Alias[]
-        | Record<string, string>
-        | null;
+      const aliases = state.ctx.phase1.userResolveAlias as Alias[] | Record<string, string> | null;
       const normalizedAliases = normalizeViteAliases(aliases, Deno.cwd());
       if (normalizedAliases) {
         state.ctx.phase1.userResolveAlias = normalizedAliases;
@@ -369,13 +366,13 @@ export function createConfigHooks(
         // Use its native write-stability queue, which delivers the final
         // write instead of throttling it away. Explicit watcher settings win.
         ...(userConfig.server?.watch === null ||
-            userConfig.server?.watch?.awaitWriteFinish !== undefined
+        userConfig.server?.watch?.awaitWriteFinish !== undefined
           ? {}
           : {
-            server: {
-              watch: { awaitWriteFinish: { stabilityThreshold: 50, pollInterval: 10 } },
-            },
-          }),
+              server: {
+                watch: { awaitWriteFinish: { stabilityThreshold: 50, pollInterval: 10 } },
+              },
+            }),
         build: {
           // The generated virtual entry intentionally contains the whole route graph.
           // Keep the budget explicit so Vite does not report it as an unexpected warning.

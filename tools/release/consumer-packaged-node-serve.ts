@@ -48,10 +48,13 @@ async function run(
 ): Promise<{ success: boolean; output: string }> {
   const controller = new AbortController();
   let timedOut = false;
-  const timeoutId = timeoutMs === undefined ? undefined : setTimeout(() => {
-    timedOut = true;
-    controller.abort();
-  }, timeoutMs);
+  const timeoutId =
+    timeoutMs === undefined
+      ? undefined
+      : setTimeout(() => {
+          timedOut = true;
+          controller.abort();
+        }, timeoutMs);
   try {
     const result = await new Deno.Command(command, {
       args,
@@ -108,8 +111,8 @@ try {
         '@openelement/router': `npm:@openelement/router@${PACKAGE_VERSION}`,
         '@openelement/router/vite': `npm:@openelement/router@${PACKAGE_VERSION}/vite`,
         '@openelement/element': `npm:@openelement/element@${PACKAGE_VERSION}`,
-        'hono': 'npm:hono@4.12.0',
-        'vite': `npm:vite@${VITE_DEV_PIN}`,
+        hono: 'npm:hono@4.12.0',
+        vite: `npm:vite@${VITE_DEV_PIN}`,
       },
       nodeModulesDir: 'manual',
       minimumDependencyAge: 0,
@@ -124,9 +127,9 @@ try {
       dependencies: {
         '@openelement/router': `file:${routerTarball}`,
         '@openelement/element': `file:${elementTarball}`,
-        'vite': VITE_DEV_PIN,
-        'hono': '4.12.0',
-        'nitro': NITRO_VERSION,
+        vite: VITE_DEV_PIN,
+        hono: '4.12.0',
+        nitro: NITRO_VERSION,
       },
     }),
   );
@@ -163,8 +166,7 @@ try {
   output: { dir: '.output-serve' },
 });
 `,
-    'server/routes/[...path].ts':
-      `import { createOpenElementNitroHandler } from '@openelement/router/nitro-mount';
+    'server/routes/[...path].ts': `import { createOpenElementNitroHandler } from '@openelement/router/nitro-mount';
 import openElementServer from '../../dist/server/index.js';
 
 // Catch-all over the Nitro static layer (nitro-public/): prerendered files
@@ -230,8 +232,7 @@ export default definePage<{ x: string }>(LivePage, {
   },
 });
 `,
-    'app/components/page-live.tsx':
-      `import { element, OpenElement, property } from '@openelement/element';
+    'app/components/page-live.tsx': `import { element, OpenElement, property } from '@openelement/element';
 
 @element('packed-live', { root: 'shadow-open' })
 export default class PackedLive extends OpenElement {
@@ -347,12 +348,16 @@ export default class PackedLive extends OpenElement {
   void (async () => {
     try {
       for await (const chunk of server.stdout) serverOutput.push(chunk);
-    } catch { /* pipe closed on kill */ }
+    } catch {
+      /* pipe closed on kill */
+    }
   })();
   void (async () => {
     try {
       for await (const chunk of server.stderr) serverOutput.push(chunk);
-    } catch { /* pipe closed on kill */ }
+    } catch {
+      /* pipe closed on kill */
+    }
   })();
   const serverLog = () => {
     const text = new TextDecoder().decode(

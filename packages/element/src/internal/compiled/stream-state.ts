@@ -32,8 +32,10 @@ export function streamHostState(
     host.getAttribute('data-oe-stream-instance') !== state.instance ||
     host.tagName.toLowerCase() !== program.tag ||
     !state.program.startsWith(`${program.version}:`) ||
-    !Array.isArray(state.parts) || !(state.pending instanceof Set) ||
+    !Array.isArray(state.parts) ||
+    !(state.pending instanceof Set) ||
     typeof state.listen !== 'function'
-  ) return undefined;
+  )
+    return undefined;
   return state;
 }

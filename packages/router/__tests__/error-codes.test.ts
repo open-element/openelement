@@ -104,11 +104,10 @@ Deno.test('error codes: the factories carry the phase their surface implies', ()
   assertThrows(() => {
     throw validation;
   }, OpenElementError);
-  assertEquals([validation.phase, validation.severity, validation.recoverable], [
-    'validation',
-    'error',
-    false,
-  ]);
+  assertEquals(
+    [validation.phase, validation.severity, validation.recoverable],
+    ['validation', 'error', false],
+  );
   const build = buildError(DescriptorErrorCode.CORS, 'boom');
   assertEquals([build.phase, build.severity, build.recoverable], ['build', 'error', false]);
   // buildError preserves the wrapped cause for diagnostics.
@@ -319,10 +318,12 @@ Deno.test('error codes: the mdx pipeline, the island scan, and the route scan re
     schemaVersion: '1',
     packageName: 'pkg',
     version: '1.0.0',
-    declarations: [{
-      tagName: 'pkg-el',
-      openElement: { module: './el.ts', hydrate, ...(media === undefined ? {} : { media }) },
-    }],
+    declarations: [
+      {
+        tagName: 'pkg-el',
+        openElement: { module: './el.ts', hydrate, ...(media === undefined ? {} : { media }) },
+      },
+    ],
   });
   const mediaWithoutDelivery = assertThrows(
     () => buildPackageIslandDecls([manifest('media') as never]),

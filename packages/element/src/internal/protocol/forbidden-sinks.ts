@@ -23,10 +23,7 @@
  * - `RAW_TEXT_TAGS`: raw-text elements are outside the compiled grammar —
  *   their content cannot be escaped by the serializer.
  */
-export const FORBIDDEN_ATTRIBUTE_NAMES: ReadonlySet<string> = new Set([
-  'innerhtml',
-  'srcdoc',
-]);
+export const FORBIDDEN_ATTRIBUTE_NAMES: ReadonlySet<string> = new Set(['innerhtml', 'srcdoc']);
 
 export const FORBIDDEN_PROPERTY_NAMES: ReadonlySet<string> = new Set([
   '__proto__',
@@ -34,10 +31,7 @@ export const FORBIDDEN_PROPERTY_NAMES: ReadonlySet<string> = new Set([
   'prototype',
 ]);
 
-export const RAW_TEXT_TAGS: ReadonlySet<string> = new Set([
-  'script',
-  'style',
-]);
+export const RAW_TEXT_TAGS: ReadonlySet<string> = new Set(['script', 'style']);
 
 /** Sink categories the canonical deny list classifies. */
 export type ForbiddenSinkKind = 'attr' | 'bool' | 'prop' | 'tag';

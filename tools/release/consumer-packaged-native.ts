@@ -130,8 +130,7 @@ export default definePage<NotesData>(NotesPage, {
 });
 `;
 
-const NATIVE_ROUTE_NOTE_DETAIL =
-  `import { definePage, notFound, type PagePropsContext } from '@openelement/router';
+const NATIVE_ROUTE_NOTE_DETAIL = `import { definePage, notFound, type PagePropsContext } from '@openelement/router';
 import NoteDetailPage from '../../components/page-note-detail.tsx';
 import { exposeActionCount, type Note, noteStore } from '../../store.ts';
 
@@ -396,8 +395,7 @@ export default class NotFoundPage extends OpenElement {
 }
 `;
 
-const NATIVE_ISLAND_COUNTER =
-  `import { element, OpenElement, property } from '@openelement/element';
+const NATIVE_ISLAND_COUNTER = `import { element, OpenElement, property } from '@openelement/element';
 import { defineIslandConfig } from '@openelement/router';
 
 export const openElement = defineIslandConfig({ hydrate: 'load', ssr: true, dsd: true });

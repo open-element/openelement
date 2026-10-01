@@ -93,9 +93,8 @@ function frameworkImportInventory(): Map<string, Set<string>> {
   const inventory = new Map<string, Set<string>>();
   for (const pkg of apiReference.packages) {
     for (const subpath of pkg.subpaths) {
-      const specifier = subpath.subpath === '.'
-        ? pkg.name
-        : `${pkg.name}/${subpath.subpath.replace(/^\.\//, '')}`;
+      const specifier =
+        subpath.subpath === '.' ? pkg.name : `${pkg.name}/${subpath.subpath.replace(/^\.\//, '')}`;
       inventory.set(specifier, new Set(subpath.exports.map((item) => item.name)));
     }
   }
@@ -119,7 +118,10 @@ export function validateFrameworkImports(
       }
       for (const raw of statement[1].split(',')) {
         // `type X` inline modifiers and `X as Y` aliases resolve to X.
-        const name = raw.replace(/^\s*type\s+/, '').split(/\s+as\s+/)[0].trim();
+        const name = raw
+          .replace(/^\s*type\s+/, '')
+          .split(/\s+as\s+/)[0]
+          .trim();
         if (!name) continue;
         if (!known.has(name)) {
           failures.push({ file, message: `'${name}' is not exported from '${specifier}'` });
@@ -152,9 +154,10 @@ export function extractExamples(file: string, markdown: string): ContentExample[
 export async function workspacePaths(): Promise<Record<string, string[]>> {
   const paths: Record<string, string[]> = {};
   for (const pkg of await readPackages()) {
-    const entries = typeof pkg.exports === 'string'
-      ? { '.': pkg.exports }
-      : (pkg.exports ?? {}) as Record<string, string>;
+    const entries =
+      typeof pkg.exports === 'string'
+        ? { '.': pkg.exports }
+        : ((pkg.exports ?? {}) as Record<string, string>);
     for (const [key, target] of Object.entries(entries)) {
       if (typeof target !== 'string') continue;
       const specifier = key === '.' ? pkg.name : `${pkg.name}/${key.replace(/^\.\//, '')}`;
@@ -230,9 +233,10 @@ export async function typeCheckExamples(examples: ContentExample[]): Promise<Exa
         const position = diagnostic.file?.getLineAndCharacterOfPosition(diagnostic.start ?? 0);
         failures.push({
           file: `${examples[index].file} (block ${examples[index].index + 1})`,
-          message: `TS${diagnostic.code} at line ${(position?.line ?? 0) + 1}: ${
-            ts.flattenDiagnosticMessageText(diagnostic.messageText, ' ')
-          }`,
+          message: `TS${diagnostic.code} at line ${(position?.line ?? 0) + 1}: ${ts.flattenDiagnosticMessageText(
+            diagnostic.messageText,
+            ' ',
+          )}`,
         });
       }
     }
@@ -285,12 +289,10 @@ export async function checkContent(): Promise<ContentGateResult> {
   // One walk over the whole content tree: import validation applies to every
   // fence anywhere under www/content; type-checking applies to the
   // maintained authoring surface only.
-  for await (
-    const entry of walk(join(repoRoot, 'www/content'), {
-      includeDirs: false,
-      exts: ['.md', '.mdx'],
-    })
-  ) {
+  for await (const entry of walk(join(repoRoot, 'www/content'), {
+    includeDirs: false,
+    exts: ['.md', '.mdx'],
+  })) {
     const markdown = await Deno.readTextFile(entry.path);
     importFailures.push(...validateFrameworkImports(entry.path, markdown, inventory));
     if (!CHECKED_CONTENT_DIRS.some((dir) => entry.path.startsWith(join(repoRoot, dir)))) continue;

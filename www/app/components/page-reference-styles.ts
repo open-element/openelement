@@ -1,6 +1,7 @@
 import { compiledStyle } from '../site-ui/compiled-style.ts';
 
-export const pageReferenceStyles = [compiledStyle(`
+export const pageReferenceStyles = [
+  compiledStyle(`
   :host { display: block; color: var(--text-primary); }
   * { box-sizing: border-box; }
   p { margin: 0; }
@@ -158,4 +159,5 @@ export const pageReferenceStyles = [compiledStyle(`
     .pkg-row { grid-template-columns: minmax(0, 1fr); gap: var(--size-3); }
     .kind { justify-self: start; }
   }
-`)];
+`),
+];

@@ -60,8 +60,8 @@ Deno.test('openPlugin: route file added during dev triggers descriptor rescan (#
 
     const plugins = createOpenPlugin({ routesDir }) as Hooked[];
     const core = plugins.find((p) => (p as { name?: string }).name === 'open:core')!;
-    const virtualEntry = plugins.find((p) =>
-      (p as { name?: string }).name === 'open:virtual-entry'
+    const virtualEntry = plugins.find(
+      (p) => (p as { name?: string }).name === 'open:virtual-entry',
     )!;
 
     await core.buildStart!();
@@ -150,8 +150,8 @@ Deno.test('openPlugin: route content changes rebuild descriptor once after a bur
 
     const plugins = createOpenPlugin({ routesDir }) as Hooked[];
     const core = plugins.find((p) => (p as { name?: string }).name === 'open:core')!;
-    const virtualEntry = plugins.find((p) =>
-      (p as { name?: string }).name === 'open:virtual-entry'
+    const virtualEntry = plugins.find(
+      (p) => (p as { name?: string }).name === 'open:virtual-entry',
     )!;
     await core.buildStart!();
 

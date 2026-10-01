@@ -22,20 +22,24 @@ interface Row {
 const program = testProgram({
   tag: 'oe-keyed-measure',
   template: [{ k: 'el', tag: 'ul', attrs: [], children: [{ k: 'part', index: 0 }] }],
-  parts: [{
-    k: 'each',
-    index: 0,
-    signal: 'items',
-    key: 'id',
-    field: 'text',
-    item: [{
-      k: 'el',
-      tag: 'li',
-      attrs: [],
-      iattrs: [['data-id', 'id']],
-      children: [{ k: 'ival', field: 'text' }],
-    }],
-  }],
+  parts: [
+    {
+      k: 'each',
+      index: 0,
+      signal: 'items',
+      key: 'id',
+      field: 'text',
+      item: [
+        {
+          k: 'el',
+          tag: 'li',
+          attrs: [],
+          iattrs: [['data-id', 'id']],
+          children: [{ k: 'ival', field: 'text' }],
+        },
+      ],
+    },
+  ],
 });
 
 function measure(size: number, scenario: 'swap' | 'rotate') {
@@ -62,14 +66,16 @@ function measure(size: number, scenario: 'swap' | 'rotate') {
     items.value = next;
     const ms = performance.now() - start;
     const after = list.childNodes.filter((node): node is FElement => node instanceof FElement);
-    const identityPreserved = after.length === size &&
-      after.every((row, index) =>
-        row === before[Number(next[index].id)] &&
-        row.getAttribute('data-id') === next[index].id
+    const identityPreserved =
+      after.length === size &&
+      after.every(
+        (row, index) =>
+          row === before[Number(next[index].id)] && row.getAttribute('data-id') === next[index].id,
       );
     const moves = document.counts.insertions;
     if (
-      !identityPreserved || moves !== (scenario === 'swap' ? 2 : 1) ||
+      !identityPreserved ||
+      moves !== (scenario === 'swap' ? 2 : 1) ||
       document.counts.removals !== 0
     ) {
       throw new Error(

@@ -71,7 +71,9 @@ Deno.test('v0.44 static-only build ships zero client runtime (#1171)', async () 
     // No client runtime artifact directories.
     for (const artifactDir of ['client', 'island-manifests']) {
       assertEquals(
-        await Deno.stat(join(distDir, artifactDir)).then(() => true).catch(() => false),
+        await Deno.stat(join(distDir, artifactDir))
+          .then(() => true)
+          .catch(() => false),
         false,
         `zero-runtime build must not emit dist/${artifactDir}`,
       );

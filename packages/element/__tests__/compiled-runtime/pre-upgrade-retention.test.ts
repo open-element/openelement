@@ -28,7 +28,7 @@ const {
   replayPreUpgradeCaptures,
 } = await import('../../src/internal/compiled/runtime/pre-upgrade-events.ts');
 
-// deno-lint-ignore no-explicit-any
+// oxlint-disable-next-line no-explicit-any
 type AnyElement = any;
 
 function click(): FacadeEvent {

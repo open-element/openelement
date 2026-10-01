@@ -61,34 +61,35 @@ async function assertPackedCliPrintsCanonicalCommand(createCli: string): Promise
   ).href;
   // `deno eval` accepts no permission flags; a bare `deno run -` with the
   // script on stdin keeps the same isolation with the flags this check needs.
-  const expected = (await runStep(
-    Deno.execPath(),
-    ['run', '--allow-read', '--no-prompt', '-'],
-    {
+  const expected = (
+    await runStep(Deno.execPath(), ['run', '--allow-read', '--no-prompt', '-'], {
       cwd: repoRoot,
-      stdin: `const { createInstallCommand } = await import(${
-        JSON.stringify(installCommandUrl)
-      }); console.log(createInstallCommand());`,
-    },
-  )).stdout.trim();
+      stdin: `const { createInstallCommand } = await import(${JSON.stringify(
+        installCommandUrl,
+      )}); console.log(createInstallCommand());`,
+    })
+  ).stdout.trim();
   // The no-arguments path is the usage path; exit 1 is its documented code.
-  const stdout = (await runStep(
-    Deno.execPath(),
-    [
-      'run',
-      '--minimum-dependency-age',
-      '0',
-      '--allow-read',
-      '--allow-write',
-      '--allow-env',
-      '--allow-net',
-      '--deny-ffi',
-      '--no-prompt',
-      createCli,
-    ],
-    { cwd: workDir, allowFailure: true },
-  )).stdout;
-  const printed = stdout.split('\n')
+  const stdout = (
+    await runStep(
+      Deno.execPath(),
+      [
+        'run',
+        '--minimum-dependency-age',
+        '0',
+        '--allow-read',
+        '--allow-write',
+        '--allow-env',
+        '--allow-net',
+        '--deny-ffi',
+        '--no-prompt',
+        createCli,
+      ],
+      { cwd: workDir, allowFailure: true },
+    )
+  ).stdout;
+  const printed = stdout
+    .split('\n')
     .find((line) => line.includes('npm:@openelement/create@'))
     ?.replace(/^Usage \(Alpha\): /, '')
     .trim();

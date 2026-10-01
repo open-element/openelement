@@ -8,8 +8,9 @@ for (const target of [undefined, '', '_self'] as const) {
       const base = document.createElement('base');
       base.target = '_blank';
       document.head.append(base);
-      const form = document.querySelector('guards-page')!.shadowRoot!
-        .querySelector<HTMLButtonElement>('#plain-submit')!.form!;
+      const form = document
+        .querySelector('guards-page')!
+        .shadowRoot!.querySelector<HTMLButtonElement>('#plain-submit')!.form!;
       if (override !== undefined) form.setAttribute('target', override);
     }, target);
     if (target === undefined) {
@@ -34,9 +35,9 @@ for (const outcome of ['html', 'network-error'] as const) {
     await page.goto('/notes/new');
     await page.waitForFunction(() => !!customElements.get('note-counter'));
     let release!: () => void;
-    const held = new Promise<void>((resolve) => release = resolve);
+    const held = new Promise<void>((resolve) => (release = resolve));
     let received!: () => void;
-    const started = new Promise<void>((resolve) => received = resolve);
+    const started = new Promise<void>((resolve) => (received = resolve));
     await page.route('**/notes/new', async (route) => {
       if (route.request().method() !== 'POST') return route.continue();
       received();
@@ -59,19 +60,20 @@ for (const outcome of ['html', 'network-error'] as const) {
   });
 }
 
-test('Lit islands introduced by repeated enhanced responses hydrate and handle clicks', async ({ page, request }) => {
+test('Lit islands introduced by repeated enhanced responses hydrate and handle clicks', async ({
+  page,
+  request,
+}) => {
   const html = (await (await request.get('/notes')).text()).replace(
     '</main>',
     '<form method="post" action="/notes/new" data-open-enhance><button id="again">again</button></form></main>',
   );
   await page.goto('/notes/new');
   await page.waitForFunction(() => !!customElements.get('note-counter'));
-  await page.route(
-    '**/notes/new',
-    (route) =>
-      route.request().method() === 'POST'
-        ? route.fulfill({ contentType: 'text/html', body: html })
-        : route.continue(),
+  await page.route('**/notes/new', (route) =>
+    route.request().method() === 'POST'
+      ? route.fulfill({ contentType: 'text/html', body: html })
+      : route.continue(),
   );
   await page.fill('#title', 'review');
   await page.click('#submit');

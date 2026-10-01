@@ -35,9 +35,7 @@ type RenderRouteFn =
   | ((path: string, opts?: Record<string, unknown>) => Promise<SsgPageOutput>)
   | undefined;
 
-type GetStaticPathsFn =
-  | ((path: string) => Promise<Array<Record<string, string>>>)
-  | undefined;
+type GetStaticPathsFn = ((path: string) => Promise<Array<Record<string, string>>>) | undefined;
 
 /** Classification of a renderRoute() result (alpha.18 R2-H3). */
 type PageOutcome =
@@ -79,11 +77,7 @@ function failurePolicy(options: SsgRenderOptions): 'fail' | 'warn' {
  * Handle a page render failure according to the configured policy.
  * 'fail' aborts the build; 'warn' logs and skips the page.
  */
-function handleRenderFailure(
-  policy: 'fail' | 'warn',
-  context: string,
-  error: unknown,
-): void {
+function handleRenderFailure(policy: 'fail' | 'warn', context: string, error: unknown): void {
   if (policy === 'fail') {
     throw buildError(
       SsgDynamicErrorCode.RENDER_FAILED,
@@ -185,11 +179,7 @@ export async function expandDynamicRoutes(
       try {
         paramsList = await getStaticPaths(route.path);
       } catch (e) {
-        handleRenderFailure(
-          policy,
-          `getStaticPaths for ${route.path} failed`,
-          e,
-        );
+        handleRenderFailure(policy, `getStaticPaths for ${route.path} failed`, e);
         continue;
       }
 
@@ -220,11 +210,7 @@ export async function expandDynamicRoutes(
             outDir,
           );
         } catch (e) {
-          handleRenderFailure(
-            policy,
-            `dynamic route ${resolvedPath} could not be rendered`,
-            e,
-          );
+          handleRenderFailure(policy, `dynamic route ${resolvedPath} could not be rendered`, e);
           continue;
         }
         if (outcome === 'written') writtenParams.push(params);
@@ -276,11 +262,7 @@ export async function expandI18nLocales(
         } catch (e) {
           // #672: getStaticPaths failures follow the same dynamicRouteFailure
           // policy as render failures (see expandDynamicRoutes).
-          handleRenderFailure(
-            policy,
-            `i18n: getStaticPaths for ${route.path} failed`,
-            e,
-          );
+          handleRenderFailure(policy, `i18n: getStaticPaths for ${route.path} failed`, e);
           continue;
         }
       } else {

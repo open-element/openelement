@@ -51,9 +51,7 @@ const EXEMPT_PATHS: readonly string[] = [
 ];
 
 /** The strict-shape validator the table must satisfy (see test 2). */
-function nonConformingEntries(
-  entries: ReadonlyArray<{ path: string; line: string }>,
-): string[] {
+function nonConformingEntries(entries: ReadonlyArray<{ path: string; line: string }>): string[] {
   return entries
     .filter((entry) => !CONSUMER_SCAFFOLD_PATTERN.test(entry.line))
     .map((entry) => `${entry.path}: ${entry.line}`);

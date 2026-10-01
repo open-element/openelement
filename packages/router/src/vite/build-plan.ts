@@ -60,9 +60,9 @@ export function createProductionBuildPlan(ctx: OpenElementBuildContext): BuildPl
     },
     i18n: ctx.plugins.i18nOptions
       ? {
-        locales: ctx.plugins.i18nOptions.locales,
-        defaultLocale: ctx.plugins.i18nOptions.defaultLocale,
-      }
+          locales: ctx.plugins.i18nOptions.locales,
+          defaultLocale: ctx.plugins.i18nOptions.defaultLocale,
+        }
       : undefined,
     packageIslands: { packages: ctx.options.packageIslands ?? [] },
   };
@@ -102,17 +102,21 @@ export function collectBuildArtifacts(plan: BuildPlan): BuildArtifacts {
   const outputDir = join(root, plan.output.outDir ?? DEFAULT_OUT_DIR);
   try {
     const emitted = files(outputDir);
-    const pages = emitted.filter((path) => path.endsWith('.html')).map((path) => ({
-      path: '/' +
-        normalizeSeparators(relative(outputDir, path)).replace(/(?:\/index)?\.html$/, ''),
-      html: Deno.readTextFileSync(path),
-      errors: [],
-    }));
-    const clientAssets = emitted.filter((path) => /\.(?:js|css)$/.test(path)).map((path) => ({
-      fileName: normalizeSeparators(relative(outputDir, path)),
-      source: Deno.readTextFileSync(path),
-      sizeBytes: Deno.statSync(path).size,
-    }));
+    const pages = emitted
+      .filter((path) => path.endsWith('.html'))
+      .map((path) => ({
+        path:
+          '/' + normalizeSeparators(relative(outputDir, path)).replace(/(?:\/index)?\.html$/, ''),
+        html: Deno.readTextFileSync(path),
+        errors: [],
+      }));
+    const clientAssets = emitted
+      .filter((path) => /\.(?:js|css)$/.test(path))
+      .map((path) => ({
+        fileName: normalizeSeparators(relative(outputDir, path)),
+        source: Deno.readTextFileSync(path),
+        sizeBytes: Deno.statSync(path).size,
+      }));
     return {
       pages,
       manifest: {

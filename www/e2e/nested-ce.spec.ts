@@ -27,10 +27,7 @@ test.describe('Nested Custom Elements', () => {
     // After DSD hydration, nested CEs should be elements in the DOM,
     // not text nodes containing raw HTML
     const nestedAsText = await page.evaluate(() => {
-      const walker = document.createTreeWalker(
-        document.body,
-        NodeFilter.SHOW_TEXT,
-      );
+      const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
       const textNodes: string[] = [];
       let node: Node | null;
       while ((node = walker.nextNode())) {

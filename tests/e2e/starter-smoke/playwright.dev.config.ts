@@ -32,8 +32,7 @@ export default defineConfig({
   },
 
   webServer: {
-    command:
-      `exec deno run --config deno.json --allow-read --allow-write --allow-env --allow-net --allow-run --allow-sys --allow-ffi --no-prompt npm:vite@8.0.16 --port ${PORT} --strictPort`,
+    command: `exec deno run --config deno.json --allow-read --allow-write --allow-env --allow-net --allow-run --allow-sys --allow-ffi --no-prompt npm:vite@8.0.16 --port ${PORT} --strictPort`,
     cwd: new URL('./work/my-blog', import.meta.url).pathname,
     url: baseURL,
     reuseExistingServer: false,

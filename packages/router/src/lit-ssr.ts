@@ -68,9 +68,13 @@ function litPageTemplate(tag: string, props: Record<string, unknown>) {
  * class explicitly before rendering, so an unregistered host is a pipeline
  * bug, never a silent passthrough.
  */
-export function renderLitPageToHtml(
-  { tag, props }: { tag: string; props?: Record<string, unknown> },
-): { html: string } {
+export function renderLitPageToHtml({
+  tag,
+  props,
+}: {
+  tag: string;
+  props?: Record<string, unknown>;
+}): { html: string } {
   if (!isValidTagName(tag)) {
     throw new OpenElementError(
       `${ERROR_PREFIX} Invalid custom element tag: ${String(tag)}. Must contain a hyphen.`,

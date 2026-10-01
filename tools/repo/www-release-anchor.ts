@@ -52,26 +52,29 @@ export function wwwReleaseAnchorFailures(
     failures.push(
       'www _generated-release-line.ts SOURCE_VERSION ' +
         (sourceVersionMatch?.[1] ?? 'missing') +
-        ' must equal release-state sourceVersion ' + state.sourceVersion,
+        ' must equal release-state sourceVersion ' +
+        state.sourceVersion,
     );
   }
   const publishedMatch = releaseLineSource.match(/SOURCE_LINE_PUBLISHED = (true|false)/);
-  const expectedPublished = state.packages.every((entry) =>
-    entry.registry.alpha === state.sourceVersion
+  const expectedPublished = state.packages.every(
+    (entry) => entry.registry.alpha === state.sourceVersion,
   );
   if (publishedMatch?.[1] !== String(expectedPublished)) {
     failures.push(
-      'www SOURCE_LINE_PUBLISHED must be ' + String(expectedPublished) +
+      'www SOURCE_LINE_PUBLISHED must be ' +
+        String(expectedPublished) +
         ' (every package @alpha dist-tag resolving to sourceVersion)',
     );
   }
   const resolvesMatch = releaseLineSource.match(/ALPHA_RESOLVES_TO = '([^']+)'/);
   const expectedResolvesTo =
     state.packages.find((entry) => entry.name === '@openelement/create')?.registry.alpha ??
-      'unknown';
+    'unknown';
   if (resolvesMatch?.[1] !== expectedResolvesTo) {
     failures.push(
-      'www ALPHA_RESOLVES_TO must be ' + expectedResolvesTo +
+      'www ALPHA_RESOLVES_TO must be ' +
+        expectedResolvesTo +
         " (the create package's @alpha dist-tag)",
     );
   }
@@ -92,10 +95,12 @@ export async function wwwReleaseAnchorDrift(root: string): Promise<string[]> {
   } catch {
     return ['docs/release/release-state.json: missing or unreadable'];
   }
-  const siteVersionSource = await Deno.readTextFile(join(root, VERSION_SOURCE_WWW))
-    .catch(() => null);
-  const releaseLineSource = await Deno.readTextFile(join(root, RELEASE_LINE_GENERATED))
-    .catch(() => null);
+  const siteVersionSource = await Deno.readTextFile(join(root, VERSION_SOURCE_WWW)).catch(
+    () => null,
+  );
+  const releaseLineSource = await Deno.readTextFile(join(root, RELEASE_LINE_GENERATED)).catch(
+    () => null,
+  );
   if (siteVersionSource === null || releaseLineSource === null) {
     return [VERSION_SOURCE_WWW + ' or ' + RELEASE_LINE_GENERATED + ': missing'];
   }

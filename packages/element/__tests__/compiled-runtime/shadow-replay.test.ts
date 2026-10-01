@@ -33,23 +33,24 @@ import { testProgram } from './test-program.ts';
 // The facade captures its HTMLElement base at module evaluation time.
 const dom: FacadeDom = installFacadeDom();
 
-const { OpenElement, ensurePreHydrationClickCapture, renderDsd } = await import(
-  '../../src/index.ts'
-);
+const { OpenElement, ensurePreHydrationClickCapture, renderDsd } =
+  await import('../../src/index.ts');
 
-// deno-lint-ignore no-explicit-any
+// oxlint-disable-next-line no-explicit-any
 type AnyElement = any;
 
 function defineCounter(tag: string, rootMode: 'light' | 'shadow-open'): void {
   const program = testProgram({
     tag,
     rootMode,
-    template: [{
-      k: 'el',
-      tag: 'button',
-      attrs: [['type', 'button']],
-      children: [{ k: 'part', index: 0 }],
-    }],
+    template: [
+      {
+        k: 'el',
+        tag: 'button',
+        attrs: [['type', 'button']],
+        children: [{ k: 'part', index: 0 }],
+      },
+    ],
     parts: [
       { k: 'text', index: 0, signal: 'count' },
       {
@@ -61,14 +62,16 @@ function defineCounter(tag: string, rootMode: 'light' | 'shadow-open'): void {
         path: [0],
       },
     ],
-    properties: [{
-      name: 'count',
-      attribute: 'count',
-      type: 'number',
-      converter: 'number',
-      reflect: false,
-      default: 0,
-    }],
+    properties: [
+      {
+        name: 'count',
+        attribute: 'count',
+        type: 'number',
+        converter: 'number',
+        reflect: false,
+        default: 0,
+      },
+    ],
   });
   class ShadowCounter extends OpenElement {
     static __partProgram = program;
@@ -108,7 +111,8 @@ function ssrShadowHost(tag: string): FacadeElement {
   for (const [name, value] of parsedHost.attributes) host.setAttribute(name, value);
   const first = parsedHost.childNodes[0];
   if (
-    first instanceof FacadeElement && first.localName === 'template' &&
+    first instanceof FacadeElement &&
+    first.localName === 'template' &&
     first.hasAttribute('shadowrootmode')
   ) {
     const root = host.attachShadow({ mode: 'open' });
@@ -121,9 +125,7 @@ function ssrShadowHost(tag: string): FacadeElement {
 
 /** Delayed upgrade: the recorded nodes move into the real element pre-connect. */
 function upgradeShadowInPlace(ssrHost: FacadeElement): ShadowCounterElement {
-  const element = dom.document.createElement(
-    ssrHost.localName,
-  ) as unknown as ShadowCounterElement;
+  const element = dom.document.createElement(ssrHost.localName) as unknown as ShadowCounterElement;
   for (const [name, value] of ssrHost.attributes) {
     (element as unknown as FacadeElement).setAttribute(name, value);
   }
@@ -147,7 +149,7 @@ function composedClick(): FacadeEvent {
 
 function innerButton(ssrHost: FacadeElement): AnyElement {
   const shadow = ssrHost.shadowRoot as unknown as FacadeShadowRoot;
-  if (shadow) return (shadow.childNodes[0] as unknown as AnyElement);
+  if (shadow) return shadow.childNodes[0] as unknown as AnyElement;
   return ssrHost.childNodes[0] as AnyElement;
 }
 

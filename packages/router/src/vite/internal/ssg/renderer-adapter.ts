@@ -42,17 +42,19 @@ const native: RendererAdapter = {
   hydration: 'compiled-claim',
   supportsCompiledStream: true,
   serverImports(hasStreamRoute) {
-    return [{
-      from: '@openelement/element',
-      names: [
-        'createDeferredDsdExecutor',
-        ...(hasStreamRoute ? ['documentStreamParts', 'escapeAttr'] : []),
-        'renderDsd',
-        'trustedHtml',
-        'escapeHtml',
-        'wrapInDocument',
-      ],
-    }];
+    return [
+      {
+        from: '@openelement/element',
+        names: [
+          'createDeferredDsdExecutor',
+          ...(hasStreamRoute ? ['documentStreamParts', 'escapeAttr'] : []),
+          'renderDsd',
+          'trustedHtml',
+          'escapeHtml',
+          'wrapInDocument',
+        ],
+      },
+    ];
   },
   runtimeSeam() {
     return {
@@ -124,9 +126,9 @@ export function selectRendererAdapter(value: unknown): RendererAdapter {
   if (value === undefined || value === 'native') return native;
   if (value === 'lit') return lit;
   throw new Error(
-    `[openElement] renderer must be 'native' or 'lit' (got ${
-      quoteGeneratedJavaScriptValue(String(value))
-    }). ` +
+    `[openElement] renderer must be 'native' or 'lit' (got ${quoteGeneratedJavaScriptValue(
+      String(value),
+    )}). ` +
       'Renderer selection is explicit openElement({ renderer }) config and is never inferred.',
   );
 }

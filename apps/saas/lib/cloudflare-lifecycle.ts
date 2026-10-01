@@ -57,7 +57,7 @@ export async function consumeAttachmentScans(
         }),
       );
       if (!response.ok) throw new Error(`scanner failed (${response.status})`);
-      const result = await response.json() as { verdict?: string };
+      const result = (await response.json()) as { verdict?: string };
       if (result.verdict !== 'clean' && result.verdict !== 'quarantined') {
         throw new Error('scanner returned an invalid verdict');
       }
@@ -261,10 +261,7 @@ export async function reconcilePayments(env: WorkerEnv): Promise<void> {
 }
 
 export async function reconcileLifecycle(env: WorkerEnv): Promise<void> {
-  const results = await Promise.allSettled([
-    reconcileAttachments(env),
-    reconcilePayments(env),
-  ]);
+  const results = await Promise.allSettled([reconcileAttachments(env), reconcilePayments(env)]);
   if (results.some((result) => result.status === 'rejected')) {
     throw new Error('one or more lifecycle reconciliation passes failed');
   }

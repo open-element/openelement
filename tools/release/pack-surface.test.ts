@@ -191,11 +191,7 @@ Deno.test('pack surface: module-scope global writes are found, nested ones are n
     '  globalThis.customElements = {};',
   ];
   for (const source of accepted) {
-    assertEquals(
-      findModuleScopeGlobalWrites(source),
-      [],
-      `must pass: ${JSON.stringify(source)}`,
-    );
+    assertEquals(findModuleScopeGlobalWrites(source), [], `must pass: ${JSON.stringify(source)}`);
   }
 });
 
@@ -224,10 +220,7 @@ Deno.test('pack surface: create keeps its side-effectful cli out of the scan', (
 });
 
 Deno.test('pack surface: module-scope seam installs are found, deferred ones are not', () => {
-  const offending = [
-    'installClaimExecutor(claimExistingDom);',
-    'installSeamThing(other);',
-  ];
+  const offending = ['installClaimExecutor(claimExistingDom);', 'installSeamThing(other);'];
   for (const line of offending) {
     const found = findModuleScopeSeamInstalls(line);
     assertEquals(found.length, 1, `must fail: ${line}`);
@@ -245,11 +238,7 @@ Deno.test('pack surface: module-scope seam installs are found, deferred ones are
     'export { installClaimExecutor } from "./claim-seam.js";',
   ];
   for (const source of accepted) {
-    assertEquals(
-      findModuleScopeSeamInstalls(source),
-      [],
-      `must pass: ${JSON.stringify(source)}`,
-    );
+    assertEquals(findModuleScopeSeamInstalls(source), [], `must pass: ${JSON.stringify(source)}`);
   }
 });
 
@@ -260,10 +249,7 @@ Deno.test('pack surface: an undeclared seam install fails, a declared one passes
   const INSTALLER_PATH = 'src/internal/compiled/runtime/claim-install.js';
   const packaged = (sideEffects: unknown): Map<string, string> =>
     new Map<string, string>([
-      [
-        'package/package.json',
-        JSON.stringify(manifest('@openelement/element', { sideEffects })),
-      ],
+      ['package/package.json', JSON.stringify(manifest('@openelement/element', { sideEffects }))],
       ['package/README.md', ''],
       ['package/src/index.js', "import './internal/compiled/runtime/claim-install.js';"],
       [`package/${INSTALLER_PATH}`, 'installClaimExecutor(claimExistingDom);'],
@@ -271,8 +257,9 @@ Deno.test('pack surface: an undeclared seam install fails, a declared one passes
   // Only the seam rule's findings: a fixture whose sideEffects differs from
   // packedMetadata() also trips the parity rule, which is not under test here.
   const seam = (sideEffects: unknown): PackSurfaceViolation[] =>
-    scanPackedPackage('@openelement/element', packaged(sideEffects))
-      .filter((violation) => violation.message.includes('tree-shaken'));
+    scanPackedPackage('@openelement/element', packaged(sideEffects)).filter((violation) =>
+      violation.message.includes('tree-shaken'),
+    );
 
   // The #1425 shape: `false` lets a bundler drop the installer AND the bare
   // import that reaches it, so the packaged entry silently loses the seam.

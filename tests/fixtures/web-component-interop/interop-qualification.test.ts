@@ -6,12 +6,10 @@ const fixtureRoot = new URL('./', import.meta.url);
 Deno.test('interop corpus covers the four framework origins and every required probe', async () => {
   const corpus = await loadInteropCorpus(fixtureRoot);
 
-  assertEquals(corpus.components.map((component) => component.framework), [
-    'native',
-    'lit',
-    'fast',
-    'stencil',
-  ]);
+  assertEquals(
+    corpus.components.map((component) => component.framework),
+    ['native', 'lit', 'fast', 'stencil'],
+  );
   for (const component of corpus.components) {
     assertEquals(component.probes, [
       'property',
@@ -45,14 +43,20 @@ Deno.test('CEM validation fails closed for empty module paths and declaration na
   };
   emptyPath.modules[0].path = '';
   const pathDiagnostics = validateCemManifest(emptyPath);
-  assertEquals(pathDiagnostics.some((diagnostic) => diagnostic.includes('.path')), true);
+  assertEquals(
+    pathDiagnostics.some((diagnostic) => diagnostic.includes('.path')),
+    true,
+  );
 
   const emptyName = structuredClone(corpus.cem) as unknown as {
     modules: Array<{ declarations: Array<Record<string, unknown>> }>;
   };
   emptyName.modules[0].declarations[0].name = '';
   const nameDiagnostics = validateCemManifest(emptyName);
-  assertEquals(nameDiagnostics.some((diagnostic) => diagnostic.includes('.name')), true);
+  assertEquals(
+    nameDiagnostics.some((diagnostic) => diagnostic.includes('.name')),
+    true,
+  );
 });
 
 Deno.test('unknown SSR capability fails closed to documented client-only behavior', () => {

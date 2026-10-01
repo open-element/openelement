@@ -23,12 +23,15 @@ Deno.test('extractBuiltLinks: keeps internal targets, skips external/protocol/fr
       '<img src="data:image/png;base64,xx">',
     ].join('\n'),
   );
-  assertEquals(links.map((link) => [link.path, link.fragment]), [
-    ['/guide/getting-started', ''],
-    ['/guide/api', 'signals'],
-    ['', 'top'],
-    ['/assets/app.js', ''],
-  ]);
+  assertEquals(
+    links.map((link) => [link.path, link.fragment]),
+    [
+      ['/guide/getting-started', ''],
+      ['/guide/api', 'signals'],
+      ['', 'top'],
+      ['/assets/app.js', ''],
+    ],
+  );
 });
 
 Deno.test('resolveBuiltPath: routes, files and assets', () => {
@@ -65,7 +68,8 @@ Deno.test('findSeoFailures: title/description/og:title/canonical/hreflang invari
   // Link attribute order matches the framework serializer (#1326): rel, href,
   // then hreflang. The checker is order-tolerant; the fixture tracks the
   // single writer's real output.
-  const good = '<head><title>Home — openElement</title>' +
+  const good =
+    '<head><title>Home — openElement</title>' +
     '<meta name="description" content="A sufficiently long description."/>' +
     '<meta property="og:title" content="Home — openElement"/>' +
     '<link rel="canonical" href="https://openelement.org/">' +
@@ -74,7 +78,8 @@ Deno.test('findSeoFailures: title/description/og:title/canonical/hreflang invari
     '</head>';
   assertEquals(findSeoFailures(good, 'index.html'), []);
   // 404 documents carry no canonical/hreflang by design.
-  const bare404 = '<head><title>404 — Page not found — openElement</title>' +
+  const bare404 =
+    '<head><title>404 — Page not found — openElement</title>' +
     '<meta name="description" content="A sufficiently long description."/>' +
     '<meta property="og:title" content="404"/></head>';
   assertEquals(findSeoFailures(bare404, '404.html'), []);
@@ -82,8 +87,9 @@ Deno.test('findSeoFailures: title/description/og:title/canonical/hreflang invari
   const failures = findSeoFailures('<head></head>', 'index.html');
   assertEquals(failures.length, 7);
   assertEquals(
-    findSeoFailures('<title>a</title><title>b</title>' + good, 'index.html')[0].message
-      .includes('exactly one <title>'),
+    findSeoFailures('<title>a</title><title>b</title>' + good, 'index.html')[0].message.includes(
+      'exactly one <title>',
+    ),
     true,
   );
   // The boilerplate bare-brand title is a failure even when present once.
@@ -96,7 +102,8 @@ Deno.test('findSeoFailures: title/description/og:title/canonical/hreflang invari
     true,
   );
   // A non-404 page without canonical/hreflang fails.
-  const noLinks = '<head><title>Home — openElement</title>' +
+  const noLinks =
+    '<head><title>Home — openElement</title>' +
     '<meta name="description" content="A sufficiently long description."/>' +
     '<meta property="og:title" content="t"/></head>';
   assertEquals(findSeoFailures(noLinks, 'apilist/index.html').length, 3);
@@ -114,25 +121,32 @@ Deno.test('findCrossPageSeoFailures: per-locale title uniqueness', () => {
     },
   ];
   assertEquals(findCrossPageSeoFailures(pages), []);
-  const duplicated = [...pages, {
-    file: 'other/index.html',
-    title: 'Home — openElement',
-    description: 'y'.repeat(24),
-    locale: 'en',
-  }];
+  const duplicated = [
+    ...pages,
+    {
+      file: 'other/index.html',
+      title: 'Home — openElement',
+      description: 'y'.repeat(24),
+      locale: 'en',
+    },
+  ];
   assertEquals(findCrossPageSeoFailures(duplicated).length, 1);
   // The same title across DIFFERENT locales is fine (original-language posts).
-  const crossLocale = [...pages, {
-    file: 'zh/blog/post/index.html',
-    title: 'API — openElement',
-    description: 'Original-language excerpt.',
-    locale: 'zh',
-  }];
+  const crossLocale = [
+    ...pages,
+    {
+      file: 'zh/blog/post/index.html',
+      title: 'API — openElement',
+      description: 'Original-language excerpt.',
+      locale: 'zh',
+    },
+  ];
   assertEquals(findCrossPageSeoFailures(crossLocale), []);
 });
 
 Deno.test('pageSeo extracts title/description and resolves locale from path', () => {
-  const html = '<head><title>T — openElement</title>' +
+  const html =
+    '<head><title>T — openElement</title>' +
     '<meta name="description" content="D for the page, long enough."/></head>';
   assertEquals(pageSeo(html, 'zh/apilist/index.html', ['en', 'zh'], 'en'), {
     file: 'zh/apilist/index.html',

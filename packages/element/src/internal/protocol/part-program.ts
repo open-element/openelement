@@ -58,13 +58,7 @@ export interface ProgramSourceRange {
   end: ProgramPosition;
 }
 
-export type ProgramSourceKind =
-  | 'root'
-  | 'element'
-  | 'part'
-  | 'region'
-  | 'property'
-  | 'handler';
+export type ProgramSourceKind = 'root' | 'element' | 'part' | 'region' | 'property' | 'handler';
 
 export interface ProgramSourceRecord {
   id: string;
@@ -457,8 +451,12 @@ function isIdentifier(value: unknown): value is string {
 }
 
 function isAttributeName(value: unknown): value is string {
-  return typeof value === 'string' && /^[A-Za-z_:][A-Za-z0-9_.:-]*$/.test(value) &&
-    !/^on/i.test(value) && forbiddenSinkReason('attr', value) === null;
+  return (
+    typeof value === 'string' &&
+    /^[A-Za-z_:][A-Za-z0-9_.:-]*$/.test(value) &&
+    !/^on/i.test(value) &&
+    forbiddenSinkReason('attr', value) === null
+  );
 }
 
 function samePath(left: unknown, right: number[]): boolean {
@@ -534,25 +532,23 @@ function validateTreeNodes(
           fail(`${where}[${position}] duplicates element ${rawNode.id}`);
         }
         elementIds.add(rawNode.id);
-        if (
-          typeof rawNode.tag !== 'string' ||
-          !/^[a-z][a-z0-9]*(-[a-z0-9]+)*$/.test(rawNode.tag)
-        ) {
+        if (typeof rawNode.tag !== 'string' || !/^[a-z][a-z0-9]*(-[a-z0-9]+)*$/.test(rawNode.tag)) {
           fail(`${where}[${position}].tag must be a lowercase element tag`);
         }
         const tagReason = forbiddenSinkReason('tag', rawNode.tag);
         if (tagReason !== null) fail(`${where}[${position}].tag ${tagReason}`);
         elementLocations.set(rawNode.id, {
           tag: rawNode.tag,
-          path: position === 0 && rootPath !== undefined
-            ? [...rootPath]
-            : [...pathPrefix, position],
+          path:
+            position === 0 && rootPath !== undefined ? [...rootPath] : [...pathPrefix, position],
         });
         if (!Array.isArray(rawNode.attrs)) fail(`${where}[${position}].attrs must be an array`);
         const attributeNames = new Set<string>();
         for (const [attrPosition, attr] of rawNode.attrs.entries()) {
           if (
-            !Array.isArray(attr) || attr.length !== 2 || typeof attr[0] !== 'string' ||
+            !Array.isArray(attr) ||
+            attr.length !== 2 ||
+            typeof attr[0] !== 'string' ||
             typeof attr[1] !== 'string'
           ) {
             fail(`${where}[${position}].attrs[${attrPosition}] must be a [name, value] pair`);
@@ -574,7 +570,9 @@ function validateTreeNodes(
           }
           for (const [slotPosition, slot] of rawNode.iattrs.entries()) {
             if (
-              !Array.isArray(slot) || slot.length !== 2 || typeof slot[0] !== 'string' ||
+              !Array.isArray(slot) ||
+              slot.length !== 2 ||
+              typeof slot[0] !== 'string' ||
               typeof slot[1] !== 'string'
             ) {
               fail(`${where}[${position}].iattrs[${slotPosition}] must be a [name, field] pair`);
@@ -664,7 +662,8 @@ function validateLocation(value: unknown, where: string): asserts value is Progr
 
 function validateCondition(value: unknown, where: string): asserts value is ProgramCondition {
   if (
-    !isRecord(value) || !isIdentifier(value.signal) ||
+    !isRecord(value) ||
+    !isIdentifier(value.signal) ||
     !conditionLiteralAllowed(value.op, value.value)
   ) {
     fail(
@@ -737,11 +736,7 @@ function validateAnchorPath(
   }
 }
 
-function validateFixedPartPath(
-  template: ProgramTreeNode[],
-  path: number[],
-  where: string,
-): void {
+function validateFixedPartPath(template: ProgramTreeNode[], path: number[], where: string): void {
   let nodes = template;
   for (const target of path) {
     for (let sibling = 0; sibling < target; sibling++) {
@@ -766,9 +761,17 @@ function hasSignal(
   | ProgramHtmlPart
   | ProgramWhenPart
   | ProgramEachPart {
-  return part.k === 'text' || part.k === 'prop' || part.k === 'attr' || part.k === 'bool' ||
-    part.k === 'class' || part.k === 'style' || part.k === 'html' || part.k === 'when' ||
-    part.k === 'each';
+  return (
+    part.k === 'text' ||
+    part.k === 'prop' ||
+    part.k === 'attr' ||
+    part.k === 'bool' ||
+    part.k === 'class' ||
+    part.k === 'style' ||
+    part.k === 'html' ||
+    part.k === 'when' ||
+    part.k === 'each'
+  );
 }
 
 function isRegion(part: ProgramPart): part is ProgramWhenPart | ProgramEachPart {
@@ -797,7 +800,8 @@ function validateEventAction(value: unknown, where: string): void {
   if (value.kind === 'add' || value.kind === 'subtract') {
     validateKeys(value, ['kind', 'signal', 'value'], where);
     if (
-      !isIdentifier(value.signal) || typeof value.value !== 'number' ||
+      !isIdentifier(value.signal) ||
+      typeof value.value !== 'number' ||
       !Number.isFinite(value.value)
     ) {
       fail(`${where} arithmetic action is invalid`);
@@ -814,18 +818,22 @@ function validateEventAction(value: unknown, where: string): void {
  */
 export function validatePartProgram(raw: unknown): asserts raw is PartProgram {
   if (!isRecord(raw)) fail('program must be an object');
-  validateKeys(raw, [
-    'version',
-    'tag',
-    'root',
-    'template',
-    'parts',
-    'regions',
-    'dependencies',
-    'locations',
-    'sourceMap',
-    'metadata',
-  ], 'program');
+  validateKeys(
+    raw,
+    [
+      'version',
+      'tag',
+      'root',
+      'template',
+      'parts',
+      'regions',
+      'dependencies',
+      'locations',
+      'sourceMap',
+      'metadata',
+    ],
+    'program',
+  );
   if (raw.version !== PART_PROGRAM_VERSION) fail('version must be 1');
   if (typeof raw.tag !== 'string' || !/^[a-z][a-z0-9]*(-[a-z0-9]+)+$/.test(raw.tag)) {
     fail('tag must be a custom-element tag name');
@@ -833,7 +841,8 @@ export function validatePartProgram(raw: unknown): asserts raw is PartProgram {
   if (!isRecord(raw.root) || raw.root.id !== 'root') fail('root must be a root record');
   validateKeys(raw.root, ['id', 'kind', 'nodes'], 'root');
   if (
-    raw.root.kind !== 'light' && raw.root.kind !== 'shadow-open' &&
+    raw.root.kind !== 'light' &&
+    raw.root.kind !== 'shadow-open' &&
     raw.root.kind !== 'shadow-closed'
   ) {
     fail('root.kind is unsupported');
@@ -845,15 +854,7 @@ export function validatePartProgram(raw: unknown): asserts raw is PartProgram {
   const elementIds = new Set<string>();
   const anchorIds = new Map<number, string>();
   const elementLocations = new Map<string, { tag: string; path: number[] }>();
-  validateTreeNodes(
-    raw.template,
-    'template',
-    true,
-    false,
-    elementIds,
-    anchorIds,
-    elementLocations,
-  );
+  validateTreeNodes(raw.template, 'template', true, false, elementIds, anchorIds, elementLocations);
   const topLevelElements = (raw.template as ProgramTreeNode[])
     .filter((node): node is ProgramElementNode => node.k === 'el')
     .map((node) => node.id);
@@ -910,8 +911,7 @@ export function validatePartProgram(raw: unknown): asserts raw is PartProgram {
             part.path,
             `parts[${position}]`,
             elementIds,
-          ) !==
-            part.location.node
+          ) !== part.location.node
         ) {
           fail(`parts[${position}] location node does not match path`);
         }
@@ -931,8 +931,7 @@ export function validatePartProgram(raw: unknown): asserts raw is PartProgram {
             part.path,
             `parts[${position}]`,
             elementIds,
-          ) !==
-            part.location.node
+          ) !== part.location.node
         ) {
           fail(`parts[${position}] location node does not match path`);
         }
@@ -981,8 +980,7 @@ export function validatePartProgram(raw: unknown): asserts raw is PartProgram {
             part.path,
             `parts[${position}]`,
             elementIds,
-          ) !==
-            part.location.node
+          ) !== part.location.node
         ) {
           fail(`parts[${position}] location node does not match path`);
         }
@@ -997,7 +995,9 @@ export function validatePartProgram(raw: unknown): asserts raw is PartProgram {
           `parts[${position}]`,
         );
         if (
-          !isIdentifier(part.handler) || typeof part.event !== 'string' || part.event.length === 0
+          !isIdentifier(part.handler) ||
+          typeof part.event !== 'string' ||
+          part.event.length === 0
         ) {
           fail(`parts[${position}] event needs event and handler`);
         }
@@ -1012,8 +1012,7 @@ export function validatePartProgram(raw: unknown): asserts raw is PartProgram {
             part.path,
             `parts[${position}]`,
             elementIds,
-          ) !==
-            part.location.node
+          ) !== part.location.node
         ) {
           fail(`parts[${position}] event location node does not match path`);
         }
@@ -1068,7 +1067,8 @@ export function validatePartProgram(raw: unknown): asserts raw is PartProgram {
           `parts[${position}]`,
         );
         if (
-          !isIdentifier(part.signal) || !isIdentifier(part.key) ||
+          !isIdentifier(part.signal) ||
+          !isIdentifier(part.key) ||
           (part.field !== undefined && !isIdentifier(part.field))
         ) {
           fail(`parts[${position}] each needs signal and key identifiers`);
@@ -1085,11 +1085,7 @@ export function validatePartProgram(raw: unknown): asserts raw is PartProgram {
           [],
           [],
         );
-        validateItemValueFields(
-          part.item,
-          part.field,
-          `parts[${position}].item`,
-        );
+        validateItemValueFields(part.item, part.field, `parts[${position}].item`);
         validateAnchorPath(
           raw.template as ProgramTreeNode[],
           part.location.path,
@@ -1140,10 +1136,13 @@ export function validatePartProgram(raw: unknown): asserts raw is PartProgram {
       );
     }
     if (
-      !isRecord(region) || region.id !== `r${region.index}` ||
+      !isRecord(region) ||
+      region.id !== `r${region.index}` ||
       region.index !== regionParts[position].index ||
-      (region.kind !== 'when' && region.kind !== 'each') || region.anchor !== `p${region.index}` ||
-      region.end !== `p${region.index}:end` || region.source !== `p${region.index}`
+      (region.kind !== 'when' && region.kind !== 'each') ||
+      region.anchor !== `p${region.index}` ||
+      region.end !== `p${region.index}:end` ||
+      region.source !== `p${region.index}`
     ) {
       fail(`regions[${position}] has an invalid Region record`);
     }
@@ -1172,7 +1171,9 @@ export function validatePartProgram(raw: unknown): asserts raw is PartProgram {
     }
     const owner = parts[dependency.owner.index];
     if (
-      !owner || !hasSignal(owner) || (isRegion(owner) ? 'region' : 'part') !== dependency.owner.kind
+      !owner ||
+      !hasSignal(owner) ||
+      (isRegion(owner) ? 'region' : 'part') !== dependency.owner.kind
     ) {
       fail(`dependencies[${position}] points at a non-signal owner`);
     }
@@ -1198,26 +1199,28 @@ export function validatePartProgram(raw: unknown): asserts raw is PartProgram {
     if (!isRecord(location) || typeof location.id !== 'string' || locationIds.has(location.id)) {
       fail(`locations[${position}] must have a unique id`);
     }
-    const locationKeys = location.kind === 'element'
-      ? ['id', 'kind', 'tag', 'path']
-      : location.kind === 'anchor'
-      ? ['id', 'kind', 'part', 'path']
-      : location.kind === 'sink'
-      ? ['id', 'kind', 'part', 'node', 'path']
-      : ['id', 'kind', 'path'];
+    const locationKeys =
+      location.kind === 'element'
+        ? ['id', 'kind', 'tag', 'path']
+        : location.kind === 'anchor'
+          ? ['id', 'kind', 'part', 'path']
+          : location.kind === 'sink'
+            ? ['id', 'kind', 'part', 'node', 'path']
+            : ['id', 'kind', 'path'];
     validateKeys(location, locationKeys, `locations[${position}]`);
     locationIds.add(location.id);
     locationById.set(location.id, location);
     if (!isIntegerArray(location.path)) fail(`locations[${position}].path is invalid`);
     if (location.kind === 'element') {
       const element = elementLocations.get(location.id);
-      if (
-        !element || location.tag !== element.tag || !samePath(location.path, element.path)
-      ) fail(`locations[${position}] element is invalid`);
+      if (!element || location.tag !== element.tag || !samePath(location.path, element.path))
+        fail(`locations[${position}] element is invalid`);
     } else if (location.kind === 'anchor') {
       const part = Number.isInteger(location.part) ? parts[location.part] : undefined;
       if (
-        !part || !isRegion(part) && part.k !== 'text' || location.id !== `p${location.part}` ||
+        !part ||
+        (!isRegion(part) && part.k !== 'text') ||
+        location.id !== `p${location.part}` ||
         !samePath(location.path, part.location.path)
       ) {
         fail(`locations[${position}] anchor is invalid`);
@@ -1225,8 +1228,12 @@ export function validatePartProgram(raw: unknown): asserts raw is PartProgram {
     } else if (location.kind === 'sink') {
       const part = Number.isInteger(location.part) ? parts[location.part] : undefined;
       if (
-        !part || isRegion(part) || part.k === 'text' || location.id !== `p${location.part}` ||
-        !elementIds.has(location.node) || !samePath(location.path, part.location.path) ||
+        !part ||
+        isRegion(part) ||
+        part.k === 'text' ||
+        location.id !== `p${location.part}` ||
+        !elementIds.has(location.node) ||
+        !samePath(location.path, part.location.path) ||
         part.location.node !== location.node
       ) {
         fail(`locations[${position}] sink is invalid`);
@@ -1258,7 +1265,8 @@ export function validatePartProgram(raw: unknown): asserts raw is PartProgram {
   const sourceIds = new Set<string>();
   if (raw.sourceMap !== undefined) {
     if (
-      !isRecord(raw.sourceMap) || raw.sourceMap.version !== 1 ||
+      !isRecord(raw.sourceMap) ||
+      raw.sourceMap.version !== 1 ||
       raw.sourceMap.file !== metadata.sourceFile
     ) {
       fail('sourceMap must be version 1 and identify the metadata source file');
@@ -1287,7 +1295,8 @@ export function validatePartProgram(raw: unknown): asserts raw is PartProgram {
   }
 
   if (
-    metadata.tag !== raw.tag || typeof metadata.className !== 'string' ||
+    metadata.tag !== raw.tag ||
+    typeof metadata.className !== 'string' ||
     typeof metadata.sourceFile !== 'string'
   ) {
     fail('metadata identity does not match the program');
@@ -1313,9 +1322,10 @@ export function validatePartProgram(raw: unknown): asserts raw is PartProgram {
     const name = isIdentifier(property && isRecord(property) ? property.name : undefined)
       ? property.name
       : '';
-    const attribute = property && isRecord(property) && property.attribute !== undefined
-      ? property.attribute
-      : undefined;
+    const attribute =
+      property && isRecord(property) && property.attribute !== undefined
+        ? property.attribute
+        : undefined;
     const type = property && isRecord(property) ? property.type : undefined;
     const converter = property && isRecord(property) ? property.converter : undefined;
     const reflect = property && isRecord(property) ? property.reflect : undefined;
@@ -1323,12 +1333,17 @@ export function validatePartProgram(raw: unknown): asserts raw is PartProgram {
     const computed = property && isRecord(property) ? property.computed : undefined;
     const deps = property && isRecord(property) ? property.deps : undefined;
     if (
-      !isRecord(property) || !isIdentifier(name) || metadataNames.has(name) ||
+      !isRecord(property) ||
+      !isIdentifier(name) ||
+      metadataNames.has(name) ||
       (attribute !== null && !isAttributeName(attribute)) ||
-      (attribute === undefined) || typeof type !== 'string' ||
+      attribute === undefined ||
+      typeof type !== 'string' ||
       !propertyTypes.has(type as PropertyValueType) ||
-      typeof converter !== 'string' || !propertyTypes.has(converter as PropertyValueType) ||
-      typeof reflect !== 'boolean' || !isSerializable(defaultValue)
+      typeof converter !== 'string' ||
+      !propertyTypes.has(converter as PropertyValueType) ||
+      typeof reflect !== 'boolean' ||
+      !isSerializable(defaultValue)
     ) {
       fail(`metadata.properties[${position}] is invalid`);
     }
@@ -1341,8 +1356,11 @@ export function validatePartProgram(raw: unknown): asserts raw is PartProgram {
       // Computed fields derive their signal from other properties, so they can
       // never be attribute-backed, reflect, or carry no source list.
       if (
-        computed !== true || attribute !== null || reflect !== false ||
-        !Array.isArray(deps) || deps.length === 0 ||
+        computed !== true ||
+        attribute !== null ||
+        reflect !== false ||
+        !Array.isArray(deps) ||
+        deps.length === 0 ||
         deps.some((dep) => !isIdentifier(dep))
       ) {
         fail(`metadata.properties[${position}].computed is invalid`);
@@ -1366,16 +1384,20 @@ export function validatePartProgram(raw: unknown): asserts raw is PartProgram {
     observed.add(attribute);
   }
   const expectedObserved = metadataProperties.flatMap((property) =>
-    property.attribute === null ? [] : [property.attribute]
+    property.attribute === null ? [] : [property.attribute],
   );
   if (JSON.stringify(expectedObserved) !== JSON.stringify(metadata.observedAttributes)) {
     fail('metadata.observedAttributes must match property attributes in declaration order');
   }
   const cem = metadata.cem;
   if (
-    !isRecord(cem) || cem.tagName !== raw.tag || cem.className !== metadata.className ||
-    !isRecord(cem.declaration) || cem.declaration.name !== metadata.className ||
-    typeof cem.declaration.module !== 'string' || !Array.isArray(cem.attributes) ||
+    !isRecord(cem) ||
+    cem.tagName !== raw.tag ||
+    cem.className !== metadata.className ||
+    !isRecord(cem.declaration) ||
+    cem.declaration.name !== metadata.className ||
+    typeof cem.declaration.module !== 'string' ||
+    !Array.isArray(cem.attributes) ||
     !Array.isArray(cem.members)
   ) {
     fail('metadata.cem identity or shape is invalid');
@@ -1387,15 +1409,16 @@ export function validatePartProgram(raw: unknown): asserts raw is PartProgram {
   );
   validateKeys(cem.declaration, ['name', 'module'], 'metadata.cem.declaration');
   const cemAttributes = cem.attributes;
-  const expectedCemAttributes = metadataProperties.filter((property) =>
-    property.attribute !== null
+  const expectedCemAttributes = metadataProperties.filter(
+    (property) => property.attribute !== null,
   );
   if (cemAttributes.length !== expectedCemAttributes.length) {
     fail('metadata.cem attributes are incomplete');
   }
   for (const [position, attribute] of cemAttributes.entries()) {
     if (
-      !isRecord(attribute) || !isAttributeName(attribute.name) ||
+      !isRecord(attribute) ||
+      !isAttributeName(attribute.name) ||
       !isIdentifier(attribute.fieldName) ||
       typeof attribute.type !== 'string' ||
       !propertyTypes.has(attribute.type as PropertyValueType) ||
@@ -1410,8 +1433,10 @@ export function validatePartProgram(raw: unknown): asserts raw is PartProgram {
     );
     const expected = expectedCemAttributes[position];
     if (
-      attribute.name !== expected.attribute || attribute.fieldName !== expected.name ||
-      attribute.type !== expected.type || attribute.reflect !== expected.reflect
+      attribute.name !== expected.attribute ||
+      attribute.fieldName !== expected.name ||
+      attribute.type !== expected.type ||
+      attribute.reflect !== expected.reflect
     ) {
       fail(`metadata.cem.attributes[${position}] does not match property metadata`);
     }
@@ -1419,8 +1444,11 @@ export function validatePartProgram(raw: unknown): asserts raw is PartProgram {
   if (cem.members.length !== metadataProperties.length) fail('metadata.cem members are incomplete');
   for (const [position, member] of cem.members.entries()) {
     if (
-      !isRecord(member) || !isIdentifier(member.name) || !isIdentifier(member.fieldName) ||
-      typeof member.type !== 'string' || !propertyTypes.has(member.type as PropertyValueType) ||
+      !isRecord(member) ||
+      !isIdentifier(member.name) ||
+      !isIdentifier(member.fieldName) ||
+      typeof member.type !== 'string' ||
+      !propertyTypes.has(member.type as PropertyValueType) ||
       (member.attribute !== null && !isAttributeName(member.attribute)) ||
       typeof member.reflect !== 'boolean'
     ) {
@@ -1433,9 +1461,11 @@ export function validatePartProgram(raw: unknown): asserts raw is PartProgram {
     );
     const expected = metadataProperties[position];
     if (
-      member.name !== expected.name || member.fieldName !== expected.name ||
+      member.name !== expected.name ||
+      member.fieldName !== expected.name ||
       member.type !== expected.type ||
-      member.attribute !== expected.attribute || member.reflect !== expected.reflect
+      member.attribute !== expected.attribute ||
+      member.reflect !== expected.reflect
     ) {
       fail(`metadata.cem.members[${position}] does not match property metadata`);
     }

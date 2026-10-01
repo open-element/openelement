@@ -26,7 +26,7 @@ const dom = installFacadeDom();
 const { ErrorBoundary } = await import('@openelement/element');
 const { renderDsd } = await import('@openelement/element');
 
-// deno-lint-ignore no-explicit-any
+// oxlint-disable-next-line no-explicit-any
 type AnyElement = any;
 type BoundaryInstance = InstanceType<typeof ErrorBoundary>;
 
@@ -36,28 +36,34 @@ function uniqueTag(prefix: string): string {
 }
 
 const COUNTER_SPEC: Omit<TestProgramSpec, 'tag'> = {
-  template: [{
-    k: 'el',
-    tag: 'button',
-    attrs: [['type', 'button']],
-    children: [{ k: 'text', value: 'count: ' }, { k: 'part', index: 0 }],
-  }],
+  template: [
+    {
+      k: 'el',
+      tag: 'button',
+      attrs: [['type', 'button']],
+      children: [
+        { k: 'text', value: 'count: ' },
+        { k: 'part', index: 0 },
+      ],
+    },
+  ],
   parts: [{ k: 'text', index: 0, signal: 'count' }],
-  properties: [{
-    name: 'count',
-    attribute: 'count',
-    type: 'number',
-    converter: 'number',
-    reflect: false,
-    default: 0,
-  }],
+  properties: [
+    {
+      name: 'count',
+      attribute: 'count',
+      type: 'number',
+      converter: 'number',
+      reflect: false,
+      default: 0,
+    },
+  ],
 };
 
 function defineBoundary(tag: string, spec: Omit<TestProgramSpec, 'tag'> = COUNTER_SPEC) {
   const program = testProgram({ ...spec, tag });
-  const ctor = class extends ErrorBoundary {} as unknown as
-    & CustomElementConstructor
-    & Record<string, unknown>;
+  const ctor = class extends ErrorBoundary {} as unknown as CustomElementConstructor &
+    Record<string, unknown>;
   ctor.__partProgram = program;
   ctor.__compiledProperties = program.metadata.properties;
   ctor.__elementMetadata = program.metadata;

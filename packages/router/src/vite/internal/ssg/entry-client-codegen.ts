@@ -27,18 +27,20 @@ function islandImportFactory(
   // Error copy uses a stable, machine-independent module identity; the import
   // specifier above stays absolute for the bundler.
   const errorLiteral = quoteGeneratedJavaScriptValue(
-    `[openElement] Capability module ${
-      stableModuleId(modulePath, undefined, WORKSPACE_ROOT)
-    } did not export a constructor for ${tagName}`,
+    `[openElement] Capability module ${stableModuleId(
+      modulePath,
+      undefined,
+      WORKSPACE_ROOT,
+    )} did not export a constructor for ${tagName}`,
   );
   // #1339 lit: after definition the island is a hydration ROOT — its page
   // host is never client-registered, so no parent hydrate() will remove the
   // SSR defer-hydration marker. Lifting it here runs lit-element-hydrate-
   // support's deferred connectedCallback and the island adopts its DSD root.
   const lift = renderer === 'lit' ? ` __liftDeferHydration(document, ${tagLiteral});` : '';
-  return `() => import(${
-    quoteGeneratedJavaScriptValue(modulePath)
-  }).then(function(mod) { var _name = ${nameLiteral}; var Ctor = _name ? mod[_name] : mod.default; if (typeof Ctor !== 'function') throw new Error(${errorLiteral}); if (!customElements.get(${tagLiteral})) customElements.define(${tagLiteral}, Ctor);${lift} return mod; })`;
+  return `() => import(${quoteGeneratedJavaScriptValue(
+    modulePath,
+  )}).then(function(mod) { var _name = ${nameLiteral}; var Ctor = _name ? mod[_name] : mod.default; if (typeof Ctor !== 'function') throw new Error(${errorLiteral}); if (!customElements.get(${tagLiteral})) customElements.define(${tagLiteral}, Ctor);${lift} return mod; })`;
 }
 
 interface NormalizedClientIsland extends AdmittedClientIslandEntry {
@@ -47,15 +49,13 @@ interface NormalizedClientIsland extends AdmittedClientIslandEntry {
 
 /** JavaScript single-quoted literal used in the media-query evidence. */
 function quoteSingle(value: string): string {
-  return `'${
-    value
-      .replaceAll('\\', '\\\\')
-      .replaceAll("'", "\\'")
-      .replaceAll('\n', '\\n')
-      .replaceAll('\r', '\\r')
-      .replaceAll('\u2028', '\\u2028')
-      .replaceAll('\u2029', '\\u2029')
-  }'`;
+  return `'${value
+    .replaceAll('\\', '\\\\')
+    .replaceAll("'", "\\'")
+    .replaceAll('\n', '\\n')
+    .replaceAll('\r', '\\r')
+    .replaceAll('\u2028', '\\u2028')
+    .replaceAll('\u2029', '\\u2029')}'`;
 }
 
 /** Expand one capability declaration into its one-to-many element names. */
@@ -68,11 +68,12 @@ function expandClientIslandEntries(
   for (const input of entries) {
     const admitted = validateClientIslandEntry(input);
     const delivery = admitted as AdmittedClientIslandEntry & ClientIslandDeliveryEntry;
-    const tags = delivery.tags && delivery.tags.length > 0
-      ? delivery.tags
-      : delivery.tagNames && delivery.tagNames.length > 0
-      ? delivery.tagNames
-      : [admitted.tagName];
+    const tags =
+      delivery.tags && delivery.tags.length > 0
+        ? delivery.tags
+        : delivery.tagNames && delivery.tagNames.length > 0
+          ? delivery.tagNames
+          : [admitted.tagName];
 
     for (const tagName of tags) {
       const item: NormalizedClientIsland = {
@@ -83,8 +84,10 @@ function expandClientIslandEntries(
       const prior = seen.get(tagName);
       if (prior) {
         if (
-          prior.modulePath !== item.modulePath || prior.strategy !== item.strategy ||
-          prior.media !== item.media || prior.exportName !== item.exportName
+          prior.modulePath !== item.modulePath ||
+          prior.strategy !== item.strategy ||
+          prior.media !== item.media ||
+          prior.exportName !== item.exportName
         ) {
           throw new Error(`Conflicting island capability declarations for ${tagName}`);
         }
@@ -116,9 +119,9 @@ function sharedActivationFactory(
   const lines = [
     `var ${promise};`,
     `var ${factory} = function() {`,
-    `  if (!${promise}) ${promise} = import(${
-      quoteGeneratedJavaScriptValue(group.modulePath)
-    }).then(function(mod) {`,
+    `  if (!${promise}) ${promise} = import(${quoteGeneratedJavaScriptValue(
+      group.modulePath,
+    )}).then(function(mod) {`,
   ];
   group.entries.forEach((entry, entryIndex) => {
     const ctor = `__Ctor${index}_${entryIndex}`;
@@ -126,18 +129,18 @@ function sharedActivationFactory(
       ? `mod[${quoteGeneratedJavaScriptValue(entry.exportName)}]`
       : 'mod.default';
     const errorLiteral = quoteGeneratedJavaScriptValue(
-      `[openElement] Capability module ${
-        stableModuleId(group.modulePath, undefined, WORKSPACE_ROOT)
-      } did not export a constructor for ${entry.tagName}`,
+      `[openElement] Capability module ${stableModuleId(
+        group.modulePath,
+        undefined,
+        WORKSPACE_ROOT,
+      )} did not export a constructor for ${entry.tagName}`,
     );
     lines.push(`    var ${ctor} = ${value};`);
+    lines.push(`    if (typeof ${ctor} !== 'function') throw new Error(${errorLiteral});`);
     lines.push(
-      `    if (typeof ${ctor} !== 'function') throw new Error(${errorLiteral});`,
-    );
-    lines.push(
-      `    if (!customElements.get(${
-        quoteGeneratedJavaScriptValue(entry.tagName)
-      })) customElements.define(${quoteGeneratedJavaScriptValue(entry.tagName)}, ${ctor});`,
+      `    if (!customElements.get(${quoteGeneratedJavaScriptValue(
+        entry.tagName,
+      )})) customElements.define(${quoteGeneratedJavaScriptValue(entry.tagName)}, ${ctor});`,
     );
     if (renderer === 'lit') {
       // #1339: see islandImportFactory — lift defer-hydration on hydration roots.
@@ -170,9 +173,8 @@ function sharedActivationFactory(
  * 9 KB, and in the other direction a broken hydration.
  */
 function pageCanHydrateServerDom(islands: readonly NormalizedClientIsland[]): boolean {
-  return islands.some((island) =>
-    island.strategy !== 'only' &&
-    (island.ssr !== false || island.dsd !== false)
+  return islands.some(
+    (island) => island.strategy !== 'only' && (island.ssr !== false || island.dsd !== false),
   );
 }
 
@@ -236,18 +238,23 @@ export function generateClientEntry(
       groupFactories.set(group, `__activation${index}`);
     }
   });
-  const islandMap = admittedIslands.map((entry) => {
-    const group = groups.find((candidate) => candidate.entries.includes(entry));
-    const factory = group && groupFactories.get(group);
-    return `  ${quoteGeneratedJavaScriptValue(entry.tagName)}: ${
-      factory ||
-      islandImportFactory(entry.modulePath, entry.tagName, entry.exportName, lit ? 'lit' : 'native')
-    }`;
-  }).join(',\n');
+  const islandMap = admittedIslands
+    .map((entry) => {
+      const group = groups.find((candidate) => candidate.entries.includes(entry));
+      const factory = group && groupFactories.get(group);
+      return `  ${quoteGeneratedJavaScriptValue(entry.tagName)}: ${
+        factory ||
+        islandImportFactory(
+          entry.modulePath,
+          entry.tagName,
+          entry.exportName,
+          lit ? 'lit' : 'native',
+        )
+      }`;
+    })
+    .join(',\n');
 
-  const tags = admittedIslands.map((i) => quoteGeneratedJavaScriptValue(i.tagName)).join(
-    ', ',
-  );
+  const tags = admittedIslands.map((i) => quoteGeneratedJavaScriptValue(i.tagName)).join(', ');
   const loadTags = admittedIslands
     .filter((i) => i.strategy === 'load')
     .map((i) => quoteGeneratedJavaScriptValue(i.tagName))
@@ -266,11 +273,14 @@ export function generateClientEntry(
     .join(', ');
   const mediaEntries = admittedIslands.filter((i) => i.strategy === 'media');
   const mediaTags = mediaEntries.map((i) => quoteSingle(i.tagName)).join(', ');
-  const mediaQueries = mediaEntries.map((i) =>
-    `    ${
-      quoteGeneratedJavaScriptValue(i.tagName)
-    }: typeof window.matchMedia === 'function' ? window.matchMedia(${quoteSingle(i.media!)}) : null`
-  ).join(',\n');
+  const mediaQueries = mediaEntries
+    .map(
+      (i) =>
+        `    ${quoteGeneratedJavaScriptValue(
+          i.tagName,
+        )}: typeof window.matchMedia === 'function' ? window.matchMedia(${quoteSingle(i.media!)}) : null`,
+    )
+    .join(',\n');
 
   const headerComment = lit
     ? `// openElement Client Entry (load/idle/visible/media/only) — LIT renderer (#1339)
@@ -299,11 +309,11 @@ export function generateClientEntry(
     ? `import '@lit-labs/ssr-client/lit-element-hydrate-support.js';
 import { createIslandScheduler as __schedule } from '${VIRTUAL_RUNTIME_SPECIFIERS.scheduler}';
 ${
-      options.enhancedForms === true
-        ? `import { createEnhanceClient } from '${VIRTUAL_RUNTIME_SPECIFIERS.enhance}';
+  options.enhancedForms === true
+    ? `import { createEnhanceClient } from '${VIRTUAL_RUNTIME_SPECIFIERS.enhance}';
 `
-        : ''
-    }
+    : ''
+}
 var log = {
   info: function () { if (typeof console !== 'undefined') console.info.apply(console, ['[openElement]'].concat([].slice.call(arguments))); },
   warn: function () { if (typeof console !== 'undefined') console.warn.apply(console, ['[openElement]'].concat([].slice.call(arguments))); },
@@ -330,16 +340,16 @@ var __liftDeferHydration = function (root, tag) {
   };
   visit(root);
 };`
-    : `import { createLogger, ensureDeepFragmentNavigation, ensurePreHydrationClickCapture } from '${
-      elementEntrySpecifier(canHydrateServerDom)
-    }';
+    : `import { createLogger, ensureDeepFragmentNavigation, ensurePreHydrationClickCapture } from '${elementEntrySpecifier(
+        canHydrateServerDom,
+      )}';
 import { createIslandScheduler as __schedule } from '${VIRTUAL_RUNTIME_SPECIFIERS.scheduler}';
 ${
-      options.enhancedForms === true
-        ? `import { createEnhanceClient } from '${VIRTUAL_RUNTIME_SPECIFIERS.enhance}';
+  options.enhancedForms === true
+    ? `import { createEnhanceClient } from '${VIRTUAL_RUNTIME_SPECIFIERS.enhance}';
 `
-        : ''
-    }
+    : ''
+}
 var log = createLogger('openElement');
 
 ensureDeepFragmentNavigation();`;
@@ -353,11 +363,13 @@ ${islandMap}
 };
 var __tags = [${tags}];
 ${
-    lit ? '' : `// #942: capture AFTER __tags (declared-island filter) and BEFORE
+  lit
+    ? ''
+    : `// #942: capture AFTER __tags (declared-island filter) and BEFORE
 // any island import below can evaluate.
 ensurePreHydrationClickCapture(document, __tags);
 `
-  }
+}
 ${activationLines.length > 0 ? `\n${activationLines.join('\n\n')}\n` : ''}
 
 var __scheduler = __schedule({
@@ -375,17 +387,17 @@ var __scheduler = __schedule({
   },
 ${mediaEntries.length > 0 ? `  mediaQueries: {\n${mediaQueries}\n  },\n` : ''}
 ${
-    options.enhancedForms === true
-      ? `  // #584: late-hydrating islands create their shadow roots after the
+  options.enhancedForms === true
+    ? `  // #584: late-hydrating islands create their shadow roots after the
   // ready-time scan; rescan so enhanced forms inside them are heard.
   onIslandLoaded: function () { __enhance.scanSubmitRoots(document); },`
-      : '  // #597: no enhance layer — no submit-root rescan after island loads.\n  onIslandLoaded: null,'
-  }
+    : '  // #597: no enhance layer — no submit-root rescan after island loads.\n  onIslandLoaded: null,'
+}
 });
 
 ${
-    options.enhancedForms === true
-      ? `// Form enhancement:
+  options.enhancedForms === true
+    ? `// Form enhancement:
 // forms marked data-open-enhance submit via fetch and the returned document
 // is morphed into the live tree — INSIDE the page element's shadow root,
 // which is where page content lives under DSD. Without JavaScript the same
@@ -398,8 +410,8 @@ var __enhance = createEnhanceClient({
   win: window,
   doc: document,
   observeVisible: ${
-        lit
-          ? `function () {
+    lit
+      ? `function () {
     // Module loading is one-shot; new SSR hosts arrive after every morph.
     // Only admitted, already-loaded tags may resume Lit hydration here.
     __tags.forEach(function (tag) {
@@ -407,11 +419,11 @@ var __enhance = createEnhanceClient({
     });
     __scheduler.observeVisible();
   }`
-          : '__scheduler.observeVisible'
-      },
+      : '__scheduler.observeVisible'
+  },
 });
 `
-      : '// No data-open-enhance forms: the form enhancement layer is omitted (#569 complement),\n// keeping the client bundle free of morph and popstate code.'
-  }
+    : '// No data-open-enhance forms: the form enhancement layer is omitted (#569 complement),\n// keeping the client bundle free of morph and popstate code.'
+}
 `;
 }

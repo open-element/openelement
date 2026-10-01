@@ -65,9 +65,8 @@ function defineCompiled(
   statics: Record<string, unknown> = {},
 ): CustomElementConstructor {
   const program = testProgram(spec);
-  const ctor = class extends OpenElement {} as unknown as
-    & CustomElementConstructor
-    & Record<string, unknown>;
+  const ctor = class extends OpenElement {} as unknown as CustomElementConstructor &
+    Record<string, unknown>;
   ctor.__partProgram = program;
   ctor.__compiledProperties = program.metadata.properties;
   ctor.__elementMetadata = program.metadata;
@@ -82,7 +81,7 @@ function defineCompiled(
   return ctor;
 }
 
-// deno-lint-ignore no-explicit-any
+// oxlint-disable-next-line no-explicit-any
 type AnyElement = any;
 
 function connect(element: FacadeElement): FacadeElement {
@@ -275,21 +274,28 @@ Deno.test('signal-backed property writes update only the subscribed Part', () =>
   const tag = uniqueTag('signal');
   defineCompiled({
     tag,
-    template: [{
-      k: 'el',
-      tag: 'div',
-      attrs: [],
-      children: [{ k: 'text', value: 'v=' }, { k: 'part', index: 0 }],
-    }],
+    template: [
+      {
+        k: 'el',
+        tag: 'div',
+        attrs: [],
+        children: [
+          { k: 'text', value: 'v=' },
+          { k: 'part', index: 0 },
+        ],
+      },
+    ],
     parts: [{ k: 'text', index: 0, signal: 'label' }],
-    properties: [{
-      name: 'label',
-      attribute: 'label',
-      type: 'string',
-      converter: 'string',
-      reflect: false,
-      default: 'a',
-    }],
+    properties: [
+      {
+        name: 'label',
+        attribute: 'label',
+        type: 'string',
+        converter: 'string',
+        reflect: false,
+        default: 'a',
+      },
+    ],
   });
   const el = connect(dom.document.createElement(tag)) as AnyElement;
   assertEquals(toHtml(el), `<${tag}><div>v=<!--oe:p0-->a</div></${tag}>`);
@@ -304,14 +310,16 @@ Deno.test('compiled event parts bind instance methods once across reconnect', ()
     {
       tag,
       template: [{ k: 'el', tag: 'button', attrs: [], children: [] }],
-      parts: [{
-        k: 'event',
-        index: 0,
-        event: 'click',
-        handler: 'activate',
-        action: { kind: 'method', name: 'activate' },
-        path: [0],
-      }],
+      parts: [
+        {
+          k: 'event',
+          index: 0,
+          event: 'click',
+          handler: 'activate',
+          action: { kind: 'method', name: 'activate' },
+          path: [0],
+        },
+      ],
     },
     {
       activate() {
@@ -488,9 +496,9 @@ Deno.test('_lifecycleSignal aborts on disconnect and re-arms on reconnect', () =
     parts: [],
   });
   // clientActivate runs on every connect (fresh and claim alike).
-  (ctor.prototype as Record<string, unknown>).clientActivate = function (
-    this: { _lifecycleSignal(): AbortSignal },
-  ) {
+  (ctor.prototype as Record<string, unknown>).clientActivate = function (this: {
+    _lifecycleSignal(): AbortSignal;
+  }) {
     seen.push(this._lifecycleSignal());
   };
   const el = connect(dom.document.createElement(tag));

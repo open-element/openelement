@@ -47,7 +47,7 @@ export function buildSpeculationRulesJson(
     rules.prerender = prerenderPaths.map((pattern) =>
       pattern === '/'
         ? { source: 'list', urls: ['/'], eagerness: 'moderate' }
-        : { where: { href_matches: pattern }, eagerness: 'conservative' }
+        : { where: { href_matches: pattern }, eagerness: 'conservative' },
     );
   }
   if (prefetchPaths.length) {

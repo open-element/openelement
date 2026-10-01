@@ -38,7 +38,9 @@ export interface LineVersion {
  */
 export function parseLineVersion(version: string): LineVersion {
   if (
-    version.trim() !== version || version.startsWith('v') || version.startsWith('V') ||
+    version.trim() !== version ||
+    version.startsWith('v') ||
+    version.startsWith('V') ||
     version.includes('+')
   ) {
     throw new Error(`Invalid semver version: ${version}`);
@@ -54,9 +56,8 @@ export function parseLineVersion(version: string): LineVersion {
     major: semver.major,
     minor: semver.minor,
     patch: semver.patch,
-    prereleaseNumber: identifiers[1] !== undefined && /^\d+$/.test(identifiers[1])
-      ? Number(identifiers[1])
-      : 0,
+    prereleaseNumber:
+      identifiers[1] !== undefined && /^\d+$/.test(identifiers[1]) ? Number(identifiers[1]) : 0,
     ...(identifiers.length > 0 ? { prerelease: identifiers[0], identifiers } : {}),
   };
 }
@@ -66,8 +67,8 @@ export function formatLineVersion(version: LineVersion): string {
   return version.identifiers
     ? `${base}-${version.identifiers.join('.')}`
     : version.prerelease
-    ? `${base}-${version.prerelease}.${version.prereleaseNumber}`
-    : base;
+      ? `${base}-${version.prerelease}.${version.prereleaseNumber}`
+      : base;
 }
 
 /** Non-throwing variant for gates that probe arbitrary strings. */
@@ -94,7 +95,7 @@ export function prereleaseParts(
 
 /** The npm dist-tag channels the release line publishes prereleases under (#607). */
 export const PRERELEASE_CHANNELS = ['alpha', 'beta', 'rc'] as const;
-export type PrereleaseChannel = typeof PRERELEASE_CHANNELS[number];
+export type PrereleaseChannel = (typeof PRERELEASE_CHANNELS)[number];
 
 /**
  * The prerelease channel of a line version when its label is a publishable

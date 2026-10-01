@@ -231,9 +231,9 @@ export function closeSearch(host: SearchHost): void {
 }
 
 export function closeSearchOnBackdrop(host: SearchHost, event: Event): void {
-  const inPanel = event.composedPath().some((node) =>
-    node instanceof Element && node.classList.contains('panel')
-  );
+  const inPanel = event
+    .composedPath()
+    .some((node) => node instanceof Element && node.classList.contains('panel'));
   if (!inPanel) closeSearch(host);
 }
 
@@ -244,9 +244,9 @@ export function closeSearchOnBackdrop(host: SearchHost, event: Event): void {
  * lands on a result link (the old per-link once-listener's contract).
  */
 export function closeSearchFromResults(host: SearchHost, event: Event): void {
-  const onResult = event.composedPath().some((node) =>
-    node instanceof Element && node.classList.contains('result')
-  );
+  const onResult = event
+    .composedPath()
+    .some((node) => node instanceof Element && node.classList.contains('result'));
   if (onResult) closeSearch(host);
 }
 

@@ -32,9 +32,11 @@ export default class SignupPage extends OpenElement {
           <input type='hidden' name='next' value='/notes' />
           <button type='submit'>Create account</button>
         </form>
-        {this.sent > 0
-          ? <p id='message'>Check your email to confirm the account.</p>
-          : <span></span>}
+        {this.sent > 0 ? (
+          <p id='message'>Check your email to confirm the account.</p>
+        ) : (
+          <span></span>
+        )}
         <a href='/login'>Sign in</a>
       </main>
     );

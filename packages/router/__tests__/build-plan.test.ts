@@ -14,13 +14,15 @@ Deno.test('production BuildPlan reuses Phase 1 discoveries and collects emitted 
     ctx.phase3.root = root;
     ctx.phase3.outDir = 'dist';
     ctx.phase3.islandsDir = 'app/islands';
-    ctx.phase1.cachedRoutes = [{
-      path: '/',
-      filePath: 'app/routes/index.tsx',
-      type: 'page',
-      varName: 'Page0',
-      tagName: 'home-page',
-    }];
+    ctx.phase1.cachedRoutes = [
+      {
+        path: '/',
+        filePath: 'app/routes/index.tsx',
+        type: 'page',
+        varName: 'Page0',
+        tagName: 'home-page',
+      },
+    ];
     ctx.phase1.islandTagNames = ['counter-island'];
     ctx.phase1.islandFiles = ['counter.ts'];
     ctx.phase1.islandMeta = { 'counter-island': { hydrate: 'idle', ssr: true } };
@@ -60,13 +62,15 @@ Deno.test('writeBuildEvidence writes the build artifacts manifest', async () => 
     const ctx = new OpenElementBuildContext({ mode: 'ssg' });
     ctx.phase3.root = root;
     ctx.phase3.outDir = 'dist';
-    ctx.phase1.cachedRoutes = [{
-      path: '/',
-      filePath: 'app/routes/index.tsx',
-      type: 'page',
-      varName: 'Page0',
-      tagName: 'home-page',
-    }];
+    ctx.phase1.cachedRoutes = [
+      {
+        path: '/',
+        filePath: 'app/routes/index.tsx',
+        type: 'page',
+        varName: 'Page0',
+        tagName: 'home-page',
+      },
+    ];
     const plan = createProductionBuildPlan(ctx);
     await Deno.mkdir(join(root, 'dist'), { recursive: true });
     await Deno.writeTextFile(join(root, 'dist', 'index.html'), '<html>ok</html>');
@@ -92,13 +96,15 @@ Deno.test('writeBuildEvidence creates the evidence dir on a clean tree (#741)', 
     const ctx = new OpenElementBuildContext({ mode: 'ssg' });
     ctx.phase3.root = root;
     ctx.phase3.outDir = 'dist';
-    ctx.phase1.cachedRoutes = [{
-      path: '/',
-      filePath: 'app/routes/index.tsx',
-      type: 'page',
-      varName: 'Page0',
-      tagName: 'home-page',
-    }];
+    ctx.phase1.cachedRoutes = [
+      {
+        path: '/',
+        filePath: 'app/routes/index.tsx',
+        type: 'page',
+        varName: 'Page0',
+        tagName: 'home-page',
+      },
+    ];
     const plan = createProductionBuildPlan(ctx);
     await Deno.mkdir(join(root, 'dist'), { recursive: true });
     await Deno.writeTextFile(join(root, 'dist', 'index.html'), '<html>ok</html>');

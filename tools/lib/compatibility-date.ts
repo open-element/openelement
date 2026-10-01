@@ -13,9 +13,9 @@ export function assertCompatibilityDate(
   if (ageDays < 0) throw new Error(`Nitro compatibility date ${value} is in the future`);
   if (ageDays > maxAgeDays) {
     throw new Error(
-      `Nitro compatibility date ${value} is ${
-        Math.floor(ageDays)
-      } days old; maximum is ${maxAgeDays}`,
+      `Nitro compatibility date ${value} is ${Math.floor(
+        ageDays,
+      )} days old; maximum is ${maxAgeDays}`,
     );
   }
 }

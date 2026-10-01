@@ -391,21 +391,23 @@ Deno.test('renderEntry: app shell composes the page host through the compiled se
   });
   const composed = runtime.renderAppShell('<page></page>', '/guide');
   assertEquals(composed, '<shell>open-layout</shell>');
-  assertEquals(ssrCalls, [{
-    tag: 'open-layout',
-    props: {
-      currentPath: '/guide',
-      locale: 'en',
-      locales: ['en'],
-      navItems: [],
-      headerNav: [],
-      homeHref: '/',
-      home: undefined,
-      routeMeta: {},
-      brand: 'acme',
+  assertEquals(ssrCalls, [
+    {
+      tag: 'open-layout',
+      props: {
+        currentPath: '/guide',
+        locale: 'en',
+        locales: ['en'],
+        navItems: [],
+        headerNav: [],
+        homeHref: '/',
+        home: undefined,
+        routeMeta: {},
+        brand: 'acme',
+      },
+      route: '/guide',
     },
-    route: '/guide',
-  }]);
+  ]);
   assertFalse(code.includes('layoutHtml.slice'));
 });
 
@@ -472,10 +474,7 @@ Deno.test('renderEntry: route meta layout can select named layouts', () => {
 // Behavior-level proof for the named-layout wiring: execute the shipped typed
 // runtime (routeMeta + the app-shell runtime) with the same plan shape the
 // entry binds (ADR-0160 rule a).
-function loadLayoutRuntime(appShellPlan: {
-  default: unknown;
-  layouts: Record<string, unknown>;
-}) {
+function loadLayoutRuntime(appShellPlan: { default: unknown; layouts: Record<string, unknown> }) {
   const ssrCalls: Array<{ tag: string; props: Record<string, unknown>; route: string }> = [];
   const runtime = createAppShellRuntime({
     ssr: (tag, props, sourceInfo) => {
@@ -523,10 +522,9 @@ Deno.test('resolveAppShell: layout false disables the shell, unknown names fall 
     layouts: { post: { tagName: 'post-layout' } },
   });
   assertEquals<unknown>(runtime.resolveAppShell(routeMeta(pageModule(false))), false);
-  assertEquals<unknown>(
-    runtime.resolveAppShell(routeMeta(pageModule('no-such-layout'))),
-    { tagName: 'main-shell' },
-  );
+  assertEquals<unknown>(runtime.resolveAppShell(routeMeta(pageModule('no-such-layout'))), {
+    tagName: 'main-shell',
+  });
   // Unset layout: no layout key in the meta, default shell applies.
   const meta = routeMeta(pageModule(undefined));
   assertEquals('layout' in meta, false);
@@ -560,10 +558,7 @@ Deno.test('renderEntry: definePage descriptor feeds load and metadata wiring', (
     code,
     "import { resolvePageDocument as __resolvePageDocument } from '@openelement/router/document'",
   );
-  assertStringIncludes(
-    code,
-    '__ssr(__tag, __pageProps($pageIndex, __pageContext)',
-  );
+  assertStringIncludes(code, '__ssr(__tag, __pageProps($pageIndex, __pageContext)');
   assertFalse(code.includes('__openElementData'));
   assertEquals(code.includes('module?.meta'), false);
   // Named layouts (ADR-0123): the descriptor's route.layout is the producer
@@ -574,16 +569,10 @@ Deno.test('renderEntry: definePage descriptor feeds load and metadata wiring', (
     "import { routeMeta as __routeMeta } from '@openelement/router/server-runtime'",
   );
   assertStringIncludes(code, 'title: __doc.title || "openElement"');
-  assertStringIncludes(
-    code,
-    'meta: { description: __doc.description, tags: __doc.meta },',
-  );
+  assertStringIncludes(code, 'meta: { description: __doc.description, tags: __doc.meta },');
   assertStringIncludes(code, 'links: __doc.links,');
   assertStringIncludes(code, 'structuredData: __doc.structuredData || [],');
-  assertStringIncludes(
-    code,
-    'dangerouslyHeadFragments: __doc.dangerouslyHeadFragments || [],',
-  );
+  assertStringIncludes(code, 'dangerouslyHeadFragments: __doc.dangerouslyHeadFragments || [],');
   // The page-definition extractor is imported runtime (ADR-0160 rule a):
   // the entry pins the binding, not a local function body.
   assertStringIncludes(
@@ -625,10 +614,7 @@ Deno.test('renderEntry: lifecycle control produces redirect and not-found respon
 
   assertStringIncludes(code, 'return c.redirect(err.location, err.status)');
   assertStringIncludes(code, '__statusHtml("404 Not Found", err.message || "Not Found")');
-  assertStringIncludes(
-    code,
-    'redirect: { location: error.location, status: error.status }',
-  );
+  assertStringIncludes(code, 'redirect: { location: error.location, status: error.status }');
   assertStringIncludes(code, 'notFound: true');
   assertStringIncludes(code, '__pageErrorProps($pageIndex, err,');
 });
@@ -683,14 +669,16 @@ Deno.test('renderEntry: SSG mode includes no DOM shim (DSD renderer)', () => {
 // Section
 
 Deno.test('renderEntry: CSP flows through full pipeline', () => {
-  const code = renderEntry(buildEntryDescriptor(basicRoutes, {
-    middleware: {
-      csp: {
-        policy: "default-src 'self'; script-src 'self' 'unsafe-inline'",
-        nonce: false,
+  const code = renderEntry(
+    buildEntryDescriptor(basicRoutes, {
+      middleware: {
+        csp: {
+          policy: "default-src 'self'; script-src 'self' 'unsafe-inline'",
+          nonce: false,
+        },
       },
-    },
-  }));
+    }),
+  );
 
   assertStringIncludes(code, 'Content-Security-Policy');
   assertStringIncludes(code, "default-src 'self'");
@@ -698,33 +686,35 @@ Deno.test('renderEntry: CSP flows through full pipeline', () => {
 });
 
 Deno.test('renderEntry: complex scenario with all features', () => {
-  const code = renderEntry(buildEntryDescriptor(withSpecialRoutes, {
-    routesDir: 'app/routes',
-    islandsDir: 'app/islands',
-    middleware: {
-      corsOrigin: 'https://example.com',
-      csp: { policy: "default-src 'self'", nonce: true },
-      securityHeaders: true,
-    },
-    islandTagNames: ['code-block', 'counter-island'],
-    packageManifests: [
-      {
-        schemaVersion: '1.0.0',
-        packageName: '@acme/components',
-        version: '0.17.0',
-        declarations: [
-          {
-            tagName: 'open-layout',
-            className: 'OpenLayout',
-            openElement: { module: '@acme/components/open-layout', hydrate: 'load' },
-          },
-        ],
+  const code = renderEntry(
+    buildEntryDescriptor(withSpecialRoutes, {
+      routesDir: 'app/routes',
+      islandsDir: 'app/islands',
+      middleware: {
+        corsOrigin: 'https://example.com',
+        csp: { policy: "default-src 'self'", nonce: true },
+        securityHeaders: true,
       },
-    ],
-    html: { lang: 'zh-CN', title: 'openElement' },
-    headExtras: '<link rel="stylesheet" href="/styles.css" />',
-    upgradeStrategy: 'idle' as const,
-  }));
+      islandTagNames: ['code-block', 'counter-island'],
+      packageManifests: [
+        {
+          schemaVersion: '1.0.0',
+          packageName: '@acme/components',
+          version: '0.17.0',
+          declarations: [
+            {
+              tagName: 'open-layout',
+              className: 'OpenLayout',
+              openElement: { module: '@acme/components/open-layout', hydrate: 'load' },
+            },
+          ],
+        },
+      ],
+      html: { lang: 'zh-CN', title: 'openElement' },
+      headExtras: '<link rel="stylesheet" href="/styles.css" />',
+      upgradeStrategy: 'idle' as const,
+    }),
+  );
 
   // All features present
   assertStringIncludes(code, 'Content-Security-Policy');
@@ -1102,10 +1092,7 @@ Deno.test('renderEntry: the action error/redirect channels are imported runtime 
     code,
     'return __actionRedirectResponse(c, err.location, __actionState.isFetch);',
   );
-  assertStringIncludes(
-    code,
-    'return __actionErrorResponse(c, "/", err, import.meta.env.PROD);',
-  );
+  assertStringIncludes(code, 'return __actionErrorResponse(c, "/", err, import.meta.env.PROD);');
   assertFalse(code.includes("title: 'Internal Server Error'"));
 });
 
@@ -1131,10 +1118,7 @@ Deno.test('renderEntry: private,no-cache is emitted only after a successful rend
   // redirect/notFound/error responses produced by the catch block below.
   const renderIndex = code.indexOf('__renderAppShell(__content,');
   const relaxIndex = code.indexOf("c.header('Cache-Control', 'private, no-cache');");
-  const returnIndex = code.indexOf(
-    'return c.html(wrapInDocument(content, {',
-    relaxIndex,
-  );
+  const returnIndex = code.indexOf('return c.html(wrapInDocument(content, {', relaxIndex);
   assertEquals(renderIndex > 0, true, 'shell render must be emitted');
   assertEquals(relaxIndex > renderIndex, true, 'private,no-cache must follow the shell render');
   assertEquals(returnIndex > relaxIndex, true, 'private,no-cache must precede the 200 return');
@@ -1159,10 +1143,7 @@ Deno.test('renderEntry: island client script descriptors also cover notFound/err
   );
   assertStringIncludes(code, 'return c.html(wrapInDocument(errorContent, {');
   const notFoundBody = code.slice(code.indexOf('app.notFound('));
-  assertStringIncludes(
-    notFoundBody,
-    'return c.html(wrapInDocument(content, {',
-  );
+  assertStringIncludes(notFoundBody, 'return c.html(wrapInDocument(content, {');
   assertStringIncludes(
     notFoundBody,
     'return c.html(wrapInDocument(__statusHtml("404 Not Found", "Not Found"), {',
@@ -1281,10 +1262,12 @@ Deno.test('renderEntry: corsOrigin warning is emitted once per process (#925)', 
 });
 
 Deno.test('renderEntry: island client script is descriptor-driven (dev URL + request-time setter)', () => {
-  const code = renderEntry(buildEntryDescriptor(basicRoutes, {
-    islandTagNames: ['live-counter'],
-    islandFiles: ['live-counter.ts'],
-  }));
+  const code = renderEntry(
+    buildEntryDescriptor(basicRoutes, {
+      islandTagNames: ['live-counter'],
+      islandFiles: ['live-counter.ts'],
+    }),
+  );
 
   // One render-time seam: the dev URL (compile-time constant) is computed in
   // the entry and handed to the factory; the request-time src the generated

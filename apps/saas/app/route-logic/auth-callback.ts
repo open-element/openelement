@@ -29,8 +29,11 @@ export function createCallbackLoader(createClient: CallbackClientFactory = creat
     const url = new URL(ctx.request.url);
     const code = url.searchParams.get('code');
     if (!code) return { error: publicAuthError('missing code') };
-    const { error } = await createClient(ctx.env, ctx.request, ctx.responseHeaders).auth
-      .exchangeCodeForSession(code);
+    const { error } = await createClient(
+      ctx.env,
+      ctx.request,
+      ctx.responseHeaders,
+    ).auth.exchangeCodeForSession(code);
     if (error) return { error: publicAuthError(error) };
     throw redirect(safeInternalNext(url.searchParams.get('next')));
   };

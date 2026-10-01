@@ -193,18 +193,12 @@ async function runStart(): Promise<void> {
   if (existsSync(serverEntry)) {
     serverMod = await importRequestTimeServer(serverEntry);
     if (typeof serverMod.default !== 'function') {
-      console.error(
-        '[openElement start] dist/server/index.js has no default export.',
-      );
+      console.error('[openElement start] dist/server/index.js has no default export.');
       Deno.exit(1);
     }
-    console.log(
-      '[openElement start] request-time server entry loaded (dynamic routes enabled)',
-    );
+    console.log('[openElement start] request-time server entry loaded (dynamic routes enabled)');
   } else {
-    console.log(
-      '[openElement start] no dist/server — static-only preview',
-    );
+    console.log('[openElement start] no dist/server — static-only preview');
   }
 
   const handler = createFetchHandler({

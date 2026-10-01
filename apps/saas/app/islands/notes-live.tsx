@@ -86,9 +86,13 @@ export default class NotesLive extends OpenElement {
         <h2>Live updates</h2>
         <p id='live-status'>realtime: {this.status}</p>
         <ul id='live-events'>
-          {this.events.map((event) => <li key={event.id}>{event.body}</li>)}
+          {this.events.map((event) => (
+            <li key={event.id}>{event.body}</li>
+          ))}
         </ul>
-        <button type='button' onClick={this.reconnectNow}>Reconnect</button>
+        <button type='button' onClick={this.reconnectNow}>
+          {'Reconnect'}
+        </button>
       </section>
     );
   }

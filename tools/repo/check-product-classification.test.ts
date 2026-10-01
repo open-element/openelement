@@ -22,7 +22,10 @@ Deno.test('product classification: required docs fail closed when unreadable', a
     assertEquals(sources, []);
     assertEquals(failures.length, REQUIRED_PRODUCT_DOCS.length);
     for (const relative of REQUIRED_PRODUCT_DOCS) {
-      assert(failures.some((failure) => failure.includes(relative)), relative);
+      assert(
+        failures.some((failure) => failure.includes(relative)),
+        relative,
+      );
     }
   } finally {
     await Deno.remove(empty, { recursive: true });

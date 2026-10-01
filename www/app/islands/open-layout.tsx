@@ -28,7 +28,8 @@ export const openElement = defineIslandConfig({ hydrate: 'load', ssr: true });
 
 @element('open-layout')
 export default class OpenLayout extends OpenElement {
-  static override styles = [compiledStyle(`
+  static override styles = [
+    compiledStyle(`
   :host {
     display: block;
   }
@@ -522,7 +523,8 @@ export default class OpenLayout extends OpenElement {
   @media (max-width: 480px) {
     .header-inner { padding: 0 var(--size-3); gap: var(--size-1); }
   }
-`)];
+`),
+  ];
 
   @property({ reflect: false })
   headerNav: HeaderNavLink[] = [];
@@ -567,7 +569,7 @@ export default class OpenLayout extends OpenElement {
 
   @property({ reflect: false, attribute: false })
   headerNavItems = computed(() =>
-    decorateHeaderNav(this.headerNav, this.currentPath, this.locale, this.locales)
+    decorateHeaderNav(this.headerNav, this.currentPath, this.locale, this.locales),
   ) as CompiledComputed<DecoratedHeaderNavLink[]>;
 
   @property({ reflect: false, attribute: false })
@@ -602,7 +604,7 @@ export default class OpenLayout extends OpenElement {
   // their static ancestor, so dynamic routes never emit a literal param href.
   @property({ reflect: false, attribute: false })
   switchLocaleHref = computed(() =>
-    localeSwitchPath(this.currentPath || '/', this.locale, this.locales, SITE_DEFAULT_LOCALE)
+    localeSwitchPath(this.currentPath || '/', this.locale, this.locales, SITE_DEFAULT_LOCALE),
   );
 
   @property({ reflect: false, attribute: false })
@@ -613,13 +615,14 @@ export default class OpenLayout extends OpenElement {
 
   @property({ reflect: false, attribute: false })
   sidebarRows = computed(() =>
-    buildSidebarRows(this.navItems, this.currentPath, this.locale, this.locales)
+    buildSidebarRows(this.navItems, this.currentPath, this.locale, this.locales),
   ) as CompiledComputed<SidebarRow[]>;
 
   @property({ reflect: false, attribute: false })
-  sidebarHidden = computed(() =>
-    this.home ||
-    buildSidebarRows(this.navItems, this.currentPath, this.locale, this.locales).length === 0
+  sidebarHidden = computed(
+    () =>
+      this.home ||
+      buildSidebarRows(this.navItems, this.currentPath, this.locale, this.locales).length === 0,
   );
 
   @property({ reflect: false, attribute: false })
@@ -646,32 +649,34 @@ export default class OpenLayout extends OpenElement {
   @property({ reflect: false, attribute: false })
   footerProductLabel = computed(() => footerColumn(this.locale, this.locales, 'product').label);
   @property({ reflect: false, attribute: false })
-  footerProductLinks = computed(() =>
-    footerColumn(this.locale, this.locales, 'product').links
+  footerProductLinks = computed(
+    () => footerColumn(this.locale, this.locales, 'product').links,
   ) as CompiledComputed<FooterLink[]>;
   @property({ reflect: false, attribute: false })
   footerResourcesLabel = computed(() => footerColumn(this.locale, this.locales, 'resources').label);
   @property({ reflect: false, attribute: false })
-  footerResourcesLinks = computed(() =>
-    footerColumn(this.locale, this.locales, 'resources').links
+  footerResourcesLinks = computed(
+    () => footerColumn(this.locale, this.locales, 'resources').links,
   ) as CompiledComputed<FooterLink[]>;
   @property({ reflect: false, attribute: false })
   footerCompanyLabel = computed(() => footerColumn(this.locale, this.locales, 'company').label);
   @property({ reflect: false, attribute: false })
-  footerCompanyLinks = computed(() =>
-    footerColumn(this.locale, this.locales, 'company').links
+  footerCompanyLinks = computed(
+    () => footerColumn(this.locale, this.locales, 'company').links,
   ) as CompiledComputed<FooterLink[]>;
   @property({ reflect: false, attribute: false })
   footerLegalLabel = computed(() => footerColumn(this.locale, this.locales, 'legal').label);
   @property({ reflect: false, attribute: false })
-  footerLegalLinks = computed(() =>
-    footerColumn(this.locale, this.locales, 'legal').links
+  footerLegalLinks = computed(
+    () => footerColumn(this.locale, this.locales, 'legal').links,
   ) as CompiledComputed<FooterLink[]>;
 
   render() {
     return (
       <div class='app-layout' part='container'>
-        <a class='skip-link' href='#main-content' data-pagefind-ignore>{this.skipToMain}</a>
+        <a class='skip-link' href='#main-content' data-pagefind-ignore>
+          {this.skipToMain}
+        </a>
         <header class='app-header' part='header' data-pagefind-ignore>
           <div class='header-inner'>
             <a class='logo' href={this.homeHref} aria-label={this.siteName}>
@@ -707,8 +712,7 @@ export default class OpenLayout extends OpenElement {
                 results={this.searchResultsLabel}
                 empty={this.searchEmptyMessage}
                 message={this.searchEmptyMessage}
-              >
-              </open-search>
+              ></open-search>
               <open-theme-toggle></open-theme-toggle>
               <a
                 class='repository-link'
@@ -717,18 +721,16 @@ export default class OpenLayout extends OpenElement {
                 rel='noopener noreferrer'
                 aria-label={this.repositoryLabel}
               >
-                <svg
-                  viewBox='0 0 16 16'
-                  aria-hidden='true'
-                  focusable='false'
-                >
+                <svg viewBox='0 0 16 16' aria-hidden='true' focusable='false'>
                   <path d='M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z' />
                 </svg>
               </a>
               <details class='mobile-menu'>
                 <summary class='mobile-menu-btn'>
                   <span class='mobile-menu-label'>{this.menuOpen}</span>
-                  <span class='mobile-menu-icon' aria-hidden='true'>☰</span>
+                  <span class='mobile-menu-icon' aria-hidden='true'>
+                    {'☰'}
+                  </span>
                 </summary>
                 <nav class='mobile-menu-panel' aria-label={this.mobileNavLabel}>
                   {this.headerNavItems.map((link) => (
@@ -757,12 +759,7 @@ export default class OpenLayout extends OpenElement {
             {this.sidebarRows.map((row) => (
               <div key={row.key} class='nav-row' data-kind={row.kind}>
                 <span class='nav-heading'>{row.heading}</span>
-                <a
-                  class='nav-link'
-                  href={row.href}
-                  aria-current={row.current}
-                  rel={row.rel}
-                >
+                <a class='nav-link' href={row.href} aria-current={row.current} rel={row.rel}>
                   {row.label}
                 </a>
               </div>
@@ -776,12 +773,7 @@ export default class OpenLayout extends OpenElement {
                 {this.sidebarRows.map((row) => (
                   <div key={row.key} class='nav-row' data-kind={row.kind}>
                     <span class='nav-heading'>{row.heading}</span>
-                    <a
-                      class='nav-link'
-                      href={row.href}
-                      aria-current={row.current}
-                      rel={row.rel}
-                    >
+                    <a class='nav-link' href={row.href} aria-current={row.current} rel={row.rel}>
                       {row.label}
                     </a>
                   </div>
@@ -795,25 +787,33 @@ export default class OpenLayout extends OpenElement {
             <nav class='footer-column' aria-label={this.footerProductLabel}>
               <span class='footer-heading'>{this.footerProductLabel}</span>
               {this.footerProductLinks.map((link) => (
-                <a key={link.key} href={link.href} rel={link.rel}>{link.label}</a>
+                <a key={link.key} href={link.href} rel={link.rel}>
+                  {link.label}
+                </a>
               ))}
             </nav>
             <nav class='footer-column' aria-label={this.footerResourcesLabel}>
               <span class='footer-heading'>{this.footerResourcesLabel}</span>
               {this.footerResourcesLinks.map((link) => (
-                <a key={link.key} href={link.href} rel={link.rel}>{link.label}</a>
+                <a key={link.key} href={link.href} rel={link.rel}>
+                  {link.label}
+                </a>
               ))}
             </nav>
             <nav class='footer-column' aria-label={this.footerCompanyLabel}>
               <span class='footer-heading'>{this.footerCompanyLabel}</span>
               {this.footerCompanyLinks.map((link) => (
-                <a key={link.key} href={link.href} rel={link.rel}>{link.label}</a>
+                <a key={link.key} href={link.href} rel={link.rel}>
+                  {link.label}
+                </a>
               ))}
             </nav>
             <nav class='footer-column' aria-label={this.footerLegalLabel}>
               <span class='footer-heading'>{this.footerLegalLabel}</span>
               {this.footerLegalLinks.map((link) => (
-                <a key={link.key} href={link.href} rel={link.rel}>{link.label}</a>
+                <a key={link.key} href={link.href} rel={link.rel}>
+                  {link.label}
+                </a>
               ))}
             </nav>
           </div>

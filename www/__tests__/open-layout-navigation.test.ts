@@ -66,14 +66,23 @@ Deno.test('open-layout navigation labels the nameless generated group as Project
     { section: '', items: [{ label: 'Roadmap', path: '/roadmap' }] },
   ];
   // Unfiltered paths keep every group, with the empty one renamed.
-  assertEquals(filterNavSections(generated, '/docs').map((s) => s.section), [
-    'Reference',
-    'Project',
-  ]);
-  assertEquals(filterNavSections(sections, '/roadmap').map((s) => s.section), ['Project']);
+  assertEquals(
+    filterNavSections(generated, '/docs').map((s) => s.section),
+    ['Reference', 'Project'],
+  );
+  assertEquals(
+    filterNavSections(sections, '/roadmap').map((s) => s.section),
+    ['Project'],
+  );
   // The blog is a project page, not a stream of its own.
-  assertEquals(filterNavSections(sections, '/blog').map((s) => s.section), ['Project']);
-  assertEquals(filterNavSections(sections, '/reference').map((s) => s.section), ['Reference']);
+  assertEquals(
+    filterNavSections(sections, '/blog').map((s) => s.section),
+    ['Project'],
+  );
+  assertEquals(
+    filterNavSections(sections, '/reference').map((s) => s.section),
+    ['Reference'],
+  );
 });
 
 const GENERATED_LIKE_SECTIONS = [
@@ -92,18 +101,17 @@ const GENERATED_LIKE_SECTIONS = [
 
 Deno.test('buildSidebarRows flattens the filtered section tree into heading and link rows', () => {
   const rows = buildSidebarRows(GENERATED_LIKE_SECTIONS, '/guide/api', 'en', ['en', 'zh']);
-  assertEquals(rows.map((row) => row.kind), [
-    'section',
-    'link',
-    'link',
-    'link',
-    'section',
-    'link',
-  ]);
+  assertEquals(
+    rows.map((row) => row.kind),
+    ['section', 'link', 'link', 'link', 'section', 'link'],
+  );
   assertEquals(rows[0].heading, 'Guide');
   assertEquals(rows[2].label, 'Getting Started');
   // The active page is marked exactly once, on the exact-match link.
-  assertEquals(rows.filter((row) => row.current === 'page').map((row) => row.href), ['/guide/api']);
+  assertEquals(
+    rows.filter((row) => row.current === 'page').map((row) => row.href),
+    ['/guide/api'],
+  );
   // Heading rows carry no link affordance; link rows carry no heading.
   assertEquals(rows[0].href, false);
   assertEquals(rows[2].heading, '');
@@ -115,9 +123,10 @@ Deno.test('buildSidebarRows localizes link targets and matches the localized cur
   const rows = buildSidebarRows(GENERATED_LIKE_SECTIONS, '/zh/guide/api', 'zh', ['en', 'zh']);
   const links = rows.filter((row) => row.kind === 'link');
   assert(links.every((row) => row.href !== false && row.href.startsWith('/zh/')));
-  assertEquals(rows.filter((row) => row.current === 'page').map((row) => row.href), [
-    '/zh/guide/api',
-  ]);
+  assertEquals(
+    rows.filter((row) => row.current === 'page').map((row) => row.href),
+    ['/zh/guide/api'],
+  );
 });
 
 Deno.test('buildSidebarRows filters to the active section family before flattening', () => {
@@ -130,13 +139,15 @@ Deno.test('buildSidebarRows filters to the active section family before flatteni
 
 Deno.test('buildSidebarRows guards unsafe hrefs and marks external links', () => {
   const rows = buildSidebarRows(
-    [{
-      section: 'Guide',
-      items: [
-        { href: 'javascript:alert(1)', label: 'Evil' },
-        { href: 'https://example.com/x', label: 'External' },
-      ],
-    }],
+    [
+      {
+        section: 'Guide',
+        items: [
+          { href: 'javascript:alert(1)', label: 'Evil' },
+          { href: 'https://example.com/x', label: 'External' },
+        ],
+      },
+    ],
     '/guide',
     'en',
     ['en', 'zh'],
@@ -154,11 +165,10 @@ Deno.test('decorateHeaderNav marks the current section and never external links'
     { href: '/blog', label: 'Blog' },
     { href: 'https://github.com/open-element/openelement', label: 'GitHub' },
   ];
-  assertEquals(decorateHeaderNav(links, '/docs', 'en', ['en', 'zh']).map((link) => link.current), [
-    'page',
-    false,
-    false,
-  ]);
+  assertEquals(
+    decorateHeaderNav(links, '/docs', 'en', ['en', 'zh']).map((link) => link.current),
+    ['page', false, false],
+  );
   // Section roots stay current on nested routes (blog posts keep Blog current).
   assertEquals(
     decorateHeaderNav(links, '/blog/1-0-0-alpha-1-baseline', 'en', ['en', 'zh'])[1].current,
@@ -167,7 +177,10 @@ Deno.test('decorateHeaderNav marks the current section and never external links'
   // Router 1.0 does not pre-localize shell nav; the Site builder localizes
   // bare hrefs, and current marking must still land for non-default locales.
   const zhNav = decorateHeaderNav(links, '/blog', 'zh', ['en', 'zh']);
-  assertEquals(zhNav.map((link) => link.current), [false, 'page', false]);
+  assertEquals(
+    zhNav.map((link) => link.current),
+    [false, 'page', false],
+  );
   assertEquals(zhNav[0].href, '/zh/docs');
   assertEquals(zhNav[2].href, 'https://github.com/open-element/openelement');
   // A locale-prefixed request-time path normalizes to the same result.
@@ -182,12 +195,7 @@ Deno.test('footerColumn restores the four-column link structure with localized t
   assertEquals(product.label, 'Product');
   assertEquals(
     product.links.map((link) => link.href),
-    [
-      '/guide/core-concepts',
-      '/architecture/design-system',
-      '/architecture',
-      '/architecture/dsd',
-    ],
+    ['/guide/core-concepts', '/architecture/design-system', '/architecture', '/architecture/dsd'],
   );
   const zhProduct = footerColumn('zh', ['en', 'zh'], 'product');
   assertEquals(zhProduct.label, '产品');
@@ -198,7 +206,10 @@ Deno.test('footerColumn restores the four-column link structure with localized t
   assertEquals(github?.rel, 'noopener noreferrer');
   const legal = footerColumn('zh', ['en', 'zh'], 'legal');
   assertEquals(legal.label, '法律');
-  assertEquals(legal.links.map((link) => link.label), ['MIT 许可证', '参与贡献']);
+  assertEquals(
+    legal.links.map((link) => link.label),
+    ['MIT 许可证', '参与贡献'],
+  );
 });
 
 Deno.test('layoutChromeStrings carries the bilingual shell chrome copy', () => {
@@ -260,25 +271,30 @@ Deno.test('decorateHeaderNav projects zh labels and keeps the en default', () =>
     { href: '/docs', label: 'Docs', labelZh: '文档' },
     { href: '/blog', label: 'Blog' },
   ];
-  assertEquals(decorateHeaderNav(links, '/docs', 'zh', ['en', 'zh']).map((link) => link.label), [
-    '文档',
-    'Blog', // no labelZh: falls back to the English label
-  ]);
-  assertEquals(decorateHeaderNav(links, '/docs', 'en', ['en', 'zh']).map((link) => link.label), [
-    'Docs',
-    'Blog',
-  ]);
+  assertEquals(
+    decorateHeaderNav(links, '/docs', 'zh', ['en', 'zh']).map((link) => link.label),
+    [
+      '文档',
+      'Blog', // no labelZh: falls back to the English label
+    ],
+  );
+  assertEquals(
+    decorateHeaderNav(links, '/docs', 'en', ['en', 'zh']).map((link) => link.label),
+    ['Docs', 'Blog'],
+  );
 });
 
 Deno.test('buildSidebarRows projects zh item labels and section headings', () => {
-  const sections = [{
-    section: 'Guide',
-    sectionZh: '指南',
-    items: [
-      { path: '/guide/getting-started', label: 'Getting Started', labelZh: '快速开始' },
-      { path: '/guide/api', label: 'API Routes', labelZh: 'API 路由' },
-    ],
-  }];
+  const sections = [
+    {
+      section: 'Guide',
+      sectionZh: '指南',
+      items: [
+        { path: '/guide/getting-started', label: 'Getting Started', labelZh: '快速开始' },
+        { path: '/guide/api', label: 'API Routes', labelZh: 'API 路由' },
+      ],
+    },
+  ];
   const zhRows = buildSidebarRows(sections, '/zh/guide/api', 'zh', ['en', 'zh']);
   assertEquals(zhRows[0].heading, '指南');
   assertEquals(

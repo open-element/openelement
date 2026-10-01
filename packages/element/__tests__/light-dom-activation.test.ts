@@ -32,7 +32,7 @@ const dom = installFacadeDom();
 const { OpenElement, renderDsd } = await import('@openelement/element');
 const { PartProgramClaimError } = await import('../src/internal/compiled/runtime.ts');
 
-// deno-lint-ignore no-explicit-any
+// oxlint-disable-next-line no-explicit-any
 type AnyElement = any;
 
 let tagCounter = 0;
@@ -41,12 +41,17 @@ function uniqueTag(prefix: string): string {
 }
 
 const LIGHT_PROGRAM = {
-  template: [{
-    k: 'el' as const,
-    tag: 'button',
-    attrs: [['type', 'button']] as Array<[string, string]>,
-    children: [{ k: 'text' as const, value: 'count: ' }, { k: 'part' as const, index: 0 }],
-  }],
+  template: [
+    {
+      k: 'el' as const,
+      tag: 'button',
+      attrs: [['type', 'button']] as Array<[string, string]>,
+      children: [
+        { k: 'text' as const, value: 'count: ' },
+        { k: 'part' as const, index: 0 },
+      ],
+    },
+  ],
   parts: [
     { k: 'text' as const, index: 0, signal: 'count' },
     {
@@ -58,14 +63,16 @@ const LIGHT_PROGRAM = {
       path: [0],
     },
   ],
-  properties: [{
-    name: 'count',
-    attribute: 'count',
-    type: 'number' as const,
-    converter: 'number' as const,
-    reflect: true,
-    default: 0,
-  }],
+  properties: [
+    {
+      name: 'count',
+      attribute: 'count',
+      type: 'number' as const,
+      converter: 'number' as const,
+      reflect: true,
+      default: 0,
+    },
+  ],
 };
 
 function defineLightCounter(tag: string): CustomElementConstructor {
@@ -174,9 +181,8 @@ Deno.test('nested light hosts claim in their own scopes', () => {
     template: [{ k: 'el', tag: 'em', attrs: [], children: [{ k: 'text', value: 'inner' }] }],
     parts: [],
   });
-  const innerCtor = class extends OpenElement {} as unknown as
-    & CustomElementConstructor
-    & Record<string, unknown>;
+  const innerCtor = class extends OpenElement {} as unknown as CustomElementConstructor &
+    Record<string, unknown>;
   innerCtor.__partProgram = innerProgram;
   innerCtor.__compiledProperties = innerProgram.metadata.properties;
   innerCtor.__elementMetadata = innerProgram.metadata;
@@ -185,22 +191,25 @@ Deno.test('nested light hosts claim in their own scopes', () => {
   const outerProgram = testProgram({
     tag: outerTag,
     rootMode: 'light',
-    template: [{
-      k: 'el',
-      tag: 'section',
-      attrs: [],
-      children: [{
+    template: [
+      {
         k: 'el',
-        tag: innerTag,
+        tag: 'section',
         attrs: [],
-        children: [],
-      }],
-    }],
+        children: [
+          {
+            k: 'el',
+            tag: innerTag,
+            attrs: [],
+            children: [],
+          },
+        ],
+      },
+    ],
     parts: [],
   });
-  const outerCtor = class extends OpenElement {} as unknown as
-    & CustomElementConstructor
-    & Record<string, unknown>;
+  const outerCtor = class extends OpenElement {} as unknown as CustomElementConstructor &
+    Record<string, unknown>;
   outerCtor.__partProgram = outerProgram;
   outerCtor.__compiledProperties = outerProgram.metadata.properties;
   outerCtor.__elementMetadata = outerProgram.metadata;

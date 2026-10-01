@@ -15,12 +15,9 @@ function isPrerelease(version: string): boolean {
   return version.includes('-');
 }
 
-async function npmPackageVersionExists(
-  name: string,
-  version: string,
-): Promise<boolean> {
+async function npmPackageVersionExists(name: string, version: string): Promise<boolean> {
   try {
-    return await npmView(`${name}@${version}`, 'version') === version;
+    return (await npmView(`${name}@${version}`, 'version')) === version;
   } catch {
     // #875: keep the lazy semantics — a failed registry query must not block
     // publish; the publish step itself retries/propagates real failures.

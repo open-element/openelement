@@ -36,7 +36,9 @@ const EXECUTABLE_MODE = 0o755;
 
 function assertArchivePath(path: string): void {
   if (
-    !path || path.startsWith('/') || path.includes('\\') ||
+    !path ||
+    path.startsWith('/') ||
+    path.includes('\\') ||
     path.split('/').some((segment) => segment === '' || segment === '..')
   ) {
     throw new Error(`deterministic-tar: unsafe archive path "${path}"`);
@@ -138,9 +140,7 @@ export function createDeterministicTar(
 
 /** Deterministic gzip wrapper (Web Standard, mtime 0, fixed OS byte). */
 export async function gzipDeterministic(data: Uint8Array): Promise<Uint8Array> {
-  const stream = new Blob([data as BlobPart]).stream().pipeThrough(
-    new CompressionStream('gzip'),
-  );
+  const stream = new Blob([data as BlobPart]).stream().pipeThrough(new CompressionStream('gzip'));
   return new Uint8Array(await new Response(stream).arrayBuffer());
 }
 

@@ -15,7 +15,10 @@ function hasControlCharacters(value: string): boolean {
   for (let index = 0; index < value.length; index++) {
     const code = value.charCodeAt(index);
     if (
-      code <= 0x08 || code === 0x0b || code === 0x0c || (code >= 0x0e && code <= 0x1f) ||
+      code <= 0x08 ||
+      code === 0x0b ||
+      code === 0x0c ||
+      (code >= 0x0e && code <= 0x1f) ||
       code === 0x7f
     ) {
       return true;
@@ -142,10 +145,11 @@ function crossoriginValue(
   if (value === undefined) return undefined;
   const normalized = stringValue(value, context);
   if (normalized !== 'anonymous' && normalized !== 'use-credentials') {
-    throw new OpenElementError(
-      `${context} must be "anonymous" or "use-credentials"`,
-      { code: 'INVALID_CRITICAL_ASSETS', statusCode: 400, recoverable: false },
-    );
+    throw new OpenElementError(`${context} must be "anonymous" or "use-credentials"`, {
+      code: 'INVALID_CRITICAL_ASSETS',
+      statusCode: 400,
+      recoverable: false,
+    });
   }
   return normalized;
 }
@@ -262,20 +266,19 @@ function renderFont(font: unknown, index: number): string {
   return `<link ${attrs.join(' ')} />`;
 }
 
-function renderStyle(
-  style: unknown,
-  index: number,
-  config: CriticalAssetsView,
-): string {
-  const value = typeof style === 'string'
-    ? { href: style }
-    : asRecord(style, `criticalAssets.styles[${index}]`);
-  const href = value.href === undefined
-    ? undefined
-    : stringValue(value.href, `criticalAssets.styles[${index}].href`);
-  const css = value.css === undefined
-    ? undefined
-    : stringValue(value.css, `criticalAssets.styles[${index}].css`);
+function renderStyle(style: unknown, index: number, config: CriticalAssetsView): string {
+  const value =
+    typeof style === 'string'
+      ? { href: style }
+      : asRecord(style, `criticalAssets.styles[${index}]`);
+  const href =
+    value.href === undefined
+      ? undefined
+      : stringValue(value.href, `criticalAssets.styles[${index}].href`);
+  const css =
+    value.css === undefined
+      ? undefined
+      : stringValue(value.css, `criticalAssets.styles[${index}].css`);
   if ((href === undefined) === (css === undefined)) {
     throw new OpenElementError(
       `criticalAssets.styles[${index}] must provide exactly one of href or css`,
@@ -286,19 +289,21 @@ function renderStyle(
     assertSafeInlineCss(css, `criticalAssets.styles[${index}].css`);
     const body = config.minifyInlineStyles === false ? css : minifyCriticalCss(css);
     const safeBody = body.replace(/<\/style/gi, '<\\/style');
-    const attrs = value.media === undefined
-      ? ''
-      : ` media="${escapeAttr(stringValue(value.media, `criticalAssets.styles[${index}].media`))}"`;
-    const type = value.type === undefined
-      ? ''
-      : ` type="${escapeAttr(stringValue(value.type, `criticalAssets.styles[${index}].type`))}"`;
+    const attrs =
+      value.media === undefined
+        ? ''
+        : ` media="${escapeAttr(stringValue(value.media, `criticalAssets.styles[${index}].media`))}"`;
+    const type =
+      value.type === undefined
+        ? ''
+        : ` type="${escapeAttr(stringValue(value.type, `criticalAssets.styles[${index}].type`))}"`;
     return `<style${attrs}${type}>${safeBody}</style>`;
   }
 
   const safeHref = safeUrl(href, `criticalAssets.styles[${index}].href`);
   const renderBlocking = value.renderBlocking !== false;
-  const allowExternal = config.allowExternalRenderBlocking === true ||
-    config.allowRenderBlockingExternal === true;
+  const allowExternal =
+    config.allowExternalRenderBlocking === true || config.allowRenderBlockingExternal === true;
   if (renderBlocking && isCrossOrigin(href!, config.origin) && !allowExternal) {
     throw new OpenElementError(
       `criticalAssets.styles[${index}] is a cross-origin render-blocking stylesheet; ` +
@@ -328,9 +333,10 @@ function renderStyle(
 }
 
 function renderInlineScript(script: unknown, index: number): string {
-  const value = typeof script === 'string'
-    ? { code: script }
-    : asRecord(script, `criticalAssets.inlineScripts[${index}]`);
+  const value =
+    typeof script === 'string'
+      ? { code: script }
+      : asRecord(script, `criticalAssets.inlineScripts[${index}]`);
   const code = stringValue(value.code, `criticalAssets.inlineScripts[${index}].code`);
   assertNoControls(code, `criticalAssets.inlineScripts[${index}].code`);
   const type = optionalString(value.type, `criticalAssets.inlineScripts[${index}].type`);
@@ -361,7 +367,9 @@ interface CriticalAssetsView {
 
 function normalizeConfig(input: unknown): CriticalAssetsView | undefined {
   const options = asRecord(input, 'createOpenPlugin options');
-  const candidate = options.criticalAssets ?? options.critical ??
+  const candidate =
+    options.criticalAssets ??
+    options.critical ??
     (typeof options.performance === 'object' && options.performance !== null
       ? (options.performance as RecordLike).criticalAssets
       : undefined);
@@ -404,13 +412,15 @@ export function buildCriticalHeadExtras(input: unknown): CriticalAssetsResult {
   if (inject && typeof inject === 'object') {
     const scripts = (inject as RecordLike).scripts;
     if (
-      Array.isArray(scripts) && config.allowExternalRenderBlocking !== true &&
+      Array.isArray(scripts) &&
+      config.allowExternalRenderBlocking !== true &&
       config.allowRenderBlockingExternal !== true
     ) {
       for (const [index, script] of scripts.entries()) {
-        const record = typeof script === 'string'
-          ? { src: script }
-          : asRecord(script, `inject.scripts[${index}]`);
+        const record =
+          typeof script === 'string'
+            ? { src: script }
+            : asRecord(script, `inject.scripts[${index}]`);
         const src = stringValue(record.src, `inject.scripts[${index}].src`);
         const asyncValue = record.async === true;
         const deferValue = record.defer === true;

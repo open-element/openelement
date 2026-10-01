@@ -50,7 +50,8 @@ test.describe('Theme Toggle', () => {
   });
 
   test('theme toggle has shadow root', async ({ page }) => {
-    const hasShadowRoot = await page.locator('open-theme-toggle')
+    const hasShadowRoot = await page
+      .locator('open-theme-toggle')
       .evaluate((el) => el.shadowRoot !== null);
     expect(hasShadowRoot).toBe(true);
   });
@@ -142,7 +143,9 @@ test.describe('Theme initialization', () => {
   // saved theme the initial data-theme must follow prefers-color-scheme
   // exactly. A dark first paint that later flips to light is the FOUC this
   // contract exists to prevent, so both directions are asserted strictly.
-  test('initial theme is light when prefers-color-scheme is light and nothing is saved', async ({ page }) => {
+  test('initial theme is light when prefers-color-scheme is light and nothing is saved', async ({
+    page,
+  }) => {
     await page.emulateMedia({ colorScheme: 'light' });
     await page.goto('/');
     const theme = await page.evaluate(() => {
@@ -156,7 +159,9 @@ test.describe('Theme initialization', () => {
     expect(themeInit).toBe('1');
   });
 
-  test('initial theme is dark when prefers-color-scheme is dark and nothing is saved', async ({ page }) => {
+  test('initial theme is dark when prefers-color-scheme is dark and nothing is saved', async ({
+    page,
+  }) => {
     await page.emulateMedia({ colorScheme: 'dark' });
     await page.goto('/');
     const theme = await page.evaluate(() => {

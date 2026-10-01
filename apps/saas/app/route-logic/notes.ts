@@ -77,11 +77,10 @@ export interface NotesSupabaseClient {
   };
 }
 
-export interface NotesQuery extends
-  PromiseLike<{
-    data: NoteRow[] | null;
-    error: { message: string } | null;
-  }> {
+export interface NotesQuery extends PromiseLike<{
+  data: NoteRow[] | null;
+  error: { message: string } | null;
+}> {
   or(expression: string): NotesQuery;
   order(column: string, options: { ascending: boolean }): NotesQuery;
   limit(count: number): NotesQuery;
@@ -99,7 +98,9 @@ export const MAX_NOTE_BODY_LENGTH = 10_000;
 export function createNotesLoader(createClient: NotesClientFactory = createServerSupabase) {
   return async function loader(ctx: LoaderContext<Record<string, string>>): Promise<NotesData> {
     const supabase = createClient(ctx.env, ctx.request, ctx.responseHeaders);
-    const { data: { user } } = await supabase.auth.getUser();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
     if (!user) throw redirect('/login');
     const cursor = decodeNotesCursor(new URL(ctx.request.url).searchParams.get('cursor'));
     let query = supabase.from('notes').select('id, title, body, created_at');
@@ -116,12 +117,15 @@ export function createNotesLoader(createClient: NotesClientFactory = createServe
     const rows = data ?? [];
     const notes = rows.slice(0, NOTES_PAGE_SIZE);
     const last = notes.at(-1);
-    const nextCursor = rows.length > NOTES_PAGE_SIZE && last
-      ? encodeNotesCursor({ createdAt: last.created_at, id: last.id })
-      : undefined;
+    const nextCursor =
+      rows.length > NOTES_PAGE_SIZE && last
+        ? encodeNotesCursor({ createdAt: last.created_at, id: last.id })
+        : undefined;
     const nextUrl = new URL(ctx.request.url);
     if (nextCursor) nextUrl.searchParams.set('cursor', nextCursor);
-    const { data: { session } } = await supabase.auth.getSession();
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
     return {
       denied: false,
       email: user.email,
@@ -153,7 +157,9 @@ export function createNoteAction(createClient: NotesClientFactory = createServer
       return fail(422, { error: 'body exceeds 10000 characters', title, body });
     }
     const supabase = createClient(ctx.env, ctx.request, ctx.responseHeaders);
-    const { data: { user } } = await supabase.auth.getUser();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
     if (!user) return fail(401, { error: 'sign-in required to create notes', title, body });
     const { error } = await supabase.from('notes').insert({
       user_id: user.id,
@@ -170,11 +176,7 @@ export async function logoutAction(ctx: {
   request: Request;
   responseHeaders: Headers;
 }): Promise<never> {
-  const supabase = createServerSupabase(
-    ctx.env,
-    ctx.request,
-    ctx.responseHeaders,
-  );
+  const supabase = createServerSupabase(ctx.env, ctx.request, ctx.responseHeaders);
   await supabase.auth.signOut();
   throw redirect('/login');
 }
@@ -186,9 +188,7 @@ export async function logoutAction(ctx: {
  * hidden cursor input is a property Part (dynamic intrinsic attributes are
  * outside the SSR part schema in v1).
  */
-export function notesPageProps(
-  context: PagePropsContext<NotesData>,
-): Record<string, unknown> {
+export function notesPageProps(context: PagePropsContext<NotesData>): Record<string, unknown> {
   const data = context.data;
   const actionData = context.actionData as CreateNoteData | undefined;
   const live = data?.live;

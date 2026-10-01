@@ -39,7 +39,9 @@ test.describe('open-input / open-button form participation', () => {
     await waitForForm(page);
   });
 
-  test('FormData carries open-input values, including the activation-time initial value', async ({ page }) => {
+  test('FormData carries open-input values, including the activation-time initial value', async ({
+    page,
+  }) => {
     // syncFormValue ran at activation: the SSR'd initial value participates
     // without any typing.
     expect(await page.evaluate(formDataJsonExpr)).toEqual({
@@ -88,7 +90,9 @@ test.describe('open-input / open-button form participation', () => {
     expect(await page.evaluate(formDataJsonExpr)).toEqual({ username: '', email: '' });
   });
 
-  test('disabled fieldset mirrors through formDisabledCallback and drops out of FormData', async ({ page }) => {
+  test('disabled fieldset mirrors through formDisabledCallback and drops out of FormData', async ({
+    page,
+  }) => {
     const locked = await page.evaluate(`(() => {
       const host = ${deepFirstExpr('#locked')};
       const inner = host?.shadowRoot?.querySelector('input');
@@ -111,7 +115,9 @@ test.describe('open-input / open-button form participation', () => {
     expect(await page.evaluate(formDataJsonExpr)).toHaveProperty('locked', '');
   });
 
-  test('delegatesFocus lands host focus on the inner control; open-input fires per input', async ({ page }) => {
+  test('delegatesFocus lands host focus on the inner control; open-input fires per input', async ({
+    page,
+  }) => {
     await page.evaluate(`(() => {
       const w = window;
       w.__inputEvents = [];

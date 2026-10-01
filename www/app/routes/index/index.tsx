@@ -18,8 +18,7 @@ const content = {
     headTitle: 'openElement — The Web, composed.',
     headDescription:
       'OpenElement is a Web Components-native, static-first application framework built on Custom Elements, Declarative Shadow DOM and selective islands.',
-    lede:
-      'A Web Components-native application framework — beautiful, static-first applications composed from real browser primitives.',
+    lede: 'A Web Components-native application framework — beautiful, static-first applications composed from real browser primitives.',
     heroMono: 'THE WEB,',
     heroSerif: 'composed.',
     sceneElementLead: 'One durable',
@@ -46,9 +45,9 @@ const content = {
     specDeps: 'Framework deps',
     specOutput: 'Server output',
     begin: 'Begin.',
-    beginNote: `${
-      alphaLineNote('en')
-    } --minimum-dependency-age 0 keeps same-day compatible patches installable despite Deno's default ~24h minimumDependencyAge.`,
+    beginNote: `${alphaLineNote(
+      'en',
+    )} --minimum-dependency-age 0 keeps same-day compatible patches installable despite Deno's default ~24h minimumDependencyAge.`,
     facts: 'Facts behind the feeling',
     continueComposition: 'Continue the composition.',
     referenceCopy:
@@ -84,9 +83,9 @@ const content = {
     specDeps: '框架依赖',
     specOutput: '服务端输出',
     begin: '开始。',
-    beginNote: `${
-      alphaLineNote('zh')
-    } --minimum-dependency-age 0 可绕过 Deno 默认约 24 小时的 minimumDependencyAge，使当天发布的兼容补丁仍可安装。`,
+    beginNote: `${alphaLineNote(
+      'zh',
+    )} --minimum-dependency-age 0 可绕过 Deno 默认约 24 小时的 minimumDependencyAge，使当天发布的兼容补丁仍可安装。`,
     facts: '感觉背后的事实',
     continueComposition: '继续这场组合。',
     referenceCopy: '本页每个数字与声称都取自仓库的发布与基准真值。',
@@ -230,12 +229,7 @@ const references = {
       '/reference',
       'Inspect the four-package surface and optional primitives.',
     ],
-    [
-      '03',
-      'Architecture',
-      '/architecture',
-      'Follow the element, app and build contracts.',
-    ],
+    ['03', 'Architecture', '/architecture', 'Follow the element, app and build contracts.'],
     ['04', 'Roadmap', '/roadmap', 'See current truth and the next product boundary.'],
   ],
   zh: [

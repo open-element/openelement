@@ -153,7 +153,7 @@ Deno.test('provenance: aliased computed, trustedHtml and defineIslandConfig stay
     "  @property({ reflect: false }) label = 'x';",
     '  @property({ reflect: false, attribute: false }) upper = derive(() => this.label);',
     '  @property({ type: Object, reflect: false, attribute: false }) body: TrustedHtml =' +
-    " html('<b>x</b>');",
+      " html('<b>x</b>');",
     '  render() {',
     '    return <main><div innerHTML={this.body} trustedHtml></div><span>{this.upper}</span></main>;',
     '  }',
@@ -174,7 +174,10 @@ Deno.test('provenance: aliased computed, trustedHtml and defineIslandConfig stay
   );
   // The derived-signal factory calls the aliased canonical binding.
   assertStringIncludes(code, 'derive(() => __s.label.value)');
-  assert(program.parts.some((part) => part.k === 'html'), 'html Part must exist');
+  assert(
+    program.parts.some((part) => part.k === 'html'),
+    'html Part must exist',
+  );
 });
 
 Deno.test('provenance: an unrelated third-party function named element is never admitted', () => {
@@ -307,7 +310,7 @@ Deno.test('provenance: a bare trustedHtml wrapper without the canonical import f
     "@element('oe-bare-trusted-html')",
     'export class BareTrustedHtml extends OpenElement {',
     '  @property({ type: Object, reflect: false, attribute: false }) body = ' +
-    "trustedHtml('<b>x</b>');",
+      "trustedHtml('<b>x</b>');",
     '  render() { return <main><div innerHTML={this.body} trustedHtml></div></main>; }',
     '}',
   ].join('\n');
@@ -331,13 +334,11 @@ Deno.test('provenance: a third-party property decorator fails closed', () => {
 });
 
 Deno.test('provenance: type-only element imports are unsupported and fail closed (OEC9027)', () => {
-  for (
-    const importLine of [
-      "import type { element } from '@openelement/element';\n" +
+  for (const importLine of [
+    "import type { element } from '@openelement/element';\n" +
       "import { OpenElement, property } from '@openelement/element';",
-      "import { type element, OpenElement, property } from '@openelement/element';",
-    ]
-  ) {
+    "import { type element, OpenElement, property } from '@openelement/element';",
+  ]) {
     const source = [
       importLine,
       "@element('oe-type-only-element')",
@@ -523,18 +524,13 @@ Deno.test('provenance: module analysis drops bare-spelling defineElement but kee
   ].join('\n');
   // Default scan (no injected vocabulary): the router factory is unknown —
   // fail closed.
-  const unadmitted = analyzeModuleSemantics(
-    boundSource,
-    '/project/app/routes/unadmitted.tsx',
-  );
+  const unadmitted = analyzeModuleSemantics(boundSource, '/project/app/routes/unadmitted.tsx');
   assertEquals(unadmitted.definedCustomElementTags, []);
   assertEquals(unadmitted.usesExportedTagName, false);
   // Host-injected vocabulary: the bound import is recognized (aliases
   // followed, canonical specifier).
-  const bound = analyzeModuleSemantics(
-    boundSource,
-    '/project/app/routes/bound.tsx',
-    { vocabulary: ROUTER_VOCABULARY },
-  );
+  const bound = analyzeModuleSemantics(boundSource, '/project/app/routes/bound.tsx', {
+    vocabulary: ROUTER_VOCABULARY,
+  });
   assertEquals(bound.usesExportedTagName, true);
 });

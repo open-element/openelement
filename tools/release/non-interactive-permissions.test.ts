@@ -38,7 +38,7 @@ async function runClosed(
     stderr: 'piped',
   }).spawn();
   const timeout = new Promise<{ timedOut: true }>((resolve) =>
-    setTimeout(() => resolve({ timedOut: true as const }), timeoutMs)
+    setTimeout(() => resolve({ timedOut: true as const }), timeoutMs),
   );
   const finished = child.output().then((output) => ({
     code: output.code,
@@ -71,9 +71,9 @@ Deno.test('permissions: an FFI request with stdin closed fails closed without pr
   for (const marker of PROMPT_MARKERS) {
     assert(
       !result.output.includes(marker),
-      `denied FFI must never print a permission prompt (found ${
-        JSON.stringify(marker)
-      }):\n${result.output}`,
+      `denied FFI must never print a permission prompt (found ${JSON.stringify(
+        marker,
+      )}):\n${result.output}`,
     );
   }
 });
@@ -81,8 +81,8 @@ Deno.test('permissions: an FFI request with stdin closed fails closed without pr
 Deno.test('permissions: packed gate tasks deny FFI and never prompt', () => {
   const text = Deno.readTextFileSync(join(repoRoot, 'tools/release/deno.json'));
   const tasks = (JSON.parse(text) as { tasks: Record<string, string> }).tasks;
-  const gated = Object.entries(tasks).filter(([name]) =>
-    name !== 'gate:packed' && name !== 'typecheck'
+  const gated = Object.entries(tasks).filter(
+    ([name]) => name !== 'gate:packed' && name !== 'typecheck',
   );
   assert(gated.length > 0, 'tools/release/deno.json must keep gate tasks to audit');
   const violations: string[] = [];

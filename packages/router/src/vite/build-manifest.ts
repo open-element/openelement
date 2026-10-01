@@ -66,10 +66,7 @@ function formatSize(bytes: number): string {
  * Recursively collect all matching files with their sizes.
  * #710: composed on the single shared walker (internal/html-files.ts).
  */
-function collectFiles(
-  dir: string,
-  extension: string,
-): ArtifactInfo[] {
+function collectFiles(dir: string, extension: string): ArtifactInfo[] {
   const results: ArtifactInfo[] = [];
   if (!existsSync(dir)) return results;
 
@@ -145,10 +142,7 @@ export function scanClientBuild(
 /**
  * Scan SSG output (dist/*.html) for page information.
  */
-export function scanSSGOutput(
-  root: string,
-  outDir: string = DEFAULT_OUT_DIR,
-): ArtifactInfo[] {
+export function scanSSGOutput(root: string, outDir: string = DEFAULT_OUT_DIR): ArtifactInfo[] {
   const distDir = resolve(root, outDir);
   return collectFiles(distDir, '.html');
 }
@@ -193,9 +187,9 @@ export function printBuildManifest(options: {
   // Check total JS budget
   if (clientData.totalJsBytes > TOTAL_JS_BUDGET_KB * 1024) {
     warnings.push(
-      `Warning: Total JS (${
-        formatSize(clientData.totalJsBytes)
-      }) exceeds ${TOTAL_JS_BUDGET_KB} KB budget`,
+      `Warning: Total JS (${formatSize(
+        clientData.totalJsBytes,
+      )}) exceeds ${TOTAL_JS_BUDGET_KB} KB budget`,
     );
   }
 
@@ -248,9 +242,9 @@ export function printBuildManifest(options: {
 
   if (phase === 3 && manifest.htmlPages.length > 0) {
     console.info(
-      `\n  HTML Pages (${manifest.htmlPages.length} files, ${
-        formatSize(manifest.totalHtmlBytes)
-      } total):`,
+      `\n  HTML Pages (${manifest.htmlPages.length} files, ${formatSize(
+        manifest.totalHtmlBytes,
+      )} total):`,
     );
 
     const maxShow = 15;
@@ -266,9 +260,9 @@ export function printBuildManifest(options: {
 
   if (manifest.headExtrasSize > 0) {
     console.info(
-      `\n  headExtras: ${
-        formatSize(manifest.headExtrasSize)
-      } (${manifest.headExtrasSize} bytes injected)`,
+      `\n  headExtras: ${formatSize(
+        manifest.headExtrasSize,
+      )} (${manifest.headExtrasSize} bytes injected)`,
     );
   }
 

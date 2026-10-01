@@ -110,17 +110,14 @@ export function findPort(preferred: number, maxAttempts = 20): number {
 }
 
 export function serveStatic(root: string, options: ServeStaticOptions = {}): StaticServer {
-  const server = Deno.serve(
-    { port: options.port ?? 0, hostname: '127.0.0.1' },
-    async (request) => {
-      const response = await readCandidate(
-        root,
-        new URL(request.url).pathname,
-        request.headers.get('range'),
-      );
-      return response ?? new Response('Not found', { status: 404 });
-    },
-  );
+  const server = Deno.serve({ port: options.port ?? 0, hostname: '127.0.0.1' }, async (request) => {
+    const response = await readCandidate(
+      root,
+      new URL(request.url).pathname,
+      request.headers.get('range'),
+    );
+    return response ?? new Response('Not found', { status: 404 });
+  });
   const addr = server.addr as Deno.NetAddr;
   return {
     origin: `http://127.0.0.1:${addr.port}`,

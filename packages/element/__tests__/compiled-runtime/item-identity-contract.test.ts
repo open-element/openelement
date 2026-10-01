@@ -38,20 +38,24 @@ interface Row {
 const PROGRAM = testProgram({
   tag: 'oe-item-identity',
   template: [{ k: 'el', tag: 'ul', attrs: [], children: [{ k: 'part', index: 0 }] }],
-  parts: [{
-    k: 'each',
-    index: 0,
-    signal: 'items',
-    key: 'id',
-    field: 'text',
-    item: [{
-      k: 'el',
-      tag: 'li',
-      attrs: [],
-      iattrs: [['data-cls', 'cls']],
-      children: [{ k: 'ival', field: 'text' }],
-    }],
-  }],
+  parts: [
+    {
+      k: 'each',
+      index: 0,
+      signal: 'items',
+      key: 'id',
+      field: 'text',
+      item: [
+        {
+          k: 'el',
+          tag: 'li',
+          attrs: [],
+          iattrs: [['data-cls', 'cls']],
+          children: [{ k: 'ival', field: 'text' }],
+        },
+      ],
+    },
+  ],
 });
 
 function node(element: TestElement): Node {
@@ -64,7 +68,7 @@ function listOf(root: TestElement): TestElement {
 
 function textOf(list: TestElement, index: number): string {
   const row = list.childNodes[index] as TestElement;
-  return ((row.childNodes[0] as TestElement & { data?: string }).data) ?? '';
+  return (row.childNodes[0] as TestElement & { data?: string }).data ?? '';
 }
 
 Deno.test('#1416: the skip is reference identity, not a value comparison', () => {
@@ -201,12 +205,18 @@ Deno.test('#1416: claim carries item identity through to the first update', () =
   // would still pass by re-writing identical text, so the assertion that
   // catches it is the node-identity one below.
   const rowBefore = list.childNodes[1] as TestElement;
-  items.value = [{ id: 'a', text: 'alpha', cls: 'one' }, { id: 'b', text: 'beta', cls: 'two' }];
+  items.value = [
+    { id: 'a', text: 'alpha', cls: 'one' },
+    { id: 'b', text: 'beta', cls: 'two' },
+  ];
   assertStrictEquals(list.childNodes[1], rowBefore);
   assertEquals(list.childNodes.length, 4);
 
   // A new item on the claimed entry updates in place (no rebuild).
-  items.value = [{ id: 'a', text: 'ALPHA', cls: 'one' }, { id: 'b', text: 'beta', cls: 'two' }];
+  items.value = [
+    { id: 'a', text: 'ALPHA', cls: 'one' },
+    { id: 'b', text: 'beta', cls: 'two' },
+  ];
   assertStrictEquals(list.childNodes[1], rowBefore, 'claim entry updated, not rebuilt');
   assertEquals(textOf(list, 1), 'ALPHA');
 
@@ -236,10 +246,7 @@ Deno.test('#1416: skip leaves an item attribute slot untouched, not removed', ()
   // which is the contrast case that proves the skip above did not run it.
   items.value = [{ id: 'a', text: 'A' }];
   assertEquals(element.getAttribute('data-cls'), null);
-  assertEquals(
-    toHtml(root),
-    '<host><ul><!--oe:p0--><li>A</li><!--oe:/p0--></ul></host>',
-  );
+  assertEquals(toHtml(root), '<host><ul><!--oe:p0--><li>A</li><!--oe:/p0--></ul></host>');
 
   instance.dispose();
 });

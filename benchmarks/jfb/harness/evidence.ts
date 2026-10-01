@@ -130,10 +130,7 @@ export function findIdentityLeaks(value: unknown, identity: EvidenceIdentity = {
  * commit, environment/toolchain versions, and finite measured numbers. This
  * is the reproducible-schema bar; it does not compare timings.
  */
-export function validateEvidence(
-  value: unknown,
-  options: { jfbCommit?: string } = {},
-): string[] {
+export function validateEvidence(value: unknown, options: { jfbCommit?: string } = {}): string[] {
   const failures: string[] = [];
   if (!isRecord(value)) return ['evidence must be a JSON object'];
   if (value.schemaVersion !== 1) failures.push('schemaVersion must be 1');

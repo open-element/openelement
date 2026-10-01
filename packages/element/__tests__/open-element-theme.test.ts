@@ -36,10 +36,12 @@ Deno.test('theme manager disconnects its observer with the last host (#1099)', (
     assertEquals(disconnected, 2);
   } finally {
     if (previousDocument === undefined) delete (globalThis as { document?: unknown }).document;
-    else {Object.defineProperty(globalThis, 'document', {
+    else {
+      Object.defineProperty(globalThis, 'document', {
         configurable: true,
         value: previousDocument,
-      });}
+      });
+    }
     if (previousObserver === undefined) {
       delete (globalThis as { MutationObserver?: unknown }).MutationObserver;
     } else {

@@ -127,10 +127,7 @@ export async function rescanRoutes(state: OpenPluginState): Promise<void> {
  * virtual entries and full-reload, exactly as for routes.
  */
 export async function rescanIslands(state: OpenPluginState): Promise<void> {
-  const islandsRoot = join(
-    Deno.cwd(),
-    state.resolvedOptions.islandsDir || DEFAULT_ISLANDS_DIR,
-  );
+  const islandsRoot = join(Deno.cwd(), state.resolvedOptions.islandsDir || DEFAULT_ISLANDS_DIR);
   const islandFiles = await scanIslands(islandsRoot);
   state.ctx.phase1.islandTagNames = islandFiles.map((f) => fileToTagName(f));
   state.ctx.phase1.islandFiles = islandFiles;
@@ -188,9 +185,9 @@ export function createBuildStartHook(state: OpenPluginState): Pick<Plugin, 'buil
               state.resolvedOptions.island?.upgradeStrategy,
             );
             log.info(
-              `Package islands: ${
-                state.ctx.phase1.packageIslandDecls.map((i) => i.tagName).join(', ')
-              }`,
+              `Package islands: ${state.ctx.phase1.packageIslandDecls
+                .map((i) => i.tagName)
+                .join(', ')}`,
             );
           }
         }
@@ -204,9 +201,7 @@ export function createBuildStartHook(state: OpenPluginState): Pick<Plugin, 'buil
         // share one descriptor instantiation (alpha.17 B1).
         try {
           const nodeModulesDir = join(Deno.cwd(), 'node_modules');
-          state.ctx.phase1.cemClassifications = await detectAndClassifyCemPackages(
-            nodeModulesDir,
-          );
+          state.ctx.phase1.cemClassifications = await detectAndClassifyCemPackages(nodeModulesDir);
           if (state.ctx.phase1.cemClassifications.length > 0) {
             log.info(
               `CEM auto-detection: classified ${state.ctx.phase1.cemClassifications.length} component(s) from node_modules`,
@@ -214,9 +209,7 @@ export function createBuildStartHook(state: OpenPluginState): Pick<Plugin, 'buil
           }
         } catch (err) {
           // CEM detection is best-effort - never fail the build
-          log.debug(
-            `CEM auto-detection failed (non-fatal): ${formatError(err)}`,
-          );
+          log.debug(`CEM auto-detection failed (non-fatal): ${formatError(err)}`);
           state.ctx.phase1.cemClassifications = [];
         }
 
@@ -232,14 +225,13 @@ export function createBuildStartHook(state: OpenPluginState): Pick<Plugin, 'buil
               tags?: readonly string[];
               tagNames?: readonly string[];
             };
-            for (
-              const deliveredTag of resolveIslandDeliveryTags(
-                tagName,
-                delivery.tags,
-                delivery.tagNames,
-                tagName,
-              )
-            ) knownTags.add(deliveredTag);
+            for (const deliveredTag of resolveIslandDeliveryTags(
+              tagName,
+              delivery.tags,
+              delivery.tagNames,
+              tagName,
+            ))
+              knownTags.add(deliveredTag);
           }
           for (const pkg of state.ctx.phase1.packageManifests) {
             for (const decl of pkg.declarations) {
@@ -251,14 +243,13 @@ export function createBuildStartHook(state: OpenPluginState): Pick<Plugin, 'buil
                 tags?: readonly string[];
                 tagNames?: readonly string[];
               };
-              for (
-                const deliveredTag of resolveIslandDeliveryTags(
-                  decl.tagName,
-                  delivery.tags ?? openElement?.tags,
-                  delivery.tagNames ?? openElement?.tagNames,
-                  decl.tagName,
-                )
-              ) knownTags.add(deliveredTag);
+              for (const deliveredTag of resolveIslandDeliveryTags(
+                decl.tagName,
+                delivery.tags ?? openElement?.tags,
+                delivery.tagNames ?? openElement?.tagNames,
+                decl.tagName,
+              ))
+                knownTags.add(deliveredTag);
             }
           }
           const pageRoutes = routes.filter((r) => r.type === 'page' && !r.special);
@@ -283,15 +274,11 @@ export function createBuildStartHook(state: OpenPluginState): Pick<Plugin, 'buil
             knownTags,
           });
           if (state.ctx.phase1.foreignTags.length > 0) {
-            log.info(
-              `Foreign WC tags consumed in JSX: ${state.ctx.phase1.foreignTags.join(', ')}`,
-            );
+            log.info(`Foreign WC tags consumed in JSX: ${state.ctx.phase1.foreignTags.join(', ')}`);
           }
         } catch (err) {
           // Foreign-tag discovery is best-effort - never fail the build
-          log.debug(
-            `Foreign-tag scan failed (non-fatal): ${formatError(err)}`,
-          );
+          log.debug(`Foreign-tag scan failed (non-fatal): ${formatError(err)}`);
           state.ctx.phase1.foreignTags = [];
         }
 
@@ -309,14 +296,10 @@ export function createBuildStartHook(state: OpenPluginState): Pick<Plugin, 'buil
         if (state.entryDescriptor) {
           state.ctx.phase1.ssrAdmissionPlan = state.entryDescriptor.ssrAdmissionPlan;
         }
-        const pageCount = routes.filter(
-          (r) => r.type === 'page' && !r.special,
-        ).length;
-        const apiCount = routes.filter(
-          (r) => r.type === 'api' && !r.special,
-        ).length;
-        const totalIslands = state.ctx.phase1.islandTagNames.length +
-          state.ctx.phase1.packageIslandDecls.length;
+        const pageCount = routes.filter((r) => r.type === 'page' && !r.special).length;
+        const apiCount = routes.filter((r) => r.type === 'api' && !r.special).length;
+        const totalIslands =
+          state.ctx.phase1.islandTagNames.length + state.ctx.phase1.packageIslandDecls.length;
         log.info(
           `Routes: ${pageCount} page(s), ${apiCount} API route(s), ` +
             `${totalIslands} island(s) - openElement Architecture`,

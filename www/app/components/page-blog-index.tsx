@@ -47,9 +47,7 @@ export default class BlogIndexPage extends OpenElement {
         <header class='masthead'>
           <p class='eyebrow'>{this.mastheadEyebrow}</p>
           <h1>{this.mastheadTitle}</h1>
-          <p class='lede'>
-            {this.mastheadLede}
-          </p>
+          <p class='lede'>{this.mastheadLede}</p>
           <p class='origin-note'>{this.originNote}</p>
         </header>
 
@@ -66,7 +64,9 @@ export default class BlogIndexPage extends OpenElement {
         <section class='stream' aria-label={this.streamLabel}>
           {this.rows.map((row) => (
             <a class='row' key={row.slug} href={row.href}>
-              <span class='row-index' aria-hidden='true'>{row.index}</span>
+              <span class='row-index' aria-hidden='true'>
+                {row.index}
+              </span>
               <div>
                 <span class='row-title'>{row.title}</span>
                 <span class='row-lang'>{row.langLabel}</span>

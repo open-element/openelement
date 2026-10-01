@@ -60,9 +60,7 @@ export function collectPublicProps(host: object): Record<string, unknown> {
  * predicate in security.ts that injectPropsSafe and the Router page
  * projectors also enforce, so the paths cannot diverge on which keys survive.
  */
-export function normalizePublicProps(
-  props: Record<string, unknown>,
-): Record<string, unknown> {
+export function normalizePublicProps(props: Record<string, unknown>): Record<string, unknown> {
   const clean: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(props)) {
     if (key.startsWith('__openElement')) continue;

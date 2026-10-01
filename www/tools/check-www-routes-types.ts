@@ -47,18 +47,15 @@ if (files.length === 0) {
  * generated module that was never produced — say so, naming generate:all.
  * Returns the repo-relative path when that diagnosis fires, else null.
  */
-async function generatedModuleHint(
-  output: string,
-  importerFile: string,
-): Promise<string | null> {
+async function generatedModuleHint(output: string, importerFile: string): Promise<string | null> {
   if (!output.includes('TS2307')) return null;
   for (const match of output.matchAll(/Cannot find module '([^']+)'/g)) {
     const specifier = match[1];
     const abs = specifier.startsWith('file://')
       ? fromFileUrl(specifier)
       : specifier.startsWith('.')
-      ? resolve(dirname(importerFile), specifier)
-      : null;
+        ? resolve(dirname(importerFile), specifier)
+        : null;
     if (!abs) continue;
     const check = new Deno.Command('git', {
       args: ['check-ignore', '-q', abs],

@@ -69,31 +69,31 @@ export async function verifyStripeSignature(
   const signedPayload = new Uint8Array(prefix.length + bodyBytes.length);
   signedPayload.set(prefix);
   signedPayload.set(bodyBytes, prefix.length);
-  const expected = new Uint8Array(
-    await crypto.subtle.sign(
-      'HMAC',
-      key,
-      signedPayload,
-    ),
-  );
+  const expected = new Uint8Array(await crypto.subtle.sign('HMAC', key, signedPayload));
   if (!signatures.some((candidate) => constantTimeEqual(expected, decodeHex(candidate)))) {
     throw new Error('Stripe signature mismatch');
   }
 }
 
 export function parseStripeEvent(rawBody: RawStripeBody): StripeEvent {
-  const json = typeof rawBody === 'string'
-    ? rawBody
-    : new TextDecoder('utf-8', { fatal: true }).decode(rawBody);
+  const json =
+    typeof rawBody === 'string'
+      ? rawBody
+      : new TextDecoder('utf-8', { fatal: true }).decode(rawBody);
   const value: unknown = JSON.parse(json);
   if (!value || typeof value !== 'object') throw new Error('invalid Stripe event');
   const event = value as Partial<StripeEvent>;
   if (
-    typeof event.id !== 'string' || !event.id.startsWith('evt_') ||
-    typeof event.type !== 'string' || !Number.isSafeInteger(event.created) ||
-    typeof event.livemode !== 'boolean' || !event.data ||
-    typeof event.data.object !== 'object' || event.data.object === null
-  ) throw new Error('invalid Stripe event');
+    typeof event.id !== 'string' ||
+    !event.id.startsWith('evt_') ||
+    typeof event.type !== 'string' ||
+    !Number.isSafeInteger(event.created) ||
+    typeof event.livemode !== 'boolean' ||
+    !event.data ||
+    typeof event.data.object !== 'object' ||
+    event.data.object === null
+  )
+    throw new Error('invalid Stripe event');
   return event as StripeEvent;
 }
 

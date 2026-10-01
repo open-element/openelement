@@ -33,7 +33,7 @@ import { readInstanceState, writeInstanceState } from '../src/instance-state.ts'
 
 installDomHarness();
 
-// deno-lint-ignore no-explicit-any
+// oxlint-disable-next-line no-explicit-any
 type AnyComponent = any;
 
 // ─── instance-state: the per-host foundation every lifecycle guard builds on ─
@@ -47,13 +47,22 @@ Deno.test('instance-state: slots are per-host — writes never leak across insta
     return 'a-value';
   });
   // The initializer runs exactly once per host.
-  assertEquals(readInstanceState(hostA, 'key', () => 'other'), 'a-value');
+  assertEquals(
+    readInstanceState(hostA, 'key', () => 'other'),
+    'a-value',
+  );
   assertEquals(inits, 1);
   // A second host gets its own slot, initialized independently.
   writeInstanceState(hostB, 'key', 'b-value');
-  assertEquals(readInstanceState(hostA, 'key', () => 'other'), 'a-value');
+  assertEquals(
+    readInstanceState(hostA, 'key', () => 'other'),
+    'a-value',
+  );
   assertEquals(first, 'a-value');
-  assertEquals(readInstanceState(hostB, 'key', () => 'other'), 'b-value');
+  assertEquals(
+    readInstanceState(hostB, 'key', () => 'other'),
+    'b-value',
+  );
 });
 
 // ─── open-theme-toggle: multi-instance / dual-state / reconnect / dispose (L4) ─
@@ -86,7 +95,10 @@ Deno.test('open-theme-toggle: two instances on one page resolve independently fr
   assertEquals(withAttr.getAttribute('data-theme'), 'light');
   // The shared document reflects each application in order (last writer wins)
   // — instances converge through the document channel, never by sharing state.
-  assertEquals(harness.docAttributes, [['data-theme', 'dark'], ['data-theme', 'light']]);
+  assertEquals(harness.docAttributes, [
+    ['data-theme', 'dark'],
+    ['data-theme', 'light'],
+  ]);
   // Each instance propagated its own resolution exactly once.
   assertEquals(harness.dispatched, ['open:theme-change', 'open:theme-change']);
   assertEquals(harness.writes, [], 'init must not persist');
@@ -160,11 +172,7 @@ Deno.test('open-theme-toggle: dual-state transitions re-apply host attribute, do
     ['data-theme', 'dark'],
   ]);
   assertEquals(harness.colorSchemes, ['dark', 'light', 'dark']);
-  assertEquals(harness.dispatched, [
-    'open:theme-change',
-    'open:theme-change',
-    'open:theme-change',
-  ]);
+  assertEquals(harness.dispatched, ['open:theme-change', 'open:theme-change', 'open:theme-change']);
   assertEquals(el.getAttribute('data-theme'), 'dark');
 });
 
@@ -390,7 +398,10 @@ Deno.test('open-tabs: activation decorates the WAI-ARIA wiring; selection re-dec
 Deno.test('open-tabs: click wiring attaches once per tab across dispose/reconnect; reconnect re-syncs stale ARIA', async () => {
   const { el, tabs } = await tabsHost(2, 2);
   el.onCsrRendered();
-  assertEquals(tabs.map((t) => t.clickListeners.length), [1, 1]);
+  assertEquals(
+    tabs.map((t) => t.clickListeners.length),
+    [1, 1],
+  );
 
   // Click selection goes through the wired listener exactly once per click.
   tabs[1].click();
@@ -398,7 +409,10 @@ Deno.test('open-tabs: click wiring attaches once per tab across dispose/reconnec
 
   // Dispose: the decorate effect is torn down and its slot cleared.
   el.disconnectedCallback();
-  assertEquals(readInstanceState(el, 'decorateEffect', () => 'missing'), undefined);
+  assertEquals(
+    readInstanceState(el, 'decorateEffect', () => 'missing'),
+    undefined,
+  );
 
   // While detached, external markup drifts stale (browser-level analog:
   // ui-dogfood ui-tabs.spec.ts reconnect test observes exactly this).
@@ -409,7 +423,10 @@ Deno.test('open-tabs: click wiring attaches once per tab across dispose/reconnec
   // and the WeakSet wiring guard keeps click listeners at one per tab.
   el.onCsrRendered();
   assertEquals(typeof readInstanceState(el, 'decorateEffect', () => undefined), 'function');
-  assertEquals(tabs.map((t) => t.clickListeners.length), [1, 1]);
+  assertEquals(
+    tabs.map((t) => t.clickListeners.length),
+    [1, 1],
+  );
   assertEquals(tabs[0].attrs.get('aria-selected'), 'true');
   assertEquals(tabs[1].attrs.get('aria-selected'), 'false');
 });

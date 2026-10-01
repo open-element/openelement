@@ -1,6 +1,7 @@
 import { compiledStyle } from './compiled-style.ts';
 
-export const openSearchStyles = [compiledStyle(`
+export const openSearchStyles = [
+  compiledStyle(`
   :host {
     display: inline-flex;
     align-items: center;
@@ -143,4 +144,5 @@ export const openSearchStyles = [compiledStyle(`
     border-radius: var(--radius-1);
     background: var(--bg-muted);
   }
-`)];
+`),
+];

@@ -42,10 +42,7 @@ export interface ThemeTokenFailure {
   text: string;
 }
 
-export function findThemeTokenFailures(
-  file: string,
-  lines: string[],
-): ThemeTokenFailure[] {
+export function findThemeTokenFailures(file: string, lines: string[]): ThemeTokenFailure[] {
   const failures: ThemeTokenFailure[] = [];
   for (let i = 0; i < lines.length; i++) {
     const text = lines[i];
@@ -63,10 +60,7 @@ export function findThemeTokenFailures(
   return failures;
 }
 
-export function findBreakpointFailures(
-  file: string,
-  lines: string[],
-): ThemeTokenFailure[] {
+export function findBreakpointFailures(file: string, lines: string[]): ThemeTokenFailure[] {
   const failures: ThemeTokenFailure[] = [];
   for (let i = 0; i < lines.length; i++) {
     if (!MEDIA_LINE.test(lines[i])) continue;

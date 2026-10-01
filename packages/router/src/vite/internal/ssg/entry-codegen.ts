@@ -185,15 +185,14 @@ function renderRouteResponseAndCatch(lines: string[], ctx: RouteHandlerEmitConte
     );
     lines.push(`    const __document = documentStreamParts({`);
     lines.push(`      streamBootstrap: __streamBrowserBootstrap,`);
-    for (
-      const optionLine of documentWrapOptionsLines({
-        titleExpr: `__doc.title || ${quoteGeneratedJavaScriptValue(docConfig.title)}`,
-        langExpr: `__doc.lang || ${quoteGeneratedJavaScriptValue(docConfig.lang)}`,
-        headExtrasExpr,
-        allowHeadExtrasScripts: docConfig.allowHeadExtrasScripts,
-        cspNonce: true,
-      })
-    ) lines.push(`      ${optionLine}`);
+    for (const optionLine of documentWrapOptionsLines({
+      titleExpr: `__doc.title || ${quoteGeneratedJavaScriptValue(docConfig.title)}`,
+      langExpr: `__doc.lang || ${quoteGeneratedJavaScriptValue(docConfig.lang)}`,
+      headExtrasExpr,
+      allowHeadExtrasScripts: docConfig.allowHeadExtrasScripts,
+      cspNonce: true,
+    }))
+      lines.push(`      ${optionLine}`);
     lines.push(`    });`);
     lines.push(`    for (const __record of __records) if (__record.failed) throw __record.error;`);
     lines.push(`    c.header('Cache-Control', 'private, no-cache');`);
@@ -211,12 +210,7 @@ function renderRouteResponseAndCatch(lines: string[], ctx: RouteHandlerEmitConte
       indent: '    ',
     });
 
-    renderRouteContentLines(
-      lines,
-      ctx,
-      `__pageProps(${ctx.route.varName}, __pageContext)`,
-      '    ',
-    );
+    renderRouteContentLines(lines, ctx, `__pageProps(${ctx.route.varName}, __pageContext)`, '    ');
     lines.push('');
     if (!isAction) {
       // #943: successful GET pages relax no-store to private,no-cache so the UA
@@ -232,15 +226,13 @@ function renderRouteResponseAndCatch(lines: string[], ctx: RouteHandlerEmitConte
     // handed in through the setter seam), so a CSP nonce reaches it and the
     // static render pass embeds the same tag at document time.
     lines.push(`    return c.html(wrapInDocument(content, {`);
-    for (
-      const optionLine of documentWrapOptionsLines({
-        titleExpr: `__doc.title || ${quoteGeneratedJavaScriptValue(docConfig.title)}`,
-        langExpr: `__doc.lang || ${quoteGeneratedJavaScriptValue(docConfig.lang)}`,
-        headExtrasExpr,
-        allowHeadExtrasScripts: docConfig.allowHeadExtrasScripts,
-        cspNonce: true,
-      })
-    ) {
+    for (const optionLine of documentWrapOptionsLines({
+      titleExpr: `__doc.title || ${quoteGeneratedJavaScriptValue(docConfig.title)}`,
+      langExpr: `__doc.lang || ${quoteGeneratedJavaScriptValue(docConfig.lang)}`,
+      headExtrasExpr,
+      allowHeadExtrasScripts: docConfig.allowHeadExtrasScripts,
+      cspNonce: true,
+    })) {
       lines.push(`      ${optionLine}`);
     }
     lines.push(`    })${isAction ? ', __actionStatus' : ''})`);
@@ -254,9 +246,7 @@ function renderRouteResponseAndCatch(lines: string[], ctx: RouteHandlerEmitConte
     // coerced to 303 (PRG must be method-safe and non-cacheable); the
     // imported runtime helper answers the fetch channel with the ActionResult
     // redirect shape. GET handlers keep the author's status.
-    lines.push(
-      `      return __actionRedirectResponse(c, err.location, __actionState.isFetch);`,
-    );
+    lines.push(`      return __actionRedirectResponse(c, err.location, __actionState.isFetch);`);
   } else {
     lines.push(`      return c.redirect(err.location, err.status)`);
   }
@@ -284,9 +274,7 @@ function renderRouteResponseAndCatch(lines: string[], ctx: RouteHandlerEmitConte
   // mapping and the diagnostic.
   if (isAction) {
     lines.push(`    if (__actionState.isFetch) {`);
-    lines.push(
-      `      return __actionErrorResponse(c, ${pathLiteral}, err, import.meta.env.PROD);`,
-    );
+    lines.push(`      return __actionErrorResponse(c, ${pathLiteral}, err, import.meta.env.PROD);`);
     lines.push(`    }`);
   }
   // POST takes the same nearest-error-boundary
@@ -311,15 +299,13 @@ function renderRouteResponseAndCatch(lines: string[], ctx: RouteHandlerEmitConte
       `        const errorContent = __renderAppShell(__errorHtml, c.req.path || ${pathLiteral}, { routeMeta: __routeMetaValue })`,
     );
     lines.push(`        return c.html(wrapInDocument(errorContent, {`);
-    for (
-      const optionLine of documentWrapOptionsLines({
-        titleExpr: `__doc.title || ${quoteGeneratedJavaScriptValue(docConfig.title)}`,
-        langExpr: `__doc.lang || ${quoteGeneratedJavaScriptValue(docConfig.lang)}`,
-        headExtrasExpr,
-        allowHeadExtrasScripts: docConfig.allowHeadExtrasScripts,
-        cspNonce: true,
-      })
-    ) {
+    for (const optionLine of documentWrapOptionsLines({
+      titleExpr: `__doc.title || ${quoteGeneratedJavaScriptValue(docConfig.title)}`,
+      langExpr: `__doc.lang || ${quoteGeneratedJavaScriptValue(docConfig.lang)}`,
+      headExtrasExpr,
+      allowHeadExtrasScripts: docConfig.allowHeadExtrasScripts,
+      cspNonce: true,
+    })) {
       lines.push(`          ${optionLine}`);
     }
     lines.push(`        }), 500)`);
@@ -332,9 +318,7 @@ function renderRouteResponseAndCatch(lines: string[], ctx: RouteHandlerEmitConte
   }
 
   const failureLabel = isAction ? 'Action POST failed' : 'Route render failed';
-  lines.push(
-    `    console.error('[openElement] ${failureLabel} for ' + ${pathLiteral} + ':', err)`,
-  );
+  lines.push(`    console.error('[openElement] ${failureLabel} for ' + ${pathLiteral} + ':', err)`);
   lines.push(`    if (import.meta.env.PROD) {`);
   lines.push(`      return c.html('<h1>500 Internal Server Error</h1>', 500)`);
   lines.push(`    } else {`);
@@ -363,9 +347,9 @@ export function renderRouteHandler(
     tagNameExpr: pageRouteTagExpr(route.varName, route.tagName),
     pageDefExpr: pageDefinitionExpr(route.varName),
     routeMeta: routeMetaExpr(route.varName),
-    routeContext: `{ path: ${quoteGeneratedJavaScriptValue(route.path)}, filePath: ${
-      quoteGeneratedJavaScriptValue(route.filePath)
-    } }`,
+    routeContext: `{ path: ${quoteGeneratedJavaScriptValue(route.path)}, filePath: ${quoteGeneratedJavaScriptValue(
+      route.filePath,
+    )} }`,
     headExtrasExpr: isSSG ? '__headExtras' : quoteGeneratedJavaScriptValue(docConfig.headExtras),
     renderer: renderer ?? 'native',
   };

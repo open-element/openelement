@@ -85,9 +85,7 @@ const POLICY_BY_CLASS: Record<string, Pick<ComponentMeta, 'layer' | 'hydrate' | 
   OpenTabs: { layer: 'dsd-interactive', hydrate: 'load', status: 'experimental' },
 };
 
-function policyForClass(
-  className: string,
-): Pick<ComponentMeta, 'layer' | 'hydrate' | 'status'> {
+function policyForClass(className: string): Pick<ComponentMeta, 'layer' | 'hydrate' | 'status'> {
   const policy = POLICY_BY_CLASS[className];
   if (!policy) {
     throw new Error(
@@ -153,11 +151,12 @@ function parseObservedAttributes(text: string): { name: string; type: string }[]
         if (attribute === null) continue;
         const attrName = attribute ?? kebab(node.name.text);
         const initializer = node.initializer?.getText(source) ?? '';
-        const inferred = type !== 'string'
-          ? type
-          : initializer === 'true' || initializer === 'false'
-          ? 'boolean'
-          : inferAttributeType(attrName);
+        const inferred =
+          type !== 'string'
+            ? type
+            : initializer === 'true' || initializer === 'false'
+              ? 'boolean'
+              : inferAttributeType(attrName);
         out.push({ name: attrName, type: inferred });
       }
     }
@@ -234,7 +233,8 @@ export function parseEvents(text: string): OpenElementEvent[] {
   const source = parseTypeScript(text, 'component.tsx');
   const visit = (node: ts.Node): void => {
     if (
-      ts.isNewExpression(node) && ts.isIdentifier(node.expression) &&
+      ts.isNewExpression(node) &&
+      ts.isIdentifier(node.expression) &&
       node.expression.text === 'CustomEvent'
     ) {
       const [nameNode, optionsNode] = node.arguments ?? [];
@@ -243,8 +243,9 @@ export function parseEvents(text: string): OpenElementEvent[] {
       seen.add(name);
       let detailType: string | undefined;
       if (optionsNode && ts.isObjectLiteralExpression(optionsNode)) {
-        const detail = optionsNode.properties.find((property) =>
-          ts.isPropertyAssignment(property) && property.name.getText(source) === 'detail'
+        const detail = optionsNode.properties.find(
+          (property) =>
+            ts.isPropertyAssignment(property) && property.name.getText(source) === 'detail',
         );
         if (detail && ts.isPropertyAssignment(detail)) {
           detailType = inferExpressionType(detail.initializer, source);
@@ -410,9 +411,7 @@ if (import.meta.main) {
       Deno.exit(1);
     }
     if (existing !== text) {
-      console.error(
-        `${target} is stale; run deno task --cwd packages/ui generate:ui-manifest`,
-      );
+      console.error(`${target} is stale; run deno task --cwd packages/ui generate:ui-manifest`);
       Deno.exit(1);
     }
     console.log(`UI manifest check passed (${manifest.declarations.length} declarations).`);

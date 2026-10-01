@@ -101,8 +101,7 @@ Deno.test('mdxToCompiledPageSource output passes through the compiler unchanged 
 });
 
 Deno.test({
-  name:
-    'mdxPlugin: Phase 3-style SSR viteBuild (configFile:false, noExternal) compiles .mdx routes',
+  name: 'mdxPlugin: Phase 3-style SSR viteBuild (configFile:false, noExternal) compiles .mdx routes',
   sanitizeOps: false,
   sanitizeResources: false,
   fn: async () => {

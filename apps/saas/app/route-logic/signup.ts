@@ -61,12 +61,15 @@ export function createSignupAction(createClient: SignupClientFactory = createSer
     }
     const callback = new URL('/auth/callback', ctx.request.url);
     callback.searchParams.set('next', next);
-    const { data, error } = await createClient(ctx.env, ctx.request, ctx.responseHeaders).auth
-      .signUp({
-        email,
-        password,
-        options: { emailRedirectTo: callback.href },
-      });
+    const { data, error } = await createClient(
+      ctx.env,
+      ctx.request,
+      ctx.responseHeaders,
+    ).auth.signUp({
+      email,
+      password,
+      options: { emailRedirectTo: callback.href },
+    });
     if (error) return fail(422, { error: publicAuthError(error), email });
     if (data.session) throw redirect(next);
     // Success is PRG (#1060): fail() accepts only 4xx, so the confirmation

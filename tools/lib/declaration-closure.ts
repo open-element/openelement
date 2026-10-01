@@ -165,9 +165,7 @@ export function buildDeclarationClosure(
     for (const rawSpecifier of specifiers) {
       if (!isRelativeSpecifier(rawSpecifier)) continue;
       const specifier = toPosix(rawSpecifier);
-      const joined = normalizeRelative(
-        `${dirnameOf(file)}/${specifier}`,
-      );
+      const joined = normalizeRelative(`${dirnameOf(file)}/${specifier}`);
       if (joined === null) {
         escaped.push({ from: file, specifier: rawSpecifier });
         continue;

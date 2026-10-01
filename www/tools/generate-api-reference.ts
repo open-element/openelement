@@ -213,8 +213,9 @@ function defaultOf(declaration: ts.Declaration): string {
 function docText(checker: ts.TypeChecker, symbol: ts.Symbol, declaration: ts.Declaration): string {
   const body = ts.displayPartsToString(symbol.getDocumentationComment(checker)).trim();
   if (body !== '') return trim(body, 400);
-  const tagComments = ts.getJSDocTags(declaration)
-    .map((tag) => typeof tag.comment === 'string' ? `@${tag.tagName.text} ${tag.comment}` : '')
+  const tagComments = ts
+    .getJSDocTags(declaration)
+    .map((tag) => (typeof tag.comment === 'string' ? `@${tag.tagName.text} ${tag.comment}` : ''))
     .filter((comment) => comment !== '');
   return tagComments.length > 0 ? trim(tagComments.join(' '), 400) : '';
 }
@@ -232,7 +233,8 @@ function signatureOf(
   declaration: ts.Declaration,
   kind: string,
 ): string {
-  const flags = ts.TypeFormatFlags.NoTruncation |
+  const flags =
+    ts.TypeFormatFlags.NoTruncation |
     ts.TypeFormatFlags.UseAliasDefinedOutsideCurrentScope |
     ts.TypeFormatFlags.WriteTypeArgumentsOfSignature;
   if (kind === 'class') {
@@ -338,19 +340,23 @@ function optionRows(
       MEMBER_LIMIT,
     ).replace(/ \| undefined$/, '');
     const path = prefix === '' ? name : `${prefix}.${name}`;
-    const required = !('questionToken' in declaration) ||
+    const required =
+      !('questionToken' in declaration) ||
       (declaration as { questionToken?: ts.QuestionToken }).questionToken === undefined;
-    const nested = isOptionBag(declaredType) &&
+    const nested =
+      isOptionBag(declaredType) &&
       !context.visited.has(declaredType.id) &&
       // A member whose type is a named interface is a group only when its
       // members are all optional (an option bag, not a data record).
       (declaredType.symbol === undefined ||
         declaredType.getProperties().every((property) => {
           const propertyDeclaration = property.valueDeclaration ?? property.declarations?.[0];
-          return propertyDeclaration !== undefined &&
+          return (
+            propertyDeclaration !== undefined &&
             'questionToken' in propertyDeclaration &&
             (propertyDeclaration as { questionToken?: ts.QuestionToken }).questionToken !==
-              undefined;
+              undefined
+          );
         }));
     if (nested) {
       const before = out.length;
@@ -379,8 +385,8 @@ function optionsOfSignature(
   const call = checker.getSignaturesOfType(type, ts.SignatureKind.Call)[0];
   const parameter = call?.getParameters()[0];
   if (!parameter) return [];
-  const parameterDeclaration = parameter.valueDeclaration ?? parameter.declarations?.[0] ??
-    declaration;
+  const parameterDeclaration =
+    parameter.valueDeclaration ?? parameter.declarations?.[0] ?? declaration;
   const parameterType = checker.getTypeOfSymbolAtLocation(parameter, parameterDeclaration);
   // Optional-parameter unions (`config?: OpenPipelineConfig` resolves to
   // `OpenPipelineConfig | undefined`) keep the object member; a union of two
@@ -412,14 +418,20 @@ function optionsOfDeclaration(checker: ts.TypeChecker, target: ts.Symbol): Optio
 function entryRecord(entryFile: string, repoRoot: string): ExportRecord {
   const resolvedEntry = resolve(entryFile);
   const text = Deno.readTextFileSync(resolvedEntry);
-  const leading = ts.getLeadingCommentRanges(text, 0)?.find((range) =>
-    range.kind === ts.SyntaxKind.MultiLineCommentTrivia
-  );
+  const leading = ts
+    .getLeadingCommentRanges(text, 0)
+    ?.find((range) => range.kind === ts.SyntaxKind.MultiLineCommentTrivia);
   const summary = leading
-    ? text.slice(leading.pos, leading.end)
-      .split('\n')
-      .map((line) => line.trim().replace(/^\/?\*+\/?/, '').trim())
-      .find((line) => line !== '') ?? ''
+    ? (text
+        .slice(leading.pos, leading.end)
+        .split('\n')
+        .map((line) =>
+          line
+            .trim()
+            .replace(/^\/?\*+\/?/, '')
+            .trim(),
+        )
+        .find((line) => line !== '') ?? '')
     : '';
   const name = resolvedEntry.slice(resolvedEntry.lastIndexOf('/') + 1).replace(/\.[^.]+$/, '');
   return {
@@ -447,43 +459,52 @@ function enumerateExports(
   const moduleSymbol = checker.getSymbolAtLocation(source);
   if (!moduleSymbol) throw new Error(`TypeScript did not resolve module ${entryFile}`);
 
-  return checker.getExportsOfModule(moduleSymbol).map((exportSymbol) => {
-    let step = 'resolveAlias';
-    try {
-      const target = resolveAlias(checker, exportSymbol);
-      step = 'declarationOf';
-      const { declaration, file, line } = declarationOf(target, source);
-      step = 'exportKind';
-      const kind = exportKind(target.flags);
-      step = 'optionsOfSignature';
-      const type = checker.getTypeOfSymbolAtLocation(target, declaration);
-      return {
-        name: exportSymbol.getName(),
-        kind,
-        summary: ts.displayPartsToString(target.getDocumentationComment(checker))
-          .replace(/\s+/g, ' ').trim(),
-        signature: signatureOf(checker, target, declaration, kind),
-        // Options come from a callable's first parameter or from the members of
-        // a declared options interface/alias — the two shapes a consumer reads a
-        // table for.
-        options: kind === 'function' || kind === 'entry'
-          ? optionsOfSignature(checker, type, declaration)
-          : kind === 'interface' || kind === 'type'
-          ? optionsOfDeclaration(checker, target)
-          : [],
-        source: { path: repoRelativePath(file, repoRoot), line },
-        stability: 'public',
-        anchor: '',
-      };
-    } catch (error) {
-      const err = error as Error;
-      throw new Error(
-        `export ${exportSymbol.getName()} failed at ${step}: ${err.message.split('\n')[0]}\n${
-          (err.stack ?? '').split('\n').slice(1, 8).join('\n')
-        }`,
-      );
-    }
-  }).sort((a, b) => a.name.localeCompare(b.name));
+  return checker
+    .getExportsOfModule(moduleSymbol)
+    .map((exportSymbol) => {
+      let step = 'resolveAlias';
+      try {
+        const target = resolveAlias(checker, exportSymbol);
+        step = 'declarationOf';
+        const { declaration, file, line } = declarationOf(target, source);
+        step = 'exportKind';
+        const kind = exportKind(target.flags);
+        step = 'optionsOfSignature';
+        const type = checker.getTypeOfSymbolAtLocation(target, declaration);
+        return {
+          name: exportSymbol.getName(),
+          kind,
+          summary: ts
+            .displayPartsToString(target.getDocumentationComment(checker))
+            .replace(/\s+/g, ' ')
+            .trim(),
+          signature: signatureOf(checker, target, declaration, kind),
+          // Options come from a callable's first parameter or from the members of
+          // a declared options interface/alias — the two shapes a consumer reads a
+          // table for.
+          options:
+            kind === 'function' || kind === 'entry'
+              ? optionsOfSignature(checker, type, declaration)
+              : kind === 'interface' || kind === 'type'
+                ? optionsOfDeclaration(checker, target)
+                : [],
+          source: { path: repoRelativePath(file, repoRoot), line },
+          stability: 'public',
+          anchor: '',
+        };
+      } catch (error) {
+        const err = error as Error;
+        throw new Error(
+          `export ${exportSymbol.getName()} failed at ${step}: ${err.message.split('\n')[0]}\n${(
+            err.stack ?? ''
+          )
+            .split('\n')
+            .slice(1, 8)
+            .join('\n')}`,
+        );
+      }
+    })
+    .sort((a, b) => a.name.localeCompare(b.name));
 }
 
 /** The application config option table, rendered from the config options type. */
@@ -495,9 +516,9 @@ function readConfigOptions(paths: Record<string, string[]>): OptionRecord[] {
   if (!source) throw new Error(`TypeScript did not load config type entry ${CONFIG_TYPE.entry}`);
   const moduleSymbol = checker.getSymbolAtLocation(source);
   const configSymbol = moduleSymbol
-    ? checker.getExportsOfModule(moduleSymbol).find((symbol) =>
-      symbol.getName() === CONFIG_TYPE.type
-    )
+    ? checker
+        .getExportsOfModule(moduleSymbol)
+        .find((symbol) => symbol.getName() === CONFIG_TYPE.type)
     : undefined;
   if (!configSymbol) {
     throw new Error(`${CONFIG_TYPE.entry} does not export ${CONFIG_TYPE.type}`);
@@ -531,9 +552,10 @@ export async function buildApiReference(): Promise<ApiReferenceBuild> {
   const records: PackageRecord[] = [];
 
   for (const info of packages) {
-    const exportsMap = typeof info.exports === 'string'
-      ? { '.': info.exports }
-      : (info.exports ?? {}) as Record<string, string>;
+    const exportsMap =
+      typeof info.exports === 'string'
+        ? { '.': info.exports }
+        : ((info.exports ?? {}) as Record<string, string>);
     const shortName = info.name.slice(info.name.lastIndexOf('/') + 1);
     const subpaths: SubpathRecord[] = [];
 
@@ -645,13 +667,15 @@ export function renderApiReferenceModule(build: ApiReferenceBuild): string {
     configOptions: build.configOptions,
     searchRecords: searchRecords(build),
   };
-  return '// Auto-generated by www/tools/generate-api-reference.ts (#1158) — do not edit\n' +
+  return (
+    '// Auto-generated by www/tools/generate-api-reference.ts (#1158) — do not edit\n' +
     '// Source of truth: packages/<name>/deno.json exports + JSDoc, the router\n' +
     '// application options type (packages/router/src/vite/index.ts\n' +
     '// OpenElementOptions) and packages/ui/src/generated-manifest.json.\n' +
     '// Regenerate with `deno task --cwd www generate:api-reference`; the file is\n' +
     '// untracked and rebuilt before test/site:build.\n' +
-    `export const apiReference = ${formatJson(payload).trimEnd()} as const;\n`;
+    `export const apiReference = ${formatJson(payload).trimEnd()} as const;\n`
+  );
 }
 
 if (import.meta.main) {

@@ -37,8 +37,8 @@ export function transformIslandSource(
   // Extract tag name from file path using the same helper as the SSG route
   // scanner. This keeps route and island tag-name derivation consistent and
   // safely handles edge cases such as top-level numeric file names.
-  const relativePath = normalizedPath.split(`/${normalizedIslandsDir}/`)[1] ??
-    normalizedPath.split('/').pop()!;
+  const relativePath =
+    normalizedPath.split(`/${normalizedIslandsDir}/`)[1] ?? normalizedPath.split('/').pop()!;
   const tagName = pathToTagName(relativePath);
 
   // Files that do not yield a valid name are skipped silently.

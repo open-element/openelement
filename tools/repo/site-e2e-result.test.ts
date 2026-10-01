@@ -86,9 +86,7 @@ Deno.test('site e2e audit accepts a retry-cleared run and records the retries', 
   const inflated = healthy();
   inflated.projects.chromium = { passed: 231, failed: 0, skipped: 0, flaky: 232 };
   inflated.flaky = 232;
-  assert(
-    auditSiteE2e(inflated).some((f) => f.includes('chromium flaky=232 > passed=231')),
-  );
+  assert(auditSiteE2e(inflated).some((f) => f.includes('chromium flaky=232 > passed=231')));
 
   // ...and the executed-count binding moves with it, so a summary that hides
   // retries (expected alone == executed) is rejected when retries happened.
@@ -160,9 +158,7 @@ Deno.test('site e2e audit rejects an unexpected extra project', () => {
     skipped: 0,
     flaky: 0,
   };
-  assert(
-    auditSiteE2e(result).some((f) => f.includes('unexpected extra projects: opera')),
-  );
+  assert(auditSiteE2e(result).some((f) => f.includes('unexpected extra projects: opera')));
 });
 
 Deno.test('site e2e audit rejects a suite shrunk below the per-browser floor', () => {
@@ -177,9 +173,10 @@ Deno.test('site e2e audit rejects a suite shrunk below the per-browser floor', (
   result.expected = result.passed;
   const failures = auditSiteE2e(result);
   assert(
-    failures.some((f) =>
-      f.includes(`chromium passed=${SITE_E2E_MIN_PASSED_PER_PROJECT - 1}`) &&
-      f.includes(`must be >= ${SITE_E2E_MIN_PASSED_PER_PROJECT}`)
+    failures.some(
+      (f) =>
+        f.includes(`chromium passed=${SITE_E2E_MIN_PASSED_PER_PROJECT - 1}`) &&
+        f.includes(`must be >= ${SITE_E2E_MIN_PASSED_PER_PROJECT}`),
     ),
   );
 });
@@ -187,9 +184,7 @@ Deno.test('site e2e audit rejects a suite shrunk below the per-browser floor', (
 Deno.test('site e2e audit rejects a forged or shrunk expected count', () => {
   const shrunk = healthy();
   shrunk.expected = 3;
-  assert(
-    auditSiteE2e(shrunk).some((f) => f.includes('expected must be a safe integer >=')),
-  );
+  assert(auditSiteE2e(shrunk).some((f) => f.includes('expected must be a safe integer >=')));
 
   const mismatched = healthy();
   mismatched.expected = TOTAL + 1;
@@ -205,14 +200,17 @@ Deno.test('site e2e audit rejects a forged or shrunk expected count', () => {
 });
 
 Deno.test('site e2e audit rejects a wrong or missing configFile', () => {
-  for (
-    const bad of ['e2e/playwright.config.ts', '/abs/www/e2e/playwright.config.ts', '', undefined]
-  ) {
+  for (const bad of [
+    'e2e/playwright.config.ts',
+    '/abs/www/e2e/playwright.config.ts',
+    '',
+    undefined,
+  ]) {
     const result = healthy() as unknown as Record<string, unknown>;
     result.configFile = bad;
     assert(
       auditSiteE2e(result as unknown as SiteE2eResult).some((f) =>
-        f.includes('configFile must be www/e2e/playwright.config.ts')
+        f.includes('configFile must be www/e2e/playwright.config.ts'),
       ),
       `expected configFile rejection for ${JSON.stringify(bad)}`,
     );
@@ -225,7 +223,7 @@ Deno.test('site e2e audit rejects a non-empty, malformed, or missing grep', () =
     result.grep = bad;
     assert(
       auditSiteE2e(result as unknown as SiteE2eResult).some((f) =>
-        f.includes('grep must be present and serialize to an empty object')
+        f.includes('grep must be present and serialize to an empty object'),
       ),
       `expected grep rejection for ${JSON.stringify(bad)}`,
     );
@@ -238,7 +236,7 @@ Deno.test('site e2e audit rejects a missing or malformed reportSha256', () => {
     result.reportSha256 = bad;
     assert(
       auditSiteE2e(result as unknown as SiteE2eResult).some((f) =>
-        f.includes('reportSha256 must be 64 lowercase hex chars')
+        f.includes('reportSha256 must be 64 lowercase hex chars'),
       ),
       `expected reportSha256 rejection for ${JSON.stringify(bad)}`,
     );
@@ -251,7 +249,7 @@ Deno.test('site e2e audit rejects a missing or malformed candidateSha', () => {
     result.candidateSha = bad;
     assert(
       auditSiteE2e(result as unknown as SiteE2eResult).some((f) =>
-        f.includes('candidateSha must be a 40-char hex commit')
+        f.includes('candidateSha must be a 40-char hex commit'),
       ),
       `expected candidateSha rejection for ${JSON.stringify(bad)}`,
     );
@@ -273,7 +271,7 @@ Deno.test('site e2e audit rejects non-integer, negative, string, and NaN values'
     result.projects.chromium.passed = bad;
     assert(
       auditSiteE2e(result as unknown as SiteE2eResult).some((f) =>
-        f.includes('chromium.passed must be a non-negative safe integer')
+        f.includes('chromium.passed must be a non-negative safe integer'),
       ),
       `expected rejection for ${JSON.stringify(bad)}`,
     );
@@ -287,15 +285,19 @@ Deno.test('site e2e audit rejects non-integer, negative, string, and NaN values'
 
 Deno.test('summarizePlaywrightReport counts per project and skips', () => {
   const report = {
-    suites: [{
-      specs: [{
-        tests: [
-          { projectName: 'chromium', status: 'expected', results: [{ status: 'passed' }] },
-          { projectName: 'chromium', status: 'unexpected', results: [{ status: 'failed' }] },
-          { projectName: 'firefox', status: 'skipped', results: [{ status: 'skipped' }] },
+    suites: [
+      {
+        specs: [
+          {
+            tests: [
+              { projectName: 'chromium', status: 'expected', results: [{ status: 'passed' }] },
+              { projectName: 'chromium', status: 'unexpected', results: [{ status: 'failed' }] },
+              { projectName: 'firefox', status: 'skipped', results: [{ status: 'skipped' }] },
+            ],
+          },
         ],
-      }],
-    }],
+      },
+    ],
   };
   assertEquals(summarizePlaywrightReport(report), {
     chromium: { passed: 1, failed: 1, skipped: 0, flaky: 0 },
@@ -309,33 +311,37 @@ Deno.test('summarizePlaywrightReport counts a retry-cleared test as a pass and a
   // `unexpected: 0`. Two such tests, and one that failed both attempts —
   // which stays a failure, because `--retries 1` must not launder a real one.
   const report = {
-    suites: [{
-      specs: [{
-        tests: [
+    suites: [
+      {
+        specs: [
           {
-            projectName: 'chromium',
-            status: 'flaky',
-            results: [{ status: 'timedOut' }, { status: 'passed' }],
-          },
-          {
-            projectName: 'chromium',
-            status: 'flaky',
-            results: [{ status: 'failed' }, { status: 'passed' }],
-          },
-          {
-            projectName: 'firefox',
-            status: 'unexpected',
-            results: [{ status: 'failed' }, { status: 'failed' }],
-          },
-          {
-            projectName: 'webkit',
-            status: 'flaky',
-            // A retry that itself timed out is a failure, not a flake.
-            results: [{ status: 'passed' }, { status: 'timedOut' }],
+            tests: [
+              {
+                projectName: 'chromium',
+                status: 'flaky',
+                results: [{ status: 'timedOut' }, { status: 'passed' }],
+              },
+              {
+                projectName: 'chromium',
+                status: 'flaky',
+                results: [{ status: 'failed' }, { status: 'passed' }],
+              },
+              {
+                projectName: 'firefox',
+                status: 'unexpected',
+                results: [{ status: 'failed' }, { status: 'failed' }],
+              },
+              {
+                projectName: 'webkit',
+                status: 'flaky',
+                // A retry that itself timed out is a failure, not a flake.
+                results: [{ status: 'passed' }, { status: 'timedOut' }],
+              },
+            ],
           },
         ],
-      }],
-    }],
+      },
+    ],
   };
   assertEquals(summarizePlaywrightReport(report), {
     chromium: { passed: 2, failed: 0, skipped: 0, flaky: 2 },
@@ -346,15 +352,19 @@ Deno.test('summarizePlaywrightReport counts a retry-cleared test as a pass and a
 
 Deno.test('summarizePlaywrightReport fails closed on a test that never executed', () => {
   const report = {
-    suites: [{
-      specs: [{
-        tests: [
-          { projectName: 'chromium', status: 'expected', results: [] },
-          { projectName: 'firefox', status: 'expected' },
-          { projectName: 'webkit', status: 'expected', results: [{ status: 'passed' }] },
+    suites: [
+      {
+        specs: [
+          {
+            tests: [
+              { projectName: 'chromium', status: 'expected', results: [] },
+              { projectName: 'firefox', status: 'expected' },
+              { projectName: 'webkit', status: 'expected', results: [{ status: 'passed' }] },
+            ],
+          },
         ],
-      }],
-    }],
+      },
+    ],
   };
   assertEquals(summarizePlaywrightReport(report), {
     chromium: { passed: 0, failed: 1, skipped: 0, flaky: 0 },
@@ -364,28 +374,23 @@ Deno.test('summarizePlaywrightReport fails closed on a test that never executed'
 });
 
 Deno.test('runner args reject suite-filtering flags before Playwright launches', () => {
-  for (
-    const args of [
-      ['--grep', 'foo'],
-      ['--grep=foo'],
-      ['-g', 'foo'],
-      ['--grep-invert', 'foo'],
-      ['--project', 'chromium'],
-      ['--project=chromium'],
-      ['--only-changed'],
-      ['--last-failed'],
-      ['--list'],
-      ['e2e/specs/home.spec.ts'],
-      ['--headed'],
-      ['--repeat-each', '2'],
-      ['--repeat-each=3'],
-      ['--workers'],
-    ]
-  ) {
-    assert(
-      checkRunnerArgs(args) !== null,
-      `expected rejection for ${JSON.stringify(args)}`,
-    );
+  for (const args of [
+    ['--grep', 'foo'],
+    ['--grep=foo'],
+    ['-g', 'foo'],
+    ['--grep-invert', 'foo'],
+    ['--project', 'chromium'],
+    ['--project=chromium'],
+    ['--only-changed'],
+    ['--last-failed'],
+    ['--list'],
+    ['e2e/specs/home.spec.ts'],
+    ['--headed'],
+    ['--repeat-each', '2'],
+    ['--repeat-each=3'],
+    ['--workers'],
+  ]) {
+    assert(checkRunnerArgs(args) !== null, `expected rejection for ${JSON.stringify(args)}`);
   }
 });
 

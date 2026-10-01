@@ -89,16 +89,14 @@ const STREAM_FRAME_ENTITY = /&(?:#[xX]?[0-9a-fA-F]+;?|colon;|Tab;|NewLine;)/g;
 
 function decodeStreamFrameEntities(value: string): string {
   return value.replace(STREAM_FRAME_ENTITY, (entity) => {
-    if (entity.charCodeAt(1) !== 0x23) { // named form: &colon; &Tab; &NewLine;
+    if (entity.charCodeAt(1) !== 0x23) {
+      // named form: &colon; &Tab; &NewLine;
       if (entity === '&colon;') return ':';
       return entity === '&Tab;' ? '\t' : '\n';
     }
     const body = entity.slice(2);
     const hex = body.charCodeAt(0) === 0x78 || body.charCodeAt(0) === 0x58;
-    const digits = body.slice(
-      hex ? 1 : 0,
-      body.endsWith(';') ? -1 : undefined,
-    );
+    const digits = body.slice(hex ? 1 : 0, body.endsWith(';') ? -1 : undefined);
     const code = hex ? parseInt(digits, 16) : parseInt(digits, 10);
     return Number.isFinite(code) && code > 0 && code <= 0x10ffff
       ? String.fromCodePoint(code)
@@ -114,11 +112,16 @@ function decodeStreamFrameEntities(value: string): string {
  */
 export function unsafeStreamFrameAttribute(name: string, value: string): boolean {
   const lower = name.toLowerCase();
-  return lower.startsWith('on') || lower.startsWith('data-oe-') || lower === 'srcdoc' ||
+  return (
+    lower.startsWith('on') ||
+    lower.startsWith('data-oe-') ||
+    lower === 'srcdoc' ||
     (urlAttributes.has(lower) &&
       STREAM_FRAME_UNSAFE_URL.test(
         decodeStreamFrameEntities(value)
-          .split('').filter((char) => char.charCodeAt(0) > STREAM_FRAME_URL_CONTROL_MAX)
+          .split('')
+          .filter((char) => char.charCodeAt(0) > STREAM_FRAME_URL_CONTROL_MAX)
           .join(''),
-      ));
+      ))
+  );
 }

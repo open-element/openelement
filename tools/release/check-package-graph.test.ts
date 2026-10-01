@@ -47,10 +47,7 @@ Deno.test('package surface: missing and unowned packages are reported', () => {
 });
 
 Deno.test('package configs: embedded create CLI version matches the package line', () => {
-  assertEquals(
-    createVersionFailures(`export const CREATE_VERSION = '${PACKAGE_VERSION}';\n`),
-    [],
-  );
+  assertEquals(createVersionFailures(`export const CREATE_VERSION = '${PACKAGE_VERSION}';\n`), []);
 });
 
 Deno.test('package configs: drifted create CLI version is rejected', () => {

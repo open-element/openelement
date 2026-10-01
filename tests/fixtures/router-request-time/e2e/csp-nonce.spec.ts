@@ -37,7 +37,9 @@ function expectEveryScriptCarriesNonce(html: string, nonce: string): void {
 }
 
 test.describe('CSP nonce (request-time)', () => {
-  test('every framework-generated script carries the request nonce from the CSP header', async ({ request }) => {
+  test('every framework-generated script carries the request nonce from the CSP header', async ({
+    request,
+  }) => {
     const response = await request.get('/live?x=csp');
     expect(response.ok()).toBe(true);
     const csp = response.headers()[CSP_HEADER];
@@ -54,7 +56,9 @@ test.describe('CSP nonce (request-time)', () => {
     expectEveryScriptCarriesNonce(html, nonce!);
   });
 
-  test('sequential and concurrent requests get distinct, self-consistent nonces', async ({ request }) => {
+  test('sequential and concurrent requests get distinct, self-consistent nonces', async ({
+    request,
+  }) => {
     const read = async (x: string) => {
       const response = await request.get(`/live?x=${x}`);
       const html = await response.text();
@@ -107,7 +111,9 @@ test.describe('CSP nonce (request-time)', () => {
     expect(cspViolations).toEqual([]);
   });
 
-  test('the prerendered static page ships no nonce attributes (SSG stays nonce-free)', async ({ request }) => {
+  test('the prerendered static page ships no nonce attributes (SSG stays nonce-free)', async ({
+    request,
+  }) => {
     const response = await request.get('/');
     expect(response.ok()).toBe(true);
     // Static files are served from disk: no middleware, no CSP header...

@@ -182,10 +182,7 @@ Deno.test('start cli: --debug expands the raw stack (#1413)', async () => {
     const { code, output } = await runCli(dir, ['--debug']);
     assertEquals(code, 1);
     assertStringIncludes(output, 'server entry exploded');
-    assert(
-      /\n\s+at .*:\d+:\d+/.test(output),
-      `--debug must expand a raw stack, got:\n${output}`,
-    );
+    assert(/\n\s+at .*:\d+:\d+/.test(output), `--debug must expand a raw stack, got:\n${output}`);
   } finally {
     await Deno.remove(dir, { recursive: true });
   }

@@ -37,7 +37,9 @@ test.describe('Layout Island Shell', () => {
       return {
         light: layout?.hasAttribute('data-oe-light') ?? false,
         // Landmark structure is the shell contract: banner + main + footer.
-        shell: !!layout?.querySelector('header') && !!layout?.querySelector('main') &&
+        shell:
+          !!layout?.querySelector('header') &&
+          !!layout?.querySelector('main') &&
           !!layout?.querySelector('footer'),
       };
     });

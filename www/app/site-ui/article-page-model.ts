@@ -134,13 +134,13 @@ export function projectArticlePage(
   const next = index >= 0 && index < ordered.length - 1 ? ordered[index + 1] : undefined;
   const localizedTitle = (targetSlug: string): string =>
     (data.getPage(targetSlug, locale) ?? data.getPage(targetSlug, 'en'))?.frontmatter.title ??
-      targetSlug;
+    targetSlug;
   const navigationItem = (candidate: typeof previous) =>
     candidate
       ? {
-        href: localizePath(articleRoutePath(collection, candidate.slug), locale),
-        label: localizedTitle(candidate.slug),
-      }
+          href: localizePath(articleRoutePath(collection, candidate.slug), locale),
+          label: localizedTitle(candidate.slug),
+        }
       : undefined;
   // Machine-derived freshness: the render locale's source-file stamp
   // from generated content meta. The 'uncommitted' sentinel hides the row

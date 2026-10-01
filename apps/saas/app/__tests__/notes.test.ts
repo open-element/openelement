@@ -125,7 +125,7 @@ Deno.test('notes loader redirects anonymous requests to sign-in (v0.44)', async 
 Deno.test('notes loader returns the signed-in owner rows', async () => {
   const notes = [{ id: '1', title: 'first', body: 'mine', created_at: '2026-08-17T00:00:00Z' }];
   let selected = '';
-  const result = await createNotesLoader(stubClient({ notes, onSelect: (c) => selected = c }))(
+  const result = await createNotesLoader(stubClient({ notes, onSelect: (c) => (selected = c) }))(
     ctx(),
   );
   assertEquals(selected, 'id, title, body, created_at');
@@ -143,7 +143,7 @@ Deno.test('notes loader applies a fixed keyset page and emits a stable next curs
     created_at: new Date(Date.UTC(2026, 7, 23, 0, 0, 20 - index)).toISOString(),
   }));
   let limit = 0;
-  const first = await createNotesLoader(stubClient({ notes, onLimit: (value) => limit = value }))(
+  const first = await createNotesLoader(stubClient({ notes, onLimit: (value) => (limit = value) }))(
     ctx(),
   );
   assertEquals(limit, 11);
@@ -152,10 +152,12 @@ Deno.test('notes loader applies a fixed keyset page and emits a stable next curs
   assert(first.nextHref?.startsWith('/notes?cursor='));
 
   let cursorFilter = '';
-  await createNotesLoader(stubClient({
-    notes: [],
-    onOr: (value) => cursorFilter = value,
-  }))({ ...ctx(), request: new Request(`http://localhost${first.nextHref}`) });
+  await createNotesLoader(
+    stubClient({
+      notes: [],
+      onOr: (value) => (cursorFilter = value),
+    }),
+  )({ ...ctx(), request: new Request(`http://localhost${first.nextHref}`) });
   assert(cursorFilter.includes(`created_at.lt.${notes[9].created_at}`));
   assert(cursorFilter.includes(`id.lt.${notes[9].id}`));
 });
@@ -200,13 +202,11 @@ Deno.test('create note rejects anonymous writes with 401', async () => {
 
 Deno.test('create note validates required and bounded input', async () => {
   const action = createNoteAction(stubClient({}));
-  for (
-    const data of [
-      form('   ', 'body'),
-      form('x'.repeat(MAX_NOTE_TITLE_LENGTH + 1), 'body'),
-      form('title', 'x'.repeat(MAX_NOTE_BODY_LENGTH + 1)),
-    ]
-  ) {
+  for (const data of [
+    form('   ', 'body'),
+    form('x'.repeat(MAX_NOTE_TITLE_LENGTH + 1), 'body'),
+    form('title', 'x'.repeat(MAX_NOTE_BODY_LENGTH + 1)),
+  ]) {
     const result = await action({ ...ctx(), formData: data });
     assert(isActionFailure(result));
     assertEquals(result.status, 422);
@@ -215,9 +215,9 @@ Deno.test('create note validates required and bounded input', async () => {
 
 Deno.test('create note stamps the authenticated owner and redirects with PRG', async () => {
   let inserted: { user_id: string; title: string; body: string } | undefined;
-  const action = createNoteAction(stubClient({ onInsert: (values) => inserted = values }));
+  const action = createNoteAction(stubClient({ onInsert: (values) => (inserted = values) }));
   const error = await assertRejects(() =>
-    action({ ...ctx(), formData: form(' Title ', ' Body ') })
+    action({ ...ctx(), formData: form(' Title ', ' Body ') }),
   );
   assert(isOpenElementRedirect(error));
   assertEquals(inserted, { user_id: USER.id, title: 'Title', body: 'Body' });

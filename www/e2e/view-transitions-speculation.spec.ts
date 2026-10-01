@@ -11,13 +11,7 @@
 import { expect, test } from '@playwright/test';
 
 test.describe('View Transitions (v0.9.2)', () => {
-  const pages = [
-    '/',
-    '/guide/getting-started',
-    '/architecture',
-    '/blog',
-    '/changelog',
-  ];
+  const pages = ['/', '/guide/getting-started', '/architecture', '/blog', '/changelog'];
 
   for (const path of pages) {
     test(`"${path}" has <meta name="view-transition">`, async ({ page }) => {

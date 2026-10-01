@@ -18,7 +18,8 @@ function required(env: Record<string, unknown>, name: string): string {
 export function checkoutConfiguration(env: Record<string, unknown>): CheckoutConfiguration {
   const appOrigin = required(env, 'APP_ORIGIN');
   const origin = new URL(appOrigin);
-  const allowedProtocol = origin.protocol === 'https:' ||
+  const allowedProtocol =
+    origin.protocol === 'https:' ||
     (origin.protocol === 'http:' && origin.hostname === 'localhost');
   if (origin.origin !== appOrigin || !allowedProtocol) {
     throw new Error('APP_ORIGIN must be an exact secure origin');
@@ -30,9 +31,10 @@ export function checkoutConfiguration(env: Record<string, unknown>): CheckoutCon
   if (!allowedPrefixes.some((prefix) => secretKey.startsWith(prefix))) {
     throw new Error('Stripe secret key mode mismatch');
   }
-  const checkoutHost = typeof env.STRIPE_CHECKOUT_HOST === 'string' && env.STRIPE_CHECKOUT_HOST
-    ? env.STRIPE_CHECKOUT_HOST
-    : 'checkout.stripe.com';
+  const checkoutHost =
+    typeof env.STRIPE_CHECKOUT_HOST === 'string' && env.STRIPE_CHECKOUT_HOST
+      ? env.STRIPE_CHECKOUT_HOST
+      : 'checkout.stripe.com';
   if (new URL(`https://${checkoutHost}`).hostname !== checkoutHost) {
     throw new Error('STRIPE_CHECKOUT_HOST must be an exact hostname');
   }

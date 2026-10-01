@@ -70,13 +70,10 @@ Deno.test('#1413 /errors: every compiler diagnostic literal in source is catalog
 
 Deno.test('#1413 /errors: the direction of the mechanism is source -> catalog', () => {
   // Enforcement runs source -> catalog: an undocumented raising site fails.
-  assertEquals(
-    coverageFailures(['OEC9001'], new Set(['OEC9001', 'OEC9999'])),
-    [
-      "compiler literal 'OEC9999' is in the source but not on /errors — add it to the " +
+  assertEquals(coverageFailures(['OEC9001'], new Set(['OEC9001', 'OEC9999'])), [
+    "compiler literal 'OEC9999' is in the source but not on /errors — add it to the " +
       'diagnostic sources the catalog is generated from, and document it before it ships',
-    ],
-  );
+  ]);
   assertEquals(coverageFailures(['OEC9001'], new Set(['OEC9001'])), []);
   // The reverse is explicitly NOT a failure: a catalogued code whose raising
   // site has not landed yet is the documented-first state (#1413 acceptance).
@@ -91,9 +88,7 @@ Deno.test('#1413 /errors: the page projection carries every generated code', asy
   // rendered table diverges from the generated truth. The route imports the
   // generated module as `errorCodes` (C-lane naming, #1419); the projection
   // test must follow whatever name the route actually uses.
-  const route = await Deno.readTextFile(
-    new URL('../app/routes/errors.tsx', import.meta.url),
-  );
+  const route = await Deno.readTextFile(new URL('../app/routes/errors.tsx', import.meta.url));
   assertStringIncludes(route, 'errorCodes.diagnostics.map(');
   assertStringIncludes(route, 'codes,');
   for (const record of errorReference.codes) {

@@ -1,0 +1,33 @@
+{
+  "$schema": "./node_modules/oxfmt/configuration_schema.json",
+  "printWidth": 100,
+  "tabWidth": 2,
+  "useTabs": false,
+  "semi": true,
+  "singleQuote": true,
+  "jsxSingleQuote": true,
+  "ignorePatterns": [
+    "**/*.md",
+    "**/*.json",
+    "**/*.jsonc",
+    "**/*.yml",
+    "**/*.yaml",
+    "**/*.html",
+    "**/*.css",
+    "www/app/data/",
+    "www/public/assets/",
+    "www/content/",
+    "custom-dist/",
+    "dist-test-ssg-render/",
+    "vendor/",
+    "node_modules/",
+    "dist/",
+    "**/dist/**",
+    ".deno/",
+    "**/.nitro/",
+    "**/.work/",
+    "packages/element/__wtr__/",
+    "packages/element/__fixtures__/",
+    "tests/fixtures/*/app/"
+  ]
+}

@@ -33,13 +33,7 @@ export class OpenElementThemeManager {
   applyStyles(root: ShadowRoot, component?: StyleSheetLike | StyleSheetLike[]): void {
     const componentStyles = component ? (Array.isArray(component) ? component : [component]) : [];
     const existing: readonly unknown[] = root.adoptedStyleSheets;
-    const styles = [
-      ...new Set([
-        ...existing,
-        ...this.#styles,
-        ...componentStyles,
-      ]),
-    ];
+    const styles = [...new Set([...existing, ...this.#styles, ...componentStyles])];
     if (styles.length > 0) root.adoptedStyleSheets = styles as unknown as CSSStyleSheet[];
   }
 
@@ -52,9 +46,8 @@ export class OpenElementThemeManager {
       // a previous connect is not host-owned.
       if (!this.#broadcastApplied.has(host)) this.#selfThemed.add(host);
     } else {
-      const theme = typeof document === 'undefined'
-        ? undefined
-        : document.documentElement?.dataset?.theme;
+      const theme =
+        typeof document === 'undefined' ? undefined : document.documentElement?.dataset?.theme;
       if (theme) {
         host.setAttribute('data-theme', theme);
         this.#broadcastApplied.add(host);
@@ -74,9 +67,11 @@ export class OpenElementThemeManager {
 
   #installObserver(): void {
     if (
-      this.#observer || typeof document === 'undefined' ||
+      this.#observer ||
+      typeof document === 'undefined' ||
       typeof MutationObserver === 'undefined'
-    ) return;
+    )
+      return;
     const observer = new MutationObserver((mutations) => {
       if (!mutations.some((m) => m.type === 'attributes' && m.attributeName === 'data-theme')) {
         return;

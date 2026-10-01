@@ -102,9 +102,7 @@ export function renderEntry(desc: EntryDescriptor): string {
   collectShellModule(desc.appShell.default);
   for (const shell of Object.values(desc.appShell.layouts)) collectShellModule(shell);
 
-  lines.push(
-    `// Known islands (determined at build time by scanning islandsDir)`,
-  );
+  lines.push(`// Known islands (determined at build time by scanning islandsDir)`);
   lines.push(`const __islandMap = ${quoteGeneratedJavaScriptValue(islandLookup, 2)}`);
   lines.push('');
 
@@ -139,9 +137,9 @@ export function renderEntry(desc: EntryDescriptor): string {
   }));
   for (const shellModule of appShellModuleList) {
     lines.push(
-      `import * as ${shellModule.varName} from ${
-        quoteGeneratedJavaScriptValue(shellModule.importPath)
-      };`,
+      `import * as ${shellModule.varName} from ${quoteGeneratedJavaScriptValue(
+        shellModule.importPath,
+      )};`,
     );
   }
   const staticComponentModules = desc.staticComponents.map((component, index) => ({
@@ -150,9 +148,9 @@ export function renderEntry(desc: EntryDescriptor): string {
   }));
   for (const component of staticComponentModules) {
     lines.push(
-      `import * as ${component.varName} from ${
-        quoteGeneratedJavaScriptValue(component.modulePath)
-      };`,
+      `import * as ${component.varName} from ${quoteGeneratedJavaScriptValue(
+        component.modulePath,
+      )};`,
     );
   }
   lines.push('');
@@ -193,9 +191,7 @@ export function renderEntry(desc: EntryDescriptor): string {
   // unconditionally, so a project without headExtras would otherwise render
   // every static page into a 500 (latent until the request-time fixture hit it).
   if (desc.isSSG) {
-    lines.push(
-      '// SSG: headExtras injected via Vite define (Phase A)',
-    );
+    lines.push('// SSG: headExtras injected via Vite define (Phase A)');
     lines.push('// Replaces the old .openElement/head-extras.html runtime file read');
     lines.push('const __headExtras = __HEAD_EXTRAS__ || "";');
     lines.push('');
@@ -217,9 +213,7 @@ export function renderEntry(desc: EntryDescriptor): string {
     // and (Amendment 1) the deferred-shell gate are imported runtime; the
     // entry binds the pump to its escapeAttr import and the gate to its
     // serialized manifests + createDeferredDsdExecutor import.
-    lines.push(
-      "// Stream pump runtime, bound to the entry's escapeAttr import.",
-    );
+    lines.push("// Stream pump runtime, bound to the entry's escapeAttr import.");
     lines.push('const __streamBody = __createStreamBody({ escapeAttr });');
     lines.push(
       "// The deferred-shell gate (Amendment 1), bound to the entry's",
@@ -258,9 +252,9 @@ export function renderEntry(desc: EntryDescriptor): string {
     `  defaultLocale: ${quoteGeneratedJavaScriptValue(desc.i18n?.defaultLocale ?? 'en')},`,
   );
   lines.push(
-    `  devClientScriptSrc: import.meta.env.DEV && ${
-      quoteGeneratedJavaScriptValue(hasClientEntry)
-    } ? import.meta.env.BASE_URL + 'client/islands/client.js' : null,`,
+    `  devClientScriptSrc: import.meta.env.DEV && ${quoteGeneratedJavaScriptValue(
+      hasClientEntry,
+    )} ? import.meta.env.BASE_URL + 'client/islands/client.js' : null,`,
   );
   lines.push(
     `  pageHandlerPaths: ${quoteGeneratedJavaScriptValue(desc.pageRoutes.map((r) => r.path))},`,
@@ -278,12 +272,10 @@ export function renderEntry(desc: EntryDescriptor): string {
       lines.push(`    ${configLine}`);
     }
     lines.push(
-      `    ssrRenderableTags: ${
-        quoteGeneratedJavaScriptValue([
-          ...desc.ssrAdmissionPlan.renderableTags,
-          ...desc.staticComponents.map((component) => component.tagName),
-        ])
-      },`,
+      `    ssrRenderableTags: ${quoteGeneratedJavaScriptValue([
+        ...desc.ssrAdmissionPlan.renderableTags,
+        ...desc.staticComponents.map((component) => component.tagName),
+      ])},`,
     );
     lines.push('  },');
   }
@@ -327,18 +319,10 @@ export function renderEntry(desc: EntryDescriptor): string {
   // --- Register page components in SSR customElements registry ---
   {
     lines.push('// Idempotent customElements.define for SSR (dev + SSG)');
-    lines.push(
-      '// #952/#1339: the define wrapper, the registration-ownership map, and the',
-    );
-    lines.push(
-      '// fail-closed conflict rule are the imported registry guard',
-    );
-    lines.push(
-      '// (@openelement/router/server-runtime — security.ts); the marker constants it',
-    );
-    lines.push(
-      '// reads are protocol values pinned by registry-marker-drift.test.ts.',
-    );
+    lines.push('// #952/#1339: the define wrapper, the registration-ownership map, and the');
+    lines.push('// fail-closed conflict rule are the imported registry guard');
+    lines.push('// (@openelement/router/server-runtime — security.ts); the marker constants it');
+    lines.push('// reads are protocol values pinned by registry-marker-drift.test.ts.');
     lines.push('');
     // #952: entry-side registration ownership tracking. Since #960
     // (registration decoupling) a definePage route's page class registration
@@ -358,18 +342,18 @@ export function renderEntry(desc: EntryDescriptor): string {
     }
     for (const shellModule of appShellModuleList) {
       lines.push(
-        `try { __registerSsrComponent(${
-          quoteGeneratedJavaScriptValue(shellModule.tagName)
-        }, ${shellModule.varName}.default); } catch (err) { console.error('[ssg] Failed to register app shell custom element ${
-          quoteGeneratedJavaScriptValue(shellModule.tagName)
-        }:', err); throw err; }`,
+        `try { __registerSsrComponent(${quoteGeneratedJavaScriptValue(
+          shellModule.tagName,
+        )}, ${shellModule.varName}.default); } catch (err) { console.error('[ssg] Failed to register app shell custom element ${quoteGeneratedJavaScriptValue(
+          shellModule.tagName,
+        )}:', err); throw err; }`,
       );
     }
     for (const component of staticComponentModules) {
       lines.push(
-        `try { __registerSsrComponent(${
-          quoteGeneratedJavaScriptValue(component.tagName)
-        }, ${component.varName}.default); } catch (err) { console.error('[ssg] Failed to register static component <${component.tagName}>:', err); throw err; }`,
+        `try { __registerSsrComponent(${quoteGeneratedJavaScriptValue(
+          component.tagName,
+        )}, ${component.varName}.default); } catch (err) { console.error('[ssg] Failed to register static component <${component.tagName}>:', err); throw err; }`,
       );
     }
     lines.push('');
@@ -389,13 +373,11 @@ export function renderEntry(desc: EntryDescriptor): string {
       ? `?.[${quoteGeneratedJavaScriptValue(island.exportName)}]`
       : '?.default';
     lines.push(`const ${componentVar} = ${varName}${componentExport}`);
+    lines.push(`if (${componentVar}) {`);
     lines.push(
-      `if (${componentVar}) {`,
-    );
-    lines.push(
-      `  try { __registerSsrComponent(${
-        quoteGeneratedJavaScriptValue(island.tagName)
-      }, ${componentVar}); } catch (err) { console.error('[ssg] Failed to register island custom element <${island.tagName}>:', err); throw err; }`,
+      `  try { __registerSsrComponent(${quoteGeneratedJavaScriptValue(
+        island.tagName,
+      )}, ${componentVar}); } catch (err) { console.error('[ssg] Failed to register island custom element <${island.tagName}>:', err); throw err; }`,
     );
     lines.push(`}`);
   }
@@ -409,9 +391,9 @@ export function renderEntry(desc: EntryDescriptor): string {
   if (desc.pageRoutes.length > 0) {
     for (const route of desc.pageRoutes) {
       lines.push(
-        `__assertStreamRoute(${route.varName}, ${quoteGeneratedJavaScriptValue(route.path)}, ${
-          quoteGeneratedJavaScriptValue(route.filePath)
-        }, ${
+        `__assertStreamRoute(${route.varName}, ${quoteGeneratedJavaScriptValue(route.path)}, ${quoteGeneratedJavaScriptValue(
+          route.filePath,
+        )}, ${
           route.streamManifest
             ? `__streamManifests[${quoteGeneratedJavaScriptValue(route.path)}]`
             : 'undefined'
@@ -432,9 +414,9 @@ export function renderEntry(desc: EntryDescriptor): string {
   for (const mwScope of desc.middlewareScopes) {
     lines.push(`// Middleware scope: ${mwScope.scope} (${mwScope.importPath})`);
     lines.push(
-      `app.use(${
-        quoteGeneratedJavaScriptValue(mwScope.scope === '/' ? '/*' : `${mwScope.scope}/*`)
-      }, (c, next) => ${mwScope.varName}.default(c.req.raw, async () => { await next(); return c.res; }))`,
+      `app.use(${quoteGeneratedJavaScriptValue(
+        mwScope.scope === '/' ? '/*' : `${mwScope.scope}/*`,
+      )}, (c, next) => ${mwScope.varName}.default(c.req.raw, async () => { await next(); return c.res; }))`,
     );
     lines.push('');
   }
@@ -472,9 +454,9 @@ export function renderEntry(desc: EntryDescriptor): string {
   }
   for (const route of desc.pageRoutes) {
     lines.push(
-      `  { id: ${quoteGeneratedJavaScriptValue(route.filePath)}, path: ${
-        quoteGeneratedJavaScriptValue(route.path)
-      }, handlers: __pageHandlers[${quoteGeneratedJavaScriptValue(route.path)}] },`,
+      `  { id: ${quoteGeneratedJavaScriptValue(route.filePath)}, path: ${quoteGeneratedJavaScriptValue(
+        route.path,
+      )}, handlers: __pageHandlers[${quoteGeneratedJavaScriptValue(route.path)}] },`,
     );
   }
   lines.push(`], { methodNotAllowed: __methodNotAllowed });`);

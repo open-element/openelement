@@ -37,9 +37,10 @@ function runHandlers(
 ): Promise<Response> {
   return index < handlers.length
     ? Promise.resolve(
-      handlers[index](request, context, () =>
-        runHandlers(handlers, request, context, next, index + 1)),
-    )
+        handlers[index](request, context, () =>
+          runHandlers(handlers, request, context, next, index + 1),
+        ),
+      )
     : next();
 }
 

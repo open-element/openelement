@@ -16,7 +16,9 @@ const SLOT_LABEL = 'Server-born pill label';
  * interactive.
  */
 
-test('streamed shell carries the Lit pill and its server-born slot child before the late frame', async ({ request }) => {
+test('streamed shell carries the Lit pill and its server-born slot child before the late frame', async ({
+  request,
+}) => {
   const response = await request.get('/stream-lit-proof?delay=100');
   expect(response.status()).toBe(200);
   const text = await response.text();
@@ -36,7 +38,9 @@ test('streamed shell carries the Lit pill and its server-born slot child before 
   expect(text.indexOf(MESSAGE)).toBeGreaterThan(frameIndex);
 });
 
-test('with JavaScript the pill upgrades after the backfill without duplication or loss', async ({ page }) => {
+test('with JavaScript the pill upgrades after the backfill without duplication or loss', async ({
+  page,
+}) => {
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));
 
@@ -58,15 +62,22 @@ test('with JavaScript the pill upgrades after the backfill without duplication o
 
   // The pill upgrades after the stream ends (client modules ride the document
   // suffix): registered, real shadow root with the button inside.
-  await expect.poll(() =>
-    page.evaluate(() => {
-      const pill = document.querySelector('stream-lit-proof-page')?.shadowRoot
-        ?.querySelector('stream-lit-pill');
-      const ctor = customElements.get('stream-lit-pill');
-      return !!ctor && !!pill && pill instanceof ctor &&
-        !!pill.shadowRoot?.querySelector('#pill-button');
-    })
-  ).toBe(true);
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const pill = document
+          .querySelector('stream-lit-proof-page')
+          ?.shadowRoot?.querySelector('stream-lit-pill');
+        const ctor = customElements.get('stream-lit-pill');
+        return (
+          !!ctor &&
+          !!pill &&
+          pill instanceof ctor &&
+          !!pill.shadowRoot?.querySelector('#pill-button')
+        );
+      }),
+    )
+    .toBe(true);
 
   // Post-backfill integrity: exactly one instance, no duplicate shadow root,
   // slot child preserved and projected. (The compiled page HOST itself is not
@@ -85,8 +96,8 @@ test('with JavaScript the pill upgrades after the backfill without duplication o
     return {
       pageHostPresent: !!pageHost?.shadowRoot,
       pillUpgraded: !!pillCtor && !!pill && pill instanceof pillCtor,
-      slotChildPreserved: pill?.querySelector('#pill-slot-label')?.textContent ===
-        'Server-born pill label',
+      slotChildPreserved:
+        pill?.querySelector('#pill-slot-label')?.textContent === 'Server-born pill label',
       slotChildProjected: (slot?.assignedNodes().length ?? 0) > 0,
     };
   });
@@ -106,7 +117,9 @@ test('with JavaScript the pill upgrades after the backfill without duplication o
   expect(errors).toEqual([]);
 });
 
-test('settled streamed page holds exactly one upgraded pill and loses no shell content', async ({ page }) => {
+test('settled streamed page holds exactly one upgraded pill and loses no shell content', async ({
+  page,
+}) => {
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));
 
@@ -134,7 +147,9 @@ test('settled streamed page holds exactly one upgraded pill and loses no shell c
   expect(errors).toEqual([]);
 });
 
-test('streamed Part remains readable without JavaScript while the pill light child survives', async ({ browser }) => {
+test('streamed Part remains readable without JavaScript while the pill light child survives', async ({
+  browser,
+}) => {
   const context = await browser.newContext({ javaScriptEnabled: false });
   try {
     const page = await context.newPage();

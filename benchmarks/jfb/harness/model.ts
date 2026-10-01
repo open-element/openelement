@@ -118,9 +118,9 @@ export function executeIteration(model: JfbModel, spec: CpuBenchmarkSpec): void 
     for (const verify of spec.initVerify) {
       if (verify.afterStep === index && !model.check(verify.check)) {
         throw new Error(
-          `model check failed during ${spec.id} init step ${index}: ${
-            JSON.stringify(verify.check)
-          }`,
+          `model check failed during ${spec.id} init step ${index}: ${JSON.stringify(
+            verify.check,
+          )}`,
         );
       }
     }

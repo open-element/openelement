@@ -33,10 +33,7 @@ import { OPENELEMENT_EXPORT_FILES } from '../src/vite/generated-export-files.ts'
 import type { RouteEntry } from '../src/vite/internal/protocol/framework.ts';
 
 const REPO_ROOT = new URL('../../../', import.meta.url).pathname;
-const SERVER_RUNTIME_DIR = resolve(
-  REPO_ROOT,
-  'packages/router/src/vite/internal/server-runtime',
-);
+const SERVER_RUNTIME_DIR = resolve(REPO_ROOT, 'packages/router/src/vite/internal/server-runtime');
 
 const basicRoutes: RouteEntry[] = [
   { path: '/', filePath: 'index.ts', type: 'page', varName: 'pageIndex' },
@@ -55,11 +52,13 @@ const streamRoutes = [
     ...basicRoutes[0],
     streamManifest: {
       program: { version: 1, tag: 'page-index', sha256: 'a'.repeat(64) },
-      fields: [{
-        field: 'first',
-        signal: 'first',
-        owners: [{ kind: 'part' as const, index: 0, location: 'p0', source: {} as never }],
-      }],
+      fields: [
+        {
+          field: 'first',
+          signal: 'first',
+          owners: [{ kind: 'part' as const, index: 0, location: 'p0', source: {} as never }],
+        },
+      ],
     },
   },
 ];
@@ -74,33 +73,39 @@ function generatedEntries(): Array<{ label: string; code: string }> {
     },
     {
       label: 'native SSG full',
-      code: renderEntry(buildEntryDescriptor(fullRoutes, {
-        ssg: true,
-        islandTagNames: ['my-counter'],
-        islandFiles: ['my-counter.ts'],
-        middleware: {
-          csp: { policy: "default-src 'self'", nonce: true },
-          corsOrigin: 'https://example.com',
-          securityHeaders: true,
-        },
-        appShell: { tagName: 'open-layout', import: './app/shell.tsx', props: {} },
-        i18n: { locales: ['en', 'de'], defaultLocale: 'de' },
-      })),
+      code: renderEntry(
+        buildEntryDescriptor(fullRoutes, {
+          ssg: true,
+          islandTagNames: ['my-counter'],
+          islandFiles: ['my-counter.ts'],
+          middleware: {
+            csp: { policy: "default-src 'self'", nonce: true },
+            corsOrigin: 'https://example.com',
+            securityHeaders: true,
+          },
+          appShell: { tagName: 'open-layout', import: './app/shell.tsx', props: {} },
+          i18n: { locales: ['en', 'de'], defaultLocale: 'de' },
+        }),
+      ),
     },
     {
       label: 'lit SSG',
-      code: renderEntry(buildEntryDescriptor(fullRoutes, {
-        renderer: 'lit',
-        ssg: true,
-        appShell: false,
-      })),
+      code: renderEntry(
+        buildEntryDescriptor(fullRoutes, {
+          renderer: 'lit',
+          ssg: true,
+          appShell: false,
+        }),
+      ),
     },
     {
       label: 'native SSG with middleware.use',
-      code: renderEntry(buildEntryDescriptor(basicRoutes, {
-        ssg: true,
-        middleware: { use: ['./app/middleware/outer.ts'] },
-      })),
+      code: renderEntry(
+        buildEntryDescriptor(basicRoutes, {
+          ssg: true,
+          middleware: { use: ['./app/middleware/outer.ts'] },
+        }),
+      ),
     },
   ];
 }
@@ -130,11 +135,9 @@ Deno.test('gate: generated entries parse with zero TypeScript syntax diagnostics
 /** `function NAME(` / `async function NAME(` declarations in one source. */
 function emittedFunctionDeclarations(code: string): string[] {
   const names: string[] = [];
-  for (
-    const match of code.matchAll(
-      /(?:^|\n)(?:export )?(?:async )?function ([A-Za-z_$][\w$]*)\s*\(/g,
-    )
-  ) {
+  for (const match of code.matchAll(
+    /(?:^|\n)(?:export )?(?:async )?function ([A-Za-z_$][\w$]*)\s*\(/g,
+  )) {
     names.push(match[1]);
   }
   return names;
@@ -249,11 +252,9 @@ Deno.test('gate: generated entries carry neither the dangerous-key copy nor its 
 /** Static import/export specifiers of one module (same pattern as lit-graph-boundary). */
 function extractSpecifiers(source: string): string[] {
   const specs = new Set<string>();
-  for (
-    const match of source.matchAll(
-      /(?:^|[;}])([\s]*)(?:import|export)\s+(?!type[\s{])(?:[^'"]*?\s+from\s+)?['"]([^'"]+)['"]/gm,
-    )
-  ) {
+  for (const match of source.matchAll(
+    /(?:^|[;}])([\s]*)(?:import|export)\s+(?!type[\s{])(?:[^'"]*?\s+from\s+)?['"]([^'"]+)['"]/gm,
+  )) {
     specs.add(match[2]);
   }
   return [...specs];
@@ -306,13 +307,15 @@ function assertServerRuntimeFree(graph: Set<string>, label: string): void {
 Deno.test('gate: the client entry and browser runtime graphs never import the server runtime', () => {
   // The generated client entry (native full shape and lit shape) must not
   // carry a server-runtime specifier...
-  const islands = [{
-    tagName: 'x-probe',
-    modulePath: '/app/islands/x.ts',
-    strategy: 'load',
-    ssr: true,
-    dsd: true,
-  }] as const;
+  const islands = [
+    {
+      tagName: 'x-probe',
+      modulePath: '/app/islands/x.ts',
+      strategy: 'load',
+      ssr: true,
+      dsd: true,
+    },
+  ] as const;
   for (const renderer of ['native', 'lit'] as const) {
     const client = generateClientEntry([...islands], {
       renderer,
@@ -341,8 +344,5 @@ Deno.test('gate: negative control — the server entry graph DOES reach the serv
   }
   const graph = walkModuleGraph(roots);
   const reached = [...graph].filter((file) => file.startsWith(SERVER_RUNTIME_DIR));
-  assert(
-    reached.length > 0,
-    'the walk must find the server runtime when it is actually imported',
-  );
+  assert(reached.length > 0, 'the walk must find the server runtime when it is actually imported');
 });

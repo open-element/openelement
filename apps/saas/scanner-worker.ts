@@ -106,13 +106,18 @@ export function createScannerWorker(
           return new Response('Not Found', { status: 404 });
         }
         const config = configuration(env);
-        const provider = options.provider ?? options.providerFactory?.(env) ??
+        const provider =
+          options.provider ??
+          options.providerFactory?.(env) ??
           createMetaDefenderProvider(env, fetchImpl, timeoutMs);
-        const body = await request.json() as Partial<ScanRequest>;
+        const body = (await request.json()) as Partial<ScanRequest>;
         if (
-          body.type !== 'attachment.scan' || !UUID_PATTERN.test(body.reservationId ?? '') ||
-          typeof body.objectKey !== 'string' || body.objectKey.length > 512
-        ) return Response.json({ error: 'invalid scan request' }, { status: 400 });
+          body.type !== 'attachment.scan' ||
+          !UUID_PATTERN.test(body.reservationId ?? '') ||
+          typeof body.objectKey !== 'string' ||
+          body.objectKey.length > 512
+        )
+          return Response.json({ error: 'invalid scan request' }, { status: 400 });
 
         const attachment = await serviceRoleRpc<AuthorizedAttachment>(
           env,
@@ -138,21 +143,27 @@ export function createScannerWorker(
         if (!object.ok) throw new Error(`object download failed (${object.status})`);
         const bytes = await boundedBytes(object, Number(attachment.byte_size));
 
-        const verdict = await scanWithTimeout(provider, {
-          bytes,
-          contentType: attachment.content_type,
-          filename: 'attachment',
-        }, timeoutMs);
+        const verdict = await scanWithTimeout(
+          provider,
+          {
+            bytes,
+            contentType: attachment.content_type,
+            filename: 'attachment',
+          },
+          timeoutMs,
+        );
         if (verdict !== 'clean' && verdict !== 'quarantined') {
           throw new Error('provider returned an invalid verdict');
         }
         return Response.json({ verdict });
       } catch (error) {
-        console.error(JSON.stringify({
-          event: 'attachment_scan_failed',
-          correlationId,
-          reason: error instanceof Error ? error.message : 'unknown failure',
-        }));
+        console.error(
+          JSON.stringify({
+            event: 'attachment_scan_failed',
+            correlationId,
+            reason: error instanceof Error ? error.message : 'unknown failure',
+          }),
+        );
         return Response.json({ error: 'scan unavailable', correlationId }, { status: 503 });
       }
     },

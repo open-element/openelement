@@ -19,10 +19,7 @@ function baseInput(overrides: Partial<Parameters<typeof auditDenoFloor>[0]> = {}
 Deno.test('deno floor: the repository documents agree', async () => {
   const floor = await readFloor(repoRoot);
   assertEquals(floor, '2.9');
-  assertEquals(
-    auditDenoFloor(baseInput({ floor, packageReadmes: [] })),
-    [],
-  );
+  assertEquals(auditDenoFloor(baseInput({ floor, packageReadmes: [] })), []);
 });
 
 Deno.test('deno floor: no earlier floor and no missing claims pass', () => {
@@ -53,7 +50,10 @@ Deno.test('deno floor: no earlier floor and no missing claims pass', () => {
   ];
   for (const [label, input, expected] of cases) {
     const failures = auditDenoFloor(input);
-    assert(failures.some((failure) => failure.includes(expected)), `${label}: ${failures}`);
+    assert(
+      failures.some((failure) => failure.includes(expected)),
+      `${label}: ${failures}`,
+    );
   }
 });
 

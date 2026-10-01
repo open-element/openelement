@@ -7,11 +7,13 @@ import { REPOSITORY_URL } from '../app/site-ui/open-layout-navigation.ts';
  * module injects the host's island admission descriptor (the same one the
  * router build injects).
  */
-const ISLAND_SIDECARS = [{
-  moduleSpecifier: '@openelement/router',
-  exportName: 'defineIslandConfig',
-  kind: 'static-sidecar',
-}] as const;
+const ISLAND_SIDECARS = [
+  {
+    moduleSpecifier: '@openelement/router',
+    exportName: 'defineIslandConfig',
+    kind: 'static-sidecar',
+  },
+] as const;
 
 const siteModules = [
   ['open-standards-visual', '../app/site-ui/open-standards-visual.tsx'],
@@ -31,10 +33,7 @@ for (const [tagName, path] of siteModules) {
 Deno.test('open-layout is an explicitly hydrated compiled app-shell island', async () => {
   const url = new URL('../app/islands/open-layout.tsx', import.meta.url);
   const source = await Deno.readTextFile(url);
-  assertStringIncludes(
-    source,
-    "defineIslandConfig({ hydrate: 'load', ssr: true })",
-  );
+  assertStringIncludes(source, "defineIslandConfig({ hydrate: 'load', ssr: true })");
   assertStringIncludes(source, "@element('open-layout')");
   assertStringIncludes(source, 'export default class OpenLayout extends OpenElement');
   const result = compileElementProgram(source, url.pathname, {
@@ -108,10 +107,7 @@ Deno.test('open-layout is an explicitly hydrated compiled app-shell island', asy
 Deno.test('open-search keeps its view compiler-owned and its browser state external', async () => {
   const url = new URL('../app/islands/open-search.tsx', import.meta.url);
   const source = await Deno.readTextFile(url);
-  assertStringIncludes(
-    source,
-    "defineIslandConfig({ hydrate: 'load', ssr: true })",
-  );
+  assertStringIncludes(source, "defineIslandConfig({ hydrate: 'load', ssr: true })");
   assertStringIncludes(source, "@element('open-search')");
   assertStringIncludes(source, "from '../site-ui/open-search-controller.ts'");
   const result = compileElementProgram(source, url.pathname, {

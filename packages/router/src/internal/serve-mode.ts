@@ -16,9 +16,11 @@ export type ServeMode = 'start' | 'preview';
  * own raw-stack rendering (#1413), so it must not reach Vite's argument
  * parser as an unknown flag.
  */
-export function extractServeMode(
-  argv: string[],
-): { mode: ServeMode; rest: string[]; debug: boolean } {
+export function extractServeMode(argv: string[]): {
+  mode: ServeMode;
+  rest: string[];
+  debug: boolean;
+} {
   const rest: string[] = [];
   let mode: ServeMode = 'start';
   let debug = false;

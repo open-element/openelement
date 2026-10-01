@@ -9,8 +9,7 @@ Deno.test({
   sanitizeResources: false,
   async fn() {
     const root = new URL('../../../', import.meta.url).pathname.replace(/\/$/, '');
-    const source =
-      `import {createRouter} from '/@fs/${root}/packages/router/src/internal/router/client-router.ts';
+    const source = `import {createRouter} from '/@fs/${root}/packages/router/src/internal/router/client-router.ts';
       window.changes=[];
       window.router=createRouter({mode:'history', routes:[
         {path:'/',tagName:'home-page'}, {path:'/a',tagName:'a-page'}, {path:'/b',tagName:'b-page'},
@@ -24,32 +23,34 @@ Deno.test({
       logLevel: 'error',
       resolve: { alias: generateWorkspaceAliases(root) },
       server: { host: '127.0.0.1', port: 0 },
-      plugins: [{
-        name: 'nav-proof',
-        configureServer(server) {
-          server.middlewares.use((req, res, next) => {
-            if (req.url === '/download') {
-              res.setHeader('content-type', 'text/plain');
-              res.setHeader('content-disposition', 'attachment; filename="proof.txt"');
-              res.end('download proof');
-              return;
-            }
-            if (req.url === '/proof.js') {
-              res.setHeader('content-type', 'text/javascript');
-              res.end(source);
-              return;
-            }
-            if (req.headers.accept?.includes('text/html')) {
-              res.setHeader('content-type', 'text/html');
-              res.end(
-                '<script type="module" src="/proof.js"></script><a href="/a" id="link">a</a>',
-              );
-              return;
-            }
-            next();
-          });
+      plugins: [
+        {
+          name: 'nav-proof',
+          configureServer(server) {
+            server.middlewares.use((req, res, next) => {
+              if (req.url === '/download') {
+                res.setHeader('content-type', 'text/plain');
+                res.setHeader('content-disposition', 'attachment; filename="proof.txt"');
+                res.end('download proof');
+                return;
+              }
+              if (req.url === '/proof.js') {
+                res.setHeader('content-type', 'text/javascript');
+                res.end(source);
+                return;
+              }
+              if (req.headers.accept?.includes('text/html')) {
+                res.setHeader('content-type', 'text/html');
+                res.end(
+                  '<script type="module" src="/proof.js"></script><a href="/a" id="link">a</a>',
+                );
+                return;
+              }
+              next();
+            });
+          },
         },
-      }],
+      ],
     });
     await server.listen();
     try {
@@ -77,7 +78,7 @@ Deno.test({
           // Read layout directly: WebKit's Playwright locator auto-wait treats
           // Navigation API same-document traversals as pending document loads.
           const link = await page.evaluate(() =>
-            document.querySelector('#link')!.getBoundingClientRect().toJSON()
+            document.querySelector('#link')!.getBoundingClientRect().toJSON(),
           );
           await page.mouse.click(link.x + link.width / 2, link.y + link.height / 2);
           await page.waitForFunction('window.router.currentPath === "/a"');
@@ -113,10 +114,8 @@ Deno.test({
           await page.mouse.click(link.x + link.width / 2, link.y + link.height / 2);
           assertEquals((await downloaded).suggestedFilename(), 'proof.txt');
           assertEquals(await page.evaluate('window.router.currentPath'), '/b');
-          await page.route(
-            'https://external.invalid/**',
-            (route) =>
-              route.fulfill({ contentType: 'text/html', body: '<p>external document</p>' }),
+          await page.route('https://external.invalid/**', (route) =>
+            route.fulfill({ contentType: 'text/html', body: '<p>external document</p>' }),
           );
           await page.evaluate(
             'const a=document.querySelector("#link"); a.removeAttribute("download"); a.href="https://external.invalid/a"; a.click()',
@@ -142,8 +141,7 @@ Deno.test({
   sanitizeResources: false,
   async fn() {
     const root = new URL('../../../', import.meta.url).pathname.replace(/\/$/, '');
-    const source =
-      `import {createRouter} from '/@fs/${root}/packages/router/src/internal/router/client-router.ts';
+    const source = `import {createRouter} from '/@fs/${root}/packages/router/src/internal/router/client-router.ts';
       window.pending=0; window.guards=0; window.changes=[];
       window.router=createRouter({mode:'history', routes:[
         {path:'/',tagName:'home-page'}, {path:'/a',tagName:'a-page'}, {path:'/submit',tagName:'submit-page'}
@@ -156,38 +154,40 @@ Deno.test({
       logLevel: 'error',
       resolve: { alias: generateWorkspaceAliases(root) },
       server: { host: '127.0.0.1', port: 0 },
-      plugins: [{
-        name: 'ownership-proof',
-        configureServer(server) {
-          server.middlewares.use((req, res, next) => {
-            if (req.url === '/proof2.js') {
-              res.setHeader('content-type', 'text/javascript');
-              res.end(source);
-              return;
-            }
-            if (req.method === 'POST' && req.url === '/submit') {
-              let body = '';
-              req.on('data', (chunk) => body += chunk);
-              req.on('end', () => {
-                seen.push({ method: req.method!, url: req.url!, body });
+      plugins: [
+        {
+          name: 'ownership-proof',
+          configureServer(server) {
+            server.middlewares.use((req, res, next) => {
+              if (req.url === '/proof2.js') {
+                res.setHeader('content-type', 'text/javascript');
+                res.end(source);
+                return;
+              }
+              if (req.method === 'POST' && req.url === '/submit') {
+                let body = '';
+                req.on('data', (chunk) => (body += chunk));
+                req.on('end', () => {
+                  seen.push({ method: req.method!, url: req.url!, body });
+                  res.setHeader('content-type', 'text/html');
+                  res.end('<body>submitted</body>');
+                });
+                return;
+              }
+              if (req.headers.accept?.includes('text/html')) {
                 res.setHeader('content-type', 'text/html');
-                res.end('<body>submitted</body>');
-              });
-              return;
-            }
-            if (req.headers.accept?.includes('text/html')) {
-              res.setHeader('content-type', 'text/html');
-              res.end(
-                '<script type="module" src="/proof2.js"></script>' +
-                  '<form method="post" action="/submit"><input name="field" value="hello"/><button type="submit" id="submit">go</button></form>' +
-                  '<a href="#section" id="frag">frag</a><div style="height:3000px"></div><div id="section">target</div>',
-              );
-              return;
-            }
-            next();
-          });
+                res.end(
+                  '<script type="module" src="/proof2.js"></script>' +
+                    '<form method="post" action="/submit"><input name="field" value="hello"/><button type="submit" id="submit">go</button></form>' +
+                    '<a href="#section" id="frag">frag</a><div style="height:3000px"></div><div id="section">target</div>',
+                );
+                return;
+              }
+              next();
+            });
+          },
         },
-      }],
+      ],
     });
     await server.listen();
     try {
@@ -216,10 +216,7 @@ Deno.test({
           // Real form POST: method/body reach the server; the SPA never
           // converts it into a GET page navigation (full document load).
           await page.evaluate('location.hash=""');
-          await Promise.all([
-            page.waitForURL('**/submit'),
-            page.click('#submit'),
-          ]);
+          await Promise.all([page.waitForURL('**/submit'), page.click('#submit')]);
           assertEquals(await page.evaluate('location.pathname'), '/submit', type.name());
           assertEquals(seen.length, 1, type.name());
           assertEquals(seen[0].method, 'POST', type.name());

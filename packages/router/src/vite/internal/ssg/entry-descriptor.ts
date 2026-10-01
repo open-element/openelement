@@ -298,8 +298,7 @@ export function buildEntryDescriptor(
       if (typeof mw.corsOrigin !== 'string' && !Array.isArray(mw.corsOrigin)) {
         throw buildError(
           DescriptorErrorCode.CORS,
-          `[openElement] middleware.corsOrigin must be a string or an array of strings; got ${typeof mw
-            .corsOrigin}.`,
+          `[openElement] middleware.corsOrigin must be a string or an array of strings; got ${typeof mw.corsOrigin}.`,
         );
       }
       corsOrigin = mw.corsOrigin;
@@ -310,8 +309,7 @@ export function buildEntryDescriptor(
         throw buildError(
           DescriptorErrorCode.CORS,
           '[openElement] middleware.corsOriginModule must be a module path (string) to a module ' +
-            `that default-exports (origin: string) => string | undefined; got ${typeof mw
-              .corsOriginModule}.`,
+            `that default-exports (origin: string) => string | undefined; got ${typeof mw.corsOriginModule}.`,
         );
       }
       if (corsOrigin !== undefined) {
@@ -404,7 +402,7 @@ export function buildEntryDescriptor(
         // at evaluation time (__resolvePageTag); the tag here is the
         // resolver's path-derived fallback, used only when the class carries
         // no compiled program.
-        tagName: r.definePage === true ? fallbackTagName : (r.tagName || fallbackTagName),
+        tagName: r.definePage === true ? fallbackTagName : r.tagName || fallbackTagName,
         importPath: `/${routesDir}/${r.filePath}`,
         isDynamic,
         paramNames,
@@ -430,10 +428,13 @@ export function buildEntryDescriptor(
     .sort((a, b) => b.depth - a.depth);
   for (const route of pageRoutes) {
     if (
-      route.streamManifest && (renderer !== 'native' ||
-        renderers.some((entry) =>
-          entry.scope === '/' || route.path === entry.scope ||
-          route.path.startsWith(entry.scope + '/')
+      route.streamManifest &&
+      (renderer !== 'native' ||
+        renderers.some(
+          (entry) =>
+            entry.scope === '/' ||
+            route.path === entry.scope ||
+            route.path.startsWith(entry.scope + '/'),
         ))
     ) {
       throw buildError(
@@ -464,21 +465,17 @@ export function buildEntryDescriptor(
   const islandsSpecifierDir = normalizeSeparators(islandsDir);
   const localIslands: IslandDecl[] = islandTagNames.map((tagName, i) => {
     const meta = islandMeta[tagName];
-    const deliveryMeta = (meta ?? {}) as Partial<IslandDecl> & IslandDeliveryMeta & {
-      hydrate?: IslandDeliveryStrategy;
-    };
+    const deliveryMeta = (meta ?? {}) as Partial<IslandDecl> &
+      IslandDeliveryMeta & {
+        hydrate?: IslandDeliveryStrategy;
+      };
     const hydrate = resolveIslandHydrate(
       deliveryMeta.hydrate as IslandDeliveryStrategy | undefined,
       options.upgradeStrategy,
     );
     const hasDeliveryTags = deliveryMeta.tags !== undefined || deliveryMeta.tagNames !== undefined;
     const deliveryTags = hasDeliveryTags
-      ? resolveIslandDeliveryTags(
-        tagName,
-        deliveryMeta.tags,
-        deliveryMeta.tagNames,
-        tagName,
-      )
+      ? resolveIslandDeliveryTags(tagName, deliveryMeta.tags, deliveryMeta.tagNames, tagName)
       : undefined;
     const exportNames = validateIslandDeliveryExportNames(
       deliveryMeta.exportNames,
@@ -548,8 +545,10 @@ export function buildEntryDescriptor(
     pageRoutes.some((route) => route.streamManifest) &&
     (appShell.default !== false || Object.values(appShell.layouts).some((shell) => shell !== false))
   ) {
-    const streamRoutes = pageRoutes.filter((route) => route.streamManifest)
-      .map((route) => `${route.path} (${route.filePath})`).join(', ');
+    const streamRoutes = pageRoutes
+      .filter((route) => route.streamManifest)
+      .map((route) => `${route.path} (${route.filePath})`)
+      .join(', ');
     throw buildError(
       DescriptorErrorCode.STREAM_APP_SHELL,
       '[openElement] streaming requires the compiled app shell/layout wrapper to be off for the ' +
@@ -577,10 +576,10 @@ export function buildEntryDescriptor(
     ...pageRoutes.map((route) => route.tagName),
     ...islands.map((island) => island.tagName),
     ...(appShell.default ? [appShell.default.tagName] : []),
-    ...Object.values(appShell.layouts).flatMap((shell) => shell ? [shell.tagName] : []),
+    ...Object.values(appShell.layouts).flatMap((shell) => (shell ? [shell.tagName] : [])),
   ]);
-  const staticComponents = (options.staticComponents ?? []).filter((component) =>
-    !reservedTags.has(component.tagName)
+  const staticComponents = (options.staticComponents ?? []).filter(
+    (component) => !reservedTags.has(component.tagName),
   );
 
   return {
@@ -597,8 +596,8 @@ export function buildEntryDescriptor(
     islands,
     // #569: data-open-enhance forms need the client entry even with zero
     // islands; #951: the dev script injection keys on the same condition.
-    hasEnhancedForms: routes.some((route) =>
-      route.type === 'page' && route.hasEnhancedForms === true
+    hasEnhancedForms: routes.some(
+      (route) => route.type === 'page' && route.hasEnhancedForms === true,
     ),
     ssrAdmissionPlan,
     cemClassifications,

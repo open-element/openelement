@@ -79,7 +79,10 @@ function eachHost(): EachHost {
   return {
     signals: {
       title: new Sig('DYN'),
-      items: new Sig([{ id: 'a', label: 'alpha' }, { id: 'b', label: 'beta' }]),
+      items: new Sig([
+        { id: 'a', label: 'alpha' },
+        { id: 'b', label: 'beta' },
+      ]),
     },
   };
 }
@@ -152,13 +155,15 @@ function eachSiblingProgram(): unknown {
         index: 1,
         signal: 'items',
         key: 'id',
-        item: [{
-          k: 'el',
-          tag: 'li',
-          attrs: [['title', 'item-static']],
-          iattrs: [['data-label', 'label']],
-          children: [],
-        }],
+        item: [
+          {
+            k: 'el',
+            tag: 'li',
+            attrs: [['title', 'item-static']],
+            iattrs: [['data-label', 'label']],
+            children: [],
+          },
+        ],
       },
     ],
   });
@@ -170,14 +175,16 @@ function mixedKeyProgram(): unknown {
   return testProgram({
     tag: 'oe-mixed-keys',
     template: [{ k: 'el', tag: 'ul', attrs: [], children: [{ k: 'part', index: 0 }] }],
-    parts: [{
-      k: 'each',
-      index: 0,
-      signal: 'items',
-      key: 'id',
-      field: 'label',
-      item: [{ k: 'el', tag: 'li', attrs: [], children: [{ k: 'ival', field: 'label' }] }],
-    }],
+    parts: [
+      {
+        k: 'each',
+        index: 0,
+        signal: 'items',
+        key: 'id',
+        field: 'label',
+        item: [{ k: 'el', tag: 'li', attrs: [], children: [{ k: 'ival', field: 'label' }] }],
+      },
+    ],
   });
 }
 
@@ -194,12 +201,14 @@ function mixedKeyHost(items: Array<{ id: number | string; label: string }>): Mix
 function regionInsideSinkProgram(): unknown {
   return testProgram({
     tag: 'oe-a104-region-in-sink',
-    template: [{
-      k: 'el',
-      tag: 'div',
-      attrs: [],
-      children: [{ k: 'part', index: 1 }],
-    }],
+    template: [
+      {
+        k: 'el',
+        tag: 'div',
+        attrs: [],
+        children: [{ k: 'part', index: 1 }],
+      },
+    ],
     parts: [
       { k: 'attr', index: 0, signal: 'title', name: 'title', path: [0] },
       {
@@ -315,7 +324,10 @@ Deno.test('A10.4: each Region item attribute slots round-trip with exact keyed-s
   assertEquals(liB.getAttribute('data-label'), 'beta');
 
   // An item-field update mutates the exact keyed item element in place.
-  browser.signals.items.value = [{ id: 'a', label: 'alpha2' }, { id: 'b', label: 'beta' }];
+  browser.signals.items.value = [
+    { id: 'a', label: 'alpha2' },
+    { id: 'b', label: 'beta' },
+  ];
   assertStrictEquals(root.childNodes[2], liA);
   assertEquals(liA.getAttribute('data-label'), 'alpha2');
   assertEquals(liA.getAttribute('title'), 'item-static');
@@ -406,10 +418,10 @@ Deno.test('A10.4: a fixed Part path crossing a when/each anchor is rejected fail
     assertThrows(() => serializeServer(raw, whenHost()));
     assertThrows(() => serializeSeed(raw, whenHost()));
     assertThrows(() =>
-      createFresh(raw, whenHost(), new TestDocument().createElement('host') as unknown as Node)
+      createFresh(raw, whenHost(), new TestDocument().createElement('host') as unknown as Node),
     );
     assertThrows(() =>
-      claimExisting(raw, whenHost(), new TestDocument().createElement('host') as unknown as Node)
+      claimExisting(raw, whenHost(), new TestDocument().createElement('host') as unknown as Node),
     );
   }
 });
@@ -417,25 +429,28 @@ Deno.test('A10.4: a fixed Part path crossing a when/each anchor is rejected fail
 Deno.test('A10.4: a fixed Part path preceded by a Region anchor is rejected fail-closed everywhere', () => {
   // The builder round-trips through the real validator, so the rejected spec
   // fails at build time with the validator diagnostic.
-  const error = assertThrows(() =>
-    testProgram({
-      tag: 'oe-a104-preceded',
-      template: [
-        { k: 'part', index: 0 },
-        { k: 'el', tag: 'div', attrs: [], children: [] },
-      ],
-      parts: [
-        {
-          k: 'when',
-          index: 0,
-          signal: 'count',
-          test: { signal: 'count', op: 'greater-than', value: 0 },
-          on: [{ k: 'el', tag: 'span', attrs: [], children: [] }],
-          off: [{ k: 'el', tag: 'span', attrs: [], children: [] }],
-        },
-        { k: 'attr', index: 1, signal: 'title', name: 'title', path: [1] },
-      ],
-    }), Error);
+  const error = assertThrows(
+    () =>
+      testProgram({
+        tag: 'oe-a104-preceded',
+        template: [
+          { k: 'part', index: 0 },
+          { k: 'el', tag: 'div', attrs: [], children: [] },
+        ],
+        parts: [
+          {
+            k: 'when',
+            index: 0,
+            signal: 'count',
+            test: { signal: 'count', op: 'greater-than', value: 0 },
+            on: [{ k: 'el', tag: 'span', attrs: [], children: [] }],
+            off: [{ k: 'el', tag: 'span', attrs: [], children: [] }],
+          },
+          { k: 'attr', index: 1, signal: 'title', name: 'title', path: [1] },
+        ],
+      }),
+    Error,
+  );
   assertStringIncludes(error.message, 'parts[1].path is preceded by a dynamic anchor');
 
   // The identical wire shape (anchor reordered before the sink element) is
@@ -452,18 +467,15 @@ Deno.test('A10.4: a fixed Part path preceded by a Region anchor is rejected fail
   assertThrows(() => serializeServer(raw, whenHost()));
   assertThrows(() => serializeSeed(raw, whenHost()));
   assertThrows(() =>
-    createFresh(raw, whenHost(), new TestDocument().createElement('host') as unknown as Node)
+    createFresh(raw, whenHost(), new TestDocument().createElement('host') as unknown as Node),
   );
   assertThrows(() =>
-    claimExisting(raw, whenHost(), new TestDocument().createElement('host') as unknown as Node)
+    claimExisting(raw, whenHost(), new TestDocument().createElement('host') as unknown as Node),
   );
 });
 
 /** Inject a nested Region/text anchor `p9` into an existing Region subtree. */
-function withNestedAnchor(
-  base: unknown,
-  inject: (raw: RawProgram) => void,
-): RawProgram {
+function withNestedAnchor(base: unknown, inject: (raw: RawProgram) => void): RawProgram {
   const raw = base as RawProgram;
   inject(raw);
   raw.parts.push({
@@ -520,10 +532,10 @@ Deno.test('A10.4: nested Region anchors (when └ each, each └ when, deeper) a
     assertThrows(() => serializeServer(raw, host));
     assertThrows(() => serializeSeed(raw, host));
     assertThrows(() =>
-      createFresh(raw, host, new TestDocument().createElement('host') as unknown as Node)
+      createFresh(raw, host, new TestDocument().createElement('host') as unknown as Node),
     );
     assertThrows(() =>
-      claimExisting(raw, host, new TestDocument().createElement('host') as unknown as Node)
+      claimExisting(raw, host, new TestDocument().createElement('host') as unknown as Node),
     );
   }
 });
@@ -536,10 +548,7 @@ Deno.test('#1374: mixed number/string each keys keep distinct identity from SSR 
   ];
   const browser = mixedKeyHost(items);
   const { html, root, instance } = receiveAndClaim(program, mixedKeyHost(items), browser);
-  assertEquals(
-    html,
-    '<ul><!--oe:p0--><li>number</li><li>string</li><!--oe:/p0--></ul>',
-  );
+  assertEquals(html, '<ul><!--oe:p0--><li>number</li><li>string</li><!--oe:/p0--></ul>');
 
   const list = root.childNodes[0] as TestElement;
   const numberItem = list.childNodes[1] as TestElement;
@@ -549,7 +558,10 @@ Deno.test('#1374: mixed number/string each keys keep distinct identity from SSR 
 
   // A reorder moves each node with its own identity: number 1 and string "1"
   // are distinct keys, so the entries swap without collapsing into one.
-  browser.signals.items.value = [{ id: '1', label: 'STRING' }, { id: 1, label: 'NUMBER' }];
+  browser.signals.items.value = [
+    { id: '1', label: 'STRING' },
+    { id: 1, label: 'NUMBER' },
+  ];
   assertStrictEquals(list.childNodes[1], stringItem);
   assertStrictEquals(list.childNodes[2], numberItem);
   assertEquals((stringItem.childNodes[0] as TestText).data, 'STRING');
@@ -559,7 +571,10 @@ Deno.test('#1374: mixed number/string each keys keep distinct identity from SSR 
   browser.signals.items.value = [{ id: 1, label: 'only number' }];
   assertStrictEquals(list.childNodes[1], numberItem);
   assertStrictEquals(stringItem.parentNode, null);
-  browser.signals.items.value = [{ id: 1, label: 'only number' }, { id: '1', label: 'STRING' }];
+  browser.signals.items.value = [
+    { id: 1, label: 'only number' },
+    { id: '1', label: 'STRING' },
+  ];
   const reattached = list.childNodes[2] as TestElement;
   assertNotStrictEquals(reattached, stringItem);
   assertEquals((reattached.childNodes[0] as TestText).data, 'STRING');
@@ -568,13 +583,13 @@ Deno.test('#1374: mixed number/string each keys keep distinct identity from SSR 
 
 Deno.test('#1374: a genuine duplicate each key still fails closed on both executors', () => {
   const program = mixedKeyProgram();
-  const duplicated = [{ id: 1, label: 'one' }, { id: 1, label: 'again' }];
+  const duplicated = [
+    { id: 1, label: 'one' },
+    { id: 1, label: 'again' },
+  ];
 
   // Server duplicate detection still rejects same-type collisions.
-  const serverError = assertThrows(
-    () => serializeServer(program, mixedKeyHost(duplicated)),
-    Error,
-  );
+  const serverError = assertThrows(() => serializeServer(program, mixedKeyHost(duplicated)), Error);
   assertStringIncludes(serverError.message, 'duplicate each Region key 1');
 
   // Claim still fails closed before attaching anything.
@@ -593,28 +608,32 @@ Deno.test('#1372: equals and truthy conditions hold through SSR/fresh/claim', ()
     return testProgram({
       tag: 'oe-1372-equals',
       template: [{ k: 'el', tag: 'div', attrs: [], children: [{ k: 'part', index: 0 }] }],
-      parts: [{
-        k: 'when',
-        index: 0,
-        signal: 'status',
-        test: { signal: 'status', op: 'equals', value: 'pending' },
-        on: [{ k: 'text', value: 'PENDING' }],
-        off: [{ k: 'text', value: 'SETTLED' }],
-      }],
+      parts: [
+        {
+          k: 'when',
+          index: 0,
+          signal: 'status',
+          test: { signal: 'status', op: 'equals', value: 'pending' },
+          on: [{ k: 'text', value: 'PENDING' }],
+          off: [{ k: 'text', value: 'SETTLED' }],
+        },
+      ],
     });
   }
   function truthyProgram(): unknown {
     return testProgram({
       tag: 'oe-1372-truthy',
       template: [{ k: 'el', tag: 'div', attrs: [], children: [{ k: 'part', index: 0 }] }],
-      parts: [{
-        k: 'when',
-        index: 0,
-        signal: 'ready',
-        test: { signal: 'ready', op: 'truthy', value: false },
-        on: [{ k: 'text', value: 'LOADING' }],
-        off: [{ k: 'text', value: 'READY' }],
-      }],
+      parts: [
+        {
+          k: 'when',
+          index: 0,
+          signal: 'ready',
+          test: { signal: 'ready', op: 'truthy', value: false },
+          on: [{ k: 'text', value: 'LOADING' }],
+          off: [{ k: 'text', value: 'READY' }],
+        },
+      ],
     });
   }
 

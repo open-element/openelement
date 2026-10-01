@@ -13,13 +13,16 @@ test.describe('Cinematic homepage', () => {
     await expect(page.getByText(installCommand)).toBeVisible();
   });
 
-  test('renders a transparent theme-aware logo linked to the current locale home', async ({ page }) => {
+  test('renders a transparent theme-aware logo linked to the current locale home', async ({
+    page,
+  }) => {
     await page.goto('/zh/guide/getting-started');
     // The logo is the site-name link inside the banner landmark.
     const logo = page.getByRole('banner').getByRole('link', { name: 'openElement' });
     await expect(logo).toBeVisible();
     await expect(logo).toHaveAttribute('href', '/zh');
-    await expect.poll(() => logo.evaluate((element) => getComputedStyle(element).backgroundImage))
+    await expect
+      .poll(() => logo.evaluate((element) => getComputedStyle(element).backgroundImage))
       .toBe('none');
     const mark = logo.locator('.logo-glyph');
     await expect(mark).toBeVisible();
@@ -28,9 +31,8 @@ test.describe('Cinematic homepage', () => {
     // environment; toggle to the opposite of the current theme instead of
     // assuming a fixed starting point.
     await page.evaluate(() => {
-      const current = document.documentElement.getAttribute('data-theme') === 'light'
-        ? 'dark'
-        : 'light';
+      const current =
+        document.documentElement.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
       document.documentElement.setAttribute('data-theme', current);
     });
     const toggledColor = await mark.evaluate((element) => getComputedStyle(element).color);
@@ -68,9 +70,11 @@ test.describe('Cinematic homepage', () => {
     await expect(strategies).toHaveCount(4);
     await expect(strategies.nth(1).locator('.tag-default')).toHaveText('DEFAULT');
     await strategies.nth(1).scrollIntoViewIfNeeded();
-    await expect.poll(() =>
-      strategies.nth(1).evaluate((element) => Number(getComputedStyle(element).opacity))
-    ).toBeGreaterThan(0.5);
+    await expect
+      .poll(() =>
+        strategies.nth(1).evaluate((element) => Number(getComputedStyle(element).opacity)),
+      )
+      .toBeGreaterThan(0.5);
     const rows = home.locator('.output-row');
     await expect(rows).toHaveCount(3);
     await rows.nth(1).scrollIntoViewIfNeeded();
@@ -119,10 +123,13 @@ test.describe('Cinematic homepage', () => {
     await expect.poll(readFrame, { timeout: 60000 }).toBeGreaterThanOrEqual(13);
     // The park rule fires after 1.2s of stillness — poll for the snap-out.
     await expect
-      .poll(async () => {
-        const f = await readFrame();
-        return f <= 14 || f >= 18;
-      }, { timeout: 60000 })
+      .poll(
+        async () => {
+          const f = await readFrame();
+          return f <= 14 || f >= 18;
+        },
+        { timeout: 60000 },
+      )
       .toBe(true);
 
     // Fully idle: the atlas glides to center and hands over to the filmed
@@ -130,10 +137,9 @@ test.describe('Cinematic homepage', () => {
     await page.mouse.move(viewport.width / 2, viewport.height / 2);
     const video = dragon.locator('video.idle-view');
     await expect
-      .poll(
-        () => dragon.evaluate((element) => Boolean(element.querySelector('.stage.idling'))),
-        { timeout: 60000 },
-      )
+      .poll(() => dragon.evaluate((element) => Boolean(element.querySelector('.stage.idling'))), {
+        timeout: 60000,
+      })
       .toBe(true);
     await expect
       .poll(() => video.evaluate((element) => (element as HTMLVideoElement).paused), {
@@ -148,10 +154,9 @@ test.describe('Cinematic homepage', () => {
     await page.mouse.move(viewport.width * 0.98, viewport.height / 2);
     await expect.poll(readFrame, { timeout: 60000 }).toBeGreaterThanOrEqual(54);
     await expect
-      .poll(
-        () => dragon.evaluate((element) => Boolean(element.querySelector('.stage.idling'))),
-        { timeout: 60000 },
-      )
+      .poll(() => dragon.evaluate((element) => Boolean(element.querySelector('.stage.idling'))), {
+        timeout: 60000,
+      })
       .toBe(false);
   });
 

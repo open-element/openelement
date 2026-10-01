@@ -80,7 +80,10 @@ export function validateSafeUrl(url: string, context: string): string {
   const normalised = url.replace(/[\t\n\r]/g, '').trim();
   try {
     const decoded = decodeURIComponent(normalised); // catch malformed %XX
-    const lower = decoded.toLowerCase().replace(/[\t\n\r]/g, '').trim();
+    const lower = decoded
+      .toLowerCase()
+      .replace(/[\t\n\r]/g, '')
+      .trim();
     const blockedProtocols = ['javascript:', 'data:', 'vbscript:', 'file:'];
     for (const proto of blockedProtocols) {
       if (lower.startsWith(proto)) {
@@ -107,14 +110,11 @@ export function validateSafeUrl(url: string, context: string): string {
           'This may be a legitimate encoding issue or a malicious URL.',
       );
     }
-    throw new OpenElementError(
-      `Invalid URL in ${context}: "${url}" - malformed percent-encoding`,
-      {
-        code: 'UNSAFE_URL',
-        statusCode: 400,
-        recoverable: false,
-      },
-    );
+    throw new OpenElementError(`Invalid URL in ${context}: "${url}" - malformed percent-encoding`, {
+      code: 'UNSAFE_URL',
+      statusCode: 400,
+      recoverable: false,
+    });
   }
   return normalised;
 }

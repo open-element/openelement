@@ -3,9 +3,7 @@ import { isActionFailure, isOpenElementRedirect } from '@openelement/router';
 
 // v0.44: route logic lives in app/route-logic/ so tests never evaluate the
 // compiled page class (decorators are compile-time-only input).
-const { createCheckoutAction, createCheckoutLoader } = await import(
-  '../route-logic/checkout.ts'
-);
+const { createCheckoutAction, createCheckoutLoader } = await import('../route-logic/checkout.ts');
 type CheckoutSupabaseClient = import('../route-logic/checkout.ts').CheckoutSupabaseClient;
 
 const ATTEMPT = '147f2ee7-289a-4da4-8a2b-6f930d1d5c47';
@@ -63,7 +61,7 @@ Deno.test('Checkout loader is owner-scoped and success return grants no new stat
   // v0.44: anonymous GETs redirect to sign-in (the 0.43 denied branch paired
   // with a dynamic authenticated variant is outside the compiler grammar).
   const denied = await assertRejects(() =>
-    createCheckoutLoader(client({ user: false }))(context())
+    createCheckoutLoader(client({ user: false }))(context()),
   );
   assert(isOpenElementRedirect(denied));
   assertEquals((denied as { location?: string }).location, '/login');
@@ -81,13 +79,19 @@ Deno.test('Checkout rejects anonymous and invalid attempts before Stripe', async
     calls++;
     return Promise.resolve(new Response());
   };
-  const invalid = await createCheckoutAction(client(), fetchStub)({
+  const invalid = await createCheckoutAction(
+    client(),
+    fetchStub,
+  )({
     ...context(),
     formData: form('attacker'),
   });
   assert(isActionFailure(invalid));
   assertEquals(invalid.status, 422);
-  const anonymous = await createCheckoutAction(client({ user: false }), fetchStub)({
+  const anonymous = await createCheckoutAction(
+    client({ user: false }),
+    fetchStub,
+  )({
     ...context(),
     formData: form(),
   });
@@ -102,16 +106,18 @@ Deno.test('Checkout uses fixed server price, idempotency and persists session be
     const url = String(input);
     calls.push({ url, init });
     if (url === STRIPE_CHECKOUT_API) {
-      return Promise.resolve(Response.json({
-        id: 'cs_test_123',
-        url: 'https://checkout.stripe.com/c/pay/test',
-        livemode: false,
-      }));
+      return Promise.resolve(
+        Response.json({
+          id: 'cs_test_123',
+          url: 'https://checkout.stripe.com/c/pay/test',
+          livemode: false,
+        }),
+      );
     }
     return Promise.resolve(Response.json(null));
   };
   const error = await assertRejects(() =>
-    createCheckoutAction(client(), fetchStub)({ ...context(), formData: form() })
+    createCheckoutAction(client(), fetchStub)({ ...context(), formData: form() }),
   );
   assert(isOpenElementRedirect(error));
   assertEquals(error.location, 'https://checkout.stripe.com/c/pay/test');
@@ -133,16 +139,21 @@ Deno.test('Checkout fails closed on unexpected redirect host and records creatio
   const fetchStub: typeof fetch = (input) => {
     const url = String(input);
     if (url === STRIPE_CHECKOUT_API) {
-      return Promise.resolve(Response.json({
-        id: 'cs_test_123',
-        url: 'https://evil.example/collect',
-        livemode: false,
-      }));
+      return Promise.resolve(
+        Response.json({
+          id: 'cs_test_123',
+          url: 'https://evil.example/collect',
+          livemode: false,
+        }),
+      );
     }
     rpcNames.push(url.split('/').pop() ?? '');
     return Promise.resolve(Response.json(null));
   };
-  const result = await createCheckoutAction(client(), fetchStub)({
+  const result = await createCheckoutAction(
+    client(),
+    fetchStub,
+  )({
     ...context(),
     formData: form(),
   });

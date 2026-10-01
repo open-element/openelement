@@ -144,9 +144,9 @@ export async function resolveReuse(options: ResolveReuseOptions): Promise<ReuseD
     } catch (cause) {
       return {
         reused: false,
-        reason: `run ${run.runId} proved tree ${tree} but its artifacts could not be listed: ${
-          String(cause)
-        }`,
+        reason: `run ${run.runId} proved tree ${tree} but its artifacts could not be listed: ${String(
+          cause,
+        )}`,
       };
     }
     const missing = artifactNames.filter((name) => !artifacts.includes(name));
@@ -155,16 +155,16 @@ export async function resolveReuse(options: ResolveReuseOptions): Promise<ReuseD
       reused: true,
       sourceRunId: run.runId,
       sourceSha: run.headSha,
-      reason: `run ${run.runId} (commit ${run.headSha}) proved tree ${tree} and carries ` +
+      reason:
+        `run ${run.runId} (commit ${run.headSha}) proved tree ${tree} and carries ` +
         artifactNames.join(', '),
     };
   }
   return {
     reused: false,
-    reason:
-      `no successful run in the ${inspected} inspected candidate(s) proved tree ${options.currentTree} while carrying ${
-        artifactNames.join(', ')
-      }`,
+    reason: `no successful run in the ${inspected} inspected candidate(s) proved tree ${options.currentTree} while carrying ${artifactNames.join(
+      ', ',
+    )}`,
   };
 }
 
@@ -219,23 +219,21 @@ export async function claimReusedResult(
 ): Promise<{ claimed: Record<string, unknown>; failures: string[] }> {
   const failures: string[] = [];
   if (result.job !== options.job) {
-    failures.push(
-      `reused artifact is for job ${JSON.stringify(result.job)}, not ${options.job}`,
-    );
+    failures.push(`reused artifact is for job ${JSON.stringify(result.job)}, not ${options.job}`);
   }
   if (result.tree !== options.currentTree) {
     failures.push(
-      `reused artifact proved tree ${
-        JSON.stringify(result.tree)
-      }, not the checked-out tree ${options.currentTree}`,
+      `reused artifact proved tree ${JSON.stringify(
+        result.tree,
+      )}, not the checked-out tree ${options.currentTree}`,
     );
   }
   const producerSha = result.sha;
   if (typeof producerSha !== 'string' || !COMMIT_SHA.test(producerSha)) {
     failures.push(
-      `reused artifact's sha must be the 40-char hex commit that produced it, got ${
-        JSON.stringify(producerSha)
-      }`,
+      `reused artifact's sha must be the 40-char hex commit that produced it, got ${JSON.stringify(
+        producerSha,
+      )}`,
     );
   } else if (producerSha === options.currentSha) {
     // Same refusal the aggregate makes: a lane may not skip its gate for the
@@ -268,7 +266,7 @@ export async function claimReusedResult(
       claimed: result,
       failures: [
         `reused artifact was produced by ${producerSha} at tree ${producerTree}, ` +
-        `not the checked-out tree ${options.currentTree}`,
+          `not the checked-out tree ${options.currentTree}`,
       ],
     };
   }
@@ -405,7 +403,10 @@ async function writeOutputs(
   path: string | undefined,
   values: Record<string, string>,
 ): Promise<void> {
-  const lines = Object.entries(values).map(([key, value]) => `${key}=${value}`).join('\n') + '\n';
+  const lines =
+    Object.entries(values)
+      .map(([key, value]) => `${key}=${value}`)
+      .join('\n') + '\n';
   if (path === undefined) {
     console.log(lines.trimEnd());
     return;
@@ -427,7 +428,7 @@ export function workflowRunListArgs(limit: number): string[] {
 }
 
 async function listWorkflowRuns(limit: number): Promise<RunSummary[]> {
-  const payload = await ghJson(workflowRunListArgs(limit)) as Array<{
+  const payload = (await ghJson(workflowRunListArgs(limit))) as Array<{
     databaseId: number;
     headSha: string;
     conclusion: string;
@@ -484,7 +485,10 @@ export function workflowArtifactListArgs(runId: number): string[] {
 
 async function listArtifactsViaGh(runId: number): Promise<string[]> {
   const names = await ghText(workflowArtifactListArgs(runId));
-  return names.split('\n').map((line) => line.trim()).filter((line) => line !== '');
+  return names
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line !== '');
 }
 
 async function resolveCommand(): Promise<void> {
@@ -495,7 +499,10 @@ async function resolveCommand(): Promise<void> {
   // a source" path end-to-end, which the fail-closed unit tests can only fake.
   const currentSha = flagValue('current-sha') ?? sha;
   const currentTree = flagValue('current-tree') ?? tree;
-  for (const [name, value] of [['--current-sha', currentSha], ['--current-tree', currentTree]]) {
+  for (const [name, value] of [
+    ['--current-sha', currentSha],
+    ['--current-tree', currentTree],
+  ]) {
     if (!/^[0-9a-f]{40}$/u.test(value)) {
       throw new Error(`${name} must be a 40-char hex object id, got ${value}`);
     }

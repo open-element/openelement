@@ -63,12 +63,9 @@ Deno.test('scanRoutes throws on varName collision between /a-b and /a_b (#1029)'
 });
 
 Deno.test('scanRoutes accepts non-colliding hyphen/slash/underscore routes', async () => {
-  await withRoutes(
-    ['a-b.tsx', join('a', 'c.tsx'), 'a_c_d.tsx', 'index.tsx'],
-    async (routesDir) => {
-      const routes = await scanRoutes(routesDir);
-      const varNames = routes.map((r) => r.varName);
-      assertEquals(new Set(varNames).size, varNames.length);
-    },
-  );
+  await withRoutes(['a-b.tsx', join('a', 'c.tsx'), 'a_c_d.tsx', 'index.tsx'], async (routesDir) => {
+    const routes = await scanRoutes(routesDir);
+    const varNames = routes.map((r) => r.varName);
+    assertEquals(new Set(varNames).size, varNames.length);
+  });
 });

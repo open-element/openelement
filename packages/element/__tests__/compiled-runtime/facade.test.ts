@@ -30,19 +30,15 @@ import { testProgram } from './test-program.ts';
 // The facade captures its HTMLElement base at module evaluation time.
 const dom = installFacadeDom();
 
-const { OpenElement, ErrorBoundary, ensurePreHydrationClickCapture, renderDsd } = await import(
-  '../../src/index.ts'
-);
+const { OpenElement, ErrorBoundary, ensurePreHydrationClickCapture, renderDsd } =
+  await import('../../src/index.ts');
 const { jsx } = await import('../../src/jsx-runtime.ts');
 type BoundaryInstance = InstanceType<typeof ErrorBoundary>;
 const { OpenElementError } = await import('../../src/internal/core/errors.ts');
 
 const FIXTURE_PROGRAM = JSON.parse(
   await Deno.readTextFile(
-    new URL(
-      '../../__fixtures__/compiled-element-v1/expected-program.json',
-      import.meta.url,
-    ),
+    new URL('../../__fixtures__/compiled-element-v1/expected-program.json', import.meta.url),
   ),
 );
 
@@ -66,17 +62,15 @@ dom.registry.define('oe-program-counter', ProgramCounter);
 function freshCounter(attrs: Record<string, string> = {}): InstanceType<typeof ProgramCounter> & {
   childNodes: unknown[];
 } {
-  const element = dom.document.createElement('oe-program-counter') as unknown as
-    & InstanceType<
-      typeof ProgramCounter
-    >
-    & { childNodes: unknown[] };
+  const element = dom.document.createElement('oe-program-counter') as unknown as InstanceType<
+    typeof ProgramCounter
+  > & { childNodes: unknown[] };
   for (const [name, value] of Object.entries(attrs)) element.setAttribute(name, value);
   dom.document.body.appendChild(element as never);
   return element;
 }
 
-// deno-lint-ignore no-explicit-any
+// oxlint-disable-next-line no-explicit-any
 type AnyElement = any;
 
 function shadowOf(element: AnyElement): AnyElement {
@@ -116,10 +110,7 @@ Deno.test('facade: reflect properties mirror post-connect writes to attributes',
   // label does not reflect.
   element.label = 'changed';
   assertEquals(element.getAttribute('label'), null);
-  assertEquals(
-    (shadowOf(element).childNodes[0].childNodes[1] as AnyElement).value,
-    'changed',
-  );
+  assertEquals((shadowOf(element).childNodes[0].childNodes[1] as AnyElement).value, 'changed');
 });
 
 Deno.test('facade: SSR-delivered attributes win at connect; defaults restore on removal', () => {
@@ -206,10 +197,7 @@ Deno.test('facade: uncompiled classes fail closed at connect (OE_PROGRAM_MISSING
   class BareElement extends OpenElement {}
   dom.registry.define('oe-bare-element', BareElement as unknown as CustomElementConstructor);
   const element = dom.document.createElement('oe-bare-element');
-  const error = assertThrows(
-    () => dom.document.body.appendChild(element),
-    OpenElementError,
-  );
+  const error = assertThrows(() => dom.document.body.appendChild(element), OpenElementError);
   assertEquals(error.code, 'OE_PROGRAM_MISSING');
   assertStringIncludes(error.message, 'BareElement');
   assertStringIncludes(error.message, 'open:compiled-element');
@@ -253,21 +241,25 @@ Deno.test('facade: renderDsd serializes shadow programs per the program root kin
   const shadowProgram = testProgram({
     tag: 'oe-facade-shadow',
     rootMode: 'shadow-open',
-    template: [{
-      k: 'el',
-      tag: 'span',
-      attrs: [],
-      children: [{ k: 'part', index: 0 }],
-    }],
+    template: [
+      {
+        k: 'el',
+        tag: 'span',
+        attrs: [],
+        children: [{ k: 'part', index: 0 }],
+      },
+    ],
     parts: [{ k: 'text', index: 0, signal: 'label' }],
-    properties: [{
-      name: 'label',
-      attribute: 'label',
-      type: 'string',
-      converter: 'string',
-      reflect: true,
-      default: 'idle',
-    }],
+    properties: [
+      {
+        name: 'label',
+        attribute: 'label',
+        type: 'string',
+        converter: 'string',
+        reflect: true,
+        default: 'idle',
+      },
+    ],
   });
 
   class ShadowElement extends OpenElement {
@@ -304,14 +296,16 @@ Deno.test('facade: style Parts kebab-case camelCase declaration keys (#1056)', (
     tag: 'oe-facade-style',
     template: [{ k: 'el', tag: 'div', attrs: [], children: [] }],
     parts: [{ k: 'style', index: 0, signal: 'theme', path: [0] }],
-    properties: [{
-      name: 'theme',
-      attribute: null,
-      type: 'object',
-      converter: 'object',
-      reflect: false,
-      default: {},
-    }],
+    properties: [
+      {
+        name: 'theme',
+        attribute: null,
+        type: 'object',
+        converter: 'object',
+        reflect: false,
+        default: {},
+      },
+    ],
   });
   class StyleElement extends OpenElement {
     static __partProgram = program;
@@ -362,14 +356,16 @@ Deno.test('facade: the kernel captures connect-time failures into the boundary s
     tag: 'oe-facade-failing',
     template: [{ k: 'el', tag: 'div', attrs: [], children: [{ k: 'part', index: 0 }] }],
     parts: [{ k: 'text', index: 0, signal: 'label' }],
-    properties: [{
-      name: 'label',
-      attribute: 'label',
-      type: 'string',
-      converter: 'string',
-      reflect: false,
-      default: 'x',
-    }],
+    properties: [
+      {
+        name: 'label',
+        attribute: 'label',
+        type: 'string',
+        converter: 'string',
+        reflect: false,
+        default: 'x',
+      },
+    ],
   });
   class FailingBoundary extends ErrorBoundary {
     static __partProgram = program;

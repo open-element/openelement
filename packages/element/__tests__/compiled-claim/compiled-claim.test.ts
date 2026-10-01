@@ -38,16 +38,15 @@ const claimExistingDom = claimExistingDomCanonical as unknown as (
   options?: WireClaimOptions,
 ) => { dispose(): void };
 
-const { capturePreUpgradeEvents, releasePreUpgradeEvents, replayPreUpgradeEvents } = (await import(
-  '../../src/internal/compiled/runtime.ts'
-)) as unknown as {
-  capturePreUpgradeEvents: (
-    root: EventTarget,
-    eventTypes?: readonly string[],
-  ) => WirePreUpgradeEventCapture;
-  releasePreUpgradeEvents: (root: Node, captured: readonly unknown[]) => void;
-  replayPreUpgradeEvents: (root: Node, captured: readonly unknown[]) => number;
-};
+const { capturePreUpgradeEvents, releasePreUpgradeEvents, replayPreUpgradeEvents } =
+  (await import('../../src/internal/compiled/runtime.ts')) as unknown as {
+    capturePreUpgradeEvents: (
+      root: EventTarget,
+      eventTypes?: readonly string[],
+    ) => WirePreUpgradeEventCapture;
+    releasePreUpgradeEvents: (root: Node, captured: readonly unknown[]) => void;
+    replayPreUpgradeEvents: (root: Node, captured: readonly unknown[]) => number;
+  };
 
 interface Counters {
   createdElements: number;
@@ -107,7 +106,7 @@ abstract class TestNode {
   get nextSibling(): TestNode | null {
     if (!this.parentNode) return null;
     const index = this.parentNode.childNodes.indexOf(this);
-    return index >= 0 ? this.parentNode.childNodes[index + 1] ?? null : null;
+    return index >= 0 ? (this.parentNode.childNodes[index + 1] ?? null) : null;
   }
 
   appendChild(node: TestNode): TestNode {
@@ -161,7 +160,10 @@ class TestText extends TestNode {
 class TestComment extends TestNode {
   readonly nodeType = 8;
 
-  constructor(ownerDocument: TestDocument, readonly data: string) {
+  constructor(
+    ownerDocument: TestDocument,
+    readonly data: string,
+  ) {
     super(ownerDocument);
   }
 }
@@ -324,10 +326,13 @@ function makeSsrDom(doc: TestDocument): {
 function makeHost(counters: Counters) {
   const count = new TestSignal(0, counters);
   const label = new TestSignal('ready', counters);
-  const items = new TestSignal([
-    { id: 'a', text: 'alpha' },
-    { id: 'b', text: 'beta' },
-  ], counters);
+  const items = new TestSignal(
+    [
+      { id: 'a', text: 'alpha' },
+      { id: 'b', text: 'beta' },
+    ],
+    counters,
+  );
   let clicks = 0;
   const host = {
     signals: { count, label, items },
@@ -373,10 +378,7 @@ Deno.test('alpha.3 claim preserves identity, live state, and one pre-upgrade eve
   dom.input.selectionEnd = 8;
   dom.input.focus();
 
-  const capture = capturePreUpgradeEvents(
-    dom.root as unknown as EventTarget,
-    ['click'],
-  );
+  const capture = capturePreUpgradeEvents(dom.root as unknown as EventTarget, ['click']);
   dom.button.dispatchEvent(new TestEvent('click'));
   const instance = claimExistingDom(program, host, dom.root as unknown as Node, {
     preUpgradeEvents: capture,
@@ -417,15 +419,17 @@ Deno.test('alpha.3 claim resolves fixed sinks across expanded dynamic anchors', 
   // and the claim walk still crosses the expanded anchor before the sinks.
   const program = testProgram({
     tag: 'oe-demo-path',
-    template: [{
-      k: 'el',
-      tag: 'section',
-      attrs: [],
-      children: [
-        { k: 'el', tag: 'div', attrs: [], children: [{ k: 'part', index: 0 }] },
-        { k: 'el', tag: 'input', attrs: [], children: [] },
-      ],
-    }],
+    template: [
+      {
+        k: 'el',
+        tag: 'section',
+        attrs: [],
+        children: [
+          { k: 'el', tag: 'div', attrs: [], children: [{ k: 'part', index: 0 }] },
+          { k: 'el', tag: 'input', attrs: [], children: [] },
+        ],
+      },
+    ],
     parts: [
       { k: 'text', index: 0, signal: 'label' },
       { k: 'prop', index: 1, signal: 'label', name: 'value', path: [0, 1] },
@@ -507,10 +511,7 @@ Deno.test('alpha.3 failed claim stops a live pre-upgrade capture', async () => {
   dom.h1.childNodes[0] = doc.createTextNode('Count? ');
   dom.h1.childNodes[0].parentNode = dom.h1;
   const { host } = makeHost(doc.counters);
-  const capture = capturePreUpgradeEvents(
-    dom.root as unknown as EventTarget,
-    ['click'],
-  );
+  const capture = capturePreUpgradeEvents(dom.root as unknown as EventTarget, ['click']);
 
   assertThrows(
     () =>
@@ -522,10 +523,7 @@ Deno.test('alpha.3 failed claim stops a live pre-upgrade capture', async () => {
   dom.button.dispatchEvent(new TestEvent('click'));
   assertEquals(capture.events.length, 0);
 
-  const invalidCapture = capturePreUpgradeEvents(
-    dom.root as unknown as EventTarget,
-    ['click'],
-  );
+  const invalidCapture = capturePreUpgradeEvents(dom.root as unknown as EventTarget, ['click']);
   assertThrows(
     () =>
       claimExistingDom({ version: 2 }, host, dom.root as unknown as Node, {
@@ -623,11 +621,13 @@ Deno.test('replay accepts hand-built records without a capture sequence', () => 
     handled++;
   });
   // No capture sequence: hand-built records sort before every captured event.
-  const records = [{
-    target: button as unknown as EventTarget,
-    type: 'click',
-    event: new TestEvent('click') as unknown as Event,
-  }];
+  const records = [
+    {
+      target: button as unknown as EventTarget,
+      type: 'click',
+      event: new TestEvent('click') as unknown as Event,
+    },
+  ];
   assertEquals(replayPreUpgradeEvents(root as unknown as Node, records), 1);
   assertEquals(handled, 1);
   assertEquals(replayPreUpgradeEvents(root as unknown as Node, records), 0);
@@ -712,14 +712,11 @@ Deno.test('alpha.3 owning recovery can replace only the root owner after root dr
 });
 
 Deno.test('alpha.3 fail-closed validation rejects executable program attributes', async () => {
-  const program = await loadProgram() as {
+  const program = (await loadProgram()) as {
     template: Array<{ attrs: Array<[string, string]> }>;
   };
   program.template[0].attrs = [['onclick', 'alert(1)']];
-  const error = assertThrows(
-    () => serializeProgramContent(program, { signals: {} }),
-    Error,
-  );
+  const error = assertThrows(() => serializeProgramContent(program, { signals: {} }), Error);
   assertStringIncludes(error.message, 'unsafe name');
 });
 
@@ -729,7 +726,10 @@ Deno.test('alpha.3 claim rejects duplicate keyed Region data before attaching', 
   const dom = makeSsrDom(doc);
   const counters = doc.counters;
   const { host, items } = makeHost(counters);
-  items.value = [{ id: 'a', text: 'alpha' }, { id: 'a', text: 'again' }];
+  items.value = [
+    { id: 'a', text: 'alpha' },
+    { id: 'a', text: 'again' },
+  ];
   const error = assertThrows(
     () => claimExistingDom(program, host, dom.root as unknown as Node),
     PartProgramClaimError,
@@ -773,8 +773,8 @@ Deno.test('alpha.3 keyed Region moves, reuses, updates, and removes only owned e
     { id: 'c', text: 'gamma' },
     { id: 'a', text: 'ALPHA' },
   ];
-  const firstPass = dom.ul.childNodes.filter((node): node is TestElement =>
-    node instanceof TestElement
+  const firstPass = dom.ul.childNodes.filter(
+    (node): node is TestElement => node instanceof TestElement,
   );
   assertEquals(firstPass.length, 3);
   assertStrictEquals(firstPass[0], initialB);
@@ -787,8 +787,8 @@ Deno.test('alpha.3 keyed Region moves, reuses, updates, and removes only owned e
     { id: 'a', text: 'alpha again' },
     { id: 'c', text: 'gamma again' },
   ];
-  const secondPass = dom.ul.childNodes.filter((node): node is TestElement =>
-    node instanceof TestElement
+  const secondPass = dom.ul.childNodes.filter(
+    (node): node is TestElement => node instanceof TestElement,
   );
   assertEquals(secondPass.length, 2);
   assertStrictEquals(secondPass[0], initialA);
@@ -802,17 +802,21 @@ Deno.test('alpha.3 keyed Region moves, reuses, updates, and removes only owned e
 Deno.test('alpha.3 claim preserves nested custom-element node identity without entering its internals', () => {
   const program = testProgram({
     tag: 'oe-demo-nested',
-    template: [{
-      k: 'el',
-      tag: 'x-shell',
-      attrs: [['data-owner', 'demo']],
-      children: [{
+    template: [
+      {
         k: 'el',
-        tag: 'x-third-party',
-        attrs: [],
-        children: [{ k: 'text', value: 'foreign' }],
-      }],
-    }],
+        tag: 'x-shell',
+        attrs: [['data-owner', 'demo']],
+        children: [
+          {
+            k: 'el',
+            tag: 'x-third-party',
+            attrs: [],
+            children: [{ k: 'text', value: 'foreign' }],
+          },
+        ],
+      },
+    ],
     parts: [],
   });
   const doc = new TestDocument();
@@ -832,12 +836,14 @@ Deno.test('alpha.3 claim preserves nested custom-element node identity without e
 Deno.test('claim leaves an independently SSG-expanded empty custom host to its own program', () => {
   const program = testProgram({
     tag: 'oe-parent',
-    template: [{
-      k: 'el',
-      tag: 'x-child',
-      attrs: [['model', '{"title":"Nested"}']],
-      children: [],
-    }],
+    template: [
+      {
+        k: 'el',
+        tag: 'x-child',
+        attrs: [['model', '{"title":"Nested"}']],
+        children: [],
+      },
+    ],
     parts: [],
   });
   const doc = new TestDocument();
@@ -861,12 +867,14 @@ Deno.test('claim leaves an independently SSG-expanded empty custom host to its o
 Deno.test('claim preserves externally projected route content inside an empty slot', () => {
   const program = testProgram({
     tag: 'oe-shell',
-    template: [{
-      k: 'el',
-      tag: 'main',
-      attrs: [],
-      children: [{ k: 'el', tag: 'slot', attrs: [], children: [] }],
-    }],
+    template: [
+      {
+        k: 'el',
+        tag: 'main',
+        attrs: [],
+        children: [{ k: 'el', tag: 'slot', attrs: [], children: [] }],
+      },
+    ],
     parts: [],
   });
   const doc = new TestDocument();

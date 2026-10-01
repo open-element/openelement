@@ -87,11 +87,13 @@ function sourceCandidates(base: string): string[] {
     : base;
   const stems = withoutExtension === base ? [base] : [base, withoutExtension];
   return [
-    ...new Set(stems.flatMap((stem) => [
-      stem,
-      ...SOURCE_EXTENSIONS.slice(1).map((extension) => `${stem}${extension}`),
-      ...SOURCE_EXTENSIONS.slice(1).map((extension) => join(stem, `index${extension}`)),
-    ])),
+    ...new Set(
+      stems.flatMap((stem) => [
+        stem,
+        ...SOURCE_EXTENSIONS.slice(1).map((extension) => `${stem}${extension}`),
+        ...SOURCE_EXTENSIONS.slice(1).map((extension) => join(stem, `index${extension}`)),
+      ]),
+    ),
   ];
 }
 
@@ -208,10 +210,7 @@ export function findReachableIslandTags(
     recordSourceFile(resolve(root, routesDir, route.filePath));
   }
 
-  const shellConfigs = [
-    ctx.phase3.appShell,
-    ...Object.values(ctx.phase3.layouts ?? {}),
-  ];
+  const shellConfigs = [ctx.phase3.appShell, ...Object.values(ctx.phase3.layouts ?? {})];
   for (const shell of shellConfigs) {
     if (!shell || typeof shell !== 'object') continue;
     const shellFile = resolveConfiguredSource(root, shell.import);
@@ -294,24 +293,26 @@ async function buildClient(ctx: OpenElementBuildContext): Promise<ClientAssetMan
   // #709: shared specificity sort with alias-utils.ts (single implementation).
   const serializedAlias = sortAliasEntries(
     resolveAlias
-      ? (Array.isArray(resolveAlias)
+      ? Array.isArray(resolveAlias)
         ? resolveAlias.map((a) => ({
-          find: a.find,
-          replacement: a.replacement,
-        }))
-        : Object.entries(resolveAlias).map(([find, replacement]) => ({ find, replacement })))
+            find: a.find,
+            replacement: a.replacement,
+          }))
+        : Object.entries(resolveAlias).map(([find, replacement]) => ({ find, replacement }))
       : [],
   );
 
   // #569: an island-free app with data-open-enhance forms still needs the
   // client entry — it carries the form-enhancement layer.
-  const enhancedForms = (ctx.phase1.cachedRoutes ?? []).some((route) =>
-    route.type === 'page' && route.hasEnhancedForms === true
+  const enhancedForms = (ctx.phase1.cachedRoutes ?? []).some(
+    (route) => route.type === 'page' && route.hasEnhancedForms === true,
   );
 
   if (
-    localIslands.length === 0 && packageIslandDecls.length === 0 &&
-    compilerBehaviorDecls.length === 0 && !enhancedForms
+    localIslands.length === 0 &&
+    packageIslandDecls.length === 0 &&
+    compilerBehaviorDecls.length === 0 &&
+    !enhancedForms
   ) {
     await removeClientDeliveryArtifacts(root, outDir);
     log.info('No islands found - zero client JS output');
@@ -322,7 +323,7 @@ async function buildClient(ctx: OpenElementBuildContext): Promise<ClientAssetMan
     deliveryTagsForLocal(
       tagName,
       ctx.phase1.islandMeta[tagName] as Partial<DeliveryIslandRecord> | undefined,
-    )
+    ),
   );
   const packageDeliveryTags = packageIslandDecls.flatMap(deliveryTagsForPackage);
   const compilerDeliveryTags = compilerBehaviorDecls.flatMap(deliveryTagsForPackage);
@@ -336,17 +337,17 @@ async function buildClient(ctx: OpenElementBuildContext): Promise<ClientAssetMan
       deliveryTagsForLocal(
         tagName,
         ctx.phase1.islandMeta[tagName] as Partial<DeliveryIslandRecord> | undefined,
-      ).some((deliveredTag) => reachableTags.has(deliveredTag))
+      ).some((deliveredTag) => reachableTags.has(deliveredTag)),
     );
   const selectedLocalTags = selectedLocal.map(({ tagName }) => tagName);
-  const selectedLocalFiles = selectedLocal.map(({ tagName, index }) =>
-    localIslandFiles[index] || `${tagName}.ts`
+  const selectedLocalFiles = selectedLocal.map(
+    ({ tagName, index }) => localIslandFiles[index] || `${tagName}.ts`,
   );
   const selectedPackageDecls = packageIslandDecls.filter((island) =>
-    deliveryTagsForPackage(island).some((deliveredTag) => reachableTags.has(deliveredTag))
+    deliveryTagsForPackage(island).some((deliveredTag) => reachableTags.has(deliveredTag)),
   );
   const selectedCompilerBehaviorDecls = compilerBehaviorDecls.filter((island) =>
-    deliveryTagsForPackage(island).some((deliveredTag) => reachableTags.has(deliveredTag))
+    deliveryTagsForPackage(island).some((deliveredTag) => reachableTags.has(deliveredTag)),
   );
 
   // Keep the post-processor and manifest inputs in lockstep with the exact
@@ -358,19 +359,22 @@ async function buildClient(ctx: OpenElementBuildContext): Promise<ClientAssetMan
   ctx.phase1.compilerBehaviorDecls = selectedCompilerBehaviorDecls;
 
   if (
-    selectedLocalTags.length === 0 && selectedPackageDecls.length === 0 &&
-    selectedCompilerBehaviorDecls.length === 0 && !enhancedForms
+    selectedLocalTags.length === 0 &&
+    selectedPackageDecls.length === 0 &&
+    selectedCompilerBehaviorDecls.length === 0 &&
+    !enhancedForms
   ) {
     await removeClientDeliveryArtifacts(root, outDir);
     log.info('No admitted reachable islands - zero client JS output');
     return null;
   }
 
-  const totalIslands = selectedLocalTags.length + selectedCompilerBehaviorDecls.length +
-    selectedPackageDecls.length;
+  const totalIslands =
+    selectedLocalTags.length + selectedCompilerBehaviorDecls.length + selectedPackageDecls.length;
   log.info(
     `Building client bundle for ${totalIslands} island(s)` +
-      (enhancedForms ? ' + data-open-enhance form enhancement' : '') + '...',
+      (enhancedForms ? ' + data-open-enhance form enhancement' : '') +
+      '...',
   );
 
   // Generate client entry code (#951: entry list built by the shared helper,
@@ -404,7 +408,7 @@ async function buildClient(ctx: OpenElementBuildContext): Promise<ClientAssetMan
     return resolved;
   };
   const packageSideSourcePaths = packageSideEntries.map((entry) =>
-    islandSourcePath(entry.modulePath)
+    islandSourcePath(entry.modulePath),
   );
   const clientAssetIslands: ClientAssetIslandInput[] = [
     ...selectedLocalTags.map((tagName, index) => ({
@@ -470,74 +474,75 @@ async function buildClient(ctx: OpenElementBuildContext): Promise<ClientAssetMan
       manifest: true,
       rollupOptions: {
         input: { client: VIRTUAL_CLIENT_ENTRY_ID },
-        output: ctx.options.renderer === 'lit'
-          ? {
-            format: 'esm',
-            entryFileNames: 'islands/[name].js',
-            chunkFileNames: 'islands/[name]-[hash].js',
-            // #1339: lit hydration is order-sensitive —
-            // lit-element-hydrate-support must set
-            // globalThis.litElementHydrateSupport BEFORE any lit-element
-            // module body reads it. Rolldown's default chunking can home
-            // shared lit-html/lit-element modules in a lazy island chunk,
-            // which then evaluates (via the entry's static import of the
-            // shared chunk) BEFORE the entry's hydrate-support module — the
-            // patch never applies and islands re-render instead of adopting
-            // DSD (observed as duplicated island content). The manualChunks
-            // compat shim did not hold here; use rolldown's native
-            // codeSplitting with an explicit high-priority lit-runtime group:
-            // it evaluates first (the entry imports hydrate-support first),
-            // and island chunks keep only the island module, staying lazy.
-            codeSplitting: {
-              groups: [
-                {
-                  name: 'lit-runtime',
-                  test: /\/(lit|lit-html|lit-element)\/|\/@lit\/|\/@lit-labs\/ssr-client\//,
-                  priority: 20,
+        output:
+          ctx.options.renderer === 'lit'
+            ? {
+                format: 'esm',
+                entryFileNames: 'islands/[name].js',
+                chunkFileNames: 'islands/[name]-[hash].js',
+                // #1339: lit hydration is order-sensitive —
+                // lit-element-hydrate-support must set
+                // globalThis.litElementHydrateSupport BEFORE any lit-element
+                // module body reads it. Rolldown's default chunking can home
+                // shared lit-html/lit-element modules in a lazy island chunk,
+                // which then evaluates (via the entry's static import of the
+                // shared chunk) BEFORE the entry's hydrate-support module — the
+                // patch never applies and islands re-render instead of adopting
+                // DSD (observed as duplicated island content). The manualChunks
+                // compat shim did not hold here; use rolldown's native
+                // codeSplitting with an explicit high-priority lit-runtime group:
+                // it evaluates first (the entry imports hydrate-support first),
+                // and island chunks keep only the island module, staying lazy.
+                codeSplitting: {
+                  groups: [
+                    {
+                      name: 'lit-runtime',
+                      test: /\/(lit|lit-html|lit-element)\/|\/@lit\/|\/@lit-labs\/ssr-client\//,
+                      priority: 20,
+                    },
+                    {
+                      name: 'preact',
+                      test: /node_modules\/preact|\/preact\//,
+                      priority: 10,
+                    },
+                    {
+                      name(id: string) {
+                        if (id.includes(`/${islandsDir}/`)) {
+                          const match = id.match(/\/([^/]+)\.(ts|tsx|js|jsx)$/);
+                          if (match) return `island-${match[1]}`;
+                        }
+                        // #1471: package islands group by the exact module
+                        // identity the asset manifest joins on — zero matches
+                        // and ambiguous matches fail the build.
+                        return packageIslandChunkName(id, packageDeclIdentities);
+                      },
+                    },
+                  ],
                 },
-                {
-                  name: 'preact',
-                  test: /node_modules\/preact|\/preact\//,
-                  priority: 10,
-                },
-                {
-                  name(id: string) {
-                    if (id.includes(`/${islandsDir}/`)) {
-                      const match = id.match(/\/([^/]+)\.(ts|tsx|js|jsx)$/);
-                      if (match) return `island-${match[1]}`;
-                    }
-                    // #1471: package islands group by the exact module
-                    // identity the asset manifest joins on — zero matches
-                    // and ambiguous matches fail the build.
-                    return packageIslandChunkName(id, packageDeclIdentities);
-                  },
-                },
-              ],
-            },
-          }
-          : {
-            format: 'esm',
-            entryFileNames: 'islands/[name].js',
-            chunkFileNames: 'islands/[name]-[hash].js',
-            manualChunks(id: string) {
-              // Force preact + preact/hooks into a single chunk so the shared
-              // options object is not duplicated across chunks (which breaks hooks).
-              if (id.includes('node_modules/preact') || id.includes('/preact/')) {
-                return 'preact';
               }
-              if (id.includes(`/${islandsDir}/`)) {
-                // Extensions mirror resolve.extensions below and scanIslands
-                // (ts/tsx/js/jsx). Previously missing tsx/jsx meant .tsx
-                // islands skipped manualChunks and lost the `island-` prefix.
-                const match = id.match(/\/([^/]+)\.(ts|tsx|js|jsx)$/);
-                if (match) return `island-${match[1]}`;
-              }
-              // #1471: package islands group by the exact module identity the
-              // asset manifest joins on — zero matches and ambiguous matches
-              // fail the build, never a substring first-hit.
-              return packageIslandChunkName(id, packageDeclIdentities);
-            },
-          },
+            : {
+                format: 'esm',
+                entryFileNames: 'islands/[name].js',
+                chunkFileNames: 'islands/[name]-[hash].js',
+                manualChunks(id: string) {
+                  // Force preact + preact/hooks into a single chunk so the shared
+                  // options object is not duplicated across chunks (which breaks hooks).
+                  if (id.includes('node_modules/preact') || id.includes('/preact/')) {
+                    return 'preact';
+                  }
+                  if (id.includes(`/${islandsDir}/`)) {
+                    // Extensions mirror resolve.extensions below and scanIslands
+                    // (ts/tsx/js/jsx). Previously missing tsx/jsx meant .tsx
+                    // islands skipped manualChunks and lost the `island-` prefix.
+                    const match = id.match(/\/([^/]+)\.(ts|tsx|js|jsx)$/);
+                    if (match) return `island-${match[1]}`;
+                  }
+                  // #1471: package islands group by the exact module identity the
+                  // asset manifest joins on — zero matches and ambiguous matches
+                  // fail the build, never a substring first-hit.
+                  return packageIslandChunkName(id, packageDeclIdentities);
+                },
+              },
       },
     },
     resolve: {

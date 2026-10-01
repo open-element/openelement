@@ -84,9 +84,9 @@ function inlineToJsx(tokens: MarkedToken[] | undefined, filePath: string): strin
         break;
       }
       case 'image':
-        out += `<img src=${JSON.stringify(token.href ?? '')} alt=${
-          JSON.stringify(token.text ?? '')
-        } />`;
+        out += `<img src=${JSON.stringify(token.href ?? '')} alt=${JSON.stringify(
+          token.text ?? '',
+        )} />`;
         break;
       case 'br':
         out += '<br />';
@@ -158,9 +158,7 @@ function blockToJsx(tokens: MarkedToken[], filePath: string): string {
 
 function pascalCase(stem: string): string {
   const parts = stem.split(/[^A-Za-z0-9]+/).filter(Boolean);
-  const name = parts
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join('');
+  const name = parts.map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join('');
   return name.length > 0 && /^[A-Za-z]/.test(name) ? name : 'MdxPage';
 }
 

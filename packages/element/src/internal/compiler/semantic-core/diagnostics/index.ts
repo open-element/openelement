@@ -36,9 +36,10 @@ export class CompilerDiagnosticError extends OpenElementError {
   constructor(diagnostics: CompilerDiagnostic[]) {
     super(
       diagnostics
-        .map((diagnostic) =>
-          `${diagnostic.file}:${diagnostic.line}:${diagnostic.character} - error ` +
-          `${diagnostic.code}: ${diagnostic.message}`
+        .map(
+          (diagnostic) =>
+            `${diagnostic.file}:${diagnostic.line}:${diagnostic.character} - error ` +
+            `${diagnostic.code}: ${diagnostic.message}`,
         )
         .join('\n'),
       {
@@ -139,14 +140,16 @@ export function diagnosticPluginError(
 ): PluginDiagnosticError | null {
   const first = diagnostics[0];
   if (!first) return null;
-  const extra = diagnostics.length > 1
-    ? ` (+${diagnostics.length - 1} further diagnostic(s) in this module)`
-    : '';
+  const extra =
+    diagnostics.length > 1
+      ? ` (+${diagnostics.length - 1} further diagnostic(s) in this module)`
+      : '';
   return {
     id,
     loc: { file: first.file, line: first.line, column: first.character },
     frame: formatDiagnosticFrame(source, first),
-    message: `${first.file}:${first.line}:${first.character} - error ${first.code}: ` +
+    message:
+      `${first.file}:${first.line}:${first.character} - error ${first.code}: ` +
       `${first.message}${extra}`,
     diagnostics,
   };

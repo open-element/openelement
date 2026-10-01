@@ -68,18 +68,11 @@ function isCommit(value: unknown): value is string {
   return typeof value === 'string' && /^[0-9a-f]{40}$/u.test(value);
 }
 
-function unknownKeys(
-  record: Record<string, unknown>,
-  allowed: readonly string[],
-): string[] {
+function unknownKeys(record: Record<string, unknown>, allowed: readonly string[]): string[] {
   return Object.keys(record).filter((key) => !allowed.includes(key));
 }
 
-function auditArtifactPath(
-  jobName: JobName,
-  value: unknown,
-  mode: 'job' | 'bundle',
-): string[] {
+function auditArtifactPath(jobName: JobName, value: unknown, mode: 'job' | 'bundle'): string[] {
   if (typeof value !== 'string' || value === '') return ['log path must be a non-empty string'];
   if (value.startsWith('/') || value.includes('\\')) {
     return [`log path must be a relative POSIX path, got ${JSON.stringify(value)}`];
@@ -155,9 +148,9 @@ async function auditJob(
   if (extra.length > 0) failures.push(`${job}: unknown job fields: ${extra.join(', ')}`);
   if (rawJob.schemaVersion !== CANDIDATE_EVIDENCE_SCHEMA_VERSION) {
     failures.push(
-      `${job}: schemaVersion must be ${CANDIDATE_EVIDENCE_SCHEMA_VERSION}, got ${
-        JSON.stringify(rawJob.schemaVersion)
-      }`,
+      `${job}: schemaVersion must be ${CANDIDATE_EVIDENCE_SCHEMA_VERSION}, got ${JSON.stringify(
+        rawJob.schemaVersion,
+      )}`,
     );
   }
   if (rawJob.job !== job) failures.push(`${job}: job field must be ${JSON.stringify(job)}`);
@@ -182,18 +175,17 @@ async function auditJob(
     // a tree-identical run.
     if (isRecord(reusedStamp) && reusedStamp.sha !== rawJob.sha) {
       failures.push(
-        `${job}: reused.sha ${JSON.stringify(reusedStamp.sha)} != job sha ${
-          JSON.stringify(rawJob.sha)
-        }`,
+        `${job}: reused.sha ${JSON.stringify(reusedStamp.sha)} != job sha ${JSON.stringify(
+          rawJob.sha,
+        )}`,
       );
     }
   }
   // Everything a reused record's steps were produced against is the SOURCE
   // commit (its argv, its clean-proof lines), so the step audit binds to the
   // record's own sha whenever the proof was replayed.
-  const proofSha = reusedStamp !== undefined && typeof rawJob.sha === 'string'
-    ? rawJob.sha
-    : context.sha;
+  const proofSha =
+    reusedStamp !== undefined && typeof rawJob.sha === 'string' ? rawJob.sha : context.sha;
   if (rawJob.tree !== context.tree) {
     failures.push(`${job}: tree ${JSON.stringify(rawJob.tree)} != ${context.tree}`);
   }
@@ -203,18 +195,19 @@ async function auditJob(
   if (rawJob.result !== 'PASS') {
     failures.push(`${job}: job result must be PASS, got ${JSON.stringify(rawJob.result)}`);
   }
-  const generatedAtMs = typeof rawJob.generatedAt === 'string' &&
-      ISO_TIMESTAMP.test(rawJob.generatedAt)
-    ? Date.parse(rawJob.generatedAt)
-    : Number.NaN;
+  const generatedAtMs =
+    typeof rawJob.generatedAt === 'string' && ISO_TIMESTAMP.test(rawJob.generatedAt)
+      ? Date.parse(rawJob.generatedAt)
+      : Number.NaN;
   if (Number.isNaN(generatedAtMs)) {
     failures.push(
-      `${job}: generatedAt must be an ISO-8601 timestamp, got ${
-        JSON.stringify(rawJob.generatedAt)
-      }`,
+      `${job}: generatedAt must be an ISO-8601 timestamp, got ${JSON.stringify(
+        rawJob.generatedAt,
+      )}`,
     );
   } else if (
-    context.bundleGeneratedAtMs !== undefined && generatedAtMs > context.bundleGeneratedAtMs
+    context.bundleGeneratedAtMs !== undefined &&
+    generatedAtMs > context.bundleGeneratedAtMs
   ) {
     failures.push(`${job}: generatedAt is after the bundle generatedAt`);
   }
@@ -262,8 +255,9 @@ async function auditJob(
     if (!step) continue;
     const label = `${job}/${name}`;
     failures.push(
-      ...auditStep(job, name, step.command, step.cwd, { sha: proofSha, tree: context.tree })
-        .map((failure) => `${label}: ${failure}`),
+      ...auditStep(job, name, step.command, step.cwd, { sha: proofSha, tree: context.tree }).map(
+        (failure) => `${label}: ${failure}`,
+      ),
     );
     const startedAt = step.startedAt;
     if (typeof startedAt !== 'string' || !ISO_TIMESTAMP.test(startedAt)) {
@@ -280,7 +274,8 @@ async function auditJob(
         }
         previousStartedAt = Math.max(previousStartedAt, startedAtMs);
         if (
-          Number.isSafeInteger(step.durationMs) && (step.durationMs as number) >= 0 &&
+          Number.isSafeInteger(step.durationMs) &&
+          (step.durationMs as number) >= 0 &&
           !Number.isNaN(generatedAtMs)
         ) {
           const end = startedAtMs + (step.durationMs as number);
@@ -293,9 +288,9 @@ async function auditJob(
     }
     if (!Number.isSafeInteger(step.durationMs) || (step.durationMs as number) < 0) {
       failures.push(
-        `${label}: durationMs must be a non-negative safe integer, got ${
-          JSON.stringify(step.durationMs)
-        }`,
+        `${label}: durationMs must be a non-negative safe integer, got ${JSON.stringify(
+          step.durationMs,
+        )}`,
       );
     }
     if (step.result !== 'PASS') {
@@ -307,8 +302,8 @@ async function auditJob(
       );
     }
     failures.push(
-      ...auditArtifactPath(job, step.logPath, context.mode).map((failure) =>
-        `${label}: ${failure}`
+      ...auditArtifactPath(job, step.logPath, context.mode).map(
+        (failure) => `${label}: ${failure}`,
       ),
     );
     let logText: string | undefined;
@@ -325,17 +320,16 @@ async function auditJob(
     }
     if (typeof step.logSha256 !== 'string' || !SHA256_HEX.test(step.logSha256)) {
       failures.push(
-        `${label}: logSha256 must be sha256:<64 lowercase hex>, got ${
-          JSON.stringify(step.logSha256)
-        }`,
+        `${label}: logSha256 must be sha256:<64 lowercase hex>, got ${JSON.stringify(
+          step.logSha256,
+        )}`,
       );
     }
     if (name === 'workspace-clean-before' || name === 'workspace-clean-after') {
       const phase = name.endsWith('before') ? 'before' : 'after';
       if (
-        logText !== undefined && !logText.includes(
-          cleanProofLine(proofSha, context.tree, phase),
-        )
+        logText !== undefined &&
+        !logText.includes(cleanProofLine(proofSha, context.tree, phase))
       ) {
         failures.push(`${label}: log is missing the canonical clean-proof PASS line`);
       }
@@ -356,10 +350,10 @@ async function auditJob(
     // re-verified against the top-level maps (upgrade: byte-check here too
     // once packed paths are bundle-relative).
     failures.push(
-      ...await collectPackedTarballFailures(rawJob.extras, {
+      ...(await collectPackedTarballFailures(rawJob.extras, {
         read: context.read,
         checkBytes: context.mode === 'job',
-      }),
+      })),
     );
   } else if (
     rawJob.extras !== undefined &&
@@ -395,12 +389,12 @@ export async function collectJobFailures(
       continue;
     }
     failures.push(
-      ...await auditJob(jobName, entry.job, {
+      ...(await auditJob(jobName, entry.job, {
         mode: 'job',
         sha: expected,
         tree: expectedTree,
         read: entry.read,
-      }),
+      })),
     );
   }
   for (const name of byName.keys()) {
@@ -425,9 +419,7 @@ export async function collectJobFailures(
  * run, because that one run's tree match is what makes them all valid. Two
  * source runs would mean the resolver's single decision was bypassed.
  */
-function auditReuseConsistency(
-  jobs: ReadonlyArray<{ name: string; reused: unknown }>,
-): string[] {
+function auditReuseConsistency(jobs: ReadonlyArray<{ name: string; reused: unknown }>): string[] {
   const sourceRuns = new Map<number, string[]>();
   for (const { name, reused } of jobs) {
     if (!isRecord(reused) || !Number.isSafeInteger(reused.runId)) continue;
@@ -437,8 +429,8 @@ function auditReuseConsistency(
   if (sourceRuns.size <= 1) return [];
   return [
     `reused evidence comes from ${sourceRuns.size} different runs (` +
-    [...sourceRuns].map(([runId, names]) => `${runId}: ${names.join('+')}`).join(', ') +
-    `); one reused tree must be replayed from one source run`,
+      [...sourceRuns].map(([runId, names]) => `${runId}: ${names.join('+')}`).join(', ') +
+      `); one reused tree must be replayed from one source run`,
   ];
 }
 
@@ -539,9 +531,9 @@ async function auditTarballFiles(
     failures.push(`packageVersion must be an x.y.z(-label) string, got ${JSON.stringify(version)}`);
   }
   const packedJob = Array.isArray(evidence.jobs)
-    ? (evidence.jobs as unknown[]).find((job) => isRecord(job) && job.job === 'packed') as
-      | Record<string, unknown>
-      | undefined
+    ? ((evidence.jobs as unknown[]).find((job) => isRecord(job) && job.job === 'packed') as
+        | Record<string, unknown>
+        | undefined)
     : undefined;
   const packedExtras = packedJob && isRecord(packedJob.extras) ? packedJob.extras : undefined;
   if (packedExtras && !stringMapsEqual(packedExtras.tarballs, evidence.tarballs)) {
@@ -551,7 +543,9 @@ async function auditTarballFiles(
     failures.push('packed job extras.tarballFiles must equal the top-level tarballFiles map');
   }
   if (
-    packedExtras && typeof version === 'string' && PACKAGE_VERSION_PATTERN.test(version) &&
+    packedExtras &&
+    typeof version === 'string' &&
+    PACKAGE_VERSION_PATTERN.test(version) &&
     packedExtras.packageVersion !== version
   ) {
     failures.push('packed job extras.packageVersion must equal the top-level packageVersion');
@@ -585,8 +579,8 @@ async function auditTarballFiles(
     }
     if (typeof version === 'string' && PACKAGE_VERSION_PATTERN.test(version)) {
       failures.push(
-        ...(await auditTarballPackage(bytes, name, version)).map((failure) =>
-          `tarball ${name}: ${failure}`
+        ...(await auditTarballPackage(bytes, name, version)).map(
+          (failure) => `tarball ${name}: ${failure}`,
         ),
       );
     }
@@ -621,9 +615,9 @@ async function auditPackDiagnostics(
   }
   if (!Array.isArray(parsed)) return ['packDiagnostics must be an array'];
   const packedJob = Array.isArray(evidence.jobs)
-    ? (evidence.jobs as unknown[]).find((job) => isRecord(job) && job.job === 'packed') as
-      | Record<string, unknown>
-      | undefined
+    ? ((evidence.jobs as unknown[]).find((job) => isRecord(job) && job.job === 'packed') as
+        | Record<string, unknown>
+        | undefined)
     : undefined;
   const packedExtras = packedJob && isRecord(packedJob.extras) ? packedJob.extras : undefined;
   if (packedExtras && !deepEqual(packedExtras.packDiagnostics, parsed)) {
@@ -632,7 +626,7 @@ async function auditPackDiagnostics(
   const expectedNames = [...REQUIRED_PACKAGE_TARBALLS].sort();
   // Diagnostics order is per-package output order, not a contract; compare as
   // a set, but require exactly one entry per package.
-  const names = parsed.map((entry) => isRecord(entry) ? entry.package : undefined).sort();
+  const names = parsed.map((entry) => (isRecord(entry) ? entry.package : undefined)).sort();
   if (names.join(',') !== expectedNames.join(',')) {
     failures.push(
       `packDiagnostics must list exactly ${expectedNames.join(', ')}; found ${
@@ -653,23 +647,21 @@ async function auditPackDiagnostics(
     }
     if (entry.unexpectedWarnings !== 0) {
       failures.push(
-        `packDiagnostics ${label}: unexpectedWarnings must be 0, got ${
-          JSON.stringify(entry.unexpectedWarnings)
-        }`,
+        `packDiagnostics ${label}: unexpectedWarnings must be 0, got ${JSON.stringify(
+          entry.unexpectedWarnings,
+        )}`,
       );
     }
-    for (
-      const field of [
-        'knownUpstreamPrivateWarnings',
-        'publicDeclarations',
-        'declarationClosure',
-      ]
-    ) {
+    for (const field of [
+      'knownUpstreamPrivateWarnings',
+      'publicDeclarations',
+      'declarationClosure',
+    ]) {
       if (!Number.isSafeInteger(entry[field]) || (entry[field] as number) < 0) {
         failures.push(
-          `packDiagnostics ${label}: ${field} must be a non-negative safe integer, got ${
-            JSON.stringify(entry[field])
-          }`,
+          `packDiagnostics ${label}: ${field} must be a non-negative safe integer, got ${JSON.stringify(
+            entry[field],
+          )}`,
         );
       }
     }
@@ -694,9 +686,9 @@ export async function collectBundleFailures(
   if (extra.length > 0) failures.push(`evidence has unknown fields: ${extra.join(', ')}`);
   if (evidence.schemaVersion !== CANDIDATE_EVIDENCE_SCHEMA_VERSION) {
     failures.push(
-      `evidence schemaVersion must be ${CANDIDATE_EVIDENCE_SCHEMA_VERSION}, got ${
-        JSON.stringify(evidence.schemaVersion)
-      }`,
+      `evidence schemaVersion must be ${CANDIDATE_EVIDENCE_SCHEMA_VERSION}, got ${JSON.stringify(
+        evidence.schemaVersion,
+      )}`,
     );
   }
   const sha = evidence.sha;
@@ -752,20 +744,24 @@ export async function collectBundleFailures(
       // Bundle steps carry `logSource`; auditJob reads `logPath`.
       const steps = Array.isArray(raw.steps)
         ? raw.steps.map((step) => {
-          if (!isRecord(step)) return step;
-          const { logSource, ...rest } = step;
-          return { ...rest, logPath: logSource };
-        })
+            if (!isRecord(step)) return step;
+            const { logSource, ...rest } = step;
+            return { ...rest, logPath: logSource };
+          })
         : raw.steps;
       if (Array.isArray(steps)) totalSteps += steps.length;
       failures.push(
-        ...await auditJob(name, { ...raw, steps }, {
-          mode: 'bundle',
-          sha: typeof sha === 'string' ? sha : '',
-          tree: typeof tree === 'string' ? tree : '',
-          bundleGeneratedAtMs: Number.isNaN(recorded) ? undefined : recorded,
-          read: options.read,
-        }),
+        ...(await auditJob(
+          name,
+          { ...raw, steps },
+          {
+            mode: 'bundle',
+            sha: typeof sha === 'string' ? sha : '',
+            tree: typeof tree === 'string' ? tree : '',
+            bundleGeneratedAtMs: Number.isNaN(recorded) ? undefined : recorded,
+            read: options.read,
+          },
+        )),
       );
     }
     for (const jobName of JOB_NAMES) {
@@ -796,7 +792,8 @@ export async function collectBundleFailures(
     }
     const inputs = aggregate.inputs;
     if (
-      !Array.isArray(inputs) || inputs.length !== JOB_NAMES.length ||
+      !Array.isArray(inputs) ||
+      inputs.length !== JOB_NAMES.length ||
       inputs.some((entry, index) => entry !== JOB_NAMES[index])
     ) {
       failures.push(
@@ -805,15 +802,15 @@ export async function collectBundleFailures(
     }
     if (aggregate.recomputedLogHashes !== totalSteps) {
       failures.push(
-        `aggregate.recomputedLogHashes must equal the validated step count ${totalSteps}, got ${
-          JSON.stringify(aggregate.recomputedLogHashes)
-        }`,
+        `aggregate.recomputedLogHashes must equal the validated step count ${totalSteps}, got ${JSON.stringify(
+          aggregate.recomputedLogHashes,
+        )}`,
       );
     }
   }
 
-  failures.push(...await auditTarballFiles(evidence, options));
-  failures.push(...await auditPackDiagnostics(evidence, options.read));
+  failures.push(...(await auditTarballFiles(evidence, options)));
+  failures.push(...(await auditPackDiagnostics(evidence, options.read)));
 
   const tarballManifest = evidence.tarballManifest;
   if (!isRecord(tarballManifest)) {
@@ -844,7 +841,7 @@ export async function collectBundleFailures(
     }
   }
 
-  const rollup = isRecord(evidence.rollup) ? evidence.rollup as Rollup : undefined;
+  const rollup = isRecord(evidence.rollup) ? (evidence.rollup as Rollup) : undefined;
   failures.push(...collectRollupFailures(rollup));
   // A reused fresh-clone job proves a tree, not a commit: bind its Site E2E
   // sidecar to the commit the suite actually ran at (#1425). The candidate
@@ -852,18 +849,19 @@ export async function collectBundleFailures(
   // when the proof was replayed.
   const bundleSha = options.expectedSha ?? (isCommit(sha) ? sha : undefined);
   const freshJob = Array.isArray(evidence.jobs)
-    ? (evidence.jobs as unknown[]).find((job) => isRecord(job) && job.job === 'fresh-clone') as
-      | Pick<JobResult, 'sha' | 'reused'>
-      | undefined
+    ? ((evidence.jobs as unknown[]).find((job) => isRecord(job) && job.job === 'fresh-clone') as
+        | Pick<JobResult, 'sha' | 'reused'>
+        | undefined)
     : undefined;
-  const siteE2eSha = freshJob !== undefined && bundleSha !== undefined
-    ? jobProofSha(freshJob, bundleSha)
-    : bundleSha;
+  const siteE2eSha =
+    freshJob !== undefined && bundleSha !== undefined
+      ? jobProofSha(freshJob, bundleSha)
+      : bundleSha;
   failures.push(
-    ...await collectSiteE2eRecomputeFailures(rollup?.siteE2e, {
+    ...(await collectSiteE2eRecomputeFailures(rollup?.siteE2e, {
       readReport: () => options.read(SITE_E2E_REPORT_BUNDLE_PATH),
       expectedSha: siteE2eSha,
-    }),
+    })),
   );
   return failures;
 }
@@ -899,8 +897,7 @@ export async function validate(
     console.error(`evidence validation FAILED:\n${failures.join('\n')}`);
     Deno.exit(1);
   }
-  const boundSha = isRecord(evidence) && typeof evidence.sha === 'string'
-    ? evidence.sha
-    : 'unknown';
+  const boundSha =
+    isRecord(evidence) && typeof evidence.sha === 'string' ? evidence.sha : 'unknown';
   console.log(`evidence validation ok: ${evidencePath} binds ${boundSha}`);
 }

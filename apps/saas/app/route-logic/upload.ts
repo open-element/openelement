@@ -46,9 +46,7 @@ export interface UploadActionData {
 /** Minimal structural surface the route needs from the Supabase client. */
 export interface UploadSupabaseClient {
   auth: {
-    getUser(): Promise<
-      { data: { user: { id: string; email?: string } | null } }
-    >;
+    getUser(): Promise<{ data: { user: { id: string; email?: string } | null } }>;
   };
   storage: {
     from(bucket: string): {
@@ -91,28 +89,30 @@ export function ownsObjectKey(userId: string, key: string): boolean {
   return key.startsWith(`${userId}/`) && !key.slice(userId.length + 1).includes('/');
 }
 
-export function createUploadLoader(
-  createClient: UploadClientFactory = createServerSupabase,
-) {
+export function createUploadLoader(createClient: UploadClientFactory = createServerSupabase) {
   return async function loader(
     ctx: LoaderContext<Record<string, unknown>>,
   ): Promise<UploadLoaderData> {
     const supabase = createClient(ctx.env, ctx.request, ctx.responseHeaders);
-    const { data: { user } } = await supabase.auth.getUser();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
     if (!user) throw redirect('/login');
     const { data, error } = await supabase.rpc('list_downloadable_attachments', {});
     if (error) {
       return { denied: false, email: user.email, error: error.message };
     }
     const rows = (data ?? []) as { object_key: string; display_name: string }[];
-    const files = await Promise.all(rows.map(async (file) => {
-      const signed = await supabase.storage.from(BUCKET).createSignedUrl(file.object_key, 60);
-      return {
-        key: file.object_key,
-        name: file.display_name,
-        downloadUrl: signed.error ? '' : signed.data?.signedUrl ?? '',
-      };
-    }));
+    const files = await Promise.all(
+      rows.map(async (file) => {
+        const signed = await supabase.storage.from(BUCKET).createSignedUrl(file.object_key, 60);
+        return {
+          key: file.object_key,
+          name: file.display_name,
+          downloadUrl: signed.error ? '' : (signed.data?.signedUrl ?? ''),
+        };
+      }),
+    );
     return {
       denied: false,
       email: user.email,
@@ -121,14 +121,14 @@ export function createUploadLoader(
   };
 }
 
-export function createUploadAction(
-  createClient: UploadClientFactory = createServerSupabase,
-) {
+export function createUploadAction(createClient: UploadClientFactory = createServerSupabase) {
   return async function upload(
     ctx: ActionContext<Record<string, unknown>>,
   ): Promise<OpenElementActionFailure<UploadActionData>> {
     const supabase = createClient(ctx.env, ctx.request, ctx.responseHeaders);
-    const { data: { user } } = await supabase.auth.getUser();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
     if (!user) return fail(401, { error: 'sign-in required to upload' });
     const file = ctx.formData.get('file');
     if (!(file instanceof File) || file.size === 0) {
@@ -197,14 +197,14 @@ export function createUploadAction(
   };
 }
 
-export function createDeleteAction(
-  createClient: UploadClientFactory = createServerSupabase,
-) {
+export function createDeleteAction(createClient: UploadClientFactory = createServerSupabase) {
   return async function remove(
     ctx: ActionContext<Record<string, unknown>>,
   ): Promise<OpenElementActionFailure<UploadActionData>> {
     const supabase = createClient(ctx.env, ctx.request, ctx.responseHeaders);
-    const { data: { user } } = await supabase.auth.getUser();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
     if (!user) return fail(401, { error: 'sign-in required to delete' });
     const key = String(ctx.formData.get('key') ?? '');
     if (!ownsObjectKey(user.id, key)) return fail(403, { error: 'invalid object owner' });

@@ -15,10 +15,14 @@ export function decodeWorkspaceCursor(value: string | null): WorkspaceCursor | n
   try {
     const parsed: unknown = JSON.parse(atob(value));
     if (
-      !Array.isArray(parsed) || parsed.length !== 2 || typeof parsed[0] !== 'string' ||
-      typeof parsed[1] !== 'number' || !Number.isSafeInteger(parsed[1]) ||
+      !Array.isArray(parsed) ||
+      parsed.length !== 2 ||
+      typeof parsed[0] !== 'string' ||
+      typeof parsed[1] !== 'number' ||
+      !Number.isSafeInteger(parsed[1]) ||
       Number.isNaN(Date.parse(parsed[0]))
-    ) return null;
+    )
+      return null;
     return { createdAt: parsed[0], id: parsed[1] };
   } catch {
     return null;

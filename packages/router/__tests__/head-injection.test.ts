@@ -183,22 +183,18 @@ Deno.test('validateSafeUrl: strips embedded tab/newline from safe URLs', () => {
 });
 
 Deno.test('buildHeadExtras: emits normalized script src (tab/newline stripped)', () => {
-  const result = buildHeadExtras(
-    {
-      inject: { scripts: ['https://cdn.example.com/a\tpp\n.js'] },
-    } as Parameters<typeof buildHeadExtras>[0],
-  );
+  const result = buildHeadExtras({
+    inject: { scripts: ['https://cdn.example.com/a\tpp\n.js'] },
+  } as Parameters<typeof buildHeadExtras>[0]);
   assertStringIncludes(result.headExtras!, 'src="https://cdn.example.com/app.js"');
 });
 
 Deno.test('buildHeadExtras: rejects tab-split javascript: script src', () => {
   assertThrows(
     () =>
-      buildHeadExtras(
-        {
-          inject: { scripts: ['java\tscript:alert(1)'] },
-        } as Parameters<typeof buildHeadExtras>[0],
-      ),
+      buildHeadExtras({
+        inject: { scripts: ['java\tscript:alert(1)'] },
+      } as Parameters<typeof buildHeadExtras>[0]),
     Error,
     'javascript: protocol is not allowed',
   );
@@ -280,10 +276,7 @@ Deno.test('buildHeadExtras: stylesheets generate link tags', () => {
 Deno.test('buildHeadExtras: multiple stylesheets in order', () => {
   const result = buildHeadExtras({
     inject: {
-      stylesheets: [
-        'https://cdn.example.com/base.css',
-        'https://cdn.example.com/theme.css',
-      ],
+      stylesheets: ['https://cdn.example.com/base.css', 'https://cdn.example.com/theme.css'],
     },
   });
   const lines = result.headExtras!.split('\n');
@@ -294,11 +287,13 @@ Deno.test('buildHeadExtras: multiple stylesheets in order', () => {
 Deno.test('buildHeadExtras: stylesheets with integrity and crossorigin', () => {
   const result = buildHeadExtras({
     inject: {
-      stylesheets: [{
-        href: 'https://cdn.example.com/app.css',
-        integrity: 'sha384-abc123',
-        crossorigin: 'anonymous',
-      }],
+      stylesheets: [
+        {
+          href: 'https://cdn.example.com/app.css',
+          integrity: 'sha384-abc123',
+          crossorigin: 'anonymous',
+        },
+      ],
     },
   });
   assertStringIncludes(result.headExtras!, 'integrity="sha384-abc123"');
@@ -308,10 +303,12 @@ Deno.test('buildHeadExtras: stylesheets with integrity and crossorigin', () => {
 Deno.test('buildHeadExtras: stylesheets with integrity auto-adds crossorigin', () => {
   const result = buildHeadExtras({
     inject: {
-      stylesheets: [{
-        href: 'https://cdn.example.com/app.css',
-        integrity: 'sha384-abc123',
-      }],
+      stylesheets: [
+        {
+          href: 'https://cdn.example.com/app.css',
+          integrity: 'sha384-abc123',
+        },
+      ],
     },
   });
   assertStringIncludes(result.headExtras!, 'integrity="sha384-abc123"');
@@ -321,10 +318,12 @@ Deno.test('buildHeadExtras: stylesheets with integrity auto-adds crossorigin', (
 Deno.test('buildHeadExtras: stylesheets with custom attrs', () => {
   const result = buildHeadExtras({
     inject: {
-      stylesheets: [{
-        href: 'https://cdn.example.com/print.css',
-        attrs: { media: 'print', 'data-theme': 'dark' },
-      }],
+      stylesheets: [
+        {
+          href: 'https://cdn.example.com/print.css',
+          attrs: { media: 'print', 'data-theme': 'dark' },
+        },
+      ],
     },
   });
   assertStringIncludes(result.headExtras!, 'media="print"');
@@ -336,10 +335,12 @@ Deno.test('buildHeadExtras: rejects event handler attrs on structured stylesheet
     () =>
       buildHeadExtras({
         inject: {
-          stylesheets: [{
-            href: 'https://cdn.example.com/print.css',
-            attrs: { onload: 'alert(1)' },
-          }],
+          stylesheets: [
+            {
+              href: 'https://cdn.example.com/print.css',
+              attrs: { onload: 'alert(1)' },
+            },
+          ],
         },
       }),
     Error,
@@ -350,10 +351,12 @@ Deno.test('buildHeadExtras: rejects event handler attrs on structured stylesheet
 Deno.test('buildHeadExtras: stylesheets with boolean attr', () => {
   const result = buildHeadExtras({
     inject: {
-      stylesheets: [{
-        href: 'https://cdn.example.com/app.css',
-        attrs: { disabled: true },
-      }],
+      stylesheets: [
+        {
+          href: 'https://cdn.example.com/app.css',
+          attrs: { disabled: true },
+        },
+      ],
     },
   });
   assertStringIncludes(result.headExtras!, 'disabled');
@@ -394,10 +397,12 @@ Deno.test('buildHeadExtras: scripts with async', () => {
 Deno.test('buildHeadExtras: scripts with integrity', () => {
   const result = buildHeadExtras({
     inject: {
-      scripts: [{
-        src: 'https://cdn.example.com/app.js',
-        integrity: 'sha384-xyz789',
-      }],
+      scripts: [
+        {
+          src: 'https://cdn.example.com/app.js',
+          integrity: 'sha384-xyz789',
+        },
+      ],
     },
   });
   assertStringIncludes(result.headExtras!, 'integrity="sha384-xyz789"');
@@ -416,10 +421,12 @@ Deno.test('buildHeadExtras: scripts with custom type', () => {
 Deno.test('buildHeadExtras: scripts with custom attrs', () => {
   const result = buildHeadExtras({
     inject: {
-      scripts: [{
-        src: 'https://cdn.example.com/worker.js',
-        attrs: { 'data-worker': 'main' },
-      }],
+      scripts: [
+        {
+          src: 'https://cdn.example.com/worker.js',
+          attrs: { 'data-worker': 'main' },
+        },
+      ],
     },
   });
   assertStringIncludes(result.headExtras!, 'data-worker="main"');
@@ -430,10 +437,12 @@ Deno.test('buildHeadExtras: rejects event handler attrs on structured script ent
     () =>
       buildHeadExtras({
         inject: {
-          scripts: [{
-            src: 'https://cdn.example.com/worker.js',
-            attrs: { onerror: 'alert(1)' },
-          }],
+          scripts: [
+            {
+              src: 'https://cdn.example.com/worker.js',
+              attrs: { onerror: 'alert(1)' },
+            },
+          ],
         },
       }),
     Error,
@@ -480,7 +489,10 @@ Deno.test('buildHeadExtras: order is headFragments → stylesheets → scripts',
       scripts: ['https://cdn.example.com/app.js'],
     },
   });
-  const lines = result.headExtras!.split('\n').map((l) => l.trim()).filter(Boolean);
+  const lines = result
+    .headExtras!.split('\n')
+    .map((l) => l.trim())
+    .filter(Boolean);
   assertStringIncludes(lines[0], '<meta');
   assertStringIncludes(lines[1], '<link');
   assertStringIncludes(lines[2], '<script');
@@ -497,9 +509,7 @@ Deno.test('buildHeadExtras: full inject with all three types', () => {
         'https://cdn.example.com/base.css',
         { href: 'https://cdn.example.com/theme.css', attrs: { media: 'screen' } },
       ],
-      scripts: [
-        { src: 'https://cdn.example.com/app.js', defer: true },
-      ],
+      scripts: [{ src: 'https://cdn.example.com/app.js', defer: true }],
     },
   });
   assertStringIncludes(result.headExtras!, '<meta charset="utf-8">');
@@ -706,28 +716,24 @@ Deno.test('assertTrustedHeadHtml: accepts complete safe style elements', () => {
 Deno.test('assertTrustedHeadHtml: rejects an unterminated style element', () => {
   // The unclosed element would otherwise escape the CSS blacklist entirely:
   // the old complete-tag regex never matched, so @import passed unchecked.
-  for (
-    const input of [
-      '<style>@import url("https://evil.example/x.css");',
-      '<style>body { color: red }',
-      '<style>safe</style><style>unsafe',
-      '<STYLE>body { color: red }',
-    ]
-  ) {
+  for (const input of [
+    '<style>@import url("https://evil.example/x.css");',
+    '<style>body { color: red }',
+    '<style>safe</style><style>unsafe',
+    '<STYLE>body { color: red }',
+  ]) {
     assertThrows(() => assertTrustedHeadHtml(input, 'test-input'), Error, '', input);
   }
 });
 
 Deno.test('assertTrustedHeadHtml: rejects unterminated or malformed opening tags', () => {
-  for (
-    const input of [
-      '<style',
-      '<style nonce="',
-      // A quoted '>' inside the opening tag still ends at the real close
-      // bracket; without a closing tag the element is rejected.
-      '<style nonce=">">body { color: red }',
-    ]
-  ) {
+  for (const input of [
+    '<style',
+    '<style nonce="',
+    // A quoted '>' inside the opening tag still ends at the real close
+    // bracket; without a closing tag the element is rejected.
+    '<style nonce=">">body { color: red }',
+  ]) {
     assertThrows(() => assertTrustedHeadHtml(input, 'test-input'), Error, '', input);
   }
 });
@@ -758,19 +764,17 @@ Deno.test('assertTrustedHeadHtml: rejects self-closing style syntax', () => {
   // <style/> is not a void element in HTML: the raw-text element still
   // swallows the rest of the fragment, so accepting it would let the
   // payload below run past the CSS blacklist.
-  for (
-    const input of [
-      '<style/>@import url("https://evil.example/x.css");',
-      '<STYLE/>@import url("https://evil.example/x.css");',
-      '<style />@import url("https://evil.example/x.css");',
-      '<style/>safe',
-      '<style />safe',
-      '<style/><style>safe</style>',
-      '<style>safe</style><style/>',
-      '<style title="x"/>safe',
-      '<style title="x" />safe',
-    ]
-  ) {
+  for (const input of [
+    '<style/>@import url("https://evil.example/x.css");',
+    '<STYLE/>@import url("https://evil.example/x.css");',
+    '<style />@import url("https://evil.example/x.css");',
+    '<style/>safe',
+    '<style />safe',
+    '<style/><style>safe</style>',
+    '<style>safe</style><style/>',
+    '<style title="x"/>safe',
+    '<style title="x" />safe',
+  ]) {
     assertThrows(() => assertTrustedHeadHtml(input, 'test-input'), Error, '', input);
   }
 });
@@ -801,14 +805,12 @@ Deno.test('assertTrustedHeadHtml: unrelated tags around styles are untouched', (
 Deno.test('assertTrustedHeadHtml: escaped whitespace cannot split the CSS blacklist', () => {
   // `\9` and `\a` decode to whitespace; the URL validator strips the same
   // set, so the CSS fold must too or `java\9 script:` slips through.
-  for (
-    const input of [
-      '<style>body { background: url("java\\9 script:alert(1)") }</style>',
-      '<style>body { background: url("da\\9 ta:text/html,x") }</style>',
-      '<style>body { background: url("java\\a script:alert(1)") }</style>',
-      '<style>body { background: url("jav\\61 script:alert(1)") }</style>',
-    ]
-  ) {
+  for (const input of [
+    '<style>body { background: url("java\\9 script:alert(1)") }</style>',
+    '<style>body { background: url("da\\9 ta:text/html,x") }</style>',
+    '<style>body { background: url("java\\a script:alert(1)") }</style>',
+    '<style>body { background: url("jav\\61 script:alert(1)") }</style>',
+  ]) {
     assertThrows(() => assertTrustedHeadHtml(input, 'test-input'), OpenElementError, 'Unsafe CSS');
   }
   // Legitimate inline CSS still passes.

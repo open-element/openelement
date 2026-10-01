@@ -115,9 +115,12 @@ export function checkAssetsProvenance(
   if (candidate.schemaVersion !== 2) failures.push('manifest schemaVersion must be 2');
   const budgets = candidate.budgets;
   if (
-    typeof budgets !== 'object' || budgets === null ||
-    !Number.isInteger(budgets.assetsTotalBytes) || budgets.assetsTotalBytes <= 0 ||
-    !Number.isInteger(budgets.singleMediaBytes) || budgets.singleMediaBytes <= 0
+    typeof budgets !== 'object' ||
+    budgets === null ||
+    !Number.isInteger(budgets.assetsTotalBytes) ||
+    budgets.assetsTotalBytes <= 0 ||
+    !Number.isInteger(budgets.singleMediaBytes) ||
+    budgets.singleMediaBytes <= 0
   ) {
     failures.push(
       'manifest budgets.assetsTotalBytes and budgets.singleMediaBytes must be positive integers',
@@ -177,7 +180,10 @@ export function checkAssetsProvenance(
       if (fileDigests.length === 0) failures.push(`${id}: files digest map must not be empty`);
       for (const [file, digest] of fileDigests) {
         if (
-          !file || file.startsWith('/') || file.includes('\\') || file.split('/').includes('..')
+          !file ||
+          file.startsWith('/') ||
+          file.includes('\\') ||
+          file.split('/').includes('..')
         ) {
           failures.push(`${id}: invalid relative file key ${JSON.stringify(file)}`);
         }
@@ -206,8 +212,11 @@ export function checkAssetsProvenance(
           }
           if (!validOrigin) failures.push(`${id}: remote.origin must be an HTTPS origin`);
         }
-        const validKey = isNonEmptyString(remote.key) && !remote.key.startsWith('/') &&
-          !remote.key.includes('\\') && !remote.key.split('/').includes('..');
+        const validKey =
+          isNonEmptyString(remote.key) &&
+          !remote.key.startsWith('/') &&
+          !remote.key.includes('\\') &&
+          !remote.key.split('/').includes('..');
         if (!validKey) failures.push(`${id}: remote.key must be a safe relative object key`);
         if (
           asset.path.endsWith('/') !== (isNonEmptyString(remote.key) && remote.key.endsWith('/'))
@@ -239,9 +248,7 @@ export function checkAssetsProvenance(
     if (file.path === 'manifest.json') continue;
     seen.add(file.path);
     totalBytes += file.bytes;
-    if (
-      remoteExact.has(file.path) || remoteGroups.some((prefix) => file.path.startsWith(prefix))
-    ) {
+    if (remoteExact.has(file.path) || remoteGroups.some((prefix) => file.path.startsWith(prefix))) {
       failures.push(`${file.path}: declared external but still exists in the vendored asset tree`);
       continue;
     }
@@ -269,9 +276,11 @@ export function checkAssetsProvenance(
       failures.push(`${file.path}: SHA-256 mismatch (manifest ${expected}, file ${file.sha256})`);
     }
     if (
-      typeof budgets === 'object' && budgets !== null &&
+      typeof budgets === 'object' &&
+      budgets !== null &&
       Number.isInteger(budgets.singleMediaBytes) &&
-      isMediaPath(file.path) && file.bytes > budgets.singleMediaBytes
+      isMediaPath(file.path) &&
+      file.bytes > budgets.singleMediaBytes
     ) {
       failures.push(
         `${file.path}: ${file.bytes} bytes exceeds the single-media budget of ${budgets.singleMediaBytes} bytes`,
@@ -282,8 +291,10 @@ export function checkAssetsProvenance(
     if (!seen.has(declared)) failures.push(`${declared}: manifest entry has no file on disk`);
   }
   if (
-    typeof budgets === 'object' && budgets !== null &&
-    Number.isInteger(budgets.assetsTotalBytes) && totalBytes > budgets.assetsTotalBytes
+    typeof budgets === 'object' &&
+    budgets !== null &&
+    Number.isInteger(budgets.assetsTotalBytes) &&
+    totalBytes > budgets.assetsTotalBytes
   ) {
     failures.push(
       `assets total ${totalBytes} bytes exceeds the budget of ${budgets.assetsTotalBytes} bytes`,
@@ -295,8 +306,9 @@ export function checkAssetsProvenance(
       failures.push(`${NOTICES_PATH}: missing third-party notice for ${name}`);
     }
   }
-  const hasMit = candidate.assets.some((entry) =>
-    typeof entry === 'object' && entry !== null && (entry as AssetEntry).license === 'MIT'
+  const hasMit = candidate.assets.some(
+    (entry) =>
+      typeof entry === 'object' && entry !== null && (entry as AssetEntry).license === 'MIT',
   );
   if (hasMit && !notices.includes('THE SOFTWARE IS PROVIDED "AS IS"')) {
     failures.push(`${NOTICES_PATH}: MIT license text must be included verbatim`);

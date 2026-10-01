@@ -32,10 +32,12 @@ async function sourceFile(candidate: string): Promise<string | undefined> {
 async function resolveLocalImport(from: string, specifier: string): Promise<string | undefined> {
   if (!specifier.startsWith('.')) return undefined;
   const base = resolve(dirname(from), specifier);
-  const candidates = extname(base) ? [base] : [
-    ...SOURCE_EXTENSIONS.map((extension) => base + extension),
-    ...SOURCE_EXTENSIONS.map((extension) => join(base, `index${extension}`)),
-  ];
+  const candidates = extname(base)
+    ? [base]
+    : [
+        ...SOURCE_EXTENSIONS.map((extension) => base + extension),
+        ...SOURCE_EXTENSIONS.map((extension) => join(base, `index${extension}`)),
+      ];
   for (const candidate of candidates) {
     const found = await sourceFile(candidate);
     if (found) return found;
@@ -103,7 +105,7 @@ export async function scanStaticComponents(
     }
   }
 
-  return [...byTag.values()].sort((a, b) =>
-    a.tagName.localeCompare(b.tagName) || a.modulePath.localeCompare(b.modulePath)
+  return [...byTag.values()].sort(
+    (a, b) => a.tagName.localeCompare(b.tagName) || a.modulePath.localeCompare(b.modulePath),
   );
 }

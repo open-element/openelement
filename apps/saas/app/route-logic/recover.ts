@@ -39,22 +39,23 @@ export type RecoverClientFactory = (
   responseHeaders: Headers,
 ) => RecoverAuthClient;
 export function createRecoverAction(createClient: RecoverClientFactory = createServerSupabase) {
-  return async function action(
-    ctx: {
-      formData: FormData;
-      env: RateLimitEnv;
-      request: Request;
-      responseHeaders: Headers;
-    },
-  ): Promise<OpenElementActionFailure<RecoverActionData>> {
+  return async function action(ctx: {
+    formData: FormData;
+    env: RateLimitEnv;
+    request: Request;
+    responseHeaders: Headers;
+  }): Promise<OpenElementActionFailure<RecoverActionData>> {
     if (!(await authRequestAllowed(ctx.env, ctx.request, 'recovery'))) {
       return fail(429, { error: 'too many attempts; retry later' });
     }
     const email = String(ctx.formData.get('email') ?? '').trim();
     if (!email) return fail(422, { error: 'email is required' });
     const redirectTo = new URL('/auth/callback?next=/reset-password', ctx.request.url).href;
-    const { error } = await createClient(ctx.env, ctx.request, ctx.responseHeaders).auth
-      .resetPasswordForEmail(email, { redirectTo });
+    const { error } = await createClient(
+      ctx.env,
+      ctx.request,
+      ctx.responseHeaders,
+    ).auth.resetPasswordForEmail(email, { redirectTo });
     if (error) return fail(422, { error: publicAuthError(error) });
     // Success is PRG (#1060): fail() accepts only 4xx, so the confirmation
     // state lives behind ?sent=1 instead of a 200 fail().

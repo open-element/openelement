@@ -43,10 +43,13 @@ function captureWarn(fn: () => void): Array<{ message: string; payload: unknown 
 }
 
 Deno.test('PROTOCOL_HEADERS is the ADR-0129 §3 protocol set (lowercase wire names)', () => {
-  assertEquals(
-    [...PROTOCOL_HEADERS].sort(),
-    ['cache-control', 'content-type', 'location', 'vary', 'x-openelement-action'],
-  );
+  assertEquals([...PROTOCOL_HEADERS].sort(), [
+    'cache-control',
+    'content-type',
+    'location',
+    'vary',
+    'x-openelement-action',
+  ]);
 });
 
 Deno.test('mergeChannelHeaders returns the identical Response when the channel is empty', () => {
@@ -81,10 +84,10 @@ Deno.test('mergeChannelHeaders keeps every Set-Cookie entry (multi-value accumul
 Deno.test('mergeChannelHeaders: protocol headers win when the response already set them', () => {
   const response = textResponse({
     headers: {
-      'Location': '/framework',
+      Location: '/framework',
       'Content-Type': 'text/html; charset=UTF-8',
       'Cache-Control': 'private, no-cache',
-      'Vary': 'X-OpenElement-Action',
+      Vary: 'X-OpenElement-Action',
       'X-OpenElement-Action': 'framework',
     },
   });
@@ -111,7 +114,7 @@ Deno.test('mergeChannelHeaders: a protocol header the response lacks is appended
 });
 
 Deno.test('mergeChannelHeaders compares protocol names case-insensitively', () => {
-  const response = textResponse({ headers: { 'LOCATION': '/framework' } });
+  const response = textResponse({ headers: { LOCATION: '/framework' } });
   const channel = new Headers({ location: '/channel' });
   assertEquals(mergeChannelHeaders(response, channel).headers.get('location'), '/framework');
 });

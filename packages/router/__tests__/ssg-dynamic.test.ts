@@ -13,14 +13,16 @@ function failingOutput(): SsgPageOutput {
   return {
     html: '<html><body>500 Internal Server Error</body></html>',
     status: 500,
-    errors: [{
-      code: 'OPEN_ELEMENT_RENDER_RENDER_FAILED',
-      severity: 'error',
-      phase: 'render',
-      tagName: 'blog-page',
-      message: 'render exploded',
-      recoverable: false,
-    }],
+    errors: [
+      {
+        code: 'OPEN_ELEMENT_RENDER_RENDER_FAILED',
+        severity: 'error',
+        phase: 'render',
+        tagName: 'blog-page',
+        message: 'render exploded',
+        recoverable: false,
+      },
+    ],
     componentCount: 0,
     renderTimeMs: 0,
   } as SsgPageOutput;

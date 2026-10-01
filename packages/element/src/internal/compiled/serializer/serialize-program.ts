@@ -153,7 +153,10 @@ interface WalkContext {
 
 function isAttributeSink(part: PartProgramV1['parts'][number]): part is ProgramAttributeSink {
   return (
-    part.k === 'attr' || part.k === 'prop' || part.k === 'bool' || part.k === 'class' ||
+    part.k === 'attr' ||
+    part.k === 'prop' ||
+    part.k === 'bool' ||
+    part.k === 'class' ||
     part.k === 'style'
   );
 }
@@ -307,9 +310,11 @@ function slotNameOf(
 }
 
 function attributeText(seams: SerializeProgramSeams, attributes: readonly SerializedAttribute[]) {
-  return attributes.map((attr) =>
-    attr.bare ? ` ${attr.name}` : ` ${attr.name}="${seams.escapeAttr(attr.value)}"`
-  ).join('');
+  return attributes
+    .map((attr) =>
+      attr.bare ? ` ${attr.name}` : ` ${attr.name}="${seams.escapeAttr(attr.value)}"`,
+    )
+    .join('');
 }
 
 function serializeElement(
@@ -362,7 +367,8 @@ function regionItemsHtml(
   value: unknown,
   anchorPath: readonly number[],
 ): string {
-  return ctx.seams.regionItems(part, value)
+  return ctx.seams
+    .regionItems(part, value)
     .map((item) => serializeNodes(ctx, part.item, anchorPath, { part, item }).html)
     .join('');
 }

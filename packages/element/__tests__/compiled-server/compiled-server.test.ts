@@ -5,19 +5,23 @@ import { testProgram } from '../compiled-runtime/test-program.ts';
 
 const PROGRAM = testProgram({
   tag: 'oe-demo-card',
-  template: [{
-    k: 'el',
-    tag: 'input',
-    attrs: [['class', 'card'] as [string, string]],
-    children: [],
-  }],
-  parts: [{
-    k: 'prop',
-    index: 0,
-    signal: 'value',
-    name: 'value',
-    path: [0],
-  }],
+  template: [
+    {
+      k: 'el',
+      tag: 'input',
+      attrs: [['class', 'card'] as [string, string]],
+      children: [],
+    },
+  ],
+  parts: [
+    {
+      k: 'prop',
+      index: 0,
+      signal: 'value',
+      name: 'value',
+      path: [0],
+    },
+  ],
 });
 
 const HOST = {
@@ -31,9 +35,7 @@ const HOST = {
 };
 
 Deno.test('compiled server requires the TrustedHtml capability for html Parts', async () => {
-  const { serializeProgramContent } = await import(
-    '../../src/internal/compiled/server/index.ts'
-  );
+  const { serializeProgramContent } = await import('../../src/internal/compiled/server/index.ts');
   const program = testProgram({
     tag: 'oe-server-html',
     template: [{ k: 'el', tag: 'div', attrs: [], children: [] }],
@@ -95,16 +97,17 @@ function fixtureHost() {
     signals: {
       count: signal(0),
       label: signal('ready'),
-      items: signal([{ id: 'a', text: 'alpha' }, { id: 'b', text: 'beta' }]),
+      items: signal([
+        { id: 'a', text: 'alpha' },
+        { id: 'b', text: 'beta' },
+      ]),
     },
     handlers: {},
   };
 }
 
 Deno.test('alpha.3 server serialization is one deterministic program across root modes', async () => {
-  const { serializeCompiledProgram } = await import(
-    '../../src/internal/compiled/server/index.ts'
-  );
+  const { serializeCompiledProgram } = await import('../../src/internal/compiled/server/index.ts');
 
   assertEquals(
     serializeCompiledProgram(PROGRAM, HOST, { mode: 'light' }),
@@ -128,12 +131,9 @@ Deno.test('alpha.3 server serialization is one deterministic program across root
 });
 
 Deno.test('alpha.3 server fixture is deterministic and agrees with the seed serializer', async () => {
-  const { serializeCompiledProgram, serializeProgramContent } = await import(
-    '../../src/internal/compiled/server/index.ts'
-  );
-  const { serializeToHtml: serializeSeed } = await import(
-    '../../src/internal/compiled/runtime.ts'
-  );
+  const { serializeCompiledProgram, serializeProgramContent } =
+    await import('../../src/internal/compiled/server/index.ts');
+  const { serializeToHtml: serializeSeed } = await import('../../src/internal/compiled/runtime.ts');
   const program = await readFixtureProgram();
   const host = fixtureHost();
   const [light, open, closed] = await Promise.all([
@@ -156,17 +156,18 @@ Deno.test('alpha.3 server fixture is deterministic and agrees with the seed seri
 });
 
 Deno.test('alpha.3 server output escapes values, supports native DSD flags, and fails closed', async () => {
-  const { serializeCompiledProgram, serializeProgramContent } = await import(
-    '../../src/internal/compiled/server/index.ts'
-  );
+  const { serializeCompiledProgram, serializeProgramContent } =
+    await import('../../src/internal/compiled/server/index.ts');
   const staticProgram = testProgram({
     tag: 'oe-static',
-    template: [{
-      k: 'el',
-      tag: 'p',
-      attrs: [['title', 'a&"<>\'']],
-      children: [{ k: 'text', value: '<safe & text>' }],
-    }],
+    template: [
+      {
+        k: 'el',
+        tag: 'p',
+        attrs: [['title', 'a&"<>\'']],
+        children: [{ k: 'text', value: '<safe & text>' }],
+      },
+    ],
     parts: [],
   });
   assertEquals(
@@ -174,17 +175,24 @@ Deno.test('alpha.3 server output escapes values, supports native DSD flags, and 
     '<p title="a&amp;&quot;&lt;&gt;&#39;">&lt;safe &amp; text&gt;</p>',
   );
   assertEquals(
-    serializeCompiledProgram(staticProgram, {}, {
-      mode: 'open',
-      hostAttrs: [['data-id', 'a&"'], ['aria-label', 'card']],
-      dsd: {
-        delegatesFocus: true,
-        clonable: true,
-        serializable: true,
-        slotAssignment: 'manual',
-        customElementRegistry: true,
+    serializeCompiledProgram(
+      staticProgram,
+      {},
+      {
+        mode: 'open',
+        hostAttrs: [
+          ['data-id', 'a&"'],
+          ['aria-label', 'card'],
+        ],
+        dsd: {
+          delegatesFocus: true,
+          clonable: true,
+          serializable: true,
+          slotAssignment: 'manual',
+          customElementRegistry: true,
+        },
       },
-    }),
+    ),
     '<oe-static data-id="a&amp;&quot;" aria-label="card"><template shadowrootmode="open" shadowrootdelegatesfocus shadowrootclonable shadowrootserializable shadowrootslotassignment="manual" shadowrootcustomelementregistry><p title="a&amp;&quot;&lt;&gt;&#39;">&lt;safe &amp; text&gt;</p></template></oe-static>',
   );
 
@@ -221,14 +229,16 @@ Deno.test('alpha.3 server output escapes values, supports native DSD flags, and 
   const eachProgram = testProgram({
     tag: 'oe-each',
     template: [{ k: 'part', index: 0 }],
-    parts: [{
-      k: 'each',
-      index: 0,
-      signal: 'items',
-      key: 'id',
-      field: 'text',
-      item: [{ k: 'ival', field: 'text' }],
-    }],
+    parts: [
+      {
+        k: 'each',
+        index: 0,
+        signal: 'items',
+        key: 'id',
+        field: 'text',
+        item: [{ k: 'ival', field: 'text' }],
+      },
+    ],
   });
   const inheritedError = assertThrows(
     () =>
@@ -245,10 +255,7 @@ Deno.test('alpha.3 server output escapes values, supports native DSD flags, and 
   const propertyPart = unsafeProperty.parts[0];
   if (propertyPart.k !== 'prop') throw new Error('test setup: expected a prop Part');
   propertyPart.name = '__proto__';
-  const propertyError = assertThrows(
-    () => serializeProgramContent(unsafeProperty, HOST),
-    Error,
-  );
+  const propertyError = assertThrows(() => serializeProgramContent(unsafeProperty, HOST), Error);
   assertStringIncludes(propertyError.message, 'unsafe property sink name');
 
   for (const forbiddenName of ['constructor', 'prototype']) {
@@ -256,10 +263,7 @@ Deno.test('alpha.3 server output escapes values, supports native DSD flags, and 
     const forgedPart = forged.parts[0];
     if (forgedPart.k !== 'prop') throw new Error('test setup: expected a prop Part');
     forgedPart.name = forbiddenName;
-    const forgedError = assertThrows(
-      () => serializeProgramContent(forged, HOST),
-      Error,
-    );
+    const forgedError = assertThrows(() => serializeProgramContent(forged, HOST), Error);
     assertStringIncludes(forgedError.message, 'unsafe property sink name');
   }
 
@@ -272,17 +276,21 @@ Deno.test('alpha.3 server output escapes values, supports native DSD flags, and 
 
   const nestedProgram = testProgram({
     tag: 'oe-nested',
-    template: [{
-      k: 'el',
-      tag: 'oe-child',
-      attrs: [['data-owner', 'demo']],
-      children: [{
+    template: [
+      {
         k: 'el',
-        tag: 'x-third-party',
-        attrs: [],
-        children: [{ k: 'text', value: 'foreign' }],
-      }],
-    }],
+        tag: 'oe-child',
+        attrs: [['data-owner', 'demo']],
+        children: [
+          {
+            k: 'el',
+            tag: 'x-third-party',
+            attrs: [],
+            children: [{ k: 'text', value: 'foreign' }],
+          },
+        ],
+      },
+    ],
     parts: [],
   });
   assertEquals(
@@ -292,18 +300,14 @@ Deno.test('alpha.3 server output escapes values, supports native DSD flags, and 
 });
 
 Deno.test('alpha.3 static-only server fixture needs no client signal artifact', async () => {
-  const { serializeProgramContent } = await import(
-    '../../src/internal/compiled/server/index.ts'
-  );
+  const { serializeProgramContent } = await import('../../src/internal/compiled/server/index.ts');
   const program = JSON.parse(await Deno.readTextFile(STATIC_ONLY_PROGRAM_URL));
   const expected = (await Deno.readTextFile(STATIC_ONLY_EXPECTED_URL)).trimEnd();
   assertEquals(serializeProgramContent(program, {}), expected);
 });
 
 Deno.test('compiled server validation rejects the shared forbidden-sink deny list', async () => {
-  const { assertCompiledProgram } = await import(
-    '../../src/internal/compiled/server/index.ts'
-  );
+  const { assertCompiledProgram } = await import('../../src/internal/compiled/server/index.ts');
   const forge = (mutate: (program: PartProgramV1) => void): PartProgramV1 => {
     const program = structuredClone(PROGRAM);
     mutate(program);
@@ -348,17 +352,17 @@ Deno.test('compiled server validation rejects the shared forbidden-sink deny lis
 });
 
 Deno.test('compiled server preserves structured custom-element property values for nested SSR', async () => {
-  const { serializeProgramContent } = await import(
-    '../../src/internal/compiled/server/index.ts'
-  );
+  const { serializeProgramContent } = await import('../../src/internal/compiled/server/index.ts');
   const program = testProgram({
     tag: 'oe-parent',
-    template: [{
-      k: 'el',
-      tag: 'oe-child',
-      attrs: [],
-      children: [],
-    }],
+    template: [
+      {
+        k: 'el',
+        tag: 'oe-child',
+        attrs: [],
+        children: [],
+      },
+    ],
     parts: [
       { k: 'prop', index: 0, signal: 'model', name: 'model', path: [0] },
       { k: 'prop', index: 1, signal: 'enabled', name: 'enabled', path: [0] },

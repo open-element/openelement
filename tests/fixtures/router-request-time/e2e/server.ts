@@ -33,15 +33,13 @@ const ROOT = resolve(Deno.cwd(), args.dir ?? '../dist');
 
 const serverEntry = await importRequestTimeServer(join(ROOT, 'server/index.js'));
 
-Deno.serve(
-  { port: PORT, hostname: '127.0.0.1' },
-  (request) =>
-    dispatchRequest(request, {
-      distDir: ROOT,
-      serverMod: serverEntry,
-      env: Deno.env.toObject(),
-      onHandlerError: (error) => console.error('[fixture server] handler error:', error),
-    }),
+Deno.serve({ port: PORT, hostname: '127.0.0.1' }, (request) =>
+  dispatchRequest(request, {
+    distDir: ROOT,
+    serverMod: serverEntry,
+    env: Deno.env.toObject(),
+    onHandlerError: (error) => console.error('[fixture server] handler error:', error),
+  }),
 );
 
 console.log(`request-time fixture server -> http://127.0.0.1:${PORT} (root: ${ROOT})`);

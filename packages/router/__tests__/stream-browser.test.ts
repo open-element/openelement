@@ -8,8 +8,8 @@ const program = '1:abc123';
 const instance = 'instance-1';
 
 function seedTemplate(firstKind: 'part' | 'region' = 'part'): string {
-  return `<template data-oe-seed="${
-    escapeAttr(JSON.stringify({
+  return `<template data-oe-seed="${escapeAttr(
+    JSON.stringify({
       request,
       program,
       instance,
@@ -27,8 +27,8 @@ function seedTemplate(firstKind: 'part' | 'region' = 'part'): string {
           parts: [{ index: 1, kind: 'part' }],
         },
       ],
-    }))
-  }"></template>`;
+    }),
+  )}"></template>`;
 }
 
 function frame(
@@ -52,8 +52,8 @@ function frame(
 }
 
 function errorFrame(part: number, field: string): string {
-  return `<template data-oe-frame="${
-    escapeAttr(JSON.stringify({
+  return `<template data-oe-frame="${escapeAttr(
+    JSON.stringify({
       request,
       program,
       instance,
@@ -62,8 +62,8 @@ function errorFrame(part: number, field: string): string {
       type: 'string',
       kind: 'part',
       outcome: 'error',
-    }))
-  }"></template><noscript><p>Content unavailable.</p></noscript>`;
+    }),
+  )}"></template><noscript><p>Content unavailable.</p></noscript>`;
 }
 
 function shell(): string {
@@ -84,15 +84,14 @@ interface TypedFieldSpec {
 }
 
 function typedSeed(fields: readonly TypedFieldSpec[]): string {
-  return `<template data-oe-seed="${
-    escapeAttr(JSON.stringify({
+  return `<template data-oe-seed="${escapeAttr(
+    JSON.stringify({
       request,
       program,
       instance,
-      properties: Object.fromEntries(fields.map((entry) => [
-        entry.field,
-        { state: 'pending', type: entry.type },
-      ])),
+      properties: Object.fromEntries(
+        fields.map((entry) => [entry.field, { state: 'pending', type: entry.type }]),
+      ),
       pending: fields.map((_, index) => index),
       fields: fields.map((entry, index) => ({
         field: entry.field,
@@ -100,8 +99,8 @@ function typedSeed(fields: readonly TypedFieldSpec[]): string {
         type: entry.type,
         parts: [{ index, kind: 'part' }],
       })),
-    }))
-  }"></template>`;
+    }),
+  )}"></template>`;
 }
 
 function typedFrame(
@@ -111,8 +110,8 @@ function typedFrame(
   value: unknown,
   html: string,
 ): string {
-  return `<template data-oe-frame="${
-    escapeAttr(JSON.stringify({
+  return `<template data-oe-frame="${escapeAttr(
+    JSON.stringify({
       request,
       program,
       instance,
@@ -122,8 +121,8 @@ function typedFrame(
       kind: 'part',
       outcome: 'content',
       value,
-    }))
-  }">${html}</template>`;
+    }),
+  )}">${html}</template>`;
 }
 
 Deno.test({
@@ -156,18 +155,21 @@ Deno.test({
 
       // The markup/value agreement stays enforced for typed values: a frame
       // whose HTML does not match String(value) is still rejected.
-      await page.evaluate((html) => {
-        document.body.insertAdjacentHTML('beforeend', html);
-      }, typedFrame(0, 'zero', 'number', 0, 'zero'));
-      await page.evaluate((html) => {
-        document.body.insertAdjacentHTML('beforeend', html);
-      }, typedFrame(4, 'nothing', 'number', null, 'void'));
+      await page.evaluate(
+        (html) => {
+          document.body.insertAdjacentHTML('beforeend', html);
+        },
+        typedFrame(0, 'zero', 'number', 0, 'zero'),
+      );
+      await page.evaluate(
+        (html) => {
+          document.body.insertAdjacentHTML('beforeend', html);
+        },
+        typedFrame(4, 'nothing', 'number', null, 'void'),
+      );
       await page.waitForTimeout(20);
       assertEquals(await page.locator('oe-stream-test main').textContent(), '');
-      assert(
-        warnings.length >= 2,
-        'typed-value markup drift is diagnosed like string drift',
-      );
+      assert(warnings.length >= 2, 'typed-value markup drift is diagnosed like string drift');
 
       // The server convention renders a text Part as String(value)
       // (escapeText applied), so number (including 0), boolean, and null
@@ -184,8 +186,8 @@ Deno.test({
           document.body.insertAdjacentHTML('beforeend', content);
         }, html);
       }
-      await page.waitForFunction(() =>
-        document.querySelector('oe-stream-test main')?.textContent === '01.5truefalsenull'
+      await page.waitForFunction(
+        () => document.querySelector('oe-stream-test main')?.textContent === '01.5truefalsenull',
       );
       assertEquals(await page.locator('oe-stream-test main').textContent(), '01.5truefalsenull');
       const properties = await page.evaluate(() => {
@@ -206,8 +208,7 @@ Deno.test({
 });
 
 Deno.test({
-  name:
-    'stream browser installer authorizes and installs sequential ranges without waiting for the final field',
+  name: 'stream browser installer authorizes and installs sequential ranges without waiting for the final field',
   sanitizeOps: false,
   sanitizeResources: false,
   async fn() {
@@ -223,9 +224,7 @@ Deno.test({
         cspNonce: 'nonce-123',
         streamBootstrap: STREAM_BROWSER_BOOTSTRAP,
       });
-      await page.setContent(
-        documentParts.prefix + shell() + seedTemplate() + documentParts.suffix,
-      );
+      await page.setContent(documentParts.prefix + shell() + seedTemplate() + documentParts.suffix);
       assertEquals(
         await page.locator('oe-stream-test main').textContent(),
         '',
@@ -233,11 +232,14 @@ Deno.test({
       );
       assertEquals(await page.locator('head script').getAttribute('nonce'), 'nonce-123');
 
-      await page.evaluate((html) => {
-        document.body.insertAdjacentHTML('beforeend', html);
-      }, frame(1, 'second', '<escaped>', '&lt;escaped&gt;'));
-      await page.waitForFunction(() =>
-        document.querySelector('oe-stream-test main')?.textContent === '<escaped>'
+      await page.evaluate(
+        (html) => {
+          document.body.insertAdjacentHTML('beforeend', html);
+        },
+        frame(1, 'second', '<escaped>', '&lt;escaped&gt;'),
+      );
+      await page.waitForFunction(
+        () => document.querySelector('oe-stream-test main')?.textContent === '<escaped>',
       );
       assertEquals(
         await page.locator('oe-stream-test main').textContent(),
@@ -245,21 +247,33 @@ Deno.test({
         'the first visual backfill installs while field zero is still pending',
       );
 
-      await page.evaluate((html) => {
-        document.body.insertAdjacentHTML('beforeend', html);
-      }, frame(1, 'second', '<conflict>', 'conflict'));
-      await page.evaluate((html) => {
-        document.body.insertAdjacentHTML('beforeend', html);
-      }, frame(1, 'second', '<escaped>', '<em>&lt;escaped&gt;</em>'));
-      await page.evaluate((html) => {
-        document.body.insertAdjacentHTML('beforeend', html);
-      }, frame(0, 'first', 'first', '<b>first</b>'));
+      await page.evaluate(
+        (html) => {
+          document.body.insertAdjacentHTML('beforeend', html);
+        },
+        frame(1, 'second', '<conflict>', 'conflict'),
+      );
+      await page.evaluate(
+        (html) => {
+          document.body.insertAdjacentHTML('beforeend', html);
+        },
+        frame(1, 'second', '<escaped>', '<em>&lt;escaped&gt;</em>'),
+      );
+      await page.evaluate(
+        (html) => {
+          document.body.insertAdjacentHTML('beforeend', html);
+        },
+        frame(0, 'first', 'first', '<b>first</b>'),
+      );
       await page.evaluate((html) => {
         document.body.insertAdjacentHTML('beforeend', html);
       }, seedTemplate());
-      await page.evaluate((html) => {
-        document.body.insertAdjacentHTML('beforeend', html);
-      }, frame(0, 'first', '<img onerror=alert(1)>', '<img src=x onerror="window.pwned=1">'));
+      await page.evaluate(
+        (html) => {
+          document.body.insertAdjacentHTML('beforeend', html);
+        },
+        frame(0, 'first', '<img onerror=alert(1)>', '<img src=x onerror="window.pwned=1">'),
+      );
       await page.evaluate(
         (html) => {
           document.body.insertAdjacentHTML('beforeend', html);
@@ -283,11 +297,14 @@ Deno.test({
         'conflicts, text-markup drift, duplicate seed, unsafe markup, stale identity, and malformed JSON are diagnosed',
       );
 
-      await page.evaluate((html) => {
-        document.body.insertAdjacentHTML('beforeend', html);
-      }, frame(0, 'first', 'first', 'first'));
-      await page.waitForFunction(() =>
-        document.querySelector('oe-stream-test main')?.textContent === 'first<escaped>'
+      await page.evaluate(
+        (html) => {
+          document.body.insertAdjacentHTML('beforeend', html);
+        },
+        frame(0, 'first', 'first', 'first'),
+      );
+      await page.waitForFunction(
+        () => document.querySelector('oe-stream-test main')?.textContent === 'first<escaped>',
       );
       assertEquals(await page.locator('oe-stream-test main').textContent(), 'first<escaped>');
     } finally {
@@ -310,25 +327,30 @@ Deno.test({
         streamBootstrap: STREAM_BROWSER_BOOTSTRAP,
       });
       await page.setContent(parts.prefix + shell() + seedTemplate() + parts.suffix);
-      await page.evaluate((content) => {
-        document.body.insertAdjacentHTML('beforeend', content);
-      }, errorFrame(0, 'first'));
+      await page.evaluate(
+        (content) => {
+          document.body.insertAdjacentHTML('beforeend', content);
+        },
+        errorFrame(0, 'first'),
+      );
       await page.waitForFunction(() => {
         const control = (document as unknown as Record<symbol, { pending: boolean }>)[
           Symbol.for('openelement.stream-control.v1')
         ];
         return control.pending && !document.querySelector('template[data-oe-frame]');
       });
-      await page.evaluate((content) => {
-        document.body.insertAdjacentHTML('beforeend', content);
-      }, frame(0, 'first', 'late-success', 'late-success'));
+      await page.evaluate(
+        (content) => {
+          document.body.insertAdjacentHTML('beforeend', content);
+        },
+        frame(0, 'first', 'late-success', 'late-success'),
+      );
       await page.waitForTimeout(20);
       assertEquals(await page.locator('oe-stream-test main').textContent(), '');
       assertEquals(
         await page.evaluate(() => {
-          const host = document.querySelector('oe-stream-test') as
-            & HTMLElement
-            & Record<symbol, { pending: Set<number> }>;
+          const host = document.querySelector('oe-stream-test') as HTMLElement &
+            Record<symbol, { pending: Set<number> }>;
           return host[Symbol.for('openelement.stream-state.v1')].pending.has(0);
         }),
         true,
@@ -357,11 +379,18 @@ Deno.test({
         (content) => {
           document.body.insertAdjacentHTML('beforeend', content);
         },
-        frame(0, 'first', 'unsafe', '<a href="java&#x09;script:alert(1)">unsafe</a>', {
-          request,
-          program,
-          instance,
-        }, 'region'),
+        frame(
+          0,
+          'first',
+          'unsafe',
+          '<a href="java&#x09;script:alert(1)">unsafe</a>',
+          {
+            request,
+            program,
+            instance,
+          },
+          'region',
+        ),
       );
       await page.waitForTimeout(20);
       assertEquals(await page.locator('oe-stream-test main a').count(), 0);
@@ -369,14 +398,21 @@ Deno.test({
         (content) => {
           document.body.insertAdjacentHTML('beforeend', content);
         },
-        frame(0, 'first', 'safe', '<a href="/safe">safe</a>', {
-          request,
-          program,
-          instance,
-        }, 'region'),
+        frame(
+          0,
+          'first',
+          'safe',
+          '<a href="/safe">safe</a>',
+          {
+            request,
+            program,
+            instance,
+          },
+          'region',
+        ),
       );
-      await page.waitForFunction(() =>
-        document.querySelector('oe-stream-test main a')?.textContent === 'safe'
+      await page.waitForFunction(
+        () => document.querySelector('oe-stream-test main a')?.textContent === 'safe',
       );
       assertEquals(await page.locator('oe-stream-test main a').getAttribute('href'), '/safe');
     } finally {
@@ -400,31 +436,47 @@ Deno.test({
       });
       await page.setContent(parts.prefix + shell());
       await page.evaluate(() => {
-        const control = (document as unknown as Record<symbol, {
-          pending: boolean;
-          cancel(): void;
-        }>)[Symbol.for('openelement.stream-control.v1')];
+        const control = (
+          document as unknown as Record<
+            symbol,
+            {
+              pending: boolean;
+              cancel(): void;
+            }
+          >
+        )[Symbol.for('openelement.stream-control.v1')];
         control.cancel();
       });
-      await page.evaluate(({ seed, content }) => {
-        document.body.insertAdjacentHTML('beforeend', seed + content);
-      }, { seed: seedTemplate(), content: frame(0, 'first', 'stale', 'stale') });
+      await page.evaluate(
+        ({ seed, content }) => {
+          document.body.insertAdjacentHTML('beforeend', seed + content);
+        },
+        { seed: seedTemplate(), content: frame(0, 'first', 'stale', 'stale') },
+      );
       await page.waitForTimeout(20);
       assertEquals(await page.locator('oe-stream-test main').textContent(), '');
 
       const page2 = await browser.newPage();
       await page2.setContent(parts.prefix + shell() + seedTemplate() + parts.suffix);
       await page2.evaluate(() => {
-        const control = (document as unknown as Record<symbol, {
-          pending: boolean;
-          cancel(): void;
-        }>)[Symbol.for('openelement.stream-control.v1')];
+        const control = (
+          document as unknown as Record<
+            symbol,
+            {
+              pending: boolean;
+              cancel(): void;
+            }
+          >
+        )[Symbol.for('openelement.stream-control.v1')];
         control.cancel();
         globalThis.dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true }));
       });
-      await page2.evaluate((content) => {
-        document.body.insertAdjacentHTML('beforeend', content);
-      }, frame(1, 'second', 'stale', 'stale'));
+      await page2.evaluate(
+        (content) => {
+          document.body.insertAdjacentHTML('beforeend', content);
+        },
+        frame(1, 'second', 'stale', 'stale'),
+      );
       await page2.waitForTimeout(20);
       assertEquals(await page2.locator('oe-stream-test main').textContent(), '');
     } finally {
@@ -451,11 +503,14 @@ Deno.test({
         dispatchEvent(new PageTransitionEvent('pagehide', { persisted: true }));
         dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true }));
       });
-      await restored.evaluate((content) => {
-        document.body.insertAdjacentHTML('beforeend', content);
-      }, frame(0, 'first', 'restored', 'restored'));
-      await restored.waitForFunction(() =>
-        document.querySelector('oe-stream-test main')?.textContent === 'restored'
+      await restored.evaluate(
+        (content) => {
+          document.body.insertAdjacentHTML('beforeend', content);
+        },
+        frame(0, 'first', 'restored', 'restored'),
+      );
+      await restored.waitForFunction(
+        () => document.querySelector('oe-stream-test main')?.textContent === 'restored',
       );
 
       const unloaded = await browser.newPage();
@@ -463,9 +518,12 @@ Deno.test({
       await unloaded.evaluate(() => {
         dispatchEvent(new PageTransitionEvent('pagehide', { persisted: false }));
       });
-      await unloaded.evaluate((content) => {
-        document.body.insertAdjacentHTML('beforeend', content);
-      }, frame(0, 'first', 'stale', 'stale'));
+      await unloaded.evaluate(
+        (content) => {
+          document.body.insertAdjacentHTML('beforeend', content);
+        },
+        frame(0, 'first', 'stale', 'stale'),
+      );
       await unloaded.waitForTimeout(20);
       assertEquals(await unloaded.locator('oe-stream-test main').textContent(), '');
     } finally {
@@ -489,12 +547,15 @@ Deno.test({
       const context = await browser.newContext({ javaScriptEnabled: false });
       const page = await context.newPage();
       await page.setContent(
-        documentParts.prefix + shell() + seedTemplate() +
-          '<noscript><p id="tail">Useful no-JS content</p></noscript>' + documentParts.suffix,
+        documentParts.prefix +
+          shell() +
+          seedTemplate() +
+          '<noscript><p id="tail">Useful no-JS content</p></noscript>' +
+          documentParts.suffix,
       );
       assertEquals(await page.locator('#tail').textContent(), 'Useful no-JS content');
       assertEquals(await page.locator('oe-stream-test main').textContent(), '');
-      assert(await page.locator('head script').count() > 0);
+      assert((await page.locator('head script').count()) > 0);
       await context.close();
     } finally {
       await browser.close();

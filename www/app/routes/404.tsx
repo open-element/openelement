@@ -20,7 +20,7 @@ function redirectSuggestions(locale: SiteLocale, popularHrefs: Set<string>) {
   const seen = new Set<string>();
   const suggestions: Array<{ label: string; href: string }> = [];
   for (const mapping of redirectTable.redirects) {
-    const raw = locale === 'zh' ? mapping.toZh ?? mapping.to : mapping.to;
+    const raw = locale === 'zh' ? (mapping.toZh ?? mapping.to) : mapping.to;
     const hash = raw.indexOf('#');
     const toPath = hash < 0 ? raw : raw.slice(0, hash);
     const fragment = hash < 0 ? '' : raw.slice(hash);

@@ -1,8 +1,10 @@
 import { compiledStyle } from '../site-ui/compiled-style.ts';
 import { pageStyles } from './page-styles.ts';
 
-export const pageChangelogStyles = [compiledStyle(
-  pageStyles + `
+export const pageChangelogStyles = [
+  compiledStyle(
+    pageStyles +
+      `
   :host { display: block; }
   .crumb { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--size-2); margin: 0 0 var(--size-4); color: var(--text-muted); font-family: var(--font-mono); font-size: var(--font-size-00); font-weight: var(--font-weight-8); letter-spacing: 0.1em; text-transform: uppercase; }
   /* No .crumb-sep ink: the 55% tint of --text-muted measured 2.62:1 on the
@@ -30,4 +32,5 @@ export const pageChangelogStyles = [compiledStyle(
   .changelog-content code { font-family: var(--font-mono); background: var(--bg-surface); padding: var(--size-1) var(--size-2); border-radius: var(--radius-1); font-size: var(--font-size-00); }
   .changelog-content pre { background: var(--bg-surface); padding: var(--size-5) var(--size-6); border-radius: var(--radius-2); overflow-x: auto; }
 `,
-)];
+  ),
+];

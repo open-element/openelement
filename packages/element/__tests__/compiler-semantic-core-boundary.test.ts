@@ -11,15 +11,9 @@ const CORE_ROOT = new URL('../src/internal/compiler/semantic-core/', import.meta
  * It is the one deliberate outside-module import: import-free, bundler-neutral,
  * and shared with the runtime so compiler and runtime cannot drift.
  */
-const PROTOCOL_PROGRAM = new URL(
-  '../src/internal/protocol/part-program.ts',
-  import.meta.url,
-);
+const PROTOCOL_PROGRAM = new URL('../src/internal/protocol/part-program.ts', import.meta.url);
 /** The import-free, host-free canonical VOID_TAGS owner (protocol base). */
-const PROTOCOL_VOID_TAGS = new URL(
-  '../src/internal/protocol/void-tags.ts',
-  import.meta.url,
-);
+const PROTOCOL_VOID_TAGS = new URL('../src/internal/protocol/void-tags.ts', import.meta.url);
 /** The import-free, host-free canonical forbidden-sink owner (protocol base). */
 const PROTOCOL_FORBIDDEN_SINKS = new URL(
   '../src/internal/protocol/forbidden-sinks.ts',
@@ -31,10 +25,7 @@ const PROTOCOL_FORBIDDEN_SINKS = new URL(
  * may import it without gaining host state — the same admission rule as the
  * other protocol base owners.
  */
-const PROTOCOL_ERRORS = new URL(
-  '../src/internal/protocol/errors.ts',
-  import.meta.url,
-);
+const PROTOCOL_ERRORS = new URL('../src/internal/protocol/errors.ts', import.meta.url);
 
 /** Protocol base owners a semantic-core or protocol module may import. */
 const PROTOCOL_BASE = [
@@ -47,7 +38,7 @@ async function sourceFiles(root: URL): Promise<URL[]> {
   const files: URL[] = [];
   for await (const entry of Deno.readDir(root)) {
     const url = new URL(entry.name, root);
-    if (entry.isDirectory) files.push(...await sourceFiles(new URL(`${url.href}/`)));
+    if (entry.isDirectory) files.push(...(await sourceFiles(new URL(`${url.href}/`))));
     if (entry.isFile && entry.name.endsWith('.ts')) files.push(url);
   }
   return files.sort((a, b) => a.href.localeCompare(b.href));
@@ -65,7 +56,8 @@ function moduleSpecifiers(source: string, file: URL): string[] {
   for (const statement of sourceFile.statements) {
     if (
       (ts.isImportDeclaration(statement) || ts.isExportDeclaration(statement)) &&
-      statement.moduleSpecifier && ts.isStringLiteral(statement.moduleSpecifier)
+      statement.moduleSpecifier &&
+      ts.isStringLiteral(statement.moduleSpecifier)
     ) {
       specifiers.push(statement.moduleSpecifier.text);
     }
@@ -86,7 +78,8 @@ Deno.test('ADR-0148 semantic core imports stay bundler-neutral and inside the co
       }
       const resolved = new URL(specifier, file);
       const insideCore = resolved.href.startsWith(CORE_ROOT.href);
-      const isCanonicalProtocol = resolved.href === PROTOCOL_PROGRAM.href ||
+      const isCanonicalProtocol =
+        resolved.href === PROTOCOL_PROGRAM.href ||
         PROTOCOL_BASE.some((base) => base.url.href === resolved.href);
       assert(
         insideCore || isCanonicalProtocol,
@@ -111,20 +104,14 @@ Deno.test('ADR-0148 semantic core imports stay bundler-neutral and inside the co
   );
   for (const { url, label } of PROTOCOL_BASE) {
     const source = await Deno.readTextFile(url);
-    assertEquals(
-      moduleSpecifiers(source, url),
-      [],
-      `canonical ${label} must stay import-free`,
-    );
+    assertEquals(moduleSpecifiers(source, url), [], `canonical ${label} must stay import-free`);
   }
-  for (
-    const [source, label] of [
-      [protocolSource, 'Part Program protocol'],
-      ...await Promise.all(
-        PROTOCOL_BASE.map(async ({ url, label }) => [await Deno.readTextFile(url), label] as const),
-      ),
-    ] as const
-  ) {
+  for (const [source, label] of [
+    [protocolSource, 'Part Program protocol'],
+    ...(await Promise.all(
+      PROTOCOL_BASE.map(async ({ url, label }) => [await Deno.readTextFile(url), label] as const),
+    )),
+  ] as const) {
     assert(
       !/PluginContext|moduleGraph|hotUpdate|devServer|Deno\./.test(source),
       `${label} must not accept integration or host state`,

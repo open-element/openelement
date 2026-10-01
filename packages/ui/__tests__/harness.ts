@@ -251,7 +251,7 @@ export function fakeDialog(): FakeDialog {
 export function dialogWith(fake: FakeDialog, mode?: string) {
   return (async () => {
     const { OpenDialog } = await import('../src/open-dialog.tsx');
-    // deno-lint-ignore no-explicit-any
+    // oxlint-disable-next-line no-explicit-any
     const el = new (OpenDialog as unknown as new () => any)();
     el.shadowRoot = { querySelector: (sel: string) => (sel === 'dialog' ? fake : null) };
     if (mode) el.setAttribute('mode', mode);

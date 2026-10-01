@@ -70,7 +70,7 @@ export async function runTestSuiteWithCrashRetry(
     throw new Error('maxAttempts must be a positive integer');
   }
   let crashes = 0;
-  for (let attempt = 1;; attempt++) {
+  for (let attempt = 1; ; attempt++) {
     const { code } = await runner();
     const kind = classifyTestExit(code);
     if (kind === 'ok') return { crashes };
@@ -125,9 +125,9 @@ async function runCoverage(crashRetries: number): Promise<string> {
         maxAttempts: crashRetries + 1,
         onCrash: ({ attempt, maxAttempts, code }) => {
           console.error(
-            `\n[check-coverage] NATIVE CRASH: deno test terminated by ${
-              describeNativeCrash(code)
-            } ` +
+            `\n[check-coverage] NATIVE CRASH: deno test terminated by ${describeNativeCrash(
+              code,
+            )} ` +
               `on attempt ${attempt}/${maxAttempts} with no test assertion failure (#1278). ` +
               (attempt < maxAttempts ? 'Retrying.' : 'No attempts left.'),
           );
@@ -155,9 +155,9 @@ async function runCoverage(crashRetries: number): Promise<string> {
 }
 
 function formatMetric(name: string, metric: CoverageMetric, threshold: number): string {
-  return `${name}: ${metric.covered}/${metric.total} ${
-    metric.percentage.toFixed(2)
-  }% (minimum ${threshold}%)`;
+  return `${name}: ${metric.covered}/${metric.total} ${metric.percentage.toFixed(
+    2,
+  )}% (minimum ${threshold}%)`;
 }
 
 async function main(): Promise<void> {

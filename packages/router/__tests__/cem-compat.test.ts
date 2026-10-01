@@ -27,53 +27,65 @@ Deno.test('CEM parser fails closed for malformed roots, modules, declarations, a
   assertEquals(parseCem('[]').errors[0].code, 'CEM_INVALID_ROOT');
   assertEquals(parseCem('{}').errors[0].code, 'CEM_NO_MODULES');
 
-  const result = parseCem(JSON.stringify({
-    modules: [
-      null,
-      {
-        declarations: [
-          { kind: 'class', name: 'Ignored' },
-          { kind: 'custom-element' },
-          element('Invalid'),
-          element('duplicate-tag'),
-          element('duplicate-tag'),
-        ],
-        exports: [{}, null],
-      },
-    ],
-  }));
+  const result = parseCem(
+    JSON.stringify({
+      modules: [
+        null,
+        {
+          declarations: [
+            { kind: 'class', name: 'Ignored' },
+            { kind: 'custom-element' },
+            element('Invalid'),
+            element('duplicate-tag'),
+            element('duplicate-tag'),
+          ],
+          exports: [{}, null],
+        },
+      ],
+    }),
+  );
   assertEquals(result.success, false);
   assertEquals(result.manifest, undefined);
   assert(result.warnings.some((warning) => warning.code === 'CEM_NO_SCHEMA_VERSION'));
   assert(result.warnings.some((warning) => warning.code === 'CEM_MODULE_NO_KIND'));
-  for (
-    const code of [
-      'CEM_MODULE_NO_PATH',
-      'CEM_CE_NO_TAG_NAME',
-      'CEM_CE_INVALID_TAG_NAME',
-      'CEM_CE_DUPLICATE_TAG',
-      'CEM_EXPORT_NO_DECLARATION',
-    ]
-  ) {
-    assert(result.errors.some((error) => error.code === code), code);
+  for (const code of [
+    'CEM_MODULE_NO_PATH',
+    'CEM_CE_NO_TAG_NAME',
+    'CEM_CE_INVALID_TAG_NAME',
+    'CEM_CE_DUPLICATE_TAG',
+    'CEM_EXPORT_NO_DECLARATION',
+  ]) {
+    assert(
+      result.errors.some((error) => error.code === code),
+      code,
+    );
   }
 });
 
 Deno.test('CEM classifier preserves conservative defaults and explicit delivery declarations', () => {
-  const parsed = parseCem(manifest([
-    moduleWith('./elements.js', [
-      element('plain-element'),
-      element('explicit-client', { ssr: false, hydrate: 'visible' }),
-      element('missing-layer', { ssr: true }),
-      element('server-element', {
-        ssr: true,
-        dsd: true,
-        layer: 'third-party-adapter',
-        hydrate: 'load',
-      }),
-      { kind: 'class', name: 'Ignored' },
-    ], [{ declaration: { name: 'ServerElement' } }]),
-  ], '@scope/components'));
+  const parsed = parseCem(
+    manifest(
+      [
+        moduleWith(
+          './elements.js',
+          [
+            element('plain-element'),
+            element('explicit-client', { ssr: false, hydrate: 'visible' }),
+            element('missing-layer', { ssr: true }),
+            element('server-element', {
+              ssr: true,
+              dsd: true,
+              layer: 'third-party-adapter',
+              hydrate: 'load',
+            }),
+            { kind: 'class', name: 'Ignored' },
+          ],
+          [{ declaration: { name: 'ServerElement' } }],
+        ),
+      ],
+      '@scope/components',
+    ),
+  );
   assertEquals(parsed.success, true);
   const classified = classifyCemManifest(parsed.manifest!);
   assertEquals(classified.stats, {
@@ -84,11 +96,7 @@ Deno.test('CEM classifier preserves conservative defaults and explicit delivery 
     experimentalDomCount: 0,
   });
   assertEquals(classified.ssrCapableTags, ['server-element']);
-  assertEquals(classified.clientOnlyTags, [
-    'plain-element',
-    'explicit-client',
-    'missing-layer',
-  ]);
+  assertEquals(classified.clientOnlyTags, ['plain-element', 'explicit-client', 'missing-layer']);
   assertStringIncludes(classified.classifications[0].reason, '@scope/components');
   assertEquals(classified.classifications[1].hydrate, 'visible');
   assertStringIncludes(classified.classifications[2].reason, 'no adapter/layer');
@@ -129,10 +137,7 @@ Deno.test('CEM scanner discovers scoped and unscoped packages without executing 
     );
 
     const scanned = await scanCemManifests(root);
-    assertEquals(scanned.map((entry) => entry.packageName).sort(), [
-      '@scope/package',
-      'plain',
-    ]);
+    assertEquals(scanned.map((entry) => entry.packageName).sort(), ['@scope/package', 'plain']);
     const classified = await detectAndClassifyCemPackages(root);
     assertEquals(classified.map((entry) => entry.tagName).sort(), [
       'plain-element',

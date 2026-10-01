@@ -93,7 +93,7 @@ Deno.test('release state: per-package Site latest must match the tracked dist-ta
   const failures = validateReleaseState(PINNED_STATE, VERSIONS, drifted);
   assertEquals(
     failures.some((f) =>
-      f.includes('PUBLISHED_LATEST must record @openelement/router v0.41.0-alpha.6')
+      f.includes('PUBLISHED_LATEST must record @openelement/router v0.41.0-alpha.6'),
     ),
     true,
   );
@@ -112,7 +112,7 @@ Deno.test('registry drift: three-package 0.43.3 is not a common complete version
     failures.some((f) =>
       f.includes(
         'commonCompleteVersion: tracked 0.43.3, registry four-package stable intersection null',
-      )
+      ),
     ),
     true,
   );
@@ -127,7 +127,10 @@ Deno.test('registry drift: only three packages containing the target fails', () 
   const wrong = structuredClone(PINNED_STATE);
   wrong.commonCompleteVersion = '0.43.3';
   const failures = validateRegistryEvidence(wrong, threeOfFour);
-  assertEquals(failures.some((f) => f.includes('commonCompleteVersion')), true);
+  assertEquals(
+    failures.some((f) => f.includes('commonCompleteVersion')),
+    true,
+  );
 });
 
 Deno.test('commonStableVersion computes the four-package stable intersection', () => {
@@ -166,7 +169,10 @@ Deno.test('registry drift: a moved dist-tag fails closed', () => {
   const moved = evidence();
   moved.distTags['@openelement/element'].beta = '0.44.0-beta.2.1';
   const failures = validateRegistryEvidence(PINNED_STATE, moved);
-  assertEquals(failures.some((f) => f.includes('dist-tag beta')), true);
+  assertEquals(
+    failures.some((f) => f.includes('dist-tag beta')),
+    true,
+  );
 });
 
 Deno.test('registry drift: Router absent at the prerelease is accepted', () => {
@@ -178,7 +184,10 @@ Deno.test('registry drift: a tracked-but-absent latest fails', () => {
   const absent = evidence();
   absent.versions['@openelement/router'] = ['0.41.0-alpha.8'];
   const failures = validateRegistryEvidence(PINNED_STATE, absent);
-  assertEquals(failures.some((f) => f.includes('recorded latest 0.41.0-alpha.6')), true);
+  assertEquals(
+    failures.some((f) => f.includes('recorded latest 0.41.0-alpha.6')),
+    true,
+  );
 });
 
 Deno.test('registry drift: a claimed-but-absent package fails closed', () => {
@@ -186,5 +195,8 @@ Deno.test('registry drift: a claimed-but-absent package fails closed', () => {
   absent.versions['@openelement/element'] = ['0.43.3'];
   absent.distTags['@openelement/element'] = { latest: '0.43.3', beta: '0.44.0-beta.2.2' };
   const failures = validateRegistryEvidence(PINNED_STATE, absent);
-  assertEquals(failures.some((f) => f.includes('recorded as published')), true);
+  assertEquals(
+    failures.some((f) => f.includes('recorded as published')),
+    true,
+  );
 });

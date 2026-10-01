@@ -121,9 +121,11 @@ Deno.test('wrapInDocument: emits link tags (canonical, hreflang alternates) afte
   }
   // Deterministic order: meta description first, then links in author order.
   if (
-    !(out.indexOf(metaDescription) < out.indexOf(canonical) &&
+    !(
+      out.indexOf(metaDescription) < out.indexOf(canonical) &&
       out.indexOf(canonical) < out.indexOf(alternateEn) &&
-      out.indexOf(alternateEn) < out.indexOf(alternateZh))
+      out.indexOf(alternateEn) < out.indexOf(alternateZh)
+    )
   ) {
     throw new Error(`link/meta order is not deterministic:\n${out}`);
   }
@@ -144,16 +146,14 @@ Deno.test('wrapInDocument: escapes link attributes and skips entries without rel
     throw new Error(`entry without rel must be skipped:\n${out}`);
   }
   // No links at all must keep the document byte-identical to before.
-  assertEquals(
-    wrapInDocument('x', { title: 'T' }).includes('<link'),
-    false,
-  );
+  assertEquals(wrapInDocument('x', { title: 'T' }).includes('<link'), false);
 });
 
 // ─── Structured script descriptors + CSP nonce (Alpha.1 closure) ────────
 
 Deno.test('wrapInDocument: no scripts and no nonce stays byte-identical', () => {
-  const baseline = '<!DOCTYPE html>\n<html lang="en">\n<head>\n  <meta charset="UTF-8">\n' +
+  const baseline =
+    '<!DOCTYPE html>\n<html lang="en">\n<head>\n  <meta charset="UTF-8">\n' +
     '  <meta name="viewport" content="width=device-width, initial-scale=1.0">\n' +
     '  <title>T</title>\n  \n</head>\n<body>\n  x\n  \n</body>\n</html>';
   assertEquals(wrapInDocument('x', { title: 'T' }), baseline);
@@ -215,10 +215,7 @@ Deno.test('wrapInDocument: script descriptors serialize byte-identically to the 
 Deno.test('wrapInDocument: a valid CSP nonce reaches EVERY generated script tag', () => {
   const out = wrapInDocument('x', {
     cspNonce: 'abc123+/=_-',
-    scripts: [
-      { type: 'module', src: '/client/islands/client.js' },
-      { code: 'window.__x = 1;' },
-    ],
+    scripts: [{ type: 'module', src: '/client/islands/client.js' }, { code: 'window.__x = 1;' }],
   });
   assertEquals(
     out.includes(
@@ -246,7 +243,10 @@ Deno.test('wrapInDocument: an invalid nonce still warns and emits no nonce attri
   } finally {
     console.warn = originalWarn;
   }
-  assertEquals(warnings.some((w) => w.includes('Invalid CSP nonce format')), true);
+  assertEquals(
+    warnings.some((w) => w.includes('Invalid CSP nonce format')),
+    true,
+  );
   assertEquals(out.includes('nonce='), false);
   assertEquals(
     out.includes('<script type="module" src="/client/islands/client.js"></script>'),
@@ -280,11 +280,10 @@ Deno.test('wrapInDocument: structured data serializes into <head> as application
     title: 'Notes',
     meta: { description: 'All notes' },
     links: [{ rel: 'canonical', href: 'https://example.com/notes' }],
-    structuredData: [
-      { '@context': 'https://schema.org', '@type': 'WebSite', name: 'Example' },
-    ],
+    structuredData: [{ '@context': 'https://schema.org', '@type': 'WebSite', name: 'Example' }],
   });
-  const tag = '  <script type="application/ld+json">' +
+  const tag =
+    '  <script type="application/ld+json">' +
     '{"@context":"https://schema.org","@type":"WebSite","name":"Example"}</script>';
   assertEquals(out.includes(tag), true);
   // Inside <head>, after the link collection, before any raw head extras.
@@ -316,10 +315,10 @@ Deno.test('wrapInDocument: structured data cannot close its script element or op
   assertEquals(out.includes('\\u003C/script>\\u003Cimg'), true);
   // The JSON still round-trips to the original text: escaping is a markup
   // constraint, not a change of meaning.
-  assertEquals(
-    JSON.parse(out.slice(out.indexOf(open) + open.length, out.indexOf('</script>'))),
-    { '@type': 'Article', headline: payload },
-  );
+  assertEquals(JSON.parse(out.slice(out.indexOf(open) + open.length, out.indexOf('</script>'))), {
+    '@type': 'Article',
+    headline: payload,
+  });
 });
 
 Deno.test('wrapInDocument: a valid CSP nonce also reaches the structured data tag', () => {
@@ -385,10 +384,7 @@ Deno.test('wrapInDocument: well-formed meta.tags keys still serialize unchanged 
     },
   });
   assertEquals(out.includes('<meta name="robots" content="index, follow">'), true);
-  assertEquals(
-    out.includes('<meta http-equiv="refresh" data:x-tra="1" flag="true">'),
-    true,
-  );
+  assertEquals(out.includes('<meta http-equiv="refresh" data:x-tra="1" flag="true">'), true);
 });
 
 Deno.test('wrapInDocument: unsafe meta.tags keys throw with a structured code (#1373)', () => {

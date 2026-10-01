@@ -12,18 +12,20 @@ import { parseHtml, TestDocument, type TestElement, toHtml } from '../compiled-r
 const program = testProgram({
   tag: 'oe-stream-claim',
   rootMode: 'light',
-  template: [{
-    k: 'el',
-    tag: 'main',
-    attrs: [],
-    children: [
-      { k: 'text', value: 'Start ' },
-      { k: 'part', index: 0 },
-      { k: 'text', value: ' middle ' },
-      { k: 'part', index: 1 },
-      { k: 'text', value: ' end' },
-    ],
-  }],
+  template: [
+    {
+      k: 'el',
+      tag: 'main',
+      attrs: [],
+      children: [
+        { k: 'text', value: 'Start ' },
+        { k: 'part', index: 0 },
+        { k: 'text', value: ' middle ' },
+        { k: 'part', index: 1 },
+        { k: 'text', value: ' end' },
+      ],
+    },
+  ],
   parts: [
     { k: 'text', index: 0, signal: 'title' },
     {
@@ -70,7 +72,10 @@ Deno.test('streamed text arriving before claim adopts the original node', () => 
     pendingParts: [1],
   });
   assertStrictEquals(main.childNodes[2], text);
-  assertEquals(main.childNodes.some((node) => 'data' in node && node.data === 'oe:p1'), true);
+  assertEquals(
+    main.childNodes.some((node) => 'data' in node && node.data === 'oe:p1'),
+    true,
+  );
   title.value = 'Updated';
   assertEquals(text.data, 'Updated');
   instance.dispose();

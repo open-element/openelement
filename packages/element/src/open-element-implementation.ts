@@ -119,11 +119,12 @@ export class OpenElement extends OpenElementConfiguration {
 
     if (!program) return;
 
-    const rootMode: CompiledRootMode = program.root.kind === 'light'
-      ? 'light'
-      : program.root.kind === 'shadow-open'
-      ? 'open'
-      : 'closed';
+    const rootMode: CompiledRootMode =
+      program.root.kind === 'light'
+        ? 'light'
+        : program.root.kind === 'shadow-open'
+          ? 'open'
+          : 'closed';
 
     state.kernel = new CompiledElementKernel(this as unknown as HTMLElement, program, {
       signals: state.signals,
@@ -133,12 +134,13 @@ export class OpenElement extends OpenElementConfiguration {
       delegatesFocus: ctor.delegatesFocus ?? false,
       styles: ctor.styles as never,
       formAssociated: ctor.formAssociated ?? false,
-      errorBoundary: ctor.isErrorBoundary === true
-        // The public ErrorBoundary owns the user-facing retry policy
-        // (maxRetries field); the kernel service only tracks state, so its
-        // own retry budget stays out of the way.
-        ? { maxRetries: Number.MAX_SAFE_INTEGER }
-        : undefined,
+      errorBoundary:
+        ctor.isErrorBoundary === true
+          ? // The public ErrorBoundary owns the user-facing retry policy
+            // (maxRetries field); the kernel service only tracks state, so its
+            // own retry budget stays out of the way.
+            { maxRetries: Number.MAX_SAFE_INTEGER }
+          : undefined,
     });
     this.#kernel = state.kernel;
   }
@@ -330,11 +332,7 @@ export class OpenElement extends OpenElementConfiguration {
    * through the accessor; removal restores the compiled default). Writes that
    * came from property reflection are ignored (loop guard).
    */
-  attributeChangedCallback(
-    name: string,
-    _oldValue: string | null,
-    newValue: string | null,
-  ): void {
+  attributeChangedCallback(name: string, _oldValue: string | null, newValue: string | null): void {
     const state = facadeStates.get(this);
     if (!state || !this.#kernel) return;
     handleCompiledAttributeChange(this, state, name, newValue);

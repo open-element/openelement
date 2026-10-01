@@ -44,9 +44,7 @@ Deno.test('vpPackEntries appends the router client-runtime entries exactly once 
     '.': './src/index.ts',
     './vite': './src/vite/index.ts',
   };
-  const entries = vpPackEntries(
-    pkg('@openelement/router', routerExports, 'packages/router'),
-  );
+  const entries = vpPackEntries(pkg('@openelement/router', routerExports, 'packages/router'));
   assertEquals(entries.slice(0, 2), ['src/index.ts', 'src/vite/index.ts']);
   assertEquals(entries.slice(2), [...ROUTER_CLIENT_RUNTIME_ENTRIES]);
   assertEquals(new Set(entries).size, entries.length);
@@ -109,7 +107,7 @@ Deno.test('synthesizedPackedManifest preserves the published exports shape', () 
 Deno.test('stagingPackageJsonFor declares self-name, unwraps npm: peers, pins the toolchain', () => {
   const staged = stagingPackageJsonFor(
     pkg('@openelement/element', ELEMENT_EXPORTS),
-    { 'typescript': '6.0.3', '@preact/signals-core': '^1.12.1' },
+    { typescript: '6.0.3', '@preact/signals-core': '^1.12.1' },
     {
       peerDependencies: { vite: 'npm:vite@^8.0.0' },
       peerDependenciesMeta: { vite: { optional: true } },
@@ -136,8 +134,8 @@ Deno.test('rootStagingPackageJsonFor unions member dependencies', () => {
     pkg('@openelement/router', { '.': './src/index.ts' }, 'packages/router'),
   ];
   const dependencyMap = new Map<string, Record<string, string>>([
-    ['@openelement/element', { 'typescript': '6.0.3' }],
-    ['@openelement/router', { 'hono': '^4.12', 'typescript': '6.0.3' }],
+    ['@openelement/element', { typescript: '6.0.3' }],
+    ['@openelement/router', { hono: '^4.12', typescript: '6.0.3' }],
   ]);
   const root = rootStagingPackageJsonFor(members, dependencyMap) as {
     private: boolean;
@@ -211,9 +209,7 @@ Deno.test('assembleVpPackageTree maps dist to src, copies scoped payload, fails 
     });
 
     assertEquals(
-      new Set(
-        [...Deno.readDirSync(out)].map((entry) => entry.name).sort(),
-      ),
+      new Set([...Deno.readDirSync(out)].map((entry) => entry.name).sort()),
       new Set(['package.json', 'src', 'README.md']),
     );
     assert(Deno.statSync(join(out, 'src', 'index.js')).isFile);
@@ -225,13 +221,17 @@ Deno.test('assembleVpPackageTree maps dist to src, copies scoped payload, fails 
     try {
       Deno.statSync(join(out, 'deno.json'));
       leaked = true;
-    } catch { /* expected absent */ }
+    } catch {
+      /* expected absent */
+    }
     assertEquals(leaked, false);
     leaked = false;
     try {
       Deno.statSync(join(out, 'vite.config.ts'));
       leaked = true;
-    } catch { /* expected absent */ }
+    } catch {
+      /* expected absent */
+    }
     assertEquals(leaked, false);
 
     // An orphan source module (no dist emission at all) fails closed.
@@ -285,7 +285,7 @@ Deno.test('prepareVpStagingFiles stages manifests, config and optional tsconfig 
       pkg: router,
       members: [element, router],
       dependencyMap: new Map<string, Record<string, string>>([
-        ['@openelement/element', { 'typescript': '6.0.3' }],
+        ['@openelement/element', { typescript: '6.0.3' }],
         ['@openelement/router', {}],
       ]),
       sourceManifest: { compilerOptions: { jsx: 'react-jsx' } },
@@ -305,9 +305,9 @@ Deno.test('prepareVpStagingFiles stages manifests, config and optional tsconfig 
       assertEquals(memberManifest.dependencies['@openelement/element'], '1.0.0-test');
       // Pack config lands in the pack dir; tsconfig only with compilerOptions.
       assert(Deno.statSync(join(staged.packDir, 'vite.config.ts')).isFile);
-      const tsconfig = JSON.parse(
-        Deno.readTextFileSync(join(staged.packDir, 'tsconfig.json')),
-      ) as { compilerOptions: Record<string, string> };
+      const tsconfig = JSON.parse(Deno.readTextFileSync(join(staged.packDir, 'tsconfig.json'))) as {
+        compilerOptions: Record<string, string>;
+      };
       assertEquals(tsconfig.compilerOptions.jsx, 'react-jsx');
       // The member copy must not drag deno.json/package.json along.
       assertEquals(
@@ -318,7 +318,9 @@ Deno.test('prepareVpStagingFiles stages manifests, config and optional tsconfig 
       try {
         Deno.statSync(join(staged.stagingRoot, 'element', 'deno.json'));
         leaked = true;
-      } catch { /* expected absent */ }
+      } catch {
+        /* expected absent */
+      }
       assertEquals(leaked, false);
     } finally {
       await staged.cleanup();

@@ -75,7 +75,9 @@ export function localeFromPath(
   path: unknown,
   fallback: string,
 ): string {
-  const first = String(path || '/').split('/').filter(Boolean)[0];
+  const first = String(path || '/')
+    .split('/')
+    .filter(Boolean)[0];
   return locales.includes(first) ? first : fallback;
 }
 
@@ -165,9 +167,10 @@ export function createPagePropsRuntime(deps: PagePropsRuntimeDeps): PagePropsRun
     pageErrorProps(routeModule: unknown, error: unknown, context: PageContext): ProjectedProps {
       const module = routeModule as RouteModule | undefined | null;
       const page = module?.default?.openElementPage;
-      const projected = page && typeof (page as { error?: unknown }).error === 'function'
-        ? (page.error as (error: unknown, context: PageContext) => unknown)(error, context)
-        : {};
+      const projected =
+        page && typeof (page as { error?: unknown }).error === 'function'
+          ? (page.error as (error: unknown, context: PageContext) => unknown)(error, context)
+          : {};
       return projected && typeof projected === 'object'
         ? filterPageProps(projected as Record<string, unknown>)
         : {};

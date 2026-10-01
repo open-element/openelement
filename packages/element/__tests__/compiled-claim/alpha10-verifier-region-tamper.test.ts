@@ -50,7 +50,10 @@ const whenHost = (): WhenHost => ({
 const eachHost = (): EachHost => ({
   signals: {
     title: new Sig('DYN'),
-    items: new Sig([{ id: 'a', label: 'alpha' }, { id: 'b', label: 'beta' }]),
+    items: new Sig([
+      { id: 'a', label: 'alpha' },
+      { id: 'b', label: 'beta' },
+    ]),
   },
 });
 
@@ -105,13 +108,15 @@ function eachSiblingProgram(): unknown {
         index: 1,
         signal: 'items',
         key: 'id',
-        item: [{
-          k: 'el',
-          tag: 'li',
-          attrs: [['title', 'item-static']],
-          iattrs: [['data-label', 'label']],
-          children: [],
-        }],
+        item: [
+          {
+            k: 'el',
+            tag: 'li',
+            attrs: [['title', 'item-static']],
+            iattrs: [['data-label', 'label']],
+            children: [],
+          },
+        ],
       },
     ],
   });

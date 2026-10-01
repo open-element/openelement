@@ -60,7 +60,10 @@ Deno.test('parseSlots keeps @slot doc descriptions and does not duplicate JSX ma
     ['tab', 'panel'],
   );
   assertEquals(slots[0].description, 'Tab label element (one per panel)');
-  assertEquals(slots.some((s) => s.name === ''), false);
+  assertEquals(
+    slots.some((s) => s.name === ''),
+    false,
+  );
 });
 
 Deno.test('parseCssParts picks up JSX part=... literals without doc comments', () => {
@@ -111,18 +114,21 @@ Deno.test('generated UI manifest covers every shipped component', () => {
   const manifest = buildManifest();
   assertEquals(manifest.packageName, '@openelement/ui');
   assertStringIncludes(manifest.$comment, 'GENERATED FILE');
-  assertEquals(manifest.declarations.map((declaration) => declaration.tagName), [
-    'open-card',
-    'open-callout',
-    'open-button',
-    'open-input',
-    'open-theme-toggle',
-    'open-code-block',
-    'open-badge',
-    'open-dialog',
-    'open-dropdown',
-    'open-tabs',
-  ]);
+  assertEquals(
+    manifest.declarations.map((declaration) => declaration.tagName),
+    [
+      'open-card',
+      'open-callout',
+      'open-button',
+      'open-input',
+      'open-theme-toggle',
+      'open-code-block',
+      'open-badge',
+      'open-dialog',
+      'open-dropdown',
+      'open-tabs',
+    ],
+  );
   for (const declaration of manifest.declarations) {
     assert(declaration.className, `${declaration.tagName} missing className`);
     assertEquals(declaration.openElement?.ssr, true);

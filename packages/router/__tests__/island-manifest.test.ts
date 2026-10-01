@@ -75,10 +75,7 @@ Deno.test('generateIslandManifests: produces manifests with known islands', () =
   assertEquals(manifests[0].route, '/');
   assertEquals(manifests[0].islands.length, 1);
   assertEquals(manifests[0].islands[0].tagName, 'open-theme-toggle');
-  assertEquals(
-    manifests[0].islands[0].chunkUrl,
-    '/client/islands/island-open-theme-toggle-abc.js',
-  );
+  assertEquals(manifests[0].islands[0].chunkUrl, '/client/islands/island-open-theme-toggle-abc.js');
   assertEquals(manifests[0].islands[0].strategy, 'idle');
   assertEquals(manifests[0].islands[0].layer, 'dsd-interactive');
   assertExists(manifests[0].builtAt);
@@ -128,12 +125,14 @@ Deno.test('writeIslandManifests: creates JSON files in island-manifests dir', as
   const manifests: PageIslandManifest[] = [
     {
       route: '/',
-      islands: [{
-        tagName: 'open-toggle',
-        chunkUrl: '/client/toggle.js',
-        strategy: 'load',
-        layer: 'dsd-static',
-      }],
+      islands: [
+        {
+          tagName: 'open-toggle',
+          chunkUrl: '/client/toggle.js',
+          strategy: 'load',
+          layer: 'dsd-static',
+        },
+      ],
       builtAt: '2026-05-08T00:00:00.000Z',
     },
   ];

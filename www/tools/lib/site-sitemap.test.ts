@@ -127,14 +127,17 @@ Deno.test('articleLastmodByRoute: source dates per locale, unknown routes omitte
         },
       }),
     );
-    const map = await articleLastmodByRoute([
-      '/',
-      '/guide/getting-started',
-      '/zh/guide/getting-started',
-      '/architecture',
-      '/zh/architecture',
-      '/blog/hello',
-    ], manifest);
+    const map = await articleLastmodByRoute(
+      [
+        '/',
+        '/guide/getting-started',
+        '/zh/guide/getting-started',
+        '/architecture',
+        '/zh/architecture',
+        '/blog/hello',
+      ],
+      manifest,
+    );
     assertEquals(map.get('/guide/getting-started'), '2026-09-18');
     assertEquals(map.get('/zh/guide/getting-started'), '2026-09-17');
     assertEquals(map.get('/architecture'), '2026-09-16');

@@ -34,9 +34,12 @@ export function createIslandLifecycle(deps: IslandLifecycleDeps): IslandLifecycl
       for (let k = 0; k < el.childNodes.length; k++) {
         const n = el.childNodes[k] as Element;
         if (
-          skipTemplate && n.nodeType === 1 && n.tagName === 'TEMPLATE' &&
+          skipTemplate &&
+          n.nodeType === 1 &&
+          n.tagName === 'TEMPLATE' &&
           n.hasAttribute('shadowrootmode')
-        ) continue;
+        )
+          continue;
         // Whitespace-only text nodes carry no meaning: hydration normalizes the
         // live tree (merged text), the fresh parse keeps them split.
         if (n.nodeType === 3 && (n as unknown as Text).data.trim() === '') continue;

@@ -315,10 +315,6 @@ export function frameworkError(
  * here — one implementation, the phase as a parameter — so a code and a phase
  * cannot drift apart per throw site.
  */
-export function raiseFrameworkError(
-  phase: ErrorPhase,
-  code: string,
-  message: string,
-): never {
+export function raiseFrameworkError(phase: ErrorPhase, code: string, message: string): never {
   throw frameworkError(code, message, { phase });
 }

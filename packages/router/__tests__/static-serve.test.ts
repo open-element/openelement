@@ -181,10 +181,7 @@ Deno.test('tryStatic cache-control: content-hashed assets immutable, HTML rechec
 
     const asset = tryStatic(root, '/assets/index-Dq2gH8fM.js');
     assert(asset);
-    assertEquals(
-      asset.headers.get('cache-control'),
-      'public, max-age=31536000, immutable',
-    );
+    assertEquals(asset.headers.get('cache-control'), 'public, max-age=31536000, immutable');
 
     const html = tryStatic(root, '/');
     assert(html);

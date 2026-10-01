@@ -204,7 +204,9 @@ export default class RoadmapPage extends OpenElement {
                   <span slot='label'>{this.inProductLabel}</span>
                   <h2>{this.inProductTitle}</h2>
                   <ul>
-                    {this.inProductItems.map((item) => <li key={item.key}>{item.value}</li>)}
+                    {this.inProductItems.map((item) => (
+                      <li key={item.key}>{item.value}</li>
+                    ))}
                   </ul>
                 </open-artifact-panel>
 
@@ -212,7 +214,9 @@ export default class RoadmapPage extends OpenElement {
                   <span slot='label'>{this.outScopeLabel}</span>
                   <h2>{this.outScopeTitle}</h2>
                   <ul>
-                    {this.outScopeItems.map((item) => <li key={item.key}>{item.value}</li>)}
+                    {this.outScopeItems.map((item) => (
+                      <li key={item.key}>{item.value}</li>
+                    ))}
                   </ul>
                 </open-artifact-panel>
 
@@ -256,8 +260,11 @@ export default class RoadmapPage extends OpenElement {
                 <open-artifact-panel>
                   <span slot='label'>{this.packageMatrixLabel}</span>
                   <span slot='meta'>{this.productBoundaryMeta}</span>
-                  <open-standards-visual variant='packages' emphasis='high' motion='auto'>
-                  </open-standards-visual>
+                  <open-standards-visual
+                    variant='packages'
+                    emphasis='high'
+                    motion='auto'
+                  ></open-standards-visual>
                 </open-artifact-panel>
                 <open-artifact-panel>
                   <span slot='label'>{this.releaseDisciplineLabel}</span>

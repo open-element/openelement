@@ -46,7 +46,7 @@ const BASE64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/
 
 /** Standard base64 VLQ encoding of one signed source-map field. */
 export function encodeVlq(value: number): string {
-  let current = value < 0 ? ((-value) << 1) | 1 : value << 1;
+  let current = value < 0 ? (-value << 1) | 1 : value << 1;
   let encoded = '';
   do {
     let digit = current & 31;
@@ -69,10 +69,14 @@ export class SourceMapSegmentBuilder {
 
   add(segment: EmissionSegment): void {
     if (
-      !Number.isInteger(segment.generatedLine) || segment.generatedLine < 1 ||
-      !Number.isInteger(segment.generatedColumn) || segment.generatedColumn < 0 ||
-      !Number.isInteger(segment.sourceLine) || segment.sourceLine < 1 ||
-      !Number.isInteger(segment.sourceColumn) || segment.sourceColumn < 0
+      !Number.isInteger(segment.generatedLine) ||
+      segment.generatedLine < 1 ||
+      !Number.isInteger(segment.generatedColumn) ||
+      segment.generatedColumn < 0 ||
+      !Number.isInteger(segment.sourceLine) ||
+      segment.sourceLine < 1 ||
+      !Number.isInteger(segment.sourceColumn) ||
+      segment.sourceColumn < 0
     ) {
       throw frameworkError(
         ProgramErrorCode.INVALID_SOURCE_SEGMENT,
@@ -92,8 +96,9 @@ export class SourceMapSegmentBuilder {
   }
 
   build(file: string, source: string, provenance?: unknown): CompiledElementSourceMap {
-    const sorted = [...this.segments].sort((left, right) =>
-      left.generatedLine - right.generatedLine || left.generatedColumn - right.generatedColumn
+    const sorted = [...this.segments].sort(
+      (left, right) =>
+        left.generatedLine - right.generatedLine || left.generatedColumn - right.generatedColumn,
     );
     let mappings = '';
     let generatedLine = 1;

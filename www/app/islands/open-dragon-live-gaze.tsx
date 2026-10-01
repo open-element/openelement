@@ -12,7 +12,8 @@ export const openElement = defineIslandConfig({ hydrate: 'idle', ssr: true });
 
 @element('open-dragon-live-gaze')
 export default class DragonLiveGaze extends OpenElement {
-  static override styles = [compiledStyle(`
+  static override styles = [
+    compiledStyle(`
   :host { display: block; width: 100%; height: 100%; }
   .stage {
     position: relative; margin: 0; width: 100%; height: 100%;
@@ -67,7 +68,8 @@ export default class DragonLiveGaze extends OpenElement {
     .poster, .idle-view { object-fit: contain; }
   }
   @media (prefers-reduced-motion: reduce) { .stage { animation: none; } .mote { animation: none; opacity: 0; } }
-`)];
+`),
+  ];
 
   override connectedCallback(): void {
     super.connectedCallback();
@@ -99,8 +101,7 @@ export default class DragonLiveGaze extends OpenElement {
           playsinline
           preload='none'
           aria-hidden='true'
-        >
-        </video>
+        ></video>
         <i class='mote'></i>
         <i class='mote'></i>
         <i class='mote'></i>

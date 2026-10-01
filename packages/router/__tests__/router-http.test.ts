@@ -39,7 +39,8 @@ Deno.test('Request chooses one URL before methods; WinterCG middleware composes 
     routeMiddleware(c.req.raw, async () => {
       await next();
       return c.res;
-    }));
+    }),
+  );
   let response = await app.request('/products/new', { method: 'POST' });
   assertEquals(response.status, 405);
   assertEquals(response.headers.get('Allow'), 'GET, HEAD');
@@ -62,7 +63,8 @@ Deno.test('Request chooses one URL before methods; WinterCG middleware composes 
 Deno.test('Handler chains run in onion order: short-circuit, pass-down and outer next', async () => {
   const events: string[] = [];
   const wrap =
-    (name: string, handler: HttpHandler): HttpHandler => async (request, context, next) => {
+    (name: string, handler: HttpHandler): HttpHandler =>
+    async (request, context, next) => {
       events.push(`${name}:in`);
       const response = await handler(request, context, next);
       events.push(`${name}:out`);
@@ -110,28 +112,33 @@ Deno.test('Handler chains run in onion order: short-circuit, pass-down and outer
 Deno.test('HTTP records reject ambiguous duplicate methods and preserve thrown handler errors', async () => {
   assertThrows(
     () =>
-      createRouteMiddleware([{
-        path: '/',
-        handlers: { get: () => new Response('a'), GET: () => new Response('b') },
-      }]),
+      createRouteMiddleware([
+        {
+          path: '/',
+          handlers: { get: () => new Response('a'), GET: () => new Response('b') },
+        },
+      ]),
     TypeError,
   );
   const app = new Hono();
   app.onError(() => {
     throw new Error('host error boundary');
   });
-  const routeMiddleware = createRouteMiddleware([{
-    path: '/',
-    handlers: {
-      GET: () => {
-        throw new Error('handler');
+  const routeMiddleware = createRouteMiddleware([
+    {
+      path: '/',
+      handlers: {
+        GET: () => {
+          throw new Error('handler');
+        },
       },
     },
-  }]);
+  ]);
   app.all('*', (c, next) =>
     routeMiddleware(c.req.raw, async () => {
       await next();
       return c.res;
-    }));
+    }),
+  );
   await assertRejects(() => Promise.resolve(app.request('/')), Error, 'host error boundary');
 });

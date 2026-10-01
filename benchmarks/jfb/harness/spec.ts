@@ -111,10 +111,13 @@ export const CPU_BENCHMARKS: CpuBenchmarkSpec[] = [
       { afterStep: 9, check: { kind: 'rowCount', expected: 0 } },
     ],
     measured: run,
-    verify: [{ kind: 'rowIdText', rowIndex: 1, expected: '5001' }, {
-      kind: 'rowCount',
-      expected: 1000,
-    }],
+    verify: [
+      { kind: 'rowIdText', rowIndex: 1, expected: '5001' },
+      {
+        kind: 'rowCount',
+        expected: 1000,
+      },
+    ],
   },
   {
     id: '02_replace1k',
@@ -128,10 +131,13 @@ export const CPU_BENCHMARKS: CpuBenchmarkSpec[] = [
       { afterStep: 4, check: { kind: 'rowIdText', rowIndex: 1, expected: '4001' } },
     ],
     measured: run,
-    verify: [{ kind: 'rowIdText', rowIndex: 1, expected: '5001' }, {
-      kind: 'rowCount',
-      expected: 1000,
-    }],
+    verify: [
+      { kind: 'rowIdText', rowIndex: 1, expected: '5001' },
+      {
+        kind: 'rowCount',
+        expected: 1000,
+      },
+    ],
   },
   {
     id: '03_update10th',
@@ -206,10 +212,13 @@ export const CPU_BENCHMARKS: CpuBenchmarkSpec[] = [
       { afterStep: 6, check: { kind: 'rowIdText', rowIndex: 6, expected: '12' } },
     ],
     measured: { kind: 'row', rowIndex: 4, cell: 'remove' },
-    verify: [{ kind: 'rowIdText', rowIndex: 4, expected: '10' }, {
-      kind: 'rowCount',
-      expected: 993,
-    }],
+    verify: [
+      { kind: 'rowIdText', rowIndex: 4, expected: '10' },
+      {
+        kind: 'rowCount',
+        expected: 993,
+      },
+    ],
   },
   {
     id: '07_create10k',
@@ -223,7 +232,10 @@ export const CPU_BENCHMARKS: CpuBenchmarkSpec[] = [
       { afterStep: 9, check: { kind: 'rowCount', expected: 0 } },
     ],
     measured: runLots,
-    verify: [{ kind: 'rowExists', rowIndex: 10000 }, { kind: 'rowCount', expected: 10000 }],
+    verify: [
+      { kind: 'rowExists', rowIndex: 10000 },
+      { kind: 'rowCount', expected: 10000 },
+    ],
   },
   {
     id: '08_append1k',
@@ -237,7 +249,10 @@ export const CPU_BENCHMARKS: CpuBenchmarkSpec[] = [
       { afterStep: 10, check: { kind: 'rowExists', rowIndex: 1000 } },
     ],
     measured: add,
-    verify: [{ kind: 'rowExists', rowIndex: 2000 }, { kind: 'rowCount', expected: 2000 }],
+    verify: [
+      { kind: 'rowExists', rowIndex: 2000 },
+      { kind: 'rowCount', expected: 2000 },
+    ],
   },
   {
     id: '09_clear1k',

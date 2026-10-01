@@ -44,8 +44,9 @@ export function isCalendarDate(value: string): boolean {
   const date = new Date(0);
   date.setUTCFullYear(year, month - 1, day);
   date.setUTCHours(0, 0, 0, 0);
-  return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 &&
-    date.getUTCDate() === day;
+  return (
+    date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day
+  );
 }
 
 /**

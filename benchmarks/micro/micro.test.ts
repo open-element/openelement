@@ -52,17 +52,15 @@ Deno.test('micro suite: report schema carries evidence fields', () => {
   assert(report.table1k.serialize.htmlBytes > 0);
   assert(report.table1k.claim.claimToFreshRatio > 0);
   assert(Number.isFinite(report.compiler.medianMs));
-  for (
-    const op of [
-      report.granularity.textPart,
-      report.granularity.attrPart,
-      report.granularity.propPart,
-      report.table1k.fresh,
-      report.table1k.claim,
-      report.table1k.replace1k,
-      report.table1k.swap1k,
-    ]
-  ) {
+  for (const op of [
+    report.granularity.textPart,
+    report.granularity.attrPart,
+    report.granularity.propPart,
+    report.table1k.fresh,
+    report.table1k.claim,
+    report.table1k.replace1k,
+    report.table1k.swap1k,
+  ]) {
     assert(Number.isFinite(op.totalMs) && op.totalMs >= 0, `${op.id} totalMs must be finite`);
   }
 });

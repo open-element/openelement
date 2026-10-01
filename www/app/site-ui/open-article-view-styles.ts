@@ -24,6 +24,6 @@ const articleExtras = `
   .article-content blockquote p { margin: 0; }
 `;
 
-export const openArticleViewStyles = [compiledStyle(
-  pageStyles + articleContentStyles('.article-content') + articleExtras,
-)];
+export const openArticleViewStyles = [
+  compiledStyle(pageStyles + articleContentStyles('.article-content') + articleExtras),
+];

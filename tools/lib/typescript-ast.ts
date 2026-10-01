@@ -33,9 +33,7 @@ export function extractStaticModuleSpecifiers(
       add(node.moduleSpecifier);
     } else if (ts.isImportTypeNode(node)) {
       add(ts.isLiteralTypeNode(node.argument) ? node.argument.literal : undefined);
-    } else if (
-      ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword
-    ) {
+    } else if (ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword) {
       add(node.arguments[0]);
     }
     ts.forEachChild(node, visit);
@@ -79,16 +77,25 @@ export function extractNodeGlobalAccesses(source: string, path = 'source.ts'): N
     const parent = node.parent;
     if (parent === undefined) return false;
     if (
-      (ts.isVariableDeclaration(parent) || ts.isParameter(parent) ||
-        ts.isBindingElement(parent)) && parent.name === node
-    ) return true;
+      (ts.isVariableDeclaration(parent) || ts.isParameter(parent) || ts.isBindingElement(parent)) &&
+      parent.name === node
+    )
+      return true;
     if (
-      (ts.isFunctionDeclaration(parent) || ts.isClassDeclaration(parent) ||
-        ts.isInterfaceDeclaration(parent) || ts.isTypeAliasDeclaration(parent) ||
-        ts.isEnumDeclaration(parent)) && parent.name === node
-    ) return true;
-    return ts.isImportClause(parent) || ts.isImportSpecifier(parent) ||
-      ts.isNamespaceImport(parent) || ts.isImportEqualsDeclaration(parent);
+      (ts.isFunctionDeclaration(parent) ||
+        ts.isClassDeclaration(parent) ||
+        ts.isInterfaceDeclaration(parent) ||
+        ts.isTypeAliasDeclaration(parent) ||
+        ts.isEnumDeclaration(parent)) &&
+      parent.name === node
+    )
+      return true;
+    return (
+      ts.isImportClause(parent) ||
+      ts.isImportSpecifier(parent) ||
+      ts.isNamespaceImport(parent) ||
+      ts.isImportEqualsDeclaration(parent)
+    );
   };
 
   const isPropertyName = (node: ts.Identifier): boolean => {
@@ -106,11 +113,14 @@ export function extractNodeGlobalAccesses(source: string, path = 'source.ts'): N
     const parent = node.parent;
     if (
       ts.isPropertyAccessExpression(parent) &&
-      ts.isIdentifier(parent.expression) && parent.expression.text === 'globalThis'
-    ) return true;
+      ts.isIdentifier(parent.expression) &&
+      parent.expression.text === 'globalThis'
+    )
+      return true;
     if (
       ts.isElementAccessExpression(parent) &&
-      ts.isIdentifier(parent.expression) && parent.expression.text === 'globalThis'
+      ts.isIdentifier(parent.expression) &&
+      parent.expression.text === 'globalThis'
     ) {
       return literalText(parent.argumentExpression) === node.text;
     }
@@ -152,8 +162,10 @@ export function extractDenoAccesses(source: string, path = 'source.ts'): DenoAcc
   const aliases = new Set<string>();
   const isDenoExpression = (node: ts.Expression): boolean =>
     (ts.isIdentifier(node) && (node.text === 'Deno' || aliases.has(node.text))) ||
-    (ts.isPropertyAccessExpression(node) && ts.isIdentifier(node.expression) &&
-      node.expression.text === 'globalThis' && node.name.text === 'Deno');
+    (ts.isPropertyAccessExpression(node) &&
+      ts.isIdentifier(node.expression) &&
+      node.expression.text === 'globalThis' &&
+      node.name.text === 'Deno');
   const record = (member: string, node: ts.Node): void => {
     found.push({
       member,

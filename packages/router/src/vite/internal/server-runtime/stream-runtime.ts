@@ -149,14 +149,17 @@ function streamJson(value: unknown): string {
   if (text === undefined || text.length > STREAM_MAX_PAYLOAD_LENGTH) {
     throw serveError(StreamErrorCode.PAYLOAD_BOUND, 'stream payload exceeds the bound');
   }
-  return text.replace(/[<>&\u2028\u2029]/g, (char) =>
-    ({
-      '<': '\\u003C',
-      '>': '\\u003E',
-      '&': '\\u0026',
-      '\u2028': '\\u2028',
-      '\u2029': '\\u2029',
-    })[char] ?? '');
+  return text.replace(
+    /[<>&\u2028\u2029]/g,
+    (char) =>
+      ({
+        '<': '\\u003C',
+        '>': '\\u003E',
+        '&': '\\u0026',
+        '\u2028': '\\u2028',
+        '\u2029': '\\u2029',
+      })[char] ?? '',
+  );
 }
 
 // A front-gate throw must never strand an unobserved loader rejection: the
@@ -191,12 +194,11 @@ interface Thenable {
  * records the pump queues. Every rejection first sweeps the loader's own
  * thenables for observation (see {@linkcode observeThenables}).
  */
-export function streamFields(
-  data: unknown,
-  manifest: StreamRouteManifest,
-): StreamFieldRecord[] {
+export function streamFields(data: unknown, manifest: StreamRouteManifest): StreamFieldRecord[] {
   if (
-    !data || typeof data !== 'object' || Array.isArray(data) ||
+    !data ||
+    typeof data !== 'object' ||
+    Array.isArray(data) ||
     (Object.getPrototypeOf(data) !== Object.prototype && Object.getPrototypeOf(data) !== null)
   ) {
     observeThenables(data);
@@ -294,8 +296,12 @@ export function createStreamBody(config: StreamBodyConfig): StreamBodyFn {
       pending: manifest.fields.flatMap((field) => field.owners.map((owner) => owner.index)),
       fields,
     };
-    const shell = document.prefix + executor.shell +
-      '<template data-oe-seed="' + escapeAttr(streamJson(seed)) + '"></template>';
+    const shell =
+      document.prefix +
+      executor.shell +
+      '<template data-oe-seed="' +
+      escapeAttr(streamJson(seed)) +
+      '"></template>';
     let active = true;
     let started = false;
     let tail = false;
@@ -339,98 +345,113 @@ export function createStreamBody(config: StreamBodyConfig): StreamBodyFn {
     }
     if (scope.upstreamSignal.aborted) cleanup();
 
-    return new ReadableStream({
-      async pull(controller) {
-        if (!active) {
-          if (!cancelled) controller.close();
-          return;
-        }
-        if (!started) {
-          started = true;
-          controller.enqueue(encoder.encode(shell));
-          return;
-        }
-        while (active && current.length === 0 && queued.length === 0 && pending.size > 0) {
-          await new Promise<void>((resolve) => {
-            wake = resolve;
-          });
-          wake = undefined;
-        }
-        // A cancel/abort that lands while this pull is parked at the wake-await
-        // resumes it on an already-cancelled stream, where close() throws
-        // TypeError ("The stream controller cannot close or enqueue") out of the
-        // resumed pull. The stream is already closed in that case, so closing is
-        // skipped; an abort without cancel() leaves the stream readable and
-        // still needs the close to terminate the body.
-        if (!active) {
-          if (!cancelled) controller.close();
-          return;
-        }
-        if (current.length === 0 && queued.length) {
-          const record = queued.shift()!;
-          const { entry } = record;
-          try {
-            if (record.failed) throw record.error;
-            const value = executor.resolvedValue(entry.field, record.value);
-            const ranges = executor.serializeResolved(entry.field, record.value);
-            current = entry.owners.map((owner, index) => {
-              const html = ranges[index];
-              const frame = {
-                ...identity,
-                part: owner.index,
-                field: entry.field,
-                type: executor.seed[entry.field].type,
-                kind: owner.kind,
-                outcome: 'content',
-                value,
-              };
-              const encoded = streamJson(frame);
-              if (html.length > STREAM_MAX_PAYLOAD_LENGTH) {
-                throw serveError(StreamErrorCode.RANGE_BOUND, 'deferred range exceeds the bound');
-              }
-              return '<template data-oe-frame="' + escapeAttr(encoded) + '">' + html +
-                '</template><noscript>' + html + '</noscript>';
-            });
-          } catch (error) {
-            if (isOpenElementRedirect(error) || isOpenElementNotFound(error)) {
-              console.error('[openElement] late stream protocol decision', {
-                route,
-                field: entry.field,
-              });
-            } else {
-              console.error('[openElement] deferred Part failed', {
-                route,
-                field: entry.field,
-                error,
-              });
-            }
-            current = entry.owners.map((owner) =>
-              '<template data-oe-frame="' + escapeAttr(streamJson({
-                ...identity,
-                part: owner.index,
-                field: entry.field,
-                type: executor.seed[entry.field].type,
-                kind: owner.kind,
-                outcome: 'error',
-              })) + '"></template><noscript><p>Content unavailable.</p></noscript>'
-            );
+    return new ReadableStream(
+      {
+        async pull(controller) {
+          if (!active) {
+            if (!cancelled) controller.close();
+            return;
           }
-        }
-        if (current.length) {
-          controller.enqueue(encoder.encode(current.shift()!));
-        } else if (!tail) {
-          tail = true;
-          controller.enqueue(encoder.encode(document.suffix));
+          if (!started) {
+            started = true;
+            controller.enqueue(encoder.encode(shell));
+            return;
+          }
+          while (active && current.length === 0 && queued.length === 0 && pending.size > 0) {
+            await new Promise<void>((resolve) => {
+              wake = resolve;
+            });
+            wake = undefined;
+          }
+          // A cancel/abort that lands while this pull is parked at the wake-await
+          // resumes it on an already-cancelled stream, where close() throws
+          // TypeError ("The stream controller cannot close or enqueue") out of the
+          // resumed pull. The stream is already closed in that case, so closing is
+          // skipped; an abort without cancel() leaves the stream readable and
+          // still needs the close to terminate the body.
+          if (!active) {
+            if (!cancelled) controller.close();
+            return;
+          }
+          if (current.length === 0 && queued.length) {
+            const record = queued.shift()!;
+            const { entry } = record;
+            try {
+              if (record.failed) throw record.error;
+              const value = executor.resolvedValue(entry.field, record.value);
+              const ranges = executor.serializeResolved(entry.field, record.value);
+              current = entry.owners.map((owner, index) => {
+                const html = ranges[index];
+                const frame = {
+                  ...identity,
+                  part: owner.index,
+                  field: entry.field,
+                  type: executor.seed[entry.field].type,
+                  kind: owner.kind,
+                  outcome: 'content',
+                  value,
+                };
+                const encoded = streamJson(frame);
+                if (html.length > STREAM_MAX_PAYLOAD_LENGTH) {
+                  throw serveError(StreamErrorCode.RANGE_BOUND, 'deferred range exceeds the bound');
+                }
+                return (
+                  '<template data-oe-frame="' +
+                  escapeAttr(encoded) +
+                  '">' +
+                  html +
+                  '</template><noscript>' +
+                  html +
+                  '</noscript>'
+                );
+              });
+            } catch (error) {
+              if (isOpenElementRedirect(error) || isOpenElementNotFound(error)) {
+                console.error('[openElement] late stream protocol decision', {
+                  route,
+                  field: entry.field,
+                });
+              } else {
+                console.error('[openElement] deferred Part failed', {
+                  route,
+                  field: entry.field,
+                  error,
+                });
+              }
+              current = entry.owners.map(
+                (owner) =>
+                  '<template data-oe-frame="' +
+                  escapeAttr(
+                    streamJson({
+                      ...identity,
+                      part: owner.index,
+                      field: entry.field,
+                      type: executor.seed[entry.field].type,
+                      kind: owner.kind,
+                      outcome: 'error',
+                    }),
+                  ) +
+                  '"></template><noscript><p>Content unavailable.</p></noscript>',
+              );
+            }
+          }
+          if (current.length) {
+            controller.enqueue(encoder.encode(current.shift()!));
+          } else if (!tail) {
+            tail = true;
+            controller.enqueue(encoder.encode(document.suffix));
+            cleanup();
+          } else {
+            controller.close();
+          }
+        },
+        cancel() {
+          cancelled = true;
           cleanup();
-        } else {
-          controller.close();
-        }
+        },
       },
-      cancel() {
-        cancelled = true;
-        cleanup();
-      },
-    }, { highWaterMark: 0 });
+      { highWaterMark: 0 },
+    );
   };
 }
 
@@ -484,21 +505,23 @@ export function createDeferredPageShell(
     documentToken,
   ) {
     const manifest = streamManifests[route];
-    const Cls = (routeModule as
-      | {
-        default?: { __partProgram?: { tag: unknown; version: unknown } };
-      }
-      | undefined
-      | null)?.default;
+    const Cls = (
+      routeModule as
+        | {
+            default?: { __partProgram?: { tag: unknown; version: unknown } };
+          }
+        | undefined
+        | null
+    )?.default;
     if (
-      !manifest || !Cls?.__partProgram ||
+      !manifest ||
+      !Cls?.__partProgram ||
       Cls.__partProgram.tag !== manifest.program.tag ||
       Cls.__partProgram.version !== manifest.program.version
     ) {
       throw serveError(
         StreamErrorCode.ROUTE_PROGRAM_MISMATCH,
-        '[openElement] stream route ' + route +
-          ' has no matching compiled route manifest/program.',
+        '[openElement] stream route ' + route + ' has no matching compiled route manifest/program.',
       );
     }
     // `return await` (not a bare return) keeps this an async function in the

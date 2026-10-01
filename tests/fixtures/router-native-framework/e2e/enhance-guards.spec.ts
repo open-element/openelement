@@ -54,53 +54,53 @@ async function markerIntact(page: Page, name: string): Promise<void> {
 }
 
 test.describe('9. submitter formaction override -> named action', () => {
-  test(
-    'enhanced path: the override posts to ?/feature with the action header',
-    async ({ page, request }, info) => {
-      const countBefore = await actionCount(request);
-      const title = `Feature enhanced ${info.project.name}`;
+  test('enhanced path: the override posts to ?/feature with the action header', async ({
+    page,
+    request,
+  }, info) => {
+    const countBefore = await actionCount(request);
+    const title = `Feature enhanced ${info.project.name}`;
 
-      await page.goto('/notes/new');
-      const namedPost = page.waitForResponse((r) =>
-        r.request().method() === 'POST' && r.url().includes('?/feature')
-      );
-      await page.fill('#title', title);
-      await page.click('#feature');
-      const response = await namedPost;
+    await page.goto('/notes/new');
+    const namedPost = page.waitForResponse(
+      (r) => r.request().method() === 'POST' && r.url().includes('?/feature'),
+    );
+    await page.fill('#title', title);
+    await page.click('#feature');
+    const response = await namedPost;
 
-      // The enhanced client resolved the submitter's formAction IDL and posted
-      // to the formaction URL with the enhancement header (#576 + ADR-0120).
-      expect(response.request().headers()['x-openelement-action']).toBe('enhance');
-      expect(response.status()).toBe(303);
-      expect(response.headers()['location']).toMatch(/^\/notes\/note-\d+\?created=1&via=feature$/);
-      expect(await actionCount(request)).toBe(countBefore + 1);
+    // The enhanced client resolved the submitter's formAction IDL and posted
+    // to the formaction URL with the enhancement header (#576 + ADR-0120).
+    expect(response.request().headers()['x-openelement-action']).toBe('enhance');
+    expect(response.status()).toBe(303);
+    expect(response.headers()['location']).toMatch(/^\/notes\/note-\d+\?created=1&via=feature$/);
+    expect(await actionCount(request)).toBe(countBefore + 1);
 
-      // The ?via=feature flash proves the NAMED action ran (the default action
-      // redirects without it); the named submitter value traveled too.
-      await page.waitForURL(/\/notes\/note-\d+\?created=1&via=feature$/);
-      await expect(page.locator('#note-title')).toHaveText(title);
-      await expect(page.locator('#last-intent')).toHaveText('intent=feature');
-    },
-  );
+    // The ?via=feature flash proves the NAMED action ran (the default action
+    // redirects without it); the named submitter value traveled too.
+    await page.waitForURL(/\/notes\/note-\d+\?created=1&via=feature$/);
+    await expect(page.locator('#note-title')).toHaveText(title);
+    await expect(page.locator('#last-intent')).toHaveText('intent=feature');
+  });
 
-  test(
-    'no-JS path: the native POST goes to the formaction URL',
-    async ({ browser, request }, info) => {
-      const countBefore = await actionCount(request);
-      const title = `Feature native ${info.project.name}`;
+  test('no-JS path: the native POST goes to the formaction URL', async ({
+    browser,
+    request,
+  }, info) => {
+    const countBefore = await actionCount(request);
+    const title = `Feature native ${info.project.name}`;
 
-      const context = await browser.newContext({ javaScriptEnabled: false });
-      const page = await context.newPage();
-      await page.goto('/notes/new');
-      await page.fill('#title', title);
-      await page.click('#feature');
-      await page.waitForURL(/\/notes\/note-\d+\?created=1&via=feature$/);
-      await expect(page.locator('#note-title')).toHaveText(title);
-      await expect(page.locator('#last-intent')).toHaveText('intent=feature');
-      expect(await actionCount(request)).toBe(countBefore + 1);
-      await context.close();
-    },
-  );
+    const context = await browser.newContext({ javaScriptEnabled: false });
+    const page = await context.newPage();
+    await page.goto('/notes/new');
+    await page.fill('#title', title);
+    await page.click('#feature');
+    await page.waitForURL(/\/notes\/note-\d+\?created=1&via=feature$/);
+    await expect(page.locator('#note-title')).toHaveText(title);
+    await expect(page.locator('#last-intent')).toHaveText('intent=feature');
+    expect(await actionCount(request)).toBe(countBefore + 1);
+    await context.close();
+  });
 });
 
 test.describe('10. forms the enhancement must NOT intercept', () => {
@@ -116,8 +116,8 @@ test.describe('10. forms the enhancement must NOT intercept', () => {
     await page.click('#plain-submit');
     // A same-origin POST enhance form IS intercepted: action-header fetch to
     // /playground, whose 404 status page is not morphable -> full navigation.
-    await page.waitForResponse((r) =>
-      r.request().method() === 'POST' && r.url().includes('/playground')
+    await page.waitForResponse(
+      (r) => r.request().method() === 'POST' && r.url().includes('/playground'),
     );
     await markerCleared(page, '__prePlain');
     expect(enhancedPosts.length).toBe(1);

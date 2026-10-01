@@ -36,9 +36,9 @@ export function renderNotFoundRoute(
   lines.push(`  let __params = {};`);
   lines.push(`  let __routeMetaValue = ${routeMetaExpr(route.varName)};`);
   lines.push(
-    `  const __routeContext = { path: ${quoteGeneratedJavaScriptValue(route.path)}, filePath: ${
-      quoteGeneratedJavaScriptValue(route.filePath)
-    } };`,
+    `  const __routeContext = { path: ${quoteGeneratedJavaScriptValue(route.path)}, filePath: ${quoteGeneratedJavaScriptValue(
+      route.filePath,
+    )} };`,
   );
   lines.push(`  c.header('Cache-Control', 'no-store');`);
   lines.push(`  try {`);
@@ -63,29 +63,27 @@ export function renderNotFoundRoute(
     indent: '    ',
   });
   lines.push(
-    `    let __content = __ssr(__tag, __pageProps(${route.varName}, __pageContext), { route: ${
-      quoteGeneratedJavaScriptValue(route.path)
-    } })`,
+    `    let __content = __ssr(__tag, __pageProps(${route.varName}, __pageContext), { route: ${quoteGeneratedJavaScriptValue(
+      route.path,
+    )} })`,
   );
   lines.push('');
   for (const renderer of renderers.filter((r) => rendererScopeMatches(route.path, r.scope))) {
     lines.push(`    __content = await ${renderer.varName}.default.wrap(__content, c)`);
   }
   lines.push(
-    `    const content = __renderAppShell(__content, ${
-      quoteGeneratedJavaScriptValue(route.path)
-    }, { routeMeta: __routeMetaValue })`,
+    `    const content = __renderAppShell(__content, ${quoteGeneratedJavaScriptValue(
+      route.path,
+    )}, { routeMeta: __routeMetaValue })`,
   );
   lines.push(`    return c.html(wrapInDocument(content, {`);
-  for (
-    const optionLine of documentWrapOptionsLines({
-      titleExpr: `__doc.title || ${quoteGeneratedJavaScriptValue(docConfig.title)}`,
-      langExpr: `__doc.lang || ${quoteGeneratedJavaScriptValue(docConfig.lang)}`,
-      headExtrasExpr,
-      allowHeadExtrasScripts: docConfig.allowHeadExtrasScripts,
-      cspNonce: true,
-    })
-  ) {
+  for (const optionLine of documentWrapOptionsLines({
+    titleExpr: `__doc.title || ${quoteGeneratedJavaScriptValue(docConfig.title)}`,
+    langExpr: `__doc.lang || ${quoteGeneratedJavaScriptValue(docConfig.lang)}`,
+    headExtrasExpr,
+    allowHeadExtrasScripts: docConfig.allowHeadExtrasScripts,
+    cspNonce: true,
+  })) {
     lines.push(`      ${optionLine}`);
   }
   lines.push(`    }), 404)`);
@@ -93,11 +91,11 @@ export function renderNotFoundRoute(
   lines.push(`    if (__isOpenElementRedirect(err)) return c.redirect(err.location, err.status);`);
   lines.push(`    console.error('[openElement] 404 page render failed:', err);`);
   lines.push(
-    `    return c.html(wrapInDocument(__statusHtml("404 Not Found", "Not Found"), { title: "404 Not Found", lang: ${
-      quoteGeneratedJavaScriptValue(docConfig.lang)
-    }, headExtras: ${headExtrasExpr}, allowHeadExtrasScripts: ${
-      JSON.stringify(docConfig.allowHeadExtrasScripts)
-    }, cspNonce: c.get('cspNonce'), scripts: __clientScriptDescriptors() }), 404);`,
+    `    return c.html(wrapInDocument(__statusHtml("404 Not Found", "Not Found"), { title: "404 Not Found", lang: ${quoteGeneratedJavaScriptValue(
+      docConfig.lang,
+    )}, headExtras: ${headExtrasExpr}, allowHeadExtrasScripts: ${JSON.stringify(
+      docConfig.allowHeadExtrasScripts,
+    )}, cspNonce: c.get('cspNonce'), scripts: __clientScriptDescriptors() }), 404);`,
   );
   lines.push(`  }`);
   // close the IIFE and merge the 404-page loader's channel too.

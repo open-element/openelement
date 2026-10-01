@@ -97,9 +97,7 @@ export function pageSeo(
  * honesty of the copy is guarded by the route-locale gates in
  * check-site-truth.ts and the i18n e2e suites.
  */
-export function findCrossPageSeoFailures(
-  pages: readonly BuiltPageSeo[],
-): LinkFailure[] {
+export function findCrossPageSeoFailures(pages: readonly BuiltPageSeo[]): LinkFailure[] {
   const failures: LinkFailure[] = [];
   const titleByLocale = new Map<string, Map<string, string>>();
   for (const page of pages) {
@@ -109,8 +107,7 @@ export function findCrossPageSeoFailures(
     if (existing !== undefined) {
       failures.push({
         file: page.file,
-        message:
-          `duplicate <title> '${page.title}' within locale '${page.locale}' (also ${existing})`,
+        message: `duplicate <title> '${page.title}' within locale '${page.locale}' (also ${existing})`,
       });
     } else {
       titles.set(page.title, page.file);

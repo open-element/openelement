@@ -224,7 +224,10 @@ Deno.test('#1416: an island that declares nothing keeps the full entry (conserva
     { tagName: 'x-silent', modulePath: './silent.ts', strategy: 'idle' },
   ]);
   assert(importLines(silent).some((line) => line.endsWith("from '@openelement/element';")));
-  assertEquals(importLines(silent).some((line) => line.includes('client-only')), false);
+  assertEquals(
+    importLines(silent).some((line) => line.includes('client-only')),
+    false,
+  );
 
   const halfDeclared = generateClientEntry([
     { tagName: 'x-half', modulePath: './half.ts', strategy: 'idle', ssr: false },
@@ -250,16 +253,14 @@ Deno.test('#1416: both ssr and dsd false is client-only even off the "only" stra
   const explicit = generateClientEntry([
     { tagName: 'x-load', modulePath: './load.ts', strategy: 'load', ssr: false, dsd: false },
   ]);
-  assert(
-    importLines(explicit).some((line) => line.includes("'@openelement/element/client-only'")),
-  );
+  assert(importLines(explicit).some((line) => line.includes("'@openelement/element/client-only'")));
 
   const onlyWithoutFlags = generateClientEntry([
     { tagName: 'x-only', modulePath: './only.ts', strategy: 'only' },
   ]);
   assert(
     importLines(onlyWithoutFlags).some((line) =>
-      line.includes("'@openelement/element/client-only'")
+      line.includes("'@openelement/element/client-only'"),
     ),
   );
 });
@@ -269,7 +270,10 @@ Deno.test('#1416: the lit renderer entry imports no element entry at all', () =>
     [{ tagName: 'x-lit', modulePath: './lit.ts', strategy: 'idle' }],
     { renderer: 'lit' },
   );
-  assertEquals(importLines(code).some((line) => line.includes('@openelement/element')), false);
+  assertEquals(
+    importLines(code).some((line) => line.includes('@openelement/element')),
+    false,
+  );
 });
 
 Deno.test('legacy eager/lazy strategies are not emitted by v0.21 runtime', () => {

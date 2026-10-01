@@ -184,28 +184,20 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-function stringField(
-  value: Record<string, unknown>,
-  key: string,
-): string | undefined {
-  return typeof value[key] === 'string' ? value[key] as string : undefined;
+function stringField(value: Record<string, unknown>, key: string): string | undefined {
+  return typeof value[key] === 'string' ? (value[key] as string) : undefined;
 }
 
 function pathFromRoot(root: URL | string, relativePath: string): string {
   return root instanceof URL ? fromFileUrl(new URL(relativePath, root)) : join(root, relativePath);
 }
 
-function equalArrays(
-  left: readonly unknown[],
-  right: readonly unknown[],
-): boolean {
-  return left.length === right.length &&
-    left.every((value, index) => value === right[index]);
+function equalArrays(left: readonly unknown[], right: readonly unknown[]): boolean {
+  return left.length === right.length && left.every((value, index) => value === right[index]);
 }
 
 function validCustomElementTag(value: unknown): value is string {
-  return typeof value === 'string' &&
-    /^[a-z][a-z0-9]*(?:-[a-z0-9]+)+$/.test(value);
+  return typeof value === 'string' && /^[a-z][a-z0-9]*(?:-[a-z0-9]+)+$/.test(value);
 }
 
 /**
@@ -268,9 +260,7 @@ export function validateCemManifest(raw: unknown): string[] {
       }
       const tag = declarationValue.tagName;
       if (!validCustomElementTag(tag)) {
-        errors.push(
-          `${declarationPath}.tagName must be a lowercase hyphenated tag`,
-        );
+        errors.push(`${declarationPath}.tagName must be a lowercase hyphenated tag`);
       } else if (tags.has(tag)) {
         errors.push(`${declarationPath}.tagName duplicates ${tag}`);
       } else {
@@ -282,9 +272,7 @@ export function validateCemManifest(raw: unknown): string[] {
 
       const superclass = declarationValue.superclass;
       if (!isRecord(superclass) || !stringField(superclass, 'name')) {
-        errors.push(
-          `${declarationPath}.superclass.name must be a non-empty string`,
-        );
+        errors.push(`${declarationPath}.superclass.name must be a non-empty string`);
       }
 
       const members = declarationValue.members;
@@ -297,27 +285,16 @@ export function validateCemManifest(raw: unknown): string[] {
             errors.push(`${memberPath} must be an object`);
             continue;
           }
-          if (
-            !['field', 'method', 'getter', 'setter'].includes(
-              String(memberValue.kind),
-            )
-          ) {
+          if (!['field', 'method', 'getter', 'setter'].includes(String(memberValue.kind))) {
             errors.push(`${memberPath}.kind is not a CEM member kind`);
           }
           if (!stringField(memberValue, 'name')) {
             errors.push(`${memberPath}.name must be a non-empty string`);
           }
-          if (
-            'attribute' in memberValue &&
-            typeof memberValue.attribute !== 'string'
-          ) {
-            errors.push(
-              `${memberPath}.attribute must be a string when present`,
-            );
+          if ('attribute' in memberValue && typeof memberValue.attribute !== 'string') {
+            errors.push(`${memberPath}.attribute must be a string when present`);
           }
-          if (
-            'reflects' in memberValue && typeof memberValue.reflects !== 'boolean'
-          ) {
+          if ('reflects' in memberValue && typeof memberValue.reflects !== 'boolean') {
             errors.push(`${memberPath}.reflects must be boolean when present`);
           }
         }
@@ -332,7 +309,8 @@ export function validateCemManifest(raw: unknown): string[] {
         for (const [entryIndex, entryValue] of entries.entries()) {
           const entryPath = `${declarationPath}.${field}[${entryIndex}]`;
           if (
-            !isRecord(entryValue) || typeof entryValue.name !== 'string' ||
+            !isRecord(entryValue) ||
+            typeof entryValue.name !== 'string' ||
             (field !== 'slots' && entryValue.name.length === 0)
           ) {
             errors.push(`${entryPath}.name must be a non-empty string`);
@@ -352,9 +330,7 @@ function customElementTags(raw: unknown): string[] {
       continue;
     }
     for (const declarationValue of moduleValue.declarations) {
-      if (
-        !isRecord(declarationValue) || declarationValue.customElement !== true
-      ) continue;
+      if (!isRecord(declarationValue) || declarationValue.customElement !== true) continue;
       const tag = declarationValue.tagName;
       if (typeof tag === 'string') tags.push(tag);
     }
@@ -374,15 +350,13 @@ function validateCorpusConfig(raw: unknown): string[] {
   if (!isRecord(application)) {
     errors.push('corpus application must be an object');
   } else {
-    for (
-      const field of [
-        'route',
-        'fixtureTag',
-        'childHostTag',
-        'childHostId',
-        'dependencyRootId',
-      ]
-    ) {
+    for (const field of [
+      'route',
+      'fixtureTag',
+      'childHostTag',
+      'childHostId',
+      'dependencyRootId',
+    ]) {
       if (!stringField(application, field)) {
         errors.push(`corpus application.${field} must be a string`);
       }
@@ -390,13 +364,8 @@ function validateCorpusConfig(raw: unknown): string[] {
   }
 
   const components = raw.components;
-  if (
-    !Array.isArray(components) ||
-    components.length !== requiredFrameworks.length
-  ) {
-    errors.push(
-      `corpus components must contain exactly ${requiredFrameworks.length} entries`,
-    );
+  if (!Array.isArray(components) || components.length !== requiredFrameworks.length) {
+    errors.push(`corpus components must contain exactly ${requiredFrameworks.length} entries`);
     return errors;
   }
   const seenFrameworks = new Set<string>();
@@ -408,10 +377,7 @@ function validateCorpusConfig(raw: unknown): string[] {
       continue;
     }
     const framework = stringField(componentValue, 'framework');
-    if (
-      !framework ||
-      !(requiredFrameworks as readonly string[]).includes(framework)
-    ) {
+    if (!framework || !(requiredFrameworks as readonly string[]).includes(framework)) {
       errors.push(`${path}.framework is unsupported`);
     } else if (seenFrameworks.has(framework)) {
       errors.push(`${path}.framework duplicates ${framework}`);
@@ -424,27 +390,14 @@ function validateCorpusConfig(raw: unknown): string[] {
     } else if (seenTags.has(tag)) errors.push(`${path}.tag duplicates ${tag}`);
     else seenTags.add(tag);
 
-    for (
-      const field of [
-        'className',
-        'property',
-        'attribute',
-        'event',
-        'slotText',
-        'cssPart',
-      ]
-    ) {
+    for (const field of ['className', 'property', 'attribute', 'event', 'slotText', 'cssPart']) {
       if (!stringField(componentValue, field)) {
         errors.push(`${path}.${field} must be a string`);
       }
     }
     const placements = componentValue.placements;
-    if (
-      !Array.isArray(placements) || !equalArrays(placements, requiredPlacements)
-    ) {
-      errors.push(
-        `${path}.placements must be child and application-dependency in order`,
-      );
+    if (!Array.isArray(placements) || !equalArrays(placements, requiredPlacements)) {
+      errors.push(`${path}.placements must be child and application-dependency in order`);
     }
     const probes = componentValue.probes;
     if (!Array.isArray(probes) || !equalArrays(probes, requiredProbes)) {
@@ -471,9 +424,7 @@ function validateCorpusConfig(raw: unknown): string[] {
  * Resolve SSR admission without inventing a fallback. A missing or unknown
  * capability is an explicit client-only decision with a stable diagnostic.
  */
-export function classifySsrCapability(
-  capability: unknown,
-): SsrCapabilityDecision {
+export function classifySsrCapability(capability: unknown): SsrCapabilityDecision {
   if (capability === 'ssr' || capability === 'ssr+client') {
     return {
       renderPath: 'ssr+client',
@@ -491,7 +442,8 @@ export function classifySsrCapability(
   return {
     renderPath: 'client-only',
     code: 'OEI2001',
-    message: `unknown SSR capability ${JSON.stringify(capability)}; fail closed to client-only ` +
+    message:
+      `unknown SSR capability ${JSON.stringify(capability)}; fail closed to client-only ` +
       'without a compatibility fallback',
   };
 }
@@ -519,9 +471,7 @@ const SUPERCLASS_BY_FRAMEWORK: Record<InteropFramework, string> = {
  * byte-deterministic across versions — all incompatible with a canonical
  * corpus whose derived artifact must be reproducible on every run.
  */
-export function generateCemManifest(
-  components: readonly InteropComponent[],
-): InteropCemManifest {
+export function generateCemManifest(components: readonly InteropComponent[]): InteropCemManifest {
   const modules: JavaScriptModule[] = components.map((component) => {
     const member: CustomElementField = {
       kind: 'field',
@@ -575,17 +525,15 @@ export async function loadInteropCorpus(
   const cem = generateCemManifest(typedConfig.components);
   const cemErrors = validateCemManifest(cem);
   if (cemErrors.length > 0) {
-    throw new Error(
-      `Invalid regenerated CEM output:\n- ${cemErrors.join('\n- ')}`,
-    );
+    throw new Error(`Invalid regenerated CEM output:\n- ${cemErrors.join('\n- ')}`);
   }
   const expectedTags = typedConfig.components.map((component) => component.tag);
   const actualTags = customElementTags(cem);
   if (!equalArrays(actualTags, expectedTags)) {
     throw new Error(
-      `CEM tags ${JSON.stringify(actualTags)} do not match corpus tags ${
-        JSON.stringify(expectedTags)
-      }`,
+      `CEM tags ${JSON.stringify(actualTags)} do not match corpus tags ${JSON.stringify(
+        expectedTags,
+      )}`,
     );
   }
   return { ...typedConfig, cem };
@@ -594,17 +542,13 @@ export async function loadInteropCorpus(
 function localPackageImports(root: string): Record<string, string> {
   const imports: Record<string, string> = {};
   try {
-    const rootJson = JSON.parse(
-      Deno.readTextFileSync(join(root, 'deno.json')),
-    ) as Record<
+    const rootJson = JSON.parse(Deno.readTextFileSync(join(root, 'deno.json'))) as Record<
       string,
       unknown
     >;
     if (isRecord(rootJson.imports)) {
       for (const [specifier, target] of Object.entries(rootJson.imports)) {
-        if (
-          typeof target === 'string' && !specifier.startsWith('@openelement/')
-        ) {
+        if (typeof target === 'string' && !specifier.startsWith('@openelement/')) {
           imports[specifier] = target;
         }
       }
@@ -617,15 +561,11 @@ function localPackageImports(root: string): Record<string, string> {
     if (!packageEntry.isDirectory) continue;
     const packagePath = join(root, 'packages', packageEntry.name, 'deno.json');
     try {
-      const packageJson = JSON.parse(
-        Deno.readTextFileSync(packagePath),
-      ) as Record<string, unknown>;
+      const packageJson = JSON.parse(Deno.readTextFileSync(packagePath)) as Record<string, unknown>;
       const packageImports = packageJson.imports;
       if (!isRecord(packageImports)) continue;
       for (const [specifier, target] of Object.entries(packageImports)) {
-        if (
-          typeof target === 'string' && !specifier.startsWith('@openelement/')
-        ) {
+        if (typeof target === 'string' && !specifier.startsWith('@openelement/')) {
           imports[specifier] = target;
         }
       }
@@ -660,10 +600,7 @@ const FIXTURE_SOURCE_FILES = [
   'app/client/interop-client.ts',
 ] as const;
 
-async function prepareInteropApp(
-  tmpRoot: string,
-  root: URL | string,
-): Promise<string> {
+async function prepareInteropApp(tmpRoot: string, root: URL | string): Promise<string> {
   const appDir = await scaffoldApp({
     workDir: tmpRoot,
     projectName: appProjectName,
@@ -675,27 +612,20 @@ async function prepareInteropApp(
   return appDir;
 }
 
-async function verifySsr(
-  appDir: string,
-  corpus: InteropCorpus,
-): Promise<SsrEvidence> {
+async function verifySsr(appDir: string, corpus: InteropCorpus): Promise<SsrEvidence> {
   const distDir = join(appDir, 'dist');
   const htmlPath = await findFile(distDir, 'index.html');
   if (!htmlPath) throw new Error(`SSG index.html not found under ${distDir}`);
   const html = await Deno.readTextFile(htmlPath);
   const entryPath = await findServerEntry(distDir);
   const plan = extractSsrAdmissionPlan(await Deno.readTextFile(entryPath));
-  const decisions = new Map(
-    plan.decisions.map((decision) => [decision.tagName, decision]),
-  );
+  const decisions = new Map(plan.decisions.map((decision) => [decision.tagName, decision]));
   const foreignComponents: SsrComponentEvidence[] = [];
   const failures: string[] = [];
 
   for (const component of corpus.components) {
     const escapedTag = escapeRegExp(component.tag);
-    const tagPresent = new RegExp(`<${escapedTag}(?:\\s[^>]*)?>`, 'i').test(
-      html,
-    );
+    const tagPresent = new RegExp(`<${escapedTag}(?:\\s[^>]*)?>`, 'i').test(html);
     const lightDomChildPresent = html.includes(component.slotText);
     const dsdTemplate = new RegExp(
       `<${escapedTag}(?:\\s[^>]*)?>\\s*<template\\s+shadowrootmode`,
@@ -716,23 +646,18 @@ async function verifySsr(
       failures.push(`${component.tag}: authored light-DOM child missing`);
     }
     if (dsdTemplate) {
-      failures.push(
-        `${component.tag}: unknown foreign tag received a DSD template`,
-      );
+      failures.push(`${component.tag}: unknown foreign tag received a DSD template`);
     }
     if (!decision) {
       failures.push(`${component.tag}: no admission decision was emitted`);
     } else if (decision.renderPath !== 'client-only') {
-      failures.push(
-        `${component.tag}: admission=${decision.renderPath}, expected client-only`,
-      );
+      failures.push(`${component.tag}: admission=${decision.renderPath}, expected client-only`);
     }
   }
 
   const fixtureTag = corpus.application.fixtureTag;
   const escapedFixture = escapeRegExp(fixtureTag);
-  const fixtureTagPresent = new RegExp(`<${escapedFixture}(?:\\s[^>]*)?>`, 'i')
-    .test(html);
+  const fixtureTagPresent = new RegExp(`<${escapedFixture}(?:\\s[^>]*)?>`, 'i').test(html);
   const fixtureDsd = new RegExp(
     `<${escapedFixture}(?:\\s[^>]*)?>\\s*<template\\s+shadowrootmode`,
     'i',
@@ -744,9 +669,7 @@ async function verifySsr(
     failures.push(`${fixtureTag}: expected DSD fixture root missing`);
   }
   if (failures.length > 0) {
-    throw new Error(
-      `SSR interoperability mismatches:\n- ${failures.join('\n- ')}`,
-    );
+    throw new Error(`SSR interoperability mismatches:\n- ${failures.join('\n- ')}`);
   }
   return {
     htmlPath: 'dist/index.html',
@@ -772,10 +695,11 @@ export async function verifyBrowser(
     await page.goto(`${session.origin}/`, { waitUntil: 'networkidle' });
     await page.waitForFunction(
       () =>
-        (globalThis as typeof globalThis & {
-          __interopState?: { ready?: boolean };
-        })
-          .__interopState?.ready === true,
+        (
+          globalThis as typeof globalThis & {
+            __interopState?: { ready?: boolean };
+          }
+        ).__interopState?.ready === true,
       undefined,
       { timeout: 20_000 },
     );
@@ -807,10 +731,7 @@ export async function verifyBrowser(
       type UpgradeEntry = { phase: string; tag: string; id: string };
       const componentInput = input as ComponentInput[];
 
-      const findTag = (
-        root: Document | ShadowRoot,
-        tag: string,
-      ): HTMLElement | null => {
+      const findTag = (root: Document | ShadowRoot, tag: string): HTMLElement | null => {
         const direct = root.querySelector(tag);
         if (direct) return direct as HTMLElement;
         for (const element of root.querySelectorAll('*')) {
@@ -826,22 +747,22 @@ export async function verifyBrowser(
       if (!fixtureRoot) {
         throw new Error('interop-fixture shadow root is missing');
       }
-      const childHost = fixtureRoot.querySelector('#children') as
-        | HTMLElement
-        | null;
-      const childSlot = childHost?.shadowRoot?.querySelector('slot') as
-        | HTMLSlotElement
-        | null;
-      const childHostWorks = !!childHost && !!childHost.shadowRoot &&
+      const childHost = fixtureRoot.querySelector('#children') as HTMLElement | null;
+      const childSlot = childHost?.shadowRoot?.querySelector('slot') as HTMLSlotElement | null;
+      const childHostWorks =
+        !!childHost &&
+        !!childHost.shadowRoot &&
         (childSlot?.assignedElements().length ?? 0) === componentInput.length;
-      const state = (globalThis as typeof globalThis & {
-        __interopState?: {
-          upgradeOrder?: UpgradeEntry[];
-          events?: string[];
-          existingIdentity?: Record<string, boolean>;
-          existingLiveState?: Record<string, boolean>;
-        };
-      }).__interopState;
+      const state = (
+        globalThis as typeof globalThis & {
+          __interopState?: {
+            upgradeOrder?: UpgradeEntry[];
+            events?: string[];
+            existingIdentity?: Record<string, boolean>;
+            existingLiveState?: Record<string, boolean>;
+          };
+        }
+      ).__interopState;
       const upgradeOrder = state?.upgradeOrder ?? [];
       const results: Array<{
         id: string;
@@ -864,9 +785,7 @@ export async function verifyBrowser(
       for (const component of componentInput) {
         for (const placement of component.placements) {
           const id = component.ids[placement];
-          const element = fixtureRoot.querySelector(`#${id}`) as
-            | HTMLElement
-            | null;
+          const element = fixtureRoot.querySelector(`#${id}`) as HTMLElement | null;
           if (!element) {
             results.push({
               id,
@@ -891,53 +810,44 @@ export async function verifyBrowser(
           if (component.property === 'disabled') {
             element.setAttribute(component.attribute, '');
             await Promise.resolve();
-            propertyValue = (element as HTMLElement & Record<string, unknown>)[
-                component.property
-              ] === true
-              ? true
-              : false;
+            propertyValue =
+              (element as HTMLElement & Record<string, unknown>)[component.property] === true
+                ? true
+                : false;
             attributeValue = element.getAttribute(component.attribute);
-            propertyAttribute = propertyValue === true &&
-              element.hasAttribute(component.attribute);
+            propertyAttribute = propertyValue === true && element.hasAttribute(component.attribute);
             element.removeAttribute(component.attribute);
           } else {
             const value = `${placement}-${component.framework}-property`;
-            (element as HTMLElement & Record<string, unknown>)[
-              component.property
-            ] = value;
+            (element as HTMLElement & Record<string, unknown>)[component.property] = value;
             const updateComplete = (element as HTMLElement & { updateComplete?: Promise<unknown> })
               .updateComplete;
             if (updateComplete) await updateComplete;
             propertyValue = String(
-              (element as HTMLElement & Record<string, unknown>)[
-                component.property
-              ],
+              (element as HTMLElement & Record<string, unknown>)[component.property],
             );
             attributeValue = element.getAttribute(component.attribute);
-            propertyAttribute = element.getAttribute(component.attribute) === value &&
-              propertyValue === value;
+            propertyAttribute =
+              element.getAttribute(component.attribute) === value && propertyValue === value;
           }
 
-          const slots = Array.from(
-            shadow?.querySelectorAll('slot') ?? [],
-          ) as HTMLSlotElement[];
+          const slots = Array.from(shadow?.querySelectorAll('slot') ?? []) as HTMLSlotElement[];
           const assignedSlotNodes = slots.reduce(
             (count, slot) => count + slot.assignedNodes({ flatten: true }).length,
             0,
           );
           const slotWorks = slots.some((slot) =>
-            slot.assignedNodes({ flatten: true }).some((node) =>
-              node.textContent?.includes(component.slotText) === true
-            )
+            slot
+              .assignedNodes({ flatten: true })
+              .some((node) => node.textContent?.includes(component.slotText) === true),
           );
-          const partWorks = !!shadow &&
+          const partWorks =
+            !!shadow &&
             Array.from(shadow.querySelectorAll('[part]')).some((part) =>
-              (part.getAttribute('part') ?? '').split(/\s+/).includes(
-                component.cssPart,
-              )
+              (part.getAttribute('part') ?? '').split(/\s+/).includes(component.cssPart),
             );
           let eventObserved = false;
-          element.addEventListener(component.event, () => eventObserved = true);
+          element.addEventListener(component.event, () => (eventObserved = true));
           const control = shadow?.querySelector('[part]') as HTMLElement | null;
           control?.click();
           await new Promise((resolve) => setTimeout(resolve, 0));
@@ -949,15 +859,15 @@ export async function verifyBrowser(
             id,
             tag: component.tag,
             placement,
-            upgraded: customElements.get(component.tag) !== undefined &&
+            upgraded:
+              customElements.get(component.tag) !== undefined &&
               element.constructor !== HTMLElement,
             propertyAttribute,
             event: eventObserved,
             slot: slotWorks,
             cssPart: partWorks,
             root: !!shadow,
-            upgradeOrder: constructorIndex >= 0 &&
-              connectedIndex > constructorIndex,
+            upgradeOrder: constructorIndex >= 0 && connectedIndex > constructorIndex,
             identityPreserved: state?.existingIdentity?.[id] === true,
             liveStatePreserved: state?.existingLiveState?.[id] === true,
             propertyValue,
@@ -981,9 +891,7 @@ export async function verifyBrowser(
         assignedSlotNodes?: number;
       };
       const fresh: FreshResult[] = [];
-      const freshRoot = fixtureRoot.querySelector('#fresh-probes') as
-        | HTMLElement
-        | null;
+      const freshRoot = fixtureRoot.querySelector('#fresh-probes') as HTMLElement | null;
       if (freshRoot) {
         for (const component of componentInput) {
           const id = `fresh-${component.tag}`;
@@ -999,99 +907,94 @@ export async function verifyBrowser(
           if (component.property === 'disabled') {
             element.setAttribute(component.attribute, '');
             await Promise.resolve();
-            propertyValue = (element as HTMLElement & Record<string, unknown>)[
-                component.property
-              ] === true
-              ? true
-              : false;
+            propertyValue =
+              (element as HTMLElement & Record<string, unknown>)[component.property] === true
+                ? true
+                : false;
             attributeValue = element.getAttribute(component.attribute);
-            propertyAttribute = propertyValue === true &&
-              element.hasAttribute(component.attribute);
+            propertyAttribute = propertyValue === true && element.hasAttribute(component.attribute);
             element.removeAttribute(component.attribute);
           } else {
             const value = `fresh-${component.framework}-property`;
-            (element as HTMLElement & Record<string, unknown>)[
-              component.property
-            ] = value;
+            (element as HTMLElement & Record<string, unknown>)[component.property] = value;
             const updateComplete = (element as HTMLElement & { updateComplete?: Promise<unknown> })
               .updateComplete;
             if (updateComplete) await updateComplete;
             propertyValue = String(
-              (element as HTMLElement & Record<string, unknown>)[
-                component.property
-              ],
+              (element as HTMLElement & Record<string, unknown>)[component.property],
             );
             attributeValue = element.getAttribute(component.attribute);
-            propertyAttribute = element.getAttribute(component.attribute) === value &&
-              propertyValue === value;
+            propertyAttribute =
+              element.getAttribute(component.attribute) === value && propertyValue === value;
           }
 
           const shadow = element.shadowRoot;
-          const slots = Array.from(
-            shadow?.querySelectorAll('slot') ?? [],
-          ) as HTMLSlotElement[];
+          const slots = Array.from(shadow?.querySelectorAll('slot') ?? []) as HTMLSlotElement[];
           const assignedSlotNodes = slots.reduce(
             (count, slot) => count + slot.assignedNodes({ flatten: true }).length,
             0,
           );
           const slotWorks = slots.some((slot) =>
-            slot.assignedNodes({ flatten: true }).some((node) =>
-              node.textContent?.includes(component.slotText) === true
-            )
+            slot
+              .assignedNodes({ flatten: true })
+              .some((node) => node.textContent?.includes(component.slotText) === true),
           );
-          const partWorks = !!shadow &&
+          const partWorks =
+            !!shadow &&
             Array.from(shadow.querySelectorAll('[part]')).some((part) =>
-              (part.getAttribute('part') ?? '').split(/\s+/).includes(
-                component.cssPart,
-              )
+              (part.getAttribute('part') ?? '').split(/\s+/).includes(component.cssPart),
             );
           let eventObserved = false;
-          element.addEventListener(component.event, () => eventObserved = true);
+          element.addEventListener(component.event, () => (eventObserved = true));
           const control = shadow?.querySelector('[part]') as HTMLElement | null;
           control?.click();
           await new Promise((resolve) => setTimeout(resolve, 0));
           if (component.event === 'click' && !eventObserved) element.click();
           const entries = upgradeOrder.slice(upgradeStart);
-          const constructorIndex = entries.findIndex((entry) =>
-            entry.phase === 'constructor' && entry.tag === component.tag
+          const constructorIndex = entries.findIndex(
+            (entry) => entry.phase === 'constructor' && entry.tag === component.tag,
           );
-          const connectedIndex = entries.findIndex((entry) =>
-            entry.phase === 'connected' && entry.id === id
+          const connectedIndex = entries.findIndex(
+            (entry) => entry.phase === 'connected' && entry.id === id,
           );
           fresh.push({
             id,
             tag: component.tag,
-            upgraded: customElements.get(component.tag) !== undefined &&
+            upgraded:
+              customElements.get(component.tag) !== undefined &&
               element.constructor !== HTMLElement,
             propertyAttribute,
             event: eventObserved,
             slot: slotWorks,
             cssPart: partWorks,
             root: !!shadow,
-            upgradeOrder: constructorIndex >= 0 &&
-              connectedIndex > constructorIndex,
+            upgradeOrder: constructorIndex >= 0 && connectedIndex > constructorIndex,
             propertyValue,
             attributeValue,
             assignedSlotNodes,
           });
         }
       }
-      const dependencyRoot = fixtureRoot.querySelector(
-        '#application-dependencies',
-      );
+      const dependencyRoot = fixtureRoot.querySelector('#application-dependencies');
       const dependencyTags = componentInput.map((component) => component.tag);
-      const dependencyWorks = !!dependencyRoot &&
+      const dependencyWorks =
+        !!dependencyRoot &&
         componentInput.every((component) => {
           const element = dependencyRoot.querySelector(
             `#${component.ids['application-dependency']}`,
           );
-          return !!element && element.parentElement === dependencyRoot &&
-            element.localName === component.tag;
+          return (
+            !!element &&
+            element.parentElement === dependencyRoot &&
+            element.localName === component.tag
+          );
         });
       return {
-        childHost: childHostWorks && dependencyWorks &&
-          dependencyTags.length === componentInput.length,
-        freshRoot: !!freshRoot && fresh.length === componentInput.length &&
+        childHost:
+          childHostWorks && dependencyWorks && dependencyTags.length === componentInput.length,
+        freshRoot:
+          !!freshRoot &&
+          fresh.length === componentInput.length &&
           fresh.every((component) => {
             const element = freshRoot.querySelector(`#${component.id}`);
             return !!element && element.parentElement === freshRoot;
@@ -1103,30 +1006,35 @@ export async function verifyBrowser(
     }, components);
 
     if (pageErrors.length > 0) {
-      throw new Error(
-        `${browserName}: browser errors: ${pageErrors.join(' | ')}`,
-      );
+      throw new Error(`${browserName}: browser errors: ${pageErrors.join(' | ')}`);
     }
-    const failedComponents = observed.components.filter((component) =>
-      !component.upgraded || !component.propertyAttribute || !component.event ||
-      !component.slot ||
-      !component.cssPart || !component.root || !component.upgradeOrder ||
-      !component.identityPreserved || !component.liveStatePreserved
+    const failedComponents = observed.components.filter(
+      (component) =>
+        !component.upgraded ||
+        !component.propertyAttribute ||
+        !component.event ||
+        !component.slot ||
+        !component.cssPart ||
+        !component.root ||
+        !component.upgradeOrder ||
+        !component.identityPreserved ||
+        !component.liveStatePreserved,
     );
     if (!observed.childHost) {
-      throw new Error(
-        `${browserName}: child/dependency placement probe failed`,
-      );
+      throw new Error(`${browserName}: child/dependency placement probe failed`);
     }
-    const failedFresh = observed.fresh.filter((component) =>
-      !component.upgraded || !component.propertyAttribute || !component.event ||
-      !component.slot ||
-      !component.cssPart || !component.root || !component.upgradeOrder
+    const failedFresh = observed.fresh.filter(
+      (component) =>
+        !component.upgraded ||
+        !component.propertyAttribute ||
+        !component.event ||
+        !component.slot ||
+        !component.cssPart ||
+        !component.root ||
+        !component.upgradeOrder,
     );
     if (!observed.freshRoot || failedFresh.length > 0) {
-      throw new Error(
-        `${browserName}: fresh DOM probes failed: ${JSON.stringify(failedFresh)}`,
-      );
+      throw new Error(`${browserName}: fresh DOM probes failed: ${JSON.stringify(failedFresh)}`);
     }
     if (failedComponents.length > 0) {
       throw new Error(
@@ -1151,9 +1059,7 @@ async function qualify(
 ): Promise<InteropQualificationEvidence> {
   const corpus = await loadInteropCorpus(root);
   const admission = Object.fromEntries(
-    corpus.components.map((
-      component,
-    ) => [component.tag, classifySsrCapability(undefined)]),
+    corpus.components.map((component) => [component.tag, classifySsrCapability(undefined)]),
   ) as Record<string, SsrCapabilityDecision>;
   const tmpRoot = await Deno.makeTempDir({
     prefix: 'openelement-web-component-interop-',
@@ -1164,11 +1070,7 @@ async function qualify(
     const ssr = await verifySsr(appDir, corpus);
     const browsers = {} as Record<BrowserName, BrowserEvidence>;
     for (const browserName of browserNames) {
-      browsers[browserName] = await verifyBrowser(
-        join(appDir, 'dist'),
-        corpus,
-        browserName,
-      );
+      browsers[browserName] = await verifyBrowser(join(appDir, 'dist'), corpus, browserName);
     }
     const evidence: InteropQualificationEvidence = {
       schemaVersion: 1,
@@ -1190,14 +1092,8 @@ async function qualify(
     // Generated artifacts land in the temporary work directory only: the CEM
     // is regenerated from corpus.json and the evidence is regenerated on
     // every run. Neither is committed (see .gitignore).
-    await Deno.writeTextFile(
-      join(tmpRoot, 'compiler-output.cem.json'),
-      jsonText(corpus.cem),
-    );
-    await Deno.writeTextFile(
-      join(tmpRoot, 'interop-evidence.json'),
-      jsonText(evidence),
-    );
+    await Deno.writeTextFile(join(tmpRoot, 'compiler-output.cem.json'), jsonText(corpus.cem));
+    await Deno.writeTextFile(join(tmpRoot, 'interop-evidence.json'), jsonText(evidence));
     console.log(JSON.stringify(evidence, null, 2));
     console.log('Web Components interoperability qualification passed');
     return evidence;

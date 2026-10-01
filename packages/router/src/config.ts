@@ -168,10 +168,12 @@ export interface OpenElementUserConfig {
    * object registers the named module. `tagName` is derived from the import's
    * basename, so it is not part of the surface.
    */
-  appShell?: false | {
-    import: string;
-    props?: Record<string, unknown>;
-  };
+  appShell?:
+    | false
+    | {
+        import: string;
+        props?: Record<string, unknown>;
+      };
   /**
    * Extra package names whose island modules the build admits (e.g.
    * `['@openelement/ui']`). The loader folds this list into the SSR
@@ -302,9 +304,9 @@ function unknownKeyError(
 ): OpenElementError {
   return configError(
     `Unknown ${owner} key "${key}" in ${OPEN_ELEMENT_CONFIG_FILE} (OEC config schema). ` +
-      `Accepted keys: ${
-        accepted.join(', ')
-      }. Remove the key or move the option to a supported one.`,
+      `Accepted keys: ${accepted.join(
+        ', ',
+      )}. Remove the key or move the option to a supported one.`,
     'CONFIG_UNKNOWN_KEY',
   );
 }
@@ -471,7 +473,8 @@ export function assertValidUserConfig(value: unknown): asserts value is OpenElem
     assertKnownKeys(middleware, 'middleware', OPEN_ELEMENT_MIDDLEWARE_KEYS);
     const { corsOrigin } = middleware;
     if (corsOrigin !== undefined) {
-      const ok = typeof corsOrigin === 'string' ||
+      const ok =
+        typeof corsOrigin === 'string' ||
         (Array.isArray(corsOrigin) && corsOrigin.every((origin) => typeof origin === 'string'));
       if (!ok) {
         throw typeError('middleware.corsOrigin', 'a string or an array of strings', corsOrigin);

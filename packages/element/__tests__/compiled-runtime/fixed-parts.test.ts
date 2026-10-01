@@ -4,12 +4,14 @@ import { testProgram } from './test-program.ts';
 Deno.test('fixed Parts validate every exact DOM sink', () => {
   const program = testProgram({
     tag: 'oe-fixed-parts',
-    template: [{
-      k: 'el',
-      tag: 'div',
-      attrs: [],
-      children: [],
-    }],
+    template: [
+      {
+        k: 'el',
+        tag: 'div',
+        attrs: [],
+        children: [],
+      },
+    ],
     parts: [
       { k: 'attr', index: 0, signal: 'title', name: 'title', path: [0] },
       { k: 'prop', index: 1, signal: 'value', name: 'value', path: [0] },
@@ -28,15 +30,10 @@ Deno.test('fixed Parts validate every exact DOM sink', () => {
     ],
   });
 
-  assertEquals(program.parts.map((part) => part.k), [
-    'attr',
-    'prop',
-    'bool',
-    'class',
-    'style',
-    'event',
-    'ref',
-  ]);
+  assertEquals(
+    program.parts.map((part) => part.k),
+    ['attr', 'prop', 'bool', 'class', 'style', 'event', 'ref'],
+  );
 });
 
 Deno.test('program validation rejects void elements with children', () => {
@@ -44,12 +41,14 @@ Deno.test('program validation rejects void elements with children', () => {
     () =>
       testProgram({
         tag: 'oe-invalid-void',
-        template: [{
-          k: 'el',
-          tag: 'input',
-          attrs: [],
-          children: [{ k: 'text', value: 'unsupported' }],
-        }],
+        template: [
+          {
+            k: 'el',
+            tag: 'input',
+            attrs: [],
+            children: [{ k: 'text', value: 'unsupported' }],
+          },
+        ],
         parts: [],
       }),
     Error,

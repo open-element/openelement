@@ -21,6 +21,6 @@ export class TestFileWatcher {
   }
 
   emit(event: string, path: string): void {
-    for (const handler of [...this.#handlers.get(event) ?? []]) handler(path);
+    for (const handler of [...(this.#handlers.get(event) ?? [])]) handler(path);
   }
 }

@@ -24,10 +24,7 @@ Deno.test('resolveDynamicRoutePath rejects path traversal', () => {
 });
 
 Deno.test('resolveDynamicRoutePath resolves catch-all values and consumes the regex body (#1022)', () => {
-  assertEquals(
-    resolveDynamicRoutePath('/docs/:path{.+}', ['path'], { path: 'a/b' }),
-    '/docs/a/b',
-  );
+  assertEquals(resolveDynamicRoutePath('/docs/:path{.+}', ['path'], { path: 'a/b' }), '/docs/a/b');
   // Unsafe chars are encoded per segment; the slash structure is preserved.
   assertEquals(
     resolveDynamicRoutePath('/docs/:path{.+}', ['path'], { path: 'a b/c#d' }),

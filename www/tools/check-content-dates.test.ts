@@ -123,7 +123,7 @@ Deno.test('content dates: a missing locale fails, an unknown locale fails', () =
   );
   assert(
     unknownLocale.some((problem) =>
-      problem.includes('architecture/architecture.fr: unknown locale')
+      problem.includes('architecture/architecture.fr: unknown locale'),
     ),
     unknownLocale.join(' | '),
   );
@@ -160,20 +160,18 @@ Deno.test('content dates: an entry that is not an object fails', () => {
 });
 
 Deno.test('content dates: impossible calendar dates fail, real ones pass', () => {
-  for (
-    const value of [
-      '2026-02-30',
-      '2026-02-29',
-      '2026-04-31',
-      '2026-13-01',
-      '2026-00-10',
-      '2026-09-00',
-      '2026-9-19',
-      '2026-09-19T00:00:00Z',
-      'not-a-date',
-      '',
-    ]
-  ) {
+  for (const value of [
+    '2026-02-30',
+    '2026-02-29',
+    '2026-04-31',
+    '2026-13-01',
+    '2026-00-10',
+    '2026-09-00',
+    '2026-9-19',
+    '2026-09-19T00:00:00Z',
+    'not-a-date',
+    '',
+  ]) {
     assertEquals(isCalendarDate(value), false, `${JSON.stringify(value)} is not a real date`);
     const problems = validateManifest(
       manifest({
@@ -198,10 +196,9 @@ Deno.test('content dates: manifest shape is validated before entries', () => {
     const problems = validateManifest(value, DOC_KEYS);
     assertEquals(problems, ['manifest must be a JSON object'], JSON.stringify(value));
   }
-  assertEquals(
-    validateManifest({ generatedFrom: 'x' }, DOC_KEYS),
-    ['manifest.articles must be a JSON object'],
-  );
+  assertEquals(validateManifest({ generatedFrom: 'x' }, DOC_KEYS), [
+    'manifest.articles must be a JSON object',
+  ]);
   assertEquals(validateManifest({ articles: [] }, DOC_KEYS), [
     'manifest.articles must be a JSON object',
   ]);

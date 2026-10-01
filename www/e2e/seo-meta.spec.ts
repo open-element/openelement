@@ -86,15 +86,15 @@ test.describe('SEO Meta Tags', () => {
   test('per-route title/description replace the boilerplate (#1307)', async ({ page }) => {
     await page.goto('/reference');
     expect(await page.title()).toBe('API Reference — openElement');
-    const referenceDescription = await page.locator('meta[name="description"]').getAttribute(
-      'content',
-    );
+    const referenceDescription = await page
+      .locator('meta[name="description"]')
+      .getAttribute('content');
     expect(referenceDescription).toContain('supported openElement API surface');
     const canonical = await page.locator('link[rel="canonical"]').getAttribute('href');
     expect(canonical).toBe('https://openelement.org/reference');
-    const hreflangZh = await page.locator('link[rel="alternate"][hreflang="zh"]').getAttribute(
-      'href',
-    );
+    const hreflangZh = await page
+      .locator('link[rel="alternate"][hreflang="zh"]')
+      .getAttribute('href');
     expect(hreflangZh).toBe('https://openelement.org/zh/reference');
 
     await page.goto('/zh/reference');

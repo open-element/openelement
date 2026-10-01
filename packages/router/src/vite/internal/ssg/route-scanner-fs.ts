@@ -11,8 +11,9 @@
 const NOT_FOUND_CODES = new Set(['ENOENT', 'ENOTDIR']);
 
 function isNotFound(e: unknown): boolean {
-  return typeof e === 'object' && e !== null &&
-    NOT_FOUND_CODES.has((e as { code?: string }).code ?? '');
+  return (
+    typeof e === 'object' && e !== null && NOT_FOUND_CODES.has((e as { code?: string }).code ?? '')
+  );
 }
 
 /** Read a directory, returning `undefined` if it does not exist. Throws on I/O errors. */

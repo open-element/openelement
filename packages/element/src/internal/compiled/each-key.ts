@@ -54,7 +54,8 @@ export function eachItemKey(part: ProgramEachPart, item: unknown): string {
   }
   const value = (item as Record<string, unknown>)[part.key];
   if (
-    (value !== null && typeof value === 'object') || typeof value === 'function' ||
+    (value !== null && typeof value === 'object') ||
+    typeof value === 'function' ||
     typeof value === 'symbol'
   ) {
     throw new EachKeyError(

@@ -74,9 +74,7 @@ function assertNotIncludes(text: string, unexpected: string, label: string): voi
 
 async function readTextFiles(dir: URL, suffix: string): Promise<string> {
   let content = '';
-  for (
-    const entry of walkSync(dir.pathname, { includeDirs: false })
-  ) {
+  for (const entry of walkSync(dir.pathname, { includeDirs: false })) {
     if (!entry.name.endsWith(suffix)) continue;
     content += await Deno.readTextFile(entry.path);
   }
@@ -87,7 +85,7 @@ type FetchLike = (request: Request) => Promise<Response> | Response;
 
 async function assertRuntimeRoutes(fetchRuntime: FetchLike): Promise<void> {
   const proof = await fetchRuntime(new Request('http://127.0.0.1/api/proof'));
-  const payload = await proof.json() as {
+  const payload = (await proof.json()) as {
     ok?: boolean;
     framework?: string;
     runtime?: string;
@@ -300,7 +298,7 @@ type CloudflareWorkerContext = {
 };
 
 async function smokeWorkers(serverEntry: URL, publicDir: URL): Promise<void> {
-  const imported = await import(`${serverEntry.href}?t=${Date.now()}`) as CloudflareWorkerModule;
+  const imported = (await import(`${serverEntry.href}?t=${Date.now()}`)) as CloudflareWorkerModule;
   const workerFetch = imported.default?.fetch;
   if (!workerFetch) {
     console.error(
@@ -449,14 +447,12 @@ if (preset === 'node') {
 console.log(`nitro proof ${preset}: real Nitro ${expectedPreset} output passed`);
 
 function assertNitroCacheRouteRule(serverCode: string): void {
-  for (
-    const [label, pattern] of [
-      ['route', /["']\/cached["']/],
-      ['cache middleware', /["']cache["']/],
-      ['maxAge', /["']?maxAge["']?\s*:\s*60/],
-      ['swr', /["']?swr["']?\s*:\s*(?:true|!0)/],
-    ] as const
-  ) {
+  for (const [label, pattern] of [
+    ['route', /["']\/cached["']/],
+    ['cache middleware', /["']cache["']/],
+    ['maxAge', /["']?maxAge["']?\s*:\s*60/],
+    ['swr', /["']?swr["']?\s*:\s*(?:true|!0)/],
+  ] as const) {
     if (!pattern.test(serverCode)) {
       console.error(`Nitro cache route rule missing ${label}: ${pattern}`);
       Deno.exit(1);

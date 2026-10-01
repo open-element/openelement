@@ -89,7 +89,10 @@ Deno.test('scope: animation frame is cancelled on dispose', () => {
   };
   try {
     const scope = new LifetimeScope();
-    assertEquals(scope.requestAnimationFrame(() => {}), 17);
+    assertEquals(
+      scope.requestAnimationFrame(() => {}),
+      17,
+    );
     scope.dispose();
     assertEquals(cancelled, [17]);
   } finally {

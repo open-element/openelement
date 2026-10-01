@@ -5,12 +5,14 @@ import { buildEntryDescriptor } from '../src/vite/internal/ssg/entry-descriptor.
 import { renderEntry } from '../src/vite/internal/ssg/entry-orchestrator.ts';
 import { selectRendererAdapter } from '../src/vite/internal/ssg/renderer-adapter.ts';
 
-const routes: RouteEntry[] = [{
-  path: '/',
-  filePath: 'index.ts',
-  type: 'page',
-  varName: 'pageIndex',
-}];
+const routes: RouteEntry[] = [
+  {
+    path: '/',
+    filePath: 'index.ts',
+    type: 'page',
+    varName: 'pageIndex',
+  },
+];
 
 // Pins verified byte-exact. The server pins moved from the #1470-block-c
 // values (17478/4bfb796b…, 17018/8ed50861…) to the #1470-block-e values
@@ -54,19 +56,25 @@ Deno.test('internal Native/Lit selection preserves the generated server/client b
     const descriptor = buildEntryDescriptor(routes, { renderer: mode });
     const server = renderEntry(descriptor);
     const client = generateClientEntry(
-      [{
-        tagName: 'x-probe',
-        modulePath: '/app/islands/x.ts',
-        strategy: 'load',
-        ssr: true,
-        dsd: true,
-      }],
+      [
+        {
+          tagName: 'x-probe',
+          modulePath: '/app/islands/x.ts',
+          strategy: 'load',
+          ssr: true,
+          dsd: true,
+        },
+      ],
       { renderer: mode },
     );
-    for (const [kind, text] of [['server', server], ['client', client]] as const) {
+    for (const [kind, text] of [
+      ['server', server],
+      ['client', client],
+    ] as const) {
       const bytes = new TextEncoder().encode(text);
       const hash = [...new Uint8Array(await crypto.subtle.digest('SHA-256', bytes))]
-        .map((byte) => byte.toString(16).padStart(2, '0')).join('');
+        .map((byte) => byte.toString(16).padStart(2, '0'))
+        .join('');
       assertEquals(bytes.length, expected[mode][kind][0]);
       assertEquals(hash, expected[mode][kind][1]);
     }

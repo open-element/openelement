@@ -69,9 +69,10 @@ function dynamicRouteEnumeration(
  * fail-closed failures (an unenumerable dynamic route, a duplicate, or an
  * excluded/empty enumeration entry).
  */
-export function enumeratePublicRoutes(
-  options: EnumeratePublicRoutesOptions,
-): { routes: string[]; failures: string[] } {
+export function enumeratePublicRoutes(options: EnumeratePublicRoutesOptions): {
+  routes: string[];
+  failures: string[];
+} {
   const { routes, blogPostRoutes, locales, defaultLocale } = options;
   const failures: string[] = [];
   // The default locale is an explicit input, never derived from array order:
@@ -108,11 +109,8 @@ export function enumeratePublicRoutes(
   const localized: string[] = [];
   for (const route of canonical) {
     for (const locale of locales) {
-      const path = locale === defaultLocale
-        ? route
-        : route === '/'
-        ? `/${locale}`
-        : `/${locale}${route}`;
+      const path =
+        locale === defaultLocale ? route : route === '/' ? `/${locale}` : `/${locale}${route}`;
       if (seen.has(path)) {
         failures.push(`duplicate sitemap route '${path}'`);
         continue;
@@ -146,14 +144,19 @@ export function renderSitemapXml(
     changefreq: 'weekly',
     priority: path === '/' ? 1.0 : 0.7,
   }));
-  const urlsXml = urls.map((url) =>
-    `  <url>\n    <loc>${escapeXml(url.loc)}</loc>\n` +
-    (url.lastmod ? `    <lastmod>${escapeXml(url.lastmod)}</lastmod>\n` : '') +
-    `    <changefreq>${escapeXml(url.changefreq)}</changefreq>\n` +
-    `    <priority>${url.priority.toFixed(1)}</priority>\n  </url>`
-  ).join('\n');
-  return `<?xml version="1.0" encoding="UTF-8"?>\n` +
-    `<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urlsXml}\n</urlset>`;
+  const urlsXml = urls
+    .map(
+      (url) =>
+        `  <url>\n    <loc>${escapeXml(url.loc)}</loc>\n` +
+        (url.lastmod ? `    <lastmod>${escapeXml(url.lastmod)}</lastmod>\n` : '') +
+        `    <changefreq>${escapeXml(url.changefreq)}</changefreq>\n` +
+        `    <priority>${url.priority.toFixed(1)}</priority>\n  </url>`,
+    )
+    .join('\n');
+  return (
+    `<?xml version="1.0" encoding="UTF-8"?>\n` +
+    `<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urlsXml}\n</urlset>`
+  );
 }
 
 /** Render robots.txt pointing at the generated sitemap. */

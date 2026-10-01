@@ -9,9 +9,7 @@ if (typeof globalThis.URLPattern !== 'function') {
 const NativeURLPattern = globalThis.URLPattern;
 
 /** Build a list from entry pairs (the package registers via addPattern). */
-function listFromEntries<T>(
-  entries: Iterable<readonly [ListPattern, T]>,
-): URLPatternList<T> {
+function listFromEntries<T>(entries: Iterable<readonly [ListPattern, T]>): URLPatternList<T> {
   const list = new URLPatternList<T>();
   for (const [pattern, value] of entries) list.addPattern(pattern, value);
   return list;
@@ -78,20 +76,27 @@ for (const [name, Pattern] of constructors) {
     // Every pair, both orders, including duplicate patterns with distinct values.
     for (const first of patterns) {
       for (const second of patterns) {
-        const entries = [[first, {}], [second, {}]] as const;
+        const entries = [
+          [first, {}],
+          [second, {}],
+        ] as const;
         const list = listFromEntries(entries);
         for (const input of inputs) {
           const url = new URL(input, 'https://example.com');
           // Upstream-aligned contract: when match() is given a baseURL, exec
           // receives it too, so result.inputs carries the caller's arguments.
-          const expected = entries.map(([pattern, value]) => ({
-            result: pattern.exec(url.href, 'https://example.com'),
-            value,
-          })).find((r) => r.result);
-          const expectedNoBase = entries.map(([pattern, value]) => ({
-            result: pattern.exec(url.href),
-            value,
-          })).find((r) => r.result);
+          const expected = entries
+            .map(([pattern, value]) => ({
+              result: pattern.exec(url.href, 'https://example.com'),
+              value,
+            }))
+            .find((r) => r.result);
+          const expectedNoBase = entries
+            .map(([pattern, value]) => ({
+              result: pattern.exec(url.href),
+              value,
+            }))
+            .find((r) => r.result);
           const actual = list.match(input, 'https://example.com');
           assertEquals(
             actual?.result ?? null,
@@ -115,14 +120,12 @@ for (const [name, Pattern] of constructors) {
       [new Pattern({ pathname: '/case', search: '', hash: '', port: '' }), 2],
     ] as const;
     const list = listFromEntries(entries);
-    for (
-      const input of [
-        'https://example.com/case',
-        'https://example.com/CASE?q=1',
-        'http://example.com:80/case#',
-        'http://example.com:81/case',
-      ]
-    ) {
+    for (const input of [
+      'https://example.com/case',
+      'https://example.com/CASE?q=1',
+      'http://example.com:80/case#',
+      'http://example.com:81/case',
+    ]) {
       const expected = entries.find(([p]) => p.exec(new URL(input).href));
       assertEquals(list.match(input)?.value, expected?.[1]);
       assertEquals(list.match(input)?.result, expected?.[0].exec(new URL(input).href));
@@ -141,13 +144,16 @@ for (const [name, Pattern] of constructors) {
       const input = `https://example.com/shared/${next() % 35}`;
       const mismatch = (candidate: typeof entries) => {
         const actual = listFromEntries(candidate).match(input);
-        const expected = candidate.map(([pattern, value]) => ({
-          result: pattern.exec(input),
-          value,
-        }))
+        const expected = candidate
+          .map(([pattern, value]) => ({
+            result: pattern.exec(input),
+            value,
+          }))
           .find((entry) => entry.result);
-        return actual?.value !== expected?.value ||
-          JSON.stringify(actual?.result) !== JSON.stringify(expected?.result);
+        return (
+          actual?.value !== expected?.value ||
+          JSON.stringify(actual?.result) !== JSON.stringify(expected?.result)
+        );
       };
       // Deletion shrinking keeps the original input/seed and reduces the route
       // sequence to a 1-minimal reproducer without changing record identities.
@@ -164,18 +170,16 @@ for (const [name, Pattern] of constructors) {
       assertEquals(
         mismatch(minimal),
         false,
-        `seed=${seed} iteration=${iteration} input=${input} patterns=${
-          JSON.stringify(minimal.map(([p, value]) => ({ pathname: p.pathname, value })))
-        }`,
+        `seed=${seed} iteration=${iteration} input=${input} patterns=${JSON.stringify(
+          minimal.map(([p, value]) => ({ pathname: p.pathname, value })),
+        )}`,
       );
     }
   });
 }
 
 Deno.test('URLPatternList invalid URL boundary is consistent for empty and populated lists', () => {
-  for (
-    const entries of [[], [[new NativeURLPattern({ pathname: '*' }), 1] as const]]
-  ) {
+  for (const entries of [[], [[new NativeURLPattern({ pathname: '*' }), 1] as const]]) {
     const list = listFromEntries(entries);
     assertThrows(() => list.match('/relative'), TypeError);
     assertThrows(() => list.match('http://['), TypeError);
@@ -184,18 +188,16 @@ Deno.test('URLPatternList invalid URL boundary is consistent for empty and popul
 });
 
 Deno.test('admitted route patterns match the native URLPattern oracle', () => {
-  for (
-    const pathname of [
-      '/',
-      '/:id',
-      '/a/:x*',
-      '/a/:x(\\d+)',
-      '/a{/:x}?',
-      '/東京',
-      '/:__proto__',
-      '/a//b',
-    ]
-  ) {
+  for (const pathname of [
+    '/',
+    '/:id',
+    '/a/:x*',
+    '/a/:x(\\d+)',
+    '/a{/:x}?',
+    '/東京',
+    '/:__proto__',
+    '/a//b',
+  ]) {
     for (const path of ['/', '/a', '/a/123', '/a/b/c', '/a//b', '/東京', '/%2F', '/%E0%A4%A']) {
       const input = new URL(path, 'https://example.com').href;
       assertEquals(

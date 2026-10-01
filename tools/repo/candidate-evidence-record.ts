@@ -96,8 +96,8 @@ export async function required(command: string, args: string[]): Promise<string>
     stdout: 'piped',
     stderr: 'piped',
   }).output();
-  const text = new TextDecoder().decode(output.stdout).trim() +
-    new TextDecoder().decode(output.stderr).trim();
+  const text =
+    new TextDecoder().decode(output.stdout).trim() + new TextDecoder().decode(output.stderr).trim();
   if (!output.success) throw new Error(`${command} ${args.join(' ')} failed: ${text}`);
   return text;
 }
@@ -121,7 +121,10 @@ export async function assertCleanAtSha(expected: string): Promise<{ sha: string;
   if (sha !== expected) {
     throw new Error(`Candidate SHA mismatch: expected ${expected}, checked out ${sha}.`);
   }
-  for (const args of [['diff', '--quiet'], ['diff', '--cached', '--quiet']]) {
+  for (const args of [
+    ['diff', '--quiet'],
+    ['diff', '--cached', '--quiet'],
+  ]) {
     const result = await new Deno.Command('git', { args, cwd: repoRoot }).output();
     if (!result.success) {
       throw new Error(`Candidate requires a tracked-clean worktree (git ${args.join(' ')}).`);
@@ -132,7 +135,7 @@ export async function assertCleanAtSha(expected: string): Promise<{ sha: string;
 
 function stripAnsi(text: string): string {
   // Intentional ANSI color stripping for log scans.
-  // deno-lint-ignore no-control-regex
+  // oxlint-disable-next-line no-control-regex
   return text.replace(/\x1b\[[0-9;]*m/g, '');
 }
 
@@ -146,13 +149,11 @@ function gateStepCounts(text: string): { pass: number; fail: number } {
 async function playwrightBrowserVersions(): Promise<Record<string, string>> {
   const out: Record<string, string> = {};
   const home = Deno.env.get('HOME') ?? Deno.env.get('USERPROFILE') ?? '';
-  for (
-    const cache of [
-      join(home, '.cache/ms-playwright'),
-      join(home, 'Library/Caches/ms-playwright'),
-      join('C:', 'Users', 'runneradmin', 'AppData', 'Local', 'ms-playwright'),
-    ]
-  ) {
+  for (const cache of [
+    join(home, '.cache/ms-playwright'),
+    join(home, 'Library/Caches/ms-playwright'),
+    join('C:', 'Users', 'runneradmin', 'AppData', 'Local', 'ms-playwright'),
+  ]) {
     try {
       for await (const entry of Deno.readDir(cache)) {
         if (!entry.isDirectory) continue;
@@ -262,7 +263,7 @@ async function packExtras(
     );
   }
   const packages = (await readPackages()).filter((pkg) =>
-    REQUIRED_PACKAGE_TARBALLS.includes(pkg.name as (typeof REQUIRED_PACKAGE_TARBALLS)[number])
+    REQUIRED_PACKAGE_TARBALLS.includes(pkg.name as (typeof REQUIRED_PACKAGE_TARBALLS)[number]),
   );
   const versions = new Set(packages.map((pkg) => pkg.version));
   if (versions.size !== 1) {
@@ -281,7 +282,10 @@ async function packExtras(
     (pkg) => tarballPath(pkg),
     outDir,
   );
-  for (const [label, keys] of [['tarballs', tarballs], ['tarballFiles', tarballFiles]] as const) {
+  for (const [label, keys] of [
+    ['tarballs', tarballs],
+    ['tarballFiles', tarballFiles],
+  ] as const) {
     const actual = Object.keys(keys).sort();
     const expected = [...REQUIRED_PACKAGE_TARBALLS].sort();
     if (actual.join(',') !== expected.join(',')) {

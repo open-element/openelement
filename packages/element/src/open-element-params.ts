@@ -10,13 +10,12 @@ const MAX_PARAMS_ATTRIBUTE_BYTES = 64 * 1024;
  * throws a TypeError downstream) — reject them with a warning and fall back
  * to an empty object (#1036).
  */
-function parseParamsAttribute(
-  attrParams: string,
-  element: HTMLElement,
-): Record<string, string> {
+function parseParamsAttribute(attrParams: string, element: HTMLElement): Record<string, string> {
   const parsed: unknown = JSON.parse(attrParams);
   if (
-    typeof parsed !== 'object' || parsed === null || Array.isArray(parsed) ||
+    typeof parsed !== 'object' ||
+    parsed === null ||
+    Array.isArray(parsed) ||
     Object.values(parsed).some((value) => typeof value !== 'string')
   ) {
     createLogger('element').warn(
@@ -64,9 +63,9 @@ export class ElementParams {
       this.#params.value = parseParamsAttribute(attrParams, element);
     } catch (err) {
       createLogger('element').error(
-        `Failed to parse params attribute on <${element.tagName.toLowerCase()}>: ${
-          formatError(err)
-        }`,
+        `Failed to parse params attribute on <${element.tagName.toLowerCase()}>: ${formatError(
+          err,
+        )}`,
       );
     }
     return true;

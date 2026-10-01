@@ -392,9 +392,11 @@ Deno.test('Part Program sink validation rejects corrupted class, style, bool, ht
 
   const htmlIndex = valid.parts.findIndex((part) => part.k === 'html');
   const occupiedHtmlTarget = structuredClone(valid);
-  setPath(occupiedHtmlTarget, ['template', 0, 'children', 1, 'children'], [
-    { k: 'text', value: 'occupied' },
-  ]);
+  setPath(
+    occupiedHtmlTarget,
+    ['template', 0, 'children', 1, 'children'],
+    [{ k: 'text', value: 'occupied' }],
+  );
   for (const validate of PART_PROGRAM_VALIDATORS) {
     assertThrows(() => validate(occupiedHtmlTarget), Error, 'childless');
   }
@@ -428,14 +430,12 @@ Deno.test('Part Program event-action and item-slot grammars fail closed', () => 
   const actionKinds = valid.parts
     .filter((part) => part.k === 'event')
     .map((part) => part.action.kind);
-  for (
-    const kind of ['increment', 'decrement', 'assign', 'add', 'subtract', 'call'] as const
-  ) {
+  for (const kind of ['increment', 'decrement', 'assign', 'add', 'subtract', 'call'] as const) {
     if (!actionKinds.includes(kind)) throw new Error(`fixture did not emit ${kind}`);
   }
 
   const eventIndices = valid.parts
-    .map((part, index) => part.k === 'event' ? index : -1)
+    .map((part, index) => (part.k === 'event' ? index : -1))
     .filter((index) => index >= 0);
   const actionFaults: unknown[] = [
     null,

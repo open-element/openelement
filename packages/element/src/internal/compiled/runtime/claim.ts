@@ -158,9 +158,12 @@ function claimElementAttributes(
     for (const name of dynamic) expected.add(name);
     for (const name of actualNames) {
       if (
-        name.toLowerCase() === DATA_OE_LIGHT && node.children.length === 0 &&
-        node.tag.includes('-') && element.getAttribute(DATA_OE_LIGHT) !== null
-      ) continue;
+        name.toLowerCase() === DATA_OE_LIGHT &&
+        node.children.length === 0 &&
+        node.tag.includes('-') &&
+        element.getAttribute(DATA_OE_LIGHT) !== null
+      )
+        continue;
       if (!expected.has(name)) claimFailure(path, `unexpected attribute "${name}"`, owner);
     }
     for (const name of expected) {
@@ -172,11 +175,7 @@ function claimElementAttributes(
   }
 }
 
-function findRegionEnd(
-  parent: Node,
-  start: number,
-  marker: string,
-): Comment | undefined {
+function findRegionEnd(parent: Node, start: number, marker: string): Comment | undefined {
   for (let index = start; index < parent.childNodes.length; index++) {
     const node = parent.childNodes[index];
     if (isComment(node) && node.data === marker) return node;
@@ -380,30 +379,32 @@ export function claimNodes(
       }
       // A trusted-HTML sink owns the target's whole content: the subtree is
       // opaque to the claim (the program declares no structure inside it).
-      const hasHtmlSink = fixedPartsAtPath(ctx, nodeProgramPath)
-        .some((part) => part.k === 'html');
-      const ownsExpandedSubtree = node.children.length === 0 && node.tag.includes('-') &&
+      const hasHtmlSink = fixedPartsAtPath(ctx, nodeProgramPath).some((part) => part.k === 'html');
+      const ownsExpandedSubtree =
+        node.children.length === 0 &&
+        node.tag.includes('-') &&
         dom.getAttribute(DATA_OE_LIGHT) !== null;
-      const ownsProjection = node.tag === 'slot' && node.children.length === 0 &&
-        dom.childNodes.length > 0;
-      const consumed = hasHtmlSink || ownsExpandedSubtree || ownsProjection
-        ? dom.childNodes.length
-        : claimNodes(
-          ctx,
-          dom,
-          0,
-          node.children,
-          `${nodePath}.children`,
-          nodeProgramPath,
-          scope,
-          owner,
-          pending,
-          item,
-          itemPart,
-          itemValueSlots,
-          itemAttrSlots,
-          stream,
-        );
+      const ownsProjection =
+        node.tag === 'slot' && node.children.length === 0 && dom.childNodes.length > 0;
+      const consumed =
+        hasHtmlSink || ownsExpandedSubtree || ownsProjection
+          ? dom.childNodes.length
+          : claimNodes(
+              ctx,
+              dom,
+              0,
+              node.children,
+              `${nodePath}.children`,
+              nodeProgramPath,
+              scope,
+              owner,
+              pending,
+              item,
+              itemPart,
+              itemValueSlots,
+              itemAttrSlots,
+              stream,
+            );
       if (consumed !== dom.childNodes.length) {
         claimFailure(`${nodePath}.children`, 'unexpected trailing nodes', owner);
       }
@@ -608,7 +609,9 @@ export interface CompiledClaimOptions {
 
 export function isStaticStyleNode(node: Node | undefined): boolean {
   return (
-    !!node && isElement(node) && node.tagName.toLowerCase() === 'style' &&
+    !!node &&
+    isElement(node) &&
+    node.tagName.toLowerCase() === 'style' &&
     node.hasAttribute(STATIC_STYLES_MARKER)
   );
 }
@@ -736,9 +739,11 @@ export function claimExistingDom(
         streamed.size !== (options.streamParts?.length ?? 0) ||
         unresolved.size !== (options.pendingParts?.length ?? 0) ||
         [...unresolved].some((index) => !streamed.has(index)) ||
-        [...streamed].some((index) =>
-          !Number.isInteger(index) || !ctx.program.parts[index] ||
-          !['text', 'when', 'each'].includes(ctx.program.parts[index].k)
+        [...streamed].some(
+          (index) =>
+            !Number.isInteger(index) ||
+            !ctx.program.parts[index] ||
+            !['text', 'when', 'each'].includes(ctx.program.parts[index].k),
         )
       ) {
         claimFailure('template', 'invalid streamed or pending Part selection', {

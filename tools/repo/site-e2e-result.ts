@@ -134,15 +134,19 @@ export interface PlaywrightReport {
 /** Bare-hex SHA-256 of the raw report bytes (sidecar `reportSha256` format). */
 export async function sha256Hex(bytes: Uint8Array): Promise<string> {
   const digest = await crypto.subtle.digest('SHA-256', Uint8Array.from(bytes));
-  return Array.from(new Uint8Array(digest)).map((byte) => byte.toString(16).padStart(2, '0')).join(
-    '',
-  );
+  return Array.from(new Uint8Array(digest))
+    .map((byte) => byte.toString(16).padStart(2, '0'))
+    .join('');
 }
 
 /** True only for a present, non-array object with zero keys (`{}`). */
 export function isEmptyGrep(grep: unknown): boolean {
-  return typeof grep === 'object' && grep !== null && !Array.isArray(grep) &&
-    Object.keys(grep).length === 0;
+  return (
+    typeof grep === 'object' &&
+    grep !== null &&
+    !Array.isArray(grep) &&
+    Object.keys(grep).length === 0
+  );
 }
 
 /** Attempt statuses Playwright records for an attempt that did not pass. */
@@ -173,13 +177,16 @@ export function summarizePlaywrightReport(
           // a retry only clears the attempts before it (see the header's retry
           // note: `--retries 1` is part of the contract, so a retry-cleared test
           // is a pass with a recorded retry, not a failure).
-          const failed = results.length === 0 || test.status === 'unexpected' ||
-            attemptFailed(last);
-          const skipped = !failed && (test.status === 'skipped' ||
-            results.every((result) => result.status === 'skipped'));
+          const failed =
+            results.length === 0 || test.status === 'unexpected' || attemptFailed(last);
+          const skipped =
+            !failed &&
+            (test.status === 'skipped' || results.every((result) => result.status === 'skipped'));
           // Retry-cleared: the final attempt passed, an earlier one did not.
           // Counted in `passed` AND recorded in `flaky`.
-          const wasFlaky = !failed && !skipped &&
+          const wasFlaky =
+            !failed &&
+            !skipped &&
             results.slice(0, -1).some((result) => attemptFailed(result.status));
           if (failed) summary.failed++;
           else if (skipped) summary.skipped++;
@@ -215,8 +222,8 @@ export function auditSiteE2e(site: Partial<SiteE2eResult> | undefined): string[]
     failures.push('Site E2E projects missing');
     return failures;
   }
-  const extraProjects = Object.keys(site.projects).filter((name) =>
-    !(SITE_E2E_PROJECTS as readonly string[]).includes(name)
+  const extraProjects = Object.keys(site.projects).filter(
+    (name) => !(SITE_E2E_PROJECTS as readonly string[]).includes(name),
   );
   if (extraProjects.length > 0) {
     failures.push(`Site E2E unexpected extra projects: ${extraProjects.sort().join(', ')}`);
@@ -237,9 +244,9 @@ export function auditSiteE2e(site: Partial<SiteE2eResult> | undefined): string[]
     for (const field of ['passed', 'failed', 'skipped', 'flaky'] as const) {
       if (!count(summary[field])) {
         failures.push(
-          `Site E2E ${browser}.${field} must be a non-negative safe integer, got ${
-            JSON.stringify(summary[field])
-          }`,
+          `Site E2E ${browser}.${field} must be a non-negative safe integer, got ${JSON.stringify(
+            summary[field],
+          )}`,
         );
         valid = false;
       }
@@ -275,9 +282,9 @@ export function auditSiteE2e(site: Partial<SiteE2eResult> | undefined): string[]
   for (const field of ['passed', 'failed', 'skipped', 'flaky'] as const) {
     if (!count(site[field])) {
       failures.push(
-        `Site E2E total ${field} must be a non-negative safe integer, got ${
-          JSON.stringify(site[field])
-        }`,
+        `Site E2E total ${field} must be a non-negative safe integer, got ${JSON.stringify(
+          site[field],
+        )}`,
       );
       continue;
     }
@@ -288,9 +295,9 @@ export function auditSiteE2e(site: Partial<SiteE2eResult> | undefined): string[]
   const minimumExpected = SITE_E2E_MIN_PASSED_PER_PROJECT * SITE_E2E_PROJECTS.length;
   if (!Number.isSafeInteger(site.expected) || (site.expected as number) < minimumExpected) {
     failures.push(
-      `Site E2E expected must be a safe integer >= ${minimumExpected}, got ${
-        JSON.stringify(site.expected)
-      }`,
+      `Site E2E expected must be a safe integer >= ${minimumExpected}, got ${JSON.stringify(
+        site.expected,
+      )}`,
     );
   } else if (countsValid && (site.flaky as number) + (site.expected as number) !== executed) {
     // `stats.expected` counts first-attempt passes, so the suite-size identity
@@ -306,23 +313,23 @@ export function auditSiteE2e(site: Partial<SiteE2eResult> | undefined): string[]
   }
   if (!isEmptyGrep(site.grep)) {
     failures.push(
-      `Site E2E grep must be present and serialize to an empty object, got ${
-        JSON.stringify(site.grep)
-      }`,
+      `Site E2E grep must be present and serialize to an empty object, got ${JSON.stringify(
+        site.grep,
+      )}`,
     );
   }
   if (typeof site.reportSha256 !== 'string' || !SHA256_BARE_HEX.test(site.reportSha256)) {
     failures.push(
-      `Site E2E reportSha256 must be 64 lowercase hex chars, got ${
-        JSON.stringify(site.reportSha256)
-      }`,
+      `Site E2E reportSha256 must be 64 lowercase hex chars, got ${JSON.stringify(
+        site.reportSha256,
+      )}`,
     );
   }
   if (typeof site.candidateSha !== 'string' || !COMMIT_HEX.test(site.candidateSha)) {
     failures.push(
-      `Site E2E candidateSha must be a 40-char hex commit, got ${
-        JSON.stringify(site.candidateSha)
-      }`,
+      `Site E2E candidateSha must be a 40-char hex commit, got ${JSON.stringify(
+        site.candidateSha,
+      )}`,
     );
   }
   return failures;

@@ -1,6 +1,7 @@
 import { compiledStyle } from '../site-ui/compiled-style.ts';
 
-export const pageErrorsStyles = [compiledStyle(`
+export const pageErrorsStyles = [
+  compiledStyle(`
   :host { display: block; color: var(--text-primary); }
   * { box-sizing: border-box; }
   p { margin: 0; }
@@ -48,4 +49,5 @@ export const pageErrorsStyles = [compiledStyle(`
     .codes-head { display: none; }
     .code-row { grid-template-columns: minmax(0, 1fr); gap: var(--size-2); }
   }
-`)];
+`),
+];

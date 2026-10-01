@@ -87,10 +87,7 @@ Deno.test('entry-generators - generateClientEntry (v0.5.0 CE upgrade)', async (t
     ];
     const code = generateClientEntry(islands);
     // v0.5.0: browser CE spec upgrades elements automatically
-    assertEquals(
-      code.includes('lit-element-hydrate-support'),
-      false,
-    );
+    assertEquals(code.includes('lit-element-hydrate-support'), false);
   });
 
   await t.step('registers custom elements via dynamic import', () => {

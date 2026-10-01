@@ -369,12 +369,10 @@ Deno.test('analyzeModuleSemantics is deterministic across repeated analysis', ()
       );
     }
   `;
-  const outputs = Array.from(
-    { length: 5 },
-    () =>
-      analyzeModuleSemantics(source, '/matrix/repeatable.tsx', {
-        vocabulary: ROUTER_VOCABULARY,
-      }),
+  const outputs = Array.from({ length: 5 }, () =>
+    analyzeModuleSemantics(source, '/matrix/repeatable.tsx', {
+      vocabulary: ROUTER_VOCABULARY,
+    }),
   );
 
   for (const output of outputs.slice(1)) {

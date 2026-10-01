@@ -47,12 +47,7 @@ function assertSharedConformance(engine: BatchedSignalEngine): void {
     'cleanup',
   ]);
 
-  assertEquals(exerciseEngine(engine, true), [
-    'run:2',
-    'cleanup',
-    'run:6',
-    'cleanup',
-  ]);
+  assertEquals(exerciseEngine(engine, true), ['run:2', 'cleanup', 'run:6', 'cleanup']);
 
   // A batch coalesces computed invalidations down to the final value.
   const source = engine.signal(1);

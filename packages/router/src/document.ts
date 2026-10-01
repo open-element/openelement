@@ -128,7 +128,7 @@ function normalizeStructuredDataValue(
   try {
     if (Array.isArray(container)) {
       return container.map((entry, index) =>
-        normalizeStructuredDataValue(entry, `${path}[${index}]`, ancestors)
+        normalizeStructuredDataValue(entry, `${path}[${index}]`, ancestors),
       );
     }
     const prototype = Object.getPrototypeOf(container);
@@ -194,9 +194,8 @@ export function resolvePageDocument(
 ): ResolvedDocument {
   const resolved = typeof head === 'function' ? head(context) : head;
   const lang = typeof context.locale === 'string' ? context.locale : undefined;
-  const normalizedClientScripts = clientScripts === undefined
-    ? undefined
-    : normalizeClientScriptDescriptors(clientScripts, fail);
+  const normalizedClientScripts =
+    clientScripts === undefined ? undefined : normalizeClientScriptDescriptors(clientScripts, fail);
   if (resolved === undefined) {
     return {
       links: [],
@@ -223,9 +222,8 @@ export function resolvePageDocument(
     fail('head.description must be a string.');
   }
   if (meta !== undefined && !Array.isArray(meta)) fail('head.meta must be an array.');
-  const normalizedStructuredData = structuredData !== undefined
-    ? normalizeStructuredData(structuredData)
-    : undefined;
+  const normalizedStructuredData =
+    structuredData !== undefined ? normalizeStructuredData(structuredData) : undefined;
   if (
     dangerouslyHeadFragments !== undefined &&
     (!Array.isArray(dangerouslyHeadFragments) ||

@@ -47,11 +47,13 @@ function world(options: {
 }) {
   return {
     listRuns: () =>
-      Promise.resolve(options.runs.map((run) => ({
-        conclusion: run.conclusion ?? 'success',
-        createdAt: run.createdAt ?? fresh(DAY),
-        ...run,
-      }))),
+      Promise.resolve(
+        options.runs.map((run) => ({
+          conclusion: run.conclusion ?? 'success',
+          createdAt: run.createdAt ?? fresh(DAY),
+          ...run,
+        })),
+      ),
     resolveTree: (sha: string) => Promise.resolve(options.trees[sha] ?? null),
     listArtifacts: (runId: number) => {
       if (options.failArtifacts) return Promise.reject(new Error('api down'));
@@ -60,14 +62,12 @@ function world(options: {
   };
 }
 
-async function resolve(
-  options: {
-    runs: Array<Partial<RunSummary> & { runId: number; headSha: string }>;
-    trees: Record<string, string>;
-    artifacts: Record<number, string[]>;
-    failArtifacts?: boolean;
-  },
-) {
+async function resolve(options: {
+  runs: Array<Partial<RunSummary> & { runId: number; headSha: string }>;
+  trees: Record<string, string>;
+  artifacts: Record<number, string[]>;
+  failArtifacts?: boolean;
+}) {
   return await resolveReuse({
     currentSha: SHA,
     currentTree: TREE,

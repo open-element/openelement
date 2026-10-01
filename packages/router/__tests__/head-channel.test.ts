@@ -25,10 +25,10 @@ import { assertValidUserConfig } from '../src/config.ts';
 Deno.test('head channel: stylesheets pass through the structured channel unchanged', () => {
   assertEquals(headStylesheetsToInject(undefined), undefined);
   assertEquals(headStylesheetsToInject([]), undefined);
-  assertEquals(
-    headStylesheetsToInject(['/a.css', 'https://cdn.example.com/b.css']),
-    ['/a.css', 'https://cdn.example.com/b.css'],
-  );
+  assertEquals(headStylesheetsToInject(['/a.css', 'https://cdn.example.com/b.css']), [
+    '/a.css',
+    'https://cdn.example.com/b.css',
+  ]);
 });
 
 Deno.test('head channel: scripts map onto the framework inject.scripts shape', () => {
@@ -84,9 +84,7 @@ Deno.test('head channel: the convention accepts meta, link and style entries', (
 
 Deno.test('head channel: attribute order is the record order (author controls bytes)', () => {
   assertEquals(
-    serializeHeadConvention([
-      { link: { href: '/x.svg', rel: 'icon', type: 'image/svg+xml' } },
-    ]),
+    serializeHeadConvention([{ link: { href: '/x.svg', rel: 'icon', type: 'image/svg+xml' } }]),
     ['<link href="/x.svg" rel="icon" type="image/svg+xml" />'],
   );
 });
@@ -107,7 +105,7 @@ Deno.test('head channel: an unsafe attribute name fails closed', () => {
     'unsafe attribute name',
   );
   assertThrows(
-    () => serializeHeadConvention([{ link: { rel: 'icon', href: '/x', 'onerror': 'a()' } }]),
+    () => serializeHeadConvention([{ link: { rel: 'icon', href: '/x', onerror: 'a()' } }]),
     Error,
     'unsafe attribute name',
   );

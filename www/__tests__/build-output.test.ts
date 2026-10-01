@@ -62,9 +62,9 @@ Deno.test('build output: client island JS stays within core budget and ships no 
   assertEquals(
     emittedShowcase,
     [],
-    `Removed showcase islands must not be emitted by the production build: ${
-      emittedShowcase.join(', ')
-    }`,
+    `Removed showcase islands must not be emitted by the production build: ${emittedShowcase.join(
+      ', ',
+    )}`,
   );
   // The one shared official-Site SLO (www/site-budget.ts) is enforced
   // here and by the build manifest; exceeding it fails instead of warning.
@@ -75,9 +75,9 @@ Deno.test('build output: client island JS stays within core budget and ships no 
   );
   assert(
     coreKB <= SITE_BUDGET.totalJsKB,
-    `Client island JS total ${
-      coreKB.toFixed(1)
-    }KB exceeds the ${SITE_BUDGET.totalJsKB}KB Site budget`,
+    `Client island JS total ${coreKB.toFixed(
+      1,
+    )}KB exceeds the ${SITE_BUDGET.totalJsKB}KB Site budget`,
   );
 });
 
@@ -95,9 +95,9 @@ Deno.test('build output: the light-mode probe fixture stays out of the public Si
   if (existsSync(manifestDir)) {
     for (const entry of Deno.readDirSync(manifestDir)) {
       if (!entry.isFile || !entry.name.endsWith('.json')) continue;
-      const manifest = JSON.parse(
-        Deno.readTextFileSync(join(manifestDir, entry.name)),
-      ) as { route?: string };
+      const manifest = JSON.parse(Deno.readTextFileSync(join(manifestDir, entry.name))) as {
+        route?: string;
+      };
       assert(
         manifest.route !== '/probe-light' && manifest.route !== '/zh/probe-light',
         `route manifest ${entry.name} still contains the internal probe`,

@@ -147,14 +147,18 @@ Deno.test('asset provenance fails closed on identity, license, and digest gaps',
     [
       'orphan entry',
       manifest({
-        assets: [manifest().assets[0], manifest().assets[1], {
-          path: 'gone.webp',
-          kind: 'first-party',
-          role: 'gone',
-          source: 'generated',
-          license: 'MIT',
-          sha256: SHA_A,
-        }],
+        assets: [
+          manifest().assets[0],
+          manifest().assets[1],
+          {
+            path: 'gone.webp',
+            kind: 'first-party',
+            role: 'gone',
+            source: 'generated',
+            license: 'MIT',
+            sha256: SHA_A,
+          },
+        ],
       }),
       FILES,
       NOTICES,
@@ -171,12 +175,7 @@ Deno.test('asset provenance fails closed on identity, license, and digest gaps',
       FILES,
       NOTICES,
     ],
-    [
-      'missing MIT text',
-      manifest(),
-      FILES,
-      'Thing is MIT.',
-    ],
+    ['missing MIT text', manifest(), FILES, 'Thing is MIT.'],
   ];
   for (const [label, candidate, files, notices] of cases) {
     const failures = checkAssetsProvenance(candidate, files, notices);
@@ -190,7 +189,10 @@ Deno.test('asset provenance rejects total budget overruns', () => {
     FILES,
     NOTICES,
   );
-  assert(failures.some((failure) => failure.includes('assets total')), failures.join('\n'));
+  assert(
+    failures.some((failure) => failure.includes('assets total')),
+    failures.join('\n'),
+  );
 });
 
 Deno.test('asset provenance treats common asset extensions as media', () => {
@@ -208,9 +210,7 @@ Deno.test('the committed assets tree passes the provenance gate', async () => {
 });
 
 Deno.test('dragon consumers stay bound to the external provenance keys', async () => {
-  const committed = JSON.parse(
-    await Deno.readTextFile('www/public/assets/manifest.json'),
-  ) as {
+  const committed = JSON.parse(await Deno.readTextFile('www/public/assets/manifest.json')) as {
     assets: Array<{
       path: string;
       remote?: { origin: string; key: string };
@@ -223,9 +223,7 @@ Deno.test('dragon consumers stay bound to the external provenance keys', async (
 
   const frameBase = `${frames.remote.origin}/${frames.remote.key}`;
   const videoUrl = `${video.remote.origin}/${video.remote.key}`;
-  const controller = await Deno.readTextFile(
-    'www/app/site-ui/open-dragon-live-gaze-controller.ts',
-  );
+  const controller = await Deno.readTextFile('www/app/site-ui/open-dragon-live-gaze-controller.ts');
   const island = await Deno.readTextFile('www/app/islands/open-dragon-live-gaze.tsx');
   assert(controller.includes(frameBase.replace('/frames/', '')));
   assert(island.includes(`${frameBase}f27.webp`));

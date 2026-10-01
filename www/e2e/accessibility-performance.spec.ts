@@ -38,7 +38,10 @@ test.describe('Accessibility', () => {
     await page.goto('/guide/getting-started');
     const contrast = (element: Element): number => {
       const luminance = (value: string): number => {
-        const rgb = value.match(/[\d.]+/g)?.slice(0, 3).map(Number) ?? [0, 0, 0];
+        const rgb = value
+          .match(/[\d.]+/g)
+          ?.slice(0, 3)
+          .map(Number) ?? [0, 0, 0];
         const scale = value.startsWith('color(srgb ') ? 1 : 255;
         const linear = rgb.map((channel) => {
           const c = channel / scale;
@@ -54,7 +57,10 @@ test.describe('Accessibility', () => {
     const codeRatio = await page.locator('open-reading-shell code').first().evaluate(contrast);
     const summaryRatio = await page.locator('open-page-rail summary').evaluate((summary) => {
       const luminance = (value: string): number => {
-        const rgb = value.match(/[\d.]+/g)?.slice(0, 3).map(Number) ?? [0, 0, 0];
+        const rgb = value
+          .match(/[\d.]+/g)
+          ?.slice(0, 3)
+          .map(Number) ?? [0, 0, 0];
         const scale = value.startsWith('color(srgb ') ? 1 : 255;
         const linear = rgb.map((channel) => {
           const c = channel / scale;
@@ -75,7 +81,9 @@ test.describe('Accessibility', () => {
     expect(summaryRatio).toBeGreaterThanOrEqual(4.5);
   });
 
-  test('layout footer restores structured chrome without skipped heading levels', async ({ page }) => {
+  test('layout footer restores structured chrome without skipped heading levels', async ({
+    page,
+  }) => {
     await page.goto('/');
     // The shell footer is a contentinfo landmark; its links and any stray
     // headings are user-visible semantics, so query by role, not class.
@@ -93,10 +101,7 @@ test.describe('Accessibility', () => {
     ).toHaveAttribute('href', '/guide/getting-started');
     await expect(
       footer.getByRole('navigation', { name: 'Company' }).getByRole('link', { name: 'GitHub' }),
-    ).toHaveAttribute(
-      'href',
-      'https://github.com/open-element/openelement',
-    );
+    ).toHaveAttribute('href', 'https://github.com/open-element/openelement');
   });
 
   test('homepage has no auto-detected a11y issues', async ({ page }) => {

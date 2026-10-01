@@ -60,10 +60,11 @@ Deno.test('defaultPageProps filters dangerous keys from params and loader data (
 
 Deno.test('defaultPageProps keeps full parity for legitimate keys (#1214)', () => {
   const runtime = createPagePropsRuntime({ dangerousKeys: DANGEROUS_KEYS });
-  assertEquals(
-    runtime.defaultPageProps({ params: { id: '42' }, data: { title: 'Hello', n: 1 } }),
-    { id: '42', title: 'Hello', n: 1 },
-  );
+  assertEquals(runtime.defaultPageProps({ params: { id: '42' }, data: { title: 'Hello', n: 1 } }), {
+    id: '42',
+    title: 'Hello',
+    n: 1,
+  });
   assertEquals(runtime.defaultPageProps({ params: { id: '7' }, data: ['a'] }), { id: '7' });
   assertEquals(runtime.defaultPageProps({}), {});
 });

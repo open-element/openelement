@@ -48,7 +48,7 @@ async function workspacePaths(): Promise<Record<string, string[]>> {
   for (const name of entries.sort()) {
     const pkg = await readPackage(join(packagesDir, name));
     if (!pkg) continue;
-    const exports = typeof pkg.exports === 'string' ? { '.': pkg.exports } : pkg.exports ?? {};
+    const exports = typeof pkg.exports === 'string' ? { '.': pkg.exports } : (pkg.exports ?? {});
     for (const [subpath, source] of Object.entries(exports)) {
       const specifier = subpath === '.' ? pkg.name : `${pkg.name}/${subpath.replace(/^\.\//, '')}`;
       paths[specifier] = [resolve(pkg.dir, String(source).replace(/^\.\//, ''))];
@@ -73,9 +73,9 @@ Deno.test('#1386: the compiled module for the canonical counter fixture type-che
   assertEquals(
     diagnostics,
     [],
-    `the emitted module must type-check; got:\n${
-      diagnostics.map((d) => `${d.line}:${d.character} TS${d.code} ${d.message}`).join('\n')
-    }`,
+    `the emitted module must type-check; got:\n${diagnostics
+      .map((d) => `${d.line}:${d.character} TS${d.code} ${d.message}`)
+      .join('\n')}`,
   );
 });
 
@@ -131,9 +131,9 @@ Deno.test('#1386: the emitted module type-checks across the authoring grammar', 
     assertEquals(
       diagnostics,
       [],
-      `${name} must emit a type-checking module; got:\n${
-        diagnostics.map((d) => `${d.line}:${d.character} TS${d.code} ${d.message}`).join('\n')
-      }`,
+      `${name} must emit a type-checking module; got:\n${diagnostics
+        .map((d) => `${d.line}:${d.character} TS${d.code} ${d.message}`)
+        .join('\n')}`,
     );
   }
 });

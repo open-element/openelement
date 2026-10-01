@@ -31,10 +31,10 @@ export interface BatchedSignalEngine extends SignalEngine {
 export function isSignalLike(value: unknown): value is SignalLike {
   return Boolean(
     value &&
-      typeof value === 'object' &&
-      (value as Partial<SignalLike>)[SIGNAL_BRAND] === true &&
-      'value' in value &&
-      typeof (value as SignalLike).subscribe === 'function',
+    typeof value === 'object' &&
+    (value as Partial<SignalLike>)[SIGNAL_BRAND] === true &&
+    'value' in value &&
+    typeof (value as SignalLike).subscribe === 'function',
   );
 }
 

@@ -23,7 +23,8 @@ export function safeInternalNext(raw: string | null | undefined, fallback = FALL
       candidate.startsWith('//') ||
       candidate.includes('\\') ||
       hasControlCharacter(candidate)
-    ) return fallback;
+    )
+      return fallback;
     let decoded: string;
     try {
       decoded = decodeURIComponent(candidate);

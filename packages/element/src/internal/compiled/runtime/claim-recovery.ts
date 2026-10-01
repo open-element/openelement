@@ -45,14 +45,15 @@ function recoverStreamRange(ctx: MountContext, range: StreamClaimRange, index: n
   const { parent, anchor, end } = range;
   const doc = parent.ownerDocument;
   if (!doc || anchor.parentNode !== parent || end.parentNode !== parent) return false;
-  const nodes = part.k === 'text'
-    ? (() => {
-      const value = displayValue(signalOf(ctx, part.signal).value);
-      return value ? [doc.createTextNode(value)] : [];
-    })()
-    : part.k === 'when' || part.k === 'each'
-    ? buildRecoveryRegionContent(ctx, doc, part)
-    : [];
+  const nodes =
+    part.k === 'text'
+      ? (() => {
+          const value = displayValue(signalOf(ctx, part.signal).value);
+          return value ? [doc.createTextNode(value)] : [];
+        })()
+      : part.k === 'when' || part.k === 'each'
+        ? buildRecoveryRegionContent(ctx, doc, part)
+        : [];
   let cursor = anchor.nextSibling;
   while (cursor && cursor !== end) {
     const next = cursor.nextSibling;
@@ -109,10 +110,8 @@ export function resolveStreamRange(
       scope.dispose();
       if (!(error instanceof PartProgramClaimError)) throw error;
       options.onMismatch?.(error);
-      if (
-        options.recovery !== 'owning' || recovered ||
-        !recoverStreamRange(ctx, range, index)
-      ) throw error;
+      if (options.recovery !== 'owning' || recovered || !recoverStreamRange(ctx, range, index))
+        throw error;
       recovered = true;
     }
   }

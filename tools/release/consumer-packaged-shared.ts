@@ -128,12 +128,14 @@ export function declarationTypeEdges(text: string): string[] {
   const edges: string[] = [];
   const visit = (node: ts.Node): void => {
     if (
-      ts.isImportDeclaration(node) && node.importClause !== undefined &&
+      ts.isImportDeclaration(node) &&
+      node.importClause !== undefined &&
       ts.isStringLiteral(node.moduleSpecifier)
     ) {
       edges.push(node.moduleSpecifier.text);
     } else if (
-      ts.isExportDeclaration(node) && node.moduleSpecifier !== undefined &&
+      ts.isExportDeclaration(node) &&
+      node.moduleSpecifier !== undefined &&
       ts.isStringLiteral(node.moduleSpecifier)
     ) {
       edges.push(node.moduleSpecifier.text);
@@ -154,10 +156,13 @@ async function run(
   // so track the timeout explicitly to report it instead of an empty failure.
   const controller = new AbortController();
   let timedOut = false;
-  const timeoutId = timeoutMs === undefined ? undefined : setTimeout(() => {
-    timedOut = true;
-    controller.abort();
-  }, timeoutMs);
+  const timeoutId =
+    timeoutMs === undefined
+      ? undefined
+      : setTimeout(() => {
+          timedOut = true;
+          controller.abort();
+        }, timeoutMs);
   try {
     const result = await new Deno.Command(command, {
       args,
@@ -236,9 +241,7 @@ async function withServer(
       }
     }
     if (!ready) {
-      throw new Error(
-        `${label} did not become ready within ${SERVER_READY_TIMEOUT_MS}ms`,
-      );
+      throw new Error(`${label} did not become ready within ${SERVER_READY_TIMEOUT_MS}ms`);
     }
     await probe(baseUrl);
   } catch (error) {
@@ -261,9 +264,9 @@ async function withServer(
     // after stopping the process; awaiting live pipes on a readiness timeout
     // would itself hang qualification forever.
     throw new Error(
-      `${label}: ${String(failure)}\n${(await stdout).slice(-12000)}\n${
-        (await stderr).slice(-12000)
-      }`,
+      `${label}: ${String(failure)}\n${(await stdout).slice(-12000)}\n${(await stderr).slice(
+        -12000,
+      )}`,
       { cause: failure },
     );
   }
@@ -315,9 +318,9 @@ async function pollDevPage(
       const missing = (expect.present ?? []).filter((marker) => !body.includes(marker));
       const leaked = (expect.absent ?? []).filter((marker) => body.includes(marker));
       if (statusOk && missing.length === 0 && leaked.length === 0) return;
-      last = `status=${response.status}, missing=[${missing.join(', ')}], leaked=[${
-        leaked.join(', ')
-      }]`;
+      last = `status=${response.status}, missing=[${missing.join(', ')}], leaked=[${leaked.join(
+        ', ',
+      )}]`;
     } catch (error) {
       last = formatError(error);
     }
@@ -392,9 +395,7 @@ const cellKey = (leg: PackedAppRenderer, cell: PackedAppCellName): string => `${
 function record(leg: PackedAppRenderer, cell: PackedAppCellName, outcome: PackedAppOutcome): void {
   outcomes.set(cellKey(leg, cell), outcome);
   const short = outcome.detail.split('\n')[0].slice(0, 240);
-  console.log(
-    `${outcome.ok ? 'PASS' : 'FAIL'} ${leg} ${cell}${short ? ` — ${short}` : ''}`,
-  );
+  console.log(`${outcome.ok ? 'PASS' : 'FAIL'} ${leg} ${cell}${short ? ` — ${short}` : ''}`);
   if (!outcome.ok && outcome.detail.includes('\n')) {
     console.error(outcome.detail);
   }
@@ -665,9 +666,7 @@ async function runGetProbes(spec: PackedAppLegSpec, baseUrl: string): Promise<st
     const raw = await response.text();
     const body = spec.stripMarkers ? stripLitMarkers(raw) : raw;
     if (response.status !== probe.status) {
-      throw new Error(
-        `probe ${probe.path}: status=${response.status}, expected ${probe.status}`,
-      );
+      throw new Error(`probe ${probe.path}: status=${response.status}, expected ${probe.status}`);
     }
     for (const marker of probe.markers) assertIncludes(body, marker, `GET ${probe.path}`);
     for (const absent of probe.absentMarkers ?? []) {
@@ -960,10 +959,7 @@ interface SessionOutcome {
  * failures are captured per phase (the session keeps going so a GET failure
  * does not hide the form results); a readiness failure fails all three.
  */
-async function serveSession(
-  spec: PackedAppLegSpec,
-  tmp: string,
-): Promise<SessionOutcome> {
+async function serveSession(spec: PackedAppLegSpec, tmp: string): Promise<SessionOutcome> {
   const label = `packed-app-${spec.renderer} start server`;
   const argsFor = () => ['task', 'start'];
   const pending = (phase: string): PackedAppOutcome => ({
@@ -990,10 +986,7 @@ async function serveSession(
   return result;
 }
 
-function combineFormOutcomes(
-  label: string,
-  outcome: PackedAppOutcome | undefined,
-): string {
+function combineFormOutcomes(label: string, outcome: PackedAppOutcome | undefined): string {
   if (!outcome) throw new Error(`${label} failed: start: not run`);
   if (!outcome.ok) throw new Error(`${label} failed: start: FAIL (${outcome.detail})`);
   return `start: ok (${outcome.detail})`;
@@ -1049,10 +1042,15 @@ function walkRouterDeclarations(tmp: string): string {
     }
     // Resolution walk follows type-bearing edges only (see declarationTypeEdges).
     for (const fileName of declarationTypeEdges(text)) {
-      const resolved = ts.resolveModuleName(fileName, path, {
-        moduleResolution: ts.ModuleResolutionKind.Bundler,
-        module: ts.ModuleKind.ESNext,
-      }, host).resolvedModule;
+      const resolved = ts.resolveModuleName(
+        fileName,
+        path,
+        {
+          moduleResolution: ts.ModuleResolutionKind.Bundler,
+          module: ts.ModuleKind.ESNext,
+        },
+        host,
+      ).resolvedModule;
       if (!resolved) {
         unresolved.push(`${path} -> ${fileName}`);
         continue;
@@ -1172,11 +1170,10 @@ function consumerDenoJson(spec: PackedAppLegSpec): Record<string, unknown> {
       '@openelement/router/vite': `npm:@openelement/router@${PACKAGE_VERSION}/vite`,
       '@openelement/element': `npm:@openelement/element@${PACKAGE_VERSION}`,
       '@openelement/element/jsx-runtime': `npm:@openelement/element@${PACKAGE_VERSION}/jsx-runtime`,
-      '@openelement/element/jsx-dev-runtime':
-        `npm:@openelement/element@${PACKAGE_VERSION}/jsx-dev-runtime`,
+      '@openelement/element/jsx-dev-runtime': `npm:@openelement/element@${PACKAGE_VERSION}/jsx-dev-runtime`,
       ...spec.importMapExtras,
-      'hono': 'npm:hono@4.12.0',
-      'vite': `npm:vite@${VITE_DEV_PIN}`,
+      hono: 'npm:hono@4.12.0',
+      vite: `npm:vite@${VITE_DEV_PIN}`,
     },
     nodeModulesDir: 'manual',
     minimumDependencyAge: 0,
@@ -1184,15 +1181,12 @@ function consumerDenoJson(spec: PackedAppLegSpec): Record<string, unknown> {
       // The public development command, same shape as the create template:
       // scoped permissions with the Vite native binding allowed (build/dev
       // host) and prompts off.
-      dev:
-        `deno run --config deno.json --allow-read --allow-write --allow-env --allow-net --allow-run --allow-sys --allow-ffi --no-prompt npm:vite@${VITE_DEV_PIN} dev`,
-      build:
-        `deno run --config deno.json --allow-read --allow-write --allow-env --allow-net --allow-run --allow-sys --allow-ffi --no-prompt npm:@openelement/router@${PACKAGE_VERSION}/cli/build`,
-      start:
-        `deno run --config deno.json --allow-read --allow-write --allow-env --allow-net --allow-run --allow-sys --allow-ffi --no-prompt npm:@openelement/router@${PACKAGE_VERSION}/cli/start`,
-      check: `deno check --config deno.json ${
-        spec.checkEntries.map((entry) => `'${entry}'`).join(' ')
-      }`,
+      dev: `deno run --config deno.json --allow-read --allow-write --allow-env --allow-net --allow-run --allow-sys --allow-ffi --no-prompt npm:vite@${VITE_DEV_PIN} dev`,
+      build: `deno run --config deno.json --allow-read --allow-write --allow-env --allow-net --allow-run --allow-sys --allow-ffi --no-prompt npm:@openelement/router@${PACKAGE_VERSION}/cli/build`,
+      start: `deno run --config deno.json --allow-read --allow-write --allow-env --allow-net --allow-run --allow-sys --allow-ffi --no-prompt npm:@openelement/router@${PACKAGE_VERSION}/cli/start`,
+      check: `deno check --config deno.json ${spec.checkEntries
+        .map((entry) => `'${entry}'`)
+        .join(' ')}`,
     },
     compilerOptions: spec.compilerOptions,
   };
@@ -1225,8 +1219,8 @@ export async function qualifyPackedAppLeg(spec: PackedAppLegSpec): Promise<void>
       // the dev-exercising consumer pins it explicitly (same contract the
       // create starter template declares).
       const dependencies: Record<string, string> = {
-        'vite': VITE_DEV_PIN,
-        'hono': '4.12.0',
+        vite: VITE_DEV_PIN,
+        hono: '4.12.0',
         '@hono/vite-dev-server': '^0.25.3',
         ...spec.externals,
       };
@@ -1339,17 +1333,11 @@ export async function qualifyPackedAppLeg(spec: PackedAppLegSpec): Promise<void>
       return `cli/start: ${result.gets.detail}`;
     });
 
-    await cell(
-      leg,
-      'form-422',
-      ['build'],
-      () => Promise.resolve(combineFormOutcomes('form-422', form422.start)),
+    await cell(leg, 'form-422', ['build'], () =>
+      Promise.resolve(combineFormOutcomes('form-422', form422.start)),
     );
-    await cell(
-      leg,
-      'form-303',
-      ['build'],
-      () => Promise.resolve(combineFormOutcomes('form-303', form303.start)),
+    await cell(leg, 'form-303', ['build'], () =>
+      Promise.resolve(combineFormOutcomes('form-303', form303.start)),
     );
 
     await cell(leg, 'browser-continuation', ['build'], async () => {
@@ -1363,8 +1351,7 @@ export async function qualifyPackedAppLeg(spec: PackedAppLegSpec): Promise<void>
           summary = await runBrowserContinuationProbe(tmp, baseUrl, leg);
         },
       );
-      return summary ||
-        'chromium+firefox+webkit: island activates in place without a full reload';
+      return summary || 'chromium+firefox+webkit: island activates in place without a full reload';
     });
 
     await cell(leg, 'boundary', ['install'], () => {
@@ -1376,8 +1363,9 @@ export async function qualifyPackedAppLeg(spec: PackedAppLegSpec): Promise<void>
           `No dist/client browser bundle (build cell failed); declaration graph: ${declarationSummary}`,
         );
       }
-      const assets = [...walkSync(clientDir, { includeDirs: false })]
-        .filter((entry) => entry.name.endsWith('.js'));
+      const assets = [...walkSync(clientDir, { includeDirs: false })].filter((entry) =>
+        entry.name.endsWith('.js'),
+      );
       if (assets.length === 0) {
         throw new Error('dist/client contains no JS assets to scan');
       }
@@ -1389,9 +1377,7 @@ export async function qualifyPackedAppLeg(spec: PackedAppLegSpec): Promise<void>
         const text = Deno.readTextFileSync(assetPath);
         for (const { fileName } of ts.preProcessFile(text).importedFiles) {
           if (BOUNDARY_SPECIFIER_PATTERN.test(fileName)) {
-            throw new Error(
-              `Browser bundle boundary leak: ${assetPath} imports ${fileName}`,
-            );
+            throw new Error(`Browser bundle boundary leak: ${assetPath} imports ${fileName}`);
           }
         }
       }

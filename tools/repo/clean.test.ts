@@ -19,27 +19,25 @@ async function writeTree(root: string, paths: readonly string[]): Promise<void> 
 }
 
 Deno.test('clean refuses absolute, home, escaping and broad targets', () => {
-  for (
-    const bad of [
-      '',
-      '/',
-      '~',
-      '~/secrets',
-      '..',
-      '../outside',
-      'packages/../../outside',
-      '.',
-      'a//b',
-      'a/',
-      'a\\b',
-      'C:/tmp',
-      'C:\\tmp',
-      '*',
-      '**',
-      'packages/**',
-      '*/*/*',
-    ]
-  ) {
+  for (const bad of [
+    '',
+    '/',
+    '~',
+    '~/secrets',
+    '..',
+    '../outside',
+    'packages/../../outside',
+    '.',
+    'a//b',
+    'a/',
+    'a\\b',
+    'C:/tmp',
+    'C:\\tmp',
+    '*',
+    '**',
+    'packages/**',
+    '*/*/*',
+  ]) {
     assertThrows(() => assertSafeTarget(bad), Error, 'clean:', bad);
   }
 });
@@ -63,13 +61,11 @@ Deno.test('clean defaults stay separate from opt-in deep targets', () => {
   assert(DEEP_TARGETS.includes('node_modules'));
   assert(!DEFAULT_TARGETS.includes('node_modules'));
   // Site E2E output is regenerable and safe by default.
-  for (
-    const target of [
-      'www/e2e/test-results',
-      'www/e2e/playwright-report',
-      'www/playwright-report',
-    ]
-  ) {
+  for (const target of [
+    'www/e2e/test-results',
+    'www/e2e/playwright-report',
+    'www/playwright-report',
+  ]) {
     assert(DEFAULT_TARGETS.includes(target), `${target} must be a default clean target`);
   }
 });
@@ -124,7 +120,10 @@ Deno.test('default clean removes generated output and preserves user content', a
     assert(removed > 0);
     for (const relativePath of generated) {
       assert(
-        await Deno.stat(join(root, relativePath)).then(() => false, () => true),
+        await Deno.stat(join(root, relativePath)).then(
+          () => false,
+          () => true,
+        ),
         `expected removed: ${relativePath}`,
       );
     }
@@ -157,11 +156,7 @@ Deno.test('clean refuses non-allowlisted targets and symlinks are unlinked, not 
     await writeTree(outside, ['site-src/dist/keep.txt']);
     await Deno.mkdir(join(root, 'apps'), { recursive: true });
     await Deno.symlink(join(outside, 'site-src'), join(root, 'www'));
-    await assertRejects(
-      () => cleanTargets(root, ['www/dist'], quiet),
-      Error,
-      'resolves outside',
-    );
+    await assertRejects(() => cleanTargets(root, ['www/dist'], quiet), Error, 'resolves outside');
     assertEquals(
       await Deno.readTextFile(join(outside, 'site-src/dist/keep.txt')),
       'site-src/dist/keep.txt\n',

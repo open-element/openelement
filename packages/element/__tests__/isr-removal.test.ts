@@ -39,70 +39,56 @@ Deno.test('ISR modules are deleted from @openelement/element internals', async (
 });
 
 Deno.test('no ISR surface remains in element public entry points', async () => {
-  for (
-    const path of [
-      'packages/element/src/index.ts',
-      // #1416: the export list lives in public-surface.ts and both entries
-      // re-export it, so the shared seam is scanned directly — scanning only
-      // the entries would miss a name added to the surface.
-      'packages/element/src/public-surface.ts',
-      'packages/element/src/client-only.ts',
-      'packages/element/src/public-contracts.ts',
-      'packages/element/src/public-build-runtime.ts',
-      'packages/element/src/build-utils.ts',
-      'packages/element/src/internal/core/index.ts',
-      'packages/element/src/internal/protocol/framework.ts',
-      'packages/element/src/internal/protocol/runtime.ts',
-    ]
-  ) {
+  for (const path of [
+    'packages/element/src/index.ts',
+    // #1416: the export list lives in public-surface.ts and both entries
+    // re-export it, so the shared seam is scanned directly — scanning only
+    // the entries would miss a name added to the surface.
+    'packages/element/src/public-surface.ts',
+    'packages/element/src/client-only.ts',
+    'packages/element/src/public-contracts.ts',
+    'packages/element/src/public-build-runtime.ts',
+    'packages/element/src/build-utils.ts',
+    'packages/element/src/internal/core/index.ts',
+    'packages/element/src/internal/protocol/framework.ts',
+    'packages/element/src/internal/protocol/runtime.ts',
+  ]) {
     const source = await readRepoFile(path);
-    for (
-      const token of [
-        'IsrManifestEntry',
-        'IsrCacheEntry',
-        'IsrCacheResult',
-        'CacheAdapter',
-        'CacheEntry',
-        'createIsrCacheKey',
-        'isr-manifest',
-        'revalidate',
-      ]
-    ) {
-      assert(
-        !source.includes(token),
-        `${path} must not reference ${token} (#1217)`,
-      );
+    for (const token of [
+      'IsrManifestEntry',
+      'IsrCacheEntry',
+      'IsrCacheResult',
+      'CacheAdapter',
+      'CacheEntry',
+      'createIsrCacheKey',
+      'isr-manifest',
+      'revalidate',
+    ]) {
+      assert(!source.includes(token), `${path} must not reference ${token} (#1217)`);
     }
   }
 });
 
 Deno.test('no ISR/revalidate semantics remain in app authoring or adapter SSG', async () => {
-  for (
-    const path of [
-      'packages/router/src/authoring.ts',
-      'packages/router/src/vite/internal/ssg/ssg-helpers.ts',
-      'packages/router/src/vite/internal/ssg/ssg-render.ts',
-      'packages/router/src/vite/internal/ssg/entry-route-helpers.ts',
-      'packages/router/src/vite/internal/ssg/entry-render-ssg.ts',
-      'packages/router/src/vite/internal/protocol/framework.ts',
-      'packages/router/src/vite/internal/protocol/ssg.ts',
-      'packages/router/src/vite/framework.ts',
-    ]
-  ) {
+  for (const path of [
+    'packages/router/src/authoring.ts',
+    'packages/router/src/vite/internal/ssg/ssg-helpers.ts',
+    'packages/router/src/vite/internal/ssg/ssg-render.ts',
+    'packages/router/src/vite/internal/ssg/entry-route-helpers.ts',
+    'packages/router/src/vite/internal/ssg/entry-render-ssg.ts',
+    'packages/router/src/vite/internal/protocol/framework.ts',
+    'packages/router/src/vite/internal/protocol/ssg.ts',
+    'packages/router/src/vite/framework.ts',
+  ]) {
     const source = await readRepoFile(path);
-    for (
-      const token of [
-        'IsrManifestEntry',
-        'IsrCache',
-        'createIsrCacheKey',
-        'isr-manifest',
-        'revalidate',
-      ]
-    ) {
-      assert(
-        !source.includes(token),
-        `${path} must not reference ${token} (#1217)`,
-      );
+    for (const token of [
+      'IsrManifestEntry',
+      'IsrCache',
+      'createIsrCacheKey',
+      'isr-manifest',
+      'revalidate',
+    ]) {
+      assert(!source.includes(token), `${path} must not reference ${token} (#1217)`);
     }
   }
 });
