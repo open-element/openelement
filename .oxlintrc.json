@@ -32,7 +32,13 @@
     "for-direction": "deny",
     "getter-return": "deny",
     "jsx-boolean-value": "deny",
-    "jsx-curly-brace-presence": "deny",
+    "jsx-curly-brace-presence": [
+      "deny",
+      {
+        "children": "ignore",
+        "propElementValues": "ignore"
+      }
+    ],
     "jsx-key": "deny",
     "jsx-no-comment-textnodes": "deny",
     "jsx-no-duplicate-props": "deny",

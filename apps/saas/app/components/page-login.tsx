@@ -47,14 +47,14 @@ export default class LoginPage extends OpenElement {
           <form method='post' action='/login?/oauth'>
             {this.oauthGoogle > 0 ? (
               <button type='submit' name='provider' value='google'>
-                Continue with Google
+                {'Continue with Google'}
               </button>
             ) : (
               <span></span>
             )}
             {this.oauthGithub > 0 ? (
               <button type='submit' name='provider' value='github'>
-                Continue with GitHub
+                {'Continue with GitHub'}
               </button>
             ) : (
               <span></span>

@@ -41,7 +41,7 @@ export default class WorkspaceRecordsPage extends OpenElement {
           <input type='hidden' name='q' value={this.filterTitlePrefix} />
           <input type='hidden' name='cursor' value={this.nextCursor} />
           <button id='next-page' type='submit'>
-            Next page
+            {'Next page'}
           </button>
         </form>
         {this.invalid > 0 ? <p id='invalid'>Valid workspace required.</p> : <span></span>}

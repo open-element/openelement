@@ -173,7 +173,7 @@ export default class OpenReadingShell extends OpenElement {
                   </a>
                   <span hidden={this.hideBreadcrumbText}>{this.breadcrumb}</span>
                   <span class='crumb-sep' aria-hidden='true'>
-                    /
+                    {'/'}
                   </span>
                   <span class='crumb-current' aria-current='page'>
                     {this.pageTitle}

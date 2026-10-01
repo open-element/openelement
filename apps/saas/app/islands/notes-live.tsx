@@ -91,7 +91,7 @@ export default class NotesLive extends OpenElement {
           ))}
         </ul>
         <button type='button' onClick={this.reconnectNow}>
-          Reconnect
+          {'Reconnect'}
         </button>
       </section>
     );

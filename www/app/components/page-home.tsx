@@ -184,7 +184,7 @@ export default class PageHome extends OpenElement {
                 </a>
               </div>
               <span class='scroll-cue' aria-hidden='true'>
-                Scroll
+                {'Scroll'}
               </span>
             </div>
           </div>
@@ -221,7 +221,7 @@ export default class PageHome extends OpenElement {
 
         <section class='scene scene-split' id='element'>
           <span class='scene-outlined' aria-hidden='true'>
-            01
+            {'01'}
           </span>
           <div class='scene-copy'>
             <p class='scene-index'>{this.sceneElementIndex}</p>
@@ -285,7 +285,7 @@ export class OpenCounter extends OpenElement {
               </code>
             </div>
             <span class='flood-arrow' aria-hidden='true'>
-              ⟶
+              {'⟶'}
             </span>
             <div class='flood-panel solid'>
               <small>{this.floodBrowser}</small>

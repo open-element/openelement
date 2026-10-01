@@ -729,7 +729,7 @@ export default class OpenLayout extends OpenElement {
                 <summary class='mobile-menu-btn'>
                   <span class='mobile-menu-label'>{this.menuOpen}</span>
                   <span class='mobile-menu-icon' aria-hidden='true'>
-                    ☰
+                    {'☰'}
                   </span>
                 </summary>
                 <nav class='mobile-menu-panel' aria-label={this.mobileNavLabel}>

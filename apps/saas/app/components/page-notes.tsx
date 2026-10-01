@@ -87,7 +87,7 @@ export default class NotesPage extends OpenElement {
         <form method='get' action='/notes'>
           <input type='hidden' name='cursor' value={this.nextCursor} />
           <button id='next-notes-page' type='submit'>
-            Next page
+            {'Next page'}
           </button>
         </form>
         <notes-live

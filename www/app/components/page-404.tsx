@@ -49,7 +49,7 @@ export default class Page404 extends OpenElement {
           <h1 class='code' aria-label='404'>
             <span aria-hidden='true'>4</span>
             <span class='solid' aria-hidden='true'>
-              0
+              {'0'}
             </span>
             <span aria-hidden='true'>4</span>
           </h1>

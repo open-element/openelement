@@ -70,62 +70,62 @@ export default class PageDocs extends OpenElement {
         <nav class='entrances' aria-label={this.navLabel}>
           <a class='entrance' href={this.entrance1Href}>
             <span class='entrance-index' aria-hidden='true'>
-              01
+              {'01'}
             </span>
             <div>
               <span class='entrance-title'>{this.entrance1Title}</span>
               <p class='entrance-copy'>{this.entrance1Copy}</p>
             </div>
             <span class='entrance-arrow' aria-hidden='true'>
-              →
+              {'→'}
             </span>
           </a>
           <a class='entrance' href={this.entrance2Href}>
             <span class='entrance-index' aria-hidden='true'>
-              02
+              {'02'}
             </span>
             <div>
               <span class='entrance-title'>{this.entrance2Title}</span>
               <p class='entrance-copy'>{this.entrance2Copy}</p>
             </div>
             <span class='entrance-arrow' aria-hidden='true'>
-              →
+              {'→'}
             </span>
           </a>
           <a class='entrance' href={this.entrance3Href}>
             <span class='entrance-index' aria-hidden='true'>
-              03
+              {'03'}
             </span>
             <div>
               <span class='entrance-title'>{this.entrance3Title}</span>
               <p class='entrance-copy'>{this.entrance3Copy}</p>
             </div>
             <span class='entrance-arrow' aria-hidden='true'>
-              →
+              {'→'}
             </span>
           </a>
           <a class='entrance' href={this.entrance4Href}>
             <span class='entrance-index' aria-hidden='true'>
-              04
+              {'04'}
             </span>
             <div>
               <span class='entrance-title'>{this.entrance4Title}</span>
               <p class='entrance-copy'>{this.entrance4Copy}</p>
             </div>
             <span class='entrance-arrow' aria-hidden='true'>
-              →
+              {'→'}
             </span>
           </a>
           <a class='entrance' href={this.entrance5Href}>
             <span class='entrance-index' aria-hidden='true'>
-              05
+              {'05'}
             </span>
             <div>
               <span class='entrance-title'>{this.entrance5Title}</span>
               <p class='entrance-copy'>{this.entrance5Copy}</p>
             </div>
             <span class='entrance-arrow' aria-hidden='true'>
-              →
+              {'→'}
             </span>
           </a>
         </nav>
