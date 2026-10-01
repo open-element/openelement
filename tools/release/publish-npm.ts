@@ -376,10 +376,19 @@ export async function packPackage(
           }`,
         );
       }
+      // Per-package pack summary in the evidence contract format: the
+      // candidate evidence recorder parses exactly this line out of the
+      // publish:npm:dry-run log and requires one per package
+      // (tools/repo/candidate-evidence-record.ts). Both zero fields are
+      // genuinely zero here — errors and unexpectedWarnings throw above —
+      // and knownUpstreamPrivateWarnings is 0 because the deno-pack
+      // known-upstream classifier retired with the A1 swap (vp warnings all
+      // fail closed). unresolvedExternals trails as log-only context.
       console.log(
         `[npm] ${pkg.name}: pack diagnostics ` +
-          `errors=0 unexpectedWarnings=0 unresolvedExternals=${summary.unresolvedImports.length} ` +
-          `publicDeclarations=${publicDeclarations} declarationClosure=${declarationGraph.reached.length}`,
+          `errors=0 unexpectedWarnings=0 knownUpstreamPrivateWarnings=0 ` +
+          `publicDeclarations=${publicDeclarations} declarationClosure=${declarationGraph.reached.length} ` +
+          `unresolvedExternals=${summary.unresolvedImports.length}`,
       );
       Deno.writeTextFileSync(pkgJsonPath, formatJson(pkgJson));
       // Repack proof: only approved manifest fields may differ from the raw
