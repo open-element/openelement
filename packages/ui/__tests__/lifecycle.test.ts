@@ -33,7 +33,7 @@ import { readInstanceState, writeInstanceState } from '../src/instance-state.ts'
 
 installDomHarness();
 
-// deno-lint-ignore no-explicit-any
+// oxlint-disable-next-line no-explicit-any
 type AnyComponent = any;
 
 // ─── instance-state: the per-host foundation every lifecycle guard builds on ─

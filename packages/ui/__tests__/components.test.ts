@@ -25,7 +25,7 @@ import {
 
 installDomHarness();
 
-// deno-lint-ignore no-explicit-any
+// oxlint-disable-next-line no-explicit-any
 type AnyComponent = any;
 
 // ─── open-button: click/form choreography (#637, #757) ──────────────────────

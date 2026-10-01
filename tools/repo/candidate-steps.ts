@@ -156,8 +156,8 @@ export const STATIC_JOB_STEPS: Record<
   readonly { name: string; command: readonly string[] }[]
 > = {
   'fast-checks': [
-    { name: 'fmt-check', command: ['deno', 'fmt', '--check'] },
-    { name: 'lint', command: ['deno', 'lint'] },
+    { name: 'fmt-check', command: ['deno', 'task', 'fmt:check'] },
+    { name: 'lint', command: ['deno', 'task', 'lint'] },
     { name: 'markdown', command: ['deno', 'task', '--cwd', 'tools/repo', 'lint:markdown'] },
     { name: 'typecheck', command: ['deno', 'task', 'typecheck'] },
   ],

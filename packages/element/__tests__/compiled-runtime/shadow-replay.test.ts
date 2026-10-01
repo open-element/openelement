@@ -37,7 +37,7 @@ const { OpenElement, ensurePreHydrationClickCapture, renderDsd } = await import(
   '../../src/index.ts'
 );
 
-// deno-lint-ignore no-explicit-any
+// oxlint-disable-next-line no-explicit-any
 type AnyElement = any;
 
 function defineCounter(tag: string, rootMode: 'light' | 'shadow-open'): void {

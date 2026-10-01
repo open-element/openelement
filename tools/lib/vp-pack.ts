@@ -74,7 +74,7 @@ export const ROUTER_CLIENT_RUNTIME_ENTRIES = [
 /** Strip ANSI color escapes for stable log scans. */
 export function stripPackAnsi(text: string): string {
   // Intentional ANSI color stripping for log scans.
-  // deno-lint-ignore no-control-regex
+  // oxlint-disable-next-line no-control-regex
   return text.replace(/\x1b\[[0-9;]*m/g, '');
 }
 

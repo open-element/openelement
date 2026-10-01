@@ -4,7 +4,7 @@
  * Tests that the internal plugin factory returns valid plugin arrays with correct
  * structure and re-exports.
  */
-// deno-lint-ignore-file ban-types
+/* oxlint-disable ban-types */
 import {
   assertArrayIncludes,
   assertEquals,

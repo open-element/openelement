@@ -26,7 +26,7 @@ const dom = installFacadeDom();
 const { ErrorBoundary } = await import('@openelement/element');
 const { renderDsd } = await import('@openelement/element');
 
-// deno-lint-ignore no-explicit-any
+// oxlint-disable-next-line no-explicit-any
 type AnyElement = any;
 type BoundaryInstance = InstanceType<typeof ErrorBoundary>;
 

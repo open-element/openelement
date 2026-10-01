@@ -42,7 +42,9 @@
     "gray-matter": "npm:gray-matter@^4.0.3",
     "@openelement/site-ui/": "./www/app/site-ui/",
     "@openelement/generated/blog-data": "./www/app/data/_generated-blog-data.ts",
-    "pagefind": "npm:pagefind@^1.4.0"
+    "pagefind": "npm:pagefind@^1.4.0",
+    "oxfmt": "npm:oxfmt@0.70.0",
+    "oxlint": "npm:oxlint@1.85.0"
   },
   "vendor": true,
   "nodeModulesDir": "manual",
@@ -62,9 +64,9 @@
     "clean": "deno run --allow-read --allow-write tools/repo/clean.ts",
     "clean:deep": "deno run --allow-read --allow-write tools/repo/clean.ts --deep",
     "bench": "deno test --no-prompt --deny-ffi --allow-read --allow-write --allow-env --allow-net --allow-run --allow-sys benchmarks/",
-    "fmt": "deno fmt",
-    "fmt:check": "deno fmt --check",
-    "lint": "deno lint",
+    "fmt": "oxfmt",
+    "fmt:check": "oxfmt --check",
+    "lint": "oxlint",
     "typecheck": "deno task --filter @openelement/element typecheck && deno task --filter @openelement/router typecheck && deno task --filter @openelement/create typecheck && deno task --filter @openelement/ui typecheck",
     "gate:release": "deno run --allow-run tools/repo/gate.ts tools/repo#gate:release tools/release#gate:packed",
     "saas:workers": "deno run --allow-run tools/repo/gate.ts apps/saas#build apps/saas#nitro:build-workers tools/repo#workers:boundary-check",

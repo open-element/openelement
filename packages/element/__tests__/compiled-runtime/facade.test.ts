@@ -76,7 +76,7 @@ function freshCounter(attrs: Record<string, string> = {}): InstanceType<typeof P
   return element;
 }
 
-// deno-lint-ignore no-explicit-any
+// oxlint-disable-next-line no-explicit-any
 type AnyElement = any;
 
 function shadowOf(element: AnyElement): AnyElement {

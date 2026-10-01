@@ -74,7 +74,7 @@ export abstract class FacadeNodeBase {
   }
 
   getRootNode(): FacadeNode {
-    // deno-lint-ignore no-this-alias
+    // oxlint-disable-next-line no-this-alias
     let root: FacadeNodeBase = this;
     while (root.parentNode) root = root.parentNode;
     return root as unknown as FacadeNode;

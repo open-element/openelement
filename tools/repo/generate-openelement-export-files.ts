@@ -104,10 +104,13 @@ function render(map: Record<string, PackageExports>): string {
 }
 
 async function runFormatter(target: string): Promise<void> {
-  const cmd = new Deno.Command('deno', { args: ['fmt', target] });
+  // oxfmt is the repository formatter (A2 engine swap); the binary comes
+  // from the deno-installed root node_modules (pinned in deno.json imports).
+  const oxfmt = new URL('../../node_modules/.bin/oxfmt', import.meta.url).pathname;
+  const cmd = new Deno.Command(oxfmt, { args: [target] });
   const status = await cmd.output();
   if (!status.success) {
-    throw new Error(`deno fmt failed on ${target}`);
+    throw new Error(`oxfmt failed on ${target}`);
   }
 }
 

@@ -224,6 +224,7 @@ export class OpenButton extends OpenElement {
         <button
           class='control btn'
           part='control'
+          // oxlint-disable-next-line button-has-type -- dynamic type is a validated public prop
           type={this.type}
           disabled={this.disabled}
           hidden={this.linkMode}

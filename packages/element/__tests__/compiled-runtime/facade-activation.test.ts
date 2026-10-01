@@ -32,7 +32,7 @@ const { OpenElement, ensurePreHydrationClickCapture, renderDsd } = await import(
   '../../src/index.ts'
 );
 
-// deno-lint-ignore no-explicit-any
+// oxlint-disable-next-line no-explicit-any
 type AnyElement = any;
 
 interface ActivationSpec {

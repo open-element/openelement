@@ -54,7 +54,7 @@
   "tasks": {
     "build": "deno check src/",
     "test": "deno test --no-prompt --allow-read --allow-write --allow-env --allow-net --allow-run --allow-ffi --allow-sys",
-    "lint": "deno lint src/ __tests__/",
+    "lint": "oxlint src __tests__",
     "typecheck": "deno check src/"
   },
   "peerDependencies": {

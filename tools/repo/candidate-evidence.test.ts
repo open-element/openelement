@@ -97,8 +97,8 @@ function stepArgv(job: string, name: string): string[] {
   }
   const staticTable: Record<string, Record<string, string[]>> = {
     'fast-checks': {
-      'fmt-check': ['deno', 'fmt', '--check'],
-      lint: ['deno', 'lint'],
+      'fmt-check': ['deno', 'task', 'fmt:check'],
+      lint: ['deno', 'task', 'lint'],
       markdown: ['deno', 'task', '--cwd', 'tools/repo', 'lint:markdown'],
       typecheck: ['deno', 'task', 'typecheck'],
     },

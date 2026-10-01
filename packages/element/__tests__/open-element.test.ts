@@ -82,7 +82,7 @@ function defineCompiled(
   return ctor;
 }
 
-// deno-lint-ignore no-explicit-any
+// oxlint-disable-next-line no-explicit-any
 type AnyElement = any;
 
 function connect(element: FacadeElement): FacadeElement {

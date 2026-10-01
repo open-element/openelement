@@ -132,7 +132,7 @@ export async function assertCleanAtSha(expected: string): Promise<{ sha: string;
 
 function stripAnsi(text: string): string {
   // Intentional ANSI color stripping for log scans.
-  // deno-lint-ignore no-control-regex
+  // oxlint-disable-next-line no-control-regex
   return text.replace(/\x1b\[[0-9;]*m/g, '');
 }
 
