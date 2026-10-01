@@ -1,11 +1,11 @@
 /**
- * Build npm tarballs with `deno pack` and optionally publish them to npm.
+ * Build npm tarballs with `vp pack` and optionally publish them to npm.
  *
  * Runs in dependency order (leaves first) so a package is packed/published
  * only after its workspace dependencies are already available as npm tarballs.
  *
- * `deno pack` is the sole code and declaration generator (proven by
- * tools/release#pack:native-check); the final npm tarball is re-wrapped by the
+ * `vp pack` (vite-plus, staged per run by tools/lib/vp-pack.ts) is the sole
+ * code and declaration generator; the final npm tarball is re-wrapped by the
  * release coordinator after metadata, dependency, peer-dependency, and Create
  * bin assembly. The deterministic archive writer and the manifest-only delta
  * proof live in tools/lib/deterministic-tar.ts; every retained step is
@@ -22,17 +22,19 @@ import {
 import { runCommand, runWithOutput } from '../lib/process.ts';
 import { assertCleanWorktree } from '../lib/git-cleanliness.ts';
 import { formatJson } from '@openelement/element/build-utils';
-import {
-  buildDeclarationClosure,
-  classifyDroppedDeclarationWarnings,
-  packageRootDeclarationIo,
-} from '../lib/declaration-closure.ts';
-import { npmTarballName, tarballPath } from '../lib/npm-tarball.ts';
+import { buildDeclarationClosure, packageRootDeclarationIo } from '../lib/declaration-closure.ts';
+import { tarballPath } from '../lib/npm-tarball.ts';
 import { createDeterministicTarGz, readTreeEntries } from '../lib/deterministic-tar.ts';
+import { compilePackageElementModules } from '../lib/compiled-pack-staging.ts';
 import {
-  compilePackageElementModules,
-  stageCompiledPackWorkspace,
-} from '../lib/compiled-pack-staging.ts';
+  assembleVpPackageTree,
+  classifyVpPackLog,
+  installVpStagingWorkspace,
+  notIgnoredFiles,
+  prepareVpStagingFiles,
+  runVpPack,
+  synthesizedPackedManifest,
+} from '../lib/vp-pack.ts';
 import { npmView, verifyNpmRelease } from './npm-release-verifier.ts';
 import {
   applyPackageJsonOverrides,
@@ -70,7 +72,7 @@ function cleanStaleTarballs(packages: PackageInfo[]): void {
 /**
  * Fail-closed raw-TypeScript guard: npm consumers must receive emitted
  * JavaScript and declarations only. Every known unimported source (element
- * provenance markers) is excluded from `deno pack` input via the package's
+ * provenance markers) was excluded from the pack input via the package's
  * own `publish.exclude`, so any `.ts`/`.tsx` surviving in the extracted
  * tarball is a pack-input regression — packPackage throws instead of
  * silently deleting it. Create templates use the `.tmpl` suffix so they
@@ -99,121 +101,10 @@ export function findRawTypeScriptPayload(packageRoot: string): string[] {
 }
 
 /**
- * Structured `deno pack` diagnostics for one package. publish-npm.ts is the
- * sole owner of pack diagnostics: raw and staged packs flow through
- * packPackage, so there is exactly one classification point and no second
- * log-scanner tool.
- *
- *   - errors: any `error[` fast-check diagnostic or `missing-explicit`
- *     mention — always repo-fixable, always FAIL.
- *   - unexpectedWarnings: any other warning token (`warning`, `slow type`,
- *     `unsupported`, `failed`) outside the exact known pair — FAIL.
- *   - knownUpstreamPrivateWarnings: exact
- *     `Could not generate types ... Types will not be included` lines for
- *     modules provably outside the public declaration closure (all public
- *     export types targets and their package-local declaration edges; see
- *     tools/lib/declaration-closure.ts) — recorded, never FAIL by itself.
- *     A warned module that is reachable, a broken relative edge, or a path
- *     escape fails closed. The single allowed diagnostic shape, its verified
- *     Deno versions, and its deletion condition are documented in
- *     docs/maintainers/deno-pack-diagnostic-exception.md.
- */
-export interface PackDiagnosticSummary {
-  errors: string[];
-  unexpectedWarnings: string[];
-  knownUpstreamPrivateWarnings: string[];
-  publicDeclarations: number;
-}
-
-export interface ClassifiedPackLog {
-  errors: string[];
-  typeWarnings: Array<{ file: string; raw: string }>;
-  unexpectedWarnings: string[];
-}
-
-const PACK_KNOWN_PAIR =
-  /Could not generate types for '([^']+)'\. Types will not be included for this module\./;
-
-/** Strip ANSI color escapes for stable log scans. */
-export function stripPackAnsi(text: string): string {
-  // Intentional ANSI color stripping for log scans.
-  // deno-lint-ignore no-control-regex
-  return text.replace(/\x1b\[[0-9;]*m/g, '');
-}
-
-/** Pure parse of one `deno pack` combined output (stdout+stderr). */
-export function classifyPackLog(output: string): ClassifiedPackLog {
-  const errors: string[] = [];
-  const typeWarnings: Array<{ file: string; raw: string }> = [];
-  const unexpectedWarnings: string[] = [];
-  for (const rawLine of stripPackAnsi(output).split('\n')) {
-    const line = rawLine.trim();
-    if (!line) continue;
-    if (line.includes('error[') || line.includes('missing-explicit')) {
-      errors.push(line.slice(0, 220));
-      continue;
-    }
-    const pair = PACK_KNOWN_PAIR.exec(line);
-    if (pair) {
-      typeWarnings.push({ file: pair[1], raw: line.slice(0, 220) });
-      continue;
-    }
-    if (
-      /\bwarning\b/i.test(line) || /slow type/i.test(line) || /\bunsupported\b/i.test(line) ||
-      /\bfailed\b/i.test(line)
-    ) {
-      unexpectedWarnings.push(line.slice(0, 220));
-    }
-  }
-  return { errors, typeWarnings, unexpectedWarnings };
-}
-
-/** POSIX `/…` or Windows `D:\…`/`D:/…` absolute path. */
-function isAbsolutePackPath(value: string): boolean {
-  return value.startsWith('/') || /^[A-Za-z]:[\\/]/.test(value);
-}
-
-/** A warned file URL/path relative to the directory pack ran in, or null when outside it. */
-export function packRelativePath(packDir: string, file: string): string | null {
-  // Lexical normalization: TMPDIR may surface as /var/... in one place and
-  // /private/var/... in the other (same directory), and Windows surfaces the
-  // same file as `D:\...`, `D:/...` or `file:///D:/...`. realpath is
-  // unavailable (staged dirs are cleaned before classification), so reduce
-  // both sides to one lexical form — forward slashes, no leading slash before
-  // the drive, lowercased drive letter — and strip the macOS alias prefix.
-  const canon = (value: string): string => {
-    let next = value.replace(/\\/g, '/');
-    if (/^\/[A-Za-z]:\//.test(next)) next = next.slice(1);
-    if (/^[A-Za-z]:/.test(next)) next = next[0].toLowerCase() + next.slice(1);
-    if (next.startsWith('/private/')) next = next.slice('/private'.length);
-    return next.endsWith('/') ? next.slice(0, -1) : next;
-  };
-  let path = file;
-  if (path.startsWith('file://')) {
-    try {
-      path = new URL(path).pathname;
-    } catch {
-      return null;
-    }
-  }
-  const normalizedDir = canon(packDir);
-  path = canon(path);
-  if (path === normalizedDir) return '';
-  if (!path.startsWith(`${normalizedDir}/`)) return null;
-  return path.slice(normalizedDir.length + 1);
-}
-
-/** Fixed `deno pack` arguments; see the --no-source-maps note in packPackage. */
-export function packArgs(filename: string): string[] {
-  return ['pack', '--output', filename, '--allow-dirty', '--no-source-maps'];
-}
-
-/**
- * Fail closed when packed JavaScript embeds an inline source map whose
- * `sources` are absolute `file:///` URLs. deno pack 2.9 emits such maps with
- * the build machine's path (and, for staged packs, a random temp directory):
- * non-portable, identity-leaking, and non-reproducible. `--no-source-maps`
- * prevents it; this scan proves no other path reintroduces it. The URLs are
+ * Fail-closed guard: packed JavaScript must not embed an inline source map
+ * whose `sources` are absolute `file:///` URLs — non-portable,
+ * identity-leaking, and non-reproducible. The vp recipe emits no source maps
+ * at all; this scan proves nothing reintroduces them. The URLs are
  * base64-encoded inside the data URL, so each map is decoded before scanning;
  * an undecodable map is itself a defect.
  */
@@ -265,295 +156,268 @@ export function findAbsoluteFileUrlPayload(packageRoot: string): string[] {
 export async function packPackage(
   pkg: PackageInfo,
   dependencies: Record<string, string>,
+  dependencyMap: ReadonlyMap<string, Record<string, string>>,
   allPackages: PackageInfo[],
-  rootDenoJson: {
-    imports?: Record<string, string>;
-    compilerOptions?: Record<string, unknown>;
-  },
 ): Promise<string> {
-  const filename = npmTarballName(pkg);
   const out = tarballPath(pkg);
-  // The explicit release cleanliness check runs before this loop and rejects
-  // every change except deterministic gate output. Deno itself cannot express
-  // that allowlist, so packing must allow those known generated files in both
-  // dry-run and publish mode.
-  //
-  // --no-source-maps: deno pack 2.9 embeds inline maps whose `sources` are
-  // absolute file:// URLs. That leaks the build machine path and, for staged
-  // UI packs, a random temp directory — breaking byte reproducibility of the
-  // final tarball. Delete the flag when deno pack emits portable relative
-  // sources (see docs/maintainers/pack-post-processing.md).
-  const args = packArgs(filename);
+  const sourceManifest = JSON.parse(Deno.readTextFileSync(`${pkg.dir}/deno.json`)) as {
+    peerDependencies?: Record<string, string>;
+    peerDependenciesMeta?: Record<string, { optional?: boolean }>;
+    compilerOptions?: Record<string, unknown>;
+    publish?: { include?: string[]; exclude?: string[] };
+  };
 
   // #1301: a package shipping compiled-element sources (.tsx modules with a
   // canonically bound @element decorator) must run the open:compiled-element
-  // intrinsic transform BEFORE `deno pack` transpiles — decorator lowering
-  // (applyDecs2203R) erases the compile-time-only intrinsics, and the packed
-  // artifact would register no Part Program (packageIslands SSR fails closed
-  // with OE_PROGRAM_MISSING). The admission contract is unchanged: staging
-  // only replaces module contents with the same compiler output a consumer's
-  // own build would produce from workspace source.
-  let staged: Awaited<ReturnType<typeof stageCompiledPackWorkspace>> | null = null;
+  // intrinsic transform BEFORE the generator transpiles — decorator lowering
+  // erases the compile-time-only intrinsics, and the packed artifact would
+  // register no Part Program (packageIslands SSR fails closed with
+  // OE_PROGRAM_MISSING). The admission contract is unchanged: staging only
+  // replaces module contents with the same compiler output a consumer's own
+  // build would produce from workspace source.
   const compiledModules = compilePackageElementModules(pkg.dir);
-  if (compiledModules.length > 0) {
-    const byName = new Map(
-      allPackages.map((candidate) => [candidate.name, candidate]),
-    );
-    const members = [
-      pkg,
-      ...Object.keys(dependencies)
-        .filter((name) => name.startsWith('@openelement/'))
-        .map((name) => {
-          const member = byName.get(name);
-          if (!member) {
-            throw new Error(
-              `Workspace dependency not found for staging: ${name}`,
-            );
-          }
-          return member;
-        }),
-    ];
-    staged = await stageCompiledPackWorkspace(
-      pkg,
-      members,
-      rootDenoJson,
-      compiledModules,
-    );
-    console.log(
-      `[npm] ${pkg.name}: packing staged compiler output for ${compiledModules.length} ` +
-        'compiled element module(s) (#1301).',
-    );
-  }
-
-  const packDir = staged?.packDir ?? pkg.dir;
-  console.log(`$ deno ${args.join(' ')}  # cwd=${packDir}`);
-  let packed: { success: boolean; code: number; stdout: string; stderr: string } | null = null;
+  // The staged workspace mirrors the deno workspace 1:1: every package is
+  // staged and symlinked under node_modules/@openelement/, so cross-package
+  // declaration emit resolves types from source exactly like the real
+  // workspace, and the shared install carries the union of every member's
+  // derived dependencies (the dts generator needs e.g. typescript even when
+  // the package being packed does not declare it). The @openelement-scoped
+  // registry fork (url-pattern-list) resolves through the install.
+  const members = allPackages;
+  const staged = await prepareVpStagingFiles({
+    pkg,
+    members,
+    dependencyMap,
+    sourceManifest,
+  });
   try {
-    packed = await runWithOutput('deno', args, { cwd: packDir });
-    if (staged) {
-      await Deno.copyFile(`${packDir}/${filename}`, out);
-    }
-  } finally {
-    await staged?.cleanup();
-  }
-  const packOutput = `${packed?.stdout ?? ''}\n${packed?.stderr ?? ''}`;
-  if (!packed?.success) {
-    throw new Error(
-      `[npm] ${pkg.name}: deno pack exited ${packed?.code ?? 'unknown'}:\n${packOutput}`,
-    );
-  }
-  const packSummary = classifyPackLog(packOutput);
-  if (packSummary.errors.length > 0) {
-    throw new Error(
-      `[npm] ${pkg.name}: deno pack fast-check errors (repo-fixable, failing closed):\n${
-        packSummary.errors.join('\n')
-      }`,
-    );
-  }
-  if (packSummary.unexpectedWarnings.length > 0) {
-    throw new Error(
-      `[npm] ${pkg.name}: deno pack unexpected warnings (repo-fixable, failing closed):\n${
-        packSummary.unexpectedWarnings.join('\n')
-      }`,
-    );
-  }
-
-  const tmp = await Deno.makeTempDir({ prefix: 'pack-' });
-  const tarEnv = { COPYFILE_DISABLE: '1' };
-  try {
-    await runCommand('tar', ['-xzf', out, '-C', tmp], { env: tarEnv });
-    const pkgJsonPath = `${tmp}/package/package.json`;
-    const pkgJson = JSON.parse(Deno.readTextFileSync(pkgJsonPath));
-    const rawManifest = await hashFileTree(tmp);
-    const rawPackageJson = JSON.parse(
-      Deno.readTextFileSync(pkgJsonPath),
-    ) as Record<string, unknown>;
-    const rawPayload = findRawTypeScriptPayload(`${tmp}/package`);
-    if (rawPayload.length > 0) {
-      throw new Error(
-        `[npm] ${pkg.name}: raw TypeScript in tarball (fix publish input, never silently strip):\n${
-          rawPayload.join('\n')
-        }`,
-      );
-    }
-    const absoluteUrls = findAbsoluteFileUrlPayload(`${tmp}/package`);
-    if (absoluteUrls.length > 0) {
-      throw new Error(
-        `[npm] ${pkg.name}: packed modules embed absolute file:// URLs (failing closed):\n${
-          absoluteUrls.join('\n')
-        }`,
-      );
-    }
-    applyPackageJsonOverrides(pkg, pkgJson);
-    const sourceManifest = JSON.parse(
-      Deno.readTextFileSync(`${pkg.dir}/deno.json`),
-    ) as {
-      peerDependencies?: Record<string, string>;
-      peerDependenciesMeta?: Record<string, { optional?: boolean }>;
-    };
-    for (
-      const [name, value] of Object.entries(
-        sourceManifest.peerDependencies ?? {},
-      )
-    ) {
-      const parsed = parseNpmSpec(value, `${pkg.name} peer dependency`);
-      if (!parsed) {
-        throw new Error(`Invalid npm peer dependency ${name}=${value}`);
+    if (compiledModules.length > 0) {
+      for (const output of compiledModules) {
+        Deno.writeTextFileSync(`${staged.packDir}/${output.relativePath}`, output.code);
       }
-      pkgJson.peerDependencies = {
-        ...pkgJson.peerDependencies,
-        [name]: publishRange(parsed),
-      };
+      console.log(
+        `[npm] ${pkg.name}: packing staged compiler output for ${compiledModules.length} ` +
+          'compiled element module(s) (#1301).',
+      );
     }
-    pkgJson.peerDependenciesMeta = {
-      ...pkgJson.peerDependenciesMeta,
-      ...sourceManifest.peerDependenciesMeta,
+    await installVpStagingWorkspace(staged, members);
+    console.log(`$ vp pack  # cwd=${staged.packDir}`);
+    const vpOutput = await runVpPack(staged);
+    // Declared specifiers (deps, peers, the package itself) may stay external
+    // unresolved — including their deep subpaths (e.g. `lit/static-html.js`
+    // under the declared peer `lit`); anything else failing to resolve is a
+    // payload regression.
+    const allowedUnresolved = new Set([
+      pkg.name,
+      ...Object.keys(dependencies),
+      ...Object.keys(sourceManifest.peerDependencies ?? {}),
+    ]);
+    const allowedUnresolvedBase = (specifier: string): boolean => {
+      if (allowedUnresolved.has(specifier)) return true;
+      const base = specifier.startsWith('@')
+        ? specifier.split('/').slice(0, 2).join('/')
+        : specifier.split('/')[0];
+      return allowedUnresolved.has(base);
     };
-    pkgJson.dependencies = {
-      ...dependencies,
-      ...(pkgJson.dependencies ?? {}),
-    };
-    // Keep the two products independently installable. Route Mode does not
-    // install Element; framework consumers opt into Element explicitly.
-    // Standalone Element authors likewise install Vite tooling without Router.
-    const optionalWorkspacePeers = pkg.name === '@openelement/router'
-      ? ['@openelement/element']
-      : [];
-    for (const name of optionalWorkspacePeers) {
-      const version = pkgJson.dependencies[name];
-      if (version) {
-        delete pkgJson.dependencies[name];
+    const summary = classifyVpPackLog(vpOutput, {
+      has: (specifier: string) => allowedUnresolvedBase(specifier),
+    });
+    if (summary.errors.length > 0) {
+      throw new Error(
+        `[npm] ${pkg.name}: vp pack errors (repo-fixable, failing closed):\n${
+          summary.errors.join('\n')
+        }`,
+      );
+    }
+    if (summary.disallowedUnresolved.length > 0) {
+      throw new Error(
+        `[npm] ${pkg.name}: vp pack could not resolve specifiers the published manifest ` +
+          `does not declare (failing closed):\n${summary.disallowedUnresolved.join('\n')}`,
+      );
+    }
+    if (summary.unexpectedWarnings.length > 0) {
+      throw new Error(
+        `[npm] ${pkg.name}: vp pack unexpected warnings (repo-fixable, failing closed):\n${
+          summary.unexpectedWarnings.join('\n')
+        }`,
+      );
+    }
+
+    const tmp = await Deno.makeTempDir({ prefix: 'pack-' });
+    const tarEnv = { COPYFILE_DISABLE: '1' };
+    try {
+      // Assemble the raw package tree: vp dist under src/, publish-scoped
+      // non-module payload files, and the synthesized manifest that preserves
+      // the published exports shape (types+import+default over src/*.js).
+      const pkgRoot = `${tmp}/package`;
+      Deno.mkdirSync(pkgRoot);
+      assembleVpPackageTree({
+        pkg,
+        stagedPackDir: staged.packDir,
+        distDir: staged.distDir,
+        outDir: pkgRoot,
+        manifest: synthesizedPackedManifest(pkg),
+        notIgnored: await notIgnoredFiles(pkg.dir),
+        publishInclude: sourceManifest.publish?.include ?? [],
+        publishExclude: sourceManifest.publish?.exclude ?? [],
+      });
+      const pkgJsonPath = `${pkgRoot}/package.json`;
+      const rawManifest = await hashFileTree(tmp);
+      const rawPackageJson = JSON.parse(
+        Deno.readTextFileSync(pkgJsonPath),
+      ) as Record<string, unknown>;
+      const pkgJson = JSON.parse(Deno.readTextFileSync(pkgJsonPath));
+      const rawPayload = findRawTypeScriptPayload(pkgRoot);
+      if (rawPayload.length > 0) {
+        throw new Error(
+          `[npm] ${pkg.name}: raw TypeScript in tarball (fix publish input, never silently strip):\n${
+            rawPayload.join('\n')
+          }`,
+        );
+      }
+      const absoluteUrls = findAbsoluteFileUrlPayload(pkgRoot);
+      if (absoluteUrls.length > 0) {
+        throw new Error(
+          `[npm] ${pkg.name}: packed modules embed absolute file:// URLs (failing closed):\n${
+            absoluteUrls.join('\n')
+          }`,
+        );
+      }
+      applyPackageJsonOverrides(pkg, pkgJson);
+      for (
+        const [name, value] of Object.entries(
+          sourceManifest.peerDependencies ?? {},
+        )
+      ) {
+        const parsed = parseNpmSpec(value, `${pkg.name} peer dependency`);
+        if (!parsed) {
+          throw new Error(`Invalid npm peer dependency ${name}=${value}`);
+        }
         pkgJson.peerDependencies = {
           ...pkgJson.peerDependencies,
-          [name]: version,
-        };
-        pkgJson.peerDependenciesMeta = {
-          ...pkgJson.peerDependenciesMeta,
-          [name]: { optional: true },
+          [name]: publishRange(parsed),
         };
       }
-    }
-    for (
-      const [name, metadata] of Object.entries(
-        pkgJson.peerDependenciesMeta ?? {},
-      )
-    ) {
-      if ((metadata as { optional?: boolean }).optional) {
-        delete pkgJson.dependencies[name];
+      pkgJson.peerDependenciesMeta = {
+        ...pkgJson.peerDependenciesMeta,
+        ...sourceManifest.peerDependenciesMeta,
+      };
+      pkgJson.dependencies = {
+        ...dependencies,
+        ...(pkgJson.dependencies ?? {}),
+      };
+      // Keep the two products independently installable. Route Mode does not
+      // install Element; framework consumers opt into Element explicitly.
+      // Standalone Element authors likewise install Vite tooling without Router.
+      const optionalWorkspacePeers = pkg.name === '@openelement/router'
+        ? ['@openelement/element']
+        : [];
+      for (const name of optionalWorkspacePeers) {
+        const version = pkgJson.dependencies[name];
+        if (version) {
+          delete pkgJson.dependencies[name];
+          pkgJson.peerDependencies = {
+            ...pkgJson.peerDependencies,
+            [name]: version,
+          };
+          pkgJson.peerDependenciesMeta = {
+            ...pkgJson.peerDependenciesMeta,
+            [name]: { optional: true },
+          };
+        }
       }
-    }
-    // Known-upstream classification: a dropped private declaration is only
-    // classified as an upstream warning when it is provably outside the
-    // public declaration closure. Reachable-and-missing declarations, broken
-    // relative edges, and path escapes all fail closed here — see
-    // tools/lib/declaration-closure.ts.
-    const packedExports = (pkgJson.exports ?? {}) as Record<string, unknown>;
-    const typeRoots: string[] = [];
-    let publicDeclarations = 0;
-    for (const [subpath, conditions] of Object.entries(packedExports)) {
-      const types = (conditions as { types?: unknown } | null)?.types;
-      if (typeof types !== 'string' || !types.startsWith('./')) {
-        // deno pack drops the types condition when it could not generate a
-        // declaration for that entry; print what pack said so a platform-only
-        // failure (e.g. Windows path limits) is diagnosable from CI logs.
-        const packSaid = [
-          ...packSummary.typeWarnings.map((warning) => warning.raw),
-          ...packSummary.unexpectedWarnings,
-        ];
+      for (
+        const [name, metadata] of Object.entries(
+          pkgJson.peerDependenciesMeta ?? {},
+        )
+      ) {
+        if ((metadata as { optional?: boolean }).optional) {
+          delete pkgJson.dependencies[name];
+        }
+      }
+      // Declaration integrity proof: every public types target exists and the
+      // relative declaration edges close inside the package root.
+      const packedExports = (pkgJson.exports ?? {}) as Record<string, unknown>;
+      const typeRoots: string[] = [];
+      let publicDeclarations = 0;
+      for (const [subpath, conditions] of Object.entries(packedExports)) {
+        const types = (conditions as { types?: unknown } | null)?.types;
+        if (typeof types !== 'string' || !types.startsWith('./')) {
+          throw new Error(
+            `[npm] ${pkg.name}: export '${subpath}' has no native types condition (failing closed).` +
+              `\npacked conditions: ${JSON.stringify(conditions)}`,
+          );
+        }
+        try {
+          await Deno.stat(`${pkgRoot}/${types.slice(2)}`);
+        } catch {
+          throw new Error(
+            `[npm] ${pkg.name}: export '${subpath}' types file missing at ${types} (failing closed).`,
+          );
+        }
+        typeRoots.push(types.slice(2));
+        publicDeclarations++;
+      }
+      const declarationGraph = buildDeclarationClosure(
+        typeRoots,
+        packageRootDeclarationIo(pkgRoot),
+      );
+      if (declarationGraph.escaped.length > 0) {
         throw new Error(
-          `[npm] ${pkg.name}: export '${subpath}' has no native types condition (failing closed).` +
-            `\npacked conditions: ${JSON.stringify(conditions)}` +
-            `\npack diagnostics: errors=${packSummary.errors.length} ` +
-            `typeWarnings=${packSummary.typeWarnings.length} ` +
-            `unexpected=${packSummary.unexpectedWarnings.length}` +
-            `\n${packSaid.slice(0, 10).join('\n') || '(pack reported no warning)'}`,
+          `[npm] ${pkg.name}: public declaration edges escape the package root (failing closed):\n${
+            declarationGraph.escaped.map((edge) => `${edge.from} -> ${edge.specifier}`).join('\n')
+          }`,
         );
       }
+      if (declarationGraph.missing.length > 0) {
+        throw new Error(
+          `[npm] ${pkg.name}: public declarations reference missing declaration files (failing closed):\n${
+            declarationGraph.missing.map((edge) => `${edge.from} -> ${edge.specifier}`).join('\n')
+          }`,
+        );
+      }
+      // Per-package pack summary in the evidence contract format: the
+      // candidate evidence recorder parses exactly this line out of the
+      // publish:npm:dry-run log and requires one per package
+      // (tools/repo/candidate-evidence-record.ts). Both zero fields are
+      // genuinely zero here — errors and unexpectedWarnings throw above —
+      // and knownUpstreamPrivateWarnings is 0 because the deno-pack
+      // known-upstream classifier retired with the A1 swap (vp warnings all
+      // fail closed). unresolvedExternals trails as log-only context.
+      console.log(
+        `[npm] ${pkg.name}: pack diagnostics ` +
+          `errors=0 unexpectedWarnings=0 knownUpstreamPrivateWarnings=0 ` +
+          `publicDeclarations=${publicDeclarations} declarationClosure=${declarationGraph.reached.length} ` +
+          `unresolvedExternals=${summary.unresolvedImports.length}`,
+      );
+      Deno.writeTextFileSync(pkgJsonPath, formatJson(pkgJson));
+      // Repack proof: only approved manifest fields may differ from the raw
+      // pack output; every JS/declaration byte is identical.
+      const finalManifest = await hashFileTree(tmp);
+      assertOnlyApprovedManifestChanges(rawManifest, finalManifest, rawPackageJson, pkgJson);
+      const archive = await createDeterministicTarGz(readTreeEntries(tmp), {
+        executablePaths: packageBinArchivePaths(pkgJson),
+      });
+      await Deno.writeFile(out, archive);
+      // Shipped-archive proof: re-extract the final tarball and confirm every
+      // member matches the verified tree (catches any writer defect).
+      const verifyDir = await Deno.makeTempDir({ prefix: 'pack-verify-' });
       try {
-        await Deno.stat(`${tmp}/package/${types.slice(2)}`);
-      } catch {
-        throw new Error(
-          `[npm] ${pkg.name}: export '${subpath}' types file missing at ${types} (failing closed).`,
-        );
-      }
-      typeRoots.push(types.slice(2));
-      publicDeclarations++;
-    }
-    const declarationGraph = buildDeclarationClosure(
-      typeRoots,
-      packageRootDeclarationIo(`${tmp}/package`),
-    );
-    if (declarationGraph.escaped.length > 0) {
-      throw new Error(
-        `[npm] ${pkg.name}: public declaration edges escape the package root (failing closed):\n${
-          declarationGraph.escaped.map((edge) => `${edge.from} -> ${edge.specifier}`).join('\n')
-        }`,
-      );
-    }
-    if (declarationGraph.missing.length > 0) {
-      throw new Error(
-        `[npm] ${pkg.name}: public declarations reference missing declaration files (failing closed):\n${
-          declarationGraph.missing.map((edge) => `${edge.from} -> ${edge.specifier}`).join('\n')
-        }`,
-      );
-    }
-    // packDir is repo-relative for direct packs but absolute for staged
-    // packs; warned file URLs are always absolute.
-    const absolutePackDir = isAbsolutePackPath(packDir) ? packDir : `${Deno.cwd()}/${packDir}`;
-    const warningRecords: Array<{ relative: string; raw: string }> = [];
-    for (const warning of packSummary.typeWarnings) {
-      const relative = packRelativePath(absolutePackDir, warning.file);
-      if (relative === null) {
-        throw new Error(
-          `[npm] ${pkg.name}: pack warned outside the package (failing closed):\n${warning.raw}`,
-        );
-      }
-      warningRecords.push({ relative, raw: warning.raw });
-    }
-    const classifiedWarnings = classifyDroppedDeclarationWarnings(
-      declarationGraph,
-      warningRecords,
-    );
-    if (classifiedWarnings.reachableFromPublicTypes.length > 0) {
-      throw new Error(
-        `[npm] ${pkg.name}: pack dropped declarations reachable from public types (failing closed):\n${
-          classifiedWarnings.reachableFromPublicTypes
-            .map((warning) => `${warning.relative}: ${warning.raw}`)
-            .join('\n')
-        }`,
-      );
-    }
-    const knownUpstream = classifiedWarnings.knownUpstream.map((warning) => warning.relative);
-    console.log(
-      `[npm] ${pkg.name}: pack diagnostics ` +
-        `errors=0 unexpectedWarnings=0 knownUpstreamPrivateWarnings=${knownUpstream.length} ` +
-        `publicDeclarations=${publicDeclarations} declarationClosure=${declarationGraph.reached.length}`,
-    );
-    Deno.writeTextFileSync(pkgJsonPath, formatJson(pkgJson));
-    // Repack proof: only approved manifest fields may differ from the raw
-    // `deno pack` output; every JS/declaration/source-map byte is identical.
-    const finalManifest = await hashFileTree(tmp);
-    assertOnlyApprovedManifestChanges(rawManifest, finalManifest, rawPackageJson, pkgJson);
-    const archive = await createDeterministicTarGz(readTreeEntries(tmp), {
-      executablePaths: packageBinArchivePaths(pkgJson),
-    });
-    await Deno.writeFile(out, archive);
-    // Shipped-archive proof: re-extract the final tarball and confirm every
-    // member matches the verified tree (catches any writer defect).
-    const verifyDir = await Deno.makeTempDir({ prefix: 'pack-verify-' });
-    try {
-      await runCommand('tar', ['-xzf', out, '-C', verifyDir], { env: tarEnv });
-      const shippedManifest = await hashFileTree(verifyDir);
-      if (JSON.stringify(shippedManifest) !== JSON.stringify(finalManifest)) {
-        throw new Error(
-          '[npm] final tarball content drifted from the verified package tree (failing closed).',
-        );
+        await runCommand('tar', ['-xzf', out, '-C', verifyDir], { env: tarEnv });
+        const shippedManifest = await hashFileTree(verifyDir);
+        if (JSON.stringify(shippedManifest) !== JSON.stringify(finalManifest)) {
+          throw new Error(
+            '[npm] final tarball content drifted from the verified package tree (failing closed).',
+          );
+        }
+      } finally {
+        await Deno.remove(verifyDir, { recursive: true });
       }
     } finally {
-      await Deno.remove(verifyDir, { recursive: true });
+      await Deno.remove(tmp, { recursive: true });
     }
   } finally {
-    await Deno.remove(tmp, { recursive: true });
+    await staged.cleanup();
   }
 
   return out;
@@ -706,10 +570,6 @@ async function main(): Promise<void> {
   const allPackages = await readPackages();
   const packages = releasePublishOrder(allPackages);
   const dependencyMap = deriveAllDependencies(packages);
-  const rootDenoJson = JSON.parse(Deno.readTextFileSync('deno.json')) as {
-    imports?: Record<string, string>;
-    compilerOptions?: Record<string, unknown>;
-  };
   if (packages.length === 0) {
     throw new Error('No packages found under packages/.');
   }
@@ -734,8 +594,8 @@ async function main(): Promise<void> {
     const tar = await packPackage(
       pkg,
       dependencyMap.get(pkg.name) ?? {},
+      dependencyMap,
       allPackages,
-      rootDenoJson,
     );
     tarballs.push(tar);
   }
