@@ -1,7 +1,7 @@
 /**
  * Zag composition spike E2E (issue #1149).
  *
- * Proves the Zag Vanilla + Open Props + OpenElement composition against the
+ * Proves the Zag Vanilla + local token sheet + OpenElement composition against the
  * request-time fixture's real SSR -> hydration pipeline:
  *
  *   1. SSR: Zag packages are imported server-side (the request-time server

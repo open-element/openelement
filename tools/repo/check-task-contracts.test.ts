@@ -96,6 +96,13 @@ test('task contract: gate:source is the fast PR-layer step set', () => {
     'gate:source is what every pull request runs; adding a step to the PR layer needs this contract updated (and a reason it cannot wait for the release train)',
   ).toEqual([
     'tools/repo#generate:all',
+    // packages/ui#theme-tokens:check (alpha9 C1 step 1, #1504): the @theme
+    // token source (packages/ui/src/theme-tokens.css) is hand-edited CSS
+    // feeding a GENERATED module that www composes into every page; a stale
+    // sheet surfaces as a visual drift on the site, not a build error, so it
+    // cannot wait for the release train where the retired ui-tokens:check
+    // lived. Same class as the generate:all adjacency it sits next to.
+    'packages/ui#theme-tokens:check',
     'tools/repo#typecheck',
     'packages/element#test',
     'packages/router#test',

@@ -35,32 +35,32 @@ export class OpenTabs extends OpenElement {
 
     .tabs {
       display: flex;
-      gap: var(--size-1);
-      padding: var(--size-1);
-      border-bottom: 1px solid var(--surface-border);
+      gap: calc(var(--spacing) * 1);
+      padding: calc(var(--spacing) * 1);
+      border-bottom: 1px solid color-mix(in srgb, var(--color-border) 78%, var(--color-primary));
     }
 
     ::slotted([slot='tab']) {
-      padding: var(--size-2) var(--size-4);
+      padding: calc(var(--spacing) * 2) calc(var(--spacing) * 4);
       border-color: transparent;
       background: transparent;
-      color: var(--text-secondary);
+      color: var(--color-muted-foreground);
       cursor: pointer;
     }
 
     ::slotted([slot='tab']:hover) {
-      color: var(--text-primary);
+      color: var(--color-foreground);
     }
 
     ::slotted(.tab-active) {
-      color: var(--text-primary);
-      background: var(--brand-subtle);
-      border-color: var(--surface-border-strong);
+      color: var(--color-foreground);
+      background: color-mix(in srgb, var(--color-primary) 14%, transparent);
+      border-color: color-mix(in srgb, var(--color-input) 62%, var(--color-primary));
     }
 
     ::slotted([slot='panel']) {
-      padding-block: var(--size-4);
-      color: var(--text-secondary);
+      padding-block: calc(var(--spacing) * 4);
+      color: var(--color-muted-foreground);
     }
   `),
   ];

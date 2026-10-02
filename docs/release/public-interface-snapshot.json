@@ -630,14 +630,14 @@
         "./open-dialog": "./src/open-dialog.tsx",
         "./open-dropdown": "./src/open-dropdown.tsx",
         "./open-input": "./src/open-input.tsx",
-        "./open-props-tokens": "./src/open-props-tokens.ts",
-        "./open-props-tokens.js": "./src/open-props-tokens.ts",
         "./open-tabs": "./src/open-tabs.tsx",
-        "./open-theme-toggle": "./src/open-theme-toggle.tsx"
+        "./open-theme-toggle": "./src/open-theme-toggle.tsx",
+        "./theme-tokens": "./src/theme-tokens.ts",
+        "./theme-tokens.js": "./src/theme-tokens.ts"
       },
       "declarations": {
         ".": {
-          "publicShapeSha256": "dbf4d4e49fb9a0eff96b32d9f55c59a1d64a42d0aed8181ba8c5aef16682351e",
+          "publicShapeSha256": "12dbf7ec5aaf45601f7a0dbde84a2071dec755c4e04820968bfba5b1fbd0ab5a",
           "publicSymbols": [
             "OpenBadge=type:{render:{call:()=>unknown};size:string;tone:string}|value:{construct:()=>{render:{call:()=>unknown};size:string;tone:string};styles:array(StyleSheetLike)}",
             "OpenButton=type:{attributeChangedCallback:{call:(name:string,old:union(null|string),val:union(null|string))=>void};buttonMode:ReadonlySignal<boolean>;disabled:union(false|true);href:string;linkAriaDisabled:ReadonlySignal<string | null>;linkHref:ReadonlySignal<string | null>;linkMode:ReadonlySignal<boolean>;linkRel:ReadonlySignal<string | null>;linkTarget:ReadonlySignal<string | null>;onCsrRendered:{call:()=>void};onDsdHydrated:{call:()=>void};render:{call:()=>unknown};size:string;target:string;type:string;variant:string}|value:{construct:()=>{attributeChangedCallback:{call:(name:string,old:union(null|string),val:union(null|string))=>void};buttonMode:ReadonlySignal<boolean>;disabled:union(false|true);href:string;linkAriaDisabled:ReadonlySignal<string | null>;linkHref:ReadonlySignal<string | null>;linkMode:ReadonlySignal<boolean>;linkRel:ReadonlySignal<string | null>;linkTarget:ReadonlySignal<string | null>;onCsrRendered:{call:()=>void};onDsdHydrated:{call:()=>void};render:{call:()=>unknown};size:string;target:string;type:string;variant:string};styles:array(StyleSheetLike)}",
@@ -650,7 +650,6 @@
             "OpenTabs=type:{active:number;disconnectedCallback:{call:()=>void};onCsrRendered:{call:()=>void};onDsdHydrated:{call:()=>void};render:{call:()=>unknown};select:{call:(idx:number)=>void};tabsId:string}|value:{construct:()=>{active:number;disconnectedCallback:{call:()=>void};onCsrRendered:{call:()=>void};onDsdHydrated:{call:()=>void};render:{call:()=>unknown};select:{call:(idx:number)=>void};tabsId:string};styles:array(StyleSheetLike)}",
             "OpenThemeToggle=type:{attributeChangedCallback:{call:(name:string,old:union(null|string),val:union(null|string))=>void};connectedCallback:{call:()=>void};onDsdHydrated:{call:()=>void};render:{call:()=>unknown};theme:union(\"dark\"|\"light\")}|value:{construct:()=>{attributeChangedCallback:{call:(name:string,old:union(null|string),val:union(null|string))=>void};connectedCallback:{call:()=>void};onDsdHydrated:{call:()=>void};render:{call:()=>unknown};theme:union(\"dark\"|\"light\")};styles:array(StyleSheetLike)}",
             "manifest=value:OpenElementPackageManifest",
-            "openPropsTokenSheet=value:StyleSheetLike",
             "readInstanceState=value:{call:<T>(host:object,key:string,init:{call:()=>T})=>T}",
             "registerOpenUi=value:{call:(registry:union(CustomElementRegistry|undefined))=>void}",
             "writeInstanceState=value:{call:(host:object,key:string,value:unknown)=>void}"
@@ -717,18 +716,6 @@
             "OpenInput=type:{ariaInvalidAttr:ReadonlySignal<string | null>;attributeChangedCallback:{call:(name:string,old:union(null|string),val:union(null|string))=>void};describedByAttr:ReadonlySignal<string | null>;disabled:union(false|true);error:string;errorIdAttr:ReadonlySignal<string | null>;formDisabledCallback:{call:(disabled:union(false|true))=>void};formResetCallback:{call:()=>void};idAttr:ReadonlySignal<string | null>;inputClass:ReadonlySignal<string>;inputId:string;label:string;name:string;noError:ReadonlySignal<boolean>;noLabel:ReadonlySignal<boolean>;onCsrRendered:{call:()=>void};onDsdHydrated:{call:()=>void};placeholder:string;render:{call:()=>unknown};required:union(false|true);requiredMark:ReadonlySignal<string>;type:string;value:string}|value:{construct:()=>{ariaInvalidAttr:ReadonlySignal<string | null>;attributeChangedCallback:{call:(name:string,old:union(null|string),val:union(null|string))=>void};describedByAttr:ReadonlySignal<string | null>;disabled:union(false|true);error:string;errorIdAttr:ReadonlySignal<string | null>;formDisabledCallback:{call:(disabled:union(false|true))=>void};formResetCallback:{call:()=>void};idAttr:ReadonlySignal<string | null>;inputClass:ReadonlySignal<string>;inputId:string;label:string;name:string;noError:ReadonlySignal<boolean>;noLabel:ReadonlySignal<boolean>;onCsrRendered:{call:()=>void};onDsdHydrated:{call:()=>void};placeholder:string;render:{call:()=>unknown};required:union(false|true);requiredMark:ReadonlySignal<string>;type:string;value:string};styles:array(StyleSheetLike)}"
           ]
         },
-        "./open-props-tokens": {
-          "publicShapeSha256": "f339716313dbb303c6819657813e4373cb3c0887d101b6b7671aca05db8f1749",
-          "publicSymbols": [
-            "openPropsTokenSheet=value:StyleSheetLike"
-          ]
-        },
-        "./open-props-tokens.js": {
-          "publicShapeSha256": "f339716313dbb303c6819657813e4373cb3c0887d101b6b7671aca05db8f1749",
-          "publicSymbols": [
-            "openPropsTokenSheet=value:StyleSheetLike"
-          ]
-        },
         "./open-tabs": {
           "publicShapeSha256": "5489d6e095837e596618576cb0cd1e7ec3dba13502260d0e9773176b4cb0b879",
           "publicSymbols": [
@@ -739,6 +726,18 @@
           "publicShapeSha256": "ae880bca66ee6af6fe9506936329eb5e85f4c83a6d8598fa6645fb3869cd4060",
           "publicSymbols": [
             "OpenThemeToggle=type:{attributeChangedCallback:{call:(name:string,old:union(null|string),val:union(null|string))=>void};connectedCallback:{call:()=>void};onDsdHydrated:{call:()=>void};render:{call:()=>unknown};theme:union(\"dark\"|\"light\")}|value:{construct:()=>{attributeChangedCallback:{call:(name:string,old:union(null|string),val:union(null|string))=>void};connectedCallback:{call:()=>void};onDsdHydrated:{call:()=>void};render:{call:()=>unknown};theme:union(\"dark\"|\"light\")};styles:array(StyleSheetLike)}"
+          ]
+        },
+        "./theme-tokens": {
+          "publicShapeSha256": "83c5dc89c07f8b0114eda95f2cc19435c903106f9c45c4b244c18dc7090a6f09",
+          "publicSymbols": [
+            "themeTokenSheet=value:StyleSheetLike"
+          ]
+        },
+        "./theme-tokens.js": {
+          "publicShapeSha256": "83c5dc89c07f8b0114eda95f2cc19435c903106f9c45c4b244c18dc7090a6f09",
+          "publicSymbols": [
+            "themeTokenSheet=value:StyleSheetLike"
           ]
         }
       }

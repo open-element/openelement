@@ -4,7 +4,7 @@ export const pageRoadmapStyles = [
   compiledStyle(`
   :host {
     display: block;
-    color: var(--text-primary);
+    color: var(--color-foreground);
   }
 
   * {
@@ -19,34 +19,34 @@ export const pageRoadmapStyles = [
   }
 
   .now-callout {
-    margin: var(--size-5) 0 var(--size-6);
-    padding: var(--size-4) var(--size-5);
-    border: var(--border-size-1) solid var(--border);
-    border-inline-start: var(--size-1) solid var(--brand);
-    border-radius: var(--radius-2);
+    margin: calc(var(--spacing) * 5) 0 calc(var(--spacing) * 6);
+    padding: calc(var(--spacing) * 4) calc(var(--spacing) * 5);
+    border: 1px solid var(--color-border);
+    border-inline-start: calc(var(--spacing) * 1) solid var(--color-primary);
+    border-radius: var(--radius-lg);
   }
 
   .now-callout .now-title {
-    margin: var(--size-3) 0 var(--size-2);
-    color: var(--text-primary);
-    font-weight: var(--font-weight-7);
+    margin: calc(var(--spacing) * 3) 0 calc(var(--spacing) * 2);
+    color: var(--color-foreground);
+    font-weight: var(--font-weight-bold);
     line-height: 1.3;
   }
 
   .now-callout .now-copy {
     margin: 0;
-    color: var(--text-secondary);
-    font-size: var(--font-size-0);
-    line-height: var(--font-lineheight-3);
+    color: var(--color-muted-foreground);
+    font-size: var(--text-sm);
+    line-height: 1.5;
   }
 
   .metric-label,
   .rule-label,
   .rule-title {
-    color: var(--brand);
+    color: var(--color-primary);
     font-family: var(--font-mono);
-    font-size: var(--font-size-00);
-    font-weight: var(--font-weight-8);
+    font-size: var(--text-xs);
+    font-weight: var(--font-weight-extrabold);
     letter-spacing: 0;
     text-transform: uppercase;
   }
@@ -58,9 +58,9 @@ export const pageRoadmapStyles = [
   .rule-copy,
   .rule-text,
   .matrix-copy {
-    color: var(--text-secondary);
-    font-size: var(--font-size-0);
-    line-height: var(--font-lineheight-3);
+    color: var(--color-muted-foreground);
+    font-size: var(--text-sm);
+    line-height: 1.5;
   }
 
   /* vertical timeline: square nodes, evidence-first versions */
@@ -79,58 +79,58 @@ export const pageRoadmapStyles = [
   .timeline::before {
     content: "";
     position: absolute;
-    inset-block: var(--size-2);
-    inset-inline-start: calc(var(--size-2) / 2);
-    width: var(--border-size-1);
-    background: var(--border);
+    inset-block: calc(var(--spacing) * 2);
+    inset-inline-start: calc(calc(var(--spacing) * 2) / 2);
+    width: 1px;
+    background: var(--color-border);
   }
 
   .tl-row {
     position: relative;
-    padding: var(--size-5) 0 var(--size-5) var(--size-8);
+    padding: calc(var(--spacing) * 5) 0 calc(var(--spacing) * 5) calc(var(--spacing) * 8);
   }
 
   .tl-node {
     position: absolute;
     inset-inline-start: 0;
-    inset-block-start: calc(var(--size-5) + var(--size-3));
-    width: var(--size-2);
-    height: var(--size-2);
+    inset-block-start: calc(calc(var(--spacing) * 5) + calc(var(--spacing) * 3));
+    width: calc(var(--spacing) * 2);
+    height: calc(var(--spacing) * 2);
   }
 
   .tl-stable .tl-node {
-    background: var(--brand);
+    background: var(--color-primary);
   }
 
   .tl-next .tl-node {
-    border: var(--border-size-2) solid var(--violet-8);
-    background: var(--bg-base);
+    border: 2px solid var(--color-primary);
+    background: var(--color-background);
   }
 
   .tl-baseline .tl-node {
-    background: var(--brand);
+    background: var(--color-primary);
   }
 
   .tl-next .tl-node::after {
     content: "";
     position: absolute;
-    inset: var(--size-1);
-    background: var(--violet-8);
+    inset: calc(var(--spacing) * 1);
+    background: var(--color-primary);
   }
 
   .tl-planned .tl-node {
-    border: var(--border-size-2) solid color-mix(in srgb, var(--violet-5) 55%, transparent);
+    border: 2px solid color-mix(in srgb, var(--color-primary) 55%, transparent);
   }
 
   .tl-head {
     display: flex;
     flex-wrap: wrap;
     align-items: baseline;
-    gap: var(--size-3) var(--size-4);
+    gap: calc(var(--spacing) * 3) calc(var(--spacing) * 4);
   }
 
   .tl-version {
-    color: var(--text-primary);
+    color: var(--color-foreground);
     font-size: clamp(2rem, 4.2vw, 3.6rem);
     font-weight: 800;
     line-height: 1;
@@ -138,16 +138,16 @@ export const pageRoadmapStyles = [
   }
 
   .tl-next .tl-version {
-    color: var(--violet-8);
+    color: var(--color-primary);
   }
 
   .tl-planned .tl-version {
     color: transparent;
-    -webkit-text-stroke: 1.5px color-mix(in srgb, var(--violet-5) 55%, transparent);
+    -webkit-text-stroke: 1.5px color-mix(in srgb, var(--color-primary) 55%, transparent);
   }
 
   .tl-theme {
-    color: var(--violet-8);
+    color: var(--color-primary);
     font-family: var(--font-serif);
     font-size: clamp(1.25rem, 1.9vw, 1.7rem);
     font-style: italic;
@@ -155,14 +155,14 @@ export const pageRoadmapStyles = [
   }
 
   .tl-planned .tl-theme {
-    color: var(--violet-5);
+    color: var(--color-primary);
   }
 
   .stamp {
-    padding: var(--size-1) var(--size-3);
-    border-radius: var(--radius-1);
-    font-size: var(--font-size-00);
-    font-weight: var(--font-weight-7);
+    padding: calc(var(--spacing) * 1) calc(var(--spacing) * 3);
+    border-radius: var(--radius-md);
+    font-size: var(--text-xs);
+    font-weight: var(--font-weight-bold);
     letter-spacing: .08em;
     text-transform: uppercase;
   }
@@ -173,45 +173,45 @@ export const pageRoadmapStyles = [
   }
 
   .stamp-current {
-    background: var(--brand);
-    color: var(--on-brand);
+    background: var(--color-primary);
+    color: var(--color-primary-foreground);
   }
 
   .stamp-next {
-    border: var(--border-size-1) solid var(--violet-8);
-    color: var(--violet-8);
+    border: 1px solid var(--color-primary);
+    color: var(--color-primary);
   }
 
   .stamp-baseline {
-    background: var(--brand);
-    color: var(--on-brand);
+    background: var(--color-primary);
+    color: var(--color-primary-foreground);
   }
 
   .tl-status {
-    color: var(--text-muted);
-    font-size: var(--font-size-00);
+    color: var(--color-muted-foreground);
+    font-size: var(--text-xs);
     letter-spacing: .1em;
     text-transform: uppercase;
   }
 
   .tl-copy {
     max-width: 560px;
-    margin-block: var(--size-3) 0;
+    margin-block: calc(var(--spacing) * 3) 0;
   }
 
   .rule-callout {
     position: sticky;
-    top: calc(var(--nav-height) + var(--size-6));
-    padding: var(--size-5);
-    border: var(--border-size-1) solid color-mix(in srgb, var(--violet-5) 45%, transparent);
-    border-radius: var(--radius-2);
-    background: var(--violet-0);
-    box-shadow: inset var(--size-1) 0 0 var(--brand);
+    top: calc(var(--nav-height) + calc(var(--spacing) * 6));
+    padding: calc(var(--spacing) * 5);
+    border: 1px solid color-mix(in srgb, var(--color-primary) 45%, transparent);
+    border-radius: var(--radius-lg);
+    background: var(--color-background);
+    box-shadow: inset calc(var(--spacing) * 1) 0 0 var(--color-primary);
   }
 
   .rule-title {
-    margin-block-end: var(--size-3);
-    color: var(--violet-8);
+    margin-block-end: calc(var(--spacing) * 3);
+    color: var(--color-primary);
   }
 
   .rule-text {
@@ -221,35 +221,35 @@ export const pageRoadmapStyles = [
   .truth-grid {
     display: grid;
     grid-template-columns: minmax(0, .95fr) minmax(0, .95fr) minmax(0, .72fr);
-    gap: var(--size-5);
+    gap: calc(var(--spacing) * 5);
   }
 
   .truth h2 {
-    margin-block: 0 var(--size-4);
-    color: var(--text-primary);
-    font-size: var(--font-size-3);
+    margin-block: 0 calc(var(--spacing) * 4);
+    color: var(--color-foreground);
+    font-size: var(--text-2xl);
     line-height: 1.08;
     letter-spacing: 0;
   }
 
   .truth ul {
     display: grid;
-    gap: var(--size-2);
+    gap: calc(var(--spacing) * 2);
     margin: 0;
-    padding-inline-start: var(--size-5);
+    padding-inline-start: calc(var(--spacing) * 5);
   }
 
   .matrix {
     display: grid;
-    border-block-start: var(--border-size-1) solid var(--border);
+    border-block-start: 1px solid var(--color-border);
   }
 
   .matrix-row {
     display: grid;
     grid-template-columns: minmax(132px, .28fr) minmax(0, 1fr);
-    gap: var(--size-5);
-    padding-block: var(--size-5);
-    border-block-end: var(--border-size-1) solid var(--border);
+    gap: calc(var(--spacing) * 5);
+    padding-block: calc(var(--spacing) * 5);
+    border-block-end: 1px solid var(--color-border);
   }
 
   .matrix-row:last-child {
@@ -259,12 +259,12 @@ export const pageRoadmapStyles = [
   .visual-grid {
     display: grid;
     grid-template-columns: minmax(0, .88fr) minmax(0, 1fr);
-    gap: var(--size-5);
+    gap: calc(var(--spacing) * 5);
   }
 
   .rule-list {
     display: grid;
-    gap: var(--size-2);
+    gap: calc(var(--spacing) * 2);
     margin: 0;
     padding: 0;
     list-style: none;
@@ -273,9 +273,9 @@ export const pageRoadmapStyles = [
   .rule-list li {
     display: grid;
     grid-template-columns: minmax(110px, .32fr) minmax(0, 1fr);
-    gap: var(--size-4);
-    padding-block: var(--size-4);
-    border-block-end: var(--border-size-1) solid var(--border);
+    gap: calc(var(--spacing) * 4);
+    padding-block: calc(var(--spacing) * 4);
+    border-block-end: 1px solid var(--color-border);
   }
 
   .rule-list li:last-child {
@@ -285,7 +285,7 @@ export const pageRoadmapStyles = [
   .nav-row {
     display: flex;
     flex-wrap: wrap;
-    gap: var(--size-3);
+    gap: calc(var(--spacing) * 3);
     width: min(1180px, calc(100% - 3rem));
     margin: clamp(4rem, 10vh, 8rem) auto 0;
     padding-block-end: clamp(3rem, 8vh, 6rem);
@@ -307,11 +307,11 @@ export const pageRoadmapStyles = [
     .matrix-row,
     .rule-list li {
       grid-template-columns: 1fr;
-      gap: var(--size-2);
+      gap: calc(var(--spacing) * 2);
     }
 
     .tl-row {
-      padding-inline-start: var(--size-6);
+      padding-inline-start: calc(var(--spacing) * 6);
     }
   }
 `),

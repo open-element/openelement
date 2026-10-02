@@ -50,18 +50,18 @@ export class OpenDialog extends OpenElement {
     }
 
     dialog {
-      border: var(--border-size-1) solid var(--surface-border-strong);
-      border-radius: var(--overlay-radius);
-      background: var(--surface-overlay);
-      color: var(--text-primary);
-      padding: var(--size-6);
+      border: 1px solid color-mix(in srgb, var(--color-input) 62%, var(--color-primary));
+      border-radius: var(--radius-xl);
+      background: color-mix(in srgb, var(--color-popover) 92%, transparent);
+      color: var(--color-foreground);
+      padding: calc(var(--spacing) * 6);
       max-width: min(90vw, 480px);
-      box-shadow: var(--surface-highlight), var(--overlay-shadow);
+      box-shadow: inset 0 1px 0 color-mix(in srgb, white 8%, transparent), 0 28px 90px color-mix(in srgb, var(--color-foreground) 48%, transparent);
       font-family: var(--font-sans);
     }
 
     dialog::backdrop {
-      background: color-mix(in srgb, var(--gray-12) 68%, transparent);
+      background: color-mix(in srgb, white 68%, transparent);
       backdrop-filter: blur(8px);
     }
 
@@ -78,13 +78,13 @@ export class OpenDialog extends OpenElement {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      margin-bottom: var(--size-4);
+      margin-bottom: calc(var(--spacing) * 4);
     }
 
     .dialog-title {
-      font-size: var(--font-size-2);
-      font-weight: var(--font-weight-6);
-      color: var(--text-primary);
+      font-size: var(--text-xl);
+      font-weight: var(--font-weight-semibold);
+      color: var(--color-foreground);
       margin: 0;
     }
 
@@ -92,30 +92,30 @@ export class OpenDialog extends OpenElement {
       background: none;
       border: none;
       cursor: pointer;
-      color: var(--text-muted);
-      font-size: var(--font-size-2);
-      line-height: var(--font-lineheight-1);
-      padding: var(--size-1);
-      border-radius: var(--radius-1);
+      color: var(--color-muted-foreground);
+      font-size: var(--text-xl);
+      line-height: 0.95;
+      padding: calc(var(--spacing) * 1);
+      border-radius: var(--radius-md);
       transition: color 0.15s ease;
     }
 
     .dialog-close:hover {
-      color: var(--text-primary);
-      background: var(--brand-subtle);
+      color: var(--color-foreground);
+      background: color-mix(in srgb, var(--color-primary) 14%, transparent);
     }
 
     .dialog-body {
-      font-size: var(--font-size-1);
-      color: var(--text-secondary);
-      line-height: var(--font-lineheight-3);
+      font-size: var(--text-base);
+      color: var(--color-muted-foreground);
+      line-height: 1.5;
     }
 
     .dialog-footer {
-      margin-top: var(--size-5);
+      margin-top: calc(var(--spacing) * 5);
       display: flex;
       justify-content: flex-end;
-      gap: var(--size-2);
+      gap: calc(var(--spacing) * 2);
     }
 
     :host(:state(open)) dialog {

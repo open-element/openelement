@@ -19,26 +19,26 @@ export default class OpenReadingShell extends OpenElement {
   .main{min-width:0;max-width:760px;line-height:1.7}
   :host([rail]) .main{max-width:880px}
   :host(:not([rail])) .main{margin-inline:auto}
-  .meta{display:none;margin-block-end:var(--size-7);padding-block-end:var(--size-5);border-block-end:1px solid var(--border)}
+  .meta{display:none;margin-block-end:calc(var(--spacing) * 7);padding-block-end:calc(var(--spacing) * 5);border-block-end:1px solid var(--color-border)}
   :host([meta]) .meta,:host([metadata]) .meta{display:block}
-  .breadcrumb{display:flex;flex-wrap:wrap;align-items:baseline;gap:var(--size-2);margin:0 0 var(--size-4);color:var(--text-muted);font-family:var(--font-mono);font-size:var(--font-size-00);font-weight:var(--font-weight-8);letter-spacing:.1em;text-transform:uppercase}
+  .breadcrumb{display:flex;flex-wrap:wrap;align-items:baseline;gap:calc(var(--spacing) * 2);margin:0 0 calc(var(--spacing) * 4);color:var(--color-muted-foreground);font-family:var(--font-mono);font-size:var(--text-xs);font-weight:var(--font-weight-extrabold);letter-spacing:.1em;text-transform:uppercase}
   .breadcrumb a{color:inherit;text-decoration:none}
-  .breadcrumb a:hover{color:var(--brand);text-decoration:underline}
+  .breadcrumb a:hover{color:var(--color-primary);text-decoration:underline}
   /* No .crumb-sep ink: the 55% tint of --text-muted measured 2.62:1 on the
      light base (2.52:1 dark); the separator carries the breadcrumb's own
      --text-muted (7.74:1 light, 6.09:1 dark) instead. */
-  .breadcrumb .crumb-current{color:var(--violet-8)}
-  .title{margin:0;color:var(--text-primary);font-family:var(--font-sans);font-size:clamp(2.1rem,4.6vw,3.4rem);font-weight:var(--font-weight-8);letter-spacing:-.035em;line-height:1.05;overflow-wrap:break-word;text-wrap:balance}
-  .title-accent{display:block;color:var(--violet-8);font-family:var(--font-serif);font-style:italic;font-weight:400;font-size:calc(1em * 1.08);letter-spacing:-.01em}
-  .lede{max-width:640px;margin:var(--size-4) 0 0;color:var(--text-secondary);font-size:clamp(var(--font-size-1),1.4vw,var(--font-size-2));line-height:1.65}
-  .freshness-row{margin:var(--size-3) 0 0;color:var(--text-muted);font-family:var(--font-mono);font-size:var(--font-size-00)}
+  .breadcrumb .crumb-current{color:var(--color-primary)}
+  .title{margin:0;color:var(--color-foreground);font-family:var(--font-sans);font-size:clamp(2.1rem,4.6vw,3.4rem);font-weight:var(--font-weight-extrabold);letter-spacing:-.035em;line-height:1.05;overflow-wrap:break-word;text-wrap:balance}
+  .title-accent{display:block;color:var(--color-primary);font-family:var(--font-serif);font-style:italic;font-weight:400;font-size:calc(1em * 1.08);letter-spacing:-.01em}
+  .lede{max-width:640px;margin:calc(var(--spacing) * 4) 0 0;color:var(--color-muted-foreground);font-size:clamp(var(--text-base),1.4vw,var(--text-xl));line-height:1.65}
+  .freshness-row{margin:calc(var(--spacing) * 3) 0 0;color:var(--color-muted-foreground);font-family:var(--font-mono);font-size:var(--text-xs)}
   .freshness-row[hidden]{display:none}
-  .meta-row{display:flex;flex-wrap:wrap;gap:var(--size-2);margin:var(--size-4) 0 0;color:var(--text-muted);font-family:var(--font-mono);font-size:var(--font-size-00)}
-  .meta-row span{padding:var(--size-1) var(--size-2);border:1px solid var(--border);border-radius:var(--radius-1)}
-  .rail{display:none;position:sticky;top:calc(var(--nav-height) + var(--size-6));align-self:start}
+  .meta-row{display:flex;flex-wrap:wrap;gap:calc(var(--spacing) * 2);margin:calc(var(--spacing) * 4) 0 0;color:var(--color-muted-foreground);font-family:var(--font-mono);font-size:var(--text-xs)}
+  .meta-row span{padding:calc(var(--spacing) * 1) calc(var(--spacing) * 2);border:1px solid var(--color-border);border-radius:var(--radius-md)}
+  .rail{display:none;position:sticky;top:calc(var(--nav-height) + calc(var(--spacing) * 6));align-self:start}
   :host([rail]) .rail{display:block}
-  .rail-label{margin:0 0 var(--size-3);color:var(--text-muted);font-family:var(--font-mono);font-size:var(--font-size-00);font-weight:var(--font-weight-8);letter-spacing:.14em;text-transform:uppercase}
-  .footer{display:none;margin-block-start:var(--size-10);padding-block-start:var(--size-5);border-block-start:1px solid var(--border)}
+  .rail-label{margin:0 0 calc(var(--spacing) * 3);color:var(--color-muted-foreground);font-family:var(--font-mono);font-size:var(--text-xs);font-weight:var(--font-weight-extrabold);letter-spacing:.14em;text-transform:uppercase}
+  .footer{display:none;margin-block-start:calc(var(--spacing) * 10);padding-block-start:calc(var(--spacing) * 5);border-block-start:1px solid var(--color-border)}
   :host([footer]) .footer,:host([navigation]) .footer{display:block}
   /* The footer is a rule plus padding, so a pager with no visible link would
      leave an empty 21px bar. Collapse the chrome (not the footer box): the
@@ -49,20 +49,20 @@ export default class OpenReadingShell extends OpenElement {
      "> slot > .pager" keeps custom footer slot content (changelog, roadmap)
      untouched. */
   :host([footer]) .footer:has(> slot > .pager):not(:has(> slot > .pager a:not([hidden]))),:host([navigation]) .footer:has(> slot > .pager):not(:has(> slot > .pager a:not([hidden]))){margin-block-start:0;padding-block-start:0;border-block-start:0}
-  .pager{display:grid;grid-template-columns:1fr 1fr;gap:var(--size-4)}
-  .pager-card{display:block;padding:var(--size-4) var(--size-5);border:var(--border-size-1) solid var(--border);border-radius:var(--radius-2);color:var(--text-primary);text-decoration:none}
+  .pager{display:grid;grid-template-columns:1fr 1fr;gap:calc(var(--spacing) * 4)}
+  .pager-card{display:block;padding:calc(var(--spacing) * 4) calc(var(--spacing) * 5);border:1px solid var(--color-border);border-radius:var(--radius-lg);color:var(--color-foreground);text-decoration:none}
   .pager-card[hidden]{display:none}
-  .pager-card:hover{border-color:var(--brand)}
+  .pager-card:hover{border-color:var(--color-primary)}
   .pager-card.next{grid-column:2;text-align:end}
-  .pager-kicker{display:block;margin-block-end:var(--size-1);color:var(--text-muted);font-family:var(--font-mono);font-size:var(--font-size-00);letter-spacing:.08em;text-transform:uppercase}
-  .pager-title{display:block;font-weight:var(--font-weight-7)}
+  .pager-kicker{display:block;margin-block-end:calc(var(--spacing) * 1);color:var(--color-muted-foreground);font-family:var(--font-mono);font-size:var(--text-xs);letter-spacing:.08em;text-transform:uppercase}
+  .pager-title{display:block;font-weight:var(--font-weight-bold)}
   @media(max-width:900px){
-    .shell,:host([rail]) .shell{grid-template-columns:1fr;width:min(100% - 2rem,760px);padding-block:var(--size-8)}
+    .shell,:host([rail]) .shell{grid-template-columns:1fr;width:min(100% - 2rem,760px);padding-block:calc(var(--spacing) * 8)}
     .pager{grid-template-columns:1fr}
     .pager-card.next{grid-column:auto}
     .main{max-width:none}
     .title{font-size:clamp(1.8rem,8vw,2.4rem)}
-    .rail{position:static;margin-block-start:var(--size-6)}
+    .rail{position:static;margin-block-start:calc(var(--spacing) * 6)}
     .rail-label{display:none}
   }
 `),

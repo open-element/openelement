@@ -19,7 +19,7 @@ separate application-framework promise.
 
 There is **no Linear compatibility layer**: the `open-*-linear` components and
 the `linear-token-sheet` token sheet are not part of the public surface. Use the
-canonical Open Props components and `@openelement/ui/open-props-tokens` instead.
+canonical `open-*` components and `@openelement/ui/theme-tokens` instead.
 
 ## Install
 
@@ -47,8 +47,8 @@ npm install @openelement/ui
 Dependencies flow in one direction:
 
 ```text
-audited Open Props subset
-  -> semantic tokens
+@theme token source (src/theme-tokens.css)
+  -> compiled role sheet (src/theme-tokens.ts)
     -> component recipes
       -> Web Component primitives
 ```
@@ -85,33 +85,25 @@ The reference site wires the same scripts through its Vite `inject` option.
 
 ## Design tokens
 
-`src/open-props-tokens.ts` is **generated — do not edit**. Regenerate from
-the package directory with:
+`src/theme-tokens.css` is the single hand-maintained `@theme` source (alpha9
+C1): the shadcn semantic role sheet adopted whole, plus three first-party
+state roles and the Tailwind-default layout primitives the component tier
+resolves at runtime. `src/theme-tokens.ts` is **generated — do not edit**;
+regenerate from the package directory with:
 
 ```bash
-deno task generate:ui-tokens
+pnpm run generate:theme-tokens
 ```
 
-The drift gate for the same task runs as `ui-tokens:check`.
+The drift gate for the same task runs as `theme-tokens:check` (wired into
+`gate:source`). The Tailwind CLI is a pinned build-time devDependency; nothing
+it emits on its own ships — the sheet carries exactly what this file authors.
 
-Sources:
-
-- Upstream [open-props](https://open-props.style) `1.7.23` (**MIT**,
-  © Adam Argyle) — only the tokens we carry verbatim: the gray ramp,
-  `--indigo-6`, two border sizes, font weights, and two line-heights, read
-  from the package's per-topic `src/props.*.js` files. The generator fails if
-  upstream renames one of them, so drift surfaces at generation time.
-- `src/semantic-tokens.css` (**ours**, hand-maintained) — everything else:
-  re-tuned scales (violet/green/red/orange, px spacing, radii, type sizes,
-  easings, shadows), semantic roles, both themes, the `:host` fallback, and
-  the CJK font stacks. Each divergence from upstream is commented where it
-  lives; do not "fix" tuned values by copying upstream.
-
-`openPropsTokenSheet` is the only token entry point: its token block
-selects `:root, :host`, so the same sheet serves document-level adoption
-and shadow-root adoption (only the structural fallback is `:host`-only).
-The token gates require `--surface-glass`,
-`--ui-control-bg`, `--focus-ring` and `--motion-standard`.
+`themeTokenSheet` is the only token entry point: the role block compiles to
+`@layer theme { :root, :host }`, so the same sheet serves document-level
+adoption and shadow-root adoption; the dark union carries
+`html[data-theme="dark"]`, `.dark` and `:host([data-theme="dark"])`, and a
+forced-colors tier mirrors the union.
 `daisyClassSheet`, modal and step-card are retired and must not reappear in
 exports, manifests, docs or packed artifacts.
 
@@ -158,14 +150,15 @@ manifest; the per-component JSDoc is the source of truth for those.
 @openelement/ui/open-callout
 @openelement/ui/open-dropdown
 @openelement/ui/open-tabs
-@openelement/ui/open-props-tokens
-@openelement/ui/open-props-tokens.js   (legacy alias of the previous entry)
+@openelement/ui/theme-tokens
+@openelement/ui/theme-tokens.js   (legacy alias of the previous entry)
 @openelement/ui/instance-state         (per-element instance state store; tree-shakeable leaf)
 @openelement/ui/manifest               (generated WC package manifest; node-safe leaf)
 ```
 
-The last entry is a compatibility alias kept for import maps written against the
-`.js` form; new code uses `@openelement/ui/open-props-tokens`.
+The `theme-tokens` entry is the compiled @theme role sheet (pure `.ts`,
+node-safe). The `.js` form is a compatibility alias kept for import maps
+written against the `.js` shape.
 
 ## License
 

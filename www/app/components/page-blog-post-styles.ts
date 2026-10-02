@@ -9,24 +9,24 @@ export const pageBlogPostStyles = [
       `
     :host { display: block; }
     .is-hidden { display: none; }
-    .crumb { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--size-2); margin: 0 0 var(--size-4); color: var(--text-muted); font-family: var(--font-mono); font-size: var(--font-size-00); font-weight: var(--font-weight-8); letter-spacing: 0.1em; text-transform: uppercase; }
-    .crumb a { color: var(--text-muted); text-decoration: none; }
-    .crumb a:hover { color: var(--brand); }
+    .crumb { display: flex; flex-wrap: wrap; align-items: baseline; gap: calc(var(--spacing) * 2); margin: 0 0 calc(var(--spacing) * 4); color: var(--color-muted-foreground); font-family: var(--font-mono); font-size: var(--text-xs); font-weight: var(--font-weight-extrabold); letter-spacing: 0.1em; text-transform: uppercase; }
+    .crumb a { color: var(--color-muted-foreground); text-decoration: none; }
+    .crumb a:hover { color: var(--color-primary); }
     /* No .crumb-sep ink: the 55% tint of --text-muted measured 2.62:1 on the
        light base (2.52:1 dark); the separator carries the .crumb --text-muted
        (7.74:1 light, 6.09:1 dark) instead. */
-    .crumb .crumb-current { color: var(--violet-8); }
-    .post-title { margin: 0; color: var(--text-primary); font-family: var(--font-serif); font-style: italic; font-weight: 400; font-size: clamp(2.4rem, 5.5vw, 4.4rem); line-height: 1.02; letter-spacing: -0.01em; overflow-wrap: break-word; text-wrap: balance; }
-    .post-lede { max-width: 640px; margin: var(--size-4) 0 0; color: var(--text-secondary); font-size: clamp(var(--font-size-1), 1.4vw, var(--font-size-2)); line-height: 1.65; }
+    .crumb .crumb-current { color: var(--color-primary); }
+    .post-title { margin: 0; color: var(--color-foreground); font-family: var(--font-serif); font-style: italic; font-weight: 400; font-size: clamp(2.4rem, 5.5vw, 4.4rem); line-height: 1.02; letter-spacing: -0.01em; overflow-wrap: break-word; text-wrap: balance; }
+    .post-lede { max-width: 640px; margin: calc(var(--spacing) * 4) 0 0; color: var(--color-muted-foreground); font-size: clamp(var(--text-base), 1.4vw, var(--text-xl)); line-height: 1.65; }
     .post-lede:empty { display: none; }
-    .lang-notice { max-width: 640px; margin: var(--size-4) 0 0; padding: var(--size-2) var(--size-3); border-inline-start: var(--border-size-2) solid var(--violet-5); color: var(--text-secondary); font-size: var(--font-size-0); line-height: 1.65; }
+    .lang-notice { max-width: 640px; margin: calc(var(--spacing) * 4) 0 0; padding: calc(var(--spacing) * 2) calc(var(--spacing) * 3); border-inline-start: 2px solid var(--color-primary); color: var(--color-muted-foreground); font-size: var(--text-sm); line-height: 1.65; }
     .lang-notice:empty { display: none; }
-    .post-meta { display: flex; flex-wrap: wrap; gap: var(--size-2); margin: var(--size-4) 0 0; color: var(--text-muted); font-family: var(--font-mono); font-size: var(--font-size-00); letter-spacing: 0.06em; text-transform: uppercase; }
-    .next-dispatch { display: grid; gap: var(--size-3); margin-top: var(--size-10); padding-top: var(--size-6); border-top: 1px solid var(--border); }
-    .next-label { color: var(--text-muted); font-family: var(--font-mono); font-size: var(--font-size-00); font-weight: var(--font-weight-8); letter-spacing: 0.16em; text-transform: uppercase; }
-    .next-dispatch a { color: var(--text-primary); font-family: var(--font-serif); font-size: clamp(1.7rem, 3.2vw, 2.6rem); line-height: 1.05; text-decoration: none; }
-    .next-dispatch a:hover { color: var(--violet-8); }
-    .not-found { text-align: center; padding: var(--size-12) var(--size-4); color: var(--text-secondary); }
+    .post-meta { display: flex; flex-wrap: wrap; gap: calc(var(--spacing) * 2); margin: calc(var(--spacing) * 4) 0 0; color: var(--color-muted-foreground); font-family: var(--font-mono); font-size: var(--text-xs); letter-spacing: 0.06em; text-transform: uppercase; }
+    .next-dispatch { display: grid; gap: calc(var(--spacing) * 3); margin-top: calc(var(--spacing) * 10); padding-top: calc(var(--spacing) * 6); border-top: 1px solid var(--color-border); }
+    .next-label { color: var(--color-muted-foreground); font-family: var(--font-mono); font-size: var(--text-xs); font-weight: var(--font-weight-extrabold); letter-spacing: 0.16em; text-transform: uppercase; }
+    .next-dispatch a { color: var(--color-foreground); font-family: var(--font-serif); font-size: clamp(1.7rem, 3.2vw, 2.6rem); line-height: 1.05; text-decoration: none; }
+    .next-dispatch a:hover { color: var(--color-primary); }
+    .not-found { text-align: center; padding: calc(var(--spacing) * 12) calc(var(--spacing) * 4); color: var(--color-muted-foreground); }
   `,
   ),
 ];

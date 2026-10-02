@@ -40,28 +40,28 @@ export class OpenCallout extends OpenElement {
     recipe(`
     :host { display: block; }
     .callout {
-      padding: var(--size-3) var(--size-4);
-      margin: var(--size-3) 0;
-      border-left: var(--border-size-2) solid var(--brand);
-      background: var(--brand-subtle);
-      border-radius: 0 var(--radius-2) var(--radius-2) 0;
+      padding: calc(var(--spacing) * 3) calc(var(--spacing) * 4);
+      margin: calc(var(--spacing) * 3) 0;
+      border-left: 2px solid var(--color-primary);
+      background: color-mix(in srgb, var(--color-primary) 14%, transparent);
+      border-radius: 0 var(--radius-lg) var(--radius-lg) 0;
     }
-    :host([type='warning']) .callout { border-left-color: var(--warning); background: var(--warning-subtle); }
-    :host([type='danger']) .callout { border-left-color: var(--error); background: var(--error-subtle); }
-    :host([type='tip']) .callout { border-left-color: var(--success); background: var(--success-subtle); }
+    :host([type='warning']) .callout { border-left-color: var(--color-warning); background: var(--color-warning-subtle); }
+    :host([type='danger']) .callout { border-left-color: var(--color-destructive); background: var(--color-destructive-subtle); }
+    :host([type='tip']) .callout { border-left-color: var(--color-success); background: var(--color-success-subtle); }
     :host([data-theme='light'][type='warning']) .callout { background: rgba(245,158,11,0.06); }
     :host([data-theme='light'][type='danger']) .callout { background: rgba(239,68,68,0.06); }
     :host([data-theme='light'][type='tip']) .callout { background: rgba(34,197,94,0.06); }
     .callout-header {
-      display: flex; align-items: center; gap: var(--size-1); margin-bottom: var(--size-1);
+      display: flex; align-items: center; gap: calc(var(--spacing) * 1); margin-bottom: calc(var(--spacing) * 1);
     }
     .callout-header[hidden] { display: none; }
-    .callout-icon { font-size: var(--font-size-0); line-height: 1; flex-shrink: 0; }
+    .callout-icon { font-size: var(--text-sm); line-height: 1; flex-shrink: 0; }
     .callout-title {
-      font-size: var(--font-size-0); font-weight: var(--font-weight-6); color: var(--text-primary);
+      font-size: var(--text-sm); font-weight: var(--font-weight-semibold); color: var(--color-foreground);
     }
     .callout-body {
-      font-size: var(--font-size-1); line-height: var(--font-lineheight-4); color: var(--text-secondary);
+      font-size: var(--text-base); line-height: 1.75; color: var(--color-muted-foreground);
     }
     .callout-body ::slotted(p) { margin: 0; }
   `),

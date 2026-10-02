@@ -51,17 +51,17 @@ export class OpenButton extends OpenElement {
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      gap: var(--size-2);
+      gap: calc(var(--spacing) * 2);
       font-family: var(--font-sans);
-      font-weight: var(--font-weight-8);
+      font-weight: var(--font-weight-extrabold);
       text-decoration: none;
       cursor: pointer;
-      border: var(--border-size-1) solid color-mix(in srgb, var(--border) 72%, var(--brand));
-      background: color-mix(in srgb, var(--bg-elevated) 78%, transparent);
-      color: var(--ui-control-text);
-      border-radius: var(--ui-control-radius);
-      box-shadow: var(--ui-control-highlight);
-      transition: color var(--ease-3) var(--duration-2), border-color var(--ease-3) var(--duration-2), background var(--ease-3) var(--duration-2), transform var(--ease-3) var(--duration-2), box-shadow var(--ease-3) var(--duration-2);
+      border: 1px solid color-mix(in srgb, var(--color-border) 72%, var(--color-primary));
+      background: color-mix(in srgb, var(--color-popover) 78%, transparent);
+      color: var(--color-foreground);
+      border-radius: var(--radius-md);
+      box-shadow: inset 0 1px 0 color-mix(in srgb, white 12%, transparent);
+      transition: color cubic-bezier(0.5, 0, 0, 1) 200ms, border-color cubic-bezier(0.5, 0, 0, 1) 200ms, background cubic-bezier(0.5, 0, 0, 1) 200ms, transform cubic-bezier(0.5, 0, 0, 1) 200ms, box-shadow cubic-bezier(0.5, 0, 0, 1) 200ms;
       white-space: nowrap;
       letter-spacing: 0;
     }
@@ -72,30 +72,30 @@ export class OpenButton extends OpenElement {
 
     /* Sizes */
     :host([size='sm']) .btn {
-      padding: var(--size-1) var(--size-3);
-      font-size: var(--font-size-0);
+      padding: calc(var(--spacing) * 1) calc(var(--spacing) * 3);
+      font-size: var(--text-sm);
       min-height: 30px;
     }
 
     :host(:not([size])) .btn,
     :host([size='md']) .btn {
-      padding: var(--size-2) var(--size-4);
-      font-size: var(--font-size-1);
+      padding: calc(var(--spacing) * 2) calc(var(--spacing) * 4);
+      font-size: var(--text-base);
       min-height: 38px;
     }
 
     :host([size='lg']) .btn {
-      padding: var(--size-3) var(--size-5);
-      font-size: var(--font-size-2);
+      padding: calc(var(--spacing) * 3) calc(var(--spacing) * 5);
+      font-size: var(--text-xl);
       min-height: 48px;
     }
 
     /* Variants (default is the base .btn treatment) */
     :host(:not([variant])) .btn:hover,
     :host([variant='default']) .btn:hover {
-      color: var(--brand-deep);
-      border-color: var(--brand-light);
-      background: color-mix(in srgb, var(--brand-pale) 52%, var(--bg-elevated));
+      color: var(--color-foreground);
+      border-color: color-mix(in srgb, var(--color-primary) 55%, transparent);
+      background: color-mix(in srgb, color-mix(in srgb, var(--color-primary) 18%, transparent) 52%, var(--color-popover));
     }
 
     /* Flat brand fill, not a light-swept gradient: the gradient's --brand-light
@@ -103,17 +103,17 @@ export class OpenButton extends OpenElement {
        have needed a dark ink on a light tint). --brand/--brand-hover are the
        two steps that clear AA against --on-brand in both themes. */
     :host([variant='primary']) .btn {
-      background: var(--brand);
-      color: var(--on-brand);
+      background: var(--color-primary);
+      color: var(--color-primary-foreground);
       border-color: transparent;
-      box-shadow: 0 var(--size-2) var(--size-5) color-mix(in srgb, var(--brand) 22%, transparent);
+      box-shadow: 0 calc(var(--spacing) * 2) calc(var(--spacing) * 5) color-mix(in srgb, var(--color-primary) 22%, transparent);
     }
 
     :host([variant='primary']) .btn:hover {
-      background: var(--brand-hover);
+      background: color-mix(in srgb, var(--color-primary) 90%, transparent);
       border-color: transparent;
-      transform: translateY(calc(var(--border-size-1) * -1));
-      box-shadow: 0 var(--size-3) var(--size-6) color-mix(in srgb, var(--brand) 28%, transparent);
+      transform: translateY(calc(1px * -1));
+      box-shadow: 0 calc(var(--spacing) * 3) calc(var(--spacing) * 6) color-mix(in srgb, var(--color-primary) 28%, transparent);
     }
 
     :host([variant='ghost']) .btn {
@@ -121,13 +121,13 @@ export class OpenButton extends OpenElement {
     }
 
     :host([variant='ghost']) .btn:hover {
-      background: color-mix(in srgb, var(--brand-pale) 38%, transparent);
+      background: color-mix(in srgb, color-mix(in srgb, var(--color-primary) 18%, transparent) 38%, transparent);
       border-color: transparent;
     }
 
     :host([variant='accent']) .btn {
-      background: var(--brand);
-      color: var(--on-brand);
+      background: var(--color-primary);
+      color: var(--color-primary-foreground);
       border-color: transparent;
     }
     :host([variant='accent']) .btn:hover {
@@ -136,7 +136,7 @@ export class OpenButton extends OpenElement {
     }
     :host([variant='accent']) .btn:active {
       transform: translateY(0);
-      box-shadow: var(--shadow-1);
+      box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
     }
 
     /* States */
@@ -148,8 +148,8 @@ export class OpenButton extends OpenElement {
     }
 
     .btn:focus-visible {
-      outline: var(--focus-size, 2px) solid var(--focus-ring, var(--brand, var(--indigo-6)));
-      outline-offset: var(--focus-offset, 2px);
+      outline: 2px solid var(--color-ring);
+      outline-offset: 3px;
     }
 
     :host(:state(disabled)) .btn {
