@@ -18,7 +18,7 @@ async function withTempTree(
   files: Record<string, string>,
   fn: (root: string) => void | Promise<void>,
 ) {
-  const root = await mkdtemp(join(tmpdir(), ''));
+  const root = await mkdtemp(join(tmpdir(), 'oe-'));
   try {
     for (const [rel, content] of Object.entries(files)) {
       const path = `${root}/${rel}`;

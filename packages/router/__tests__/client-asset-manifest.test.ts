@@ -120,7 +120,7 @@ test('readViteClientManifest fails closed when the manifest is missing', async (
 });
 
 test('readViteClientManifest fails closed when the manifest is corrupted', async () => {
-  const dir = await mkdtemp(join(tmpdir(), ''));
+  const dir = await mkdtemp(join(tmpdir(), 'oe-'));
   try {
     const path = join(dir, 'manifest.json');
     await writeFile(path, '{ not json');

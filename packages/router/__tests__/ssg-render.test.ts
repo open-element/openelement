@@ -181,7 +181,7 @@ test('ssgRender - handles options with speculation enabled', async () => {
 // ─── #674: output mkdir failures must propagate, not be swallowed ───
 
 test('ssgRender - output mkdir failure aborts the build with the fs error (#674)', async () => {
-  const root = await mkdtemp(join(tmpdir(), ''));
+  const root = await mkdtemp(join(tmpdir(), 'oe-'));
   try {
     // A regular file sits where the output directory must be created, so the
     // recursive mkdir fails (ENOTDIR). Previously this was swallowed and the
@@ -491,7 +491,7 @@ test('request-time server entry serves the SSR bundle at request time', async ()
   const { renderRequestTimeServerModule } = await import('../src/vite/internal/ssg/ssg-helpers.ts');
   const { join, toFileUrl } = await import('@std/path');
 
-  const dir = await mkdtemp(join(tmpdir(), ''));
+  const dir = await mkdtemp(join(tmpdir(), 'oe-'));
   try {
     // The temp fixture sits outside any node_modules tree, so the bare
     // 'hono' specifier the real generated entry uses cannot resolve there;
@@ -538,7 +538,7 @@ test('request-time server entry wires the island client script into the entry re
   const { renderRequestTimeServerModule } = await import('../src/vite/internal/ssg/ssg-helpers.ts');
   const { join, toFileUrl } = await import('@std/path');
 
-  const dir = await mkdtemp(join(tmpdir(), ''));
+  const dir = await mkdtemp(join(tmpdir(), 'oe-'));
   try {
     // The temp fixture sits outside any node_modules tree; use the resolved
     // specifier (see the first request-time entry test).
@@ -581,7 +581,7 @@ test('request-time server entry isRequestTimePath admits request-time paths (#55
   const { renderRequestTimeServerModule } = await import('../src/vite/internal/ssg/ssg-helpers.ts');
   const { join, toFileUrl } = await import('@std/path');
 
-  const dir = await mkdtemp(join(tmpdir(), ''));
+  const dir = await mkdtemp(join(tmpdir(), 'oe-'));
   try {
     // The temp fixture sits outside any node_modules tree; use the resolved
     // specifier (see the first request-time entry test).

@@ -48,7 +48,7 @@ async function exists(path: string): Promise<boolean> {
 }
 
 test('expandI18nLocales skips the default locale output', async () => {
-  const root = await mkdtemp(join(tmpdir(), ''));
+  const root = await mkdtemp(join(tmpdir(), 'oe-'));
   const calls: string[] = [];
   try {
     await expandI18nLocales(
@@ -84,7 +84,7 @@ test('expandI18nLocales skips the default locale output', async () => {
 // ─── alpha.18 R2-H3: 500 contract wiring (dynamic routes) ──────
 
 test('expandDynamicRoutes - renderRoute receives no forced global title (#968)', async () => {
-  const root = await mkdtemp(join(tmpdir(), ''));
+  const root = await mkdtemp(join(tmpdir(), 'oe-'));
   try {
     let seenOptions: Record<string, unknown> | undefined;
     await expandDynamicRoutes(
@@ -109,7 +109,7 @@ test('expandDynamicRoutes - renderRoute receives no forced global title (#968)',
 });
 
 test('expandDynamicRoutes - defined 500 output fails the build by default and writes nothing', async () => {
-  const root = await mkdtemp(join(tmpdir(), ''));
+  const root = await mkdtemp(join(tmpdir(), 'oe-'));
   try {
     await assertRejectsIncludes(
       () =>
@@ -131,7 +131,7 @@ test('expandDynamicRoutes - defined 500 output fails the build by default and wr
 });
 
 test('expandDynamicRoutes - defined 500 output in warn mode skips the page and keeps it out of the ISR map', async () => {
-  const root = await mkdtemp(join(tmpdir(), ''));
+  const root = await mkdtemp(join(tmpdir(), 'oe-'));
   try {
     const map = await expandDynamicRoutes(
       [blogRoute],
@@ -149,7 +149,7 @@ test('expandDynamicRoutes - defined 500 output in warn mode skips the page and k
 });
 
 test('expandDynamicRoutes - mixed params register only successful renders in the ISR map (warn mode)', async () => {
-  const root = await mkdtemp(join(tmpdir(), ''));
+  const root = await mkdtemp(join(tmpdir(), 'oe-'));
   try {
     const map = await expandDynamicRoutes(
       [blogRoute],
@@ -171,7 +171,7 @@ test('expandDynamicRoutes - mixed params register only successful renders in the
 });
 
 test('expandDynamicRoutes - redirect result is not written as a 200 page', async () => {
-  const root = await mkdtemp(join(tmpdir(), ''));
+  const root = await mkdtemp(join(tmpdir(), 'oe-'));
   try {
     const redirectOutput: SsgPageOutput = {
       ...okOutput('<html><body>Redirecting</body></html>'),
@@ -194,7 +194,7 @@ test('expandDynamicRoutes - redirect result is not written as a 200 page', async
 });
 
 test('expandDynamicRoutes - notFound result is not written as a 200 page', async () => {
-  const root = await mkdtemp(join(tmpdir(), ''));
+  const root = await mkdtemp(join(tmpdir(), 'oe-'));
   try {
     const notFoundOutput: SsgPageOutput = {
       ...okOutput('<html><body>404 Not Found</body></html>'),
@@ -217,7 +217,7 @@ test('expandDynamicRoutes - notFound result is not written as a 200 page', async
 });
 
 test('expandDynamicRoutes - renderRoute throw fails the build by default', async () => {
-  const root = await mkdtemp(join(tmpdir(), ''));
+  const root = await mkdtemp(join(tmpdir(), 'oe-'));
   try {
     await assertRejectsIncludes(
       () =>
@@ -239,7 +239,7 @@ test('expandDynamicRoutes - renderRoute throw fails the build by default', async
 });
 
 test('expandDynamicRoutes - renderRoute throw in warn mode skips the page', async () => {
-  const root = await mkdtemp(join(tmpdir(), ''));
+  const root = await mkdtemp(join(tmpdir(), 'oe-'));
   try {
     const map = await expandDynamicRoutes(
       [blogRoute],
@@ -259,7 +259,7 @@ test('expandDynamicRoutes - renderRoute throw in warn mode skips the page', asyn
 // ─── #672: getStaticPaths failures follow the dynamicRouteFailure policy ───
 
 test('expandDynamicRoutes - getStaticPaths throw fails the build by default', async () => {
-  const root = await mkdtemp(join(tmpdir(), ''));
+  const root = await mkdtemp(join(tmpdir(), 'oe-'));
   try {
     await assertRejectsIncludes(
       () =>
@@ -280,7 +280,7 @@ test('expandDynamicRoutes - getStaticPaths throw fails the build by default', as
 });
 
 test('expandDynamicRoutes - getStaticPaths throw in warn mode skips the route', async () => {
-  const root = await mkdtemp(join(tmpdir(), ''));
+  const root = await mkdtemp(join(tmpdir(), 'oe-'));
   try {
     const map = await expandDynamicRoutes(
       [blogRoute],
@@ -297,7 +297,7 @@ test('expandDynamicRoutes - getStaticPaths throw in warn mode skips the route', 
 });
 
 test('expandI18nLocales - getStaticPaths throw fails the build by default', async () => {
-  const root = await mkdtemp(join(tmpdir(), ''));
+  const root = await mkdtemp(join(tmpdir(), 'oe-'));
   try {
     await assertRejectsIncludes(
       () =>
@@ -320,7 +320,7 @@ test('expandI18nLocales - getStaticPaths throw fails the build by default', asyn
 });
 
 test('expandI18nLocales - getStaticPaths throw in warn mode skips the route', async () => {
-  const root = await mkdtemp(join(tmpdir(), ''));
+  const root = await mkdtemp(join(tmpdir(), 'oe-'));
   try {
     await expandI18nLocales(
       { i18nOptions: { locales: ['en', 'zh'], defaultLocale: 'en' } },

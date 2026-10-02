@@ -19,7 +19,7 @@ import {
 } from '../src/vite/internal/static-serve.ts';
 
 test('dispatchRequest shares mutating and styled-fallback production semantics (#1100)', async () => {
-  const root = await mkdtemp(join(tmpdir(), ''));
+  const root = await mkdtemp(join(tmpdir(), 'oe-'));
   const seen: string[] = [];
   try {
     await writeFile(join(root, 'index.html'), '<h1>static home</h1>');
@@ -86,7 +86,7 @@ test('staticFileCandidates: exact, /index.html, then .html', () => {
 });
 
 test('tryStatic serves files and refuses path escape', async () => {
-  const root = await mkdtemp(join(tmpdir(), ''));
+  const root = await mkdtemp(join(tmpdir(), 'oe-'));
   try {
     await writeFile(join(root, 'index.html'), '<h1>home</h1>');
     await mkdir(join(root, 'about'));
@@ -119,8 +119,8 @@ test('tryStatic serves files and refuses path escape', async () => {
 });
 
 test('tryStatic refuses symlink escape but allows in-root symlinks', async () => {
-  const root = await mkdtemp(join(tmpdir(), ''));
-  const outside = await mkdtemp(join(tmpdir(), ''));
+  const root = await mkdtemp(join(tmpdir(), 'oe-'));
+  const outside = await mkdtemp(join(tmpdir(), 'oe-'));
   try {
     await writeFile(join(outside, 'secret.txt'), 'TOP-SECRET');
     await writeFile(join(root, 'real.html'), '<h1>real</h1>');
@@ -143,7 +143,7 @@ test('tryStatic treats a directory at a candidate path as a miss (#1281, CodeQL 
   // The candidate check is read-and-fallback instead of existsSync/statSync
   // guard-then-read (check-then-act TOCTOU): a directory named like a file
   // candidate must fall through exactly like a missing file.
-  const root = await mkdtemp(join(tmpdir(), ''));
+  const root = await mkdtemp(join(tmpdir(), 'oe-'));
   try {
     await mkdir(join(root, 'dir.html'));
     await writeFile(join(root, 'real.html'), '<h1>real</h1>');
@@ -163,7 +163,7 @@ test('malformed percent-encoding is a defined 400, never a crash (#823)', async 
   expect(isMalformedUrlError(err)).toBeTruthy();
   expect(!isMalformedUrlError(new Error('nope'))).toBeTruthy();
 
-  const root = await mkdtemp(join(tmpdir(), ''));
+  const root = await mkdtemp(join(tmpdir(), 'oe-'));
   try {
     const response = tryStatic(root, '/%zz');
     expect(response).toBeTruthy();
@@ -175,7 +175,7 @@ test('malformed percent-encoding is a defined 400, never a crash (#823)', async 
 });
 
 test('tryStatic cache-control: content-hashed assets immutable, HTML rechecked on deploy (#1039)', async () => {
-  const root = await mkdtemp(join(tmpdir(), ''));
+  const root = await mkdtemp(join(tmpdir(), 'oe-'));
   try {
     await mkdir(join(root, 'assets'));
     await writeFile(join(root, 'assets', 'index-Dq2gH8fM.js'), 'console.log(1)');
@@ -203,7 +203,7 @@ test('tryStatic cache-control: content-hashed assets immutable, HTML rechecked o
 test('tryStatic cache-control: unhashed framework client runtime revalidates', async () => {
   // The framework-owned /client/islands/client.js is not content-hashed;
   // without an explicit header its cache semantics were undefined.
-  const root = await mkdtemp(join(tmpdir(), ''));
+  const root = await mkdtemp(join(tmpdir(), 'oe-'));
   try {
     await mkdir(join(root, 'client', 'islands'), { recursive: true });
     await writeFile(join(root, 'client', 'islands', 'client.js'), 'export {}');
@@ -218,7 +218,7 @@ test('tryStatic cache-control: unhashed framework client runtime revalidates', a
 });
 
 test('dispatchRequest: pure-static (serverMod=null) answers mutating methods 405', async () => {
-  const root = await mkdtemp(join(tmpdir(), ''));
+  const root = await mkdtemp(join(tmpdir(), 'oe-'));
   try {
     await mkdir(join(root, 'about'));
     await writeFile(join(root, 'about', 'index.html'), '<h1>about</h1>');

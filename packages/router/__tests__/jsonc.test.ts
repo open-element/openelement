@@ -53,7 +53,7 @@ test('parseJsonc - returns null on invalid JSON', () => {
 });
 
 test('readJsonc - reads JSONC from disk and returns null for missing files', async () => {
-  const dir = await mkdtemp(join(tmpdir(), ''));
+  const dir = await mkdtemp(join(tmpdir(), 'oe-'));
   try {
     const path = `${dir}/deno.json`;
     await writeFile(
@@ -71,7 +71,7 @@ test('readJsonc - reads JSONC from disk and returns null for missing files', asy
 });
 
 test('readJsonc - returns null for invalid file contents', async () => {
-  const dir = await mkdtemp(join(tmpdir(), ''));
+  const dir = await mkdtemp(join(tmpdir(), 'oe-'));
   try {
     const path = `${dir}/deno.json`;
     await writeFile(path, '{ invalid');

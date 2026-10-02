@@ -14,7 +14,7 @@ test('contentType maps known extensions and falls back to octet-stream', () => {
 });
 
 test('serveStatic serves files and uses production candidate/cache semantics', async () => {
-  const root = await mkdtemp(join(tmpdir(), ''));
+  const root = await mkdtemp(join(tmpdir(), 'oe-'));
   await writeFile(`${root}/index.html`, '<h1>root</h1>');
   await writeFile(`${root}/app.js`, 'console.log(1)');
   await writeFile(`${root}/font.woff2`, new Uint8Array([119, 79, 70, 50]));
@@ -51,7 +51,7 @@ test('serveStatic serves files and uses production candidate/cache semantics', a
 });
 
 test('serveStatic rejects NUL with 403, returns 404 when nothing matches', async () => {
-  const root = await mkdtemp(join(tmpdir(), ''));
+  const root = await mkdtemp(join(tmpdir(), 'oe-'));
   const server = await serveStatic(root);
   try {
     // `..` cannot be exercised through fetch (WHATWG URL parsing resolves dot
@@ -72,7 +72,7 @@ test('serveStatic rejects NUL with 403, returns 404 when nothing matches', async
 });
 
 test('serveStatic answers single-range requests with 206 and advertises accept-ranges', async () => {
-  const root = await mkdtemp(join(tmpdir(), ''));
+  const root = await mkdtemp(join(tmpdir(), 'oe-'));
   await writeFile(`${root}/clip.mp4`, new Uint8Array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]));
 
   const server = await serveStatic(root);

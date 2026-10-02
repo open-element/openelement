@@ -198,7 +198,7 @@ async function loadAdmissionPredicate(
   routes: CorpusRoute[],
   caseIndex: number,
 ): Promise<(pathname: string) => boolean> {
-  const dir = await mkdtemp(join(tmpdir(), ''));
+  const dir = await mkdtemp(join(tmpdir(), 'oe-'));
   try {
     await writeFile(
       join(dir, 'entry.js'),
