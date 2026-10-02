@@ -1,7 +1,7 @@
 /**
  * Release gate: the packed npm facade (#1412).
  *
- * `deno pack` produces the artifact; tools/release/npm-manifest.ts owns the
+ * `vp pack` produces the artifact; tools/release/npm-manifest.ts owns the
  * metadata the coordinator writes into it. This check reads the REAL tarball
  * bytes (run tools/release#pack:dry-run first) and fails closed on five
  * things a consumer would otherwise see:

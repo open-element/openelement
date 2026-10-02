@@ -3,7 +3,7 @@
  *
  * Owns the approved post-pack manifest mutations (metadata, dependency and
  * peer derivation, Create bin) and their proof: only the allowlisted fields
- * may differ from the raw `deno pack` output, and every other file must stay
+ * may differ from the raw pack output, and every other file must stay
  * byte-identical. Pure enough to test without packing.
  */
 
@@ -139,7 +139,7 @@ const CREATE_BIN = {
 };
 
 /**
- * The only `package.json` fields the coordinator may change after `deno pack`.
+ * The only `package.json` fields the coordinator may change after the pack.
  * Everything else (name, version, exports, ...) must be byte-identical; the
  * proof is enforced by assertOnlyApprovedManifestChanges at pack time and
  * documented in docs/maintainers/pack-post-processing.md.
@@ -205,7 +205,7 @@ export function assertOnlyApprovedManifestChanges(
     if (rawManifest[path] !== finalManifest[path]) {
       throw new Error(
         `[npm] repack modified '${path}' content (failing closed); ` +
-          'only package.json metadata may change after deno pack.',
+          'only package.json metadata may change after the pack.',
       );
     }
   }

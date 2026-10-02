@@ -38,8 +38,8 @@ export const RESOLVED_CLIENT_ENTRY_ID = '\0' + VIRTUAL_CLIENT_ENTRY_ID;
 const CLIENT_ENTRY_PUBLIC_PATH = 'client/islands/client.js';
 
 // Same packed-world rule as runtimeModulePath in cli/build-client.ts:
-// workspace dev resolves the TypeScript source; `deno pack` removes raw
-// TypeScript payloads, so an installed tarball resolves the staged
+// workspace dev resolves the TypeScript source; the packed payload ships no
+// raw TypeScript, so an installed tarball resolves the staged
 // JavaScript counterpart instead.
 function devRuntimeModulePath(relativeSource: string): string {
   const sourcePath = fromFileUrl(new URL(relativeSource, import.meta.url));

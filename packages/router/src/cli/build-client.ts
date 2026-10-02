@@ -232,8 +232,8 @@ async function removeClientDeliveryArtifacts(root: string, outDir: string): Prom
 }
 
 // #868: the browser runtimes are real modules bundled through virtual
-// specifiers. Development resolves the TypeScript source; `deno pack` removes
-// raw TypeScript payloads, so an installed tarball must instead resolve the
+// specifiers. Development resolves the TypeScript source; the packed payload
+// ships no raw TypeScript, so an installed tarball must instead resolve the
 // staged JavaScript counterpart.
 function runtimeModulePath(relativeSource: string): string {
   const sourcePath = fromFileUrl(new URL(relativeSource, import.meta.url));

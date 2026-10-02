@@ -1,5 +1,6 @@
 import { assert, assertEquals, assertStringIncludes, assertThrows } from '@std/assert';
-import { join } from '@std/path';
+import { dirname, fromFileUrl, isAbsolute, join, relative, resolve } from '@std/path';
+import ts from 'typescript';
 import {
   assembleVpPackageTree,
   prepareVpStagingFiles,
@@ -333,6 +334,240 @@ Deno.test('prepareVpStagingFiles stages manifests, config and optional tsconfig 
       gone = true;
     }
     assert(gone, 'cleanup must remove the staging root');
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+// ─── ROUTER_CLIENT_RUNTIME_ENTRIES drift guard (P6: single source, no parallel
+// mechanism) ────────────────────────────────────────────────────────────────
+
+const ROUTER_PACKAGE_DIR = fromFileUrl(new URL('../../packages/router', import.meta.url));
+
+/** The file exists and is not a directory. */
+function isFile(path: string): boolean {
+  try {
+    return Deno.statSync(path).isFile;
+  } catch {
+    return false;
+  }
+}
+
+/** True when `candidate` sits inside `dir` (no `..` escape). */
+function isWithin(candidate: string, dir: string): boolean {
+  const from = relative(resolve(dir), resolve(candidate));
+  return from === '' || (!from.startsWith('..') && !isAbsolute(from));
+}
+
+/**
+ * The relative specifiers of one module's VALUE imports. `import type` and
+ * inline `type` specifiers are erased at transpile and never execute the
+ * module; every other import/export-from shape (and dynamic `import()`) does,
+ * so the consumer bundler pulls those modules from the packed payload.
+ */
+function relativeValueImportSpecifiers(source: string): string[] {
+  const sourceFile = ts.createSourceFile('module.ts', source, ts.ScriptTarget.Latest, true);
+  const specifiers: string[] = [];
+  const visit = (node: ts.Node): void => {
+    if (ts.isImportDeclaration(node) && ts.isStringLiteral(node.moduleSpecifier)) {
+      const clause = node.importClause;
+      const named = clause?.namedBindings;
+      const typeOnly =
+        (clause?.isTypeOnly ?? false) ||
+        (named !== undefined &&
+          ts.isNamedImports(named) &&
+          named.elements.length > 0 &&
+          named.elements.every((element) => element.isTypeOnly));
+      // A side-effect import (no clause at all) executes the module.
+      if (!typeOnly) specifiers.push(node.moduleSpecifier.text);
+    } else if (
+      ts.isExportDeclaration(node) &&
+      node.moduleSpecifier !== undefined &&
+      ts.isStringLiteral(node.moduleSpecifier)
+    ) {
+      const reexports = node.exportClause;
+      const typeOnly =
+        node.isTypeOnly ||
+        (reexports !== undefined &&
+          ts.isNamedExports(reexports) &&
+          reexports.elements.length > 0 &&
+          reexports.elements.every((element) => element.isTypeOnly));
+      // `export * from './x'` (no clause) re-exports values.
+      if (!typeOnly) specifiers.push(node.moduleSpecifier.text);
+    } else if (
+      ts.isCallExpression(node) &&
+      node.expression.kind === ts.SyntaxKind.ImportKeyword &&
+      node.arguments.length === 1 &&
+      ts.isStringLiteral(node.arguments[0])
+    ) {
+      specifiers.push((node.arguments[0] as ts.StringLiteral).text);
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sourceFile);
+  return specifiers.filter((specifier) => specifier.startsWith('.'));
+}
+
+/** Resolve one relative specifier the way the source tree spells it (.ts/.tsx, index fallbacks). */
+function resolveRelativeSpecifier(
+  fromFile: string,
+  specifier: string,
+  packageDir: string,
+): string | null {
+  const clean = specifier.split(/[?#]/, 1)[0];
+  const base = resolve(dirname(fromFile), clean);
+  if (!isWithin(base, packageDir)) return null;
+  const candidates = /\.(?:ts|tsx)$/.test(base)
+    ? [base]
+    : [`${base}.ts`, `${base}.tsx`, join(base, 'index.ts'), join(base, 'index.tsx')];
+  return candidates.find((candidate) => isFile(candidate)) ?? null;
+}
+
+interface RuntimeExtraction {
+  /** Package-relative module paths (src/...) the consumer build consumes by path. */
+  modules: Set<string>;
+  /** Fail-closed extraction problems (non-literal arguments, unresolved roots). */
+  problems: string[];
+}
+
+/**
+ * Extract the consumer-side path-consumed runtime set from the router's OWN
+ * sources — never from vp-pack.ts, so the guard cannot self-certify. The
+ * roots are the `runtimeModulePath('...')` literal resolutions in
+ * cli/build-client.ts (#868: the virtual runtime specifiers resolve to real
+ * modules the bundler inlines from the packed payload); the rest of the set
+ * is the transitive closure of their static value imports (type-only imports
+ * add nothing). This mirrors the vp-pack.ts header's definition of the entry
+ * list: the two roots resolved directly, the siblings riding along as value
+ * imports (G0.5 §2).
+ */
+function consumerPathConsumedModules(packageDir: string): RuntimeExtraction {
+  const problems: string[] = [];
+  const entry = join(packageDir, 'src', 'cli', 'build-client.ts');
+  const source = Deno.readTextFileSync(entry);
+  const literalArgs = [...source.matchAll(/runtimeModulePath\(\s*(['"])(.*?)\1\s*\)/g)].map(
+    (match) => match[2],
+  );
+  const callSites =
+    (source.match(/runtimeModulePath\(/g) ?? []).length -
+    (source.match(/function runtimeModulePath\(/g) ?? []).length;
+  if (literalArgs.length !== callSites) {
+    problems.push(
+      `build-client.ts has ${callSites} runtimeModulePath call site(s) but only ` +
+        `${literalArgs.length} literal string argument(s); the extraction only sees ` +
+        'string literals — pass the module path as a literal or extend this guard ' +
+        'deliberately',
+    );
+  }
+  const modules = new Set<string>();
+  const queue: string[] = [];
+  for (const argument of literalArgs) {
+    const resolved = resolve(dirname(entry), argument.split(/[?#]/, 1)[0]);
+    if (!isWithin(resolved, packageDir) || !isFile(resolved)) {
+      problems.push(`runtimeModulePath('${argument}') does not resolve to a file in the package`);
+      continue;
+    }
+    const modulePath = relative(packageDir, resolved);
+    if (!modules.has(modulePath)) {
+      modules.add(modulePath);
+      queue.push(resolved);
+    }
+  }
+  while (queue.length > 0) {
+    const file = queue.shift()!;
+    for (const specifier of relativeValueImportSpecifiers(Deno.readTextFileSync(file))) {
+      const imported = resolveRelativeSpecifier(file, specifier, packageDir);
+      if (imported === null) continue;
+      const modulePath = relative(packageDir, imported);
+      if (!modules.has(modulePath)) {
+        modules.add(modulePath);
+        queue.push(imported);
+      }
+    }
+  }
+  return { modules, problems };
+}
+
+Deno.test('ROUTER_CLIENT_RUNTIME_ENTRIES covers every consumer path-resolved runtime module', () => {
+  const { modules, problems } = consumerPathConsumedModules(ROUTER_PACKAGE_DIR);
+  assertEquals(problems, []);
+  const entries: string[] = [...ROUTER_CLIENT_RUNTIME_ENTRIES];
+  const missing = [...modules].filter((module) => !entries.includes(module)).sort();
+  const stale = entries.filter((entry) => !modules.has(entry)).sort();
+  assertEquals(
+    missing,
+    [],
+    'path-consumed runtime modules missing from ROUTER_CLIENT_RUNTIME_ENTRIES — the ' +
+      'pack would not guarantee their emitted .js, so add them to the entries list',
+  );
+  assertEquals(
+    stale,
+    [],
+    'ROUTER_CLIENT_RUNTIME_ENTRIES entries no longer consumed by path from ' +
+      'cli/build-client.ts — remove them from the entries list',
+  );
+  assertEquals([...modules].sort(), entries.sort());
+});
+
+Deno.test('runtime extraction captures a ninth value-consumed module and skips type-only edges', async () => {
+  const root = await Deno.makeTempDir({ prefix: 'vp-pack-drift-capture-' });
+  try {
+    const cli = join(root, 'src', 'cli');
+    const ssg = join(root, 'src', 'vite', 'internal', 'ssg');
+    Deno.mkdirSync(cli, { recursive: true });
+    Deno.mkdirSync(ssg, { recursive: true });
+    Deno.writeTextFileSync(
+      join(cli, 'build-client.ts'),
+      [
+        "export const first = runtimeModulePath('../vite/internal/ssg/root-a.ts');",
+        "export const second = runtimeModulePath('../vite/internal/ssg/root-b.ts');",
+      ].join('\n'),
+    );
+    Deno.writeTextFileSync(join(ssg, 'root-a.ts'), 'export const rootA = 1;\n');
+    Deno.writeTextFileSync(
+      join(ssg, 'root-b.ts'),
+      [
+        "import { createNinth } from './ninth.ts';",
+        "import type { TypedShape } from './typed.ts';",
+        'export const rootB = createNinth() as unknown as TypedShape;\n',
+      ].join('\n'),
+    );
+    Deno.writeTextFileSync(
+      join(ssg, 'ninth.ts'),
+      [
+        "import type { TypedShape } from './typed.ts';",
+        'export const createNinth = () => 9;\n',
+      ].join('\n'),
+    );
+    Deno.writeTextFileSync(join(ssg, 'typed.ts'), 'export interface TypedShape { n: number };\n');
+
+    const { modules, problems } = consumerPathConsumedModules(root);
+    assertEquals(problems, []);
+    // The value-imported ninth module IS path-consumed; the type-only edge is not.
+    assertEquals([...modules].sort(), [
+      'src/vite/internal/ssg/ninth.ts',
+      'src/vite/internal/ssg/root-a.ts',
+      'src/vite/internal/ssg/root-b.ts',
+    ]);
+    assert(!modules.has('src/vite/internal/ssg/typed.ts'));
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+Deno.test('runtime extraction fails closed on a non-literal runtimeModulePath argument', async () => {
+  const root = await Deno.makeTempDir({ prefix: 'vp-pack-drift-failclosed-' });
+  try {
+    const cli = join(root, 'src', 'cli');
+    Deno.mkdirSync(cli, { recursive: true });
+    Deno.writeTextFileSync(
+      join(cli, 'build-client.ts'),
+      'export const mapped = runtimeModulePath(dynamicArgument);\n',
+    );
+    const { modules, problems } = consumerPathConsumedModules(root);
+    assertEquals(modules.size, 0);
+    assertEquals(problems.length, 1);
+    assertStringIncludes(problems[0], 'literal string argument');
   } finally {
     await Deno.remove(root, { recursive: true });
   }

@@ -485,6 +485,44 @@ chunks.
   the new codes are pinned by `error-codes.test.ts` raiser proofs through
   the real raisers instead.
 
+## Amendment 5 — the error record's `code` field is a wire-protocol increment, recorded comply-or-explain under P2 (2026-10-02)
+
+- Amends: nothing already recorded. Amendment 4 recorded the alpha7 A0.2
+  error-code cataloging's scope and its bare-`Error` boundary (#1495, with
+  the packed payload re-cut in the same train by #1496); this amendment
+  records what that change means one layer up — at the protocol the design
+  principles govern. The design-principles working rule is comply or
+  explain: the deviation is named here rather than left implicit.
+- The increment: the error records the framework serializes to clients now
+  carry a stable `code` field. The streaming timeout record (`record.error`)
+  carries `OE_STREAM_DEFERRED_TIMEOUT` — its terminal wire frame is
+  unchanged, because it never serialized the message — and the request-time
+  failure channel (`serveError`, the `buildError`/`authoringError`
+  companion for the `ssr` phase) carries the codes of the cataloged
+  server-runtime and build-time surfaces into the wire frames and the
+  problem+json responses. Adding a field to a client-visible record is
+  runtime surface: P2's litmus — "Does this add build-time surface or
+  runtime surface? Runtime surface needs an ADR." — applies, and this
+  amendment is that ADR. The explanation for the deviation: the field is a
+  protocol identifier consumers match on, the exact class rule (e) already
+  admits in runtime artifacts (with error-code enums named), and it buys
+  what message text cannot — a failure addressable across releases, since
+  message text is prose and deliberately not a protocol fact.
+- The invariant this amendment freezes: every converted site's message text
+  is verbatim — the wire frames, the problem+json channel, and every client
+  matching on message substrings are untouched, and the `code` field is
+  purely additive. Renaming a shipped code or editing a frozen message
+  re-opens this amendment.
+- Scale, as measured at this amendment (2026-10-02): the wire increment
+  itself is the record field over Amendment 4's seven router tables (26
+  conversions). The generated error reference additionally projects the
+  element compiler's build-time diagnostics — the `OEC9000`-series catalog,
+  25 codes over 128 quoted call sites in package sources — which is the
+  stable-code surface end to end; the compiler catalog is build-time surface
+  (P2-compliant by construction, pre-dating this train and unchanged by it)
+  and does not itself ride the wire. Only the record field is the runtime
+  increment recorded here.
+
 ## Verification
 
 - The oracle suite is green, unweakened, at every stage boundary.

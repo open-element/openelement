@@ -1,11 +1,9 @@
 import { assert, assertEquals } from '@std/assert';
 import {
   buildDeclarationClosure,
-  classifyDroppedDeclarationWarnings,
   declarationCandidates,
   type DeclarationIo,
   packageRootDeclarationIo,
-  warnedDeclarationCandidates,
 } from './declaration-closure.ts';
 
 function io(files: Record<string, string>): DeclarationIo {
@@ -23,7 +21,7 @@ function graphOf(files: Record<string, string>, roots: string[]) {
   return buildDeclarationClosure(roots, io(files));
 }
 
-Deno.test('declaration closure: a direct public export warning is reachable and fails', () => {
+Deno.test('declaration closure: a lone public export reaches itself', () => {
   const graph = graphOf(
     {
       'src/index.d.ts': 'export declare const entry: true;\n',
@@ -31,14 +29,6 @@ Deno.test('declaration closure: a direct public export warning is reachable and 
     ['src/index.d.ts'],
   );
   assertEquals(graph.reached, ['src/index.d.ts']);
-  const classified = classifyDroppedDeclarationWarnings(graph, [
-    {
-      relative: 'src/index.ts',
-      raw: 'Could not generate types for src/index.ts',
-    },
-  ]);
-  assertEquals(classified.knownUpstream, []);
-  assertEquals(classified.reachableFromPublicTypes.length, 1);
 });
 
 Deno.test('declaration closure: a missing declaration behind a public .d.ts fails', () => {
@@ -63,22 +53,6 @@ Deno.test('declaration closure: two and three level indirect references are reac
   const graph = graphOf(files, ['src/index.d.ts']);
   assertEquals(graph.missing, []);
   assertEquals(graph.reached, ['src/b.d.ts', 'src/index.d.ts', 'src/internal/c.d.ts']);
-
-  const twoLevel = classifyDroppedDeclarationWarnings(graph, [
-    {
-      relative: 'src/b.ts',
-      raw: '',
-    },
-  ]);
-  assertEquals(twoLevel.reachableFromPublicTypes.length, 1, 'level two is public-reachable');
-
-  const threeLevel = classifyDroppedDeclarationWarnings(graph, [
-    {
-      relative: 'src/internal/c.ts',
-      raw: '',
-    },
-  ]);
-  assertEquals(threeLevel.reachableFromPublicTypes.length, 1, 'level three is public-reachable');
 });
 
 Deno.test('declaration closure: import("...") type references are followed', () => {
@@ -203,35 +177,6 @@ Deno.test('declaration closure: Windows separators behave like POSIX', () => {
     ['src/index.d.ts'],
   );
   assertEquals(escaped.escaped.length, 1);
-});
-
-Deno.test('declaration closure: truly unreachable private modules are known upstream', () => {
-  const graph = graphOf(
-    {
-      'src/index.d.ts': 'export declare const entry: true;\n',
-    },
-    ['src/index.d.ts'],
-  );
-  const classified = classifyDroppedDeclarationWarnings(graph, [
-    { relative: 'src/internal/runtime-only.ts', raw: 'warning one' },
-    { relative: 'src/internal/other.tsx', raw: 'warning two' },
-  ]);
-  assertEquals(classified.knownUpstream.length, 2);
-  assertEquals(classified.reachableFromPublicTypes, []);
-});
-
-Deno.test('warnedDeclarationCandidates maps source extensions to declarations', () => {
-  assertEquals(warnedDeclarationCandidates('src/a.ts'), [
-    'src/a.d.ts',
-    'src/a.d.mts',
-    'src/a.d.cts',
-    'src/a/index.d.ts',
-    'src/a/index.d.mts',
-    'src/a/index.d.cts',
-  ]);
-  assertEquals(warnedDeclarationCandidates('src/a.tsx').slice(0, 2), ['src/a.d.ts', 'src/a.d.mts']);
-  assertEquals(warnedDeclarationCandidates('src/a.d.ts'), ['src/a.d.ts']);
-  assertEquals(warnedDeclarationCandidates('README.md'), []);
 });
 
 Deno.test('packageRootDeclarationIo reads a real extracted tree', async () => {
