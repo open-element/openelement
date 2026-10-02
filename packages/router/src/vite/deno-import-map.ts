@@ -22,8 +22,8 @@
  */
 
 import { existsSync, readFileSync } from 'node:fs';
-import { join, resolve } from '../internal/host-path.ts';
-import { fromFileUrl } from '../internal/host-path.ts';
+import { join, resolve } from 'pathe';
+import { fileURLToPath } from 'node:url';
 import type { Plugin } from 'vite';
 import { createLogger } from '@openelement/element';
 import { normalizeSeparators } from '@openelement/element/build-utils';
@@ -43,7 +43,7 @@ export interface ImportMapResolution {
 const WORKSPACE_ROOT: string | null = (() => {
   if (!import.meta.url.startsWith('file:')) return null;
   try {
-    const root = normalizeSeparators(fromFileUrl(new URL('../../../..', import.meta.url)));
+    const root = normalizeSeparators(fileURLToPath(new URL('../../../..', import.meta.url)));
     if (!existsSync(join(root, 'packages', 'element', 'deno.json'))) return null;
     return root;
   } catch (e) {
@@ -114,7 +114,7 @@ export function lookupInDenoJson(id: string, root: string): ImportMapResolution 
 export function convertImportMapTarget(target: string, denoJsonDir: string): string | null {
   if (target.startsWith('file://')) {
     try {
-      return normalizeSeparators(fromFileUrl(target));
+      return normalizeSeparators(fileURLToPath(target));
     } catch (e) {
       log.warn('Unable to convert file:// import-map target, skipping', e);
       return null;

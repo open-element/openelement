@@ -6,7 +6,7 @@
  */
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { join } from '../../../internal/host-path.ts';
+import { join } from 'pathe';
 import type { ComponentLayer } from '../protocol/framework.ts';
 import { formatJson, normalizeSeparators } from '@openelement/element/build-utils';
 import { isValidTagName } from '@openelement/element';

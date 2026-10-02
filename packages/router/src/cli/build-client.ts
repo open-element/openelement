@@ -18,8 +18,8 @@ import { existsSync, readFileSync } from 'node:fs';
 import { rm } from 'node:fs/promises';
 import process from 'node:process';
 import { type Alias, build as viteBuild, type InlineConfig } from 'vite';
-import { dirname, isAbsolute, join, relative, resolve } from '../internal/host-path.ts';
-import { fromFileUrl } from '../internal/host-path.ts';
+import { dirname, isAbsolute, join, relative, resolve } from 'pathe';
+import { fileURLToPath } from 'node:url';
 import { extractCustomElementTags, generateClientEntry } from '../vite/internal/ssg/index.ts';
 import { findWorkspaceRoot } from '../vite/workspace-alias.ts';
 import { buildClientIslandEntries } from '../vite/internal/ssg/client-island-entries.ts';
@@ -240,7 +240,7 @@ async function removeClientDeliveryArtifacts(root: string, outDir: string): Prom
 // ships no raw TypeScript, so an installed tarball must instead resolve the
 // staged JavaScript counterpart.
 function runtimeModulePath(relativeSource: string): string {
-  const sourcePath = fromFileUrl(new URL(relativeSource, import.meta.url));
+  const sourcePath = fileURLToPath(new URL(relativeSource, import.meta.url));
   if (existsSync(sourcePath)) return sourcePath;
   return sourcePath.replace(/\.(?:[cm]?ts|tsx)$/, '.js');
 }

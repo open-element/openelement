@@ -6,7 +6,7 @@
  * can run in synchronous plugin hooks (config, configResolved).
  */
 
-import { resolve } from '../internal/host-path.ts';
+import { resolve } from 'pathe';
 import { readJsonc } from './internal/jsonc.ts';
 
 interface AliasEntry {

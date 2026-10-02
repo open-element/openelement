@@ -16,7 +16,7 @@
  */
 
 import { mkdirSync, writeFileSync } from 'node:fs';
-import { join } from '../../../internal/host-path.ts';
+import { join } from 'pathe';
 import { buildError, SsgDynamicErrorCode } from '../../../internal/error-codes.ts';
 import type {
   RouteInfoEntry,

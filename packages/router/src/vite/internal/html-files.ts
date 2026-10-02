@@ -1,5 +1,5 @@
 import { readFileSync, readdirSync, writeFileSync } from 'node:fs';
-import { join } from '../../internal/host-path.ts';
+import { join } from 'pathe';
 
 interface HtmlFileEntry {
   absolutePath: string;

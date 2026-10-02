@@ -15,8 +15,8 @@
 import { mkdirSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { mkdir, stat, writeFile } from 'node:fs/promises';
 import process from 'node:process';
-import { existsSync } from '../../../internal/host-path.ts';
-import { dirname, join, relative } from '../../../internal/host-path.ts';
+import { existsSync } from 'node:fs';
+import { dirname, join, relative } from 'pathe';
 import type {
   RouteInfoEntry,
   SsgPageOutput,

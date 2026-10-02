@@ -46,7 +46,7 @@
 import type { RouteEntry, SpecialFileType } from '../protocol/framework.ts';
 import { createLogger } from '@openelement/element';
 import { normalizeSeparators, pathToTagName } from '@openelement/element/build-utils';
-import { dirname, join, resolve } from '../../../internal/host-path.ts';
+import { dirname, join, resolve } from 'pathe';
 import { buildError, RouteScanErrorCode } from '../../../internal/error-codes.ts';
 import { safeReadDir, safeReadFile, safeStat } from './route-scanner-fs.ts';
 import { analyzeModuleSemantics } from '@openelement/element/compiler';

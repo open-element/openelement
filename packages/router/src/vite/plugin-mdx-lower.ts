@@ -18,7 +18,7 @@ import process from 'node:process';
 import { marked } from 'marked';
 import { normalizeSeparators, pathToTagName } from '@openelement/element/build-utils';
 import { buildError, MdxErrorCode } from '../internal/error-codes.ts';
-import { basename, relative, resolve } from '../internal/host-path.ts';
+import { basename, relative, resolve } from 'pathe';
 import { validateSafeUrl } from './head-injection.ts';
 
 /** Quote one text run as a JSX expression container (`{"..."}`). */

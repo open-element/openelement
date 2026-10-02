@@ -16,9 +16,9 @@
 
 import { rm } from 'node:fs/promises';
 import process from 'node:process';
-import { existsSync } from '../internal/host-path.ts';
-import { join, resolve } from '../internal/host-path.ts';
-import { toFileUrl } from '../internal/host-path.ts';
+import { existsSync } from 'node:fs';
+import { join, resolve } from 'pathe';
+import { pathToFileURL } from 'node:url';
 import { normalizePath } from 'vite';
 import type {
   CompatibilityClassification,
@@ -93,12 +93,12 @@ function litSsrDataUrlStubPlugin(): import('vite').Plugin {
 
 /**
  * file:// URL for the dynamic import of the built SSR bundle (issue #1220,
- * M13). toFileUrl percent-encodes spaces, `#`, `?`, and non-ASCII bytes
+ * M13). pathToFileURL percent-encodes spaces, `#`, `?`, and non-ASCII bytes
  * and handles Windows drive letters; string concatenation mis-resolved such
  * project paths. Same correct usage as internal/static-serve.ts.
  */
 export function ssrBundleImportUrl(ssrBundlePath: string): string {
-  return toFileUrl(ssrBundlePath).href;
+  return pathToFileURL(ssrBundlePath).href;
 }
 
 const VIRTUAL_SSG_ENTRY_ID = 'virtual:open-ssg-entry';

@@ -1,13 +1,6 @@
 /** Discover compiled static components reachable from local route imports. */
 import { readFile, stat } from 'node:fs/promises';
-import {
-  dirname,
-  extname,
-  isAbsolute,
-  join,
-  relative,
-  resolve,
-} from '../../../internal/host-path.ts';
+import { dirname, extname, isAbsolute, join, relative, resolve } from 'pathe';
 import type { RouteEntry } from '../protocol/framework.ts';
 import type { StaticComponentDecl } from '../protocol/ssg.ts';
 import { normalizeSeparators } from '@openelement/element/build-utils';

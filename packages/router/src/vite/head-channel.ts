@@ -17,7 +17,7 @@
  * fail-closed style checks as every other head fragment. A string that is not a
  * valid entry fails the build; nothing is skipped silently.
  *
- * This module imports no host APIs beyond the pure host-path helpers, so the
+ * This module imports no host APIs, so the
  * dev server, `cli/build` and the SSG phases all serialize the head the same
  * way.
  */

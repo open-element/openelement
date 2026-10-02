@@ -17,8 +17,8 @@
 
 import type { FrameworkOptions } from './framework.ts';
 import { existsSync, readFileSync } from 'node:fs';
-import { join } from '../internal/host-path.ts';
-import { toFileUrl } from '../internal/host-path.ts';
+import { join } from 'pathe';
+import { pathToFileURL } from 'node:url';
 import { escapeAttr } from '@openelement/element/html';
 import { OpenElementError } from '@openelement/element/authoring';
 import { conventionAppShellPath } from '../config.ts';
@@ -119,7 +119,9 @@ export function detectAppConfigFile(root: string): string | null {
  * its own invalidation.
  */
 export async function importAppConfigModule(filePath: string): Promise<unknown> {
-  const module = (await import(`${toFileUrl(filePath)}?t=${Date.now()}`)) as { default?: unknown };
+  const module = (await import(`${pathToFileURL(filePath).href}?t=${Date.now()}`)) as {
+    default?: unknown;
+  };
   if (module.default === undefined) {
     throw new OpenElementError(
       `[openElement] ${OPEN_ELEMENT_CONFIG_FILE} must default-export a config object: ` +

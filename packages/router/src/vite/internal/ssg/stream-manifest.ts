@@ -1,7 +1,7 @@
 /** Route-owned streaming admission; the Element program remains generic. */
 import process from 'node:process';
 import ts from 'typescript';
-import { dirname, extname, resolve } from '../../../internal/host-path.ts';
+import { dirname, extname, resolve } from 'pathe';
 import { compileElementProgram, stableModuleId } from '@openelement/element/compiler';
 import { isDangerousKey } from '@openelement/element/authoring';
 import type { StreamRouteManifest } from '../protocol/ssg.ts';

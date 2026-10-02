@@ -7,7 +7,7 @@ import { createLogger } from '@openelement/element';
 import { normalizeSeparators, pathToTagName } from '@openelement/element/build-utils';
 import { hasControlCharacter } from '../../../internal/control-characters.ts';
 import { buildError, PackageIslandErrorCode } from '../../../internal/error-codes.ts';
-import { join } from '../../../internal/host-path.ts';
+import { join } from 'pathe';
 import { safeReadDir, safeReadFile, safeStat } from './route-scanner-fs.ts';
 import {
   ISLAND_DELIVERY_STRATEGIES,

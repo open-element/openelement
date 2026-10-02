@@ -12,7 +12,7 @@ import type { Plugin } from 'vite';
 import type { OpenElementPackageManifest, RouteEntry } from './internal/protocol/framework.ts';
 import type { IslandDecl } from './internal/protocol/ssg.ts';
 import { createLogger, formatError, OpenElementError } from '@openelement/element';
-import { join } from '../internal/host-path.ts';
+import { join } from 'pathe';
 import { DEFAULT_ISLANDS_DIR, DEFAULT_ROUTES_DIR } from './internal/paths.ts';
 import {
   buildEntryDescriptor,

@@ -1,6 +1,6 @@
 import { mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import process from 'node:process';
-import { join, relative } from '../internal/host-path.ts';
+import { join, relative } from 'pathe';
 import type { BuildArtifacts, BuildPlan } from './internal/protocol/ssg.ts';
 import type { OpenElementBuildContext } from './build-context.ts';
 import { fsPathToModuleSpecifier } from './internal/ssg/module-specifier.ts';

@@ -12,7 +12,7 @@
 import process from 'node:process';
 import type { Plugin, ViteDevServer } from 'vite';
 import { createLogger, formatError } from '@openelement/element';
-import { relative, resolve } from '../internal/host-path.ts';
+import { relative, resolve } from 'pathe';
 import { DEFAULT_ISLANDS_DIR } from './internal/paths.ts';
 import { RESOLVED_CLIENT_ENTRY_ID } from './dev-island-client.ts';
 import { rescanIslands, rescanRoutes } from './plugin-scanners.ts';

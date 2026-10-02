@@ -16,7 +16,7 @@
  */
 
 import { existsSync, readdirSync, statSync } from 'node:fs';
-import { basename, join, resolve } from '../internal/host-path.ts';
+import { basename, join, resolve } from 'pathe';
 import { createLogger } from '@openelement/element';
 import { normalizeSeparators } from '@openelement/element/build-utils';
 import { DEFAULT_OUT_DIR } from './internal/paths.ts';

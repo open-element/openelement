@@ -16,7 +16,7 @@
 
 import { readdir, rm } from 'node:fs/promises';
 import process from 'node:process';
-import { join } from '../../../internal/host-path.ts';
+import { join } from 'pathe';
 import type { ComponentLayer, HydrationStrategy } from '../protocol/framework.ts';
 import type { ClientAssetManifest } from '../protocol/client-assets.ts';
 import type { IslandDecl } from '../protocol/ssg.ts';

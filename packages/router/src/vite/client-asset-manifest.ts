@@ -16,7 +16,7 @@
  */
 
 import { readFile } from 'node:fs/promises';
-import { join, relative } from '../internal/host-path.ts';
+import { join, relative } from 'pathe';
 import { normalizeSeparators } from '@openelement/element/build-utils';
 import { buildError, ClientAssetErrorCode } from '../internal/error-codes.ts';
 import type { ClientAssetManifest, ClientIslandAsset } from './internal/protocol/client-assets.ts';

@@ -17,7 +17,7 @@ import type { SsgBehaviorOptions } from './internal/protocol/ssg.ts';
 import type { ClientAssetManifest } from './internal/protocol/client-assets.ts';
 import { serializeClientAssetsModule } from './internal/protocol/client-assets.ts';
 import type { OpenElementBuildContext } from './build-context.ts';
-import { join } from '../internal/host-path.ts';
+import { join } from 'pathe';
 import { createLogger } from '@openelement/element';
 import { cleanSsrArtifacts, postProcessClientIslandBuild } from './internal/ssg/index.ts';
 import {

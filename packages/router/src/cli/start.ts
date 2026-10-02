@@ -20,7 +20,7 @@
 import { spawn } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import process from 'node:process';
-import { join } from '../internal/host-path.ts';
+import { join } from 'pathe';
 import { serveFetch } from '../internal/node-http.ts';
 import { formatError } from '@openelement/element';
 import { DEFAULT_OUT_DIR } from '../vite/internal/paths.ts';

@@ -177,7 +177,6 @@ Deno.test('task contract: gate:release carries the steps trimmed out of the PR l
     'tests/fixtures/router-nitro#proof:workers',
     // Boundary/provenance scans.
     'tools/repo#esm:boundary-check',
-    'tools/repo#deno-api:check',
     'tools/repo#validation:boundary-check',
     'tools/repo#signals:check-protocol-boundary',
     'tools/repo#assets:check-provenance',
