@@ -64,10 +64,10 @@ async function sha256(text: string): Promise<string> {
 }
 
 const TOOL_VERSIONS = {
-  deno: '2.9.0',
+  node: 'v24.18.0',
+  pnpm: '12.3.4',
   v8: '13.9.0',
   typescript: '6.0.3',
-  node: 'v24.18.0',
   npm: '11.16.0',
   os: 'linux/x64',
   playwrightBrowsers: { chromium: '1217', firefox: '1511', webkit: '2272' },
@@ -76,7 +76,7 @@ const TOOL_VERSIONS = {
 function stepArgv(job: string, name: string): string[] {
   if (name.startsWith('workspace-clean-')) {
     const phase = name.endsWith('before') ? 'before' : 'after';
-    return ['deno', ...cleanProofArgv(SHA, TREE, phase).slice(1)];
+    return ['node', ...cleanProofArgv(SHA, TREE, phase).slice(1)];
   }
   if (job === 'fresh-clone') {
     switch (name) {
@@ -85,34 +85,34 @@ function stepArgv(job: string, name: string): string[] {
       case 'git-checkout':
         return freshCloneCommands.checkout(SHA);
       case 'install':
-        return freshCloneCommands.install('deno');
+        return freshCloneCommands.install();
       case 'task-check':
-        return freshCloneCommands.check('deno');
+        return freshCloneCommands.check();
       case 'task-gate-source':
-        return freshCloneCommands.gateSource('deno');
+        return freshCloneCommands.gateSource();
       case 'task-gate-packed':
-        return freshCloneCommands.gatePacked('deno');
+        return freshCloneCommands.gatePacked();
       case 'task-site-build':
-        return freshCloneCommands.siteBuild('deno');
+        return freshCloneCommands.siteBuild();
       case 'task-site-e2e':
-        return freshCloneCommands.siteE2e('deno');
+        return freshCloneCommands.siteE2e();
       default:
         throw new Error(`no fresh argv for ${name}`);
     }
   }
   const staticTable: Record<string, Record<string, string[]>> = {
     'fast-checks': {
-      'fmt-check': ['deno', 'task', 'fmt:check'],
-      lint: ['deno', 'task', 'lint'],
-      markdown: ['deno', 'task', '--cwd', 'tools/repo', 'lint:markdown'],
-      typecheck: ['deno', 'task', 'typecheck'],
+      'fmt-check': ['pnpm', 'run', 'fmt:check'],
+      lint: ['pnpm', 'run', 'lint'],
+      markdown: ['pnpm', '--dir', 'tools/repo', 'run', 'lint:markdown'],
+      typecheck: ['pnpm', 'run', 'typecheck'],
     },
     'source-matrix': {
-      'gate-source': ['deno', 'task', '--cwd', 'tools/repo', 'gate:source'],
+      'gate-source': ['pnpm', '--dir', 'tools/repo', 'run', 'gate:source'],
     },
     packed: {
-      'gate-packed': ['deno', 'task', '--cwd', 'tools/release', 'gate:packed'],
-      'publish-npm-dry-run': ['deno', 'task', '--cwd', 'tools/release', 'publish:npm:dry-run'],
+      'gate-packed': ['pnpm', '--dir', 'tools/release', 'run', 'gate:packed'],
+      'publish-npm-dry-run': ['pnpm', '--dir', 'tools/release', 'run', 'publish:npm:dry-run'],
     },
   };
   const command = staticTable[job]?.[name];
@@ -1098,7 +1098,7 @@ test('step argv, cwd, timing, and logs are strict', async () => {
     [
       'command-wrong-task',
       (b) => {
-        bundleStep(b, 'fresh-clone', 'task-gate-source').command = ['deno', 'task', 'check'];
+        bundleStep(b, 'fresh-clone', 'task-gate-source').command = ['pnpm', 'run', 'check'];
       },
       'task-gate-source',
     ],
@@ -1303,9 +1303,9 @@ test('fresh-clone path binding rejects every decoy', async () => {
             string,
             unknown
           >
-        ).denoDir = '/workspace/.deno';
+        ).pnpmStore = '/workspace/store';
       },
-      'denoDir',
+      'pnpmStore',
     ],
     [
       'isolation-extra',
@@ -1690,8 +1690,8 @@ test('evidence roles materialize back to real paths before spawning', () => {
     materializeEvidencePath(`${EVIDENCE_ROLES.clone}/tools/repo/clean-proof.ts`, mapping),
   ).toEqual('/tmp/x/repo/tools/repo/clean-proof.ts');
   expect(materializeEvidencePath('git', mapping)).toEqual('git');
-  expect(normalizeEvidencePath('/tmp/x/repo/deno-dir', mapping)).toEqual(
-    `${EVIDENCE_ROLES.clone}/deno-dir`,
+  expect(normalizeEvidencePath('/tmp/x/repo/pnpm-store', mapping)).toEqual(
+    `${EVIDENCE_ROLES.clone}/pnpm-store`,
   );
 });
 

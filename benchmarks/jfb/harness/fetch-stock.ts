@@ -8,7 +8,9 @@
  * `--jfb-path <dir>` uses a local js-framework-benchmark checkout instead of
  * the network (must sit at the pinned commit).
  */
-import { join } from '@std/path';
+import { dirname, join } from '@std/path';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { spawnSync } from 'node:child_process';
 
 export const JFB_REPO = 'krausest/js-framework-benchmark';
 export const JFB_COMMIT = '21d7204da754846fe1402f4437b5b53066f3c34e';
@@ -117,14 +119,11 @@ export async function fetchStockSources(
   const records: Array<{ path: string; sha256: string; source: 'network' | 'local-checkout' }> = [];
   let localRoot: string | undefined;
   if (options.jfbPath) {
-    const rev = new Deno.Command('git', {
-      args: ['-C', options.jfbPath, 'rev-parse', 'HEAD'],
-      stdout: 'piped',
-      stderr: 'piped',
+    const result = spawnSync('git', ['-C', options.jfbPath, 'rev-parse', 'HEAD'], {
+      encoding: 'utf8',
     });
-    const result = await rev.output();
-    const head = new TextDecoder().decode(result.stdout).trim();
-    if (!result.success || head !== JFB_COMMIT) {
+    const head = (result.stdout ?? '').trim();
+    if (result.status !== 0 || head !== JFB_COMMIT) {
       throw new Error(
         `[jfb-harness] local JFB checkout must be at pinned commit ${JFB_COMMIT}, found "${head}"`,
       );
@@ -135,7 +134,7 @@ export async function fetchStockSources(
     let bytes: Uint8Array;
     let source: 'network' | 'local-checkout';
     if (localRoot) {
-      bytes = await Deno.readFile(join(localRoot, pinned.path));
+      bytes = new Uint8Array(await readFile(join(localRoot, pinned.path)));
       source = 'local-checkout';
     } else {
       const url = `https://raw.githubusercontent.com/${JFB_REPO}/${JFB_COMMIT}/${pinned.path}`;
@@ -153,8 +152,8 @@ export async function fetchStockSources(
       );
     }
     const target = join(destDir, pinned.path);
-    await Deno.mkdir(join(target, '..'), { recursive: true });
-    await Deno.writeFile(target, bytes);
+    await mkdir(dirname(target), { recursive: true });
+    await writeFile(target, bytes);
     records.push({ path: pinned.path, sha256: digest, source });
   }
   return records;

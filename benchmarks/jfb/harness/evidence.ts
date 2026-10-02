@@ -168,12 +168,10 @@ export function validateEvidence(value: unknown, options: { jfbCommit?: string }
     if (!toolchain) {
       failures.push('provenance.toolchain is required');
     } else {
-      // Deno.version is an object ({ deno, v8, typescript }); plain version
-      // strings (node/npm/platform/...) are accepted as-is.
-      const isVersion = (candidate: unknown): boolean =>
-        isNonEmptyString(candidate) ||
-        (isRecord(candidate) && Object.values(candidate).some(isNonEmptyString));
-      for (const field of ['platform', 'release', 'arch', 'cpuModel', 'deno', 'node', 'npm']) {
+      // All toolchain fields are plain version strings since the B4 node-host
+      // port (pnpm replaced the deno record).
+      const isVersion = (candidate: unknown): boolean => isNonEmptyString(candidate);
+      for (const field of ['platform', 'release', 'arch', 'cpuModel', 'node', 'pnpm', 'npm']) {
         if (!isVersion(toolchain[field])) {
           failures.push(`provenance.toolchain.${field} must be a non-empty version string`);
         }

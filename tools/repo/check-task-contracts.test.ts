@@ -185,10 +185,9 @@ test('task contract: gate:release carries the steps trimmed out of the PR layer'
     'tools/repo#assets:check-provenance',
     'tools/repo#workspace:links:check',
     'tools/repo#url-pattern-list:provenance',
-    // Retired-api, classification, floor and generator gates.
+    // Retired-api, classification and generator gates.
     'tools/repo#retired-api:check',
     'tools/repo#product:classification:check',
-    'tools/repo#deno-floor:check',
     'tools/repo#generator-gates:check',
     // The release train keeps the FULL element browser matrix; the PR layer
     // runs the Chromium subset under the same step name's gate.

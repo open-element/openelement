@@ -43,7 +43,7 @@ jobs:
           ref: ${{ inputs.candidate_sha }}
           fetch-depth: 0
           persist-credentials: false
-      - uses: ./.github/actions/setup-deno-workspace
+      - uses: ./.github/actions/setup-node-workspace
       # v7.0.0
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
@@ -57,8 +57,8 @@ jobs:
           test "$(git rev-parse HEAD)" = "$CANDIDATE_SHA"
           # The dispatch version must be what ALL retained package manifests
           # carry (element/router/create/ui), validated against the release
-          # line contract; no deno eval.
-          deno run --allow-read tools/repo/check-release-version.ts "$RELEASE_VERSION"
+          # line contract; a plain node entrypoint.
+          node tools/repo/check-release-version.ts "$RELEASE_VERSION"
       # Release accepts only successful, non-expired CI evidence bound to the
       # exact candidate SHA — never a hand-written or copied status. The
       # artifact is validated by recomputing every log/manifest hash.
@@ -84,8 +84,7 @@ jobs:
             --pattern 'candidate-evidence-*' --dir .artifacts/ci-evidence
           evidence="$(find .artifacts/ci-evidence -name candidate-evidence.json | head -1)"
           test -n "$evidence"
-          deno run --allow-read --allow-write --allow-run --allow-env --allow-net \
-            --deny-ffi --no-prompt tools/repo/candidate-evidence.ts \
+          node tools/repo/candidate-evidence.ts \
             --validate "$evidence" --expected-sha "$CANDIDATE_SHA" --max-age-days 14
       - name: Verify npm CLI supports Trusted Publishing
         if: inputs.publish
@@ -105,7 +104,7 @@ jobs:
         env:
           CANDIDATE_SHA: ${{ inputs.candidate_sha }}
           OPEN_ELEMENT_TIER_REPORT: ${{ github.workspace }}/.artifacts/wc-tier-report.json
-        run: deno task --cwd tests/fixtures/third-party-web-components smoke
+        run: pnpm --dir tests/fixtures/third-party-web-components run smoke
       - name: Upload Web Component tier report
         if: always()
         # v7.0.1
@@ -119,7 +118,7 @@ jobs:
         continue-on-error: true
         env:
           OPEN_ELEMENT_T1_PROTOTYPE_REPORT: ${{ github.workspace }}/.artifacts/lit-snapshot-prototype.json
-        run: deno task --cwd tests/fixtures/third-party-web-components snapshot:prototype
+        run: pnpm --dir tests/fixtures/third-party-web-components run snapshot:prototype
       - name: Upload Lit snapshot prototype report
         if: always()
         # v7.0.1

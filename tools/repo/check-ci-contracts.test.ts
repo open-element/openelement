@@ -131,7 +131,7 @@ test('ci contract: execution jobs are separate from evidence aggregation', () =>
     .split('\n')
     .filter((line) => !line.trimStart().startsWith('#'))
     .join('\n');
-  for (const rerun of ['gate:source', 'gate:packed', 'publish:npm:dry-run', 'deno task check']) {
+  for (const rerun of ['gate:source', 'gate:packed', 'publish:npm:dry-run', 'pnpm run check']) {
     expect(
       !rerunForbidden.includes(rerun),
       `autoflow-ci aggregation must not re-run the suite: found ${rerun}`,

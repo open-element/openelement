@@ -17,6 +17,10 @@
  * so repo gates never scan generated or third-party files.
  */
 import { join } from '@std/path';
+import { copyFile, mkdir, readFile, readdir, stat, writeFile } from 'node:fs/promises';
+import { mkdtemp } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { spawn } from 'node:child_process';
 import { compileElementProgram } from '../../../packages/element/src/internal/compiler/semantic-core/compile.ts';
 import { fetchStockSources, JFB_COMMIT } from './fetch-stock.ts';
 
@@ -185,27 +189,26 @@ export interface BuildReport {
 }
 
 async function runCommand(command: string, args: string[], cwd: string): Promise<void> {
-  const result = await new Deno.Command(command, {
-    args,
-    cwd,
-    stdout: 'inherit',
-    stderr: 'inherit',
-  }).output();
-  if (!result.success) {
+  const code = await new Promise<number | null>((resolve, reject) => {
+    const child = spawn(command, args, { cwd, stdio: 'inherit' });
+    child.on('error', reject);
+    child.on('close', resolve);
+  });
+  if (code !== 0) {
     throw new Error(`[jfb-build] ${command} ${args.join(' ')} failed in ${cwd}`);
   }
 }
 
 async function buildOe(buildDir: string): Promise<BuildReport['oe']> {
   const srcDir = join(buildDir, 'oe-src');
-  await Deno.mkdir(srcDir, { recursive: true });
-  const source = await Deno.readTextFile(oeSourcePath);
+  await mkdir(srcDir, { recursive: true });
+  const source = await readFile(oeSourcePath, 'utf8');
   const compileStarted = performance.now();
   const compiled = compileElementProgram(source, '/benchmarks/jfb/src/oe/jfb-table.tsx');
   const compileMs = performance.now() - compileStarted;
-  await Deno.writeTextFile(join(srcDir, 'jfb-table.generated.ts'), compiled.code);
-  await Deno.copyFile(join(repoRoot, 'benchmarks/jfb/src/oe/data.ts'), join(srcDir, 'data.ts'));
-  await Deno.writeTextFile(
+  await writeFile(join(srcDir, 'jfb-table.generated.ts'), compiled.code);
+  await copyFile(join(repoRoot, 'benchmarks/jfb/src/oe/data.ts'), join(srcDir, 'data.ts'));
+  await writeFile(
     join(srcDir, 'entry.ts'),
     [
       "import { JfbOeTable } from './jfb-table.generated.ts';",
@@ -214,7 +217,7 @@ async function buildOe(buildDir: string): Promise<BuildReport['oe']> {
       '',
     ].join('\n'),
   );
-  await Deno.writeTextFile(
+  await writeFile(
     join(srcDir, 'vite.config.ts'),
     [
       '// Plain object export: the sandbox config must not require a vite install.',
@@ -254,8 +257,8 @@ async function buildOe(buildDir: string): Promise<BuildReport['oe']> {
     [join(repoRoot, 'node_modules/vite/bin/vite.js'), 'build', '--config', 'vite.config.ts'],
     srcDir,
   );
-  await Deno.copyFile(oeIndexPath, join(buildDir, 'oe', 'index.html'));
-  const bundle = await Deno.stat(join(buildDir, 'oe', 'main.js'));
+  await copyFile(oeIndexPath, join(buildDir, 'oe', 'index.html'));
+  const bundle = await stat(join(buildDir, 'oe', 'main.js'));
   return {
     compileMs,
     programBytes: new TextEncoder().encode(JSON.stringify(compiled.program)).byteLength,
@@ -271,13 +274,13 @@ async function buildComparator(
   spec: ComparatorSandboxSpec,
 ): Promise<BuildReport['comparators'][number]> {
   const sandbox = join(sandboxRoot, spec.id);
-  await Deno.mkdir(join(sandbox, 'src'), { recursive: true });
+  await mkdir(join(sandbox, 'src'), { recursive: true });
   // Copy stock sources (already sha256-verified by fetchStockSources).
   const stockDir = join(buildDir, 'stock/frameworks/keyed', spec.id);
-  for await (const entry of Deno.readDir(join(stockDir, 'src'))) {
-    await Deno.copyFile(join(stockDir, 'src', entry.name), join(sandbox, 'src', entry.name));
+  for (const entry of await readdir(join(stockDir, 'src'))) {
+    await copyFile(join(stockDir, 'src', entry.name), join(sandbox, 'src', entry.name));
   }
-  await Deno.writeTextFile(
+  await writeFile(
     join(sandbox, 'package.json'),
     JSON.stringify(
       {
@@ -290,30 +293,30 @@ async function buildComparator(
       2,
     ),
   );
-  await Deno.writeTextFile(join(sandbox, 'build.mjs'), SANDBOX_BUILD_SCRIPT);
+  await writeFile(join(sandbox, 'build.mjs'), SANDBOX_BUILD_SCRIPT);
   await runCommand('npm', ['install', '--no-audit', '--no-fund', '--loglevel=error'], sandbox);
   await runCommand('node', ['build.mjs', spec.id], sandbox);
   const outDir = join(buildDir, spec.id);
-  await Deno.mkdir(join(outDir, 'dist'), { recursive: true });
-  await Deno.copyFile(join(sandbox, 'dist/main.js'), join(outDir, 'dist/main.js'));
-  await Deno.copyFile(join(stockDir, 'index.html'), join(outDir, 'index.html'));
+  await mkdir(join(outDir, 'dist'), { recursive: true });
+  await copyFile(join(sandbox, 'dist/main.js'), join(outDir, 'dist/main.js'));
+  await copyFile(join(stockDir, 'index.html'), join(outDir, 'index.html'));
   if (spec.id === 'vue') {
     // Stock vue index.html references ./src/main.js as a module; mirror it.
-    await Deno.mkdir(join(outDir, 'src'), { recursive: true });
-    await Deno.copyFile(join(sandbox, 'dist/main.js'), join(outDir, 'src/main.js'));
+    await mkdir(join(outDir, 'src'), { recursive: true });
+    await copyFile(join(sandbox, 'dist/main.js'), join(outDir, 'src/main.js'));
   }
   const resolvedVersions: Record<string, string> = {};
   for (const name of [...Object.keys(spec.dependencies), ...Object.keys(spec.devDependencies)]) {
     try {
       const manifest = JSON.parse(
-        await Deno.readTextFile(join(sandbox, 'node_modules', name, 'package.json')),
+        await readFile(join(sandbox, 'node_modules', name, 'package.json'), 'utf8'),
       ) as { version?: string };
       if (manifest.version) resolvedVersions[name] = manifest.version;
     } catch {
       /* transitive-only */
     }
   }
-  const bundleStat = await Deno.stat(join(outDir, 'dist/main.js'));
+  const bundleStat = await stat(join(outDir, 'dist/main.js'));
   return { id: spec.id, built: true, bundleBytes: bundleStat.size, resolvedVersions };
 }
 
@@ -325,23 +328,24 @@ export interface BuildOptions {
 }
 
 export async function buildHarness(options: BuildOptions = {}): Promise<BuildReport> {
-  const buildDir = options.buildDir ?? join(await Deno.makeTempDir(), 'openelement-jfb');
+  const buildDir =
+    options.buildDir ?? join(await mkdtemp(join(tmpdir(), 'openelement-jfb-')), 'build');
   const sandboxRoot = join(buildDir, 'sandbox');
-  await Deno.mkdir(join(buildDir, 'stock'), { recursive: true });
+  await mkdir(join(buildDir, 'stock'), { recursive: true });
   const stockFetch = await fetchStockSources(join(buildDir, 'stock'), { jfbPath: options.jfbPath });
   // Shared stylesheet (served at /css/currentStyle.css for every page).
-  await Deno.mkdir(join(buildDir, 'css'), { recursive: true });
-  await Deno.copyFile(
+  await mkdir(join(buildDir, 'css'), { recursive: true });
+  await copyFile(
     join(buildDir, 'stock/css/currentStyle.css'),
     join(buildDir, 'css/currentStyle.css'),
   );
   // vanillajs: verbatim stock, no build step (as upstream).
-  await Deno.mkdir(join(buildDir, 'vanillajs/src'), { recursive: true });
-  await Deno.copyFile(
+  await mkdir(join(buildDir, 'vanillajs/src'), { recursive: true });
+  await copyFile(
     join(buildDir, 'stock/frameworks/keyed/vanillajs/index.html'),
     join(buildDir, 'vanillajs/index.html'),
   );
-  await Deno.copyFile(
+  await copyFile(
     join(buildDir, 'stock/frameworks/keyed/vanillajs/src/Main.js'),
     join(buildDir, 'vanillajs/src/Main.js'),
   );
@@ -366,11 +370,12 @@ export async function buildHarness(options: BuildOptions = {}): Promise<BuildRep
 }
 
 if (import.meta.main) {
-  const localOnly = Deno.args.includes('--local-only');
-  const jfbPathIndex = Deno.args.indexOf('--jfb-path');
-  const jfbPath = jfbPathIndex >= 0 ? Deno.args[jfbPathIndex + 1] : undefined;
-  const buildDirIndex = Deno.args.indexOf('--build-dir');
-  const buildDir = buildDirIndex >= 0 ? Deno.args[buildDirIndex + 1] : undefined;
+  const localOnly = process.argv.slice(2).includes('--local-only');
+  const args = process.argv.slice(2);
+  const jfbPathIndex = args.indexOf('--jfb-path');
+  const jfbPath = jfbPathIndex >= 0 ? args[jfbPathIndex + 1] : undefined;
+  const buildDirIndex = args.indexOf('--build-dir');
+  const buildDir = buildDirIndex >= 0 ? args[buildDirIndex + 1] : undefined;
   const report = await buildHarness({ buildDir, jfbPath, localOnly });
   console.log(JSON.stringify(report, null, 2));
 }

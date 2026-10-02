@@ -12,10 +12,11 @@ to the lanes that own them.
 The B3 lane migrated every suite to vitest (runner decision: vitest 5.x on the
 node host; registration + `@std/assert` moved by the auditable codemods in
 `tools/repo/codemod-deno-test-to-vitest.ts` and `codemod-deno-runtime-to-node.ts`,
-with the special-construct helpers in `tests/lib/vitest-asserts.ts`). The only
-remaining `Deno.test` code is `benchmarks/` (still on `deno test benchmarks/`
-via the root `bench` script) and product/docs prose that teaches framework
-users their own test setups. Package `test` scripts now invoke vitest.
+with the special-construct helpers in `tests/lib/vitest-asserts.ts`). The root
+`bench` script now runs the vitest benchmarks project (B3 补漏), and B4 moved
+the JFB harness itself onto node:\*. Remaining `Deno.test` text is product/docs
+prose that teaches framework users their own test setups. Package `test`
+scripts now invoke vitest.
 
 Sub-residuals disclosed at the cutover:
 - **Sanitizer leak detection retired with the host**: the deno runner's
@@ -45,10 +46,20 @@ that loss is the cost of migration, not something B1b solved.
 
 ## 3. Runtime entry and task graph
 
-`deno run` / `deno task` / `deno test` shebangs and the nested
-`run-in.ts --root …` invocation style are the runtime entry. node:\* is only
-the library layer beneath them. Expiry: any Node-host shift changes the entry
-points, not the ported APIs.
+B4 cutover (CI surface): the workflows, the composite setup action, the
+candidate-evidence chain (`candidate-steps.ts` argv contracts, schema v3), and
+the JFB harness now enter through `node`/`pnpm`; `.dvmrc` is retired for
+`.node-version`. STILL deno-entered: the `tools/release` scripts that keep
+`deno run` entries in their package.json (publish/pack, the packaged-consumer
+harnesses, the published-consumer qualification's Deno-consumer legs), the
+fixture/qualify scripts (`router-nitro` proofs, `third-party-web-components`,
+`web-component-interop`, `starter-smoke` setup), `apps/saas` build scripts, and
+the two benchmark probes in §5. Because CI no longer carries the retired
+setup-deno workspace step, `setup-node-workspace` installs deno@2.9.0
+(=`.dvmrc`'s last pin) TRANSITIONALLY so those entries keep running unchanged;
+the release-lane port ("until the release-lane port pivots those readers to
+package.json", tools/release/package.json) deletes that install step as its
+final act. Expiry: that lane changes the entry points, not the ported APIs.
 
 ## 4. Module resolution artifacts
 
@@ -63,22 +74,22 @@ registry mirrors. `check-fixture-locks.ts` was deleted with its gate step.
 
 No node:\* one-liner exists for a fetch-handler server. B1a replaced the
 router product usage with `packages/router/src/internal/node-http.ts`
-(fetch(Request): Response on node:http), but `Deno.serve` calls survive
-outside the B1b lanes — B2/B3 residuals, listed here rather than claimed zero:
+(fetch(Request): Response on node:http). B2/B3 retired the shared static
+server (`tools/lib/static-server.ts`), the pack qualification server
+(`tools/release/consumer-packaged-element.ts`), and the parity harness;
+B4 ported `benchmarks/jfb/harness/run.ts` onto `node:http`. Still live:
 
-- `tools/lib/static-server.ts:113` — the shared static server; serving the
-  www e2e web server through the thin wrapper `www/e2e/static-server.ts:14`
-- `tools/release/consumer-packaged-element.ts:145` — pack qualification server
-- `packages/router/__tests__/request-time-parity.test.ts:37` — dev/prod parity
-  harness (its doc comment, line 11, names Deno.serve too)
-- `benchmarks/jfb/harness/run.ts:329`, `benchmarks/jfb/harness/swap-repeat-probe.ts:125`,
-  `benchmarks/streaming/measure.ts:85` — benchmark harnesses
+- `benchmarks/jfb/harness/swap-repeat-probe.ts:125` — local repeat-swap probe
+  (unrunnable since the B4 CI swap removed the deno host; port or delete with
+  the next benchmark-owner pass)
+- `benchmarks/streaming/measure.ts:85` — manual measurement script (same
+  status)
 
 Comment-only mentions (no executable call): `tests/lib/qualify-harness/serve-static.ts:5`,
 `tools/release/consumer-packaged-node-serve.ts:21`, `docs/adr/ADR-0154`.
 `www/content/docs/guide/deployment*.md` and one blog post teach it in prose.
-Expiry: the B2/B3 lanes (or a benchmark-owner pass) replace the live calls with
-the node-http shape; docs follow the product copy.
+Expiry: a benchmark-owner pass replaces the remaining calls with the
+node-http shape; docs follow the product copy.
 
 ## 6. Error taxonomy
 

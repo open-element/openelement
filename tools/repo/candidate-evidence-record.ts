@@ -2,7 +2,7 @@
  * Candidate evidence — the record foundation (alpha6 record split).
  *
  * One CI job's proof is recorded here: the job-record shapes (`StepResult`,
- * `JobResult`, `LoadedJob`), the process primitives (`repoRoot`, `denoExe`,
+ * `JobResult`, `LoadedJob`), the process primitives (`repoRoot`, `nodeExe`,
  * `required`, the `CANDIDATE_SHA`/`--expected-sha` resolution in
  * `expectedSha`, the tracked-clean probe in `assertCleanAtSha`), the step
  * runner with its SHA-free log bookkeeping (`runStep`, `toolVersions`,
@@ -47,18 +47,18 @@ import {
 
 export const repoRoot = join(dirname(new URL(import.meta.url).pathname), '..', '..');
 
-export const denoExe = process.execPath;
+export const nodeExe = process.execPath;
 
 /**
  * The pre-port build identifiers spelled 'windows'/'aarch64'/'x86_64'; node
  * spells them 'win32'/'arm64'/'x64'. The evidence record strings must stay
  * byte-identical across the port, so translate instead of rewording.
  */
-function denoBuildOs(): string {
+function evidenceOs(): string {
   return process.platform === 'win32' ? 'windows' : process.platform;
 }
 
-function denoBuildArch(): string {
+function evidenceArch(): string {
   if (process.arch === 'arm64') return 'aarch64';
   if (process.arch === 'x64') return 'x86_64';
   return process.arch;
@@ -191,17 +191,18 @@ async function playwrightBrowserVersions(): Promise<Record<string, string>> {
 }
 
 export async function toolVersions(): Promise<EvidenceToolVersions> {
-  const [node, npm] = await Promise.all([
+  const [node, npm, pnpm] = await Promise.all([
     required('node', ['--version']).catch(() => 'unavailable'),
     required('npm', ['--version']).catch(() => 'unavailable'),
+    required('pnpm', ['--version']).catch(() => 'unavailable'),
   ]);
   return {
-    deno: process.versions.deno!,
+    node,
+    pnpm,
     v8: process.versions.v8!,
     typescript: process.versions.typescript!,
-    node,
     npm,
-    os: `${denoBuildOs()}/${denoBuildArch()}`,
+    os: `${evidenceOs()}/${evidenceArch()}`,
     playwrightBrowsers: await playwrightBrowserVersions(),
   };
 }
@@ -338,7 +339,7 @@ export async function recordJob(
   const steps: StepResult[] = [];
   const runCleanProof = async (phase: 'before' | 'after'): Promise<void> => {
     const name = `workspace-clean-${phase}`;
-    const argv = [denoExe, ...cleanProofArgv(sha, tree, phase).slice(1)];
+    const argv = [nodeExe, ...cleanProofArgv(sha, tree, phase).slice(1)];
     console.log(`[evidence] ${job}: ${name}: ${argv.join(' ')}`);
     const step = await runStep(name, argv, outDir, repoRoot, SOURCE_ROLES);
     steps.push(step);

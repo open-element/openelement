@@ -86,7 +86,7 @@ export { composeBundleJobs } from './candidate-evidence-aggregate.ts';
 // primitives moved to candidate-evidence-record.ts and the audit lanes import
 // them there; these keep the historical import paths working.
 export {
-  denoExe,
+  nodeExe,
   expectedSha,
   type JobResult,
   type LoadedJob,

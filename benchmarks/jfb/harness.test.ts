@@ -191,7 +191,7 @@ function validEvidence() {
         cpuModel: 'Apple M4',
         cpuCount: 10,
         totalMemoryBytes: 16_000_000_000,
-        deno: { deno: '2.9.0' },
+        pnpm: '12.3.4',
         node: 'v24.18.0',
         npm: '11.0.0',
       },

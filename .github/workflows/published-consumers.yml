@@ -36,12 +36,12 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
-      - uses: ./.github/actions/setup-deno-workspace
+      - uses: ./.github/actions/setup-node-workspace
       - name: Generate and exercise the published starter
         env:
           OPEN_ELEMENT_PUBLISHED_VERSION: ${{ inputs.version }}
         run: >-
-          deno run --allow-read --allow-write --allow-run --allow-env --allow-net --deny-ffi --no-prompt
+          node
           tools/release/published-consumer-qualification.ts --mode starter
           --report published-consumer-starter-${{ runner.os }}.json
       - name: Archive published starter diagnostics
@@ -62,26 +62,26 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
-      - uses: ./.github/actions/setup-deno-workspace
+      - uses: ./.github/actions/setup-node-workspace
       - name: Install Chromium for browser-backed consumer smoke
         run: ./node_modules/.bin/playwright install --with-deps chromium
       - name: Verify Deno and Node ESM public runtime consumers
         env:
           OPEN_ELEMENT_PUBLISHED_VERSION: ${{ inputs.version }}
         run: >-
-          deno run --allow-read --allow-write --allow-run --allow-env --allow-net --deny-ffi --no-prompt
+          node
           tools/release/published-consumer-qualification.ts --mode runtime
           --report published-consumer-runtime-linux.json
       - name: Verify Nitro Node and Workers through nitro-mount
         run: |
-          deno task --cwd tests/fixtures/router-nitro proof:node
-          deno task --cwd tests/fixtures/router-nitro proof:workers
+          pnpm --dir tests/fixtures/router-nitro run proof:node
+          pnpm --dir tests/fixtures/router-nitro run proof:workers
       - name: Verify third-party Web Components and CDN consumption
         env:
           OPEN_ELEMENT_PUBLISHED_VERSION: ${{ inputs.version }}
         run: |
-          deno task --cwd tests/fixtures/third-party-web-components smoke
-          deno run --allow-read --allow-write --allow-env --allow-run --allow-net --deny-ffi --no-prompt tools/release/published-consumer-qualification.ts --smoke --version "$OPEN_ELEMENT_PUBLISHED_VERSION" --jsdelivr
+          pnpm --dir tests/fixtures/third-party-web-components run smoke
+          node tools/release/published-consumer-qualification.ts --smoke --version "$OPEN_ELEMENT_PUBLISHED_VERSION" --jsdelivr
       - name: Archive published runtime diagnostics
         if: always()
         # v7.0.1

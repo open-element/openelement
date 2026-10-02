@@ -48,8 +48,9 @@ const PACKAGE_KEYWORDS: Record<string, string[]> = {
 /**
  * Host floors (#1412). `node` is the Alpha target the repository actually
  * exercises: ADR-0154 names Node 24, and CI runs the packed consumers on Node
- * 24 plus a 24/26 serve matrix. `deno` is the pinned, documented, CI-verified
- * Deno floor (`.dvmrc`, README) and is declared only by the two packages whose
+ * 24 plus a 24/26 serve matrix. `deno` is the documented, CI-verified
+ * Deno floor (README; CI-pinned since the B4 .dvmrc retirement) and is
+ * declared only by the two packages whose
  * supported toolchain is Deno-driven today: Router's `./vite` + `./cli/*`
  * subpaths call Deno APIs at build time (#1387 tracks the portable-host
  * migration) and Create's CLI is a `deno run` program. npm ignores unknown

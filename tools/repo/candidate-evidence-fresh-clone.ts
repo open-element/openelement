@@ -1,11 +1,11 @@
 /**
  * Candidate evidence — the fresh-clone producer (alpha6 record split).
  *
- * The fresh-clone lane proves the candidate from a clean clone with an empty
- * DENO_DIR and npm cache: clone, checkout (the SHA is re-verified inside the
- * clone), install, typecheck, the fast source gate, the packed gate, the Site
- * build, and the official Site E2E — bracketed by clean proofs so
- * `trackedClean` is derived, not asserted. Commands are declared in shared
+ * The fresh-clone lane proves the candidate from a clean clone with an
+ * isolated pnpm store and npm cache: clone, checkout (the SHA is re-verified
+ * inside the clone), install, typecheck, the fast source gate, the packed
+ * gate, the Site build, and the official Site E2E — bracketed by clean proofs
+ * so `trackedClean` is derived, not asserted. Commands are declared in shared
  * roles and only the spawn materializes real paths, so the recorded evidence
  * stays free of machine-specific locations.
  *
@@ -37,9 +37,9 @@ import {
 } from './candidate-steps.ts';
 import {
   assertCleanAtSha,
-  denoExe,
   expectedSha,
   type JobResult,
+  nodeExe,
   repoRoot,
   required,
   toolVersions,
@@ -64,7 +64,7 @@ export async function recordFreshClone(outDir: string): Promise<void> {
   await mkdir(join(outDir, 'logs'), { recursive: true });
   const tmpRoot = await mkdtemp(join(tmpdir(), 'fresh-candidate-'));
   const cloneDir = join(tmpRoot, 'repo');
-  const denoDir = join(tmpRoot, 'deno-dir');
+  const pnpmStore = join(tmpRoot, 'pnpm-store');
   const npmCache = join(tmpRoot, 'npm-cache');
   // One mapping for every recorded path: real absolute paths stay private and
   // the validator only ever sees the shared roles.
@@ -123,37 +123,39 @@ export async function recordFreshClone(outDir: string): Promise<void> {
     if (clonedSha !== sha) throw new Error(`fresh clone checked out ${clonedSha}, want ${sha}`);
     const isolatedEnv = {
       ...process.env,
-      DENO_DIR: denoDir,
+      // pnpm resolves its content-addressable store through npm_config_* env,
+      // so the clone's install/build never shares store state with the
+      // workspace checkout.
+      npm_config_store_dir: pnpmStore,
       NPM_CONFIG_CACHE: npmCache,
       npm_config_cache: npmCache,
-      DENO_NO_UPDATE_CHECK: '1',
     };
     const runCleanProof = (phase: 'before' | 'after') =>
       run(
         `workspace-clean-${phase}`,
-        [denoExe, ...cleanProofArgv(sha, tree, phase).slice(1)],
+        [nodeExe, ...cleanProofArgv(sha, tree, phase).slice(1)],
         cloneDir,
         isolatedEnv,
       );
     await runCleanProof('before');
-    await run('install', freshCloneCommands.install(denoExe), cloneDir, isolatedEnv);
-    await run('task-check', freshCloneCommands.check(denoExe), cloneDir, isolatedEnv);
+    await run('install', freshCloneCommands.install(), cloneDir, isolatedEnv);
+    await run('task-check', freshCloneCommands.check(), cloneDir, isolatedEnv);
     // The PR-layer lane: the fresh clone proves the fast source gate and the
     // packed gate. The release train (registry read, gate:release, packed
     // gate, publish dry-run) belongs to the release workflow, not to every
     // PR — see docs/maintainers/releasing.md.
-    await run('task-gate-source', freshCloneCommands.gateSource(denoExe), cloneDir, isolatedEnv);
-    await run('task-gate-packed', freshCloneCommands.gatePacked(denoExe), cloneDir, isolatedEnv);
+    await run('task-gate-source', freshCloneCommands.gateSource(), cloneDir, isolatedEnv);
+    await run('task-gate-packed', freshCloneCommands.gatePacked(), cloneDir, isolatedEnv);
     // This lane owns the candidate's Site proof: build the Site in the clone
     // and drive the official Playwright suite there, so the recorded sidecar
     // describes the same exact SHA/tree as every other job.
-    await run('task-site-build', freshCloneCommands.siteBuild(denoExe), cloneDir, isolatedEnv);
+    await run('task-site-build', freshCloneCommands.siteBuild(), cloneDir, isolatedEnv);
     // #1409: the Site E2E step must not throw past the evidence staging below.
     // A failing suite is exactly the case whose per-test names are unrecoverable
     // without a live runner, so the raw report is staged on failure too — then
     // the failure is re-raised, unchanged, after the record is written.
     try {
-      await run('task-site-e2e', freshCloneCommands.siteE2e(denoExe), cloneDir, isolatedEnv);
+      await run('task-site-e2e', freshCloneCommands.siteE2e(), cloneDir, isolatedEnv);
     } catch (cause) {
       siteE2eFailure = cause instanceof Error ? cause : new Error(String(cause));
     }

@@ -263,9 +263,11 @@ export default class PackedLive extends OpenElement {
   }
 
   // build.mjs drives the packed router vite build (Rolldown native binding):
-  // scoped build-host permissions with prompts off.
+  // scoped build-host permissions with prompts off. The deno host is
+  // transitional (setup-node-workspace installs it until the release-lane
+  // port): the packed vite build drives a deno entry.
   const build = await run(
-    process.execPath,
+    'deno',
     [
       'run',
       '--allow-read',
@@ -304,9 +306,10 @@ export default class PackedLive extends OpenElement {
     throw new Error('Static publish leaked dist/server into the Nitro public dir');
   }
   // Nitro 3 builds on a Rolldown-based pipeline (native binding): scoped
-  // build-host permissions with prompts off.
+  // build-host permissions with prompts off. Same transitional deno host:
+  // the build runs through the deno npm: specifier.
   const nitroBuild = await run(
-    process.execPath,
+    'deno',
     [
       'run',
       '--allow-read',

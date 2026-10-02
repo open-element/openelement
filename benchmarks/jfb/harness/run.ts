@@ -20,10 +20,15 @@
  * no CPU throttling (stock default), and OE-diagnostic memory probe 26.
  */
 import { dirname, join } from '@std/path';
-// Host metadata the benchmark schema requires: Deno has no CPU-model API, and
+// Host metadata the benchmark schema requires: node has no CPU-model API, and
 // OS release strings come from the same host boundary. Identity values are
 // read from the environment instead (redacted before writing).
-import { cpus, release, totalmem } from 'node:os';
+import { spawnSync } from 'node:child_process';
+import { readFile } from 'node:fs/promises';
+import { mkdir, writeFile } from 'node:fs/promises';
+import { createServer, type AddressInfo } from 'node:http';
+import { cpus, hostname, release, totalmem } from 'node:os';
+import process from 'node:process';
 import { buildHarness, type BuildReport } from './build.ts';
 import {
   assertEvidenceSafe,
@@ -244,51 +249,47 @@ interface RunOptions {
   crossEngineSanity?: boolean;
 }
 
-async function commandVersion(command: string, args: string[]): Promise<string> {
-  const result = await new Deno.Command(command, {
-    args,
-    stdout: 'piped',
-    stderr: 'piped',
-  }).output();
-  return result.success ? new TextDecoder().decode(result.stdout).trim() : 'unavailable';
+function commandVersion(command: string, args: string[]): string {
+  const result = spawnSync(command, args, { encoding: 'utf8' });
+  return result.status === 0 ? (result.stdout ?? '').trim() : 'unavailable';
 }
 
-async function machineProvenance(): Promise<Record<string, unknown>> {
+function machineProvenance(): Record<string, unknown> {
   const cpuInfo = cpus();
   return {
-    platform: Deno.build.os,
+    platform: process.platform,
     release: release(),
-    arch: Deno.build.arch,
+    arch: process.arch,
     cpuModel: cpuInfo[0]?.model ?? 'unknown',
     cpuCount: cpuInfo.length,
     totalMemoryBytes: totalmem(),
-    deno: Deno.version,
-    node: await commandVersion('node', ['--version']),
-    npm: await commandVersion('npm', ['--version']),
+    node: commandVersion('node', ['--version']),
+    pnpm: commandVersion('pnpm', ['--version']),
+    npm: commandVersion('npm', ['--version']),
   };
 }
 
 /** Identity values the evidence writer must scrub before writing. */
 function recordingIdentity(buildDir: string): EvidenceIdentity {
-  const hostname = (() => {
+  const host = (() => {
     try {
-      return Deno.hostname();
+      return hostname();
     } catch {
       return undefined;
     }
   })();
   return {
-    hostname,
-    username: Deno.env.get('USER') ?? Deno.env.get('USERNAME'),
-    homeDir: Deno.env.get('HOME') ?? Deno.env.get('USERPROFILE'),
+    hostname: host,
+    username: process.env['USER'] ?? process.env['USERNAME'],
+    homeDir: process.env['HOME'] ?? process.env['USERPROFILE'],
     repoRoot: new URL('../../..', import.meta.url).pathname,
     buildDir,
-    tmpDir: Deno.env.get('TMPDIR') ?? Deno.env.get('TEMP'),
+    tmpDir: process.env['TMPDIR'] ?? process.env['TEMP'],
   };
 }
 
-async function gitRevision(): Promise<string> {
-  return await commandVersion('git', ['rev-parse', 'HEAD']);
+function gitRevision(): string {
+  return commandVersion('git', ['rev-parse', 'HEAD']);
 }
 
 export async function runHarness(options: RunOptions = {}): Promise<Record<string, unknown>> {
@@ -326,11 +327,11 @@ export async function runHarness(options: RunOptions = {}): Promise<Record<strin
   const browser = await browserType.launch({ args: launchArgs });
   const browserVersion = browser.version();
 
-  const server = Deno.serve({ port: 0 }, async (req) => {
-    const url = new URL(req.url);
+  const server = createServer(async (req, res) => {
+    const url = new URL(req.url ?? '/', 'http://localhost');
     const path = url.pathname === '/' ? '/index.html' : url.pathname;
     try {
-      const file = await Deno.readFile(join(buildReport.buildDir, path));
+      const file = await readFile(join(buildReport.buildDir, path));
       const type = path.endsWith('.html')
         ? 'text/html'
         : path.endsWith('.js')
@@ -338,12 +339,18 @@ export async function runHarness(options: RunOptions = {}): Promise<Record<strin
           : path.endsWith('.css')
             ? 'text/css'
             : 'application/octet-stream';
-      return new Response(file, { headers: { 'content-type': type, 'cache-control': 'no-store' } });
+      res.writeHead(200, { 'content-type': type, 'cache-control': 'no-store' });
+      res.end(file);
     } catch {
-      return new Response('not found', { status: 404 });
+      res.writeHead(404, { 'content-type': 'text/plain' });
+      res.end('not found');
     }
   });
-  const baseUrl = `http://localhost:${server.addr.port}`;
+  const listenPort = await new Promise<number>((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(0, 'localhost', () => resolve((server.address() as AddressInfo).port));
+  });
+  const baseUrl = `http://localhost:${listenPort}`;
 
   const results: ImplementationResult[] = [];
   try {
@@ -420,7 +427,10 @@ export async function runHarness(options: RunOptions = {}): Promise<Record<strin
     }
   } finally {
     await browser.close();
-    await server.shutdown();
+    await new Promise<void>((resolve, reject) => {
+      server.closeIdleConnections?.();
+      server.close((error) => (error ? reject(error) : resolve()));
+    });
   }
 
   const evidence = {
@@ -438,7 +448,7 @@ export async function runHarness(options: RunOptions = {}): Promise<Record<strin
       },
       stockFiles: buildReport.stockFetch,
       browser: { engine: browserName, version: browserVersion, launchArgs },
-      toolchain: await machineProvenance(),
+      toolchain: machineProvenance(),
       iterations: { cpu: iterations, cpuStock: CPU_ITERATIONS_STOCK, mem: MEM_ITERATIONS },
       warmupPolicy:
         'stock webdriver-ts warmup counts (5/5/3/1/5/5/5/5/5), fresh page per measured iteration, no CPU throttling',
@@ -467,7 +477,7 @@ export async function runHarness(options: RunOptions = {}): Promise<Record<strin
 }
 
 if (import.meta.main) {
-  const args = Deno.args;
+  const args = process.argv.slice(2);
   const flagValue = (name: string): string | undefined => {
     const index = args.indexOf(`--${name}`);
     return index >= 0 ? args[index + 1] : undefined;
@@ -483,7 +493,7 @@ if (import.meta.main) {
   // Results are local output, not a tracked file (identity-free by default).
   const repoRoot = new URL('../../..', import.meta.url).pathname;
   const out = flagValue('out') ?? join(repoRoot, DEFAULT_EVIDENCE_PATH);
-  await Deno.mkdir(dirname(out), { recursive: true });
-  await Deno.writeTextFile(out, `${JSON.stringify(evidence, null, 2)}\n`);
+  await mkdir(dirname(out), { recursive: true });
+  await writeFile(out, `${JSON.stringify(evidence, null, 2)}\n`);
   console.log(`wrote ${out}`);
 }
