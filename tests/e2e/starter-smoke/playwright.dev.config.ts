@@ -32,7 +32,11 @@ export default defineConfig({
   },
 
   webServer: {
-    command: `exec deno run --config deno.json --allow-read --allow-write --allow-env --allow-net --allow-run --allow-sys --allow-ffi --no-prompt npm:vite@8.0.16 --port ${PORT} --strictPort`,
+    // B5 (ADR-0161): the starter's own `dev` script — the exact-pinned vite
+    // devDependency; args pass straight through to vite. The host is pinned
+    // because vite's default 'localhost' binding is IPv6-first on some
+    // platforms while the probe URL is 127.0.0.1.
+    command: `exec pnpm run dev --port ${PORT} --host 127.0.0.1 --strictPort`,
     cwd: new URL('./work/my-blog', import.meta.url).pathname,
     url: baseURL,
     reuseExistingServer: false,

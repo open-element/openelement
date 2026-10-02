@@ -45,17 +45,21 @@ test('vite gate rejects split lockfile instances and second bundlers', () => {
 });
 
 test('vite gate holds the starter template to the ${v.vite} token and anchors its embedded pin', () => {
-  const tmpl = 'packages/create/templates/deno.json.tmpl';
-  // The token form passes; a literal pin in the template fails even when it
-  // matches the canonical dev pin (the template must not carry a copy).
+  const tmpl = 'packages/create/templates/package.json.tmpl';
+  // The token form passes (the raw devDependency '${v.vite}' normalizes to
+  // the canonical token specifier); a literal pin in the template fails even
+  // when it matches the canonical dev pin (the template must not carry a
+  // copy).
   expect(checkManifests([{ path: tmpl, imports: { vite: 'npm:vite@${v.vite}' } }])).toEqual([]);
   expect(
     checkManifests([{ path: tmpl, imports: { vite: `npm:vite@${VITE_DEV_PIN}` } }]).length,
   ).toEqual(1);
-  // Task commands sit outside the manifest slots, so the raw-text rule
+  // Script commands sit outside the manifest slots, so the raw-text rule
   // covers them.
-  expect(checkTemplateViteText(tmpl, '"dev": "deno run npm:vite@${v.vite}"')).toEqual([]);
-  expect(checkTemplateViteText(tmpl, '"dev": "deno run npm:vite@8.0.16"').length).toEqual(1);
+  expect(checkTemplateViteText(tmpl, '"dev": "vite"')).toEqual([]);
+  expect(
+    checkTemplateViteText(tmpl, '"dependencies": { "vite": "npm:vite@8.0.16" }').length,
+  ).toEqual(1);
   expect(checkTemplateViteText('packages/router/deno.json', 'npm:vite@8.0.16')).toEqual([]);
   // The embedded copy the packed CLI stamps into generated starters is
   // anchored to the canonical pin.

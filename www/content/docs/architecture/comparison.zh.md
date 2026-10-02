@@ -83,7 +83,7 @@ OpenElement × Supabase × Cloudflare 是经过验证的全栈交付路径，所
 
 ### 产物体积
 
-以下数字于 2026-10-01 量自 docs 站点自身的构建（`www/dist`，由 `deno task site:build` 生成）。下列命令可复现每一行；页面数与 URL 数随路由集合变化，内容变更后请重跑。这些数字最近一次变动是因为 alpha6 构建把客户端资产注入改为 manifest 驱动、包 island 采用精确身份匹配（#1471、ADR-0160）：每个包 island 现在按模块身份产出自己的 `island-<tag>-<hash>.js` chunk，而此前被编译的组件代码会打进引用它的那个 island chunk——因此多个 chunk 被重新切分和改名，页面载荷跟随它自己的 island 集合，不再继承被错误归并的 bundle。
+以下数字于 2026-10-01 量自 docs 站点自身的构建（`www/dist`，由 `pnpm run site:build` 生成）。下列命令可复现每一行；页面数与 URL 数随路由集合变化，内容变更后请重跑。这些数字最近一次变动是因为 alpha6 构建把客户端资产注入改为 manifest 驱动、包 island 采用精确身份匹配（#1471、ADR-0160）：每个包 island 现在按模块身份产出自己的 `island-<tag>-<hash>.js` chunk，而此前被编译的组件代码会打进引用它的那个 island chunk——因此多个 chunk 被重新切分和改名，页面载荷跟随它自己的 island 集合，不再继承被错误归并的 bundle。
 
 | 指标                 | 数值                                             |
 | -------------------- | ------------------------------------------------ |
@@ -94,7 +94,7 @@ OpenElement × Supabase × Cloudflare 是经过验证的全栈交付路径，所
 | 搜索索引             | 每个语言 34 页（en、zh），68 个 fragment，1.6 MB |
 
 ```bash
-deno task site:build                        # 先重新生成以下全部内容
+pnpm run site:build                         # 先重新生成以下全部内容
 find www/dist -name '*.html' | wc -l        # 70
 grep -c '<loc>' www/dist/sitemap.xml        # 68
 du -sh www/dist                             # 9.6M（随平台变化；上表 8.9 MB 是字节总和）

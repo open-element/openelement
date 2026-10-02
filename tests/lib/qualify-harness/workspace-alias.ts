@@ -56,10 +56,16 @@ export async function applyWorkspaceAliases(
   options: ApplyWorkspaceAliasesOptions,
 ): Promise<void> {
   const denoJsonPath = join(appDir, 'deno.json');
-  const denoJson = await readJson<{
-    imports?: Record<string, string>;
-    tasks?: Record<string, string>;
-  }>(denoJsonPath);
+  // B5 (ADR-0161): the generated starter no longer ships a deno.json — the
+  // scaffold is a Node/pnpm project. The Deno-host fixture harness provides
+  // its own Deno universe instead: a minimal config that carries exactly the
+  // workspace alias map (below) plus the rewritten build task.
+  let denoJson: { imports?: Record<string, string>; tasks?: Record<string, string> } = {};
+  try {
+    denoJson = await readJson<typeof denoJson>(denoJsonPath);
+  } catch (error) {
+    if ((error as { code?: string }).code !== 'ENOENT') throw error;
+  }
   const imports = (denoJson.imports ??= {});
   Object.assign(imports, options.extraImports);
   for (const [specifier, url] of allPackageAliases(options.repoRoot)) {

@@ -85,7 +85,7 @@ What we measure, and the commands that reproduce each row.
 
 ### Output size
 
-Numbers measured on 2026-10-01 from the docs site's own build (`www/dist`, built with `deno task site:build`). The commands below reproduce each row; page and URL counts follow the route set, so re-run them after content changes. These figures last moved when the alpha6 build made client asset injection manifest-driven with exact package-island identity (#1471, ADR-0160): each package island now ships as its own `island-<tag>-<hash>.js` chunk matched by module identity, where the compiled component code previously bundled into whichever island chunk referenced it — so several chunks were re-cut and renamed, and a page's payload now follows its own island set instead of inheriting mis-attributed bundles.
+Numbers measured on 2026-10-01 from the docs site's own build (`www/dist`, built with `pnpm run site:build`). The commands below reproduce each row; page and URL counts follow the route set, so re-run them after content changes. These figures last moved when the alpha6 build made client asset injection manifest-driven with exact package-island identity (#1471, ADR-0160): each package island now ships as its own `island-<tag>-<hash>.js` chunk matched by module identity, where the compiled component code previously bundled into whichever island chunk referenced it — so several chunks were re-cut and renamed, and a page's payload now follows its own island set instead of inheriting mis-attributed bundles.
 
 | Metric                 | Value                                              |
 | ---------------------- | -------------------------------------------------- |
@@ -96,7 +96,7 @@ Numbers measured on 2026-10-01 from the docs site's own build (`www/dist`, built
 | Search index           | 34 pages per locale (en, zh), 68 fragments, 1.6 MB |
 
 ```bash
-deno task site:build                        # regenerate everything below first
+pnpm run site:build                         # regenerate everything below first
 find www/dist -name '*.html' | wc -l        # 70
 grep -c '<loc>' www/dist/sitemap.xml        # 68
 du -sh www/dist                             # 9.6M (platform-dependent; the 8.9 MB above is the byte sum)

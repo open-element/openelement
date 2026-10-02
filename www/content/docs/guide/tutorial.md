@@ -9,7 +9,7 @@ order: 2
 
 ## Before you start
 
-You need **Deno 2.9 or newer** and a terminal. Nothing else — no Node.js install, no `package.json`.
+You need **Node.js 24+** with pnpm, and a terminal. The one bootstrap command is a Deno invocation — a Deno 2.9+ install resolves it through `npm:` specifiers (ADR-0161); everything after it is Node and pnpm.
 
 The tutorial builds one app in five steps, and every step ends with something you can see:
 
@@ -26,7 +26,8 @@ The TypeScript and TSX blocks on this page are not sketches: CI type-checks them
 ```bash
 {{INSTALL_COMMAND}}
 cd my-app
-deno task dev
+pnpm install
+pnpm dev
 ```
 
 `--minimum-dependency-age 0` is needed only because Deno's default (~24 hours) refuses packages published within the last day.
@@ -37,11 +38,12 @@ The create CLI prints one `created <path>` line per file, then the next steps:
 openElement project created at ./my-app/
 
   cd my-app
-  deno task dev
-  See README.md for all tasks (check/build/start/preview)
+  pnpm install
+  pnpm dev
+  See README.md for all scripts (check/test/build/start/preview)
 ```
 
-`deno task dev` starts the Vite dev server and prints the URL to open:
+`pnpm dev` starts the Vite dev server and prints the URL to open:
 
 ```text
   VITE v8.0.16  ready in 412 ms
@@ -53,7 +55,7 @@ That page is the starter's home route. Its layout is the whole architecture:
 
 ```text
 my-app/
-  deno.json         import map + tasks: dev, check, test, build, start, preview
+  package.json      dependencies + pnpm scripts: dev, check, test, build, start, preview
   openelement.config.ts  framework options (tokens, head, shell conventions)
   vite.config.ts    Vite configuration; the plugin call takes no arguments
   app/routes/       one file per URL
@@ -62,7 +64,7 @@ my-app/
   public/           static assets, copied into dist/ as-is
 ```
 
-`deno task check` type-checks the starter's `app/` directory together with `vite.config.ts` and `openelement.config.ts`; new routes are picked up automatically.
+`pnpm check` type-checks the starter's `app/` directory together with `vite.config.ts` and `openelement.config.ts`; new routes are picked up automatically.
 
 ## Step 2: Add your first page
 
@@ -285,7 +287,7 @@ Without the `x-openelement-action` header the same POST is an ordinary browser s
 ## Step 5: Build and serve
 
 ```bash
-deno task build
+pnpm build
 ```
 
 The build prerenders every static route, bundles one chunk per reachable island, and — because `/notes` is request-time — writes the server entry too. Expected output (trimmed: the starter's own islands appear in the same table, and the per-page list is elided):
@@ -323,7 +325,7 @@ server/index.js     the request-time handler that answers POST /notes
 Serve the artifact:
 
 ```bash
-deno task start
+pnpm start
 ```
 
 ```text
@@ -341,7 +343,7 @@ curl -i http://localhost:4173/hello | head -1
 HTTP/1.1 200 OK
 ```
 
-`/hello` is a file on disk; `/notes` reached the server entry. `deno task preview` is the static-only mode and refuses to run while `dist/server` exists — which is why a project with a request-time route is served with `deno task start`.
+`/hello` is a file on disk; `/notes` reached the server entry. `pnpm preview` is the static-only mode and refuses to run while `dist/server` exists — which is why a project with a request-time route is served with `pnpm start`.
 
 You now have a project, a page, an island, a form action, and a build you can deploy.
 

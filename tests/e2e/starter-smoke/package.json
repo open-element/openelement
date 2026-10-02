@@ -3,9 +3,9 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
-  "//": "setup.ts drives the packed-consumer flow (deno pack + a scaffolded Deno app), so it keeps a `deno run` entry; the Playwright suites run on the node-installed @playwright/test CLI. The former `install` task is `browsers:install` here: a script named `install` is a pnpm lifecycle hook and would download browsers on every workspace install.",
+  "//": "setup.ts drives the packed-consumer flow on the Node/pnpm surface (vp pack tarballs + a scaffolded Node starter, B5/ADR-0161); the Playwright suites run on the node-installed @playwright/test CLI. The former `install` task is `browsers:install` here: a script named `install` is a pnpm lifecycle hook and would download browsers on every workspace install.",
   "scripts": {
-    "setup": "deno run --no-lock --allow-read --allow-write --allow-run setup.ts",
+    "setup": "node setup.ts",
     "browsers:install": "playwright install chromium firefox webkit",
     "test": "playwright test --config ./playwright.config.ts --project=chromium --project=firefox --project=webkit",
     "test:dev": "playwright test --config ./playwright.dev.config.ts",

@@ -62,19 +62,19 @@ const TASK_FILES: TaskFile[] = [
   { path: 'tests/fixtures/third-party-web-components/package.json', ffiAllowed: {} },
 ];
 
-/** Template tasks that must keep --allow-ffi (Vite native binding). */
+/** Template lifecycle scripts audited for the flag-free Node contract. */
 const TEMPLATE_FFI_REQUIRED = ['dev', 'build', 'start', 'preview'];
 
-/** The starter template keeps its Deno-consumer task surface (deno.json.tmpl). */
+/** The starter template's lifecycle scripts (package.json.tmpl, B5/ADR-0161). */
 function templateScripts(): Record<string, string> {
   const parsed = JSON.parse(
-    readFileSync(join(repoRoot, 'packages/create/templates/deno.json.tmpl'), 'utf8'),
-  ) as { tasks?: Record<string, string> };
+    readFileSync(join(repoRoot, 'packages/create/templates/package.json.tmpl'), 'utf8'),
+  ) as { scripts?: Record<string, string> };
   expect(
-    parsed.tasks && typeof parsed.tasks === 'object',
-    'template has no tasks map',
+    parsed.scripts && typeof parsed.scripts === 'object',
+    'template has no scripts map',
   ).toBeTruthy();
-  return parsed.tasks as Record<string, string>;
+  return parsed.scripts as Record<string, string>;
 }
 
 function taskMap(path: string): Record<string, string> {
@@ -106,7 +106,7 @@ test('task permissions: no broad flags in first-party tasks or templates', () =>
   }
   const template = templateScripts();
   for (const [name, command] of Object.entries(template)) {
-    check(`templates/deno.json.tmpl#${name}`, command);
+    check(`templates/package.json.tmpl#${name}`, command);
   }
   expect(
     violations.length === 0,
@@ -161,15 +161,21 @@ test('task permissions: unit suites run on vitest — the deno permission surfac
   }
 });
 
-test('task permissions: create template keeps scoped vite permissions', () => {
+test('task permissions: create template lifecycle is flag-free on the Node host', () => {
+  // DISCLOSED SEMANTIC CHANGE (B5): the former assertion pinned --allow-ffi
+  // on the template's dev/build/start/preview Deno tasks (vite native
+  // binding). The B5 cutover makes the generated starter a Node/pnpm project
+  // (ADR-0161) — there is no permission model to scope, so the invariant that
+  // REMAINS: the lifecycle scripts exist and carry no host permission flags
+  // at all.
   const template = templateScripts();
   for (const name of TEMPLATE_FFI_REQUIRED) {
     const command = template[name];
-    expect(command, `template task missing: ${name}`).toBeTruthy();
+    expect(command, `template script missing: ${name}`).toBeTruthy();
     expect(
-      command.includes('--allow-ffi'),
-      `template#${name} must keep --allow-ffi (vite native binding; removal reintroduces the FFI prompt)`,
-    ).toBeTruthy();
+      /--allow|--deny|--no-prompt/.test(command),
+      `template#${name} must not carry host permission flags: ${command}`,
+    ).toBeFalsy();
   }
 });
 

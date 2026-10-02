@@ -53,27 +53,19 @@ function assertCleanError(stderr: string): void {
   expect(stderr.includes('\n    at '), `stack trace leaked into CLI error:\n${stderr}`).toBeFalsy();
 }
 
-test('starter exposes only product imports and the standard lifecycle', () => {
-  const denoJson = JSON.parse(readTemplate('deno.json.tmpl'));
-  expect(Object.keys(denoJson.imports).sort()).toEqual([
+test('starter exposes only product dependencies and the standard lifecycle', () => {
+  const manifest = JSON.parse(readTemplate('package.json.tmpl'));
+  // B5 (ADR-0161): the import map collapsed into four plain npm dependencies.
+  // Subpaths (jsx-runtime, /vite, /nitro-mount, ...) resolve through the
+  // published packages' own exports maps — they are never separate pins.
+  expect(Object.keys(manifest.dependencies).sort()).toEqual([
     '@hono/vite-dev-server',
     '@openelement/element',
-    '@openelement/element/build-utils',
-    '@openelement/element/jsx-dev-runtime',
-    '@openelement/element/jsx-runtime',
     '@openelement/router',
-    '@openelement/router/nitro-mount',
-    '@openelement/router/vite',
     'hono',
-    'vite',
   ]);
-  expect(denoJson.imports['@openelement/element/jsx-runtime']).toEqual(
-    'npm:@openelement/element@${v.element}/jsx-runtime',
-  );
-  expect(denoJson.imports['@openelement/element/jsx-dev-runtime']).toEqual(
-    'npm:@openelement/element@${v.element}/jsx-dev-runtime',
-  );
-  expect(Object.keys(denoJson.tasks).sort()).toEqual([
+  expect(Object.keys(manifest.devDependencies).sort()).toEqual(['typescript', 'vite']);
+  expect(Object.keys(manifest.scripts).sort()).toEqual([
     'build',
     'check',
     'dev',
@@ -81,20 +73,27 @@ test('starter exposes only product imports and the standard lifecycle', () => {
     'start',
     'test',
   ]);
-  expect(
-    String(denoJson.imports['@openelement/router/nitro-mount'] || '').includes('nitro-mount'),
-    'starter import map must include router/nitro-mount (#601)',
-  ).toBeTruthy();
-  expect(
-    String(denoJson.tasks.start || '').includes('cli/start'),
-    'starter must expose deno task start (#601)',
-  ).toBeTruthy();
-  expect(denoJson.tasks.test).toEqual('deno test --config deno.json --permit-no-files');
-  expect(denoJson.imports.hono).toEqual('npm:hono@^4.12');
-  expect(denoJson.compilerOptions.jsxImportSource).toEqual('@openelement/element');
-  expect(JSON.stringify(denoJson).includes('@openelement/core')).toBeFalsy();
-  expect(JSON.stringify(denoJson).includes('@openelement/app')).toBeFalsy();
-  expect(JSON.stringify(denoJson).includes('@openelement/signal')).toBeFalsy();
+  expect(manifest.scripts.dev).toEqual('vite');
+  // The starter ships no test files today; the runner must permit that
+  // (the Node counterpart of the retired --permit-no-files task).
+  expect(manifest.scripts.test).toEqual('node --test');
+  // Lifecycle scripts drive the router CLI subpaths through the starter's own
+  // node_modules tree (#601): build/start/preview are the same CLI, one mode
+  // flag apart.
+  expect(manifest.scripts.build).toContain('@openelement/router/src/cli/build.js');
+  expect(manifest.scripts.start).toContain('@openelement/router/src/cli/start.js');
+  expect(manifest.scripts.preview).toContain('--mode=preview');
+  expect(manifest.engines).toEqual({ node: '>=24' });
+  expect(JSON.stringify(manifest).includes('@openelement/core')).toBeFalsy();
+  expect(JSON.stringify(manifest).includes('@openelement/app')).toBeFalsy();
+  expect(JSON.stringify(manifest).includes('@openelement/signal')).toBeFalsy();
+  // The type-check surface is the generated tsconfig: JSX authoring through
+  // the element import source, whole-app/ coverage (#679).
+  const tsconfig = JSON.parse(readTemplate('tsconfig.json.tmpl'));
+  expect(tsconfig.compilerOptions.jsx).toEqual('react-jsx');
+  expect(tsconfig.compilerOptions.jsxImportSource).toEqual('@openelement/element');
+  expect(tsconfig.compilerOptions.noEmit).toEqual(true);
+  expect(tsconfig.include).toEqual(['app', 'vite.config.ts', 'openelement.config.ts']);
 });
 
 test('embedded CLI version matches its package manifest', () => {
@@ -168,12 +167,10 @@ test('generated starter carries no JSR bridge', async () => {
   // Packed first-party modules carry no bare @std/* specifiers, so the
   // starter needs no @std npm aliases and no @jsr registry mapping: npm is
   // the only public registry.
-  expect(pkg.dependencies).toEqual({});
   expect('.npmrc' in templates).toBeFalsy();
-  const denoJson = JSON.parse(templates['deno.json']);
-  for (const value of Object.values(denoJson.imports as Record<string, string>)) {
-    expect(value.includes('@jsr/'), `import map must not reference @jsr: ${value}`).toBeFalsy();
-    expect(value.startsWith('jsr:'), `import map must not use jsr: ${value}`).toBeFalsy();
+  for (const value of Object.values(pkg.dependencies as Record<string, string>)) {
+    expect(value.includes('@jsr/'), `dependency must not reference @jsr: ${value}`).toBeFalsy();
+    expect(value.startsWith('jsr:'), `dependency must not use jsr: ${value}`).toBeFalsy();
   }
   // Parse, don't substring: a bridge might hide behind a proxy subdomain.
   const serialized = JSON.stringify(templates);
@@ -193,37 +190,35 @@ test('generated starter carries no JSR bridge', async () => {
   expect(/@jsr\//.test(serialized), 'starter must not use @jsr scopes').toBeFalsy();
 });
 
-test('generated starter pins every OpenElement import to the exact release', async () => {
-  const versions = resolveVersions();
-  const config = JSON.parse((await buildTemplates(versions, 'sample-app'))['deno.json']);
-  expect(config.imports['@openelement/router']).toEqual(
-    `npm:@openelement/router@${versions.router}`,
-  );
-  expect(config.imports['@openelement/router/vite']).toEqual(
-    `npm:@openelement/router@${versions.router}/vite`,
-  );
-  expect(config.imports['@openelement/element']).toEqual(
-    `npm:@openelement/element@${versions.element}`,
-  );
-  expect(config.imports['@openelement/element/jsx-runtime']).toEqual(
-    `npm:@openelement/element@${versions.element}/jsx-runtime`,
-  );
-  expect(config.imports['@openelement/element/jsx-dev-runtime']).toEqual(
-    `npm:@openelement/element@${versions.element}/jsx-dev-runtime`,
-  );
+test('generated starter is a Node project: no deno.json, pnpm lifecycle', async () => {
+  const templates = await buildTemplates(resolveVersions(), 'sample-app');
+  // B5 (ADR-0161): the Deno-native starter manifest is gone; the scaffold is
+  // a plain Node/pnpm project.
+  expect('deno.json' in templates).toBeFalsy();
+  expect('tsconfig.json' in templates).toBeTruthy();
+  const pkg = JSON.parse(templates['package.json']);
+  expect(pkg.scripts.dev).toEqual('vite');
+  expect(pkg.scripts.check).toEqual('tsc --noEmit');
 });
 
-test('starter pins vite exactly and type-checks app-shell', async () => {
-  const raw = JSON.parse(readTemplate('deno.json.tmpl'));
+test('generated starter pins every OpenElement dependency to the exact release', async () => {
+  const versions = resolveVersions();
+  const pkg = JSON.parse((await buildTemplates(versions, 'sample-app'))['package.json']);
+  expect(pkg.dependencies['@openelement/router']).toEqual(versions.router);
+  expect(pkg.dependencies['@openelement/element']).toEqual(versions.element);
+});
+
+test('starter pins vite and typescript exactly, aligned with the router', async () => {
+  const raw = JSON.parse(readTemplate('package.json.tmpl'));
   expect(
-    '@deno/vite-plugin' in raw.imports,
+    '@deno/vite-plugin' in raw.devDependencies,
     'starter must not depend on @deno/vite-plugin',
   ).toBeFalsy();
   // The raw template injects the pin through the ${v.vite} token (deps:vite-check
   // owns the raw-template token rule and the VITE_STARTER_PIN anchor); the
   // generated starter is what must carry the exact pin.
   const generated = JSON.parse(
-    (await buildTemplates(resolveVersions(), 'sample-app'))['deno.json'],
+    (await buildTemplates(resolveVersions(), 'sample-app'))['package.json'],
   );
   // #681: starter vite version must stay aligned with packages/router.
   // (B2: the alignment anchor is the workspace-wide vite pin — the router
@@ -231,27 +226,13 @@ test('starter pins vite exactly and type-checks app-shell', async () => {
   // canonical VITE_DEV_PIN, asserted against router's package.json below.)
   const routerManifest = JSON.parse(readFileSync(join(packageDir, '..', 'router', 'package.json')));
   expect(routerManifest.dependencies.vite).toEqual(VITE_STARTER_PIN);
-  expect(generated.imports.vite).toEqual(`npm:vite@${VITE_STARTER_PIN}`);
-  expect(
-    /^npm:vite@\d+\.\d+\.\d+$/.test(String(generated.imports.vite)),
-    generated.imports.vite,
-  ).toBeTruthy();
-  // #927: the dev task must pin the same exact vite version as the import
-  // map — a bare npm:vite resolves to latest independently of import maps,
-  // which would run a second vite copy next to the pinned one.
-  const devTask = String(generated.tasks.dev || '');
-  const pinnedVite = String(generated.imports.vite).match(/@([^@]+)$/)?.[1] ?? '';
-  expect(devTask.includes(`npm:vite@${pinnedVite}`), devTask).toBeTruthy();
-  // #679: the check task must cover the app-shell layout island template —
-  // and every other shipped TypeScript file — by checking the app/ directory
-  // recursively instead of a hardcoded file list, so new template files (and
-  // files the user adds later) are type-checked without manual registration.
-  // Deno 2.9 resolves a directory argument to all modules beneath it; the
-  // markdown post route is compiled at build time and is not a check entry.
-  const checkTask = String(raw.tasks.check || '');
-  expect(checkTask.includes('app/'), checkTask).toBeTruthy();
-  expect(checkTask.includes('vite.config.ts'), checkTask).toBeTruthy();
-  expect(checkTask.includes('app/routes/404.tsx'), checkTask).toBeFalsy();
+  expect(generated.devDependencies.vite).toEqual(VITE_STARTER_PIN);
+  // #927's concern carries over through the devDependencies pin: the dev
+  // script runs `vite` from the starter's own install, so a single exact
+  // vite copy is guaranteed by the manifest, not by a pinned task string.
+  expect(generated.scripts.dev).toEqual('vite');
+  // The build-time TypeScript pin stays aligned with the router's own.
+  expect(raw.devDependencies.typescript).toEqual(routerManifest.dependencies.typescript);
 });
 
 test('starter templates use the compiled element authoring surface (v0.44)', () => {
@@ -481,13 +462,21 @@ test('source CLI generates a complete, token-free starter', async () => {
     const appDir = join(tmpRoot, 'sample-app');
     expect(existsSync(join(appDir, '.gitignore'))).toBeTruthy();
     expect(existsSync(join(appDir, 'gitignore.tmpl'))).toBeFalsy();
-    expect(readFileSync(join(appDir, 'deno.json'), 'utf8').includes('${v.')).toBeFalsy();
+    // B5 (ADR-0161): the scaffold is a Node/pnpm project — package.json
+    // manifest, generated tsconfig, no Deno config anywhere.
+    expect(existsSync(join(appDir, 'deno.json'))).toBeFalsy();
+    const manifest = JSON.parse(readFileSync(join(appDir, 'package.json'), 'utf8'));
+    expect(JSON.stringify(manifest).includes('${v.')).toBeFalsy();
+    expect(existsSync(join(appDir, 'tsconfig.json'))).toBeTruthy();
     // Starter ships the compiled blog routes and a README explaining
-    // tasks/conventions.
+    // scripts/conventions.
     expect(existsSync(join(appDir, 'README.md'))).toBeTruthy();
     expect(existsSync(join(appDir, 'app', 'routes', 'blog', 'index.tsx'))).toBeTruthy();
     expect(existsSync(join(appDir, 'app', 'routes', 'blog', 'welcome.tsx'))).toBeTruthy();
-    // Success output points at the README for the full task list.
+    // Success output walks the documented pnpm lifecycle.
+    expect(stdout.includes('pnpm install'), stdout).toBeTruthy();
+    expect(stdout.includes('pnpm dev'), stdout).toBeTruthy();
+    // Success output points at the README for the full script list.
     expect(stdout.includes('README.md'), stdout).toBeTruthy();
   } finally {
     rmSync(tmpRoot, { recursive: true });
@@ -599,7 +588,11 @@ test('packed CLI retains every starter template, including dotfiles', async () =
       existsSync(join(tmpRoot, 'sample-app', 'app', 'components', 'page-home.tsx')),
     ).toBeTruthy();
     // No JSR bridge may ship in packed scaffolds, not just workspace runs.
+    // B5 (ADR-0161): the packed scaffold is a Node/pnpm project — the
+    // manifest and tsconfig ship, no Deno config does.
     expect(existsSync(join(tmpRoot, 'sample-app', 'package.json'))).toBeTruthy();
+    expect(existsSync(join(tmpRoot, 'sample-app', 'tsconfig.json'))).toBeTruthy();
+    expect(existsSync(join(tmpRoot, 'sample-app', 'deno.json'))).toBeFalsy();
     expect(existsSync(join(tmpRoot, 'sample-app', '.npmrc'))).toBeFalsy();
   } finally {
     rmSync(tmpRoot, { recursive: true });

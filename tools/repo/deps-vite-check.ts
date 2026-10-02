@@ -30,8 +30,9 @@ const MANIFEST_GLOB_ROOTS = [
   'tests/fixtures/*/package.json',
   'tests/e2e/starter-smoke/package.json',
   // The starter template ships to every new user; its vite entries must
-  // inject the canonical pin through the ${v.vite} scaffold token.
-  'packages/create/templates/deno.json.tmpl',
+  // inject the canonical pin through the ${v.vite} scaffold token (B5: the
+  // token lives in devDependencies of package.json.tmpl, ADR-0161).
+  'packages/create/templates/package.json.tmpl',
 ];
 
 /** Scaffold token form the starter template must use for every vite specifier. */
@@ -323,11 +324,13 @@ if (import.meta.main) {
         continue;
       }
       failures.push(...checkTemplateViteText(path, text));
-      records.push({
-        path,
-        imports: manifest.imports,
-        peerDependencies: manifest.peerDependencies,
-      });
+      // B5 (ADR-0161): the starter template is a package.json manifest — the
+      // dependency slots normalize into the `npm:<name>@<spec>` shape the
+      // specifier checks consume (devDependencies.vite '${v.vite}' becomes
+      // the canonical token form).
+      records.push(
+        manifestRecordFromPackageJson(path, manifest as unknown as Record<string, unknown>),
+      );
       continue;
     }
     if (path.endsWith('package.json')) {

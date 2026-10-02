@@ -6,21 +6,25 @@
  * tarballs into a scratch consumer OUTSIDE the repository (so the adapter's
  * workspace auto-alias in workspace-alias.ts cannot substitute workspace
  * source for the packed modules), scaffolds the canonical starter through the
- * packed @openelement/create CLI, and then exercises the full external
- * consumer lifecycle exactly as an adopter would:
+ * packed @openelement/create CLI, installs the starter's own dependency
+ * surface through pnpm (the @openelement/* pins rewired to the same current-
+ * SHA tarballs), and then exercises the full external consumer lifecycle
+ * exactly as an adopter would on the B5 Node/pnpm surface (ADR-0161):
  *
+ *   install  the starter's package.json resolves through a real pnpm install
  *   dev      vite dev server boots and SSR-renders / over HTTP
- *   check    the starter's own typecheck task
- *   test     the starter's own test task
+ *   check    the starter's own `check` script (tsc)
+ *   test     the starter's own `test` script
  *   build    real SSG build; must emit dist/server/index.js (request-time),
  *            the structured build manifest (6 pages + 1 API route, no page
  *            errors), the prerendered index/freshness pages with the app
  *            shell marker, and the public asset copy
  *   boundary the generated SSR bundle (dist/server/entry.js) imports only the
- *            starter's product import surface — no @openelement/* specifier
- *            outside the generated import map may survive into the bundle
+ *            starter's product dependency surface — no @openelement/*
+ *            specifier outside package.json may survive into the bundle
  *            (a packed starter must never need workspace aliases)
- *   start    cli/start serves static + request-time + API routes over HTTP
+ *   start    the `start` script (cli/start) serves static + request-time +
+ *            API routes over HTTP
  *   browser  packed three-browser matrix (chromium+firefox+webkit): the
  *            starter island hydrates in place, interaction patches without a
  *            full reload, and request-time navigation renders. One probe
@@ -36,12 +40,12 @@
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
+import { pathToFileURL } from 'node:url';
 import { commandOutput } from '../repo/node-command.ts';
-import { mkdtemp, readFile, realpath, rm, symlink, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import { readdirSync } from 'node:fs';
 import { existsSync } from '@std/fs';
 import { join, resolve } from '@std/path';
-import { formatJson } from '@openelement/element/build-utils';
 import { PACKAGE_VERSION, RETAINED_PACKAGE_NAMES } from '../repo/project-constants.ts';
 import { readPackages } from '../lib/package-graph.ts';
 import { tarballPath } from '../lib/npm-tarball.ts';
@@ -106,8 +110,7 @@ async function run(
   }
 }
 
-async function assertConsumerDoesNotResolveIntoRepository(tmp: string): Promise<void> {
-  const nodeModules = join(tmp, 'node_modules');
+async function assertConsumerDoesNotResolveIntoRepository(nodeModules: string): Promise<void> {
   const candidates: string[] = [];
   for (const entry of readdirSync(nodeModules, { withFileTypes: true })) {
     if (entry.name.startsWith('.')) continue;
@@ -144,13 +147,14 @@ function reservePort(): Promise<number> {
   });
 }
 
-// ─── Import-map boundary helpers ────────────────────────────────────────────
+// ─── Dependency-surface boundary helpers ────────────────────────────────────
 //
-// The packed starter must resolve exclusively through its generated import
-// map: any @openelement/* bare specifier surviving in the built SSR bundle
-// outside that surface would only resolve through workspace aliases a real
-// consumer does not have. Ported from the retired local-source consumer's
-// --packaged-import-map-check leg.
+// The packed starter must resolve exclusively through its package.json
+// dependency surface: any @openelement/* bare specifier surviving in the
+// built SSR bundle outside that surface would only resolve through workspace
+// aliases a real consumer does not have. Ported from the retired
+// local-source consumer's --packaged-import-map-check leg (B5 renamed the
+// universe from the deno.json import map to package.json dependencies).
 
 function isBareSpecifier(specifier: string): boolean {
   return (
@@ -165,17 +169,22 @@ function isBareSpecifier(specifier: string): boolean {
   );
 }
 
-function isMappedSpecifier(specifier: string, importMap: Record<string, string>): boolean {
-  if (Object.hasOwn(importMap, specifier)) return true;
-  return Object.keys(importMap).some((key) => key.endsWith('/') && specifier.startsWith(key));
+function isCoveredByDependency(specifier: string, dependencies: Record<string, string>): boolean {
+  if (Object.hasOwn(dependencies, specifier)) return true;
+  return Object.keys(dependencies).some((name) => specifier.startsWith(`${name}/`));
 }
 
-function findMissingGeneratedImports(source: string, importMap: Record<string, string>): string[] {
+function findMissingGeneratedImports(
+  source: string,
+  dependencies: Record<string, string>,
+): string[] {
   const specifiers = new Set<string>();
   for (const { value } of extractStaticModuleSpecifiers(source)) {
     if (isBareSpecifier(value)) specifiers.add(value);
   }
-  return [...specifiers].filter((specifier) => !isMappedSpecifier(specifier, importMap)).sort();
+  return [...specifiers]
+    .filter((specifier) => !isCoveredByDependency(specifier, dependencies))
+    .sort();
 }
 
 /**
@@ -248,10 +257,10 @@ try {
 }
 `;
 
-/** Boot cli/start, run the three-browser matrix, then stop the server. */
+/** Boot the starter's `start` script, run the three-browser matrix, then stop it. */
 async function runStarterBrowserMatrix(starter: string, tmp: string): Promise<void> {
   const port = await reservePort();
-  const server = spawn('deno', ['task', 'start'], {
+  const server = spawn('pnpm', ['run', 'start'], {
     cwd: starter,
     env: { ...process.env, OPEN_ELEMENT_PORT: String(port), OPEN_ELEMENT_HOST: '127.0.0.1' },
     stdio: ['ignore', 'pipe', 'pipe'],
@@ -427,15 +436,18 @@ try {
   // Cover the canonical retained package line (#828) with the shared tarball
   // naming helper (#793) so a new package cannot escape the smoke.
   const workspacePackages = await readPackages();
-  const tarballs = RETAINED_PACKAGE_NAMES.map((name) => {
+  const tarballFor = (name: string): string => {
     const pkg = workspacePackages.find((candidate) => candidate.name === name);
     if (!pkg) throw new Error(`Retained package missing from workspace graph: ${name}`);
     return join(repoRoot, tarballPath(pkg));
-  });
+  };
+  const tarballs = RETAINED_PACKAGE_NAMES.map(tarballFor);
+  const routerTarball = tarballFor('@openelement/router');
+  const elementTarball = tarballFor('@openelement/element');
   for (const tarball of tarballs) {
     if (!existsSync(tarball)) {
       throw new Error(
-        `Missing packed release artifact: ${tarball} (run \`deno task pack:dry-run\` first)`,
+        `Missing packed release artifact: ${tarball} (run \`pnpm --dir tools/release run pack:dry-run\` first)`,
       );
     }
   }
@@ -457,138 +469,108 @@ try {
   if (!install.success) throw new Error(`Packed package installation failed:\n${install.output}`);
 
   const createCli = join(tmp, 'node_modules', '@openelement', 'create', 'src', 'cli.js');
-  // The packed Create CLI only scaffolds files: read/write/env/net, no FFI,
-  // no prompts.
-  const create = await run(
-    process.execPath,
-    [
-      'run',
-      '--allow-read',
-      '--allow-write',
-      '--allow-env',
-      '--allow-net',
-      '--deny-ffi',
-      '--no-prompt',
-      createCli,
-      'starter',
-    ],
-    tmp,
-  );
+  // The packed Create CLI is node-hosted (its source is node:*-ported) and
+  // only scaffolds files: no prompts, no native bindings.
+  const create = await run('node', [createCli, 'starter'], tmp);
   if (!create.success) throw new Error(`Packed starter generation failed:\n${create.output}`);
 
   const starter = join(tmp, 'starter');
-  const configPath = join(starter, 'deno.json');
-  const config = (await readJson(configPath)) as {
-    imports: Record<string, string>;
-    nodeModulesDir?: string;
+  const manifestPath = join(starter, 'package.json');
+  const manifest = (await readJson(manifestPath)) as {
+    dependencies: Record<string, string>;
+    devDependencies: Record<string, string>;
+    scripts: Record<string, string>;
   };
-  // The generated starter must expose exactly the supported product import
-  // surface — no more, no less (a missing pin breaks the consumer; an extra
-  // one would leak an internal alias into the public contract).
-  const productImports = [
+  // The generated starter must expose exactly the supported product
+  // dependency surface — no more, no less (a missing pin breaks the consumer;
+  // an extra one would leak an internal alias into the public contract).
+  // Subpaths (jsx-runtime, /vite, /nitro-mount) resolve through the packages'
+  // own exports maps and are never separate pins.
+  const productDependencies = [
     '@hono/vite-dev-server',
     '@openelement/element',
-    '@openelement/element/build-utils',
-    '@openelement/element/jsx-dev-runtime',
-    '@openelement/element/jsx-runtime',
     '@openelement/router',
-    '@openelement/router/nitro-mount',
-    '@openelement/router/vite',
     'hono',
-    'vite',
   ];
-  if (Object.keys(config.imports).sort().join('\n') !== productImports.join('\n')) {
+  if (Object.keys(manifest.dependencies).sort().join('\n') !== productDependencies.join('\n')) {
     throw new Error(
-      'Packed starter exposes an unsupported import surface:\n' +
-        Object.keys(config.imports).sort().join('\n'),
+      'Packed starter exposes an unsupported dependency surface:\n' +
+        Object.keys(manifest.dependencies).sort().join('\n'),
     );
   }
-  const generatedImportMap = { ...config.imports };
-  const expectedImports: Record<string, string> = {
-    '@openelement/router': `npm:@openelement/router@${PACKAGE_VERSION}`,
-    '@openelement/router/vite': `npm:@openelement/router@${PACKAGE_VERSION}/vite`,
-    '@openelement/element': `npm:@openelement/element@${PACKAGE_VERSION}`,
-    '@openelement/element/jsx-runtime': `npm:@openelement/element@${PACKAGE_VERSION}/jsx-runtime`,
-    '@openelement/element/jsx-dev-runtime': `npm:@openelement/element@${PACKAGE_VERSION}/jsx-dev-runtime`,
+  const generatedDependencies = {
+    ...manifest.dependencies,
+    ...manifest.devDependencies,
+  } as Record<string, string>;
+  const expectedPins: Record<string, string> = {
+    '@openelement/router': PACKAGE_VERSION,
+    '@openelement/element': PACKAGE_VERSION,
   };
-  for (const [key, expected] of Object.entries(expectedImports)) {
-    if (config.imports[key] !== expected) {
-      throw new Error(`Packed starter import ${key}=${config.imports[key]}, expected=${expected}`);
+  for (const [name, expected] of Object.entries(expectedPins)) {
+    if (manifest.dependencies[name] !== expected) {
+      throw new Error(
+        `Packed starter dependency ${name}=${manifest.dependencies[name]}, expected=${expected}`,
+      );
+    }
+  }
+  // The lifecycle is the starter's own pnpm scripts (ADR-0161); the legs
+  // below run them exactly as an adopter would.
+  for (const script of ['dev', 'check', 'test', 'build', 'start', 'preview']) {
+    if (typeof manifest.scripts[script] !== 'string') {
+      throw new Error(`Packed starter is missing the '${script}' script.`);
     }
   }
 
-  // Provision the starter's external npm deps (vite, hono, dev-server)
-  // explicitly: the packed tarballs only cover @openelement/*, and scavenging
-  // the repo's node_modules is not hermetic — a fresh checkout (or a CI cache
-  // miss) may lack them and the starter build fails to resolve them.
-  // Already-installed transitive deps of the tarballs (vite, hono) are skipped.
-  const missingExternals = Object.values(config.imports)
-    .filter((spec) => spec.startsWith('npm:') && !spec.startsWith('npm:@openelement/'))
-    .map((spec) => spec.slice('npm:'.length))
-    .filter((spec) => {
-      const name = spec.startsWith('@')
-        ? spec
-            .split('/')
-            .slice(0, 2)
-            .join('/')
-            .replace(/@[^/]*$/u, '')
-        : spec.split('@')[0];
-      return !existsSync(join(tmp, 'node_modules', ...name.split('/')));
-    });
-  if (missingExternals.length > 0) {
-    const provision = await run(
-      'npm',
-      [
-        'install',
-        '--ignore-scripts',
-        '--no-audit',
-        '--no-fund',
-        '--fetch-timeout=30000',
-        ...missingExternals,
-      ],
-      tmp,
-      NPM_INSTALL_TIMEOUT_MS,
-      npmEnv,
-    );
-    if (!provision.success) {
-      throw new Error(`Starter external dependency install failed:\n${provision.output}`);
-    }
+  // Install the starter's own dependency surface: the @openelement/* pins are
+  // rewired to the SAME current-SHA tarballs installed above, so the legs
+  // qualify the packed artifacts end-to-end; everything else resolves from
+  // the registry. pnpm is the scaffolded package manager (packageManager pin).
+  manifest.dependencies['@openelement/router'] = pathToFileURL(routerTarball).href;
+  manifest.dependencies['@openelement/element'] = pathToFileURL(elementTarball).href;
+  await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+  const installStarter = await run(
+    'pnpm',
+    ['install', '--ignore-workspace'],
+    starter,
+    NPM_INSTALL_TIMEOUT_MS,
+  );
+  if (!installStarter.success) {
+    throw new Error(`Starter dependency install failed:\n${installStarter.output}`);
   }
 
-  // A packed consumer is a closed world. Its only node_modules tree is built
-  // above from tarballs and explicit external imports; it must never borrow
+  // A packed consumer is a closed world. Neither node_modules tree — the
+  // tarball install above nor the starter's own pnpm install — may borrow
   // missing modules from this repository.
-  await assertConsumerDoesNotResolveIntoRepository(tmp);
-
-  config.nodeModulesDir = 'manual';
-  await writeFile(configPath, formatJson(config));
-  await symlink(join(tmp, 'node_modules'), join(starter, 'node_modules'));
+  await assertConsumerDoesNotResolveIntoRepository(join(tmp, 'node_modules'));
+  await assertConsumerDoesNotResolveIntoRepository(join(starter, 'node_modules'));
 
   // Lifecycle leg 1 — dev: the packed adapter must boot the real vite dev
   // server and SSR-render the index route over HTTP, not just exit green.
+  // The host is pinned: vite's default 'localhost' binding is IPv6-first on
+  // some platforms while the HTTP probes target 127.0.0.1.
   await exerciseServer(
     'Packed starter dev server',
-    process.execPath,
-    (port) => ['task', 'dev', '--port', String(port), '--strictPort'],
+    'pnpm',
+    (port) => ['run', 'dev', '--port', String(port), '--host', '127.0.0.1', '--strictPort'],
     starter,
     {},
     [['/', 'Static pages, alive where it counts']],
   );
 
   // Lifecycle leg 2 — check.
-  const check = await run(process.execPath, ['task', 'check'], starter);
+  const check = await run('pnpm', ['run', 'check'], starter);
   if (!check.success) throw new Error(`Packed starter typecheck failed:\n${check.output}`);
   console.log(`Packed starter typecheck passed for ${PACKAGE_VERSION}.`);
 
-  // Lifecycle leg 3 — test: the starter's own test task must run green
-  // (permit-no-files today; the leg pins the task wiring for when the
+  // Lifecycle leg 3 — test: the starter's own test script must run green
+  // (no test files today; the leg pins the script wiring for when the
   // starter ships real tests).
-  const test = await run(process.execPath, ['task', 'test'], starter);
-  if (!test.success) throw new Error(`Packed starter test task failed:\n${test.output}`);
-  console.log('Packed starter test task passed.');
+  const test = await run('pnpm', ['run', 'test'], starter);
+  if (!test.success) throw new Error(`Packed starter test script failed:\n${test.output}`);
+  console.log('Packed starter test script passed.');
 
   // Lifecycle leg 4 — build: packed adapter must run the real SSG build.
-  const build = await run(process.execPath, ['task', 'build'], starter, BUILD_TIMEOUT_MS);
+  const build = await run('pnpm', ['run', 'build'], starter, BUILD_TIMEOUT_MS);
   if (!build.success) throw new Error(`Packed starter SSG build failed:\n${build.output}`);
 
   // A green exit alone is not enough: the packed adapter must actually emit the
@@ -654,16 +636,16 @@ try {
     throw new Error('Packed starter build did not copy the public asset dist/openelement-mark.svg');
   }
 
-  // Import-map boundary: the generated SSR bundle must import only the
-  // starter's product import surface. A surviving @openelement/* bare
-  // specifier outside the generated import map would resolve only through
-  // workspace aliases — the packed starter must never need them.
+  // Dependency-surface boundary: the generated SSR bundle must import only
+  // the starter's package.json dependency surface. A surviving
+  // @openelement/* bare specifier outside that surface would resolve only
+  // through workspace aliases — the packed starter must never need them.
   const ssrBundlePath = join(starter, 'dist', 'server', 'entry.js');
   if (!existsSync(ssrBundlePath)) {
     throw new Error(`Packed starter build emitted no SSR bundle: ${ssrBundlePath}`);
   }
   const ssrBundle = await readFile(ssrBundlePath, 'utf8');
-  const missingGeneratedImports = findMissingGeneratedImports(ssrBundle, generatedImportMap);
+  const missingGeneratedImports = findMissingGeneratedImports(ssrBundle, generatedDependencies);
   const missingProductImports = missingGeneratedImports.filter((specifier) =>
     specifier.startsWith('@openelement/'),
   );
@@ -693,8 +675,8 @@ try {
   ] as const;
   await exerciseServer(
     'Packed starter start server',
-    process.execPath,
-    () => ['task', 'start'],
+    'pnpm',
+    () => ['run', 'start'],
     starter,
     {},
     serveProbes,
@@ -709,13 +691,13 @@ try {
   // this leg is unconditionally required, and fails the gate on any browser.
   await runStarterBrowserMatrix(starter, tmp);
   // Lifecycle leg 7 — preview: the starter ships a request-time route, so the
-  // documented preview behavior is a fail-closed refusal that points at
-  // `deno task start` (#601); a silent static-only preview would be wrong.
-  const preview = await run(process.execPath, ['task', 'preview'], starter);
+  // documented preview behavior is a fail-closed refusal that points at the
+  // `start` script (#601); a silent static-only preview would be wrong.
+  const preview = await run('pnpm', ['run', 'preview'], starter);
   if (
     preview.success ||
     !preview.output.includes('request-time routes') ||
-    !preview.output.includes('deno task start')
+    !preview.output.includes('pnpm start')
   ) {
     throw new Error(
       `Packed starter preview must fail closed with start guidance for a dynamic app:\n${preview.output}`,

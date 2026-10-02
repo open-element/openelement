@@ -30,9 +30,9 @@ Sites that need richer authoring keep the pipeline site-owned. The router ships 
 
 ## Build path
 
-`deno task build` compiles `.mdx` routes together with the rest of the route tree. They follow the same rendering rules as any page — the default `renderIntent` mode is static, so they are prerendered into `dist/` at their route path and appear in the sitemap like every other route.
+`pnpm build` compiles `.mdx` routes together with the rest of the route tree. They follow the same rendering rules as any page — the default `renderIntent` mode is static, so they are prerendered into `dist/` at their route path and appear in the sitemap like every other route.
 
-Failures surface at build time, not at request time: an unsupported construct, an unresolvable `marked` import or an undeclarable tag all stop the build with a source-located message. `deno task check` type-checks the app's TypeScript sources alongside the build, so authored `.tsx` pages keep their own fast signal while `.mdx` pages are covered by the build itself.
+Failures surface at build time, not at request time: an unsupported construct, an unresolvable `marked` import or an undeclarable tag all stop the build with a source-located message. `pnpm check` type-checks the app's TypeScript sources alongside the build, so authored `.tsx` pages keep their own fast signal while `.mdx` pages are covered by the build itself.
 
 ## See also
 

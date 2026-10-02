@@ -48,8 +48,11 @@ export async function runStep(
     Array.fromAsync(child.stdout!),
     Array.fromAsync(child.stderr!),
   ]);
-  const stdout = Buffer.from(stdoutBuf).toString();
-  const stderr = Buffer.from(stderrBuf).toString();
+  // Buffer.concat, never Buffer.from(chunk[]): the latter coerces each chunk
+  // to a single number, collapsing captured output to NUL bytes (surfaced by
+  // the B5 starter-smoke node-host run).
+  const stdout = Buffer.concat(stdoutBuf).toString();
+  const stderr = Buffer.concat(stderrBuf).toString();
   if (code !== 0 && options.allowFailure !== true) {
     if (stdout.trim()) console.error(stdout.trim());
     if (stderr.trim()) console.error(stderr.trim());

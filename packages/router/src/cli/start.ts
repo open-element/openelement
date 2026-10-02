@@ -7,11 +7,11 @@
  *                      fetch(Request): Response dispatch. When
  *                      dist/server/index.js exists, dynamic routes and
  *                      mutations dispatch to it.
- *                      (`deno task start` in a generated project.)
+ *                      (`pnpm start` in a generated project.)
  *   preview          - static-only `vite preview`; refuses to run when
  *                      dist/server/index.js exists because `vite preview`
  *                      cannot serve dynamic routes.
- *                      (`deno task preview` in a generated project.)
+ *                      (`pnpm preview` in a generated project.)
  *
  * Node/Workers/Bun deploys are produced by the Nitro mount from the same
  * standard fetch entry; this CLI serves the local/preview surface only.
@@ -19,8 +19,9 @@
 
 import { spawn } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import process from 'node:process';
-import { join } from 'pathe';
+import { dirname, join } from 'pathe';
 import { serveFetch } from '../internal/node-http.ts';
 import { formatError } from '@openelement/element';
 import { DEFAULT_OUT_DIR } from '../vite/internal/paths.ts';
@@ -80,7 +81,7 @@ async function main(): Promise<void> {
 
   if (!existsSync(distDir)) {
     console.error(
-      `[openElement ${parsed.mode}] ${DEFAULT_OUT_DIR}/ not found. Run \`deno task build\` first.`,
+      `[openElement ${parsed.mode}] ${DEFAULT_OUT_DIR}/ not found. Run \`pnpm build\` first.`,
     );
     process.exit(1);
   }
@@ -144,15 +145,41 @@ function findWorkspaceConfig(from: string): string | null {
   }
 }
 
+/**
+ * B5 (ADR-0161): the generated starter is a plain Node/pnpm project, so on a
+ * Node host preview spawns the app's OWN vite install (a devDependency) —
+ * no runtime registry hop and no host CLI in the consumer's path. The Deno
+ * host keeps the `deno run npm:vite` form for in-workspace flows.
+ */
+function isDenoHost(): boolean {
+  return Boolean((process.versions as Record<string, string | undefined>).deno);
+}
+
+/** The app-local vite JS entry, resolved through the app's own package.json. */
+function nodeViteBin(root: string): string {
+  const requireFromApp = createRequire(join(root, 'package.json'));
+  return join(dirname(requireFromApp.resolve('vite/package.json')), 'bin', 'vite.js');
+}
+
 async function runPreview(viteArgs: string[]): Promise<void> {
   if (existsSync(serverEntry)) {
     console.error(
       `[openElement preview] This project has request-time routes (${DEFAULT_OUT_DIR}/server).\n` +
         '  `vite preview` cannot serve dynamic loader/action routes.\n' +
-        '  Use: deno task start\n' +
-        '  (or: deno run --allow-read --allow-write --allow-env --allow-net --allow-run --allow-sys --allow-ffi --no-prompt npm:@openelement/router/cli/start)',
+        '  Use: pnpm start\n' +
+        '  (or: node node_modules/@openelement/router/src/cli/start.js)',
     );
     process.exit(1);
+  }
+  if (!isDenoHost()) {
+    const code = await new Promise<number>((resolveCode, rejectSpawn) => {
+      const child = spawn(process.execPath, [nodeViteBin(root), 'preview', ...viteArgs], {
+        stdio: 'inherit',
+      });
+      child.on('error', rejectSpawn);
+      child.on('close', (closedCode) => resolveCode(closedCode ?? 1));
+    });
+    process.exit(code);
   }
   const workspaceConfig = findWorkspaceConfig(root);
   const configArgs = workspaceConfig === null ? [] : ['--config', workspaceConfig];

@@ -30,9 +30,9 @@ Markdown 解析是这条路径唯一的依赖，而它是 `@openelement/router` 
 
 ## 构建路径
 
-`deno task build` 会连同整棵路由树一起编译 `.mdx` 路由。它们与任何页面遵循同样的渲染规则——默认 `renderIntent` 模式是 static，因此会被预渲染到 `dist/` 下的路由路径，并与其他路由一样进入 sitemap。
+`pnpm build` 会连同整棵路由树一起编译 `.mdx` 路由。它们与任何页面遵循同样的渲染规则——默认 `renderIntent` 模式是 static，因此会被预渲染到 `dist/` 下的路由路径，并与其他路由一样进入 sitemap。
 
-失败发生在构建期而不是请求期：不受支持的构造、无法解析的 `marked` import、无法派生的标签都会以带源码位置的信息中止构建。`deno task check` 与此同时对应用的 TypeScript 源码做类型检查，所以手写 `.tsx` 页面保留自己的快速信号，而 `.mdx` 页面由构建本身覆盖。
+失败发生在构建期而不是请求期：不受支持的构造、无法解析的 `marked` import、无法派生的标签都会以带源码位置的信息中止构建。`pnpm check` 与此同时对应用的 TypeScript 源码做类型检查，所以手写 `.tsx` 页面保留自己的快速信号，而 `.mdx` 页面由构建本身覆盖。
 
 ## 另见
 

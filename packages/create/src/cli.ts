@@ -109,8 +109,9 @@ async function main(): Promise<void> {
 
   console.info(`\nopenElement project created at ./${relativeTarget}/`);
   console.info(`\n  cd ${relativeTarget}`);
-  console.info('  deno task dev');
-  console.info('  See README.md for all tasks (check/build/start/preview)');
+  console.info('  pnpm install');
+  console.info('  pnpm dev');
+  console.info('  See README.md for all scripts (check/test/build/start/preview)');
 }
 
 try {

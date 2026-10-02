@@ -63,20 +63,22 @@ export function assertUnifiedProductVersions(versions: ProductVersions): Product
 }
 
 // [sourceTemplate, targetRelativePath] pairs. The starter manifest is stored
-// as deno.json.tmpl so deno does not treat the templates/ directory as a
-// nested workspace config; it is renamed to deno.json when written.
+// as package.json.tmpl so the templates/ directory never looks like a nested
+// package root to npm tooling; pnpm scripts and the exact @openelement/* pins
+// (B5: the former deno.json import map) live in it when written.
 const TEMPLATE_FILES: readonly (readonly [string, string])[] = [
   // npm tarballs omit dotfiles even when a directory is included. Keep the
   // template non-hidden and write the expected dotfile into generated apps.
   ['gitignore.tmpl', '.gitignore'],
   ['README.tmpl', 'README.md'],
   ['public/openelement-mark.svg', 'public/openelement-mark.svg'],
-  ['deno.json.tmpl', 'deno.json'],
-  // package.json carries no runtime npm dependencies: framework consumption
-  // resolves through the deno.json import map, and packed first-party
-  // modules carry no bare @std/* specifiers, so no @jsr registry bridge is
-  // generated. npm is the only public registry.
+  // B5 (ADR-0161): the starter is a plain Node/pnpm project. Framework
+  // consumption resolves through package.json dependencies (npm is the only
+  // public registry; packed first-party modules carry no bare @std/*
+  // specifiers, so no @jsr registry bridge is generated), the lifecycle is
+  // pnpm scripts, and tsconfig.json owns the `check` type-check surface.
   ['package.json.tmpl', 'package.json'],
+  ['tsconfig.json.tmpl', 'tsconfig.json'],
   ['vite.config.ts.tmpl', 'vite.config.ts'],
   // #1411: framework options live in openelement.config.ts; the starter ships
   // it near-empty, so every option comes from a file convention until the user

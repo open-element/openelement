@@ -101,7 +101,7 @@ test('start cli: both modes refuse when dist/ is missing', async () => {
     for (const args of [[], ['--mode=preview']]) {
       const { code, output } = await runCli(dir, args);
       expect(code).toEqual(1);
-      expect(output).toContain('not found. Run `deno task build` first.');
+      expect(output).toContain('not found. Run `pnpm build` first.');
     }
   } finally {
     await rm(dir, { recursive: true });
@@ -117,7 +117,7 @@ test('start cli: preview mode refuses when dist/server exists and points at star
     const { code, output } = await runCli(dir, ['--mode=preview']);
     expect(code).toEqual(1);
     expect(output).toContain('request-time routes');
-    expect(output).toContain('deno task start');
+    expect(output).toContain('pnpm start');
   } finally {
     await rm(dir, { recursive: true });
   }
