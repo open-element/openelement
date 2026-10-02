@@ -19,6 +19,7 @@ import {
   renderRouteModule,
   routeSetFor,
 } from './generate-site-article-routes.ts';
+import { readFile, stat } from 'node:fs/promises';
 
 const siteRoot = fromFileUrl(new URL('../../www/', import.meta.url));
 const entry = (slug: string, order: number, locale?: string) => ({
@@ -203,16 +204,17 @@ Deno.test('article routes: every route on disk is generated from the collection'
   assert(articleRoutes.length > 0, 'the generated table is empty');
   for (const route of articleRoutes) {
     const path = join(siteRoot, 'app/routes', route.collection, route.routeFile);
-    const source = await Deno.readTextFile(path);
+    const source = await readFile(path, 'utf8');
     assertStringIncludes(source, route.className);
     assertStringIncludes(source, route.componentFile);
-    const binding = await Deno.readTextFile(
+    const binding = await readFile(
       join(siteRoot, 'app/components/article-routes', route.componentFile),
+      'utf8',
     );
     assertStringIncludes(binding, `@element('${route.elementTag}')`);
     // The content file the header names must exist — the route is not orphaned.
     const contentPath = join(siteRoot, 'content/docs', route.collection, `${route.slug}.md`);
-    const stat = await Deno.stat(contentPath);
-    assert(stat.isFile, `${contentPath} must exist for ${route.slug}`);
+    const stats = await stat(contentPath);
+    assert(stats.isFile(), `${contentPath} must exist for ${route.slug}`);
   }
 });

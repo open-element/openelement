@@ -27,6 +27,9 @@ import { scanRoutes } from '../../../packages/router/src/vite/internal/ssg/route
 import { fileToRoutePath } from '../../lib/route-path.ts';
 import { slugifyHeadingId, stripHtmlToText } from '../../app/site-ui/article-body.ts';
 import { SITE_LOCALES, type SiteLocale } from '../../site-config.ts';
+import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { commandOutput } from '../../../tools/repo/node-command.ts';
 
 const repoRoot = fromFileUrl(new URL('../../../', import.meta.url));
 const routesRel = 'www/app/routes';
@@ -54,13 +57,13 @@ export interface BaselineManifest {
 }
 
 async function git(args: string[]): Promise<{ code: number; out: string; err: string }> {
-  const command = new Deno.Command('git', {
+  const command = await commandOutput('git', {
     args,
     cwd: repoRoot,
     stdout: 'piped',
     stderr: 'piped',
   });
-  const { code, stdout, stderr } = await command.output();
+  const { code, stdout, stderr } = command;
   const decode = new TextDecoder().decode.bind(new TextDecoder());
   return { code, out: decode(stdout).trim(), err: decode(stderr).trim() };
 }
@@ -94,7 +97,7 @@ export function parseBaselineManifest(parsed: unknown, sourceLabel: string): Bas
 export async function loadBaselineManifest(): Promise<BaselineManifest> {
   let parsed: unknown;
   try {
-    parsed = JSON.parse(await Deno.readTextFile(baselinePath));
+    parsed = JSON.parse(await readFile(baselinePath, 'utf8'));
   } catch {
     throw new Error(`cannot read ${baselinePath}; refresh it with --refresh --base <ref>`);
   }
@@ -144,7 +147,7 @@ export function parseRedirectTable(parsed: unknown, sourceLabel: string): Redire
 export async function loadRedirectTable(): Promise<RedirectMapping[]> {
   let parsed: unknown;
   try {
-    parsed = JSON.parse(await Deno.readTextFile(tablePath));
+    parsed = JSON.parse(await readFile(tablePath, 'utf8'));
   } catch {
     throw new Error(`cannot read ${tablePath}`);
   }
@@ -203,7 +206,7 @@ function stripMarkdownInline(text: string): string {
 
 /** All h2/h3 ids a document renders, via the shared allocator. */
 async function documentHeadingIds(contentFile: string): Promise<Set<string>> {
-  const source = await Deno.readTextFile(contentFile);
+  const source = await readFile(contentFile, 'utf8');
   const usedIds = new Set<string>();
   const ids = new Set<string>();
   for (const line of source.split('\n')) {
@@ -232,10 +235,13 @@ export async function retiredContentTitles(): Promise<Set<string>> {
 export async function currentContentTitles(): Promise<Set<string>> {
   const titles = new Set<string>();
   for (const collection of ['guide', 'architecture']) {
-    for await (const entry of Deno.readDir(join(repoRoot, `www/content/docs/${collection}`))) {
-      if (!entry.isFile || !entry.name.endsWith('.md')) continue;
-      const source = await Deno.readTextFile(
+    for (const entry of await readdir(join(repoRoot, `www/content/docs/${collection}`), {
+      withFileTypes: true,
+    })) {
+      if (!entry.isFile() || !entry.name.endsWith('.md')) continue;
+      const source = await readFile(
         join(repoRoot, `www/content/docs/${collection}/${entry.name}`),
+        'utf8',
       );
       for (const field of ['title', 'navLabel']) {
         const match = new RegExp('^' + field + ":\\s*'([^']*)'", 'm').exec(source);
@@ -376,29 +382,29 @@ export async function refreshBaseline(ref: string): Promise<void> {
     );
   }
   const sha = resolved.out;
-  const tmp = await Deno.makeTempDir({ prefix: 'retired-urls-base-' });
+  const tmp = await mkdtemp(join(tmpdir(), 'retired-urls-base-'));
   let baseline: Set<string>;
   try {
-    const archive = new Deno.Command('git', {
+    const archive = await commandOutput('git', {
       args: ['archive', sha, routesRel],
       cwd: repoRoot,
       stdout: 'piped',
       stderr: 'null',
     });
-    const { code, stdout } = await archive.output();
+    const { code, stdout } = archive;
     if (code !== 0) throw new Error(`git archive of ${sha} failed`);
-    await Deno.writeFile(join(tmp, 'routes.tar'), stdout);
-    const untar = new Deno.Command('tar', {
+    await writeFile(join(tmp, 'routes.tar'), stdout);
+    const untar = await commandOutput('tar', {
       args: ['-x', '-f', join(tmp, 'routes.tar'), '-C', tmp],
       stdin: 'null',
       stdout: 'null',
       stderr: 'null',
     });
-    const untarred = await untar.output();
+    const untarred = untar;
     if (untarred.code !== 0) throw new Error('could not unpack the baseline route tree');
     baseline = await routePathsIn(join(tmp, routesRel));
   } finally {
-    await Deno.remove(tmp, { recursive: true });
+    await rm(tmp, { recursive: true });
   }
   const head = await routePathsIn(join(repoRoot, routesRel));
   const retired = [...baseline].filter((route) => !head.has(route)).sort();
@@ -425,7 +431,7 @@ export async function refreshBaseline(ref: string): Promise<void> {
     routes: [...baseline].sort(),
     retiredTitles: [...titles].sort(),
   };
-  await Deno.writeTextFile(baselinePath, `${JSON.stringify(manifest, null, 2)}\n`);
+  await writeFile(baselinePath, `${JSON.stringify(manifest, null, 2)}\n`);
   console.log(
     `baseline snapshot refreshed from ${ref} (${sha.slice(0, 12)}): ` +
       `${manifest.routes.length} routes, ${retired.length} retired, ${manifest.retiredTitles.length} titles.`,

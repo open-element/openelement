@@ -1,6 +1,7 @@
 import { assertEquals, assertStringIncludes } from '@std/assert';
 import { compileElementProgram } from '@openelement/element/compiler';
 import { REPOSITORY_URL } from '../app/site-ui/open-layout-navigation.ts';
+import { readFile } from 'node:fs/promises';
 
 /**
  * The compiler admits no sidecar by default (#1468): compiling an island
@@ -25,14 +26,14 @@ const siteModules = [
 for (const [tagName, path] of siteModules) {
   Deno.test(`site UI owns compiled ${tagName}`, async () => {
     const url = new URL(path, import.meta.url);
-    const result = compileElementProgram(await Deno.readTextFile(url), url.pathname);
+    const result = compileElementProgram(await readFile(url, 'utf8'), url.pathname);
     assertEquals(result.program.tag, tagName);
   });
 }
 
 Deno.test('open-layout is an explicitly hydrated compiled app-shell island', async () => {
   const url = new URL('../app/islands/open-layout.tsx', import.meta.url);
-  const source = await Deno.readTextFile(url);
+  const source = await readFile(url, 'utf8');
   assertStringIncludes(source, "defineIslandConfig({ hydrate: 'load', ssr: true })");
   assertStringIncludes(source, "@element('open-layout')");
   assertStringIncludes(source, 'export default class OpenLayout extends OpenElement');
@@ -106,7 +107,7 @@ Deno.test('open-layout is an explicitly hydrated compiled app-shell island', asy
 
 Deno.test('open-search keeps its view compiler-owned and its browser state external', async () => {
   const url = new URL('../app/islands/open-search.tsx', import.meta.url);
-  const source = await Deno.readTextFile(url);
+  const source = await readFile(url, 'utf8');
   assertStringIncludes(source, "defineIslandConfig({ hydrate: 'load', ssr: true })");
   assertStringIncludes(source, "@element('open-search')");
   assertStringIncludes(source, "from '../site-ui/open-search-controller.ts'");

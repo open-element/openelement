@@ -8,6 +8,7 @@ import { projectArticlePage } from '../app/site-ui/article-page-model.ts';
 // tests below double as its staleness gate: the table is compared against the
 // content files and against the managed route directories on disk.
 import { articleRoutes } from '../app/data/_generated-article-routes.ts';
+import { readdir, readFile } from 'node:fs/promises';
 
 type ArticleCollection = keyof typeof articleCollections;
 type ArticleContentPage = {
@@ -43,11 +44,13 @@ const tableGenerator = 'www/tools/generate-site-article-routes.ts';
 for (const route of articleRoutes) {
   const { collection, slug, className, componentFile, elementTag, routeFile } = route;
   Deno.test(`${collection}/${slug} is a thin article shell`, async () => {
-    const routeSource = await Deno.readTextFile(
+    const routeSource = await readFile(
       new URL(`../app/routes/${collection}/${routeFile}`, import.meta.url),
+      'utf8',
     );
-    const adapterSource = await Deno.readTextFile(
+    const adapterSource = await readFile(
       new URL(`../app/components/article-routes/${componentFile}`, import.meta.url),
+      'utf8',
     );
     assertStringIncludes(routeSource, 'export default definePage(');
     assertStringIncludes(routeSource, `projectArticlePage('${collection}', '${slug}', locale)`);
@@ -97,10 +100,10 @@ Deno.test('managed article directories hold exactly the generated routes', async
       .map((route) => route.routeFile)
       .sort();
     const onDisk: string[] = [];
-    for await (const entry of Deno.readDir(
-      new URL(`../app/routes/${collection}/`, import.meta.url),
-    )) {
-      if (entry.isFile && entry.name.endsWith('.tsx')) onDisk.push(entry.name);
+    for (const entry of await readdir(new URL(`../app/routes/${collection}/`, import.meta.url), {
+      withFileTypes: true,
+    })) {
+      if (entry.isFile() && entry.name.endsWith('.tsx')) onDisk.push(entry.name);
     }
     assertEquals(
       onDisk.sort(),
@@ -108,10 +111,13 @@ Deno.test('managed article directories hold exactly the generated routes', async
       `app/routes/${collection}/ must hold exactly the routes the content emits`,
     );
     const bindings: string[] = [];
-    for await (const entry of Deno.readDir(
+    for (const entry of await readdir(
       new URL('../app/components/article-routes/', import.meta.url),
+      {
+        withFileTypes: true,
+      },
     )) {
-      if (entry.isFile && entry.name.startsWith(`${collection}-`)) bindings.push(entry.name);
+      if (entry.isFile() && entry.name.startsWith(`${collection}-`)) bindings.push(entry.name);
     }
     assertEquals(
       bindings.sort(),
@@ -125,8 +131,9 @@ Deno.test('managed article directories hold exactly the generated routes', async
 });
 
 Deno.test('the article route table is generated, never hand-maintained', async () => {
-  const source = await Deno.readTextFile(
+  const source = await readFile(
     new URL('../app/data/_generated-article-routes.ts', import.meta.url),
+    'utf8',
   );
   assertStringIncludes(
     source.split('\n')[0],

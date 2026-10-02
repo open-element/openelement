@@ -19,7 +19,11 @@
  * of showing a machine-local date.
  */
 import { fromFileUrl, join } from '@std/path';
+import type { Dirent } from 'node:fs';
+import { readdir } from 'node:fs/promises';
 import { SITE_LOCALES } from '../site-config.ts';
+import { readFile } from 'node:fs/promises';
+import process from 'node:process';
 
 export const COLLECTIONS = ['guide', 'architecture'] as const;
 
@@ -50,20 +54,29 @@ export function isCalendarDate(value: string): boolean {
 }
 
 /**
- * Directory reader seam: `Deno.readDir` in production, a fake tree in tests
- * (which keeps the unit tests filesystem-permission-free).
+ * The subset of a node directory entry the scanner reads. The seam exists so
+ * unit tests can fake the tree without touching the filesystem.
  */
-export type DirReader = (path: string) => AsyncIterable<Deno.DirEntry>;
+export type DirEntry = Pick<Dirent, 'name' | 'isFile' | 'isDirectory' | 'isSymbolicLink'>;
+
+/** Production reader: node readdir with file types (the pre-port directory API). */
+export async function* readDirEntries(path: string): AsyncIterable<DirEntry> {
+  for (const entry of await readdir(path, { withFileTypes: true })) {
+    yield entry;
+  }
+}
+
+export type DirReader = (path: string) => AsyncIterable<DirEntry>;
 
 /** Article keys (`<collection>/<slug>`) of the markdown files under `root`. */
 export async function collectDocKeys(
   root: string = contentRoot,
-  readDir: DirReader = Deno.readDir,
+  readDir: DirReader = readDirEntries,
 ): Promise<Set<string>> {
   const keys = new Set<string>();
   for (const collection of COLLECTIONS) {
     for await (const entry of readDir(join(root, collection))) {
-      if (!entry.isFile || !entry.name.endsWith('.md')) continue;
+      if (!entry.isFile() || !entry.name.endsWith('.md')) continue;
       const slug = entry.name.replace(/\.zh\.md$/, '').replace(/\.md$/, '');
       keys.add(`${collection}/${slug}`);
     }
@@ -137,26 +150,29 @@ export function validateManifest(
 }
 
 async function main(): Promise<void> {
-  if (Deno.args.length > 0) {
+  if (process.argv.slice(2).length > 0) {
     console.error(
-      `content-dates: unexpected argument(s) ${Deno.args.map((arg) => `'${arg}'`).join(' ')}. ` +
+      `content-dates: unexpected argument(s) ${process.argv
+        .slice(2)
+        .map((arg) => `'${arg}'`)
+        .join(' ')}. ` +
         'This check is read-only: the manifest is hand-maintained and there is no --write mode.',
     );
-    Deno.exit(2);
+    process.exit(2);
   }
   let raw: string;
   try {
-    raw = await Deno.readTextFile(manifestFile);
+    raw = await readFile(manifestFile, 'utf8');
   } catch (error) {
     console.error(`content-dates: cannot read ${manifestFile}: ${String(error)}`);
-    Deno.exit(1);
+    process.exit(1);
   }
   let manifest: unknown;
   try {
     manifest = JSON.parse(raw);
   } catch (error) {
     console.error(`content-dates: ${manifestFile} is not valid JSON: ${String(error)}`);
-    Deno.exit(1);
+    process.exit(1);
   }
   const docKeys = await collectDocKeys();
   const problems = validateManifest(manifest, docKeys);
@@ -165,7 +181,7 @@ async function main(): Promise<void> {
       'content-dates check failed (the hand-maintained manifest must match the docs tree):',
     );
     for (const problem of problems) console.error(`- ${problem}`);
-    Deno.exit(1);
+    process.exit(1);
   }
   console.log(
     `content dates check passed (${docKeys.size} articles, ${SITE_LOCALES.join('/')} stamps each).`,

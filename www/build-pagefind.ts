@@ -25,6 +25,8 @@
 import { walk } from '@std/fs/walk';
 import { join, relative } from '@std/path';
 import { close, createIndex } from 'pagefind';
+import { mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import process from 'node:process';
 
 const WWW_ROOT = import.meta.dirname ?? '.';
 const DIST_DIR = join(WWW_ROOT, 'dist');
@@ -37,14 +39,14 @@ function unwrapTemplates(html: string): string {
 }
 
 async function stageDist(): Promise<number> {
-  await Deno.remove(STAGE_DIR, { recursive: true }).catch(() => {});
+  await rm(STAGE_DIR, { recursive: true }).catch(() => {});
   let count = 0;
   for await (const entry of walk(DIST_DIR, { exts: ['.html'], includeDirs: false })) {
-    const html = await Deno.readTextFile(entry.path);
+    const html = await readFile(entry.path, 'utf8');
     const staged = unwrapTemplates(html);
     const outPath = join(STAGE_DIR, relative(DIST_DIR, entry.path));
-    await Deno.mkdir(join(outPath, '..'), { recursive: true });
-    await Deno.writeTextFile(outPath, staged);
+    await mkdir(join(outPath, '..'), { recursive: true });
+    await writeFile(outPath, staged);
     count++;
   }
   return count;
@@ -56,19 +58,19 @@ console.log(`Pagefind: staged ${staged} HTML file(s) from www/dist`);
 const { errors, index } = await createIndex();
 if (!index) {
   console.error('Pagefind: failed to create index:', errors);
-  Deno.exit(1);
+  process.exit(1);
 }
 
 const { errors: addErrors, page_count } = await index.addDirectory({ path: STAGE_DIR });
 if (addErrors.length > 0 || page_count === 0) {
   console.error(`Pagefind: indexing failed (page_count=${page_count}):`, addErrors);
-  Deno.exit(1);
+  process.exit(1);
 }
 
 const { errors: writeErrors, outputPath } = await index.writeFiles({ outputPath: OUTPUT_DIR });
 if (writeErrors.length > 0) {
   console.error('Pagefind: failed to write index files:', writeErrors);
-  Deno.exit(1);
+  process.exit(1);
 }
 
 // pagefind copies its UI bundle through a child process; writeFiles can
@@ -77,24 +79,24 @@ if (writeErrors.length > 0) {
 const uiBundle = join(outputPath, 'pagefind-component-ui.js');
 for (let attempt = 0; attempt < 100; attempt++) {
   try {
-    if ((await Deno.stat(uiBundle)).size > 0) break;
+    if ((await stat(uiBundle)).size > 0) break;
   } catch {
     // not there yet
   }
   await new Promise((resolve) => setTimeout(resolve, 100));
 }
 try {
-  const size = (await Deno.stat(uiBundle)).size;
+  const size = (await stat(uiBundle)).size;
   if (size === 0) {
     console.error('Pagefind: UI bundle copy did not complete');
-    Deno.exit(1);
+    process.exit(1);
   }
 } catch {
   console.error('Pagefind: UI bundle was never emitted');
-  Deno.exit(1);
+  process.exit(1);
 }
 
 console.log(`Pagefind: indexed ${page_count} page(s) -> ${outputPath}`);
 await index.deleteIndex();
 await close();
-await Deno.remove(STAGE_DIR, { recursive: true }).catch(() => {});
+await rm(STAGE_DIR, { recursive: true }).catch(() => {});

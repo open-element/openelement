@@ -14,13 +14,14 @@ import { assert, assertEquals } from '@std/assert';
 import {
   collectDocKeys,
   COLLECTIONS,
+  type DirReader,
   isCalendarDate,
   UNCOMMITTED,
   validateManifest,
 } from './check-content-dates.ts';
 
-/** A fake Deno.readDir over `{ directoryName: fileNames }`. */
-function fakeTree(files: Record<string, string[]>): (path: string) => AsyncIterable<Deno.DirEntry> {
+/** A fake directory reader over `{ directoryName: fileNames }`. */
+function fakeTree(files: Record<string, string[]>): DirReader {
   return (path) => {
     const name = path.split(/[\\/]/).pop() ?? '';
     return {
@@ -28,10 +29,10 @@ function fakeTree(files: Record<string, string[]>): (path: string) => AsyncItera
         for (const entryName of files[name] ?? []) {
           yield {
             name: entryName,
-            isFile: !entryName.endsWith('/'),
-            isDirectory: entryName.endsWith('/'),
-            isSymlink: false,
-          } as Deno.DirEntry;
+            isFile: () => !entryName.endsWith('/'),
+            isDirectory: () => entryName.endsWith('/'),
+            isSymbolicLink: () => false,
+          };
         }
       },
     };

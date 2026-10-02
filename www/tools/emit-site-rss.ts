@@ -11,6 +11,8 @@ import { fromFileUrl, join } from '@std/path';
 import { loadCollectionData } from '../lib/content.ts';
 import { blogCollection, prepareBlogPosts } from '../lib/blog.ts';
 import { feedFailures, renderBlogFeedXml, SITE_FEED_PATH } from './lib/site-rss.ts';
+import { writeFile } from 'node:fs/promises';
+import process from 'node:process';
 
 export const SITE_DIST = 'www/dist';
 
@@ -24,10 +26,10 @@ export async function generateSiteRss(dist = join(repoRoot, SITE_DIST)): Promise
   if (failures.length > 0) {
     console.error('site rss generation failed:');
     for (const failure of failures) console.error(`- ${failure}`);
-    Deno.exit(1);
+    process.exit(1);
   }
   const feedPath = join(dist, SITE_FEED_PATH);
-  await Deno.writeTextFile(feedPath, renderBlogFeedXml(posts));
+  await writeFile(feedPath, renderBlogFeedXml(posts));
   return feedPath;
 }
 

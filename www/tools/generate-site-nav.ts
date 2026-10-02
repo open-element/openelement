@@ -33,6 +33,8 @@
  */
 import { walk } from '@std/fs/walk';
 import { fromFileUrl, join } from '@std/path';
+import { readFile, writeFile } from 'node:fs/promises';
+import process from 'node:process';
 import { loadCollectionData } from '../lib/content.ts';
 import { fileToRoutePath } from '../lib/route-path.ts';
 import { articleCollections } from '../content-collections.ts';
@@ -181,7 +183,7 @@ async function collect(
     if (!path) continue;
     routes.push(path);
     const fromContent = contentNav.get(path);
-    const meta = fromContent ?? parseMeta(await Deno.readTextFile(entry.path));
+    const meta = fromContent ?? parseMeta(await readFile(entry.path, 'utf8'));
     if (!meta) continue;
     const labelZh = fromContent ? fromContent.labelZh : ROUTE_LABEL_ZH[path];
     const list = sections.get(meta.section) ?? [];
@@ -266,7 +268,7 @@ if (uncovered.size > 0) {
   );
   for (const entry of [...uncovered].sort()) console.error(`  ${entry}`);
   console.error('add the section to its basePath list, or the page sidebar drops it.');
-  Deno.exit(1);
+  process.exit(1);
 }
 
 // Static-map drift guard: a zh label for a route that left the nav (renamed
@@ -278,21 +280,21 @@ if (staleZhKeys.length > 0) {
 }
 
 const generated = render(sections, routes);
-const check = Deno.args.includes('--check');
+const check = process.argv.slice(2).includes('--check');
 
 if (check) {
   let current = '';
   try {
-    current = await Deno.readTextFile(outFile);
+    current = await readFile(outFile, 'utf8');
   } catch {
     // Missing file is drift; fall through to the mismatch path.
   }
   if (current !== generated) {
     console.error('site nav drift: regenerate with deno task --cwd www generate:nav');
-    Deno.exit(1);
+    process.exit(1);
   }
   console.log('site nav check passed.');
 } else {
-  await Deno.writeTextFile(outFile, generated);
+  await writeFile(outFile, generated);
   console.log(`site nav written: ${routes.length} routes, ${sections.size} sections.`);
 }

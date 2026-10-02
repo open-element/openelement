@@ -12,6 +12,7 @@
  */
 import { fromFileUrl, join } from '@std/path';
 import { SITE_DEFAULT_LOCALE, SITE_LOCALES } from '../../site-config.ts';
+import { readFile } from 'node:fs/promises';
 
 const repoRoot = fromFileUrl(new URL('../../../', import.meta.url));
 
@@ -33,7 +34,7 @@ export async function articleLastmodByRoute(
   routes: readonly string[],
   manifestFile = join(repoRoot, 'www/lib/content-dates.json'),
 ): Promise<Map<string, string>> {
-  const manifest = JSON.parse(await Deno.readTextFile(manifestFile)) as ContentDatesManifest;
+  const manifest = JSON.parse(await readFile(manifestFile, 'utf8')) as ContentDatesManifest;
   const out = new Map<string, string>();
   for (const route of routes) {
     let path = route;

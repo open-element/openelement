@@ -11,9 +11,11 @@
  */
 
 import { findPort, serveStatic } from '../../tools/lib/static-server.ts';
+import process from 'node:process';
 
 const args = Object.fromEntries(
-  Deno.args
+  process.argv
+    .slice(2)
     .reduce<string[]>((acc, arg, i, arr) => {
       if (arg.startsWith('--')) {
         const key = arg.slice(2);

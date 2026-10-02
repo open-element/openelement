@@ -10,6 +10,7 @@ import { existsSync } from '@std/fs';
 import { walkSync } from '@std/fs/walk';
 import { join } from '@std/path';
 import { SITE_BUDGET } from '../site-budget.ts';
+import { readFileSync, readdirSync, statSync } from 'node:fs';
 
 const DIST = join(import.meta.dirname ?? '.', '..', 'dist');
 
@@ -18,7 +19,7 @@ Deno.test('build output: no Hono virtual entry in public assets', () => {
   const assetsDir = join(DIST, 'assets');
   assert(existsSync(assetsDir), `Build assets directory is missing: ${assetsDir}`);
 
-  const files = [...Deno.readDirSync(assetsDir)].map((entry) => entry.name);
+  const files = [...readdirSync(assetsDir, { withFileTypes: true })].map((entry) => entry.name);
   const honoEntry = files.find((f) => f.startsWith('_virtual_less-hono-entry'));
   assertEquals(
     honoEntry,
@@ -52,7 +53,7 @@ Deno.test('build output: client island JS stays within core budget and ships no 
       emittedShowcase.push(f);
       continue;
     }
-    const size = Deno.statSync(f).size;
+    const size = statSync(f).size;
     coreBytes += size;
     if (f.includes('island-') && size > SITE_BUDGET.islandKB * 1024) {
       oversizedIslands.push(`${f} (${(size / 1024).toFixed(1)}KB)`);
@@ -93,9 +94,9 @@ Deno.test('build output: the light-mode probe fixture stays out of the public Si
   // Route manifests: every emitted island manifest records its route.
   const manifestDir = join(DIST, 'island-manifests');
   if (existsSync(manifestDir)) {
-    for (const entry of Deno.readDirSync(manifestDir)) {
-      if (!entry.isFile || !entry.name.endsWith('.json')) continue;
-      const manifest = JSON.parse(Deno.readTextFileSync(join(manifestDir, entry.name))) as {
+    for (const entry of readdirSync(manifestDir, { withFileTypes: true })) {
+      if (!entry.isFile() || !entry.name.endsWith('.json')) continue;
+      const manifest = JSON.parse(readFileSync(join(manifestDir, entry.name), 'utf8')) as {
         route?: string;
       };
       assert(
@@ -105,7 +106,7 @@ Deno.test('build output: the light-mode probe fixture stays out of the public Si
     }
   }
 
-  const sitemap = Deno.readTextFileSync(join(DIST, 'sitemap.xml'));
+  const sitemap = readFileSync(join(DIST, 'sitemap.xml'), 'utf8');
   assert(!sitemap.includes('/probe-light'), 'sitemap must not list the internal probe');
 });
 
@@ -130,7 +131,7 @@ Deno.test('build output: zh pages keep in-content links inside the zh tree (#103
   const failures: string[] = [];
   for (const file of targets) {
     assert(existsSync(file), `Expected zh page is missing: ${file}`);
-    const html = Deno.readTextFileSync(file);
+    const html = readFileSync(file, 'utf8');
     for (const match of html.matchAll(anchorRe)) {
       const [tag, href] = match;
       // Layout chrome links carry data-nav and are localized client-side by

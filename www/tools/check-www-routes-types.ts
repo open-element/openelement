@@ -23,6 +23,8 @@
 
 import { dirname, fromFileUrl, join, relative, resolve } from '@std/path';
 import { scanRoutes } from '../../packages/router/src/vite/internal/ssg/route-scanner.ts';
+import process from 'node:process';
+import { commandOutput } from '../../tools/repo/node-command.ts';
 
 const repoRoot = fromFileUrl(new URL('../..', import.meta.url));
 const routesDir = join(repoRoot, 'www/app/routes');
@@ -37,7 +39,7 @@ if (files.length === 0) {
     `routes typecheck: route scan of ${routesDir} returned zero entries — ` +
       'the scanner or the routes directory is broken; refusing to vacuously pass.',
   );
-  Deno.exit(1);
+  process.exit(1);
 }
 
 /**
@@ -57,14 +59,14 @@ async function generatedModuleHint(output: string, importerFile: string): Promis
         ? resolve(dirname(importerFile), specifier)
         : null;
     if (!abs) continue;
-    const check = new Deno.Command('git', {
+    const check = await commandOutput('git', {
       args: ['check-ignore', '-q', abs],
       cwd: repoRoot,
       stdin: 'null',
       stdout: 'null',
       stderr: 'null',
     });
-    const { code } = await check.output();
+    const { code } = check;
     if (code === 0) return relative(repoRoot, abs);
   }
   return null;
@@ -72,18 +74,18 @@ async function generatedModuleHint(output: string, importerFile: string): Promis
 
 let failures = 0;
 for (const file of files) {
-  const child = new Deno.Command(Deno.execPath(), {
+  const child = await commandOutput(process.execPath, {
     args: ['check', '--config', join(repoRoot, 'deno.json'), file],
     cwd: repoRoot,
     // Fail closed on a permission prompt rather than hanging (gate invariant).
     stdin: 'null',
     stdout: 'piped',
     stderr: 'piped',
-  }).spawn();
-  const { code, stdout, stderr } = await child.output();
+  });
+  const { code, stdout, stderr } = child;
   const text = new TextDecoder().decode(stdout) + new TextDecoder().decode(stderr);
   // Preserve the historical pass-through log shape.
-  await Deno.stdout.write(new TextEncoder().encode(text));
+  await process.stdout.write(new TextEncoder().encode(text));
   if (code === 0) {
     console.log(`PASS ${relative(repoRoot, file)}`);
   } else {
@@ -101,6 +103,6 @@ for (const file of files) {
 
 if (failures > 0) {
   console.error(`routes typecheck failed: ${failures}/${files.length} route module(s)`);
-  Deno.exit(1);
+  process.exit(1);
 }
 console.log(`routes typecheck ok: ${files.length} route module(s) checked`);

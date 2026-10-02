@@ -13,6 +13,8 @@ import { blogCollection, prepareBlogPosts } from '../lib/blog.ts';
 import { scanSiteRoutes } from './lib/site-route-scan.ts';
 import { enumeratePublicRoutes, renderRobotsTxt, renderSitemapXml } from './lib/site-sitemap.ts';
 import { articleLastmodByRoute } from './lib/site-lastmod.ts';
+import { writeFile } from 'node:fs/promises';
+import process from 'node:process';
 
 export const SITE_DIST = 'www/dist';
 const SITE_ROUTES = 'www/app/routes';
@@ -35,7 +37,7 @@ export async function generateSiteSitemap(dist = join(repoRoot, SITE_DIST)): Pro
   if (failures.length > 0) {
     console.error('site sitemap generation failed:');
     for (const failure of failures) console.error(`- ${failure}`);
-    Deno.exit(1);
+    process.exit(1);
   }
   // Real source dates, not the build clock: routes without a known content
   // date omit <lastmod> entirely, and the artifact stays byte-stable across
@@ -43,8 +45,8 @@ export async function generateSiteSitemap(dist = join(repoRoot, SITE_DIST)): Pro
   const lastmod = await articleLastmodByRoute(publicRoutes);
   const sitemapPath = join(dist, 'sitemap.xml');
   const robotsPath = join(dist, 'robots.txt');
-  await Deno.writeTextFile(sitemapPath, renderSitemapXml(publicRoutes, { lastmod }));
-  await Deno.writeTextFile(robotsPath, renderRobotsTxt());
+  await writeFile(sitemapPath, renderSitemapXml(publicRoutes, { lastmod }));
+  await writeFile(robotsPath, renderRobotsTxt());
   return [sitemapPath, robotsPath];
 }
 

@@ -49,6 +49,8 @@ import { fromFileUrl, join } from '@std/path';
 import { walk } from '@std/fs/walk';
 import { readPackages } from '../../tools/lib/package-graph.ts';
 import { apiReference } from '../app/data/_generated-api-reference.ts';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import process from 'node:process';
 
 const repoRoot = fromFileUrl(new URL('../../', import.meta.url));
 
@@ -178,15 +180,15 @@ export async function typeCheckExamples(examples: ContentExample[]): Promise<Exa
   // (vite, preact, ...) walks up to the repo's dependencies; `.tmp` is
   // gitignored, so create it first (clean CI checkouts do not carry it).
   const tmpRoot = join(repoRoot, '.tmp');
-  await Deno.mkdir(tmpRoot, { recursive: true });
-  const dir = await Deno.makeTempDir({ dir: tmpRoot, prefix: 'content-examples-' });
+  await mkdir(tmpRoot, { recursive: true });
+  const dir = await mkdtemp(join(tmpRoot, 'content-examples-'));
   try {
     // Project-shape side-effect imports (`import './components/x.tsx'`) name
     // files of the reader's project, not the docs tree: retarget them at an
     // empty stub so teaching examples check the framework usage, not the
     // reader's filesystem. Value imports (`from './x'`) are left alone and
     // still fail closed when unresolvable.
-    await Deno.writeTextFile(`${dir}/__project_shape_stub.ts`, 'export {};\n');
+    await writeFile(`${dir}/__project_shape_stub.ts`, 'export {};\n');
     const files: string[] = [];
     for (const [index, example] of examples.entries()) {
       const name = `example-${index}.${example.lang}`;
@@ -194,7 +196,7 @@ export async function typeCheckExamples(examples: ContentExample[]): Promise<Exa
         /(^|\n)\s*import\s*(['"])\.[^'"]*\2\s*;?/g,
         (_, prefix, quote) => `${prefix}import ${quote}./__project_shape_stub.ts${quote};`,
       );
-      await Deno.writeTextFile(`${dir}/${name}`, code);
+      await writeFile(`${dir}/${name}`, code);
       files.push(`${dir}/${name}`);
     }
     const paths = await workspacePaths();
@@ -242,7 +244,7 @@ export async function typeCheckExamples(examples: ContentExample[]): Promise<Exa
     }
     return failures;
   } finally {
-    await Deno.remove(dir, { recursive: true });
+    await rm(dir, { recursive: true });
   }
 }
 
@@ -293,7 +295,7 @@ export async function checkContent(): Promise<ContentGateResult> {
     includeDirs: false,
     exts: ['.md', '.mdx'],
   })) {
-    const markdown = await Deno.readTextFile(entry.path);
+    const markdown = await readFile(entry.path, 'utf8');
     importFailures.push(...validateFrameworkImports(entry.path, markdown, inventory));
     if (!CHECKED_CONTENT_DIRS.some((dir) => entry.path.startsWith(join(repoRoot, dir)))) continue;
     for (const example of extractExamples(entry.path, markdown)) {
@@ -320,6 +322,6 @@ if (import.meta.main) {
       console.error(`- ${failure.file}: ${failure.message}`);
     }
   }
-  if (importFailures.length > 0 || exampleFailures.length > 0) Deno.exit(1);
+  if (importFailures.length > 0 || exampleFailures.length > 0) process.exit(1);
   console.log('Content gate passed (imports resolved, examples type-checked).');
 }

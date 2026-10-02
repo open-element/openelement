@@ -22,6 +22,8 @@ import {
 import { blogCollection, prepareBlogPosts } from '../lib/blog.ts';
 import { fromFileUrl, join } from '@std/path';
 import { articleCollections } from '../content-collections.ts';
+import { readFile, writeFile } from 'node:fs/promises';
+import process from 'node:process';
 
 const siteRoot = fromFileUrl(new URL('../../www/', import.meta.url));
 
@@ -51,7 +53,7 @@ outputs.set(
 // flips automatically when the release train publishes — no manual wording
 // sweep. Consumed by www/app/data/version.ts.
 const releaseState = JSON.parse(
-  await Deno.readTextFile(join(siteRoot, '../docs/release/release-state.json')),
+  await readFile(join(siteRoot, '../docs/release/release-state.json'), 'utf8'),
 ) as {
   sourceVersion: string;
   packages: Array<{ name: string; registry: Record<string, string | undefined> }>;
@@ -70,7 +72,7 @@ const alphaResolvesTo = createEntry?.registry.alpha ?? 'unknown';
 // www/app/data/version.ts from the same generated truth, so whichever claim
 // contradicts the tracked registry state fails here and turns CI red
 // (www#check:content-data) instead of shipping a stale roadmap row.
-const roadmapSource = await Deno.readTextFile(join(siteRoot, 'app/routes/roadmap.tsx'));
+const roadmapSource = await readFile(join(siteRoot, 'app/routes/roadmap.tsx'), 'utf8');
 const contradictingClaims = sourceLinePublished
   ? [/repository baseline/iu, /not yet on npm/iu, /仓库基线——尚未发布到 npm/u]
   : [/published to npm under the @alpha dist-tag/iu, /已通过 @alpha dist-tag 发布到 npm/u];
@@ -82,7 +84,7 @@ if (roadmapDrift.length > 0) {
       'must stay derived from www/app/data/version.ts.',
   );
   for (const claim of roadmapDrift) console.error(`  ${claim}`);
-  Deno.exit(1);
+  process.exit(1);
 }
 
 outputs.set(
@@ -99,7 +101,7 @@ export const ALPHA_RESOLVES_TO = '${alphaResolvesTo}';
 // Per-article source-freshness stamps, projected from the committed
 // manifest (never from Git: the build must run without .git or a network).
 const contentDates = JSON.parse(
-  await Deno.readTextFile(join(siteRoot, 'lib/content-dates.json')),
+  await readFile(join(siteRoot, 'lib/content-dates.json'), 'utf8'),
 ) as { generatedFrom: string; articles: Record<string, { en: string; zh: string }> };
 const STAMP = /^(?:\d{4}-\d{2}-\d{2}|uncommitted)$/;
 const metaMap: Record<string, { en: string; zh: string }> = {};
@@ -123,12 +125,12 @@ export const contentMeta: Record<string, { en: string; zh: string }> = ${JSON.st
 `,
 );
 
-if (Deno.args.includes('--check')) {
+if (process.argv.slice(2).includes('--check')) {
   const drifted: string[] = [];
   for (const [path, expected] of outputs) {
     let current = '';
     try {
-      current = await Deno.readTextFile(path);
+      current = await readFile(path, 'utf8');
     } catch {
       // Missing file is drift; fall through to the mismatch path.
     }
@@ -137,10 +139,10 @@ if (Deno.args.includes('--check')) {
   if (drifted.length > 0) {
     console.error('site content data drift: regenerate with deno task --cwd www generate:content');
     for (const path of drifted) console.error(`  ${path}`);
-    Deno.exit(1);
+    process.exit(1);
   }
   console.log('site content data check passed.');
 } else {
-  for (const [path, output] of outputs) await Deno.writeTextFile(path, output);
+  for (const [path, output] of outputs) await writeFile(path, output);
   console.log(`site content data written: ${outputs.size} modules.`);
 }

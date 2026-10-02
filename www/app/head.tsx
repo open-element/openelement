@@ -3,7 +3,8 @@
  *
  * `app/head.tsx` is compiled into the Site's own module graph, so it may import
  * CSS by URL and the Site's own modules — which is exactly why the Prism theme
- * is an import here instead of a build-time file read (`Deno.readTextFileSync`
+ * is an import here instead of a build-time file read (a pre-port
+ * `readTextFileSync`
  * in the config would have made the document depend on a host API the module is
  * not allowed to use).
  *

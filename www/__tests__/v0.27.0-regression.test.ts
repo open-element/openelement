@@ -17,6 +17,7 @@
 import { assert, assertEquals, assertFalse, assertStringIncludes } from '@std/assert';
 import { existsSync } from '@std/fs';
 import { join } from '@std/path';
+import { readFileSync } from 'node:fs';
 
 const DIST = join(import.meta.dirname ?? '.', '..', 'dist');
 const DOCS_PAGE = join(DIST, 'zh', 'guide', 'getting-started', 'index.html');
@@ -28,7 +29,7 @@ const REGISTRY_PAGE = join(DIST, 'zh', 'registry', 'index.html');
 
 function readPage(path: string): string {
   if (!existsSync(path)) throw new Error(`Page not found: ${path}`);
-  return Deno.readTextFileSync(path);
+  return readFileSync(path, 'utf8');
 }
 
 // ─── Bug 1: Sidebar not missing ─────────────────────────────────────
@@ -133,9 +134,9 @@ Deno.test('v0.44 surface: JSX factories live only in the supported jsx-runtime s
     'src',
     'jsx-dev-runtime.ts',
   );
-  const rootSource = Deno.readTextFileSync(elementRoot);
-  const src = Deno.readTextFileSync(runtimePath);
-  const devSource = Deno.readTextFileSync(devRuntimePath);
+  const rootSource = readFileSync(elementRoot, 'utf8');
+  const src = readFileSync(runtimePath, 'utf8');
+  const devSource = readFileSync(devRuntimePath, 'utf8');
   for (const name of ['Fragment', 'jsx', 'jsxs']) {
     assert(src.includes(name), `${name} should be exported from jsx-runtime`);
   }

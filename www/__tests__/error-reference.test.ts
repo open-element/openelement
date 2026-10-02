@@ -27,6 +27,7 @@ import {
   coverageFailures,
   renderErrorReferenceModule,
 } from '../tools/generate-error-reference.ts';
+import { readFile } from 'node:fs/promises';
 
 const catalogCodes = errorReference.codes.map((record) => record.code);
 
@@ -88,7 +89,7 @@ Deno.test('#1413 /errors: the page projection carries every generated code', asy
   // rendered table diverges from the generated truth. The route imports the
   // generated module as `errorCodes` (C-lane naming, #1419); the projection
   // test must follow whatever name the route actually uses.
-  const route = await Deno.readTextFile(new URL('../app/routes/errors.tsx', import.meta.url));
+  const route = await readFile(new URL('../app/routes/errors.tsx', import.meta.url), 'utf8');
   assertStringIncludes(route, 'errorCodes.diagnostics.map(');
   assertStringIncludes(route, 'codes,');
   for (const record of errorReference.codes) {
@@ -111,8 +112,9 @@ Deno.test('#1413 /errors: generation is deterministic and the artifact is curren
   );
   // The committed (generated, untracked) artifact must equal a fresh build:
   // a hand-edited row would fail here.
-  const onDisk = await Deno.readTextFile(
+  const onDisk = await readFile(
     new URL('../app/data/_generated-error-reference.ts', import.meta.url),
+    'utf8',
   );
   assertEquals(
     onDisk,
@@ -124,8 +126,9 @@ Deno.test('#1413 /errors: generation is deterministic and the artifact is curren
 Deno.test('#1413 /errors: an unclassifiable code fails the generator', async () => {
   // The classification rule is a rule, not a list: a code outside every family
   // must stop generation rather than land on the page with empty columns.
-  const source = await Deno.readTextFile(
+  const source = await readFile(
     new URL('../tools/generate-error-reference.ts', import.meta.url),
+    'utf8',
   );
   assertStringIncludes(source, 'matches no family rule');
   const failures = coverageFailures(['OE_MYSTERY_FAMILY_9'], new Set(['OE_MYSTERY_FAMILY_9']));

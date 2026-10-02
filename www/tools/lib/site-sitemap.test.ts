@@ -4,6 +4,8 @@ import { join } from '@std/path';
 import { SITE_LOCALES, type SiteLocale } from '../../site-config.ts';
 import { enumeratePublicRoutes, renderRobotsTxt, renderSitemapXml } from './site-sitemap.ts';
 import { articleLastmodByRoute } from './site-lastmod.ts';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 
 const LOCALES: readonly SiteLocale[] = SITE_LOCALES;
 
@@ -115,10 +117,10 @@ Deno.test('enumeratePublicRoutes: invalid locale configuration fails closed', ()
 });
 
 Deno.test('articleLastmodByRoute: source dates per locale, unknown routes omitted', async () => {
-  const dir = await Deno.makeTempDir({ prefix: 'site-lastmod-fixture-' });
+  const dir = await mkdtemp(join(tmpdir(), 'site-lastmod-fixture-'));
   try {
     const manifest = join(dir, 'content-dates.json');
-    await Deno.writeTextFile(
+    await writeFile(
       manifest,
       JSON.stringify({
         articles: {
@@ -145,6 +147,6 @@ Deno.test('articleLastmodByRoute: source dates per locale, unknown routes omitte
     assertEquals(map.has('/'), false);
     assertEquals(map.has('/blog/hello'), false);
   } finally {
-    await Deno.remove(dir, { recursive: true });
+    await rm(dir, { recursive: true });
   }
 });

@@ -13,6 +13,7 @@ import {
   PUBLISHED_LATEST,
   REGISTRY_NOTE,
 } from '../app/data/version.ts';
+import { readFile } from 'node:fs/promises';
 
 const APP_ROOT = new URL('../app/', import.meta.url);
 
@@ -60,7 +61,7 @@ Deno.test('release copy: Site sources do not claim a four-package version', asyn
     'components/page-changelog.tsx',
   ];
   for (const file of files) {
-    const source = await Deno.readTextFile(new URL(file, APP_ROOT));
+    const source = await readFile(new URL(file, APP_ROOT), 'utf8');
     assert(
       !/published for all four packages is/iu.test(source),
       `${file}: reintroduced a four-package published-version claim`,

@@ -16,6 +16,8 @@
  */
 import { fromFileUrl, join } from '@std/path';
 import { createInstallCommand } from '../../packages/create/src/install-command.ts';
+import { readFile, writeFile } from 'node:fs/promises';
+import process from 'node:process';
 
 export const INSTALL_COMMAND_ARTIFACT = 'www/app/data/_generated-install-command.ts';
 const repoRoot = fromFileUrl(new URL('../../', import.meta.url));
@@ -79,7 +81,7 @@ export async function buildInstallCommand(): Promise<InstallCommandBuild> {
   for (const relative of DISPLAY_FILES) {
     let text: string;
     try {
-      text = await Deno.readTextFile(join(repoRoot, relative));
+      text = await readFile(join(repoRoot, relative), 'utf8');
     } catch (cause) {
       throw new Error(`${relative} is missing`, { cause });
     }
@@ -117,35 +119,35 @@ export function renderInstallCommandModule(build: InstallCommandBuild): string {
 }
 
 if (import.meta.main) {
-  const check = Deno.args.includes('--check');
+  const check = process.argv.slice(2).includes('--check');
   const build = await buildInstallCommand();
   if (build.failures.length > 0) {
     console.error('install-command gate failed:');
     for (const failure of build.failures) console.error(`- ${failure}`);
-    Deno.exit(1);
+    process.exit(1);
   }
   const module = renderInstallCommandModule(build);
   if (check) {
     let existing: string;
     try {
-      existing = await Deno.readTextFile(join(repoRoot, INSTALL_COMMAND_ARTIFACT));
+      existing = await readFile(join(repoRoot, INSTALL_COMMAND_ARTIFACT), 'utf8');
     } catch {
       console.error(
         `${INSTALL_COMMAND_ARTIFACT} is missing; run deno task --cwd www generate:install-command`,
       );
-      Deno.exit(1);
+      process.exit(1);
     }
     if (existing !== module) {
       console.error(
         `${INSTALL_COMMAND_ARTIFACT} is stale; run deno task --cwd www generate:install-command`,
       );
-      Deno.exit(1);
+      process.exit(1);
     }
     console.log(
       `Install-command check passed (${DISPLAY_FILES.length} display files, 1 canonical string).`,
     );
   } else {
-    await Deno.writeTextFile(join(repoRoot, INSTALL_COMMAND_ARTIFACT), module);
+    await writeFile(join(repoRoot, INSTALL_COMMAND_ARTIFACT), module);
     console.log(`Wrote the canonical install command to ${INSTALL_COMMAND_ARTIFACT}`);
   }
 }

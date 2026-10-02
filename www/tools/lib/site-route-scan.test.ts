@@ -1,9 +1,11 @@
 import { assertEquals } from '@std/assert';
 import { join } from '@std/path';
 import { scanSiteRoutes } from './site-route-scan.ts';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 
 Deno.test('scanSiteRoutes maps index, nested, and dynamic route files', async () => {
-  const dir = await Deno.makeTempDir({ prefix: 'site-route-scan-' });
+  const dir = await mkdtemp(join(tmpdir(), 'site-route-scan-'));
   try {
     for (const file of [
       'index.tsx',
@@ -12,8 +14,8 @@ Deno.test('scanSiteRoutes maps index, nested, and dynamic route files', async ()
       'blog/[slug].tsx',
     ]) {
       const target = join(dir, file);
-      await Deno.mkdir(target.split('/').slice(0, -1).join('/'), { recursive: true });
-      await Deno.writeTextFile(target, 'export default {};');
+      await mkdir(target.split('/').slice(0, -1).join('/'), { recursive: true });
+      await writeFile(target, 'export default {};');
     }
     assertEquals(await scanSiteRoutes(dir), [
       { path: '/', type: 'page' },
@@ -22,6 +24,6 @@ Deno.test('scanSiteRoutes maps index, nested, and dynamic route files', async ()
       { path: '/guide/configuration', type: 'page' },
     ]);
   } finally {
-    await Deno.remove(dir, { recursive: true });
+    await rm(dir, { recursive: true });
   }
 });

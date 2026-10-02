@@ -18,6 +18,8 @@
 import { walk } from '@std/fs/walk';
 import { fromFileUrl, join } from '@std/path';
 import { SITE_BREAKPOINT_TIERS } from '../site-css.ts';
+import { readFile } from 'node:fs/promises';
+import process from 'node:process';
 
 const repoRoot = fromFileUrl(new URL('../../', import.meta.url));
 const SCAN_ROOTS = [join(repoRoot, 'www/app')];
@@ -85,7 +87,7 @@ async function main(): Promise<void> {
     for await (const entry of walk(root, { exts: ['.ts', '.tsx'] })) {
       if (!SOURCE.test(entry.path)) continue;
       if (entry.path.includes('/data/_generated-')) continue;
-      const text = await Deno.readTextFile(entry.path);
+      const text = await readFile(entry.path, 'utf8');
       failures.push(...findThemeTokenFailures(entry.path, text.split('\n')));
       failures.push(...findBreakpointFailures(entry.path, text.split('\n')));
     }
@@ -98,7 +100,7 @@ async function main(): Promise<void> {
     console.error(
       'Theme values must come from open-props tokens or the www/vite.config.ts alias layer.',
     );
-    Deno.exit(1);
+    process.exit(1);
   }
   console.log('site theme token check passed.');
 }
