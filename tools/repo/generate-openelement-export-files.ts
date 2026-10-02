@@ -14,8 +14,12 @@
  *     -> regenerate, format, and fail (exit 1) if the committed file is stale.
  */
 
+import { readFile, writeFile } from 'node:fs/promises';
+import process from 'node:process';
+import { commandOutput } from './node-command.ts';
+
 async function readJson<T = unknown>(path: string | URL): Promise<T> {
-  return JSON.parse(await Deno.readTextFile(path)) as T;
+  return JSON.parse(await readFile(path, 'utf8')) as T;
 }
 
 interface PackageExports {
@@ -106,16 +110,14 @@ async function runFormatter(target: string): Promise<void> {
   // oxfmt is the repository formatter (A2 engine swap); the binary comes
   // from the deno-installed root node_modules (pinned in deno.json imports).
   const oxfmt = new URL('../../node_modules/.bin/oxfmt', import.meta.url).pathname;
-  const cmd = new Deno.Command(oxfmt, { args: [target] });
-  const status = await cmd.output();
+  const status = await commandOutput(oxfmt, { args: [target] });
   if (!status.success) {
     throw new Error(`oxfmt failed on ${target}`);
   }
 }
 
 async function gitDiffIsEmpty(target: string): Promise<boolean> {
-  const cmd = new Deno.Command('git', { args: ['diff', '--quiet', '--', target] });
-  const status = await cmd.output();
+  const status = await commandOutput('git', { args: ['diff', '--quiet', '--', target] });
   return status.code === 0;
 }
 
@@ -124,19 +126,18 @@ async function main(args: string[]): Promise<void> {
   const map = await buildExportFiles();
   const source = render(map);
 
-  await Deno.writeTextFile(TARGET, source);
+  await writeFile(TARGET, source, 'utf8');
   await runFormatter(TARGET);
 
   if (checkOnly) {
     const clean = await gitDiffIsEmpty(TARGET);
     if (!clean) {
-      const diff = new Deno.Command('git', {
+      const out = await commandOutput('git', {
         args: ['--no-pager', 'diff', '--', TARGET],
       });
-      const out = await diff.output();
       console.error('export-files sync check failed: generated file is stale.');
       console.error(new TextDecoder().decode(out.stdout));
-      Deno.exit(1);
+      process.exit(1);
     }
     console.log('export-files sync check passed (generated file matches deno.json exports).');
     return;
@@ -146,5 +147,5 @@ async function main(args: string[]): Promise<void> {
 }
 
 if (import.meta.main) {
-  await main(Deno.args);
+  await main(process.argv.slice(2));
 }

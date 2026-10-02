@@ -28,6 +28,9 @@
  * skips.
  */
 import { dirname, fromFileUrl, join, relative } from '@std/path';
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import process from 'node:process';
+import { commandOutput } from './node-command.ts';
 import {
   auditSiteE2e,
   type PlaywrightReport,
@@ -88,14 +91,12 @@ export function checkRunnerArgs(args: readonly string[]): string | null {
 }
 
 async function gitHead(): Promise<string> {
-  const output = await new Deno.Command('git', {
+  const output = await commandOutput('git', {
     args: ['rev-parse', 'HEAD'],
     cwd: repoRoot,
     stdout: 'piped',
     stderr: 'null',
-  })
-    .output()
-    .catch(() => null);
+  }).catch(() => null);
   return output?.success ? new TextDecoder().decode(output.stdout).trim() : '';
 }
 
@@ -106,19 +107,19 @@ function normalizeConfigFile(configFile: string | undefined): string {
 }
 
 async function writeResult(result: SiteE2eResult): Promise<void> {
-  await Deno.mkdir(dirname(resultPath), { recursive: true });
-  await Deno.writeTextFile(resultPath, JSON.stringify(result, null, 2) + '\n');
+  await mkdir(dirname(resultPath), { recursive: true });
+  await writeFile(resultPath, JSON.stringify(result, null, 2) + '\n', 'utf8');
 }
 
 async function main(): Promise<void> {
-  const argError = checkRunnerArgs(Deno.args);
+  const argError = checkRunnerArgs(process.argv.slice(2));
   if (argError) {
     console.error(argError);
-    Deno.exit(1);
+    process.exit(1);
   }
-  await Deno.mkdir(artifactsDir, { recursive: true });
-  await Deno.remove(reportPath).catch(() => undefined);
-  const command = new Deno.Command(Deno.execPath(), {
+  await mkdir(artifactsDir, { recursive: true });
+  await rm(reportPath).catch(() => undefined);
+  const status = await commandOutput(process.execPath, {
     args: [
       'run',
       '--config',
@@ -134,20 +135,19 @@ async function main(): Promise<void> {
       '--config',
       'e2e/playwright.config.ts',
       '--reporter=list,json',
-      ...Deno.args,
+      ...process.argv.slice(2),
     ],
     cwd: siteDir,
-    env: { ...Deno.env.toObject(), PLAYWRIGHT_JSON_OUTPUT_NAME: reportPath },
+    env: { ...process.env, PLAYWRIGHT_JSON_OUTPUT_NAME: reportPath },
     stdout: 'inherit',
     stderr: 'inherit',
     stdin: 'null',
   });
-  const status = await command.output();
 
   let result: SiteE2eResult;
   const candidateSha = await gitHead();
   try {
-    const reportBytes = await Deno.readFile(reportPath);
+    const reportBytes = await readFile(reportPath);
     const report = JSON.parse(new TextDecoder().decode(reportBytes)) as PlaywrightReport;
     const projects = summarizePlaywrightReport(report);
     const totals = { passed: 0, failed: 0, skipped: 0, flaky: 0 };
@@ -206,7 +206,7 @@ async function main(): Promise<void> {
   if (failures.length > 0) {
     console.error('site-e2e: candidate proof is not valid:');
     for (const failure of failures) console.error(`- ${failure}`);
-    Deno.exit(1);
+    process.exit(1);
   }
 }
 

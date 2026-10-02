@@ -1,5 +1,8 @@
 import { assert, assertEquals } from '@std/assert';
 import { join } from '@std/path';
+import { mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import process from 'node:process';
 import { execute, parseRunInArgs } from './run-in.ts';
 
 Deno.test('run-in: parses root, env, and command', () => {
@@ -34,25 +37,28 @@ Deno.test('run-in: rejects missing root, separator, and command', () => {
 });
 
 Deno.test('run-in: runs the child in the given root with the given env', async () => {
-  const dir = await Deno.makeTempDir({ prefix: 'openelement-run-in-' });
+  const dir = await mkdtemp(join(tmpdir(), 'openelement-run-in-'));
   try {
     const probe = join(dir, 'probe.ts');
-    await Deno.writeTextFile(
+    // The probe runs under a child `deno run`; it reads env through the
+    // node:process compat surface (B1b) — same values, same permissions.
+    await writeFile(
       probe,
-      'if (Deno.env.get("OPENELEMENT_RUN_IN_PROBE") !== "ok") throw new Error("env missing");' +
-        'if (Deno.cwd() !== Deno.env.get("OPENELEMENT_RUN_IN_CWD")) {' +
-        '  throw new Error(`cwd=${Deno.cwd()}`);' +
+      'if (process.env["OPENELEMENT_RUN_IN_PROBE"] !== "ok") throw new Error("env missing");' +
+        'if (process.cwd() !== process.env["OPENELEMENT_RUN_IN_CWD"]) {' +
+        '  throw new Error(`cwd=${process.cwd()}`);' +
         '}',
+      'utf8',
     );
-    const expectedCwd = await Deno.realPath('tools/repo');
+    const expectedCwd = await realpath('tools/repo');
     const code = await execute({
       root: 'tools/repo',
       env: { OPENELEMENT_RUN_IN_PROBE: 'ok', OPENELEMENT_RUN_IN_CWD: expectedCwd },
-      command: [Deno.execPath(), 'run', '--allow-env', '--allow-read', probe],
+      command: [process.execPath, 'run', '--allow-env', '--allow-read', probe],
     });
     assertEquals(code, 0);
   } finally {
-    await Deno.remove(dir, { recursive: true });
+    await rm(dir, { recursive: true });
   }
 });
 
@@ -60,7 +66,7 @@ Deno.test('run-in: passes the child exit code through', async () => {
   const code = await execute({
     root: '.',
     env: {},
-    command: [Deno.execPath(), 'eval', 'Deno.exit(7);'],
+    command: [process.execPath, 'eval', 'process.exit(7);'],
   });
   assertEquals(code, 7);
 });

@@ -16,6 +16,9 @@
  * Usage: deno run --allow-read tools/repo/deps-vite-check.ts
  */
 
+import { readdir, readFile, stat } from 'node:fs/promises';
+import process from 'node:process';
+
 export const VITE_DEV_PIN = '8.0.16';
 export const VITE_PEER_RANGE = 'npm:vite@^8.0.0';
 
@@ -204,7 +207,9 @@ export function checkStarterVitePin(versionSource: string): ViteViolation[] {
     return [
       {
         where: 'packages/create/src/version.ts',
-        message: `VITE_STARTER_PIN ${match[1]} does not match canonical VITE_DEV_PIN ${VITE_DEV_PIN}`,
+        message: `VITE_STARTER_PIN ${
+          match[1]
+        } does not match canonical VITE_DEV_PIN ${VITE_DEV_PIN}`,
       },
     ];
   }
@@ -213,7 +218,7 @@ export function checkStarterVitePin(versionSource: string): ViteViolation[] {
 
 async function readJsonFile<T>(path: string): Promise<T | null> {
   try {
-    return JSON.parse(await Deno.readTextFile(path)) as T;
+    return JSON.parse(await readFile(path, 'utf8')) as T;
   } catch {
     return null;
   }
@@ -228,11 +233,11 @@ async function expandManifestPaths(): Promise<string[]> {
     }
     const [dir, file] = pattern.split('/*/');
     try {
-      for await (const entry of Deno.readDir(dir)) {
-        if (!entry.isDirectory) continue;
+      for (const entry of await readdir(dir, { withFileTypes: true })) {
+        if (!entry.isDirectory()) continue;
         const candidate = `${dir}/${entry.name}/${file}`;
         try {
-          await Deno.stat(candidate);
+          await stat(candidate);
           paths.push(candidate);
         } catch {
           // fixture/example without its own manifest resolves the root config
@@ -256,11 +261,11 @@ async function collectBuildSources(): Promise<{ path: string; text: string }[]> 
   const files: { path: string; text: string }[] = [];
   const visit = async (dir: string): Promise<void> => {
     try {
-      for await (const entry of Deno.readDir(dir)) {
+      for (const entry of await readdir(dir, { withFileTypes: true })) {
         const path = `${dir}/${entry.name}`;
-        if (entry.isDirectory) await visit(path);
-        else if (entry.isFile && (path.endsWith('.ts') || path.endsWith('.tsx'))) {
-          files.push({ path, text: await Deno.readTextFile(path) });
+        if (entry.isDirectory()) await visit(path);
+        else if (entry.isFile() && (path.endsWith('.ts') || path.endsWith('.tsx'))) {
+          files.push({ path, text: await readFile(path, 'utf8') });
         }
       }
     } catch {
@@ -279,7 +284,7 @@ if (import.meta.main) {
       let text: string;
       let manifest: ManifestRecord;
       try {
-        text = await Deno.readTextFile(path);
+        text = await readFile(path, 'utf8');
         manifest = JSON.parse(text) as ManifestRecord;
       } catch {
         failures.push({ where: path, message: 'manifest missing or unparseable' });
@@ -301,7 +306,7 @@ if (import.meta.main) {
     records.push({ path, imports: manifest.imports, peerDependencies: manifest.peerDependencies });
   }
   failures.push(...checkManifests(records));
-  failures.push(...checkStarterVitePin(await Deno.readTextFile('packages/create/src/version.ts')));
+  failures.push(...checkStarterVitePin(await readFile('packages/create/src/version.ts', 'utf8')));
   const lockfile = await readJsonFile<{ specifiers?: Record<string, string> }>('deno.lock');
   if (!lockfile?.specifiers) {
     failures.push({ where: 'deno.lock', message: 'lockfile missing specifiers' });
@@ -310,7 +315,7 @@ if (import.meta.main) {
   if (failures.length > 0) {
     for (const failure of failures) console.error(`FAIL ${failure.where}: ${failure.message}`);
     console.error(`${failures.length} vite-unification violation(s)`);
-    Deno.exit(1);
+    process.exit(1);
   }
   console.log(`vite-unification ok (dev ${VITE_DEV_PIN}, peer ${VITE_PEER_RANGE})`);
 }

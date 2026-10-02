@@ -6,6 +6,8 @@ import {
   scanProductClassification,
   stripParentheticals,
 } from './check-product-classification.ts';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 
 const repoRoot = join(dirname(new URL(import.meta.url).pathname), '..', '..');
 
@@ -16,7 +18,7 @@ Deno.test('product classification: the repository public docs pass', async () =>
 });
 
 Deno.test('product classification: required docs fail closed when unreadable', async () => {
-  const empty = await Deno.makeTempDir({ prefix: 'classification-empty-' });
+  const empty = await mkdtemp(join(tmpdir(), 'classification-empty-'));
   try {
     const { sources, failures } = await readProductDocs(empty);
     assertEquals(sources, []);
@@ -28,7 +30,7 @@ Deno.test('product classification: required docs fail closed when unreadable', a
       );
     }
   } finally {
-    await Deno.remove(empty, { recursive: true });
+    await rm(empty, { recursive: true });
   }
 });
 

@@ -46,6 +46,8 @@ import {
   normalizeEvidencePath,
 } from './candidate-steps.ts';
 import { createDeterministicTarGz } from '../lib/deterministic-tar.ts';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 
 const SHA = 'a'.repeat(40);
 const TREE = 'b'.repeat(40);
@@ -351,15 +353,15 @@ function REQUIRED_STEPS_REDUCED(): number {
 }
 
 Deno.test('packed tarballs travel with job evidence and are hash-checked on aggregation', async () => {
-  const root = await Deno.makeTempDir();
+  const root = await mkdtemp(join(tmpdir(), 'opx-test-'));
   try {
     const source = `${root}/source`;
     const recorded = `${root}/recorded`;
     const aggregated = `${root}/aggregated`;
-    await Deno.mkdir(source);
+    await mkdir(source);
     const packages = [{ name: '@openelement/example', version: VERSION }];
     const archive = `${source}/openelement-example-${VERSION}.tgz`;
-    await Deno.writeFile(archive, encoder.encode('release archive bytes'));
+    await writeFile(archive, encoder.encode('release archive bytes'));
 
     const first = await stageTarballEvidence(packages, () => archive, recorded);
     assertEquals(first.files, {
@@ -368,8 +370,10 @@ Deno.test('packed tarballs travel with job evidence and are hash-checked on aggr
     const carried = `${recorded}/${first.files['@openelement/example']}`;
     const second = await stageTarballEvidence(packages, () => carried, aggregated, first.hashes);
     assertEquals(second, first);
+    // node readFile returns a Buffer; compare as a plain Uint8Array like the
+    // pre-port Deno.readFile result.
     assertEquals(
-      await Deno.readFile(`${aggregated}/${second.files['@openelement/example']}`),
+      new Uint8Array(await readFile(`${aggregated}/${second.files['@openelement/example']}`)),
       encoder.encode('release archive bytes'),
     );
 
@@ -382,7 +386,7 @@ Deno.test('packed tarballs travel with job evidence and are hash-checked on aggr
       'Candidate tarball hash mismatch',
     );
   } finally {
-    await Deno.remove(root, { recursive: true });
+    await rm(root, { recursive: true });
   }
 });
 
@@ -418,7 +422,7 @@ async function validPackedStore(version = VERSION) {
 Deno.test('valid packed evidence capsule validates and carries without the workspace', async () => {
   const { extras, archives, read } = await validPackedStore();
   assertEquals(await collectPackedTarballFailures(extras, { read }), []);
-  const outDir = await Deno.makeTempDir();
+  const outDir = await mkdtemp(join(tmpdir(), 'opx-test-'));
   try {
     // ponytail: the guard simulates an aggregate runner with no producer
     // workspace — any packages/* fallback throws (upgrade: prove it with the
@@ -434,10 +438,10 @@ Deno.test('valid packed evidence capsule validates and carries without the works
     for (const path of Object.values(extras.tarballFiles)) {
       const expected = archives.get(path);
       assert(expected !== undefined);
-      assertEquals(await Deno.readFile(`${outDir}/${path}`), expected);
+      assertEquals(new Uint8Array(await readFile(`${outDir}/${path}`)), expected);
     }
   } finally {
-    await Deno.remove(outDir, { recursive: true });
+    await rm(outDir, { recursive: true });
   }
 });
 
@@ -464,7 +468,7 @@ Deno.test('packed validation fails when the archive bytes are missing', async ()
     failures.some((failure) => failure.includes('archive missing')),
     failures.join(' | '),
   );
-  const outDir = await Deno.makeTempDir();
+  const outDir = await mkdtemp(join(tmpdir(), 'opx-test-'));
   try {
     await assertRejects(
       () => carryPackedTarballs(extras, read, outDir),
@@ -472,7 +476,7 @@ Deno.test('packed validation fails when the archive bytes are missing', async ()
       'packed tarball missing',
     );
   } finally {
-    await Deno.remove(outDir, { recursive: true });
+    await rm(outDir, { recursive: true });
   }
 });
 
@@ -491,7 +495,7 @@ Deno.test('packed validation fails when archive bytes are tampered', async () =>
     failures.some((failure) => failure.includes('sha256')),
     failures.join(' | '),
   );
-  const outDir = await Deno.makeTempDir();
+  const outDir = await mkdtemp(join(tmpdir(), 'opx-test-'));
   try {
     await assertRejects(
       () => carryPackedTarballs(extras, tamperedRead, outDir),
@@ -499,7 +503,7 @@ Deno.test('packed validation fails when archive bytes are tampered', async () =>
       'hash mismatch',
     );
   } finally {
-    await Deno.remove(outDir, { recursive: true });
+    await rm(outDir, { recursive: true });
   }
 });
 
@@ -535,7 +539,7 @@ Deno.test('packed validation rejects a missing package from the exact set', asyn
     failures.some((failure) => failure.includes('must map exactly')),
     failures.join(' | '),
   );
-  const outDir = await Deno.makeTempDir();
+  const outDir = await mkdtemp(join(tmpdir(), 'opx-test-'));
   try {
     await assertRejects(
       () => carryPackedTarballs(extras, read, outDir),
@@ -543,7 +547,7 @@ Deno.test('packed validation rejects a missing package from the exact set', asyn
       'must contain exactly',
     );
   } finally {
-    await Deno.remove(outDir, { recursive: true });
+    await rm(outDir, { recursive: true });
   }
 });
 
@@ -556,7 +560,7 @@ Deno.test('packed validation rejects an unknown extra package', async () => {
     failures.some((failure) => failure.includes('must contain exactly')),
     failures.join(' | '),
   );
-  const outDir = await Deno.makeTempDir();
+  const outDir = await mkdtemp(join(tmpdir(), 'opx-test-'));
   try {
     await assertRejects(
       () => carryPackedTarballs(extras, read, outDir),
@@ -564,7 +568,7 @@ Deno.test('packed validation rejects an unknown extra package', async () => {
       'must contain exactly',
     );
   } finally {
-    await Deno.remove(outDir, { recursive: true });
+    await rm(outDir, { recursive: true });
   }
 });
 
@@ -1935,32 +1939,27 @@ async function stageScratchSiteE2e(
   files: { sidecar?: unknown; reportText?: string },
   options: { required: boolean },
 ): Promise<{ rollup: Awaited<ReturnType<typeof stageCloneSiteE2e>>; stagedText: string | null }> {
-  const cloneDir = await Deno.makeTempDir({ prefix: 'oe-stage-clone-' });
-  const outDir = await Deno.makeTempDir({ prefix: 'oe-stage-out-' });
+  const cloneDir = await mkdtemp(join(tmpdir(), 'oe-stage-clone-'));
+  const outDir = await mkdtemp(join(tmpdir(), 'oe-stage-out-'));
   try {
     if (files.sidecar !== undefined || files.reportText !== undefined) {
-      await Deno.mkdir(join(cloneDir, '.artifacts'), { recursive: true });
+      await mkdir(join(cloneDir, '.artifacts'), { recursive: true });
     }
     if (files.sidecar !== undefined) {
-      await Deno.writeTextFile(
+      await writeFile(
         join(cloneDir, '.artifacts', 'site-e2e-result.json'),
         JSON.stringify(files.sidecar),
       );
     }
     if (files.reportText !== undefined) {
-      await Deno.writeTextFile(
-        join(cloneDir, '.artifacts', SITE_E2E_REPORT_FILE),
-        files.reportText,
-      );
+      await writeFile(join(cloneDir, '.artifacts', SITE_E2E_REPORT_FILE), files.reportText);
     }
     const rollup = await stageCloneSiteE2e(cloneDir, outDir, SHA, options);
-    const stagedText = await Deno.readTextFile(join(outDir, SITE_E2E_REPORT_FILE)).catch(
-      () => null,
-    );
+    const stagedText = await readFile(join(outDir, SITE_E2E_REPORT_FILE), 'utf8').catch(() => null);
     return { rollup, stagedText };
   } finally {
-    await Deno.remove(cloneDir, { recursive: true }).catch(() => undefined);
-    await Deno.remove(outDir, { recursive: true }).catch(() => undefined);
+    await rm(cloneDir, { recursive: true }).catch(() => undefined);
+    await rm(outDir, { recursive: true }).catch(() => undefined);
   }
 }
 

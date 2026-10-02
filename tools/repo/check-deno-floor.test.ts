@@ -1,6 +1,8 @@
 import { assert, assertEquals, assertRejects } from '@std/assert';
 import { dirname, join } from '@std/path';
 import { auditDenoFloor, readFloor } from './check-deno-floor.ts';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 
 const repoRoot = join(dirname(new URL(import.meta.url).pathname), '..', '..');
 
@@ -58,11 +60,11 @@ Deno.test('deno floor: no earlier floor and no missing claims pass', () => {
 });
 
 Deno.test('deno floor: a malformed .dvmrc pin fails closed', async () => {
-  const root = await Deno.makeTempDir({ prefix: 'deno-floor-' });
+  const root = await mkdtemp(join(tmpdir(), 'deno-floor-'));
   try {
-    await Deno.writeTextFile(join(root, '.dvmrc'), '2.9\n');
+    await writeFile(join(root, '.dvmrc'), '2.9\n');
     await assertRejects(() => readFloor(root), Error, 'exact x.y.z');
   } finally {
-    await Deno.remove(root, { recursive: true });
+    await rm(root, { recursive: true });
   }
 });

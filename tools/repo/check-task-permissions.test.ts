@@ -19,6 +19,7 @@
 
 import { assert, assertEquals } from '@std/assert';
 import { dirname, join } from '@std/path';
+import { readFileSync } from 'node:fs';
 
 const repoRoot = join(dirname(new URL(import.meta.url).pathname), '..', '..');
 
@@ -86,7 +87,7 @@ const TASK_FILES: TaskFile[] = [
 const TEMPLATE_FFI_REQUIRED = ['dev', 'build', 'start', 'preview'];
 
 function taskMap(path: string): Record<string, string> {
-  const text = Deno.readTextFileSync(join(repoRoot, path));
+  const text = readFileSync(join(repoRoot, path), 'utf8');
   const parsed = JSON.parse(text) as { tasks?: Record<string, string> };
   assert(parsed.tasks && typeof parsed.tasks === 'object', `${path} has no tasks map`);
   return parsed.tasks as Record<string, string>;

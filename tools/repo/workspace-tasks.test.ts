@@ -9,16 +9,18 @@
 import { assert, assertEquals, assertRejects } from '@std/assert';
 import { dirname, join } from '@std/path';
 import { emitterEntries, generatorEntries, readWorkspaces } from './workspace-tasks.ts';
+import { mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 
 async function fixture(files: Record<string, string>): Promise<string> {
   // Canonicalize the root so the tests exercise the duplicate logic itself,
   // not a platform accident (macOS /var is a symlink to /private/var; Linux
   // /tmp is canonical — the symlink test passed for the wrong reason there).
-  const root = await Deno.realPath(await Deno.makeTempDir({ prefix: 'workspace-tasks-fixture-' }));
+  const root = await realpath(await mkdtemp(join(tmpdir(), 'workspace-tasks-fixture-')));
   for (const [relative, content] of Object.entries(files)) {
     const path = join(root, relative);
-    await Deno.mkdir(dirname(path), { recursive: true });
-    await Deno.writeTextFile(path, content);
+    await mkdir(dirname(path), { recursive: true });
+    await writeFile(path, content);
   }
   return root;
 }
@@ -31,7 +33,7 @@ async function withFixture(
   try {
     await fn(root);
   } finally {
-    await Deno.remove(root, { recursive: true });
+    await rm(root, { recursive: true });
   }
 }
 
@@ -220,7 +222,7 @@ Deno.test('generator and emitter discovery derive from the task graph', async ()
 
 Deno.test('generate-all and generator-gates share the canonical discovery', async () => {
   for (const name of ['generate-all.ts', 'check-generator-gates.ts']) {
-    const source = await Deno.readTextFile(new URL(name, import.meta.url));
+    const source = await readFile(new URL(name, import.meta.url), 'utf8');
     if (!source.includes("from './workspace-tasks.ts'")) {
       throw new Error(`${name} must consume ./workspace-tasks.ts, not a private workspace list`);
     }
@@ -234,7 +236,7 @@ Deno.test('readWorkspaces: symlinked members resolving to one directory are dupl
       'alpha/deno.json': workspaceConfig({}),
     },
     async (root) => {
-      await Deno.symlink(join(root, 'alpha'), join(root, 'alias'), { type: 'dir' });
+      await symlink(join(root, 'alpha'), join(root, 'alias'), 'dir');
       await assertRejects(() => readWorkspaces(root), Error, 'duplicate workspace identity');
     },
   );

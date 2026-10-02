@@ -8,10 +8,12 @@
  * source.
  */
 import { walkSync } from '@std/fs/walk';
+import { readFile } from 'node:fs/promises';
+import process from 'node:process';
 import { extractStaticModuleSpecifiers } from '../lib/typescript-ast.ts';
 
 async function readJson<T = unknown>(path: string | URL): Promise<T> {
-  return JSON.parse(await Deno.readTextFile(path)) as T;
+  return JSON.parse(await readFile(path, 'utf8')) as T;
 }
 
 type Failure = { file: string; message: string };
@@ -32,10 +34,7 @@ async function main(): Promise<void> {
     for (const entry of walkSync(root, { includeDirs: false })) {
       if (!entry.name.endsWith('.ts') && !entry.name.endsWith('.tsx')) continue;
       if (entry.path.includes('/internal/signal/')) continue;
-      for (const dep of findSignalBoundaryImports(
-        await Deno.readTextFile(entry.path),
-        entry.path,
-      )) {
+      for (const dep of findSignalBoundaryImports(await readFile(entry.path, 'utf8'), entry.path)) {
         failures.push({
           file: entry.path,
           message: `${dep} must not be imported directly outside Element's internal signal engine`,
@@ -59,7 +58,7 @@ async function main(): Promise<void> {
   if (failures.length > 0) {
     console.error('Signal boundary check failed:');
     for (const failure of failures) console.error(`- ${failure.file}: ${failure.message}`);
-    Deno.exit(1);
+    process.exit(1);
   }
   console.log('Signal boundary check passed.');
 }

@@ -3,11 +3,11 @@
  *
  * check-task-permissions.test.ts only scans deno.json task maps. This test
  * scans every tracked first-party text file (tasks, TS string args,
- * Deno.Command argv, shell commands, fixtures, templates, workflows,
+ * subprocess argv, shell commands, fixtures, templates, workflows,
  * READMEs, docs, site content, generated data) for the broad Deno run flags
  * and fails on any occurrence. Bypass shapes that only the task-map scanner
  * would miss are covered too:
- *   - quoted argv elements ('-A' / "-A" in Deno.Command arrays)
+ *   - quoted argv elements ('-A' / "-A" in subprocess argv arrays)
  *   - split/concatenated construction ('-' + 'A', ['-', 'A']) in code files,
  *     detected on a quotes-and-separators-stripped normalization
  *   - shell indirection (exec deno run … in Playwright webServer commands)
@@ -35,6 +35,8 @@
 
 import { assertEquals } from '@std/assert';
 import { dirname, join } from '@std/path';
+import { readFileSync } from 'node:fs';
+import { commandOutputSync } from './node-command.ts';
 
 const repoRoot = join(dirname(new URL(import.meta.url).pathname), '..', '..');
 
@@ -74,12 +76,12 @@ const EXCLUDED_PATHS = new Set([
 const EXCLUDED_SUFFIXES = ['deno.lock', 'package-lock.json', 'npm-shrinkwrap.json'];
 
 function trackedFiles(): string[] {
-  const output = new Deno.Command('git', {
+  const output = commandOutputSync('git', {
     args: ['ls-files', '-z'],
     cwd: repoRoot,
     stdout: 'piped',
     stderr: 'piped',
-  }).outputSync();
+  });
   if (!output.success) {
     throw new Error('check-no-allow-all: git ls-files failed (tests must run inside the repo)');
   }
@@ -153,7 +155,8 @@ export function isConsumerScaffoldExempt(path: string, line: string): boolean {
  * --allow-read), which is a false green on a security tripwire.
  */
 export function shouldSkipUnreadableFile(error: unknown): boolean {
-  return error instanceof Deno.errors.NotFound;
+  // node:fs signals "path does not exist" with ENOENT (pre-port: NotFound).
+  return (error as { code?: string }).code === 'ENOENT';
 }
 
 export interface LineVerdict {
@@ -208,7 +211,7 @@ Deno.test('permissions: no broad Deno flags in any tracked first-party text', ()
     if (!isCode && !isProse) continue;
     let text: string;
     try {
-      text = Deno.readTextFileSync(join(repoRoot, path));
+      text = readFileSync(join(repoRoot, path), 'utf8');
     } catch (error) {
       if (shouldSkipUnreadableFile(error)) continue;
       // Unreadable is NOT clean: failing closed keeps a permission/IO problem

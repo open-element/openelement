@@ -11,7 +11,7 @@
  * no test logic — it only sequences formal tasks.
  *
  * Usage:
- *   deno run --allow-run tools/repo/gate.ts <step> [<step> ...]
+ *   deno run --allow-run --allow-env tools/repo/gate.ts <step> [<step> ...]
  *
  * A step is either a root task (`typecheck`) or a workspace task
  * (`<dir>#<task>`, e.g. `www#build`): the latter runs as
@@ -33,6 +33,9 @@ export interface GateStep {
   dir: string | null;
   task: string;
 }
+
+import { commandStatus } from './node-command.ts';
+import process from 'node:process';
 
 const STEP_CHARS = /^[A-Za-z0-9:_-]+$/;
 const DIR_CHARS = /^[A-Za-z0-9_./-]+$/;
@@ -85,7 +88,7 @@ async function defaultSpawn(step: string): Promise<number> {
   }
   const args =
     parsed.dir === null ? ['task', parsed.task] : ['task', '--cwd', parsed.dir, parsed.task];
-  const child = new Deno.Command(Deno.execPath(), {
+  const status = await commandStatus(process.execPath, {
     args,
     cwd: repoRoot,
     // Gates never interact: stdin stays closed so a permission request fails
@@ -93,15 +96,15 @@ async function defaultSpawn(step: string): Promise<number> {
     stdin: 'null',
     stdout: 'inherit',
     stderr: 'inherit',
-  }).spawn();
-  return (await child.status).code;
+  });
+  return status.code;
 }
 
 if (import.meta.main) {
-  if (Deno.args.length === 0) {
+  if (process.argv.slice(2).length === 0) {
     console.error('gate: at least one task name is required');
-    Deno.exit(2);
+    process.exit(2);
   }
-  const { ok } = await runGate(Deno.args);
-  if (!ok) Deno.exit(1);
+  const { ok } = await runGate(process.argv.slice(2));
+  if (!ok) process.exit(1);
 }

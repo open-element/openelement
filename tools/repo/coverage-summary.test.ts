@@ -1,4 +1,5 @@
 import { assert, assertEquals } from '@std/assert';
+import { join } from '@std/path';
 import {
   addUncoveredFiles,
   countCoverableElements,
@@ -10,6 +11,8 @@ import {
   lcovFilePaths,
   parseLcov,
 } from './coverage-summary.ts';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 
 const SAMPLE = [
   'SF:/packages/element/src/foo.ts',
@@ -104,7 +107,7 @@ Deno.test('addUncoveredFiles folds never-loaded files in at 0%', () => {
 });
 
 Deno.test('enumerateCoverageFiles finds in-scope sources and skips excluded trees', async () => {
-  const root = await Deno.makeTempDir();
+  const root = await mkdtemp(join(tmpdir(), 'opx-test-'));
   try {
     const files = [
       'packages/element/src/foo.ts',
@@ -118,8 +121,8 @@ Deno.test('enumerateCoverageFiles finds in-scope sources and skips excluded tree
     ];
     for (const file of files) {
       const path = `${root}/${file}`;
-      await Deno.mkdir(path.substring(0, path.lastIndexOf('/')), { recursive: true });
-      await Deno.writeTextFile(path, 'export {};\n');
+      await mkdir(path.substring(0, path.lastIndexOf('/')), { recursive: true });
+      await writeFile(path, 'export {};\n');
     }
     const found = await enumerateCoverageFiles(root, isPackageSource);
     assertEquals(
@@ -127,18 +130,18 @@ Deno.test('enumerateCoverageFiles finds in-scope sources and skips excluded tree
       ['packages/element/src/foo.ts', 'packages/router/src/bar.ts'],
     );
   } finally {
-    await Deno.remove(root, { recursive: true });
+    await rm(root, { recursive: true });
   }
 });
 
 Deno.test('full denominator: fake LCOV plus fake tree yields 0%-weighted summary', async () => {
-  const root = await Deno.makeTempDir();
+  const root = await mkdtemp(join(tmpdir(), 'opx-test-'));
   try {
     const coveredPath = `${root}/packages/element/src/covered.ts`;
     const missedPath = `${root}/packages/element/src/missed.ts`;
-    await Deno.mkdir(`${root}/packages/element/src`, { recursive: true });
-    await Deno.writeTextFile(coveredPath, 'export const a = 1;\n');
-    await Deno.writeTextFile(
+    await mkdir(`${root}/packages/element/src`, { recursive: true });
+    await writeFile(coveredPath, 'export const a = 1;\n');
+    await writeFile(
       missedPath,
       'export function missed(x: number): number {\n  if (x) return 1;\n  return 0;\n}\n',
     );
@@ -149,7 +152,7 @@ Deno.test('full denominator: fake LCOV plus fake tree yields 0%-weighted summary
     const files = await enumerateCoverageFiles(root, isPackageSource);
     for (const path of files) {
       if (!profiled.has(path)) {
-        uncovered.push(countCoverableElements(await Deno.readTextFile(path), path));
+        uncovered.push(countCoverableElements(await readFile(path, 'utf8'), path));
       }
     }
     const summary = addUncoveredFiles(parseLcov(lcov, isPackageSource), uncovered);
@@ -158,6 +161,6 @@ Deno.test('full denominator: fake LCOV plus fake tree yields 0%-weighted summary
     assertEquals(summary.functions, { covered: 0, total: 1, percentage: 0 });
     assertEquals(summary.branches, { covered: 0, total: 2, percentage: 0 });
   } finally {
-    await Deno.remove(root, { recursive: true });
+    await rm(root, { recursive: true });
   }
 });

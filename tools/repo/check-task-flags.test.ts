@@ -11,6 +11,9 @@
 import { assert, assertEquals } from '@std/assert';
 import { dirname, join } from '@std/path';
 import { REQUIRED_PACKED_CONSUMERS } from './candidate-evidence.ts';
+import { readFile } from 'node:fs/promises';
+import process from 'node:process';
+import { commandOutput } from './node-command.ts';
 
 const repoRoot = join(dirname(new URL(import.meta.url).pathname), '..', '..');
 
@@ -19,7 +22,7 @@ interface TaskFileShape {
 }
 
 async function tasks(path: string): Promise<Record<string, string>> {
-  return (JSON.parse(await Deno.readTextFile(join(repoRoot, path))) as TaskFileShape).tasks ?? {};
+  return (JSON.parse(await readFile(join(repoRoot, path), 'utf8')) as TaskFileShape).tasks ?? {};
 }
 
 const TASK_FILES = [
@@ -60,12 +63,12 @@ Deno.test('task wiring: release:registry-check uses one scoped run flag and runs
     command.includes('--allow-run=git,npm'),
     'release:registry-check must combine git and npm into one --allow-run flag',
   );
-  const result = await new Deno.Command(Deno.execPath(), {
+  const result = await commandOutput(process.execPath, {
     args: ['task', '--cwd', 'tools/repo', 'release:registry-check'],
     cwd: repoRoot,
     stdout: 'piped',
     stderr: 'piped',
-  }).output();
+  });
   const output = new TextDecoder().decode(result.stdout) + new TextDecoder().decode(result.stderr);
   assertEquals(result.success, true, `release:registry-check failed:\n${output}`);
   assert(output.includes('Release state check passed'), output);
@@ -159,9 +162,7 @@ Deno.test('task wiring: gate:packed covers every required packed consumer', asyn
 });
 
 Deno.test('task wiring: the release workflow qualifies through the official task', async () => {
-  const workflow = await Deno.readTextFile(
-    join(repoRoot, '.github/workflows/autoflow-release.yml'),
-  );
+  const workflow = await readFile(join(repoRoot, '.github/workflows/autoflow-release.yml'), 'utf8');
   assert(
     /run:\s*deno task release:check\b/.test(workflow),
     'the release workflow must call `deno task release:check`',

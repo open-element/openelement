@@ -15,6 +15,7 @@
  */
 import { join, relative, resolve } from '@std/path';
 import { walk } from '@std/fs/walk';
+import { readFile, realpath, stat } from 'node:fs/promises';
 
 export interface WorkspaceTasks {
   /** Canonical repository-relative workspace path (e.g. 'www'). */
@@ -76,7 +77,7 @@ export async function readWorkspaces(repoRoot: string): Promise<WorkspaceTasks[]
     // failure this test pins).
     let physicalIdentity: string | undefined;
     try {
-      physicalIdentity = relative(rootDir, await Deno.realPath(dir)) || '.';
+      physicalIdentity = relative(rootDir, await realpath(dir)) || '.';
     } catch {
       // Missing directories are diagnosed below with a clear message.
     }
@@ -94,7 +95,7 @@ export async function readWorkspaces(repoRoot: string): Promise<WorkspaceTasks[]
       seen.set(key, member);
     }
     try {
-      if (!(await Deno.stat(dir)).isDirectory) {
+      if (!(await stat(dir)).isDirectory()) {
         throw new Error('not a directory');
       }
     } catch (cause) {
@@ -135,7 +136,7 @@ async function readConfigObject(
   const shown = relative(repoRoot, path) || '.';
   let text: string;
   try {
-    text = await Deno.readTextFile(path);
+    text = await readFile(path, 'utf8');
   } catch (cause) {
     throw new Error(`${label}: ${shown} is missing or unreadable`, { cause });
   }
@@ -204,7 +205,7 @@ export async function discoverScriptFiles(
     const locations = [ws.dir, join(ws.dir, 'tools')];
     for (const [index, dir] of locations.entries()) {
       try {
-        await Deno.stat(dir);
+        await stat(dir);
       } catch {
         continue;
       }

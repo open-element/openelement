@@ -6,6 +6,8 @@
  */
 
 import { walkSync } from '@std/fs/walk';
+import { readFileSync } from 'node:fs';
+import process from 'node:process';
 import { extractStaticModuleSpecifiers } from '../lib/typescript-ast.ts';
 
 const SOURCE_ROOTS = ['packages/element/src', 'packages/router/src', 'packages/create/src'];
@@ -29,7 +31,7 @@ export function scanValidationBoundary(roots: string[] = SOURCE_ROOTS): string[]
   for (const root of roots) {
     for (const entry of walkSync(root, { includeDirs: false })) {
       if (!entry.name.endsWith('.ts') && !entry.name.endsWith('.tsx')) continue;
-      failures.push(...findValidationLibraryImports(Deno.readTextFileSync(entry.path), entry.path));
+      failures.push(...findValidationLibraryImports(readFileSync(entry.path, 'utf8'), entry.path));
     }
   }
   return failures;
@@ -43,7 +45,7 @@ function main(): void {
     console.error(
       'Published packages are validation-agnostic; see docs/architecture/packages-and-distribution.md.',
     );
-    Deno.exit(1);
+    process.exit(1);
   }
   console.log('Validation-library boundary check passed.');
 }

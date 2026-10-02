@@ -18,6 +18,8 @@
  * unreferenced script is an unowned mechanism.
  */
 import { fromFileUrl, join } from '@std/path';
+import { readFile, stat } from 'node:fs/promises';
+import process from 'node:process';
 import {
   discoverScriptFiles,
   emitterEntries,
@@ -30,7 +32,7 @@ const repoRoot = fromFileUrl(new URL('../../', import.meta.url));
 const workspaces = await readWorkspaces(repoRoot);
 const repoTasks =
   (
-    JSON.parse(await Deno.readTextFile(join(repoRoot, 'tools/repo/deno.json'))) as {
+    JSON.parse(await readFile(join(repoRoot, 'tools/repo/deno.json'), 'utf8')) as {
       tasks?: Record<string, string>;
     }
   ).tasks ?? {};
@@ -53,7 +55,7 @@ for (const layer of GATE_LAYERS) {
       `generator-gates: ${layer} is missing or empty in tools/repo/deno.json — refusing to ` +
         `report on a gate list it could not read.`,
     );
-    Deno.exit(1);
+    process.exit(1);
   }
 }
 
@@ -107,7 +109,7 @@ async function resolveScript(workspace: string, script: string): Promise<string>
   const wsDir = workspaces.find((ws) => ws.workspace === workspace)!.dir;
   for (const candidate of [join(wsDir, script), join(repoRoot, script)]) {
     try {
-      await Deno.stat(candidate);
+      await stat(candidate);
       return candidate;
     } catch {
       // try the next base
@@ -138,12 +140,12 @@ if (generatorCount === 0 || emitterCount === 0) {
     `generator-gates: expected both generators and emitters, found ${generatorCount} and ` +
       `${emitterCount} — refusing to vacuously pass.`,
   );
-  Deno.exit(1);
+  process.exit(1);
 }
 if (failures.length > 0) {
   console.error(`generator-gates: ${failures.length} wiring problem(s):`);
   for (const failure of failures) console.error(`  ${failure}`);
-  Deno.exit(1);
+  process.exit(1);
 }
 console.log(
   `generator-gates: ${generatorCount} committed generator(s) checked, ${emitterCount} artifact emitter(s) clean.`,

@@ -8,6 +8,8 @@
  * the declared floor) fails closed.
  */
 import { walk } from '@std/fs/walk';
+import { readFile } from 'node:fs/promises';
+import process from 'node:process';
 
 export interface DenoFloorResult {
   floor: string;
@@ -16,7 +18,7 @@ export interface DenoFloorResult {
 
 /** Read the pinned exact version and derive the major.minor floor. */
 export async function readFloor(repoRoot: string): Promise<string> {
-  const pin = (await Deno.readTextFile(`${repoRoot}/.dvmrc`)).trim();
+  const pin = (await readFile(`${repoRoot}/.dvmrc`, 'utf8')).trim();
   const match = /^(\d+)\.(\d+)\.\d+$/u.exec(pin);
   if (!match) {
     throw new Error(`.dvmrc must pin an exact x.y.z version, got ${JSON.stringify(pin)}`);
@@ -67,7 +69,7 @@ export function auditDenoFloor(input: {
 }
 
 async function readRequired(path: string): Promise<string> {
-  return await Deno.readTextFile(path);
+  return await readFile(path, 'utf8');
 }
 
 if (import.meta.main) {
@@ -111,7 +113,7 @@ if (import.meta.main) {
     })) {
       packageReadmes.push({
         path: entry.path.replace(`${repoRoot}/`, ''),
-        text: await Deno.readTextFile(entry.path),
+        text: await readFile(entry.path, 'utf8'),
       });
     }
   } catch {
@@ -132,7 +134,7 @@ if (import.meta.main) {
   if (failures.length > 0) {
     console.error('Deno floor check failed:');
     for (const failure of failures) console.error(`- ${failure}`);
-    Deno.exit(1);
+    process.exit(1);
   }
   console.log(`Deno floor check passed: ${floor}+ everywhere.`);
 }

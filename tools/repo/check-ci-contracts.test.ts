@@ -7,14 +7,16 @@
 
 import { assert, assertEquals } from '@std/assert';
 import { dirname, join } from '@std/path';
+import { readFile } from 'node:fs/promises';
 
 const repoRoot = join(dirname(new URL(import.meta.url).pathname), '..', '..');
-const workflow = await Deno.readTextFile(join(repoRoot, '.github/workflows/autoflow-ci.yml'));
-const releasing = await Deno.readTextFile(join(repoRoot, 'docs/maintainers/releasing.md'));
-const dependencyAudit = await Deno.readTextFile(
+const workflow = await readFile(join(repoRoot, '.github/workflows/autoflow-ci.yml'), 'utf8');
+const releasing = await readFile(join(repoRoot, 'docs/maintainers/releasing.md'), 'utf8');
+const dependencyAudit = await readFile(
   join(repoRoot, '.github/workflows/dependency-audit.yml'),
+  'utf8',
 );
-const siteConfig = await Deno.readTextFile(join(repoRoot, 'www/openelement.config.ts'));
+const siteConfig = await readFile(join(repoRoot, 'www/openelement.config.ts'), 'utf8');
 
 /** Extract one top-level job block (two-space `name:` jobs) by job key. */
 function jobBlock(text: string, job: string): string {
@@ -179,8 +181,9 @@ Deno.test('ci contract: candidate evidence bundle ships JSON and every log/manif
 });
 
 Deno.test('ci contract: release workflow permissions cover its GitHub API use', async () => {
-  const releasing = await Deno.readTextFile(
+  const releasing = await readFile(
     join(repoRoot, '.github/workflows/autoflow-release.yml'),
+    'utf8',
   );
   // With an explicit permissions map, unlisted scopes are none. The release
   // job calls `gh run list/view/download`, which needs Actions read.
@@ -206,8 +209,9 @@ Deno.test('ci contract: release workflow permissions cover its GitHub API use', 
 });
 
 Deno.test('ci contract: release consumes the bound, non-expired CI artifact', async () => {
-  const releasingWorkflow = await Deno.readTextFile(
+  const releasingWorkflow = await readFile(
     join(repoRoot, '.github/workflows/autoflow-release.yml'),
+    'utf8',
   );
   assert(
     /gh run list[^]*--commit "\$CANDIDATE_SHA"[^]*--status success/.test(releasingWorkflow),
@@ -232,11 +236,13 @@ Deno.test('ci contract: release consumes the bound, non-expired CI artifact', as
 });
 
 Deno.test('ci contract: post-publish consumers are chained, not manual-only', async () => {
-  const releasing = await Deno.readTextFile(
+  const releasing = await readFile(
     join(repoRoot, '.github/workflows/autoflow-release.yml'),
+    'utf8',
   );
-  const published = await Deno.readTextFile(
+  const published = await readFile(
     join(repoRoot, '.github/workflows/published-consumers.yml'),
+    'utf8',
   );
   assert(
     /workflow_call:/.test(published),
@@ -298,9 +304,9 @@ Deno.test('ci contract: BFCache runs a blocking Chrome-channel lane', async () =
   // stay wired into gate:release (the trimmed PR layer no longer builds or
   // drives the Site) and the PR-layer fresh-clone lane must keep producing
   // the Site E2E sidecar that the required candidate evidence requires.
-  const repoConfig = JSON.parse(
-    await Deno.readTextFile(join(repoRoot, 'tools/repo/deno.json')),
-  ) as { tasks: Record<string, string> };
+  const repoConfig = JSON.parse(await readFile(join(repoRoot, 'tools/repo/deno.json'), 'utf8')) as {
+    tasks: Record<string, string>;
+  };
   assert(
     repoConfig.tasks['gate:release'].includes('www#e2e:browsers'),
     'gate:release must run the three-browser Site E2E matrix',
@@ -314,7 +320,7 @@ Deno.test('ci contract: BFCache runs a blocking Chrome-channel lane', async () =
     freshClone.includes('candidate:evidence:fresh'),
     'the fresh-clone lane records the candidate Site E2E sidecar',
   );
-  const candidateSteps = await Deno.readTextFile(join(repoRoot, 'tools/repo/candidate-steps.ts'));
+  const candidateSteps = await readFile(join(repoRoot, 'tools/repo/candidate-steps.ts'), 'utf8');
   assert(
     /name:\s*'task-site-e2e'/.test(candidateSteps) &&
       /name:\s*'task-site-build'/.test(candidateSteps),
@@ -325,15 +331,17 @@ Deno.test('ci contract: BFCache runs a blocking Chrome-channel lane', async () =
 Deno.test('ci contract: Site E2E evidence is owned by the fresh-clone lane', async () => {
   // #1473 split candidate-evidence.ts into single-duty modules; each contract
   // assertion reads the module the symbol now lives in, semantics unchanged.
-  const siteE2e = await Deno.readTextFile(
+  const siteE2e = await readFile(
     join(repoRoot, 'tools/repo/candidate-evidence-site-e2e.ts'),
+    'utf8',
   );
   assert(
     /SITE_E2E_REPORT_BUNDLE_PATH\s*=\s*`ci\/fresh-clone\//.test(siteE2e),
     'the raw Site E2E report must travel in the fresh-clone evidence tree',
   );
-  const aggregate = await Deno.readTextFile(
+  const aggregate = await readFile(
     join(repoRoot, 'tools/repo/candidate-evidence-aggregate.ts'),
+    'utf8',
   );
   assert(
     /jobs\.find\(\(\{ job \}\) => job\.job === 'fresh-clone'\)[\s\S]{0,200}siteE2e/.test(aggregate),
@@ -341,8 +349,9 @@ Deno.test('ci contract: Site E2E evidence is owned by the fresh-clone lane', asy
   );
   // The producer's per-job extras staging lives on candidate-evidence-record.ts
   // (alpha6 record split), so the no-reintroduction guard reads it there.
-  const evidence = await Deno.readTextFile(
+  const evidence = await readFile(
     join(repoRoot, 'tools/repo/candidate-evidence-record.ts'),
+    'utf8',
   );
   assert(
     !/job === 'source-matrix'[\s\S]{0,40}sourceExtras/.test(evidence),
@@ -350,8 +359,9 @@ Deno.test('ci contract: Site E2E evidence is owned by the fresh-clone lane', asy
   );
   // The trimmed PR gate must not lose the Site proof outright: the release
   // train still runs the official suite, and the sidecar is recomputed.
-  const validator = await Deno.readTextFile(
+  const validator = await readFile(
     join(repoRoot, 'tools/repo/candidate-evidence-validate.ts'),
+    'utf8',
   );
   assert(
     /auditSiteE2e\(rollup\.siteE2e\)/.test(validator),
@@ -360,9 +370,9 @@ Deno.test('ci contract: Site E2E evidence is owned by the fresh-clone lane', asy
 });
 
 Deno.test('ci contract: SaaS is decoupled from the core candidate gate', async () => {
-  const repoConfig = JSON.parse(
-    await Deno.readTextFile(join(repoRoot, 'tools/repo/deno.json')),
-  ) as { tasks: Record<string, string> };
+  const repoConfig = JSON.parse(await readFile(join(repoRoot, 'tools/repo/deno.json'), 'utf8')) as {
+    tasks: Record<string, string>;
+  };
   const gateSource = repoConfig.tasks['gate:source'];
   for (const token of ['saas:verify', 'apps/saas', 'workers:boundary-check']) {
     assert(!gateSource.includes(token), `gate:source must not include SaaS step ${token}`);
@@ -387,7 +397,7 @@ Deno.test('ci contract: SaaS is decoupled from the core candidate gate', async (
     }
   }
 
-  const rootConfig = JSON.parse(await Deno.readTextFile(join(repoRoot, 'deno.json'))) as {
+  const rootConfig = JSON.parse(await readFile(join(repoRoot, 'deno.json'), 'utf8')) as {
     tasks: Record<string, string>;
   };
   assert(rootConfig.tasks['verify:core'], 'root verify:core must exist');
@@ -396,8 +406,9 @@ Deno.test('ci contract: SaaS is decoupled from the core candidate gate', async (
 });
 
 Deno.test('ci contract: partial publish receipts are persisted as recovery records', async () => {
-  const releasing = await Deno.readTextFile(
+  const releasing = await readFile(
     join(repoRoot, '.github/workflows/autoflow-release.yml'),
+    'utf8',
   );
   const block = releasing.slice(releasing.indexOf('Upload release receipt'));
   assert(
@@ -423,7 +434,7 @@ Deno.test('ci contract: partial publish receipts are persisted as recovery recor
     'a publish run with no receipt must fail closed',
   );
 
-  const publish = await Deno.readTextFile(join(repoRoot, 'tools/release/publish-npm.ts'));
+  const publish = await readFile(join(repoRoot, 'tools/release/publish-npm.ts'), 'utf8');
   assert(
     /receipt\.result !== 'published'[\s\S]{0,40}Deno\.exit\(1\)/.test(publish),
     'a partial/failed publish must exit non-zero',
@@ -434,7 +445,7 @@ Deno.test('ci contract: the requeue companion re-runs a failed CI run exactly on
   // #1409: webkit fails deterministically PER RUNNER, so the only retry that
   // can change the outcome is a re-run on fresh runners — and exactly one of
   // them, or a genuine failure would be retried forever.
-  const requeue = await Deno.readTextFile(join(repoRoot, '.github/workflows/requeue-once.yml'));
+  const requeue = await readFile(join(repoRoot, '.github/workflows/requeue-once.yml'), 'utf8');
   assert(
     /workflow_run:/.test(requeue) && /workflows:\s*\['AutoFlow CI'\]/.test(requeue),
     'the requeue must trigger on the AutoFlow CI workflow_run event',
@@ -456,7 +467,7 @@ Deno.test('ci contract: the requeue companion re-runs a failed CI run exactly on
 });
 
 Deno.test('ci contract: the nightly JFB workflow measures, never gates', async () => {
-  const nightly = await Deno.readTextFile(join(repoRoot, '.github/workflows/jfb-nightly.yml'));
+  const nightly = await readFile(join(repoRoot, '.github/workflows/jfb-nightly.yml'), 'utf8');
   assert(
     /continue-on-error:\s*true/.test(nightly),
     'benchmark numbers move with the runner; a nightly measurement must not gate anything',
@@ -570,8 +581,9 @@ Deno.test('ci contract: tree-SHA evidence reuse is fail-closed and single-source
 
   // The claim must download the SOURCE run's artifact and stamp it through the
   // audited tool, never by hand.
-  const claim = await Deno.readTextFile(
+  const claim = await readFile(
     join(repoRoot, '.github/actions/claim-reused-evidence/action.yml'),
+    'utf8',
   );
   assert(
     /run-id:\s*\$\{\{\s*inputs\.source-run-id\s*\}\}/.test(claim),
@@ -593,9 +605,9 @@ Deno.test('ci contract: tree-SHA evidence reuse is fail-closed and single-source
     /candidate:evidence:reuse:resolve/.test(reuse) && /candidate:evidence:reuse:claim/.test(claim),
     'both reuse tasks must be wired to their tools',
   );
-  const repoConfig = JSON.parse(
-    await Deno.readTextFile(join(repoRoot, 'tools/repo/deno.json')),
-  ) as { tasks: Record<string, string> };
+  const repoConfig = JSON.parse(await readFile(join(repoRoot, 'tools/repo/deno.json'), 'utf8')) as {
+    tasks: Record<string, string>;
+  };
   for (const task of ['candidate:evidence:reuse:resolve', 'candidate:evidence:reuse:claim']) {
     assert(repoConfig.tasks[task] !== undefined, `${task} must exist as a task`);
   }

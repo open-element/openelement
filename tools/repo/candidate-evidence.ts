@@ -48,6 +48,7 @@
  */
 
 import { join } from '@std/path';
+import process from 'node:process';
 import { JOB_NAMES, type JobName } from './candidate-steps.ts';
 import { aggregate } from './candidate-evidence-aggregate.ts';
 import { ARTIFACT_RETENTION_DAYS, validate } from './candidate-evidence-validate.ts';
@@ -112,10 +113,10 @@ if (import.meta.main) {
   if (validatePath) {
     await validate(
       validatePath,
-      flagValue('expected-sha') ?? Deno.env.get('CANDIDATE_SHA'),
+      flagValue('expected-sha') ?? process.env['CANDIDATE_SHA'],
       Number(flagValue('max-age-days') ?? ARTIFACT_RETENTION_DAYS),
     );
-  } else if (Deno.args.includes('--aggregate')) {
+  } else if (process.argv.slice(2).includes('--aggregate')) {
     await aggregate(
       flagValue('input-dir') ?? join(repoRoot, '.artifacts/ci'),
       flagValue('output') ?? join(repoRoot, '.artifacts/candidate-evidence.json'),

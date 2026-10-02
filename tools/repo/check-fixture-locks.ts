@@ -17,6 +17,10 @@
  * registered here fails the check until it is reviewed and added.
  */
 
+import { readdir, readFile, rm, stat } from 'node:fs/promises';
+import process from 'node:process';
+import { commandStatus } from './node-command.ts';
+
 export interface FixtureLockEntry {
   /** Fixture directory under tests/fixtures. */
   fixture: string;
@@ -214,37 +218,37 @@ export async function updateLocks(
     const taskSpecifiers =
       entry.fixture === 'router-nitro'
         ? []
-        : taskNpmSpecifiers(await Deno.readTextFile(`${cwd}/deno.json`).catch(() => ''));
+        : taskNpmSpecifiers(await readFile(`${cwd}/deno.json`, 'utf8').catch(() => ''));
     const args =
       entry.fixture === 'router-nitro'
         ? ['task', 'proof:node']
         : ['cache', entry.entrypoint, ...taskSpecifiers];
     console.log(`[fixtures:locks] ${cwd}: ${regenerateCommand(entry, taskSpecifiers)}`);
     if (shared.has(entry.fixture) && entry.fixture !== 'router-nitro') {
-      await Deno.remove(`${cwd}/deno.lock`).catch(() => {});
+      await rm(`${cwd}/deno.lock`).catch(() => {});
     }
-    const status = await new Deno.Command(Deno.execPath(), {
+    const status = await commandStatus(process.execPath, {
       args,
       cwd,
       stdin: 'null',
       stdout: 'inherit',
       stderr: 'inherit',
-    }).spawn().status;
+    });
     if (status.code !== 0) return status.code;
   }
   return 0;
 }
 
 async function main(): Promise<void> {
-  if (Deno.args.includes('--update')) {
-    Deno.exit(await updateLocks());
+  if (process.argv.slice(2).includes('--update')) {
+    process.exit(await updateLocks());
   }
   const root = 'tests/fixtures';
   const discovered: string[] = [];
-  for await (const entry of Deno.readDir(root)) {
-    if (!entry.isDirectory) continue;
+  for (const entry of await readdir(root, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue;
     try {
-      await Deno.stat(`${root}/${entry.name}/deno.lock`);
+      await stat(`${root}/${entry.name}/deno.lock`);
       discovered.push(entry.name);
     } catch {
       // no lockfile for this fixture
@@ -255,8 +259,8 @@ async function main(): Promise<void> {
   const files = new Map<string, FixtureLockFiles>();
   const failures: string[] = [];
   for (const fixture of discovered) {
-    const lock = await Deno.readTextFile(`${root}/${fixture}/deno.lock`);
-    const config = await Deno.readTextFile(`${root}/${fixture}/deno.json`);
+    const lock = await readFile(`${root}/${fixture}/deno.lock`, 'utf8');
+    const config = await readFile(`${root}/${fixture}/deno.json`, 'utf8');
     files.set(fixture, { lock, config });
     failures.push(...lockVersionFailures(fixture, lock));
     failures.push(...absolutePathFailures(fixture, lock));
@@ -271,7 +275,7 @@ async function main(): Promise<void> {
     console.log(`  ${entry.fixture}${shared} — ${entry.purpose}`);
     const config =
       files.get(entry.fixture)?.config ??
-      (await Deno.readTextFile(`tests/fixtures/${entry.fixture}/deno.json`).catch(() => ''));
+      (await readFile(`tests/fixtures/${entry.fixture}/deno.json`, 'utf8').catch(() => ''));
     console.log(
       `    regenerate: ${regenerateCommand(
         entry,
@@ -283,7 +287,7 @@ async function main(): Promise<void> {
   if (failures.length > 0) {
     console.error('Fixture lockfile check failed:');
     for (const failure of failures) console.error(`  ${failure}`);
-    Deno.exit(1);
+    process.exit(1);
   }
   console.log(`Fixture lockfile check passed (${discovered.length} lockfiles).`);
 }

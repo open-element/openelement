@@ -17,7 +17,10 @@
  */
 
 import { compare, parse } from '@std/semver';
+import { readdir, readFile } from 'node:fs/promises';
+import process from 'node:process';
 import { wwwReleaseAnchorFailures } from './www-release-anchor.ts';
+import { commandOutput } from './node-command.ts';
 
 export type RegistryTags = Record<string, string>;
 
@@ -224,54 +227,55 @@ export function validateRegistryEvidence(
 }
 
 async function readState(): Promise<ReleaseStateV3> {
-  return JSON.parse(await Deno.readTextFile('docs/release/release-state.json')) as ReleaseStateV3;
+  return JSON.parse(await readFile('docs/release/release-state.json', 'utf8')) as ReleaseStateV3;
 }
 
 async function workspaceVersions(): Promise<Map<string, string>> {
   const versions = new Map<string, string>();
-  for await (const entry of Deno.readDir('packages')) {
-    if (!entry.isDirectory) continue;
+  for (const entry of await readdir('packages', { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue;
     try {
-      const manifest = JSON.parse(await Deno.readTextFile(`packages/${entry.name}/deno.json`));
+      const manifest = JSON.parse(await readFile(`packages/${entry.name}/deno.json`, 'utf8'));
       if (manifest.name && manifest.version) versions.set(manifest.name, manifest.version);
     } catch (error) {
-      if (!(error instanceof Deno.errors.NotFound)) throw error;
+      // node:fs signals "path does not exist" with ENOENT (Deno: NotFound).
+      if ((error as { code?: string }).code !== 'ENOENT') throw error;
     }
   }
   return versions;
 }
 
 async function main(): Promise<void> {
-  const offline = Deno.args.includes('--offline');
+  const offline = process.argv.slice(2).includes('--offline');
   const state = await readState();
   const versions = await workspaceVersions();
-  const siteVersionSource = await Deno.readTextFile('www/app/data/version.ts');
+  const siteVersionSource = await readFile('www/app/data/version.ts', 'utf8');
   const failures = validateReleaseState(state, versions, siteVersionSource);
   // The www source-line anchor audit rides the same offline gate: version.ts
   // must stay derived from the generated release-line module, and that module
   // must mirror release-state.json (see www-release-anchor.ts).
-  const releaseLineSource = await Deno.readTextFile('www/app/data/_generated-release-line.ts');
+  const releaseLineSource = await readFile('www/app/data/_generated-release-line.ts', 'utf8');
   failures.push(...wwwReleaseAnchorFailures(state, siteVersionSource, releaseLineSource));
 
   if (!offline) {
     const evidence: RegistryEvidence = { versions: {}, distTags: {} };
     for (const entry of state.packages) {
-      const versionsResult = await new Deno.Command('npm', {
+      const versionsResult = await commandOutput('npm', {
         args: ['view', entry.name, 'versions', '--json'],
         stdout: 'piped',
         stderr: 'piped',
-      }).output();
+      });
       if (!versionsResult.success) {
         failures.push(`npm view ${entry.name} versions failed (fail closed)`);
         continue;
       }
       const parsed = JSON.parse(new TextDecoder().decode(versionsResult.stdout));
       evidence.versions[entry.name] = Array.isArray(parsed) ? parsed.map(String) : [String(parsed)];
-      const tagsResult = await new Deno.Command('npm', {
+      const tagsResult = await commandOutput('npm', {
         args: ['view', entry.name, 'dist-tags', '--json'],
         stdout: 'piped',
         stderr: 'piped',
-      }).output();
+      });
       if (!tagsResult.success) {
         failures.push(`npm view ${entry.name} dist-tags failed (fail closed)`);
         continue;
@@ -284,7 +288,7 @@ async function main(): Promise<void> {
   if (failures.length > 0) {
     console.error('Release state check failed:');
     for (const failure of failures) console.error(`- ${failure}`);
-    Deno.exit(1);
+    process.exit(1);
   }
   console.log(
     `Release state check passed: source ${state.sourceVersion}; ` +

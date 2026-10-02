@@ -15,6 +15,8 @@
  */
 
 import { dirname, join } from '@std/path';
+import { readFile } from 'node:fs/promises';
+import process from 'node:process';
 import {
   auditFreshCloneIsolation,
   auditStep,
@@ -882,7 +884,7 @@ export async function validate(
   maxAgeDays: number,
 ): Promise<void> {
   const root = dirname(evidencePath);
-  const evidence = JSON.parse(await Deno.readTextFile(evidencePath)) as Parameters<
+  const evidence = JSON.parse(await readFile(evidencePath, 'utf8')) as Parameters<
     typeof collectBundleFailures
   >[0];
   const sha = await required('git', ['rev-parse', 'HEAD']);
@@ -890,12 +892,12 @@ export async function validate(
   const failures = await collectBundleFailures(evidence, {
     expectedSha: expected ?? sha,
     expectedTree: tree,
-    read: (path) => Deno.readFile(join(root, path)).catch(() => null),
+    read: (path) => readFile(join(root, path)).catch(() => null),
     maxAgeDays,
   });
   if (failures.length > 0) {
     console.error(`evidence validation FAILED:\n${failures.join('\n')}`);
-    Deno.exit(1);
+    process.exit(1);
   }
   const boundSha =
     isRecord(evidence) && typeof evidence.sha === 'string' ? evidence.sha : 'unknown';

@@ -20,6 +20,9 @@
  */
 import { expandGlob } from '@std/fs';
 import { fromFileUrl, isAbsolute, join, relative, resolve, SEPARATOR } from '@std/path';
+import { lstat, realpath, rm } from 'node:fs/promises';
+import type { Stats } from 'node:fs';
+import process from 'node:process';
 
 /** Generated build/test output with no long-term value. Safe by default. */
 export const DEFAULT_TARGETS: readonly string[] = [
@@ -139,7 +142,7 @@ export async function cleanTargets(
   io: CleanIo = { log: console.log },
 ): Promise<number> {
   const resolvedRoot = resolve(root);
-  const realRoot = await Deno.realPath(resolvedRoot);
+  const realRoot = await realpath(resolvedRoot);
   for (const target of targets) {
     assertSafeTarget(target);
     if (!ALLOWLIST.has(target)) {
@@ -149,20 +152,21 @@ export async function cleanTargets(
 
   let removed = 0;
   const remove = async (absolute: string, label: string): Promise<void> => {
-    let stat: Deno.FileInfo;
+    let stat: Stats;
     try {
-      stat = await Deno.lstat(absolute);
+      stat = await lstat(absolute);
     } catch (error) {
-      if (error instanceof Deno.errors.NotFound) return;
+      // node:fs signals "path does not exist" with ENOENT (Deno: NotFound).
+      if ((error as { code?: string }).code === 'ENOENT') return;
       throw error;
     }
     assertWithinRoot(resolvedRoot, label, absolute);
     // A symlink is removed as a link; a real entry must live under the repo
     // even after resolving symlinked ancestors (fail closed on escapes).
-    if (!stat.isSymlink) {
-      assertWithinRoot(realRoot, label, await Deno.realPath(absolute));
+    if (!stat.isSymbolicLink()) {
+      assertWithinRoot(realRoot, label, await realpath(absolute));
     }
-    await Deno.remove(absolute, { recursive: true });
+    await rm(absolute, { recursive: true });
     io.log(`clean: removed ${label}`);
     removed++;
   };
@@ -180,7 +184,7 @@ export async function cleanTargets(
 }
 
 if (import.meta.main) {
-  const { targets, deep } = parseCleanArgs(Deno.args);
+  const { targets, deep } = parseCleanArgs(process.argv.slice(2));
   if (deep) {
     console.log(`clean --deep targets (${targets.length}):`);
     for (const target of targets) console.log(`  ${target}`);

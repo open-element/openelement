@@ -21,6 +21,10 @@
  */
 
 import { join } from '@std/path';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import process from 'node:process';
+import { commandOutput } from './node-command.ts';
 import {
   CANDIDATE_EVIDENCE_SCHEMA_VERSION,
   cleanProofArgv,
@@ -57,8 +61,8 @@ interface FreshCloneCommand {
 export async function recordFreshClone(outDir: string): Promise<void> {
   const expected = expectedSha();
   const { sha, tree } = await assertCleanAtSha(expected);
-  await Deno.mkdir(join(outDir, 'logs'), { recursive: true });
-  const tmpRoot = await Deno.makeTempDir({ prefix: 'fresh-candidate-' });
+  await mkdir(join(outDir, 'logs'), { recursive: true });
+  const tmpRoot = await mkdtemp(join(tmpdir(), 'fresh-candidate-'));
   const cloneDir = join(tmpRoot, 'repo');
   const denoDir = join(tmpRoot, 'deno-dir');
   const npmCache = join(tmpRoot, 'npm-cache');
@@ -87,17 +91,17 @@ export async function recordFreshClone(outDir: string): Promise<void> {
     // Commands are declared in shared roles; only the spawn uses real paths,
     // so the recorded evidence stays free of machine-specific locations.
     const argv = roleArgv.map((element) => materializeEvidencePath(element, roles));
-    const output = await new Deno.Command(argv[0], {
+    const output = await commandOutput(argv[0], {
       args: argv.slice(1),
       cwd,
       stdin: 'null',
       stdout: 'piped',
       stderr: 'piped',
       env,
-    }).output();
+    });
     const text = new TextDecoder().decode(output.stdout) + new TextDecoder().decode(output.stderr);
     const logPath = `logs/fresh-clone-${commands.length}-${name}.log`;
-    await Deno.writeTextFile(join(outDir, logPath), text);
+    await writeFile(join(outDir, logPath), text, 'utf8');
     commands.push({
       name,
       argv: argv.map((element) => normalizeEvidencePath(element, roles)),
@@ -118,7 +122,7 @@ export async function recordFreshClone(outDir: string): Promise<void> {
     const clonedSha = (await required('git', ['-C', cloneDir, 'rev-parse', 'HEAD'])).trim();
     if (clonedSha !== sha) throw new Error(`fresh clone checked out ${clonedSha}, want ${sha}`);
     const isolatedEnv = {
-      ...Deno.env.toObject(),
+      ...process.env,
       DENO_DIR: denoDir,
       NPM_CONFIG_CACHE: npmCache,
       npm_config_cache: npmCache,
@@ -159,7 +163,7 @@ export async function recordFreshClone(outDir: string): Promise<void> {
     // validator fails closed on it.
     siteE2e = await stageCloneSiteE2e(cloneDir, outDir, sha, { required: !siteE2eFailure });
   } finally {
-    await Deno.remove(tmpRoot, { recursive: true }).catch(() => undefined);
+    await rm(tmpRoot, { recursive: true }).catch(() => undefined);
   }
   const result: JobResult = {
     schemaVersion: CANDIDATE_EVIDENCE_SCHEMA_VERSION,
@@ -183,7 +187,7 @@ export async function recordFreshClone(outDir: string): Promise<void> {
     extras: { isolation: FRESH_CLONE_ISOLATION, siteE2e: siteE2e ?? { ran: false } },
     generatedAt: new Date().toISOString(),
   };
-  await Deno.writeTextFile(join(outDir, 'result.json'), JSON.stringify(result, null, 2) + '\n');
+  await writeFile(join(outDir, 'result.json'), JSON.stringify(result, null, 2) + '\n', 'utf8');
   if (siteE2eFailure) throw siteE2eFailure;
-  if (result.result !== 'PASS') Deno.exit(1);
+  if (result.result !== 'PASS') process.exit(1);
 }

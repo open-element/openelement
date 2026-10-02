@@ -1,5 +1,6 @@
 /**
- * Portable `cd` + env replacement for `deno task` strings (1.0 Alpha baseline).
+ * Portable `cd` + env replacement for `deno task` strings (1.0 Alpha baseline,
+ * subprocesses via node:child_process since B1b).
  *
  * Root tasks must not `cd` (Windows cmd has no `cd ... &&` composition that
  * behaves like POSIX sh, and directory-hopping inside task strings hides the
@@ -12,6 +13,9 @@
  *
  * The child exit code passes through; a spawn failure exits 127.
  */
+
+import { commandStatus } from './node-command.ts';
+import process from 'node:process';
 
 export interface RunInOptions {
   root: string;
@@ -47,29 +51,29 @@ export function parseRunInArgs(args: string[]): RunInOptions {
 
 export async function execute(options: RunInOptions): Promise<number> {
   const [command, ...commandArgs] = options.command;
-  let child: Deno.ChildProcess;
   try {
-    child = new Deno.Command(command, {
+    // Deno.Command merges `env` over the parent environment; node's raw env
+    // option would replace it and drop PATH, so commandStatus merges too.
+    const status = await commandStatus(command, {
       args: commandArgs,
       cwd: options.root,
       env: options.env,
       stdin: 'inherit',
       stdout: 'inherit',
       stderr: 'inherit',
-    }).spawn();
+    });
+    return status.code;
   } catch (error) {
     console.error(`run-in: cannot start '${options.command.join(' ')}': ${String(error)}`);
     return 127;
   }
-  const status = await child.status;
-  return status.code;
 }
 
 if (import.meta.main) {
   try {
-    Deno.exit(await execute(parseRunInArgs(Deno.args)));
+    process.exit(await execute(parseRunInArgs(process.argv.slice(2))));
   } catch (error) {
     console.error(String(error instanceof Error ? error.message : error));
-    Deno.exit(2);
+    process.exit(2);
   }
 }

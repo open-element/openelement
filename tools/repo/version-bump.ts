@@ -40,7 +40,10 @@
 import { parse } from '@std/semver';
 import { walk } from '@std/fs/walk';
 import { join, relative } from '@std/path';
+import { readFile, stat, writeFile } from 'node:fs/promises';
+import process from 'node:process';
 import { FIXTURE_LOCKS } from './check-fixture-locks.ts';
+import { commandStatus } from './node-command.ts';
 import { wwwReleaseAnchorDrift } from './www-release-anchor.ts';
 
 /** Packages whose `deno.json` carries the release line version. */
@@ -116,7 +119,7 @@ export async function historicalReleaseNameFindings(
   for (const shippedRoot of SHIPPED_SOURCE_ROOTS) {
     const walkRoot = join(root, shippedRoot);
     try {
-      await Deno.stat(walkRoot);
+      await stat(walkRoot);
     } catch {
       continue; // root absent — nothing to scan
     }
@@ -125,7 +128,7 @@ export async function historicalReleaseNameFindings(
       if (SHIPPED_SCAN_ALLOWLIST.some((pattern) => shippedScanAllowlisted(pattern, path))) {
         continue;
       }
-      const lines = (await Deno.readTextFile(entry.path)).split('\n');
+      const lines = (await readFile(entry.path, 'utf8')).split('\n');
       for (let index = 0; index < lines.length; index++) {
         if (HISTORICAL_RELEASE_NAME.test(lines[index])) {
           findings.push({ path, line: index + 1, text: lines[index].trim() });
@@ -217,7 +220,7 @@ export async function planVersionBump(
   root: string,
   targetVersion: string,
 ): Promise<VersionBumpPlan> {
-  const elementConfig = await Deno.readTextFile(join(root, PACKAGE_CONFIGS[0]));
+  const elementConfig = await readFile(join(root, PACKAGE_CONFIGS[0]), 'utf8');
   const currentVersion = readConfigVersion(elementConfig);
   if (currentVersion === null) {
     throw new Error(`${PACKAGE_CONFIGS[0]} declares no version`);
@@ -225,14 +228,14 @@ export async function planVersionBump(
 
   const edits: VersionEdit[] = [];
   for (const path of PACKAGE_CONFIGS) {
-    const before = await Deno.readTextFile(join(root, path));
+    const before = await readFile(join(root, path), 'utf8');
     const after = rewriteConfigVersion(before, currentVersion, targetVersion);
     if (after !== before) {
       edits.push({ path, point: 'package-config', before, after });
     }
   }
 
-  const anchorBefore = await Deno.readTextFile(join(root, VERSION_SOURCE));
+  const anchorBefore = await readFile(join(root, VERSION_SOURCE), 'utf8');
   const anchorAfter = rewriteCreateVersion(anchorBefore, currentVersion, targetVersion);
   if (anchorAfter !== anchorBefore) {
     edits.push({
@@ -245,7 +248,7 @@ export async function planVersionBump(
 
   const lockEdits: VersionEdit[] = [];
   for (const path of LOCK_FILES) {
-    const before = await Deno.readTextFile(join(root, path)).catch(() => null);
+    const before = await readFile(join(root, path), 'utf8').catch(() => null);
     if (before === null) continue;
     const after = rewriteLockVersion(before, currentVersion, targetVersion);
     if (after !== before) {
@@ -265,18 +268,18 @@ export async function planVersionBump(
 export async function inconsistencyFailures(root: string, expected: string): Promise<string[]> {
   const failures: string[] = [];
   for (const path of PACKAGE_CONFIGS) {
-    const version = readConfigVersion(await Deno.readTextFile(join(root, path)));
+    const version = readConfigVersion(await readFile(join(root, path), 'utf8'));
     if (version !== expected) {
       failures.push(`${path}: version ${String(version)} != ${expected}`);
     }
   }
-  const anchor = await Deno.readTextFile(join(root, VERSION_SOURCE));
+  const anchor = await readFile(join(root, VERSION_SOURCE), 'utf8');
   const match = anchor.match(/CREATE_VERSION = '([^']+)'/u);
   if (match?.[1] !== expected) {
     failures.push(`${VERSION_SOURCE}: CREATE_VERSION ${String(match?.[1])} != ${expected}`);
   }
   for (const path of LOCK_FILES) {
-    const text = await Deno.readTextFile(join(root, path)).catch(() => null);
+    const text = await readFile(join(root, path), 'utf8').catch(() => null);
     if (text === null) {
       failures.push(`${path}: missing`);
       continue;
@@ -310,32 +313,32 @@ export function renderDiff(edit: VersionEdit, limit = 12): string {
 }
 
 async function runFixtureLockUpdate(root: string): Promise<number> {
-  const status = await new Deno.Command(Deno.execPath(), {
+  const status = await commandStatus(process.execPath, {
     args: ['task', '--cwd', 'tools/repo', 'fixtures:locks:update'],
     cwd: root,
     stdin: 'null',
     stdout: 'inherit',
     stderr: 'inherit',
-  }).spawn().status;
+  });
   return status.code;
 }
 
 async function main(): Promise<void> {
-  const args = Deno.args.filter((arg) => !arg.startsWith('--'));
-  const write = Deno.args.includes('--write');
-  const root = Deno.cwd();
+  const args = process.argv.slice(2).filter((arg) => !arg.startsWith('--'));
+  const write = process.argv.slice(2).includes('--write');
+  const root = process.cwd();
   const target = args[0];
   if (!target) {
     console.error(
       'usage: deno task version-bump <version> [--write]\n' +
         '       (dry run by default; --write applies the six-point update)',
     );
-    Deno.exit(2);
+    process.exit(2);
   }
   const invalid = validateVersion(target);
   if (invalid) {
     console.error(`version-bump: ${invalid}`);
-    Deno.exit(2);
+    process.exit(2);
   }
 
   const findings = await historicalReleaseNameFindings(root);
@@ -347,7 +350,7 @@ async function main(): Promise<void> {
     for (const finding of findings) {
       console.error(`  ${finding.path}:${finding.line}: ${finding.text}`);
     }
-    Deno.exit(1);
+    process.exit(1);
   }
 
   const plan = await planVersionBump(root, target);
@@ -373,7 +376,7 @@ async function main(): Promise<void> {
   }
 
   for (const edit of [...plan.edits, ...plan.lockEdits]) {
-    await Deno.writeTextFile(join(root, edit.path), edit.after);
+    await writeFile(join(root, edit.path), edit.after, 'utf8');
     console.log(`[version-bump] wrote ${edit.path}`);
   }
 
@@ -381,7 +384,7 @@ async function main(): Promise<void> {
   const code = await runFixtureLockUpdate(root);
   if (code !== 0) {
     console.error(`version-bump: fixtures:locks:update exited ${code}`);
-    Deno.exit(1);
+    process.exit(1);
   }
 
   const failures = await inconsistencyFailures(root, target);
@@ -389,7 +392,7 @@ async function main(): Promise<void> {
     console.error(
       `version-bump: six points are NOT consistent after the bump:\n  ${failures.join('\n  ')}`,
     );
-    Deno.exit(1);
+    process.exit(1);
   }
   console.log(
     `version-bump: six points consistent at ${target}. ` +
@@ -403,6 +406,6 @@ if (import.meta.main) {
     await main();
   } catch (error) {
     console.error(`version-bump: ${error instanceof Error ? error.message : String(error)}`);
-    Deno.exit(1);
+    process.exit(1);
   }
 }

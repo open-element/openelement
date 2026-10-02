@@ -19,20 +19,21 @@
 
 import { assert, assertEquals } from '@std/assert';
 import { dirname, join } from '@std/path';
+import { readFile } from 'node:fs/promises';
 
 const repoRoot = join(dirname(new URL(import.meta.url).pathname), '..', '..');
-const rootConfig = JSON.parse(await Deno.readTextFile(join(repoRoot, 'deno.json'))) as {
+const rootConfig = JSON.parse(await readFile(join(repoRoot, 'deno.json'), 'utf8')) as {
   tasks: Record<string, string>;
   workspace?: string[];
 };
-const repoConfig = JSON.parse(await Deno.readTextFile(join(repoRoot, 'tools/repo/deno.json'))) as {
+const repoConfig = JSON.parse(await readFile(join(repoRoot, 'tools/repo/deno.json'), 'utf8')) as {
   tasks: Record<string, string>;
 };
 const releaseConfig = JSON.parse(
-  await Deno.readTextFile(join(repoRoot, 'tools/release/deno.json')),
+  await readFile(join(repoRoot, 'tools/release/deno.json'), 'utf8'),
 ) as { tasks: Record<string, string> };
 
-const GATE_RUNNER = 'deno run --allow-run tools/repo/gate.ts ';
+const GATE_RUNNER = 'deno run --allow-run --allow-env tools/repo/gate.ts ';
 
 /** The ordered step list a root task hands to the gate coordinator. */
 function gateSteps(task: string): string[] {
@@ -49,7 +50,7 @@ function gateSteps(task: string): string[] {
 function repoSplitSteps(task: string): string[] {
   const command = repoConfig.tasks[task];
   assert(typeof command === 'string', `tools/repo task missing: ${task}`);
-  const prefix = 'deno run --allow-run ./gate.ts ';
+  const prefix = 'deno run --allow-run --allow-env ./gate.ts ';
   assert(
     command.startsWith(prefix),
     `tools/repo task ${task} must delegate to the gate coordinator ('${prefix.trim()} ...'), got: ${command}`,
@@ -246,7 +247,7 @@ Deno.test('task contract: fmt/lint run the ox engines and deno fmt/lint stays re
     manifests.push(join(repoRoot, member, 'deno.json'));
   }
   for (const manifest of manifests) {
-    const config = JSON.parse(await Deno.readTextFile(manifest)) as {
+    const config = JSON.parse(await readFile(manifest, 'utf8')) as {
       tasks?: Record<string, string>;
     };
     for (const [name, command] of Object.entries(config.tasks ?? {})) {

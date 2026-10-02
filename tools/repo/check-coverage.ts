@@ -1,6 +1,8 @@
 #!/usr/bin/env -S deno run --allow-read --allow-run
 /** Run repository tests and enforce production-package LCOV thresholds. */
 
+import { readFile, rm } from 'node:fs/promises';
+import process from 'node:process';
 import {
   addUncoveredFiles,
   countCoverableElements,
@@ -13,10 +15,12 @@ import {
   lcovFilePaths,
   parseLcov,
 } from './coverage-summary.ts';
+import { commandOutput, commandStatus } from './node-command.ts';
 
 function getNumberArg(flag: string, fallback: number): number {
-  const index = Deno.args.indexOf(flag);
-  const value = Number(index >= 0 ? Deno.args[index + 1] : fallback);
+  const args = process.argv.slice(2);
+  const index = args.indexOf(flag);
+  const value = Number(index >= 0 ? args[index + 1] : fallback);
   if (!Number.isFinite(value)) throw new Error(`${flag} must be a number`);
   return value;
 }
@@ -94,8 +98,8 @@ async function runCoverage(crashRetries: number): Promise<string> {
       async () => {
         // A crashed attempt can leave partial coverage profiles behind that
         // `deno coverage` would choke on; each attempt starts from a clean dir.
-        await Deno.remove(coverageDir, { recursive: true }).catch(() => undefined);
-        return await new Deno.Command(Deno.execPath(), {
+        await rm(coverageDir, { recursive: true }).catch(() => undefined);
+        return await commandStatus(process.execPath, {
           args: [
             'test',
             '--no-lock',
@@ -119,7 +123,7 @@ async function runCoverage(crashRetries: number): Promise<string> {
           ],
           stdout: 'inherit',
           stderr: 'inherit',
-        }).spawn().status;
+        });
       },
       {
         maxAttempts: crashRetries + 1,
@@ -142,15 +146,15 @@ async function runCoverage(crashRetries: number): Promise<string> {
       );
     }
 
-    const report = await new Deno.Command(Deno.execPath(), {
+    const report = await commandOutput(process.execPath, {
       args: ['coverage', coverageDir, '--lcov'],
       stdout: 'piped',
       stderr: 'inherit',
-    }).output();
+    });
     if (!report.success) throw new Error(`coverage report failed with code ${report.code}`);
     return new TextDecoder().decode(report.stdout);
   } finally {
-    await Deno.remove(coverageDir, { recursive: true }).catch(() => undefined);
+    await rm(coverageDir, { recursive: true }).catch(() => undefined);
   }
 }
 
@@ -237,13 +241,13 @@ async function main(): Promise<void> {
     // loaded it (Deno only profiles imported modules). Unloaded files are
     // folded in as fully uncovered via an AST estimate of their coverable
     // elements.
-    const treeFiles = await enumerateCoverageFiles(Deno.cwd(), scope.include);
+    const treeFiles = await enumerateCoverageFiles(process.cwd(), scope.include);
     const uncovered: CoverableCounts[] = [];
     const missing: string[] = [];
     for (const path of treeFiles) {
       if (profiledFiles.has(path)) continue;
       missing.push(path);
-      uncovered.push(countCoverableElements(await Deno.readTextFile(path), path));
+      uncovered.push(countCoverableElements(await readFile(path, 'utf8'), path));
     }
     console.log(
       `Denominator: ${treeFiles.length} source files ` +

@@ -9,6 +9,8 @@
 import { formatJson } from '@openelement/element/build-utils';
 import ts from 'typescript';
 import { resolve } from '@std/path';
+import { readFile, writeFile } from 'node:fs/promises';
+import process from 'node:process';
 import { type PackageInfo, readPackages, releasePublishOrder } from '../lib/package-graph.ts';
 
 const SNAPSHOT = 'docs/release/public-interface-snapshot.json';
@@ -320,7 +322,7 @@ export async function publicInterfaceShape(
 }
 
 async function main(): Promise<void> {
-  const write = Deno.args.includes('--write');
+  const write = process.argv.slice(2).includes('--write');
   const packages = releasePublishOrder(await readPackages());
   const paths = workspacePaths(packages);
   const degraded: string[] = [];
@@ -363,8 +365,8 @@ async function main(): Promise<void> {
             .join('\n  ')}`,
       );
     }
-    await Deno.writeTextFile(SNAPSHOT, text);
-  } else if ((await Deno.readTextFile(SNAPSHOT)) !== text) {
+    await writeFile(SNAPSHOT, text, 'utf8');
+  } else if ((await readFile(SNAPSHOT, 'utf8')) !== text) {
     throw new Error(`${SNAPSHOT} drifted; run deno task interface:snapshot:write`);
   }
   console.log(

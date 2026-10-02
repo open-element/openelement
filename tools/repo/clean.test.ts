@@ -7,14 +7,16 @@ import {
   DEFAULT_TARGETS,
   parseCleanArgs,
 } from './clean.ts';
+import { mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 
 const quiet = { log: () => {} };
 
 async function writeTree(root: string, paths: readonly string[]): Promise<void> {
   for (const relativePath of paths) {
     const absolute = join(root, relativePath);
-    await Deno.mkdir(dirname(absolute), { recursive: true });
-    await Deno.writeTextFile(absolute, `${relativePath}\n`);
+    await mkdir(dirname(absolute), { recursive: true });
+    await writeFile(absolute, `${relativePath}\n`);
   }
 }
 
@@ -71,7 +73,7 @@ Deno.test('clean defaults stay separate from opt-in deep targets', () => {
 });
 
 Deno.test('default clean removes generated output and preserves user content', async () => {
-  const root = await Deno.makeTempDir({ prefix: 'clean-test-' });
+  const root = await mkdtemp(join(tmpdir(), 'clean-test-'));
   const generated = [
     'packages/element/dist/index.js',
     'packages/router/dist/index.js',
@@ -120,7 +122,7 @@ Deno.test('default clean removes generated output and preserves user content', a
     assert(removed > 0);
     for (const relativePath of generated) {
       assert(
-        await Deno.stat(join(root, relativePath)).then(
+        await stat(join(root, relativePath)).then(
           () => false,
           () => true,
         ),
@@ -129,40 +131,40 @@ Deno.test('default clean removes generated output and preserves user content', a
     }
     for (const relativePath of user) {
       assertEquals(
-        await Deno.readTextFile(join(root, relativePath)),
+        await readFile(join(root, relativePath), 'utf8'),
         `${relativePath}\n`,
         `expected preserved: ${relativePath}`,
       );
     }
     assertEquals(await cleanTargets(root, DEFAULT_TARGETS, quiet), 0);
   } finally {
-    await Deno.remove(root, { recursive: true });
+    await rm(root, { recursive: true });
   }
 });
 
 Deno.test('clean refuses non-allowlisted targets and symlinks are unlinked, not followed', async () => {
-  const root = await Deno.makeTempDir({ prefix: 'clean-test-' });
-  const outside = await Deno.makeTempDir({ prefix: 'clean-outside-' });
+  const root = await mkdtemp(join(tmpdir(), 'clean-test-'));
+  const outside = await mkdtemp(join(tmpdir(), 'clean-outside-'));
   try {
     await writeTree(root, ['docs/keep.md', '.env']);
     await assertRejects(() => cleanTargets(root, ['docs'], quiet), Error, 'not an allowlisted');
-    await Deno.writeTextFile(join(outside, 'keep.txt'), 'keep');
-    await Deno.symlink(outside, join(root, 'coverage'));
+    await writeFile(join(outside, 'keep.txt'), 'keep');
+    await symlink(outside, join(root, 'coverage'));
     assertEquals(await cleanTargets(root, ['coverage'], quiet), 1);
-    assertEquals(await Deno.readTextFile(join(outside, 'keep.txt')), 'keep');
-    assertEquals(await Deno.readTextFile(join(root, '.env')), '.env\n');
+    assertEquals(await readFile(join(outside, 'keep.txt'), 'utf8'), 'keep');
+    assertEquals(await readFile(join(root, '.env'), 'utf8'), '.env\n');
 
     // A generated target behind a symlinked parent must not delete outside.
     await writeTree(outside, ['site-src/dist/keep.txt']);
-    await Deno.mkdir(join(root, 'apps'), { recursive: true });
-    await Deno.symlink(join(outside, 'site-src'), join(root, 'www'));
+    await mkdir(join(root, 'apps'), { recursive: true });
+    await symlink(join(outside, 'site-src'), join(root, 'www'));
     await assertRejects(() => cleanTargets(root, ['www/dist'], quiet), Error, 'resolves outside');
     assertEquals(
-      await Deno.readTextFile(join(outside, 'site-src/dist/keep.txt')),
+      await readFile(join(outside, 'site-src/dist/keep.txt'), 'utf8'),
       'site-src/dist/keep.txt\n',
     );
   } finally {
-    await Deno.remove(root, { recursive: true });
-    await Deno.remove(outside, { recursive: true });
+    await rm(root, { recursive: true });
+    await rm(outside, { recursive: true });
   }
 });

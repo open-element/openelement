@@ -29,6 +29,7 @@ import {
   isConsumerScaffoldExempt,
   shouldSkipUnreadableFile,
 } from './check-no-allow-all.test.ts';
+import { readFileSync } from 'node:fs';
 
 const BROAD_SHORT = String.fromCharCode(45, 65);
 // Assembled so this file carries no literal broad-flag token (the tripwire
@@ -68,7 +69,7 @@ Deno.test('scope: every exemption entry is a consumer scaffold command', () => {
   // Every path must actually EXIST and carry the exempt line — a stale entry
   // would silently shrink the exception's coverage story.
   for (const entry of CONSUMER_SCAFFOLD_EXEMPT_LINES) {
-    const text = Deno.readTextFileSync(new URL(`../../${entry.path}`, import.meta.url));
+    const text = readFileSync(new URL(`../../${entry.path}`, import.meta.url), 'utf8');
     assert(
       text.split('\n').some((line) => line.trim() === entry.line),
       `${entry.path} no longer carries the exempt line: ${entry.line}`,
@@ -132,7 +133,9 @@ Deno.test('scope: the exemption is exact-match, never substring', () => {
 Deno.test('scope: unreadable tracked files are not silently skipped', () => {
   // The false-green that hid this tripwire during the #1411 install-command
   // sync: a permission error was swallowed as "skip" and the scan reported ok.
-  assertFalse(shouldSkipUnreadableFile(new Deno.errors.PermissionDenied('denied')));
+  const permissionDenied = Object.assign(new Error('denied'), { code: 'EACCES' });
+  const notFound = Object.assign(new Error('missing'), { code: 'ENOENT' });
+  assertFalse(shouldSkipUnreadableFile(permissionDenied));
   assertFalse(shouldSkipUnreadableFile(new Error('boom')));
-  assert(shouldSkipUnreadableFile(new Deno.errors.NotFound('missing')));
+  assert(shouldSkipUnreadableFile(notFound));
 });

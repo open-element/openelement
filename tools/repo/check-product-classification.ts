@@ -17,6 +17,8 @@
  * ownership from filename or directory names.
  */
 import { walk } from '@std/fs/walk';
+import { readFile } from 'node:fs/promises';
+import process from 'node:process';
 
 /** Documents that must exist and carry the product contract. */
 export const REQUIRED_PRODUCT_DOCS: readonly string[] = [
@@ -202,7 +204,7 @@ export async function readProductDocs(repoRoot: string): Promise<ClassificationR
   const sources: ClassificationSource[] = [];
   for (const relative of REQUIRED_PRODUCT_DOCS) {
     try {
-      sources.push({ path: relative, text: await Deno.readTextFile(`${repoRoot}/${relative}`) });
+      sources.push({ path: relative, text: await readFile(`${repoRoot}/${relative}`, 'utf8') });
     } catch {
       failures.push(`${relative}: required product-contract document is unreadable`);
     }
@@ -219,7 +221,7 @@ export async function readProductDocs(repoRoot: string): Promise<ClassificationR
   }
   for (const path of [...optional].sort()) {
     try {
-      sources.push({ path: path.replace(`${repoRoot}/`, ''), text: await Deno.readTextFile(path) });
+      sources.push({ path: path.replace(`${repoRoot}/`, ''), text: await readFile(path, 'utf8') });
     } catch {
       // A discovered doc that vanishes mid-walk is not a classification defect.
     }
@@ -234,7 +236,7 @@ if (import.meta.main) {
   if (failures.length > 0) {
     console.error('Product classification check failed:');
     for (const failure of failures) console.error(`- ${failure}`);
-    Deno.exit(1);
+    process.exit(1);
   }
   console.log('Product classification check passed: SaaS is not described as framework core.');
 }

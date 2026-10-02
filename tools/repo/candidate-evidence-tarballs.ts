@@ -14,6 +14,7 @@
  */
 
 import { join } from '@std/path';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { npmTarballName } from '../lib/npm-tarball.ts';
 import { auditTarballPackage } from './tarball-inspect.ts';
 
@@ -69,10 +70,10 @@ export async function stageTarballEvidence<T extends TarballEvidencePackage>(
 ): Promise<{ hashes: Record<string, string>; files: Record<string, string> }> {
   const hashes: Record<string, string> = {};
   const files: Record<string, string> = {};
-  await Deno.mkdir(join(destinationRoot, 'tarballs'), { recursive: true });
+  await mkdir(join(destinationRoot, 'tarballs'), { recursive: true });
   for (const pkg of packages) {
     const source = sourcePath(pkg);
-    const bytes = await Deno.readFile(source).catch(() => null);
+    const bytes = await readFile(source).catch(() => null);
     if (!bytes) throw new Error(`Candidate tarball missing for ${pkg.name}: ${source}`);
     const hash = await sha256Bytes(bytes);
     const expected = expectedHashes?.[pkg.name];
@@ -82,7 +83,7 @@ export async function stageTarballEvidence<T extends TarballEvidencePackage>(
       );
     }
     const relativeArchive = `tarballs/${npmTarballName(pkg)}`;
-    await Deno.writeFile(join(destinationRoot, relativeArchive), bytes);
+    await writeFile(join(destinationRoot, relativeArchive), bytes);
     hashes[pkg.name] = hash;
     files[pkg.name] = relativeArchive;
   }
@@ -231,7 +232,7 @@ export async function carryPackedTarballs(
     );
   }
   const tarballFiles: Record<string, string> = {};
-  await Deno.mkdir(join(outDir, 'tarballs'), { recursive: true });
+  await mkdir(join(outDir, 'tarballs'), { recursive: true });
   for (const packageName of REQUIRED_PACKAGE_TARBALLS) {
     const sourcePath = carried[packageName];
     if (
@@ -269,7 +270,7 @@ export async function carryPackedTarballs(
     if (Object.values(tarballFiles).includes(finalRelativePath)) {
       throw new Error(`packed job: duplicate archive path ${finalRelativePath}`);
     }
-    await Deno.writeFile(join(outDir, finalRelativePath), bytes);
+    await writeFile(join(outDir, finalRelativePath), bytes);
     tarballFiles[packageName] = finalRelativePath;
   }
   return { tarballs: { ...recorded }, tarballFiles, packageVersion };

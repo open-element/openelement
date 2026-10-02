@@ -118,6 +118,9 @@ export function cleanProofArgv(sha: string, tree: string, phase: 'before' | 'aft
     'run',
     '--allow-read',
     '--allow-run=git',
+    // node:child_process spawn resolves the parent environment through the
+    // Deno compat layer, which requires env access (B1b port consequence).
+    '--allow-env',
     '--deny-ffi',
     '--no-prompt',
     'tools/repo/clean-proof.ts',

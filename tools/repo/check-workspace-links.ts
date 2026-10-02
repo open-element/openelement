@@ -23,6 +23,9 @@
  */
 
 import { isAbsolute, relative, resolve } from '@std/path';
+import { lstat, realpath } from 'node:fs/promises';
+import type { Stats } from 'node:fs';
+import process from 'node:process';
 import { readWorkspaces } from './workspace-tasks.ts';
 
 export const NODE_MODULES_DIR = 'node_modules';
@@ -101,19 +104,20 @@ export async function readWorkspaceMembers(root = '.'): Promise<WorkspaceMember[
 /** Inspect what node_modules holds for one member name. */
 export async function readNodeModulesEntry(name: string, root = '.'): Promise<NodeModulesEntry> {
   const path = resolve(root, NODE_MODULES_DIR, name);
-  let stats: Deno.FileInfo;
+  let stats: Stats;
   try {
-    stats = await Deno.lstat(path);
+    stats = await lstat(path);
   } catch (error) {
-    if (error instanceof Deno.errors.NotFound) return { path: name, kind: 'missing' };
+    // node:fs signals "path does not exist" with ENOENT (Deno: NotFound).
+    if ((error as { code?: string }).code === 'ENOENT') return { path: name, kind: 'missing' };
     throw error;
   }
-  if (!stats.isSymlink) {
-    return { path: name, kind: stats.isDirectory ? 'directory' : 'file' };
+  if (!stats.isSymbolicLink()) {
+    return { path: name, kind: stats.isDirectory() ? 'directory' : 'file' };
   }
   let target: string | undefined;
   try {
-    const resolved = await Deno.realPath(path);
+    const resolved = await realpath(path);
     // Report workspace-relative paths so the message is stable across checkouts.
     target = relative(resolve(root), resolved) || '.';
   } catch {
@@ -136,7 +140,7 @@ if (import.meta.main) {
   if (failures.length > 0) {
     console.error('Workspace shadow check failed:');
     for (const failure of failures) console.error(`- ${failure}`);
-    Deno.exit(1);
+    process.exit(1);
   }
   console.log('Workspace links check passed.');
 }
