@@ -3,9 +3,9 @@
  * starter-smoke setup (#934/#936)
  *
  * Builds the packed-starter verification surface: runs the packed create CLI
- * (deno pack output) to generate a fresh starter, rewrites the starter's
+ * (vp pack output) to generate a fresh starter, rewrites the starter's
  * @openelement/* imports and build/start tasks to the monorepo sources
- * (deno pack strips package deno.json files; each package's own deno.json is
+ * (packing strips package deno.json files; each package's own deno.json is
  * rediscovered from its sources, so transitive npm imports keep resolving),
  * then builds the starter. The built dist/ + dist/server/ are served by the
  * starter's own `start` command during the Playwright run.

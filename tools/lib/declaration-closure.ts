@@ -1,12 +1,15 @@
 /**
  * Public declaration closure for packed npm tarballs.
  *
- * `deno pack` may drop a private module's standalone `.d.ts`
+ * The deno-pack generator (retired in the A1 swap) could drop a private
+ * module's standalone `.d.ts`
  * (`Could not generate types ... Types will not be included for this module`)
  * while still generating a complete public export declaration. The only proof
  * that a dropped declaration is harmless is reachability: if no public
  * declaration transitively imports the module, no consumer type surface can
- * miss it.
+ * miss it. That proof outlived the generator: the closure is the structural
+ * declaration-integrity check the packed payload still answers to
+ * (docs/maintainers/deno-pack-diagnostic-exception.md, "Retirement").
  *
  * This module builds the reachable closure of declaration files starting at
  * every public `types` target and following package-local relative edges:
@@ -18,8 +21,7 @@
  * existing declaration; cycles terminate through the visited set.
  *
  * The graph is deliberately conservative: a missing declaration on a
- * reachable edge fails the release, and a dropped declaration is only
- * classified as a known upstream warning when it is provably unreachable.
+ * reachable edge fails the release.
  */
 
 import { extractStaticModuleSpecifiers } from './typescript-ast.ts';
@@ -36,19 +38,6 @@ export interface DeclarationGraph {
 export interface DeclarationIo {
   exists: (path: string) => boolean;
   read: (path: string) => string;
-}
-
-export interface DroppedDeclarationWarning {
-  /** Package-relative path of the warned source module. */
-  relative: string;
-  raw: string;
-}
-
-export interface ClassifiedDeclarationWarnings {
-  /** Dropped declarations unreachable from every public declaration. */
-  knownUpstream: DroppedDeclarationWarning[];
-  /** Dropped declarations the public closure depends on: always fail. */
-  reachableFromPublicTypes: DroppedDeclarationWarning[];
 }
 
 const DECLARATION_EXTENSIONS = ['.d.ts', '.d.mts', '.d.cts'] as const;
@@ -185,43 +174,6 @@ export function buildDeclarationClosure(
     missing,
     escaped,
   };
-}
-
-/**
- * Declaration candidates for a warned source module (the path `deno pack`
- * prints). A source with no recognizable extension yields no candidates and
- * therefore cannot match the closure: it is treated as unreachable.
- */
-export function warnedDeclarationCandidates(sourceRelative: string): string[] {
-  const path = toPosix(sourceRelative);
-  if (DECLARATION_EXTENSIONS.some((extension) => path.endsWith(extension))) {
-    return [path];
-  }
-  if (!SOURCE_EXTENSION.test(path)) return [];
-  return declarationCandidates(path);
-}
-
-/**
- * Classify dropped-declaration warnings against the closure. Only a warned
- * module whose declaration is provably outside the public reachable set may
- * be treated as an upstream private warning.
- */
-export function classifyDroppedDeclarationWarnings(
-  graph: DeclarationGraph,
-  warnings: readonly DroppedDeclarationWarning[],
-): ClassifiedDeclarationWarnings {
-  const reached = new Set(graph.reached);
-  const knownUpstream: DroppedDeclarationWarning[] = [];
-  const reachableFromPublicTypes: DroppedDeclarationWarning[] = [];
-  for (const warning of warnings) {
-    const candidates = warnedDeclarationCandidates(warning.relative);
-    if (candidates.some((candidate) => reached.has(candidate))) {
-      reachableFromPublicTypes.push(warning);
-    } else {
-      knownUpstream.push(warning);
-    }
-  }
-  return { knownUpstream, reachableFromPublicTypes };
 }
 
 /** Default filesystem IO over an extracted package root. */

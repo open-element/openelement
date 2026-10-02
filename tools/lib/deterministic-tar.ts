@@ -1,7 +1,7 @@
 /**
  * Deterministic tar.gz writer for the final npm tarball.
  *
- * `deno pack` is the sole code/declaration generator, but the release
+ * `vp pack` is the sole code/declaration generator, but the release
  * coordinator re-wraps the package after applying manifest-only mutations
  * (see docs/maintainers/pack-post-processing.md). System `tar` writes
  * platform-dependent headers (mtime, owner, order, gzip metadata), so the
