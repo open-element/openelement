@@ -26,13 +26,15 @@
  *     apps/saas/scripts/quota-race-proof.ts
  */
 
+import process from 'node:process';
+
 const QUOTA_BYTES = 10 * 1024 * 1024; // 10 MiB, from the migration
 const RACE_SIZE_BYTES = 1024 * 1024; // 1 MiB per reservation
 const CONCURRENCY = 12;
 const EXPECTED_SUCCESSES = QUOTA_BYTES / RACE_SIZE_BYTES; // 10
 
 function required(name: string): string {
-  const value = Deno.env.get(name);
+  const value = process.env[name];
   if (!value) throw new Error(`${name} is required`);
   return value;
 }

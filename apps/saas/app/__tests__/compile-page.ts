@@ -7,6 +7,7 @@
  * @element/@property decorators are compile-time-only input and throw at
  * module evaluation outside the adapter transform.
  */
+import { readFile } from 'node:fs/promises';
 import { compileElementProgram } from '@openelement/element/compiler';
 
 // Resolved through the workspace (daily dev) or the installed packed
@@ -17,7 +18,7 @@ const APP_URL = import.meta.resolve('@openelement/router');
 /** Compile + import the default-exported compiled class of one component module. */
 export async function compileComponentClass(sourceUrl: string): Promise<CustomElementConstructor> {
   const absoluteSource = new URL(sourceUrl, import.meta.url);
-  const source = await Deno.readTextFile(absoluteSource);
+  const source = await readFile(absoluteSource, 'utf8');
   // Island modules colocate the island delivery policy statement with the
   // class; the compiler admits it only through the injected descriptor (#1468).
   const { code } = compileElementProgram(source, sourceUrl, {
