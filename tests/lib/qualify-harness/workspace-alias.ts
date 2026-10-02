@@ -34,6 +34,28 @@ export function workspaceSourceAliases(repoRoot: string): WorkspaceSourceAlias[]
   }));
 }
 
+/**
+ * Bare specifiers imported by the workspace build source (the Router CLI and
+ * vite plugin, the element signal engine) with their canonical pins — lifted
+ * from the retired pre-B2 root deno.json import map and the router package's
+ * dependency surface. Fixture-specific extraImports override these.
+ */
+const WORKSPACE_BUILD_EXTERNALS: Record<string, string> = {
+  vite: 'npm:vite@8.0.16',
+  typescript: 'npm:typescript@6.0.3',
+  hono: 'npm:hono@^4.12',
+  '@hono/vite-dev-server': 'npm:@hono/vite-dev-server@^0.25.3',
+  '@lit-labs/ssr': 'npm:@lit-labs/ssr@4.1.0',
+  '@lit-labs/ssr-client': 'npm:@lit-labs/ssr-client@1.1.8',
+  '@preact/signals-core': 'npm:@preact/signals-core@^1.12.1',
+  lit: 'npm:lit@3.3.3',
+  marked: 'npm:marked@^15.0.0',
+  pathe: 'npm:pathe@^2.0.3',
+  'jsonc-parser': 'npm:jsonc-parser@^3.3.1',
+  mime: 'npm:mime@^4.1.0',
+  '@openelement/url-pattern-list': 'npm:@openelement/url-pattern-list@0.6.0',
+};
+
 export interface ApplyWorkspaceAliasesOptions {
   repoRoot: string;
   /** Extra import-map entries merged ahead of the workspace aliases. */
@@ -60,13 +82,36 @@ export async function applyWorkspaceAliases(
   // scaffold is a Node/pnpm project. The Deno-host fixture harness provides
   // its own Deno universe instead: a minimal config that carries exactly the
   // workspace alias map (below) plus the rewritten build task.
-  let denoJson: { imports?: Record<string, string>; tasks?: Record<string, string> } = {};
+  let denoJson: {
+    imports?: Record<string, string>;
+    tasks?: Record<string, string>;
+    nodeModulesDir?: string;
+    minimumDependencyAge?: string | number;
+  } = {};
   try {
     denoJson = await readJson<typeof denoJson>(denoJsonPath);
   } catch (error) {
     if ((error as { code?: string }).code !== 'ENOENT') throw error;
   }
+  // B2 residual: with a deno.json present, Deno defaults to manual
+  // node_modules (BYONM) and refuses bare npm specifiers ("Did you forget to
+  // run `deno install`?"). The pre-B2 root deno.json import map carried
+  // specifiers like 'vite'; the app-local universe must opt into Deno-managed
+  // node_modules instead, so priming/build resolution materializes the
+  // scaffolded app's package.json dependencies. minimumDependencyAge 0 keeps
+  // the workspace-pinned @openelement/* versions installable: this fixture
+  // builds against WORKSPACE SOURCE through the import map/alias injected
+  // below, so registry freshness is not a supply-chain signal here.
+  denoJson.nodeModulesDir ??= 'auto';
+  denoJson.minimumDependencyAge ??= 0;
   const imports = (denoJson.imports ??= {});
+  // B2 residual: the workspace build source (Router CLI/vite plugin, element
+  // signal engine) that the alias build executes imports these bare
+  // specifiers, and the pre-B2 root deno.json import map carried them into
+  // every temp app. The harness restores that universe here; fixture-specific
+  // pins (extraImports) and the @openelement/* workspace aliases below
+  // override these.
+  Object.assign(imports, WORKSPACE_BUILD_EXTERNALS);
   Object.assign(imports, options.extraImports);
   for (const [specifier, url] of allPackageAliases(options.repoRoot)) {
     imports[specifier] = url;
@@ -122,6 +167,9 @@ export async function primeAppNodeModules(appDir: string, specifier: string): Pr
       '--allow-env',
       '--allow-net',
       '--allow-sys',
+      // vite 8 loads rolldown's native binding (.node) at import time — the
+      // same reason the app's build task carries --allow-ffi.
+      '--allow-ffi',
       '--no-prompt',
       '-',
     ],

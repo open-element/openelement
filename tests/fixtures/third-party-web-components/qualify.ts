@@ -43,7 +43,10 @@ import { extractSsrAdmissionPlan } from '../../lib/qualify-harness/admission-pla
 import { runRouterBuild } from '../../lib/qualify-harness/build-router.ts';
 import { launchQualifyBrowser } from '../../lib/qualify-harness/drive-chromium.ts';
 import { scaffoldApp } from '../../lib/qualify-harness/scaffold-app.ts';
-import { applyWorkspaceAliases } from '../../lib/qualify-harness/workspace-alias.ts';
+import {
+  applyWorkspaceAliases,
+  primeAppNodeModules,
+} from '../../lib/qualify-harness/workspace-alias.ts';
 
 const repoRoot = dirname(dirname(dirname(dirname(fromFileUrl(import.meta.url)))));
 const fixtureDir = dirname(fromFileUrl(import.meta.url));
@@ -536,6 +539,12 @@ export async function prepareFixtureApp(tmpRoot: string): Promise<string> {
         "packageIslands: ['@acme/components'],\n    island: { upgradeStrategy: 'load' },",
       ),
   });
+  // The root deno.json import map (pre-B2) used to carry 'vite' into this
+  // app's Deno universe; the app-local node_modules must be materialized
+  // instead now — priming installs the scaffolded app's npm dependencies up
+  // front (same mechanism as the web-component-interop qualify harness), so
+  // vite.config.ts resolves when the build loads it.
+  await primeAppNodeModules(appDir, 'vite');
   await runRouterBuild(appDir);
   return appDir;
 }
