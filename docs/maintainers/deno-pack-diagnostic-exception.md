@@ -66,17 +66,22 @@ re-measured.
    so an incomplete public type surface cannot pass them.
 
 The warning is produced for a private runtime module whose standalone
-declaration no consumer can import; `deno publish --dry-run` reports
-`Checking for slow types in the public API... Success` on the same sources.
+declaration no consumer can import; the retired Deno publisher's dry-run
+(`deno publish --dry-run`) reported
+`Checking for slow types in the public API... Success` on the same sources —
+historical evidence only: JSR was never a release channel (ADR-0108) and the
+deno pack/publish toolchain left with the A1 swap.
 The diagnostic is informational for private modules, but the release pipeline
 cannot distinguish informational from fatal without the closure proof — hence
 this exception is paired with the machine check, never used alone.
 
 ## Re-verification duties
 
-- After every Deno upgrade: run the native pack (`deno task --cwd tools/release
-  pack:native-check`) and the minimal repro in `.artifacts/deno-pack-repros/`
-  with the new exact version; append a row above with measured counts.
+- After every Deno upgrade: run the native pack dry-run and the minimal repro
+  in `.artifacts/deno-pack-repros/` with the new exact version; append a row
+  above with measured counts. (The `pack:native-check` gate task retired with
+  the B2 manifest conversion — no deno.json means no native deno pack surface;
+  the duty now falls to anyone deliberately reintroducing a deno.json.)
 - Any new warning shape fails the pipeline until this document adds it together
   with a closure-based argument for why it is private.
 - Unknown warnings always fail; there is no catch-all allowance.
