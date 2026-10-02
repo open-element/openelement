@@ -14,7 +14,10 @@
  *   renderable/clientOnly/rejected lists (no SSR behavior change).
  */
 
-import { assertEquals, assertExists } from '@std/assert';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { expect, test } from 'vitest';
 import {
   buildSsrAdmissionPlan,
   collectDefinedTags,
@@ -64,40 +67,40 @@ export default definePage({
 });
 `;
 
-Deno.test('foreign-tag scan: collects JSX custom-element usage, not plain tags', () => {
+test('foreign-tag scan: collects JSX custom-element usage, not plain tags', () => {
   const used = collectUsedTags('<div><sl-button></sl-button><my-island /></div>');
-  assertEquals(used.has('sl-button'), true);
-  assertEquals(used.has('my-island'), true);
-  assertEquals(used.has('div'), false);
+  expect(used.has('sl-button')).toEqual(true);
+  expect(used.has('my-island')).toEqual(true);
+  expect(used.has('div')).toEqual(false);
 });
 
-Deno.test('foreign-tag scan: string/template contents never register as usage', () => {
+test('foreign-tag scan: string/template contents never register as usage', () => {
   const used = collectUsedTags(
     'const sample = `<sl-button></sl-button>`; const label = "<md-switch>";',
   );
-  assertEquals(used.size, 0);
+  expect(used.size).toEqual(0);
 });
 
-Deno.test('foreign-tag scan: tags mentioned in comments never register as usage', () => {
+test('foreign-tag scan: tags mentioned in comments never register as usage', () => {
   const used = collectUsedTags(
     '// renders a <fake-widget> here\n/* and a <ghost-panel /> there */\nconst x = 1;\nvoid x;',
   );
-  assertEquals(used.has('fake-widget'), false);
-  assertEquals(used.has('ghost-panel'), false);
-  assertEquals(used.size, 0);
+  expect(used.has('fake-widget')).toEqual(false);
+  expect(used.has('ghost-panel')).toEqual(false);
+  expect(used.size).toEqual(0);
 });
 
-Deno.test('foreign-tag scan: collects openElement-authored element definitions', () => {
+test('foreign-tag scan: collects openElement-authored element definitions', () => {
   const defined = collectDefinedTags(ISLAND_SOURCE);
-  assertEquals(defined.has('local-child'), true);
+  expect(defined.has('local-child')).toEqual(true);
   // defineIsland is retired vocabulary (removed from both packages in v0.44):
   // its calls no longer register authored definitions, so the island's own
   // delivery tag is known only through the island scan, not this factory.
-  assertEquals(defined.has('my-island'), false);
-  assertEquals(defined.has('sl-button'), false);
+  expect(defined.has('my-island')).toEqual(false);
+  expect(defined.has('sl-button')).toEqual(false);
 });
 
-Deno.test('foreign-tag scan: defineIsland calls are no longer openElement-authored definitions', () => {
+test('foreign-tag scan: defineIsland calls are no longer openElement-authored definitions', () => {
   // Regression pin: the router module vocabulary must not admit defineIsland
   // (the router never exported it; the element runtime retired it in v0.44),
   // so a legacy defineIsland call site surfaces as a foreign tag instead of
@@ -109,38 +112,38 @@ Deno.test('foreign-tag scan: defineIsland calls are no longer openElement-author
       render() { return <legacy-island></legacy-island>; },
     });
   `;
-  assertEquals(discoverForeignTags([source], new Set()), ['legacy-island']);
+  expect(discoverForeignTags([source], new Set())).toEqual(['legacy-island']);
 });
 
-Deno.test('foreign-tag scan: discovers foreign tags in island and page JSX', () => {
+test('foreign-tag scan: discovers foreign tags in island and page JSX', () => {
   const foreign = discoverForeignTags([ISLAND_SOURCE, PAGE_SOURCE], new Set(['my-island']));
-  assertEquals(foreign, ['demo-native-badge', 'md-switch', 'sl-button']);
+  expect(foreign).toEqual(['demo-native-badge', 'md-switch', 'sl-button']);
 });
 
-Deno.test('foreign-tag scan: local island tags are excluded', () => {
+test('foreign-tag scan: local island tags are excluded', () => {
   const foreign = discoverForeignTags([PAGE_SOURCE], new Set(['my-island', 'demo-native-badge']));
-  assertEquals(foreign, []);
+  expect(foreign).toEqual([]);
 });
 
-Deno.test('foreign-tag scan: openElement-authored tags defined in scanned sources are excluded', () => {
+test('foreign-tag scan: openElement-authored tags defined in scanned sources are excluded', () => {
   // 'local-child' is used in the island JSX but defined via defineElement in
   // the same scanned source — it is authored, not foreign.
   const foreign = discoverForeignTags([ISLAND_SOURCE], new Set(['my-island']));
-  assertEquals(foreign.includes('local-child'), false);
+  expect(foreign.includes('local-child')).toEqual(false);
 });
 
-Deno.test('foreign-tag scan: customElements.define tags are excluded', () => {
+test('foreign-tag scan: customElements.define tags are excluded', () => {
   const source = "customElements.define('native-badge', class {}); render(<native-badge />);";
-  assertEquals(discoverForeignTags([source], new Set()), []);
+  expect(discoverForeignTags([source], new Set())).toEqual([]);
 });
 
-Deno.test('foreign-tag scan: scanForeignTags reads route + island files from disk', async () => {
-  const root = await Deno.makeTempDir({ prefix: 'foreign-tag-scan-' });
+test('foreign-tag scan: scanForeignTags reads route + island files from disk', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'foreign-tag-scan-'));
   try {
-    await Deno.mkdir(`${root}/app/routes`, { recursive: true });
-    await Deno.mkdir(`${root}/app/islands`, { recursive: true });
-    await Deno.writeTextFile(`${root}/app/routes/index.tsx`, PAGE_SOURCE);
-    await Deno.writeTextFile(`${root}/app/islands/my-island.tsx`, ISLAND_SOURCE);
+    await mkdir(`${root}/app/routes`, { recursive: true });
+    await mkdir(`${root}/app/islands`, { recursive: true });
+    await writeFile(`${root}/app/routes/index.tsx`, PAGE_SOURCE);
+    await writeFile(`${root}/app/islands/my-island.tsx`, ISLAND_SOURCE);
 
     const foreign = await scanForeignTags({
       routesDir: `${root}/app/routes`,
@@ -149,9 +152,9 @@ Deno.test('foreign-tag scan: scanForeignTags reads route + island files from dis
       islandFiles: ['my-island.tsx'],
       knownTags: new Set(['my-island', 'index-page']),
     });
-    assertEquals(foreign, ['demo-native-badge', 'md-switch', 'sl-button']);
+    expect(foreign).toEqual(['demo-native-badge', 'md-switch', 'sl-button']);
   } finally {
-    await Deno.remove(root, { recursive: true });
+    await rm(root, { recursive: true });
   }
 });
 
@@ -174,30 +177,30 @@ const cemClassification: CompatibilityClassification = {
   modulePath: '@shoelace-style/shoelace/dist/components/button/button.js',
 };
 
-Deno.test('foreign-tag admission: unknown foreign tag -> client-only decision with unscanned-foreign-tag reason', () => {
+test('foreign-tag admission: unknown foreign tag -> client-only decision with unscanned-foreign-tag reason', () => {
   const plan = buildSsrAdmissionPlan([localIsland], [], ['md-switch']);
 
   const decision = plan.decisions.find((d) => d.tagName === 'md-switch');
-  assertExists(decision);
-  assertEquals(decision.source, 'foreign');
-  assertEquals(decision.renderPath, 'client-only');
-  assertEquals(decision.reason, 'unscanned-foreign-tag');
-  assertEquals(plan.foreignTags, ['md-switch']);
-  assertEquals(plan.reasons['md-switch'], 'unscanned-foreign-tag');
+  expect(decision).toEqual(expect.anything());
+  expect(decision.source).toEqual('foreign');
+  expect(decision.renderPath).toEqual('client-only');
+  expect(decision.reason).toEqual('unscanned-foreign-tag');
+  expect(plan.foreignTags).toEqual(['md-switch']);
+  expect(plan.reasons['md-switch']).toEqual('unscanned-foreign-tag');
 });
 
-Deno.test('foreign-tag admission: CEM-classified foreign tag records the CEM tier in the reason', () => {
+test('foreign-tag admission: CEM-classified foreign tag records the CEM tier in the reason', () => {
   const plan = buildSsrAdmissionPlan([localIsland], [cemClassification], ['sl-button']);
 
   const decision = plan.decisions.find((d) => d.tagName === 'sl-button');
-  assertExists(decision);
-  assertEquals(decision.source, 'foreign');
-  assertEquals(decision.renderPath, 'client-only');
-  assertEquals(decision.reason, `CEM client-only: ${cemClassification.reason}`);
-  assertEquals(plan.foreignTags, ['sl-button']);
+  expect(decision).toEqual(expect.anything());
+  expect(decision.source).toEqual('foreign');
+  expect(decision.renderPath).toEqual('client-only');
+  expect(decision.reason).toEqual(`CEM client-only: ${cemClassification.reason}`);
+  expect(plan.foreignTags).toEqual(['sl-button']);
 });
 
-Deno.test('foreign-tag admission: no behavior change — foreign tags stay out of render lists', () => {
+test('foreign-tag admission: no behavior change — foreign tags stay out of render lists', () => {
   const withoutForeign = buildSsrAdmissionPlan([localIsland], [cemClassification]);
   const withForeign = buildSsrAdmissionPlan(
     [localIsland],
@@ -205,24 +208,23 @@ Deno.test('foreign-tag admission: no behavior change — foreign tags stay out o
     ['sl-button', 'md-switch'],
   );
 
-  assertEquals(withForeign.renderableTags, withoutForeign.renderableTags);
-  assertEquals(withForeign.clientOnlyTags, withoutForeign.clientOnlyTags);
-  assertEquals(withForeign.rejectedTags, withoutForeign.rejectedTags);
+  expect(withForeign.renderableTags).toEqual(withoutForeign.renderableTags);
+  expect(withForeign.clientOnlyTags).toEqual(withoutForeign.clientOnlyTags);
+  expect(withForeign.rejectedTags).toEqual(withoutForeign.rejectedTags);
   // Foreign decisions are appended after the island decisions.
-  assertEquals(
-    withForeign.decisions.slice(0, withoutForeign.decisions.length),
+  expect(withForeign.decisions.slice(0, withoutForeign.decisions.length)).toEqual(
     withoutForeign.decisions,
   );
-  assertEquals(withForeign.decisions.length, withoutForeign.decisions.length + 2);
+  expect(withForeign.decisions.length).toEqual(withoutForeign.decisions.length + 2);
   // No foreignTags field when nothing foreign was discovered.
-  assertEquals(withoutForeign.foreignTags, undefined);
+  expect(withoutForeign.foreignTags).toEqual(undefined);
 });
 
-Deno.test('foreign-tag admission: a foreign tag colliding with an island keeps the island decision', () => {
+test('foreign-tag admission: a foreign tag colliding with an island keeps the island decision', () => {
   const plan = buildSsrAdmissionPlan([localIsland], [], ['my-island']);
 
-  assertEquals(plan.foreignTags, undefined);
+  expect(plan.foreignTags).toEqual(undefined);
   const decisions = plan.decisions.filter((d) => d.tagName === 'my-island');
-  assertEquals(decisions.length, 1);
-  assertEquals(decisions[0].source, 'local');
+  expect(decisions.length).toEqual(1);
+  expect(decisions[0].source).toEqual('local');
 });

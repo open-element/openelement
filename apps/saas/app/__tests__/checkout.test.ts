@@ -1,4 +1,5 @@
-import { assert, assertEquals, assertRejects } from '@std/assert';
+import { expect, test } from 'vitest';
+import { assertRejectsIncludes } from '../../../../tests/lib/vitest-asserts.ts';
 import { isActionFailure, isOpenElementRedirect } from '@openelement/router';
 
 // v0.44: route logic lives in app/route-logic/ so tests never evaluate the
@@ -57,23 +58,23 @@ function form(attempt = ATTEMPT): FormData {
   return value;
 }
 
-Deno.test('Checkout loader is owner-scoped and success return grants no new state', async () => {
+test('Checkout loader is owner-scoped and success return grants no new state', async () => {
   // v0.44: anonymous GETs redirect to sign-in (the 0.43 denied branch paired
   // with a dynamic authenticated variant is outside the compiler grammar).
-  const denied = await assertRejects(() =>
+  const denied = await assertRejectsIncludes(() =>
     createCheckoutLoader(client({ user: false }))(context()),
   );
-  assert(isOpenElementRedirect(denied));
-  assertEquals((denied as { location?: string }).location, '/login');
+  expect(isOpenElementRedirect(denied)).toBeTruthy();
+  expect((denied as { location?: string }).location).toEqual('/login');
   const returned = await createCheckoutLoader(client())(
     context('https://app.test/checkout?result=success'),
   );
-  assertEquals(returned.denied, false);
-  assertEquals(returned.result, 'success');
-  assert(returned.attemptId);
+  expect(returned.denied).toEqual(false);
+  expect(returned.result).toEqual('success');
+  expect(returned.attemptId).toBeTruthy();
 });
 
-Deno.test('Checkout rejects anonymous and invalid attempts before Stripe', async () => {
+test('Checkout rejects anonymous and invalid attempts before Stripe', async () => {
   let calls = 0;
   const fetchStub: typeof fetch = () => {
     calls++;
@@ -86,8 +87,8 @@ Deno.test('Checkout rejects anonymous and invalid attempts before Stripe', async
     ...context(),
     formData: form('attacker'),
   });
-  assert(isActionFailure(invalid));
-  assertEquals(invalid.status, 422);
+  expect(isActionFailure(invalid)).toBeTruthy();
+  expect(invalid.status).toEqual(422);
   const anonymous = await createCheckoutAction(
     client({ user: false }),
     fetchStub,
@@ -95,12 +96,12 @@ Deno.test('Checkout rejects anonymous and invalid attempts before Stripe', async
     ...context(),
     formData: form(),
   });
-  assert(isActionFailure(anonymous));
-  assertEquals(anonymous.status, 401);
-  assertEquals(calls, 0);
+  expect(isActionFailure(anonymous)).toBeTruthy();
+  expect(anonymous.status).toEqual(401);
+  expect(calls).toEqual(0);
 });
 
-Deno.test('Checkout uses fixed server price, idempotency and persists session before redirect', async () => {
+test('Checkout uses fixed server price, idempotency and persists session before redirect', async () => {
   const calls: { url: string; init?: RequestInit }[] = [];
   const fetchStub: typeof fetch = (input, init) => {
     const url = String(input);
@@ -116,25 +117,25 @@ Deno.test('Checkout uses fixed server price, idempotency and persists session be
     }
     return Promise.resolve(Response.json(null));
   };
-  const error = await assertRejects(() =>
+  const error = await assertRejectsIncludes(() =>
     createCheckoutAction(client(), fetchStub)({ ...context(), formData: form() }),
   );
-  assert(isOpenElementRedirect(error));
-  assertEquals(error.location, 'https://checkout.stripe.com/c/pay/test');
+  expect(isOpenElementRedirect(error)).toBeTruthy();
+  expect(error.location).toEqual('https://checkout.stripe.com/c/pay/test');
   const stripe = calls[0];
   const body = stripe.init?.body as URLSearchParams;
-  assertEquals(body.get('line_items[0][price]'), 'price_fixed');
-  assertEquals(body.get('metadata[order_id]'), ORDER);
-  assertEquals(body.get('payment_intent_data[metadata][order_id]'), ORDER);
-  assertEquals(new Headers(stripe.init?.headers).get('idempotency-key'), `checkout-${ATTEMPT}`);
-  assertEquals(new Headers(stripe.init?.headers).get('stripe-version'), '2026-07-29.dahlia');
-  assertEquals(body.get('payment_method_types[0]'), null);
-  assertEquals(body.get('managed_payments[enabled]'), null);
-  assertEquals(body.get('integration_identifier')?.startsWith('openelement_reference_'), true);
-  assertEquals(calls[1].url.endsWith('/rpc/attach_checkout_session'), true);
+  expect(body.get('line_items[0][price]')).toEqual('price_fixed');
+  expect(body.get('metadata[order_id]')).toEqual(ORDER);
+  expect(body.get('payment_intent_data[metadata][order_id]')).toEqual(ORDER);
+  expect(new Headers(stripe.init?.headers).get('idempotency-key')).toEqual(`checkout-${ATTEMPT}`);
+  expect(new Headers(stripe.init?.headers).get('stripe-version')).toEqual('2026-07-29.dahlia');
+  expect(body.get('payment_method_types[0]')).toEqual(null);
+  expect(body.get('managed_payments[enabled]')).toEqual(null);
+  expect(body.get('integration_identifier')?.startsWith('openelement_reference_')).toEqual(true);
+  expect(calls[1].url.endsWith('/rpc/attach_checkout_session')).toEqual(true);
 });
 
-Deno.test('Checkout fails closed on unexpected redirect host and records creation failure', async () => {
+test('Checkout fails closed on unexpected redirect host and records creation failure', async () => {
   const rpcNames: string[] = [];
   const fetchStub: typeof fetch = (input) => {
     const url = String(input);
@@ -157,7 +158,7 @@ Deno.test('Checkout fails closed on unexpected redirect host and records creatio
     ...context(),
     formData: form(),
   });
-  assert(isActionFailure(result));
-  assertEquals(result.status, 409);
-  assertEquals(rpcNames, ['attach_checkout_session', 'mark_checkout_creation_failed']);
+  expect(isActionFailure(result)).toBeTruthy();
+  expect(result.status).toEqual(409);
+  expect(rpcNames).toEqual(['attach_checkout_session', 'mark_checkout_creation_failed']);
 });

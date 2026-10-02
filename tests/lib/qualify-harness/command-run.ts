@@ -8,6 +8,9 @@
  * nonzero exits for the probe-style invocations.
  */
 
+import { spawn } from 'node:child_process';
+import process from 'node:process';
+
 export interface RunStepOptions {
   /** Working directory for the subprocess. */
   cwd: string;
@@ -31,31 +34,26 @@ export async function runStep(
   options: RunStepOptions,
 ): Promise<RunStepResult> {
   console.log(`$ ${command} ${args.join(' ')}  # cwd=${options.cwd}`);
-  const child = new Deno.Command(command, {
-    args,
+  const child = spawn(command, args, {
     cwd: options.cwd,
-    env: options.env,
-    stdout: 'piped',
-    stderr: 'piped',
-    stdin: options.stdin === undefined ? 'null' : 'piped',
-  }).spawn();
+    env: options.env === undefined ? process.env : { ...process.env, ...options.env },
+    stdio: [options.stdin === undefined ? 'ignore' : 'pipe', 'pipe', 'pipe'],
+  });
   if (options.stdin !== undefined) {
-    const writer = child.stdin.getWriter();
-    writer.write(new TextEncoder().encode(options.stdin));
-    writer.releaseLock();
-    child.stdin.close();
+    child.stdin.write(options.stdin);
+    child.stdin.end();
   }
-  const [status, stdoutBytes, stderrBytes] = await Promise.all([
-    child.status,
-    new Response(child.stdout).arrayBuffer(),
-    new Response(child.stderr).arrayBuffer(),
+  const [code, stdoutBuf, stderrBuf] = await Promise.all([
+    new Promise<number>((resolve) => child.once('exit', (c) => resolve(c ?? -1))),
+    Array.fromAsync(child.stdout!),
+    Array.fromAsync(child.stderr!),
   ]);
-  const stdout = new TextDecoder().decode(stdoutBytes);
-  const stderr = new TextDecoder().decode(stderrBytes);
-  if (!status.success && options.allowFailure !== true) {
+  const stdout = Buffer.from(stdoutBuf).toString();
+  const stderr = Buffer.from(stderrBuf).toString();
+  if (code !== 0 && options.allowFailure !== true) {
     if (stdout.trim()) console.error(stdout.trim());
     if (stderr.trim()) console.error(stderr.trim());
-    throw new Error(`command failed with exit code ${status.code}: ${command} ${args.join(' ')}`);
+    throw new Error(`command failed with exit code ${code}: ${command} ${args.join(' ')}`);
   }
   return { stdout, stderr };
 }

@@ -16,7 +16,7 @@
  * unstubbed registry.
  */
 
-import { assert, assertArrayIncludes, assertEquals, assertStringIncludes } from '@std/assert';
+import { expect, test } from 'vitest';
 import {
   ENTRY_REGISTRATION_OWNERS,
   SSR_REGISTRY_ORIGINAL_DEFINE,
@@ -37,33 +37,33 @@ const routes: RouteEntry[] = [
   },
 ];
 
-Deno.test('registry markers: wire values stay the historical contract', () => {
-  assertEquals(SSR_REGISTRY_STUB_MARKER, '__openElementSsrStub');
-  assertEquals(ENTRY_REGISTRATION_OWNERS, '__openEntryDefined');
-  assertEquals(SSR_REGISTRY_ORIGINAL_DEFINE, '__openElementOrigDefine');
+test('registry markers: wire values stay the historical contract', () => {
+  expect(SSR_REGISTRY_STUB_MARKER).toEqual('__openElementSsrStub');
+  expect(ENTRY_REGISTRATION_OWNERS).toEqual('__openEntryDefined');
+  expect(SSR_REGISTRY_ORIGINAL_DEFINE).toEqual('__openElementOrigDefine');
 });
 
-Deno.test('registry markers: the polyfill banner injects the canonical stub marker', () => {
+test('registry markers: the polyfill banner injects the canonical stub marker', () => {
   const banner = generateCustomElementsPolyfill();
-  assertStringIncludes(banner, `'${SSR_REGISTRY_STUB_MARKER}': true`);
-  assertStringIncludes(banner, 'globalThis.customElements = {');
+  expect(banner).toContain(`'${SSR_REGISTRY_STUB_MARKER}': true`);
+  expect(banner).toContain('globalThis.customElements = {');
 });
 
-Deno.test('registry markers: the generated entry binds the guard seam, not marker literals', () => {
+test('registry markers: the generated entry binds the guard seam, not marker literals', () => {
   const code = renderEntry(buildEntryDescriptor(routes));
   // #1470 block e (ADR-0160 rule a): the marker values moved behind the
   // imported typed guard; the generated entry must carry NEITHER the old
   // injected literals NOR any customElements surgery of its own — only the
   // factory-bound register call sites.
-  assertStringIncludes(code, 'registerSsrComponent: __registerSsrComponent,');
-  assertStringIncludes(code, '__registerSsrComponent(');
-  assertEquals(code.includes(SSR_REGISTRY_STUB_MARKER), false);
-  assertEquals(code.includes(ENTRY_REGISTRATION_OWNERS), false);
-  assertEquals(code.includes(SSR_REGISTRY_ORIGINAL_DEFINE), false);
-  assertEquals(code.includes('customElements.define ='), false);
+  expect(code).toContain('registerSsrComponent: __registerSsrComponent,');
+  expect(code).toContain('__registerSsrComponent(');
+  expect(code.includes(SSR_REGISTRY_STUB_MARKER)).toEqual(false);
+  expect(code.includes(ENTRY_REGISTRATION_OWNERS)).toEqual(false);
+  expect(code.includes(SSR_REGISTRY_ORIGINAL_DEFINE)).toEqual(false);
+  expect(code.includes('customElements.define =')).toEqual(false);
 });
 
-Deno.test('registry guard: installs the wrapper once and keeps the TRUE original', () => {
+test('registry guard: installs the wrapper once and keeps the TRUE original', () => {
   const fake = globalThis.customElements;
   try {
     const calls: string[] = [];
@@ -78,19 +78,19 @@ Deno.test('registry guard: installs the wrapper once and keeps the TRUE original
     // kept on the registry (#1339), so re-registration still reaches it.
     installSsrRegistryGuard();
     const registry = globalThis.customElements as unknown as Record<string, PropertyKey>;
-    assert(typeof registry[SSR_REGISTRY_ORIGINAL_DEFINE] === 'function');
-    assertEquals(calls, []);
+    expect(typeof registry[SSR_REGISTRY_ORIGINAL_DEFINE] === 'function').toBeTruthy();
+    expect(calls).toEqual([]);
     guard.register('x-foo', class Foo {});
     // The wrapper forwarded to the original exactly once — through the
     // captured original, not a re-wrapped define.
-    assertEquals(calls, ['raw:x-foo']);
-    assertEquals(calls.length, 1);
+    expect(calls).toEqual(['raw:x-foo']);
+    expect(calls.length).toEqual(1);
   } finally {
     (globalThis as { customElements?: unknown }).customElements = fake;
   }
 });
 
-Deno.test('registry guard: stub registry lets re-definition win, ownership tracked', () => {
+test('registry guard: stub registry lets re-definition win, ownership tracked', () => {
   const fake = globalThis.customElements;
   try {
     const raw: Array<[string, unknown]> = [];
@@ -106,30 +106,24 @@ Deno.test('registry guard: stub registry lets re-definition win, ownership track
     const guard = installSsrRegistryGuard();
     class Page {}
     guard.register('x-page', Page);
-    assertEquals(registry[ENTRY_REGISTRATION_OWNERS] instanceof Map, true);
+    expect(registry[ENTRY_REGISTRATION_OWNERS] instanceof Map).toEqual(true);
     // Same class again: define forwarded (stub registries are re-definable).
     const rawCount = raw.length;
     guard.register('x-page', Page);
-    assertEquals(raw.length, rawCount + 1);
+    expect(raw.length).toEqual(rawCount + 1);
     // A tag the entry did NOT register stays untouched (fail-closed no-op).
     class Foreign {}
     registry['element:x-foreign'] = Foreign;
     guard.register('x-foreign', class Other {});
-    assertEquals(registry['element:x-foreign'], Foreign);
-    assertArrayIncludes(
-      raw.map(([name]) => name),
-      ['x-page'],
-    );
-    assertEquals(
-      raw.some(([, ctor]) => ctor === Foreign),
-      false,
-    );
+    expect(registry['element:x-foreign']).toEqual(Foreign);
+    expect(raw.map(([name]) => name)).toEqual(expect.arrayContaining(['x-page']));
+    expect(raw.some(([, ctor]) => ctor === Foreign)).toEqual(false);
   } finally {
     (globalThis as { customElements?: unknown }).customElements = fake;
   }
 });
 
-Deno.test('registry guard: dev re-evaluation overwrites its OWN tag through the original define', () => {
+test('registry guard: dev re-evaluation overwrites its OWN tag through the original define', () => {
   const fake = globalThis.customElements;
   try {
     const raw: Array<[string, unknown]> = [];
@@ -144,16 +138,13 @@ Deno.test('registry guard: dev re-evaluation overwrites its OWN tag through the 
     const guard = installSsrRegistryGuard();
     class Stale {}
     guard.register('x-page', Stale);
-    assertEquals(registry['element:x-page'], Stale);
+    expect(registry['element:x-page']).toEqual(Stale);
     // The registry outlives module re-evaluation: the same tag arrives with a
     // FRESH class and must win, through the TRUE original define (#1339).
     class Fresh {}
     guard.register('x-page', Fresh);
-    assertEquals(registry['element:x-page'], Fresh);
-    assertEquals(
-      raw.some(([, ctor]) => ctor === Fresh),
-      true,
-    );
+    expect(registry['element:x-page']).toEqual(Fresh);
+    expect(raw.some(([, ctor]) => ctor === Fresh)).toEqual(true);
   } finally {
     (globalThis as { customElements?: unknown }).customElements = fake;
   }

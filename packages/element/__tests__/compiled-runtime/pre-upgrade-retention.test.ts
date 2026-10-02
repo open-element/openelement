@@ -15,7 +15,7 @@
  *   - a root's release never touches another pending root's share
  */
 
-import { assertEquals } from '@std/assert';
+import { expect, test } from 'vitest';
 import { type FacadeDom, FacadeElement, FacadeEvent, installFacadeDom } from './facade-dom.ts';
 
 // The facade captures its HTMLElement base at module evaluation time.
@@ -54,38 +54,36 @@ function asNode(host: FacadeElement): Node {
   return host as unknown as Node;
 }
 
-Deno.test('retention: release empties the root bucket and replay is a no-op', () => {
+test('retention: release empties the root bucket and replay is a no-op', () => {
   ensurePreHydrationClickCapture();
   const { host, button } = pendingHost('oe-retention-claimed');
   button.dispatchEvent(click());
-  assertEquals(
+  expect(
     preUpgradeRetainedRecordCount(asNode(host)),
-    0,
     'a pending record sits in the shared pool; the root has no bucket yet',
-  );
+  ).toEqual(0);
 
   const fired: string[] = [];
   button.addEventListener('click', () => fired.push('button'));
   replayPreUpgradeCaptures(asNode(host));
-  assertEquals(fired, ['button'], 'the pending click replays into its claim root');
+  expect(fired, 'the pending click replays into its claim root').toEqual(['button']);
 
   releasePreUpgradeCapturesFor(asNode(host));
-  assertEquals(
+  expect(
     preUpgradeRetainedRecordCount(asNode(host)),
-    0,
     'release empties the root bucket deterministically',
-  );
+  ).toEqual(0);
   releasePreUpgradeCapturesFor(asNode(host));
-  assertEquals(preUpgradeRetainedRecordCount(asNode(host)), 0, 'release is idempotent');
+  expect(preUpgradeRetainedRecordCount(asNode(host)), 'release is idempotent').toEqual(0);
 
   replayPreUpgradeCaptures(asNode(host));
-  assertEquals(fired, ['button'], 'replay after release never re-fires');
-  assertEquals(preUpgradeRetainedRecordCount(asNode(host)), 0);
+  expect(fired, 'replay after release never re-fires').toEqual(['button']);
+  expect(preUpgradeRetainedRecordCount(asNode(host))).toEqual(0);
 
   cleanup(host);
 });
 
-Deno.test('retention: release without replay drops the unconsumed record (replay is a no-op)', () => {
+test('retention: release without replay drops the unconsumed record (replay is a no-op)', () => {
   ensurePreHydrationClickCapture();
   const { host, button } = pendingHost('oe-retention-cancelled');
   button.dispatchEvent(click());
@@ -93,22 +91,21 @@ Deno.test('retention: release without replay drops the unconsumed record (replay
   // Cancelled before activation: the disconnect path releases the root's
   // records without any replay pass — the record was never consumed.
   releasePreUpgradeCapturesFor(asNode(host));
-  assertEquals(
+  expect(
     preUpgradeRetainedRecordCount(asNode(host)),
-    0,
     'the root bucket is empty after an unreplayed release',
-  );
+  ).toEqual(0);
 
   const fired: string[] = [];
   button.addEventListener('click', () => fired.push('button'));
   replayPreUpgradeCaptures(asNode(host));
-  assertEquals(fired, [], 'the unconsumed record is gone: replay is a no-op');
-  assertEquals(preUpgradeRetainedRecordCount(asNode(host)), 0);
+  expect(fired, 'the unconsumed record is gone: replay is a no-op').toEqual([]);
+  expect(preUpgradeRetainedRecordCount(asNode(host))).toEqual(0);
 
   cleanup(host);
 });
 
-Deno.test('retention: a root release never touches another pending root share', () => {
+test('retention: a root release never touches another pending root share', () => {
   ensurePreHydrationClickCapture();
   const a = pendingHost('oe-retention-a');
   const b = pendingHost('oe-retention-b');
@@ -116,23 +113,21 @@ Deno.test('retention: a root release never touches another pending root share', 
   b.button.dispatchEvent(click());
 
   releasePreUpgradeCapturesFor(asNode(a.host));
-  assertEquals(
+  expect(
     preUpgradeRetainedRecordCount(asNode(a.host)),
-    0,
     'the released root retains nothing',
-  );
+  ).toEqual(0);
 
   const fired: string[] = [];
   b.button.addEventListener('click', () => fired.push('b'));
   replayPreUpgradeCaptures(asNode(b.host));
-  assertEquals(fired, ['b'], 'the sibling root still replays its own share');
-  assertEquals(
+  expect(fired, 'the sibling root still replays its own share').toEqual(['b']);
+  expect(
     preUpgradeRetainedRecordCount(asNode(b.host)),
-    1,
     'the adopted record is retained until its own root releases it',
-  );
+  ).toEqual(1);
   releasePreUpgradeCapturesFor(asNode(b.host));
-  assertEquals(preUpgradeRetainedRecordCount(asNode(b.host)), 0);
+  expect(preUpgradeRetainedRecordCount(asNode(b.host))).toEqual(0);
 
   cleanup(a.host, b.host);
 });

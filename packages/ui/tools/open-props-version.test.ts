@@ -5,17 +5,18 @@
  * dependency declaration is the canonical source, and it must pin an exact
  * version. node_modules is never a governance source.
  */
-import { assertEquals, assertThrows } from '@std/assert';
+import { expect, test } from 'vitest';
+import { assertThrowsIncludes } from '../../../tests/lib/vitest-asserts.ts';
 import { parseOpenPropsVersion } from './open-props-version.ts';
 
 const deps = (spec: string) => ({ 'open-props': spec });
 
-Deno.test('parseOpenPropsVersion: reads the declared version', () => {
-  assertEquals(parseOpenPropsVersion(deps('1.7.23'), 'fixture'), '1.7.23');
-  assertEquals(parseOpenPropsVersion(deps('2.0.0-beta.1'), 'fixture'), '2.0.0-beta.1');
+test('parseOpenPropsVersion: reads the declared version', () => {
+  expect(parseOpenPropsVersion(deps('1.7.23'), 'fixture')).toEqual('1.7.23');
+  expect(parseOpenPropsVersion(deps('2.0.0-beta.1'), 'fixture')).toEqual('2.0.0-beta.1');
 });
 
-Deno.test('parseOpenPropsVersion: fails closed on malformed declarations', () => {
+test('parseOpenPropsVersion: fails closed on malformed declarations', () => {
   const cases: Array<[string, unknown]> = [
     ['dependencies missing', undefined],
     ['dependencies not an object', 'nope'],
@@ -27,6 +28,11 @@ Deno.test('parseOpenPropsVersion: fails closed on malformed declarations', () =>
     ['npm prefix residue', { 'open-props': 'npm:open-props@1.7.23' }],
   ];
   for (const [label, dependencies] of cases) {
-    assertThrows(() => parseOpenPropsVersion(dependencies, 'fixture'), Error, 'fixture', label);
+    assertThrowsIncludes(
+      () => parseOpenPropsVersion(dependencies, 'fixture'),
+      Error,
+      'fixture',
+      label,
+    );
   }
 });

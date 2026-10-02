@@ -4,7 +4,7 @@
  * with stub forms (H1/#576/#598 action-URL resolution, previously locked by
  * string assertions on generated code) and the morph helpers (#603/#604).
  */
-import { assert, assertEquals } from '@std/assert';
+import { expect, test } from 'vitest';
 import { createEnhanceClient } from '../src/vite/internal/ssg/enhance-client.ts';
 import {
   computeSubmissionTuple,
@@ -204,7 +204,7 @@ function submitEvent(
   };
 }
 
-Deno.test('H1/#576: formaction attribute wins over the form action', async () => {
+test('H1/#576: formaction attribute wins over the form action', async () => {
   const { fetches, fireSubmit } = makeHarness();
   const form = new FakeFormElement();
   form.setAttribute('method', 'post');
@@ -218,17 +218,17 @@ Deno.test('H1/#576: formaction attribute wins over the form action', async () =>
   form.controls = [{ name: 'title', value: 'hello world' }];
   fireSubmit(form, submitter);
   await Promise.resolve();
-  assertEquals(fetches.length, 1);
-  assertEquals(fetches[0].url, 'https://fixture.local/ping?/pong');
-  assertEquals(fetches[0].init.headers['x-openelement-action'], 'enhance');
+  expect(fetches.length).toEqual(1);
+  expect(fetches[0].url).toEqual('https://fixture.local/ping?/pong');
+  expect(fetches[0].init.headers['x-openelement-action']).toEqual('enhance');
   // Beta.2.2 (#1339): the default enctype is urlencoded — the body is the
   // native urlencoded serialization (tree order + the submitter's name/value)
   // with the exact native Content-Type, never a multipart FormData body.
-  assertEquals(fetches[0].init.headers['content-type'], 'application/x-www-form-urlencoded');
-  assertEquals(fetches[0].init.body, 'title=hello+world&intent=probe');
+  expect(fetches[0].init.headers['content-type']).toEqual('application/x-www-form-urlencoded');
+  expect(fetches[0].init.body).toEqual('title=hello+world&intent=probe');
 });
 
-Deno.test('H1/#576: the form action attribute is used when no formaction exists', async () => {
+test('H1/#576: the form action attribute is used when no formaction exists', async () => {
   const { fetches, fireSubmit } = makeHarness();
   const form = new FakeFormElement();
   form.setAttribute('method', 'post');
@@ -239,11 +239,11 @@ Deno.test('H1/#576: the form action attribute is used when no formaction exists'
   const submitter = new FakeSubmitter();
   fireSubmit(form, submitter);
   await Promise.resolve();
-  assertEquals(fetches.length, 1);
-  assertEquals(fetches[0].url, 'https://fixture.local/form');
+  expect(fetches.length).toEqual(1);
+  expect(fetches[0].url).toEqual('https://fixture.local/form');
 });
 
-Deno.test('H1/#598: the action ATTRIBUTE is resolved, never the form.action IDL', async () => {
+test('H1/#598: the action ATTRIBUTE is resolved, never the form.action IDL', async () => {
   const { fetches, fireSubmit } = makeHarness();
   const form = new FakeFormElement();
   form.setAttribute('method', 'post');
@@ -254,22 +254,22 @@ Deno.test('H1/#598: the action ATTRIBUTE is resolved, never the form.action IDL'
   (form as unknown as Record<string, unknown>).action = { tagName: 'INPUT' };
   fireSubmit(form);
   await Promise.resolve();
-  assertEquals(fetches.length, 1);
-  assertEquals(fetches[0].url, 'https://fixture.local/elsewhere');
+  expect(fetches.length).toEqual(1);
+  expect(fetches[0].url).toEqual('https://fixture.local/elsewhere');
 });
 
-Deno.test('no action attribute posts to the current URL', async () => {
+test('no action attribute posts to the current URL', async () => {
   const { fetches, fireSubmit } = makeHarness();
   const form = new FakeFormElement();
   form.setAttribute('method', 'post');
   form.setAttribute('data-open-enhance', '');
   fireSubmit(form);
   await Promise.resolve();
-  assertEquals(fetches.length, 1);
-  assertEquals(fetches[0].url, 'https://fixture.local/form');
+  expect(fetches.length).toEqual(1);
+  expect(fetches[0].url).toEqual('https://fixture.local/form');
 });
 
-Deno.test('GET forms and non-enhanced forms are never intercepted', () => {
+test('GET forms and non-enhanced forms are never intercepted', () => {
   const { fetches, fireSubmit } = makeHarness();
   const get = new FakeFormElement();
   get.setAttribute('method', 'get');
@@ -280,10 +280,10 @@ Deno.test('GET forms and non-enhanced forms are never intercepted', () => {
   fireSubmit(get);
   fireSubmit(plain);
   fireSubmit(notAForm as unknown as FakeFormElement);
-  assertEquals(fetches.length, 0);
+  expect(fetches.length).toEqual(0);
 });
 
-Deno.test('#974: an empty 200 text/html response navigates instead of morphing to blank', async () => {
+test('#974: an empty 200 text/html response navigates instead of morphing to blank', async () => {
   const { fireSubmit, navigations } = makeHarness({
     responseStatus: 200,
     responseType: 'text/html',
@@ -298,25 +298,25 @@ Deno.test('#974: an empty 200 text/html response navigates instead of morphing t
   await new Promise((resolve) => setTimeout(resolve, 0));
   // An empty body must take the navigation path; morphing it would blank
   // the live page (the fake DOMParser throws if a morph were attempted).
-  assertEquals(navigations.length, 1);
-  assertEquals(navigations[0], 'https://fixture.local/form');
+  expect(navigations.length).toEqual(1);
+  expect(navigations[0]).toEqual('https://fixture.local/form');
 });
 
-Deno.test('#564: a second submit while one in flight is ignored', async () => {
+test('#564: a second submit while one in flight is ignored', async () => {
   const { fetches, fireSubmit } = makeHarness({ responseStatus: 500 });
   const form = new FakeFormElement();
   form.setAttribute('method', 'post');
   form.setAttribute('data-open-enhance', '');
   fireSubmit(form);
   fireSubmit(form); // in flight: ignored
-  assertEquals(fetches.length, 1);
+  expect(fetches.length).toEqual(1);
   // Let the response promise chain settle (busy flag resets in a .then).
   await new Promise((resolve) => setTimeout(resolve, 0));
   fireSubmit(form); // response settled: allowed again
-  assertEquals(fetches.length, 2);
+  expect(fetches.length).toEqual(2);
 });
 
-Deno.test('#599: concurrent submits on different forms never drop a response (per-form sequence)', async () => {
+test('#599: concurrent submits on different forms never drop a response (per-form sequence)', async () => {
   // Deferred fetch: the test chooses the landing order. Form B's response
   // lands FIRST; form A's must still be applied afterwards — a global
   // last-wins sequence (the pre-#599 design) would silently drop it.
@@ -347,10 +347,10 @@ Deno.test('#599: concurrent submits on different forms never drop a response (pe
 
   fireSubmit(formA);
   fireSubmit(formB);
-  assertEquals(
-    deferred.map((d) => d.url),
-    ['https://fixture.local/form-a', 'https://fixture.local/form-b'],
-  );
+  expect(deferred.map((d) => d.url)).toEqual([
+    'https://fixture.local/form-a',
+    'https://fixture.local/form-b',
+  ]);
 
   // B lands first, A second — the reverse of submission order.
   deferred[1].resolve();
@@ -359,7 +359,7 @@ Deno.test('#599: concurrent submits on different forms never drop a response (pe
   await new Promise((resolve) => setTimeout(resolve, 0));
 
   // Both 500 responses take the navigation path; neither was dropped.
-  assertEquals(navigations, ['https://fixture.local/form-b', 'https://fixture.local/form-a']);
+  expect(navigations).toEqual(['https://fixture.local/form-b', 'https://fixture.local/form-a']);
 });
 
 // The submit interceptor computes the platform's effective submission tuple
@@ -370,7 +370,7 @@ Deno.test('#599: concurrent submits on different forms never drop a response (pe
 // URL, Content-Type and raw body, JS on/off) lives in the app-flow-native
 // fixture's e2e/effective-tuple.spec.ts.
 
-Deno.test('tuple: submitter formmethod=get on a POST form is never intercepted', () => {
+test('tuple: submitter formmethod=get on a POST form is never intercepted', () => {
   const { fetches, fireSubmit } = makeHarness();
   const form = new FakeFormElement();
   form.setAttribute('method', 'post');
@@ -379,11 +379,11 @@ Deno.test('tuple: submitter formmethod=get on a POST form is never intercepted',
   const submitter = new FakeSubmitter();
   submitter.attrs.set('formmethod', 'get');
   const event = fireSubmit(form, submitter);
-  assertEquals(fetches.length, 0);
-  assertEquals(event.prevented, false);
+  expect(fetches.length).toEqual(0);
+  expect(event.prevented).toEqual(false);
 });
 
-Deno.test('tuple: submitter formmethod=post on a GET form IS enhanced as POST', async () => {
+test('tuple: submitter formmethod=post on a GET form IS enhanced as POST', async () => {
   const { fetches, fireSubmit } = makeHarness();
   const form = new FakeFormElement();
   form.setAttribute('method', 'get');
@@ -394,13 +394,13 @@ Deno.test('tuple: submitter formmethod=post on a GET form IS enhanced as POST', 
   submitter.attrs.set('formmethod', 'post');
   fireSubmit(form, submitter);
   await Promise.resolve();
-  assertEquals(fetches.length, 1);
-  assertEquals(fetches[0].init.method, 'POST');
-  assertEquals(fetches[0].init.headers['content-type'], 'application/x-www-form-urlencoded');
-  assertEquals(fetches[0].init.body, 'q=hello+world');
+  expect(fetches.length).toEqual(1);
+  expect(fetches[0].init.method).toEqual('POST');
+  expect(fetches[0].init.headers['content-type']).toEqual('application/x-www-form-urlencoded');
+  expect(fetches[0].init.body).toEqual('q=hello+world');
 });
 
-Deno.test('tuple: invalid/unknown formmethod falls back to GET and is never intercepted', () => {
+test('tuple: invalid/unknown formmethod falls back to GET and is never intercepted', () => {
   const { fetches, fireSubmit } = makeHarness();
   const form = new FakeFormElement();
   form.setAttribute('method', 'post');
@@ -408,21 +408,21 @@ Deno.test('tuple: invalid/unknown formmethod falls back to GET and is never inte
   const submitter = new FakeSubmitter();
   submitter.attrs.set('formmethod', 'bogus');
   const event = fireSubmit(form, submitter);
-  assertEquals(fetches.length, 0);
-  assertEquals(event.prevented, false);
+  expect(fetches.length).toEqual(0);
+  expect(event.prevented).toEqual(false);
 });
 
-Deno.test('tuple: method=dialog is never intercepted (native dialog close)', () => {
+test('tuple: method=dialog is never intercepted (native dialog close)', () => {
   const { fetches, fireSubmit } = makeHarness();
   const form = new FakeFormElement();
   form.setAttribute('method', 'dialog');
   form.setAttribute('data-open-enhance', '');
   const event = fireSubmit(form);
-  assertEquals(fetches.length, 0);
-  assertEquals(event.prevented, false);
+  expect(fetches.length).toEqual(0);
+  expect(event.prevented).toEqual(false);
 });
 
-Deno.test('tuple: multipart enctype passes FormData through untouched (no hand-set boundary)', async () => {
+test('tuple: multipart enctype passes FormData through untouched (no hand-set boundary)', async () => {
   const { fetches, fireSubmit } = makeHarness();
   const form = new FakeFormElement();
   form.setAttribute('method', 'post');
@@ -431,12 +431,12 @@ Deno.test('tuple: multipart enctype passes FormData through untouched (no hand-s
   form.setAttribute('action', '/form');
   fireSubmit(form);
   await Promise.resolve();
-  assertEquals(fetches.length, 1);
-  assert(fetches[0].init.body instanceof FakeFormData);
-  assertEquals('content-type' in fetches[0].init.headers, false);
+  expect(fetches.length).toEqual(1);
+  expect(fetches[0].init.body instanceof FakeFormData).toBeTruthy();
+  expect('content-type' in fetches[0].init.headers).toEqual(false);
 });
 
-Deno.test('tuple: submitter formenctype wins over the form enctype, both directions', async () => {
+test('tuple: submitter formenctype wins over the form enctype, both directions', async () => {
   const { fetches, fireSubmit } = makeHarness();
   // form multipart + submitter urlencoded -> urlencoded serialization.
   const formA = new FakeFormElement();
@@ -449,8 +449,8 @@ Deno.test('tuple: submitter formenctype wins over the form enctype, both directi
   subA.attrs.set('formenctype', 'application/x-www-form-urlencoded');
   fireSubmit(formA, subA);
   await Promise.resolve();
-  assertEquals(fetches[0].init.body, 'x=1');
-  assertEquals(fetches[0].init.headers['content-type'], 'application/x-www-form-urlencoded');
+  expect(fetches[0].init.body).toEqual('x=1');
+  expect(fetches[0].init.headers['content-type']).toEqual('application/x-www-form-urlencoded');
   // form urlencoded + submitter multipart -> FormData passthrough.
   const formB = new FakeFormElement();
   formB.setAttribute('method', 'post');
@@ -460,21 +460,21 @@ Deno.test('tuple: submitter formenctype wins over the form enctype, both directi
   subB.attrs.set('formenctype', 'multipart/form-data');
   fireSubmit(formB, subB);
   await Promise.resolve();
-  assert(fetches[1].init.body instanceof FakeFormData);
+  expect(fetches[1].init.body instanceof FakeFormData).toBeTruthy();
 });
 
-Deno.test('tuple: text/plain is never intercepted (explicit native fallback)', () => {
+test('tuple: text/plain is never intercepted (explicit native fallback)', () => {
   const { fetches, fireSubmit } = makeHarness();
   const form = new FakeFormElement();
   form.setAttribute('method', 'post');
   form.setAttribute('enctype', 'text/plain');
   form.setAttribute('data-open-enhance', '');
   const event = fireSubmit(form);
-  assertEquals(fetches.length, 0);
-  assertEquals(event.prevented, false);
+  expect(fetches.length).toEqual(0);
+  expect(event.prevented).toEqual(false);
 });
 
-Deno.test('tuple: submitter formtarget=_blank keeps browser behavior; formtarget=_self intercepts', async () => {
+test('tuple: submitter formtarget=_blank keeps browser behavior; formtarget=_self intercepts', async () => {
   const { fetches, fireSubmit } = makeHarness();
   const form = new FakeFormElement();
   form.setAttribute('method', 'post');
@@ -483,39 +483,39 @@ Deno.test('tuple: submitter formtarget=_blank keeps browser behavior; formtarget
   const blank = new FakeSubmitter();
   blank.attrs.set('formtarget', '_blank');
   const blankEvent = fireSubmit(form, blank);
-  assertEquals(fetches.length, 0);
-  assertEquals(blankEvent.prevented, false);
+  expect(fetches.length).toEqual(0);
+  expect(blankEvent.prevented).toEqual(false);
   const self = new FakeSubmitter();
   self.attrs.set('formtarget', '_SELF');
   fireSubmit(form, self);
   await Promise.resolve();
-  assertEquals(fetches.length, 1);
+  expect(fetches.length).toEqual(1);
 });
 
-Deno.test('tuple: a cross-origin action keeps native submission', () => {
+test('tuple: a cross-origin action keeps native submission', () => {
   const { fetches, fireSubmit } = makeHarness();
   const form = new FakeFormElement();
   form.setAttribute('method', 'post');
   form.setAttribute('data-open-enhance', '');
   form.setAttribute('action', 'https://other.example/sink');
   const event = fireSubmit(form);
-  assertEquals(fetches.length, 0);
-  assertEquals(event.prevented, false);
+  expect(fetches.length).toEqual(0);
+  expect(event.prevented).toEqual(false);
 });
 
-Deno.test('normalizeNewlinesForUrlencoded: the platform urlencoded newline rule', () => {
+test('normalizeNewlinesForUrlencoded: the platform urlencoded newline rule', () => {
   // Lone LF -> CRLF.
-  assertEquals(normalizeNewlinesForUrlencoded('a\nb'), 'a\r\nb');
+  expect(normalizeNewlinesForUrlencoded('a\nb')).toEqual('a\r\nb');
   // Lone CR -> CRLF.
-  assertEquals(normalizeNewlinesForUrlencoded('a\rb'), 'a\r\nb');
+  expect(normalizeNewlinesForUrlencoded('a\rb')).toEqual('a\r\nb');
   // An existing CRLF stays a SINGLE CRLF (never double-expanded).
-  assertEquals(normalizeNewlinesForUrlencoded('a\r\nb'), 'a\r\nb');
+  expect(normalizeNewlinesForUrlencoded('a\r\nb')).toEqual('a\r\nb');
   // Mixed input: each newline sequence normalizes independently.
-  assertEquals(normalizeNewlinesForUrlencoded('a\nb\rc\r\nd'), 'a\r\nb\r\nc\r\nd');
-  assertEquals(normalizeNewlinesForUrlencoded('plain'), 'plain');
+  expect(normalizeNewlinesForUrlencoded('a\nb\rc\r\nd')).toEqual('a\r\nb\r\nc\r\nd');
+  expect(normalizeNewlinesForUrlencoded('plain')).toEqual('plain');
 });
 
-Deno.test('tuple: urlencoded bodies normalize newlines in names AND values (native parity)', async () => {
+test('tuple: urlencoded bodies normalize newlines in names AND values (native parity)', async () => {
   const { fetches, fireSubmit } = makeHarness();
   const form = new FakeFormElement();
   form.setAttribute('method', 'post');
@@ -531,12 +531,12 @@ Deno.test('tuple: urlencoded bodies normalize newlines in names AND values (nati
   ];
   fireSubmit(form);
   await Promise.resolve();
-  assertEquals(fetches.length, 1);
-  assertEquals(fetches[0].init.body, 'multi%0D%0Aline=a%0D%0Ab&cr=a%0D%0Ab&crlf=a%0D%0Ab');
-  assertEquals(fetches[0].init.headers['content-type'], 'application/x-www-form-urlencoded');
+  expect(fetches.length).toEqual(1);
+  expect(fetches[0].init.body).toEqual('multi%0D%0Aline=a%0D%0Ab&cr=a%0D%0Ab&crlf=a%0D%0Ab');
+  expect(fetches[0].init.headers['content-type']).toEqual('application/x-www-form-urlencoded');
 });
 
-Deno.test('tuple: newline normalization never reorders repeated fields', async () => {
+test('tuple: newline normalization never reorders repeated fields', async () => {
   const { fetches, fireSubmit } = makeHarness();
   const form = new FakeFormElement();
   form.setAttribute('method', 'post');
@@ -550,10 +550,10 @@ Deno.test('tuple: newline normalization never reorders repeated fields', async (
   fireSubmit(form);
   await Promise.resolve();
   // Tree order is preserved exactly; only the newline bytes change.
-  assertEquals(fetches[0].init.body, 'tag=one%0D%0Atwo&title=middle&tag=three');
+  expect(fetches[0].init.body).toEqual('tag=one%0D%0Atwo&title=middle&tag=three');
 });
 
-Deno.test('computeSubmissionTuple: platform defaults and validation state', () => {
+test('computeSubmissionTuple: platform defaults and validation state', () => {
   const form = new FakeFormElement();
   form.setAttribute('action', '/rel');
   const tuple = computeSubmissionTuple(
@@ -562,11 +562,11 @@ Deno.test('computeSubmissionTuple: platform defaults and validation state', () =
     'https://fixture.local/docs/page',
     'https://fixture.local/docs/page',
   );
-  assertEquals(tuple.method, 'GET');
-  assertEquals(tuple.enctype, 'application/x-www-form-urlencoded');
-  assertEquals(tuple.target, '');
-  assertEquals(tuple.noValidate, false);
-  assertEquals(tuple.action, 'https://fixture.local/rel');
+  expect(tuple.method).toEqual('GET');
+  expect(tuple.enctype).toEqual('application/x-www-form-urlencoded');
+  expect(tuple.target).toEqual('');
+  expect(tuple.noValidate).toEqual(false);
+  expect(tuple.action).toEqual('https://fixture.local/rel');
 
   form.setAttribute('novalidate', '');
   const noValidateTuple = computeSubmissionTuple(
@@ -575,7 +575,7 @@ Deno.test('computeSubmissionTuple: platform defaults and validation state', () =
     'https://fixture.local/',
     'https://fixture.local/',
   );
-  assertEquals(noValidateTuple.noValidate, true);
+  expect(noValidateTuple.noValidate).toEqual(true);
 
   const submitter = new FakeSubmitter();
   submitter.attrs.set('formnovalidate', '');
@@ -587,14 +587,14 @@ Deno.test('computeSubmissionTuple: platform defaults and validation state', () =
     'https://fixture.local/',
     'https://fixture.local/',
   );
-  assertEquals(submitterTuple.noValidate, true);
-  assertEquals(submitterTuple.method, 'POST');
+  expect(submitterTuple.noValidate).toEqual(true);
+  expect(submitterTuple.method).toEqual('POST');
   // Invalid enctype casing resolves case-insensitively; unknown values fall
   // back to urlencoded.
-  assertEquals(submitterTuple.enctype, 'text/plain');
+  expect(submitterTuple.enctype).toEqual('text/plain');
 });
 
-Deno.test('late form failures cannot navigate after the submitting page exits', async () => {
+test('late form failures cannot navigate after the submitting page exits', async () => {
   let finish!: (value: unknown) => void;
   const { win, fireSubmit, navigations } = makeHarness({
     fetchFn: () => new Promise((resolve) => (finish = resolve)),
@@ -611,10 +611,10 @@ Deno.test('late form failures cannot navigate after the submitting page exits', 
     headers: { get: () => 'text/plain' },
   });
   await new Promise((resolve) => setTimeout(resolve, 0));
-  assertEquals(navigations, []);
+  expect(navigations).toEqual([]);
 });
 
-Deno.test('fragment changes retain the pending form result', async () => {
+test('fragment changes retain the pending form result', async () => {
   let finish!: (value: unknown) => void;
   const { win, fireSubmit, navigations } = makeHarness({
     fetchFn: () => new Promise((resolve) => (finish = resolve)),
@@ -631,5 +631,5 @@ Deno.test('fragment changes retain the pending form result', async () => {
     headers: { get: () => 'text/plain' },
   });
   await new Promise((resolve) => setTimeout(resolve, 0));
-  assertEquals(navigations, ['https://fixture.local/form']);
+  expect(navigations).toEqual(['https://fixture.local/form']);
 });

@@ -1,4 +1,4 @@
-import { assertEquals, assertStringIncludes } from '@std/assert';
+import { expect, test } from 'vitest';
 import { createScannerWorker } from '../../scanner-worker.ts';
 
 const reservationId = '123e4567-e89b-42d3-a456-426614174000';
@@ -47,27 +47,24 @@ function successfulFetch(code: number) {
   return { fetchImpl, calls };
 }
 
-Deno.test('private scanner validates the reservation before downloading and scanning', async () => {
+test('private scanner validates the reservation before downloading and scanning', async () => {
   const { fetchImpl, calls } = successfulFetch(0);
   const response = await createScannerWorker(fetchImpl).fetch(request(), env);
-  assertEquals(response.status, 200);
-  assertEquals(await response.json(), { verdict: 'clean' });
-  assertEquals(
-    calls.map(({ url }) => new URL(url).pathname),
-    [
-      '/rest/v1/rpc/authorize_attachment_scan',
-      '/storage/v1/object/authenticated/notes-attachments/owner/private-object.pdf',
-      '/file/sync',
-    ],
-  );
-  assertEquals(JSON.parse(String(calls[0].init?.body)), {
+  expect(response.status).toEqual(200);
+  expect(await response.json()).toEqual({ verdict: 'clean' });
+  expect(calls.map(({ url }) => new URL(url).pathname)).toEqual([
+    '/rest/v1/rpc/authorize_attachment_scan',
+    '/storage/v1/object/authenticated/notes-attachments/owner/private-object.pdf',
+    '/file/sync',
+  ]);
+  expect(JSON.parse(String(calls[0].init?.body))).toEqual({
     target_reservation_id: reservationId,
     target_object_key: objectKey,
   });
-  assertEquals(new Headers(calls[2].init?.headers).get('apikey'), 'metadefender-secret');
+  expect(new Headers(calls[2].init?.headers).get('apikey')).toEqual('metadefender-secret');
 });
 
-Deno.test('scanner orchestration accepts a provider-neutral adapter without MetaDefender config', async () => {
+test('scanner orchestration accepts a provider-neutral adapter without MetaDefender config', async () => {
   const base = successfulFetch(0);
   const scanned: Uint8Array[] = [];
   const response = await createScannerWorker(base.fetchImpl, {
@@ -75,7 +72,7 @@ Deno.test('scanner orchestration accepts a provider-neutral adapter without Meta
       name: 'test-provider',
       scan(input) {
         scanned.push(input.bytes);
-        assertEquals(input.contentType, 'application/pdf');
+        expect(input.contentType).toEqual('application/pdf');
         return Promise.resolve('clean');
       },
     },
@@ -85,33 +82,33 @@ Deno.test('scanner orchestration accepts a provider-neutral adapter without Meta
     METADEFENDER_API_KEY: '',
   });
 
-  assertEquals(response.status, 200);
-  assertEquals(await response.json(), { verdict: 'clean' });
-  assertEquals(scanned, [new Uint8Array([1, 2, 3, 4])]);
-  assertEquals(base.calls.length, 2);
+  expect(response.status).toEqual(200);
+  expect(await response.json()).toEqual({ verdict: 'clean' });
+  expect(scanned).toEqual([new Uint8Array([1, 2, 3, 4])]);
+  expect(base.calls.length).toEqual(2);
 });
 
-Deno.test('private scanner quarantines infected, suspicious, and blocklisted results', async () => {
+test('private scanner quarantines infected, suspicious, and blocklisted results', async () => {
   for (const code of [1, 2, 8]) {
     const response = await createScannerWorker(successfulFetch(code).fetchImpl).fetch(
       request(),
       env,
     );
-    assertEquals(await response.json(), { verdict: 'quarantined' });
+    expect(await response.json()).toEqual({ verdict: 'quarantined' });
   }
 });
 
-Deno.test('private scanner fails closed without provider configuration', async () => {
+test('private scanner fails closed without provider configuration', async () => {
   let called = false;
   const response = await createScannerWorker(() => {
     called = true;
     return Promise.reject(new Error('must not call'));
   }).fetch(request(), { ...env, METADEFENDER_API_KEY: '' });
-  assertEquals(response.status, 503);
-  assertEquals(called, false);
+  expect(response.status).toEqual(503);
+  expect(called).toEqual(false);
 });
 
-Deno.test('private scanner rejects cross-object substitution before Storage access', async () => {
+test('private scanner rejects cross-object substitution before Storage access', async () => {
   let calls = 0;
   const response = await createScannerWorker((_input, _init) => {
     calls++;
@@ -123,11 +120,11 @@ Deno.test('private scanner rejects cross-object substitution before Storage acce
       }),
     );
   }).fetch(request(), env);
-  assertEquals(response.status, 503);
-  assertEquals(calls, 1);
+  expect(response.status).toEqual(503);
+  expect(calls).toEqual(1);
 });
 
-Deno.test('private scanner rejects oversized or mismatched object bytes', async () => {
+test('private scanner rejects oversized or mismatched object bytes', async () => {
   for (const declared of [10 * 1024 * 1024 + 1, 5]) {
     let calls = 0;
     const response = await createScannerWorker((input) => {
@@ -148,12 +145,12 @@ Deno.test('private scanner rejects oversized or mismatched object bytes', async 
         }),
       );
     }).fetch(request(), env);
-    assertEquals(response.status, 503);
-    assertEquals(calls, 2);
+    expect(response.status).toEqual(503);
+    expect(calls).toEqual(2);
   }
 });
 
-Deno.test('private scanner treats malformed, incomplete, and provider failures as retryable', async () => {
+test('private scanner treats malformed, incomplete, and provider failures as retryable', async () => {
   for (const provider of [
     new Response('unavailable', { status: 503 }),
     Response.json({ scan_results: { progress_percentage: 50, scan_all_result_i: 0 } }),
@@ -171,12 +168,12 @@ Deno.test('private scanner treats malformed, incomplete, and provider failures a
       if (String(input).endsWith('/file/sync')) return Promise.resolve(provider.clone());
       return base.fetchImpl(input, init);
     }).fetch(request(), env);
-    assertEquals(response.status, 503);
-    assertStringIncludes(await response.text(), 'scan unavailable');
+    expect(response.status).toEqual(503);
+    expect(await response.text()).toContain('scan unavailable');
   }
 });
 
-Deno.test('private scanner converts upstream timeout into retryable failure', async () => {
+test('private scanner converts upstream timeout into retryable failure', async () => {
   const response = await createScannerWorker(
     (_input, init) =>
       new Promise((_resolve, reject) => {
@@ -184,10 +181,10 @@ Deno.test('private scanner converts upstream timeout into retryable failure', as
       }),
     { timeoutMs: 1 },
   ).fetch(request(), env);
-  assertEquals(response.status, 503);
+  expect(response.status).toEqual(503);
 });
 
-Deno.test('scanner orchestration times out a provider that ignores AbortSignal', async () => {
+test('scanner orchestration times out a provider that ignores AbortSignal', async () => {
   const base = successfulFetch(0);
   let aborted = false;
   const startedAt = performance.now();
@@ -202,7 +199,7 @@ Deno.test('scanner orchestration times out a provider that ignores AbortSignal',
     },
   }).fetch(request(), env);
 
-  assertEquals(response.status, 503);
-  assertEquals(aborted, true);
-  assertEquals(performance.now() - startedAt < 500, true);
+  expect(response.status).toEqual(503);
+  expect(aborted).toEqual(true);
+  expect(performance.now() - startedAt < 500).toEqual(true);
 });

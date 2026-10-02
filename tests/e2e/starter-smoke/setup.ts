@@ -14,6 +14,9 @@
  *   deno task --cwd tests/e2e/starter-smoke setup   (build everything into work/)
  */
 
+import { readFile, writeFile } from 'node:fs/promises';
+import { mkdirSync, rmSync } from 'node:fs';
+import process from 'node:process';
 import { join, relative, resolve, toFileUrl } from '@std/path';
 import { existsSync } from '@std/fs';
 import { runStep } from '../../lib/qualify-harness/command-run.ts';
@@ -35,7 +38,7 @@ function packAndExtract(pkg: (typeof PACKAGES)[number]): Promise<void> {
   return (async () => {
     await runStep('deno', ['pack', '--allow-dirty', '-o', tgz], { cwd: pkgDir });
     const extractDir = join(depsDir, pkg);
-    Deno.mkdirSync(extractDir, { recursive: true });
+    mkdirSync(extractDir, { recursive: true });
     await runStep('tar', ['-xzf', tgz, '-C', extractDir, '--strip-components=1'], {
       cwd: repoRoot,
     });
@@ -62,7 +65,7 @@ async function assertPackedCliPrintsCanonicalCommand(createCli: string): Promise
   // `deno eval` accepts no permission flags; a bare `deno run -` with the
   // script on stdin keeps the same isolation with the flags this check needs.
   const expected = (
-    await runStep(Deno.execPath(), ['run', '--allow-read', '--no-prompt', '-'], {
+    await runStep(process.execPath, ['run', '--allow-read', '--no-prompt', '-'], {
       cwd: repoRoot,
       stdin: `const { createInstallCommand } = await import(${JSON.stringify(
         installCommandUrl,
@@ -72,7 +75,7 @@ async function assertPackedCliPrintsCanonicalCommand(createCli: string): Promise
   // The no-arguments path is the usage path; exit 1 is its documented code.
   const stdout = (
     await runStep(
-      Deno.execPath(),
+      process.execPath,
       [
         'run',
         '--minimum-dependency-age',
@@ -110,7 +113,7 @@ async function assertPackedCliPrintsCanonicalCommand(createCli: string): Promise
  * transitive npm imports resolving.
  */
 async function rewireToMonorepoSources(denoJsonPath: string): Promise<void> {
-  const denoJson = JSON.parse(await Deno.readTextFile(denoJsonPath)) as {
+  const denoJson = JSON.parse(await readFile(denoJsonPath, 'utf8')) as {
     imports: Record<string, string>;
     tasks: Record<string, string>;
   };
@@ -140,12 +143,12 @@ async function rewireToMonorepoSources(denoJsonPath: string): Promise<void> {
     if (replaced !== command) denoJson.tasks[name] = replaced;
   }
 
-  await Deno.writeTextFile(denoJsonPath, JSON.stringify(denoJson, null, 2) + '\n');
+  await writeFile(denoJsonPath, JSON.stringify(denoJson, null, 2) + '\n');
 }
 
 async function main(): Promise<void> {
-  Deno.mkdirSync(depsDir, { recursive: true });
-  if (existsSync(appDir)) Deno.removeSync(appDir, { recursive: true });
+  mkdirSync(depsDir, { recursive: true });
+  if (existsSync(appDir)) rmSync(appDir, { recursive: true });
   for (const pkg of PACKAGES) await packAndExtract(pkg);
 
   const createCli = join(depsDir, 'create', 'src', 'cli.js');

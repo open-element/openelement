@@ -31,7 +31,7 @@
  * no JSX whitespace, and its literal text is emitted verbatim (pinned below).
  */
 
-import { assert, assertEquals, assertStringIncludes } from '@std/assert';
+import { expect, test } from 'vitest';
 import ts from 'typescript';
 import {
   CompiledElementError,
@@ -124,13 +124,13 @@ function reactTextChildren(fragment: string): string[] {
 function assertMatchesReact(fragment: string, fields = ''): void {
   const emitted = staticTexts(compileRender(fragment, fields).template);
   const react = reactTextChildren(fragment);
-  assert(
+  expect(
     JSON.stringify(emitted) === JSON.stringify(react),
     `OE emitted ${JSON.stringify(emitted)} but the React transform compiled ${JSON.stringify(react)}`,
-  );
+  ).toBeTruthy();
 }
 
-Deno.test('jsx text matrix: 404 regression shape — newline-wrapped span serializes without injected spaces', () => {
+test('jsx text matrix: 404 regression shape — newline-wrapped span serializes without injected spaces', () => {
   // The alpha7 A2 oxfmt re-layout of www's el-404 heading. React renders
   // `404`; the pre-fix lowering rendered `40 4`.
   const fragment = [
@@ -143,92 +143,95 @@ Deno.test('jsx text matrix: 404 regression shape — newline-wrapped span serial
     '          </h1>',
   ].join('\n');
   const texts = staticTexts(compileRender(fragment).template);
-  assertEquals(texts, ['40', '0', '4']);
+  expect(texts).toEqual(['40', '0', '4']);
   assertMatchesReact(fragment);
 });
 
-Deno.test('jsx text matrix: R1 — newline-touching boundary runs are stripped', () => {
-  assertEquals(staticTexts(compileRender('<p>\n  hello</p>').template), ['hello']);
+test('jsx text matrix: R1 — newline-touching boundary runs are stripped', () => {
+  expect(staticTexts(compileRender('<p>\n  hello</p>').template)).toEqual(['hello']);
   // Trailing run with a newline: pre-fix this serialized as 'hello '.
-  assertEquals(staticTexts(compileRender('<p>hello\n  </p>').template), ['hello']);
+  expect(staticTexts(compileRender('<p>hello\n  </p>').template)).toEqual(['hello']);
   // Whitespace-only node with a newline is removed entirely.
-  assertEquals(staticTexts(compileRender('<p>\n</p>').template), []);
+  expect(staticTexts(compileRender('<p>\n</p>').template)).toEqual([]);
   assertMatchesReact('<p>\n  hello</p>');
   assertMatchesReact('<p>hello\n  </p>');
 });
 
-Deno.test('jsx text matrix: R2 — newline-containing interior runs fold to one space', () => {
-  assertEquals(staticTexts(compileRender('<p>x\n  y</p>').template), ['x y']);
+test('jsx text matrix: R2 — newline-containing interior runs fold to one space', () => {
+  expect(staticTexts(compileRender('<p>x\n  y</p>').template)).toEqual(['x y']);
   // Blank lines collapse into the same single joining space.
-  assertEquals(staticTexts(compileRender('<p>a\n\n  b</p>').template), ['a b']);
+  expect(staticTexts(compileRender('<p>a\n\n  b</p>').template)).toEqual(['a b']);
   // Tabs touching a newline fold the same way.
-  assertEquals(staticTexts(compileRender('<p>x\n\ty</p>').template), ['x y']);
+  expect(staticTexts(compileRender('<p>x\n\ty</p>').template)).toEqual(['x y']);
   assertMatchesReact('<p>x\n  y</p>');
   assertMatchesReact('<p>a\n\n  b</p>');
 });
 
-Deno.test('jsx text matrix: R2 — pure-space runs without newlines are preserved verbatim', () => {
-  assertEquals(staticTexts(compileRender('<p>a  b</p>').template), ['a  b']);
+test('jsx text matrix: R2 — pure-space runs without newlines are preserved verbatim', () => {
+  expect(staticTexts(compileRender('<p>a  b</p>').template)).toEqual(['a  b']);
   // Trailing spaces on the last line never touch a newline: preserved.
   // (Pre-fix the raw run was collapsed to one space.)
-  assertEquals(staticTexts(compileRender('<p>pad  </p>').template), ['pad  ']);
-  assertEquals(staticTexts(compileRender('<p>pad </p>').template), ['pad ']);
+  expect(staticTexts(compileRender('<p>pad  </p>').template)).toEqual(['pad  ']);
+  expect(staticTexts(compileRender('<p>pad </p>').template)).toEqual(['pad ']);
   // Leading spaces survive too — the lowering reads JsxText.text, which keeps
   // the full run (getText() would have dropped it).
-  assertEquals(staticTexts(compileRender('<p>  pad</p>').template), ['  pad']);
-  assertEquals(staticTexts(compileRender('<p>  pad  </p>').template), ['  pad  ']);
+  expect(staticTexts(compileRender('<p>  pad</p>').template)).toEqual(['  pad']);
+  expect(staticTexts(compileRender('<p>  pad  </p>').template)).toEqual(['  pad  ']);
   assertMatchesReact('<p>a  b</p>');
   assertMatchesReact('<p>pad  </p>');
   assertMatchesReact('<p>  pad</p>');
   assertMatchesReact('<p>  pad  </p>');
 });
 
-Deno.test('jsx text matrix: R3 — newline between elements removes the run, bare space survives', () => {
-  assertEquals(staticTexts(compileRender('<p><span>a</span>\n  <span>b</span></p>').template), [
+test('jsx text matrix: R3 — newline between elements removes the run, bare space survives', () => {
+  expect(staticTexts(compileRender('<p><span>a</span>\n  <span>b</span></p>').template)).toEqual([
     'a',
     'b',
   ]);
   // No newline: the run survives (R3 second branch) and renders as one space.
   // The lowering must read the parser's canonical JsxText.text — getText()
   // drops a run abutting a tag and would lose the space.
-  assertEquals(staticTexts(compileRender('<p><span>a</span> <span>b</span></p>').template), [
+  expect(staticTexts(compileRender('<p><span>a</span> <span>b</span></p>').template)).toEqual([
     'a',
     ' ',
     'b',
   ]);
-  assertEquals(staticTexts(compileRender('<p><span>a</span> b</p>').template), ['a', ' b']);
-  assertEquals(staticTexts(compileRender('<p> </p>').template), [' ']);
+  expect(staticTexts(compileRender('<p><span>a</span> b</p>').template)).toEqual(['a', ' b']);
+  expect(staticTexts(compileRender('<p> </p>').template)).toEqual([' ']);
   assertMatchesReact('<p><span>a</span>\n  <span>b</span></p>');
   assertMatchesReact('<p><span>a</span> <span>b</span></p>');
   assertMatchesReact('<p><span>a</span> b</p>');
   assertMatchesReact('<p> </p>');
 });
 
-Deno.test('jsx text matrix: CRLF is a newline sequence for all three rules', () => {
-  assertEquals(staticTexts(compileRender('<p>40\r\n<span>4</span></p>').template), ['40', '4']);
-  assertEquals(staticTexts(compileRender('<p>\r\n  hi\r\n</p>').template), ['hi']);
-  assertEquals(staticTexts(compileRender('<p>a\r\nb</p>').template), ['a b']);
+test('jsx text matrix: CRLF is a newline sequence for all three rules', () => {
+  expect(staticTexts(compileRender('<p>40\r\n<span>4</span></p>').template)).toEqual(['40', '4']);
+  expect(staticTexts(compileRender('<p>\r\n  hi\r\n</p>').template)).toEqual(['hi']);
+  expect(staticTexts(compileRender('<p>a\r\nb</p>').template)).toEqual(['a b']);
   assertMatchesReact('<p>40\r\n<span>4</span></p>');
   assertMatchesReact('<p>a\r\nb</p>');
 });
 
-Deno.test('jsx text matrix: expression children are verbatim — no JSX whitespace applies', () => {
-  assertEquals(staticTexts(compileRender("<p>{'  40  '}</p>").template), ['  40  ']);
+test('jsx text matrix: expression children are verbatim — no JSX whitespace applies', () => {
+  expect(staticTexts(compileRender("<p>{'  40  '}</p>").template)).toEqual(['  40  ']);
   // Mixed: expression form keeps its literal while JSX text around it is
   // cleaned under the contract.
-  assertEquals(staticTexts(compileRender("<p>{'x'}\n  y\n  {'z'}</p>").template), ['x', 'y', 'z']);
+  expect(staticTexts(compileRender("<p>{'x'}\n  y\n  {'z'}</p>").template)).toEqual([
+    'x',
+    'y',
+    'z',
+  ]);
 });
 
-Deno.test('jsx text matrix: serialized 404-shape program renders 404, not 40 4', () => {
+test('jsx text matrix: serialized 404-shape program renders 404, not 40 4', () => {
   const program = compileRender("<h1 class='code'>\n  40\n  <span class='solid'>4</span>\n</h1>");
   const host = { signals: {}, handlers: {} } as unknown as Parameters<typeof serializeToHtml>[1];
-  assertEquals(
-    serializeToHtml(program, host),
+  expect(serializeToHtml(program, host)).toEqual(
     `<h1 class="code">40<span class="solid">4</span></h1>`,
   );
 });
 
-Deno.test('jsx text matrix: each-item templates lower their text under the same contract', () => {
+test('jsx text matrix: each-item templates lower their text under the same contract', () => {
   const itemFields = '@property({ reflect: false })\n  items = [{ id: "a", text: "alpha" }];';
   const program = compileRender(
     '<ul>{this.items.map((item) => <li key={item.id}>\n  {item.text}\n</li>)}</ul>',
@@ -236,16 +239,16 @@ Deno.test('jsx text matrix: each-item templates lower their text under the same 
   );
   // The newline-only runs around the item slot are removed; the slot itself
   // (ival) is not a static text node.
-  assertEquals(staticTexts(program.template), []);
+  expect(staticTexts(program.template)).toEqual([]);
   const list = program.template[0];
-  assert(list.k === 'el');
+  expect(list.k === 'el').toBeTruthy();
   const part = list.children[0];
-  assert(part.k === 'part');
+  expect(part.k === 'part').toBeTruthy();
   const item = program.parts[part.index];
-  assert(item.k === 'each');
+  expect(item.k === 'each').toBeTruthy();
   const itemRoot = item.item[0];
-  assert(itemRoot.k === 'el');
-  assertEquals(itemRoot.children, [{ k: 'ival', field: 'text' }]);
+  expect(itemRoot.k === 'el').toBeTruthy();
+  expect(itemRoot.children).toEqual([{ k: 'ival', field: 'text' }]);
 
   // Static multiline text inside the item template cleans the same way while
   // the slot keeps the template admissible. The template tree only holds the
@@ -254,16 +257,16 @@ Deno.test('jsx text matrix: each-item templates lower their text under the same 
     '<ul>{this.items.map((item) => <li key={item.id}>\n  x\n  {item.text}\n</li>)}</ul>',
     itemFields,
   );
-  assertEquals(staticTexts(staticProgram.template), []);
+  expect(staticTexts(staticProgram.template)).toEqual([]);
   const staticItem = staticProgram.parts[0];
-  assert(staticItem.k === 'each');
+  expect(staticItem.k === 'each').toBeTruthy();
   const staticItemRoot = staticItem.item[0];
-  assert(staticItemRoot.k === 'el');
-  assertEquals(staticItemRoot.children[0], { k: 'text', value: 'x' });
-  assertEquals(staticItemRoot.children[1], { k: 'ival', field: 'text' });
+  expect(staticItemRoot.k === 'el').toBeTruthy();
+  expect(staticItemRoot.children[0]).toEqual({ k: 'text', value: 'x' });
+  expect(staticItemRoot.children[1]).toEqual({ k: 'ival', field: 'text' });
 });
 
-Deno.test('jsx text matrix: html-sink childlessness stays coherent with emission', () => {
+test('jsx text matrix: html-sink childlessness stays coherent with emission', () => {
   const sinkPrelude =
     "import { element, OpenElement, property, trustedHtml, type TrustedHtml } from '@openelement/element';\n";
   const sinkFields =
@@ -284,12 +287,12 @@ Deno.test('jsx text matrix: html-sink childlessness stays coherent with emission
       try {
         compile(render);
       } catch (thrown) {
-        assert(thrown instanceof CompiledElementError);
+        expect(thrown instanceof CompiledElementError).toBeTruthy();
         return thrown;
       }
       throw new Error(`expected this render to keep the sink check closed: ${render}`);
     })();
-    assertStringIncludes(String(error), 'OEC9026');
+    expect(String(error)).toContain('OEC9026');
   }
   // Newline-only whitespace cleans to nothing (R1): still childless, still
   // allowed. The meaning predicate and the emission see identical text.

@@ -9,7 +9,8 @@
  * the app-flow-native / app-flow-lit fixture matrices.
  */
 
-import { assertEquals, assertThrows } from '@std/assert';
+import { expect, test } from 'vitest';
+import { assertThrowsIncludes } from '../../../tests/lib/vitest-asserts.ts';
 import { OpenElementError, wrapInDocument } from '@openelement/element';
 import { resolvePageDocument } from '../src/document.ts';
 import type { PageHead, PagePropsContext } from '../src/index.ts';
@@ -25,7 +26,7 @@ function ctx(overrides: Partial<PagePropsContext> = {}): PagePropsContext {
   };
 }
 
-Deno.test('resolvePageDocument: a static head passes through with normalized links in order', () => {
+test('resolvePageDocument: a static head passes through with normalized links in order', () => {
   const document = resolvePageDocument(
     {
       title: 'Notes',
@@ -40,7 +41,7 @@ Deno.test('resolvePageDocument: a static head passes through with normalized lin
     },
     ctx(),
   );
-  assertEquals(document, {
+  expect(document).toEqual({
     title: 'Notes',
     description: 'All notes',
     meta: [{ name: 'robots', content: 'index' }],
@@ -58,7 +59,7 @@ Deno.test('resolvePageDocument: a static head passes through with normalized lin
   });
 });
 
-Deno.test('resolvePageDocument: a resolver receives the request-scoped context', () => {
+test('resolvePageDocument: a resolver receives the request-scoped context', () => {
   interface NoteData {
     note: { title: string };
   }
@@ -76,21 +77,21 @@ Deno.test('resolvePageDocument: a resolver receives the request-scoped context',
       canonical: `https://example.com/notes/${c.params.id}`,
     };
   }, context);
-  assertEquals(received, context);
-  assertEquals(document.title, 'First note');
-  assertEquals(document.lang, 'zh');
-  assertEquals(document.links, [{ rel: 'canonical', href: 'https://example.com/notes/n1' }]);
+  expect(received).toEqual(context);
+  expect(document.title).toEqual('First note');
+  expect(document.lang).toEqual('zh');
+  expect(document.links).toEqual([{ rel: 'canonical', href: 'https://example.com/notes/n1' }]);
 });
 
-Deno.test('resolvePageDocument: an undefined head resolves to an empty document carrying the locale', () => {
-  assertEquals(resolvePageDocument(undefined, ctx({ locale: 'en' })), {
+test('resolvePageDocument: an undefined head resolves to an empty document carrying the locale', () => {
+  expect(resolvePageDocument(undefined, ctx({ locale: 'en' }))).toEqual({
     lang: 'en',
     links: [],
   });
-  assertEquals(resolvePageDocument(undefined, ctx()), { links: [] });
+  expect(resolvePageDocument(undefined, ctx())).toEqual({ links: [] });
 });
 
-Deno.test('resolvePageDocument: malformed heads fail loudly', () => {
+test('resolvePageDocument: malformed heads fail loudly', () => {
   const cases: Array<[string, PageHead | (() => never)]> = [
     ['resolver returning null', (() => null) as never],
     ['resolver returning an array', (() => []) as never],
@@ -111,7 +112,7 @@ Deno.test('resolvePageDocument: malformed heads fail loudly', () => {
     ],
   ];
   for (const [name, head] of cases) {
-    assertThrows(
+    assertThrowsIncludes(
       () => resolvePageDocument(head as PageHead, ctx()),
       Error,
       '[openElement] resolvePageDocument:',
@@ -120,7 +121,7 @@ Deno.test('resolvePageDocument: malformed heads fail loudly', () => {
   }
 });
 
-Deno.test('resolvePageDocument: resolution is pure, deterministic, and does not mutate its input', () => {
+test('resolvePageDocument: resolution is pure, deterministic, and does not mutate its input', () => {
   const head: PageHead = {
     title: 'Notes',
     canonical: 'https://example.com/notes',
@@ -129,21 +130,21 @@ Deno.test('resolvePageDocument: resolution is pure, deterministic, and does not 
   const snapshot = structuredClone(head);
   const first = resolvePageDocument(head, ctx());
   const second = resolvePageDocument(head, ctx());
-  assertEquals(first, second);
-  assertEquals(head, snapshot);
+  expect(first).toEqual(second);
+  expect(head).toEqual(snapshot);
 });
 
-Deno.test('resolvePageDocument: the resolver runs once per resolution, not per field', () => {
+test('resolvePageDocument: the resolver runs once per resolution, not per field', () => {
   let calls = 0;
   resolvePageDocument(() => {
     calls += 1;
     return { title: 'Counted' };
   }, ctx());
-  assertEquals(calls, 1);
+  expect(calls).toEqual(1);
 });
 
-Deno.test('resolvePageDocument: dangerouslyHeadFragments rejects <script> (fail-closed, route-data channel)', () => {
-  assertThrows(
+test('resolvePageDocument: dangerouslyHeadFragments rejects <script> (fail-closed, route-data channel)', () => {
+  assertThrowsIncludes(
     () =>
       resolvePageDocument(
         ({ data }: PagePropsContext) => ({
@@ -158,8 +159,8 @@ Deno.test('resolvePageDocument: dangerouslyHeadFragments rejects <script> (fail-
   );
 });
 
-Deno.test('resolvePageDocument: dangerouslyHeadFragments rejects blacklisted CSS in <style>', () => {
-  assertThrows(
+test('resolvePageDocument: dangerouslyHeadFragments rejects blacklisted CSS in <style>', () => {
+  assertThrowsIncludes(
     () =>
       resolvePageDocument(
         {
@@ -172,7 +173,7 @@ Deno.test('resolvePageDocument: dangerouslyHeadFragments rejects blacklisted CSS
   );
 });
 
-Deno.test('resolvePageDocument: dangerouslyHeadFragments accepts benign meta and style', () => {
+test('resolvePageDocument: dangerouslyHeadFragments accepts benign meta and style', () => {
   const document = resolvePageDocument(
     {
       dangerouslyHeadFragments: [
@@ -182,13 +183,13 @@ Deno.test('resolvePageDocument: dangerouslyHeadFragments accepts benign meta and
     },
     ctx(),
   );
-  assertEquals(document.dangerouslyHeadFragments?.length, 2);
+  expect(document.dangerouslyHeadFragments?.length).toEqual(2);
 });
 
-Deno.test('resolvePageDocument: the JSON-LD channel does not relax the <script> ban on raw fragments', () => {
+test('resolvePageDocument: the JSON-LD channel does not relax the <script> ban on raw fragments', () => {
   // The structured channel is an ADDITIONAL path; the rejected raw channel
   // keeps rejecting every <script> tag, including a well-formed ld+json one.
-  assertThrows(
+  assertThrowsIncludes(
     () =>
       resolvePageDocument(
         {
@@ -203,7 +204,7 @@ Deno.test('resolvePageDocument: the JSON-LD channel does not relax the <script> 
   );
 });
 
-Deno.test('resolvePageDocument: structured data resolves into normalized JSON-LD documents', () => {
+test('resolvePageDocument: structured data resolves into normalized JSON-LD documents', () => {
   const head: PageHead = {
     structuredData: [
       {
@@ -217,15 +218,15 @@ Deno.test('resolvePageDocument: structured data resolves into normalized JSON-LD
   };
   const snapshot = structuredClone(head);
   const document = resolvePageDocument(head, ctx());
-  assertEquals(document.structuredData, head.structuredData);
-  assertEquals(head, snapshot);
+  expect(document.structuredData).toEqual(head.structuredData);
+  expect(head).toEqual(snapshot);
   // The resolved value is an inert copy: a null-prototype tree, so no
   // `__proto__` key can rewrite a prototype on the way to the serializer.
-  assertEquals(Object.getPrototypeOf(document.structuredData?.[0]), null);
-  assertEquals(Object.getPrototypeOf(document.structuredData?.[0].author), null);
+  expect(Object.getPrototypeOf(document.structuredData?.[0])).toEqual(null);
+  expect(Object.getPrototypeOf(document.structuredData?.[0].author)).toEqual(null);
 });
 
-Deno.test('resolvePageDocument: malformed structured data fails loudly', () => {
+test('resolvePageDocument: malformed structured data fails loudly', () => {
   const circular: Record<string, unknown> = {};
   circular.self = circular;
   const cases: Array<[string, unknown]> = [
@@ -245,7 +246,7 @@ Deno.test('resolvePageDocument: malformed structured data fails loudly', () => {
     ['a circular document', [circular]],
   ];
   for (const [name, structuredData] of cases) {
-    assertThrows(
+    assertThrowsIncludes(
       () => resolvePageDocument({ structuredData } as unknown as PageHead, ctx()),
       Error,
       '[openElement] resolvePageDocument:',
@@ -254,18 +255,18 @@ Deno.test('resolvePageDocument: malformed structured data fails loudly', () => {
   }
 });
 
-Deno.test('resolvePageDocument: clientScripts ride the resolved document (#1471) and stay pure', () => {
+test('resolvePageDocument: clientScripts ride the resolved document (#1471) and stay pure', () => {
   const descriptors = [{ type: 'module', src: '/client/islands/client.js' }];
   const first = resolvePageDocument(undefined, ctx(), descriptors);
   const second = resolvePageDocument(undefined, ctx(), descriptors);
-  assertEquals(first, {
+  expect(first).toEqual({
     links: [],
     clientScripts: [{ type: 'module', src: '/client/islands/client.js' }],
   });
-  assertEquals(first, second);
+  expect(first).toEqual(second);
   // No scripts handed in: the field stays absent, the document shape is
   // byte-equal to the pre-#1471 contract.
-  assertEquals(resolvePageDocument({ title: 'Notes' }, ctx()), {
+  expect(resolvePageDocument({ title: 'Notes' }, ctx())).toEqual({
     title: 'Notes',
     links: [],
   });
@@ -273,15 +274,14 @@ Deno.test('resolvePageDocument: clientScripts ride the resolved document (#1471)
   const html = wrapInDocument('<p>ok</p>', {
     scripts: resolvePageDocument(undefined, ctx(), descriptors).clientScripts,
   });
-  assertEquals(
+  expect(
     html.endsWith(
       '<script type="module" src="/client/islands/client.js"></script>\n</body>\n</html>',
     ),
-    true,
-  );
+  ).toEqual(true);
 });
 
-Deno.test('resolvePageDocument + wrapInDocument: the resolved JSON-LD reaches <head> escaped', () => {
+test('resolvePageDocument + wrapInDocument: the resolved JSON-LD reaches <head> escaped', () => {
   // Composition proof for both serialization paths (the SSG entry and the
   // request-time entry both feed raw values into the same call).
   const document = resolvePageDocument(
@@ -306,14 +306,14 @@ Deno.test('resolvePageDocument + wrapInDocument: the resolved JSON-LD reaches <h
   const head = html.slice(html.indexOf('<head>'), html.indexOf('</head>'));
   const open = '<script type="application/ld+json">';
   const start = head.indexOf(open);
-  assertEquals(start > 0, true, head);
+  expect(start > 0, head).toEqual(true);
   // Exactly one end tag in the whole document — the framework's own — and no
   // raw script sequence from the payload reaches the markup.
-  assertEquals((html.match(/<\/script>/g) ?? []).length, 1);
-  assertEquals(head.includes('<script>alert(1)'), false);
-  assertEquals(head.includes('</script><script'), false);
+  expect((html.match(/<\/script>/g) ?? []).length).toEqual(1);
+  expect(head.includes('<script>alert(1)')).toEqual(false);
+  expect(head.includes('</script><script')).toEqual(false);
   const body = head.slice(start + open.length, head.indexOf('</script>', start));
-  assertEquals(JSON.parse(body), {
+  expect(JSON.parse(body)).toEqual({
     '@context': 'https://schema.org',
     '@type': 'BlogPosting',
     headline: 'Notes</script><script>alert(1)</script>',

@@ -3,7 +3,8 @@
  * run against a stubbed Supabase client (the real client stays behind
  * lib/supabase-server.ts, composition boundary #981).
  */
-import { assert, assertEquals, assertRejects } from '@std/assert';
+import { expect, test } from 'vitest';
+import { assertRejectsIncludes } from '../../../../tests/lib/vitest-asserts.ts';
 import { isActionFailure, isOpenElementRedirect } from '@openelement/router';
 
 // v0.44: route logic lives in app/route-logic/ so tests never evaluate the
@@ -49,7 +50,7 @@ function stubClient(overrides: {
     auth: { getUser: () => Promise.resolve({ data: { user } }) },
     storage: {
       from: (bucket: string) => {
-        assertEquals(bucket, BUCKET);
+        expect(bucket).toEqual(BUCKET);
         return {
           upload: (path: string, file: File) => {
             onUpload?.(path, file);
@@ -86,37 +87,37 @@ const ctx = () => ({
   route: { path: '/upload', filePath: 'app/routes/upload.tsx' },
 });
 
-Deno.test('sanitizeFilename strips path traversal and unsafe characters', () => {
-  assertEquals(sanitizeFilename('../../etc/passwd'), 'passwd');
-  assertEquals(sanitizeFilename('C:\\tmp\\my file!.txt'), 'my_file_.txt');
-  assertEquals(sanitizeFilename('plain.md'), 'plain.md');
+test('sanitizeFilename strips path traversal and unsafe characters', () => {
+  expect(sanitizeFilename('../../etc/passwd')).toEqual('passwd');
+  expect(sanitizeFilename('C:\\tmp\\my file!.txt')).toEqual('my_file_.txt');
+  expect(sanitizeFilename('plain.md')).toEqual('plain.md');
 });
 
-Deno.test('objectKeyFor scopes the object to the owner folder', () => {
+test('objectKeyFor scopes the object to the owner folder', () => {
   const first = objectKeyFor('user-123', 'a.txt');
   const second = objectKeyFor('user-123', 'a.txt');
-  assert(first.startsWith('user-123/'));
-  assert(first.endsWith('-a.txt'));
-  assert(first !== second);
-  assert(ownsObjectKey('user-123', first));
-  assert(!ownsObjectKey('other-user', first));
-  assert(!ownsObjectKey('user-123', 'user-123/nested/a.txt'));
+  expect(first.startsWith('user-123/')).toBeTruthy();
+  expect(first.endsWith('-a.txt')).toBeTruthy();
+  expect(first !== second).toBeTruthy();
+  expect(ownsObjectKey('user-123', first)).toBeTruthy();
+  expect(!ownsObjectKey('other-user', first)).toBeTruthy();
+  expect(!ownsObjectKey('user-123', 'user-123/nested/a.txt')).toBeTruthy();
 });
 
-Deno.test('loader redirects anonymous requests to sign-in (v0.44)', async () => {
+test('loader redirects anonymous requests to sign-in (v0.44)', async () => {
   // 0.43 rendered a denied branch; grammar v1 cannot pair a static denied
   // variant with a dynamic authenticated one, so the loader redirects.
   const loader = createUploadLoader(stubClient({ user: null }));
-  const error = await assertRejects(() => loader(ctx()));
-  assert(isOpenElementRedirect(error));
-  assertEquals((error as { location?: string }).location, '/login');
+  const error = await assertRejectsIncludes(() => loader(ctx()));
+  expect(isOpenElementRedirect(error)).toBeTruthy();
+  expect((error as { location?: string }).location).toEqual('/login');
 });
 
-Deno.test('loader lists the owner folder for signed-in requests', async () => {
+test('loader lists the owner folder for signed-in requests', async () => {
   const loader = createUploadLoader(
     stubClient({ listData: [{ object_key: 'user-123/uuid-a.txt', display_name: 'a.txt' }] }),
   );
-  assertEquals(await loader(ctx()), {
+  expect(await loader(ctx())).toEqual({
     denied: false,
     email: USER.email,
     files: [
@@ -129,53 +130,53 @@ Deno.test('loader lists the owner folder for signed-in requests', async () => {
   });
 });
 
-Deno.test('action rejects anonymous uploads with 401', async () => {
+test('action rejects anonymous uploads with 401', async () => {
   const action = createUploadAction(stubClient({ user: null }));
   const formData = new FormData();
   formData.set('file', new File(['x'], 'a.txt', { type: 'text/plain' }));
   const result = await action({ ...ctx(), formData });
-  assert(isActionFailure(result));
-  assertEquals(result.status, 401);
+  expect(isActionFailure(result)).toBeTruthy();
+  expect(result.status).toEqual(401);
 });
 
-Deno.test('action rejects a missing file with 422', async () => {
+test('action rejects a missing file with 422', async () => {
   const action = createUploadAction(stubClient({}));
   const result = await action({ ...ctx(), formData: new FormData() });
-  assert(isActionFailure(result));
-  assertEquals(result.status, 422);
+  expect(isActionFailure(result)).toBeTruthy();
+  expect(result.status).toEqual(422);
 });
 
-Deno.test('action rejects files over the reference cap with 422', async () => {
+test('action rejects files over the reference cap with 422', async () => {
   const action = createUploadAction(stubClient({}));
   const formData = new FormData();
   formData.set('file', new File([new Uint8Array(MAX_FILE_BYTES + 1)], 'big.bin'));
   const result = await action({ ...ctx(), formData });
-  assert(isActionFailure(result));
-  assertEquals(result.status, 422);
+  expect(isActionFailure(result)).toBeTruthy();
+  expect(result.status).toEqual(422);
 });
 
-Deno.test('action rejects content types outside the allowlist', async () => {
-  assert(ALLOWED_CONTENT_TYPES.has('text/plain'));
+test('action rejects content types outside the allowlist', async () => {
+  expect(ALLOWED_CONTENT_TYPES.has('text/plain')).toBeTruthy();
   const action = createUploadAction(stubClient({}));
   const formData = new FormData();
   formData.set('file', new File(['x'], 'script.js', { type: 'text/javascript' }));
   const result = await action({ ...ctx(), formData });
-  assert(isActionFailure(result));
-  assertEquals(result.status, 422);
+  expect(isActionFailure(result)).toBeTruthy();
+  expect(result.status).toEqual(422);
 });
 
-Deno.test('action uploads under the owner key and redirects (PRG)', async () => {
+test('action uploads under the owner key and redirects (PRG)', async () => {
   let uploadedPath = '';
   const action = createUploadAction(stubClient({ onUpload: (path) => (uploadedPath = path) }));
   const formData = new FormData();
   formData.set('file', new File(['hello'], 'hello.txt', { type: 'text/plain' }));
-  const error = await assertRejects(() => action({ ...ctx(), formData }));
-  assert(isOpenElementRedirect(error));
-  assert(uploadedPath.startsWith('user-123/'));
-  assert(uploadedPath.endsWith('-hello.txt'));
+  const error = await assertRejectsIncludes(() => action({ ...ctx(), formData }));
+  expect(isOpenElementRedirect(error)).toBeTruthy();
+  expect(uploadedPath.startsWith('user-123/')).toBeTruthy();
+  expect(uploadedPath.endsWith('-hello.txt')).toBeTruthy();
 });
 
-Deno.test('successful upload enqueues the pending scan message', async () => {
+test('successful upload enqueues the pending scan message', async () => {
   const queued: unknown[] = [];
   const action = createUploadAction(stubClient({}));
   const formData = new FormData();
@@ -187,23 +188,23 @@ Deno.test('successful upload enqueues the pending scan message', async () => {
       return Promise.resolve();
     },
   };
-  const error = await assertRejects(() => action({ ...requestContext, formData }));
-  assert(isOpenElementRedirect(error));
-  assertEquals(queued.length, 1);
-  assertEquals((queued[0] as { type: string }).type, 'attachment.scan');
+  const error = await assertRejectsIncludes(() => action({ ...requestContext, formData }));
+  expect(isOpenElementRedirect(error)).toBeTruthy();
+  expect(queued.length).toEqual(1);
+  expect((queued[0] as { type: string }).type).toEqual('attachment.scan');
 });
 
-Deno.test('action surfaces storage errors as 422', async () => {
+test('action surfaces storage errors as 422', async () => {
   const action = createUploadAction(stubClient({ uploadError: { message: 'row level security' } }));
   const formData = new FormData();
   formData.set('file', new File(['x'], 'a.txt', { type: 'text/plain' }));
   const result = await action({ ...ctx(), formData });
-  assert(isActionFailure(result));
-  assertEquals(result.status, 422);
-  assertEquals(result.data, { error: 'row level security' });
+  expect(isActionFailure(result)).toBeTruthy();
+  expect(result.status).toEqual(422);
+  expect(result.data).toEqual({ error: 'row level security' });
 });
 
-Deno.test('action atomically reserves and releases quota when upload fails', async () => {
+test('action atomically reserves and releases quota when upload fails', async () => {
   const calls: string[] = [];
   const action = createUploadAction(
     stubClient({
@@ -214,12 +215,12 @@ Deno.test('action atomically reserves and releases quota when upload fails', asy
   const formData = new FormData();
   formData.set('file', new File(['x'], 'a.txt', { type: 'text/plain' }));
   const result = await action({ ...ctx(), formData });
-  assert(isActionFailure(result));
-  assertEquals(result.status, 422);
-  assertEquals(calls, ['reserve_attachment', 'release_attachment']);
+  expect(isActionFailure(result)).toBeTruthy();
+  expect(result.status).toEqual(422);
+  expect(calls).toEqual(['reserve_attachment', 'release_attachment']);
 });
 
-Deno.test('finalize failure records durable deletion before removing Storage', async () => {
+test('finalize failure records durable deletion before removing Storage', async () => {
   const calls: string[] = [];
   const removed: string[][] = [];
   const action = createUploadAction(
@@ -231,18 +232,18 @@ Deno.test('finalize failure records durable deletion before removing Storage', a
   );
   const formData = new FormData();
   formData.set('file', new File(['x'], 'a.txt', { type: 'text/plain' }));
-  const error = await assertRejects(() => action({ ...ctx(), formData }), Error);
-  assertEquals(error.message, 'upload could not be finalized');
-  assertEquals(calls, [
+  const error = await assertRejectsIncludes(() => action({ ...ctx(), formData }), Error);
+  expect(error.message).toEqual('upload could not be finalized');
+  expect(calls).toEqual([
     'reserve_attachment',
     'finalize_attachment',
     'request_attachment_delete',
     'complete_attachment_delete',
   ]);
-  assertEquals(removed.length, 1);
+  expect(removed.length).toEqual(1);
 });
 
-Deno.test('finalize compensation Storage failure leaves the durable deletion intent', async () => {
+test('finalize compensation Storage failure leaves the durable deletion intent', async () => {
   const calls: string[] = [];
   const action = createUploadAction(
     stubClient({
@@ -253,12 +254,12 @@ Deno.test('finalize compensation Storage failure leaves the durable deletion int
   );
   const formData = new FormData();
   formData.set('file', new File(['x'], 'a.txt', { type: 'text/plain' }));
-  const error = await assertRejects(() => action({ ...ctx(), formData }), Error);
-  assertEquals(error.message, 'upload finalization failed; object deletion is queued for retry');
-  assertEquals(calls, ['reserve_attachment', 'finalize_attachment', 'request_attachment_delete']);
+  const error = await assertRejectsIncludes(() => action({ ...ctx(), formData }), Error);
+  expect(error.message).toEqual('upload finalization failed; object deletion is queued for retry');
+  expect(calls).toEqual(['reserve_attachment', 'finalize_attachment', 'request_attachment_delete']);
 });
 
-Deno.test('finalize compensation never deletes Storage before durable intent', async () => {
+test('finalize compensation never deletes Storage before durable intent', async () => {
   const calls: string[] = [];
   const removed: string[][] = [];
   const action = createUploadAction(
@@ -273,22 +274,22 @@ Deno.test('finalize compensation never deletes Storage before durable intent', a
   );
   const formData = new FormData();
   formData.set('file', new File(['x'], 'a.txt', { type: 'text/plain' }));
-  const error = await assertRejects(() => action({ ...ctx(), formData }), Error);
-  assertEquals(error.message, 'upload finalization is uncertain; cleanup is pending');
-  assertEquals(calls, ['reserve_attachment', 'finalize_attachment', 'request_attachment_delete']);
-  assertEquals(removed, []);
+  const error = await assertRejectsIncludes(() => action({ ...ctx(), formData }), Error);
+  expect(error.message).toEqual('upload finalization is uncertain; cleanup is pending');
+  expect(calls).toEqual(['reserve_attachment', 'finalize_attachment', 'request_attachment_delete']);
+  expect(removed).toEqual([]);
 });
 
-Deno.test('delete rejects a cross-user object key before Storage', async () => {
+test('delete rejects a cross-user object key before Storage', async () => {
   const action = createDeleteAction(stubClient({}));
   const formData = new FormData();
   formData.set('key', 'other-user/secret.txt');
   const result = await action({ ...ctx(), formData });
-  assert(isActionFailure(result));
-  assertEquals(result.status, 403);
+  expect(isActionFailure(result)).toBeTruthy();
+  expect(result.status).toEqual(403);
 });
 
-Deno.test('delete removes the owner object and releases quota', async () => {
+test('delete removes the owner object and releases quota', async () => {
   const removed: string[][] = [];
   const calls: string[] = [];
   const action = createDeleteAction(
@@ -299,13 +300,13 @@ Deno.test('delete removes the owner object and releases quota', async () => {
   );
   const formData = new FormData();
   formData.set('key', 'user-123/opaque-a.txt');
-  const error = await assertRejects(() => action({ ...ctx(), formData }));
-  assert(isOpenElementRedirect(error));
-  assertEquals(removed, [['user-123/opaque-a.txt']]);
-  assertEquals(calls, ['request_attachment_delete', 'complete_attachment_delete']);
+  const error = await assertRejectsIncludes(() => action({ ...ctx(), formData }));
+  expect(isOpenElementRedirect(error)).toBeTruthy();
+  expect(removed).toEqual([['user-123/opaque-a.txt']]);
+  expect(calls).toEqual(['request_attachment_delete', 'complete_attachment_delete']);
 });
 
-Deno.test('duplicate owner deletes remain idempotent across intent and completion RPCs', async () => {
+test('duplicate owner deletes remain idempotent across intent and completion RPCs', async () => {
   const calls: string[] = [];
   const removed: string[][] = [];
   const action = createDeleteAction(
@@ -318,12 +319,12 @@ Deno.test('duplicate owner deletes remain idempotent across intent and completio
   formData.set('key', 'user-123/opaque-a.txt');
 
   for (let attempt = 0; attempt < 2; attempt++) {
-    const error = await assertRejects(() => action({ ...ctx(), formData }));
-    assert(isOpenElementRedirect(error));
+    const error = await assertRejectsIncludes(() => action({ ...ctx(), formData }));
+    expect(isOpenElementRedirect(error)).toBeTruthy();
   }
 
-  assertEquals(removed, [['user-123/opaque-a.txt'], ['user-123/opaque-a.txt']]);
-  assertEquals(calls, [
+  expect(removed).toEqual([['user-123/opaque-a.txt'], ['user-123/opaque-a.txt']]);
+  expect(calls).toEqual([
     'request_attachment_delete',
     'complete_attachment_delete',
     'request_attachment_delete',
@@ -331,7 +332,7 @@ Deno.test('duplicate owner deletes remain idempotent across intent and completio
   ]);
 });
 
-Deno.test('delete finalization failure leaves a recoverable tombstone', async () => {
+test('delete finalization failure leaves a recoverable tombstone', async () => {
   const calls: string[] = [];
   const action = createDeleteAction(
     stubClient({
@@ -341,12 +342,12 @@ Deno.test('delete finalization failure leaves a recoverable tombstone', async ()
   );
   const formData = new FormData();
   formData.set('key', 'user-123/opaque-a.txt');
-  const error = await assertRejects(() => action({ ...ctx(), formData }), Error);
-  assertEquals(error.message, 'object deleted; quota reconciliation is pending');
-  assertEquals(calls, ['request_attachment_delete', 'complete_attachment_delete']);
+  const error = await assertRejectsIncludes(() => action({ ...ctx(), formData }), Error);
+  expect(error.message).toEqual('object deleted; quota reconciliation is pending');
+  expect(calls).toEqual(['request_attachment_delete', 'complete_attachment_delete']);
 });
 
-Deno.test('delete Storage failure keeps the durable intent for Cron retry', async () => {
+test('delete Storage failure keeps the durable intent for Cron retry', async () => {
   const calls: string[] = [];
   const action = createDeleteAction(
     stubClient({
@@ -357,10 +358,10 @@ Deno.test('delete Storage failure keeps the durable intent for Cron retry', asyn
   const formData = new FormData();
   formData.set('key', 'user-123/opaque-a.txt');
   const result = await action({ ...ctx(), formData });
-  assert(isActionFailure(result));
-  assertEquals(result.status, 422);
-  assertEquals(result.data?.error, 'storage unavailable; deletion queued for retry');
-  assertEquals(calls, ['request_attachment_delete']);
+  expect(isActionFailure(result)).toBeTruthy();
+  expect(result.status).toEqual(422);
+  expect(result.data?.error).toEqual('storage unavailable; deletion queued for retry');
+  expect(calls).toEqual(['request_attachment_delete']);
 });
 
 /**
@@ -392,7 +393,7 @@ function statefulReservationClient(
     auth: { getUser: () => Promise.resolve({ data: { user: USER } }) },
     storage: {
       from: (bucket: string) => {
-        assertEquals(bucket, BUCKET);
+        expect(bucket).toEqual(BUCKET);
         return {
           upload: async (path: string, _file: File) => {
             uploads.push(path);
@@ -466,7 +467,7 @@ function statefulReservationClient(
   return { factory, rows, audit, uploads, removals };
 }
 
-Deno.test('upload finalize is single-completion: a duplicate finalize on the same reservation loses', async () => {
+test('upload finalize is single-completion: a duplicate finalize on the same reservation loses', async () => {
   const db = statefulReservationClient();
   const queued: unknown[] = [];
   const action = createUploadAction(db.factory);
@@ -479,8 +480,8 @@ Deno.test('upload finalize is single-completion: a duplicate finalize on the sam
       return Promise.resolve();
     },
   };
-  const error = await assertRejects(() => action({ ...requestContext, formData }));
-  assert(isOpenElementRedirect(error));
+  const error = await assertRejectsIncludes(() => action({ ...requestContext, formData }));
+  expect(isOpenElementRedirect(error)).toBeTruthy();
   // The reservation id is server-generated per request (upload.tsx:151) and
   // never exposed before finalize, so a duplicate can only arrive at the
   // database contract level — e.g. a retried finalize after a lost response.
@@ -489,13 +490,13 @@ Deno.test('upload finalize is single-completion: a duplicate finalize on the sam
   const duplicate = await db.factory().rpc('finalize_attachment', {
     reservation_id: reservationId,
   });
-  assertEquals(duplicate.error?.message, 'attachment reservation not found');
-  assertEquals(db.audit, ['upload_reserved', 'upload_pending_scan']);
-  assertEquals([...db.rows.values()][0]?.state, 'pending_scan');
-  assertEquals(queued.length, 1);
+  expect(duplicate.error?.message).toEqual('attachment reservation not found');
+  expect(db.audit).toEqual(['upload_reserved', 'upload_pending_scan']);
+  expect([...db.rows.values()][0]?.state).toEqual('pending_scan');
+  expect(queued.length).toEqual(1);
 });
 
-Deno.test('upload finalize race won by a duplicate converges to one durable deletion', async () => {
+test('upload finalize race won by a duplicate converges to one durable deletion', async () => {
   // Hold the Storage upload so a racing duplicate finalize commits first; the
   // route's own finalize then observes the migration's not-found error and
   // must treat the outcome as uncertain (upload.tsx:174-192): durable delete
@@ -516,19 +517,24 @@ Deno.test('upload finalize race won by a duplicate converges to one durable dele
   };
   const actionPromise = action({ ...requestContext, formData });
   for (let i = 0; i < 100 && db.uploads.length === 0; i++) await Promise.resolve();
-  assertEquals(db.uploads.length, 1);
+  expect(db.uploads.length).toEqual(1);
   const reservationId = [...db.rows.keys()][0];
   const racer = await db.factory().rpc('finalize_attachment', {
     reservation_id: reservationId,
   });
-  assertEquals(racer.error, null); // the racing finalize takes the single transition
+  expect(racer.error).toEqual(null); // the racing finalize takes the single transition
   releaseUpload();
-  const error = await assertRejects(() => actionPromise, Error);
-  assertEquals(error.message, 'upload could not be finalized');
-  assertEquals(db.audit, ['upload_reserved', 'upload_pending_scan', 'delete_requested', 'deleted']);
-  assertEquals(db.removals, [[db.uploads[0]]]);
-  assertEquals(db.rows.size, 0);
-  assertEquals(queued.length, 0);
+  const error = await assertRejectsIncludes(() => actionPromise, Error);
+  expect(error.message).toEqual('upload could not be finalized');
+  expect(db.audit).toEqual([
+    'upload_reserved',
+    'upload_pending_scan',
+    'delete_requested',
+    'deleted',
+  ]);
+  expect(db.removals).toEqual([[db.uploads[0]]]);
+  expect(db.rows.size).toEqual(0);
+  expect(queued.length).toEqual(0);
 
   // The completed deletion is idempotent: repeating the intent/completion RPCs
   // for the converged key is a no-op, so Cron retries stay safe.
@@ -539,7 +545,12 @@ Deno.test('upload finalize race won by a duplicate converges to one durable dele
   const retryComplete = await client.rpc('complete_attachment_delete', {
     target_key: db.uploads[0],
   });
-  assertEquals(retryIntent.error, null);
-  assertEquals(retryComplete.error, null);
-  assertEquals(db.audit, ['upload_reserved', 'upload_pending_scan', 'delete_requested', 'deleted']);
+  expect(retryIntent.error).toEqual(null);
+  expect(retryComplete.error).toEqual(null);
+  expect(db.audit).toEqual([
+    'upload_reserved',
+    'upload_pending_scan',
+    'delete_requested',
+    'deleted',
+  ]);
 });

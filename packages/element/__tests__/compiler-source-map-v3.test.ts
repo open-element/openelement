@@ -9,7 +9,7 @@
  * computed file/line/column in the authored TSX source.
  */
 
-import { assert, assertEquals, assertNotEquals } from '@std/assert';
+import { expect, test } from 'vitest';
 import { eachMapping, originalPositionFor, TraceMap } from '@jridgewell/trace-mapping';
 import {
   CompiledElementError,
@@ -82,7 +82,7 @@ function positionOf(
   let offset = -1;
   for (let index = 0; index < occurrence; index++) {
     offset = haystack.indexOf(needle, from);
-    assert(offset >= 0, `needle occurrence ${occurrence} not found: ${needle}`);
+    expect(offset >= 0, `needle occurrence ${occurrence} not found: ${needle}`).toBeTruthy();
     from = offset + needle.length;
   }
   const before = haystack.slice(0, offset);
@@ -95,7 +95,7 @@ function positionOf(
 function decodeInlineMap(code: string): Record<string, unknown> {
   const marker = '//# sourceMappingURL=data:application/json;base64,';
   const line = code.split('\n').find((candidate) => candidate.startsWith(marker));
-  assert(line, 'generated code must embed an inline base64 source map');
+  expect(line, 'generated code must embed an inline base64 source map').toBeTruthy();
   return JSON.parse(
     new TextDecoder().decode(
       Uint8Array.from(atob(line.slice(marker.length)), (c) => c.charCodeAt(0)),
@@ -148,11 +148,10 @@ function assertResolves(
   columnNeedle?: string,
 ) {
   const resolved = resolve(trace, code, needle, occurrence, columnNeedle);
-  assertEquals(
+  expect(
     { source: resolved.source, line: resolved.line, column: resolved.column },
-    expected,
     `generated "${needle}" (occurrence ${occurrence}) must resolve to ${expected.source}:${expected.line}:${expected.column}`,
-  );
+  ).toEqual(expected);
 }
 
 /**
@@ -171,41 +170,44 @@ function compileFixture() {
   return compileElementProgram(SOURCE, FILE, { staticSidecars: [ISLAND_SIDECAR] });
 }
 
-Deno.test('A10.2 compiler emits a REAL Source Map v3 (VLQ line+column segments)', () => {
+test('A10.2 compiler emits a REAL Source Map v3 (VLQ line+column segments)', () => {
   const { code, map, program } = compileFixture();
 
   // The old substitute (mappings: '') is gone; a standard consumer decodes
   // real segments from both the returned map and the inline artifact map.
-  assertEquals(typeof map.mappings, 'string');
-  assertNotEquals(map.mappings, '', 'mappings must carry real VLQ segments');
-  assertEquals(map.version, 3);
-  assertEquals(map.sources, [FILE]);
-  assertEquals(map.sourcesContent, [SOURCE]);
-  assertEquals(decodeInlineMap(code), map as unknown as Record<string, unknown>);
+  expect(typeof map.mappings).toEqual('string');
+  expect(map.mappings, 'mappings must carry real VLQ segments').not.toEqual('');
+  expect(map.version).toEqual(3);
+  expect(map.sources).toEqual([FILE]);
+  expect(map.sourcesContent).toEqual([SOURCE]);
+  expect(decodeInlineMap(code)).toEqual(map as unknown as Record<string, unknown>);
 
   // x_openElement survives only as SUPPLEMENTARY metadata next to real
   // segments, deep-equal to the Part Program's provenance records (#1209).
-  assertEquals(map.x_openElement, program.sourceMap);
+  expect(map.x_openElement).toEqual(program.sourceMap);
 
   const trace = traceOf(map);
   const decoded: Array<unknown> = [];
   eachMapping(trace, (mapping) => decoded.push(mapping));
-  assert(decoded.length >= 30, `expected a dense segment table, decoded ${decoded.length}`);
+  expect(
+    decoded.length >= 30,
+    `expected a dense segment table, decoded ${decoded.length}`,
+  ).toBeTruthy();
 });
 
-Deno.test('A10.2 the serialized payload omits the compile-time sourceMap provenance', () => {
+test('A10.2 the serialized payload omits the compile-time sourceMap provenance', () => {
   const { code, map, program } = compileFixture();
 
   // Provenance stays on the in-memory program and the map's supplementary
   // x_openElement metadata; the browser-bound module payload carries no
   // sourceMap block at all (no runtime consumer reads it).
-  assert(program.sourceMap.records.length > 0);
-  assertEquals(map.x_openElement, program.sourceMap);
-  assertEquals(code.includes('"sourceMap"'), false);
-  assertEquals(code.includes('"records"'), false);
+  expect(program.sourceMap.records.length > 0).toBeTruthy();
+  expect(map.x_openElement).toEqual(program.sourceMap);
+  expect(code.includes('"sourceMap"')).toEqual(false);
+  expect(code.includes('"records"')).toEqual(false);
 });
 
-Deno.test('A10.2 module scaffolding resolves to authored constructs', () => {
+test('A10.2 module scaffolding resolves to authored constructs', () => {
   const { code, map } = compileFixture();
   const trace = traceOf(map);
 
@@ -264,7 +266,7 @@ Deno.test('A10.2 module scaffolding resolves to authored constructs', () => {
   );
 });
 
-Deno.test('A10.2 properties, computed fields, methods and multiline initializers resolve', () => {
+test('A10.2 properties, computed fields, methods and multiline initializers resolve', () => {
   const { code, map } = compileFixture();
   const trace = traceOf(map);
 
@@ -292,7 +294,7 @@ Deno.test('A10.2 properties, computed fields, methods and multiline initializers
   assertResolves(trace, code, `    parity: 'even',`, 2, expectSource(`parity: 'even',`));
 });
 
-Deno.test('A10.2 identical repeated source lines map to their DISTINCT authored locations', () => {
+test('A10.2 identical repeated source lines map to their DISTINCT authored locations', () => {
   const { code, map } = compileFixture();
   const trace = traceOf(map);
 
@@ -300,23 +302,20 @@ Deno.test('A10.2 identical repeated source lines map to their DISTINCT authored 
   const first = resolve(trace, code, 'this.count++;', 1);
   const second = resolve(trace, code, 'this.count++;', 2);
   const third = resolve(trace, code, 'this.count++;', 3);
-  assertEquals(
-    { source: first.source, line: first.line, column: first.column },
+  expect({ source: first.source, line: first.line, column: first.column }).toEqual(
     expectSource('this.count++;', 1),
   );
-  assertEquals(
-    { source: second.source, line: second.line, column: second.column },
+  expect({ source: second.source, line: second.line, column: second.column }).toEqual(
     expectSource('this.count++;', 2),
   );
-  assertEquals(
-    { source: third.source, line: third.line, column: third.column },
+  expect({ source: third.source, line: third.line, column: third.column }).toEqual(
     expectSource('this.count++;', 3),
   );
-  assertNotEquals(first.line, second.line);
-  assertNotEquals(second.line, third.line);
+  expect(first.line).not.toEqual(second.line);
+  expect(second.line).not.toEqual(third.line);
 });
 
-Deno.test('A10.2 MANDATORY: two generated `this.count++;` event handlers map to two distinct arrows', () => {
+test('A10.2 MANDATORY: two generated `this.count++;` event handlers map to two distinct arrows', () => {
   const { code, map } = compileFixture();
   const trace = traceOf(map);
 
@@ -326,39 +325,31 @@ Deno.test('A10.2 MANDATORY: two generated `this.count++;` event handlers map to 
   const second = resolve(trace, code, '__compiledEvent1(): void { this.count++; }', 1);
   const firstArrow = positionOf(SOURCE, '() => this.count++', 1);
   const secondArrow = positionOf(SOURCE, '() => this.count++', 2);
-  assertEquals(
-    { source: first.source, line: first.line, column: first.column },
-    {
-      source: FILE,
-      line: firstArrow.line,
-      column: firstArrow.column,
-    },
-  );
-  assertEquals(
-    { source: second.source, line: second.line, column: second.column },
-    {
-      source: FILE,
-      line: secondArrow.line,
-      column: secondArrow.column,
-    },
-  );
-  assertNotEquals(
-    first.line,
+  expect({ source: first.source, line: first.line, column: first.column }).toEqual({
+    source: FILE,
+    line: firstArrow.line,
+    column: firstArrow.column,
+  });
+  expect({ source: second.source, line: second.line, column: second.column }).toEqual({
+    source: FILE,
+    line: secondArrow.line,
+    column: secondArrow.column,
+  });
+  expect(first.line, 'duplicate handler bodies must not collapse to one line').not.toEqual(
     second.line,
-    'duplicate handler bodies must not collapse to one line',
   );
 });
 
-Deno.test('A10.2 segments carry original identifier names where the compiler knows them', () => {
+test('A10.2 segments carry original identifier names where the compiler knows them', () => {
   const { code, map } = compileFixture();
   const trace = traceOf(map);
-  assert(map.names.includes('count'), 'names table must carry authored identifiers');
-  assert(map.names.includes('bump'), 'names table must carry authored method names');
+  expect(map.names.includes('count'), 'names table must carry authored identifiers').toBeTruthy();
+  expect(map.names.includes('bump'), 'names table must carry authored method names').toBeTruthy();
   const resolved = resolve(trace, code, '  count = 0;', 1);
-  assertEquals(resolved.name, 'count');
+  expect(resolved.name).toEqual('count');
 });
 
-Deno.test('A10.2 diagnostics keep pointing at authored positions', () => {
+test('A10.2 diagnostics keep pointing at authored positions', () => {
   const nested = `import { element, OpenElement, property } from '@openelement/element';
 @element('oe-nested-region')
 export class NestedRegion extends OpenElement {
@@ -379,33 +370,30 @@ export class NestedRegion extends OpenElement {
   } catch (error) {
     caught = error;
   }
-  assert(caught instanceof CompiledElementError, 'nested regions must fail closed');
+  expect(caught instanceof CompiledElementError, 'nested regions must fail closed').toBeTruthy();
   const diagnostic = caught.diagnostics[0];
-  assertEquals(diagnostic.code, 'OEC9012');
+  expect(diagnostic.code).toEqual('OEC9012');
   const expected = positionOf(nested, '{this.count > 1 ?');
-  assertEquals(diagnostic.file, file);
-  assertEquals(diagnostic.line, expected.line);
-  assertEquals(diagnostic.character, expected.column + 1);
+  expect(diagnostic.file).toEqual(file);
+  expect(diagnostic.line).toEqual(expected.line);
+  expect(diagnostic.character).toEqual(expected.column + 1);
 });
 
-Deno.test('A10.2 Vite boundary: compileElementModule hands the real map to the host', () => {
+test('A10.2 Vite boundary: compileElementModule hands the real map to the host', () => {
   // compileElementModule (the Vite-bound entrypoint) returns the real map;
   // the island descriptor rides the same options pass-through.
   const result = compileElementModule(SOURCE, FILE, { staticSidecars: [ISLAND_SIDECAR] });
-  assert(result, 'fixture must be admitted by the compiler gate');
-  assertNotEquals(result.map.mappings, '');
-  assertEquals(result.map.x_openElement, result.program.sourceMap);
+  expect(result, 'fixture must be admitted by the compiler gate').toBeTruthy();
+  expect(result.map.mappings).not.toEqual('');
+  expect(result.map.x_openElement).toEqual(result.program.sourceMap);
   const trace = traceOf(result.map);
   const resolved = resolve(trace, result.code, '__compiledEvent1(): void { this.count++; }', 1);
   const secondArrow = positionOf(SOURCE, '() => this.count++', 2);
-  assertEquals(
-    { source: resolved.source, line: resolved.line, column: resolved.column },
-    {
-      source: FILE,
-      line: secondArrow.line,
-      column: secondArrow.column,
-    },
-  );
+  expect({ source: resolved.source, line: resolved.line, column: resolved.column }).toEqual({
+    source: FILE,
+    line: secondArrow.line,
+    column: secondArrow.column,
+  });
   // The Router-side open:core hook's map composition (inline comment stripped,
   // map object returned to Vite) is pinned adapter-side in
   // packages/router/__tests__/compiler-open-core-boundary.test.ts.

@@ -16,7 +16,8 @@
     ],
     "jsx": "react-jsx",
     "jsxImportSource": "@openelement/element",
-    "allowImportingTsExtensions": true
+    "allowImportingTsExtensions": true,
+    "experimentalDecorators": true
   },
   "files": [
     "src/index.ts"

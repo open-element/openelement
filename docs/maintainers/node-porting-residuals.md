@@ -7,14 +7,28 @@ the Deno-native capabilities that have **no direct node:\* equivalent**, where
 each one still lives, and its expiry path. Facts only; design decisions belong
 to the lanes that own them.
 
-## 1. Test registration — `Deno.test` (largest residual, ~524 sites)
+## 1. Test registration — `Deno.test` — RESOLVED IN B3
 
-No node:\* equivalent was adopted. `node:test` exists but is a different
-framework (different assertion surface, different lifecycle), and the
-repository's assertion layer is `@std/assert` (jsr). Runtime fact: tests still
-run under `deno test`; `Deno.test` is a runner API, not a library call, so B1b
-left it untouched by ruling. Expiry: the test-migration lane (B3) owns it; a
-Node-host migration would need a runner decision first.
+The B3 lane migrated every suite to vitest (runner decision: vitest 5.x on the
+node host; registration + `@std/assert` moved by the auditable codemods in
+`tools/repo/codemod-deno-test-to-vitest.ts` and `codemod-deno-runtime-to-node.ts`,
+with the special-construct helpers in `tests/lib/vitest-asserts.ts`). The only
+remaining `Deno.test` code is `benchmarks/` (still on `deno test benchmarks/`
+via the root `bench` script) and product/docs prose that teaches framework
+users their own test setups. Package `test` scripts now invoke vitest.
+
+Sub-residuals disclosed at the cutover:
+- **Sanitizer leak detection retired with the host**: the deno runner's
+  `--sanitizeOps/--sanitizeResources/--sanitizeExit` options (dropped by the
+  codemod from 11 registrations) and the `deny-ffi`/`no-prompt` non-interactive
+  flags had no node equivalent — leak detection and permission-prompt
+  suppression are deno-host facilities. Node's own guards (unhandledRejection
+  process traps in the ported suites) cover the rejection half.
+- **Browser gate engine matrix**: `browser:gate` runs chromium only (PR
+  layer); `browser:gate:full` sets `OE_BROWSER_MATRIX=full` for the
+  chromium+firefox+webkit conformance matrix through the vitest playwright
+  provider — same fail-closed engine-list rule as the retired
+  web-test-runner gate.
 
 ## 2. Permission model (`--allow-*`) — no node equivalent
 

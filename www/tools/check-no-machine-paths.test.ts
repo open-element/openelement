@@ -1,15 +1,15 @@
 /** Machine-path scanner semantics: text-only, strict markers. */
-import { assertEquals } from '@std/assert';
+import { expect, test } from 'vitest';
 import { findMachinePath, isTextArtifact } from './check-no-machine-paths.ts';
 
-Deno.test('isTextArtifact: binary bytes are not text', () => {
+test('isTextArtifact: binary bytes are not text', () => {
   // Invalid UTF-8 (a lone continuation byte) is binary for this gate.
-  assertEquals(isTextArtifact(new Uint8Array([0x80, 0x81, 0x82])), false);
-  assertEquals(isTextArtifact(new TextEncoder().encode('<html>ok</html>')), true);
-  assertEquals(isTextArtifact(new Uint8Array()), true);
+  expect(isTextArtifact(new Uint8Array([0x80, 0x81, 0x82]))).toEqual(false);
+  expect(isTextArtifact(new TextEncoder().encode('<html>ok</html>'))).toEqual(true);
+  expect(isTextArtifact(new Uint8Array())).toEqual(true);
 });
 
-Deno.test('findMachinePath: real machine paths are found', () => {
+test('findMachinePath: real machine paths are found', () => {
   for (const [input, label] of [
     ['/Users/alice/projects/app.js', 'macOS home path'],
     ['/home/runner/work/repo/build.js', 'Linux home path'],
@@ -19,11 +19,11 @@ Deno.test('findMachinePath: real machine paths are found', () => {
     ['c:/ci/work/repo/y.js', 'Windows drive path'],
   ] as const) {
     const hit = findMachinePath(input);
-    assertEquals(hit?.label, label, input);
+    expect(hit?.label, input).toEqual(label);
   }
 });
 
-Deno.test('findMachinePath: Linux CI roots are caught', () => {
+test('findMachinePath: Linux CI roots are caught', () => {
   for (const [input, label] of [
     ['/tmp/oe-build/checkout/openelement/www/dist/x.js', 'Linux temp path'],
     ['/builds/org/repo/www/dist/x.js', 'CI builds path'],
@@ -31,16 +31,16 @@ Deno.test('findMachinePath: Linux CI roots are caught', () => {
     ['/opt/hostedtoolcache/node/20.11.0/x64/bin/node', 'hosted toolcache path'],
   ] as const) {
     const hit = findMachinePath(input);
-    assertEquals(hit?.label, label, input);
+    expect(hit?.label, input).toEqual(label);
   }
   // A bare prose mention of a temp directory is not a machine path.
-  assertEquals(findMachinePath('write the file under /tmp/ before moving it'), null);
+  expect(findMachinePath('write the file under /tmp/ before moving it')).toEqual(null);
 });
 
-Deno.test('findMachinePath: short drive-letter lookalikes and clean text do not trip', () => {
-  assertEquals(findMachinePath('U:w'), null);
-  assertEquals(findMachinePath('U:\\w'), null);
-  assertEquals(findMachinePath('e:/p4--'), null);
-  assertEquals(findMachinePath('the key U: is pressed'), null);
-  assertEquals(findMachinePath('https://example.com/guide/install'), null);
+test('findMachinePath: short drive-letter lookalikes and clean text do not trip', () => {
+  expect(findMachinePath('U:w')).toEqual(null);
+  expect(findMachinePath('U:\\w')).toEqual(null);
+  expect(findMachinePath('e:/p4--')).toEqual(null);
+  expect(findMachinePath('the key U: is pressed')).toEqual(null);
+  expect(findMachinePath('https://example.com/guide/install')).toEqual(null);
 });

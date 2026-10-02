@@ -23,10 +23,13 @@
  * packages/element/src/internal/** (compiled runtime, server serializer,
  * signal engine) to measure the canonical compiled path, which the public
  * surface deliberately does not export. It must stay benchmark-local —
- * shipped packages and product code never import from here. `deno task bench`
- * exercises it through the deterministic self-checks in micro.test.ts;
+ * shipped packages and product code never import from here. The root `bench`
+ * script (vitest `--project benchmarks`) exercises it through the
+ * deterministic self-checks in micro.test.ts;
  * standalone evidence runs use the import.meta.main entry below.
  */
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { compileElementProgram } from '../../packages/element/src/internal/compiler/semantic-core/compile.ts';
 import {
   claimExistingDom,
@@ -244,8 +247,9 @@ export function runMicroSuite(options: MicroOptions = {}): MicroSuiteResult {
   const compilerSamples = options.compilerSamples ?? 25;
 
   // ── Compiler cost + artifacts (JFB table component) ─────────────
-  const tableSource = Deno.readTextFileSync(
-    new URL('../jfb/src/oe/jfb-table.tsx', import.meta.url),
+  const tableSource = readFileSync(
+    fileURLToPath(new URL('../jfb/src/oe/jfb-table.tsx', import.meta.url)),
+    'utf8',
   );
   const compileOnce = () =>
     compileElementProgram(tableSource, '/benchmarks/jfb/src/oe/jfb-table.tsx');
@@ -403,7 +407,7 @@ export function runMicroSuite(options: MicroOptions = {}): MicroSuiteResult {
   });
 
   // ── Churn stability: repeated create+dispose leaves nothing behind ──
-  const heapBefore = Deno.memoryUsage().heapUsed;
+  const heapBefore = process.memoryUsage().heapUsed;
   const churnStarted = performance.now();
   let retainedSubscriptions = 0;
   let retainedListeners = 0;
@@ -430,7 +434,7 @@ export function runMicroSuite(options: MicroOptions = {}): MicroSuiteResult {
     retainedListeners = Math.max(retainedListeners, root.listenerCount());
   }
   const churnMs = performance.now() - churnStarted;
-  const heapAfter = Deno.memoryUsage().heapUsed;
+  const heapAfter = process.memoryUsage().heapUsed;
 
   const report: MicroReport = {
     schemaVersion: 1,
@@ -439,7 +443,10 @@ export function runMicroSuite(options: MicroOptions = {}): MicroSuiteResult {
     recordedAt: new Date().toISOString(),
     provenance: {
       openElementSha: options.openElementSha ?? 'unknown',
-      deno: Deno.version.deno,
+      // host runtime version: a node version when the deterministic
+      // self-checks record under vitest, a Deno version for standalone
+      // evidence runs through the import.meta.main entry below
+      deno: typeof Deno !== 'undefined' ? Deno.version.deno : process.version,
       note:
         'fake-DOM kernel/region numbers isolate algorithmic behavior (no layout/paint); ' +
         'browser-inclusive numbers come from the JFB harness local output ' +

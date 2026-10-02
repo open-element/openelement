@@ -1,4 +1,5 @@
-import { assertEquals, assertThrows } from '@std/assert';
+import { expect, test } from 'vitest';
+import { assertThrowsIncludes } from '../../../tests/lib/vitest-asserts.ts';
 import type { RouteEntry } from '../src/vite/internal/protocol/framework.ts';
 import { generateClientEntry } from '../src/vite/internal/ssg/entry-client-codegen.ts';
 import { buildEntryDescriptor } from '../src/vite/internal/ssg/entry-descriptor.ts';
@@ -47,12 +48,12 @@ const expected = {
   },
 } as const;
 
-Deno.test('internal Native/Lit selection preserves the generated server/client bytes', async () => {
+test('internal Native/Lit selection preserves the generated server/client bytes', async () => {
   for (const mode of ['native', 'lit'] as const) {
     const adapter = selectRendererAdapter(mode);
-    assertEquals(adapter.mode, mode);
-    assertEquals(adapter.supportsCompiledStream, mode === 'native');
-    assertEquals(adapter.hydration, mode === 'native' ? 'compiled-claim' : 'lit-adoption');
+    expect(adapter.mode).toEqual(mode);
+    expect(adapter.supportsCompiledStream).toEqual(mode === 'native');
+    expect(adapter.hydration).toEqual(mode === 'native' ? 'compiled-claim' : 'lit-adoption');
     const descriptor = buildEntryDescriptor(routes, { renderer: mode });
     const server = renderEntry(descriptor);
     const client = generateClientEntry(
@@ -75,18 +76,20 @@ Deno.test('internal Native/Lit selection preserves the generated server/client b
       const hash = [...new Uint8Array(await crypto.subtle.digest('SHA-256', bytes))]
         .map((byte) => byte.toString(16).padStart(2, '0'))
         .join('');
-      assertEquals(bytes.length, expected[mode][kind][0]);
-      assertEquals(hash, expected[mode][kind][1]);
+      expect(bytes.length).toEqual(expected[mode][kind][0]);
+      expect(hash).toEqual(expected[mode][kind][1]);
     }
-    assertEquals(
-      descriptor.imports.some((entry) => entry.from === '@openelement/element'),
+    expect(descriptor.imports.some((entry) => entry.from === '@openelement/element')).toEqual(
       mode === 'native',
     );
-    assertEquals(
+    expect(
       descriptor.imports.some((entry) => entry.from === '@openelement/router/lit-ssr'),
-      mode === 'lit',
-    );
+    ).toEqual(mode === 'lit');
   }
-  assertEquals(selectRendererAdapter(undefined).mode, 'native');
-  assertThrows(() => selectRendererAdapter('future'), Error, "renderer must be 'native' or 'lit'");
+  expect(selectRendererAdapter(undefined).mode).toEqual('native');
+  assertThrowsIncludes(
+    () => selectRendererAdapter('future'),
+    Error,
+    "renderer must be 'native' or 'lit'",
+  );
 });

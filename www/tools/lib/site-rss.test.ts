@@ -1,5 +1,6 @@
 /** Blog feed render unit tests (#1441). */
-import { assert, assertEquals, assertThrows } from '@std/assert';
+import { expect, test } from 'vitest';
+import { assertThrowsIncludes } from '../../../tests/lib/vitest-asserts.ts';
 import { fromFileUrl } from '@std/path';
 import { blogCollection, blogCollectionSchema, prepareBlogPosts } from '../../lib/blog.ts';
 import {
@@ -49,21 +50,21 @@ function items(xml: string): string[] {
   return xml.match(/^\s*<item>[\s\S]*?^\s*<\/item>$/gm) ?? [];
 }
 
-Deno.test('renderBlogFeedXml: one item per published post, drafts excluded, newest first', () => {
+test('renderBlogFeedXml: one item per published post, drafts excluded, newest first', () => {
   const xml = renderBlogFeedXml(POSTS);
-  assertEquals(POSTS.length, 2, 'prepareBlogPosts drops the draft');
-  assertEquals(items(xml).length, POSTS.length);
-  assert(!xml.includes('unpublished-draft'), 'draft post never reaches the feed');
-  assertEquals(
-    [...xml.matchAll(/<title>([^<]*)<\/title>/g)].map((match) => match[1]),
-    ['openElement Blog', 'Newer &amp; &lt;unsafe&gt; dispatch', 'Older dispatch'],
-  );
+  expect(POSTS.length, 'prepareBlogPosts drops the draft').toEqual(2);
+  expect(items(xml).length).toEqual(POSTS.length);
+  expect(!xml.includes('unpublished-draft'), 'draft post never reaches the feed').toBeTruthy();
+  expect([...xml.matchAll(/<title>([^<]*)<\/title>/g)].map((match) => match[1])).toEqual([
+    'openElement Blog',
+    'Newer &amp; &lt;unsafe&gt; dispatch',
+    'Older dispatch',
+  ]);
 });
 
-Deno.test('renderBlogFeedXml: absolute permalinks, guid and RFC 822 dates', () => {
+test('renderBlogFeedXml: absolute permalinks, guid and RFC 822 dates', () => {
   const xml = renderBlogFeedXml(POSTS);
-  assertEquals(
-    items(xml)[0],
+  expect(items(xml)[0]).toEqual(
     '    <item>\n' +
       '      <title>Newer &amp; &lt;unsafe&gt; dispatch</title>\n' +
       '      <link>https://openelement.org/blog/newer-dispatch</link>\n' +
@@ -72,32 +73,32 @@ Deno.test('renderBlogFeedXml: absolute permalinks, guid and RFC 822 dates', () =
       '      <pubDate>Mon, 14 Sep 2026 00:00:00 GMT</pubDate>\n' +
       '    </item>',
   );
-  assert(xml.includes(`<link>${blogPostUrl('older-dispatch')}</link>`));
-  assert(!xml.includes('<link>/blog/'), 'links are absolute, never site-relative');
+  expect(xml.includes(`<link>${blogPostUrl('older-dispatch')}</link>`)).toBeTruthy();
+  expect(!xml.includes('<link>/blog/'), 'links are absolute, never site-relative').toBeTruthy();
 });
 
-Deno.test('renderBlogFeedXml: well-formed RSS 2.0 document, deterministic output', () => {
+test('renderBlogFeedXml: well-formed RSS 2.0 document, deterministic output', () => {
   const xml = renderBlogFeedXml(POSTS, { hostname: 'https://example.test/' });
-  assert(xml.startsWith('<?xml version="1.0" encoding="UTF-8"?>\n<rss version="2.0">\n'));
-  assert(xml.endsWith('</rss>'));
-  assertEquals(xml.match(/<rss\b/g)?.length, 1);
-  assertEquals(xml.match(/<channel>/g)?.length, 1);
-  assertEquals(xml.match(/<channel>[\s\S]*<\/channel>/g)?.length, 1);
+  expect(
+    xml.startsWith('<?xml version="1.0" encoding="UTF-8"?>\n<rss version="2.0">\n'),
+  ).toBeTruthy();
+  expect(xml.endsWith('</rss>')).toBeTruthy();
+  expect(xml.match(/<rss\b/g)?.length).toEqual(1);
+  expect(xml.match(/<channel>/g)?.length).toEqual(1);
+  expect(xml.match(/<channel>[\s\S]*<\/channel>/g)?.length).toEqual(1);
   // Every element the feed opens is closed, and no raw text marker leaks
   // unescaped into a text node (the escaped forms are the only ones allowed).
-  assertEquals((xml.match(/<item>/g) ?? []).length, (xml.match(/<\/item>/g) ?? []).length);
-  assert(!/&(?!(amp|lt|gt|quot|apos);)/.test(xml), 'every & is an entity');
-  assert(
+  expect((xml.match(/<item>/g) ?? []).length).toEqual((xml.match(/<\/item>/g) ?? []).length);
+  expect(!/&(?!(amp|lt|gt|quot|apos);)/.test(xml), 'every & is an entity').toBeTruthy();
+  expect(
     xml.includes('<link>https://example.test/blog</link>'),
     'trailing host slash is normalized',
-  );
-  assertEquals(renderBlogFeedXml(POSTS, { hostname: 'https://example.test/' }), xml);
-  assertEquals(
-    renderBlogFeedXml([]).includes('<item>'),
+  ).toBeTruthy();
+  expect(renderBlogFeedXml(POSTS, { hostname: 'https://example.test/' })).toEqual(xml);
+  expect(renderBlogFeedXml([]).includes('<item>'), 'an empty collection renders no items').toEqual(
     false,
-    'an empty collection renders no items',
   );
-  assert(
+  expect(
     renderBlogFeedXml([
       {
         slug: 'no-excerpt',
@@ -107,18 +108,18 @@ Deno.test('renderBlogFeedXml: well-formed RSS 2.0 document, deterministic output
       },
     ]).includes('<description></description>'),
     'a post without an excerpt renders an empty, valid description element',
-  );
+  ).toBeTruthy();
 });
 
-Deno.test('feedFailures: unpublishable dates, duplicate and empty slugs fail closed', () => {
-  assertEquals(feedFailures(POSTS), []);
+test('feedFailures: unpublishable dates, duplicate and empty slugs fail closed', () => {
+  expect(feedFailures(POSTS)).toEqual([]);
   const broken = prepareBlogPosts([
     entry('not-a-dated-filename.md', { title: 'No date', date: 'someday' }),
     entry('2026-09-14-dup.md', { title: 'First', date: '2026-09-14' }),
   ]);
   // A date that matches YYYY-MM-DD but is not a real day must fail too: the
   // regex-shaped check alone would emit an Invalid Date pubDate.
-  assert(
+  expect(
     feedFailures([
       {
         slug: 'impossible-date',
@@ -127,7 +128,7 @@ Deno.test('feedFailures: unpublishable dates, duplicate and empty slugs fail clo
         html: '',
       },
     ]).some((failure) => failure.includes("no publishable date (got '2026-13-45')")),
-  );
+  ).toBeTruthy();
   const failures = feedFailures([
     ...broken,
     {
@@ -138,35 +139,41 @@ Deno.test('feedFailures: unpublishable dates, duplicate and empty slugs fail clo
     },
     { slug: '', frontmatter: { title: 'Unreachable', date: '2026-09-14' }, content: '', html: '' },
   ]);
-  assert(failures.some((failure) => failure.includes("no publishable date (got 'someday')")));
-  assert(
+  expect(
+    failures.some((failure) => failure.includes("no publishable date (got 'someday')")),
+  ).toBeTruthy();
+  expect(
     failures.some((failure) =>
       failure.includes("duplicate feed guid for blog post 'not-a-dated-filename'"),
     ),
-  );
-  assert(failures.some((failure) => failure.includes('without a slug')));
+  ).toBeTruthy();
+  expect(failures.some((failure) => failure.includes('without a slug'))).toBeTruthy();
   // The renderer refuses the same post rather than emitting a dateless item.
-  assertThrows(() => renderBlogFeedXml(broken), Error, "no publishable date (got 'someday')");
+  assertThrowsIncludes(
+    () => renderBlogFeedXml(broken),
+    Error,
+    "no publishable date (got 'someday')",
+  );
 });
 
-Deno.test('site feed: the real blog collection renders one item per published post', async () => {
+test('site feed: the real blog collection renders one item per published post', async () => {
   const contentDir = fromFileUrl(new URL('../../content/blog', import.meta.url));
   const posts = prepareBlogPosts(
     await loadCollectionData('blog', { ...blogCollection, contentDir }),
   );
   const xml = renderBlogFeedXml(posts);
-  assertEquals(items(xml).length, posts.length);
-  assert(posts.length > 0, 'the site ships at least one published dispatch');
+  expect(items(xml).length).toEqual(posts.length);
+  expect(posts.length > 0, 'the site ships at least one published dispatch').toBeTruthy();
   for (const post of posts) {
-    assert(
+    expect(
       xml.includes(`<guid isPermaLink="true">${blogPostUrl(post.slug)}</guid>`),
       `${post.slug} is permalinked absolutely`,
-    );
+    ).toBeTruthy();
   }
-  assertEquals(SITE_FEED_PATH, '/blog/rss.xml');
+  expect(SITE_FEED_PATH).toEqual('/blog/rss.xml');
 });
 
-Deno.test('feedFailures: calendar dates round-trip and impossible days fail closed', () => {
+test('feedFailures: calendar dates round-trip and impossible days fail closed', () => {
   const failureFor = (date: string): string[] =>
     feedFailures([
       { slug: 'dated-post', frontmatter: { title: 'Dated', date }, content: '', html: '' },
@@ -180,12 +187,12 @@ Deno.test('feedFailures: calendar dates round-trip and impossible days fail clos
     '2026-13-45',
     'someday',
   ]) {
-    assert(
+    expect(
       failureFor(date).some((failure) => failure.includes(`no publishable date (got '${date}')`)),
       `calendar-impossible date must fail closed: ${date}`,
-    );
+    ).toBeTruthy();
   }
   for (const date of ['2028-02-29', '2000-02-29', '2026-04-30', '2026-09-14']) {
-    assertEquals(failureFor(date), [], `real calendar date must be accepted: ${date}`);
+    expect(failureFor(date), `real calendar date must be accepted: ${date}`).toEqual([]);
   }
 });

@@ -26,8 +26,13 @@
  *   tools    tools/repo + tools/lib + tools/release
  *   tests    tests/fixtures/web-component-interop (the only Deno.test
  *            universe under tests/)
- * benchmarks/ keeps `deno test` (root `bench` script) and is deliberately
- * not a project. `element-browser` is the vitest-browser-mode replacement
+ *   benchmarks benchmarks/micro + benchmarks/jfb deterministic self-checks
+ *            (B3 补漏, owner ruling: the jfb lane's harness migrates onto
+ *            vitest). Both suites are DOM-free structural checks that never
+ *            launch a browser, so a plain node project covers them — no
+ *            browser-mode adaptation, no skips. benchmarks/streaming is a
+ *            manual `deno run` measurement script, not a test universe.
+ * `element-browser` is the vitest-browser-mode replacement
  * for the @web/test-runner universe in packages/element/__wtr__ (#1333
  * conformance suite): chai-based suites are collected from the same files
  * until the port lands, served against the working-tree runtime source
@@ -39,12 +44,40 @@ import { defineConfig } from 'vitest/config';
 
 const rootDir = fileURLToPath(new URL('.', import.meta.url));
 
+/**
+ * Browser-instance matrix for the element-browser project.
+ *   default | 'chromium' → [chromium]           (PR-layer subset)
+ *   'full'               → [chromium, firefox, webkit]  (release matrix)
+ * anything else → hard error (fail closed, never a silently smaller run)
+ */
+function matrixInstances(): Array<{ browser: string }> {
+  const matrix = process.env.OE_BROWSER_MATRIX ?? 'chromium';
+  switch (matrix) {
+    case 'chromium':
+    case '':
+      return [{ browser: 'chromium' }];
+    case 'full':
+      return [{ browser: 'chromium' }, { browser: 'firefox' }, { browser: 'webkit' }];
+    default:
+      throw new Error(`unknown OE_BROWSER_MATRIX: ${matrix}`);
+  }
+}
+
 export default defineConfig({
   test: {
     globals: false,
     environment: 'node',
+    // The deno test runner executed every file in one sequential process; the
+    // suites share fixture dists and spawn port-bound servers, so parallel
+    // file execution reintroduces races that never existed pre-migration.
+    fileParallelism: false,
     projects: [
       {
+        // Decorator-syntax suites (compile-decorators, compiled-element-v1)
+        // lower through vite 8's oxc transform, which reads the nearest
+        // tsconfig — packages/element/tsconfig.json carries
+        // experimentalDecorators for exactly this surface (Deno parsed them
+        // natively pre-migration).
         test: { name: 'element', include: ['packages/element/__tests__/**/*.test.ts'] },
       },
       {
@@ -73,10 +106,23 @@ export default defineConfig({
             'tools/lib/**/*.test.ts',
             'tools/release/**/*.test.ts',
           ],
+          // the tools suites spawn real pnpm/gate subprocesses (the deno
+          // runner had no per-test budget); vitest defaults to 5s
+          testTimeout: 120_000,
         },
       },
       {
         test: { name: 'tests', include: ['tests/fixtures/web-component-interop/**/*.test.ts'] },
+      },
+      {
+        test: {
+          name: 'benchmarks',
+          include: ['benchmarks/micro/**/*.test.ts', 'benchmarks/jfb/**/*.test.ts'],
+          // the self-checks drive real compiles and 1k-row Region ops at
+          // JFB scale (deterministic counts, but not free); the deno
+          // runner had no per-test budget either
+          testTimeout: 60_000,
+        },
       },
       {
         resolve: {
@@ -101,17 +147,21 @@ export default defineConfig({
         test: {
           name: 'element-browser',
           include: ['packages/element/__wtr__/tests/**/*.test.js'],
+          // Engine matrix parity with the retired web-test-runner gate:
+          // default (PR layer) is chromium; OE_BROWSER_MATRIX=full widens to
+          // the chromium+firefox+webkit conformance matrix (release layer).
+          // Unknown values fail closed.
+          browser: {
+            enabled: true,
+            headless: true,
+            provider: playwright(),
+            instances: matrixInstances(),
+          },
           // The wtr suites follow web-test-runner's injected-globals convention
           // (bare describe/it, chai imported explicitly), so only this project
           // opts into vitest globals — the node projects stay explicit-import
           // (globals: false), matching what the codemod emits.
           globals: true,
-          browser: {
-            enabled: true,
-            headless: true,
-            provider: playwright(),
-            instances: [{ browser: 'chromium' }],
-          },
         },
       },
     ],

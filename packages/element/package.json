@@ -24,15 +24,16 @@
     "build": "tsc --noEmit -p tsconfig.json",
     "lint": "oxlint src __tests__",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "test": "deno test --no-lock --no-check --deny-ffi --no-prompt --allow-read --allow-write --allow-env --allow-net --allow-run __tests__/",
-    "test:ci": "deno test --no-lock --no-check --allow-read --allow-write --allow-env --allow-net --allow-run --coverage --junit-path=test-results.xml __tests__/",
+    "test": "vitest run --root ../.. --project element",
+    "test:ci": "vitest run --root ../.. --project element --coverage",
     "browser:compile": "node __wtr__/tools/compile-fixtures.ts",
     "browser:install": "node ../../tools/repo/run-in.ts --root __wtr__ --env PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 -- npm ci --no-audit --no-fund",
-    "browser:test": "pnpm run browser:compile && pnpm --dir __wtr__ test",
-    "browser:test:chromium": "pnpm run browser:compile && node ../../tools/repo/run-in.ts --root __wtr__ --env WTR_BROWSERS=chromium -- npm test",
+    "browser:test": "pnpm run browser:compile && vitest run --root ../.. --project element-browser",
+    "browser:test:chromium": "pnpm run browser:compile && vitest run --root ../.. --project element-browser",
     "browser:negative": "node __wtr__/tools/negative-proofs.ts",
     "browser:gate": "pnpm run browser:install && pnpm run browser:test:chromium && pnpm run browser:negative",
-    "browser:gate:full": "pnpm run browser:install && pnpm run browser:test && pnpm run browser:negative"
+    "browser:gate:full": "pnpm run browser:install && pnpm run browser:test:full && pnpm run browser:negative",
+    "browser:test:full": "pnpm run browser:compile && OE_BROWSER_MATRIX=full vitest run --root ../.. --project element-browser"
   },
   "peerDependencies": {
     "vite": "^8.0.0"

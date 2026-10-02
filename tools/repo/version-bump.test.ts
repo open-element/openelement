@@ -6,7 +6,7 @@
  * against a copy of the tree pieces it owns (never the live repo).
  */
 
-import { assert, assertEquals } from '@std/assert';
+import { expect, test } from 'vitest';
 import { join } from '@std/path';
 import { prereleaseParts } from '../lib/version.ts';
 import {
@@ -27,38 +27,37 @@ import { tmpdir } from 'node:os';
 
 const repoRoot = join(import.meta.dirname!, '..', '..');
 
-Deno.test('version-bump: the five points are the four manifests and the anchor', () => {
-  assertEquals(PACKAGE_CONFIGS, [
+test('version-bump: the five points are the four manifests and the anchor', () => {
+  expect(PACKAGE_CONFIGS).toEqual([
     'packages/element/package.json',
     'packages/router/package.json',
     'packages/create/package.json',
     'packages/ui/package.json',
   ]);
-  assertEquals(VERSION_SOURCE, 'packages/create/src/version.ts');
+  expect(VERSION_SOURCE).toEqual('packages/create/src/version.ts');
 });
 
-Deno.test('version-bump: version input is validated', () => {
-  assertEquals(validateVersion('1.0.0-alpha.4'), null);
-  assertEquals(validateVersion('1.0.0'), null);
+test('version-bump: version input is validated', () => {
+  expect(validateVersion('1.0.0-alpha.4')).toEqual(null);
+  expect(validateVersion('1.0.0')).toEqual(null);
   for (const bad of ['alpha', 'v1.0.0-alpha.4', '^1.0.0', '', '1.0']) {
-    assert(validateVersion(bad), `"${bad}" must be rejected`);
+    expect(validateVersion(bad), `"${bad}" must be rejected`).toBeTruthy();
   }
 });
 
-Deno.test('version-bump: rewriters move only the version token', () => {
+test('version-bump: rewriters move only the version token', () => {
   const config = `{\n  "name": "@openelement/element",\n  "version": "1.0.0-alpha.2",\n  "description": "1.0.0-alpha.2 stays"\n}`;
-  assertEquals(
-    rewriteConfigVersion(config, '1.0.0-alpha.2', '1.0.0-alpha.3'),
+  expect(rewriteConfigVersion(config, '1.0.0-alpha.2', '1.0.0-alpha.3')).toEqual(
     `{\n  "name": "@openelement/element",\n  "version": "1.0.0-alpha.3",\n  "description": "1.0.0-alpha.2 stays"\n}`,
   );
   const anchor =
     "/** The published CLI version. */\nexport const CREATE_VERSION = '1.0.0-alpha.2';\n\nexport const VITE_STARTER_PIN = '8.0.16';\n";
   const rewritten = rewriteCreateVersion(anchor, '1.0.0-alpha.2', '1.0.0-alpha.3');
-  assert(rewritten.includes("CREATE_VERSION = '1.0.0-alpha.3'"), rewritten);
-  assert(rewritten.includes("VITE_STARTER_PIN = '8.0.16'"), rewritten);
+  expect(rewritten.includes("CREATE_VERSION = '1.0.0-alpha.3'"), rewritten).toBeTruthy();
+  expect(rewritten.includes("VITE_STARTER_PIN = '8.0.16'"), rewritten).toBeTruthy();
 });
 
-Deno.test('version-bump: dry run reports every point against the live tree', async () => {
+test('version-bump: dry run reports every point against the live tree', async () => {
   // The dry-run target is derived from the live tree, not hardcoded: this test
   // once pinned `1.0.0-alpha.4` as the "next" version, which is exactly the
   // version the tree reaches after the alpha.4 bump — at which point the dry run
@@ -68,38 +67,37 @@ Deno.test('version-bump: dry run reports every point against the live tree', asy
   // being cut.
   const current = readConfigVersion(await readFile(join(repoRoot, PACKAGE_CONFIGS[0]), 'utf8'));
   const parts = prereleaseParts(current ?? '');
-  assert(parts, `the live tree must declare a prerelease line version, got ${current}`);
+  expect(
+    parts,
+    `the live tree must declare a prerelease line version, got ${current}`,
+  ).toBeTruthy();
   const target = `${parts.base}-${parts.name}.${parts.num + 1}`;
   const plan = await planVersionBump(repoRoot, target);
-  assertEquals(
-    plan.currentVersion,
+  expect(plan.currentVersion).toEqual(
     readConfigVersion(await readFile(join(repoRoot, PACKAGE_CONFIGS[0]), 'utf8')),
   );
-  assert(plan.currentVersion !== target);
+  expect(plan.currentVersion !== target).toBeTruthy();
   // Points 1-5: all four configs plus the anchor carry the bumped token.
-  assertEquals(
-    plan.edits.map((edit) => edit.path),
-    [...PACKAGE_CONFIGS, VERSION_SOURCE],
-  );
-  assertEquals(plan.edits.filter((edit) => edit.point === 'package-config').length, 4);
-  assertEquals(plan.edits.filter((edit) => edit.point === 'create-anchor').length, 1);
+  expect(plan.edits.map((edit) => edit.path)).toEqual([...PACKAGE_CONFIGS, VERSION_SOURCE]);
+  expect(plan.edits.filter((edit) => edit.point === 'package-config').length).toEqual(4);
+  expect(plan.edits.filter((edit) => edit.point === 'create-anchor').length).toEqual(1);
 });
 
-Deno.test('version-bump: consistency check reports the points that lag', async () => {
+test('version-bump: consistency check reports the points that lag', async () => {
   // The live tree is consistent with its own version.
   const current = readConfigVersion(await readFile(join(repoRoot, PACKAGE_CONFIGS[0]), 'utf8'))!;
-  assertEquals(await inconsistencyFailures(repoRoot, current), []);
+  expect(await inconsistencyFailures(repoRoot, current)).toEqual([]);
   // A different expected version reports every point (the www anchor audit is
   // expected-version-independent, so it adds nothing here on a healthy tree).
   const failures = await inconsistencyFailures(repoRoot, '9.9.9');
-  assertEquals(failures.length, 5);
-  assert(
+  expect(failures.length).toEqual(5);
+  expect(
     failures.some((line) => line.startsWith(VERSION_SOURCE)),
     failures.join('\n'),
-  );
+  ).toBeTruthy();
 });
 
-Deno.test('version-bump: the allowlist matcher scopes the shipped-source scan', () => {
+test('version-bump: the allowlist matcher scopes the shipped-source scan', () => {
   const cases: readonly [string, string, boolean][] = [
     ['docs/', 'docs/release/notes.md', true],
     ['docs/', 'packages/element/src/docs.md', false],
@@ -111,10 +109,10 @@ Deno.test('version-bump: the allowlist matcher scopes the shipped-source scan', 
     ['pnpm-lock.yaml', 'tests/fixtures/x/pnpm-lock.yaml', false],
   ];
   for (const [pattern, path, expected] of cases) {
-    assertEquals(shippedScanAllowlisted(pattern, path), expected, `${pattern} vs ${path}`);
+    expect(shippedScanAllowlisted(pattern, path), `${pattern} vs ${path}`).toEqual(expected);
   }
   // The ask's allowlist is registered verbatim.
-  assertEquals(SHIPPED_SCAN_ALLOWLIST, [
+  expect(SHIPPED_SCAN_ALLOWLIST).toEqual([
     'docs/',
     'CHANGELOG.md',
     'www/content/',
@@ -123,11 +121,11 @@ Deno.test('version-bump: the allowlist matcher scopes the shipped-source scan', 
   ]);
 });
 
-Deno.test('version-bump: the live shipped source carries no historical release names', async () => {
-  assertEquals(await historicalReleaseNameFindings(repoRoot), []);
+test('version-bump: the live shipped source carries no historical release names', async () => {
+  expect(await historicalReleaseNameFindings(repoRoot)).toEqual([]);
 });
 
-Deno.test('version-bump: the scan finds a leaked release name and honors the allowlist', async () => {
+test('version-bump: the scan finds a leaked release name and honors the allowlist', async () => {
   const root = await mkdtemp(join(tmpdir(), 'opx-test-'));
   try {
     const src = join(root, 'packages/element/src');
@@ -147,7 +145,7 @@ Deno.test('version-bump: the scan finds a leaked release name and honors the all
     );
 
     const findings = await historicalReleaseNameFindings(root);
-    assertEquals(findings, [
+    expect(findings).toEqual([
       {
         path: 'packages/element/src/banner.ts',
         line: 1,

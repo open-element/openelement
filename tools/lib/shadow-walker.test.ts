@@ -4,7 +4,7 @@
  * `matches` and `shadowRoot`. That narrow surface is what this test fakes: it
  * pins traversal order and open-shadow-root piercing without a browser.
  */
-import { assertEquals } from '@std/assert';
+import { expect, test } from 'vitest';
 import { deepQueryAllInPage, deepQueryFirstInPage } from './shadow-walker.ts';
 
 class FakeNode {
@@ -61,32 +61,30 @@ const host = new FakeNode('open-card', 'host').shadows(new FakeNode('#shadow').w
 const light = new FakeNode('open-input', 'light');
 const page = new FakeNode('#document').with(host, light);
 
-Deno.test('deepQueryFirstInPage returns a light-DOM match', () => {
+test('deepQueryFirstInPage returns a light-DOM match', () => {
   const found = deepQueryFirstInPage(page.asRoot(), 'open-input');
-  assertEquals((found as unknown as FakeNode | null)?.id, 'light');
+  expect((found as unknown as FakeNode | null)?.id).toEqual('light');
 });
 
-Deno.test('deepQueryFirstInPage pierces an open shadow root', () => {
+test('deepQueryFirstInPage pierces an open shadow root', () => {
   const found = deepQueryFirstInPage(page.asRoot(), '#inner');
-  assertEquals((found as unknown as FakeNode | null)?.id, 'inner');
+  expect((found as unknown as FakeNode | null)?.id).toEqual('inner');
 });
 
-Deno.test('deepQueryFirstInPage returns null when nothing matches', () => {
-  assertEquals(deepQueryFirstInPage(page.asRoot(), '#absent'), null);
+test('deepQueryFirstInPage returns null when nothing matches', () => {
+  expect(deepQueryFirstInPage(page.asRoot(), '#absent')).toEqual(null);
 });
 
-Deno.test('deepQueryAllInPage filters a light-DOM selector', () => {
+test('deepQueryAllInPage filters a light-DOM selector', () => {
   const found = deepQueryAllInPage(page.asRoot(), 'open-input');
-  assertEquals(
-    (found as unknown as FakeNode[]).map((node) => node.id),
-    ['light'],
-  );
+  expect((found as unknown as FakeNode[]).map((node) => node.id)).toEqual(['light']);
 });
 
-Deno.test('deepQueryAllInPage sweeps shadow content in document order', () => {
+test('deepQueryAllInPage sweeps shadow content in document order', () => {
   const found = deepQueryAllInPage(page.asRoot(), '*');
-  assertEquals(
-    (found as unknown as FakeNode[]).map((node) => node.id),
-    ['host', 'inner', 'light'],
-  );
+  expect((found as unknown as FakeNode[]).map((node) => node.id)).toEqual([
+    'host',
+    'inner',
+    'light',
+  ]);
 });

@@ -6,7 +6,9 @@
  * the same import twice and Rollup fails with a bare "Identifier has already
  * been declared". scanRoutes must fail first, naming both source paths.
  */
-import { assertEquals, assertStringIncludes } from '@std/assert';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { expect, test } from 'vitest';
 import { dirname, join } from '@std/path';
 import { scanRoutes } from '../src/vite/internal/ssg/index.ts';
 
@@ -20,52 +22,52 @@ async function withRoutes(
   files: string[],
   fn: (routesDir: string) => Promise<void>,
 ): Promise<void> {
-  const dir = await Deno.makeTempDir({ prefix: 'oe-scan-varname-' });
+  const dir = await mkdtemp(join(tmpdir(), 'oe-scan-varname-'));
   try {
     const routesDir = join(dir, 'routes');
     for (const file of files) {
       const path = join(routesDir, file);
-      await Deno.mkdir(dirname(path), { recursive: true });
-      await Deno.writeTextFile(path, ROUTE_SOURCE);
+      await mkdir(dirname(path), { recursive: true });
+      await writeFile(path, ROUTE_SOURCE);
     }
     await fn(routesDir);
   } finally {
-    await Deno.remove(dir, { recursive: true }).catch(() => {});
+    await rm(dir, { recursive: true }).catch(() => {});
   }
 }
 
-Deno.test('scanRoutes throws on varName collision between /a-b and /a/b (#1029)', async () => {
+test('scanRoutes throws on varName collision between /a-b and /a/b (#1029)', async () => {
   await withRoutes(['a-b.tsx', join('a', 'b.tsx')], async (routesDir) => {
     const err = await scanRoutes(routesDir).then(
       () => undefined,
       (e: unknown) => e as Error,
     );
-    assertEquals(err instanceof Error, true);
-    assertStringIncludes(err!.message, 'Route_A_b');
+    expect(err instanceof Error).toEqual(true);
+    expect(err!.message).toContain('Route_A_b');
     // Both source paths must be named so the author can find the pair.
-    assertStringIncludes(err!.message, 'a-b.tsx');
-    assertStringIncludes(err!.message, join('a', 'b.tsx'));
-    assertStringIncludes(err!.message, 'Rename one of the route files');
+    expect(err!.message).toContain('a-b.tsx');
+    expect(err!.message).toContain(join('a', 'b.tsx'));
+    expect(err!.message).toContain('Rename one of the route files');
   });
 });
 
-Deno.test('scanRoutes throws on varName collision between /a-b and /a_b (#1029)', async () => {
+test('scanRoutes throws on varName collision between /a-b and /a_b (#1029)', async () => {
   await withRoutes(['a-b.tsx', 'a_b.tsx'], async (routesDir) => {
     const err = await scanRoutes(routesDir).then(
       () => undefined,
       (e: unknown) => e as Error,
     );
-    assertEquals(err instanceof Error, true);
-    assertStringIncludes(err!.message, 'Route_A_b');
-    assertStringIncludes(err!.message, 'a-b.tsx');
-    assertStringIncludes(err!.message, 'a_b.tsx');
+    expect(err instanceof Error).toEqual(true);
+    expect(err!.message).toContain('Route_A_b');
+    expect(err!.message).toContain('a-b.tsx');
+    expect(err!.message).toContain('a_b.tsx');
   });
 });
 
-Deno.test('scanRoutes accepts non-colliding hyphen/slash/underscore routes', async () => {
+test('scanRoutes accepts non-colliding hyphen/slash/underscore routes', async () => {
   await withRoutes(['a-b.tsx', join('a', 'c.tsx'), 'a_c_d.tsx', 'index.tsx'], async (routesDir) => {
     const routes = await scanRoutes(routesDir);
     const varNames = routes.map((r) => r.varName);
-    assertEquals(new Set(varNames).size, varNames.length);
+    expect(new Set(varNames).size).toEqual(varNames.length);
   });
 });

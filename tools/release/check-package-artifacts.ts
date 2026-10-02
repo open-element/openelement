@@ -12,7 +12,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { mkdtemp, rm, stat } from 'node:fs/promises';
 import { readFileSync, statSync } from 'node:fs';
-import { walkSync } from '@std/fs/walk';
+import { walkSync } from '../lib/std-fs.ts';
 import { dirname } from '@std/path';
 import { stripComments } from '../lib/text.ts';
 import { runCommand } from '../lib/process.ts';

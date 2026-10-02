@@ -1,5 +1,5 @@
 /** Built-output link/fragment/SEO checker unit tests (#1159). */
-import { assertEquals } from '@std/assert';
+import { expect, test } from 'vitest';
 import {
   anchorsFragment,
   extractBuiltLinks,
@@ -9,7 +9,7 @@ import {
   resolveBuiltPath,
 } from './site-links.ts';
 
-Deno.test('extractBuiltLinks: keeps internal targets, skips external/protocol/fragment-only', () => {
+test('extractBuiltLinks: keeps internal targets, skips external/protocol/fragment-only', () => {
   const links = extractBuiltLinks(
     'index.html',
     [
@@ -23,18 +23,15 @@ Deno.test('extractBuiltLinks: keeps internal targets, skips external/protocol/fr
       '<img src="data:image/png;base64,xx">',
     ].join('\n'),
   );
-  assertEquals(
-    links.map((link) => [link.path, link.fragment]),
-    [
-      ['/guide/getting-started', ''],
-      ['/guide/api', 'signals'],
-      ['', 'top'],
-      ['/assets/app.js', ''],
-    ],
-  );
+  expect(links.map((link) => [link.path, link.fragment])).toEqual([
+    ['/guide/getting-started', ''],
+    ['/guide/api', 'signals'],
+    ['', 'top'],
+    ['/assets/app.js', ''],
+  ]);
 });
 
-Deno.test('resolveBuiltPath: routes, files and assets', () => {
+test('resolveBuiltPath: routes, files and assets', () => {
   const files = new Set([
     'index.html',
     'guide/getting-started/index.html',
@@ -42,29 +39,27 @@ Deno.test('resolveBuiltPath: routes, files and assets', () => {
     '404.html',
   ]);
   const exists = (file: string) => files.has(file);
-  assertEquals(resolveBuiltPath('/', exists), 'index.html');
-  assertEquals(
-    resolveBuiltPath('/guide/getting-started', exists),
+  expect(resolveBuiltPath('/', exists)).toEqual('index.html');
+  expect(resolveBuiltPath('/guide/getting-started', exists)).toEqual(
     'guide/getting-started/index.html',
   );
-  assertEquals(
-    resolveBuiltPath('/guide/getting-started/', exists),
+  expect(resolveBuiltPath('/guide/getting-started/', exists)).toEqual(
     'guide/getting-started/index.html',
   );
-  assertEquals(resolveBuiltPath('/assets/app.js', exists), 'assets/app.js');
-  assertEquals(resolveBuiltPath('/404', exists), '404.html');
-  assertEquals(resolveBuiltPath('/nope', exists), null);
-  assertEquals(resolveBuiltPath('/assets/missing.js', exists), null);
+  expect(resolveBuiltPath('/assets/app.js', exists)).toEqual('assets/app.js');
+  expect(resolveBuiltPath('/404', exists)).toEqual('404.html');
+  expect(resolveBuiltPath('/nope', exists)).toEqual(null);
+  expect(resolveBuiltPath('/assets/missing.js', exists)).toEqual(null);
 });
 
-Deno.test('anchorsFragment: id and name anchor the fragment', () => {
+test('anchorsFragment: id and name anchor the fragment', () => {
   const html = '<section id="signals"></section><a name="legacy"></a>';
-  assertEquals(anchorsFragment(html, 'signals'), true);
-  assertEquals(anchorsFragment(html, 'legacy'), true);
-  assertEquals(anchorsFragment(html, 'missing'), false);
+  expect(anchorsFragment(html, 'signals')).toEqual(true);
+  expect(anchorsFragment(html, 'legacy')).toEqual(true);
+  expect(anchorsFragment(html, 'missing')).toEqual(false);
 });
 
-Deno.test('findSeoFailures: title/description/og:title/canonical/hreflang invariants (#1307)', () => {
+test('findSeoFailures: title/description/og:title/canonical/hreflang invariants (#1307)', () => {
   // Link attribute order matches the framework serializer (#1326): rel, href,
   // then hreflang. The checker is order-tolerant; the fixture tracks the
   // single writer's real output.
@@ -76,40 +71,38 @@ Deno.test('findSeoFailures: title/description/og:title/canonical/hreflang invari
     '<link rel="alternate" href="https://openelement.org/" hreflang="en">' +
     '<link rel="alternate" href="https://openelement.org/zh" hreflang="zh">' +
     '</head>';
-  assertEquals(findSeoFailures(good, 'index.html'), []);
+  expect(findSeoFailures(good, 'index.html')).toEqual([]);
   // 404 documents carry no canonical/hreflang by design.
   const bare404 =
     '<head><title>404 — Page not found — openElement</title>' +
     '<meta name="description" content="A sufficiently long description."/>' +
     '<meta property="og:title" content="404"/></head>';
-  assertEquals(findSeoFailures(bare404, '404.html'), []);
-  assertEquals(findSeoFailures(bare404, 'zh/404/index.html'), []);
+  expect(findSeoFailures(bare404, '404.html')).toEqual([]);
+  expect(findSeoFailures(bare404, 'zh/404/index.html')).toEqual([]);
   const failures = findSeoFailures('<head></head>', 'index.html');
-  assertEquals(failures.length, 7);
-  assertEquals(
+  expect(failures.length).toEqual(7);
+  expect(
     findSeoFailures('<title>a</title><title>b</title>' + good, 'index.html')[0].message.includes(
       'exactly one <title>',
     ),
-    true,
-  );
+  ).toEqual(true);
   // The boilerplate bare-brand title is a failure even when present once.
   const boilerplate = good.replace(
     '<title>Home — openElement</title>',
     '<title>openElement</title>',
   );
-  assertEquals(
+  expect(
     findSeoFailures(boilerplate, 'index.html').some((f) => f.message.includes('boilerplate')),
-    true,
-  );
+  ).toEqual(true);
   // A non-404 page without canonical/hreflang fails.
   const noLinks =
     '<head><title>Home — openElement</title>' +
     '<meta name="description" content="A sufficiently long description."/>' +
     '<meta property="og:title" content="t"/></head>';
-  assertEquals(findSeoFailures(noLinks, 'apilist/index.html').length, 3);
+  expect(findSeoFailures(noLinks, 'apilist/index.html').length).toEqual(3);
 });
 
-Deno.test('findCrossPageSeoFailures: per-locale title uniqueness', () => {
+test('findCrossPageSeoFailures: per-locale title uniqueness', () => {
   const pages = [
     { file: 'index.html', title: 'Home — openElement', description: 'x'.repeat(24), locale: 'en' },
     { file: 'zh/index.html', title: '首页 — openElement', description: '中文描述。', locale: 'zh' },
@@ -120,7 +113,7 @@ Deno.test('findCrossPageSeoFailures: per-locale title uniqueness', () => {
       locale: 'en',
     },
   ];
-  assertEquals(findCrossPageSeoFailures(pages), []);
+  expect(findCrossPageSeoFailures(pages)).toEqual([]);
   const duplicated = [
     ...pages,
     {
@@ -130,7 +123,7 @@ Deno.test('findCrossPageSeoFailures: per-locale title uniqueness', () => {
       locale: 'en',
     },
   ];
-  assertEquals(findCrossPageSeoFailures(duplicated).length, 1);
+  expect(findCrossPageSeoFailures(duplicated).length).toEqual(1);
   // The same title across DIFFERENT locales is fine (original-language posts).
   const crossLocale = [
     ...pages,
@@ -141,25 +134,25 @@ Deno.test('findCrossPageSeoFailures: per-locale title uniqueness', () => {
       locale: 'zh',
     },
   ];
-  assertEquals(findCrossPageSeoFailures(crossLocale), []);
+  expect(findCrossPageSeoFailures(crossLocale)).toEqual([]);
 });
 
-Deno.test('pageSeo extracts title/description and resolves locale from path', () => {
+test('pageSeo extracts title/description and resolves locale from path', () => {
   const html =
     '<head><title>T — openElement</title>' +
     '<meta name="description" content="D for the page, long enough."/></head>';
-  assertEquals(pageSeo(html, 'zh/apilist/index.html', ['en', 'zh'], 'en'), {
+  expect(pageSeo(html, 'zh/apilist/index.html', ['en', 'zh'], 'en')).toEqual({
     file: 'zh/apilist/index.html',
     title: 'T — openElement',
     description: 'D for the page, long enough.',
     locale: 'zh',
   });
-  assertEquals(pageSeo(html, 'apilist/index.html', ['en', 'zh'], 'en').locale, 'en');
+  expect(pageSeo(html, 'apilist/index.html', ['en', 'zh'], 'en').locale).toEqual('en');
 });
 
-Deno.test('pageSeo: locale detection follows the explicit default, not array order', () => {
+test('pageSeo: locale detection follows the explicit default, not array order', () => {
   const seo = pageSeo('<title>x</title>', 'guide/install/index.html', ['zh', 'en'], 'en');
-  assertEquals(seo.locale, 'en');
+  expect(seo.locale).toEqual('en');
   const zh = pageSeo('<title>x</title>', 'zh/guide/install/index.html', ['zh', 'en'], 'en');
-  assertEquals(zh.locale, 'zh');
+  expect(zh.locale).toEqual('zh');
 });

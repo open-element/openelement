@@ -8,7 +8,8 @@
  *   - dev:   vite dev server (@hono/vite-dev-server over the same virtual
  *            entry codegen as the build) serving the request-time fixture
  *   - build: the generated dist/server/index.js default export (the Nitro
- *            production entry) served by Deno.serve
+ *            production entry) served through the shipped node:http adapter
+ *            (packages/router/src/internal/node-http.ts)
  *
  * Status codes and the listed headers must match exactly; bodies may differ
  * in dev-only details (client script injection, stack traces) — the test
@@ -22,7 +23,10 @@
  *   pnpm --dir tests/fixtures/router-request-time run build
  */
 
-import { assert, assertEquals, assertStringIncludes } from '@std/assert';
+import { spawnSync } from 'node:child_process';
+import { readFile, writeFile } from 'node:fs/promises';
+import process from 'node:process';
+import { afterAll, beforeAll, describe, expect, test } from 'vitest';
 import { join, toFileUrl } from '@std/path';
 import { createServer as createNodeServer } from 'node:http';
 
@@ -34,14 +38,24 @@ type ServerHandle = { base: string; close: () => Promise<void> };
 async function bootBuildServer(): Promise<ServerHandle> {
   const entry = await import(toFileUrl(serverEntryPath).href);
   const handle = entry.default as (event: { req: Request }) => Promise<Response>;
-  const server = Deno.serve({ port: 0, hostname: '127.0.0.1' }, (request) =>
-    handle({ req: request }),
-  );
-  const addr = server.addr as Deno.NetAddr;
+  // The same node:http ↔ fetch adapter the start CLI uses in production
+  // (packages/router/src/internal/node-http.ts) — the oracle pins semantic
+  // parity, so the harness bridge must be the shipped one.
+  const { serveFetch } = await import('../src/internal/node-http.ts');
+  const server = serveFetch({
+    hostname: '127.0.0.1',
+    port: 0,
+    handler: (request) => handle({ req: request }),
+  });
+  await new Promise<void>((resolve, reject) => {
+    server.once('listening', resolve);
+    server.once('error', reject);
+  });
+  const addr = server.address() as { port: number };
   return {
     base: `http://127.0.0.1:${addr.port}`,
     close: async () => {
-      await server.shutdown();
+      await new Promise<void>((resolve) => server.close(() => resolve()));
     },
   };
 }
@@ -54,8 +68,8 @@ async function bootDevServer(): Promise<ServerHandle> {
   const { createServer } = await import('vite');
   // The plugin scans routes relative to the process cwd, so boot from the
   // fixture directory (same shape as `deno task dev`, which cds into www).
-  const previousCwd = Deno.cwd();
-  Deno.chdir(fixtureDir);
+  const previousCwd = process.cwd();
+  process.chdir(fixtureDir);
   let server;
   try {
     server = await createServer({
@@ -96,7 +110,7 @@ async function bootDevServer(): Promise<ServerHandle> {
       server: { middlewareMode: true, ws: false },
     });
   } finally {
-    Deno.chdir(previousCwd);
+    process.chdir(previousCwd);
   }
   const httpServer = createNodeServer((request, response) => {
     server.middlewares(request, response, (error: unknown) => {
@@ -114,8 +128,11 @@ async function bootDevServer(): Promise<ServerHandle> {
     throw error;
   }
   const address = httpServer.address();
-  assert(address && typeof address === 'object', 'vite dev server did not bind a port');
-  assertEquals(address.address, '127.0.0.1', 'vite dev server must stay on loopback');
+  expect(
+    address && typeof address === 'object',
+    'vite dev server did not bind a port',
+  ).toBeTruthy();
+  expect(address.address, 'vite dev server must stay on loopback').toEqual('127.0.0.1');
   return {
     base: `http://127.0.0.1:${address.port}`,
     close: async () => {
@@ -139,921 +156,805 @@ function formBody(fields: Record<string, string>): RequestInit {
   };
 }
 
-Deno.test({
-  name: 'request-time parity: dev (hono) vs build (Nitro)',
-  sanitizeOps: false,
-  sanitizeResources: false,
-  fn: async (t) => {
+describe('request-time parity: dev (hono) vs build (Nitro)', () => {
+  const both: Record<'dev' | 'build', string> = { dev: '', build: '' };
+  let dev: ServerHandle | undefined;
+  let build: ServerHandle | undefined;
+
+  beforeAll(async () => {
     // The fixture dist is not committed, and the coverage/test gates run
     // before any build gate, so this builds it on demand. It builds
     // unconditionally: "the entry exists" is not evidence that it matches the
     // sources around it, and a stale entry makes the suite assert a past build
     // while reporting on the working tree (2026-09-17: a fixture dist and a
     // shadowing node_modules copy each hid the same stale codegen).
-    const fixtureBuild = await new Deno.Command('pnpm', {
-      args: ['--dir', 'tests/fixtures/router-request-time', 'run', 'build'],
-      cwd: join(fixtureDir, '../../..'),
-      stdout: 'inherit',
-      stderr: 'inherit',
-    }).output();
-    if (!fixtureBuild.success) throw new Error('fixture build failed');
+    const fixtureBuild = spawnSync(
+      'pnpm',
+      ['--dir', 'tests/fixtures/router-request-time', 'run', 'build'],
+      {
+        cwd: join(fixtureDir, '../../..'),
+        stdio: 'inherit',
+      },
+    );
+    if ((fixtureBuild.status ?? -1) !== 0) throw new Error('fixture build failed');
 
-    const build = await bootBuildServer();
-    const dev = await bootDevServer();
-    try {
-      const both = { dev: dev.base, build: build.base };
+    build = await bootBuildServer();
+    dev = await bootDevServer();
+    both.dev = dev.base;
+    both.build = build.base;
+  }, 600_000);
 
-      await t.step(
-        'GET /live → 200, loader data present, Cache-Control: private,no-cache (#943)',
-        async () => {
-          for (const [name, base] of Object.entries(both)) {
-            const response = await fetch(`${base}/live?x=parity`);
-            assertEquals(response.status, 200, `${name}: GET /live status`);
-            assertEquals(
-              response.headers.get('cache-control'),
-              'private, no-cache',
-              `${name}: GET /live cache-control`,
-            );
-            const body = await response.text();
-            assertStringIncludes(body, 'x=parity', `${name}: GET /live loader data`);
-          }
-        },
+  afterAll(async () => {
+    await dev?.close();
+    await build?.close();
+  });
+
+  test('GET /live → 200, loader data present, Cache-Control: private,no-cache (#943)', async () => {
+    for (const [name, base] of Object.entries(both)) {
+      const response = await fetch(`${base}/live?x=parity`);
+      expect(response.status, `${name}: GET /live status`).toEqual(200);
+      expect(response.headers.get('cache-control'), `${name}: GET /live cache-control`).toEqual(
+        'private, no-cache',
       );
-
-      await t.step('GET /missing → styled 404 page with a 404 status (#923)', async () => {
-        for (const [name, base] of Object.entries(both)) {
-          const response = await fetch(`${base}/missing/route`);
-          assertEquals(response.status, 404, `${name}: GET unmatched status`);
-          assertEquals(
-            response.headers.get('cache-control'),
-            'no-store',
-            `${name}: GET unmatched cache-control`,
-          );
-          const body = await response.text();
-          assertStringIncludes(body, 'styled not found', `${name}: styled 404 page rendered`);
-          assertStringIncludes(body, '404', `${name}: 404 title present`);
-        }
-      });
-
-      // #943 amendment: the private,no-cache relaxation applies ONLY to a
-      // successful 200 GET. notFound()/redirect()/a throw out of render()
-      // (inside __renderAppShell) must keep the no-store baseline — the
-      // override used to be emitted before the render, leaking onto every
-      // error/redirect response.
-      await t.step('GET /unstable → notFound() during render: 404 keeps no-store', async () => {
-        for (const [name, base] of Object.entries(both)) {
-          const response = await fetch(`${base}/unstable`);
-          assertEquals(response.status, 404, `${name}: GET /unstable status`);
-          assertEquals(
-            response.headers.get('cache-control'),
-            'no-store',
-            `${name}: GET /unstable cache-control`,
-          );
-          const body = await response.text();
-          assertStringIncludes(body, 'unstable gone', `${name}: 404 body carries the message`);
-        }
-      });
-
-      await t.step('GET /unstable?kind=redirect → 3xx during render keeps no-store', async () => {
-        for (const [name, base] of Object.entries(both)) {
-          const response = await fetch(`${base}/unstable?kind=redirect`, { redirect: 'manual' });
-          assertEquals(response.status, 302, `${name}: GET /unstable?kind=redirect status`);
-          assertEquals(
-            response.headers.get('location'),
-            '/live',
-            `${name}: GET /unstable?kind=redirect location`,
-          );
-          assertEquals(
-            response.headers.get('cache-control'),
-            'no-store',
-            `${name}: GET /unstable?kind=redirect cache-control`,
-          );
-          await response.body?.cancel();
-        }
-      });
-
-      await t.step('GET /boom → 500 error boundary keeps no-store', async () => {
-        for (const [name, base] of Object.entries(both)) {
-          const response = await fetch(`${base}/boom`);
-          assertEquals(response.status, 500, `${name}: GET /boom status`);
-          assertEquals(
-            response.headers.get('cache-control'),
-            'no-store',
-            `${name}: GET /boom cache-control`,
-          );
-          const body = await response.text();
-          assertStringIncludes(body, 'boom boundary', `${name}: error boundary rendered`);
-        }
-      });
-
-      await t.step('POST /form empty → 422 + Vary: x-openelement-action', async () => {
-        for (const [name, base] of Object.entries(both)) {
-          const response = await fetch(`${base}/form`, formBody({ message: '' }));
-          assertEquals(response.status, 422, `${name}: POST /form empty status`);
-          assertStringIncludes(
-            response.headers.get('vary') ?? '',
-            'x-openelement-action',
-            `${name}: POST /form empty vary`,
-          );
-          const body = await response.text();
-          assertStringIncludes(body, 'message is required', `${name}: POST /form failure echo`);
-        }
-      });
-
-      // Fetch channel with unserializable fail() data: the JSON channel
-      // must still answer the author status (payload degrades to null) —
-      // a c.json throw here would turn a 422 into a 500.
-      await t.step(
-        'POST /fail-unserializable (fetch channel) → 422 with degraded payload',
-        async () => {
-          for (const [name, base] of Object.entries(both)) {
-            for (const kind of ['undefined', 'function', 'symbol', 'bigint', 'circular']) {
-              const response = await fetch(`${base}/fail-unserializable`, {
-                method: 'POST',
-                headers: {
-                  'content-type': 'application/x-www-form-urlencoded',
-                  'x-openelement-action': 'true',
-                  origin: new URL(base).origin,
-                },
-                body: `kind=${kind}`,
-              });
-              assertEquals(response.status, 422, `${name}/${kind}: unserializable fail status`);
-              const body = await response.json();
-              assertEquals(body.type, 'failure', `${name}/${kind}: failure body shape`);
-              assertEquals(body.status, 422, `${name}/${kind}: failure body status`);
-              assertEquals(
-                body.data,
-                null,
-                `${name}/${kind}: unserializable data degrades to null`,
-              );
-            }
-          }
-        },
-      );
-
-      // #1146 area 4a — native (no-JS) channel parity for the same five
-      // unserializable kinds: a plain form POST WITHOUT the fetch header.
-      // Contract (from entry-action-runtime.ts): __runActionProtocol returns
-      // { actionResult } and the handler re-renders the page at the author
-      // status (entry-codegen.ts:149-154 + c.html(..., __actionStatus)). The
-      // raw fail() data rides the __openElementActionData prop, which
-      // collectPublicProps drops (props-utils.ts:64), so it never reaches
-      // attribute/hydration serialization — the re-render cannot 500.
-      await t.step(
-        'POST /fail-unserializable (native channel) → 422 page re-render (#1146 4a)',
-        async () => {
-          for (const [name, base] of Object.entries(both)) {
-            for (const kind of ['undefined', 'function', 'symbol', 'bigint', 'circular']) {
-              const response = await fetch(`${base}/fail-unserializable`, formBody({ kind }));
-              assertEquals(response.status, 422, `${name}/${kind}: native fail status`);
-              assertStringIncludes(
-                response.headers.get('content-type') ?? '',
-                'text/html',
-                `${name}/${kind}: native fail content-type`,
-              );
-              assertStringIncludes(
-                response.headers.get('vary') ?? '',
-                'x-openelement-action',
-                `${name}/${kind}: native fail vary`,
-              );
-              assertEquals(
-                response.headers.get('cache-control'),
-                'no-store',
-                `${name}/${kind}: native fail cache-control`,
-              );
-              const body = await response.text();
-              assertStringIncludes(
-                body,
-                '<h1>fail-unserializable</h1>',
-                `${name}/${kind}: native fail re-renders the page`,
-              );
-            }
-          }
-        },
-      );
-
-      // #1146 area 4b — large-but-serializable fail() data on both channels.
-      // Threshold (pinned by the fixture's bigPayload()): 64 nesting levels
-      // over a 64 KiB string leaf; serialized payload ≥ 64 KiB. The fetch
-      // channel must answer 422 with the payload intact (no truncation, no
-      // 500); the native channel re-renders without embedding the data.
-      await t.step(
-        'large serializable fail() data (64-deep, 64 KiB leaf) → intact on both channels (#1146 4b)',
-        async () => {
-          for (const [name, base] of Object.entries(both)) {
-            const json = await fetch(`${base}/fail-unserializable`, {
-              method: 'POST',
-              headers: {
-                'content-type': 'application/x-www-form-urlencoded',
-                'x-openelement-action': 'true',
-                origin: new URL(base).origin,
-              },
-              body: 'kind=big',
-            });
-            assertEquals(json.status, 422, `${name}: big fetch status`);
-            const body = (await json.json()) as {
-              type?: string;
-              status?: number;
-              data?: unknown;
-            };
-            assertEquals(body.type, 'failure', `${name}: big fetch body shape`);
-            assertEquals(body.status, 422, `${name}: big fetch body status`);
-            let node = body.data;
-            let depth = 0;
-            while (node !== null && typeof node === 'object' && 'child' in node) {
-              node = (node as { child: unknown }).child;
-              depth++;
-            }
-            assertEquals(depth, 64, `${name}: big nesting depth survives untruncated`);
-            assertEquals(
-              (node as { leaf: string }).leaf.length,
-              64 * 1024,
-              `${name}: big 64 KiB leaf survives untruncated`,
-            );
-            assert(
-              JSON.stringify(body.data).length >= 64 * 1024,
-              `${name}: big serialized payload is ≥ 64 KiB`,
-            );
-
-            const native = await fetch(`${base}/fail-unserializable`, formBody({ kind: 'big' }));
-            assertEquals(native.status, 422, `${name}: big native status`);
-            const html = await native.text();
-            assertStringIncludes(
-              html,
-              '<h1>fail-unserializable</h1>',
-              `${name}: big native re-renders the page`,
-            );
-            // fail() data is render-context state, not document state: the
-            // 64 KiB leaf must not be embedded into the re-rendered HTML.
-            assert(
-              !html.includes('x'.repeat(1024)),
-              `${name}: big fail data is not embedded in the native HTML`,
-            );
-          }
-        },
-      );
-
-      // #1146 area 4c — symbol-KEYED object (not symbol value): JSON.stringify
-      // drops symbol keys silently, so the fetch payload keeps only the plain
-      // key; the native channel re-renders unaffected.
-      await t.step(
-        'symbol-keyed fail() data: symbol key dropped, plain key survives (#1146 4c)',
-        async () => {
-          for (const [name, base] of Object.entries(both)) {
-            const json = await fetch(`${base}/fail-unserializable`, {
-              method: 'POST',
-              headers: {
-                'content-type': 'application/x-www-form-urlencoded',
-                'x-openelement-action': 'true',
-                origin: new URL(base).origin,
-              },
-              body: 'kind=symbol-key',
-            });
-            assertEquals(json.status, 422, `${name}: symbol-key fetch status`);
-            const body = (await json.json()) as {
-              type?: string;
-              status?: number;
-              data?: unknown;
-            };
-            assertEquals(body.type, 'failure', `${name}: symbol-key fetch body shape`);
-            assertEquals(
-              body.data,
-              { plain: 1 },
-              `${name}: symbol key dropped silently, plain key survives`,
-            );
-
-            const native = await fetch(
-              `${base}/fail-unserializable`,
-              formBody({ kind: 'symbol-key' }),
-            );
-            assertEquals(native.status, 422, `${name}: symbol-key native status`);
-            assertStringIncludes(
-              await native.text(),
-              '<h1>fail-unserializable</h1>',
-              `${name}: symbol-key native re-renders the page`,
-            );
-          }
-        },
-      );
-
-      // ADR-0129: the loader writes the channel on every GET; the action
-      // writes Set-Cookie then redirects; a 422 re-render carries the
-      // action's header; protocol headers (Cache-Control) cannot be
-      // overridden by the channel.
-      await t.step(
-        'ADR-0129 response-header channel: render + redirect + 422 + protocol wins',
-        async () => {
-          for (const [name, base] of Object.entries(both)) {
-            const page = await fetch(`${base}/set-header`);
-            assertEquals(
-              page.headers.get('x-oe-channel'),
-              'loader-render',
-              `${name}: GET channel header`,
-            );
-            assertEquals(
-              page.headers.get('cache-control'),
-              'private, no-cache',
-              `${name}: protocol Cache-Control wins over the channel`,
-            );
-            await page.body?.cancel();
-
-            const action = await fetch(`${base}/set-header`, {
-              method: 'POST',
-              headers: {
-                'content-type': 'application/x-www-form-urlencoded',
-                origin: new URL(base).origin,
-              },
-              body: 'mode=go',
-              redirect: 'manual',
-            });
-            assertEquals(action.status, 303, `${name}: action redirect status`);
-            assertEquals(
-              action.headers.get('set-cookie'),
-              'oe_session=stub-ok; HttpOnly; Path=/; SameSite=Lax',
-              `${name}: Set-Cookie survives the redirect`,
-            );
-            assertEquals(
-              action.headers.get('x-oe-channel'),
-              'action-redirect',
-              `${name}: action channel header`,
-            );
-            await action.body?.cancel();
-
-            const failed = await fetch(`${base}/set-header`, {
-              method: 'POST',
-              headers: {
-                'content-type': 'application/x-www-form-urlencoded',
-                origin: new URL(base).origin,
-              },
-              body: 'mode=fail',
-            });
-            assertEquals(failed.status, 422, `${name}: 422 status`);
-            // The channel accumulates across the action and the re-run
-            // loader (Headers.append join) — assert membership, not equality.
-            const channel = failed.headers.get('x-oe-channel') ?? '';
-            assertEquals(
-              channel.includes('action-422'),
-              true,
-              `${name}: 422 re-render carries the action's channel entry`,
-            );
-            await failed.body?.cancel();
-          }
-        },
-      );
-
-      await t.step('POST /form valid → 303 + Location', async () => {
-        for (const [name, base] of Object.entries(both)) {
-          const response = await fetch(`${base}/form`, formBody({ message: 'parity-check' }));
-          assertEquals(response.status, 303, `${name}: POST /form valid status`);
-          assertEquals(
-            response.headers.get('location'),
-            '/form?echoed=parity-check',
-            `${name}: POST /form valid location`,
-          );
-          await response.body?.cancel();
-        }
-      });
-
-      await t.step('POST /form?/nope → 404', async () => {
-        for (const [name, base] of Object.entries(both)) {
-          const response = await fetch(`${base}/form?/nope`, formBody({ message: 'x' }));
-          assertEquals(response.status, 404, `${name}: POST /form?/nope status`);
-          await response.body?.cancel();
-        }
-      });
-
-      // #1382: the residual window for browser-shaped form bodies. A client
-      // that omits Origin AND Fetch Metadata is allowed only when it does not
-      // look like a browser form navigation; with browser evidence
-      // (Upgrade-Insecure-Requests or a text/html Accept) the missing Origin
-      // is fail-closed, in the same dialect as the #921 forged-header rule.
-      //
-      // Non-vacuity (differential pair): the trailing
-      // 'non-browser POST without Origin stays allowed' step sends the SAME
-      // urlencoded body with the SAME absent Origin and Fetch Metadata, and
-      // only differs by omitting the browser-evidence header — it must be
-      // allowed (303). Since no other rule reads anything but Origin and
-      // Sec-Fetch-Site, a 403 in this step can only come from the #1382
-      // branch; the previous rule set allowed this shape (see #938/#921 E2E).
-      await t.step('browser-shaped POST without Origin → 403, both channels (#1382)', async () => {
-        for (const [name, base] of Object.entries(both)) {
-          for (const browserEvidence of [
-            { 'upgrade-insecure-requests': '1' },
-            { accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8' },
-          ] as Array<Record<string, string>>) {
-            // Native (no-JS) multipart form navigation.
-            const multipart = new FormData();
-            multipart.set('message', 'cross-site-probe');
-            const html = await fetch(`${base}/form`, {
-              method: 'POST',
-              headers: browserEvidence,
-              body: multipart,
-              redirect: 'manual',
-            });
-            assertEquals(
-              html.status,
-              403,
-              `${name}: multipart without Origin status for ${Object.keys(browserEvidence)[0]}`,
-            );
-            assertEquals(
-              await html.text(),
-              'Forbidden',
-              `${name}: native channel answers plain Forbidden`,
-            );
-
-            // Same shape on the fetch channel speaks RFC 9457 problem+json.
-            const form = new FormData();
-            form.set('message', 'cross-site-probe');
-            const json = await fetch(`${base}/form`, {
-              method: 'POST',
-              headers: { ...browserEvidence, 'x-openelement-action': 'true' },
-              body: form,
-              redirect: 'manual',
-            });
-            assertEquals(json.status, 403, `${name}: fetch channel 403 status`);
-            assertStringIncludes(
-              json.headers.get('content-type') ?? '',
-              'application/problem+json',
-              `${name}: fetch channel 403 content-type`,
-            );
-            const problem = (await json.json()) as { status?: number; detail?: string };
-            assertEquals(problem.status, 403, `${name}: fetch channel problem status`);
-            assertEquals(
-              problem.detail,
-              'Cross-site form submission rejected',
-              `${name}: fetch channel problem detail`,
-            );
-
-            // The urlencoded shape is covered by the same rule.
-            const urlencoded = await fetch(`${base}/form`, {
-              method: 'POST',
-              headers: {
-                ...browserEvidence,
-                'content-type': 'application/x-www-form-urlencoded',
-              },
-              body: 'message=cross-site-probe',
-              redirect: 'manual',
-            });
-            assertEquals(urlencoded.status, 403, `${name}: urlencoded without Origin status`);
-            await urlencoded.body?.cancel();
-          }
-        }
-      });
-
-      await t.step(
-        'browser-shaped POST with a same-origin Origin still commits (#1382)',
-        async () => {
-          for (const [name, base] of Object.entries(both)) {
-            const multipart = new FormData();
-            multipart.set('message', 'same-origin-upload');
-            const response = await fetch(`${base}/form`, {
-              method: 'POST',
-              headers: {
-                origin: new URL(base).origin,
-                'upgrade-insecure-requests': '1',
-                accept: 'text/html',
-              },
-              body: multipart,
-              redirect: 'manual',
-            });
-            assertEquals(response.status, 303, `${name}: same-origin multipart status`);
-            assertEquals(
-              response.headers.get('location'),
-              '/form?echoed=same-origin-upload',
-              `${name}: same-origin multipart location`,
-            );
-            await response.body?.cancel();
-
-            // Origin: null + Fetch Metadata same-origin is the #938
-            // no-referrer case. It must keep passing: an opaque origin is
-            // still an Origin the browser sent (the residual-window rule
-            // above deliberately only fires when the header is absent).
-            const opaque = new FormData();
-            opaque.set('message', 'no-referrer-upload');
-            const opaqueResponse = await fetch(`${base}/form`, {
-              method: 'POST',
-              headers: {
-                origin: 'null',
-                'sec-fetch-site': 'same-origin',
-                'upgrade-insecure-requests': '1',
-                accept: 'text/html',
-              },
-              body: opaque,
-              redirect: 'manual',
-            });
-            assertEquals(opaqueResponse.status, 303, `${name}: #938 opaque-origin status`);
-            await opaqueResponse.body?.cancel();
-          }
-        },
-      );
-
-      await t.step('non-browser POST without Origin stays allowed (#1382 trade-off)', async () => {
-        // The allowance this rule deliberately preserves: a client that omits
-        // browser navigation evidence (curl, health probes, API tooling) is
-        // not a browser-shaped form post, so it is still let through even
-        // with a urlencoded body and no Origin. Pinned so the compatibility
-        // promise documented in docs/architecture keeps holding.
-        for (const [name, base] of Object.entries(both)) {
-          const response = await fetch(`${base}/form`, {
-            method: 'POST',
-            headers: {
-              'content-type': 'application/x-www-form-urlencoded',
-              accept: '*/*',
-            },
-            body: 'message=scripted-client',
-            redirect: 'manual',
-          });
-          assertEquals(response.status, 303, `${name}: tool-shaped POST status`);
-          assertEquals(
-            response.headers.get('location'),
-            '/form?echoed=scripted-client',
-            `${name}: tool-shaped POST location`,
-          );
-          await response.body?.cancel();
-        }
-      });
-
-      await t.step('POST /live (no action) → 404', async () => {
-        for (const [name, base] of Object.entries(both)) {
-          const response = await fetch(`${base}/live`, formBody({ x: '1' }));
-          assertEquals(response.status, 404, `${name}: POST /live status`);
-          await response.body?.cancel();
-        }
-      });
-
-      // #960 regression: a route module exporting tagName + a same-tag
-      // self-registered content element + a definePage default export must
-      // run the definePage render (previously the content element won the
-      // registration and the page render — with its request context — was
-      // silently bypassed).
-      await t.step(
-        'GET /decoupled → definePage render runs, wrapping the content element',
-        async () => {
-          for (const [name, base] of Object.entries(both)) {
-            const response = await fetch(`${base}/decoupled?marker=from-request`);
-            assertEquals(response.status, 200, `${name}: GET /decoupled status`);
-            const body = await response.text();
-            assertStringIncludes(
-              body,
-              'decoupled-page-render',
-              `${name}: definePage render output present`,
-            );
-            assertStringIncludes(
-              body,
-              'content element: from-request',
-              `${name}: request context reached the page render`,
-            );
-            assertStringIncludes(
-              body,
-              '<decoupled-page',
-              `${name}: page registers under the path-derived fallback tag`,
-            );
-          }
-        },
-      );
-
-      await t.step('PUT /form → 405 + no-store', async () => {
-        for (const [name, base] of Object.entries(both)) {
-          const response = await fetch(`${base}/form`, { method: 'PUT', body: 'x=1' });
-          assertEquals(response.status, 405, `${name}: PUT /form status`);
-          assertEquals(
-            response.headers.get('cache-control'),
-            'no-store',
-            `${name}: PUT /form cache-control`,
-          );
-          await response.body?.cancel();
-        }
-      });
-
-      await t.step('oversized action POST → 413, fetch channel speaks problem+json', async () => {
-        // #568 sets a 10 MiB action limit; the fetch channel parses every
-        // action error as RFC 9457 problem+json (same fork as the CSRF 403),
-        // while the native form channel keeps the plain-text 413. The full
-        // fork is asserted on the build server, which bundles the entry from
-        // workspace source; the dev server boots the plugin copy resolved
-        // from node_modules, so it is pinned on the channel-invariant part.
-        const oversized = new Uint8Array(11 * 1024 * 1024);
-        const post = (base: string, headers: Record<string, string>) =>
-          fetch(`${base}/form`, {
-            method: 'POST',
-            headers: { 'content-type': 'application/x-www-form-urlencoded', ...headers },
-            body: oversized,
-          });
-        for (const [name, base] of Object.entries(both)) {
-          const json = await post(base, { 'x-openelement-action': 'true' });
-          assertEquals(json.status, 413, `${name}: fetch 413 status`);
-          assertEquals(
-            json.headers.get('cache-control'),
-            'no-store',
-            `${name}: fetch 413 cache-control`,
-          );
-          await json.body?.cancel();
-
-          const plain = await post(base, {});
-          assertEquals(plain.status, 413, `${name}: native 413 status`);
-          assertStringIncludes(
-            plain.headers.get('content-type') ?? '',
-            'text/plain',
-            `${name}: native 413 content-type`,
-          );
-          await plain.body?.cancel();
-        }
-
-        const json = await post(build.base, { 'x-openelement-action': 'true' });
-        assertStringIncludes(
-          json.headers.get('content-type') ?? '',
-          'application/problem+json',
-          'build: fetch 413 content-type',
-        );
-        const problem = (await json.json()) as { type?: string; title?: string; status?: number };
-        assertEquals(problem.type, 'about:blank', 'build: fetch 413 problem type');
-        assertEquals(problem.title, 'Payload Too Large', 'build: fetch 413 problem title');
-        assertEquals(problem.status, 413, 'build: fetch 413 problem status');
-      });
-
-      await t.step('fetch-header unknown action → RFC 9457 problem+json 404 (#863)', async () => {
-        for (const [name, base] of Object.entries(both)) {
-          const response = await fetch(`${base}/form?/nope`, {
-            method: 'POST',
-            headers: {
-              'content-type': 'application/x-www-form-urlencoded',
-              'x-openelement-action': 'true',
-            },
-            body: 'message=x',
-          });
-          assertEquals(response.status, 404, `${name}: JSON 404 status`);
-          assertStringIncludes(
-            response.headers.get('content-type') ?? '',
-            'application/problem+json',
-            `${name}: JSON 404 content-type`,
-          );
-          const body = (await response.json()) as {
-            type?: string;
-            title?: string;
-            status?: number;
-            detail?: string;
-          };
-          assertEquals(body.type, 'about:blank', `${name}: JSON 404 problem type`);
-          assertEquals(body.title, 'Not Found', `${name}: JSON 404 problem title`);
-          assertEquals(body.status, 404, `${name}: JSON 404 problem status`);
-          assertEquals(
-            body.detail,
-            'No action named "nope" on this route.',
-            `${name}: JSON 404 problem detail`,
-          );
-        }
-      });
-
-      await t.step('action returning a Response → 500 contract violation', async () => {
-        for (const [name, base] of Object.entries(both)) {
-          const response = await fetch(`${base}/ping?/raw`, formBody({}));
-          assertEquals(response.status, 500, `${name}: /ping?/raw status`);
-          const body = await response.text();
-          assertEquals(body.includes('<h1>raw</h1>'), false, `${name}: raw HTML must not leak`);
-        }
-      });
-
-      await t.step('malformed body (JSON content-type) → 400, both channels', async () => {
-        for (const [name, base] of Object.entries(both)) {
-          const response = await fetch(`${base}/form`, {
-            method: 'POST',
-            headers: { 'content-type': 'application/json' },
-            body: '{"x":1}',
-          });
-          assertEquals(response.status, 400, `${name}: JSON body status`);
-          const json = await fetch(`${base}/form`, {
-            method: 'POST',
-            headers: { 'content-type': 'application/json', 'x-openelement-action': 'true' },
-            body: '{"x":1}',
-          });
-          assertEquals(json.status, 400, `${name}: JSON body (fetch channel) status`);
-          assertStringIncludes(
-            json.headers.get('content-type') ?? '',
-            'application/problem+json',
-            `${name}: fetch channel errors speak problem+json`,
-          );
-        }
-      });
-
-      await t.step('303 PRG chain: POST → 303 → GET renders the target', async () => {
-        for (const [name, base] of Object.entries(both)) {
-          const post = await fetch(`${base}/form`, {
-            ...formBody({ message: 'chain' }),
-            redirect: 'manual',
-          });
-          assertEquals(post.status, 303, `${name}: PRG status`);
-          const get = await fetch(`${base}${post.headers.get('location')}`);
-          assertEquals(get.status, 200, `${name}: PRG target status`);
-          assertStringIncludes(await get.text(), 'echo=chain', `${name}: PRG target body`);
-        }
-      });
-
-      // #1146 area 4d — concurrency: one burst of N=20 parallel action POSTs
-      // per runtime, alternating valid/fail-unserializable across both
-      // channels (5 requests per quadrant). Cross-talk shows up as a wrong
-      // per-request marker in the 303/redirect location or a status flip;
-      // server-side failures show up as console.error output from the
-      // generated entry's catch blocks, captured here for the assertion.
-      await t.step(
-        'concurrent mixed submissions: 20 parallel, both channels, no cross-talk (#1146 4d)',
-        async () => {
-          for (const [name, base] of Object.entries(both)) {
-            const origin = new URL(base).origin;
-            const errorLogs: unknown[][] = [];
-            const originalError = console.error;
-            console.error = (...args: unknown[]) => {
-              errorLogs.push(args);
-            };
-            type BurstResult = { quadrant: number; marker: string; response: Response };
-            try {
-              const results: BurstResult[] = await Promise.all(
-                Array.from({ length: 20 }, async (_, i) => {
-                  const quadrant = i % 4;
-                  const marker = `mix-${i}`;
-                  if (quadrant === 0 || quadrant === 2) {
-                    // Native channel: valid → 303, fail → 422 re-render.
-                    const target = quadrant === 0 ? '/form' : '/fail-unserializable';
-                    const fields: Record<string, string> =
-                      quadrant === 0 ? { message: marker } : { kind: 'circular' };
-                    const response = await fetch(`${base}${target}`, formBody(fields));
-                    return { quadrant, marker, response };
-                  }
-                  // Fetch channel: valid → 200 JSON redirect, fail → 422 JSON failure.
-                  const target = quadrant === 1 ? '/form' : '/fail-unserializable';
-                  const body = quadrant === 1 ? `message=${marker}` : 'kind=circular';
-                  const response = await fetch(`${base}${target}`, {
-                    method: 'POST',
-                    headers: {
-                      'content-type': 'application/x-www-form-urlencoded',
-                      'x-openelement-action': 'true',
-                      origin,
-                    },
-                    body,
-                  });
-                  return { quadrant, marker, response };
-                }),
-              );
-              assertEquals(results.length, 20, `${name}: every burst request answered`);
-              for (const { quadrant, marker, response } of results) {
-                if (quadrant === 0) {
-                  assertEquals(response.status, 303, `${name}/${marker}: native valid status`);
-                  assertEquals(
-                    response.headers.get('location'),
-                    `/form?echoed=${marker}`,
-                    `${name}/${marker}: native valid location carries its own marker`,
-                  );
-                  await response.body?.cancel();
-                } else if (quadrant === 1) {
-                  assertEquals(response.status, 200, `${name}/${marker}: fetch valid status`);
-                  const body = (await response.json()) as {
-                    type?: string;
-                    status?: number;
-                    location?: string;
-                  };
-                  assertEquals(body.type, 'redirect', `${name}/${marker}: fetch valid shape`);
-                  assertEquals(body.status, 303, `${name}/${marker}: fetch valid body status`);
-                  assertEquals(
-                    body.location,
-                    `/form?echoed=${marker}`,
-                    `${name}/${marker}: fetch valid location carries its own marker`,
-                  );
-                } else if (quadrant === 2) {
-                  assertEquals(response.status, 422, `${name}/${marker}: native fail status`);
-                  assertStringIncludes(
-                    await response.text(),
-                    '<h1>fail-unserializable</h1>',
-                    `${name}/${marker}: native fail re-renders the page`,
-                  );
-                } else {
-                  assertEquals(response.status, 422, `${name}/${marker}: fetch fail status`);
-                  const body = (await response.json()) as { type?: string; data?: unknown };
-                  assertEquals(body.type, 'failure', `${name}/${marker}: fetch fail shape`);
-                  assertEquals(body.data, null, `${name}/${marker}: fetch fail degrades to null`);
-                }
-              }
-            } finally {
-              console.error = originalError;
-            }
-            assertEquals(
-              errorLogs,
-              [],
-              `${name}: no server error logs during the concurrent burst`,
-            );
-          }
-        },
-      );
-
-      // ADR-0123 item 2 (#858), Alpha.1 module contract: the fixture's
-      // middleware.use entries are MODULE PATHS. app/middleware/outer.ts
-      // default-exports a factory result closing over a module constant;
-      // app/middleware/inner.ts imports a local helper AND a third-party
-      // package (hono/utils/cookie), closes over module constants,
-      // short-circuits, and throws on demand. Both runtimes must run the
-      // chain with identical semantics.
-      await t.step('fetch middleware: onion order + short-circuit parity (#858)', async () => {
-        for (const [name, base] of Object.entries(both)) {
-          const response = await fetch(`${base}/live?x=mw`);
-          assertEquals(response.status, 200, `${name}: GET /live status`);
-          // Onion order: the inner middleware post-processes the response
-          // first, so 'inner' precedes 'outer'.
-          assertEquals(
-            response.headers.get('x-fixture-middleware'),
-            'inner, outer',
-            `${name}: middleware onion order`,
-          );
-          await response.body?.cancel();
-
-          const short = await fetch(`${base}/live?mw-short=1`);
-          assertEquals(short.status, 418, `${name}: short-circuit status`);
-          assertEquals(await short.text(), 'fixture short-circuit', `${name}: short-circuit body`);
-          // The outer middleware still wraps the short-circuit response.
-          assertEquals(
-            short.headers.get('x-fixture-middleware'),
-            'outer',
-            `${name}: short-circuit still passes the outer middleware`,
-          );
-        }
-      });
-
-      await t.step(
-        'fetch middleware module contract: local helper + third-party dep + closures (#858, Alpha.1)',
-        async () => {
-          for (const [name, base] of Object.entries(both)) {
-            // Third-party proof: inner.ts parses the Cookie header with
-            // hono/utils/cookie — a bare package import the old toString()
-            // inlining could never resolve — and echoes the proof cookie.
-            const proof = await fetch(`${base}/live?x=mw-dep`, {
-              headers: { cookie: 'fixture-proof=hono-cookie-parser' },
-            });
-            assertEquals(proof.status, 200, `${name}: dependency proof status`);
-            assertEquals(
-              proof.headers.get('x-fixture-cookie-proof'),
-              'hono-cookie-parser',
-              `${name}: third-party package import works inside middleware`,
-            );
-            // Module-closure proof: the marker header comes from a constant
-            // and a helper in ../lib/middleware-marker.ts, and the 'outer'
-            // marker comes from a factory closure over a module constant.
-            assertEquals(
-              proof.headers.get('x-fixture-middleware'),
-              'inner, outer',
-              `${name}: module-level constants/closures captured`,
-            );
-            await proof.body?.cancel();
-          }
-        },
-      );
-
-      await t.step(
-        'fetch middleware: a throwing middleware is a contained 500, server survives',
-        async () => {
-          for (const [name, base] of Object.entries(both)) {
-            const boom = await fetch(`${base}/live?mw-boom=1`);
-            assertEquals(boom.status, 500, `${name}: throwing middleware status`);
-            await boom.body?.cancel();
-            // Contained: the runtime keeps serving afterwards.
-            const after = await fetch(`${base}/live?x=after-boom`);
-            assertEquals(after.status, 200, `${name}: server survives a middleware throw`);
-            assertEquals(
-              after.headers.get('x-fixture-middleware'),
-              'inner, outer',
-              `${name}: chain intact after a middleware throw`,
-            );
-            await after.body?.cancel();
-          }
-        },
-      );
-
-      await t.step(
-        'dev SSR reloads an edited imported component on the next request (#1091)',
-        async () => {
-          // v0.44: the /shared route's markup lives in the imported compiled
-          // page element module; the edit exercises the same SSR-runner
-          // invalidation chain for compiled modules.
-          const componentPath = join(fixtureDir, 'app/components/page-shared.tsx');
-          const original = await Deno.readTextFile(componentPath);
-          const changed = original.replace('Shared submit', 'Fresh SSR dependency');
-          assert(changed !== original, 'fixture replacement sentinel was not found');
-          try {
-            await Deno.writeTextFile(componentPath, changed);
-            const deadline = Date.now() + 5000;
-            while (true) {
-              const response = await fetch(`${dev.base}/shared`);
-              const body = await response.text();
-              if (body.includes('Fresh SSR dependency')) break;
-              if (Date.now() > deadline) {
-                throw new Error('dev SSR kept serving the stale imported component after 5s');
-              }
-              await new Promise((resolve) => setTimeout(resolve, 50));
-            }
-          } finally {
-            await Deno.writeTextFile(componentPath, original);
-          }
-        },
-      );
-    } finally {
-      await dev.close();
-      await build.close();
+      const body = await response.text();
+      expect(body, `${name}: GET /live loader data`).toContain('x=parity');
     }
-  },
+  });
+
+  test('GET /missing → styled 404 page with a 404 status (#923)', async () => {
+    for (const [name, base] of Object.entries(both)) {
+      const response = await fetch(`${base}/missing/route`);
+      expect(response.status, `${name}: GET unmatched status`).toEqual(404);
+      expect(response.headers.get('cache-control'), `${name}: GET unmatched cache-control`).toEqual(
+        'no-store',
+      );
+      const body = await response.text();
+      expect(body, `${name}: styled 404 page rendered`).toContain('styled not found');
+      expect(body, `${name}: 404 title present`).toContain('404');
+    }
+  });
+
+  // #943 amendment: the private,no-cache relaxation applies ONLY to a
+  // successful 200 GET. notFound()/redirect()/a throw out of render()
+  // (inside __renderAppShell) must keep the no-store baseline — the
+  // override used to be emitted before the render, leaking onto every
+  // error/redirect response.
+  test('GET /unstable → notFound() during render: 404 keeps no-store', async () => {
+    for (const [name, base] of Object.entries(both)) {
+      const response = await fetch(`${base}/unstable`);
+      expect(response.status, `${name}: GET /unstable status`).toEqual(404);
+      expect(response.headers.get('cache-control'), `${name}: GET /unstable cache-control`).toEqual(
+        'no-store',
+      );
+      const body = await response.text();
+      expect(body, `${name}: 404 body carries the message`).toContain('unstable gone');
+    }
+  });
+
+  test('GET /unstable?kind=redirect → 3xx during render keeps no-store', async () => {
+    for (const [name, base] of Object.entries(both)) {
+      const response = await fetch(`${base}/unstable?kind=redirect`, { redirect: 'manual' });
+      expect(response.status, `${name}: GET /unstable?kind=redirect status`).toEqual(302);
+      expect(
+        response.headers.get('location'),
+        `${name}: GET /unstable?kind=redirect location`,
+      ).toEqual('/live');
+      expect(
+        response.headers.get('cache-control'),
+        `${name}: GET /unstable?kind=redirect cache-control`,
+      ).toEqual('no-store');
+      await response.body?.cancel();
+    }
+  });
+
+  test('GET /boom → 500 error boundary keeps no-store', async () => {
+    for (const [name, base] of Object.entries(both)) {
+      const response = await fetch(`${base}/boom`);
+      expect(response.status, `${name}: GET /boom status`).toEqual(500);
+      expect(response.headers.get('cache-control'), `${name}: GET /boom cache-control`).toEqual(
+        'no-store',
+      );
+      const body = await response.text();
+      expect(body, `${name}: error boundary rendered`).toContain('boom boundary');
+    }
+  });
+
+  test('POST /form empty → 422 + Vary: x-openelement-action', async () => {
+    for (const [name, base] of Object.entries(both)) {
+      const response = await fetch(`${base}/form`, formBody({ message: '' }));
+      expect(response.status, `${name}: POST /form empty status`).toEqual(422);
+      expect(response.headers.get('vary') ?? '', `${name}: POST /form empty vary`).toContain(
+        'x-openelement-action',
+      );
+      const body = await response.text();
+      expect(body, `${name}: POST /form failure echo`).toContain('message is required');
+    }
+  });
+
+  // Fetch channel with unserializable fail() data: the JSON channel
+  // must still answer the author status (payload degrades to null) —
+  // a c.json throw here would turn a 422 into a 500.
+  test('POST /fail-unserializable (fetch channel) → 422 with degraded payload', async () => {
+    for (const [name, base] of Object.entries(both)) {
+      for (const kind of ['undefined', 'function', 'symbol', 'bigint', 'circular']) {
+        const response = await fetch(`${base}/fail-unserializable`, {
+          method: 'POST',
+          headers: {
+            'content-type': 'application/x-www-form-urlencoded',
+            'x-openelement-action': 'true',
+            origin: new URL(base).origin,
+          },
+          body: `kind=${kind}`,
+        });
+        expect(response.status, `${name}/${kind}: unserializable fail status`).toEqual(422);
+        const body = await response.json();
+        expect(body.type, `${name}/${kind}: failure body shape`).toEqual('failure');
+        expect(body.status, `${name}/${kind}: failure body status`).toEqual(422);
+        expect(body.data, `${name}/${kind}: unserializable data degrades to null`).toEqual(null);
+      }
+    }
+  });
+
+  // #1146 area 4a — native (no-JS) channel parity for the same five
+  // unserializable kinds: a plain form POST WITHOUT the fetch header.
+  // Contract (from entry-action-runtime.ts): __runActionProtocol returns
+  // { actionResult } and the handler re-renders the page at the author
+  // status (entry-codegen.ts:149-154 + c.html(..., __actionStatus)). The
+  // raw fail() data rides the __openElementActionData prop, which
+  // collectPublicProps drops (props-utils.ts:64), so it never reaches
+  // attribute/hydration serialization — the re-render cannot 500.
+  test('POST /fail-unserializable (native channel) → 422 page re-render (#1146 4a)', async () => {
+    for (const [name, base] of Object.entries(both)) {
+      for (const kind of ['undefined', 'function', 'symbol', 'bigint', 'circular']) {
+        const response = await fetch(`${base}/fail-unserializable`, formBody({ kind }));
+        expect(response.status, `${name}/${kind}: native fail status`).toEqual(422);
+        expect(
+          response.headers.get('content-type') ?? '',
+          `${name}/${kind}: native fail content-type`,
+        ).toContain('text/html');
+        expect(response.headers.get('vary') ?? '', `${name}/${kind}: native fail vary`).toContain(
+          'x-openelement-action',
+        );
+        expect(
+          response.headers.get('cache-control'),
+          `${name}/${kind}: native fail cache-control`,
+        ).toEqual('no-store');
+        const body = await response.text();
+        expect(body, `${name}/${kind}: native fail re-renders the page`).toContain(
+          '<h1>fail-unserializable</h1>',
+        );
+      }
+    }
+  });
+
+  // #1146 area 4b — large-but-serializable fail() data on both channels.
+  // Threshold (pinned by the fixture's bigPayload()): 64 nesting levels
+  // over a 64 KiB string leaf; serialized payload ≥ 64 KiB. The fetch
+  // channel must answer 422 with the payload intact (no truncation, no
+  // 500); the native channel re-renders without embedding the data.
+  test('large serializable fail() data (64-deep, 64 KiB leaf) → intact on both channels (#1146 4b)', async () => {
+    for (const [name, base] of Object.entries(both)) {
+      const json = await fetch(`${base}/fail-unserializable`, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/x-www-form-urlencoded',
+          'x-openelement-action': 'true',
+          origin: new URL(base).origin,
+        },
+        body: 'kind=big',
+      });
+      expect(json.status, `${name}: big fetch status`).toEqual(422);
+      const body = (await json.json()) as {
+        type?: string;
+        status?: number;
+        data?: unknown;
+      };
+      expect(body.type, `${name}: big fetch body shape`).toEqual('failure');
+      expect(body.status, `${name}: big fetch body status`).toEqual(422);
+      let node = body.data;
+      let depth = 0;
+      while (node !== null && typeof node === 'object' && 'child' in node) {
+        node = (node as { child: unknown }).child;
+        depth++;
+      }
+      expect(depth, `${name}: big nesting depth survives untruncated`).toEqual(64);
+      expect(
+        (node as { leaf: string }).leaf.length,
+        `${name}: big 64 KiB leaf survives untruncated`,
+      ).toEqual(64 * 1024);
+      expect(
+        JSON.stringify(body.data).length >= 64 * 1024,
+        `${name}: big serialized payload is ≥ 64 KiB`,
+      ).toBeTruthy();
+
+      const native = await fetch(`${base}/fail-unserializable`, formBody({ kind: 'big' }));
+      expect(native.status, `${name}: big native status`).toEqual(422);
+      const html = await native.text();
+      expect(html, `${name}: big native re-renders the page`).toContain(
+        '<h1>fail-unserializable</h1>',
+      );
+      // fail() data is render-context state, not document state: the
+      // 64 KiB leaf must not be embedded into the re-rendered HTML.
+      expect(
+        !html.includes('x'.repeat(1024)),
+        `${name}: big fail data is not embedded in the native HTML`,
+      ).toBeTruthy();
+    }
+  });
+
+  // #1146 area 4c — symbol-KEYED object (not symbol value): JSON.stringify
+  // drops symbol keys silently, so the fetch payload keeps only the plain
+  // key; the native channel re-renders unaffected.
+  test('symbol-keyed fail() data: symbol key dropped, plain key survives (#1146 4c)', async () => {
+    for (const [name, base] of Object.entries(both)) {
+      const json = await fetch(`${base}/fail-unserializable`, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/x-www-form-urlencoded',
+          'x-openelement-action': 'true',
+          origin: new URL(base).origin,
+        },
+        body: 'kind=symbol-key',
+      });
+      expect(json.status, `${name}: symbol-key fetch status`).toEqual(422);
+      const body = (await json.json()) as {
+        type?: string;
+        status?: number;
+        data?: unknown;
+      };
+      expect(body.type, `${name}: symbol-key fetch body shape`).toEqual('failure');
+      expect(body.data, `${name}: symbol key dropped silently, plain key survives`).toEqual({
+        plain: 1,
+      });
+
+      const native = await fetch(`${base}/fail-unserializable`, formBody({ kind: 'symbol-key' }));
+      expect(native.status, `${name}: symbol-key native status`).toEqual(422);
+      expect(await native.text(), `${name}: symbol-key native re-renders the page`).toContain(
+        '<h1>fail-unserializable</h1>',
+      );
+    }
+  });
+
+  // ADR-0129: the loader writes the channel on every GET; the action
+  // writes Set-Cookie then redirects; a 422 re-render carries the
+  // action's header; protocol headers (Cache-Control) cannot be
+  // overridden by the channel.
+  test('ADR-0129 response-header channel: render + redirect + 422 + protocol wins', async () => {
+    for (const [name, base] of Object.entries(both)) {
+      const page = await fetch(`${base}/set-header`);
+      expect(page.headers.get('x-oe-channel'), `${name}: GET channel header`).toEqual(
+        'loader-render',
+      );
+      expect(
+        page.headers.get('cache-control'),
+        `${name}: protocol Cache-Control wins over the channel`,
+      ).toEqual('private, no-cache');
+      await page.body?.cancel();
+
+      const action = await fetch(`${base}/set-header`, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/x-www-form-urlencoded',
+          origin: new URL(base).origin,
+        },
+        body: 'mode=go',
+        redirect: 'manual',
+      });
+      expect(action.status, `${name}: action redirect status`).toEqual(303);
+      expect(action.headers.get('set-cookie'), `${name}: Set-Cookie survives the redirect`).toEqual(
+        'oe_session=stub-ok; HttpOnly; Path=/; SameSite=Lax',
+      );
+      expect(action.headers.get('x-oe-channel'), `${name}: action channel header`).toEqual(
+        'action-redirect',
+      );
+      await action.body?.cancel();
+
+      const failed = await fetch(`${base}/set-header`, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/x-www-form-urlencoded',
+          origin: new URL(base).origin,
+        },
+        body: 'mode=fail',
+      });
+      expect(failed.status, `${name}: 422 status`).toEqual(422);
+      // The channel accumulates across the action and the re-run
+      // loader (Headers.append join) — assert membership, not equality.
+      const channel = failed.headers.get('x-oe-channel') ?? '';
+      expect(
+        channel.includes('action-422'),
+        `${name}: 422 re-render carries the action's channel entry`,
+      ).toEqual(true);
+      await failed.body?.cancel();
+    }
+  });
+
+  test('POST /form valid → 303 + Location', async () => {
+    for (const [name, base] of Object.entries(both)) {
+      const response = await fetch(`${base}/form`, formBody({ message: 'parity-check' }));
+      expect(response.status, `${name}: POST /form valid status`).toEqual(303);
+      expect(response.headers.get('location'), `${name}: POST /form valid location`).toEqual(
+        '/form?echoed=parity-check',
+      );
+      await response.body?.cancel();
+    }
+  });
+
+  test('POST /form?/nope → 404', async () => {
+    for (const [name, base] of Object.entries(both)) {
+      const response = await fetch(`${base}/form?/nope`, formBody({ message: 'x' }));
+      expect(response.status, `${name}: POST /form?/nope status`).toEqual(404);
+      await response.body?.cancel();
+    }
+  });
+
+  // #1382: the residual window for browser-shaped form bodies. A client
+  // that omits Origin AND Fetch Metadata is allowed only when it does not
+  // look like a browser form navigation; with browser evidence
+  // (Upgrade-Insecure-Requests or a text/html Accept) the missing Origin
+  // is fail-closed, in the same dialect as the #921 forged-header rule.
+  //
+  // Non-vacuity (differential pair): the trailing
+  // 'non-browser POST without Origin stays allowed' step sends the SAME
+  // urlencoded body with the SAME absent Origin and Fetch Metadata, and
+  // only differs by omitting the browser-evidence header — it must be
+  // allowed (303). Since no other rule reads anything but Origin and
+  // Sec-Fetch-Site, a 403 in this step can only come from the #1382
+  // branch; the previous rule set allowed this shape (see #938/#921 E2E).
+  test('browser-shaped POST without Origin → 403, both channels (#1382)', async () => {
+    for (const [name, base] of Object.entries(both)) {
+      for (const browserEvidence of [
+        { 'upgrade-insecure-requests': '1' },
+        { accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8' },
+      ] as Array<Record<string, string>>) {
+        // Native (no-JS) multipart form navigation.
+        const multipart = new FormData();
+        multipart.set('message', 'cross-site-probe');
+        const html = await fetch(`${base}/form`, {
+          method: 'POST',
+          headers: browserEvidence,
+          body: multipart,
+          redirect: 'manual',
+        });
+        expect(
+          html.status,
+          `${name}: multipart without Origin status for ${Object.keys(browserEvidence)[0]}`,
+        ).toEqual(403);
+        expect(await html.text(), `${name}: native channel answers plain Forbidden`).toEqual(
+          'Forbidden',
+        );
+
+        // Same shape on the fetch channel speaks RFC 9457 problem+json.
+        const form = new FormData();
+        form.set('message', 'cross-site-probe');
+        const json = await fetch(`${base}/form`, {
+          method: 'POST',
+          headers: { ...browserEvidence, 'x-openelement-action': 'true' },
+          body: form,
+          redirect: 'manual',
+        });
+        expect(json.status, `${name}: fetch channel 403 status`).toEqual(403);
+        expect(
+          json.headers.get('content-type') ?? '',
+          `${name}: fetch channel 403 content-type`,
+        ).toContain('application/problem+json');
+        const problem = (await json.json()) as { status?: number; detail?: string };
+        expect(problem.status, `${name}: fetch channel problem status`).toEqual(403);
+        expect(problem.detail, `${name}: fetch channel problem detail`).toEqual(
+          'Cross-site form submission rejected',
+        );
+
+        // The urlencoded shape is covered by the same rule.
+        const urlencoded = await fetch(`${base}/form`, {
+          method: 'POST',
+          headers: {
+            ...browserEvidence,
+            'content-type': 'application/x-www-form-urlencoded',
+          },
+          body: 'message=cross-site-probe',
+          redirect: 'manual',
+        });
+        expect(urlencoded.status, `${name}: urlencoded without Origin status`).toEqual(403);
+        await urlencoded.body?.cancel();
+      }
+    }
+  });
+
+  test('browser-shaped POST with a same-origin Origin still commits (#1382)', async () => {
+    for (const [name, base] of Object.entries(both)) {
+      const multipart = new FormData();
+      multipart.set('message', 'same-origin-upload');
+      const response = await fetch(`${base}/form`, {
+        method: 'POST',
+        headers: {
+          origin: new URL(base).origin,
+          'upgrade-insecure-requests': '1',
+          accept: 'text/html',
+        },
+        body: multipart,
+        redirect: 'manual',
+      });
+      expect(response.status, `${name}: same-origin multipart status`).toEqual(303);
+      expect(response.headers.get('location'), `${name}: same-origin multipart location`).toEqual(
+        '/form?echoed=same-origin-upload',
+      );
+      await response.body?.cancel();
+
+      // Origin: null + Fetch Metadata same-origin is the #938
+      // no-referrer case. It must keep passing: an opaque origin is
+      // still an Origin the browser sent (the residual-window rule
+      // above deliberately only fires when the header is absent).
+      const opaque = new FormData();
+      opaque.set('message', 'no-referrer-upload');
+      const opaqueResponse = await fetch(`${base}/form`, {
+        method: 'POST',
+        headers: {
+          origin: 'null',
+          'sec-fetch-site': 'same-origin',
+          'upgrade-insecure-requests': '1',
+          accept: 'text/html',
+        },
+        body: opaque,
+        redirect: 'manual',
+      });
+      expect(opaqueResponse.status, `${name}: #938 opaque-origin status`).toEqual(303);
+      await opaqueResponse.body?.cancel();
+    }
+  });
+
+  test('non-browser POST without Origin stays allowed (#1382 trade-off)', async () => {
+    // The allowance this rule deliberately preserves: a client that omits
+    // browser navigation evidence (curl, health probes, API tooling) is
+    // not a browser-shaped form post, so it is still let through even
+    // with a urlencoded body and no Origin. Pinned so the compatibility
+    // promise documented in docs/architecture keeps holding.
+    for (const [name, base] of Object.entries(both)) {
+      const response = await fetch(`${base}/form`, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/x-www-form-urlencoded',
+          accept: '*/*',
+        },
+        body: 'message=scripted-client',
+        redirect: 'manual',
+      });
+      expect(response.status, `${name}: tool-shaped POST status`).toEqual(303);
+      expect(response.headers.get('location'), `${name}: tool-shaped POST location`).toEqual(
+        '/form?echoed=scripted-client',
+      );
+      await response.body?.cancel();
+    }
+  });
+
+  test('POST /live (no action) → 404', async () => {
+    for (const [name, base] of Object.entries(both)) {
+      const response = await fetch(`${base}/live`, formBody({ x: '1' }));
+      expect(response.status, `${name}: POST /live status`).toEqual(404);
+      await response.body?.cancel();
+    }
+  });
+
+  // #960 regression: a route module exporting tagName + a same-tag
+  // self-registered content element + a definePage default export must
+  // run the definePage render (previously the content element won the
+  // registration and the page render — with its request context — was
+  // silently bypassed).
+  test('GET /decoupled → definePage render runs, wrapping the content element', async () => {
+    for (const [name, base] of Object.entries(both)) {
+      const response = await fetch(`${base}/decoupled?marker=from-request`);
+      expect(response.status, `${name}: GET /decoupled status`).toEqual(200);
+      const body = await response.text();
+      expect(body, `${name}: definePage render output present`).toContain('decoupled-page-render');
+      expect(body, `${name}: request context reached the page render`).toContain(
+        'content element: from-request',
+      );
+      expect(body, `${name}: page registers under the path-derived fallback tag`).toContain(
+        '<decoupled-page',
+      );
+    }
+  });
+
+  test('PUT /form → 405 + no-store', async () => {
+    for (const [name, base] of Object.entries(both)) {
+      const response = await fetch(`${base}/form`, { method: 'PUT', body: 'x=1' });
+      expect(response.status, `${name}: PUT /form status`).toEqual(405);
+      expect(response.headers.get('cache-control'), `${name}: PUT /form cache-control`).toEqual(
+        'no-store',
+      );
+      await response.body?.cancel();
+    }
+  });
+
+  test('oversized action POST → 413, fetch channel speaks problem+json', async () => {
+    // #568 sets a 10 MiB action limit; the fetch channel parses every
+    // action error as RFC 9457 problem+json (same fork as the CSRF 403),
+    // while the native form channel keeps the plain-text 413. The full
+    // fork is asserted on the build server, which bundles the entry from
+    // workspace source; the dev server boots the plugin copy resolved
+    // from node_modules, so it is pinned on the channel-invariant part.
+    const oversized = new Uint8Array(11 * 1024 * 1024);
+    const post = (base: string, headers: Record<string, string>) =>
+      fetch(`${base}/form`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/x-www-form-urlencoded', ...headers },
+        body: oversized,
+      });
+    for (const [name, base] of Object.entries(both)) {
+      const json = await post(base, { 'x-openelement-action': 'true' });
+      expect(json.status, `${name}: fetch 413 status`).toEqual(413);
+      expect(json.headers.get('cache-control'), `${name}: fetch 413 cache-control`).toEqual(
+        'no-store',
+      );
+      await json.body?.cancel();
+
+      const plain = await post(base, {});
+      expect(plain.status, `${name}: native 413 status`).toEqual(413);
+      expect(plain.headers.get('content-type') ?? '', `${name}: native 413 content-type`).toContain(
+        'text/plain',
+      );
+      await plain.body?.cancel();
+    }
+
+    const json = await post(build.base, { 'x-openelement-action': 'true' });
+    expect(json.headers.get('content-type') ?? '', 'build: fetch 413 content-type').toContain(
+      'application/problem+json',
+    );
+    const problem = (await json.json()) as { type?: string; title?: string; status?: number };
+    expect(problem.type, 'build: fetch 413 problem type').toEqual('about:blank');
+    expect(problem.title, 'build: fetch 413 problem title').toEqual('Payload Too Large');
+    expect(problem.status, 'build: fetch 413 problem status').toEqual(413);
+  });
+
+  test('fetch-header unknown action → RFC 9457 problem+json 404 (#863)', async () => {
+    for (const [name, base] of Object.entries(both)) {
+      const response = await fetch(`${base}/form?/nope`, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/x-www-form-urlencoded',
+          'x-openelement-action': 'true',
+        },
+        body: 'message=x',
+      });
+      expect(response.status, `${name}: JSON 404 status`).toEqual(404);
+      expect(
+        response.headers.get('content-type') ?? '',
+        `${name}: JSON 404 content-type`,
+      ).toContain('application/problem+json');
+      const body = (await response.json()) as {
+        type?: string;
+        title?: string;
+        status?: number;
+        detail?: string;
+      };
+      expect(body.type, `${name}: JSON 404 problem type`).toEqual('about:blank');
+      expect(body.title, `${name}: JSON 404 problem title`).toEqual('Not Found');
+      expect(body.status, `${name}: JSON 404 problem status`).toEqual(404);
+      expect(body.detail, `${name}: JSON 404 problem detail`).toEqual(
+        'No action named "nope" on this route.',
+      );
+    }
+  });
+
+  test('action returning a Response → 500 contract violation', async () => {
+    for (const [name, base] of Object.entries(both)) {
+      const response = await fetch(`${base}/ping?/raw`, formBody({}));
+      expect(response.status, `${name}: /ping?/raw status`).toEqual(500);
+      const body = await response.text();
+      expect(body.includes('<h1>raw</h1>'), `${name}: raw HTML must not leak`).toEqual(false);
+    }
+  });
+
+  test('malformed body (JSON content-type) → 400, both channels', async () => {
+    for (const [name, base] of Object.entries(both)) {
+      const response = await fetch(`${base}/form`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: '{"x":1}',
+      });
+      expect(response.status, `${name}: JSON body status`).toEqual(400);
+      const json = await fetch(`${base}/form`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-openelement-action': 'true' },
+        body: '{"x":1}',
+      });
+      expect(json.status, `${name}: JSON body (fetch channel) status`).toEqual(400);
+      expect(
+        json.headers.get('content-type') ?? '',
+        `${name}: fetch channel errors speak problem+json`,
+      ).toContain('application/problem+json');
+    }
+  });
+
+  test('303 PRG chain: POST → 303 → GET renders the target', async () => {
+    for (const [name, base] of Object.entries(both)) {
+      const post = await fetch(`${base}/form`, {
+        ...formBody({ message: 'chain' }),
+        redirect: 'manual',
+      });
+      expect(post.status, `${name}: PRG status`).toEqual(303);
+      const get = await fetch(`${base}${post.headers.get('location')}`);
+      expect(get.status, `${name}: PRG target status`).toEqual(200);
+      expect(await get.text(), `${name}: PRG target body`).toContain('echo=chain');
+    }
+  });
+
+  // #1146 area 4d — concurrency: one burst of N=20 parallel action POSTs
+  // per runtime, alternating valid/fail-unserializable across both
+  // channels (5 requests per quadrant). Cross-talk shows up as a wrong
+  // per-request marker in the 303/redirect location or a status flip;
+  // server-side failures show up as console.error output from the
+  // generated entry's catch blocks, captured here for the assertion.
+  test('concurrent mixed submissions: 20 parallel, both channels, no cross-talk (#1146 4d)', async () => {
+    for (const [name, base] of Object.entries(both)) {
+      const origin = new URL(base).origin;
+      const errorLogs: unknown[][] = [];
+      const originalError = console.error;
+      console.error = (...args: unknown[]) => {
+        errorLogs.push(args);
+      };
+      type BurstResult = { quadrant: number; marker: string; response: Response };
+      try {
+        const results: BurstResult[] = await Promise.all(
+          Array.from({ length: 20 }, async (_, i) => {
+            const quadrant = i % 4;
+            const marker = `mix-${i}`;
+            if (quadrant === 0 || quadrant === 2) {
+              // Native channel: valid → 303, fail → 422 re-render.
+              const target = quadrant === 0 ? '/form' : '/fail-unserializable';
+              const fields: Record<string, string> =
+                quadrant === 0 ? { message: marker } : { kind: 'circular' };
+              const response = await fetch(`${base}${target}`, formBody(fields));
+              return { quadrant, marker, response };
+            }
+            // Fetch channel: valid → 200 JSON redirect, fail → 422 JSON failure.
+            const target = quadrant === 1 ? '/form' : '/fail-unserializable';
+            const body = quadrant === 1 ? `message=${marker}` : 'kind=circular';
+            const response = await fetch(`${base}${target}`, {
+              method: 'POST',
+              headers: {
+                'content-type': 'application/x-www-form-urlencoded',
+                'x-openelement-action': 'true',
+                origin,
+              },
+              body,
+            });
+            return { quadrant, marker, response };
+          }),
+        );
+        expect(results.length, `${name}: every burst request answered`).toEqual(20);
+        for (const { quadrant, marker, response } of results) {
+          if (quadrant === 0) {
+            expect(response.status, `${name}/${marker}: native valid status`).toEqual(303);
+            expect(
+              response.headers.get('location'),
+              `${name}/${marker}: native valid location carries its own marker`,
+            ).toEqual(`/form?echoed=${marker}`);
+            await response.body?.cancel();
+          } else if (quadrant === 1) {
+            expect(response.status, `${name}/${marker}: fetch valid status`).toEqual(200);
+            const body = (await response.json()) as {
+              type?: string;
+              status?: number;
+              location?: string;
+            };
+            expect(body.type, `${name}/${marker}: fetch valid shape`).toEqual('redirect');
+            expect(body.status, `${name}/${marker}: fetch valid body status`).toEqual(303);
+            expect(
+              body.location,
+              `${name}/${marker}: fetch valid location carries its own marker`,
+            ).toEqual(`/form?echoed=${marker}`);
+          } else if (quadrant === 2) {
+            expect(response.status, `${name}/${marker}: native fail status`).toEqual(422);
+            expect(
+              await response.text(),
+              `${name}/${marker}: native fail re-renders the page`,
+            ).toContain('<h1>fail-unserializable</h1>');
+          } else {
+            expect(response.status, `${name}/${marker}: fetch fail status`).toEqual(422);
+            const body = (await response.json()) as { type?: string; data?: unknown };
+            expect(body.type, `${name}/${marker}: fetch fail shape`).toEqual('failure');
+            expect(body.data, `${name}/${marker}: fetch fail degrades to null`).toEqual(null);
+          }
+        }
+      } finally {
+        console.error = originalError;
+      }
+      expect(errorLogs, `${name}: no server error logs during the concurrent burst`).toEqual([]);
+    }
+  });
+
+  // ADR-0123 item 2 (#858), Alpha.1 module contract: the fixture's
+  // middleware.use entries are MODULE PATHS. app/middleware/outer.ts
+  // default-exports a factory result closing over a module constant;
+  // app/middleware/inner.ts imports a local helper AND a third-party
+  // package (hono/utils/cookie), closes over module constants,
+  // short-circuits, and throws on demand. Both runtimes must run the
+  // chain with identical semantics.
+  test('fetch middleware: onion order + short-circuit parity (#858)', async () => {
+    for (const [name, base] of Object.entries(both)) {
+      const response = await fetch(`${base}/live?x=mw`);
+      expect(response.status, `${name}: GET /live status`).toEqual(200);
+      // Onion order: the inner middleware post-processes the response
+      // first, so 'inner' precedes 'outer'.
+      expect(
+        response.headers.get('x-fixture-middleware'),
+        `${name}: middleware onion order`,
+      ).toEqual('inner, outer');
+      await response.body?.cancel();
+
+      const short = await fetch(`${base}/live?mw-short=1`);
+      expect(short.status, `${name}: short-circuit status`).toEqual(418);
+      expect(await short.text(), `${name}: short-circuit body`).toEqual('fixture short-circuit');
+      // The outer middleware still wraps the short-circuit response.
+      expect(
+        short.headers.get('x-fixture-middleware'),
+        `${name}: short-circuit still passes the outer middleware`,
+      ).toEqual('outer');
+    }
+  });
+
+  test('fetch middleware module contract: local helper + third-party dep + closures (#858, Alpha.1)', async () => {
+    for (const [name, base] of Object.entries(both)) {
+      // Third-party proof: inner.ts parses the Cookie header with
+      // hono/utils/cookie — a bare package import the old toString()
+      // inlining could never resolve — and echoes the proof cookie.
+      const proof = await fetch(`${base}/live?x=mw-dep`, {
+        headers: { cookie: 'fixture-proof=hono-cookie-parser' },
+      });
+      expect(proof.status, `${name}: dependency proof status`).toEqual(200);
+      expect(
+        proof.headers.get('x-fixture-cookie-proof'),
+        `${name}: third-party package import works inside middleware`,
+      ).toEqual('hono-cookie-parser');
+      // Module-closure proof: the marker header comes from a constant
+      // and a helper in ../lib/middleware-marker.ts, and the 'outer'
+      // marker comes from a factory closure over a module constant.
+      expect(
+        proof.headers.get('x-fixture-middleware'),
+        `${name}: module-level constants/closures captured`,
+      ).toEqual('inner, outer');
+      await proof.body?.cancel();
+    }
+  });
+
+  test('fetch middleware: a throwing middleware is a contained 500, server survives', async () => {
+    for (const [name, base] of Object.entries(both)) {
+      const boom = await fetch(`${base}/live?mw-boom=1`);
+      expect(boom.status, `${name}: throwing middleware status`).toEqual(500);
+      await boom.body?.cancel();
+      // Contained: the runtime keeps serving afterwards.
+      const after = await fetch(`${base}/live?x=after-boom`);
+      expect(after.status, `${name}: server survives a middleware throw`).toEqual(200);
+      expect(
+        after.headers.get('x-fixture-middleware'),
+        `${name}: chain intact after a middleware throw`,
+      ).toEqual('inner, outer');
+      await after.body?.cancel();
+    }
+  });
+
+  test('dev SSR reloads an edited imported component on the next request (#1091)', async () => {
+    // v0.44: the /shared route's markup lives in the imported compiled
+    // page element module; the edit exercises the same SSR-runner
+    // invalidation chain for compiled modules.
+    const componentPath = join(fixtureDir, 'app/components/page-shared.tsx');
+    const original = await readFile(componentPath, 'utf8');
+    const changed = original.replace('Shared submit', 'Fresh SSR dependency');
+    expect(changed !== original, 'fixture replacement sentinel was not found').toBeTruthy();
+    try {
+      await writeFile(componentPath, changed);
+      const deadline = Date.now() + 5000;
+      while (true) {
+        const response = await fetch(`${dev.base}/shared`);
+        const body = await response.text();
+        if (body.includes('Fresh SSR dependency')) break;
+        if (Date.now() > deadline) {
+          throw new Error('dev SSR kept serving the stale imported component after 5s');
+        }
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+    } finally {
+      await writeFile(componentPath, original);
+    }
+  });
 });

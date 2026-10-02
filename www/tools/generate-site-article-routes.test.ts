@@ -8,7 +8,8 @@
  * files resolving to one route, and the ownership/planning boundary that keeps
  * the generator away from non-article routes.
  */
-import { assert, assertEquals, assertStringIncludes, assertThrows } from '@std/assert';
+import { expect, test } from 'vitest';
+import { assertThrowsIncludes } from '../../tests/lib/vitest-asserts.ts';
 import { fromFileUrl, join } from '@std/path';
 import {
   type ArticleRoute,
@@ -28,13 +29,13 @@ const entry = (slug: string, order: number, locale?: string) => ({
   frontmatter: { order },
 });
 
-Deno.test('article routes: a slug maps to its route, binding and class names', () => {
-  assertEquals(pascalCase('web-component-admission'), 'WebComponentAdmission');
-  assertEquals(pascalCase('i18n'), 'I18n');
-  assertEquals(pascalCase('mdx'), 'Mdx');
+test('article routes: a slug maps to its route, binding and class names', () => {
+  expect(pascalCase('web-component-admission')).toEqual('WebComponentAdmission');
+  expect(pascalCase('i18n')).toEqual('I18n');
+  expect(pascalCase('mdx')).toEqual('Mdx');
 
   const [route] = routeSetFor('guide', [entry('getting-started', 1)]);
-  assertEquals(route, {
+  expect(route).toEqual({
     collection: 'guide',
     slug: 'getting-started',
     routeFile: 'getting-started.tsx',
@@ -47,27 +48,27 @@ Deno.test('article routes: a slug maps to its route, binding and class names', (
   // The collection overview article owns the collection root URL, so its
   // route file is index.tsx — the one place the file name is not the slug.
   const [overview] = routeSetFor('architecture', [entry('architecture', 10)]);
-  assertEquals(overview.routeFile, 'index.tsx');
-  assertEquals(overview.componentFile, 'architecture-architecture.tsx');
-  assertEquals(overview.className, 'ArchitecturePage');
+  expect(overview.routeFile).toEqual('index.tsx');
+  expect(overview.componentFile).toEqual('architecture-architecture.tsx');
+  expect(overview.className).toEqual('ArchitecturePage');
 });
 
-Deno.test('article routes: a zh locale suffix folds into the English route', () => {
+test('article routes: a zh locale suffix folds into the English route', () => {
   const routes = routeSetFor('guide', [entry('styling', 5), entry('styling', 5, 'zh')]);
-  assertEquals(routes.length, 1, 'the zh pair is not a second route');
-  assertEquals(routes[0].routeFile, 'styling.tsx');
+  expect(routes.length, 'the zh pair is not a second route').toEqual(1);
+  expect(routes[0].routeFile).toEqual('styling.tsx');
 });
 
-Deno.test('article routes: content that cannot become a route module fails closed', () => {
+test('article routes: content that cannot become a route module fails closed', () => {
   // No English original: the route would serve a page whose canonical head and
   // body fall back to a slug title.
-  assertThrows(
+  assertThrowsIncludes(
     () => routeSetFor('guide', [entry('only-chinese', 1, 'zh')]),
     Error,
     'no English source',
   );
   // Two files for one locale would silently overwrite each other's route.
-  assertThrows(
+  assertThrowsIncludes(
     () => routeSetFor('guide', [entry('dup', 1), entry('dup', 2)]),
     Error,
     'two content files resolve to dup (en)',
@@ -82,7 +83,7 @@ Deno.test('article routes: content that cannot become a route module fails close
     'dot.ted',
   ];
   for (const slug of unusableSlugs) {
-    assertThrows(
+    assertThrowsIncludes(
       () => routeSetFor('guide', [entry(slug, 1)]),
       Error,
       'slug must match',
@@ -90,9 +91,9 @@ Deno.test('article routes: content that cannot become a route module fails close
     );
   }
   // A digit-only or hyphen-joined slug is still a legal module name.
-  assertEquals(routeSetFor('guide', [entry('a-2', 1)])[0].className, 'GuideA2Page');
+  expect(routeSetFor('guide', [entry('a-2', 1)])[0].className).toEqual('GuideA2Page');
   // A route with no navigation order cannot be placed in the sidebar.
-  assertThrows(
+  assertThrowsIncludes(
     () =>
       routeSetFor('guide', [
         {
@@ -105,28 +106,27 @@ Deno.test('article routes: content that cannot become a route module fails close
   );
 });
 
-Deno.test('article routes: two content files claiming one generated file fail closed', () => {
+test('article routes: two content files claiming one generated file fail closed', () => {
   // The collection overview article owns `index.tsx`; a separate article whose
   // slug is literally `index` computes the same output path. Without the
   // collision check one route would silently disappear from the tree while its
   // binding stayed behind as an orphan.
   const routes = routeSetFor('architecture', [entry('architecture', 10), entry('index', 11)]);
-  assertEquals(routes.length, 2, 'the route set itself sees two distinct articles');
-  assertEquals(
+  expect(routes.length, 'the route set itself sees two distinct articles').toEqual(2);
+  expect(
     routes.map((route) => route.routeFile).sort(),
-    ['index.tsx', 'index.tsx'],
     'both routes compute the same route module path',
-  );
-  const error = assertThrows(() => planFiles(routes), Error) as Error;
-  assertStringIncludes(error.message, 'two content files resolve to the same generated file');
-  assertStringIncludes(error.message, 'app/routes/architecture/index.tsx');
+  ).toEqual(['index.tsx', 'index.tsx']);
+  const error = assertThrowsIncludes(() => planFiles(routes), Error) as Error;
+  expect(error.message).toContain('two content files resolve to the same generated file');
+  expect(error.message).toContain('app/routes/architecture/index.tsx');
   // Both claiming sources are named, so the fix is unambiguous.
-  assertStringIncludes(error.message, 'content/docs/architecture/architecture.md');
-  assertStringIncludes(error.message, 'content/docs/architecture/index.md');
+  expect(error.message).toContain('content/docs/architecture/architecture.md');
+  expect(error.message).toContain('content/docs/architecture/index.md');
 
   // The same rule covers the binding directory: a colliding binding file is
   // caught by the same mechanism, not by a second code path.
-  assertThrows(
+  assertThrowsIncludes(
     () =>
       planFiles([
         {
@@ -154,67 +154,66 @@ Deno.test('article routes: two content files claiming one generated file fail cl
   );
 });
 
-Deno.test('article routes: the plan covers only managed article paths', () => {
+test('article routes: the plan covers only managed article paths', () => {
   const routes: ArticleRoute[] = routeSetFor('guide', [entry('styling', 5)]);
   const files = planFiles(routes);
-  assertEquals(files.length, routes.length * 2 + 1, 'one route module + one binding per route');
+  expect(files.length, 'one route module + one binding per route').toEqual(routes.length * 2 + 1);
   for (const file of files) {
-    assert(
+    expect(
       file.rel.startsWith('app/routes/guide/') ||
         file.rel.startsWith('app/components/article-routes/') ||
         file.rel === 'app/data/_generated-article-routes.ts',
       `unmanaged output path: ${file.rel}`,
-    );
-    assertStringIncludes(
+    ).toBeTruthy();
+    expect(
       file.content.split('\n')[0],
-      'Auto-generated by www/tools/generate-site-article-routes.ts',
       `${file.rel} must carry the ownership header the generator keys on`,
-    );
+    ).toContain('Auto-generated by www/tools/generate-site-article-routes.ts');
   }
   // The managed directories are exactly the article collection route dirs plus
   // the binding dir — the non-article surface (/blog, /docs, /reference, …) is
   // never walked, written or deleted.
-  assertEquals([...managedDirectories().keys()].sort(), [
+  expect([...managedDirectories().keys()].sort()).toEqual([
     'app/components/article-routes',
     'app/routes/architecture',
     'app/routes/guide',
   ]);
 });
 
-Deno.test('article routes: the emitted modules name their content source', () => {
+test('article routes: the emitted modules name their content source', () => {
   const [route] = routeSetFor('architecture', [entry('dsd', 30)]);
   const routeModule = renderRouteModule(route);
-  assertStringIncludes(routeModule, 'www/content/docs/architecture/dsd.md');
-  assertStringIncludes(routeModule, `projectArticlePage('architecture', 'dsd', locale)`);
-  assertStringIncludes(routeModule, `articlePageHead('architecture', 'dsd', locale)`);
-  assertStringIncludes(routeModule, 'export default definePage(DsdPage, {');
+  expect(routeModule).toContain('www/content/docs/architecture/dsd.md');
+  expect(routeModule).toContain(`projectArticlePage('architecture', 'dsd', locale)`);
+  expect(routeModule).toContain(`articlePageHead('architecture', 'dsd', locale)`);
+  expect(routeModule).toContain('export default definePage(DsdPage, {');
   // The binding's locale redeclaration is load-bearing (its @ts-expect-error is
   // fingerprinted by site-ui conventions); the generator must keep emitting it.
   const binding = renderComponent(route);
-  assertStringIncludes(binding, `@element('architecture-dsd')`);
-  assertStringIncludes(binding, 'export default class DsdPage extends OpenElement');
-  assertStringIncludes(binding, '// @ts-expect-error compiled @property shadows');
-  assertStringIncludes(binding, '<open-article-view model={this.model} locale={this.locale}>');
+  expect(binding).toContain(`@element('architecture-dsd')`);
+  expect(binding).toContain('export default class DsdPage extends OpenElement');
+  expect(binding).toContain('// @ts-expect-error compiled @property shadows');
+  expect(binding).toContain('<open-article-view model={this.model} locale={this.locale}>');
 });
 
-Deno.test('article routes: every route on disk is generated from the collection', async () => {
+test('article routes: every route on disk is generated from the collection', async () => {
   // The real tree, read through the same pure rules: this is the invariant the
   // generated table and the managed-directory walk both rely on.
   const { articleRoutes } = await import('../app/data/_generated-article-routes.ts');
-  assert(articleRoutes.length > 0, 'the generated table is empty');
+  expect(articleRoutes.length > 0, 'the generated table is empty').toBeTruthy();
   for (const route of articleRoutes) {
     const path = join(siteRoot, 'app/routes', route.collection, route.routeFile);
     const source = await readFile(path, 'utf8');
-    assertStringIncludes(source, route.className);
-    assertStringIncludes(source, route.componentFile);
+    expect(source).toContain(route.className);
+    expect(source).toContain(route.componentFile);
     const binding = await readFile(
       join(siteRoot, 'app/components/article-routes', route.componentFile),
       'utf8',
     );
-    assertStringIncludes(binding, `@element('${route.elementTag}')`);
+    expect(binding).toContain(`@element('${route.elementTag}')`);
     // The content file the header names must exist — the route is not orphaned.
     const contentPath = join(siteRoot, 'content/docs', route.collection, `${route.slug}.md`);
     const stats = await stat(contentPath);
-    assert(stats.isFile(), `${contentPath} must exist for ${route.slug}`);
+    expect(stats.isFile(), `${contentPath} must exist for ${route.slug}`).toBeTruthy();
   }
 });

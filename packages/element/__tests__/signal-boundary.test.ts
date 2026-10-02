@@ -7,7 +7,9 @@
  * default adapter, but Preact API is not Element public API and arbitrary
  * third-party engines are not promised.
  */
-import { assert, assertEquals, assertFalse, assertRejects, assertStrictEquals } from '@std/assert';
+import { readFile, stat } from 'node:fs/promises';
+import { expect, test } from 'vitest';
+import { readdirSync } from 'node:fs';
 import { computed, effect, signal } from '../src/index.ts';
 import { SIGNAL_BRAND } from '../src/internal/protocol/signal.ts';
 import { selectedSignalEngine } from '../src/internal/signal/selection.ts';
@@ -33,63 +35,65 @@ const PUBLIC_SOURCES = [
   'vite.ts',
 ];
 
-Deno.test('public signal exports are protocol objects, never Preact objects', () => {
+test('public signal exports are protocol objects, never Preact objects', () => {
   const count = signal(1);
   const doubled = computed(() => count.value * 2);
-  assertEquals(doubled.value, 2);
+  expect(doubled.value).toEqual(2);
 
   const seen: number[] = [];
   const stop = effect(() => {
     seen.push(doubled.value);
   });
   count.value = 2;
-  assertEquals(doubled.value, 4);
-  assert(seen.includes(4), 'the default adapter propagates writes to effects');
+  expect(doubled.value).toEqual(4);
+  expect(seen.includes(4), 'the default adapter propagates writes to effects').toBeTruthy();
   stop();
 
   for (const value of [count, doubled]) {
-    assertStrictEquals(value[SIGNAL_BRAND], true, 'public signals are protocol-branded');
-    assertStrictEquals(
+    expect(value[SIGNAL_BRAND], 'public signals are protocol-branded').toBe(true);
+    expect(
       Object.getPrototypeOf(value),
-      Object.prototype,
       'public signals are protocol wrappers, not Preact Signal instances',
-    );
-    assertEquals(
-      Object.keys(value).sort(),
-      ['subscribe', 'value'],
-      'only protocol members are enumerable',
-    );
-    assertEquals(
+    ).toBe(Object.prototype);
+    expect(Object.keys(value).sort(), 'only protocol members are enumerable').toEqual([
+      'subscribe',
+      'value',
+    ]);
+    expect(
       (value as unknown as { peek?: unknown }).peek,
-      undefined,
       'Preact Signal#peek must not leak through the public surface',
-    );
-    assertEquals(
+    ).toEqual(undefined);
+    expect(
       (value as unknown as { brand?: unknown }).brand,
-      undefined,
       'Preact Signal#brand must not leak through the public surface',
-    );
+    ).toEqual(undefined);
   }
 });
 
-Deno.test('public entry points never import the Preact adapter or test engine', async () => {
+test('public entry points never import the Preact adapter or test engine', async () => {
   for (const file of PUBLIC_SOURCES) {
-    const source = await Deno.readTextFile(new URL(`../src/${file}`, import.meta.url));
-    assertFalse(
+    const source = await readFile(new URL(`../src/${file}`, import.meta.url), 'utf8');
+    expect(
       source.includes('@preact/signals-core'),
       `${file} must not import @preact/signals-core directly`,
-    );
-    assertFalse(source.includes('preact-engine'), `${file} must not reach into the Preact adapter`);
-    assertFalse(source.includes('test-engine'), `${file} must not reference a non-shipped engine`);
+    ).toBeFalsy();
+    expect(
+      source.includes('preact-engine'),
+      `${file} must not reach into the Preact adapter`,
+    ).toBeFalsy();
+    expect(
+      source.includes('test-engine'),
+      `${file} must not reference a non-shipped engine`,
+    ).toBeFalsy();
   }
 });
 
-Deno.test('1.0.0-alpha.1 declares exactly one shipped engine adapter', async () => {
+test('1.0.0-alpha.1 declares exactly one shipped engine adapter', () => {
   const entries: string[] = [];
-  for await (const entry of Deno.readDir(SIGNAL_SRC_DIR)) {
-    if (entry.isFile) entries.push(entry.name);
+  for (const entry of readdirSync(SIGNAL_SRC_DIR, { withFileTypes: true })) {
+    if (entry.isFile()) entries.push(entry.name);
   }
-  assertEquals(entries.sort(), [
+  expect(entries.sort()).toEqual([
     'framework.ts',
     'index.ts',
     'preact-engine.ts',
@@ -98,31 +102,30 @@ Deno.test('1.0.0-alpha.1 declares exactly one shipped engine adapter', async () 
   ]);
 
   const engine = selectedSignalEngine();
-  assertStrictEquals(typeof engine.signal, 'function');
-  assertStrictEquals(typeof engine.computed, 'function');
-  assertStrictEquals(typeof engine.effect, 'function');
-  assertStrictEquals(
+  expect(typeof engine.signal).toBe('function');
+  expect(typeof engine.computed).toBe('function');
+  expect(typeof engine.effect).toBe('function');
+  expect(
     typeof (engine as { batch?: unknown }).batch,
-    'function',
     'the built-in Preact adapter is the default engine',
-  );
-  assertStrictEquals(engine.signal(0)[SIGNAL_BRAND], true);
+  ).toBe('function');
+  expect(engine.signal(0)[SIGNAL_BRAND]).toBe(true);
 });
 
-Deno.test('the test engine is not part of the publish surface', async () => {
+test('the test engine is not part of the publish surface', async () => {
   const manifest = JSON.parse(
-    await Deno.readTextFile(new URL('../package.json', import.meta.url)),
+    await readFile(new URL('../package.json', import.meta.url), 'utf8'),
   ) as { files?: string[] };
   const include = manifest.files ?? [];
-  assertEquals(include.includes('src/**'), true, 'the package publishes src/**');
+  expect(include.includes('src/**'), 'the package publishes src/**').toEqual(true);
   for (const pattern of include) {
-    assertFalse(
+    expect(
       pattern.includes('__tests__'),
       `publish include must not cover the test tree: ${pattern}`,
-    );
+    ).toBeFalsy();
   }
-  await assertRejects(
-    () => Deno.stat(new URL('../src/internal/signal/test-engine.ts', import.meta.url)),
-    Deno.errors.NotFound,
-  );
+  // Deno.errors.NotFound ≡ node fs ENOENT: same fail-closed contract, errno shape
+  await expect(
+    stat(new URL('../src/internal/signal/test-engine.ts', import.meta.url)),
+  ).rejects.toMatchObject({ code: 'ENOENT' });
 });

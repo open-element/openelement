@@ -1,4 +1,4 @@
-import { assertEquals, assertStrictEquals } from '@std/assert';
+import { expect, test } from 'vitest';
 import { FDocument, FElement, type FNode } from '../../../../benchmarks/micro/counting-dom.ts';
 import {
   claimExistingDom,
@@ -67,7 +67,7 @@ function rows(root: FElement): FElement[] {
   );
 }
 
-Deno.test('#1455: a distant swap moves only two keyed rows', () => {
+test('#1455: a distant swap moves only two keyed rows', () => {
   const initial = Array.from({ length: 1000 }, (_, index) => ({
     id: String(index),
     text: String(index),
@@ -80,32 +80,28 @@ Deno.test('#1455: a distant swap moves only two keyed rows', () => {
 
   doc.resetCounts();
   items.value = initial.slice();
-  assertEquals(doc.counts.insertions, 0);
+  expect(doc.counts.insertions).toEqual(0);
   const swapped = initial.slice();
   [swapped[1], swapped[998]] = [swapped[998], swapped[1]];
   doc.resetCounts();
   items.value = swapped;
-  assertEquals(doc.counts.insertions, 2);
-  assertEquals(doc.counts.removals, 0);
-  assertStrictEquals(rows(root)[500], original[500]);
-  assertStrictEquals(rows(root)[1], original[998]);
-  assertStrictEquals(rows(root)[998], original[1]);
-  assertEquals(
-    rows(root).map((row) => row.getAttribute('data-id')),
+  expect(doc.counts.insertions).toEqual(2);
+  expect(doc.counts.removals).toEqual(0);
+  expect(rows(root)[500]).toBe(original[500]);
+  expect(rows(root)[1]).toBe(original[998]);
+  expect(rows(root)[998]).toBe(original[1]);
+  expect(rows(root).map((row) => row.getAttribute('data-id'))).toEqual(
     swapped.map((row) => row.id),
   );
 
   doc.resetCounts();
   items.value = initial.slice();
-  assertEquals(doc.counts.insertions, 2);
-  assertEquals(
-    rows(root).every((row, index) => row === original[index]),
-    true,
-  );
+  expect(doc.counts.insertions).toEqual(2);
+  expect(rows(root).every((row, index) => row === original[index])).toEqual(true);
   instance.dispose();
 });
 
-Deno.test('#1455: reordered suffixes retain keyed identity through mixed edits', () => {
+test('#1455: reordered suffixes retain keyed identity through mixed edits', () => {
   const source = Array.from({ length: 60 }, (_, index) => ({
     id: String(index),
     text: String(index),
@@ -132,13 +128,12 @@ Deno.test('#1455: reordered suffixes retain keyed identity through mixed edits',
         [next[a], next[b]] = [next[b], next[a]];
       }
       items.value = next;
-      assertEquals(
-        rows(root).map((row) => row.getAttribute('data-id')),
+      expect(rows(root).map((row) => row.getAttribute('data-id'))).toEqual(
         next.map((row) => row.id),
       );
       for (const row of rows(root)) {
         const original = originals.get(row.getAttribute('data-id'));
-        if (original?.parentNode) assertStrictEquals(row, original);
+        if (original?.parentNode) expect(row).toBe(original);
         originals.set(row.getAttribute('data-id'), row);
       }
       current = next;
@@ -148,7 +143,7 @@ Deno.test('#1455: reordered suffixes retain keyed identity through mixed edits',
   }
 });
 
-Deno.test('#1455: multi-node entries move as ordered ranges and retain direct slots', () => {
+test('#1455: multi-node entries move as ordered ranges and retain direct slots', () => {
   const [a, b, c, d] = ['A', 'B', 'C', 'D'].map((text) => ({ id: text, text }));
   const items = signal([a, b, c, d]);
   const doc = new FDocument();
@@ -158,8 +153,8 @@ Deno.test('#1455: multi-node entries move as ordered ranges and retain direct sl
 
   doc.resetCounts();
   items.value = [a, c, b, d];
-  assertEquals(doc.counts.insertions, 3, 'only one three-node entry moves');
-  assertEquals(doc.counts.removals, 0);
+  expect(doc.counts.insertions, 'only one three-node entry moves').toEqual(3);
+  expect(doc.counts.removals).toEqual(0);
   const actual = (root.childNodes[0] as FElement).childNodes;
   const expected: FNode[] = [
     original[0],
@@ -168,24 +163,20 @@ Deno.test('#1455: multi-node entries move as ordered ranges and retain direct sl
     ...original.slice(4, 7),
     ...original.slice(10),
   ];
-  assertEquals(
-    actual.every((node, index) => node === expected[index]),
-    true,
-  );
+  expect(actual.every((node, index) => node === expected[index])).toEqual(true);
 
   items.value = [c, b, { id: 'A', text: '' }, d, { id: 'E', text: 'E' }];
   items.value = [d, { id: 'A', text: 'again' }, c, b];
-  assertEquals(
+  expect(
     actual
       .filter((node) => node.nodeType === 3)
       .map((node) => (node as { data: string }).data)
       .join(''),
-    '[D][again][C][B]',
-  );
+  ).toEqual('[D][again][C][B]');
   instance.dispose();
 });
 
-Deno.test('#1455: claimed keyed entries also preserve stationary node identity', () => {
+test('#1455: claimed keyed entries also preserve stationary node identity', () => {
   const [a, b, c, d] = ['A', 'B', 'C', 'D'].map((text) => ({ id: text, text }));
   const items = signal([a, b, c, d]);
   const state = host(items);
@@ -196,19 +187,18 @@ Deno.test('#1455: claimed keyed entries also preserve stationary node identity',
   const original = [...list.childNodes];
 
   items.value = [a, c, b, d];
-  assertStrictEquals(list.childNodes[1], original[1]);
-  assertStrictEquals(list.childNodes[2], original[3]);
-  assertStrictEquals(list.childNodes[3], original[2]);
-  assertStrictEquals(list.childNodes[4], original[4]);
-  assertEquals(
-    toHtml(root),
+  expect(list.childNodes[1]).toBe(original[1]);
+  expect(list.childNodes[2]).toBe(original[3]);
+  expect(list.childNodes[3]).toBe(original[2]);
+  expect(list.childNodes[4]).toBe(original[4]);
+  expect(toHtml(root)).toEqual(
     '<host><ul><!--oe:p0--><li data-id="A">A</li><li data-id="C">C</li>' +
       '<li data-id="B">B</li><li data-id="D">D</li><!--oe:/p0--></ul></host>',
   );
   claimed.dispose();
 });
 
-Deno.test('#1455: insert, delete and reorder retain surviving rows without extra moves', () => {
+test('#1455: insert, delete and reorder retain surviving rows without extra moves', () => {
   const [a, b, c, d, e] = ['A', 'B', 'C', 'D', 'E'].map((text) => ({ id: text, text }));
   const items = signal([a, b, c, d]);
   const doc = new FDocument();
@@ -225,21 +215,18 @@ Deno.test('#1455: insert, delete and reorder retain surviving rows without extra
   for (const { next, moves, removals } of steps) {
     doc.resetCounts();
     items.value = next;
-    assertEquals(
-      rows(root).map((row) => row.getAttribute('data-id')),
-      next.map((row) => row.id),
-    );
-    assertEquals(doc.counts.insertions, moves, next.map((row) => row.id).join(','));
-    assertEquals(doc.counts.removals, removals, next.map((row) => row.id).join(','));
+    expect(rows(root).map((row) => row.getAttribute('data-id'))).toEqual(next.map((row) => row.id));
+    expect(doc.counts.insertions, next.map((row) => row.id).join(',')).toEqual(moves);
+    expect(doc.counts.removals, next.map((row) => row.id).join(',')).toEqual(removals);
     for (const row of rows(root)) {
       const original = originals.get(row.getAttribute('data-id'));
-      if (original?.parentNode) assertStrictEquals(row, original);
+      if (original?.parentNode) expect(row).toBe(original);
     }
   }
   instance.dispose();
 });
 
-Deno.test('#1455: empty direct entries can gain text while moving past existing entries', () => {
+test('#1455: empty direct entries can gain text while moving past existing entries', () => {
   const direct = testProgram({
     tag: 'oe-keyed-empty',
     template: [{ k: 'el', tag: 'div', attrs: [], children: [{ k: 'part', index: 0 }] }],
@@ -274,30 +261,28 @@ Deno.test('#1455: empty direct entries can gain text while moving past existing 
     { id: 'a', text: 'A' },
     { id: 'b', text: 'B' },
   ];
-  assertEquals(
+  expect(
     list.childNodes
       .filter((node) => node.nodeType === 3)
       .map((node) => (node as { data: string }).data),
-    ['C', 'A', 'B'],
-  );
-  assertStrictEquals(list.childNodes[1], cNode);
-  assertStrictEquals(list.childNodes[3], bNode);
-  assertEquals(doc.counts.texts, 1);
+  ).toEqual(['C', 'A', 'B']);
+  expect(list.childNodes[1]).toBe(cNode);
+  expect(list.childNodes[3]).toBe(bNode);
+  expect(doc.counts.texts).toEqual(1);
   items.value = [
     { id: 'b', text: 'B' },
     { id: 'a', text: '' },
     { id: 'c', text: 'C' },
   ];
-  assertEquals(
+  expect(
     list.childNodes
       .filter((node) => node.nodeType === 3)
       .map((node) => (node as { data: string }).data),
-    ['B', 'C'],
-  );
+  ).toEqual(['B', 'C']);
   instance.dispose();
 });
 
-Deno.test('#1455: a reused trailing slot stays with its range after reorder and fill', () => {
+test('#1455: a reused trailing slot stays with its range after reorder and fill', () => {
   const trailing = testProgram({
     tag: 'oe-keyed-trailing',
     template: [{ k: 'el', tag: 'div', attrs: [], children: [{ k: 'part', index: 0 }] }],
@@ -332,12 +317,11 @@ Deno.test('#1455: a reused trailing slot stays with its range after reorder and 
     { id: 'a', text: 'A' },
     { id: 'b', text: 'B' },
   ];
-  assertEquals(
+  expect(
     list.childNodes
       .filter((node) => node.nodeType === 3)
       .map((node) => (node as { data: string }).data)
       .join(''),
-    '[C[A[B',
-  );
+  ).toEqual('[C[A[B');
   instance.dispose();
 });

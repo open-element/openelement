@@ -33,7 +33,7 @@
  * asserts the exact path list, so adding a surface is an explicit edit.
  */
 
-import { assertEquals } from '@std/assert';
+import { expect, test } from 'vitest';
 import { dirname, join } from '@std/path';
 import { readFileSync } from 'node:fs';
 import { commandOutputSync } from './node-command.ts';
@@ -200,7 +200,7 @@ function splitHit(line: string): boolean {
   return stripped.includes(BROAD_LONG);
 }
 
-Deno.test('permissions: no broad Deno flags in any tracked first-party text', () => {
+test('permissions: no broad Deno flags in any tracked first-party text', () => {
   const violations: string[] = [];
   for (const path of trackedFiles()) {
     if (EXCLUDED_PATHS.has(path)) continue;
@@ -227,5 +227,7 @@ Deno.test('permissions: no broad Deno flags in any tracked first-party text', ()
       }
     }
   }
-  assertEquals(violations, [], `broad Deno permissions in tracked text:\n${violations.join('\n')}`);
+  expect(violations, `broad Deno permissions in tracked text:\n${violations.join('\n')}`).toEqual(
+    [],
+  );
 });

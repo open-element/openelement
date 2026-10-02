@@ -1,4 +1,8 @@
-import { assert, assertEquals, assertStringIncludes, assertThrows } from '@std/assert';
+import { mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { expect, test } from 'vitest';
+import { assertThrowsIncludes } from '../../tests/lib/vitest-asserts.ts';
 import { dirname, fromFileUrl, isAbsolute, join, relative, resolve } from '@std/path';
 import ts from 'typescript';
 import {
@@ -33,48 +37,48 @@ const ELEMENT_EXPORTS: Record<string, string> = {
   './vite': './src/vite.ts',
 };
 
-Deno.test('vpPackEntries derives ordered entries from exports', () => {
-  assertEquals(vpPackEntries(pkg('@openelement/element', ELEMENT_EXPORTS)), [
+test('vpPackEntries derives ordered entries from exports', () => {
+  expect(vpPackEntries(pkg('@openelement/element', ELEMENT_EXPORTS))).toEqual([
     'src/index.ts',
     'src/vite.ts',
   ]);
 });
 
-Deno.test('vpPackEntries appends the router client-runtime entries exactly once each', () => {
+test('vpPackEntries appends the router client-runtime entries exactly once each', () => {
   const routerExports: Record<string, string> = {
     '.': './src/index.ts',
     './vite': './src/vite/index.ts',
   };
   const entries = vpPackEntries(pkg('@openelement/router', routerExports, 'packages/router'));
-  assertEquals(entries.slice(0, 2), ['src/index.ts', 'src/vite/index.ts']);
-  assertEquals(entries.slice(2), [...ROUTER_CLIENT_RUNTIME_ENTRIES]);
-  assertEquals(new Set(entries).size, entries.length);
+  expect(entries.slice(0, 2)).toEqual(['src/index.ts', 'src/vite/index.ts']);
+  expect(entries.slice(2)).toEqual([...ROUTER_CLIENT_RUNTIME_ENTRIES]);
+  expect(new Set(entries).size).toEqual(entries.length);
 });
 
-Deno.test('vpPackEntries rejects non-src targets and missing root entry', () => {
-  assertThrows(
+test('vpPackEntries rejects non-src targets and missing root entry', () => {
+  assertThrowsIncludes(
     () => vpPackEntries(pkg('@openelement/element', { '.': './lib/index.ts' })),
     Error,
     'not a src/*.ts module',
   );
-  assertThrows(
+  assertThrowsIncludes(
     () => vpPackEntries(pkg('@openelement/element', { './html': './src/html.ts' })),
     Error,
     'must define the "." entry',
   );
 });
 
-Deno.test('vpPackConfigFile pins the verified recipe', () => {
+test('vpPackConfigFile pins the verified recipe', () => {
   const file = vpPackConfigFile(['src/index.ts']);
-  assertStringIncludes(file, 'dts: true');
-  assertStringIncludes(file, 'treeshake: false');
-  assertStringIncludes(file, 'unbundle: true');
-  assertStringIncludes(file, 'fixedExtension: false');
-  assertStringIncludes(file, 'neverBundle');
-  assertStringIncludes(file, '"src/index.ts"');
+  expect(file).toContain('dts: true');
+  expect(file).toContain('treeshake: false');
+  expect(file).toContain('unbundle: true');
+  expect(file).toContain('fixedExtension: false');
+  expect(file).toContain('neverBundle');
+  expect(file).toContain('"src/index.ts"');
 });
 
-Deno.test('synthesizedPackedManifest preserves the published exports shape', () => {
+test('synthesizedPackedManifest preserves the published exports shape', () => {
   const manifest = synthesizedPackedManifest(
     pkg('@openelement/element', {
       '.': './src/index.ts',
@@ -88,24 +92,24 @@ Deno.test('synthesizedPackedManifest preserves the published exports shape', () 
     types: string;
     exports: Record<string, Record<string, string>>;
   };
-  assertEquals(manifest.name, '@openelement/element');
-  assertEquals(manifest.version, '1.0.0-test');
-  assertEquals(manifest.type, 'module');
-  assertEquals(manifest.main, './src/index.js');
-  assertEquals(manifest.types, './src/index.d.ts');
-  assertEquals(manifest.exports['.'], {
+  expect(manifest.name).toEqual('@openelement/element');
+  expect(manifest.version).toEqual('1.0.0-test');
+  expect(manifest.type).toEqual('module');
+  expect(manifest.main).toEqual('./src/index.js');
+  expect(manifest.types).toEqual('./src/index.d.ts');
+  expect(manifest.exports['.']).toEqual({
     types: './src/index.d.ts',
     import: './src/index.js',
     default: './src/index.js',
   });
-  assertEquals(manifest.exports['./open-props-tokens.js'], {
+  expect(manifest.exports['./open-props-tokens.js']).toEqual({
     types: './src/open-props-tokens.d.ts',
     import: './src/open-props-tokens.js',
     default: './src/open-props-tokens.js',
   });
 });
 
-Deno.test('stagingPackageJsonFor declares self-name, unwraps npm: peers, pins the toolchain', () => {
+test('stagingPackageJsonFor declares self-name, unwraps npm: peers, pins the toolchain', () => {
   const staged = stagingPackageJsonFor(
     pkg('@openelement/element', ELEMENT_EXPORTS),
     { typescript: '6.0.3', '@preact/signals-core': '^1.12.1' },
@@ -119,17 +123,17 @@ Deno.test('stagingPackageJsonFor declares self-name, unwraps npm: peers, pins th
     peerDependenciesMeta: Record<string, unknown>;
     devDependencies: Record<string, string>;
   };
-  assertEquals(staged.dependencies['@openelement/element'], '1.0.0-test');
-  assertEquals(staged.dependencies['typescript'], '6.0.3');
-  assertEquals(staged.peerDependencies, { vite: '^8.0.0' });
-  assertEquals(staged.peerDependenciesMeta, { vite: { optional: true } });
-  assertEquals(staged.devDependencies, {
+  expect(staged.dependencies['@openelement/element']).toEqual('1.0.0-test');
+  expect(staged.dependencies['typescript']).toEqual('6.0.3');
+  expect(staged.peerDependencies).toEqual({ vite: '^8.0.0' });
+  expect(staged.peerDependenciesMeta).toEqual({ vite: { optional: true } });
+  expect(staged.devDependencies).toEqual({
     vite: VITE_ALIAS_SPEC,
     'vite-plus': VP_TOOLCHAIN.vitePlus,
   });
 });
 
-Deno.test('rootStagingPackageJsonFor unions member dependencies', () => {
+test('rootStagingPackageJsonFor unions member dependencies', () => {
   const members = [
     pkg('@openelement/element', ELEMENT_EXPORTS),
     pkg('@openelement/router', { '.': './src/index.ts' }, 'packages/router'),
@@ -143,54 +147,51 @@ Deno.test('rootStagingPackageJsonFor unions member dependencies', () => {
     dependencies: Record<string, string>;
     devDependencies: Record<string, string>;
   };
-  assert(root.private);
-  assertEquals(root.dependencies, { typescript: '6.0.3', hono: '^4.12' });
-  assertEquals(root.devDependencies.vite, VITE_ALIAS_SPEC);
+  expect(root.private).toBeTruthy();
+  expect(root.dependencies).toEqual({ typescript: '6.0.3', hono: '^4.12' });
+  expect(root.devDependencies.vite).toEqual(VITE_ALIAS_SPEC);
 });
 
-Deno.test('publishGlobToRegExp matches the publish dialect used by the manifests', () => {
+test('publishGlobToRegExp matches the publish dialect used by the manifests', () => {
   const srcAll = publishGlobToRegExp('src/**');
-  assert(srcAll.test('src/index.ts'));
-  assert(srcAll.test('src/internal/protocol/errors.ts'));
-  assert(!srcAll.test('srcx/index.ts'));
+  expect(srcAll.test('src/index.ts')).toBeTruthy();
+  expect(srcAll.test('src/internal/protocol/errors.ts')).toBeTruthy();
+  expect(!srcAll.test('srcx/index.ts')).toBeTruthy();
 
   const nestedTests = publishGlobToRegExp('src/**/__tests__/**');
-  assert(nestedTests.test('src/internal/__tests__/a.ts'));
-  assert(nestedTests.test('src/__tests__/a.ts'));
+  expect(nestedTests.test('src/internal/__tests__/a.ts')).toBeTruthy();
+  expect(nestedTests.test('src/__tests__/a.ts')).toBeTruthy();
 
   const bare = publishGlobToRegExp('templates');
-  assert(bare.test('templates'));
-  assert(bare.test('templates/app/x.ts.tmpl'));
-  assert(!bare.test('src/templates.ts'));
+  expect(bare.test('templates')).toBeTruthy();
+  expect(bare.test('templates/app/x.ts.tmpl')).toBeTruthy();
+  expect(!bare.test('src/templates.ts')).toBeTruthy();
 
   const singleSegment = publishGlobToRegExp('src/*.ts');
-  assert(singleSegment.test('src/index.ts'));
-  assert(!singleSegment.test('src/internal/index.ts'));
+  expect(singleSegment.test('src/index.ts')).toBeTruthy();
+  expect(!singleSegment.test('src/internal/index.ts')).toBeTruthy();
 });
 
-Deno.test('assembleVpPackageTree maps dist to src, copies scoped payload, fails on unreachable modules', async () => {
-  const root = await Deno.makeTempDir({ prefix: 'vp-pack-assemble-' });
+test('assembleVpPackageTree maps dist to src, copies scoped payload, fails on unreachable modules', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'vp-pack-assemble-'));
   try {
     const staged = join(root, 'staged');
     const dist = join(staged, 'dist');
     const out = join(root, 'package');
-    Deno.mkdirSync(join(dist, 'internal'), { recursive: true });
-    Deno.writeTextFileSync(join(dist, 'index.js'), 'export {};\n');
-    Deno.writeTextFileSync(join(dist, 'index.d.ts'), 'export declare const x: number;\n');
-    Deno.writeTextFileSync(join(dist, 'internal', 'helper.js'), 'export {};\n');
-    Deno.mkdirSync(join(staged, 'src'), { recursive: true });
-    Deno.mkdirSync(join(staged, 'src', 'internal'), { recursive: true });
-    Deno.writeTextFileSync(join(staged, 'src', 'index.ts'), 'export const x = 1;\n');
-    Deno.writeTextFileSync(join(staged, 'src', 'internal', 'helper.ts'), 'export const y = 2;\n');
-    Deno.mkdirSync(join(staged, 'src', 'unreachable'), { recursive: true });
-    Deno.writeTextFileSync(
-      join(staged, 'src', 'unreachable', 'orphan.ts'),
-      'export const z = 3;\n',
-    );
-    Deno.writeTextFileSync(join(staged, 'README.md'), 'readme\n');
-    Deno.writeTextFileSync(join(staged, 'src', 'tokens.css'), ':root {}\n');
-    Deno.writeTextFileSync(join(staged, 'deno.json'), '{"name":"x"}\n');
-    Deno.writeTextFileSync(join(staged, 'vite.config.ts'), 'export default {};\n');
+    mkdirSync(join(dist, 'internal'), { recursive: true });
+    writeFileSync(join(dist, 'index.js'), 'export {};\n');
+    writeFileSync(join(dist, 'index.d.ts'), 'export declare const x: number;\n');
+    writeFileSync(join(dist, 'internal', 'helper.js'), 'export {};\n');
+    mkdirSync(join(staged, 'src'), { recursive: true });
+    mkdirSync(join(staged, 'src', 'internal'), { recursive: true });
+    writeFileSync(join(staged, 'src', 'index.ts'), 'export const x = 1;\n');
+    writeFileSync(join(staged, 'src', 'internal', 'helper.ts'), 'export const y = 2;\n');
+    mkdirSync(join(staged, 'src', 'unreachable'), { recursive: true });
+    writeFileSync(join(staged, 'src', 'unreachable', 'orphan.ts'), 'export const z = 3;\n');
+    writeFileSync(join(staged, 'README.md'), 'readme\n');
+    writeFileSync(join(staged, 'src', 'tokens.css'), ':root {}\n');
+    writeFileSync(join(staged, 'deno.json'), '{"name":"x"}\n');
+    writeFileSync(join(staged, 'vite.config.ts'), 'export default {};\n');
 
     assembleVpPackageTree({
       pkg: pkg('@openelement/demo', ELEMENT_EXPORTS),
@@ -209,45 +210,45 @@ Deno.test('assembleVpPackageTree maps dist to src, copies scoped payload, fails 
       publishExclude: [],
     });
 
-    assertEquals(
-      new Set([...Deno.readDirSync(out)].map((entry) => entry.name).sort()),
-      new Set(['package.json', 'src', 'README.md']),
-    );
-    assert(Deno.statSync(join(out, 'src', 'index.js')).isFile);
-    assert(Deno.statSync(join(out, 'src', 'index.d.ts')).isFile);
-    assert(Deno.statSync(join(out, 'src', 'internal', 'helper.js')).isFile);
-    assert(Deno.statSync(join(out, 'src', 'tokens.css')).isFile);
+    expect(
+      new Set(
+        readdirSync(out, { withFileTypes: true })
+          .map((entry) => entry.name)
+          .sort(),
+      ),
+    ).toEqual(new Set(['package.json', 'src', 'README.md']));
+    expect(statSync(join(out, 'src', 'index.js')).isFile()).toBeTruthy();
+    expect(statSync(join(out, 'src', 'index.d.ts')).isFile()).toBeTruthy();
+    expect(statSync(join(out, 'src', 'internal', 'helper.js')).isFile).toBeTruthy();
+    expect(statSync(join(out, 'src', 'tokens.css')).isFile).toBeTruthy();
     // deno.json and the synthesized vite.config.ts never ship.
     let leaked = false;
     try {
-      Deno.statSync(join(out, 'deno.json'));
+      statSync(join(out, 'deno.json'));
       leaked = true;
     } catch {
       /* expected absent */
     }
-    assertEquals(leaked, false);
+    expect(leaked).toEqual(false);
     leaked = false;
     try {
-      Deno.statSync(join(out, 'vite.config.ts'));
+      statSync(join(out, 'vite.config.ts'));
       leaked = true;
     } catch {
       /* expected absent */
     }
-    assertEquals(leaked, false);
+    expect(leaked).toEqual(false);
 
     // An orphan source module (no dist emission at all) fails closed.
-    const failRoot = await Deno.makeTempDir({ prefix: 'vp-pack-assemble-fail-' });
+    const failRoot = await mkdtemp(join(tmpdir(), 'vp-pack-assemble-fail-'));
     try {
       const failDist = join(failRoot, 'staged', 'dist');
-      Deno.mkdirSync(failDist, { recursive: true });
-      Deno.writeTextFileSync(join(failDist, 'index.js'), 'export {};\n');
+      mkdirSync(failDist, { recursive: true });
+      writeFileSync(join(failDist, 'index.js'), 'export {};\n');
       const failStaged = join(failRoot, 'staged');
-      Deno.mkdirSync(join(failStaged, 'src', 'unreachable'), { recursive: true });
-      Deno.writeTextFileSync(
-        join(failStaged, 'src', 'unreachable', 'orphan.ts'),
-        'export const z = 3;\n',
-      );
-      assertThrows(
+      mkdirSync(join(failStaged, 'src', 'unreachable'), { recursive: true });
+      writeFileSync(join(failStaged, 'src', 'unreachable', 'orphan.ts'), 'export const z = 3;\n');
+      assertThrowsIncludes(
         () =>
           assembleVpPackageTree({
             pkg: pkg('@openelement/demo', ELEMENT_EXPORTS),
@@ -263,24 +264,24 @@ Deno.test('assembleVpPackageTree maps dist to src, copies scoped payload, fails 
         'cannot reach it',
       );
     } finally {
-      await Deno.remove(failRoot, { recursive: true });
+      await rm(failRoot, { recursive: true });
     }
   } finally {
-    await Deno.remove(root, { recursive: true });
+    await rm(root, { recursive: true });
   }
 });
 
-Deno.test('prepareVpStagingFiles stages manifests, config and optional tsconfig without network', async () => {
-  const root = await Deno.makeTempDir({ prefix: 'vp-pack-prepare-' });
+test('prepareVpStagingFiles stages manifests, config and optional tsconfig without network', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'vp-pack-prepare-'));
   try {
     const pkgDir = join(root, 'element');
     const depDir = join(root, 'router');
-    Deno.mkdirSync(pkgDir, { recursive: true });
-    Deno.mkdirSync(depDir, { recursive: true });
+    mkdirSync(pkgDir, { recursive: true });
+    mkdirSync(depDir, { recursive: true });
     const element = pkg('@openelement/element', ELEMENT_EXPORTS, pkgDir);
     const router = pkg('@openelement/router', { '.': './src/index.ts' }, depDir);
-    Deno.mkdirSync(join(pkgDir, 'src'), { recursive: true });
-    Deno.writeTextFileSync(join(pkgDir, 'src', 'index.ts'), 'export {};\n');
+    mkdirSync(join(pkgDir, 'src'), { recursive: true });
+    writeFileSync(join(pkgDir, 'src', 'index.ts'), 'export {};\n');
 
     const staged = await prepareVpStagingFiles({
       pkg: router,
@@ -292,50 +293,50 @@ Deno.test('prepareVpStagingFiles stages manifests, config and optional tsconfig 
       sourceManifest: { compilerOptions: { jsx: 'react-jsx' } },
     });
     try {
-      assertEquals(staged.packDir, join(staged.stagingRoot, 'router'));
+      expect(staged.packDir).toEqual(join(staged.stagingRoot, 'router'));
       // Root manifest unions member deps and pins the toolchain.
-      const rootManifest = JSON.parse(
-        Deno.readTextFileSync(join(staged.stagingRoot, 'package.json')),
-      ) as { dependencies: Record<string, string>; devDependencies: Record<string, string> };
-      assertEquals(rootManifest.dependencies, { typescript: '6.0.3' });
-      assertEquals(rootManifest.devDependencies['vite-plus'], '1.0.0');
+      const rootManifest = JSON.parse(readFileSync(join(staged.stagingRoot, 'package.json'))) as {
+        dependencies: Record<string, string>;
+        devDependencies: Record<string, string>;
+      };
+      expect(rootManifest.dependencies).toEqual({ typescript: '6.0.3' });
+      expect(rootManifest.devDependencies['vite-plus']).toEqual('1.0.0');
       // Each member carries a staging manifest with its self-name.
       const memberManifest = JSON.parse(
-        Deno.readTextFileSync(join(staged.stagingRoot, 'element', 'package.json')),
+        readFileSync(join(staged.stagingRoot, 'element', 'package.json')),
       ) as { dependencies: Record<string, string> };
-      assertEquals(memberManifest.dependencies['@openelement/element'], '1.0.0-test');
+      expect(memberManifest.dependencies['@openelement/element']).toEqual('1.0.0-test');
       // Pack config lands in the pack dir; tsconfig only with compilerOptions.
-      assert(Deno.statSync(join(staged.packDir, 'vite.config.ts')).isFile);
-      const tsconfig = JSON.parse(Deno.readTextFileSync(join(staged.packDir, 'tsconfig.json'))) as {
+      expect(statSync(join(staged.packDir, 'vite.config.ts')).isFile).toBeTruthy();
+      const tsconfig = JSON.parse(readFileSync(join(staged.packDir, 'tsconfig.json'))) as {
         compilerOptions: Record<string, string>;
       };
-      assertEquals(tsconfig.compilerOptions.jsx, 'react-jsx');
+      expect(tsconfig.compilerOptions.jsx).toEqual('react-jsx');
       // The member copy must not drag deno.json/package.json along.
-      assertEquals(
-        Deno.readTextFileSync(join(staged.stagingRoot, 'element', 'src', 'index.ts')),
+      expect(readFileSync(join(staged.stagingRoot, 'element', 'src', 'index.ts'), 'utf8')).toEqual(
         'export {};\n',
       );
       let leaked = false;
       try {
-        Deno.statSync(join(staged.stagingRoot, 'element', 'deno.json'));
+        statSync(join(staged.stagingRoot, 'element', 'deno.json'));
         leaked = true;
       } catch {
         /* expected absent */
       }
-      assertEquals(leaked, false);
+      expect(leaked).toEqual(false);
     } finally {
       await staged.cleanup();
     }
     // Cleanup removes the whole staging root.
     let gone = false;
     try {
-      Deno.statSync(staged.stagingRoot);
+      statSync(staged.stagingRoot);
     } catch {
       gone = true;
     }
-    assert(gone, 'cleanup must remove the staging root');
+    expect(gone, 'cleanup must remove the staging root').toBeTruthy();
   } finally {
-    await Deno.remove(root, { recursive: true });
+    await rm(root, { recursive: true });
   }
 });
 
@@ -347,7 +348,7 @@ const ROUTER_PACKAGE_DIR = fromFileUrl(new URL('../../packages/router', import.m
 /** The file exists and is not a directory. */
 function isFile(path: string): boolean {
   try {
-    return Deno.statSync(path).isFile;
+    return statSync(path).isFile;
   } catch {
     return false;
   }
@@ -444,7 +445,7 @@ interface RuntimeExtraction {
 function consumerPathConsumedModules(packageDir: string): RuntimeExtraction {
   const problems: string[] = [];
   const entry = join(packageDir, 'src', 'cli', 'build-client.ts');
-  const source = Deno.readTextFileSync(entry);
+  const source = readFileSync(entry, 'utf8');
   const literalArgs = [...source.matchAll(/runtimeModulePath\(\s*(['"])(.*?)\1\s*\)/g)].map(
     (match) => match[2],
   );
@@ -475,7 +476,7 @@ function consumerPathConsumedModules(packageDir: string): RuntimeExtraction {
   }
   while (queue.length > 0) {
     const file = queue.shift()!;
-    for (const specifier of relativeValueImportSpecifiers(Deno.readTextFileSync(file))) {
+    for (const specifier of relativeValueImportSpecifiers(readFileSync(file, 'utf8'))) {
       const imported = resolveRelativeSpecifier(file, specifier, packageDir);
       if (imported === null) continue;
       const modulePath = relative(packageDir, imported);
@@ -488,43 +489,41 @@ function consumerPathConsumedModules(packageDir: string): RuntimeExtraction {
   return { modules, problems };
 }
 
-Deno.test('ROUTER_CLIENT_RUNTIME_ENTRIES covers every consumer path-resolved runtime module', () => {
+test('ROUTER_CLIENT_RUNTIME_ENTRIES covers every consumer path-resolved runtime module', () => {
   const { modules, problems } = consumerPathConsumedModules(ROUTER_PACKAGE_DIR);
-  assertEquals(problems, []);
+  expect(problems).toEqual([]);
   const entries: string[] = [...ROUTER_CLIENT_RUNTIME_ENTRIES];
   const missing = [...modules].filter((module) => !entries.includes(module)).sort();
   const stale = entries.filter((entry) => !modules.has(entry)).sort();
-  assertEquals(
+  expect(
     missing,
-    [],
     'path-consumed runtime modules missing from ROUTER_CLIENT_RUNTIME_ENTRIES — the ' +
       'pack would not guarantee their emitted .js, so add them to the entries list',
-  );
-  assertEquals(
+  ).toEqual([]);
+  expect(
     stale,
-    [],
     'ROUTER_CLIENT_RUNTIME_ENTRIES entries no longer consumed by path from ' +
       'cli/build-client.ts — remove them from the entries list',
-  );
-  assertEquals([...modules].sort(), entries.sort());
+  ).toEqual([]);
+  expect([...modules].sort()).toEqual(entries.sort());
 });
 
-Deno.test('runtime extraction captures a ninth value-consumed module and skips type-only edges', async () => {
-  const root = await Deno.makeTempDir({ prefix: 'vp-pack-drift-capture-' });
+test('runtime extraction captures a ninth value-consumed module and skips type-only edges', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'vp-pack-drift-capture-'));
   try {
     const cli = join(root, 'src', 'cli');
     const ssg = join(root, 'src', 'vite', 'internal', 'ssg');
-    Deno.mkdirSync(cli, { recursive: true });
-    Deno.mkdirSync(ssg, { recursive: true });
-    Deno.writeTextFileSync(
+    mkdirSync(cli, { recursive: true });
+    mkdirSync(ssg, { recursive: true });
+    writeFileSync(
       join(cli, 'build-client.ts'),
       [
         "export const first = runtimeModulePath('../vite/internal/ssg/root-a.ts');",
         "export const second = runtimeModulePath('../vite/internal/ssg/root-b.ts');",
       ].join('\n'),
     );
-    Deno.writeTextFileSync(join(ssg, 'root-a.ts'), 'export const rootA = 1;\n');
-    Deno.writeTextFileSync(
+    writeFileSync(join(ssg, 'root-a.ts'), 'export const rootA = 1;\n');
+    writeFileSync(
       join(ssg, 'root-b.ts'),
       [
         "import { createNinth } from './ninth.ts';",
@@ -532,43 +531,43 @@ Deno.test('runtime extraction captures a ninth value-consumed module and skips t
         'export const rootB = createNinth() as unknown as TypedShape;\n',
       ].join('\n'),
     );
-    Deno.writeTextFileSync(
+    writeFileSync(
       join(ssg, 'ninth.ts'),
       [
         "import type { TypedShape } from './typed.ts';",
         'export const createNinth = () => 9;\n',
       ].join('\n'),
     );
-    Deno.writeTextFileSync(join(ssg, 'typed.ts'), 'export interface TypedShape { n: number };\n');
+    writeFileSync(join(ssg, 'typed.ts'), 'export interface TypedShape { n: number };\n');
 
     const { modules, problems } = consumerPathConsumedModules(root);
-    assertEquals(problems, []);
+    expect(problems).toEqual([]);
     // The value-imported ninth module IS path-consumed; the type-only edge is not.
-    assertEquals([...modules].sort(), [
+    expect([...modules].sort()).toEqual([
       'src/vite/internal/ssg/ninth.ts',
       'src/vite/internal/ssg/root-a.ts',
       'src/vite/internal/ssg/root-b.ts',
     ]);
-    assert(!modules.has('src/vite/internal/ssg/typed.ts'));
+    expect(!modules.has('src/vite/internal/ssg/typed.ts')).toBeTruthy();
   } finally {
-    await Deno.remove(root, { recursive: true });
+    await rm(root, { recursive: true });
   }
 });
 
-Deno.test('runtime extraction fails closed on a non-literal runtimeModulePath argument', async () => {
-  const root = await Deno.makeTempDir({ prefix: 'vp-pack-drift-failclosed-' });
+test('runtime extraction fails closed on a non-literal runtimeModulePath argument', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'vp-pack-drift-failclosed-'));
   try {
     const cli = join(root, 'src', 'cli');
-    Deno.mkdirSync(cli, { recursive: true });
-    Deno.writeTextFileSync(
+    mkdirSync(cli, { recursive: true });
+    writeFileSync(
       join(cli, 'build-client.ts'),
       'export const mapped = runtimeModulePath(dynamicArgument);\n',
     );
     const { modules, problems } = consumerPathConsumedModules(root);
-    assertEquals(modules.size, 0);
-    assertEquals(problems.length, 1);
-    assertStringIncludes(problems[0], 'literal string argument');
+    expect(modules.size).toEqual(0);
+    expect(problems.length).toEqual(1);
+    expect(problems[0]).toContain('literal string argument');
   } finally {
-    await Deno.remove(root, { recursive: true });
+    await rm(root, { recursive: true });
   }
 });

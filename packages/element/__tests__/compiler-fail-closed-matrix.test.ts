@@ -1,4 +1,4 @@
-import { assert, assertEquals, assertStringIncludes } from '@std/assert';
+import { expect, test } from 'vitest';
 import {
   CompiledElementError,
   compileElementProgram,
@@ -26,12 +26,15 @@ function expectCompilerFailure(source: string, code: string, fragment: string): 
   } catch (error) {
     thrown = error;
   }
-  assert(thrown instanceof CompiledElementError, `expected ${code}, got ${String(thrown)}`);
-  assertStringIncludes(String(thrown), code);
-  assertStringIncludes(String(thrown), fragment);
+  expect(
+    thrown instanceof CompiledElementError,
+    `expected ${code}, got ${String(thrown)}`,
+  ).toBeTruthy();
+  expect(String(thrown)).toContain(code);
+  expect(String(thrown)).toContain(fragment);
 }
 
-Deno.test('semantic compiler accepts the complete JSON-safe property literal grammar', () => {
+test('semantic compiler accepts the complete JSON-safe property literal grammar', () => {
   const source = component(
     `
       @property({ type: Number, reflect: false }) negative = -2;
@@ -44,14 +47,17 @@ Deno.test('semantic compiler accepts the complete JSON-safe property literal gra
   );
   const first = compileElementProgram(source, '/project/app/components/literals.tsx');
   const second = compileElementProgram(source, '/project/app/components/literals.tsx');
-  assertEquals(first.program, second.program);
-  assertEquals(
-    first.program.metadata.properties.map((property) => property.type),
-    ['number', 'array', 'object', 'boolean', 'string'],
-  );
+  expect(first.program).toEqual(second.program);
+  expect(first.program.metadata.properties.map((property) => property.type)).toEqual([
+    'number',
+    'array',
+    'object',
+    'boolean',
+    'string',
+  ]);
 });
 
-Deno.test('semantic compiler rejects malformed computed declarations at their source', () => {
+test('semantic compiler rejects malformed computed declarations at their source', () => {
   const cases: Array<[string, string]> = [
     [`@property({ reflect: false, attribute: false }) derived = computed();`, 'exactly one'],
     [
@@ -100,7 +106,7 @@ Deno.test('semantic compiler rejects malformed computed declarations at their so
   );
 });
 
-Deno.test('semantic compiler rejects unsupported property converters and event actions', () => {
+test('semantic compiler rejects unsupported property converters and event actions', () => {
   expectCompilerFailure(
     component(
       `@property({ type: Date, reflect: false }) value = 'x';`,
@@ -131,7 +137,7 @@ Deno.test('semantic compiler rejects unsupported property converters and event a
   }
 });
 
-Deno.test('semantic compiler rejects forbidden sinks from the shared deny list', () => {
+test('semantic compiler rejects forbidden sinks from the shared deny list', () => {
   const fields = `@property({ reflect: false }) label = 'ready';`;
   const attributeCases: Array<[string, string]> = [
     // srcdoc was previously rejected only by SSR; the compiler now fails too.

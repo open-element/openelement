@@ -1,4 +1,10 @@
 /**
+ * RETIRED RUNNER (B3): the suites in tests/ now run through vitest browser
+ * mode (root vitest.config.ts, project `element-browser`; gate scripts in
+ * packages/element/package.json). This config and the negative/*.config.js
+ * fixtures remain as the historical record of the web-test-runner era; they
+ * are no longer executed.
+ *
  * Element browser conformance config (#1333) — Chromium + Firefox + WebKit
  * via @web/test-runner-playwright.
  *

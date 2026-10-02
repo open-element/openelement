@@ -1,4 +1,4 @@
-import { assertEquals } from '@std/assert';
+import { expect, test } from 'vitest';
 import {
   consumeAttachmentScanDeadLetters,
   consumeAttachmentScans,
@@ -20,7 +20,7 @@ function env(overrides: Partial<WorkerEnv> = {}): WorkerEnv {
   };
 }
 
-Deno.test('queue scan acknowledges only after scanner verdict and atomic RPC', async () => {
+test('queue scan acknowledges only after scanner verdict and atomic RPC', async () => {
   const originalFetch = globalThis.fetch;
   const rpcBodies: unknown[] = [];
   globalThis.fetch = (_input, init) => {
@@ -46,12 +46,12 @@ Deno.test('queue scan acknowledges only after scanner verdict and atomic RPC', a
   } finally {
     globalThis.fetch = originalFetch;
   }
-  assertEquals(acked, 1);
-  assertEquals(retried, 0);
-  assertEquals(rpcBodies, [{ reservation_id: 'r1', target_key: 'u/o', verdict: 'clean' }]);
+  expect(acked).toEqual(1);
+  expect(retried).toEqual(0);
+  expect(rpcBodies).toEqual([{ reservation_id: 'r1', target_key: 'u/o', verdict: 'clean' }]);
 });
 
-Deno.test('queue scan retries invalid scanner responses without acknowledging', async () => {
+test('queue scan retries invalid scanner responses without acknowledging', async () => {
   let acked = 0;
   let retried = 0;
   await consumeAttachmentScans(
@@ -69,11 +69,11 @@ Deno.test('queue scan retries invalid scanner responses without acknowledging', 
       ATTACHMENT_SCANNER: { fetch: () => Promise.resolve(Response.json({ verdict: 'unknown' })) },
     }),
   );
-  assertEquals(acked, 0);
-  assertEquals(retried, 1);
+  expect(acked).toEqual(0);
+  expect(retried).toEqual(1);
 });
 
-Deno.test('DLQ acknowledges only after durable dead-letter persistence', async () => {
+test('DLQ acknowledges only after durable dead-letter persistence', async () => {
   const originalFetch = globalThis.fetch;
   const calls: unknown[] = [];
   globalThis.fetch = (_input, init) => {
@@ -99,12 +99,12 @@ Deno.test('DLQ acknowledges only after durable dead-letter persistence', async (
   } finally {
     globalThis.fetch = originalFetch;
   }
-  assertEquals(acked, 1);
-  assertEquals(retried, 0);
-  assertEquals(calls, [{ reservation_id: 'r1', target_key: 'u/o' }]);
+  expect(acked).toEqual(1);
+  expect(retried).toEqual(0);
+  expect(calls).toEqual([{ reservation_id: 'r1', target_key: 'u/o' }]);
 });
 
-Deno.test('DLQ retries when durable persistence is unavailable', async () => {
+test('DLQ retries when durable persistence is unavailable', async () => {
   const originalFetch = globalThis.fetch;
   globalThis.fetch = () => Promise.resolve(new Response(null, { status: 503 }));
   let acked = 0;
@@ -126,11 +126,11 @@ Deno.test('DLQ retries when durable persistence is unavailable', async () => {
   } finally {
     globalThis.fetch = originalFetch;
   }
-  assertEquals(acked, 0);
-  assertEquals(retried, 1);
+  expect(acked).toEqual(0);
+  expect(retried).toEqual(1);
 });
 
-Deno.test('Cron removes stale objects before releasing quota and requeues pending scans', async () => {
+test('Cron removes stale objects before releasing quota and requeues pending scans', async () => {
   const originalFetch = globalThis.fetch;
   const operations: string[] = [];
   const queued: unknown[] = [];
@@ -172,8 +172,8 @@ Deno.test('Cron removes stale objects before releasing quota and requeues pendin
   } finally {
     globalThis.fetch = originalFetch;
   }
-  assertEquals(operations, ['storage:DELETE', 'release']);
-  assertEquals(queued, [
+  expect(operations).toEqual(['storage:DELETE', 'release']);
+  expect(queued).toEqual([
     {
       type: 'attachment.scan',
       reservationId: 'pending-1',
@@ -182,7 +182,7 @@ Deno.test('Cron removes stale objects before releasing quota and requeues pendin
   ]);
 });
 
-Deno.test('Cron retains an abandoned reservation across Storage failure and releases it on retry', async () => {
+test('Cron retains an abandoned reservation across Storage failure and releases it on retry', async () => {
   // Reserve succeeded but the client never finalized: the row stays 'reserved'
   // until the 15-minute stale sweep lists it (migration 20260817000002). The
   // sweep must not release quota while the object removal failed, and must
@@ -228,12 +228,12 @@ Deno.test('Cron retains an abandoned reservation across Storage failure and rele
   } finally {
     globalThis.fetch = originalFetch;
   }
-  assertEquals(storageAttempts, 2);
-  assertEquals(released, 1);
-  assertEquals(operations, ['storage:DELETE#1', 'storage:DELETE#2', 'release']);
+  expect(storageAttempts).toEqual(2);
+  expect(released).toEqual(1);
+  expect(operations).toEqual(['storage:DELETE#1', 'storage:DELETE#2', 'release']);
 });
 
-Deno.test('Cron converges an interrupted attachment deletion', async () => {
+test('Cron converges an interrupted attachment deletion', async () => {
   const originalFetch = globalThis.fetch;
   const operations: string[] = [];
   globalThis.fetch = (input, init) => {
@@ -262,10 +262,10 @@ Deno.test('Cron converges an interrupted attachment deletion', async () => {
   } finally {
     globalThis.fetch = originalFetch;
   }
-  assertEquals(operations, ['storage:DELETE', 'complete']);
+  expect(operations).toEqual(['storage:DELETE', 'complete']);
 });
 
-Deno.test('Cron retains a deletion tombstone across Storage failure and converges on retry', async () => {
+test('Cron retains a deletion tombstone across Storage failure and converges on retry', async () => {
   const originalFetch = globalThis.fetch;
   let completed = false;
   let storageAttempts = 0;
@@ -302,11 +302,11 @@ Deno.test('Cron retains a deletion tombstone across Storage failure and converge
   } finally {
     globalThis.fetch = originalFetch;
   }
-  assertEquals(storageAttempts, 2);
-  assertEquals(completed, true);
+  expect(storageAttempts).toEqual(2);
+  expect(completed).toEqual(true);
 });
 
-Deno.test('Cron isolates one enqueue failure so later pending scans still run', async () => {
+test('Cron isolates one enqueue failure so later pending scans still run', async () => {
   const originalFetch = globalThis.fetch;
   const queued: string[] = [];
   globalThis.fetch = (input) => {
@@ -347,10 +347,10 @@ Deno.test('Cron isolates one enqueue failure so later pending scans still run', 
   } finally {
     globalThis.fetch = originalFetch;
   }
-  assertEquals(queued, ['good']);
+  expect(queued).toEqual(['good']);
 });
 
-Deno.test('Cron marks replay only after Queue handoff succeeds', async () => {
+test('Cron marks replay only after Queue handoff succeeds', async () => {
   const originalFetch = globalThis.fetch;
   const operations: string[] = [];
   globalThis.fetch = (input) => {
@@ -395,10 +395,10 @@ Deno.test('Cron marks replay only after Queue handoff succeeds', async () => {
   } finally {
     globalThis.fetch = originalFetch;
   }
-  assertEquals(operations, ['sent', 'marked']);
+  expect(operations).toEqual(['sent', 'marked']);
 });
 
-Deno.test('Cron leaves a failed replay request durable and continues later rows', async () => {
+test('Cron leaves a failed replay request durable and continues later rows', async () => {
   const originalFetch = globalThis.fetch;
   const marked: string[] = [];
   globalThis.fetch = (input, init) => {
@@ -440,10 +440,10 @@ Deno.test('Cron leaves a failed replay request durable and continues later rows'
   } finally {
     globalThis.fetch = originalFetch;
   }
-  assertEquals(marked, ['good']);
+  expect(marked).toEqual(['good']);
 });
 
-Deno.test('payment Queue acknowledges only after the durable processor succeeds', async () => {
+test('payment Queue acknowledges only after the durable processor succeeds', async () => {
   const originalFetch = globalThis.fetch;
   const calls: unknown[] = [];
   globalThis.fetch = (_input, init) => {
@@ -469,11 +469,11 @@ Deno.test('payment Queue acknowledges only after the durable processor succeeds'
   } finally {
     globalThis.fetch = originalFetch;
   }
-  assertEquals({ acked, retried }, { acked: 1, retried: 0 });
-  assertEquals(calls, [{ target_event_id: 'evt_paid' }]);
+  expect({ acked, retried }).toEqual({ acked: 1, retried: 0 });
+  expect(calls).toEqual([{ target_event_id: 'evt_paid' }]);
 });
 
-Deno.test('payment DLQ retries until the dead letter is durable', async () => {
+test('payment DLQ retries until the dead letter is durable', async () => {
   const originalFetch = globalThis.fetch;
   globalThis.fetch = () => Promise.resolve(new Response(null, { status: 503 }));
   let acked = 0;
@@ -495,10 +495,10 @@ Deno.test('payment DLQ retries until the dead letter is durable', async () => {
   } finally {
     globalThis.fetch = originalFetch;
   }
-  assertEquals({ acked, retried }, { acked: 0, retried: 1 });
+  expect({ acked, retried }).toEqual({ acked: 0, retried: 1 });
 });
 
-Deno.test('payment Cron queues received events and marks replay only after handoff', async () => {
+test('payment Cron queues received events and marks replay only after handoff', async () => {
   const originalFetch = globalThis.fetch;
   const operations: string[] = [];
   globalThis.fetch = (input, init) => {
@@ -531,10 +531,10 @@ Deno.test('payment Cron queues received events and marks replay only after hando
   } finally {
     globalThis.fetch = originalFetch;
   }
-  assertEquals(operations, ['send:evt_received', 'send:evt_replay', 'mark:evt_replay']);
+  expect(operations).toEqual(['send:evt_received', 'send:evt_replay', 'mark:evt_replay']);
 });
 
-Deno.test('payment lifecycle logs correlate by event id and stay redacted', async () => {
+test('payment lifecycle logs correlate by event id and stay redacted', async () => {
   const originalFetch = globalThis.fetch;
   const originalLog = console.log;
   const originalError = console.error;
@@ -578,31 +578,26 @@ Deno.test('payment lifecycle logs correlate by event id and stay redacted', asyn
   }
 
   const entries = lines.map((line) => JSON.parse(line) as Record<string, unknown>);
-  assertEquals(
+  expect(
     entries.find((entry) => entry.event === 'payment_event_processed')?.provider_event_id,
-    'evt_ok',
-  );
-  assertEquals(
+  ).toEqual('evt_ok');
+  expect(
     entries.find((entry) => entry.event === 'payment_event_dead_letter_failed')?.provider_event_id,
-    'evt_dead',
-  );
+  ).toEqual('evt_dead');
   const reconciliation = entries.find((entry) => entry.event === 'payment_reconciliation');
-  assertEquals(
-    {
-      pending: reconciliation?.pending,
-      enqueued: reconciliation?.enqueued,
-      replays: reconciliation?.replays,
-    },
-    { pending: 1, enqueued: 1, replays: 0 },
-  );
+  expect({
+    pending: reconciliation?.pending,
+    enqueued: reconciliation?.enqueued,
+    replays: reconciliation?.replays,
+  }).toEqual({ pending: 1, enqueued: 1, replays: 0 });
 
   const all = lines.join('\n');
   for (const sentinel of ['service-role-test', 'project.supabase.co']) {
-    assertEquals(all.includes(sentinel), false, `payment log leaked: ${sentinel}`);
+    expect(all.includes(sentinel), `payment log leaked: ${sentinel}`).toEqual(false);
   }
 });
 
-Deno.test('Cron delegates attachment replay state and audit to one atomic RPC', async () => {
+test('Cron delegates attachment replay state and audit to one atomic RPC', async () => {
   const originalFetch = globalThis.fetch;
   const operations: unknown[] = [];
   globalThis.fetch = (input, init) => {
@@ -642,7 +637,7 @@ Deno.test('Cron delegates attachment replay state and audit to one atomic RPC', 
   } finally {
     globalThis.fetch = originalFetch;
   }
-  assertEquals(operations, [
+  expect(operations).toEqual([
     {
       rpc: 'mark_attachment_scan_replayed',
       body: { dead_letter_id: 'dlq-1' },
@@ -650,7 +645,7 @@ Deno.test('Cron delegates attachment replay state and audit to one atomic RPC', 
   ]);
 });
 
-Deno.test('payment Cron delegates replay state and audit to one atomic RPC', async () => {
+test('payment Cron delegates replay state and audit to one atomic RPC', async () => {
   const originalFetch = globalThis.fetch;
   const operations: unknown[] = [];
   globalThis.fetch = (input, init) => {
@@ -680,7 +675,7 @@ Deno.test('payment Cron delegates replay state and audit to one atomic RPC', asy
   } finally {
     globalThis.fetch = originalFetch;
   }
-  assertEquals(operations, [
+  expect(operations).toEqual([
     {
       rpc: 'mark_payment_event_replay_enqueued',
       body: { target_event_id: 'evt_replay' },
@@ -688,7 +683,7 @@ Deno.test('payment Cron delegates replay state and audit to one atomic RPC', asy
   ]);
 });
 
-Deno.test('payment Cron isolates an atomic replay mark failure and continues later rows', async () => {
+test('payment Cron isolates an atomic replay mark failure and continues later rows', async () => {
   const originalFetch = globalThis.fetch;
   const operations: string[] = [];
   globalThis.fetch = (input, init) => {
@@ -722,5 +717,5 @@ Deno.test('payment Cron isolates an atomic replay mark failure and continues lat
   } finally {
     globalThis.fetch = originalFetch;
   }
-  assertEquals(operations, ['send:evt_bad', 'mark:evt_bad', 'send:evt_good', 'mark:evt_good']);
+  expect(operations).toEqual(['send:evt_bad', 'mark:evt_bad', 'send:evt_good', 'mark:evt_good']);
 });

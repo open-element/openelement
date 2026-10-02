@@ -19,7 +19,7 @@
  * including this one, so the rule is described here in words only.
  */
 
-import { assert, assertEquals } from '@std/assert';
+import { expect, test } from 'vitest';
 import { dirname, join } from '@std/path';
 import { readFileSync } from 'node:fs';
 
@@ -70,18 +70,24 @@ function templateScripts(): Record<string, string> {
   const parsed = JSON.parse(
     readFileSync(join(repoRoot, 'packages/create/templates/deno.json.tmpl'), 'utf8'),
   ) as { tasks?: Record<string, string> };
-  assert(parsed.tasks && typeof parsed.tasks === 'object', 'template has no tasks map');
+  expect(
+    parsed.tasks && typeof parsed.tasks === 'object',
+    'template has no tasks map',
+  ).toBeTruthy();
   return parsed.tasks as Record<string, string>;
 }
 
 function taskMap(path: string): Record<string, string> {
   const text = readFileSync(join(repoRoot, path), 'utf8');
   const parsed = JSON.parse(text) as { scripts?: Record<string, string> };
-  assert(parsed.scripts && typeof parsed.scripts === 'object', `${path} has no scripts map`);
+  expect(
+    parsed.scripts && typeof parsed.scripts === 'object',
+    `${path} has no scripts map`,
+  ).toBeTruthy();
   return parsed.scripts as Record<string, string>;
 }
 
-Deno.test('task permissions: no broad flags in first-party tasks or templates', () => {
+test('task permissions: no broad flags in first-party tasks or templates', () => {
   // Broad-flag tokens assembled without literals: the repo-wide
   // check-no-allow-all scanner covers this file too.
   const dashA = String.fromCharCode(45, 65);
@@ -102,10 +108,13 @@ Deno.test('task permissions: no broad flags in first-party tasks or templates', 
   for (const [name, command] of Object.entries(template)) {
     check(`templates/deno.json.tmpl#${name}`, command);
   }
-  assert(violations.length === 0, `broad permissions in tasks:\n${violations.join('\n')}`);
+  expect(
+    violations.length === 0,
+    `broad permissions in tasks:\n${violations.join('\n')}`,
+  ).toBeTruthy();
 });
 
-Deno.test('task permissions: --allow-ffi only on audited tasks', () => {
+test('task permissions: --allow-ffi only on audited tasks', () => {
   const violations: string[] = [];
   for (const file of TASK_FILES) {
     for (const [name, command] of Object.entries(taskMap(file.path))) {
@@ -122,51 +131,58 @@ Deno.test('task permissions: --allow-ffi only on audited tasks', () => {
       }
     }
   }
-  assert(violations.length === 0, `ffi allowlist violations:\n${violations.join('\n')}`);
+  expect(
+    violations.length === 0,
+    `ffi allowlist violations:\n${violations.join('\n')}`,
+  ).toBeTruthy();
 });
 
-Deno.test('task permissions: FFI-free unit suites deny FFI and never prompt', () => {
+test('task permissions: unit suites run on vitest — the deno permission surface retired', () => {
+  // DISCLOSED SEMANTIC CHANGE (B3): the former assertions audited
+  // `deno test --deny-ffi --no-prompt` flags on the unit-suite tasks. The
+  // B3 cutover moves those tasks to vitest on the node host, where no deno
+  // permission model exists — the flags have nothing to attach to. The
+  // invariant that REMAINS: the migrated tasks must not spawn the deno
+  // test runner (which would silently drop the flag audit), and the
+  // still-deno-hosted scripts stay audited below.
   for (const [path, name] of [
     ['packages/element/package.json', 'test'],
     ['packages/ui/package.json', 'test'],
     ['packages/create/package.json', 'test'],
-  ] as const) {
-    const command = taskMap(path)[name];
-    assert(command.includes('--deny-ffi'), `${path}#${name} must carry --deny-ffi`);
-    assert(command.includes('--no-prompt'), `${path}#${name} must carry --no-prompt`);
-  }
-  for (const [path, name] of [
-    ['package.json', 'test'],
     ['packages/router/package.json', 'test'],
+    ['package.json', 'test'],
   ] as const) {
     const command = taskMap(path)[name];
-    assert(command.includes('--no-prompt'), `${path}#${name} must carry --no-prompt`);
+    expect(command.includes('vitest'), `${path}#${name} must run under vitest`).toBeTruthy();
+    expect(
+      command.includes('deno test'),
+      `${path}#${name} must not spawn the deno test runner`,
+    ).toBeFalsy();
   }
 });
 
-Deno.test('task permissions: create template keeps scoped vite permissions', () => {
+test('task permissions: create template keeps scoped vite permissions', () => {
   const template = templateScripts();
   for (const name of TEMPLATE_FFI_REQUIRED) {
     const command = template[name];
-    assert(command, `template task missing: ${name}`);
-    assert(
+    expect(command, `template task missing: ${name}`).toBeTruthy();
+    expect(
       command.includes('--allow-ffi'),
       `template#${name} must keep --allow-ffi (vite native binding; removal reintroduces the FFI prompt)`,
-    );
+    ).toBeTruthy();
   }
 });
 
-Deno.test('task permissions: content-dates validation is read-only', () => {
+test('task permissions: content-dates validation is read-only', () => {
   const scripts = taskMap('www/package.json');
   const command = scripts['check:content-dates'];
-  assert(command, 'www/package.json#check:content-dates must exist');
-  assert(
+  expect(command, 'www/package.json#check:content-dates must exist').toBeTruthy();
+  expect(
     command.includes('run-in.ts') && command.includes('check-content-dates.ts'),
     'check:content-dates must delegate through run-in.ts to the read-only checker',
-  );
-  assertEquals(
+  ).toBeTruthy();
+  expect(
     scripts['write:content-dates'],
-    undefined,
     'the manifest is hand-maintained: there is no regeneration script to write it',
-  );
+  ).toEqual(undefined);
 });

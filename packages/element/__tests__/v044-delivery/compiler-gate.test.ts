@@ -19,7 +19,7 @@
  * in the Router tooling island-delivery.test.ts and must keep passing.
  */
 
-import { assert, assertEquals, assertStringIncludes } from '@std/assert';
+import { describe, expect, test } from 'vitest';
 import type { Plugin } from 'vite';
 import { compiledElementPlugin, compileElementModule } from '../../src/internal/compiler/plugin.ts';
 
@@ -48,7 +48,10 @@ type TransformHook = (
 ) => { code: string; map?: unknown } | string | null;
 
 function transformOf(plugin: Plugin): TransformHook {
-  assert(typeof plugin.transform === 'function', 'plugin must expose a transform hook');
+  expect(
+    typeof plugin.transform === 'function',
+    'plugin must expose a transform hook',
+  ).toBeTruthy();
   return plugin.transform as unknown as TransformHook;
 }
 
@@ -69,21 +72,21 @@ const MENTION_ONLY_SOURCE = [
 
 const MENTION_ONLY_ID = '/project/app/components/mention-only.tsx';
 
-Deno.test('v0.44 compiler gate - marker mentions pass through untransformed', () => {
+test('v0.44 compiler gate - marker mentions pass through untransformed', () => {
   // Second stage, unbound from Vite.
-  assertEquals(compileElementModule(MENTION_ONLY_SOURCE, MENTION_ONLY_ID), null);
+  expect(compileElementModule(MENTION_ONLY_SOURCE, MENTION_ONLY_ID)).toEqual(null);
 
   // The standalone Vite plugin applies the same gate instead of failing the
   // build on a false positive. The default Router pipeline (open:core)
   // pass-through is pinned adapter-side in compiler-open-core-boundary.test.ts.
   const standalone = compilerTransformHook();
-  assertEquals(standalone.call(failingContext(), MENTION_ONLY_SOURCE, MENTION_ONLY_ID), null);
+  expect(standalone.call(failingContext(), MENTION_ONLY_SOURCE, MENTION_ONLY_ID)).toEqual(null);
 });
 
-Deno.test('v0.44 compiler gate - real @element modules still compile or fail closed', async (t) => {
+describe('v0.44 compiler gate - real @element modules still compile or fail closed', () => {
   const compile = compilerTransformHook();
 
-  await t.step('a genuinely decorated module compiles through the Vite hook', () => {
+  test('a genuinely decorated module compiles through the Vite hook', () => {
     const source = [
       "import { element, OpenElement, property } from '@openelement/element';",
       "@element('oe-gate-counter')",
@@ -93,11 +96,11 @@ Deno.test('v0.44 compiler gate - real @element modules still compile or fail clo
       '}',
     ].join('\n');
     const result = compile.call(failingContext(), source, '/project/app/islands/gate-counter.tsx');
-    assert(typeof result === 'string', 'compiler hook must emit compiled code');
-    assertStringIncludes(result, '__partProgram');
+    expect(typeof result === 'string', 'compiler hook must emit compiled code').toBeTruthy();
+    expect(result).toContain('__partProgram');
   });
 
-  await t.step('a real but invalid @element module fails closed with located diagnostics', () => {
+  test('a real but invalid @element module fails closed with located diagnostics', () => {
     const source = [
       "import { element, OpenElement, property } from '@openelement/element';",
       "@element('oe-gate-invalid')",
@@ -112,10 +115,10 @@ Deno.test('v0.44 compiler gate - real @element modules still compile or fail clo
     } catch (error) {
       thrown = error as Error;
     }
-    assert(thrown, 'transform must throw for an invalid @element module');
-    assertEquals(ctx.messages.length, 1);
-    assertStringIncludes(ctx.messages[0], 'gate-invalid.tsx:');
-    assertStringIncludes(ctx.messages[0], 'OEC9011');
-    assertStringIncludes(ctx.messages[0].toLowerCase(), 'spread');
+    expect(thrown, 'transform must throw for an invalid @element module').toBeTruthy();
+    expect(ctx.messages.length).toEqual(1);
+    expect(ctx.messages[0]).toContain('gate-invalid.tsx:');
+    expect(ctx.messages[0]).toContain('OEC9011');
+    expect(ctx.messages[0].toLowerCase()).toContain('spread');
   });
 });

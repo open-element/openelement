@@ -1,4 +1,4 @@
-import { assert, assertEquals, assertRejects } from '@std/assert';
+import { expect, test } from 'vitest';
 import {
   parseStripeEvent,
   stripeEventData,
@@ -37,68 +37,68 @@ async function signature(payload = body, at = timestamp): Promise<string> {
   return [...digest].map((byte) => byte.toString(16).padStart(2, '0')).join('');
 }
 
-Deno.test('Stripe signature accepts an exact raw body and any valid v1 candidate', async () => {
+test('Stripe signature accepts an exact raw body and any valid v1 candidate', async () => {
   const valid = await signature();
   await verifyStripeSignature(body, `t=${timestamp},v1=${'0'.repeat(64)},v1=${valid}`, secret, {
     nowSeconds: timestamp + 300,
   });
-  assertEquals(parseStripeEvent(body).id, 'evt_test');
+  expect(parseStripeEvent(body).id).toEqual('evt_test');
 });
 
-Deno.test('Stripe signature rejects changed bodies, stale/future timestamps and malformed headers', async () => {
+test('Stripe signature rejects changed bodies, stale/future timestamps and malformed headers', async () => {
   const valid = await signature();
-  await assertRejects(() =>
+  await expect(() =>
     verifyStripeSignature(`${body} `, `t=${timestamp},v1=${valid}`, secret, {
       nowSeconds: timestamp,
     }),
-  );
-  await assertRejects(() =>
+  ).rejects.toThrow();
+  await expect(() =>
     verifyStripeSignature(body, `t=${timestamp},v1=${valid}`, secret, {
       nowSeconds: timestamp + 301,
     }),
-  );
-  await assertRejects(() =>
+  ).rejects.toThrow();
+  await expect(() =>
     verifyStripeSignature(body, `t=${timestamp},v1=${valid}`, secret, {
       nowSeconds: timestamp - 301,
     }),
-  );
-  await assertRejects(() =>
+  ).rejects.toThrow();
+  await expect(() =>
     verifyStripeSignature(body, `t=${timestamp},v0=${valid}`, secret, { nowSeconds: timestamp }),
-  );
+  ).rejects.toThrow();
 });
 
-Deno.test('Stripe event parsing rejects non-events after signature verification', () => {
+test('Stripe event parsing rejects non-events after signature verification', () => {
   for (const invalid of ['null', '{}', '{"id":"evt_x"}']) {
     try {
       parseStripeEvent(invalid);
       throw new Error('expected invalid event');
     } catch (error) {
-      assertEquals((error as Error).message === 'expected invalid event', false);
+      expect((error as Error).message === 'expected invalid event').toEqual(false);
     }
   }
 });
 
-Deno.test('Stripe persistence payload excludes customer and metadata fields', () => {
+test('Stripe persistence payload excludes customer and metadata fields', () => {
   const event = parseStripeEvent(body);
-  assertEquals(stripeEventData(event), { id: 'cs_test', payment_status: 'paid' });
+  expect(stripeEventData(event)).toEqual({ id: 'cs_test', payment_status: 'paid' });
 });
 
-Deno.test('Stripe webhook is POST-only and fails closed when secrets are unavailable', async () => {
+test('Stripe webhook is POST-only and fails closed when secrets are unavailable', async () => {
   const get = await stripeWebhook({
     request: new Request('https://app.test/api/stripe-webhook'),
     env: {},
   });
-  assertEquals(get.status, 405);
-  assertEquals(get.headers.get('allow'), 'POST');
+  expect(get.status).toEqual(405);
+  expect(get.headers.get('allow')).toEqual('POST');
 
   const post = await stripeWebhook({
     request: new Request('https://app.test/api/stripe-webhook', { method: 'POST', body }),
     env: {},
   });
-  assertEquals(post.status, 503);
+  expect(post.status).toEqual(503);
 });
 
-Deno.test('Stripe webhook bounds chunked bodies before signature verification', async () => {
+test('Stripe webhook bounds chunked bodies before signature verification', async () => {
   let cancelled = 0;
   const oversized = new ReadableStream<Uint8Array>({
     start(controller) {
@@ -112,6 +112,7 @@ Deno.test('Stripe webhook bounds chunked bodies before signature verification', 
   const request = new Request('https://app.test/api/stripe-webhook', {
     method: 'POST',
     body: oversized,
+    duplex: 'half',
   });
   const response = await createStripeWebhook()({
     request,
@@ -124,12 +125,12 @@ Deno.test('Stripe webhook bounds chunked bodies before signature verification', 
     },
   });
   await Promise.resolve();
-  assertEquals(request.headers.has('content-length'), false);
-  assertEquals(response.status, 413);
-  assertEquals(cancelled, 1);
+  expect(request.headers.has('content-length')).toEqual(false);
+  expect(response.status).toEqual(413);
+  expect(cancelled).toEqual(1);
 });
 
-Deno.test('bounded Stripe body reader cancels a stalled stream on timeout', async () => {
+test('bounded Stripe body reader cancels a stalled stream on timeout', async () => {
   let cancelled = 0;
   const stalled = new ReadableStream<Uint8Array>({
     pull() {
@@ -142,16 +143,16 @@ Deno.test('bounded Stripe body reader cancels a stalled stream on timeout', asyn
   const request = new Request('https://app.test/api/stripe-webhook', {
     method: 'POST',
     body: stalled,
+    duplex: 'half',
   });
-  await assertRejects(
-    () => readBoundedRawBody(request, MAX_WEBHOOK_BYTES, 5),
+  await expect(() => readBoundedRawBody(request, MAX_WEBHOOK_BYTES, 5)).rejects.toThrow(
     WebhookBodyReadTimeoutError,
   );
   await Promise.resolve();
-  assertEquals(cancelled, 1);
+  expect(cancelled).toEqual(1);
 });
 
-Deno.test('Stripe webhook fast-rejects an over-cap Content-Length without reading the body', async () => {
+test('Stripe webhook fast-rejects an over-cap Content-Length without reading the body', async () => {
   let pulled = 0;
   let cancelled = 0;
   const unread = new ReadableStream<Uint8Array>({
@@ -167,6 +168,7 @@ Deno.test('Stripe webhook fast-rejects an over-cap Content-Length without readin
     method: 'POST',
     headers: { 'content-length': String(MAX_WEBHOOK_BYTES + 1) },
     body: unread,
+    duplex: 'half',
   });
   let rpcCalls = 0;
   const response = await createStripeWebhook(() => {
@@ -182,21 +184,24 @@ Deno.test('Stripe webhook fast-rejects an over-cap Content-Length without readin
       PAYMENT_EVENT_QUEUE: { send: () => Promise.resolve() },
     },
   });
-  assertEquals(response.status, 413);
-  assertEquals(await response.json(), { error: 'payload too large' });
+  expect(response.status).toEqual(413);
+  expect(await response.json()).toEqual({ error: 'payload too large' });
   // Fast reject (stripe-webhook.ts:119-123) returns before readBoundedRawBody:
   // the body stream was never locked by a reader, never cancelled, and never
   // pulled beyond the stream's own one-chunk self-fill. Had the handler read
   // and failed inside readBoundedRawBody, the lock would still be held (:85).
-  assertEquals(request.body?.locked, false);
-  assertEquals(cancelled, 0);
+  expect(request.body?.locked).toEqual(false);
+  expect(cancelled).toEqual(0);
   await Promise.resolve();
-  assert(pulled <= 1, `declared-length fast reject still read the body (${pulled} pulls)`);
-  assertEquals(rpcCalls, 0);
+  expect(
+    pulled <= 1,
+    `declared-length fast reject still read the body (${pulled} pulls)`,
+  ).toBeTruthy();
+  expect(rpcCalls).toEqual(0);
   await request.body?.cancel().catch(() => undefined);
 });
 
-Deno.test('Stripe webhook rejects a body that outgrows a dishonest under-cap Content-Length', async () => {
+test('Stripe webhook rejects a body that outgrows a dishonest under-cap Content-Length', async () => {
   let cancelled = 0;
   // Exactly-cap chunks first (must NOT trip the guard), then one byte over.
   const oversized = new ReadableStream<Uint8Array>({
@@ -214,6 +219,7 @@ Deno.test('Stripe webhook rejects a body that outgrows a dishonest under-cap Con
     method: 'POST',
     headers: { 'content-length': '10' },
     body: oversized,
+    duplex: 'half',
   });
   let rpcCalls = 0;
   const response = await createStripeWebhook(() => {
@@ -231,14 +237,14 @@ Deno.test('Stripe webhook rejects a body that outgrows a dishonest under-cap Con
   });
   // The declared length stayed under the cap, so the streaming bound
   // (stripe-webhook.ts:124-145) — not the fast reject — produced the 413.
-  assertEquals(request.headers.get('content-length'), '10');
-  assertEquals(response.status, 413);
-  assertEquals(await response.json(), { error: 'payload too large' });
-  assertEquals(cancelled, 1);
-  assertEquals(rpcCalls, 0);
+  expect(request.headers.get('content-length')).toEqual('10');
+  expect(response.status).toEqual(413);
+  expect(await response.json()).toEqual({ error: 'payload too large' });
+  expect(cancelled).toEqual(1);
+  expect(rpcCalls).toEqual(0);
 });
 
-Deno.test('bounded Stripe body reader accepts exactly the cap and rejects one byte over', async () => {
+test('bounded Stripe body reader accepts exactly the cap and rejects one byte over', async () => {
   const bodyOf = (sizes: number[], close: boolean, onCancel: () => void) =>
     new ReadableStream<Uint8Array>({
       start(controller) {
@@ -251,22 +257,26 @@ Deno.test('bounded Stripe body reader accepts exactly the cap and rejects one by
   const atCap = new Request('https://app.test/api/stripe-webhook', {
     method: 'POST',
     body: bodyOf([400, 400], true, () => {}),
+    duplex: 'half',
   });
   const resolved = await readBoundedRawBody(atCap, 800, 60_000);
-  assertEquals(resolved.byteLength, 800);
+  expect(resolved.byteLength).toEqual(800);
 
   let cancelled = 0;
   const overCap = new Request('https://app.test/api/stripe-webhook', {
     method: 'POST',
     // Left open like a drip-feeding sender so the cancel has work to prove.
     body: bodyOf([400, 400, 1], false, () => cancelled++),
+    duplex: 'half',
   });
-  await assertRejects(() => readBoundedRawBody(overCap, 800, 60_000), WebhookBodyTooLargeError);
+  await expect(() => readBoundedRawBody(overCap, 800, 60_000)).rejects.toThrow(
+    WebhookBodyTooLargeError,
+  );
   await Promise.resolve();
-  assertEquals(cancelled, 1);
+  expect(cancelled).toEqual(1);
 });
 
-Deno.test('bounded Stripe body reader stops pulling an unbounded source at the cap', async () => {
+test('bounded Stripe body reader stops pulling an unbounded source at the cap', async () => {
   let pulled = 0;
   let cancelled = 0;
   const infinite = new ReadableStream<Uint8Array>({
@@ -281,16 +291,19 @@ Deno.test('bounded Stripe body reader stops pulling an unbounded source at the c
   const request = new Request('https://app.test/api/stripe-webhook', {
     method: 'POST',
     body: infinite,
+    duplex: 'half',
   });
-  await assertRejects(() => readBoundedRawBody(request, 1_000, 60_000), WebhookBodyTooLargeError);
+  await expect(() => readBoundedRawBody(request, 1_000, 60_000)).rejects.toThrow(
+    WebhookBodyTooLargeError,
+  );
   await Promise.resolve();
-  assertEquals(cancelled, 1);
+  expect(cancelled).toEqual(1);
   // One eager self-fill plus one pull per read until 1024 > 1000; an
   // unbounded reader would drain the infinite source and hang instead.
-  assert(pulled <= 5, `reader kept pulling an unbounded source (${pulled} pulls)`);
+  expect(pulled <= 5, `reader kept pulling an unbounded source (${pulled} pulls)`).toBeTruthy();
 });
 
-Deno.test('Stripe webhook maps a handler-level stalled body to 408 and cancels the stream', async () => {
+test('Stripe webhook maps a handler-level stalled body to 408 and cancels the stream', async () => {
   // The route reads with the module default (stripe-webhook.ts:129 does not
   // inject a timeout), so instead of waiting WEBHOOK_READ_TIMEOUT_MS this
   // test captures the pending read timer and fires it synchronously. The
@@ -325,6 +338,7 @@ Deno.test('Stripe webhook maps a handler-level stalled body to 408 and cancels t
       request: new Request('https://app.test/api/stripe-webhook', {
         method: 'POST',
         body: stalled,
+        duplex: 'half',
       }),
       env: {
         STRIPE_WEBHOOK_SECRET: secret,
@@ -334,22 +348,22 @@ Deno.test('Stripe webhook maps a handler-level stalled body to 408 and cancels t
         PAYMENT_EVENT_QUEUE: { send: () => Promise.resolve() },
       },
     });
-    assertEquals(captured.length, 1);
-    assertEquals(captured[0].delay, WEBHOOK_READ_TIMEOUT_MS);
+    expect(captured.length).toEqual(1);
+    expect(captured[0].delay).toEqual(WEBHOOK_READ_TIMEOUT_MS);
     captured[0].callback();
     const response = await responsePromise;
-    assertEquals(response.status, 408);
-    assertEquals(await response.json(), { error: 'request timeout' });
+    expect(response.status).toEqual(408);
+    expect(await response.json()).toEqual({ error: 'request timeout' });
     await Promise.resolve();
-    assertEquals(cancelled, 1);
-    assertEquals(rpcCalls, 0);
+    expect(cancelled).toEqual(1);
+    expect(rpcCalls).toEqual(0);
   } finally {
     globalThis.setTimeout = realSetTimeout;
     globalThis.clearTimeout = realClearTimeout;
   }
 });
 
-Deno.test('Stripe webhook acknowledges only after the verified event is durable', async () => {
+test('Stripe webhook acknowledges only after the verified event is durable', async () => {
   const now = Math.floor(Date.now() / 1000);
   const valid = await signature(body, now);
   let rpcBody: Record<string, unknown> | undefined;
@@ -372,10 +386,10 @@ Deno.test('Stripe webhook acknowledges only after the verified event is durable'
       PAYMENT_EVENT_QUEUE: { send: (message: unknown) => queued.push(message) },
     },
   });
-  assertEquals(response.status, 200);
-  assertEquals(rpcBody?.target_event_id, 'evt_test');
-  assertEquals(rpcBody?.order_reference, 'x');
-  assertEquals(queued, [{ type: 'payment.process', eventId: 'evt_test' }]);
+  expect(response.status).toEqual(200);
+  expect(rpcBody?.target_event_id).toEqual('evt_test');
+  expect(rpcBody?.order_reference).toEqual('x');
+  expect(queued).toEqual([{ type: 'payment.process', eventId: 'evt_test' }]);
 
   const unavailable = createStripeWebhook(() => Promise.resolve(new Response('', { status: 503 })));
   const retry = await unavailable({
@@ -392,7 +406,7 @@ Deno.test('Stripe webhook acknowledges only after the verified event is durable'
       PAYMENT_EVENT_QUEUE: { send: () => Promise.resolve() },
     },
   });
-  assertEquals(retry.status, 503);
+  expect(retry.status).toEqual(503);
 
   const networkFailure = createStripeWebhook(() => Promise.reject(new Error('offline')));
   const retryNetwork = await networkFailure({
@@ -409,10 +423,10 @@ Deno.test('Stripe webhook acknowledges only after the verified event is durable'
       PAYMENT_EVENT_QUEUE: { send: () => Promise.resolve() },
     },
   });
-  assertEquals(retryNetwork.status, 503);
+  expect(retryNetwork.status).toEqual(503);
 });
 
-Deno.test('Stripe webhook returns retryable failure when Queue handoff fails', async () => {
+test('Stripe webhook returns retryable failure when Queue handoff fails', async () => {
   const now = Math.floor(Date.now() / 1000);
   const valid = await signature(body, now);
   const handler = createStripeWebhook(() =>
@@ -432,7 +446,7 @@ Deno.test('Stripe webhook returns retryable failure when Queue handoff fails', a
       PAYMENT_EVENT_QUEUE: { send: () => Promise.reject(new Error('unavailable')) },
     },
   });
-  assertEquals(response.status, 503);
+  expect(response.status).toEqual(503);
 });
 
 const piiBody = JSON.stringify({
@@ -462,7 +476,7 @@ function captureConsole(lines: string[]): () => void {
   };
 }
 
-Deno.test('Stripe webhook logs correlate by event id and never leak payload or secrets', async () => {
+test('Stripe webhook logs correlate by event id and never leak payload or secrets', async () => {
   const now = Math.floor(Date.now() / 1000);
   const valid = await signature(piiBody, now);
   const lines: string[] = [];
@@ -484,33 +498,33 @@ Deno.test('Stripe webhook logs correlate by event id and never leak payload or s
     const accepted = await createStripeWebhook(() =>
       Promise.resolve(Response.json({ processing_state: 'received' })),
     )({ request: post(`t=${now},v1=${valid}`), env });
-    assertEquals(accepted.status, 200);
+    expect(accepted.status).toEqual(200);
 
     const rejected = await createStripeWebhook()({
       request: post(`t=${now},v1=${'0'.repeat(64)}`),
       env,
     });
-    assertEquals(rejected.status, 400);
+    expect(rejected.status).toEqual(400);
 
     const notDurable = await createStripeWebhook(() =>
       Promise.resolve(new Response('', { status: 503 })),
     )({ request: post(`t=${now},v1=${valid}`), env });
-    assertEquals(notDurable.status, 503);
+    expect(notDurable.status).toEqual(503);
   } finally {
     restore();
   }
 
   const entries = lines.map((line) => JSON.parse(line) as Record<string, unknown>);
   const acceptedLog = entries.find((entry) => entry.event === 'stripe_webhook_accepted');
-  assertEquals(acceptedLog?.provider_event_id, 'evt_pii');
-  assertEquals(acceptedLog?.event_type, 'checkout.session.completed');
-  assertEquals(acceptedLog?.processing_state, 'received');
-  assertEquals(acceptedLog?.enqueued, true);
+  expect(acceptedLog?.provider_event_id).toEqual('evt_pii');
+  expect(acceptedLog?.event_type).toEqual('checkout.session.completed');
+  expect(acceptedLog?.processing_state).toEqual('received');
+  expect(acceptedLog?.enqueued).toEqual(true);
   const rejectedLog = entries.find((entry) => entry.event === 'stripe_webhook_rejected');
-  assertEquals(rejectedLog?.reason, 'invalid_signature');
-  assertEquals(rejectedLog && 'provider_event_id' in rejectedLog, false);
+  expect(rejectedLog?.reason).toEqual('invalid_signature');
+  expect(rejectedLog && 'provider_event_id' in rejectedLog).toEqual(false);
   const notDurableLog = entries.find((entry) => entry.event === 'stripe_webhook_not_durable');
-  assertEquals(notDurableLog?.provider_event_id, 'evt_pii');
+  expect(notDurableLog?.provider_event_id).toEqual('evt_pii');
 
   const all = lines.join('\n');
   for (const sentinel of [
@@ -520,6 +534,6 @@ Deno.test('Stripe webhook logs correlate by event id and never leak payload or s
     'service-role-sentinel',
     piiBody,
   ]) {
-    assertEquals(all.includes(sentinel), false, `payment log leaked: ${sentinel}`);
+    expect(all.includes(sentinel), `payment log leaked: ${sentinel}`).toEqual(false);
   }
 });

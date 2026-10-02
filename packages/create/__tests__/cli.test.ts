@@ -1,5 +1,10 @@
-import { assert, assertEquals, assertFalse, assertThrows } from '@std/assert';
-import { existsSync } from '@std/fs';
+import { spawn, spawnSync } from 'node:child_process';
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import process from 'node:process';
+import { expect, test } from 'vitest';
+import { assertThrowsIncludes } from '../../../tests/lib/vitest-asserts.ts';
+import { existsSync } from 'node:fs';
 import { join } from '@std/path';
 import { OPEN_ELEMENT_CONFIG_KEYS } from '../../router/src/config.ts';
 import { CREATE_VERSION, VITE_STARTER_PIN } from '../src/version.ts';
@@ -17,40 +22,40 @@ function readTemplate(path: string): string {
   // Pack-safe source payloads add .tmpl, while callers intentionally keep the
   // generated project's logical .ts/.tsx names.
   const payloadPath = `${logicalPath}.tmpl`;
-  return Deno.readTextFileSync(existsSync(payloadPath) ? payloadPath : logicalPath);
+  return readFileSync(existsSync(payloadPath) ? payloadPath : logicalPath, 'utf8');
 }
 
 async function runCreate(executable: string, cwd: string, name: string) {
-  const result = await new Deno.Command(Deno.execPath(), {
-    args: ['run', '--allow-read', '--allow-write', executable, name],
-    cwd,
-    stdout: 'piped',
-    stderr: 'piped',
-  }).output();
-  assertEquals(result.code, 0, new TextDecoder().decode(result.stderr));
-  return new TextDecoder().decode(result.stdout);
+  const child = spawn(process.execPath, [executable, name], { cwd });
+  const [out, err] = await Promise.all([
+    Array.fromAsync(child.stdout!),
+    Array.fromAsync(child.stderr!),
+  ]);
+  const code = await new Promise<number>((resolve) => child.once('exit', (c) => resolve(c ?? -1)));
+  expect(code, Buffer.concat(err).toString()).toEqual(0);
+  return Buffer.concat(out).toString();
 }
 
 async function runCreateExpectingFailure(executable: string, cwd: string, name: string) {
-  const result = await new Deno.Command(Deno.execPath(), {
-    args: ['run', '--allow-read', '--allow-write', executable, name],
-    cwd,
-    stdout: 'piped',
-    stderr: 'piped',
-  }).output();
-  assert(result.code !== 0, `expected create to fail for "${name}"`);
-  return new TextDecoder().decode(result.stderr);
+  const child = spawn(process.execPath, [executable, name], { cwd });
+  const [, err] = await Promise.all([
+    Array.fromAsync(child.stdout!),
+    Array.fromAsync(child.stderr!),
+  ]);
+  const code = await new Promise<number>((resolve) => child.once('exit', (c) => resolve(c ?? -1)));
+  expect(code !== 0, `expected create to fail for "${name}"`).toBeTruthy();
+  return Buffer.concat(err).toString();
 }
 
 // A clean, actionable CLI error is a single message line: no runtime stack
 // trace vomit (L9). Deno stack frames are indented `at file:///` lines.
 function assertCleanError(stderr: string): void {
-  assertFalse(stderr.includes('\n    at '), `stack trace leaked into CLI error:\n${stderr}`);
+  expect(stderr.includes('\n    at '), `stack trace leaked into CLI error:\n${stderr}`).toBeFalsy();
 }
 
-Deno.test('starter exposes only product imports and the standard lifecycle', () => {
+test('starter exposes only product imports and the standard lifecycle', () => {
   const denoJson = JSON.parse(readTemplate('deno.json.tmpl'));
-  assertEquals(Object.keys(denoJson.imports).sort(), [
+  expect(Object.keys(denoJson.imports).sort()).toEqual([
     '@hono/vite-dev-server',
     '@openelement/element',
     '@openelement/element/build-utils',
@@ -62,15 +67,13 @@ Deno.test('starter exposes only product imports and the standard lifecycle', () 
     'hono',
     'vite',
   ]);
-  assertEquals(
-    denoJson.imports['@openelement/element/jsx-runtime'],
+  expect(denoJson.imports['@openelement/element/jsx-runtime']).toEqual(
     'npm:@openelement/element@${v.element}/jsx-runtime',
   );
-  assertEquals(
-    denoJson.imports['@openelement/element/jsx-dev-runtime'],
+  expect(denoJson.imports['@openelement/element/jsx-dev-runtime']).toEqual(
     'npm:@openelement/element@${v.element}/jsx-dev-runtime',
   );
-  assertEquals(Object.keys(denoJson.tasks).sort(), [
+  expect(Object.keys(denoJson.tasks).sort()).toEqual([
     'build',
     'check',
     'dev',
@@ -78,69 +81,69 @@ Deno.test('starter exposes only product imports and the standard lifecycle', () 
     'start',
     'test',
   ]);
-  assert(
+  expect(
     String(denoJson.imports['@openelement/router/nitro-mount'] || '').includes('nitro-mount'),
     'starter import map must include router/nitro-mount (#601)',
-  );
-  assert(
+  ).toBeTruthy();
+  expect(
     String(denoJson.tasks.start || '').includes('cli/start'),
     'starter must expose deno task start (#601)',
-  );
-  assertEquals(denoJson.tasks.test, 'deno test --config deno.json --permit-no-files');
-  assertEquals(denoJson.imports.hono, 'npm:hono@^4.12');
-  assertEquals(denoJson.compilerOptions.jsxImportSource, '@openelement/element');
-  assertFalse(JSON.stringify(denoJson).includes('@openelement/core'));
-  assertFalse(JSON.stringify(denoJson).includes('@openelement/app'));
-  assertFalse(JSON.stringify(denoJson).includes('@openelement/signal'));
+  ).toBeTruthy();
+  expect(denoJson.tasks.test).toEqual('deno test --config deno.json --permit-no-files');
+  expect(denoJson.imports.hono).toEqual('npm:hono@^4.12');
+  expect(denoJson.compilerOptions.jsxImportSource).toEqual('@openelement/element');
+  expect(JSON.stringify(denoJson).includes('@openelement/core')).toBeFalsy();
+  expect(JSON.stringify(denoJson).includes('@openelement/app')).toBeFalsy();
+  expect(JSON.stringify(denoJson).includes('@openelement/signal')).toBeFalsy();
 });
 
-Deno.test('embedded CLI version matches its package manifest', () => {
-  const manifest = JSON.parse(Deno.readTextFileSync(join(packageDir, 'package.json')));
-  const versionSource = Deno.readTextFileSync(join(packageDir, 'src', 'version.ts'));
-  assert(versionSource.includes(`'${manifest.version}'`));
+test('embedded CLI version matches its package manifest', () => {
+  const manifest = JSON.parse(readFileSync(join(packageDir, 'package.json'), 'utf8'));
+  const versionSource = readFileSync(join(packageDir, 'src', 'version.ts'), 'utf8');
+  expect(versionSource.includes(`'${manifest.version}'`)).toBeTruthy();
 });
 
-Deno.test('Alpha README never emits an untagged create install command', () => {
-  const readme = Deno.readTextFileSync(join(packageDir, 'README.md'));
+test('Alpha README never emits an untagged create install command', () => {
+  const readme = readFileSync(join(packageDir, 'README.md'), 'utf8');
   const installs = [...readme.matchAll(/npm:@openelement\/create(?:@([^\s`]+))?/g)];
-  assert(installs.length > 0, 'README must document at least one install command');
+  expect(installs.length > 0, 'README must document at least one install command').toBeTruthy();
   for (const [command, tag] of installs) {
     // A versionless `npm:@openelement/create` resolves the stable 0.43 line.
-    assert(tag, `install command must carry an explicit tag or version: ${command}`);
+    expect(tag, `install command must carry an explicit tag or version: ${command}`).toBeTruthy();
   }
-  assert(
+  expect(
     readme.includes('npm:@openelement/create@alpha my-app'),
     'the primary Alpha install path must use the @alpha dist-tag',
-  );
+  ).toBeTruthy();
   // The exact-version pin is bound to registry truth (release-state.json), not
   // to the source-tree version: before the release is published the README must
   // not advertise it; once release-state registers it, the README must.
   const releaseState = JSON.parse(
-    Deno.readTextFileSync(join(packageDir, '..', '..', 'docs', 'release', 'release-state.json')),
+    readFileSync(join(packageDir, '..', '..', 'docs', 'release', 'release-state.json')),
   );
   const createRegistry = releaseState.packages.find(
     (p: { name: string }) => p.name === '@openelement/create',
   ).registry;
   const isPublished = Object.values(createRegistry).includes(CREATE_VERSION);
-  assert(
+  expect(
     readme.includes(`npm:@openelement/create@${CREATE_VERSION}`) === isPublished,
     isPublished
       ? `README must document the exact Alpha version @${CREATE_VERSION}`
       : `README must not pin the unpublished version @${CREATE_VERSION}`,
-  );
+  ).toBeTruthy();
 });
 
-Deno.test('Create and all support-distribution packages share one release version', () => {
+test('Create and all support-distribution packages share one release version', () => {
   const versions = ['router', 'create', 'element'].map(
     (name) =>
-      JSON.parse(Deno.readTextFileSync(join(packageDir, '..', name, 'package.json')))
+      JSON.parse(readFileSync(join(packageDir, '..', name, 'package.json'), 'utf8'))
         .version as string,
   );
-  assertEquals([...new Set(versions)], [resolveVersions().router]);
+  expect([...new Set(versions)]).toEqual([resolveVersions().router]);
 });
 
-Deno.test('Create rejects mixed product versions instead of silently generating', () => {
-  assertThrows(
+test('Create rejects mixed product versions instead of silently generating', () => {
+  assertThrowsIncludes(
     () =>
       assertUnifiedProductVersions({
         router: '0.41.0-alpha.12',
@@ -151,70 +154,71 @@ Deno.test('Create rejects mixed product versions instead of silently generating'
   );
 });
 
-Deno.test('async template build returns deterministic path order', async () => {
+test('async template build returns deterministic path order', async () => {
   const templates = await buildTemplates(resolveVersions(), 'sample-app');
-  assertEquals(Object.keys(templates), Object.keys(templates).toSorted());
-  assertFalse(Object.values(templates).some((content) => content.includes('${v.')));
+  expect(Object.keys(templates)).toEqual(Object.keys(templates).toSorted());
+  expect(Object.values(templates).some((content) => content.includes('${v.'))).toBeFalsy();
 });
 
-Deno.test('generated starter carries no JSR bridge', async () => {
+test('generated starter carries no JSR bridge', async () => {
   const templates = await buildTemplates(resolveVersions(), 'sample-app');
   const pkg = JSON.parse(templates['package.json']);
-  assertEquals(pkg.name, 'sample-app');
-  assertEquals(pkg.private, true);
+  expect(pkg.name).toEqual('sample-app');
+  expect(pkg.private).toEqual(true);
   // Packed first-party modules carry no bare @std/* specifiers, so the
   // starter needs no @std npm aliases and no @jsr registry mapping: npm is
   // the only public registry.
-  assertEquals(pkg.dependencies, {});
-  assertFalse('.npmrc' in templates);
+  expect(pkg.dependencies).toEqual({});
+  expect('.npmrc' in templates).toBeFalsy();
   const denoJson = JSON.parse(templates['deno.json']);
   for (const value of Object.values(denoJson.imports as Record<string, string>)) {
-    assertFalse(value.includes('@jsr/'), `import map must not reference @jsr: ${value}`);
-    assertFalse(value.startsWith('jsr:'), `import map must not use jsr: ${value}`);
+    expect(value.includes('@jsr/'), `import map must not reference @jsr: ${value}`).toBeFalsy();
+    expect(value.startsWith('jsr:'), `import map must not use jsr: ${value}`).toBeFalsy();
   }
   // Parse, don't substring: a bridge might hide behind a proxy subdomain.
   const serialized = JSON.stringify(templates);
   const templateUrls = serialized.match(/https?:\/\/[^"'\\\s]+/g) ?? [];
   for (const url of templateUrls) {
     const host = new URL(url).hostname;
-    assertFalse(
+    expect(
       host === 'jsr.io' || host.endsWith('.jsr.io'),
       `starter must not route through the JSR registry: ${url}`,
-    );
+    ).toBeFalsy();
   }
   // Host-boundary match, so "notnpm.jsr.io.evil" cannot pass as a non-match.
-  assertFalse(
+  expect(
     /(^|[^a-z0-9.-])npm\.jsr\.io([^a-z0-9.-]|$)/i.test(serialized),
     'starter must not mention the JSR npm proxy',
-  );
-  assertFalse(/@jsr\//.test(serialized), 'starter must not use @jsr scopes');
+  ).toBeFalsy();
+  expect(/@jsr\//.test(serialized), 'starter must not use @jsr scopes').toBeFalsy();
 });
 
-Deno.test('generated starter pins every OpenElement import to the exact release', async () => {
+test('generated starter pins every OpenElement import to the exact release', async () => {
   const versions = resolveVersions();
   const config = JSON.parse((await buildTemplates(versions, 'sample-app'))['deno.json']);
-  assertEquals(config.imports['@openelement/router'], `npm:@openelement/router@${versions.router}`);
-  assertEquals(
-    config.imports['@openelement/router/vite'],
+  expect(config.imports['@openelement/router']).toEqual(
+    `npm:@openelement/router@${versions.router}`,
+  );
+  expect(config.imports['@openelement/router/vite']).toEqual(
     `npm:@openelement/router@${versions.router}/vite`,
   );
-  assertEquals(
-    config.imports['@openelement/element'],
+  expect(config.imports['@openelement/element']).toEqual(
     `npm:@openelement/element@${versions.element}`,
   );
-  assertEquals(
-    config.imports['@openelement/element/jsx-runtime'],
+  expect(config.imports['@openelement/element/jsx-runtime']).toEqual(
     `npm:@openelement/element@${versions.element}/jsx-runtime`,
   );
-  assertEquals(
-    config.imports['@openelement/element/jsx-dev-runtime'],
+  expect(config.imports['@openelement/element/jsx-dev-runtime']).toEqual(
     `npm:@openelement/element@${versions.element}/jsx-dev-runtime`,
   );
 });
 
-Deno.test('starter pins vite exactly and type-checks app-shell', async () => {
+test('starter pins vite exactly and type-checks app-shell', async () => {
   const raw = JSON.parse(readTemplate('deno.json.tmpl'));
-  assertFalse('@deno/vite-plugin' in raw.imports, 'starter must not depend on @deno/vite-plugin');
+  expect(
+    '@deno/vite-plugin' in raw.imports,
+    'starter must not depend on @deno/vite-plugin',
+  ).toBeFalsy();
   // The raw template injects the pin through the ${v.vite} token (deps:vite-check
   // owns the raw-template token rule and the VITE_STARTER_PIN anchor); the
   // generated starter is what must carry the exact pin.
@@ -225,18 +229,19 @@ Deno.test('starter pins vite exactly and type-checks app-shell', async () => {
   // (B2: the alignment anchor is the workspace-wide vite pin — the router
   // manifest no longer carries an imports map; both pins bind to the same
   // canonical VITE_DEV_PIN, asserted against router's package.json below.)
-  const routerManifest = JSON.parse(
-    Deno.readTextFileSync(join(packageDir, '..', 'router', 'package.json')),
-  );
-  assertEquals(routerManifest.dependencies.vite, VITE_STARTER_PIN);
-  assertEquals(generated.imports.vite, `npm:vite@${VITE_STARTER_PIN}`);
-  assert(/^npm:vite@\d+\.\d+\.\d+$/.test(String(generated.imports.vite)), generated.imports.vite);
+  const routerManifest = JSON.parse(readFileSync(join(packageDir, '..', 'router', 'package.json')));
+  expect(routerManifest.dependencies.vite).toEqual(VITE_STARTER_PIN);
+  expect(generated.imports.vite).toEqual(`npm:vite@${VITE_STARTER_PIN}`);
+  expect(
+    /^npm:vite@\d+\.\d+\.\d+$/.test(String(generated.imports.vite)),
+    generated.imports.vite,
+  ).toBeTruthy();
   // #927: the dev task must pin the same exact vite version as the import
   // map — a bare npm:vite resolves to latest independently of import maps,
   // which would run a second vite copy next to the pinned one.
   const devTask = String(generated.tasks.dev || '');
   const pinnedVite = String(generated.imports.vite).match(/@([^@]+)$/)?.[1] ?? '';
-  assert(devTask.includes(`npm:vite@${pinnedVite}`), devTask);
+  expect(devTask.includes(`npm:vite@${pinnedVite}`), devTask).toBeTruthy();
   // #679: the check task must cover the app-shell layout island template —
   // and every other shipped TypeScript file — by checking the app/ directory
   // recursively instead of a hardcoded file list, so new template files (and
@@ -244,12 +249,12 @@ Deno.test('starter pins vite exactly and type-checks app-shell', async () => {
   // Deno 2.9 resolves a directory argument to all modules beneath it; the
   // markdown post route is compiled at build time and is not a check entry.
   const checkTask = String(raw.tasks.check || '');
-  assert(checkTask.includes('app/'), checkTask);
-  assert(checkTask.includes('vite.config.ts'), checkTask);
-  assertFalse(checkTask.includes('app/routes/404.tsx'), checkTask);
+  expect(checkTask.includes('app/'), checkTask).toBeTruthy();
+  expect(checkTask.includes('vite.config.ts'), checkTask).toBeTruthy();
+  expect(checkTask.includes('app/routes/404.tsx'), checkTask).toBeFalsy();
 });
 
-Deno.test('starter templates use the compiled element authoring surface (v0.44)', () => {
+test('starter templates use the compiled element authoring surface (v0.44)', () => {
   for (const path of [
     'app/components/page-home.tsx',
     'app/components/page-freshness.tsx',
@@ -265,59 +270,59 @@ Deno.test('starter templates use the compiled element authoring surface (v0.44)'
     // Compiled modules: @element decorator on an OpenElement subclass, bound
     // by a canonical named import of the compile-time-only intrinsic from
     // '@openelement/element' (the compiler strips it from generated output).
-    assert(source.includes("@element('"), path);
-    assert(
+    expect(source.includes("@element('"), path).toBeTruthy();
+    expect(
       /import \{[^}]*\belement\b[^}]*\bOpenElement\b[^}]*\} from '@openelement\/element'/.test(
         source,
       ),
       path,
-    );
-    assertFalse(source.includes('declare function element('), path);
-    assertFalse(source.includes('@openelement/core'), path);
+    ).toBeTruthy();
+    expect(source.includes('declare function element('), path).toBeFalsy();
+    expect(source.includes('@openelement/core'), path).toBeFalsy();
     // Legacy authoring APIs were removed in v0.44 (ADR-0143).
-    assertFalse(source.includes('defineElement'), path);
-    assertFalse(source.includes('defineCustomElement'), path);
-    assertFalse(source.includes('customElements.define'), path);
-    assertFalse(source.includes('registerSignal'), path);
+    expect(source.includes('defineElement'), path).toBeFalsy();
+    expect(source.includes('defineCustomElement'), path).toBeFalsy();
+    expect(source.includes('customElements.define'), path).toBeFalsy();
+    expect(source.includes('registerSignal'), path).toBeFalsy();
   }
-  assert(readTemplate('gitignore.tmpl').includes('dist/'));
+  expect(readTemplate('gitignore.tmpl').includes('dist/')).toBeTruthy();
 });
 
-Deno.test('starter islands are single-module compiled classes (#1092, #939)', () => {
+test('starter islands are single-module compiled classes (#1092, #939)', () => {
   const counter = readTemplate('app/islands/my-counter.tsx');
   // The delivery policy stays in the statically scanned defineIslandConfig
   // export; state is a compiled @property and events are method Parts.
-  assert(counter.includes("hydrate: 'idle'"), counter);
-  assert(counter.includes('defineIslandConfig'), counter);
-  assert(counter.includes('count = 0'), counter);
-  assert(counter.includes('onClick={this.increment}'), counter);
+  expect(counter.includes("hydrate: 'idle'"), counter).toBeTruthy();
+  expect(counter.includes('defineIslandConfig'), counter).toBeTruthy();
+  expect(counter.includes('count = 0'), counter).toBeTruthy();
+  expect(counter.includes('onClick={this.increment}'), counter).toBeTruthy();
   // Compiled text Parts replace the renderer-owned hydration markers; starter
   // code never hand-authors protocol attributes.
-  assertFalse(counter.includes('data-signal'), counter);
+  expect(counter.includes('data-signal'), counter).toBeFalsy();
 
   const ticker = readTemplate('app/islands/only-ticker.tsx');
-  assert(ticker.includes("hydrate: 'only'"), ticker);
-  assert(ticker.includes('ssr: false'), ticker);
-  assert(ticker.includes('tick = 0'), ticker);
-  assert(ticker.includes('onClick={this.bump}'), ticker);
-  assertFalse(ticker.includes('data-signal'), ticker);
+  expect(ticker.includes("hydrate: 'only'"), ticker).toBeTruthy();
+  expect(ticker.includes('ssr: false'), ticker).toBeTruthy();
+  expect(ticker.includes('tick = 0'), ticker).toBeTruthy();
+  expect(ticker.includes('onClick={this.bump}'), ticker).toBeTruthy();
+  expect(ticker.includes('data-signal'), ticker).toBeFalsy();
 });
 
-Deno.test('starter global style block scopes tokens under :root', () => {
+test('starter global style block scopes tokens under :root', () => {
   // #1411: tokens live in the app/styles/tokens.css convention file that the
   // config loader inlines into <head>; vite.config.ts carries no CSS at all.
   const tokens = readTemplate('app/styles/tokens.css');
   // Bare `--token:value` declarations at stylesheet top level are dropped by
   // CSS error recovery and take the following body rule down with them.
-  assert(tokens.includes(':root {'), tokens);
-  assert(tokens.includes('--gray-0: #f8f9fa'), tokens);
-  assertFalse(
+  expect(tokens.includes(':root {'), tokens).toBeTruthy();
+  expect(tokens.includes('--gray-0: #f8f9fa'), tokens).toBeTruthy();
+  expect(
     readTemplate('vite.config.ts').includes('headFragments'),
     'vite.config.ts must not carry style/CSS strings (#1411)',
-  );
+  ).toBeFalsy();
 });
 
-Deno.test('starter pages own their styles via static styles, not the global baseline', () => {
+test('starter pages own their styles via static styles, not the global baseline', () => {
   const tokens = readTemplate('app/styles/tokens.css');
   // The tokens file keeps only true globals (design tokens + body/::selection
   // baseline); per-page rules live in each page's `static styles` (inlined into
@@ -330,11 +335,17 @@ Deno.test('starter pages own their styles via static styles, not the global base
     'el-404',
     'contact-page',
   ]) {
-    assertFalse(tokens.includes(`${tag}{`), `the tokens file must not scope rules under ${tag}`);
-    assertFalse(tokens.includes(`${tag} `), `the tokens file must not scope rules under ${tag}`);
+    expect(
+      tokens.includes(`${tag}{`),
+      `the tokens file must not scope rules under ${tag}`,
+    ).toBeFalsy();
+    expect(
+      tokens.includes(`${tag} `),
+      `the tokens file must not scope rules under ${tag}`,
+    ).toBeFalsy();
   }
-  assert(tokens.includes('body {'), tokens);
-  assert(tokens.includes('::selection {'), tokens);
+  expect(tokens.includes('body {'), tokens).toBeTruthy();
+  expect(tokens.includes('::selection {'), tokens).toBeTruthy();
 
   const styles = readTemplate('app/components/page-styles.ts');
   for (const exportName of [
@@ -346,14 +357,14 @@ Deno.test('starter pages own their styles via static styles, not the global base
     'notFoundPageStyles',
     'contactPageStyles',
   ]) {
-    assert(
+    expect(
       styles.includes(`export const ${exportName}`),
       `page-styles.ts must export ${exportName}`,
-    );
+    ).toBeTruthy();
   }
   // The post-list rules stay single-source: both list pages spread the shared
   // sheet instead of duplicating the rules.
-  assertEquals(styles.split('...postListStyles').length - 1, 2, styles);
+  expect(styles.split('...postListStyles').length - 1, styles).toEqual(2);
 
   const pages: Array<[string, string]> = [
     ['app/components/page-home.tsx', 'homePageStyles'],
@@ -365,34 +376,34 @@ Deno.test('starter pages own their styles via static styles, not the global base
   ];
   for (const [path, exportName] of pages) {
     const source = readTemplate(path);
-    assert(
+    expect(
       source.includes(`static override styles = ${exportName};`),
       `${path} must declare static override styles`,
-    );
-    assert(
+    ).toBeTruthy();
+    expect(
       source.includes(`from './page-styles.ts'`),
       `${path} must import its sheet from ./page-styles.ts`,
-    );
+    ).toBeTruthy();
     // The stale workaround guidance must be gone from the starter.
-    assertFalse(source.includes('global baseline'), path);
+    expect(source.includes('global baseline'), path).toBeFalsy();
   }
 });
 
-Deno.test('starter blog is a pair of compiled page routes', () => {
+test('starter blog is a pair of compiled page routes', () => {
   const index = readTemplate('app/routes/blog/index.tsx');
   // The route module is a thin definePage wrapper around the compiled page
   // element; the page class lives in app/components/.
-  assert(index.includes('definePage'), index);
-  assert(index.includes('page-blog-index.tsx'), index);
+  expect(index.includes('definePage'), index).toBeTruthy();
+  expect(index.includes('page-blog-index.tsx'), index).toBeTruthy();
   const post = readTemplate('app/routes/blog/welcome.tsx');
-  assert(post.includes('definePage'), post);
-  assert(post.includes('page-blog-welcome.tsx'), post);
+  expect(post.includes('definePage'), post).toBeTruthy();
+  expect(post.includes('page-blog-welcome.tsx'), post).toBeTruthy();
   const page = readTemplate('app/components/page-blog-welcome.tsx');
-  assert(page.includes("@element('blog-welcome'"), page);
+  expect(page.includes("@element('blog-welcome'"), page).toBeTruthy();
   // The post body renders exactly one H1 (the markdown-body duplicate-H1
   // regression class from the legacy starter stays impossible by authoring).
   const h1Count = page.split('<h1>').length - 1;
-  assertEquals(h1Count, 1, page);
+  expect(h1Count, page).toEqual(1);
   // #922: an unknown slug is a 404 — there is no [slug] fallback route, so
   // unmatched paths render the styled 404 page with a 404 status.
   let slugRouteExists = true;
@@ -401,17 +412,17 @@ Deno.test('starter blog is a pair of compiled page routes', () => {
   } catch {
     slugRouteExists = false;
   }
-  assertFalse(slugRouteExists, 'the legacy dynamic [slug] route must not ship');
+  expect(slugRouteExists, 'the legacy dynamic [slug] route must not ship').toBeFalsy();
 });
 
-Deno.test('starter owns a concrete --brand token without a UI package dependency', () => {
+test('starter owns a concrete --brand token without a UI package dependency', () => {
   // #1411: the token sheet is the convention file the config loader inlines.
   const tokens = readTemplate('app/styles/tokens.css');
   const brand = tokens.match(/--brand:\s*(#[0-9a-fA-F]{3,8})/)?.[1];
-  assert(brand, 'starter app/styles/tokens.css must define a --brand token');
+  expect(brand, 'starter app/styles/tokens.css must define a --brand token').toBeTruthy();
 });
 
-Deno.test('TypeScript starter sources are pack-safe template payloads', () => {
+test('TypeScript starter sources are pack-safe template payloads', () => {
   for (const path of [
     'vite.config.ts',
     'app/head.tsx',
@@ -420,66 +431,72 @@ Deno.test('TypeScript starter sources are pack-safe template payloads', () => {
     'app/routes/api/health.ts',
   ]) {
     const logicalPath = join(packageDir, 'templates', path);
-    assertFalse(existsSync(logicalPath), `raw TypeScript source must not be packed: ${path}`);
-    assert(existsSync(`${logicalPath}.tmpl`), `missing template payload: ${path}.tmpl`);
+    expect(
+      existsSync(logicalPath),
+      `raw TypeScript source must not be packed: ${path}`,
+    ).toBeFalsy();
+    expect(
+      existsSync(`${logicalPath}.tmpl`),
+      `missing template payload: ${path}.tmpl`,
+    ).toBeTruthy();
   }
 });
 
-Deno.test('starter app/head.tsx is the structural head convention (alpha.4)', () => {
+test('starter app/head.tsx is the structural head convention (alpha.4)', () => {
   const source = readTemplate('app/head.tsx');
   // Data entries only: the framework serializes them, the file never writes
   // markup. Two of the three accepted shapes are exercised.
-  assert(source.includes('export default ['), source);
-  assert(/\{\s*link:\s*\{/.test(source), source);
-  assert(/\{\s*meta:\s*\{/.test(source), source);
+  expect(source.includes('export default ['), source).toBeTruthy();
+  expect(/\{\s*link:\s*\{/.test(source), source).toBeTruthy();
+  expect(/\{\s*meta:\s*\{/.test(source), source).toBeTruthy();
   // A raw HTML string is not a head entry: the convention is structured.
-  assertFalse(source.includes('<meta '), source);
-  assertFalse(source.includes('<link '), source);
+  expect(source.includes('<meta '), source).toBeFalsy();
+  expect(source.includes('<link '), source).toBeFalsy();
   // No host APIs: the module is a build artifact, not a runtime read.
-  assertFalse(source.includes('Deno.'), source);
-  assertFalse(source.includes('readFileSync'), source);
+  expect(source.includes('Deno.'), source).toBeFalsy();
+  expect(source.includes('readFileSync'), source).toBeFalsy();
 });
 
-Deno.test('starter openelement.config.ts keeps framework options in one home', () => {
+test('starter openelement.config.ts keeps framework options in one home', () => {
   const source = readTemplate('openelement.config.ts');
   const written = [...source.matchAll(/^\s{2}([a-zA-Z]+):/gm)].map((match) => match[1]);
   for (const key of written) {
-    assert(
+    expect(
       OPEN_ELEMENT_CONFIG_KEYS.includes(key),
       `starter config writes unknown key "${key}"; accepted: ${OPEN_ELEMENT_CONFIG_KEYS.join(
         ', ',
       )}`,
-    );
+    ).toBeTruthy();
   }
   // The raw-head channel has no home in the config file, and the retired inline
   // spelling must not reappear.
-  assertFalse(source.includes('inject'), source);
-  assertFalse(source.includes('html:'), source);
+  expect(source.includes('inject'), source).toBeFalsy();
+  expect(source.includes('html:'), source).toBeFalsy();
 });
 
-Deno.test('source CLI generates a complete, token-free starter', async () => {
-  const tmpRoot = Deno.makeTempDirSync({ prefix: 'open-create-source-' });
+test('source CLI generates a complete, token-free starter', async () => {
+  const tmpRoot = mkdtempSync(join(tmpdir(), 'open-create-source-'));
   try {
     const stdout = await runCreate(join(packageDir, 'src', 'cli.ts'), tmpRoot, 'sample-app');
     const appDir = join(tmpRoot, 'sample-app');
-    assert(existsSync(join(appDir, '.gitignore')));
-    assertFalse(existsSync(join(appDir, 'gitignore.tmpl')));
-    assertFalse(Deno.readTextFileSync(join(appDir, 'deno.json')).includes('${v.'));
+    expect(existsSync(join(appDir, '.gitignore'))).toBeTruthy();
+    expect(existsSync(join(appDir, 'gitignore.tmpl'))).toBeFalsy();
+    expect(readFileSync(join(appDir, 'deno.json'), 'utf8').includes('${v.')).toBeFalsy();
     // Starter ships the compiled blog routes and a README explaining
     // tasks/conventions.
-    assert(existsSync(join(appDir, 'README.md')));
-    assert(existsSync(join(appDir, 'app', 'routes', 'blog', 'index.tsx')));
-    assert(existsSync(join(appDir, 'app', 'routes', 'blog', 'welcome.tsx')));
+    expect(existsSync(join(appDir, 'README.md'))).toBeTruthy();
+    expect(existsSync(join(appDir, 'app', 'routes', 'blog', 'index.tsx'))).toBeTruthy();
+    expect(existsSync(join(appDir, 'app', 'routes', 'blog', 'welcome.tsx'))).toBeTruthy();
     // Success output points at the README for the full task list.
-    assert(stdout.includes('README.md'), stdout);
+    expect(stdout.includes('README.md'), stdout).toBeTruthy();
   } finally {
-    Deno.removeSync(tmpRoot, { recursive: true });
+    rmSync(tmpRoot, { recursive: true });
   }
 });
 
-Deno.test('L11: project name validation enforces npm-name and traversal rules', () => {
+test('L11: project name validation enforces npm-name and traversal rules', () => {
   for (const name of ['my-app', 'app', 'my_app', 'app2', '2app', 'my.app', 'a']) {
-    assertEquals(validateProjectName(name), null, name);
+    expect(validateProjectName(name), name).toEqual(null);
   }
   const invalid: Array<[string, string]> = [
     ['MyApp', 'lowercase'],
@@ -494,97 +511,97 @@ Deno.test('L11: project name validation enforces npm-name and traversal rules', 
   ];
   for (const [name, fragment] of invalid) {
     const message = validateProjectName(name);
-    assert(message !== null, `expected "${name}" to be rejected`);
-    assert(message.includes(fragment), `"${name}": expected "${fragment}" in "${message}"`);
+    expect(message !== null, `expected "${name}" to be rejected`).toBeTruthy();
+    expect(
+      message.includes(fragment),
+      `"${name}": expected "${fragment}" in "${message}"`,
+    ).toBeTruthy();
   }
 });
 
-Deno.test('L9/L11: CLI rejects an invalid project name with a clean actionable error', async () => {
-  const tmpRoot = Deno.makeTempDirSync({ prefix: 'open-create-invalid-' });
+test('L9/L11: CLI rejects an invalid project name with a clean actionable error', async () => {
+  const tmpRoot = mkdtempSync(join(tmpdir(), 'open-create-invalid-'));
   try {
     const stderr = await runCreateExpectingFailure(
       join(packageDir, 'src', 'cli.ts'),
       tmpRoot,
       'Bad Name',
     );
-    assert(stderr.includes('Invalid project name'), stderr);
+    expect(stderr.includes('Invalid project name'), stderr).toBeTruthy();
     assertCleanError(stderr);
-    assertFalse(existsSync(join(tmpRoot, 'Bad Name')));
+    expect(existsSync(join(tmpRoot, 'Bad Name'))).toBeFalsy();
   } finally {
-    Deno.removeSync(tmpRoot, { recursive: true });
+    rmSync(tmpRoot, { recursive: true });
   }
 });
 
-Deno.test('L9: CLI refuses an existing target directory with guidance, not a stack trace', async () => {
-  const tmpRoot = Deno.makeTempDirSync({ prefix: 'open-create-exists-' });
+test('L9: CLI refuses an existing target directory with guidance, not a stack trace', async () => {
+  const tmpRoot = mkdtempSync(join(tmpdir(), 'open-create-exists-'));
   try {
     const executable = join(packageDir, 'src', 'cli.ts');
     await runCreate(executable, tmpRoot, 'sample-app');
     const stderr = await runCreateExpectingFailure(executable, tmpRoot, 'sample-app');
-    assert(stderr.includes('already exists'), stderr);
+    expect(stderr.includes('already exists'), stderr).toBeTruthy();
     // Actionable: tells the adopter how to resolve the collision.
-    assert(stderr.includes('Choose a different name'), stderr);
+    expect(stderr.includes('Choose a different name'), stderr).toBeTruthy();
     assertCleanError(stderr);
   } finally {
-    Deno.removeSync(tmpRoot, { recursive: true });
+    rmSync(tmpRoot, { recursive: true });
   }
 });
 
-Deno.test({
-  name: 'L9: CLI reports scaffolding write failures cleanly and actionably',
-  // chmod-based permission failures are a POSIX mechanism; the CI matrix for
-  // this suite is Linux/macOS only.
-  ignore: Deno.build.os === 'windows',
-  async fn() {
-    const tmpRoot = Deno.makeTempDirSync({ prefix: 'open-create-readonly-' });
+test.skipIf(process.platform === 'win32')(
+  'L9: CLI reports scaffolding write failures cleanly and actionably',
+  async function fn() {
+    const tmpRoot = mkdtempSync(join(tmpdir(), 'open-create-readonly-'));
     try {
-      Deno.mkdirSync(join(tmpRoot, 'readonly'));
-      Deno.chmodSync(join(tmpRoot, 'readonly'), 0o555);
+      mkdirSync(join(tmpRoot, 'readonly'));
+      chmodSync(join(tmpRoot, 'readonly'), 0o555);
       const stderr = await runCreateExpectingFailure(
         join(packageDir, 'src', 'cli.ts'),
         join(tmpRoot, 'readonly'),
         'sample-app',
       );
-      assert(stderr.includes('Permission denied') || stderr.includes('Failed to'), stderr);
-      assert(stderr.includes('sample-app'), stderr);
+      expect(
+        stderr.includes('Permission denied') || stderr.includes('Failed to'),
+        stderr,
+      ).toBeTruthy();
+      expect(stderr.includes('sample-app'), stderr).toBeTruthy();
       assertCleanError(stderr);
     } finally {
-      Deno.chmodSync(join(tmpRoot, 'readonly'), 0o755);
-      Deno.removeSync(tmpRoot, { recursive: true });
+      chmodSync(join(tmpRoot, 'readonly'), 0o755);
+      rmSync(tmpRoot, { recursive: true });
     }
   },
-});
+);
 
-Deno.test('packed CLI retains every starter template, including dotfiles', async () => {
-  const tmpRoot = Deno.makeTempDirSync({ prefix: 'open-create-packed-' });
+test('packed CLI retains every starter template, including dotfiles', async () => {
+  const tmpRoot = mkdtempSync(join(tmpdir(), 'open-create-packed-'));
   try {
     // The packed payload is produced by the release toolchain (vp pack via
     // publish-npm dry-run; `deno pack` retired with the A1 toolchain swap).
     // The dry run writes the same payload tarballs the publish flow ships.
     const repoRoot = join(packageDir, '..', '..');
-    const pack = await new Deno.Command('pnpm', {
-      args: ['--dir', 'tools/release', 'run', 'pack:dry-run'],
+    const pack = spawnSync('pnpm', ['--dir', 'tools/release', 'run', 'pack:dry-run'], {
       cwd: repoRoot,
-      stdout: 'piped',
-      stderr: 'piped',
-    }).output();
-    assertEquals(pack.code, 0, new TextDecoder().decode(pack.stderr));
+    });
+    expect(pack.status, pack.stderr.toString()).toEqual(0);
     const tarball = join(packageDir, `openelement-create-${CREATE_VERSION}.tgz`);
-    const unpack = await new Deno.Command('tar', {
-      args: ['-xzf', tarball, '-C', tmpRoot],
-      stdout: 'piped',
-      stderr: 'piped',
-    }).output();
-    assertEquals(unpack.code, 0, new TextDecoder().decode(unpack.stderr));
+    const unpack = spawnSync('tar', ['-xzf', tarball, '-C', tmpRoot]);
+    expect(unpack.status, unpack.stderr.toString()).toEqual(0);
     await runCreate(join(tmpRoot, 'package', 'src', 'cli.js'), tmpRoot, 'sample-app');
-    assert(existsSync(join(tmpRoot, 'sample-app', '.gitignore')));
-    assert(existsSync(join(tmpRoot, 'sample-app', 'app', 'routes', 'blog', 'welcome.tsx')));
-    assert(existsSync(join(tmpRoot, 'sample-app', 'README.md')));
-    assert(existsSync(join(tmpRoot, 'sample-app', 'app', 'components', 'page-home.tsx')));
+    expect(existsSync(join(tmpRoot, 'sample-app', '.gitignore'))).toBeTruthy();
+    expect(
+      existsSync(join(tmpRoot, 'sample-app', 'app', 'routes', 'blog', 'welcome.tsx')),
+    ).toBeTruthy();
+    expect(existsSync(join(tmpRoot, 'sample-app', 'README.md'))).toBeTruthy();
+    expect(
+      existsSync(join(tmpRoot, 'sample-app', 'app', 'components', 'page-home.tsx')),
+    ).toBeTruthy();
     // No JSR bridge may ship in packed scaffolds, not just workspace runs.
-    assert(existsSync(join(tmpRoot, 'sample-app', 'package.json')));
-    assertFalse(existsSync(join(tmpRoot, 'sample-app', '.npmrc')));
+    expect(existsSync(join(tmpRoot, 'sample-app', 'package.json'))).toBeTruthy();
+    expect(existsSync(join(tmpRoot, 'sample-app', '.npmrc'))).toBeFalsy();
   } finally {
-    Deno.removeSync(tmpRoot, { recursive: true });
+    rmSync(tmpRoot, { recursive: true });
   }
-});
+}, 300_000);

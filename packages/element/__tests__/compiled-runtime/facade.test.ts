@@ -16,14 +16,9 @@
  *     OE_JSX_OUTSIDE_COMPILER)
  */
 
-import {
-  assert,
-  assertEquals,
-  assertInstanceOf,
-  assertStrictEquals,
-  assertStringIncludes,
-  assertThrows,
-} from '@std/assert';
+import { readFile } from 'node:fs/promises';
+import { expect, test } from 'vitest';
+import { assertThrowsIncludes } from '../../../../tests/lib/vitest-asserts.ts';
 import { FacadeEvent, installFacadeDom, mountSerialized, toHtml } from './facade-dom.ts';
 import { testProgram } from './test-program.ts';
 
@@ -37,8 +32,9 @@ type BoundaryInstance = InstanceType<typeof ErrorBoundary>;
 const { OpenElementError } = await import('../../src/internal/core/errors.ts');
 
 const FIXTURE_PROGRAM = JSON.parse(
-  await Deno.readTextFile(
+  await readFile(
     new URL('../../__fixtures__/compiled-element-v1/expected-program.json', import.meta.url),
+    'utf8',
   ),
 );
 
@@ -77,12 +73,11 @@ function shadowOf(element: AnyElement): AnyElement {
   return element.shadowRoot ?? element;
 }
 
-Deno.test('facade: fresh connect renders the compiled program end to end', () => {
+test('facade: fresh connect renders the compiled program end to end', () => {
   const element = freshCounter() as AnyElement;
-  assertEquals(element.count, 0);
-  assertEquals(element.label, 'ready');
-  assertEquals(
-    toHtml(shadowOf(element).childNodes[0]),
+  expect(element.count).toEqual(0);
+  expect(element.label).toEqual('ready');
+  expect(toHtml(shadowOf(element).childNodes[0])).toEqual(
     '<div class="proof">' +
       '<h1>Count: <!--oe:p0-->0</h1>' +
       '<input value="ready">' +
@@ -93,60 +88,60 @@ Deno.test('facade: fresh connect renders the compiled program end to end', () =>
   );
 });
 
-Deno.test('facade: attribute writes convert and drive Parts and Regions', () => {
+test('facade: attribute writes convert and drive Parts and Regions', () => {
   const element = freshCounter() as AnyElement;
   element.setAttribute('count', '5');
-  assertEquals(element.count, 5);
-  assertStringIncludes(toHtml(shadowOf(element)), '<h1>Count: <!--oe:p0-->5</h1>');
-  assertStringIncludes(toHtml(shadowOf(element)), '<p class="parity">positive</p>');
+  expect(element.count).toEqual(5);
+  expect(toHtml(shadowOf(element))).toContain('<h1>Count: <!--oe:p0-->5</h1>');
+  expect(toHtml(shadowOf(element))).toContain('<p class="parity">positive</p>');
 });
 
-Deno.test('facade: reflect properties mirror post-connect writes to attributes', () => {
+test('facade: reflect properties mirror post-connect writes to attributes', () => {
   const element = freshCounter() as AnyElement;
   element.count = 7;
-  assertEquals(element.getAttribute('count'), '7');
+  expect(element.getAttribute('count')).toEqual('7');
   // The mirrored attribute does not re-enter the property (no loop).
-  assertEquals(element.count, 7);
+  expect(element.count).toEqual(7);
   // label does not reflect.
   element.label = 'changed';
-  assertEquals(element.getAttribute('label'), null);
-  assertEquals((shadowOf(element).childNodes[0].childNodes[1] as AnyElement).value, 'changed');
+  expect(element.getAttribute('label')).toEqual(null);
+  expect((shadowOf(element).childNodes[0].childNodes[1] as AnyElement).value).toEqual('changed');
 });
 
-Deno.test('facade: SSR-delivered attributes win at connect; defaults restore on removal', () => {
+test('facade: SSR-delivered attributes win at connect; defaults restore on removal', () => {
   const element = freshCounter({ count: '41' }) as AnyElement;
-  assertEquals(element.count, 41);
-  assertStringIncludes(toHtml(shadowOf(element)), '<h1>Count: <!--oe:p0-->41</h1>');
+  expect(element.count).toEqual(41);
+  expect(toHtml(shadowOf(element))).toContain('<h1>Count: <!--oe:p0-->41</h1>');
   element.removeAttribute('count');
   // Removal restores the compiled default and the reflect mirror re-appears.
-  assertEquals(element.count, 0);
-  assertEquals(element.getAttribute('count'), '0');
+  expect(element.count).toEqual(0);
+  expect(element.getAttribute('count')).toEqual('0');
 });
 
-Deno.test('facade: event handlers wire to instance methods and survive reconnect once', () => {
+test('facade: event handlers wire to instance methods and survive reconnect once', () => {
   const element = freshCounter() as AnyElement;
   const button = () => shadowOf(element).childNodes[0].childNodes[2] as AnyElement;
   const listenerCount = () => (button().listeners.get('click') ?? []).length;
 
-  assertEquals(listenerCount(), 1);
+  expect(listenerCount()).toEqual(1);
   button().dispatchEvent(new FacadeEvent('click'));
-  assertEquals(element.count, 1);
-  assertStringIncludes(toHtml(shadowOf(element)), '<p class="parity">positive</p>');
+  expect(element.count).toEqual(1);
+  expect(toHtml(shadowOf(element))).toContain('<p class="parity">positive</p>');
 
   dom.document.body.removeChild(element);
-  assertEquals(listenerCount(), 0, 'disconnect removes the listener');
+  expect(listenerCount(), 'disconnect removes the listener').toEqual(0);
   dom.document.body.appendChild(element);
-  assertEquals(listenerCount(), 1, 'reconnect adds exactly one listener');
+  expect(listenerCount(), 'reconnect adds exactly one listener').toEqual(1);
   button().dispatchEvent(new FacadeEvent('click'));
-  assertEquals(element.count, 2, 'one dispatch fires the handler exactly once');
+  expect(element.count, 'one dispatch fires the handler exactly once').toEqual(2);
 });
 
-Deno.test('facade: claim from serialized HTML preserves node identity', () => {
+test('facade: claim from serialized HTML preserves node identity', () => {
   const serialized = renderDsd('oe-program-counter', {
     componentClass: ProgramCounter as unknown as CustomElementConstructor,
     props: { count: 3 },
   }).html;
-  assertStringIncludes(serialized, '<oe-program-counter count="3" data-oe-light>');
+  expect(serialized).toContain('<oe-program-counter count="3" data-oe-light>');
 
   let claimedDiv: unknown;
   let claimedH1: unknown;
@@ -157,19 +152,19 @@ Deno.test('facade: claim from serialized HTML preserves node identity', () => {
     claimedButton = (claimedDiv as AnyElement).childNodes[2];
   }) as AnyElement;
 
-  assertStrictEquals(element.childNodes[0], claimedDiv, 'claim does not re-allocate the root');
-  assertStrictEquals((element.childNodes[0] as AnyElement).childNodes[0], claimedH1);
-  assertStrictEquals((element.childNodes[0] as AnyElement).childNodes[2], claimedButton);
-  assertEquals(element.count, 3);
-  assertStringIncludes(toHtml(element), '<p class="parity">positive</p>');
+  expect(element.childNodes[0], 'claim does not re-allocate the root').toBe(claimedDiv);
+  expect((element.childNodes[0] as AnyElement).childNodes[0]).toBe(claimedH1);
+  expect((element.childNodes[0] as AnyElement).childNodes[2]).toBe(claimedButton);
+  expect(element.count).toEqual(3);
+  expect(toHtml(element)).toContain('<p class="parity">positive</p>');
 
   // The claimed DOM is live: handler + parts activate on the existing nodes.
   (claimedButton as AnyElement).dispatchEvent(new FacadeEvent('click'));
-  assertEquals(element.count, 4);
-  assertStringIncludes(toHtml(element), '<h1>Count: <!--oe:p0-->4</h1>');
+  expect(element.count).toEqual(4);
+  expect(toHtml(element)).toContain('<h1>Count: <!--oe:p0-->4</h1>');
 });
 
-Deno.test('facade: pre-upgrade capture replays one click after claim', () => {
+test('facade: pre-upgrade capture replays one click after claim', () => {
   const serialized = renderDsd('oe-program-counter', {
     componentClass: ProgramCounter as unknown as CustomElementConstructor,
   }).html;
@@ -182,62 +177,65 @@ Deno.test('facade: pre-upgrade capture replays one click after claim', () => {
     ensurePreHydrationClickCapture(host as unknown as EventTarget);
     button = (host.childNodes[0] as AnyElement).childNodes[2];
     button.dispatchEvent(new FacadeEvent('click', { bubbles: true }));
-    assertEquals((host as AnyElement).count, 0, 'no handler runs before upgrade');
+    expect((host as AnyElement).count, 'no handler runs before upgrade').toEqual(0);
   }) as AnyElement;
 
-  assert(button !== undefined);
-  assertEquals(element.count, 1, 'the pre-upgrade click replays into the claimed handler');
+  expect(button !== undefined).toBeTruthy();
+  expect(element.count, 'the pre-upgrade click replays into the claimed handler').toEqual(1);
   // Replay is bounded: a second claim cycle does not re-fire the consumed event.
   dom.document.body.removeChild(element);
   dom.document.body.appendChild(element);
-  assertEquals(element.count, 1);
+  expect(element.count).toEqual(1);
 });
 
-Deno.test('facade: uncompiled classes fail closed at connect (OE_PROGRAM_MISSING)', () => {
+test('facade: uncompiled classes fail closed at connect (OE_PROGRAM_MISSING)', () => {
   class BareElement extends OpenElement {}
   dom.registry.define('oe-bare-element', BareElement as unknown as CustomElementConstructor);
   const element = dom.document.createElement('oe-bare-element');
-  const error = assertThrows(() => dom.document.body.appendChild(element), OpenElementError);
-  assertEquals(error.code, 'OE_PROGRAM_MISSING');
-  assertStringIncludes(error.message, 'BareElement');
-  assertStringIncludes(error.message, 'open:compiled-element');
+  const error = assertThrowsIncludes(
+    () => dom.document.body.appendChild(element),
+    OpenElementError,
+  );
+  expect(error.code).toEqual('OE_PROGRAM_MISSING');
+  expect(error.message).toContain('BareElement');
+  expect(error.message).toContain('open:compiled-element');
 });
 
-Deno.test('facade: a program-referenced handler missing on the instance fails closed', () => {
+test('facade: a program-referenced handler missing on the instance fails closed', () => {
   class Handlerless extends OpenElement {
     static __partProgram = FIXTURE_PROGRAM;
     static __compiledProperties = FIXTURE_PROGRAM.metadata.properties;
     static __elementMetadata = FIXTURE_PROGRAM.metadata;
     static observedAttributes = FIXTURE_PROGRAM.metadata.observedAttributes;
   }
-  const error = assertThrows(
+  const error = assertThrowsIncludes(
     () => new (Handlerless as unknown as new () => unknown)(),
     OpenElementError,
   );
-  assertEquals(error.code, 'OE_HANDLER_MISSING');
-  assertStringIncludes(error.message, '"increment"');
+  expect(error.code).toEqual('OE_HANDLER_MISSING');
+  expect(error.message).toContain('"increment"');
 });
 
-Deno.test('facade: the runtime JSX factory fails closed outside the compiler', () => {
-  const error = assertThrows(() => jsx('div', {}), OpenElementError);
-  assertEquals(error.code, 'OE_JSX_OUTSIDE_COMPILER');
-  assertStringIncludes(error.message, 'compiler pipeline');
+test('facade: the runtime JSX factory fails closed outside the compiler', () => {
+  const error = assertThrowsIncludes(() => jsx('div', {}), OpenElementError);
+  expect(error.code).toEqual('OE_JSX_OUTSIDE_COMPILER');
+  expect(error.message).toContain('compiler pipeline');
 });
 
-Deno.test('facade: renderDsd fails closed for uncompiled classes', () => {
+test('facade: renderDsd fails closed for uncompiled classes', () => {
   class LegacyClass {}
-  const error = assertThrows(
+  const error = assertThrowsIncludes(
     () =>
       renderDsd('oe-legacy', {
         componentClass: LegacyClass as unknown as CustomElementConstructor,
       }),
     OpenElementError,
   );
-  assertEquals(error.code, 'OE_PROGRAM_MISSING');
-  assertStringIncludes(error.message, 'oe-legacy');
+  expect(error.code).toEqual('OE_PROGRAM_MISSING');
+  expect(error.message).toContain('oe-legacy');
 });
 
-Deno.test('facade: renderDsd serializes shadow programs per the program root kind', () => {
+test('facade: renderDsd serializes shadow programs per the program root kind', () => {
   const shadowProgram = testProgram({
     tag: 'oe-facade-shadow',
     rootMode: 'shadow-open',
@@ -275,8 +273,7 @@ Deno.test('facade: renderDsd serializes shadow programs per the program root kin
     componentClass: ShadowElement as unknown as CustomElementConstructor,
     props: { label: 'live' },
   }).html;
-  assertEquals(
-    html,
+  expect(html).toEqual(
     '<oe-facade-shadow label="live"><template shadowrootmode="open">' +
       '<span><!--oe:p0-->live</span>' +
       '</template></oe-facade-shadow>',
@@ -287,11 +284,11 @@ Deno.test('facade: renderDsd serializes shadow programs per the program root kin
   const element = mountSerialized(dom, html, (host) => {
     claimedSpan = host.shadowRoot!.childNodes[0];
   });
-  assertStrictEquals((element.shadowRoot as unknown as AnyElement).childNodes[0], claimedSpan);
-  assertEquals((element as AnyElement).label, 'live');
+  expect((element.shadowRoot as unknown as AnyElement).childNodes[0]).toBe(claimedSpan);
+  expect((element as AnyElement).label).toEqual('live');
 });
 
-Deno.test('facade: style Parts kebab-case camelCase declaration keys (#1056)', () => {
+test('facade: style Parts kebab-case camelCase declaration keys (#1056)', () => {
   const program = testProgram({
     tag: 'oe-facade-style',
     template: [{ k: 'el', tag: 'div', attrs: [], children: [] }],
@@ -318,10 +315,10 @@ Deno.test('facade: style Parts kebab-case camelCase declaration keys (#1056)', (
   dom.document.body.appendChild(element);
   (element as AnyElement).theme = { backgroundColor: 'red', 'font-size': '12px' };
   const div = element.childNodes[0] as AnyElement;
-  assertEquals(div.getAttribute('style'), 'background-color:red;font-size:12px');
+  expect(div.getAttribute('style')).toEqual('background-color:red;font-size:12px');
 });
 
-Deno.test('facade: ErrorBoundary exposes kernel-backed state and retry/reset', () => {
+test('facade: ErrorBoundary exposes kernel-backed state and retry/reset', () => {
   const program = testProgram({
     tag: 'oe-facade-boundary',
     template: [{ k: 'el', tag: 'div', attrs: [], children: [{ k: 'text', value: 'ok' }] }],
@@ -336,22 +333,22 @@ Deno.test('facade: ErrorBoundary exposes kernel-backed state and retry/reset', (
   const element = dom.document.createElement('oe-facade-boundary') as unknown as BoundaryInstance;
   dom.document.body.appendChild(element as never);
 
-  assertEquals(element.hasError, false);
+  expect(element.hasError).toEqual(false);
   element.catchError(new Error('boom'));
-  assertEquals(element.hasError, true);
-  assertEquals(element.error?.message, 'boom');
+  expect(element.hasError).toEqual(true);
+  expect(element.error?.message).toEqual('boom');
 
   element.retry();
-  assertEquals(element.hasError, false);
-  assertEquals(element.retryCount, 1);
+  expect(element.hasError).toEqual(false);
+  expect(element.retryCount).toEqual(1);
 
   element.catchError(new Error('again'));
   element.reset();
-  assertEquals(element.hasError, false);
-  assertEquals(element.retryCount, 0);
+  expect(element.hasError).toEqual(false);
+  expect(element.retryCount).toEqual(0);
 });
 
-Deno.test('facade: the kernel captures connect-time failures into the boundary service', () => {
+test('facade: the kernel captures connect-time failures into the boundary service', () => {
   const program = testProgram({
     tag: 'oe-facade-failing',
     template: [{ k: 'el', tag: 'div', attrs: [], children: [{ k: 'part', index: 0 }] }],
@@ -384,7 +381,7 @@ Deno.test('facade: the kernel captures connect-time failures into the boundary s
   const drifted = dom.document.createElement('div');
   drifted.appendChild(dom.document.createTextNode('drifted'));
   (element as unknown as AnyElement).appendChild(drifted);
-  assertThrows(() => dom.document.body.appendChild(element as never));
-  assertEquals(element.hasError, true);
-  assertInstanceOf(element.error, OpenElementError);
+  assertThrowsIncludes(() => dom.document.body.appendChild(element as never));
+  expect(element.hasError).toEqual(true);
+  expect(element.error).toBeInstanceOf(OpenElementError);
 });

@@ -1,29 +1,29 @@
-import { assertEquals, assertInstanceOf } from '@std/assert';
+import { expect, test } from 'vitest';
 import { OpenElement } from '../src/index.ts';
 import * as elementSurface from '../src/index.ts';
 
-Deno.test('@openelement/element exports OpenElement facade', () => {
+test('@openelement/element exports OpenElement facade', () => {
   const element = new OpenElement();
 
-  assertInstanceOf(element, OpenElement);
+  expect(element).toBeInstanceOf(OpenElement);
 });
 
-Deno.test('@openelement/element preserves light DOM opt-in static contract', () => {
+test('@openelement/element preserves light DOM opt-in static contract', () => {
   class LightElement extends OpenElement {
     static override renderMode = 'light' as const;
   }
 
-  assertEquals(LightElement.renderMode, 'light');
+  expect(LightElement.renderMode).toEqual('light');
 });
 
-Deno.test('@openelement/element exports the compiled pipeline entries', () => {
+test('@openelement/element exports the compiled pipeline entries', () => {
   // 0.44: the functional authoring helper (defineElement) and the runtime JSX
   // factories (For/jsx/...) were removed with the legacy renderer. The public
   // pipeline entries are the compiled server render and the claim bootstrap.
-  assertEquals('defineElement' in elementSurface, false);
-  assertEquals('defineLayout' in elementSurface, false);
-  assertEquals('For' in elementSurface, false);
-  assertEquals('jsx' in elementSurface, false);
-  assertEquals(typeof elementSurface.renderDsd, 'function');
-  assertEquals(typeof elementSurface.ensurePreHydrationClickCapture, 'function');
+  expect('defineElement' in elementSurface).toEqual(false);
+  expect('defineLayout' in elementSurface).toEqual(false);
+  expect('For' in elementSurface).toEqual(false);
+  expect('jsx' in elementSurface).toEqual(false);
+  expect(typeof elementSurface.renderDsd).toEqual('function');
+  expect(typeof elementSurface.ensurePreHydrationClickCapture).toEqual('function');
 });

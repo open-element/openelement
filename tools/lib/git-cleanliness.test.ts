@@ -1,13 +1,13 @@
-import { assertEquals } from '@std/assert';
+import { expect, test } from 'vitest';
 import { filterNonEvidenceDirty, parsePorcelainPath } from './git-cleanliness.ts';
 
-Deno.test('git cleanliness parses renamed and ordinary porcelain paths', () => {
-  assertEquals(parsePorcelainPath(' M tools/a.ts'), 'tools/a.ts');
-  assertEquals(parsePorcelainPath('R  old.ts -> docs/release/new.ts'), 'docs/release/new.ts');
+test('git cleanliness parses renamed and ordinary porcelain paths', () => {
+  expect(parsePorcelainPath(' M tools/a.ts')).toEqual('tools/a.ts');
+  expect(parsePorcelainPath('R  old.ts -> docs/release/new.ts')).toEqual('docs/release/new.ts');
 });
 
-Deno.test('git cleanliness uses one normalized evidence allowlist', () => {
-  assertEquals(
+test('git cleanliness uses one normalized evidence allowlist', () => {
+  expect(
     filterNonEvidenceDirty(
       [
         ' M docs/release/evidence.md',
@@ -16,6 +16,5 @@ Deno.test('git cleanliness uses one normalized evidence allowlist', () => {
         ' M tools/real-change.ts',
       ].join('\n'),
     ),
-    [' M tools/real-change.ts'],
-  );
+  ).toEqual([' M tools/real-change.ts']);
 });

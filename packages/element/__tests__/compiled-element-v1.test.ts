@@ -17,7 +17,10 @@
  * harness and fixtures work while the new vertical behavior is absent.
  */
 
-import { assert, assertEquals, assertStringIncludes, assertThrows } from '@std/assert';
+import { readFileSync } from 'node:fs';
+import { readFile } from 'node:fs/promises';
+import { describe, expect, test } from 'vitest';
+import { assertThrowsIncludes } from '../../../tests/lib/vitest-asserts.ts';
 import type { Plugin } from 'vite';
 import {
   COMPILED_MODULE_ABI_VERSION,
@@ -26,6 +29,13 @@ import {
 import type { StaticSidecarDescriptor } from '../src/internal/compiler/semantic-core/module-analysis.ts';
 
 const FIXTURE_DIR = new URL('../__fixtures__/compiled-element-v1/', import.meta.url);
+
+// Module-level loads (top-level await): the suites below shared single loads
+// in their Deno parent bodies; vitest describe bodies are synchronous, so the
+// loads hoist here — identical semantics (one load, cached modules).
+const { compiledElementPlugin } = await loadPluginModule();
+const { compileElementProgram, CompiledElementError } =
+  await import('../src/internal/compiler/semantic-core/compile.ts');
 
 /**
  * The island sidecar descriptor a host framework injects (#1468): the
@@ -39,7 +49,11 @@ const ISLAND_SIDECAR: StaticSidecarDescriptor = {
 };
 
 async function readFixture(name: string): Promise<string> {
-  return await Deno.readTextFile(new URL(name, FIXTURE_DIR));
+  return await readFile(new URL(name, FIXTURE_DIR), 'utf8');
+}
+
+function readFixtureSync(name: string): string {
+  return readFileSync(new URL(name, FIXTURE_DIR), 'utf8');
 }
 
 type PluginModule = typeof import('../src/internal/compiler/plugin.ts');
@@ -70,7 +84,10 @@ function failingContext(): TransformContext & { messages: string[] } {
 type TransformHook = (this: TransformContext, code: string, id: string) => string | null;
 
 function transformOf(plugin: Plugin): TransformHook {
-  assert(typeof plugin.transform === 'function', 'plugin must expose a transform hook');
+  expect(
+    typeof plugin.transform === 'function',
+    'plugin must expose a transform hook',
+  ).toBeTruthy();
   return plugin.transform as unknown as TransformHook;
 }
 
@@ -80,59 +97,60 @@ function decodeBase64(value: string): string {
   return new TextDecoder().decode(bytes);
 }
 
-Deno.test('compiled-element v1 - harness sanity (fixtures load)', async () => {
+test('compiled-element v1 - harness sanity (fixtures load)', async () => {
   const counter = await readFixture('counter.tsx');
   const expected = await readFixture('expected-program.json');
-  assert(counter.includes("@element('oe-program-counter')"));
-  assertEquals(JSON.parse(expected).tag, 'oe-program-counter');
+  expect(counter.includes("@element('oe-program-counter')")).toBeTruthy();
+  expect(JSON.parse(expected).tag).toEqual('oe-program-counter');
 });
 
-Deno.test('compiled-element v1 - the standalone compiler hook has its canonical name', async () => {
+test('compiled-element v1 - the standalone compiler hook has its canonical name', () => {
   // The default Router pipeline (open:core) embeds the compiler instead of
   // registering this standalone plugin; that composition is pinned by the
-  // adapter-side openPlugin ordering tests.
-  const { compiledElementPlugin } = await loadPluginModule();
-  assertEquals(compiledElementPlugin().name, 'open:compiled-element');
+  // adapter-side openPlugin ordering tests. loadPluginModule hoists to the
+  // module-level top-level await above.
+  expect(compiledElementPlugin().name).toEqual('open:compiled-element');
 });
 
-Deno.test('compiled-element v1 - fixture transforms through the Vite hook', async (t) => {
-  const { compiledElementPlugin } = await loadPluginModule();
+describe('compiled-element v1 - fixture transforms through the Vite hook', () => {
   const plugin = compiledElementPlugin();
   const transform = transformOf(plugin);
-  const source = await readFixture('counter.tsx');
+  const source = readFixtureSync('counter.tsx');
   const id = '/project/app/islands/counter.tsx';
 
+  // One shared emission across the steps (Deno parent scope): a single test
+  // produces it, later tests pin its properties in the same order.
   let emitted: string | null = null;
-  await t.step('transform returns generated code', () => {
+  test('transform returns generated code', () => {
     emitted = transform.call(failingContext(), source, id);
-    assert(typeof emitted === 'string');
-    assertStringIncludes(emitted, '__partProgram');
+    expect(typeof emitted === 'string').toBeTruthy();
+    expect(emitted).toContain('__partProgram');
   });
 
   const programLiteral = (code: string): string => {
     const marker = 'const __partProgram = ';
     const start = code.indexOf(marker);
-    assert(start >= 0, 'generated code must embed the Part Program literal');
+    expect(start >= 0, 'generated code must embed the Part Program literal').toBeTruthy();
     const end = code.indexOf(';', start);
     return code.slice(start + marker.length, end);
   };
 
-  await t.step('emitted program deep-equals the frozen expected program', async () => {
-    const expected = JSON.parse(await readFixture('expected-program.json'));
+  test('emitted program deep-equals the frozen expected program', () => {
+    const expected = JSON.parse(readFixtureSync('expected-program.json'));
     // The wire payload omits the compile-time sourceMap provenance; the
     // frozen fixture keeps it for the in-memory artifact contract.
     const { sourceMap: _provenance, ...wireExpected } = expected;
-    assertEquals(JSON.parse(programLiteral(emitted!)), wireExpected);
+    expect(JSON.parse(programLiteral(emitted!))).toEqual(wireExpected);
   });
 
-  await t.step('emitted metadata preserves @property reflection decisions (R2)', () => {
+  test('emitted metadata preserves @property reflection decisions (R2)', () => {
     const marker = 'const __compiledProperties = ';
     const start = emitted!.indexOf(marker);
-    assert(start >= 0, 'generated code must embed compiled-property metadata');
+    expect(start >= 0, 'generated code must embed compiled-property metadata').toBeTruthy();
     const end = emitted!.indexOf(';', start);
     const metadata = JSON.parse(emitted!.slice(start + marker.length, end));
     // Exact fixture decisions: count reflected; label and items not reflected.
-    assertEquals(metadata, [
+    expect(metadata).toEqual([
       {
         name: 'count',
         attribute: 'count',
@@ -162,28 +180,26 @@ Deno.test('compiled-element v1 - fixture transforms through the Vite hook', asyn
       },
     ]);
     // Compile-time data only: no runtime reflection behavior is emitted.
-    assertEquals(emitted!.includes('attributeChangedCallback'), false);
-    assertStringIncludes(
-      emitted!,
+    expect(emitted!.includes('attributeChangedCallback')).toEqual(false);
+    expect(emitted!).toContain(
       'static __compiledProperties: typeof __compiledProperties = __compiledProperties;',
     );
-    assertStringIncludes(emitted!, 'static props: typeof __compiledProps = __compiledProps;');
-    assertStringIncludes(
-      emitted!,
+    expect(emitted!).toContain('static props: typeof __compiledProps = __compiledProps;');
+    expect(emitted!).toContain(
       'static observedAttributes: typeof __observedAttributes = __observedAttributes;',
     );
   });
 
-  await t.step('program carries static structure plus typed Part/Region instructions', () => {
+  test('program carries static structure plus typed Part/Region instructions', () => {
     const program = JSON.parse(programLiteral(emitted!));
-    assertEquals(program.version, 1);
+    expect(program.version).toEqual(1);
     const kinds = program.parts.map((p: { k: string }) => p.k).sort();
-    assertEquals(kinds, ['each', 'event', 'prop', 'text', 'when']);
+    expect(kinds).toEqual(['each', 'event', 'prop', 'text', 'when']);
     // instruction count = typed parts; static structure lives in the template
-    assertEquals(program.parts.length, 5);
+    expect(program.parts.length).toEqual(5);
   });
 
-  await t.step('emitted code contains no VNode/binding/hydration fallback vocabulary', () => {
+  test('emitted code contains no VNode/binding/hydration fallback vocabulary', () => {
     for (const token of [
       'VNode',
       'BindingDescriptor',
@@ -191,55 +207,52 @@ Deno.test('compiled-element v1 - fixture transforms through the Vite hook', asyn
       'HydrationScope',
       'createElement(',
     ]) {
-      assertEquals(emitted!.includes(token), false, `generated code must not contain ${token}`);
+      expect(emitted!.includes(token), `generated code must not contain ${token}`).toEqual(false);
     }
-    assertStringIncludes(emitted!, 'the runtime JSX render path is not available');
+    expect(emitted!).toContain('the runtime JSX render path is not available');
   });
 
-  await t.step('generated banner stamps protocol versions, not release names', () => {
+  test('generated banner stamps protocol versions, not release names', () => {
     const banner = emitted!.split('\n')[0];
-    assertStringIncludes(
-      banner,
+    expect(banner).toContain(
       `// <auto-generated by open:compiled-element; part-program format ${PART_PROGRAM_VERSION} / module ABI ${COMPILED_MODULE_ABI_VERSION} - do not edit>`,
     );
     // The banner carries protocol versions only — never a package release name.
-    assertEquals(
-      /v?\d+\.\d+\.\d+/.test(banner),
+    expect(/v?\d+\.\d+\.\d+/.test(banner), `banner leaked a release version: ${banner}`).toEqual(
       false,
-      `banner leaked a release version: ${banner}`,
     );
   });
 
-  await t.step('re-running the transform yields byte-identical output', () => {
+  test('re-running the transform yields byte-identical output', () => {
     const again = transform.call(failingContext(), source, id);
-    assertEquals(again, emitted);
+    expect(again).toEqual(emitted);
   });
 
-  await t.step('inline source map carries x_openElement v1 program source records', async () => {
+  test('inline source map carries x_openElement v1 program source records', () => {
     const marker = '//# sourceMappingURL=data:application/json;base64,';
     const line = emitted!.split('\n').find((candidate) => candidate.startsWith(marker));
-    assert(line, 'generated code must embed an inline base64 source map');
+    expect(line, 'generated code must embed an inline base64 source map').toBeTruthy();
     const map = JSON.parse(decodeBase64(line.slice(marker.length)));
-    assertEquals(map.version, 3);
-    assertEquals(map.sources, [id]);
+    expect(map.version).toEqual(3);
+    expect(map.sources).toEqual([id]);
     // sourcesContent carries the original TSX source verbatim.
-    assertEquals(map.sourcesContent, [source]);
+    expect(map.sourcesContent).toEqual([source]);
     // The frozen fixture program is the source of truth for the v1 records:
     // x_openElement must deep-equal its sourceMap (file + every record).
-    const expected = JSON.parse(await readFixture('expected-program.json'));
-    assertEquals(map.x_openElement.version, 1);
-    assertEquals(map.x_openElement, expected.sourceMap);
-    assertEquals(map.x_openElement.records.length, expected.sourceMap.records.length);
+    const expected = JSON.parse(readFixtureSync('expected-program.json'));
+    expect(map.x_openElement.version).toEqual(1);
+    expect(map.x_openElement).toEqual(expected.sourceMap);
+    expect(map.x_openElement.records.length).toEqual(expected.sourceMap.records.length);
   });
 
-  await t.step('measurement evidence is recorded', () => {
+  test('measurement evidence is recorded', () => {
     const programJson = programLiteral(emitted!);
     const generatedBytes = new TextEncoder().encode(emitted!).length;
     const programBytes = new TextEncoder().encode(programJson).length;
     const instructionCount = JSON.parse(programJson).parts.length;
     // Frozen program evidence (alpha.0 fixture): regenerated only by changing the
     // fixture grammar. These are evidence, not a performance claim.
-    assertEquals(instructionCount, 5);
+    expect(instructionCount).toEqual(5);
     console.log(
       JSON.stringify({
         proof: 'adapter-compiler',
@@ -250,22 +263,21 @@ Deno.test('compiled-element v1 - fixture transforms through the Vite hook', asyn
     );
   });
 
-  await t.step('files outside the program grammar marker pass through untouched', () => {
+  test('files outside the program grammar marker pass through untouched', () => {
     const result = transform.call(
       failingContext(),
       'export class Plain { render() { return null; } }',
       '/project/app/components/plain.tsx',
     );
-    assertEquals(result, null);
+    expect(result).toEqual(null);
   });
 });
 
-Deno.test('compiled-element v1 - unsupported syntax fails closed with located diagnostics', async (t) => {
-  const { compiledElementPlugin } = await loadPluginModule();
+describe('compiled-element v1 - unsupported syntax fails closed with located diagnostics', () => {
   const transform = transformOf(compiledElementPlugin());
 
-  await t.step('spread attributes are rejected with file/line location', async () => {
-    const source = await readFixture('unsupported-spread.tsx');
+  test('spread attributes are rejected with file/line location', () => {
+    const source = readFixtureSync('unsupported-spread.tsx');
     const ctx = failingContext();
     let thrown: Error | null = null;
     try {
@@ -273,15 +285,15 @@ Deno.test('compiled-element v1 - unsupported syntax fails closed with located di
     } catch (err) {
       thrown = err as Error;
     }
-    assert(thrown, 'transform must throw for unsupported syntax');
-    assertEquals(ctx.messages.length, 1);
+    expect(thrown, 'transform must throw for unsupported syntax').toBeTruthy();
+    expect(ctx.messages.length).toEqual(1);
     const message = ctx.messages[0];
-    assertStringIncludes(message, 'unsupported-spread.tsx:');
-    assertStringIncludes(message, 'OEC9');
-    assertStringIncludes(message.toLowerCase(), 'spread');
+    expect(message).toContain('unsupported-spread.tsx:');
+    expect(message).toContain('OEC9');
+    expect(message.toLowerCase()).toContain('spread');
   });
 
-  await t.step('unknown decorators on an OpenElement class fail closed', () => {
+  test('unknown decorators on an OpenElement class fail closed', () => {
     const source = [
       "import { element, OpenElement, property } from '@openelement/element';",
       'declare function mystery(): ClassDecorator;',
@@ -298,12 +310,12 @@ Deno.test('compiled-element v1 - unsupported syntax fails closed with located di
     } catch (err) {
       thrown = err as Error;
     }
-    assert(thrown, 'transform must throw for unknown decorators');
-    assertStringIncludes(ctx.messages[0], 'mystery.tsx:');
-    assertStringIncludes(ctx.messages[0].toLowerCase(), 'decorator');
+    expect(thrown, 'transform must throw for unknown decorators').toBeTruthy();
+    expect(ctx.messages[0]).toContain('mystery.tsx:');
+    expect(ctx.messages[0].toLowerCase()).toContain('decorator');
   });
 
-  await t.step('classes not extending OpenElement fail closed', () => {
+  test('classes not extending OpenElement fail closed', () => {
     const source = [
       "import { element } from '@openelement/element';",
       "@element('oe-proof-alien')",
@@ -318,11 +330,11 @@ Deno.test('compiled-element v1 - unsupported syntax fails closed with located di
     } catch (err) {
       thrown = err as Error;
     }
-    assert(thrown, 'transform must throw for non-OpenElement base classes');
-    assertStringIncludes(ctx.messages[0], 'OpenElement');
+    expect(thrown, 'transform must throw for non-OpenElement base classes').toBeTruthy();
+    expect(ctx.messages[0]).toContain('OpenElement');
   });
 
-  await t.step('path-addressed fixed sinks after dynamic anchors fail closed', () => {
+  test('path-addressed fixed sinks after dynamic anchors fail closed', () => {
     const source = [
       "import { element, OpenElement, property } from '@openelement/element';",
       "@element('oe-proof-unsafe-path')",
@@ -335,15 +347,15 @@ Deno.test('compiled-element v1 - unsupported syntax fails closed with located di
       '}',
     ].join('\n');
     const ctx = failingContext();
-    assertThrows(
+    assertThrowsIncludes(
       () => transform.call(ctx, source, '/project/app/islands/unsafe-path.tsx'),
       Error,
       'OEC9015',
     );
-    assertStringIncludes(ctx.messages[0], 'dynamic anchor');
+    expect(ctx.messages[0]).toContain('dynamic anchor');
   });
 
-  await t.step('duplicate static and dynamic attribute sinks fail closed', () => {
+  test('duplicate static and dynamic attribute sinks fail closed', () => {
     const source = [
       "import { element, OpenElement, property } from '@openelement/element';",
       "@element('oe-proof-duplicate-attribute')",
@@ -353,15 +365,15 @@ Deno.test('compiled-element v1 - unsupported syntax fails closed with located di
       '}',
     ].join('\n');
     const ctx = failingContext();
-    assertThrows(
+    assertThrowsIncludes(
       () => transform.call(ctx, source, '/project/app/islands/duplicate-attribute.tsx'),
       Error,
       'duplicate attribute',
     );
-    assertStringIncludes(ctx.messages[0], 'OEC9011');
+    expect(ctx.messages[0]).toContain('OEC9011');
   });
 
-  await t.step('void elements with children fail closed', () => {
+  test('void elements with children fail closed', () => {
     const source = [
       "import { element, OpenElement, property } from '@openelement/element';",
       "@element('oe-proof-void-children')",
@@ -370,15 +382,15 @@ Deno.test('compiled-element v1 - unsupported syntax fails closed with located di
       '}',
     ].join('\n');
     const ctx = failingContext();
-    assertThrows(
+    assertThrowsIncludes(
       () => transform.call(ctx, source, '/project/app/islands/void-children.tsx'),
       Error,
       'void element',
     );
-    assertStringIncludes(ctx.messages[0], 'OEC9013');
+    expect(ctx.messages[0]).toContain('OEC9013');
   });
 
-  await t.step('event-looking attribute sinks fail closed', () => {
+  test('event-looking attribute sinks fail closed', () => {
     const source = [
       "import { element, OpenElement, property } from '@openelement/element';",
       "@element('oe-proof-unsafe-attribute')",
@@ -388,107 +400,99 @@ Deno.test('compiled-element v1 - unsupported syntax fails closed with located di
       '}',
     ].join('\n');
     const ctx = failingContext();
-    assertThrows(
+    assertThrowsIncludes(
       () => transform.call(ctx, source, '/project/app/islands/unsafe-attribute.tsx'),
       Error,
       'unsafe',
     );
-    assertStringIncludes(ctx.messages[0], 'OEC9011');
+    expect(ctx.messages[0]).toContain('OEC9011');
   });
 
-  await t.step(
-    '=== ternary conditions compile; non-literal comparisons still fail closed (#1372)',
-    () => {
-      // The old fixture (`this.count === 1 ? … : …`) failed only because `===`
-      // was outside the seed operator set; with #1372 it is a valid program.
-      const admitted = [
-        "import { element, OpenElement, property } from '@openelement/element';",
-        "@element('oe-proof-equals-ternary')",
-        'export class EqualsTernary extends OpenElement {',
-        '  @property({ reflect: false }) count = 0;',
-        '  render() { return <div>{this.count === 1 ? <p>one</p> : <p>other</p>}</div>; }',
-        '}',
-      ].join('\n');
-      const okCtx = failingContext();
-      transform.call(okCtx, admitted, '/project/app/islands/equals-ternary.tsx');
-      assertEquals(okCtx.messages.length, 0, '=== ternary condition should compile (#1372)');
+  test('=== ternary conditions compile; non-literal comparisons still fail closed (#1372)', () => {
+    // The old fixture (`this.count === 1 ? … : …`) failed only because `===`
+    // was outside the seed operator set; with #1372 it is a valid program.
+    const admitted = [
+      "import { element, OpenElement, property } from '@openelement/element';",
+      "@element('oe-proof-equals-ternary')",
+      'export class EqualsTernary extends OpenElement {',
+      '  @property({ reflect: false }) count = 0;',
+      '  render() { return <div>{this.count === 1 ? <p>one</p> : <p>other</p>}</div>; }',
+      '}',
+    ].join('\n');
+    const okCtx = failingContext();
+    transform.call(okCtx, admitted, '/project/app/islands/equals-ternary.tsx');
+    expect(okCtx.messages.length, '=== ternary condition should compile (#1372)').toEqual(0);
 
-      // The right-hand side must stay a literal: comparing two properties is
-      // outside the grammar and fails closed.
-      const rejected = [
-        "import { element, OpenElement, property } from '@openelement/element';",
-        "@element('oe-proof-non-literal-condition')",
-        'export class NonLiteralCondition extends OpenElement {',
-        '  @property({ reflect: false }) count = 0;',
-        '  @property({ reflect: false }) limit = 10;',
-        '  render() { return <div>{this.count > this.limit && <p>over</p>}</div>; }',
-        '}',
-      ].join('\n');
-      const ctx = failingContext();
-      assertThrows(
-        () => transform.call(ctx, rejected, '/project/app/islands/non-literal-condition.tsx'),
-        Error,
-        'OEC9013',
-      );
-      assertStringIncludes(ctx.messages[0], 'OEC9013');
-    },
-  );
+    // The right-hand side must stay a literal: comparing two properties is
+    // outside the grammar and fails closed.
+    const rejected = [
+      "import { element, OpenElement, property } from '@openelement/element';",
+      "@element('oe-proof-non-literal-condition')",
+      'export class NonLiteralCondition extends OpenElement {',
+      '  @property({ reflect: false }) count = 0;',
+      '  @property({ reflect: false }) limit = 10;',
+      '  render() { return <div>{this.count > this.limit && <p>over</p>}</div>; }',
+      '}',
+    ].join('\n');
+    const ctx = failingContext();
+    assertThrowsIncludes(
+      () => transform.call(ctx, rejected, '/project/app/islands/non-literal-condition.tsx'),
+      Error,
+      'OEC9013',
+    );
+    expect(ctx.messages[0]).toContain('OEC9013');
+  });
 
-  await t.step(
-    'list Regions admit multi-field item slots and fail closed on non-item expressions',
-    async () => {
-      const { compileElementProgram } =
-        await import('../src/internal/compiler/semantic-core/compile.ts');
-      // alpha.8: item templates carry one ival/iattr slot per item field — a row
-      // may bind {item.text} twice and per-item attributes (id, href, ...).
-      const source = [
-        "import { element, OpenElement, property } from '@openelement/element';",
-        "@element('oe-proof-multi-field')",
-        'export class MultiField extends OpenElement {',
-        "  @property({ reflect: false }) items = [{ id: 'a', text: 'alpha', link: '/a' }];",
-        '  render() {',
-        '    return <ul>{this.items.map((item) => <li key={item.id} id={item.id}>{item.text}{item.text}<a href={item.link}>{item.text}</a></li>)}</ul>;',
-        '  }',
-        '}',
-      ].join('\n');
-      const program = compileElementProgram(source, '/project/app/islands/multi-field.tsx').program;
-      const each = program.parts.find((part: { k: string }) => part.k === 'each') as
-        | {
-            field?: string;
-            item: unknown[];
-          }
-        | undefined;
-      assert(each, 'each Region must exist');
-      assertEquals(
-        each.field,
-        undefined,
-        'multi-field templates omit the Region field restatement',
-      );
-      assert(JSON.stringify(each.item).includes('"iattrs"'));
+  test('list Regions admit multi-field item slots and fail closed on non-item expressions', async () => {
+    const { compileElementProgram } =
+      await import('../src/internal/compiler/semantic-core/compile.ts');
+    // alpha.8: item templates carry one ival/iattr slot per item field — a row
+    // may bind {item.text} twice and per-item attributes (id, href, ...).
+    const source = [
+      "import { element, OpenElement, property } from '@openelement/element';",
+      "@element('oe-proof-multi-field')",
+      'export class MultiField extends OpenElement {',
+      "  @property({ reflect: false }) items = [{ id: 'a', text: 'alpha', link: '/a' }];",
+      '  render() {',
+      '    return <ul>{this.items.map((item) => <li key={item.id} id={item.id}>{item.text}{item.text}<a href={item.link}>{item.text}</a></li>)}</ul>;',
+      '  }',
+      '}',
+    ].join('\n');
+    const program = compileElementProgram(source, '/project/app/islands/multi-field.tsx').program;
+    const each = program.parts.find((part: { k: string }) => part.k === 'each') as
+      | {
+          field?: string;
+          item: unknown[];
+        }
+      | undefined;
+    expect(each, 'each Region must exist').toBeTruthy();
+    expect(each.field, 'multi-field templates omit the Region field restatement').toEqual(
+      undefined,
+    );
+    expect(JSON.stringify(each.item).includes('"iattrs"')).toBeTruthy();
 
-      // Expressions that are not item field slots still fail closed.
-      const bad = [
-        "import { element, OpenElement, property } from '@openelement/element';",
-        "@element('oe-proof-bad-item')",
-        'export class BadItem extends OpenElement {',
-        "  @property({ reflect: false }) items = [{ id: 'a', text: 'alpha' }];",
-        '  render() {',
-        '    return <ul>{this.items.map((item) => <li key={item.id}>{item.text.toUpperCase()}</li>)}</ul>;',
-        '  }',
-        '}',
-      ].join('\n');
-      const ctx = failingContext();
-      assertThrows(
-        () => transform.call(ctx, bad, '/project/app/islands/bad-item.tsx'),
-        Error,
-        'item child must be',
-      );
-      assertStringIncludes(ctx.messages[0], 'OEC9013');
-    },
-  );
+    // Expressions that are not item field slots still fail closed.
+    const bad = [
+      "import { element, OpenElement, property } from '@openelement/element';",
+      "@element('oe-proof-bad-item')",
+      'export class BadItem extends OpenElement {',
+      "  @property({ reflect: false }) items = [{ id: 'a', text: 'alpha' }];",
+      '  render() {',
+      '    return <ul>{this.items.map((item) => <li key={item.id}>{item.text.toUpperCase()}</li>)}</ul>;',
+      '  }',
+      '}',
+    ].join('\n');
+    const ctx = failingContext();
+    assertThrowsIncludes(
+      () => transform.call(ctx, bad, '/project/app/islands/bad-item.tsx'),
+      Error,
+      'item child must be',
+    );
+    expect(ctx.messages[0]).toContain('OEC9013');
+  });
 });
 
-Deno.test('compiled-element alpha.1 - canonical program records and decorator lowering', async () => {
+test('compiled-element alpha.1 - canonical program records and decorator lowering', async () => {
   const { compiledElementPlugin, compileElementModule } = await loadPluginModule();
   const transform = transformOf(compiledElementPlugin());
   const source = [
@@ -506,31 +510,28 @@ Deno.test('compiled-element alpha.1 - canonical program records and decorator lo
   ].join('\n');
   const id = '/project/app/islands/alpha-one.tsx';
   const emitted = transform.call(failingContext(), source, id);
-  assert(typeof emitted === 'string');
+  expect(typeof emitted === 'string').toBeTruthy();
 
   const marker = 'const __partProgram = ';
   const start = emitted.indexOf(marker);
-  assert(start >= 0, 'generated code must embed the Part Program literal');
+  expect(start >= 0, 'generated code must embed the Part Program literal').toBeTruthy();
   const end = emitted.indexOf(';', start);
   const program = JSON.parse(emitted.slice(start + marker.length, end));
 
-  assertEquals(program.version, 1);
-  assertEquals(program.root, { id: 'root', kind: 'light', nodes: ['e0'] });
-  assertEquals(
-    program.parts.map((part: { k: string }) => part.k),
-    ['bool', 'event', 'text'],
-  );
-  assertEquals(program.parts[0].location, {
+  expect(program.version).toEqual(1);
+  expect(program.root).toEqual({ id: 'root', kind: 'light', nodes: ['e0'] });
+  expect(program.parts.map((part: { k: string }) => part.k)).toEqual(['bool', 'event', 'text']);
+  expect(program.parts[0].location).toEqual({
     id: 'p0',
     kind: 'sink',
     node: 'e0',
     path: [0],
   });
-  assertEquals(program.dependencies, [
+  expect(program.dependencies).toEqual([
     { signal: 'enabled', owner: { kind: 'part', index: 0 }, location: 'p0' },
     { signal: 'count', owner: { kind: 'part', index: 2 }, location: 'p2' },
   ]);
-  assertEquals(program.metadata.properties, [
+  expect(program.metadata.properties).toEqual([
     {
       name: 'count',
       attribute: 'count',
@@ -548,26 +549,25 @@ Deno.test('compiled-element alpha.1 - canonical program records and decorator lo
       default: false,
     },
   ]);
-  assertEquals(program.metadata.observedAttributes, ['count', 'enabled']);
+  expect(program.metadata.observedAttributes).toEqual(['count', 'enabled']);
   // The wire payload omits the compile-time sourceMap (no runtime consumer);
   // provenance stays on the in-memory program artifact.
   const compiled = compileElementModule(source, id);
-  assert(
+  expect(
     compiled?.program.sourceMap.records.some(
       (record) => record.id === 'p0' && record.source.file === id,
     ),
-  );
-  assertStringIncludes(
-    emitted,
+  ).toBeTruthy();
+  expect(emitted).toContain(
     'static observedAttributes: typeof __observedAttributes = __observedAttributes;',
   );
-  assertStringIncludes(emitted, 'static props: typeof __compiledProps = __compiledProps;');
-  assertEquals(emitted.includes('@element'), false);
-  assertEquals(emitted.includes('@property'), false);
-  assertEquals(emitted.includes('accessor '), false);
+  expect(emitted).toContain('static props: typeof __compiledProps = __compiledProps;');
+  expect(emitted.includes('@element')).toEqual(false);
+  expect(emitted.includes('@property')).toEqual(false);
+  expect(emitted.includes('accessor ')).toEqual(false);
 });
 
-Deno.test('compiled-element alpha.1 - program validation fails closed on unsafe identity', async () => {
+test('compiled-element alpha.1 - program validation fails closed on unsafe identity', async () => {
   const [{ compileElementProgram }, { validatePartProgram }] = await Promise.all([
     import('../src/internal/compiler/semantic-core/compile.ts'),
     import('../src/internal/protocol/part-program.ts'),
@@ -579,19 +579,27 @@ Deno.test('compiled-element alpha.1 - program validation fails closed on unsafe 
     parts: Array<{ location: { path: number[] } }>;
   };
   shiftedLocation.parts[1].location.path = [0];
-  assertThrows(() => validatePartProgram(shiftedLocation), Error, 'location path');
+  assertThrowsIncludes(() => validatePartProgram(shiftedLocation), Error, 'location path');
 
   const shiftedElementLocation = structuredClone(program) as {
     locations: Array<{ id: string; path: number[]; tag?: string }>;
   };
   shiftedElementLocation.locations[0].path = [0, 99];
-  assertThrows(() => validatePartProgram(shiftedElementLocation), Error, 'locations[0] element');
+  assertThrowsIncludes(
+    () => validatePartProgram(shiftedElementLocation),
+    Error,
+    'locations[0] element',
+  );
 
   const renamedElementLocation = structuredClone(program) as {
     locations: Array<{ id: string; path: number[]; tag?: string }>;
   };
   renamedElementLocation.locations[0].tag = 'span';
-  assertThrows(() => validatePartProgram(renamedElementLocation), Error, 'locations[0] element');
+  assertThrowsIncludes(
+    () => validatePartProgram(renamedElementLocation),
+    Error,
+    'locations[0] element',
+  );
 
   const mismatchedItemField = structuredClone(program) as {
     parts: Array<{
@@ -599,29 +607,30 @@ Deno.test('compiled-element alpha.1 - program validation fails closed on unsafe 
     }>;
   };
   mismatchedItemField.parts[4].item![0].children![0].field = 'id';
-  assertThrows(() => validatePartProgram(mismatchedItemField), Error, 'must use item field');
+  assertThrowsIncludes(
+    () => validatePartProgram(mismatchedItemField),
+    Error,
+    'must use item field',
+  );
 
   const mismatchedRegionSource = structuredClone(program) as {
     regions: Array<{ source: string }>;
   };
   mismatchedRegionSource.regions[0].source = 'p0';
-  assertThrows(() => validatePartProgram(mismatchedRegionSource), Error, 'regions[0]');
+  assertThrowsIncludes(() => validatePartProgram(mismatchedRegionSource), Error, 'regions[0]');
 
   const unknownPart = structuredClone(program) as { parts: Array<{ k: string }> };
   unknownPart.parts[0].k = 'future';
-  assertThrows(() => validatePartProgram(unknownPart), Error, 'unknown part kind');
+  assertThrowsIncludes(() => validatePartProgram(unknownPart), Error, 'unknown part kind');
 });
 
-Deno.test('compiled-element alpha.8 - canonical page/island authoring grammar', async (t) => {
-  const { compileElementProgram, CompiledElementError } =
-    await import('../src/internal/compiler/semantic-core/compile.ts');
-
+describe('compiled-element alpha.8 - canonical page/island authoring grammar', () => {
   const prelude = [
     "import { element, OpenElement, property } from '@openelement/element';",
     "import { defineIslandConfig } from '@openelement/router';",
   ].join('\n');
 
-  await t.step('default-exported class with a shadow root and the island policy statement', () => {
+  test('default-exported class with a shadow root and the island policy statement', () => {
     const source = [
       prelude,
       "export const openElement = defineIslandConfig({ hydrate: 'load', ssr: true, dsd: true });",
@@ -634,41 +643,37 @@ Deno.test('compiled-element alpha.8 - canonical page/island authoring grammar', 
     const { code, program } = compileElementProgram(source, '/project/app/routes/alpha8.tsx', {
       staticSidecars: [ISLAND_SIDECAR],
     });
-    assertEquals(program.root.kind, 'shadow-open');
-    assertStringIncludes(code, 'export default class Alpha8Page extends OpenElement {');
+    expect(program.root.kind).toEqual('shadow-open');
+    expect(code).toContain('export default class Alpha8Page extends OpenElement {');
     // The island delivery policy is copied verbatim into the compiled module.
-    assertStringIncludes(
-      code,
+    expect(code).toContain(
       "export const openElement = defineIslandConfig({ hydrate: 'load', ssr: true, dsd: true });",
     );
   });
 
-  await t.step(
-    'nested custom-element hosts lower as static shells with prop-Part attributes',
-    () => {
-      const source = [
-        prelude,
-        "@element('oe-alpha8-host')",
-        'export class Alpha8Host extends OpenElement {',
-        "  @property({ reflect: false }) marker = '';",
-        '  render() {',
-        '    return <main><decoupled-view marker={this.marker}></decoupled-view><live-counter></live-counter></main>;',
-        '  }',
-        '}',
-      ].join('\n');
-      const { program } = compileElementProgram(source, '/project/app/components/host.tsx');
-      const template = JSON.stringify(program.template);
-      assert(template.includes('"tag":"decoupled-view"'), template);
-      assert(template.includes('"tag":"live-counter"'), template);
-      const propPart = program.parts.find((part: { k: string }) => part.k === 'prop') as
-        | { name?: string; signal?: string }
-        | undefined;
-      assertEquals(propPart?.name, 'marker');
-      assertEquals(propPart?.signal, 'marker');
-    },
-  );
+  test('nested custom-element hosts lower as static shells with prop-Part attributes', () => {
+    const source = [
+      prelude,
+      "@element('oe-alpha8-host')",
+      'export class Alpha8Host extends OpenElement {',
+      "  @property({ reflect: false }) marker = '';",
+      '  render() {',
+      '    return <main><decoupled-view marker={this.marker}></decoupled-view><live-counter></live-counter></main>;',
+      '  }',
+      '}',
+    ].join('\n');
+    const { program } = compileElementProgram(source, '/project/app/components/host.tsx');
+    const template = JSON.stringify(program.template);
+    expect(template.includes('"tag":"decoupled-view"'), template).toBeTruthy();
+    expect(template.includes('"tag":"live-counter"'), template).toBeTruthy();
+    const propPart = program.parts.find((part: { k: string }) => part.k === 'prop') as
+      | { name?: string; signal?: string }
+      | undefined;
+    expect(propPart?.name).toEqual('marker');
+    expect(propPart?.signal).toEqual('marker');
+  });
 
-  await t.step('nested custom-element hosts inside list Region items', () => {
+  test('nested custom-element hosts inside list Region items', () => {
     const source = [
       prelude,
       "@element('oe-alpha8-list')",
@@ -681,11 +686,11 @@ Deno.test('compiled-element alpha.8 - canonical page/island authoring grammar', 
     ].join('\n');
     const { program } = compileElementProgram(source, '/project/app/components/list.tsx');
     const each = program.parts.find((part: { k: string }) => part.k === 'each');
-    assert(each, 'each Region must exist');
-    assert(JSON.stringify(each).includes('"tag":"live-counter"'));
+    expect(each, 'each Region must exist').toBeTruthy();
+    expect(JSON.stringify(each).includes('"tag":"live-counter"')).toBeTruthy();
   });
 
-  await t.step('fail-closed grammar boundaries for the new constructs', () => {
+  test('fail-closed grammar boundaries for the new constructs', () => {
     const base = [
       prelude,
       "@element('oe-alpha8-bad')",
@@ -704,10 +709,10 @@ Deno.test('compiled-element alpha.8 - canonical page/island authoring grammar', 
       } catch (error) {
         thrown = error;
       }
-      assert(thrown instanceof CompiledElementError, `expected ${code} failure`);
+      expect(thrown instanceof CompiledElementError, `expected ${code} failure`).toBeTruthy();
       const text = String(thrown);
-      assertStringIncludes(text, code);
-      assertStringIncludes(text, fragment);
+      expect(text).toContain(code);
+      expect(text).toContain(fragment);
     };
 
     // Host children are the host's light content (slot projection is platform
@@ -716,10 +721,10 @@ Deno.test('compiled-element alpha.8 - canonical page/island authoring grammar', 
       render('render() { return <main><live-counter><span>x</span></live-counter></main>; }'),
       '/project/app/components/host-children.tsx',
     );
-    assert(
+    expect(
       JSON.stringify(withChildren.program.template).includes('"tag":"live-counter"'),
       'host children must lower',
-    );
+    ).toBeTruthy();
     // Host event handlers are outside the grammar.
     expectFailure(
       render(
@@ -764,109 +769,100 @@ Deno.test('compiled-element alpha.8 - canonical page/island authoring grammar', 
     );
   });
 
-  await t.step(
-    'computed fields, html sinks and element options (alpha.8 grammar extension)',
-    () => {
-      // Positive: computed field drives a bool sink; innerHTML sink; element
-      // options emit the facade statics.
-      const source = [
-        "import { computed, element, OpenElement, property, trustedHtml, type TrustedHtml } from '@openelement/element';",
-        "@element('oe-alpha8-computed', { root: 'shadow-open', delegatesFocus: true, formAssociated: true })",
-        'export default class Alpha8Computed extends OpenElement {',
-        "  @property({ reflect: false }) label = '';",
-        "  @property({ type: Object, reflect: false, attribute: false }) bodyHtml: TrustedHtml = trustedHtml('');",
-        "  @property({ reflect: false, attribute: false }) noLabel = computed(() => this.label === '') as unknown as boolean;",
-        '  render() {',
-        '    return <main><button hidden={this.noLabel}>{this.label}</button><div innerHTML={this.bodyHtml} trustedHtml></div></main>;',
-        '  }',
+  test('computed fields, html sinks and element options (alpha.8 grammar extension)', () => {
+    // Positive: computed field drives a bool sink; innerHTML sink; element
+    // options emit the facade statics.
+    const source = [
+      "import { computed, element, OpenElement, property, trustedHtml, type TrustedHtml } from '@openelement/element';",
+      "@element('oe-alpha8-computed', { root: 'shadow-open', delegatesFocus: true, formAssociated: true })",
+      'export default class Alpha8Computed extends OpenElement {',
+      "  @property({ reflect: false }) label = '';",
+      "  @property({ type: Object, reflect: false, attribute: false }) bodyHtml: TrustedHtml = trustedHtml('');",
+      "  @property({ reflect: false, attribute: false }) noLabel = computed(() => this.label === '') as unknown as boolean;",
+      '  render() {',
+      '    return <main><button hidden={this.noLabel}>{this.label}</button><div innerHTML={this.bodyHtml} trustedHtml></div></main>;',
+      '  }',
+      '}',
+    ].join('\n');
+    const { code, program } = compileElementProgram(source, '/project/app/components/computed.tsx');
+    const meta = program.metadata.properties.find(
+      (p: { name: string }) => p.name === 'noLabel',
+    ) as {
+      computed?: boolean;
+      deps?: string[];
+    };
+    expect(meta.computed).toEqual(true);
+    expect(meta.deps).toEqual(['label']);
+    expect(
+      program.parts.some((p: { k: string }) => p.k === 'html'),
+      'html Part must exist',
+    ).toBeTruthy();
+    expect(code).toContain('static override delegatesFocus: boolean = true;');
+    expect(code).toContain('static override formAssociated: boolean = true;');
+    expect(code).toContain('static __computedFields: {');
+    expect(code).toContain("noLabel: (__s) => computed(() => __s.label.value === '')");
+
+    const expectFailure = (src: string, code: string, fragment: string) => {
+      let thrown: unknown;
+      try {
+        compileElementProgram(src, '/project/app/components/bad-computed.tsx');
+      } catch (error) {
+        thrown = error;
+      }
+      expect(
+        thrown instanceof CompiledElementError,
+        `expected ${code} failure, got ${String(thrown)}`,
+      ).toBeTruthy();
+      const text = String(thrown);
+      expect(text).toContain(code);
+      expect(text).toContain(fragment);
+    };
+    const badPrelude = [
+      "import { computed, element, OpenElement, property } from '@openelement/element';",
+      "@element('oe-alpha8-bad-computed')",
+      'export class BadComputed extends OpenElement {',
+      "  @property({ reflect: false }) label = '';",
+    ].join('\n');
+
+    // A computed that reads an undeclared member fails closed.
+    expectFailure(
+      [
+        badPrelude,
+        "  @property({ reflect: false, attribute: false }) bad = computed(() => this.missing === '') as unknown as boolean;",
+        '  render() { return <main>{this.label}</main>; }',
         '}',
-      ].join('\n');
-      const { code, program } = compileElementProgram(
-        source,
-        '/project/app/components/computed.tsx',
-      );
-      const meta = program.metadata.properties.find(
-        (p: { name: string }) => p.name === 'noLabel',
-      ) as {
-        computed?: boolean;
-        deps?: string[];
-      };
-      assertEquals(meta.computed, true);
-      assertEquals(meta.deps, ['label']);
-      assert(
-        program.parts.some((p: { k: string }) => p.k === 'html'),
-        'html Part must exist',
-      );
-      assertStringIncludes(code, 'static override delegatesFocus: boolean = true;');
-      assertStringIncludes(code, 'static override formAssociated: boolean = true;');
-      assertStringIncludes(code, 'static __computedFields: {');
-      assertStringIncludes(code, "noLabel: (__s) => computed(() => __s.label.value === '')");
-
-      const expectFailure = (src: string, code: string, fragment: string) => {
-        let thrown: unknown;
-        try {
-          compileElementProgram(src, '/project/app/components/bad-computed.tsx');
-        } catch (error) {
-          thrown = error;
-        }
-        assert(
-          thrown instanceof CompiledElementError,
-          `expected ${code} failure, got ${String(thrown)}`,
-        );
-        const text = String(thrown);
-        assertStringIncludes(text, code);
-        assertStringIncludes(text, fragment);
-      };
-      const badPrelude = [
-        "import { computed, element, OpenElement, property } from '@openelement/element';",
-        "@element('oe-alpha8-bad-computed')",
-        'export class BadComputed extends OpenElement {',
-        "  @property({ reflect: false }) label = '';",
-      ].join('\n');
-
-      // A computed that reads an undeclared member fails closed.
-      expectFailure(
-        [
-          badPrelude,
-          "  @property({ reflect: false, attribute: false }) bad = computed(() => this.missing === '') as unknown as boolean;",
-          '  render() { return <main>{this.label}</main>; }',
-          '}',
-        ].join('\n'),
-        'OEC9024',
-        'this.missing',
-      );
-      // A computed with an attribute channel fails closed.
-      expectFailure(
-        [
-          badPrelude,
-          "  @property({ reflect: false }) bad = computed(() => this.label === '') as unknown as boolean;",
-          '  render() { return <main>{this.label}</main>; }',
-          '}',
-        ].join('\n'),
-        'OEC9025',
-        'attribute: false',
-      );
-      // An html sink with element children fails closed (the sink owns content).
-      expectFailure(
-        [
-          "import { element, OpenElement, property, trustedHtml, type TrustedHtml } from '@openelement/element';",
-          "@element('oe-alpha8-bad-html')",
-          'export class BadHtml extends OpenElement {',
-          "  @property({ type: Object, reflect: false, attribute: false }) bodyHtml: TrustedHtml = trustedHtml('');",
-          '  render() { return <main><div innerHTML={this.bodyHtml} trustedHtml><span>x</span></div></main>; }',
-          '}',
-        ].join('\n'),
-        'OEC9026',
-        'childless',
-      );
-    },
-  );
+      ].join('\n'),
+      'OEC9024',
+      'this.missing',
+    );
+    // A computed with an attribute channel fails closed.
+    expectFailure(
+      [
+        badPrelude,
+        "  @property({ reflect: false }) bad = computed(() => this.label === '') as unknown as boolean;",
+        '  render() { return <main>{this.label}</main>; }',
+        '}',
+      ].join('\n'),
+      'OEC9025',
+      'attribute: false',
+    );
+    // An html sink with element children fails closed (the sink owns content).
+    expectFailure(
+      [
+        "import { element, OpenElement, property, trustedHtml, type TrustedHtml } from '@openelement/element';",
+        "@element('oe-alpha8-bad-html')",
+        'export class BadHtml extends OpenElement {',
+        "  @property({ type: Object, reflect: false, attribute: false }) bodyHtml: TrustedHtml = trustedHtml('');",
+        '  render() { return <main><div innerHTML={this.bodyHtml} trustedHtml><span>x</span></div></main>; }',
+        '}',
+      ].join('\n'),
+      'OEC9026',
+      'childless',
+    );
+  });
 });
 
-Deno.test('compiled-element alpha.9 - trusted HTML sink admission matrix', async (t) => {
-  const { compileElementProgram, CompiledElementError } =
-    await import('../src/internal/compiler/semantic-core/compile.ts');
-
+describe('compiled-element alpha.9 - trusted HTML sink admission matrix', () => {
   const validPrelude = [
     "import { element, OpenElement, property, trustedHtml, type TrustedHtml } from '@openelement/element';",
     "@element('oe-alpha9-trusted-html')",
@@ -877,13 +873,13 @@ Deno.test('compiled-element alpha.9 - trusted HTML sink admission matrix', async
   const sourceFor = (render: string, field = validField) =>
     [...validPrelude, field, '  render() { return ' + render + '; }', '}'].join('\n');
 
-  await t.step('accepts marker + Object + TrustedHtml initializer', () => {
+  test('accepts marker + Object + TrustedHtml initializer', () => {
     const result = compileElementProgram(
       sourceFor('<div innerHTML={this.bodyHtml} trustedHtml></div>'),
       '/project/app/components/alpha9-trusted-html.tsx',
     );
-    assert(result.program.parts.some((part: { k: string }) => part.k === 'html'));
-    assertEquals(result.program.metadata.properties[0], {
+    expect(result.program.parts.some((part: { k: string }) => part.k === 'html')).toBeTruthy();
+    expect(result.program.metadata.properties[0]).toEqual({
       name: 'bodyHtml',
       attribute: null,
       type: 'object',
@@ -900,11 +896,14 @@ Deno.test('compiled-element alpha.9 - trusted HTML sink admission matrix', async
     } catch (error) {
       thrown = error;
     }
-    assert(thrown instanceof CompiledElementError, `${name} must fail with CompiledElementError`);
-    assertStringIncludes(String(thrown), 'OEC9026');
+    expect(
+      thrown instanceof CompiledElementError,
+      `${name} must fail with CompiledElementError`,
+    ).toBeTruthy();
+    expect(String(thrown)).toContain('OEC9026');
   };
 
-  await t.step('accepts marker + Object + TrustedHtml initializer on a custom-element host', () => {
+  test('accepts marker + Object + TrustedHtml initializer on a custom-element host', () => {
     // Same boundary as an intrinsic element: the custom-host prop lowering must
     // not skip innerHTML capability admission.
     const result = compileElementProgram(
@@ -916,18 +915,21 @@ Deno.test('compiled-element alpha.9 - trusted HTML sink admission matrix', async
     const htmlPart = result.program.parts.find((part: { k: string }) => part.k === 'html') as
       | { k: string; signal?: string }
       | undefined;
-    assert(htmlPart, 'custom host innerHTML must lower as a security-classified html sink');
-    assertEquals(htmlPart?.signal, 'bodyHtml');
+    expect(
+      htmlPart,
+      'custom host innerHTML must lower as a security-classified html sink',
+    ).toBeTruthy();
+    expect(htmlPart?.signal).toEqual('bodyHtml');
   });
 
-  await t.step('rejects a custom-element host innerHTML sink without the marker', () => {
+  test('rejects a custom-element host innerHTML sink without the marker', () => {
     expectOec9026(
       'alpha9-custom-host-missing-marker',
       sourceFor('<some-custom-element innerHTML={this.bodyHtml}></some-custom-element>'),
     );
   });
 
-  await t.step('rejects a custom-element host innerHTML sink with trustedHtml={false}', () => {
+  test('rejects a custom-element host innerHTML sink with trustedHtml={false}', () => {
     expectOec9026(
       'alpha9-custom-host-false-marker',
       sourceFor(
@@ -936,7 +938,7 @@ Deno.test('compiled-element alpha.9 - trusted HTML sink admission matrix', async
     );
   });
 
-  await t.step('rejects a string-typed custom-element host innerHTML sink', () => {
+  test('rejects a string-typed custom-element host innerHTML sink', () => {
     const stringField =
       "  @property({ type: String, reflect: false, attribute: false }) bodyHtml: string = '';";
     expectOec9026(
@@ -948,22 +950,22 @@ Deno.test('compiled-element alpha.9 - trusted HTML sink admission matrix', async
     );
   });
 
-  await t.step('rejects an innerHTML sink without the marker', () => {
+  test('rejects an innerHTML sink without the marker', () => {
     expectOec9026('alpha9-missing-marker', sourceFor('<div innerHTML={this.bodyHtml}></div>'));
   });
 
-  await t.step('rejects trustedHtml={false}', () => {
+  test('rejects trustedHtml={false}', () => {
     expectOec9026(
       'alpha9-false-marker',
       sourceFor('<div innerHTML={this.bodyHtml} trustedHtml={false}></div>'),
     );
   });
 
-  await t.step('rejects a marker without an innerHTML sink', () => {
+  test('rejects a marker without an innerHTML sink', () => {
     expectOec9026('alpha9-marker-without-sink', sourceFor('<div trustedHtml></div>'));
   });
 
-  await t.step('rejects a string-typed innerHTML sink', () => {
+  test('rejects a string-typed innerHTML sink', () => {
     const stringField =
       "  @property({ type: String, reflect: false, attribute: false }) bodyHtml: string = '';";
     expectOec9026(
@@ -972,7 +974,7 @@ Deno.test('compiled-element alpha.9 - trusted HTML sink admission matrix', async
     );
   });
 
-  await t.step('rejects a TrustedHtml initializer without type:Object/attribute:false', () => {
+  test('rejects a TrustedHtml initializer without type:Object/attribute:false', () => {
     const incompleteField =
       "  @property({ reflect: false }) bodyHtml: TrustedHtml = trustedHtml('');";
     expectOec9026(
@@ -982,11 +984,8 @@ Deno.test('compiled-element alpha.9 - trusted HTML sink admission matrix', async
   });
 });
 
-Deno.test('compiled-element strict emission - generated statics carry explicit types for native pack', async (t) => {
-  const { compileElementProgram } =
-    await import('../src/internal/compiler/semantic-core/compile.ts');
-
-  await t.step('module-local constants are referenced through typeof (no API growth)', () => {
+describe('compiled-element strict emission - generated statics carry explicit types for native pack', () => {
+  test('module-local constants are referenced through typeof (no API growth)', () => {
     const source = [
       "import { element, OpenElement, property } from '@openelement/element';",
       "@element('oe-strict-statics')",
@@ -998,26 +997,23 @@ Deno.test('compiled-element strict emission - generated statics carry explicit t
       '}',
     ].join('\n');
     const { code } = compileElementProgram(source, '/project/app/islands/strict-statics.tsx');
-    assertStringIncludes(code, 'static __partProgram: typeof __partProgram = __partProgram;');
-    assertStringIncludes(
-      code,
+    expect(code).toContain('static __partProgram: typeof __partProgram = __partProgram;');
+    expect(code).toContain(
       'static __compiledProperties: typeof __compiledProperties = __compiledProperties;',
     );
-    assertStringIncludes(
-      code,
+    expect(code).toContain(
       'static __elementMetadata: typeof __elementMetadata = __elementMetadata;',
     );
-    assertStringIncludes(code, 'static props: typeof __compiledProps = __compiledProps;');
-    assertStringIncludes(
-      code,
+    expect(code).toContain('static props: typeof __compiledProps = __compiledProps;');
+    expect(code).toContain(
       'static observedAttributes: typeof __observedAttributes = __observedAttributes;',
     );
     // The attribute list is explicitly typed (an empty list must not infer
     // an evolving any[]).
-    assertStringIncludes(code, 'const __observedAttributes: string[] = [');
+    expect(code).toContain('const __observedAttributes: string[] = [');
   });
 
-  await t.step('styles keeps the authored annotation with override', () => {
+  test('styles keeps the authored annotation with override', () => {
     const source = [
       "import { element, OpenElement, property, type StyleSheetLike } from '@openelement/element';",
       "import { recipe } from './component-recipes.ts';",
@@ -1031,10 +1027,10 @@ Deno.test('compiled-element strict emission - generated statics carry explicit t
       '}',
     ].join('\n');
     const { code } = compileElementProgram(source, '/project/app/islands/strict-styles.tsx');
-    assertStringIncludes(code, 'static override styles: StyleSheetLike[] = [recipe(');
+    expect(code).toContain('static override styles: StyleSheetLike[] = [recipe(');
   });
 
-  await t.step('computed factories are explicitly typed through the outer annotation', () => {
+  test('computed factories are explicitly typed through the outer annotation', () => {
     const source = [
       "import { computed, element, OpenElement, property, type ReadonlySignal } from '@openelement/element';",
       "@element('oe-strict-computed')",
@@ -1050,19 +1046,17 @@ Deno.test('compiled-element strict emission - generated statics carry explicit t
     ].join('\n');
     const { code } = compileElementProgram(source, '/project/app/islands/strict-computed.tsx');
     // Precise per-field signatures: authored return types, per-dep signal types.
-    assertStringIncludes(
-      code,
+    expect(code).toContain(
       'noLabel: (__s: { label: ReadonlySignal<string> }) => ReadonlySignal<boolean>;',
     );
-    assertStringIncludes(
-      code,
+    expect(code).toContain(
       'doubled: (__s: { count: ReadonlySignal<number> }) => ReadonlySignal<number>;',
     );
     // Inner factories stay textually unchanged and contextually typed.
-    assertStringIncludes(code, "noLabel: (__s) => computed(() => __s.label.value === '')");
+    expect(code).toContain("noLabel: (__s) => computed(() => __s.label.value === '')");
   });
 
-  await t.step('missing ReadonlySignal binding is added as a type-only import', () => {
+  test('missing ReadonlySignal binding is added as a type-only import', () => {
     const source = [
       "import { computed, element, OpenElement, property } from '@openelement/element';",
       "@element('oe-strict-import')",
@@ -1075,15 +1069,14 @@ Deno.test('compiled-element strict emission - generated statics carry explicit t
       '}',
     ].join('\n');
     const { code } = compileElementProgram(source, '/project/app/islands/strict-import.tsx');
-    assertStringIncludes(code, "import type { ReadonlySignal } from '@openelement/element';");
+    expect(code).toContain("import type { ReadonlySignal } from '@openelement/element';");
     // Unannotated computed fields fall back to the contract-level signal type.
-    assertStringIncludes(
-      code,
+    expect(code).toContain(
       'shouty: (__s: { label: ReadonlySignal<string> }) => ReadonlySignal<unknown>;',
     );
   });
 
-  await t.step('element options emit override boolean flags', () => {
+  test('element options emit override boolean flags', () => {
     const source = [
       "import { element, OpenElement } from '@openelement/element';",
       "@element('oe-strict-flags', { root: 'shadow-open', delegatesFocus: true, formAssociated: true })",
@@ -1094,7 +1087,7 @@ Deno.test('compiled-element strict emission - generated statics carry explicit t
       '}',
     ].join('\n');
     const { code } = compileElementProgram(source, '/project/app/islands/strict-flags.tsx');
-    assertStringIncludes(code, 'static override delegatesFocus: boolean = true;');
-    assertStringIncludes(code, 'static override formAssociated: boolean = true;');
+    expect(code).toContain('static override delegatesFocus: boolean = true;');
+    expect(code).toContain('static override formAssociated: boolean = true;');
   });
 });

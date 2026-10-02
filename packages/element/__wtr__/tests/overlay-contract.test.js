@@ -14,13 +14,13 @@
  *   - repeated open/close cycles keep node identity and single event counts,
  *   - disconnect/reconnect leaves a clean, working component.
  *
- * Trusted input (Escape, pointer) goes through @web/test-runner-commands
- * sendKeys/sendMouse (Playwright input pipeline) because synthetic untrusted
+ * Trusted input (Escape, pointer) goes through the vitest browser userEvent
+ * bridge (Playwright input pipeline) because synthetic untrusted
  * events do not trigger native cancel/light-dismiss. No sleeps: every async
  * settle is awaited through waitFor predicates.
  */
 import { assert } from 'chai';
-import { sendKeys, sendMouse } from '@web/test-runner-commands';
+import { userEvent } from 'vitest/browser';
 import { OpenDialog } from '../generated/open-dialog.ts';
 import { OpenDropdown } from '../generated/open-dropdown.ts';
 
@@ -98,7 +98,7 @@ describe('overlay contract: open-dialog (production packages/ui component)', () 
     assert.strictEqual(dialogEl(host).matches(':modal'), true, 'showModal() entered the top layer');
     assert.strictEqual(host.hasAttribute('open'), true, 'the open property reflects');
 
-    await sendKeys({ press: 'Escape' });
+    await userEvent.keyboard('{Escape}');
     await waitFor(() => !dialogEl(host).open, 'Escape-driven close');
     assert.strictEqual(host.hasAttribute('open'), false, 'host state followed the cancel');
     await waitFor(
@@ -182,7 +182,7 @@ describe('overlay contract: open-dropdown (production packages/ui component)', (
     item.focus();
     assert.strictEqual(deepActive(), item, 'focus moved into the popover');
 
-    await sendKeys({ press: 'Escape' });
+    await userEvent.keyboard('{Escape}');
     await waitFor(() => !content.matches(':popover-open'), 'Escape light dismiss');
     await waitFor(
       () => deepActive() === trigger,
@@ -207,7 +207,7 @@ describe('overlay contract: open-dropdown (production packages/ui component)', (
     assert.strictEqual(deepActive(), item, 'focus moved into the popover in the opening task');
     await waitFor(() => content.matches(':popover-open'), 'popover open');
 
-    await sendKeys({ press: 'Escape' });
+    await userEvent.keyboard('{Escape}');
     await waitFor(() => !content.matches(':popover-open'), 'Escape light dismiss');
     await waitFor(
       () => deepActive() === trigger,
@@ -233,7 +233,7 @@ describe('overlay contract: open-dropdown (production packages/ui component)', (
     assert.strictEqual(deepActive(), item, 'focus moved into the popover in the opening task');
     await waitFor(() => content.matches(':popover-open'), 'popover open');
 
-    await sendKeys({ press: 'Escape' });
+    await userEvent.keyboard('{Escape}');
     await waitFor(() => !content.matches(':popover-open'), 'Escape light dismiss');
     await waitFor(
       () => deepActive() === trigger,
@@ -252,8 +252,18 @@ describe('overlay contract: open-dropdown (production packages/ui component)', (
     await waitFor(() => content.matches(':popover-open'), 'popover open');
 
     // Bottom-right corner: away from the trigger AND from the popover box
-    // (in Chromium the anchored popover lands near the top-left here).
-    await sendMouse({ type: 'click', position: [700, 500] });
+    // (in Chromium the anchored popover lands near the top-left here). The
+    // vitest userEvent bridge clicks real elements rather than raw
+    // coordinates, so the same corner gets a dedicated target element.
+    const outsideZone = document.createElement('div');
+    outsideZone.textContent = 'outside';
+    outsideZone.style.cssText = 'position:fixed;right:20px;bottom:20px;width:80px;height:40px;';
+    document.body.appendChild(outsideZone);
+    try {
+      await userEvent.click(outsideZone);
+    } finally {
+      outsideZone.remove();
+    }
     await waitFor(() => !content.matches(':popover-open'), 'light dismiss on outside press');
 
     wrap.remove();
@@ -306,7 +316,7 @@ describe('overlay contract: open-dropdown (production packages/ui component)', (
 
     trigger.click();
     await waitFor(() => content.matches(':popover-open'), 'open after reconnect');
-    await sendKeys({ press: 'Escape' });
+    await userEvent.keyboard('{Escape}');
     await waitFor(() => !content.matches(':popover-open'), 'close after reconnect');
 
     wrap.remove();

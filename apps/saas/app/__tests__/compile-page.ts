@@ -7,7 +7,10 @@
  * @element/@property decorators are compile-time-only input and throw at
  * module evaluation outside the adapter transform.
  */
-import { readFile } from 'node:fs/promises';
+import { rm, readFile, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { compileElementProgram } from '@openelement/element/compiler';
 
 // Resolved through the workspace (daily dev) or the installed packed
@@ -41,11 +44,18 @@ export async function compileComponentClass(sourceUrl: string): Promise<CustomEl
       /from '(\.[^']*)'/g,
       (_match, specifier: string) => `from '${new URL(specifier, absoluteSource).href}'`,
     );
-  // The rewritten module imports through a data: URL so the test sandbox
-  // needs no write permission; encode UTF-8-safe (component sources carry
-  // non-ASCII copy) and declare the TypeScript media type so Deno parses the
-  // emitted annotations.
-  const encoded = btoa(String.fromCharCode(...new TextEncoder().encode(rewritten)));
-  const mod = await import(`data:application/typescript;base64,${encoded}`);
+  // The rewritten module imports from a temp .ts file: node strips the
+  // emitted annotations by extension (the Deno host parsed the data: URL's
+  // TypeScript media type, a host facility node does not offer for data:
+  // imports). The workspace tmpdir is writable in daily dev, and release
+  // qualification runs the packed tarballs instead of this helper.
+  // the unique temp filename busts node's module cache across compiles
+  const tempModule = join(
+    tmpdir(),
+    `saas-compiled-page-${Date.now()}-${Math.random().toString(36).slice(2)}.ts`,
+  );
+  await writeFile(tempModule, rewritten, 'utf8');
+  const mod = await import(pathToFileURL(tempModule).href);
+  await rm(tempModule, { force: true });
   return mod.default as CustomElementConstructor;
 }

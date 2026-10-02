@@ -1,10 +1,10 @@
-import { assertEquals } from '@std/assert';
+import { expect, test } from 'vitest';
 import { join } from '@std/path';
 import { scanSiteRoutes } from './site-route-scan.ts';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 
-Deno.test('scanSiteRoutes maps index, nested, and dynamic route files', async () => {
+test('scanSiteRoutes maps index, nested, and dynamic route files', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'site-route-scan-'));
   try {
     for (const file of [
@@ -17,7 +17,7 @@ Deno.test('scanSiteRoutes maps index, nested, and dynamic route files', async ()
       await mkdir(target.split('/').slice(0, -1).join('/'), { recursive: true });
       await writeFile(target, 'export default {};');
     }
-    assertEquals(await scanSiteRoutes(dir), [
+    expect(await scanSiteRoutes(dir)).toEqual([
       { path: '/', type: 'page' },
       { path: '/blog', type: 'page' },
       { path: '/blog/:slug', type: 'page' },

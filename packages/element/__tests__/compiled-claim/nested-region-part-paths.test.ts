@@ -21,13 +21,8 @@
  *    unrepresentable — this is the permanent guard, not a bug fix.
  */
 
-import {
-  assertEquals,
-  assertNotStrictEquals,
-  assertStrictEquals,
-  assertStringIncludes,
-  assertThrows,
-} from '@std/assert';
+import { expect, test } from 'vitest';
+import { assertThrowsIncludes } from '../../../../tests/lib/vitest-asserts.ts';
 import { validatePartProgram } from '../../src/internal/protocol/part-program.ts';
 import {
   claimExistingDom,
@@ -232,11 +227,11 @@ function receiveAndClaim(
   const html = serializeServer(program, serverHost);
   // The seed serializer and a fresh browser mount must agree with the SSR
   // payload byte-for-byte: SSR/fresh/claim observational equivalence.
-  assertEquals(serializeSeed(program, serverHost), html);
+  expect(serializeSeed(program, serverHost)).toEqual(html);
   const freshDoc = new TestDocument();
   const freshRoot = freshDoc.createElement('host');
   const freshInstance = createFresh(program, serverHost, freshRoot as unknown as Node);
-  assertEquals(freshRoot.innerHTML, html);
+  expect(freshRoot.innerHTML).toEqual(html);
   freshInstance.dispose();
 
   // Browser receives the DOM: parse the serialized payload into fresh nodes.
@@ -245,16 +240,15 @@ function receiveAndClaim(
   const before = { ...doc.counts };
   const instance = claimExisting(program, browserHost, root as unknown as Node);
   // A successful claim allocates and replaces nothing: exact node identity.
-  assertEquals({ ...doc.counts }, before);
+  expect({ ...doc.counts }).toEqual(before);
   return { html, doc, root, instance };
 }
 
-Deno.test('A10.4: when Region branch never inherits the sibling sink path (serialize → claim → exact-sink update)', () => {
+test('A10.4: when Region branch never inherits the sibling sink path (serialize → claim → exact-sink update)', () => {
   const program = whenSiblingProgram();
   const browser = whenHost();
   const { html, root, instance } = receiveAndClaim(program, whenHost(), browser);
-  assertEquals(
-    html,
+  expect(html).toEqual(
     '<div title="DYN"></div><!--oe:p1--><span title="static-on"></span><!--oe:/p1-->',
   );
 
@@ -263,31 +257,31 @@ Deno.test('A10.4: when Region branch never inherits the sibling sink path (seria
   const anchor = root.childNodes[1];
   const span = root.childNodes[2] as TestElement;
   const end = root.childNodes[3];
-  assertEquals(div.getAttribute('title'), 'DYN');
-  assertEquals(span.getAttribute('title'), 'static-on');
+  expect(div.getAttribute('title')).toEqual('DYN');
+  expect(span.getAttribute('title')).toEqual('static-on');
 
   // A subsequent update mutates the exact sink node — no replacement, and
   // the Region-internal static attribute is not touched by the sink.
   browser.signals.title.value = 'DYN2';
-  assertStrictEquals(root.childNodes[0], div);
-  assertEquals(div.getAttribute('title'), 'DYN2');
-  assertStrictEquals(root.childNodes[2], span);
-  assertEquals(span.getAttribute('title'), 'static-on');
+  expect(root.childNodes[0]).toBe(div);
+  expect(div.getAttribute('title')).toEqual('DYN2');
+  expect(root.childNodes[2]).toBe(span);
+  expect(span.getAttribute('title')).toEqual('static-on');
 
   // The Region still owns its range: a branch swap replaces only the branch
   // content; the anchors and the sibling sink keep their node identity.
   browser.signals.count.value = 0;
-  assertStrictEquals(root.childNodes[1], anchor);
-  assertStrictEquals(root.childNodes[3], end);
+  expect(root.childNodes[1]).toBe(anchor);
+  expect(root.childNodes[3]).toBe(end);
   const offSpan = root.childNodes[2] as TestElement;
-  assertNotStrictEquals(offSpan, span);
-  assertEquals(offSpan.getAttribute('title'), 'static-off');
-  assertStrictEquals(root.childNodes[0], div);
-  assertEquals(div.getAttribute('title'), 'DYN2');
+  expect(offSpan).not.toBe(span);
+  expect(offSpan.getAttribute('title')).toEqual('static-off');
+  expect(root.childNodes[0]).toBe(div);
+  expect(div.getAttribute('title')).toEqual('DYN2');
   instance.dispose();
 });
 
-Deno.test('A10.4: claim fails closed on static drift inside a when Region branch', () => {
+test('A10.4: claim fails closed on static drift inside a when Region branch', () => {
   const program = whenSiblingProgram();
   const html = serializeServer(program, whenHost());
   const doc = new TestDocument();
@@ -297,20 +291,19 @@ Deno.test('A10.4: claim fails closed on static drift inside a when Region branch
   // The branch element holds no dynamic sink: a rewritten static attribute is
   // real drift and must not hide behind a reset path colliding with the
   // sibling sink at canonical path [0].
-  const error = assertThrows(
+  const error = assertThrowsIncludes(
     () => claimExisting(program, whenHost(), root as unknown as Node),
     PartProgramClaimError,
   );
-  assertStringIncludes(error.message, 'template[1].branch[0]');
-  assertStringIncludes(error.message, 'attribute drift on "title"');
+  expect(error.message).toContain('template[1].branch[0]');
+  expect(error.message).toContain('attribute drift on "title"');
 });
 
-Deno.test('A10.4: each Region item attribute slots round-trip with exact keyed-sink updates', () => {
+test('A10.4: each Region item attribute slots round-trip with exact keyed-sink updates', () => {
   const program = eachSiblingProgram();
   const browser = eachHost();
   const { html, root, instance } = receiveAndClaim(program, eachHost(), browser);
-  assertEquals(
-    html,
+  expect(html).toEqual(
     '<div title="DYN"></div><!--oe:p1-->' +
       '<li title="item-static" data-label="alpha"></li>' +
       '<li title="item-static" data-label="beta"></li>' +
@@ -320,67 +313,66 @@ Deno.test('A10.4: each Region item attribute slots round-trip with exact keyed-s
   const div = root.childNodes[0] as TestElement;
   const liA = root.childNodes[2] as TestElement;
   const liB = root.childNodes[3] as TestElement;
-  assertEquals(liA.getAttribute('data-label'), 'alpha');
-  assertEquals(liB.getAttribute('data-label'), 'beta');
+  expect(liA.getAttribute('data-label')).toEqual('alpha');
+  expect(liB.getAttribute('data-label')).toEqual('beta');
 
   // An item-field update mutates the exact keyed item element in place.
   browser.signals.items.value = [
     { id: 'a', label: 'alpha2' },
     { id: 'b', label: 'beta' },
   ];
-  assertStrictEquals(root.childNodes[2], liA);
-  assertEquals(liA.getAttribute('data-label'), 'alpha2');
-  assertEquals(liA.getAttribute('title'), 'item-static');
-  assertStrictEquals(root.childNodes[3], liB);
-  assertEquals(liB.getAttribute('data-label'), 'beta');
+  expect(root.childNodes[2]).toBe(liA);
+  expect(liA.getAttribute('data-label')).toEqual('alpha2');
+  expect(liA.getAttribute('title')).toEqual('item-static');
+  expect(root.childNodes[3]).toBe(liB);
+  expect(liB.getAttribute('data-label')).toEqual('beta');
 
   // The sibling fixed sink keeps its canonical identity through the update.
   browser.signals.title.value = 'DYN2';
-  assertStrictEquals(root.childNodes[0], div);
-  assertEquals(div.getAttribute('title'), 'DYN2');
+  expect(root.childNodes[0]).toBe(div);
+  expect(div.getAttribute('title')).toEqual('DYN2');
   instance.dispose();
 });
 
-Deno.test('A10.4: claim fails closed on static and per-item drift inside an each Region', () => {
+test('A10.4: claim fails closed on static and per-item drift inside an each Region', () => {
   const program = eachSiblingProgram();
 
   // Static item attribute rewritten in transit.
   const staticDoc = new TestDocument();
   const staticRoot = parseHtml(staticDoc, serializeServer(program, eachHost()));
   (staticRoot.childNodes[2] as TestElement).setAttribute('title', 'tampered');
-  const staticError = assertThrows(
+  const staticError = assertThrowsIncludes(
     () => claimExisting(program, eachHost(), staticRoot as unknown as Node),
     PartProgramClaimError,
   );
-  assertStringIncludes(staticError.message, 'template[1].item[0][0]');
-  assertStringIncludes(staticError.message, 'attribute drift on "title"');
+  expect(staticError.message).toContain('template[1].item[0][0]');
+  expect(staticError.message).toContain('attribute drift on "title"');
 
   // Per-item attribute slot rewritten in transit.
   const itemDoc = new TestDocument();
   const itemRoot = parseHtml(itemDoc, serializeServer(program, eachHost()));
   (itemRoot.childNodes[2] as TestElement).setAttribute('data-label', 'tampered');
-  const itemError = assertThrows(
+  const itemError = assertThrowsIncludes(
     () => claimExisting(program, eachHost(), itemRoot as unknown as Node),
     PartProgramClaimError,
   );
-  assertStringIncludes(itemError.message, 'item attribute drift on "data-label"');
+  expect(itemError.message).toContain('item attribute drift on "data-label"');
 });
 
-Deno.test('A10.4: a Region nested inside the sink element keeps canonical paths (deeper combination)', () => {
+test('A10.4: a Region nested inside the sink element keeps canonical paths (deeper combination)', () => {
   const program = regionInsideSinkProgram();
   const browser = whenHost();
   const { html, root, instance } = receiveAndClaim(program, whenHost(), browser);
-  assertEquals(
-    html,
+  expect(html).toEqual(
     '<div title="DYN"><!--oe:p1--><span title="static-on"></span><!--oe:/p1--></div>',
   );
 
   const div = root.childNodes[0] as TestElement;
   const span = div.childNodes[1] as TestElement;
   browser.signals.title.value = 'DYN2';
-  assertStrictEquals(root.childNodes[0], div);
-  assertEquals(div.getAttribute('title'), 'DYN2');
-  assertEquals(span.getAttribute('title'), 'static-on');
+  expect(root.childNodes[0]).toBe(div);
+  expect(div.getAttribute('title')).toEqual('DYN2');
+  expect(span.getAttribute('title')).toEqual('static-on');
   instance.dispose();
 
   // Static drift one level deeper still fails closed.
@@ -388,11 +380,11 @@ Deno.test('A10.4: a Region nested inside the sink element keeps canonical paths 
   const tamperedRoot = parseHtml(tamperedDoc, html);
   const tamperedDiv = tamperedRoot.childNodes[0] as TestElement;
   (tamperedDiv.childNodes[1] as TestElement).setAttribute('title', 'tampered');
-  const error = assertThrows(
+  const error = assertThrowsIncludes(
     () => claimExisting(program, whenHost(), tamperedRoot as unknown as Node),
     PartProgramClaimError,
   );
-  assertStringIncludes(error.message, 'attribute drift on "title"');
+  expect(error.message).toContain('attribute drift on "title"');
 });
 
 /**
@@ -407,29 +399,29 @@ function retargetAttrSink(raw: RawProgram, path: number[]): void {
   if (location) location.path = path;
 }
 
-Deno.test('A10.4: a fixed Part path crossing a when/each anchor is rejected fail-closed everywhere', () => {
+test('A10.4: a fixed Part path crossing a when/each anchor is rejected fail-closed everywhere', () => {
   for (const base of [whenSiblingProgram(), eachSiblingProgram()]) {
     const raw = base as RawProgram;
     retargetAttrSink(raw, [1, 0]);
-    const error = assertThrows(() => validatePartProgram(raw), Error);
-    assertStringIncludes(error.message, 'parts[0].path [1,0] is unresolved');
+    const error = assertThrowsIncludes(() => validatePartProgram(raw), Error);
+    expect(error.message).toContain('parts[0].path [1,0] is unresolved');
     // Every executor entry point validates the identical wire program and
     // fails closed: no serializer or mount path can execute the drift shape.
-    assertThrows(() => serializeServer(raw, whenHost()));
-    assertThrows(() => serializeSeed(raw, whenHost()));
-    assertThrows(() =>
+    assertThrowsIncludes(() => serializeServer(raw, whenHost()));
+    assertThrowsIncludes(() => serializeSeed(raw, whenHost()));
+    assertThrowsIncludes(() =>
       createFresh(raw, whenHost(), new TestDocument().createElement('host') as unknown as Node),
     );
-    assertThrows(() =>
+    assertThrowsIncludes(() =>
       claimExisting(raw, whenHost(), new TestDocument().createElement('host') as unknown as Node),
     );
   }
 });
 
-Deno.test('A10.4: a fixed Part path preceded by a Region anchor is rejected fail-closed everywhere', () => {
+test('A10.4: a fixed Part path preceded by a Region anchor is rejected fail-closed everywhere', () => {
   // The builder round-trips through the real validator, so the rejected spec
   // fails at build time with the validator diagnostic.
-  const error = assertThrows(
+  const error = assertThrowsIncludes(
     () =>
       testProgram({
         tag: 'oe-a104-preceded',
@@ -451,7 +443,7 @@ Deno.test('A10.4: a fixed Part path preceded by a Region anchor is rejected fail
       }),
     Error,
   );
-  assertStringIncludes(error.message, 'parts[1].path is preceded by a dynamic anchor');
+  expect(error.message).toContain('parts[1].path is preceded by a dynamic anchor');
 
   // The identical wire shape (anchor reordered before the sink element) is
   // refused by every executor entry point as well.
@@ -463,13 +455,13 @@ Deno.test('A10.4: a fixed Part path preceded by a Region anchor is rejected fail
   raw.parts[1].location = { id: 'p1', kind: 'anchor', path: [0] };
   const anchorLocation = raw.locations.find((candidate) => candidate.id === 'p1');
   if (anchorLocation) anchorLocation.path = [0];
-  assertThrows(() => validatePartProgram(raw));
-  assertThrows(() => serializeServer(raw, whenHost()));
-  assertThrows(() => serializeSeed(raw, whenHost()));
-  assertThrows(() =>
+  assertThrowsIncludes(() => validatePartProgram(raw));
+  assertThrowsIncludes(() => serializeServer(raw, whenHost()));
+  assertThrowsIncludes(() => serializeSeed(raw, whenHost()));
+  assertThrowsIncludes(() =>
     createFresh(raw, whenHost(), new TestDocument().createElement('host') as unknown as Node),
   );
-  assertThrows(() =>
+  assertThrowsIncludes(() =>
     claimExisting(raw, whenHost(), new TestDocument().createElement('host') as unknown as Node),
   );
 });
@@ -495,7 +487,7 @@ function regionSubtree(
   return raw.parts[partIndex][field] as unknown[];
 }
 
-Deno.test('A10.4: nested Region anchors (when └ each, each └ when, deeper) are rejected fail-closed everywhere', () => {
+test('A10.4: nested Region anchors (when └ each, each └ when, deeper) are rejected fail-closed everywhere', () => {
   const nested = { k: 'part', id: 'p9', index: 9 };
   const cases: Array<[string, RawProgram, string]> = [
     [
@@ -526,21 +518,21 @@ Deno.test('A10.4: nested Region anchors (when └ each, each └ when, deeper) a
     ],
   ];
   for (const [name, raw, diagnostic] of cases) {
-    const error = assertThrows(() => validatePartProgram(raw), Error);
-    assertStringIncludes(error.message, diagnostic, name);
+    const error = assertThrowsIncludes(() => validatePartProgram(raw), Error);
+    expect(error.message, name).toContain(diagnostic);
     const host = whenHost();
-    assertThrows(() => serializeServer(raw, host));
-    assertThrows(() => serializeSeed(raw, host));
-    assertThrows(() =>
+    assertThrowsIncludes(() => serializeServer(raw, host));
+    assertThrowsIncludes(() => serializeSeed(raw, host));
+    assertThrowsIncludes(() =>
       createFresh(raw, host, new TestDocument().createElement('host') as unknown as Node),
     );
-    assertThrows(() =>
+    assertThrowsIncludes(() =>
       claimExisting(raw, host, new TestDocument().createElement('host') as unknown as Node),
     );
   }
 });
 
-Deno.test('#1374: mixed number/string each keys keep distinct identity from SSR through claim', () => {
+test('#1374: mixed number/string each keys keep distinct identity from SSR through claim', () => {
   const program = mixedKeyProgram();
   const items: Array<{ id: number | string; label: string }> = [
     { id: 1, label: 'number' },
@@ -548,13 +540,13 @@ Deno.test('#1374: mixed number/string each keys keep distinct identity from SSR 
   ];
   const browser = mixedKeyHost(items);
   const { html, root, instance } = receiveAndClaim(program, mixedKeyHost(items), browser);
-  assertEquals(html, '<ul><!--oe:p0--><li>number</li><li>string</li><!--oe:/p0--></ul>');
+  expect(html).toEqual('<ul><!--oe:p0--><li>number</li><li>string</li><!--oe:/p0--></ul>');
 
   const list = root.childNodes[0] as TestElement;
   const numberItem = list.childNodes[1] as TestElement;
   const stringItem = list.childNodes[2] as TestElement;
-  assertEquals((numberItem.childNodes[0] as TestText).data, 'number');
-  assertEquals((stringItem.childNodes[0] as TestText).data, 'string');
+  expect((numberItem.childNodes[0] as TestText).data).toEqual('number');
+  expect((stringItem.childNodes[0] as TestText).data).toEqual('string');
 
   // A reorder moves each node with its own identity: number 1 and string "1"
   // are distinct keys, so the entries swap without collapsing into one.
@@ -562,26 +554,26 @@ Deno.test('#1374: mixed number/string each keys keep distinct identity from SSR 
     { id: '1', label: 'STRING' },
     { id: 1, label: 'NUMBER' },
   ];
-  assertStrictEquals(list.childNodes[1], stringItem);
-  assertStrictEquals(list.childNodes[2], numberItem);
-  assertEquals((stringItem.childNodes[0] as TestText).data, 'STRING');
-  assertEquals((numberItem.childNodes[0] as TestText).data, 'NUMBER');
+  expect(list.childNodes[1]).toBe(stringItem);
+  expect(list.childNodes[2]).toBe(numberItem);
+  expect((stringItem.childNodes[0] as TestText).data).toEqual('STRING');
+  expect((numberItem.childNodes[0] as TestText).data).toEqual('NUMBER');
 
   // Removing one identity keeps the other's node; re-adding allocates fresh.
   browser.signals.items.value = [{ id: 1, label: 'only number' }];
-  assertStrictEquals(list.childNodes[1], numberItem);
-  assertStrictEquals(stringItem.parentNode, null);
+  expect(list.childNodes[1]).toBe(numberItem);
+  expect(stringItem.parentNode).toBe(null);
   browser.signals.items.value = [
     { id: 1, label: 'only number' },
     { id: '1', label: 'STRING' },
   ];
   const reattached = list.childNodes[2] as TestElement;
-  assertNotStrictEquals(reattached, stringItem);
-  assertEquals((reattached.childNodes[0] as TestText).data, 'STRING');
+  expect(reattached).not.toBe(stringItem);
+  expect((reattached.childNodes[0] as TestText).data).toEqual('STRING');
   instance.dispose();
 });
 
-Deno.test('#1374: a genuine duplicate each key still fails closed on both executors', () => {
+test('#1374: a genuine duplicate each key still fails closed on both executors', () => {
   const program = mixedKeyProgram();
   const duplicated = [
     { id: 1, label: 'one' },
@@ -589,21 +581,24 @@ Deno.test('#1374: a genuine duplicate each key still fails closed on both execut
   ];
 
   // Server duplicate detection still rejects same-type collisions.
-  const serverError = assertThrows(() => serializeServer(program, mixedKeyHost(duplicated)), Error);
-  assertStringIncludes(serverError.message, 'duplicate each Region key 1');
+  const serverError = assertThrowsIncludes(
+    () => serializeServer(program, mixedKeyHost(duplicated)),
+    Error,
+  );
+  expect(serverError.message).toContain('duplicate each Region key 1');
 
   // Claim still fails closed before attaching anything.
   const doc = new TestDocument();
   const root = parseHtml(doc, '<ul><!--oe:p0--><li>one</li><li>again</li><!--oe:/p0--></ul>');
-  const claimError = assertThrows(
+  const claimError = assertThrowsIncludes(
     () => claimExisting(program, mixedKeyHost(duplicated), root as unknown as Node),
     PartProgramClaimError,
   );
-  assertStringIncludes(claimError.message, 'duplicate key');
+  expect(claimError.message).toContain('duplicate key');
 });
 
 /** #1372: the widened operator set must hold across SSR/fresh/claim parity. */
-Deno.test('#1372: equals and truthy conditions hold through SSR/fresh/claim', () => {
+test('#1372: equals and truthy conditions hold through SSR/fresh/claim', () => {
   function equalsProgram(): unknown {
     return testProgram({
       tag: 'oe-1372-equals',
@@ -640,16 +635,16 @@ Deno.test('#1372: equals and truthy conditions hold through SSR/fresh/claim', ()
   // Strict string equality: on while equal, off after the write flips it.
   const status = new Sig('pending');
   const eq = receiveAndClaim(equalsProgram(), { signals: { status } }, { signals: { status } });
-  assertStringIncludes(eq.html, 'PENDING');
+  expect(eq.html).toContain('PENDING');
   status.value = 'done';
-  assertStringIncludes(eq.root.innerHTML, 'SETTLED');
+  expect(eq.root.innerHTML).toContain('SETTLED');
   eq.instance.dispose();
 
   // Negated truthiness: Boolean(value) === false while the signal is empty.
   const ready = new Sig('');
   const tr = receiveAndClaim(truthyProgram(), { signals: { ready } }, { signals: { ready } });
-  assertStringIncludes(tr.html, 'LOADING');
+  expect(tr.html).toContain('LOADING');
   ready.value = 'loaded';
-  assertStringIncludes(tr.root.innerHTML, 'READY');
+  expect(tr.root.innerHTML).toContain('READY');
   tr.instance.dispose();
 });

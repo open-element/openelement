@@ -5,7 +5,7 @@
  * loosening of the scanner fails here instead of silently shipping a tarball
  * a consumer cannot read.
  */
-import { assertEquals, assertStringIncludes } from '@std/assert';
+import { expect, test } from 'vitest';
 import {
   findInternalReferences,
   findMetadataViolations,
@@ -37,11 +37,11 @@ function manifest(
   };
 }
 
-Deno.test('pack surface: metadata parity with packedMetadata()', () => {
-  assertEquals(findMetadataViolations('@openelement/element', manifest(), ELEMENT_METADATA), []);
+test('pack surface: metadata parity with packedMetadata()', () => {
+  expect(findMetadataViolations('@openelement/element', manifest(), ELEMENT_METADATA)).toEqual([]);
 });
 
-Deno.test('pack surface: a missing or divergent facade field fails', () => {
+test('pack surface: a missing or divergent facade field fails', () => {
   const fields: Array<[string, unknown]> = [
     ['homepage', undefined],
     ['homepage', 'https://example.com'],
@@ -58,29 +58,28 @@ Deno.test('pack surface: a missing or divergent facade field fails', () => {
       manifest('@openelement/element', { [field]: value }),
       ELEMENT_METADATA,
     ).map((violation) => violation.message);
-    assertEquals(messages.length, 1, `${field}=${JSON.stringify(value)} must fail`);
-    assertStringIncludes(messages[0], field);
+    expect(messages.length, `${field}=${JSON.stringify(value)} must fail`).toEqual(1);
+    expect(messages[0]).toContain(field);
   }
 });
 
-Deno.test('pack surface: create declares a Deno-floor engine and a cli side effect', () => {
+test('pack surface: create declares a Deno-floor engine and a cli side effect', () => {
   const metadata = packedMetadata('@openelement/create');
-  assertEquals(metadata.engines, { deno: '>=2.9' });
-  assertEquals(metadata.sideEffects, ['./src/cli.js']);
-  assertEquals(
+  expect(metadata.engines).toEqual({ deno: '>=2.9' });
+  expect(metadata.sideEffects).toEqual(['./src/cli.js']);
+  expect(
     findMetadataViolations('@openelement/create', manifest('@openelement/create'), metadata),
-    [],
-  );
+  ).toEqual([]);
   const violations = findMetadataViolations(
     '@openelement/create',
     manifest('@openelement/create', { sideEffects: false }),
     metadata,
   );
-  assertEquals(violations.length, 1);
-  assertStringIncludes(violations[0].message, 'sideEffects');
+  expect(violations.length).toEqual(1);
+  expect(violations[0].message).toContain('sideEffects');
 });
 
-Deno.test('pack surface: repository-internal paths and ADR citations fail', () => {
+test('pack surface: repository-internal paths and ADR citations fail', () => {
   const cases: Array<[string, string]> = [
     ['comment', '// see packages/router/src/authoring.ts for the contract'],
     ['task', 'Regenerate with: deno task --cwd packages/ui generate:ui-tokens'],
@@ -92,12 +91,12 @@ Deno.test('pack surface: repository-internal paths and ADR citations fail', () =
   ];
   for (const [label, line] of cases) {
     const violations = findInternalReferences('@openelement/element', 'src/index.js', line);
-    assertEquals(violations.length, 1, `${label} must fail: ${line}`);
-    assertEquals(violations[0].line, 1);
+    expect(violations.length, `${label} must fail: ${line}`).toEqual(1);
+    expect(violations[0].line).toEqual(1);
   }
 });
 
-Deno.test('pack surface: ordinary prose and package-relative paths pass', () => {
+test('pack surface: ordinary prose and package-relative paths pass', () => {
   const accepted = [
     // The word "tests" in prose, not a repository directory reference.
     '/** Install the process-wide hook (replaceable for tests, HMR, multi-app pages). */',
@@ -107,34 +106,32 @@ Deno.test('pack surface: ordinary prose and package-relative paths pass', () => 
     'docs/ is where the consumer keeps their own files',
   ];
   for (const line of accepted) {
-    assertEquals(
+    expect(
       findInternalReferences('@openelement/element', 'src/index.js', line),
-      [],
       `must pass: ${line}`,
-    );
+    ).toEqual([]);
   }
 });
 
-Deno.test('pack surface: undocumented export subpaths fail, documented ones pass', () => {
+test('pack surface: undocumented export subpaths fail, documented ones pass', () => {
   const readme = 'The package exposes `@openelement/element/compiler` and `/html`.';
   const undocumented = findUndocumentedSubpaths(
     '@openelement/element',
     { '.': './src/index.ts', './compiler': './src/compiler.ts', './logger': './src/logger.ts' },
     readme,
   );
-  assertEquals(undocumented.length, 1);
-  assertStringIncludes(undocumented[0].message, '@openelement/element/logger');
-  assertEquals(
+  expect(undocumented.length).toEqual(1);
+  expect(undocumented[0].message).toContain('@openelement/element/logger');
+  expect(
     findUndocumentedSubpaths(
       '@openelement/element',
       { '.': './src/index.ts', './compiler': './src/compiler.ts' },
       readme,
     ),
-    [],
-  );
+  ).toEqual([]);
 });
 
-Deno.test('pack surface: scanPackedPackage reads the archive shape npm installs', () => {
+test('pack surface: scanPackedPackage reads the archive shape npm installs', () => {
   const files = new Map<string, string>([
     [
       'package/package.json',
@@ -150,20 +147,20 @@ Deno.test('pack surface: scanPackedPackage reads the archive shape npm installs'
   ]);
   const violations = scanPackedPackage('@openelement/element', files);
   // One line, two independent rules: a repository path and a decision citation.
-  assertEquals(violations.length, 2);
-  assertEquals(violations[0].path, 'src/html.js');
-  assertEquals(violations[0].line, 1);
-  assertStringIncludes(violations[0].message, 'docs/');
-  assertStringIncludes(violations[1].message, 'decision-record');
+  expect(violations.length).toEqual(2);
+  expect(violations[0].path).toEqual('src/html.js');
+  expect(violations[0].line).toEqual(1);
+  expect(violations[0].message).toContain('docs/');
+  expect(violations[1].message).toContain('decision-record');
 });
 
-Deno.test('pack surface: a missing packed manifest fails closed', () => {
+test('pack surface: a missing packed manifest fails closed', () => {
   const violations = scanPackedPackage('@openelement/element', new Map());
-  assertEquals(violations.length, 1);
-  assertStringIncludes(violations[0].message, 'missing package/package.json');
+  expect(violations.length).toEqual(1);
+  expect(violations[0].message).toContain('missing package/package.json');
 });
 
-Deno.test('pack surface: module-scope global writes are found, nested ones are not', () => {
+test('pack surface: module-scope global writes are found, nested ones are not', () => {
   const offending = [
     'globalThis.customElements = {};',
     'window.__openElement = true;',
@@ -173,7 +170,7 @@ Deno.test('pack surface: module-scope global writes are found, nested ones are n
   ];
   for (const line of offending) {
     const found = findModuleScopeGlobalWrites(line);
-    assertEquals(found.length, 1, `must fail: ${line}`);
+    expect(found.length, `must fail: ${line}`).toEqual(1);
   }
 
   const accepted = [
@@ -191,11 +188,11 @@ Deno.test('pack surface: module-scope global writes are found, nested ones are n
     '  globalThis.customElements = {};',
   ];
   for (const source of accepted) {
-    assertEquals(findModuleScopeGlobalWrites(source), [], `must pass: ${JSON.stringify(source)}`);
+    expect(findModuleScopeGlobalWrites(source), `must pass: ${JSON.stringify(source)}`).toEqual([]);
   }
 });
 
-Deno.test('pack surface: a side-effect-free package with a module-scope write fails', () => {
+test('pack surface: a side-effect-free package with a module-scope write fails', () => {
   const files = new Map<string, string>([
     // Element declares an array (#1425), so this case uses a package that still
     // declares a flat `false`: the rule it pins is the flat claim's.
@@ -204,26 +201,26 @@ Deno.test('pack surface: a side-effect-free package with a module-scope write fa
     ['package/src/index.js', 'globalThis.__openElementBootstrap = true;'],
   ]);
   const violations = scanPackedPackage('@openelement/ui', files);
-  assertEquals(violations.length, 1);
-  assertStringIncludes(violations[0].message, 'sideEffects');
-  assertStringIncludes(violations[0].path, 'src/index.js');
+  expect(violations.length).toEqual(1);
+  expect(violations[0].message).toContain('sideEffects');
+  expect(violations[0].path).toContain('src/index.js');
 });
 
-Deno.test('pack surface: create keeps its side-effectful cli out of the scan', () => {
+test('pack surface: create keeps its side-effectful cli out of the scan', () => {
   const files = new Map<string, string>([
     ['package/package.json', JSON.stringify(manifest('@openelement/create'))],
     ['package/README.md', ''],
     ['package/src/cli.js', 'globalThis.__scaffoldOnImport = true;'],
   ]);
   // Create declares sideEffects: ['./src/cli.js'], so the write is expected.
-  assertEquals(scanPackedPackage('@openelement/create', files), []);
+  expect(scanPackedPackage('@openelement/create', files)).toEqual([]);
 });
 
-Deno.test('pack surface: module-scope seam installs are found, deferred ones are not', () => {
+test('pack surface: module-scope seam installs are found, deferred ones are not', () => {
   const offending = ['installClaimExecutor(claimExistingDom);', 'installSeamThing(other);'];
   for (const line of offending) {
     const found = findModuleScopeSeamInstalls(line);
-    assertEquals(found.length, 1, `must fail: ${line}`);
+    expect(found.length, `must fail: ${line}`).toEqual(1);
   }
 
   const accepted = [
@@ -238,11 +235,11 @@ Deno.test('pack surface: module-scope seam installs are found, deferred ones are
     'export { installClaimExecutor } from "./claim-seam.js";',
   ];
   for (const source of accepted) {
-    assertEquals(findModuleScopeSeamInstalls(source), [], `must pass: ${JSON.stringify(source)}`);
+    expect(findModuleScopeSeamInstalls(source), `must pass: ${JSON.stringify(source)}`).toEqual([]);
   }
 });
 
-Deno.test('pack surface: an undeclared seam install fails, a declared one passes', () => {
+test('pack surface: an undeclared seam install fails, a declared one passes', () => {
   // The installer path in the fixture is the one the shipped element manifest
   // declares, so "declared" below means the real declaration actually covers
   // the real module — not a coincidental match on a test-only name.
@@ -264,31 +261,30 @@ Deno.test('pack surface: an undeclared seam install fails, a declared one passes
   // The #1425 shape: `false` lets a bundler drop the installer AND the bare
   // import that reaches it, so the packaged entry silently loses the seam.
   const undeclared = seam(false);
-  assertEquals(undeclared.length, 1);
-  assertStringIncludes(undeclared[0].path, INSTALLER_PATH);
+  expect(undeclared.length).toEqual(1);
+  expect(undeclared[0].path).toContain(INSTALLER_PATH);
 
   // The shipped declaration clears it, and clears every other rule too.
-  assertEquals(
+  expect(
     scanPackedPackage(
       '@openelement/element',
       packaged(packedMetadata('@openelement/element').sideEffects),
     ),
-    [],
-  );
+  ).toEqual([]);
 
   // Wildcards and a flat `true` are honoured the way npm reads them.
   for (const declared of [['./src/**'], true] as const) {
-    assertEquals(seam(declared), [], `must pass with sideEffects=${JSON.stringify(declared)}`);
+    expect(seam(declared), `must pass with sideEffects=${JSON.stringify(declared)}`).toEqual([]);
   }
 
   // Naming only the importer is NOT enough: the installer body is still
   // side-effect-free on its own, which is exactly the half-dropped bundle.
   const importerOnly = seam(['./src/index.js']);
-  assertEquals(importerOnly.length, 1);
-  assertStringIncludes(importerOnly[0].path, INSTALLER_PATH);
+  expect(importerOnly.length).toEqual(1);
+  expect(importerOnly[0].path).toContain(INSTALLER_PATH);
 
   // And the shipped element manifest must not regress to the flat claim.
-  assertEquals(packedMetadata('@openelement/element').sideEffects, [
+  expect(packedMetadata('@openelement/element').sideEffects).toEqual([
     './src/index.js',
     './src/internal/compiled/runtime/claim-install.js',
   ]);

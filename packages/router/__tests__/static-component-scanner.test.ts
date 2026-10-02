@@ -1,19 +1,23 @@
-import { assertEquals, assertRejects } from '@std/assert';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { expect, test } from 'vitest';
+import { assertRejectsIncludes } from '../../../tests/lib/vitest-asserts.ts';
 import type { RouteEntry } from '../src/vite/internal/protocol/framework.ts';
 import { scanStaticComponents } from '../src/vite/internal/ssg/static-component-scanner.ts';
 
 async function write(root: string, path: string, source: string): Promise<void> {
   const url = new URL(path, `file://${root}/`);
-  await Deno.mkdir(new URL('.', url), { recursive: true });
-  await Deno.writeTextFile(url, source);
+  await mkdir(new URL('.', url), { recursive: true });
+  await writeFile(url, source);
 }
 
 const ROUTES: RouteEntry[] = [
   { path: '/', filePath: 'index.tsx', type: 'page', varName: 'pageIndex' },
 ];
 
-Deno.test('scanStaticComponents follows the local route graph deterministically', async () => {
-  const root = await Deno.makeTempDir({ prefix: 'oe-static-components-' });
+test('scanStaticComponents follows the local route graph deterministically', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'oe-static-components-'));
   try {
     await write(
       root,
@@ -36,33 +40,32 @@ Deno.test('scanStaticComponents follows the local route graph deterministically'
       `import { element, OpenElement } from '@openelement/element';\n@element('open-counter')\nexport default class Counter extends OpenElement {}`,
     );
 
-    assertEquals(
+    expect(
       await scanStaticComponents({
         root,
         routesDir: 'app/routes',
         islandsDir: 'app/islands',
         routes: ROUTES,
       }),
-      [
-        {
-          tagName: 'open-article-view',
-          modulePath: '/app/components/article.tsx',
-          compilerInteractionEvents: [],
-        },
-        {
-          tagName: 'open-reading-shell',
-          modulePath: '/app/components/reading-shell.tsx',
-          compilerInteractionEvents: ['click'],
-        },
-      ],
-    );
+    ).toEqual([
+      {
+        tagName: 'open-article-view',
+        modulePath: '/app/components/article.tsx',
+        compilerInteractionEvents: [],
+      },
+      {
+        tagName: 'open-reading-shell',
+        modulePath: '/app/components/reading-shell.tsx',
+        compilerInteractionEvents: ['click'],
+      },
+    ]);
   } finally {
-    await Deno.remove(root, { recursive: true });
+    await rm(root, { recursive: true });
   }
 });
 
-Deno.test('scanStaticComponents fails closed on duplicate reachable tags', async () => {
-  const root = await Deno.makeTempDir({ prefix: 'oe-static-components-duplicate-' });
+test('scanStaticComponents fails closed on duplicate reachable tags', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'oe-static-components-duplicate-'));
   try {
     await write(
       root,
@@ -77,7 +80,7 @@ Deno.test('scanStaticComponents fails closed on duplicate reachable tags', async
       );
     }
 
-    await assertRejects(
+    await assertRejectsIncludes(
       () =>
         scanStaticComponents({
           root,
@@ -89,6 +92,6 @@ Deno.test('scanStaticComponents fails closed on duplicate reachable tags', async
       'declared by both',
     );
   } finally {
-    await Deno.remove(root, { recursive: true });
+    await rm(root, { recursive: true });
   }
 });

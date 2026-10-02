@@ -14,13 +14,8 @@
  * module), and by stream-browser.test.ts (real Chromium executing the real
  * bootstrap string).
  */
-import {
-  assert,
-  assertEquals,
-  assertRejects,
-  assertStringIncludes,
-  assertThrows,
-} from '@std/assert';
+import { expect, test } from 'vitest';
+import { assertRejectsIncludes, assertThrowsIncludes } from '../../../tests/lib/vitest-asserts.ts';
 import {
   STREAM_FRAME_FORBIDDEN_TAGS,
   STREAM_FRAME_UNSAFE_URL,
@@ -70,18 +65,18 @@ function escapeAttr(value: string): string {
     .replaceAll('>', '&gt;');
 }
 
-Deno.test('stream request scope fans the upstream abort out and cancel detaches it', () => {
+test('stream request scope fans the upstream abort out and cancel detaches it', () => {
   const upstream = new AbortController();
   const scope = createStreamRequestScope(
     new Request('https://example.test/', {
       signal: upstream.signal,
     }),
   );
-  assertEquals(scope.upstreamSignal.aborted, false);
-  assertEquals(scope.request.signal.aborted, false);
+  expect(scope.upstreamSignal.aborted).toEqual(false);
+  expect(scope.request.signal.aborted).toEqual(false);
   upstream.abort(new Error('client gone'));
-  assertEquals(scope.upstreamSignal.aborted, true);
-  assertEquals(scope.request.signal.aborted, true, 'the upstream abort fans out to the scope');
+  expect(scope.upstreamSignal.aborted).toEqual(true);
+  expect(scope.request.signal.aborted, 'the upstream abort fans out to the scope').toEqual(true);
 
   const second = new AbortController();
   const scope2 = createStreamRequestScope(
@@ -90,15 +85,14 @@ Deno.test('stream request scope fans the upstream abort out and cancel detaches 
     }),
   );
   scope2.abortWork();
-  assertEquals(scope2.request.signal.aborted, true);
-  assertEquals(second.signal.aborted, false, 'abortWork must not cancel the upstream request');
+  expect(scope2.request.signal.aborted).toEqual(true);
+  expect(second.signal.aborted, 'abortWork must not cancel the upstream request').toEqual(false);
   scope2.cancel();
-  assertEquals(scope2.request.signal.aborted, true, 'cancel aborts the scope');
-  assertEquals(
+  expect(scope2.request.signal.aborted, 'cancel aborts the scope').toEqual(true);
+  expect(
     second.signal.aborted,
-    false,
     'cancel detaches the fan-out instead of aborting the upstream request',
-  );
+  ).toEqual(false);
 
   const third = new AbortController();
   const scope3 = createStreamRequestScope(
@@ -108,42 +102,42 @@ Deno.test('stream request scope fans the upstream abort out and cancel detaches 
   );
   scope3.cancel();
   scope3.cancel();
-  assertEquals(scope3.request.signal.aborted, true, 'a repeated cancel stays a no-op');
+  expect(scope3.request.signal.aborted, 'a repeated cancel stays a no-op').toEqual(true);
 });
 
-Deno.test('stream front gate rejects non-object loader data after observing its thenables', async () => {
+test('stream front gate rejects non-object loader data after observing its thenables', async () => {
   const rejecting = Promise.reject(new Error('array stray rejection'));
-  const error = assertThrows(() => streamFields([rejecting], manifest(1)), Error);
-  assertEquals(error.message, 'stream loader must return one object');
+  const error = assertThrowsIncludes(() => streamFields([rejecting], manifest(1)), Error);
+  expect(error.message).toEqual('stream loader must return one object');
   await new Promise((resolve) => setTimeout(resolve, 0)); // the rejection is observed
 });
 
-Deno.test('stream front gate enforces the field/owner budget from the policy constants', () => {
+test('stream front gate enforces the field/owner budget from the policy constants', () => {
   const overFields = manifest(STREAM_MAX_FIELDS + 1);
-  const error = assertThrows(() => streamFields({}, overFields), Error);
-  assertEquals(error.message, 'stream manifest exceeds the bounded field/Part budget');
+  const error = assertThrowsIncludes(() => streamFields({}, overFields), Error);
+  expect(error.message).toEqual('stream manifest exceeds the bounded field/Part budget');
   // The boundary itself is admitted: a manifest AT the budget passes the gate.
   const atBudgetFields = manifest(STREAM_MAX_FIELDS);
   const atBudget = streamFields(
     Object.fromEntries(atBudgetFields.fields.map((field) => [field.field, 'v'])),
     atBudgetFields,
   );
-  assertEquals(atBudget.length, STREAM_MAX_FIELDS);
+  expect(atBudget.length).toEqual(STREAM_MAX_FIELDS);
 });
 
-Deno.test('stream front gate rejects a missing declared field and observes the strays', async () => {
+test('stream front gate rejects a missing declared field and observes the strays', async () => {
   const declared = Promise.reject(new Error('declared field rejection'));
-  const error = assertThrows(
+  const error = assertThrowsIncludes(
     () => streamFields({ f0: declared }, manifest(2)),
     Error,
     'missing declared deferred field',
   );
-  assertEquals(error.message, 'missing declared deferred field f1');
+  expect(error.message).toEqual('missing declared deferred field f1');
   await new Promise((resolve) => setTimeout(resolve, 0)); // the declared rejection is observed
   // The undeclared-thenable exit sweeps every loader thenable through
   // observation before it throws, rejections included.
   const stray = Promise.reject(new Error('undeclared stray rejection'));
-  assertThrows(
+  assertThrowsIncludes(
     () => streamFields({ f0: 'a', f1: 'b', ghost: stray }, manifest(2)),
     Error,
     'undeclared thenable loader field ghost',
@@ -151,59 +145,60 @@ Deno.test('stream front gate rejects a missing declared field and observes the s
   await new Promise((resolve) => setTimeout(resolve, 0)); // the stray rejection is observed too
 });
 
-Deno.test('stream front gate attaches both observers per declared field', async () => {
+test('stream front gate attaches both observers per declared field', async () => {
   const records = streamFields(
     { f0: Promise.resolve('ok'), f1: Promise.reject(new Error('no')) },
     manifest(2),
   );
   await new Promise((resolve) => setTimeout(resolve, 0)); // settlement lands on the microtask queue
-  assertEquals(
-    records.map((record) => record.settled),
-    [true, true],
-  );
-  assertEquals(
-    records.map((record) => record.failed),
-    [false, true],
-  );
-  assertEquals(records[0].value, 'ok');
-  assertEquals((records[1].error as Error).message, 'no');
+  expect(records.map((record) => record.settled)).toEqual([true, true]);
+  expect(records.map((record) => record.failed)).toEqual([false, true]);
+  expect(records[0].value).toEqual('ok');
+  expect((records[1].error as Error).message).toEqual('no');
 });
 
-Deno.test('deferred-shell gate fails closed when the route has no build manifest', async () => {
+test('deferred-shell gate fails closed when the route has no build manifest', async () => {
   const gate = createDeferredPageShell({
     streamManifests: {},
     createDeferredDsdExecutor: () => Promise.resolve(executor()),
   });
-  const error = await assertRejects(
+  const error = await assertRejectsIncludes(
     () => gate('/', { default: { __partProgram: { tag: 'oe-unit', version: 1 } } }, {}, 'i', 't'),
     Error,
   );
-  assertEquals(
-    error.message,
+  expect(error.message).toEqual(
     '[openElement] stream route / has no matching compiled route manifest/program.',
   );
 });
 
-Deno.test('deferred-shell gate fails closed on a program tag or version mismatch', async () => {
+test('deferred-shell gate fails closed on a program tag or version mismatch', async () => {
   const gate = createDeferredPageShell({
     streamManifests: { '/': manifest(1) },
     createDeferredDsdExecutor: () => Promise.resolve(executor()),
   });
   const routeModule = { default: { __partProgram: { tag: 'other-unit', version: 1 } } };
-  await assertRejects(() => gate('/', routeModule, {}, 'i', 't'), Error, 'no matching compiled');
+  await assertRejectsIncludes(
+    () => gate('/', routeModule, {}, 'i', 't'),
+    Error,
+    'no matching compiled',
+  );
   const wrongVersion = {
     default: { __partProgram: { tag: 'oe-unit', version: manifest(1).program.version + 1 } },
   };
-  await assertRejects(() => gate('/', wrongVersion, {}, 'i', 't'), Error, 'no matching compiled');
+  await assertRejectsIncludes(
+    () => gate('/', wrongVersion, {}, 'i', 't'),
+    Error,
+    'no matching compiled',
+  );
   // A page module without a compiled program fails the same gate.
-  await assertRejects(
+  await assertRejectsIncludes(
     () => gate('/', { default: {} }, {}, 'i', 't'),
     Error,
     'no matching compiled',
   );
 });
 
-Deno.test('deferred-shell gate delegates to the entry executor import on a match', async () => {
+test('deferred-shell gate delegates to the entry executor import on a match', async () => {
   const routeModule = { default: { __partProgram: { tag: 'oe-unit', version: 1 } } };
   const calls: unknown[] = [];
   const produced = executor();
@@ -215,8 +210,8 @@ Deno.test('deferred-shell gate delegates to the entry executor import on a match
     },
   });
   const executorView = await gate('/', routeModule, { first: 'v' }, 'instance-9', 'token-9');
-  assertEquals(executorView, produced);
-  assertEquals(calls, [
+  expect(executorView).toEqual(produced);
+  expect(calls).toEqual([
     {
       componentClass: routeModule.default,
       props: { first: 'v' },
@@ -227,7 +222,7 @@ Deno.test('deferred-shell gate delegates to the entry executor import on a match
   ]);
 });
 
-Deno.test('stream body commits the shell with its typed seed attribute first', async () => {
+test('stream body commits the shell with its typed seed attribute first', async () => {
   const scope = createStreamRequestScope(new Request('https://example.test/'));
   const records = streamFields({ f0: Promise.resolve('v0') }, manifest(1));
   const body = createStreamBody({ escapeAttr })({
@@ -242,17 +237,17 @@ Deno.test('stream body commits the shell with its typed seed attribute first', a
   const reader = body.getReader();
   const decoder = new TextDecoder();
   const shell = decoder.decode((await reader.read()).value);
-  assertStringIncludes(shell, '<!DOCTYPE html><html>');
-  assertStringIncludes(shell, '<oe-unit></oe-unit>');
-  assertStringIncludes(shell, 'data-oe-seed=');
-  assertStringIncludes(shell, '&quot;instance&quot;:&quot;instance-1&quot;');
-  assertStringIncludes(shell, '&quot;program&quot;:&quot;1:' + 'a'.repeat(64) + '&quot;');
-  assertStringIncludes(shell, '&quot;pending&quot;:[0]');
-  assertEquals(scope.request.signal.aborted, false);
+  expect(shell).toContain('<!DOCTYPE html><html>');
+  expect(shell).toContain('<oe-unit></oe-unit>');
+  expect(shell).toContain('data-oe-seed=');
+  expect(shell).toContain('&quot;instance&quot;:&quot;instance-1&quot;');
+  expect(shell).toContain('&quot;program&quot;:&quot;1:' + 'a'.repeat(64) + '&quot;');
+  expect(shell).toContain('&quot;pending&quot;:[0]');
+  expect(scope.request.signal.aborted).toEqual(false);
   await reader.cancel();
 });
 
-Deno.test('stream body backfills content frames, the no-JS tail, and then closes', async () => {
+test('stream body backfills content frames, the no-JS tail, and then closes', async () => {
   const scope = createStreamRequestScope(new Request('https://example.test/'));
   const deferred = Promise.withResolvers<string>();
   const records = streamFields({ f0: deferred.promise }, manifest(1));
@@ -270,16 +265,16 @@ Deno.test('stream body backfills content frames, the no-JS tail, and then closes
   await reader.read();
   deferred.resolve('backfilled');
   const frame = decoder.decode((await reader.read()).value);
-  assertStringIncludes(frame, 'data-oe-frame=');
-  assertStringIncludes(frame, '&quot;outcome&quot;:&quot;content&quot;');
-  assertStringIncludes(frame, '<noscript>backfilled</noscript>');
+  expect(frame).toContain('data-oe-frame=');
+  expect(frame).toContain('&quot;outcome&quot;:&quot;content&quot;');
+  expect(frame).toContain('<noscript>backfilled</noscript>');
   const tail = decoder.decode((await reader.read()).value);
-  assertEquals(tail, '</html>');
-  assertEquals((await reader.read()).done, true);
+  expect(tail).toEqual('</html>');
+  expect((await reader.read()).done).toEqual(true);
   await reader.cancel();
 });
 
-Deno.test('stream body answers a rejected field with a terminal value-less error frame', async () => {
+test('stream body answers a rejected field with a terminal value-less error frame', async () => {
   const scope = createStreamRequestScope(new Request('https://example.test/'));
   const deferred = Promise.withResolvers<string>();
   const records = streamFields({ f0: deferred.promise }, manifest(1));
@@ -305,17 +300,17 @@ Deno.test('stream body answers a rejected field with a terminal value-less error
   } finally {
     console.error = originalError;
   }
-  assertStringIncludes(frame, '&quot;outcome&quot;:&quot;error&quot;');
-  assertStringIncludes(frame, '<noscript><p>Content unavailable.</p></noscript>');
-  assert(
+  expect(frame).toContain('&quot;outcome&quot;:&quot;error&quot;');
+  expect(frame).toContain('<noscript><p>Content unavailable.</p></noscript>');
+  expect(
     messages.some((message) => message === '[openElement] deferred Part failed'),
     'the failure is diagnosed',
-  );
-  assert(!frame.includes('late failure'), 'the error frame carries no internals');
+  ).toBeTruthy();
+  expect(!frame.includes('late failure'), 'the error frame carries no internals').toBeTruthy();
   await reader.cancel();
 });
 
-Deno.test('stream body turns an over-policy range into error frames, never oversized markup', async () => {
+test('stream body turns an over-policy range into error frames, never oversized markup', async () => {
   const scope = createStreamRequestScope(new Request('https://example.test/'));
   const oversized: StreamExecutorView = {
     ...executor(),
@@ -343,15 +338,15 @@ Deno.test('stream body turns an over-policy range into error frames, never overs
   } finally {
     console.error = originalError;
   }
-  assertStringIncludes(frame, '&quot;outcome&quot;:&quot;error&quot;');
-  assert(
+  expect(frame).toContain('&quot;outcome&quot;:&quot;error&quot;');
+  expect(
     messages.some((message) => message === '[openElement] deferred Part failed'),
     'the oversized range is diagnosed',
-  );
+  ).toBeTruthy();
   await reader.cancel();
 });
 
-Deno.test('stream body timeout sweeps pending fields and aborts loader work', async () => {
+test('stream body timeout sweeps pending fields and aborts loader work', async () => {
   const scope = createStreamRequestScope(new Request('https://example.test/'));
   const records = streamFields({ f0: new Promise<string>(() => {}) }, manifest(1));
   const body = createStreamBody({ escapeAttr, timeoutMs: 20 })({
@@ -367,13 +362,13 @@ Deno.test('stream body timeout sweeps pending fields and aborts loader work', as
   const decoder = new TextDecoder();
   await reader.read();
   const frame = decoder.decode((await reader.read()).value);
-  assertStringIncludes(frame, '&quot;outcome&quot;:&quot;error&quot;');
-  assertEquals(scope.request.signal.aborted, true, 'the timeout aborts loader work');
-  assertStringIncludes(decoder.decode((await reader.read()).value), '</html>');
+  expect(frame).toContain('&quot;outcome&quot;:&quot;error&quot;');
+  expect(scope.request.signal.aborted, 'the timeout aborts loader work').toEqual(true);
+  expect(decoder.decode((await reader.read()).value)).toContain('</html>');
   await reader.cancel();
 });
 
-Deno.test('stream body cancel aborts the request scope and ends the stream', async () => {
+test('stream body cancel aborts the request scope and ends the stream', async () => {
   const upstream = new AbortController();
   const scope = createStreamRequestScope(
     new Request('https://example.test/', {
@@ -393,57 +388,56 @@ Deno.test('stream body cancel aborts the request scope and ends the stream', asy
   const reader = body.getReader();
   await reader.read();
   await reader.cancel();
-  assertEquals(scope.request.signal.aborted, true, 'cancel aborts the loader-facing scope');
-  assertEquals(
+  expect(scope.request.signal.aborted, 'cancel aborts the loader-facing scope').toEqual(true);
+  expect(
     upstream.signal.aborted,
-    false,
     'the upstream signal is the consumer side; the body only detaches from it',
-  );
-  assertEquals((await reader.read()).done, true);
+  ).toEqual(false);
+  expect((await reader.read()).done).toEqual(true);
 });
 
-Deno.test('the browser bootstrap constant carries the policy values it enforces', () => {
+test('the browser bootstrap constant carries the policy values it enforces', () => {
   // It is the one inline head script of every streamed page; its EXECUTION in
   // a real document is pinned by stream-browser.test.ts (Chromium).
-  assertStringIncludes(STREAM_BROWSER_BOOTSTRAP, '(function () {');
-  assertStringIncludes(STREAM_BROWSER_BOOTSTRAP.trimEnd(), '})();');
-  assertStringIncludes(STREAM_BROWSER_BOOTSTRAP, 'openelement.stream-state.v1');
-  assertStringIncludes(STREAM_BROWSER_BOOTSTRAP, 'openelement.stream-control.v1');
-  assertStringIncludes(STREAM_BROWSER_BOOTSTRAP, `var maxPayload = ${STREAM_MAX_PAYLOAD_LENGTH};`);
-  assertStringIncludes(
-    STREAM_BROWSER_BOOTSTRAP,
+  expect(STREAM_BROWSER_BOOTSTRAP).toContain('(function () {');
+  expect(STREAM_BROWSER_BOOTSTRAP.trimEnd()).toContain('})();');
+  expect(STREAM_BROWSER_BOOTSTRAP).toContain('openelement.stream-state.v1');
+  expect(STREAM_BROWSER_BOOTSTRAP).toContain('openelement.stream-control.v1');
+  expect(STREAM_BROWSER_BOOTSTRAP).toContain(`var maxPayload = ${STREAM_MAX_PAYLOAD_LENGTH};`);
+  expect(STREAM_BROWSER_BOOTSTRAP).toContain(
     `new Set(${JSON.stringify(STREAM_FRAME_FORBIDDEN_TAGS)})`,
   );
-  assertStringIncludes(
-    STREAM_BROWSER_BOOTSTRAP,
+  expect(STREAM_BROWSER_BOOTSTRAP).toContain(
     `new Set(${JSON.stringify(STREAM_FRAME_URL_ATTRIBUTES)})`,
   );
-  assertStringIncludes(
-    STREAM_BROWSER_BOOTSTRAP,
+  expect(STREAM_BROWSER_BOOTSTRAP).toContain(
     `var frameUrlControlMax = ${STREAM_FRAME_URL_CONTROL_MAX};`,
   );
-  assertStringIncludes(
-    STREAM_BROWSER_BOOTSTRAP,
-    `var unsafeFrameUrl = ${STREAM_FRAME_UNSAFE_URL};`,
-  );
-  assertStringIncludes(
-    STREAM_BROWSER_BOOTSTRAP,
+  expect(STREAM_BROWSER_BOOTSTRAP).toContain(`var unsafeFrameUrl = ${STREAM_FRAME_UNSAFE_URL};`);
+  expect(STREAM_BROWSER_BOOTSTRAP).toContain(
     `frame.fields.length > ${STREAM_MAX_FIELDS} || frame.pending.length > ${STREAM_MAX_OWNERS}`,
   );
-  assertStringIncludes(STREAM_BROWSER_BOOTSTRAP, `names.length > ${STREAM_MAX_SEED_PROPERTIES}`);
+  expect(STREAM_BROWSER_BOOTSTRAP).toContain(`names.length > ${STREAM_MAX_SEED_PROPERTIES}`);
   // The browser-local walker bounds stay contract literals.
-  assertStringIncludes(STREAM_BROWSER_BOOTSTRAP, 'var maxNodes = 10000;');
-  assertStringIncludes(STREAM_BROWSER_BOOTSTRAP, 'if (depth > 32) return false;');
+  expect(STREAM_BROWSER_BOOTSTRAP).toContain('var maxNodes = 10000;');
+  expect(STREAM_BROWSER_BOOTSTRAP).toContain('if (depth > 32) return false;');
 });
 
-Deno.test('the stream policy constants are the wire contracts the browser enforces', () => {
-  assertEquals(STREAM_MAX_FIELDS, 32);
-  assertEquals(STREAM_MAX_OWNERS, 64);
-  assertEquals(STREAM_MAX_SEED_PROPERTIES, 64);
-  assertEquals(STREAM_MAX_PAYLOAD_LENGTH, 256 * 1024);
-  assertEquals(STREAM_FRAME_URL_CONTROL_MAX, 32);
-  assertEquals(
-    [...STREAM_FRAME_FORBIDDEN_TAGS],
-    ['script', 'style', 'template', 'iframe', 'object', 'embed', 'base', 'meta', 'link'],
-  );
+test('the stream policy constants are the wire contracts the browser enforces', () => {
+  expect(STREAM_MAX_FIELDS).toEqual(32);
+  expect(STREAM_MAX_OWNERS).toEqual(64);
+  expect(STREAM_MAX_SEED_PROPERTIES).toEqual(64);
+  expect(STREAM_MAX_PAYLOAD_LENGTH).toEqual(256 * 1024);
+  expect(STREAM_FRAME_URL_CONTROL_MAX).toEqual(32);
+  expect([...STREAM_FRAME_FORBIDDEN_TAGS]).toEqual([
+    'script',
+    'style',
+    'template',
+    'iframe',
+    'object',
+    'embed',
+    'base',
+    'meta',
+    'link',
+  ]);
 });

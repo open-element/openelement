@@ -1,4 +1,6 @@
-import { assert, assertEquals, assertStringIncludes } from '@std/assert';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { expect, test } from 'vitest';
 import { join } from '@std/path';
 import {
   detectAndClassifyCemPackages,
@@ -22,10 +24,10 @@ const element = (tagName: string, openElement?: Record<string, unknown>): unknow
   ...(openElement ? { openElement } : {}),
 });
 
-Deno.test('CEM parser fails closed for malformed roots, modules, declarations, and exports', () => {
-  assertEquals(parseCem('{broken').errors[0].code, 'CEM_PARSE_ERROR');
-  assertEquals(parseCem('[]').errors[0].code, 'CEM_INVALID_ROOT');
-  assertEquals(parseCem('{}').errors[0].code, 'CEM_NO_MODULES');
+test('CEM parser fails closed for malformed roots, modules, declarations, and exports', () => {
+  expect(parseCem('{broken').errors[0].code).toEqual('CEM_PARSE_ERROR');
+  expect(parseCem('[]').errors[0].code).toEqual('CEM_INVALID_ROOT');
+  expect(parseCem('{}').errors[0].code).toEqual('CEM_NO_MODULES');
 
   const result = parseCem(
     JSON.stringify({
@@ -44,10 +46,10 @@ Deno.test('CEM parser fails closed for malformed roots, modules, declarations, a
       ],
     }),
   );
-  assertEquals(result.success, false);
-  assertEquals(result.manifest, undefined);
-  assert(result.warnings.some((warning) => warning.code === 'CEM_NO_SCHEMA_VERSION'));
-  assert(result.warnings.some((warning) => warning.code === 'CEM_MODULE_NO_KIND'));
+  expect(result.success).toEqual(false);
+  expect(result.manifest).toEqual(undefined);
+  expect(result.warnings.some((warning) => warning.code === 'CEM_NO_SCHEMA_VERSION')).toBeTruthy();
+  expect(result.warnings.some((warning) => warning.code === 'CEM_MODULE_NO_KIND')).toBeTruthy();
   for (const code of [
     'CEM_MODULE_NO_PATH',
     'CEM_CE_NO_TAG_NAME',
@@ -55,14 +57,14 @@ Deno.test('CEM parser fails closed for malformed roots, modules, declarations, a
     'CEM_CE_DUPLICATE_TAG',
     'CEM_EXPORT_NO_DECLARATION',
   ]) {
-    assert(
+    expect(
       result.errors.some((error) => error.code === code),
       code,
-    );
+    ).toBeTruthy();
   }
 });
 
-Deno.test('CEM classifier preserves conservative defaults and explicit delivery declarations', () => {
+test('CEM classifier preserves conservative defaults and explicit delivery declarations', () => {
   const parsed = parseCem(
     manifest(
       [
@@ -86,21 +88,21 @@ Deno.test('CEM classifier preserves conservative defaults and explicit delivery 
       '@scope/components',
     ),
   );
-  assertEquals(parsed.success, true);
+  expect(parsed.success).toEqual(true);
   const classified = classifyCemManifest(parsed.manifest!);
-  assertEquals(classified.stats, {
+  expect(classified.stats).toEqual({
     totalComponents: 4,
     ssrCapableCount: 1,
     clientOnlyCount: 3,
     rejectedCount: 0,
     experimentalDomCount: 0,
   });
-  assertEquals(classified.ssrCapableTags, ['server-element']);
-  assertEquals(classified.clientOnlyTags, ['plain-element', 'explicit-client', 'missing-layer']);
-  assertStringIncludes(classified.classifications[0].reason, '@scope/components');
-  assertEquals(classified.classifications[1].hydrate, 'visible');
-  assertStringIncludes(classified.classifications[2].reason, 'no adapter/layer');
-  assertEquals(classified.classifications[3].dsd, true);
+  expect(classified.ssrCapableTags).toEqual(['server-element']);
+  expect(classified.clientOnlyTags).toEqual(['plain-element', 'explicit-client', 'missing-layer']);
+  expect(classified.classifications[0].reason).toContain('@scope/components');
+  expect(classified.classifications[1].hydrate).toEqual('visible');
+  expect(classified.classifications[2].reason).toContain('no adapter/layer');
+  expect(classified.classifications[3].dsd).toEqual(true);
 
   // Classification remains fail-closed if a caller supplies an already-decoded
   // manifest containing a duplicate instead of using parseCem first.
@@ -112,22 +114,22 @@ Deno.test('CEM classifier preserves conservative defaults and explicit delivery 
     declarations: [...(duplicateManifest.modules[0].declarations ?? [])],
   });
   const duplicate = classifyCemManifest(duplicateManifest);
-  assertEquals(duplicate.rejectedTags, ['same-element']);
-  assertEquals(duplicate.stats.rejectedCount, 1);
+  expect(duplicate.rejectedTags).toEqual(['same-element']);
+  expect(duplicate.stats.rejectedCount).toEqual(1);
 });
 
-Deno.test('CEM scanner discovers scoped and unscoped packages without executing them', async () => {
-  const root = await Deno.makeTempDir({ prefix: 'oe-cem-' });
+test('CEM scanner discovers scoped and unscoped packages without executing them', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'oe-cem-'));
   try {
-    await Deno.mkdir(join(root, 'plain'), { recursive: true });
-    await Deno.mkdir(join(root, '@scope', 'package'), { recursive: true });
-    await Deno.mkdir(join(root, '.cache'), { recursive: true });
-    await Deno.mkdir(join(root, '@scope', '.hidden'), { recursive: true });
-    await Deno.writeTextFile(
+    await mkdir(join(root, 'plain'), { recursive: true });
+    await mkdir(join(root, '@scope', 'package'), { recursive: true });
+    await mkdir(join(root, '.cache'), { recursive: true });
+    await mkdir(join(root, '@scope', '.hidden'), { recursive: true });
+    await writeFile(
       join(root, 'plain', 'custom-elements.json'),
       manifest([moduleWith('./plain.js', [element('plain-element')])]),
     );
-    await Deno.writeTextFile(
+    await writeFile(
       join(root, '@scope', 'package', 'custom-elements.json'),
       manifest([
         moduleWith('./server.js', [
@@ -137,21 +139,20 @@ Deno.test('CEM scanner discovers scoped and unscoped packages without executing 
     );
 
     const scanned = await scanCemManifests(root);
-    assertEquals(scanned.map((entry) => entry.packageName).sort(), ['@scope/package', 'plain']);
+    expect(scanned.map((entry) => entry.packageName).sort()).toEqual(['@scope/package', 'plain']);
     const classified = await detectAndClassifyCemPackages(root);
-    assertEquals(classified.map((entry) => entry.tagName).sort(), [
+    expect(classified.map((entry) => entry.tagName).sort()).toEqual([
       'plain-element',
       'server-element',
     ]);
 
-    await Deno.writeTextFile(join(root, 'plain', 'custom-elements.json'), '{bad');
-    assertEquals(
-      (await detectAndClassifyCemPackages(root)).map((entry) => entry.tagName),
-      ['server-element'],
-    );
-    assertEquals(await scanCemManifests(join(root, 'missing')), []);
-    assertEquals(await detectAndClassifyCemPackages(join(root, 'missing')), []);
+    await writeFile(join(root, 'plain', 'custom-elements.json'), '{bad');
+    expect((await detectAndClassifyCemPackages(root)).map((entry) => entry.tagName)).toEqual([
+      'server-element',
+    ]);
+    expect(await scanCemManifests(join(root, 'missing'))).toEqual([]);
+    expect(await detectAndClassifyCemPackages(join(root, 'missing'))).toEqual([]);
   } finally {
-    await Deno.remove(root, { recursive: true });
+    await rm(root, { recursive: true });
   }
 });

@@ -18,7 +18,10 @@
  *    not about the program.
  * 4. Both entries export the same names (the surface cannot drift).
  */
-import { assert, assertEquals, assertStringIncludes } from '@std/assert';
+import { spawn } from 'node:child_process';
+import { join } from 'node:path';
+import { expect, test } from 'vitest';
+import process from 'node:process';
 import * as defaultEntry from '../src/index.ts';
 import * as clientOnlyEntry from '../src/client-only.ts';
 
@@ -31,16 +34,21 @@ const TEST_PROGRAM_SPECIFIER = new URL('./compiled-runtime/test-program.ts', imp
 async function runInSubprocess(
   script: string,
 ): Promise<{ code: number; out: string; err: string }> {
-  const command = new Deno.Command(Deno.execPath(), {
-    args: ['eval', '--no-lock', script],
-    stdout: 'piped',
-    stderr: 'piped',
+  // node --input-type=module -e: ESM eval resolving the workspace imports
+  // from the element package root (cwd matters for bare-specifier lookup)
+  const child = spawn(process.execPath, ['--input-type=module', '--eval', script], {
+    cwd: join(import.meta.dirname!, '../..'),
+    stdio: ['ignore', 'pipe', 'pipe'],
   });
-  const { code, stdout, stderr } = await command.output();
+  const [stdout, stderr] = await Promise.all([
+    Array.fromAsync(child.stdout!),
+    Array.fromAsync(child.stderr!),
+  ]);
+  const code = await new Promise<number>((resolve) => child.once('exit', (c) => resolve(c ?? -1)));
   return {
     code,
-    out: new TextDecoder().decode(stdout),
-    err: new TextDecoder().decode(stderr),
+    out: Buffer.concat(stdout).toString(),
+    err: Buffer.concat(stderr).toString(),
   };
 }
 
@@ -114,7 +122,7 @@ const BOOT_KERNEL = `
   const { CompiledElementKernel } = await import(${JSON.stringify(KERNEL_SPECIFIER)});
 `;
 
-Deno.test('#1416: the client-only entry connects an empty root (fresh) without the claim', async () => {
+test('#1416: the client-only entry connects an empty root (fresh) without the claim', async () => {
   const { code, out, err } = await runInSubprocess(`
     ${harness()}
     ${BOOT_KERNEL}
@@ -122,11 +130,11 @@ Deno.test('#1416: the client-only entry connects an empty root (fresh) without t
     const kernel = new CompiledElementKernel(host, program, { rootMode: 'shadow-open' });
     console.log(kernel.connect().mode);
   `);
-  assertEquals(code, 0, `fresh connect should work. stderr: ${err}`);
-  assertEquals(out.trim(), 'fresh');
+  expect(code, `fresh connect should work. stderr: ${err}`).toEqual(0);
+  expect(out.trim()).toEqual('fresh');
 });
 
-Deno.test('#1416: the client-only entry fails closed on content it cannot claim', async () => {
+test('#1416: the client-only entry fails closed on content it cannot claim', async () => {
   const { code, out, err } = await runInSubprocess(`
     ${harness()}
     ${BOOT_KERNEL}
@@ -140,17 +148,17 @@ Deno.test('#1416: the client-only entry fails closed on content it cannot claim'
       console.log(error.message);
     }
   `);
-  assertEquals(code, 0, `probe should complete. stderr: ${err}`);
-  assert(
+  expect(code, `probe should complete. stderr: ${err}`).toEqual(0);
+  expect(
     !out.includes('NO-ERROR'),
     'connecting existing DOM through the client-only entry must throw',
-  );
-  assertStringIncludes(out, 'needs the claim executor');
-  assertStringIncludes(out, '@openelement/element/client-only');
-  assertStringIncludes(out, "Import '@openelement/element'");
+  ).toBeTruthy();
+  expect(out).toContain('needs the claim executor');
+  expect(out).toContain('@openelement/element/client-only');
+  expect(out).toContain("Import '@openelement/element'");
 });
 
-Deno.test('#1416: the default entry claims the same content the client-only entry refuses', async () => {
+test('#1416: the default entry claims the same content the client-only entry refuses', async () => {
   // The contrast case: identical setup, only the entry differs.
   const { code, out, err } = await runInSubprocess(`
     ${harness()}
@@ -163,22 +171,24 @@ Deno.test('#1416: the default entry claims the same content the client-only entr
     const activation = kernel.connect();
     console.log(activation.mode, activation.root.childNodes.length, activation.root.childNodes[0] === content);
   `);
-  assertEquals(code, 0, `claim through the default entry should work. stderr: ${err}`);
-  assertEquals(out.trim(), 'claim 1 true', 'the claim keeps the existing node');
+  expect(code, `claim through the default entry should work. stderr: ${err}`).toEqual(0);
+  expect(out.trim(), 'the claim keeps the existing node').toEqual('claim 1 true');
 });
 
-Deno.test('#1416: both entries export exactly the same names', () => {
+test('#1416: both entries export exactly the same names', () => {
   const defaultNames = Object.keys(defaultEntry).sort();
   const clientOnlyNames = Object.keys(clientOnlyEntry).sort();
-  assertEquals(
+  expect(
     clientOnlyNames,
-    defaultNames,
     'the client-only entry must not add, drop, or rename a public export',
-  );
+  ).toEqual(defaultNames);
   // 35 runtime exports at the time of writing (types are erased, so this is
   // fewer than the 73 symbols the interface snapshot records). The pin is a
   // floor rather than an exact count: ADDING a name to the shared surface is a
   // deliberate change owned by the snapshot gate, which records every one.
   // What must never happen is the client-only entry exposing fewer.
-  assert(defaultNames.length >= 30, 'the surface is the full package surface, not a subset');
+  expect(
+    defaultNames.length >= 30,
+    'the surface is the full package surface, not a subset',
+  ).toBeTruthy();
 });

@@ -17,7 +17,7 @@
  * match the compiled program tag "workspace-records-page" (OE_PROGRAM_MISSING)
  * → HTTP 500. Covered by the request-time and framework-mode fixtures.
  */
-import { assertEquals, assertStringIncludes } from '@std/assert';
+import { expect, test } from 'vitest';
 import { buildEntryDescriptor, renderEntry } from '../src/vite/internal/ssg/index.ts';
 import {
   resolveCompiledPageTag,
@@ -37,30 +37,29 @@ const definePageRoutes: RouteEntry[] = [
 
 const RESOLUTION_EXPR = '__resolvePageTag($pageWorkspaceRecords, "workspace-records")';
 
-Deno.test('renderEntry: definePage route registers through the compiled-program tag resolution (#1276)', () => {
+test('renderEntry: definePage route registers through the compiled-program tag resolution (#1276)', () => {
   const code = renderEntry(buildEntryDescriptor(definePageRoutes));
 
   // Registration resolves the tag from the route module's compiled program;
   // the path-derived tag survives only as the resolver's fallback argument.
-  assertStringIncludes(
-    code,
+  expect(code).toContain(
     `__registerSsrComponent(${RESOLUTION_EXPR}, $pageWorkspaceRecords.default)`,
   );
 });
 
-Deno.test('renderEntry: definePage route handler renders through the compiled-program tag resolution (#1276)', () => {
+test('renderEntry: definePage route handler renders through the compiled-program tag resolution (#1276)', () => {
   const code = renderEntry(buildEntryDescriptor(definePageRoutes));
 
-  assertStringIncludes(code, `let __tag = ${RESOLUTION_EXPR}`);
+  expect(code).toContain(`let __tag = ${RESOLUTION_EXPR}`);
 });
 
-Deno.test('renderEntry: SSG routeInfo resolves the tag from the compiled program (#1276)', () => {
+test('renderEntry: SSG routeInfo resolves the tag from the compiled program (#1276)', () => {
   const code = renderEntry(buildEntryDescriptor(definePageRoutes, { ssg: true }));
 
-  assertStringIncludes(code, `tagName: ${RESOLUTION_EXPR},`);
+  expect(code).toContain(`tagName: ${RESOLUTION_EXPR},`);
 });
 
-Deno.test('renderEntry: styled 404 route renders through the compiled-program tag resolution (#1276)', () => {
+test('renderEntry: styled 404 route renders through the compiled-program tag resolution (#1276)', () => {
   const routes: RouteEntry[] = [
     ...definePageRoutes,
     {
@@ -73,76 +72,72 @@ Deno.test('renderEntry: styled 404 route renders through the compiled-program ta
   ];
   const code = renderEntry(buildEntryDescriptor(routes));
 
-  assertStringIncludes(code, 'let __tag = __resolvePageTag($pageNotFound, "el-404");');
+  expect(code).toContain('let __tag = __resolvePageTag($pageNotFound, "el-404");');
 });
 
 // The generated entry imports the resolvers from
 // @openelement/router/server-runtime and binds them per the renderer adapter
 // (ADR-0160 rule a); the assertions below execute the shipped module directly.
-Deno.test('resolveCompiledPageTag: compiled program tag wins over the path-derived fallback (#1276)', () => {
+test('resolveCompiledPageTag: compiled program tag wins over the path-derived fallback (#1276)', () => {
   // The definePage route module default-exports the compiled page class
   // (definePage returns the class), whose __partProgram.tag is the @element
   // tag — this is the mismatch shape from the B1.3 qualification.
   const routeModule = { default: { __partProgram: { tag: 'workspace-records-page' } } };
-  assertEquals(resolveCompiledPageTag(routeModule, 'workspace-records'), 'workspace-records-page');
+  expect(resolveCompiledPageTag(routeModule, 'workspace-records')).toEqual(
+    'workspace-records-page',
+  );
 });
 
-Deno.test('resolveCompiledPageTag: matching program and fallback tags resolve identically', () => {
+test('resolveCompiledPageTag: matching program and fallback tags resolve identically', () => {
   const routeModule = { default: { __partProgram: { tag: 'login' } } };
-  assertEquals(resolveCompiledPageTag(routeModule, 'login'), 'login');
+  expect(resolveCompiledPageTag(routeModule, 'login')).toEqual('login');
 });
 
-Deno.test('resolveCompiledPageTag: no compiled program keeps the path-derived fallback (#1276)', () => {
-  assertEquals(
-    resolveCompiledPageTag({ default: class {} }, 'workspace-records'),
+test('resolveCompiledPageTag: no compiled program keeps the path-derived fallback (#1276)', () => {
+  expect(resolveCompiledPageTag({ default: class {} }, 'workspace-records')).toEqual(
     'workspace-records',
   );
-  assertEquals(
-    resolveCompiledPageTag({ default: undefined }, 'workspace-records'),
+  expect(resolveCompiledPageTag({ default: undefined }, 'workspace-records')).toEqual(
     'workspace-records',
   );
-  assertEquals(resolveCompiledPageTag(undefined, 'workspace-records'), 'workspace-records');
+  expect(resolveCompiledPageTag(undefined, 'workspace-records')).toEqual('workspace-records');
 });
 
-Deno.test('resolveCompiledPageTag: malformed program tags keep the path-derived fallback (#1276)', () => {
+test('resolveCompiledPageTag: malformed program tags keep the path-derived fallback (#1276)', () => {
   // Not a custom-element tag (no hyphen) or not a string at all: never let a
   // malformed program tag reach the registration/render call sites.
-  assertEquals(
+  expect(
     resolveCompiledPageTag({ default: { __partProgram: { tag: 'nohyphen' } } }, 'x-page'),
-    'x-page',
-  );
-  assertEquals(
-    resolveCompiledPageTag({ default: { __partProgram: { tag: 42 } } }, 'x-page'),
+  ).toEqual('x-page');
+  expect(resolveCompiledPageTag({ default: { __partProgram: { tag: 42 } } }, 'x-page')).toEqual(
     'x-page',
   );
 });
 
-Deno.test('resolveLitPageTag: the openElementPageTag static wins over the fallback (#1339)', () => {
+test('resolveLitPageTag: the openElementPageTag static wins over the fallback (#1339)', () => {
   const routeModule = { default: { openElementPageTag: 'lit-notes-page' } };
-  assertEquals(resolveLitPageTag(routeModule, 'notes'), 'lit-notes-page');
-  assertEquals(resolveLitPageTag({ default: { openElementPageTag: 'notes' } }, 'notes'), 'notes');
-  assertEquals(resolveLitPageTag({ default: { openElementPageTag: 7 } }, 'notes'), 'notes');
-  assertEquals(resolveLitPageTag({ default: class {} }, 'notes'), 'notes');
-  assertEquals(resolveLitPageTag(undefined, 'notes'), 'notes');
+  expect(resolveLitPageTag(routeModule, 'notes')).toEqual('lit-notes-page');
+  expect(resolveLitPageTag({ default: { openElementPageTag: 'notes' } }, 'notes')).toEqual('notes');
+  expect(resolveLitPageTag({ default: { openElementPageTag: 7 } }, 'notes')).toEqual('notes');
+  expect(resolveLitPageTag({ default: class {} }, 'notes')).toEqual('notes');
+  expect(resolveLitPageTag(undefined, 'notes')).toEqual('notes');
 });
 
-Deno.test('the generated entry imports the tag resolvers per renderer and never forks the call sites', () => {
+test('the generated entry imports the tag resolvers per renderer and never forks the call sites', () => {
   const nativeEntry = renderEntry(buildEntryDescriptor(definePageRoutes));
-  assertStringIncludes(
-    nativeEntry,
+  expect(nativeEntry).toContain(
     "import { resolveCompiledPageTag as __resolvePageTag } from '@openelement/router/server-runtime'",
   );
-  assertEquals(nativeEntry.includes('resolveLitPageTag'), false);
+  expect(nativeEntry.includes('resolveLitPageTag')).toEqual(false);
 
   const litEntry = renderEntry(
     buildEntryDescriptor(definePageRoutes, { renderer: 'lit', appShell: false }),
   );
-  assertStringIncludes(
-    litEntry,
+  expect(litEntry).toContain(
     "import { resolveLitPageTag as __resolvePageTag } from '@openelement/router/server-runtime'",
   );
-  assertEquals(litEntry.includes('resolveCompiledPageTag'), false);
+  expect(litEntry.includes('resolveCompiledPageTag')).toEqual(false);
   // The binding call sites (registration, handler, routeInfo) stay renderer-
   // neutral: one canonical `__resolvePageTag(module, fallback)` expression.
-  assertStringIncludes(litEntry, `let __tag = ${RESOLUTION_EXPR}`);
+  expect(litEntry).toContain(`let __tag = ${RESOLUTION_EXPR}`);
 });

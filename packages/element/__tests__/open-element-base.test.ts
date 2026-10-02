@@ -1,22 +1,23 @@
-import { assertEquals, assertThrows } from '@std/assert';
+import { expect, test } from 'vitest';
+import { assertThrowsIncludes } from '../../../tests/lib/vitest-asserts.ts';
 import { OpenElementBase } from '../src/open-element-base.ts';
 import { OpenElementError } from '../src/internal/core/errors.ts';
 
-Deno.test('SSR HTMLElement facade exposes inert reads and fails closed on DOM operations', () => {
+test('SSR HTMLElement facade exposes inert reads and fails closed on DOM operations', () => {
   const element = new OpenElementBase();
-  assertEquals(element.hasAttribute('mode'), false);
-  assertEquals(element.getAttribute('mode'), null);
+  expect(element.hasAttribute('mode')).toEqual(false);
+  expect(element.getAttribute('mode')).toEqual(null);
   element.setAttribute('mode', 'ready');
   element.removeAttribute('mode');
-  assertEquals(element.tagName, '');
-  assertEquals(element.isConnected, false);
+  expect(element.tagName).toEqual('');
+  expect(element.isConnected).toEqual(false);
   for (const operation of [
     () => element.querySelector('*'),
     () => element.attachShadow({ mode: 'open' }),
     () => element.dispatchEvent(new Event('test')),
   ]) {
-    const error = assertThrows(operation, OpenElementError, 'unavailable during SSR');
-    assertEquals(error.code, 'SSR_DOM_ACCESS_UNSUPPORTED');
-    assertEquals(error.phase, 'ssr');
+    const error = assertThrowsIncludes(operation, OpenElementError, 'unavailable during SSR');
+    expect(error.code).toEqual('SSR_DOM_ACCESS_UNSUPPORTED');
+    expect(error.phase).toEqual('ssr');
   }
 });

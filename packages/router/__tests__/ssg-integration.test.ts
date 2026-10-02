@@ -14,31 +14,34 @@
  *   - K+I (Knowledge + Isolated): Islands are the only JS
  */
 
-import { assertEquals, assertStringIncludes } from '@std/assert';
+import { mkdir, rm, writeFile } from 'node:fs/promises';
+import { readFileSync } from 'node:fs';
+import process from 'node:process';
+import { afterAll, beforeAll, describe, expect, test } from 'vitest';
 import { join } from '@std/path';
 import { injectCspMeta, islandChunkMapFromAssetManifest } from '../src/vite/internal/ssg/index.ts';
 import type { ClientAssetManifest } from '../src/vite/internal/protocol/client-assets.ts';
 
 // ─── Test fixtures ─────────────────────────────────────────────
 
-const FIXTURES_DIR = join(Deno.cwd(), 'packages/router/__test_fixtures__/ssg');
+const FIXTURES_DIR = join(process.cwd(), 'packages/router/__test_fixtures__/ssg');
 
 async function setupSsgFixtures() {
   const islandsDir = join(FIXTURES_DIR, 'dist', 'client', 'islands');
-  await Deno.mkdir(islandsDir, { recursive: true });
+  await mkdir(islandsDir, { recursive: true });
 
-  await Deno.writeTextFile(
+  await writeFile(
     join(islandsDir, 'island-my-counter-abc123.js'),
     'const e="my-counter";customElements.define(e,MyCounter);',
   );
-  await Deno.writeTextFile(
+  await writeFile(
     join(islandsDir, 'island-theme-toggle-def456.js'),
     "const t='theme-toggle';customElements.define(t,Toggle);",
   );
 
   // Simulate SSG HTML output with DSD
   const htmlDir = join(FIXTURES_DIR, 'dist');
-  await Deno.writeTextFile(
+  await writeFile(
     join(htmlDir, 'index.html'),
     `<!DOCTYPE html>
 <html lang="en">
@@ -61,8 +64,8 @@ async function setupSsgFixtures() {
 
   // Sub-page HTML (about page)
   const aboutDir = join(htmlDir, 'about');
-  await Deno.mkdir(aboutDir, { recursive: true });
-  await Deno.writeTextFile(
+  await mkdir(aboutDir, { recursive: true });
+  await writeFile(
     join(aboutDir, 'index.html'),
     `<!DOCTYPE html>
 <html lang="en">
@@ -86,7 +89,7 @@ async function setupSsgFixtures() {
 
 async function cleanupSsgFixtures() {
   try {
-    await Deno.remove(FIXTURES_DIR, { recursive: true });
+    await rm(FIXTURES_DIR, { recursive: true });
   } catch {
     // Ignore cleanup errors
   }
@@ -103,58 +106,57 @@ const MANIFEST: ClientAssetManifest = {
 
 // ─── Tests ─────────────────────────────────────────────────────
 
-Deno.test('SSG integration', { permissions: { read: true, write: true } }, async (t) => {
-  await setupSsgFixtures();
+describe('SSG integration', () => {
+  beforeAll(async () => {
+    await setupSsgFixtures();
+  });
+  afterAll(async () => {
+    await cleanupSsgFixtures();
+  });
 
-  await t.step('islandChunkMapFromAssetManifest - maps every scanned island identity', () => {
+  test('islandChunkMapFromAssetManifest - maps every scanned island identity', () => {
     const chunkMap = islandChunkMapFromAssetManifest(MANIFEST, ['my-counter', 'theme-toggle']);
-    assertEquals(chunkMap, {
+    expect(chunkMap).toEqual({
       'my-counter': '/client/islands/island-my-counter-abc123.js',
       'theme-toggle': '/client/islands/island-theme-toggle-def456.js',
     });
   });
 
-  await t.step(
-    'islandChunkMapFromAssetManifest - a chunk rename never moves the tag identity',
-    () => {
-      const renamed: ClientAssetManifest = {
-        ...MANIFEST,
-        islands: {
-          'my-counter': { file: '/client/islands/shared-bundle-Qq11.js', strategy: 'idle' },
-        },
-      };
-      assertEquals(islandChunkMapFromAssetManifest(renamed, ['my-counter']), {
-        'my-counter': '/client/islands/shared-bundle-Qq11.js',
-      });
-    },
-  );
+  test('islandChunkMapFromAssetManifest - a chunk rename never moves the tag identity', () => {
+    const renamed: ClientAssetManifest = {
+      ...MANIFEST,
+      islands: {
+        'my-counter': { file: '/client/islands/shared-bundle-Qq11.js', strategy: 'idle' },
+      },
+    };
+    expect(islandChunkMapFromAssetManifest(renamed, ['my-counter'])).toEqual({
+      'my-counter': '/client/islands/shared-bundle-Qq11.js',
+    });
+  });
 
-  await t.step('injectCspMeta - adds <meta http-equiv="Content-Security-Policy"> to head', () => {
+  test('injectCspMeta - adds <meta http-equiv="Content-Security-Policy"> to head', () => {
     injectCspMeta(join(FIXTURES_DIR, 'dist'), "default-src 'self'; script-src 'self'", false);
 
-    const html = Deno.readTextFileSync(join(FIXTURES_DIR, 'dist', 'index.html'));
-    assertStringIncludes(html, '<meta http-equiv="Content-Security-Policy"');
-    assertStringIncludes(html, "default-src 'self'");
+    const html = readFileSync(join(FIXTURES_DIR, 'dist', 'index.html'), 'utf8');
+    expect(html).toContain('<meta http-equiv="Content-Security-Policy"');
+    expect(html).toContain("default-src 'self'");
     const headEnd = html.indexOf('</head>');
     const metaIdx = html.indexOf('Content-Security-Policy');
-    assertEquals(metaIdx < headEnd, true);
+    expect(metaIdx < headEnd).toEqual(true);
   });
 
-  await t.step('rendered HTML carries no post-build script surgery (S constraint)', () => {
-    const html = Deno.readTextFileSync(join(FIXTURES_DIR, 'dist', 'index.html'));
-    assertEquals(html.includes('<script'), false);
+  test('rendered HTML carries no post-build script surgery (S constraint)', () => {
+    const html = readFileSync(join(FIXTURES_DIR, 'dist', 'index.html'), 'utf8');
+    expect(html.includes('<script')).toEqual(false);
   });
 
-  await t.step('DSD content preserved (S constraint)', () => {
-    const html = Deno.readTextFileSync(join(FIXTURES_DIR, 'dist', 'index.html'));
+  test('DSD content preserved (S constraint)', () => {
+    const html = readFileSync(join(FIXTURES_DIR, 'dist', 'index.html'), 'utf8');
 
-    assertStringIncludes(html, 'shadowroot="open"');
-    assertStringIncludes(html, 'shadowrootmode="open"');
-    assertStringIncludes(html, 'docs-home');
-    assertStringIncludes(html, 'app-layout');
-    assertStringIncludes(html, 'docs-sidebar');
+    expect(html).toContain('shadowroot="open"');
+    expect(html).toContain('shadowrootmode="open"');
+    expect(html).toContain('docs-home');
+    expect(html).toContain('app-layout');
+    expect(html).toContain('docs-sidebar');
   });
-
-  // Cleanup
-  await cleanupSsgFixtures();
 });

@@ -1,4 +1,5 @@
-import { assert, assertEquals, assertRejects } from '@std/assert';
+import { expect, test } from 'vitest';
+import { assertRejectsIncludes } from '../../../../tests/lib/vitest-asserts.ts';
 import { isActionFailure, isOpenElementRedirect } from '@openelement/router';
 
 // v0.44: route logic lives in app/route-logic/ so tests never evaluate the
@@ -25,7 +26,7 @@ function email(value = 'user@example.com') {
   return data;
 }
 
-Deno.test('magic-link rejects a Cloudflare rate-limit denial before auth', async () => {
+test('magic-link rejects a Cloudflare rate-limit denial before auth', async () => {
   let called = false;
   const action = createMagicLinkAction(() => {
     called = true;
@@ -36,37 +37,39 @@ Deno.test('magic-link rejects a Cloudflare rate-limit denial before auth', async
       AUTH_RATE_LIMITER: { limit: () => Promise.resolve({ success: false }) },
     }),
   );
-  assert(isActionFailure(result));
-  assertEquals(result.status, 429);
-  assertEquals(called, false);
+  expect(isActionFailure(result)).toBeTruthy();
+  expect(result.status).toEqual(429);
+  expect(called).toEqual(false);
 });
 
-Deno.test('magic-link rejects a missing email', async () => {
+test('magic-link rejects a missing email', async () => {
   const result = await createMagicLinkAction(client())(context());
-  assert(isActionFailure(result));
-  assertEquals(result.status, 422);
+  expect(isActionFailure(result)).toBeTruthy();
+  expect(result.status).toEqual(422);
 });
 
-Deno.test('magic-link sanitizes provider failures', async () => {
+test('magic-link sanitizes provider failures', async () => {
   const result = await createMagicLinkAction(
     client({ message: 'private provider diagnostic eyJsecret' }),
   )(context(email()));
-  assert(isActionFailure(result));
-  assertEquals(result.status, 422);
-  assertEquals(JSON.stringify(result.data).includes('eyJsecret'), false);
+  expect(isActionFailure(result)).toBeTruthy();
+  expect(result.status).toEqual(422);
+  expect(JSON.stringify(result.data).includes('eyJsecret')).toEqual(false);
 });
 
-Deno.test('magic-link success redirects to the sent confirmation with PRG (#1060)', async () => {
-  const error = await assertRejects(() => createMagicLinkAction(client())(context(email())));
-  assert(isOpenElementRedirect(error));
-  assertEquals((error as { location?: string }).location, '/magic-link?sent=1');
+test('magic-link success redirects to the sent confirmation with PRG (#1060)', async () => {
+  const error = await assertRejectsIncludes(() =>
+    createMagicLinkAction(client())(context(email())),
+  );
+  expect(isOpenElementRedirect(error)).toBeTruthy();
+  expect((error as { location?: string }).location).toEqual('/magic-link?sent=1');
 });
 
-Deno.test('magic-link loader exposes the sent confirmation state from the query', () => {
-  assertEquals(magicLinkLoader({ request: new Request('https://app.test/magic-link?sent=1') }), {
+test('magic-link loader exposes the sent confirmation state from the query', () => {
+  expect(magicLinkLoader({ request: new Request('https://app.test/magic-link?sent=1') })).toEqual({
     sent: true,
   });
-  assertEquals(magicLinkLoader({ request: new Request('https://app.test/magic-link') }), {
+  expect(magicLinkLoader({ request: new Request('https://app.test/magic-link') })).toEqual({
     sent: false,
   });
 });

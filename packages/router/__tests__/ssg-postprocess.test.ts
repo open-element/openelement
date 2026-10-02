@@ -12,15 +12,10 @@
  * shipping a partial page manifest, and only the metadata Phase 2 selected
  * is validated or delivered.
  */
-import {
-  assert,
-  assertEquals,
-  assertExists,
-  assertFalse,
-  assertRejects,
-  assertStringIncludes,
-  assertThrows,
-} from '@std/assert';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { expect, test } from 'vitest';
+import { assertRejectsIncludes, assertThrowsIncludes } from '../../../tests/lib/vitest-asserts.ts';
 import { OpenElementError } from '@openelement/element';
 import { ClientAssetErrorCode } from '../src/internal/error-codes.ts';
 import {
@@ -40,7 +35,7 @@ import type { IslandDecl } from '../src/vite/internal/protocol/ssg.ts';
 import { join } from '@std/path';
 
 function makeTempDir(): string {
-  return Deno.makeTempDirSync({ prefix: 'open-test-' });
+  return mkdtempSync(join(tmpdir(), 'open-test-'));
 }
 
 /** The per-page island manifest file writeIslandManifests emits for a route. */
@@ -51,7 +46,7 @@ async function pageManifestPath(outputDir: string, route: string): Promise<strin
 
 function cleanup(dir: string) {
   try {
-    Deno.removeSync(dir, { recursive: true });
+    rmSync(dir, { recursive: true });
   } catch {
     /* ignore */
   }
@@ -59,7 +54,7 @@ function cleanup(dir: string) {
 
 // ─── islandChunkMapFromAssetManifest (identity-driven chunk resolution) ──
 
-Deno.test('islandChunkMapFromAssetManifest maps delivery tags to manifest asset URLs', () => {
+test('islandChunkMapFromAssetManifest maps delivery tags to manifest asset URLs', () => {
   const manifest: ClientAssetManifest = {
     entry: '/client/islands/client.js',
     islands: {
@@ -73,13 +68,13 @@ Deno.test('islandChunkMapFromAssetManifest maps delivery tags to manifest asset 
     shared: [],
   };
   const map = islandChunkMapFromAssetManifest(manifest, ['open-counter', 'open-theme-toggle']);
-  assertEquals(map, {
+  expect(map).toEqual({
     'open-counter': '/client/islands/island-counter-Ab12.js',
     'open-theme-toggle': '/client/islands/island-open-theme-toggle-Cd34.js',
   });
 });
 
-Deno.test('islandChunkMapFromAssetManifest follows a chunk rename through the manifest, not the name', () => {
+test('islandChunkMapFromAssetManifest follows a chunk rename through the manifest, not the name', () => {
   // The file name carries no identity: after a rename/rehash the tag keeps
   // resolving through the manifest record (joined on module ids at build
   // time). The retired filename-prefix matcher would have dropped this.
@@ -90,17 +85,16 @@ Deno.test('islandChunkMapFromAssetManifest follows a chunk rename through the ma
     },
     shared: [],
   };
-  assertEquals(
-    islandChunkMapFromAssetManifest(renamed, ['open-counter'])['open-counter'],
+  expect(islandChunkMapFromAssetManifest(renamed, ['open-counter'])['open-counter']).toEqual(
     '/client/islands/shared-bundle-Zz99.js',
   );
 });
 
-Deno.test('islandChunkMapFromAssetManifest fails closed on islands the manifest does not record', () => {
+test('islandChunkMapFromAssetManifest fails closed on islands the manifest does not record', () => {
   // The former warn-and-continue shipped a partial chunk map: a page would
   // carry an island whose client script never loads. Now the join fails,
   // naming the island — whatever else the manifest does record.
-  const error = assertThrows(
+  const error = assertThrowsIncludes(
     () =>
       islandChunkMapFromAssetManifest(
         {
@@ -112,27 +106,27 @@ Deno.test('islandChunkMapFromAssetManifest fails closed on islands the manifest 
       ),
     OpenElementError,
   );
-  assertEquals(error.code, ClientAssetErrorCode.ISLAND_UNMAPPED);
-  assertEquals(error.phase, 'build');
-  assert(
+  expect(error.code).toEqual(ClientAssetErrorCode.ISLAND_UNMAPPED);
+  expect(error.phase).toEqual('build');
+  expect(
     error.message.includes('open-ghost') && error.message.includes('client asset manifest'),
     `error names the island and the manifest: ${error.message}`,
-  );
+  ).toBeTruthy();
 });
 
-Deno.test('islandChunkMapFromAssetManifest fails closed for every island when no manifest shipped', () => {
-  const error = assertThrows(
+test('islandChunkMapFromAssetManifest fails closed for every island when no manifest shipped', () => {
+  const error = assertThrowsIncludes(
     () => islandChunkMapFromAssetManifest(null, ['open-counter']),
     OpenElementError,
   );
-  assertEquals(error.code, ClientAssetErrorCode.ISLAND_UNMAPPED);
-  assert(
+  expect(error.code).toEqual(ClientAssetErrorCode.ISLAND_UNMAPPED);
+  expect(
     error.message.includes('open-counter') && error.message.includes('no client asset manifest'),
     `error names the island and the missing manifest: ${error.message}`,
-  );
+  ).toBeTruthy();
   // An island-free build owes no records: the empty list maps without
   // consulting the manifest at all.
-  assertEquals(islandChunkMapFromAssetManifest(null, []), {});
+  expect(islandChunkMapFromAssetManifest(null, [])).toEqual({});
 });
 
 // ─── postProcessClientIslandBuild (manifest-driven, no HTML surgery) ────
@@ -152,16 +146,16 @@ function ctxView(manifest: ClientAssetManifest | null, root: string) {
   };
 }
 
-Deno.test('postProcessClientIslandBuild writes per-page manifests with manifest-keyed chunks and leaves HTML untouched', async () => {
+test('postProcessClientIslandBuild writes per-page manifests with manifest-keyed chunks and leaves HTML untouched', async () => {
   const tmp = makeTempDir();
   try {
     const dist = join(tmp, 'dist');
-    Deno.mkdirSync(join(dist, 'guide'), { recursive: true });
-    Deno.writeTextFileSync(
+    mkdirSync(join(dist, 'guide'), { recursive: true });
+    writeFileSync(
       join(dist, 'index.html'),
       '<html><head></head><body><open-counter></open-counter></body></html>',
     );
-    Deno.writeTextFileSync(
+    writeFileSync(
       join(dist, 'guide', 'page.html'),
       '<html><head></head><body><p>no islands here</p></body></html>',
     );
@@ -176,32 +170,31 @@ Deno.test('postProcessClientIslandBuild writes per-page manifests with manifest-
     await postProcessClientIslandBuild(ctxView(manifest, tmp));
 
     // The island identity resolves through the manifest, chunk URL intact.
-    const homeManifest = JSON.parse(Deno.readTextFileSync(await pageManifestPath(dist, '/'))) as {
+    const homeManifest = JSON.parse(readFileSync(await pageManifestPath(dist, '/'), 'utf8')) as {
       route: string;
       islands: Array<{ tagName: string; chunkUrl: string; strategy: string }>;
     };
-    assertEquals(homeManifest.route, '/');
+    expect(homeManifest.route).toEqual('/');
     const counter = homeManifest.islands.find((entry) => entry.tagName === 'open-counter');
-    assertExists(counter);
-    assertEquals(counter.chunkUrl, '/client/islands/island-counter-Ab12.js');
-    assertEquals(counter.strategy, 'idle');
+    expect(counter).toEqual(expect.anything());
+    expect(counter.chunkUrl).toEqual('/client/islands/island-counter-Ab12.js');
+    expect(counter.strategy).toEqual('idle');
 
     // A page without islands gets a manifest with an empty island list.
     const guideManifest = JSON.parse(
-      Deno.readTextFileSync(await pageManifestPath(dist, '/guide/page')),
+      readFileSync(await pageManifestPath(dist, '/guide/page'), 'utf8'),
     ) as { islands: unknown[] };
-    assertEquals(guideManifest.islands, []);
+    expect(guideManifest.islands).toEqual([]);
 
     // No script surgery: the rendered HTML is left byte-identical — script
     // tags were already embedded at document render time (#1471).
-    assertEquals(
-      Deno.readTextFileSync(join(dist, 'index.html')),
+    expect(readFileSync(join(dist, 'index.html'), 'utf8')).toEqual(
       '<html><head></head><body><open-counter></open-counter></body></html>',
     );
-    assert(
-      !Deno.readTextFileSync(join(dist, 'index.html')).includes('<script'),
+    expect(
+      !readFileSync(join(dist, 'index.html'), 'utf8').includes('<script'),
       'post-processing must not inject scripts into rendered HTML',
-    );
+    ).toBeTruthy();
   } finally {
     cleanup(tmp);
   }
@@ -209,37 +202,36 @@ Deno.test('postProcessClientIslandBuild writes per-page manifests with manifest-
 
 function dirExists(path: string): boolean {
   try {
-    return Deno.statSync(path).isDirectory;
+    return statSync(path).isDirectory;
   } catch {
     return false;
   }
 }
 
-Deno.test('postProcessClientIslandBuild without a manifest fails closed and writes nothing', async () => {
+test('postProcessClientIslandBuild without a manifest fails closed and writes nothing', async () => {
   const tmp = makeTempDir();
   try {
     const dist = join(tmp, 'dist');
-    Deno.mkdirSync(dist, { recursive: true });
-    Deno.writeTextFileSync(
+    mkdirSync(dist, { recursive: true });
+    writeFileSync(
       join(dist, 'index.html'),
       '<html><body><open-counter></open-counter></body></html>',
     );
 
-    const error = await assertRejects(
+    const error = await assertRejectsIncludes(
       () => postProcessClientIslandBuild(ctxView(null, tmp)),
       OpenElementError,
     );
-    assertEquals(error.code, ClientAssetErrorCode.ISLAND_UNMAPPED);
-    assert(
+    expect(error.code).toEqual(ClientAssetErrorCode.ISLAND_UNMAPPED);
+    expect(
       error.message.includes('open-counter'),
       `error names the unrecorded island: ${error.message}`,
-    );
+    ).toBeTruthy();
     // No partial manifest: the pass either writes the complete set or none
     // of it — here nothing was written at all.
-    assertEquals(dirExists(join(dist, 'island-manifests')), false);
+    expect(dirExists(join(dist, 'island-manifests'))).toEqual(false);
     // The rendered HTML stays untouched either way.
-    assertEquals(
-      Deno.readTextFileSync(join(dist, 'index.html')),
+    expect(readFileSync(join(dist, 'index.html'), 'utf8')).toEqual(
       '<html><body><open-counter></open-counter></body></html>',
     );
   } finally {
@@ -247,15 +239,15 @@ Deno.test('postProcessClientIslandBuild without a manifest fails closed and writ
   }
 });
 
-Deno.test('postProcessClientIslandBuild fails before writing when the manifest misses one island', async () => {
+test('postProcessClientIslandBuild fails before writing when the manifest misses one island', async () => {
   // One island resolves, one does not: the failure must land BEFORE any
   // page manifest is generated, so the output tree never carries a partial
   // record that silently omits the unrecorded island.
   const tmp = makeTempDir();
   try {
     const dist = join(tmp, 'dist');
-    Deno.mkdirSync(dist, { recursive: true });
-    Deno.writeTextFileSync(
+    mkdirSync(dist, { recursive: true });
+    writeFileSync(
       join(dist, 'index.html'),
       '<html><body><open-counter></open-counter></body></html>',
     );
@@ -267,7 +259,7 @@ Deno.test('postProcessClientIslandBuild fails before writing when the manifest m
       },
       shared: [],
     };
-    const error = await assertRejects(
+    const error = await assertRejectsIncludes(
       () =>
         postProcessClientIslandBuild({
           phase3: { root: tmp, outDir: 'dist', base: '/', upgradeStrategy: 'idle' as const },
@@ -282,15 +274,18 @@ Deno.test('postProcessClientIslandBuild fails before writing when the manifest m
         }),
       OpenElementError,
     );
-    assertEquals(error.code, ClientAssetErrorCode.ISLAND_UNMAPPED);
-    assert(error.message.includes('open-theme'), `error names the island: ${error.message}`);
-    assertEquals(dirExists(join(dist, 'island-manifests')), false);
+    expect(error.code).toEqual(ClientAssetErrorCode.ISLAND_UNMAPPED);
+    expect(
+      error.message.includes('open-theme'),
+      `error names the island: ${error.message}`,
+    ).toBeTruthy();
+    expect(dirExists(join(dist, 'island-manifests'))).toEqual(false);
   } finally {
     cleanup(tmp);
   }
 });
 
-Deno.test('postProcessClientIslandBuild validates only the local metadata Phase 2 selected', async () => {
+test('postProcessClientIslandBuild validates only the local metadata Phase 2 selected', async () => {
   // buildClient narrows ctx.phase1.islandTagNames to the reachable client
   // set but leaves islandMeta carrying every scanned island. An unselected
   // island's metadata — malformed or merely multi-tag — must be neither
@@ -299,8 +294,8 @@ Deno.test('postProcessClientIslandBuild validates only the local metadata Phase 
   const tmp = makeTempDir();
   try {
     const dist = join(tmp, 'dist');
-    Deno.mkdirSync(dist, { recursive: true });
-    Deno.writeTextFileSync(
+    mkdirSync(dist, { recursive: true });
+    writeFileSync(
       join(dist, 'index.html'),
       '<html><body><open-counter></open-counter></body></html>',
     );
@@ -332,10 +327,10 @@ Deno.test('postProcessClientIslandBuild validates only the local metadata Phase 
       },
       clientAssetManifest: manifest,
     });
-    const pageManifest = JSON.parse(Deno.readTextFileSync(await pageManifestPath(dist, '/'))) as {
+    const pageManifest = JSON.parse(readFileSync(await pageManifestPath(dist, '/'), 'utf8')) as {
       islands: Array<{ tagName: string; chunkUrl: string; strategy: string; layer: string }>;
     };
-    assertEquals(pageManifest.islands, [
+    expect(pageManifest.islands).toEqual([
       {
         tagName: 'open-counter',
         chunkUrl: '/client/islands/island-counter-Ab12.js',
@@ -350,105 +345,105 @@ Deno.test('postProcessClientIslandBuild validates only the local metadata Phase 
 
 // ─── injectCspMeta ──────────────────────────────────────────
 
-Deno.test('injectCspMeta adds CSP meta tag to HTML files', () => {
+test('injectCspMeta adds CSP meta tag to HTML files', () => {
   const tmp = makeTempDir();
   try {
     const htmlPath = join(tmp, 'index.html');
-    Deno.writeTextFileSync(htmlPath, '<html><head></head><body></body></html>');
+    writeFileSync(htmlPath, '<html><head></head><body></body></html>');
 
     injectCspMeta(tmp, "default-src 'self'");
 
-    const content = Deno.readTextFileSync(htmlPath);
-    assertStringIncludes(content, 'Content-Security-Policy');
-    assertStringIncludes(content, "default-src 'self'");
+    const content = readFileSync(htmlPath, 'utf8');
+    expect(content).toContain('Content-Security-Policy');
+    expect(content).toContain("default-src 'self'");
   } finally {
     cleanup(tmp);
   }
 });
 
-Deno.test('injectCspMeta uses Report-Only header in report-only mode', () => {
+test('injectCspMeta uses Report-Only header in report-only mode', () => {
   const tmp = makeTempDir();
   try {
     const htmlPath = join(tmp, 'index.html');
-    Deno.writeTextFileSync(htmlPath, '<html><head></head><body></body></html>');
+    writeFileSync(htmlPath, '<html><head></head><body></body></html>');
 
     injectCspMeta(tmp, "default-src 'self'", true);
 
-    const content = Deno.readTextFileSync(htmlPath);
-    assertStringIncludes(content, 'Content-Security-Policy-Report-Only');
-    assertFalse(content.includes('"Content-Security-Policy"'));
+    const content = readFileSync(htmlPath, 'utf8');
+    expect(content).toContain('Content-Security-Policy-Report-Only');
+    expect(content.includes('"Content-Security-Policy"')).toBeFalsy();
   } finally {
     cleanup(tmp);
   }
 });
 
-Deno.test('injectCspMeta escapes double quotes in policy', () => {
+test('injectCspMeta escapes double quotes in policy', () => {
   const tmp = makeTempDir();
   try {
     const htmlPath = join(tmp, 'index.html');
-    Deno.writeTextFileSync(htmlPath, '<html><head></head><body></body></html>');
+    writeFileSync(htmlPath, '<html><head></head><body></body></html>');
 
     injectCspMeta(tmp, `default-src 'self'; script-src "unsafe-inline"`);
 
-    const content = Deno.readTextFileSync(htmlPath);
-    assertStringIncludes(content, '&quot;');
+    const content = readFileSync(htmlPath, 'utf8');
+    expect(content).toContain('&quot;');
   } finally {
     cleanup(tmp);
   }
 });
 
-Deno.test('injectCspMeta does not duplicate on repeated calls', () => {
+test('injectCspMeta does not duplicate on repeated calls', () => {
   const tmp = makeTempDir();
   try {
     const htmlPath = join(tmp, 'index.html');
-    Deno.writeTextFileSync(htmlPath, '<html><head></head><body></body></html>');
+    writeFileSync(htmlPath, '<html><head></head><body></body></html>');
 
     injectCspMeta(tmp, "default-src 'self'");
     injectCspMeta(tmp, "default-src 'self'");
 
-    const content = Deno.readTextFileSync(htmlPath);
+    const content = readFileSync(htmlPath, 'utf8');
     const count = (content.match(/Content-Security-Policy/g) || []).length;
-    assertEquals(count, 1);
+    expect(count).toEqual(1);
   } finally {
     cleanup(tmp);
   }
 });
 
-Deno.test('injectCspMeta handles HTML without <head> tag', () => {
+test('injectCspMeta handles HTML without <head> tag', () => {
   const tmp = makeTempDir();
   try {
     const htmlPath = join(tmp, 'no-head.html');
-    Deno.writeTextFileSync(htmlPath, '<html><body><p>No head</p></body></html>');
+    writeFileSync(htmlPath, '<html><body><p>No head</p></body></html>');
 
     injectCspMeta(tmp, "default-src 'self'");
 
-    const content = Deno.readTextFileSync(htmlPath);
-    assertStringIncludes(content, 'Content-Security-Policy');
+    const content = readFileSync(htmlPath, 'utf8');
+    expect(content).toContain('Content-Security-Policy');
   } finally {
     cleanup(tmp);
   }
 });
 
-Deno.test('injectCspMeta handles HTML starting with <!DOCTYPE>', () => {
+test('injectCspMeta handles HTML starting with <!DOCTYPE>', () => {
   const tmp = makeTempDir();
   try {
     const htmlPath = join(tmp, 'doctype.html');
-    Deno.writeTextFileSync(htmlPath, '<!DOCTYPE html><html><body></body></html>');
+    writeFileSync(htmlPath, '<!DOCTYPE html><html><body></body></html>');
 
     injectCspMeta(tmp, "default-src 'self'");
 
-    const content = Deno.readTextFileSync(htmlPath);
-    assertStringIncludes(content, 'Content-Security-Policy');
+    const content = readFileSync(htmlPath, 'utf8');
+    expect(content).toContain('Content-Security-Policy');
   } finally {
     cleanup(tmp);
   }
 });
 
-Deno.test('injectCspMeta warns when nonce=true (SSG rejects nonce — behavior unchanged)', () => {
+test('injectCspMeta warns when nonce=true (SSG rejects nonce — behavior unchanged)', () => {
   const tmp = makeTempDir();
   try {
     const htmlPath = join(tmp, 'nonce.html');
-    Deno.writeTextFileSync(htmlPath, '<html><head></head><body></body></html>');
+    writeFileSync(htmlPath, '<html><head></head><body></body></html>');
 
     const origWarn = console.warn;
     let warnMsg = '';
@@ -459,29 +454,29 @@ Deno.test('injectCspMeta warns when nonce=true (SSG rejects nonce — behavior u
     injectCspMeta(tmp, "default-src 'self'", false, true);
 
     console.warn = origWarn;
-    assertStringIncludes(warnMsg, 'nonce', 'Should warn about nonce not supported');
+    expect(warnMsg, 'Should warn about nonce not supported').toContain('nonce');
     // The rejection is real: no nonce attribute may reach the static output.
-    assertFalse(
-      Deno.readTextFileSync(htmlPath).includes('nonce='),
+    expect(
+      readFileSync(htmlPath, 'utf8').includes('nonce='),
       'SSG output must not carry a nonce attribute',
-    );
+    ).toBeFalsy();
   } finally {
     cleanup(tmp);
   }
 });
 
-Deno.test('injectCspMeta skips non-HTML files', () => {
+test('injectCspMeta skips non-HTML files', () => {
   const tmp = makeTempDir();
   try {
     const htmlPath = join(tmp, 'index.html');
     const txtPath = join(tmp, 'readme.txt');
-    Deno.writeTextFileSync(htmlPath, '<html><head></head><body></body></html>');
-    Deno.writeTextFileSync(txtPath, 'Not HTML');
+    writeFileSync(htmlPath, '<html><head></head><body></body></html>');
+    writeFileSync(txtPath, 'Not HTML');
 
     injectCspMeta(tmp, "default-src 'self'");
 
-    const txtContent = Deno.readTextFileSync(txtPath);
-    assertEquals(txtContent, 'Not HTML', 'Non-HTML files should not be modified');
+    const txtContent = readFileSync(txtPath, 'utf8');
+    expect(txtContent, 'Non-HTML files should not be modified').toEqual('Not HTML');
   } finally {
     cleanup(tmp);
   }
@@ -489,108 +484,105 @@ Deno.test('injectCspMeta skips non-HTML files', () => {
 
 // ─── injectViewTransitionMeta ─────────────────────────────────
 
-Deno.test('injectViewTransitionMeta adds meta tag to HTML files', () => {
+test('injectViewTransitionMeta adds meta tag to HTML files', () => {
   const tmp = makeTempDir();
   try {
     const htmlPath = join(tmp, 'index.html');
-    Deno.writeTextFileSync(htmlPath, '<html><head></head><body><p>Hello</p></body></html>');
+    writeFileSync(htmlPath, '<html><head></head><body><p>Hello</p></body></html>');
 
     injectViewTransitionMeta(tmp);
 
-    const content = Deno.readTextFileSync(htmlPath);
-    assertStringIncludes(content, 'view-transition');
-    assertStringIncludes(content, 'same-origin');
+    const content = readFileSync(htmlPath, 'utf8');
+    expect(content).toContain('view-transition');
+    expect(content).toContain('same-origin');
   } finally {
     cleanup(tmp);
   }
 });
 
-Deno.test('injectViewTransitionMeta does not duplicate on repeated calls', () => {
+test('injectViewTransitionMeta does not duplicate on repeated calls', () => {
   const tmp = makeTempDir();
   try {
     const htmlPath = join(tmp, 'index.html');
-    Deno.writeTextFileSync(htmlPath, '<html><head></head><body></body></html>');
+    writeFileSync(htmlPath, '<html><head></head><body></body></html>');
 
     injectViewTransitionMeta(tmp);
     injectViewTransitionMeta(tmp);
 
-    const content = Deno.readTextFileSync(htmlPath);
+    const content = readFileSync(htmlPath, 'utf8');
     const count = (content.match(/view-transition/g) || []).length;
-    assertEquals(count, 1);
+    expect(count).toEqual(1);
   } finally {
     cleanup(tmp);
   }
 });
 
-Deno.test('injectViewTransitionMeta recurses into subdirectories', () => {
+test('injectViewTransitionMeta recurses into subdirectories', () => {
   const tmp = makeTempDir();
   try {
-    Deno.mkdirSync(join(tmp, 'guide'));
-    Deno.writeTextFileSync(join(tmp, 'index.html'), '<html><head></head><body></body></html>');
-    Deno.writeTextFileSync(
-      join(tmp, 'guide', 'page.html'),
-      '<html><head></head><body></body></html>',
-    );
+    mkdirSync(join(tmp, 'guide'));
+    writeFileSync(join(tmp, 'index.html'), '<html><head></head><body></body></html>');
+    writeFileSync(join(tmp, 'guide', 'page.html'), '<html><head></head><body></body></html>');
 
     injectViewTransitionMeta(tmp);
 
-    assertStringIncludes(Deno.readTextFileSync(join(tmp, 'index.html')), 'view-transition');
-    assertStringIncludes(Deno.readTextFileSync(join(tmp, 'guide', 'page.html')), 'view-transition');
+    expect(readFileSync(join(tmp, 'index.html'), 'utf8')).toContain('view-transition');
+    expect(readFileSync(join(tmp, 'guide', 'page.html'), 'utf8')).toContain('view-transition');
   } finally {
     cleanup(tmp);
   }
 });
 
-Deno.test('injectViewTransitionMeta skips non-HTML files', () => {
+test('injectViewTransitionMeta skips non-HTML files', () => {
   const tmp = makeTempDir();
   try {
     const htmlPath = join(tmp, 'index.html');
     const txtPath = join(tmp, 'readme.txt');
-    Deno.writeTextFileSync(htmlPath, '<html><head></head><body></body></html>');
-    Deno.writeTextFileSync(txtPath, 'Not HTML');
+    writeFileSync(htmlPath, '<html><head></head><body></body></html>');
+    writeFileSync(txtPath, 'Not HTML');
 
     injectViewTransitionMeta(tmp);
 
-    const txtContent = Deno.readTextFileSync(txtPath);
-    assertEquals(txtContent, 'Not HTML');
+    const txtContent = readFileSync(txtPath, 'utf8');
+    expect(txtContent).toEqual('Not HTML');
   } finally {
     cleanup(tmp);
   }
 });
 
-Deno.test('injectViewTransitionMeta handles HTML without <head> tag', () => {
+test('injectViewTransitionMeta handles HTML without <head> tag', () => {
   const tmp = makeTempDir();
   try {
     const htmlPath = join(tmp, 'no-head.html');
-    Deno.writeTextFileSync(htmlPath, '<html><body><p>No head</p></body></html>');
+    writeFileSync(htmlPath, '<html><body><p>No head</p></body></html>');
 
     injectViewTransitionMeta(tmp);
 
-    const content = Deno.readTextFileSync(htmlPath);
-    assertStringIncludes(content, 'view-transition');
+    const content = readFileSync(htmlPath, 'utf8');
+    expect(content).toContain('view-transition');
   } finally {
     cleanup(tmp);
   }
 });
 
-Deno.test('injectViewTransitionMeta still injects when body text mentions view-transition', () => {
+test('injectViewTransitionMeta still injects when body text mentions view-transition', () => {
   // Regression: changelog page content contains "view-transition" as text,
   // which previously caused the injection to be skipped.
   // Fix: check for '<meta name="view-transition"' instead of 'view-transition'.
   const tmp = makeTempDir();
   try {
     const htmlPath = join(tmp, 'changelog.html');
-    Deno.writeTextFileSync(
+    writeFileSync(
       htmlPath,
       '<html><head></head><body><p>We added view-transition support in v0.9.2</p></body></html>',
     );
 
     injectViewTransitionMeta(tmp);
 
-    const content = Deno.readTextFileSync(htmlPath);
+    const content = readFileSync(htmlPath, 'utf8');
     // Should have the meta tag injected (not skipped because of body text)
     const matchCount = (content.match(/<meta name="view-transition"/g) || []).length;
-    assertEquals(matchCount, 1);
+    expect(matchCount).toEqual(1);
   } finally {
     cleanup(tmp);
   }
@@ -598,12 +590,12 @@ Deno.test('injectViewTransitionMeta still injects when body text mentions view-t
 
 // ─── buildSpeculationRulesJson ────────────────────────────────
 
-Deno.test('buildSpeculationRulesJson returns empty string for no options and no routes', () => {
+test('buildSpeculationRulesJson returns empty string for no options and no routes', () => {
   const result = buildSpeculationRulesJson({});
-  assertEquals(result, '');
+  expect(result).toEqual('');
 });
 
-Deno.test('buildSpeculationRulesJson generates heuristic prerender rules from routes', () => {
+test('buildSpeculationRulesJson generates heuristic prerender rules from routes', () => {
   const result = buildSpeculationRulesJson({}, [
     { path: '/', type: 'page' },
     { path: '/about', type: 'page' },
@@ -613,41 +605,41 @@ Deno.test('buildSpeculationRulesJson generates heuristic prerender rules from ro
 
   const parsed = JSON.parse(result);
   // Heuristic mode generates prerender rules (not prefetch)
-  assertExists(parsed.prerender);
+  expect(parsed.prerender).toEqual(expect.anything());
   // Home page is a list rule (source + urls, no where)
-  assert(
+  expect(
     parsed.prerender.some(
       (r: { source?: string; urls?: string[] }) => r.source === 'list' && r.urls?.includes('/'),
     ),
     'Home page should be a list rule with / in urls',
-  );
+  ).toBeTruthy();
   // Top-level page produces a document rule (where.href_matches)
-  assert(
+  expect(
     parsed.prerender.some(
       (r: { where?: { href_matches: string } }) => r.where?.href_matches === '/about',
     ),
     'Top-level page should produce an /about document rule',
-  );
+  ).toBeTruthy();
   // API routes are excluded from the document rules
-  assert(
+  expect(
     parsed.prerender.some((r: { where?: { not?: unknown } }) => r.where?.not != null),
     'API routes should be excluded via where.not',
-  );
+  ).toBeTruthy();
   // Dynamic routes (with :) should be excluded
-  assertFalse(result.includes('/blog/:slug'));
+  expect(result.includes('/blog/:slug')).toBeFalsy();
 });
 
-Deno.test('buildSpeculationRulesJson generates user-provided prerender rules', () => {
+test('buildSpeculationRulesJson generates user-provided prerender rules', () => {
   const result = buildSpeculationRulesJson({
     prerender: ['/guide/*'],
   });
 
   const parsed = JSON.parse(result);
-  assertExists(parsed.prerender);
-  assertEquals(parsed.prerender[0].where.href_matches, '/guide/*');
+  expect(parsed.prerender).toEqual(expect.anything());
+  expect(parsed.prerender[0].where.href_matches).toEqual('/guide/*');
 });
 
-Deno.test('buildSpeculationRulesJson escapes raw-text terminators in config patterns', () => {
+test('buildSpeculationRulesJson escapes raw-text terminators in config patterns', () => {
   // The JSON is inlined into a <script type="speculationrules"> raw-text
   // element; a config/plugin pattern containing </script> must not terminate
   // it. Angle brackets in patterns are emitted as unicode escapes, which
@@ -655,53 +647,53 @@ Deno.test('buildSpeculationRulesJson escapes raw-text terminators in config patt
   const payload = '/x</script><script>alert(1)</script>';
   const result = buildSpeculationRulesJson({ prerender: [payload] });
 
-  assertEquals(result.includes('</script>'), false);
-  assertEquals(result.includes('<'), false);
+  expect(result.includes('</script>')).toEqual(false);
+  expect(result.includes('<')).toEqual(false);
   const parsed = JSON.parse(result);
-  assertEquals(parsed.prerender[0].where.href_matches, payload);
+  expect(parsed.prerender[0].where.href_matches).toEqual(payload);
 });
 
-Deno.test('buildSpeculationRulesJson generates user-provided prefetch rules', () => {
+test('buildSpeculationRulesJson generates user-provided prefetch rules', () => {
   const result = buildSpeculationRulesJson({
     prefetch: ['/about', '/blog/*'],
   });
 
   const parsed = JSON.parse(result);
-  assertExists(parsed.prefetch);
-  assertEquals(parsed.prefetch.length, 2);
+  expect(parsed.prefetch).toEqual(expect.anything());
+  expect(parsed.prefetch.length).toEqual(2);
 });
 
-Deno.test('buildSpeculationRulesJson applies exclusion to user rules', () => {
+test('buildSpeculationRulesJson applies exclusion to user rules', () => {
   const result = buildSpeculationRulesJson({
     prerender: ['/guide/*'],
     exclude: ['/api/*'],
   });
 
   const parsed = JSON.parse(result);
-  assertExists(parsed.prerender[0].where.not);
+  expect(parsed.prerender[0].where.not).toEqual(expect.anything());
 });
 
-Deno.test('buildSpeculationRulesJson sets eagerness when not moderate', () => {
+test('buildSpeculationRulesJson sets eagerness when not moderate', () => {
   const result = buildSpeculationRulesJson({
     prerender: ['/guide/*'],
     eagerness: 'immediate',
   });
 
   const parsed = JSON.parse(result);
-  assertEquals(parsed.prerender[0].eagerness, 'immediate');
+  expect(parsed.prerender[0].eagerness).toEqual('immediate');
 });
 
-Deno.test('buildSpeculationRulesJson omits eagerness when moderate (default)', () => {
+test('buildSpeculationRulesJson omits eagerness when moderate (default)', () => {
   const result = buildSpeculationRulesJson({
     prerender: ['/guide/*'],
     eagerness: 'moderate',
   });
 
   const parsed = JSON.parse(result);
-  assertEquals(parsed.prerender[0].eagerness, undefined);
+  expect(parsed.prerender[0].eagerness).toEqual(undefined);
 });
 
-Deno.test('buildSpeculationRulesJson excludes API routes in heuristic mode', () => {
+test('buildSpeculationRulesJson excludes API routes in heuristic mode', () => {
   const result = buildSpeculationRulesJson({}, [
     { path: '/', type: 'page' },
     { path: '/api/data', type: 'api' },
@@ -709,44 +701,44 @@ Deno.test('buildSpeculationRulesJson excludes API routes in heuristic mode', () 
 
   const parsed = JSON.parse(result);
   // Heuristic mode generates prerender, not prefetch
-  assertExists(parsed.prerender);
+  expect(parsed.prerender).toEqual(expect.anything());
   // Only one static page (/) -> no exclusions needed
-  assertEquals(parsed.prerender.length, 1);
+  expect(parsed.prerender.length).toEqual(1);
 });
 
-Deno.test('buildSpeculationRulesJson returns empty string when no static pages', () => {
+test('buildSpeculationRulesJson returns empty string when no static pages', () => {
   const result = buildSpeculationRulesJson({}, [
     { path: '/api/data', type: 'api' },
     { path: '/blog/:slug', type: 'page' },
   ]);
 
-  assertEquals(result, '');
+  expect(result).toEqual('');
 });
 
 // #798: a nested page must prefetch both the page itself and its sub-paths —
 // '/blog/post/*' alone never matches '/blog/post'.
-Deno.test('buildSpeculationRulesJson nested pages prefetch the page itself and sub-paths (#798)', () => {
+test('buildSpeculationRulesJson nested pages prefetch the page itself and sub-paths (#798)', () => {
   const result = buildSpeculationRulesJson({}, [
     { path: '/', type: 'page' },
     { path: '/blog/post', type: 'page' },
   ]);
 
   const parsed = JSON.parse(result);
-  assertExists(parsed.prefetch);
+  expect(parsed.prefetch).toEqual(expect.anything());
   const matches = parsed.prefetch.map(
     (r: { where?: { href_matches: string } }) => r.where?.href_matches,
   );
-  assert(matches.includes('/blog/post'), 'prefetch should match the page itself');
-  assert(matches.includes('/blog/post/*'), 'prefetch should match sub-paths');
+  expect(matches.includes('/blog/post'), 'prefetch should match the page itself').toBeTruthy();
+  expect(matches.includes('/blog/post/*'), 'prefetch should match sub-paths').toBeTruthy();
 });
 
 // ─── injectSpeculationRules ───────────────────────────────────
 
-Deno.test('injectSpeculationRules adds script tag to HTML files', () => {
+test('injectSpeculationRules adds script tag to HTML files', () => {
   const tmp = makeTempDir();
   try {
     const htmlPath = join(tmp, 'index.html');
-    Deno.writeTextFileSync(htmlPath, '<html><head></head><body></body></html>');
+    writeFileSync(htmlPath, '<html><head></head><body></body></html>');
 
     const rulesJson = JSON.stringify(
       { prefetch: [{ where: { href_matches: '/about/*' } }] },
@@ -755,72 +747,72 @@ Deno.test('injectSpeculationRules adds script tag to HTML files', () => {
     );
     injectSpeculationRules(tmp, rulesJson);
 
-    const content = Deno.readTextFileSync(htmlPath);
-    assertStringIncludes(content, 'speculationrules');
-    assertStringIncludes(content, '/about/*');
+    const content = readFileSync(htmlPath, 'utf8');
+    expect(content).toContain('speculationrules');
+    expect(content).toContain('/about/*');
   } finally {
     cleanup(tmp);
   }
 });
 
-Deno.test('injectSpeculationRules does nothing with empty rules', () => {
+test('injectSpeculationRules does nothing with empty rules', () => {
   const tmp = makeTempDir();
   try {
     const htmlPath = join(tmp, 'index.html');
-    Deno.writeTextFileSync(htmlPath, '<html><head></head><body></body></html>');
+    writeFileSync(htmlPath, '<html><head></head><body></body></html>');
 
     injectSpeculationRules(tmp, '');
 
-    const content = Deno.readTextFileSync(htmlPath);
-    assertFalse(content.includes('speculationrules'));
+    const content = readFileSync(htmlPath, 'utf8');
+    expect(content.includes('speculationrules')).toBeFalsy();
   } finally {
     cleanup(tmp);
   }
 });
 
-Deno.test('injectSpeculationRules does not duplicate on repeated calls', () => {
+test('injectSpeculationRules does not duplicate on repeated calls', () => {
   const tmp = makeTempDir();
   try {
     const htmlPath = join(tmp, 'index.html');
-    Deno.writeTextFileSync(htmlPath, '<html><head></head><body></body></html>');
+    writeFileSync(htmlPath, '<html><head></head><body></body></html>');
 
     const rulesJson = JSON.stringify({ prefetch: [{ where: { href_matches: '/' } }] }, null, 2);
     injectSpeculationRules(tmp, rulesJson);
     injectSpeculationRules(tmp, rulesJson);
 
-    const content = Deno.readTextFileSync(htmlPath);
+    const content = readFileSync(htmlPath, 'utf8');
     const count = (content.match(/speculationrules/g) || []).length;
-    assertEquals(count, 1);
+    expect(count).toEqual(1);
   } finally {
     cleanup(tmp);
   }
 });
 
-Deno.test('injectSpeculationRules recurses into subdirectories', () => {
+test('injectSpeculationRules recurses into subdirectories', () => {
   const tmp = makeTempDir();
   try {
-    Deno.mkdirSync(join(tmp, 'blog'));
-    Deno.writeTextFileSync(join(tmp, 'index.html'), '<html><body></body></html>');
-    Deno.writeTextFileSync(join(tmp, 'blog', 'post.html'), '<html><body></body></html>');
+    mkdirSync(join(tmp, 'blog'));
+    writeFileSync(join(tmp, 'index.html'), '<html><body></body></html>');
+    writeFileSync(join(tmp, 'blog', 'post.html'), '<html><body></body></html>');
 
     const rulesJson = JSON.stringify({ prefetch: [{ where: { href_matches: '/*' } }] }, null, 2);
     injectSpeculationRules(tmp, rulesJson);
 
-    assertStringIncludes(Deno.readTextFileSync(join(tmp, 'index.html')), 'speculationrules');
-    assertStringIncludes(Deno.readTextFileSync(join(tmp, 'blog', 'post.html')), 'speculationrules');
+    expect(readFileSync(join(tmp, 'index.html'), 'utf8')).toContain('speculationrules');
+    expect(readFileSync(join(tmp, 'blog', 'post.html'), 'utf8')).toContain('speculationrules');
   } finally {
     cleanup(tmp);
   }
 });
 
-Deno.test('injectSpeculationRules still injects when body text mentions speculationrules', () => {
+test('injectSpeculationRules still injects when body text mentions speculationrules', () => {
   // Regression: changelog page content contains "speculationrules" as text,
   // which previously caused the injection to be skipped.
   // Fix: check for '<script type="speculationrules"' instead of 'speculationrules'.
   const tmp = makeTempDir();
   try {
     const htmlPath = join(tmp, 'changelog.html');
-    Deno.writeTextFileSync(
+    writeFileSync(
       htmlPath,
       '<html><head></head><body><p>We added speculationrules support in v0.9.2</p></body></html>',
     );
@@ -828,10 +820,10 @@ Deno.test('injectSpeculationRules still injects when body text mentions speculat
     const rulesJson = JSON.stringify({ prefetch: [{ where: { href_matches: '/*' } }] }, null, 2);
     injectSpeculationRules(tmp, rulesJson);
 
-    const content = Deno.readTextFileSync(htmlPath);
+    const content = readFileSync(htmlPath, 'utf8');
     // Should have the script tag injected (not skipped because of body text)
     const matchCount = (content.match(/<script type="speculationrules"/g) || []).length;
-    assertEquals(matchCount, 1);
+    expect(matchCount).toEqual(1);
   } finally {
     cleanup(tmp);
   }

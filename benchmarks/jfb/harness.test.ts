@@ -14,7 +14,10 @@
  * - recorded evidence is identity-free, reproducible in shape, and written to
  *   local output rather than a committed baseline
  */
-import { assert, assertEquals, assertMatch, assertStringIncludes } from '@std/assert';
+import { readFileSync } from 'node:fs';
+import { readFile } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
+import { expect, test } from 'vitest';
 import { compileElementProgram } from '../../packages/element/src/internal/compiler/semantic-core/compile.ts';
 import type {
   ProgramElementNode,
@@ -37,127 +40,128 @@ import {
   validateEvidence,
 } from './harness/evidence.ts';
 
-Deno.test('jfb spec reproduces stock store semantics (model check)', () => {
+test('jfb spec reproduces stock store semantics (model check)', () => {
   verifyAllSpecsAgainstModel();
 });
 
-Deno.test('jfb spec matches stock warmup counts and benchmark set', () => {
-  assertEquals(
-    CPU_BENCHMARKS.map((spec) => spec.id),
-    [
-      '01_run1k',
-      '02_replace1k',
-      '03_update10th',
-      '04_select1k',
-      '05_swap1k',
-      '06_remove1k',
-      '07_create10k',
-      '08_append1k',
-      '09_clear1k',
-    ],
-  );
+test('jfb spec matches stock warmup counts and benchmark set', () => {
+  expect(CPU_BENCHMARKS.map((spec) => spec.id)).toEqual([
+    '01_run1k',
+    '02_replace1k',
+    '03_update10th',
+    '04_select1k',
+    '05_swap1k',
+    '06_remove1k',
+    '07_create10k',
+    '08_append1k',
+    '09_clear1k',
+  ]);
   // Stock warmupCount values from webdriver-ts benchmarksCommon.ts.
-  assertEquals(
-    CPU_BENCHMARKS.map((spec) => spec.warmupCount),
-    [5, 5, 3, 1, 5, 5, 5, 5, 5],
-  );
+  expect(CPU_BENCHMARKS.map((spec) => spec.warmupCount)).toEqual([5, 5, 3, 1, 5, 5, 5, 5, 5]);
   // Stock select benchmark records additionalNumberOfRuns: 10.
-  assertEquals(CPU_BENCHMARKS.find((spec) => spec.id === '04_select1k')?.subRuns, 10);
-  assert(CPU_ITERATIONS >= 5, 'iteration count must be meaningful');
+  expect(CPU_BENCHMARKS.find((spec) => spec.id === '04_select1k')?.subRuns).toEqual(10);
+  expect(CPU_ITERATIONS >= 5, 'iteration count must be meaningful').toBeTruthy();
   // Memory probes: three stock (21/22/25) plus the labeled OE extension.
-  assertEquals(
-    MEM_BENCHMARKS.map((spec) => spec.id),
-    ['21_ready-memory', '22_run1k-memory', '25_run-clear-memory', '26_run10k-memory'],
-  );
-  assertEquals(MEM_BENCHMARKS.filter((spec) => spec.stock).length, 3);
+  expect(MEM_BENCHMARKS.map((spec) => spec.id)).toEqual([
+    '21_ready-memory',
+    '22_run1k-memory',
+    '25_run-clear-memory',
+    '26_run10k-memory',
+  ]);
+  expect(MEM_BENCHMARKS.filter((spec) => spec.stock).length).toEqual(3);
 });
 
-Deno.test('jfb model: repeated iterations stay consistent (id counter monotonic)', () => {
+test('jfb model: repeated iterations stay consistent (id counter monotonic)', () => {
   const model = new JfbModel();
   const spec = CPU_BENCHMARKS.find((candidate) => candidate.id === '01_run1k')!;
   executeIteration(model, spec);
   // Second iteration on the same model: 5 warmups + 1 measured run consumed
   // 6000 ids, so the next run starts at 6001.
   model.run();
-  assertEquals(String(model.rows[0].id), '6001');
+  expect(String(model.rows[0].id)).toEqual('6001');
 });
 
-Deno.test('jfb aggregation helpers are correct', () => {
-  assertEquals(median([3, 1, 2]), 2);
-  assertEquals(median([1, 2, 3, 4]), 2.5);
-  assertEquals(mean([1, 2, 3]), 2);
+test('jfb aggregation helpers are correct', () => {
+  expect(median([3, 1, 2])).toEqual(2);
+  expect(median([1, 2, 3, 4])).toEqual(2.5);
+  expect(mean([1, 2, 3])).toEqual(2);
   const gm = geometricMean([2, 8]);
-  assert(Math.abs(gm - 4) < 1e-9);
+  expect(Math.abs(gm - 4) < 1e-9).toBeTruthy();
   let threw = false;
   try {
     geometricMean([0, 1]);
   } catch {
     threw = true;
   }
-  assert(threw, 'geometric mean must reject non-positive values');
+  expect(threw, 'geometric mean must reject non-positive values').toBeTruthy();
 });
 
-Deno.test('oe implementation granularity: one component, one keyed region, plain table DOM', () => {
-  const source = Deno.readTextFileSync(new URL('./src/oe/jfb-table.tsx', import.meta.url));
+test('oe implementation granularity: one component, one keyed region, plain table DOM', () => {
+  const source = readFileSync(
+    fileURLToPath(new URL('./src/oe/jfb-table.tsx', import.meta.url)),
+    'utf8',
+  );
   const { program } = compileElementProgram(source, '/bench/jfb-table.tsx');
   const eachParts = program.parts.filter((part) => part.k === 'each');
-  assertEquals(eachParts.length, 1, 'exactly one keyed Region owns the rows');
+  expect(eachParts.length, 'exactly one keyed Region owns the rows').toEqual(1);
   const each = eachParts[0];
-  assert(each.k === 'each');
-  assertEquals(each.key, 'id', 'rows are keyed by the stock row id');
+  expect(each.k === 'each').toBeTruthy();
+  expect(each.key, 'rows are keyed by the stock row id').toEqual('id');
 
   const walk = (nodes: ProgramTreeNode[]): ProgramElementNode[] =>
     nodes.flatMap((node) => (node.k === 'el' ? [node, ...walk(node.children)] : []));
   const itemElements = walk(each.item);
-  assertEquals(each.item[0].k, 'el');
-  assertEquals(
+  expect(each.item[0].k).toEqual('el');
+  expect(
     (each.item[0] as ProgramElementNode).tag,
-    'tr',
     'region item root must be a plain table row',
-  );
+  ).toEqual('tr');
   for (const element of itemElements) {
-    assert(
+    expect(
       !element.tag.includes('-'),
       `region item must not instantiate custom elements, found <${element.tag}>`,
-    );
+    ).toBeTruthy();
   }
   // No event parts at all inside the region item template (grammar v1 cannot
   // express them); row interaction is one delegated handler on the table.
   const eventParts = program.parts.filter((part) => part.k === 'event');
-  assertEquals(eventParts.length, 7, 'six jumbotron buttons plus one delegated table handler');
+  expect(eventParts.length, 'six jumbotron buttons plus one delegated table handler').toEqual(7);
 });
 
-Deno.test('oe data generator is the verbatim stock JFB algorithm', () => {
-  const data = Deno.readTextFileSync(new URL('./src/oe/data.ts', import.meta.url));
+test('oe data generator is the verbatim stock JFB algorithm', () => {
+  const data = readFileSync(fileURLToPath(new URL('./src/oe/data.ts', import.meta.url)), 'utf8');
   for (const word of ['pretty', 'quaint', 'unsightly', 'inexpensive', 'fancy']) {
-    assertStringIncludes(data, `'${word}'`);
+    expect(data).toContain(`'${word}'`);
   }
   for (const word of ['table', 'bbq', 'pony', 'keyboard']) {
-    assertStringIncludes(data, `'${word}'`);
+    expect(data).toContain(`'${word}'`);
   }
   // The stock _random formula and a module-level monotonic id counter.
-  assertStringIncludes(data, 'Math.round(Math.random() * 1000) % max');
-  assertStringIncludes(data, 'let idCounter = 1');
+  expect(data).toContain('Math.round(Math.random() * 1000) % max');
+  expect(data).toContain('let idCounter = 1');
   // Word list sizes must match stock (25 adjectives, 11 colours, 13 nouns).
   const adjectives = data.match(/const adjectives = \[([\s\S]*?)\];/)![1].match(/'[^']+'/g)!;
   const colours = data.match(/const colours = \[([\s\S]*?)\];/)![1].match(/'[^']+'/g)!;
   const nouns = data.match(/const nouns = \[([\s\S]*?)\];/)![1].match(/'[^']+'/g)!;
-  assertEquals(adjectives.length, 25);
-  assertEquals(colours.length, 11);
-  assertEquals(nouns.length, 13);
+  expect(adjectives.length).toEqual(25);
+  expect(colours.length).toEqual(11);
+  expect(nouns.length).toEqual(13);
 });
 
-Deno.test('stock comparator pin table is well-formed', () => {
-  assertMatch(JFB_COMMIT, /^[0-9a-f]{40}$/);
-  assert(PINNED_STOCK_FILES.length >= 15, 'pin table must cover css plus all comparator sources');
+test('stock comparator pin table is well-formed', () => {
+  expect(JFB_COMMIT).toMatch(/^[0-9a-f]{40}$/);
+  expect(
+    PINNED_STOCK_FILES.length >= 15,
+    'pin table must cover css plus all comparator sources',
+  ).toBeTruthy();
   for (const pinned of PINNED_STOCK_FILES) {
-    assertMatch(pinned.sha256, /^[0-9a-f]{64}$/);
-    assert(!pinned.path.startsWith('/'), 'pinned paths are repo-relative');
+    expect(pinned.sha256).toMatch(/^[0-9a-f]{64}$/);
+    expect(!pinned.path.startsWith('/'), 'pinned paths are repo-relative').toBeTruthy();
   }
   // Every required comparator family is covered.
   const paths = PINNED_STOCK_FILES.map((pinned) => pinned.path).join('\n');
   for (const impl of ['vanillajs', 'preact-signals', 'lit', 'solid', 'vue', 'svelte']) {
-    assertStringIncludes(paths, `frameworks/keyed/${impl}/`);
+    expect(paths).toContain(`frameworks/keyed/${impl}/`);
   }
 });
 
@@ -215,39 +219,45 @@ function validEvidence() {
   };
 }
 
-Deno.test('jfb evidence redaction strips hostname, account, and absolute paths', () => {
+test('jfb evidence redaction strips hostname, account, and absolute paths', () => {
   const dirty = {
     ...validEvidence(),
     note: `recorded on ${IDENTITY.hostname} by ${IDENTITY.username}`,
     build: { error: `${IDENTITY.buildDir}/oe-src/main.ts missing under ${IDENTITY.repoRoot}` },
   };
-  assert(findIdentityLeaks(dirty, IDENTITY).length > 0, 'raw identity must be detectable');
+  expect(
+    findIdentityLeaks(dirty, IDENTITY).length > 0,
+    'raw identity must be detectable',
+  ).toBeTruthy();
 
   const clean = redactEvidence(dirty, IDENTITY);
-  assertEquals(findIdentityLeaks(clean, IDENTITY), []);
-  assertEquals(validateEvidence(clean, { jfbCommit: JFB_COMMIT }), []);
+  expect(findIdentityLeaks(clean, IDENTITY)).toEqual([]);
+  expect(validateEvidence(clean, { jfbCommit: JFB_COMMIT })).toEqual([]);
 });
 
-Deno.test('jfb evidence validation keeps the reproducible JFB commit and schema', () => {
-  assertEquals(validateEvidence(validEvidence(), { jfbCommit: JFB_COMMIT }), []);
+test('jfb evidence validation keeps the reproducible JFB commit and schema', () => {
+  expect(validateEvidence(validEvidence(), { jfbCommit: JFB_COMMIT })).toEqual([]);
   const drifted = validEvidence();
   drifted.provenance.jfb.commit = 'b'.repeat(40);
-  assert(validateEvidence(drifted, { jfbCommit: JFB_COMMIT }).length > 0);
+  expect(validateEvidence(drifted, { jfbCommit: JFB_COMMIT }).length > 0).toBeTruthy();
   const broken = validEvidence();
   broken.results[0].cpu[0].samplesMs = [Number.NaN];
-  assert(validateEvidence(broken, { jfbCommit: JFB_COMMIT }).length > 0);
+  expect(validateEvidence(broken, { jfbCommit: JFB_COMMIT }).length > 0).toBeTruthy();
   const missingVersion = validEvidence();
   missingVersion.provenance.toolchain.node = '';
-  assert(validateEvidence(missingVersion, { jfbCommit: JFB_COMMIT }).length > 0);
+  expect(validateEvidence(missingVersion, { jfbCommit: JFB_COMMIT }).length > 0).toBeTruthy();
 });
 
-Deno.test('jfb results default to local output, never a committed baseline', async () => {
-  assertEquals(DEFAULT_EVIDENCE_PATH, '.artifacts/jfb-evidence.json');
-  assert(DEFAULT_EVIDENCE_PATH.endsWith('.json'));
-  const runner = await Deno.readTextFile(new URL('./harness/run.ts', import.meta.url));
-  assertStringIncludes(runner, 'DEFAULT_EVIDENCE_PATH');
-  assert(
+test('jfb results default to local output, never a committed baseline', async () => {
+  expect(DEFAULT_EVIDENCE_PATH).toEqual('.artifacts/jfb-evidence.json');
+  expect(DEFAULT_EVIDENCE_PATH.endsWith('.json')).toBeTruthy();
+  const runner = await readFile(
+    fileURLToPath(new URL('./harness/run.ts', import.meta.url)),
+    'utf8',
+  );
+  expect(runner).toContain('DEFAULT_EVIDENCE_PATH');
+  expect(
     !runner.includes("'../evidence.json'"),
     'the runner must not write benchmarks/jfb/evidence.json by default',
-  );
+  ).toBeTruthy();
 });

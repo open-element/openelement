@@ -1,4 +1,5 @@
-import { assert, assertEquals, assertRejects } from '@std/assert';
+import { expect, test } from 'vitest';
+import { assertRejectsIncludes } from '../../tests/lib/vitest-asserts.ts';
 import { dirname, join } from '@std/path';
 import { auditDenoFloor, readFloor } from './check-deno-floor.ts';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
@@ -18,13 +19,13 @@ function baseInput(overrides: Partial<Parameters<typeof auditDenoFloor>[0]> = {}
   };
 }
 
-Deno.test('deno floor: the repository documents agree', async () => {
+test('deno floor: the repository documents agree', async () => {
   const floor = await readFloor(repoRoot);
-  assertEquals(floor, '2.9');
-  assertEquals(auditDenoFloor(baseInput({ floor, packageReadmes: [] })), []);
+  expect(floor).toEqual('2.9');
+  expect(auditDenoFloor(baseInput({ floor, packageReadmes: [] }))).toEqual([]);
 });
 
-Deno.test('deno floor: no earlier floor and no missing claims pass', () => {
+test('deno floor: no earlier floor and no missing claims pass', () => {
   const cases: Array<[string, ReturnType<typeof baseInput>, string]> = [
     [
       'create states 2.8 floor',
@@ -52,18 +53,18 @@ Deno.test('deno floor: no earlier floor and no missing claims pass', () => {
   ];
   for (const [label, input, expected] of cases) {
     const failures = auditDenoFloor(input);
-    assert(
+    expect(
       failures.some((failure) => failure.includes(expected)),
       `${label}: ${failures}`,
-    );
+    ).toBeTruthy();
   }
 });
 
-Deno.test('deno floor: a malformed .dvmrc pin fails closed', async () => {
+test('deno floor: a malformed .dvmrc pin fails closed', async () => {
   const root = await mkdtemp(join(tmpdir(), 'deno-floor-'));
   try {
     await writeFile(join(root, '.dvmrc'), '2.9\n');
-    await assertRejects(() => readFloor(root), Error, 'exact x.y.z');
+    await assertRejectsIncludes(() => readFloor(root), Error, 'exact x.y.z');
   } finally {
     await rm(root, { recursive: true });
   }

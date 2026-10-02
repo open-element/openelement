@@ -1,4 +1,4 @@
-import { assert, assertEquals } from '@std/assert';
+import { expect, test } from 'vitest';
 import {
   type AssetFile,
   checkAssetsProvenance,
@@ -48,11 +48,11 @@ const FILES: AssetFile[] = [
 
 const NOTICES = 'Thing is MIT.\nTHE SOFTWARE IS PROVIDED "AS IS"';
 
-Deno.test('asset provenance accepts a well-formed manifest', () => {
-  assertEquals(checkAssetsProvenance(manifest(), FILES, NOTICES), []);
+test('asset provenance accepts a well-formed manifest', () => {
+  expect(checkAssetsProvenance(manifest(), FILES, NOTICES)).toEqual([]);
 });
 
-Deno.test('asset provenance records external assets without vendoring them', () => {
+test('asset provenance records external assets without vendoring them', () => {
   const external = {
     path: 'frames/',
     kind: 'first-party',
@@ -67,16 +67,16 @@ Deno.test('asset provenance records external assets without vendoring them', () 
     },
   };
   const candidate = manifest({ assets: [manifest().assets[0], external] });
-  assertEquals(checkAssetsProvenance(candidate, [FILES[0]], NOTICES), []);
+  expect(checkAssetsProvenance(candidate, [FILES[0]], NOTICES)).toEqual([]);
 
   const failures = checkAssetsProvenance(candidate, FILES, NOTICES);
-  assert(
+  expect(
     failures.some((failure) => failure.includes('declared external but still exists')),
     failures.join('\n'),
-  );
+  ).toBeTruthy();
 });
 
-Deno.test('asset provenance rejects malformed external delivery declarations', () => {
+test('asset provenance rejects malformed external delivery declarations', () => {
   const external = {
     path: 'frames/',
     kind: 'first-party',
@@ -95,10 +95,10 @@ Deno.test('asset provenance rejects malformed external delivery declarations', (
     [FILES[0]],
     NOTICES,
   );
-  assert(failures.length >= 4, failures.join('\n'));
+  expect(failures.length >= 4, failures.join('\n')).toBeTruthy();
 });
 
-Deno.test('asset provenance fails closed on identity, license, and digest gaps', () => {
+test('asset provenance fails closed on identity, license, and digest gaps', () => {
   const cases: Array<[string, unknown, AssetFile[], string]> = [
     [
       'sha mismatch',
@@ -180,37 +180,37 @@ Deno.test('asset provenance fails closed on identity, license, and digest gaps',
   ];
   for (const [label, candidate, files, notices] of cases) {
     const failures = checkAssetsProvenance(candidate, files, notices);
-    assert(failures.length > 0, `${label} must fail`);
+    expect(failures.length > 0, `${label} must fail`).toBeTruthy();
   }
 });
 
-Deno.test('asset provenance rejects total budget overruns', () => {
+test('asset provenance rejects total budget overruns', () => {
   const failures = checkAssetsProvenance(
     manifest({ budgets: { assetsTotalBytes: 250, singleMediaBytes: 500_000 } }),
     FILES,
     NOTICES,
   );
-  assert(
+  expect(
     failures.some((failure) => failure.includes('assets total')),
     failures.join('\n'),
-  );
+  ).toBeTruthy();
 });
 
-Deno.test('asset provenance treats common asset extensions as media', () => {
-  assertEquals(isMediaPath('dragon-idle.mp4'), true);
-  assertEquals(isMediaPath('dragon-frames/f00.webp'), true);
-  assertEquals(isMediaPath('vendor/prism/prism.min.js'), false);
+test('asset provenance treats common asset extensions as media', () => {
+  expect(isMediaPath('dragon-idle.mp4')).toEqual(true);
+  expect(isMediaPath('dragon-frames/f00.webp')).toEqual(true);
+  expect(isMediaPath('vendor/prism/prism.min.js')).toEqual(false);
 });
 
-Deno.test('toHex renders lowercase hex', () => {
-  assertEquals(toHex(new Uint8Array([0, 15, 16, 255])), '000f10ff');
+test('toHex renders lowercase hex', () => {
+  expect(toHex(new Uint8Array([0, 15, 16, 255]))).toEqual('000f10ff');
 });
 
-Deno.test('the committed assets tree passes the provenance gate', async () => {
-  assertEquals(await scanAssetsProvenance(), []);
+test('the committed assets tree passes the provenance gate', async () => {
+  expect(await scanAssetsProvenance()).toEqual([]);
 });
 
-Deno.test('dragon consumers stay bound to the external provenance keys', async () => {
+test('dragon consumers stay bound to the external provenance keys', async () => {
   const committed = JSON.parse(await readFile('www/public/assets/manifest.json', 'utf8')) as {
     assets: Array<{
       path: string;
@@ -219,14 +219,14 @@ Deno.test('dragon consumers stay bound to the external provenance keys', async (
   };
   const frames = committed.assets.find((asset) => asset.path === 'dragon-frames/');
   const video = committed.assets.find((asset) => asset.path === 'dragon-idle.mp4');
-  assert(frames?.remote, 'dragon frame delivery must be declared');
-  assert(video?.remote, 'dragon video delivery must be declared');
+  expect(frames?.remote, 'dragon frame delivery must be declared').toBeTruthy();
+  expect(video?.remote, 'dragon video delivery must be declared').toBeTruthy();
 
   const frameBase = `${frames.remote.origin}/${frames.remote.key}`;
   const videoUrl = `${video.remote.origin}/${video.remote.key}`;
   const controller = await readFile('www/app/site-ui/open-dragon-live-gaze-controller.ts', 'utf8');
   const island = await readFile('www/app/islands/open-dragon-live-gaze.tsx', 'utf8');
-  assert(controller.includes(frameBase.replace('/frames/', '')));
-  assert(island.includes(`${frameBase}f27.webp`));
-  assert(island.includes(videoUrl));
+  expect(controller.includes(frameBase.replace('/frames/', ''))).toBeTruthy();
+  expect(island.includes(`${frameBase}f27.webp`)).toBeTruthy();
+  expect(island.includes(videoUrl)).toBeTruthy();
 });

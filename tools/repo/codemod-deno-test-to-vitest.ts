@@ -93,6 +93,11 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 const DRY = process.argv.includes('--dry');
+// --soft-throws: convert assertThrows/assertRejects onto the shared
+// tests/lib/vitest-asserts helpers (exact std semantics incl. captured
+// errors) instead of skipping such files — used for the step-2 sweep of the
+// step-1 manual batch. t.step files still fail closed.
+const SOFT_THROWS = process.argv.includes('--soft-throws');
 
 const ROOTS = ['packages', 'apps', 'www', 'tools', 'tests'];
 const EXCLUDED_DIRS = new Set([
@@ -141,7 +146,32 @@ function throwsBuilder(rejects: boolean) {
   };
 }
 
+// DISCLOSED SEMANTIC DELTAS of assertEquals → expect().toEqual (verified
+// empirically against the repo's vitest 5.0.2 + @std/assert, B3 review):
+//   ±0            std EQUAL / vitest NOT-equal  — vitest stricter (fails loud)
+//   NaN           both EQUAL                    — identical
+//   {a:undefined} vs {}: std NOT-equal / vitest equal — vitest looser
+//   same-shape objects of different constructors: std NOT-equal / vitest equal
+//                  — vitest looser
+// The two looser directions cannot silently weaken a pre-migration-green
+// suite, and a repo-wide grep at the cutover found no migrated call site
+// comparing ±0/NaN literals, undefined-key objects, or cross-class shapes.
 const THROW_NAMES = new Set(['assertThrows', 'assertRejects']);
+// --soft-throws table: std arg shapes (fn[, C[, msgIncludes[, message]]])
+// pass through verbatim to the helpers
+const SOFT_THROW_TABLE: Record<
+  string,
+  { arity: [number, number]; build: (a: string[]) => string }
+> = {
+  assertThrows: {
+    arity: [1, 4],
+    build: (a) => `assertThrowsIncludes(${a.join(', ')})`,
+  },
+  assertRejects: {
+    arity: [1, 4],
+    build: (a) => `assertRejectsIncludes(${a.join(', ')})`,
+  },
+};
 const DROPPABLE_TEST_OPTS = new Set([
   'permissions',
   'sanitizeResources',
@@ -607,6 +637,7 @@ function rewriteAssertCalls(
   codeAt: (i: number) => boolean,
   importedNames: Set<string>,
   stats: FileStats,
+  softHelperUsed: { value: boolean },
 ): Edit[] {
   const edits: Edit[] = [];
   const callRe = /\b([A-Za-z_$][A-Za-z0-9_$]*)\s*\(/g;
@@ -616,6 +647,19 @@ function rewriteAssertCalls(
     if (!ASSERT_TABLE[name] || !importedNames.has(name)) continue;
     const openParen = m.index + m[0].length - 1;
     if (!codeAt(openParen)) continue;
+    if (SOFT_THROWS && THROW_NAMES.has(name)) {
+      const closeSoft = scanner.balanced(openParen);
+      const softArgs = scanner.args(openParen, closeSoft).map((a) => a.text.trim());
+      edits.push({
+        start: m.index,
+        end: closeSoft,
+        replacement: SOFT_THROW_TABLE[name]!.build(softArgs),
+      });
+      stats.asserts[name] = (stats.asserts[name] ?? 0) + 1;
+      softHelperUsed.value = true;
+      callRe.lastIndex = closeSoft;
+      continue;
+    }
     const close = scanner.balanced(openParen);
     const args = scanner.args(openParen, close);
     const [minArity, maxArity] = ASSERT_TABLE[name]!.arity;
@@ -664,6 +708,16 @@ function rewriteAssertCalls(
   return edits;
 }
 
+/** Relative specifier of tests/lib/vitest-asserts.ts from a repo file. */
+function helperSpecifier(filePath: string): string {
+  const rel = path.relative(
+    path.dirname(path.resolve(filePath)),
+    path.resolve('tests/lib/vitest-asserts.ts'),
+  );
+  const posix = rel.split(path.sep).join('/');
+  return posix.startsWith('.') ? posix : `./${posix}`;
+}
+
 /** Insert the std trailing message as expect()'s optional 2nd argument. */
 function spliceExpectMessage(replacement: string, message: string): string {
   const bodyScanner = new Scanner(replacement, scanRegions(replacement));
@@ -677,10 +731,15 @@ function rewriteImports(
   codeAt: (i: number) => boolean,
   usedNames: Set<string>,
   stats: FileStats,
+  filePath: string,
+  softHelperUsed: boolean,
 ): Edit[] {
   const edits: Edit[] = [];
   const names = [...usedNames].sort().join(', ');
   const vitestImport = usedNames.size > 0 ? `import { ${names} } from 'vitest';` : '';
+  const helperImport = softHelperUsed
+    ? `import { assertRejectsIncludes, assertThrowsIncludes } from '${helperSpecifier(filePath)}';`
+    : '';
   const re = /import\s*(?:type\s*)?\{[^}]*\}\s*from\s*(['"])@std\/assert\1\s*;?/g;
   let m: RegExpExecArray | null;
   let seen = false;
@@ -688,16 +747,18 @@ function rewriteImports(
     if (!codeAt(m.index)) continue;
     stats.importRewritten++;
     // first occurrence carries the vitest import; any further ones delete
+    const block = [vitestImport, helperImport].filter(Boolean).join('\n');
     edits.push({
       start: m.index,
       end: m.index + m[0].length,
-      replacement: seen ? '' : vitestImport,
+      replacement: seen ? '' : block,
     });
     seen = true;
   }
-  if (!seen && usedNames.size > 0) {
+  if (!seen && (usedNames.size > 0 || helperImport)) {
     // Deno.test-only file (no @std/assert import): prepend at the top
-    edits.push({ start: 0, end: 0, replacement: `${vitestImport}\n` });
+    const block = [vitestImport, helperImport].filter(Boolean).join('\n');
+    edits.push({ start: 0, end: 0, replacement: `${block}\n` });
   }
   return edits;
 }
@@ -706,7 +767,10 @@ function rewriteImports(
 
 export function transformFile(filePath: string, relFile: string): FileStats | null {
   const src = fs.readFileSync(filePath, 'utf8');
-  if (!/Deno\.test\s*\(/.test(src)) return null; // registration is the migration unit
+  // Migration unit: a Deno.test registration, or a leftover @std/assert
+  // import whose registration was already structurally converted by hand
+  // (the B3 step-2 t.step restructures).
+  if (!/Deno\.test\s*\(/.test(src) && !/from\s*['"]@std\/assert['"]/.test(src)) return null;
 
   const stats: FileStats = {
     file: relFile,
@@ -774,12 +838,14 @@ export function transformFile(filePath: string, relFile: string): FileStats | nu
     // use is a manual case (vitest has no throwing-assertion that hands back
     // the error value)
     const captureRe = /(?:=|return)\s*(?:await\s+)?assert(?:Throws|Rejects)\s*\(/g;
-    let cm: RegExpExecArray | null;
-    while ((cm = captureRe.exec(src))) {
-      if (codeAt(cm.index)) {
-        stats.notes.push('manual: assertThrows/assertRejects return value captured');
-        stats.skipped = true;
-        return stats;
+    if (!SOFT_THROWS) {
+      let cm: RegExpExecArray | null;
+      while ((cm = captureRe.exec(src))) {
+        if (codeAt(cm.index)) {
+          stats.notes.push('manual: assertThrows/assertRejects return value captured');
+          stats.skipped = true;
+          return stats;
+        }
       }
     }
     const bareCallRe = /\b(assert[A-Za-z]*)\s*\(/g;
@@ -795,26 +861,58 @@ export function transformFile(filePath: string, relFile: string): FileStats | nu
     }
 
     const testEdits = rewriteDenoTest(src, scanner, codeAt, stats);
-    const assertEdits = rewriteAssertCalls(src, scanner, codeAt, importedNames, stats);
+    const softHelperUsed = { value: false };
+    const assertEdits = rewriteAssertCalls(
+      src,
+      scanner,
+      codeAt,
+      importedNames,
+      stats,
+      softHelperUsed,
+    );
     // corruption guard: an @std/assert import whose calls were NOT rewritten
     // must never lose its import (that would leave undefined identifiers)
     if (importedNames.size > 0 && testEdits.length === 0 && assertEdits.length === 0) {
       throw new SkipFile('manual: @std/assert import present but no call was rewritten');
     }
+
+    // vitest import names follow ACTUAL post-edit usage (the step-2
+    // hand-restructures introduced describe/test before this codemod ran on
+    // these files)
+    const applyEdits = (base: string, list: Edit[]): string => {
+      let out = base;
+      for (let k = list.length - 1; k >= 0; k--) {
+        const e = list[k]!;
+        out = out.slice(0, e.start) + e.replacement + out.slice(e.end);
+      }
+      return out;
+    };
+    const bodyWithoutImports = applyEdits(src, [...testEdits, ...assertEdits]);
+    const bodyCodeAt = regionTester(scanRegions(bodyWithoutImports));
     const usedNames = new Set<string>();
-    if (testEdits.length > 0) usedNames.add('test');
-    if (Object.keys(stats.asserts).length > 0) usedNames.add('expect');
-    const importEdits = rewriteImports(src, codeAt, usedNames, stats);
+    for (const name of ['test', 'describe', 'expect'] as const) {
+      const usage = new RegExp(`\\b${name}\\s*\\(`, 'g');
+      for (const um of bodyWithoutImports.matchAll(usage)) {
+        if (bodyCodeAt(um.index)) {
+          usedNames.add(name);
+          break;
+        }
+      }
+    }
+    const importEdits = rewriteImports(
+      src,
+      codeAt,
+      usedNames,
+      stats,
+      filePath,
+      softHelperUsed.value,
+    );
 
     const all = [...testEdits, ...assertEdits, ...importEdits].sort((a, b) => a.start - b.start);
     for (let k = 1; k < all.length; k++) {
       if (all[k]!.start < all[k - 1]!.end) throw new SkipFile('manual: overlapping rewrites');
     }
-    let out = src;
-    for (let k = all.length - 1; k >= 0; k--) {
-      const e = all[k]!;
-      out = out.slice(0, e.start) + e.replacement + out.slice(e.end);
-    }
+    const out = applyEdits(src, all);
 
     // audit: the transformed output must be free of codemod triggers
     const outRegions = scanRegions(out);

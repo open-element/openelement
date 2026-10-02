@@ -17,7 +17,8 @@
  * relative imports resolve on the real file system.
  */
 
-import { assert, assertEquals } from '@std/assert';
+import { readFileSync, statSync } from 'node:fs';
+import { expect, test } from 'vitest';
 import { dirname, resolve } from '@std/path';
 import { buildEntryDescriptor, renderEntry } from '../src/vite/internal/ssg/index.ts';
 import { OPENELEMENT_EXPORT_FILES } from '../src/vite/generated-export-files.ts';
@@ -49,7 +50,7 @@ function resolveSpecifier(spec: string, fromFile: string): string | null {
     // Generated entries import the app's route modules relatively; the test
     // fixtures are virtual, so only on-disk files join the walk.
     try {
-      return Deno.statSync(target).isFile ? target : null;
+      return statSync(target).isFile ? target : null;
     } catch {
       return null;
     }
@@ -74,7 +75,7 @@ function walkModuleGraph(roots: string[]): { seen: Set<string>; parents: Map<str
     const file = stack.pop()!;
     if (seen.has(file)) continue;
     seen.add(file);
-    const source = Deno.readTextFileSync(file);
+    const source = readFileSync(file, 'utf8');
     for (const spec of extractSpecifiers(source)) {
       const target = resolveSpecifier(spec, file);
       if (target && !seen.has(target)) {
@@ -108,10 +109,10 @@ function assertKernelFree(
           cur = graph.parents.get(cur)!;
           chain.unshift(cur);
         }
-        assert(
+        expect(
           false,
           `${label} reached the Native runtime kernel: ${file}\nvia:\n  ${chain.join('\n  ')}`,
-        );
+        ).toBeTruthy();
       }
     }
   }
@@ -131,40 +132,46 @@ function graphRootsFromGenerated(source: string): string[] {
   return roots;
 }
 
-Deno.test('lit server entry: module graph never reaches the Native runtime kernel', () => {
+test('lit server entry: module graph never reaches the Native runtime kernel', () => {
   const litEntry = renderEntry(
     buildEntryDescriptor(litRoutes, { renderer: 'lit', appShell: false, ssg: true }),
   );
   const graph = walkModuleGraph(graphRootsFromGenerated(litEntry));
   assertKernelFree(graph, 'lit server entry graph');
   // Sanity presence: the graph really contains the lit seam and the leaves.
-  assert(graph.seen.has(resolve(REPO_ROOT, 'packages/router/src/lit-ssr.ts')), 'lit-ssr missing');
-  assert(
+  expect(
+    graph.seen.has(resolve(REPO_ROOT, 'packages/router/src/lit-ssr.ts')),
+    'lit-ssr missing',
+  ).toBeTruthy();
+  expect(
     graph.seen.has(resolve(REPO_ROOT, 'packages/router/src/document.ts')),
     'document seam missing',
-  );
-  assert(graph.seen.has(resolve(REPO_ROOT, 'packages/element/src/html.ts')), 'html leaf missing');
+  ).toBeTruthy();
+  expect(
+    graph.seen.has(resolve(REPO_ROOT, 'packages/element/src/html.ts')),
+    'html leaf missing',
+  ).toBeTruthy();
 });
 
-Deno.test('element/html and element/authoring leaves are kernel-free', () => {
+test('element/html and element/authoring leaves are kernel-free', () => {
   for (const leaf of ['html.ts', 'authoring.ts']) {
     const graph = walkModuleGraph([resolve(REPO_ROOT, 'packages/element/src', leaf)]);
     assertKernelFree(graph, `@openelement/element/${leaf.replace('.ts', '')}`);
     // The leaves must be useful: the html graph carries the real serializer.
     if (leaf === 'html.ts') {
-      assert(
+      expect(
         graph.seen.has(resolve(REPO_ROOT, 'packages/element/src/internal/core/html-escape.ts')),
         'html leaf must reach the single wrapInDocument implementation',
-      );
+      ).toBeTruthy();
     }
   }
 });
 
-Deno.test('negative control: the native server entry graph DOES reach the kernel', () => {
+test('negative control: the native server entry graph DOES reach the kernel', () => {
   const nativeEntry = renderEntry(buildEntryDescriptor(litRoutes, { ssg: true }));
   const graph = walkModuleGraph(graphRootsFromGenerated(nativeEntry));
   const reachesKernel = [...graph.seen].some((file) =>
     KERNEL.some((pattern) => pattern.test(file)),
   );
-  assertEquals(reachesKernel, true, 'the walk must find the Native kernel when it is present');
+  expect(reachesKernel, 'the walk must find the Native kernel when it is present').toEqual(true);
 });

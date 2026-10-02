@@ -1,4 +1,5 @@
-import { assert, assertEquals } from '@std/assert';
+import { expect, test } from 'vitest';
+import { readFileSync, readdirSync, type Dirent } from 'node:fs';
 import { dirname, join } from '@std/path';
 
 /**
@@ -31,17 +32,17 @@ const REPO_ROOT = join(dirname(new URL(import.meta.url).pathname), '..', '..', '
 function listTestFiles(): string[] {
   const files: string[] = [];
   const packagesDir = join(REPO_ROOT, 'packages');
-  for (const pkg of Deno.readDirSync(packagesDir)) {
-    if (!pkg.isDirectory) continue;
+  for (const pkg of readdirSync(packagesDir, { withFileTypes: true })) {
+    if (!pkg.isDirectory()) continue;
     const testsDir = join(packagesDir, pkg.name, '__tests__');
-    let entries: Deno.DirEntry[];
+    let entries: Dirent[];
     try {
-      entries = [...Deno.readDirSync(testsDir)];
+      entries = readdirSync(testsDir, { withFileTypes: true });
     } catch {
       continue; // package without __tests__
     }
     for (const entry of entries) {
-      if (entry.isFile && entry.name.endsWith('.test.ts')) {
+      if (entry.isFile() && entry.name.endsWith('.test.ts')) {
         files.push(join(testsDir, entry.name));
       }
     }
@@ -90,18 +91,18 @@ function directArguments(source: string): Array<{ text: string; line: number }> 
   }
 }
 
-Deno.test('audit gate: no boolean expressions passed to assertExists', () => {
+test('audit gate: no boolean expressions passed to assertExists', () => {
   const offenders: string[] = [];
   const files = listTestFiles();
   // A scan that found no test files proves nothing: an empty offender list
   // from an empty file set would report success without looking at any code.
-  assert(
+  expect(
     files.length > 0,
     `no test files found under ${join(REPO_ROOT, 'packages')} — the audit cannot pass vacuously`,
-  );
+  ).toBeTruthy();
 
   for (const file of files) {
-    const content = Deno.readTextFileSync(file);
+    const content = readFileSync(file, 'utf8');
     for (const { text, line } of directArguments(content)) {
       if (BOOLEAN_PATTERN.test(text)) {
         offenders.push(`${file}:${line}: ${text.trim().replaceAll(/\s+/g, ' ').slice(0, 80)}`);
@@ -109,5 +110,5 @@ Deno.test('audit gate: no boolean expressions passed to assertExists', () => {
     }
   }
 
-  assertEquals(offenders, []);
+  expect(offenders).toEqual([]);
 });

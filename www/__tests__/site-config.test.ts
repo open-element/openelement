@@ -5,23 +5,21 @@
  * i18n, link helpers, sitemap, redirects, head alternates) relies on; adding
  * a locale must stay a single edit in www/site-config.ts.
  */
-import { assertEquals } from '@std/assert';
+import { expect, test } from 'vitest';
 import { isSiteLocale, SITE_DEFAULT_LOCALE, SITE_LOCALES } from '../site-config.ts';
 
-Deno.test('site-config: locales are non-empty and unique', () => {
-  assertEquals(SITE_LOCALES.length > 0, true, 'the site must build at least one locale');
-  assertEquals(new Set(SITE_LOCALES).size, SITE_LOCALES.length, 'duplicate locale entry');
+test('site-config: locales are non-empty and unique', () => {
+  expect(SITE_LOCALES.length > 0, 'the site must build at least one locale').toEqual(true);
+  expect(new Set(SITE_LOCALES).size, 'duplicate locale entry').toEqual(SITE_LOCALES.length);
   for (const locale of SITE_LOCALES) {
-    assertEquals(
-      /^[a-z]{2}(?:-[A-Za-z0-9]+)*$/.test(locale),
+    expect(/^[a-z]{2}(?:-[A-Za-z0-9]+)*$/.test(locale), `invalid locale tag: ${locale}`).toEqual(
       true,
-      `invalid locale tag: ${locale}`,
     );
   }
 });
 
-Deno.test('site-config: the default locale is one of the built locales', () => {
-  assertEquals(SITE_LOCALES.includes(SITE_DEFAULT_LOCALE), true);
-  assertEquals(isSiteLocale(SITE_DEFAULT_LOCALE), true);
-  assertEquals(isSiteLocale('not-a-locale'), false);
+test('site-config: the default locale is one of the built locales', () => {
+  expect(SITE_LOCALES.includes(SITE_DEFAULT_LOCALE)).toEqual(true);
+  expect(isSiteLocale(SITE_DEFAULT_LOCALE)).toEqual(true);
+  expect(isSiteLocale('not-a-locale')).toEqual(false);
 });

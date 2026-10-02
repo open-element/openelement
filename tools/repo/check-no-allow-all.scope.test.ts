@@ -21,7 +21,7 @@
  *   4. unreadable files fail the scan instead of being skipped.
  */
 
-import { assert, assertEquals, assertFalse } from '@std/assert';
+import { expect, test } from 'vitest';
 import {
   classifyLine,
   CONSUMER_SCAFFOLD_EXEMPT_LINES,
@@ -58,26 +58,25 @@ function nonConformingEntries(entries: ReadonlyArray<{ path: string; line: strin
     .map((entry) => `${entry.path}: ${entry.line}`);
 }
 
-Deno.test('scope: every exemption entry is a consumer scaffold command', () => {
-  assertEquals(nonConformingEntries(CONSUMER_SCAFFOLD_EXEMPT_LINES), []);
-  assert(CONSUMER_SCAFFOLD_EXEMPT_LINES.length > 0, 'the table must not be empty');
+test('scope: every exemption entry is a consumer scaffold command', () => {
+  expect(nonConformingEntries(CONSUMER_SCAFFOLD_EXEMPT_LINES)).toEqual([]);
+  expect(CONSUMER_SCAFFOLD_EXEMPT_LINES.length > 0, 'the table must not be empty').toBeTruthy();
   // The exact path list: growth is explicit, never implicit.
-  assertEquals(
+  expect(
     [...new Set(CONSUMER_SCAFFOLD_EXEMPT_LINES.map((entry) => entry.path))].toSorted(),
-    [...new Set(EXEMPT_PATHS)].toSorted(),
-  );
+  ).toEqual([...new Set(EXEMPT_PATHS)].toSorted());
   // Every path must actually EXIST and carry the exempt line — a stale entry
   // would silently shrink the exception's coverage story.
   for (const entry of CONSUMER_SCAFFOLD_EXEMPT_LINES) {
     const text = readFileSync(new URL(`../../${entry.path}`, import.meta.url), 'utf8');
-    assert(
+    expect(
       text.split('\n').some((line) => line.trim() === entry.line),
       `${entry.path} no longer carries the exempt line: ${entry.line}`,
-    );
+    ).toBeTruthy();
   }
 });
 
-Deno.test('scope: a loosened exemption entry is rejected by the validator', () => {
+test('scope: a loosened exemption entry is rejected by the validator', () => {
   // The owner requirement: widening an entry into a general flag allowance
   // must turn this test red.
   const loosened: Array<{ path: string; line: string }> = [
@@ -89,53 +88,51 @@ Deno.test('scope: a loosened exemption entry is rejected by the validator', () =
     { path: 'README.md', line: `${RUN} ${BROAD_SHORT} ${TOOL}@* my-app` },
   ];
   for (const entry of loosened) {
-    assert(
+    expect(
       nonConformingEntries([entry]).length === 1,
       `validator must reject a loosened entry: ${entry.line}`,
-    );
+    ).toBeTruthy();
   }
   // ...and the table's own entries must satisfy the very same validator.
-  assertEquals(nonConformingEntries(CONSUMER_SCAFFOLD_EXEMPT_LINES), []);
+  expect(nonConformingEntries(CONSUMER_SCAFFOLD_EXEMPT_LINES)).toEqual([]);
 });
 
-Deno.test('scope: another broad-flag line still classifies as a violation', () => {
+test('scope: another broad-flag line still classifies as a violation', () => {
   // (i) In an EXEMPT document: the path is allowlisted, the line is not.
-  assertEquals(
-    classifyLine('README.md', `${RUN} ${BROAD_SHORT} npm:other@1 x`, false).kind,
+  expect(classifyLine('README.md', `${RUN} ${BROAD_SHORT} npm:other@1 x`, false).kind).toEqual(
     'violation',
   );
   // (ii) The same consumer command in a non-allowlisted path.
-  assertEquals(classifyLine('packages/router/README.md', CONSUMER_LINE, false).kind, 'violation');
+  expect(classifyLine('packages/router/README.md', CONSUMER_LINE, false).kind).toEqual('violation');
   // (iii) A nearby variant in an exempt document (different arg shape).
-  assertEquals(
+  expect(
     classifyLine('README.md', `${RUN} ${BROAD_SHORT} ${TOOL}@alpha other-app`, false).kind,
-    'violation',
-  );
+  ).toEqual('violation');
   // (iv) Split/concat construction in code is still caught, in an exempt path.
   // Assembled from character codes so this file carries no literal token: the
   // tripwire scans it as tracked text.
   const splitConstruction = `args: ['${String.fromCharCode(45)}', '${String.fromCharCode(65)}']`;
-  assertEquals(classifyLine('README.md', splitConstruction, true).kind, 'violation');
+  expect(classifyLine('README.md', splitConstruction, true).kind).toEqual('violation');
   // The ruled lines themselves are exempt...
-  assertEquals(classifyLine('README.md', CONSUMER_LINE, false).kind, 'exempt');
+  expect(classifyLine('README.md', CONSUMER_LINE, false).kind).toEqual('exempt');
   // ...and an unruled clean line is neither.
-  assertEquals(classifyLine('README.md', 'deno task dev', false).kind, 'clean');
+  expect(classifyLine('README.md', 'deno task dev', false).kind).toEqual('clean');
 });
 
-Deno.test('scope: the exemption is exact-match, never substring', () => {
-  assert(isConsumerScaffoldExempt('README.md', CONSUMER_LINE));
-  assert(isConsumerScaffoldExempt('README.md', `  ${CONSUMER_LINE}  `));
-  assertFalse(isConsumerScaffoldExempt('README.md', `${CONSUMER_LINE} extra`));
-  assertFalse(isConsumerScaffoldExempt('docs/other.md', CONSUMER_LINE));
-  assertFalse(isConsumerScaffoldExempt('README.md', `${RUN} ${BROAD_SHORT}`));
+test('scope: the exemption is exact-match, never substring', () => {
+  expect(isConsumerScaffoldExempt('README.md', CONSUMER_LINE)).toBeTruthy();
+  expect(isConsumerScaffoldExempt('README.md', `  ${CONSUMER_LINE}  `)).toBeTruthy();
+  expect(isConsumerScaffoldExempt('README.md', `${CONSUMER_LINE} extra`)).toBeFalsy();
+  expect(isConsumerScaffoldExempt('docs/other.md', CONSUMER_LINE)).toBeFalsy();
+  expect(isConsumerScaffoldExempt('README.md', `${RUN} ${BROAD_SHORT}`)).toBeFalsy();
 });
 
-Deno.test('scope: unreadable tracked files are not silently skipped', () => {
+test('scope: unreadable tracked files are not silently skipped', () => {
   // The false-green that hid this tripwire during the #1411 install-command
   // sync: a permission error was swallowed as "skip" and the scan reported ok.
   const permissionDenied = Object.assign(new Error('denied'), { code: 'EACCES' });
   const notFound = Object.assign(new Error('missing'), { code: 'ENOENT' });
-  assertFalse(shouldSkipUnreadableFile(permissionDenied));
-  assertFalse(shouldSkipUnreadableFile(new Error('boom')));
-  assert(shouldSkipUnreadableFile(notFound));
+  expect(shouldSkipUnreadableFile(permissionDenied)).toBeFalsy();
+  expect(shouldSkipUnreadableFile(new Error('boom'))).toBeFalsy();
+  expect(shouldSkipUnreadableFile(notFound)).toBeTruthy();
 });

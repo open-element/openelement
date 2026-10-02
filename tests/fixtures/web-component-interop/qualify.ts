@@ -19,6 +19,7 @@
  * committed as a second hand-written source of truth.
  */
 
+import { readdirSync } from 'node:fs';
 import { dirname, fromFileUrl, join, resolve } from '@std/path';
 import type {
   CustomElementDeclaration,
@@ -557,8 +558,8 @@ function localPackageImports(root: string): Record<string, string> {
     // The repository root manifest is required by the build, but keep the
     // helper diagnostic-free if a caller supplies a different root.
   }
-  for (const packageEntry of Deno.readDirSync(join(root, 'packages'))) {
-    if (!packageEntry.isDirectory) continue;
+  for (const packageEntry of readdirSync(join(root, 'packages'), { withFileTypes: true })) {
+    if (!packageEntry.isDirectory()) continue;
     const packagePath = join(root, 'packages', packageEntry.name, 'deno.json');
     try {
       const packageJson = JSON.parse(Deno.readTextFileSync(packagePath)) as Record<string, unknown>;

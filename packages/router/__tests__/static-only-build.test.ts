@@ -14,7 +14,11 @@
  *   pnpm --dir tests/fixtures/router-static-only run build
  */
 
-import { assert, assertEquals, assertStringIncludes } from '@std/assert';
+import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
+import { createServer } from 'node:net';
+import { stat, readFile } from 'node:fs/promises';
+import type { AddressInfo } from 'node:net';
+import { expect, test } from 'vitest';
 import { join } from '@std/path';
 
 const fixtureDir = join(import.meta.dirname!, '../../../tests/fixtures/router-static-only');
@@ -26,53 +30,39 @@ async function ensureFixtureBuild(): Promise<void> {
   // rebuild (the build is incremental enough for local runs).
   // The fixture build runs the Vite native binding: scoped build-host
   // permissions with prompts off, never -A.
-  const build = await new Deno.Command(Deno.execPath(), {
-    args: [
-      'run',
-      '--no-lock',
-      '--allow-read',
-      '--allow-write',
-      '--allow-env',
-      '--allow-net',
-      '--allow-run',
-      '--allow-sys',
-      '--allow-ffi',
-      '--no-prompt',
-      join(fixtureDir, '../../../packages/router/src/cli/build.ts'),
-    ],
-    cwd: fixtureDir,
-    stdout: 'piped',
-    stderr: 'piped',
-  }).output();
-  const logs = new TextDecoder().decode(build.stdout) + new TextDecoder().decode(build.stderr);
-  assertEquals(build.code, 0, `static-only fixture build failed:\n${logs}`);
+  const build = spawn(
+    process.execPath,
+    [join(fixtureDir, '../../../packages/router/src/cli/build.ts')],
+    { cwd: fixtureDir },
+  );
+  const logs = (await Array.fromAsync(build.stdout)) + (await Array.fromAsync(build.stderr));
+  const code = await new Promise<number>((resolve) => build.on('exit', (c) => resolve(c ?? -1)));
+  expect(code, `static-only fixture build failed:\n${logs}`).toEqual(0);
 }
 
-Deno.test('static-only build: no dist/server, mdx route prerendered (#953, #954)', async () => {
+test('static-only build: no dist/server, mdx route prerendered (#953, #954)', async () => {
   await ensureFixtureBuild();
 
-  assertEquals(
-    await Deno.stat(join(distDir, 'index.html'))
+  expect(
+    await stat(join(distDir, 'index.html'))
       .then(() => true)
       .catch(() => false),
-    true,
     'index.html should exist after build',
-  );
+  ).toEqual(true);
   // #953: pure-static projects must not ship the build-time SSR bundle.
-  assertEquals(
-    await Deno.stat(join(distDir, 'server'))
+  expect(
+    await stat(join(distDir, 'server'))
       .then(() => true)
       .catch(() => false),
-    false,
     'pure-static build must not emit dist/server',
-  );
+  ).toEqual(false);
 
   // #954: the .mdx route is discovered and prerendered with real content.
-  const mdxHtml = await Deno.readTextFile(join(distDir, 'mdx-page', 'index.html'));
-  assertStringIncludes(mdxHtml, 'MDX route page');
+  const mdxHtml = await readFile(join(distDir, 'mdx-page', 'index.html'), 'utf8');
+  expect(mdxHtml).toContain('MDX route page');
 });
 
-Deno.test('static-only build: zero islands, zero enhanced forms, zero client JS', async () => {
+test('static-only build: zero islands, zero enhanced forms, zero client JS', async () => {
   // Phase 2 fail-closed hardening (client asset manifest) must not pull a
   // zero-JS build into client output: with no islands, no compiler-proven
   // interaction handlers, and no data-open-enhance routes, buildClient
@@ -82,82 +72,64 @@ Deno.test('static-only build: zero islands, zero enhanced forms, zero client JS'
   await ensureFixtureBuild();
 
   for (const absent of ['client', 'island-manifests']) {
-    assertEquals(
-      await Deno.stat(join(distDir, absent))
+    expect(
+      await stat(join(distDir, absent))
         .then(() => true)
         .catch(() => false),
-      false,
       `pure-static build must not emit dist/${absent}`,
-    );
+    ).toEqual(false);
   }
 });
 
-Deno.test({
-  name: 'static-only build: preview mode serves the output (#953)',
-  sanitizeOps: false,
-  sanitizeResources: false,
-  fn: async () => {
-    await ensureFixtureBuild();
+test('static-only build: preview mode serves the output (#953)', async () => {
+  await ensureFixtureBuild();
 
-    const probe = Deno.listen({ hostname: '127.0.0.1', port: 0 });
-    const freePort = (probe.addr as Deno.NetAddr).port;
-    probe.close();
+  const freePort = await new Promise<number>((resolve) => {
+    const probe = createServer();
+    probe.listen(0, '127.0.0.1', () => {
+      const { port } = probe.address() as AddressInfo;
+      probe.close(() => resolve(port));
+    });
+  });
 
-    const startCli = join(import.meta.dirname!, '../src/cli/start.ts');
-    let server: Deno.ChildProcess | undefined;
-    try {
-      server = new Deno.Command(Deno.execPath(), {
-        args: [
-          'run',
-          '--no-lock',
-          '--allow-read',
-          '--allow-write',
-          '--allow-env',
-          '--allow-net',
-          '--allow-run',
-          '--allow-sys',
-          '--allow-ffi',
-          '--no-prompt',
-          startCli,
-          '--mode=preview',
-          '--port',
-          String(freePort),
-          '--host',
-          '127.0.0.1',
-        ],
+  const startCli = join(import.meta.dirname!, '../src/cli/start.ts');
+  let server: ChildProcess | undefined;
+  try {
+    server = spawn(
+      process.execPath,
+      [startCli, '--mode=preview', '--port', String(freePort), '--host', '127.0.0.1'],
+      {
         cwd: fixtureDir,
-        stdout: 'null',
-        stderr: 'null',
-      }).spawn();
+        stdio: 'ignore',
+      },
+    );
 
-      let response: Response | undefined;
-      for (let attempt = 0; attempt < 100; attempt++) {
-        try {
-          response = await fetch(`http://127.0.0.1:${freePort}/`);
-          break;
-        } catch {
-          await new Promise((resolve) => setTimeout(resolve, 200));
-        }
-      }
-      assert(response, 'preview mode did not come up for a pure-static project (#953)');
-      assertEquals(response.status, 200);
-      await response.body?.cancel();
-    } finally {
+    let response: Response | undefined;
+    for (let attempt = 0; attempt < 100; attempt++) {
       try {
-        server?.kill('SIGTERM');
+        response = await fetch(`http://127.0.0.1:${freePort}/`);
+        break;
       } catch {
-        // The process may have already exited.
+        await new Promise((resolve) => setTimeout(resolve, 200));
       }
-      await server?.status.catch(() => undefined);
-      // Preview delegates to a scoped-permission `npm:vite preview` grandchild;
-      // kill it by its unique port argument so no server leaks.
-      await new Deno.Command('pkill', {
-        args: ['-f', `npm:vite preview --port ${freePort}`],
-        stdout: 'null',
-        stderr: 'null',
-      })
-        .output()
-        .catch(() => undefined);
     }
-  },
+    expect(response, 'preview mode did not come up for a pure-static project (#953)').toBeTruthy();
+    expect(response.status).toEqual(200);
+    await response.body?.cancel();
+  } finally {
+    try {
+      server?.kill('SIGTERM');
+    } catch {
+      // The process may have already exited.
+    }
+    if (server) {
+      await new Promise<void>((resolve) => {
+        server!.once('exit', () => resolve());
+        setTimeout(resolve, 5000).unref();
+      });
+    }
+    // Preview delegates to a scoped-permission `npm:vite preview` grandchild;
+    // kill it by its unique port argument so no server leaks.
+    spawnSync('pkill', ['-f', `npm:vite preview --port ${freePort}`]);
+  }
 });

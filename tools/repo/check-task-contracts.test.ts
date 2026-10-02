@@ -17,7 +17,7 @@
  * this pair of contracts exists to catch.
  */
 
-import { assert, assertEquals } from '@std/assert';
+import { expect, test } from 'vitest';
 import { dirname, join } from '@std/path';
 import { readFile } from 'node:fs/promises';
 
@@ -41,109 +41,106 @@ const GATE_RUNNER = 'node tools/repo/gate.ts ';
 /** The ordered step list a root task hands to the gate coordinator. */
 function gateSteps(task: string): string[] {
   const command = rootConfig.scripts[task];
-  assert(typeof command === 'string', `root task missing: ${task}`);
-  assert(
+  expect(typeof command === 'string', `root task missing: ${task}`).toBeTruthy();
+  expect(
     command.startsWith(GATE_RUNNER),
     `root task ${task} must delegate to the gate coordinator ('${GATE_RUNNER.trim()} ...'), got: ${command}`,
-  );
+  ).toBeTruthy();
   return command.slice(GATE_RUNNER.length).trim().split(/\s+/);
 }
 
 /** The ordered step list a tools/repo gate task hands to the coordinator. */
 function repoSplitSteps(task: string): string[] {
   const command = repoConfig.scripts[task];
-  assert(typeof command === 'string', `tools/repo task missing: ${task}`);
+  expect(typeof command === 'string', `tools/repo task missing: ${task}`).toBeTruthy();
   const prefix = 'node ../../tools/repo/gate.ts ';
-  assert(
+  expect(
     command.startsWith(prefix),
     `tools/repo task ${task} must delegate to the gate coordinator ('${prefix.trim()} ...'), got: ${command}`,
-  );
+  ).toBeTruthy();
   return command.slice(prefix.length).trim().split(/\s+/);
 }
 
 const coreSteps = gateSteps('verify:core');
 
-Deno.test('task contract: verify:core stays the source gate plus the packed gate', () => {
-  assertEquals(
+test('task contract: verify:core stays the source gate plus the packed gate', () => {
+  expect(
     coreSteps,
-    ['tools/repo#gate:source', 'tools/release#gate:packed'],
     'verify:core is the CI-equivalent core; changing its step set requires updating this contract',
-  );
+  ).toEqual(['tools/repo#gate:source', 'tools/release#gate:packed']);
 });
 
-Deno.test('task contract: verify runs every verify:core step', () => {
+test('task contract: verify runs every verify:core step', () => {
   const verifySteps = gateSteps('verify');
   for (const step of coreSteps) {
-    assert(
+    expect(
       verifySteps.includes(step),
       `verify must run the verify:core step '${step}' — a green local verify must certify the core gate`,
-    );
+    ).toBeTruthy();
   }
 });
 
-Deno.test('task contract: verify adds only the documented local-only steps', () => {
+test('task contract: verify adds only the documented local-only steps', () => {
   const extras = gateSteps('verify')
     .filter((step) => !coreSteps.includes(step))
     .sort();
-  assertEquals(
+  expect(
     extras,
-    ['check', 'saas:verify', 'saas:workers', 'test'],
     'verify may only add fmt/lint (check), the unit-test suite (test) and the SaaS lanes on top of verify:core',
-  );
+  ).toEqual(['check', 'saas:verify', 'saas:workers', 'test']);
 });
 
-Deno.test('task contract: gate:source is the fast PR-layer step set', () => {
-  assertEquals(
+test('task contract: gate:source is the fast PR-layer step set', () => {
+  expect(
     repoSplitSteps('gate:source'),
-    [
-      'tools/repo#generate:all',
-      'tools/repo#typecheck',
-      'packages/element#test',
-      'packages/router#test',
-      'tools/repo#lint:markdown',
-      'www#check:content-dates',
-      'tools/repo#interface:snapshot',
-      'tests/fixtures/router-request-time#gate',
-      'packages/element#browser:gate',
-    ],
     'gate:source is what every pull request runs; adding a step to the PR layer needs this contract updated (and a reason it cannot wait for the release train)',
-  );
+  ).toEqual([
+    'tools/repo#generate:all',
+    'tools/repo#typecheck',
+    'packages/element#test',
+    'packages/router#test',
+    'tools/repo#lint:markdown',
+    'www#check:content-dates',
+    'tools/repo#interface:snapshot',
+    'tests/fixtures/router-request-time#gate',
+    'packages/element#browser:gate',
+  ]);
 });
 
-Deno.test('task contract: packed qualification runs separately from the source gate', () => {
-  assert(
+test('task contract: packed qualification runs separately from the source gate', () => {
+  expect(
     !repoSplitSteps('gate:source').includes('tools/release#gate:packed'),
     'the source producer must not duplicate the independent packed producer',
-  );
-  assert(
+  ).toBeTruthy();
+  expect(
     coreSteps.includes('tools/release#gate:packed'),
     'the local CI equivalent must retain packed qualification',
-  );
+  ).toBeTruthy();
 });
 
-Deno.test('task contract: artifact scan consumes the packed gate tarballs exactly once', () => {
+test('task contract: artifact scan consumes the packed gate tarballs exactly once', () => {
   const packed = releaseConfig.scripts['gate:packed'].split(/\s+/);
   const packIndex = packed.indexOf('tools/release#pack:dry-run');
   const scanIndex = packed.indexOf('tools/release#package-artifacts:check:prepacked');
-  assert(packIndex >= 0 && scanIndex === packIndex + 1);
-  assert(
+  expect(packIndex >= 0 && scanIndex === packIndex + 1).toBeTruthy();
+  expect(
     !packed.includes('tools/release#package-artifacts:check'),
     'the standalone scanner repacks and must not run inside gate:packed',
-  );
-  assert(
+  ).toBeTruthy();
+  expect(
     releaseConfig.scripts['package-artifacts:check:prepacked'].endsWith(
       'tools/release/check-package-artifacts.ts --prepacked',
     ),
-  );
-  assert(
+  ).toBeTruthy();
+  expect(
     releaseConfig.scripts['package-artifacts:check'].endsWith(
       'tools/release/check-package-artifacts.ts',
     ),
     'the standalone scanner still builds its own tarballs',
-  );
+  ).toBeTruthy();
 });
 
-Deno.test('task contract: gate:release carries the steps trimmed out of the PR layer', () => {
+test('task contract: gate:release carries the steps trimmed out of the PR layer', () => {
   const release = repoSplitSteps('gate:release');
   const source = repoSplitSteps('gate:source');
   // Every trimmed step must land in the release train, or the two-tier split
@@ -198,51 +195,50 @@ Deno.test('task contract: gate:release carries the steps trimmed out of the PR l
     'packages/element#browser:gate:full',
   ];
   for (const step of required) {
-    assert(
+    expect(
       release.includes(step),
       `gate:release must run '${step}': it was trimmed out of the PR layer and must not vanish`,
-    );
+    ).toBeTruthy();
   }
   for (const step of release) {
     // Both layers generate first: gate:release's www checks import the
     // generated data, so the generator entrypoint is the one documented
     // shared step — everything else must stay in exactly one layer.
     if (step === 'tools/repo#generate:all') continue;
-    assert(
+    expect(
       !source.includes(step),
       `'${step}' appears in both gates; the PR layer must stay the fast subset`,
-    );
+    ).toBeTruthy();
   }
 });
 
-Deno.test('task contract: release:check is the release train plus the packed gate', () => {
-  assertEquals(
+test('task contract: release:check is the release train plus the packed gate', () => {
+  expect(
     gateSteps('release:check'),
-    [
-      // First, and explicitly before release:registry-check: that step reads
-      // the ignored derived module www/app/data/_generated-release-line.ts
-      // (check-release-state-machine.ts), which only generate:all
-      // materializes on a clean checkout — the release workflow starts from
-      // one, so generating later (or not first) fails the run pre-publish.
-      'tools/repo#generate:all',
-      'tools/repo#release:registry-check',
-      'tools/repo#gate:release',
-      'tools/release#gate:packed',
-      'tools/release#publish:npm:dry-run',
-    ],
     'release:check is what qualifies a release candidate on a clean checkout; ' +
       'it must generate the derived site data the registry check reads, then ' +
       'include the trimmed gate:release steps',
-  );
+  ).toEqual([
+    // First, and explicitly before release:registry-check: that step reads
+    // the ignored derived module www/app/data/_generated-release-line.ts
+    // (check-release-state-machine.ts), which only generate:all
+    // materializes on a clean checkout — the release workflow starts from
+    // one, so generating later (or not first) fails the run pre-publish.
+    'tools/repo#generate:all',
+    'tools/repo#release:registry-check',
+    'tools/repo#gate:release',
+    'tools/release#gate:packed',
+    'tools/release#publish:npm:dry-run',
+  ]);
 });
 
-Deno.test('task contract: fmt/lint run the ox engines and deno fmt/lint stays retired', async () => {
+test('task contract: fmt/lint run the ox engines and deno fmt/lint stays retired', async () => {
   // The format/lint engine is pinned once, here: fmt:check must stay the
   // check-mode spelling of fmt, and lint must be the oxlint CLI. A change to
   // any of these bodies is an engine swap and must update this contract.
-  assertEquals(rootConfig.scripts['fmt'], 'oxfmt', 'fmt is oxfmt in write mode');
-  assertEquals(rootConfig.scripts['fmt:check'], 'oxfmt --check', 'fmt:check is oxfmt check mode');
-  assertEquals(rootConfig.scripts['lint'], 'oxlint', 'lint is the oxlint CLI');
+  expect(rootConfig.scripts['fmt'], 'fmt is oxfmt in write mode').toEqual('oxfmt');
+  expect(rootConfig.scripts['fmt:check'], 'fmt:check is oxfmt check mode').toEqual('oxfmt --check');
+  expect(rootConfig.scripts['lint'], 'lint is the oxlint CLI').toEqual('oxlint');
   // The retired deno fmt/deno lint engines must not survive in any
   // workspace script body: a script silently re-adding them would split the
   // repository across two formatters/linters with diverging style and rules.
@@ -262,10 +258,10 @@ Deno.test('task contract: fmt/lint run the ox engines and deno fmt/lint stays re
       scripts?: Record<string, string>;
     };
     for (const [name, command] of Object.entries(config.scripts ?? {})) {
-      assert(
+      expect(
         !/(^|\s)deno (fmt|lint)(\s|'|$)/.test(command),
         `${manifest} script '${name}' shells out to the retired deno fmt/deno lint engine: ${command}`,
-      );
+      ).toBeTruthy();
     }
   }
 });

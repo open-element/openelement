@@ -1,3 +1,4 @@
+import { readFile } from 'node:fs/promises';
 /**
  * JSON helpers for the qualify harnesses (#1472).
  *
@@ -7,7 +8,7 @@
 
 /** Read and parse a JSON file. */
 export async function readJson<T = unknown>(path: string | URL): Promise<T> {
-  return JSON.parse(await Deno.readTextFile(path)) as T;
+  return JSON.parse(await readFile(path, 'utf8')) as T;
 }
 
 /** Deterministic JSON text: 2-space indent and a trailing newline. */

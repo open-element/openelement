@@ -14,7 +14,7 @@
  * components — Deno tests import the sources uncompiled (no Part Program), so
  * nothing here connects an element.
  */
-import { assert, assertEquals, assertNotEquals, assertStringIncludes } from '@std/assert';
+import { expect, test } from 'vitest';
 import {
   dialogWith,
   fakeDialog,
@@ -30,7 +30,7 @@ type AnyComponent = any;
 
 // ─── open-button: click/form choreography (#637, #757) ──────────────────────
 
-Deno.test('open-button: click dispatches open-click and submits an associated form', async () => {
+test('open-button: click dispatches open-click and submits an associated form', async () => {
   const { OpenButton } = await import('../src/open-button.tsx');
   const btn = new (OpenButton as unknown as new () => AnyComponent)();
 
@@ -51,11 +51,11 @@ Deno.test('open-button: click dispatches open-click and submits an associated fo
   btn.closest = () => fakeForm;
   btn.type = 'submit';
   btn.handleClick(new Event('click'));
-  assert(openClickSeen, 'open-click must fire');
-  assertEquals(events, ['submit', 'requestSubmit']);
+  expect(openClickSeen, 'open-click must fire').toBeTruthy();
+  expect(events).toEqual(['submit', 'requestSubmit']);
 });
 
-Deno.test('open-button: a prevented submit skips requestSubmit', async () => {
+test('open-button: a prevented submit skips requestSubmit', async () => {
   const { OpenButton } = await import('../src/open-button.tsx');
   const btn = new (OpenButton as unknown as new () => AnyComponent)();
   const events: string[] = [];
@@ -72,10 +72,10 @@ Deno.test('open-button: a prevented submit skips requestSubmit', async () => {
   btn.closest = () => fakeForm;
   btn.type = 'submit';
   btn.handleClick(new Event('click'));
-  assertEquals(events, ['submit']);
+  expect(events).toEqual(['submit']);
 });
 
-Deno.test('open-button: type=reset resets the form; anchor branch never touches forms (#637)', async () => {
+test('open-button: type=reset resets the form; anchor branch never touches forms (#637)', async () => {
   const { OpenButton } = await import('../src/open-button.tsx');
   const btn = new (OpenButton as unknown as new () => AnyComponent)();
   const events: string[] = [];
@@ -91,7 +91,7 @@ Deno.test('open-button: type=reset resets the form; anchor branch never touches 
   btn.closest = () => fakeForm;
   btn.type = 'reset';
   btn.handleClick(new Event('click'));
-  assertEquals(events, ['reset']);
+  expect(events).toEqual(['reset']);
 
   // Anchor branch: navigation control, not a form control.
   const anchor = new (OpenButton as unknown as new () => AnyComponent)();
@@ -99,10 +99,10 @@ Deno.test('open-button: type=reset resets the form; anchor branch never touches 
   anchor.href = '/go';
   anchor.type = 'submit';
   anchor.handleClick(new Event('click'));
-  assertEquals(events, ['reset']);
+  expect(events).toEqual(['reset']);
 });
 
-Deno.test('open-button: disabled click prevents default and fires nothing (#757)', async () => {
+test('open-button: disabled click prevents default and fires nothing (#757)', async () => {
   const { OpenButton } = await import('../src/open-button.tsx');
   const btn = new (OpenButton as unknown as new () => AnyComponent)();
   let openClickSeen = false;
@@ -122,43 +122,43 @@ Deno.test('open-button: disabled click prevents default and fires nothing (#757)
   btn.type = 'submit';
   const event = new Event('click', { cancelable: true });
   btn.handleClick(event);
-  assertEquals(openClickSeen, false);
-  assertEquals(submits.length, 0);
-  assertEquals(event.defaultPrevented, true);
+  expect(openClickSeen).toEqual(false);
+  expect(submits.length).toEqual(0);
+  expect(event.defaultPrevented).toEqual(true);
 });
 
 // ─── open-dialog: top-layer state machine (#1030) ────────────────────────────
 
-Deno.test('open-dialog: show/close/toggle manage the open property', async () => {
+test('open-dialog: show/close/toggle manage the open property', async () => {
   const el = await dialogWith(fakeDialog());
   el.show();
-  assertEquals(el.open, true);
+  expect(el.open).toEqual(true);
   el.close();
-  assertEquals(el.open, false);
+  expect(el.open).toEqual(false);
   el.toggle();
-  assertEquals(el.open, true);
+  expect(el.open).toEqual(true);
 });
 
-Deno.test('open-dialog: modal open closes the attribute-driven open, then showModal (#1030)', async () => {
+test('open-dialog: modal open closes the attribute-driven open, then showModal (#1030)', async () => {
   const fake = fakeDialog();
   const el = await dialogWith(fake);
   el.open = true;
   el.onDsdHydrated();
   // The bool sink (compiled) marks dialog.open; the sync closes that state and
   // enters the top layer via showModal exactly once per open session.
-  assertEquals(fake.calls.includes('showModal'), true);
+  expect(fake.calls.includes('showModal')).toEqual(true);
 });
 
-Deno.test('open-dialog: non-modal mode uses show() only', async () => {
+test('open-dialog: non-modal mode uses show() only', async () => {
   const fake = fakeDialog();
   const el = await dialogWith(fake, 'non-modal');
   el.open = true;
   el.onCsrRendered();
-  assertEquals(fake.calls, ['show']);
-  assertEquals(fake.calls.includes('showModal'), false);
+  expect(fake.calls).toEqual(['show']);
+  expect(fake.calls.includes('showModal')).toEqual(false);
 });
 
-Deno.test('open-dialog: close dispatches open-dialog-close; cancel prevents default first', async () => {
+test('open-dialog: close dispatches open-dialog-close; cancel prevents default first', async () => {
   const el = await dialogWith(fakeDialog());
   let closes = 0;
   el.addEventListener('open-dialog-close', () => {
@@ -166,17 +166,17 @@ Deno.test('open-dialog: close dispatches open-dialog-close; cancel prevents defa
   });
   const cancel = new Event('cancel', { cancelable: true });
   el.handleCancel(cancel);
-  assertEquals(cancel.defaultPrevented, true);
-  assertEquals(closes, 1);
-  assertEquals(el.open, false);
+  expect(cancel.defaultPrevented).toEqual(true);
+  expect(closes).toEqual(1);
+  expect(el.open).toEqual(false);
 });
 
-Deno.test('open-dialog: modal close restores the sink-removed open attribute before close() (#1226)', async () => {
+test('open-dialog: modal close restores the sink-removed open attribute before close() (#1226)', async () => {
   const fake = fakeDialog();
   const el = await dialogWith(fake);
   el.open = true;
   el.onDsdHydrated();
-  assertEquals(fake.calls.includes('showModal'), true);
+  expect(fake.calls.includes('showModal')).toEqual(true);
   // The compiled bool sink may remove the inner `open` attribute before the
   // component's sync runs; per spec close() is then a no-op and the dialog
   // stays :modal forever. The sync must restore the attribute first.
@@ -184,11 +184,11 @@ Deno.test('open-dialog: modal close restores the sink-removed open attribute bef
   fake.calls.length = 0;
   el.open = false;
   el.syncDialogElement();
-  assertEquals(fake.calls, ['setAttribute:open', 'close']);
-  assertEquals(fake.open, false);
+  expect(fake.calls).toEqual(['setAttribute:open', 'close']);
+  expect(fake.open).toEqual(false);
 });
 
-Deno.test('open-dialog: the native close echo of a programmatic close does not re-dispatch (#1226)', async () => {
+test('open-dialog: the native close echo of a programmatic close does not re-dispatch (#1226)', async () => {
   const fake = fakeDialog();
   const el = await dialogWith(fake);
   let closes = 0;
@@ -199,24 +199,24 @@ Deno.test('open-dialog: the native close echo of a programmatic close does not r
   el.onDsdHydrated();
   // The user-facing close path (close button / cancel) fires the event.
   el.handleCancel(new Event('cancel', { cancelable: true }));
-  assertEquals(closes, 1);
+  expect(closes).toEqual(1);
   // The inner dialog's native close event arrives after the programmatic
   // close; the session already fired its event.
   fake.open = false;
   el.handleNativeClose();
-  assertEquals(closes, 1);
+  expect(closes).toEqual(1);
   // A genuine native close (e.g. form method="dialog") with the session
   // still open still dispatches exactly once.
   el.open = true;
   fake.open = false;
   el.handleNativeClose();
-  assertEquals(closes, 2);
-  assertEquals(el.open, false);
+  expect(closes).toEqual(2);
+  expect(el.open).toEqual(false);
 });
 
 // ─── open-input: value channel + events ──────────────────────────────────────
 
-Deno.test('open-input: input events write the value attribute and dispatch open-input/open-change', async () => {
+test('open-input: input events write the value attribute and dispatch open-input/open-change', async () => {
   const { OpenInput } = await import('../src/open-input.tsx');
   const el = new (OpenInput as unknown as new () => AnyComponent)();
   const seen: Array<Record<string, unknown>> = [];
@@ -228,86 +228,86 @@ Deno.test('open-input: input events write the value attribute and dispatch open-
   });
   el.handleInput({ target: { value: 'abc' } } as unknown as Event);
   el.handleChange({ target: { value: 'abc' } } as unknown as Event);
-  assertEquals(el.getAttribute('value'), 'abc');
-  assertEquals(seen, [
+  expect(el.getAttribute('value')).toEqual('abc');
+  expect(seen).toEqual([
     { type: 'input', value: 'abc' },
     { type: 'change', value: 'abc' },
   ]);
 });
 
-Deno.test('open-input: activation assigns realm-unique control ids', async () => {
+test('open-input: activation assigns realm-unique control ids', async () => {
   const { OpenInput } = await import('../src/open-input.tsx');
   const first = new (OpenInput as unknown as new () => AnyComponent)();
   const second = new (OpenInput as unknown as new () => AnyComponent)();
-  assertEquals(first.inputId, '');
+  expect(first.inputId).toEqual('');
   first.onCsrRendered();
   second.onCsrRendered();
-  assertNotEquals(first.inputId, second.inputId);
-  assertStringIncludes(first.inputId, 'input-');
+  expect(first.inputId).not.toEqual(second.inputId);
+  expect(first.inputId).toContain('input-');
 });
 
-Deno.test('open-input: formResetCallback clears value and error attributes', async () => {
+test('open-input: formResetCallback clears value and error attributes', async () => {
   const { OpenInput } = await import('../src/open-input.tsx');
   const el = new (OpenInput as unknown as new () => AnyComponent)();
   el.setAttribute('value', 'x');
   el.setAttribute('error', 'bad');
   el.formResetCallback();
-  assertEquals(el.getAttribute('value'), '');
-  assertEquals(el.hasAttribute('error'), false);
+  expect(el.getAttribute('value')).toEqual('');
+  expect(el.hasAttribute('error')).toEqual(false);
 });
 
-Deno.test('open-input: formDisabledCallback mirrors onto the property, never the attribute (#1226)', async () => {
+test('open-input: formDisabledCallback mirrors onto the property, never the attribute (#1226)', async () => {
   const { OpenInput } = await import('../src/open-input.tsx');
   const el = new (OpenInput as unknown as new () => AnyComponent)();
   el.formDisabledCallback(true);
-  assertEquals(el.disabled, true);
+  expect(el.disabled).toEqual(true);
   // The platform counts a form-associated custom element's own `disabled`
   // attribute toward its disabledness: writing it would make the
   // fieldset-driven state irreversible.
-  assertEquals(el.hasAttribute('disabled'), false);
+  expect(el.hasAttribute('disabled')).toEqual(false);
   el.formDisabledCallback(false);
-  assertEquals(el.disabled, false);
+  expect(el.disabled).toEqual(false);
 });
 
 // ─── open-theme-toggle: initialization priority + persistence policy (#804) ──
 
-Deno.test('open-theme-toggle: init follows attribute > document > storage > media priority', async () => {
+test('open-theme-toggle: init follows attribute > document > storage > media priority', async () => {
   const { OpenThemeToggle } = await import('../src/open-theme-toggle.tsx');
   const withAttr = new (OpenThemeToggle as unknown as new () => AnyComponent)();
   const attrHarness = themeHarness({ savedTheme: 'dark', mediaLight: false });
   installThemeGlobals(attrHarness);
   withAttr.setAttribute('theme', 'light');
   withAttr.initTheme();
-  assertEquals(withAttr.theme, 'light');
+  expect(withAttr.theme).toEqual('light');
 
   const withDoc = new (OpenThemeToggle as unknown as new () => AnyComponent)();
   installThemeGlobals(themeHarness({ docTheme: 'light' }));
   withDoc.initTheme();
-  assertEquals(withDoc.theme, 'light');
+  expect(withDoc.theme).toEqual('light');
 
   const withStorage = new (OpenThemeToggle as unknown as new () => AnyComponent)();
   installThemeGlobals(themeHarness({ savedTheme: 'dark' }));
   withStorage.initTheme();
-  assertEquals(withStorage.theme, 'dark');
+  expect(withStorage.theme).toEqual('dark');
 
   const withMedia = new (OpenThemeToggle as unknown as new () => AnyComponent)();
   installThemeGlobals(themeHarness({ mediaLight: true }));
   withMedia.initTheme();
-  assertEquals(withMedia.theme, 'light');
+  expect(withMedia.theme).toEqual('light');
 });
 
-Deno.test('open-theme-toggle: init never persists; explicit toggle persists and dispatches (#804)', async () => {
+test('open-theme-toggle: init never persists; explicit toggle persists and dispatches (#804)', async () => {
   const { OpenThemeToggle } = await import('../src/open-theme-toggle.tsx');
   const harness = themeHarness({ savedTheme: 'dark' });
   installThemeGlobals(harness);
   const el = new (OpenThemeToggle as unknown as new () => AnyComponent)();
   el.initTheme();
-  assertEquals(harness.writes, [], 'init path must not write localStorage');
+  expect(harness.writes, 'init path must not write localStorage').toEqual([]);
 
   el.handleToggle();
-  assertEquals(el.theme, 'light');
-  assertEquals(harness.writes, ['light']);
-  assertEquals(harness.dispatched.includes('open:theme-change'), true);
+  expect(el.theme).toEqual('light');
+  expect(harness.writes).toEqual(['light']);
+  expect(harness.dispatched.includes('open:theme-change')).toEqual(true);
 });
 
 // ─── open-tabs: WAI-ARIA keyboard pattern ────────────────────────────────────
@@ -332,28 +332,28 @@ function tabsWith(count: number) {
   })();
 }
 
-Deno.test('open-tabs: ArrowRight/Left wrap, Home/End jump, focus follows selection', async () => {
+test('open-tabs: ArrowRight/Left wrap, Home/End jump, focus follows selection', async () => {
   const { el, tabs } = await tabsWith(3);
   const key = (k: string) =>
     el.onKeydown({ key: k, preventDefault: () => {} } as unknown as KeyboardEvent);
   key('ArrowRight');
-  assertEquals(el.active, 1);
+  expect(el.active).toEqual(1);
   key('ArrowRight');
-  assertEquals(el.active, 2);
+  expect(el.active).toEqual(2);
   key('ArrowRight');
-  assertEquals(el.active, 0, 'ArrowRight wraps');
+  expect(el.active, 'ArrowRight wraps').toEqual(0);
   key('ArrowLeft');
-  assertEquals(el.active, 2, 'ArrowLeft wraps backwards');
+  expect(el.active, 'ArrowLeft wraps backwards').toEqual(2);
   key('End');
-  assertEquals(el.active, 2);
+  expect(el.active).toEqual(2);
   key('Home');
-  assertEquals(el.active, 0);
-  assertEquals(tabs[0].focused, true, 'selection moves DOM focus');
+  expect(el.active).toEqual(0);
+  expect(tabs[0].focused, 'selection moves DOM focus').toEqual(true);
 });
 
 // ─── open-dropdown: pointerdown popover guard + per-instance anchor (#1061) ──
 
-Deno.test('open-dropdown: click toggles the native popover; pointerdown on an open popover swallows the re-open', async () => {
+test('open-dropdown: click toggles the native popover; pointerdown on an open popover swallows the re-open', async () => {
   const { OpenDropdown } = await import('../src/open-dropdown.tsx');
   const el = new (OpenDropdown as unknown as new () => AnyComponent)();
   const state = { open: false, toggles: 0 };
@@ -368,7 +368,7 @@ Deno.test('open-dropdown: click toggles the native popover; pointerdown on an op
 
   // Plain click toggles open.
   el.toggle();
-  assertEquals(state.open, true);
+  expect(state.open).toEqual(true);
 
   // A mouse press on the trigger while open records the state; the click that
   // follows the native light-dismiss must not re-open the popover.
@@ -377,27 +377,27 @@ Deno.test('open-dropdown: click toggles the native popover; pointerdown on an op
   el.onTriggerPointerDown();
   // (pointerdown saw the popover closed, so the click toggles normally.)
   el.toggle();
-  assertEquals(state.toggles, 1);
+  expect(state.toggles).toEqual(1);
 
   state.open = true;
   el.onTriggerPointerDown();
   el.toggle();
-  assertEquals(state.toggles, 1, 'the post-pointerdown click is swallowed');
+  expect(state.toggles, 'the post-pointerdown click is swallowed').toEqual(1);
 });
 
-Deno.test('open-dropdown: activation assigns realm-unique anchor names to both halves', async () => {
+test('open-dropdown: activation assigns realm-unique anchor names to both halves', async () => {
   const { OpenDropdown } = await import('../src/open-dropdown.tsx');
   const first = new (OpenDropdown as unknown as new () => AnyComponent)();
   const second = new (OpenDropdown as unknown as new () => AnyComponent)();
   first.onCsrRendered();
   second.onCsrRendered();
-  assertNotEquals(first.anchorName, second.anchorName);
-  assertStringIncludes(first.anchorName, '--open-dropdown-trigger-');
+  expect(first.anchorName).not.toEqual(second.anchorName);
+  expect(first.anchorName).toContain('--open-dropdown-trigger-');
 });
 
 // ─── open-code-block: copy feedback contract ─────────────────────────────────
 
-Deno.test('open-code-block: copy success and failure drive the compiled label sink', async () => {
+test('open-code-block: copy success and failure drive the compiled label sink', async () => {
   const { OpenCodeBlock } = await import('../src/open-code-block.tsx');
   const originalClipboard = (globalThis as { navigator?: unknown }).navigator;
   Object.defineProperty(globalThis, 'navigator', {
@@ -407,7 +407,7 @@ Deno.test('open-code-block: copy success and failure drive the compiled label si
   try {
     const el = new (OpenCodeBlock as unknown as new () => AnyComponent)();
     await el.copy();
-    assertEquals(el.copyLabel, 'Copied!');
+    expect(el.copyLabel).toEqual('Copied!');
   } finally {
     Object.defineProperty(globalThis, 'navigator', {
       configurable: true,
@@ -416,7 +416,7 @@ Deno.test('open-code-block: copy success and failure drive the compiled label si
   }
 });
 
-Deno.test('open-code-block: failed clipboard write shows Failed', async () => {
+test('open-code-block: failed clipboard write shows Failed', async () => {
   const { OpenCodeBlock } = await import('../src/open-code-block.tsx');
   const originalNavigator = (globalThis as { navigator?: unknown }).navigator;
   Object.defineProperty(globalThis, 'navigator', {
@@ -426,7 +426,7 @@ Deno.test('open-code-block: failed clipboard write shows Failed', async () => {
   try {
     const el = new (OpenCodeBlock as unknown as new () => AnyComponent)();
     await el.copy();
-    assertEquals(el.copyLabel, 'Failed');
+    expect(el.copyLabel).toEqual('Failed');
   } finally {
     Object.defineProperty(globalThis, 'navigator', {
       configurable: true,
@@ -439,7 +439,7 @@ Deno.test('open-code-block: failed clipboard write shows Failed', async () => {
 // the router build derives island metadata from manifest.declarations (WC Package
 // Protocol); a drifted declaration silently miscompiles consumer pages.
 
-Deno.test("manifest: every declaration carries the component's published attributes and events", async () => {
+test("manifest: every declaration carries the component's published attributes and events", async () => {
   const { manifest } = await import('../src/index.ts');
   const expected: Record<string, { attributes: string[]; events: string[] }> = {
     'open-card': { attributes: ['variant'], events: [] },
@@ -477,5 +477,5 @@ Deno.test("manifest: every declaration carries the component's published attribu
       },
     ]),
   );
-  assertEquals(actual, expected);
+  expect(actual).toEqual(expected);
 });

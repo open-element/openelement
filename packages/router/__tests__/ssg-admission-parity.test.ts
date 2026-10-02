@@ -8,7 +8,7 @@
  * same decisions that produced the emitted HTML.
  */
 
-import { assertEquals, assertStringIncludes } from '@std/assert';
+import { expect, test } from 'vitest';
 import { OpenElementBuildContext } from '../src/vite/build-context.ts';
 import { buildSsgEntryDescriptor } from '../src/cli/build-ssg.ts';
 import { createSsgRenderEvidence } from '../src/cli/ssg-render.ts';
@@ -92,23 +92,23 @@ function buildSsgDescriptor(ctx: OpenElementBuildContext) {
   );
 }
 
-Deno.test('admission parity: CEM-admitted package island gets the same decision in dev and SSG entries', () => {
+test('admission parity: CEM-admitted package island gets the same decision in dev and SSG entries', () => {
   const devDescriptor = buildDevDescriptor();
   const devDecision = devDescriptor.ssrAdmissionPlan.decisions.find(
     (d) => d.tagName === 'cem-pkg-island',
   );
-  assertEquals(devDecision?.renderPath, 'ssr+client');
+  expect(devDecision?.renderPath).toEqual('ssr+client');
 
   const ctx = new OpenElementBuildContext({});
   const ssgDescriptor = buildSsgDescriptor(ctx);
   const ssgDecision = ssgDescriptor.ssrAdmissionPlan.decisions.find(
     (d) => d.tagName === 'cem-pkg-island',
   );
-  assertEquals(ssgDecision?.renderPath, devDecision?.renderPath);
-  assertEquals(ssgDecision?.reason, devDecision?.reason);
+  expect(ssgDecision?.renderPath).toEqual(devDecision?.renderPath);
+  expect(ssgDecision?.reason).toEqual(devDecision?.reason);
 });
 
-Deno.test('admission parity: ctx.phase1.ssrAdmissionPlan stays the single source after SSG sync', () => {
+test('admission parity: ctx.phase1.ssrAdmissionPlan stays the single source after SSG sync', () => {
   const devDescriptor = buildDevDescriptor();
   const ctx = new OpenElementBuildContext({});
   buildSsgDescriptor(ctx);
@@ -119,27 +119,27 @@ Deno.test('admission parity: ctx.phase1.ssrAdmissionPlan stays the single source
   const devDecision = devDescriptor.ssrAdmissionPlan.decisions.find(
     (d) => d.tagName === 'cem-pkg-island',
   );
-  assertEquals(syncedDecision?.renderPath, 'ssr+client');
-  assertEquals(syncedDecision?.renderPath, devDecision?.renderPath);
+  expect(syncedDecision?.renderPath).toEqual('ssr+client');
+  expect(syncedDecision?.renderPath).toEqual(devDecision?.renderPath);
 });
 
-Deno.test('admission parity: evidence decisions match the plan that rendered the pages', () => {
+test('admission parity: evidence decisions match the plan that rendered the pages', () => {
   const ctx = new OpenElementBuildContext({});
   const ssgDescriptor = buildSsgDescriptor(ctx);
 
   const evidence = createSsgRenderEvidence(ctx);
-  assertEquals(evidence.admissionDecisions, ssgDescriptor.ssrAdmissionPlan.decisions);
+  expect(evidence.admissionDecisions).toEqual(ssgDescriptor.ssrAdmissionPlan.decisions);
   const evidenceDecision = evidence.admissionDecisions?.find((d) => d.tagName === 'cem-pkg-island');
-  assertEquals(evidenceDecision?.renderPath, 'ssr+client');
-  assertStringIncludes(evidenceDecision?.reason ?? '', 'CEM ssr-capable');
+  expect(evidenceDecision?.renderPath).toEqual('ssr+client');
+  expect(evidenceDecision?.reason ?? '').toContain('CEM ssr-capable');
 });
 
-Deno.test('admission parity: emitted SSG entry SSR-registers a CEM-admitted island like the dev entry', () => {
+test('admission parity: emitted SSG entry SSR-registers a CEM-admitted island like the dev entry', () => {
   const devCode = renderEntry(buildDevDescriptor());
   const ctx = new OpenElementBuildContext({});
   const ssgCode = renderEntry(buildSsgDescriptor(ctx));
 
   // SSR-admitted islands are statically imported + registered in the entry.
-  assertStringIncludes(devCode, '__island_cem_pkg_island');
-  assertStringIncludes(ssgCode, '__island_cem_pkg_island');
+  expect(devCode).toContain('__island_cem_pkg_island');
+  expect(ssgCode).toContain('__island_cem_pkg_island');
 });

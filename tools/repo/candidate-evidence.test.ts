@@ -8,7 +8,8 @@
  * and aggregate counts — requiring explicit rejection for each. Every forgery
  * reported by the round-2 review is a regression here.
  */
-import { assert, assertEquals, assertRejects } from '@std/assert';
+import { expect, test } from 'vitest';
+import { assertRejectsIncludes } from '../../tests/lib/vitest-asserts.ts';
 import { join } from '@std/path';
 import {
   carryPackedTarballs,
@@ -352,7 +353,7 @@ function REQUIRED_STEPS_REDUCED(): number {
   return JOB_NAMES.reduce((sum, job) => sum + REQUIRED_STEPS[job].length, 0);
 }
 
-Deno.test('packed tarballs travel with job evidence and are hash-checked on aggregation', async () => {
+test('packed tarballs travel with job evidence and are hash-checked on aggregation', async () => {
   const root = await mkdtemp(join(tmpdir(), 'opx-test-'));
   try {
     const source = `${root}/source`;
@@ -364,20 +365,19 @@ Deno.test('packed tarballs travel with job evidence and are hash-checked on aggr
     await writeFile(archive, encoder.encode('release archive bytes'));
 
     const first = await stageTarballEvidence(packages, () => archive, recorded);
-    assertEquals(first.files, {
+    expect(first.files).toEqual({
       '@openelement/example': `tarballs/openelement-example-${VERSION}.tgz`,
     });
     const carried = `${recorded}/${first.files['@openelement/example']}`;
     const second = await stageTarballEvidence(packages, () => carried, aggregated, first.hashes);
-    assertEquals(second, first);
+    expect(second).toEqual(first);
     // node readFile returns a Buffer; compare as a plain Uint8Array like the
     // pre-port Deno.readFile result.
-    assertEquals(
+    expect(
       new Uint8Array(await readFile(`${aggregated}/${second.files['@openelement/example']}`)),
-      encoder.encode('release archive bytes'),
-    );
+    ).toEqual(encoder.encode('release archive bytes'));
 
-    await assertRejects(
+    await assertRejectsIncludes(
       () =>
         stageTarballEvidence(packages, () => carried, aggregated, {
           '@openelement/example': `sha256:${'0'.repeat(64)}`,
@@ -419,9 +419,9 @@ async function validPackedStore(version = VERSION) {
   return { extras, archives, read };
 }
 
-Deno.test('valid packed evidence capsule validates and carries without the workspace', async () => {
+test('valid packed evidence capsule validates and carries without the workspace', async () => {
   const { extras, archives, read } = await validPackedStore();
-  assertEquals(await collectPackedTarballFailures(extras, { read }), []);
+  expect(await collectPackedTarballFailures(extras, { read })).toEqual([]);
   const outDir = await mkdtemp(join(tmpdir(), 'opx-test-'));
   try {
     // ponytail: the guard simulates an aggregate runner with no producer
@@ -432,20 +432,20 @@ Deno.test('valid packed evidence capsule validates and carries without the works
       return read(path);
     };
     const carried = await carryPackedTarballs(extras, guarded, outDir);
-    assertEquals(carried.tarballs, extras.tarballs);
-    assertEquals(carried.tarballFiles, extras.tarballFiles);
-    assertEquals(carried.packageVersion, VERSION);
+    expect(carried.tarballs).toEqual(extras.tarballs);
+    expect(carried.tarballFiles).toEqual(extras.tarballFiles);
+    expect(carried.packageVersion).toEqual(VERSION);
     for (const path of Object.values(extras.tarballFiles)) {
       const expected = archives.get(path);
-      assert(expected !== undefined);
-      assertEquals(new Uint8Array(await readFile(`${outDir}/${path}`)), expected);
+      expect(expected !== undefined).toBeTruthy();
+      expect(new Uint8Array(await readFile(`${outDir}/${path}`))).toEqual(expected);
     }
   } finally {
     await rm(outDir, { recursive: true });
   }
 });
 
-Deno.test('tarball map equality ignores key insertion order', async () => {
+test('tarball map equality ignores key insertion order', async () => {
   // Producer stages in workspace order; the aggregator composes in
   // REQUIRED_PACKAGE_TARBALLS order. Identical maps must validate.
   const f = await shared();
@@ -457,20 +457,20 @@ Deno.test('tarball map equality ignores key insertion order', async () => {
   (bundleJob(bundle, 'packed').extras as Record<string, unknown>).tarballFiles = Object.fromEntries(
     Object.entries(reversed).reverse(),
   );
-  assertEquals(await failuresFor(bundle, f), []);
+  expect(await failuresFor(bundle, f)).toEqual([]);
 });
 
-Deno.test('packed validation fails when the archive bytes are missing', async () => {
+test('packed validation fails when the archive bytes are missing', async () => {
   const { extras } = await validPackedStore();
   const read = (_path: string) => Promise.resolve(null);
   const failures = await collectPackedTarballFailures(extras, { read });
-  assert(
+  expect(
     failures.some((failure) => failure.includes('archive missing')),
     failures.join(' | '),
-  );
+  ).toBeTruthy();
   const outDir = await mkdtemp(join(tmpdir(), 'opx-test-'));
   try {
-    await assertRejects(
+    await assertRejectsIncludes(
       () => carryPackedTarballs(extras, read, outDir),
       Error,
       'packed tarball missing',
@@ -480,24 +480,24 @@ Deno.test('packed validation fails when the archive bytes are missing', async ()
   }
 });
 
-Deno.test('packed validation fails when archive bytes are tampered', async () => {
+test('packed validation fails when archive bytes are tampered', async () => {
   const { extras, archives } = await validPackedStore();
   const victim = REQUIRED_PACKAGE_TARBALLS[0];
   const path = extras.tarballFiles[victim];
   const original = archives.get(path);
-  assert(original !== undefined);
+  expect(original !== undefined).toBeTruthy();
   const tampered = new Uint8Array(original);
   tampered[0] ^= 0xff;
   const tamperedRead = (candidate: string) =>
     Promise.resolve(candidate === path ? tampered : (archives.get(candidate) ?? null));
   const failures = await collectPackedTarballFailures(extras, { read: tamperedRead });
-  assert(
+  expect(
     failures.some((failure) => failure.includes('sha256')),
     failures.join(' | '),
-  );
+  ).toBeTruthy();
   const outDir = await mkdtemp(join(tmpdir(), 'opx-test-'));
   try {
-    await assertRejects(
+    await assertRejectsIncludes(
       () => carryPackedTarballs(extras, tamperedRead, outDir),
       Error,
       'hash mismatch',
@@ -507,7 +507,7 @@ Deno.test('packed validation fails when archive bytes are tampered', async () =>
   }
 });
 
-Deno.test('packed validation rejects every path-traversal vector', async () => {
+test('packed validation rejects every path-traversal vector', async () => {
   const vectors = [
     '../../packages/foo.tgz',
     '../foo.tgz',
@@ -519,29 +519,29 @@ Deno.test('packed validation rejects every path-traversal vector', async () => {
     const { extras, read } = await validPackedStore();
     extras.tarballFiles[REQUIRED_PACKAGE_TARBALLS[0]] = vector;
     const failures = await collectPackedTarballFailures(extras, { read });
-    assert(
+    expect(
       failures.some((failure) => failure.includes('tarballFiles')),
       `expected path rejection for ${vector}; got ${failures.join(' | ')}`,
-    );
+    ).toBeTruthy();
   }
 });
 
-Deno.test('packed validation rejects a missing package from the exact set', async () => {
+test('packed validation rejects a missing package from the exact set', async () => {
   const { extras, read } = await validPackedStore();
   delete extras.tarballs['@openelement/ui'];
   delete extras.tarballFiles['@openelement/ui'];
   const failures = await collectPackedTarballFailures(extras, { read });
-  assert(
+  expect(
     failures.some((failure) => failure.includes('must contain exactly')),
     failures.join(' | '),
-  );
-  assert(
+  ).toBeTruthy();
+  expect(
     failures.some((failure) => failure.includes('must map exactly')),
     failures.join(' | '),
-  );
+  ).toBeTruthy();
   const outDir = await mkdtemp(join(tmpdir(), 'opx-test-'));
   try {
-    await assertRejects(
+    await assertRejectsIncludes(
       () => carryPackedTarballs(extras, read, outDir),
       Error,
       'must contain exactly',
@@ -551,18 +551,18 @@ Deno.test('packed validation rejects a missing package from the exact set', asyn
   }
 });
 
-Deno.test('packed validation rejects an unknown extra package', async () => {
+test('packed validation rejects an unknown extra package', async () => {
   const { extras, read } = await validPackedStore();
   extras.tarballs['@openelement/fake'] = `sha256:${'1'.repeat(64)}`;
   extras.tarballFiles['@openelement/fake'] = `tarballs/openelement-fake-${VERSION}.tgz`;
   const failures = await collectPackedTarballFailures(extras, { read });
-  assert(
+  expect(
     failures.some((failure) => failure.includes('must contain exactly')),
     failures.join(' | '),
-  );
+  ).toBeTruthy();
   const outDir = await mkdtemp(join(tmpdir(), 'opx-test-'));
   try {
-    await assertRejects(
+    await assertRejectsIncludes(
       () => carryPackedTarballs(extras, read, outDir),
       Error,
       'must contain exactly',
@@ -572,7 +572,7 @@ Deno.test('packed validation rejects an unknown extra package', async () => {
   }
 });
 
-Deno.test('packed validation rejects divergent package versions', async () => {
+test('packed validation rejects divergent package versions', async () => {
   const { extras, archives } = await validPackedStore();
   const victim = '@openelement/router';
   const driftedVersion = '1.0.0-alpha.2';
@@ -587,10 +587,10 @@ Deno.test('packed validation rejects divergent package versions', async () => {
   extras.tarballs[victim] = await sha256BytesLocal(drifted);
   const read = (candidate: string) => Promise.resolve(archives.get(candidate) ?? null);
   const failures = await collectPackedTarballFailures(extras, { read });
-  assert(
+  expect(
     failures.some((failure) => failure.includes('package version')),
     failures.join(' | '),
-  );
+  ).toBeTruthy();
 });
 
 async function sha256BytesLocal(bytes: Uint8Array): Promise<string> {
@@ -633,20 +633,19 @@ async function shared(): Promise<Fixture> {
   return cached;
 }
 
-Deno.test('valid schema-v2 bundle and jobs pass the strict contract', async () => {
+test('valid schema-v2 bundle and jobs pass the strict contract', async () => {
   const f = await shared();
-  assertEquals(await failuresFor(clone(f.bundle), f), []);
-  assertEquals(
+  expect(await failuresFor(clone(f.bundle), f)).toEqual([]);
+  expect(
     await collectJobFailures(
       f.jobs.map((entry) => ({ job: structuredClone(entry.job), read: entry.read })) as never,
       SHA,
       TREE,
     ),
-    [],
-  );
+  ).toEqual([]);
 });
 
-Deno.test('top-level identity and lifecycle fields are strict', async () => {
+test('top-level identity and lifecycle fields are strict', async () => {
   const f = await shared();
   const cases: Array<[string, (b: Record<string, unknown>) => void, string]> = [
     [
@@ -765,14 +764,14 @@ Deno.test('top-level identity and lifecycle fields are strict', async () => {
   for (const [label, mutate, expected] of cases) {
     const bundle = clone(f.bundle);
     mutate(bundle);
-    assert(
+    expect(
       (await failuresFor(bundle, f)).some((failure) => failure.includes(expected)),
       `expected rejection for ${label}`,
-    );
+    ).toBeTruthy();
   }
 });
 
-Deno.test('job identity, time, and toolchain fields are strict', async () => {
+test('job identity, time, and toolchain fields are strict', async () => {
   const f = await shared();
   const cases: Array<[string, (job: Record<string, unknown>) => void, string]> = [
     [
@@ -850,29 +849,29 @@ Deno.test('job identity, time, and toolchain fields are strict', async () => {
     const bundle = clone(f.bundle);
     mutate(bundleJob(bundle, 'fast-checks'));
     const failures = await failuresFor(bundle, f);
-    assert(
+    expect(
       failures.some((failure) => failure.includes(expected)),
       `expected rejection for job ${label}; got ${failures.join(' | ')}`,
-    );
+    ).toBeTruthy();
   }
   const staleBundle = clone(f.bundle);
   staleBundle.generatedAt = new Date(
     Date.parse(f.bundle.generatedAt as string) - 60_000,
   ).toISOString();
-  assert(
+  expect(
     (await failuresFor(staleBundle, f)).some((x) => x.includes('after the bundle generatedAt')),
-  );
+  ).toBeTruthy();
 
   const lateStep = clone(f.bundle);
   const step = bundleStep(lateStep, 'fast-checks', 'fmt-check');
   step.startedAt = new Date(Date.now() - 1000).toISOString();
   step.durationMs = 60 * 60 * 1000;
-  assert(
+  expect(
     (await failuresFor(lateStep, f)).some((x) => x.includes('step ends after the job generatedAt')),
-  );
+  ).toBeTruthy();
 });
 
-Deno.test('aggregate must match the actual job and step set', async () => {
+test('aggregate must match the actual job and step set', async () => {
   const f = await shared();
   for (const [label, mutate, expected] of [
     [
@@ -913,47 +912,51 @@ Deno.test('aggregate must match the actual job and step set', async () => {
   ] as const) {
     const bundle = clone(f.bundle);
     mutate(bundle);
-    assert(
+    expect(
       (await failuresFor(bundle, f)).some((failure) => failure.includes(expected)),
       `expected rejection for aggregate ${label}`,
-    );
+    ).toBeTruthy();
   }
 });
 
-Deno.test('tarball bytes, files, and manifest are cross-verified', async () => {
+test('tarball bytes, files, and manifest are cross-verified', async () => {
   const f = await shared();
   const zeroed = clone(f.bundle);
   for (const key of Object.keys(zeroed.tarballs as Record<string, string>)) {
     (zeroed.tarballs as Record<string, string>)[key] = `sha256:${'0'.repeat(64)}`;
   }
-  assert((await failuresFor(zeroed, f)).some((x) => x.includes('archive sha256')));
+  expect((await failuresFor(zeroed, f)).some((x) => x.includes('archive sha256'))).toBeTruthy();
 
   const missingKey = clone(f.bundle);
   delete (missingKey.tarballs as Record<string, string>)['@openelement/router'];
-  assert(
+  expect(
     (await failuresFor(missingKey, f)).some((x) => x.includes('tarballs must contain exactly')),
-  );
+  ).toBeTruthy();
 
   const extraKey = clone(f.bundle);
   (extraKey.tarballs as Record<string, string>)['@evil/fake'] = `sha256:${'1'.repeat(64)}`;
-  assert((await failuresFor(extraKey, f)).some((x) => x.includes('tarballs must contain exactly')));
+  expect(
+    (await failuresFor(extraKey, f)).some((x) => x.includes('tarballs must contain exactly')),
+  ).toBeTruthy();
 
   const missingFile = clone(f.bundle);
   delete (missingFile.tarballFiles as Record<string, string>)['@openelement/ui'];
-  assert(
+  expect(
     (await failuresFor(missingFile, f)).some((x) => x.includes('tarballFiles must map exactly')),
-  );
+  ).toBeTruthy();
 
   const badPath = clone(f.bundle);
   (badPath.tarballFiles as Record<string, string>)['@openelement/ui'] = '../escape.tgz';
-  assert((await failuresFor(badPath, f)).some((x) => x.includes('tarballFiles.@openelement/ui')));
+  expect(
+    (await failuresFor(badPath, f)).some((x) => x.includes('tarballFiles.@openelement/ui')),
+  ).toBeTruthy();
 
   const emptyManifest = clone(f.bundle);
   emptyManifest.tarballManifest = {
     path: 'tarball-manifest.json',
     sha256: await sha256('{}\n'),
   };
-  assert(
+  expect(
     (
       await collectBundleFailures(emptyManifest, {
         expectedSha: SHA,
@@ -962,27 +965,29 @@ Deno.test('tarball bytes, files, and manifest are cross-verified', async () => {
           path === 'tarball-manifest.json' ? Promise.resolve(encoder.encode('{}\n')) : f.read(path),
       })
     ).some((x) => x.includes('contents must equal')),
-  );
+  ).toBeTruthy();
 
   const threeWay = clone(f.bundle);
   (bundleJob(threeWay, 'packed').extras as Record<string, unknown>).tarballs = {
     ...(f.bundle.tarballs as Record<string, string>),
     '@openelement/element': `sha256:${'f'.repeat(64)}`,
   };
-  assert((await failuresFor(threeWay, f)).some((x) => x.includes('extras.tarballs')));
+  expect((await failuresFor(threeWay, f)).some((x) => x.includes('extras.tarballs'))).toBeTruthy();
 
   const diagnosticsDrift = clone(f.bundle);
   (bundleJob(diagnosticsDrift, 'packed').extras as Record<string, unknown>).packDiagnostics = [];
-  assert(
+  expect(
     (await failuresFor(diagnosticsDrift, f)).some((x) => x.includes('extras.packDiagnostics')),
-  );
+  ).toBeTruthy();
 });
 
-Deno.test('tarball package name and version come from the archive bytes', async () => {
+test('tarball package name and version come from the archive bytes', async () => {
   const f = await shared();
   const wrongVersion = clone(f.bundle);
   wrongVersion.packageVersion = '9.9.9';
-  assert((await failuresFor(wrongVersion, f)).some((x) => x.includes('package version')));
+  expect(
+    (await failuresFor(wrongVersion, f)).some((x) => x.includes('package version')),
+  ).toBeTruthy();
   const wrongName = clone(f.bundle);
   const bytes = await createDeterministicTarGz([
     {
@@ -990,7 +995,7 @@ Deno.test('tarball package name and version come from the archive bytes', async 
       data: encoder.encode(JSON.stringify({ name: '@evil/wrong', version: VERSION })),
     },
   ]);
-  assert(
+  expect(
     (
       await collectBundleFailures(wrongName, {
         expectedSha: SHA,
@@ -1001,17 +1006,17 @@ Deno.test('tarball package name and version come from the archive bytes', async 
             : f.read(path),
       })
     ).some((x) => x.includes('package name')),
-  );
+  ).toBeTruthy();
 });
 
-Deno.test('pack diagnostics are parsed and cross-checked', async () => {
+test('pack diagnostics are parsed and cross-checked', async () => {
   const f = await shared();
   const emptyDiagnostics = clone(f.bundle);
   emptyDiagnostics.packDiagnostics = {
     path: 'pack-diagnostics.json',
     sha256: await sha256('{}\n'),
   };
-  assert(
+  expect(
     (
       await collectBundleFailures(emptyDiagnostics, {
         expectedSha: SHA,
@@ -1020,7 +1025,7 @@ Deno.test('pack diagnostics are parsed and cross-checked', async () => {
           path === 'pack-diagnostics.json' ? Promise.resolve(encoder.encode('{}\n')) : f.read(path),
       })
     ).some((x) => x.includes('must be an array')),
-  );
+  ).toBeTruthy();
 
   for (const [label, mutate, expected] of [
     [
@@ -1071,7 +1076,7 @@ Deno.test('pack diagnostics are parsed and cross-checked', async () => {
     const content = JSON.stringify(diagnostics) + '\n';
     const bundle = clone(f.bundle);
     bundle.packDiagnostics = { path: 'pack-diagnostics.json', sha256: await sha256(content) };
-    assert(
+    expect(
       (
         await collectBundleFailures(bundle, {
           expectedSha: SHA,
@@ -1083,11 +1088,11 @@ Deno.test('pack diagnostics are parsed and cross-checked', async () => {
         })
       ).some((x) => x.includes(expected)),
       `expected rejection for diagnostics ${label}`,
-    );
+    ).toBeTruthy();
   }
 });
 
-Deno.test('step argv, cwd, timing, and logs are strict', async () => {
+test('step argv, cwd, timing, and logs are strict', async () => {
   const f = await shared();
   const cases: Array<[string, (b: Record<string, unknown>) => void, string]> = [
     [
@@ -1186,10 +1191,10 @@ Deno.test('step argv, cwd, timing, and logs are strict', async () => {
   for (const [label, mutate, expected] of cases) {
     const bundle = clone(f.bundle);
     mutate(bundle);
-    assert(
+    expect(
       (await failuresFor(bundle, f)).some((failure) => failure.includes(expected)),
       `expected rejection for ${label}`,
-    );
+    ).toBeTruthy();
   }
 
   // A clean-proof log without the canonical PASS line is rejected even when
@@ -1198,7 +1203,7 @@ Deno.test('step argv, cwd, timing, and logs are strict', async () => {
   const content = 'clean-proof FAIL phase=before\n';
   const step = bundleStep(noLine, 'fast-checks', 'workspace-clean-before');
   step.logSha256 = await sha256(content);
-  assert(
+  expect(
     (
       await collectBundleFailures(noLine, {
         expectedSha: SHA,
@@ -1209,28 +1214,32 @@ Deno.test('step argv, cwd, timing, and logs are strict', async () => {
             : f.read(path),
       })
     ).some((x) => x.includes('missing the canonical clean-proof PASS line')),
-  );
+  ).toBeTruthy();
 
   const missingStep = clone(f.bundle);
   (bundleJob(missingStep, 'fast-checks').steps as Array<unknown>) = (
     bundleJob(missingStep, 'fast-checks').steps as Array<Record<string, unknown>>
   ).filter((entry) => entry.name !== 'workspace-clean-after');
-  assert((await failuresFor(missingStep, f)).some((x) => x.includes('required step missing')));
+  expect(
+    (await failuresFor(missingStep, f)).some((x) => x.includes('required step missing')),
+  ).toBeTruthy();
 
   const duplicateStep = clone(f.bundle);
   const steps = bundleJob(duplicateStep, 'packed').steps as Array<Record<string, unknown>>;
   steps.push(clone(steps[0]));
-  assert((await failuresFor(duplicateStep, f)).some((x) => x.includes('duplicate step')));
+  expect(
+    (await failuresFor(duplicateStep, f)).some((x) => x.includes('duplicate step')),
+  ).toBeTruthy();
 
   const unknownStep = clone(f.bundle);
   (bundleJob(unknownStep, 'packed').steps as Array<Record<string, unknown>>).push({
     ...(bundleJob(unknownStep, 'packed').steps as Array<Record<string, unknown>>)[0],
     name: 'extra-step',
   });
-  assert((await failuresFor(unknownStep, f)).some((x) => x.includes('unknown step')));
+  expect((await failuresFor(unknownStep, f)).some((x) => x.includes('unknown step'))).toBeTruthy();
 });
 
-Deno.test('fresh-clone path binding rejects every decoy', async () => {
+test('fresh-clone path binding rejects every decoy', async () => {
   const f = await shared();
   const cases: Array<[string, (b: Record<string, unknown>) => void, string]> = [
     [
@@ -1314,38 +1323,42 @@ Deno.test('fresh-clone path binding rejects every decoy', async () => {
   for (const [label, mutate, expected] of cases) {
     const bundle = clone(f.bundle);
     mutate(bundle);
-    assert(
+    expect(
       (await failuresFor(bundle, f)).some((failure) => failure.includes(expected)),
       `expected rejection for ${label}`,
-    );
+    ).toBeTruthy();
   }
 });
 
-Deno.test('job-name, SHA/tree, and duplicate/unknown jobs are rejected', async () => {
+test('job-name, SHA/tree, and duplicate/unknown jobs are rejected', async () => {
   const f = await shared();
   const missing = clone(f.bundle);
   missing.jobs = (missing.jobs as Array<Record<string, unknown>>).filter(
     (job) => job.job !== 'packed',
   );
-  assert(
+  expect(
     (await failuresFor(missing, f)).some((x) => x.includes('required job result missing: packed')),
-  );
+  ).toBeTruthy();
 
   const duplicate = clone(f.bundle);
   const jobs = duplicate.jobs as Array<Record<string, unknown>>;
   jobs.push(clone(jobs[0]));
-  assert((await failuresFor(duplicate, f)).some((x) => x.includes('duplicate job result')));
+  expect(
+    (await failuresFor(duplicate, f)).some((x) => x.includes('duplicate job result')),
+  ).toBeTruthy();
 
   const unknown = clone(f.bundle);
   (unknown.jobs as Array<Record<string, unknown>>).push({
     ...clone((unknown.jobs as Array<Record<string, unknown>>)[0]),
     job: 'unknown-job',
   });
-  assert((await failuresFor(unknown, f)).some((x) => x.includes('unknown job result')));
+  expect(
+    (await failuresFor(unknown, f)).some((x) => x.includes('unknown job result')),
+  ).toBeTruthy();
 
   const wrongSha = clone(f.bundle);
   wrongSha.sha = 'c'.repeat(40);
-  assert((await failuresFor(wrongSha, f)).some((x) => x.includes('evidence sha')));
+  expect((await failuresFor(wrongSha, f)).some((x) => x.includes('evidence sha'))).toBeTruthy();
 });
 
 /** The source commit a reuse test replays from (never the candidate SHA). */
@@ -1407,7 +1420,7 @@ async function failuresWith(
   });
 }
 
-Deno.test('reuse: a stamped tree-identical bundle is accepted by the aggregate', async () => {
+test('reuse: a stamped tree-identical bundle is accepted by the aggregate', async () => {
   const f = await shared();
   const bundle = clone(f.bundle);
   // Reuse EVERY lane from one source run: that is what the resolver decides,
@@ -1416,10 +1429,10 @@ Deno.test('reuse: a stamped tree-identical bundle is accepted by the aggregate',
   for (const job of JOB_NAMES) {
     Object.assign(overlays, (await reuseJob(bundle, job, { runId: 42 })).overlays);
   }
-  assertEquals(await failuresWith(bundle, f, overlays), []);
+  expect(await failuresWith(bundle, f, overlays)).toEqual([]);
 });
 
-Deno.test('reuse: the aggregator carries the stamp into the bundle it composes', async () => {
+test('reuse: the aggregator carries the stamp into the bundle it composes', async () => {
   // Regression: the aggregator composes bundle records from the DOWNLOADED
   // producer records through an explicit field projection, and it omitted
   // `reused`. Every earlier reuse test built its bundle by cloning the fixture
@@ -1463,7 +1476,7 @@ Deno.test('reuse: the aggregator carries the stamp into the bundle it composes',
   // cannot tell a licensed replay from a foreign record.
   const composed = composeBundleJobs(jobs as never, '/runner/.artifacts');
   for (const record of composed) {
-    assertEquals(record.reused, { runId: 42, sha: sourceSha }, `${record.job} lost its stamp`);
+    expect(record.reused, `${record.job} lost its stamp`).toEqual({ runId: 42, sha: sourceSha });
   }
   // And the bundle assembled from those records validates against the
   // CANDIDATE sha, which is the aggregation that runs in CI. The rollup is
@@ -1486,10 +1499,10 @@ Deno.test('reuse: the aggregator carries the stamp into the bundle it composes',
     read: (path) =>
       path in overlays ? Promise.resolve(encoder.encode(overlays[path])) : f.read(path),
   });
-  assertEquals(failures, []);
+  expect(failures).toEqual([]);
 });
 
-Deno.test('reuse: a bundle spliced from two source runs is rejected', async () => {
+test('reuse: a bundle spliced from two source runs is rejected', async () => {
   const f = await shared();
   const bundle = clone(f.bundle);
   const overlays = {
@@ -1497,29 +1510,29 @@ Deno.test('reuse: a bundle spliced from two source runs is rejected', async () =
     ...(await reuseJob(bundle, 'packed', { runId: 43 })).overlays,
   };
   const failures = await failuresWith(bundle, f, overlays);
-  assert(
+  expect(
     failures.some((x) => x.includes('different runs')),
     `two source runs must be rejected, got: ${failures.join(' | ')}`,
-  );
+  ).toBeTruthy();
 });
 
-Deno.test('reuse: the site E2E sidecar and logs follow the source commit', async () => {
+test('reuse: the site E2E sidecar and logs follow the source commit', async () => {
   const f = await shared();
   // Reused fresh-clone: the sidecar and the clean-proof lines name the source
   // commit, and the bundle is accepted.
   const replayed = clone(f.bundle);
   const { overlays } = await reuseJob(replayed, 'fresh-clone', { runId: 42 });
-  assertEquals(await failuresWith(replayed, f, overlays), []);
+  expect(await failuresWith(replayed, f, overlays)).toEqual([]);
 
   // The same reused record with the sidecar left at the candidate commit is
   // refused: the sidecar must describe the run that produced it.
   const stale = clone(f.bundle);
   const replayedStale = await reuseJob(stale, 'fresh-clone', { runId: 42 });
   rollupSiteE2e(stale).candidateSha = SHA;
-  assert(
+  expect(
     (await failuresWith(stale, f, replayedStale.overlays)).some((x) => x.includes('candidateSha')),
     'a sidecar bound to the wrong commit must be rejected',
-  );
+  ).toBeTruthy();
 
   // And a reused record whose clean-proof log still names the candidate
   // commit is refused: the logs are the audit trail of the run that ran.
@@ -1530,28 +1543,28 @@ Deno.test('reuse: the site E2E sidecar and logs follow the source commit', async
     TREE,
     'before',
   )}\n`;
-  assert(
+  expect(
     (await failuresWith(wrongLog, f, replayedWrongLog.overlays)).some((x) =>
       x.includes('clean-proof'),
     ),
     'a reused job must be audited against ITS OWN commit for log lines',
-  );
+  ).toBeTruthy();
 });
 
-Deno.test('reuse: a reused job claiming the candidate commit is rejected', async () => {
+test('reuse: a reused job claiming the candidate commit is rejected', async () => {
   const f = await shared();
   const bundle = clone(f.bundle);
   // Stamped, but still claiming to be this commit: that is the shape a lane
   // would produce to skip its gate without a real source.
   bundleJob(bundle, 'fast-checks').reused = { runId: 42, sha: SHA };
   const failures = await failuresFor(bundle, f);
-  assert(
+  expect(
     failures.some((x) => x.includes('claims reused proof for its own commit')),
     failures.join(' | '),
-  );
+  ).toBeTruthy();
 });
 
-Deno.test('reuse: a malformed or disagreeing stamp is rejected', async () => {
+test('reuse: a malformed or disagreeing stamp is rejected', async () => {
   const f = await shared();
   for (const [label, stamp, expected] of [
     ['not-an-object', 'yes', 'reused must be an object'],
@@ -1566,37 +1579,37 @@ Deno.test('reuse: a malformed or disagreeing stamp is rejected', async () => {
     job.sha = SOURCE_SHA;
     job.reused = stamp;
     const failures = await failuresFor(bundle, f);
-    assert(
+    expect(
       failures.some((x) => x.includes(expected)),
       `${label}: expected a failure mentioning ${JSON.stringify(expected)}, got ${failures.join(
         ' | ',
       )}`,
-    );
+    ).toBeTruthy();
   }
 });
 
-Deno.test('reuse: an unstamped job with a foreign commit is still rejected', async () => {
+test('reuse: an unstamped job with a foreign commit is still rejected', async () => {
   const f = await shared();
   const bundle = clone(f.bundle);
   // No `reused` stamp at all: the differing sha is the pre-reuse violation.
   bundleJob(bundle, 'fast-checks').sha = SOURCE_SHA;
-  assert((await failuresFor(bundle, f)).some((x) => x.includes('sha')));
+  expect((await failuresFor(bundle, f)).some((x) => x.includes('sha'))).toBeTruthy();
 });
 
-Deno.test('reuse: a stamp for the right run on a DIFFERENT tree is rejected', async () => {
+test('reuse: a stamp for the right run on a DIFFERENT tree is rejected', async () => {
   const f = await shared();
   const bundle = clone(f.bundle);
   // No log overlays: the tree check must reject before any log binding.
   const { overlays } = await reuseJob(bundle, 'fast-checks', { withLogs: false });
   bundleJob(bundle, 'fast-checks').tree = 'f'.repeat(40);
   const failures = await failuresWith(bundle, f, overlays);
-  assert(
+  expect(
     failures.some((x) => x.includes('tree')),
     `the tree is the reuse key and must still match: ${failures.join(' | ')}`,
-  );
+  ).toBeTruthy();
 });
 
-Deno.test('collectJobFailures rejects old-style and decoy fresh clones', async () => {
+test('collectJobFailures rejects old-style and decoy fresh clones', async () => {
   const f = await shared();
   const cloneJobs = () =>
     f.jobs.map((entry) => ({ job: structuredClone(entry.job), read: entry.read }));
@@ -1616,11 +1629,11 @@ Deno.test('collectJobFailures rejects old-style and decoy fresh clones', async (
       'task-site-e2e',
     ].includes(step.name),
   );
-  assert(
+  expect(
     (await collectJobFailures(oldStyle as never, SHA, TREE)).some((x) =>
       x.includes('required step missing: workspace-clean-before'),
     ),
-  );
+  ).toBeTruthy();
 
   const decoy = cloneJobs();
   const decoyFresh = decoy.find((entry) => entry.job.job === 'fresh-clone');
@@ -1630,11 +1643,11 @@ Deno.test('collectJobFailures rejects old-style and decoy fresh clones', async (
   );
   if (!checkout) throw new Error('git-checkout fixture missing');
   (checkout.command as string[])[2] = '/tmp/decoy-clone';
-  assert(
+  expect(
     (await collectJobFailures(decoy as never, SHA, TREE)).some((x) =>
       x.includes('git-checkout must run against'),
     ),
-  );
+  ).toBeTruthy();
 
   // A fresh clone that skipped the Site E2E leg has no candidate Site proof;
   // the lane owns it now, so the missing step must fail the job.
@@ -1644,11 +1657,11 @@ Deno.test('collectJobFailures rejects old-style and decoy fresh clones', async (
   noSiteFresh.job.steps = (noSiteFresh.job.steps as Array<{ name: string }>).filter(
     (step) => step.name !== 'task-site-e2e',
   );
-  assert(
+  expect(
     (await collectJobFailures(noSiteProof as never, SHA, TREE)).some((x) =>
       x.includes('required step missing: task-site-e2e'),
     ),
-  );
+  ).toBeTruthy();
 
   const failed = cloneJobs();
   const failedFresh = failed.find((entry) => entry.job.job === 'fresh-clone');
@@ -1659,36 +1672,34 @@ Deno.test('collectJobFailures rejects old-style and decoy fresh clones', async (
   if (!packed) throw new Error('packed fixture missing');
   packed.result = 'FAIL';
   packed.exitCode = 1;
-  assert(
+  expect(
     (await collectJobFailures(failed as never, SHA, TREE)).some((x) =>
       x.includes('task-gate-packed'),
     ),
-  );
+  ).toBeTruthy();
 });
 
-Deno.test('evidence roles materialize back to real paths before spawning', () => {
+test('evidence roles materialize back to real paths before spawning', () => {
   const mapping = [
     ['/work/repo', EVIDENCE_ROLES.source],
     ['/tmp/x', EVIDENCE_ROLES.temp],
     ['/tmp/x/repo', EVIDENCE_ROLES.clone],
   ] as const;
-  assertEquals(materializeEvidencePath(EVIDENCE_ROLES.source, mapping), '/work/repo');
-  assertEquals(
+  expect(materializeEvidencePath(EVIDENCE_ROLES.source, mapping)).toEqual('/work/repo');
+  expect(
     materializeEvidencePath(`${EVIDENCE_ROLES.clone}/tools/repo/clean-proof.ts`, mapping),
-    '/tmp/x/repo/tools/repo/clean-proof.ts',
-  );
-  assertEquals(materializeEvidencePath('git', mapping), 'git');
-  assertEquals(
-    normalizeEvidencePath('/tmp/x/repo/deno-dir', mapping),
+  ).toEqual('/tmp/x/repo/tools/repo/clean-proof.ts');
+  expect(materializeEvidencePath('git', mapping)).toEqual('git');
+  expect(normalizeEvidencePath('/tmp/x/repo/deno-dir', mapping)).toEqual(
     `${EVIDENCE_ROLES.clone}/deno-dir`,
   );
 });
 
-Deno.test('rollup checks are unchanged and strict', () => {
-  assertEquals(collectRollupFailures(undefined).length, 1);
+test('rollup checks are unchanged and strict', () => {
+  expect(collectRollupFailures(undefined).length).toEqual(1);
   const failures = collectRollupFailures({ artifactCheck: false, consumers: [] });
-  assert(failures.some((x) => x.includes('artifact scan did not run')));
-  assert(failures.some((x) => x.includes('packed consumer missing')));
+  expect(failures.some((x) => x.includes('artifact scan did not run'))).toBeTruthy();
+  expect(failures.some((x) => x.includes('packed consumer missing'))).toBeTruthy();
   const floor = SITE_E2E_MIN_PASSED_PER_PROJECT;
   const healthy = {
     artifactCheck: true,
@@ -1712,7 +1723,7 @@ Deno.test('rollup checks are unchanged and strict', () => {
       ),
     },
   };
-  assertEquals(collectRollupFailures(healthy), []);
+  expect(collectRollupFailures(healthy)).toEqual([]);
   const skipped = clone(healthy);
   skipped.siteE2e.skipped = 3;
   skipped.siteE2e.passed = 0;
@@ -1723,7 +1734,7 @@ Deno.test('rollup checks are unchanged and strict', () => {
       { passed: 0, failed: 0, skipped: 1, flaky: 0 },
     ]),
   );
-  assert(collectRollupFailures(skipped).some((x) => x.includes('skipped=1')));
+  expect(collectRollupFailures(skipped).some((x) => x.includes('skipped=1'))).toBeTruthy();
 });
 
 function tinySiteReport(configFile: string) {
@@ -1800,20 +1811,19 @@ async function tinySiteE2e(reportBytes: Uint8Array, report: unknown) {
   };
 }
 
-Deno.test('site e2e recompute guard accepts a sidecar derived from the raw report', async () => {
+test('site e2e recompute guard accepts a sidecar derived from the raw report', async () => {
   const report = tinySiteReport('/agent/checkout/www/e2e/playwright.config.ts');
   const bytes = encoder.encode(JSON.stringify(report));
   const siteE2e = await tinySiteE2e(bytes, report);
-  assertEquals(
+  expect(
     await collectSiteE2eRecomputeFailures(siteE2e, {
       readReport: () => Promise.resolve(bytes),
       expectedSha: SHA,
     }),
-    [],
-  );
+  ).toEqual([]);
 });
 
-Deno.test('site e2e recompute guard fails closed on stale, forged, or missing evidence', async () => {
+test('site e2e recompute guard fails closed on stale, forged, or missing evidence', async () => {
   const report = tinySiteReport('/agent/checkout/www/e2e/playwright.config.ts');
   const bytes = encoder.encode(JSON.stringify(report));
   const siteE2e = await tinySiteE2e(bytes, report);
@@ -1823,19 +1833,19 @@ Deno.test('site e2e recompute guard fails closed on stale, forged, or missing ev
     { ...siteE2e, candidateSha: 'c'.repeat(40) },
     { readReport: read, expectedSha: SHA },
   );
-  assert(
+  expect(
     stale.some((x) => x.includes('candidateSha')),
     stale.join(' | '),
-  );
+  ).toBeTruthy();
 
   const forgedTotal = await collectSiteE2eRecomputeFailures(
     { ...siteE2e, passed: siteE2e.passed + 1 },
     { readReport: read, expectedSha: SHA },
   );
-  assert(
+  expect(
     forgedTotal.some((x) => x.includes('!= recomputed')),
     forgedTotal.join(' | '),
-  );
+  ).toBeTruthy();
 
   const forgedProjects = clone(siteE2e);
   forgedProjects.projects.chromium.passed += 1;
@@ -1843,28 +1853,28 @@ Deno.test('site e2e recompute guard fails closed on stale, forged, or missing ev
     readReport: read,
     expectedSha: SHA,
   });
-  assert(
+  expect(
     projectFailures.some((x) => x.includes('projects do not match')),
     projectFailures.join(' | '),
-  );
+  ).toBeTruthy();
 
   const badHash = await collectSiteE2eRecomputeFailures(
     { ...siteE2e, reportSha256: '0'.repeat(64) },
     { readReport: read, expectedSha: SHA },
   );
-  assert(
+  expect(
     badHash.some((x) => x.includes('reportSha256 does not match')),
     badHash.join(' | '),
-  );
+  ).toBeTruthy();
 
   const missing = await collectSiteE2eRecomputeFailures(siteE2e, {
     readReport: () => Promise.resolve(null),
     expectedSha: SHA,
   });
-  assert(
+  expect(
     missing.some((x) => x.includes('raw Playwright report missing')),
     missing.join(' | '),
-  );
+  ).toBeTruthy();
 
   const otherConfig = { ...report, config: { ...report.config, configFile: '/x/e2e/other.ts' } };
   const otherBytes = encoder.encode(JSON.stringify(otherConfig));
@@ -1873,22 +1883,22 @@ Deno.test('site e2e recompute guard fails closed on stale, forged, or missing ev
     readReport: () => Promise.resolve(otherBytes),
     expectedSha: SHA,
   });
-  assert(
+  expect(
     wrongConfig.some((x) => x.includes('configFile')),
     wrongConfig.join(' | '),
-  );
+  ).toBeTruthy();
 });
 
 function rollupSiteE2e(bundle: Record<string, unknown>): Record<string, unknown> {
   return (bundle.rollup as Record<string, unknown>).siteE2e as Record<string, unknown>;
 }
 
-Deno.test('bundle validation recomputes the site e2e sidecar from the staged raw report', async () => {
+test('bundle validation recomputes the site e2e sidecar from the staged raw report', async () => {
   const f = await shared();
 
   const stale = clone(f.bundle);
   rollupSiteE2e(stale).candidateSha = 'c'.repeat(40);
-  assert((await failuresFor(stale, f)).some((x) => x.includes('candidateSha')));
+  expect((await failuresFor(stale, f)).some((x) => x.includes('candidateSha'))).toBeTruthy();
 
   // Internally consistent forgery: totals match the projects and expected
   // matches the executed count, so auditSiteE2e alone would accept it — only
@@ -1899,35 +1909,37 @@ Deno.test('bundle validation recomputes the site e2e sidecar from the staged raw
   site.passed = (site.passed as number) + 1;
   site.expected = (site.expected as number) + 1;
   const forgedFailures = await failuresFor(forged, f);
-  assert(
+  expect(
     forgedFailures.some((x) => x.includes('!= recomputed')),
     forgedFailures.join(' | '),
-  );
+  ).toBeTruthy();
 
   const badHash = clone(f.bundle);
   rollupSiteE2e(badHash).reportSha256 = '0'.repeat(64);
-  assert((await failuresFor(badHash, f)).some((x) => x.includes('reportSha256 does not match')));
+  expect(
+    (await failuresFor(badHash, f)).some((x) => x.includes('reportSha256 does not match')),
+  ).toBeTruthy();
 
   const noReport: Fixture = {
     ...f,
     read: (path) => (path === SITE_E2E_REPORT_BUNDLE_PATH ? Promise.resolve(null) : f.read(path)),
   };
-  assert(
+  expect(
     (await failuresFor(clone(f.bundle), noReport)).some((x) =>
       x.includes('raw Playwright report missing'),
     ),
-  );
+  ).toBeTruthy();
 });
 
-Deno.test('packedRollupFromLog derives the artifact scan and consumers from the gate log', () => {
+test('packedRollupFromLog derives the artifact scan and consumers from the gate log', () => {
   const healthy = [
     'PASS tools/release#package-artifacts:check (13.7s)',
     ...REQUIRED_PACKED_CONSUMERS.map((consumer) => `PASS ${consumer} (40.8s)`),
   ].join('\n');
   const parsed = packedRollupFromLog(healthy);
-  assertEquals(parsed.artifactCheck, true);
-  assertEquals(parsed.consumers.length, REQUIRED_PACKED_CONSUMERS.length);
-  assertEquals(packedRollupFromLog('PASS tools/release#pack:dry-run').artifactCheck, false);
+  expect(parsed.artifactCheck).toEqual(true);
+  expect(parsed.consumers.length).toEqual(REQUIRED_PACKED_CONSUMERS.length);
+  expect(packedRollupFromLog('PASS tools/release#pack:dry-run').artifactCheck).toEqual(false);
 });
 
 /**
@@ -1968,32 +1980,31 @@ function redSidecarFixture(sidecar: Record<string, unknown>): Record<string, unk
   return { ...sidecar, failed: 1, passed: (sidecar.passed as number) - 1 };
 }
 
-Deno.test('stageCloneSiteE2e: a green run must produce recordable evidence', async () => {
+test('stageCloneSiteE2e: a green run must produce recordable evidence', async () => {
   const report = fullSiteReport(SITE_E2E_MIN_PASSED_PER_PROJECT);
   const reportText = JSON.stringify(report);
   const sidecar = await fullSiteE2e(report, reportText);
 
   // Green + recordable stages the raw report bytes next to result.json.
   const green = await stageScratchSiteE2e({ sidecar, reportText }, { required: true });
-  assertEquals(green.rollup.candidateSha, SHA);
-  assertEquals(green.stagedText, reportText);
+  expect(green.rollup.candidateSha).toEqual(SHA);
+  expect(green.stagedText).toEqual(reportText);
   // The staged sidecar is exactly what the aggregate accepts.
-  assertEquals(
+  expect(
     await collectSiteE2eRecomputeFailures(green.rollup, {
       readReport: () => Promise.resolve(encoder.encode(reportText)),
       expectedSha: SHA,
     }),
-    [],
-  );
+  ).toEqual([]);
 
   // Green with no report at all is still a hard error (unchanged contract).
-  await assertRejects(
+  await assertRejectsIncludes(
     () => stageScratchSiteE2e({ sidecar }, { required: true }),
     Error,
     'did not produce the Site E2E sidecar',
   );
   // Green with a red sidecar (a failed test) is not recordable.
-  await assertRejects(
+  await assertRejectsIncludes(
     () =>
       stageScratchSiteE2e(
         { sidecar: redSidecarFixture(sidecar as Record<string, unknown>), reportText },
@@ -2004,7 +2015,7 @@ Deno.test('stageCloneSiteE2e: a green run must produce recordable evidence', asy
   );
 });
 
-Deno.test('stageCloneSiteE2e: a red run stages the report and never fakes a pass', async () => {
+test('stageCloneSiteE2e: a red run stages the report and never fakes a pass', async () => {
   // A genuinely red report: one webkit test failed, so the recompute agrees
   // with the sidecar's `failed: 1` and only the audit rejects it.
   const report = fullSiteReport(SITE_E2E_MIN_PASSED_PER_PROJECT);
@@ -2019,18 +2030,17 @@ Deno.test('stageCloneSiteE2e: a red run stages the report and never fakes a pass
   // Red + report present: staged as-is, so the per-test names are readable
   // from the evidence tree (#1409), and the rollup still fails the aggregate.
   const staged = await stageScratchSiteE2e({ sidecar: red, reportText }, { required: false });
-  assertEquals(staged.rollup.failed, 1);
-  assertEquals(staged.stagedText, reportText);
+  expect(staged.rollup.failed).toEqual(1);
+  expect(staged.stagedText).toEqual(reportText);
   // The red sidecar recomputes cleanly (it is honest) — auditSiteE2e is what
   // rejects it, which is the fail-closed path the aggregate takes.
-  assertEquals(
+  expect(
     await collectSiteE2eRecomputeFailures(staged.rollup, {
       readReport: () => Promise.resolve(encoder.encode(reportText)),
       expectedSha: SHA,
     }),
-    [],
-  );
-  assert(
+  ).toEqual([]);
+  expect(
     (
       await collectRollupFailures({
         artifactCheck: true,
@@ -2039,17 +2049,17 @@ Deno.test('stageCloneSiteE2e: a red run stages the report and never fakes a pass
       })
     ).some((failure) => failure.includes('Site E2E')),
     'a red Site E2E rollup must not validate',
-  );
+  ).toBeTruthy();
 
   // Red + nothing written: records ran:false instead of throwing, so the lane
   // still writes result.json and the aggregate fails closed on the sidecar.
   const empty = await stageScratchSiteE2e({}, { required: false });
-  assertEquals(empty.rollup.ran, false);
+  expect(empty.rollup.ran).toEqual(false);
 
   // Red + a sidecar belonging to another candidate is not recorded as ours.
   const foreign = await stageScratchSiteE2e(
     { sidecar: { ...red, candidateSha: 'c'.repeat(40) }, reportText },
     { required: false },
   );
-  assertEquals(foreign.rollup.ran, false);
+  expect(foreign.rollup.ran).toEqual(false);
 });

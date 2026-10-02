@@ -1,71 +1,71 @@
-import { assertEquals, assertStringIncludes, assertThrows } from '@std/assert';
+import { expect, test } from 'vitest';
 import {
   renderRequestTimeServerModule,
   resolveDynamicRoutePath,
 } from '../src/vite/internal/ssg/ssg-helpers.ts';
 import { parseRouteFilePath } from '../src/vite/internal/ssg/route-scanner.ts';
 
-Deno.test('resolveDynamicRoutePath encodes # ? & % and spaces', () => {
+test('resolveDynamicRoutePath encodes # ? & % and spaces', () => {
   const path = resolveDynamicRoutePath('/blog/:slug', ['slug'], {
     slug: 'a#b?c&d%e f',
   });
-  assertEquals(path, '/blog/a%23b%3Fc%26d%25e%20f');
+  expect(path).toEqual('/blog/a%23b%3Fc%26d%25e%20f');
 });
 
-Deno.test('resolveDynamicRoutePath preserves @ in values', () => {
+test('resolveDynamicRoutePath preserves @ in values', () => {
   const path = resolveDynamicRoutePath('/pkg/:name', ['name'], {
     name: '@user',
   });
-  assertEquals(path, '/pkg/@user');
+  expect(path).toEqual('/pkg/@user');
 });
 
-Deno.test('resolveDynamicRoutePath rejects path traversal', () => {
-  assertThrows(() => resolveDynamicRoutePath('/x/:p', ['p'], { p: '../etc' }));
+test('resolveDynamicRoutePath rejects path traversal', () => {
+  expect(() => resolveDynamicRoutePath('/x/:p', ['p'], { p: '../etc' })).toThrow();
 });
 
-Deno.test('resolveDynamicRoutePath resolves catch-all values and consumes the regex body (#1022)', () => {
-  assertEquals(resolveDynamicRoutePath('/docs/:path{.+}', ['path'], { path: 'a/b' }), '/docs/a/b');
+test('resolveDynamicRoutePath resolves catch-all values and consumes the regex body (#1022)', () => {
+  expect(resolveDynamicRoutePath('/docs/:path{.+}', ['path'], { path: 'a/b' })).toEqual(
+    '/docs/a/b',
+  );
   // Unsafe chars are encoded per segment; the slash structure is preserved.
-  assertEquals(
-    resolveDynamicRoutePath('/docs/:path{.+}', ['path'], { path: 'a b/c#d' }),
+  expect(resolveDynamicRoutePath('/docs/:path{.+}', ['path'], { path: 'a b/c#d' })).toEqual(
     '/docs/a%20b/c%23d',
   );
 });
 
-Deno.test('resolveDynamicRoutePath rejects traversal segments inside catch-all values (#1022)', () => {
-  assertThrows(() => resolveDynamicRoutePath('/docs/:path{.+}', ['path'], { path: 'a/../b' }));
-  assertThrows(() => resolveDynamicRoutePath('/docs/:path{.+}', ['path'], { path: '..' }));
+test('resolveDynamicRoutePath rejects traversal segments inside catch-all values (#1022)', () => {
+  expect(() => resolveDynamicRoutePath('/docs/:path{.+}', ['path'], { path: 'a/../b' })).toThrow();
+  expect(() => resolveDynamicRoutePath('/docs/:path{.+}', ['path'], { path: '..' })).toThrow();
 });
 
-Deno.test('request-time client script rides the entry setter — no response splicing (#1103)', () => {
+test('request-time client script rides the entry setter — no response splicing (#1103)', () => {
   const code = renderRequestTimeServerModule([]);
   // The generated server module reads the structured client asset manifest
   // (#1471) and hands the entry URL to the SSR entry at startup; the entry
   // embeds the tag at render time through wrapInDocument (CSP-nonce-safe).
   // No post-hoc HTML splicing remains.
-  assertStringIncludes(
-    code,
+  expect(code).toContain(
     "import { openElementHandler, __setRequestTimeClientScript } from './entry.js';",
   );
-  assertStringIncludes(code, "import { clientAssets } from './client-assets.js';");
-  assertStringIncludes(code, '__setRequestTimeClientScript(clientAssets.entry);');
-  assertEquals(code.includes('clientScriptSrc'), false);
-  assertEquals(code.includes('insertBeforeBodyClose'), false);
-  assertEquals(code.includes('withClientScript'), false);
-  assertEquals(code.includes("from '@openelement/"), false);
+  expect(code).toContain("import { clientAssets } from './client-assets.js';");
+  expect(code).toContain('__setRequestTimeClientScript(clientAssets.entry);');
+  expect(code.includes('clientScriptSrc')).toEqual(false);
+  expect(code.includes('insertBeforeBodyClose')).toEqual(false);
+  expect(code.includes('withClientScript')).toEqual(false);
+  expect(code.includes("from '@openelement/")).toEqual(false);
 });
 
-Deno.test('parseRouteFilePath maps a catch-all segment to a named Hono regex param (#556)', () => {
-  assertEquals(parseRouteFilePath('docs/[...path].ts'), '/docs/:path{.+}');
-  assertEquals(parseRouteFilePath('item/[id].ts'), '/item/:id');
+test('parseRouteFilePath maps a catch-all segment to a named Hono regex param (#556)', () => {
+  expect(parseRouteFilePath('docs/[...path].ts')).toEqual('/docs/:path{.+}');
+  expect(parseRouteFilePath('item/[id].ts')).toEqual('/item/:id');
 });
 
-Deno.test('renderRequestTimeServerModule mounts the entry openElementHandler (#858)', () => {
+test('renderRequestTimeServerModule mounts the entry openElementHandler (#858)', () => {
   const code = renderRequestTimeServerModule([{ path: '/live' }]);
   // The generated server entry delegates to the entry's openElementHandler
   // export, which carries the composed middleware.use chain when configured —
   // no direct app.fetch bypass.
-  assertStringIncludes(code, "from './entry.js';");
-  assertStringIncludes(code, 'return openElementHandler(request, {');
-  assertEquals(code.includes('app.fetch'), false);
+  expect(code).toContain("from './entry.js';");
+  expect(code).toContain('return openElementHandler(request, {');
+  expect(code.includes('app.fetch')).toEqual(false);
 });

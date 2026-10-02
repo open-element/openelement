@@ -22,8 +22,9 @@
  *      the walk finds it from the server entry).
  */
 
+import { readFileSync, statSync } from 'node:fs';
 import ts from 'typescript';
-import { assert, assertEquals, assertFalse, assertStringIncludes } from '@std/assert';
+import { expect, test } from 'vitest';
 import { dirname, resolve } from '@std/path';
 import { DANGEROUS_KEYS } from '../../element/src/internal/core/security.ts';
 import { generateClientEntry } from '../src/vite/internal/ssg/entry-client-codegen.ts';
@@ -112,7 +113,7 @@ function generatedEntries(): Array<{ label: string; code: string }> {
 
 // ── Gate a: the generated source parses as a standalone module ──────────────
 
-Deno.test('gate: generated entries parse with zero TypeScript syntax diagnostics', () => {
+test('gate: generated entries parse with zero TypeScript syntax diagnostics', () => {
   for (const { label, code } of generatedEntries()) {
     const { diagnostics } = ts.transpileModule(code, {
       compilerOptions: { target: ts.ScriptTarget.ES2022 },
@@ -122,11 +123,10 @@ Deno.test('gate: generated entries parse with zero TypeScript syntax diagnostics
     const errors = (diagnostics ?? []).filter(
       (diagnostic) => diagnostic.category === ts.DiagnosticCategory.Error,
     );
-    assertEquals(
+    expect(
       errors.map((diagnostic) => ts.flattenDiagnosticMessageText(diagnostic.messageText, '\n')),
-      [],
       `generated entry "${label}" must parse standalone`,
-    );
+    ).toEqual([]);
   }
 });
 
@@ -158,39 +158,36 @@ const SSG_ALLOWED = new Set([
   'getStaticPaths',
 ]);
 
-Deno.test('gate: emitted function declarations are exactly the allowlisted set', () => {
+test('gate: emitted function declarations are exactly the allowlisted set', () => {
   for (const { label, code } of generatedEntries()) {
     const isSSG = code.includes('export const routeInfo = [');
     const requestTime = isSSG ? code.slice(0, code.indexOf('export const routeInfo = [')) : code;
     const ssg = isSSG ? code.slice(code.indexOf('export const routeInfo = [')) : '';
 
     const requestTimeDeclarations = emittedFunctionDeclarations(requestTime);
-    assertEquals(
+    expect(
       requestTimeDeclarations.filter((name) => !REQUEST_TIME_ALLOWED.has(name)),
-      [],
       `request-time section of "${label}" carries non-allowlisted function declarations`,
-    );
+    ).toEqual([]);
     // The request-time section carries no function declarations at all —
     // streamed entries included, since Amendment 1 moved the deferred-shell
     // gate into the typed stream runtime (the gate descriptors here have no
     // stream routes; `streamedEntries` below covers the streamed shape).
-    assertEquals(requestTimeDeclarations, []);
+    expect(requestTimeDeclarations).toEqual([]);
 
     const ssgDeclarations = emittedFunctionDeclarations(ssg);
-    assertEquals(
+    expect(
       ssgDeclarations.filter((name) => !SSG_ALLOWED.has(name)),
-      [],
       `SSG section of "${label}" carries non-allowlisted function declarations`,
-    );
-    assertEquals(
+    ).toEqual([]);
+    expect(
       isSSG ? ssgDeclarations.sort() : [],
-      isSSG ? [...SSG_ALLOWED].sort() : [],
       `SSG section of "${label}" must carry exactly the prerender-section functions`,
-    );
+    ).toEqual(isSSG ? [...SSG_ALLOWED].sort() : []);
   }
 });
 
-Deno.test('gate: retired helper emissions never reappear in generated entries', () => {
+test('gate: retired helper emissions never reappear in generated entries', () => {
   const retiredHeads = [
     // response/header channel (block a) + page/document render (block b)
     'function __mergeChannelHeaders(',
@@ -228,21 +225,21 @@ Deno.test('gate: retired helper emissions never reappear in generated entries', 
   ];
   for (const { label, code } of generatedEntries()) {
     for (const head of retiredHeads) {
-      assertFalse(
+      expect(
         code.includes(head),
         `generated entry "${label}" must not re-accrete the retired emission: ${head}`,
-      );
+      ).toBeFalsy();
     }
   }
 });
 
 // ── Gate c: no serialized DANGEROUS_KEYS copy ───────────────────────────────
 
-Deno.test('gate: generated entries carry neither the dangerous-key copy nor its literals', () => {
+test('gate: generated entries carry neither the dangerous-key copy nor its literals', () => {
   for (const { label, code } of generatedEntries()) {
-    assertFalse(code.includes('__DANGEROUS_KEYS'), label);
+    expect(code.includes('__DANGEROUS_KEYS'), label).toBeFalsy();
     for (const key of DANGEROUS_KEYS) {
-      assertFalse(code.includes(`"${key}"`), `${label} serializes the dangerous key ${key}`);
+      expect(code.includes(`"${key}"`), `${label} serializes the dangerous key ${key}`).toBeFalsy();
     }
   }
 });
@@ -265,7 +262,7 @@ function resolveSpecifier(spec: string, fromFile: string): string | null {
   if (spec.startsWith('.')) {
     const target = resolve(dirname(fromFile), spec);
     try {
-      return Deno.statSync(target).isFile ? target : null;
+      return statSync(target).isFile ? target : null;
     } catch {
       return null;
     }
@@ -286,7 +283,7 @@ function walkModuleGraph(roots: string[]): Set<string> {
     const file = stack.pop()!;
     if (seen.has(file)) continue;
     seen.add(file);
-    const source = Deno.readTextFileSync(file);
+    const source = readFileSync(file, 'utf8');
     for (const spec of extractSpecifiers(source)) {
       const target = resolveSpecifier(spec, file);
       if (target && !seen.has(target)) stack.push(target);
@@ -297,14 +294,14 @@ function walkModuleGraph(roots: string[]): Set<string> {
 
 function assertServerRuntimeFree(graph: Set<string>, label: string): void {
   for (const file of graph) {
-    assertFalse(
+    expect(
       file.startsWith(SERVER_RUNTIME_DIR),
       `${label} reached the server-only runtime at ${file}`,
-    );
+    ).toBeFalsy();
   }
 }
 
-Deno.test('gate: the client entry and browser runtime graphs never import the server runtime', () => {
+test('gate: the client entry and browser runtime graphs never import the server runtime', () => {
   // The generated client entry (native full shape and lit shape) must not
   // carry a server-runtime specifier...
   const islands = [
@@ -321,8 +318,11 @@ Deno.test('gate: the client entry and browser runtime graphs never import the se
       renderer,
       enhancedForms: true,
     });
-    assertStringIncludes(client, 'virtual:open-client-runtime/scheduler');
-    assertFalse(client.includes('server-runtime'), `${renderer} client entry imports server code`);
+    expect(client).toContain('virtual:open-client-runtime/scheduler');
+    expect(
+      client.includes('server-runtime'),
+      `${renderer} client entry imports server code`,
+    ).toBeFalsy();
     // ...and the real modules behind the virtual client runtime specifiers
     // (island-scheduler.ts / enhance-client.ts) stay server-free too: the
     // walk follows their actual import graph.
@@ -330,12 +330,12 @@ Deno.test('gate: the client entry and browser runtime graphs never import the se
       resolve(REPO_ROOT, 'packages/router/src/vite/internal/ssg/island-scheduler.ts'),
       resolve(REPO_ROOT, 'packages/router/src/vite/internal/ssg/enhance-client.ts'),
     ]);
-    assert(browserRuntime.size > 0);
+    expect(browserRuntime.size > 0).toBeTruthy();
     assertServerRuntimeFree(browserRuntime, `${renderer} client runtime graph`);
   }
 });
 
-Deno.test('gate: negative control — the server entry graph DOES reach the server runtime', () => {
+test('gate: negative control — the server entry graph DOES reach the server runtime', () => {
   const serverEntry = renderEntry(buildEntryDescriptor(basicRoutes));
   const roots: string[] = [];
   for (const spec of extractSpecifiers(serverEntry)) {
@@ -344,5 +344,8 @@ Deno.test('gate: negative control — the server entry graph DOES reach the serv
   }
   const graph = walkModuleGraph(roots);
   const reached = [...graph].filter((file) => file.startsWith(SERVER_RUNTIME_DIR));
-  assert(reached.length > 0, 'the walk must find the server runtime when it is actually imported');
+  expect(
+    reached.length > 0,
+    'the walk must find the server runtime when it is actually imported',
+  ).toBeTruthy();
 });

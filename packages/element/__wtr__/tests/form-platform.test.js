@@ -25,7 +25,7 @@
  * Style: no sleeps; async settling is awaited through waitFor predicates.
  */
 import { assert } from 'chai';
-import { sendKeys } from '@web/test-runner-commands';
+import { userEvent } from 'vitest/browser';
 import { WtrField } from '../generated/wtr-field.ts';
 
 customElements.define('wtr-field', WtrField);
@@ -161,7 +161,7 @@ describe('form/platform matrix', () => {
     typeInto(field, 'typed');
     input.value = 'enter-title';
     input.focus();
-    await sendKeys({ press: 'Enter' });
+    await userEvent.keyboard('{Enter}');
 
     await waitFor(() => events.submits.length === 1, 'implicit submission submit event');
     const submit = events.submits[0];

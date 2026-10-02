@@ -18,7 +18,9 @@
  *      no precedence, no params, no decoding, no method/query/slash logic.
  */
 
-import { assert, assertEquals, assertStringIncludes } from '@std/assert';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { describe, expect, test } from 'vitest';
 import { join } from '@std/path';
 import { Hono } from 'hono';
 import { createRouteMiddleware } from '../../router/src/http.ts';
@@ -196,20 +198,19 @@ async function loadAdmissionPredicate(
   routes: CorpusRoute[],
   caseIndex: number,
 ): Promise<(pathname: string) => boolean> {
-  const dir = await Deno.makeTempDir();
+  const dir = await mkdtemp(join(tmpdir(), ''));
   try {
-    await Deno.writeTextFile(
+    await writeFile(
       join(dir, 'entry.js'),
       "export const openElementHandler = () => new Response('stub');\n" +
         'export function __setRequestTimeClientScript() {}\n',
     );
-    await Deno.writeTextFile(
+    await writeFile(
       join(dir, 'client-assets.js'),
       "export const clientAssets = { entry: '', islands: {}, shared: [] };\n",
     );
-    await Deno.writeTextFile(
-      join(dir, 'index.js'),
-      // Mirrors ssg-render.ts: only request-time routes reach the module.
+    await writeFile(
+      join(dir, 'index.js'), // Mirrors ssg-render.ts: only request-time routes reach the module.
       renderRequestTimeServerModule(
         routes.filter((route) => route.requestTime).map(({ path }) => ({ path })),
       ),
@@ -217,24 +218,22 @@ async function loadAdmissionPredicate(
     const mod = (await import(`file://${join(dir, 'index.js')}?case=${caseIndex}`)) as {
       isRequestTimePath?: unknown;
     };
-    assertEquals(
+    expect(
       typeof mod.isRequestTimePath,
-      'function',
       'generated entry must export isRequestTimePath (admission only, #1215)',
-    );
-    assertEquals(
+    ).toEqual('function');
+    expect(
       'matchRequestTimeRoute' in mod,
-      false,
       'generated entry must not export a route winner (#1215)',
-    );
+    ).toEqual(false);
     const predicate = mod.isRequestTimePath as (pathname: string) => boolean;
     return (pathname) => {
       const admitted = predicate(pathname);
-      assertEquals(typeof admitted, 'boolean', 'admission answers a boolean only');
+      expect(typeof admitted, 'admission answers a boolean only').toEqual('boolean');
       return admitted;
     };
   } finally {
-    await Deno.remove(dir, { recursive: true }).catch(() => {});
+    await rm(dir, { recursive: true }).catch(() => {});
   }
 }
 
@@ -282,113 +281,105 @@ function honoEntryFor(routes: CorpusRoute[]): Hono {
   return app;
 }
 
-Deno.test({
-  name: 'request-time admission parity: one observable winner across the corpus (#1215)',
-  sanitizeOps: false,
-  sanitizeResources: false,
-  fn: async (t) => {
-    for (const [index, corpusCase] of CORPUS.entries()) {
-      await t.step(corpusCase.name, async () => {
-        const table = new RouteTable(
-          corpusCase.routes.map(({ path, methods }) => ({ path, methods })),
-        );
-        const admission = await loadAdmissionPredicate(corpusCase.routes, index);
-        const hono = honoEntryFor(corpusCase.routes);
+describe('request-time admission parity: one observable winner across the corpus (#1215)', () => {
+  for (const [index, corpusCase] of CORPUS.entries()) {
+    test(corpusCase.name, async () => {
+      const table = new RouteTable(
+        corpusCase.routes.map(({ path, methods }) => ({ path, methods })),
+      );
+      const admission = await loadAdmissionPredicate(corpusCase.routes, index);
+      const hono = honoEntryFor(corpusCase.routes);
 
-        for (const probe of corpusCase.probes) {
-          const method = probe.method ?? 'GET';
-          const label = `${method} ${probe.pathname}${probe.search ?? ''}`;
+      for (const probe of corpusCase.probes) {
+        const method = probe.method ?? 'GET';
+        const label = `${method} ${probe.pathname}${probe.search ?? ''}`;
 
-          // 1. Canonical client semantics: RouteTable owns the winner.
-          const resolution = table.resolve(probe.pathname, probe.search ?? '', method);
-          const canonicalWinner = resolution.kind === 'match' ? resolution.route.path : null;
-          assertEquals(canonicalWinner, probe.winner, `RouteTable winner for ${label}`);
-          if (resolution.kind === 'match' && probe.params) {
-            const params: Record<string, string> = {};
-            for (const key of Object.keys(resolution.params)) {
-              params[key] = resolution.params[key];
-            }
-            assertEquals(params, probe.params, `RouteTable params for ${label}`);
+        // 1. Canonical client semantics: RouteTable owns the winner.
+        const resolution = table.resolve(probe.pathname, probe.search ?? '', method);
+        const canonicalWinner = resolution.kind === 'match' ? resolution.route.path : null;
+        expect(canonicalWinner, `RouteTable winner for ${label}`).toEqual(probe.winner);
+        if (resolution.kind === 'match' && probe.params) {
+          const params: Record<string, string> = {};
+          for (const key of Object.keys(resolution.params)) {
+            params[key] = resolution.params[key];
           }
+          expect(params, `RouteTable params for ${label}`).toEqual(probe.params);
+        }
 
-          // 2. Server semantics: the entry's Hono app picks the SAME winner.
-          const response = await hono.request(
-            `http://parity.test${probe.pathname}${probe.search ?? ''}`,
-            { method },
-          );
-          if (probe.winner === null) {
-            assert(
-              response.status === 404 || response.status === 405,
-              `Hono must not produce a winner for ${label} (got ${response.status})`,
-            );
-          } else {
-            assertEquals(response.status, 200, `Hono status for ${label}`);
-            if (method !== 'HEAD') {
-              const body = (await response.json()) as {
-                path: string;
-                params: Record<string, string>;
-              };
-              assertEquals(body.path, probe.winner, `Hono winner for ${label}`);
-              if (probe.params) {
-                for (const [key, value] of Object.entries(probe.params)) {
-                  if (key in (table.match(probe.pathname)?.params ?? {})) {
-                    assertEquals(body.params[key], value, `Hono param ${key} for ${label}`);
-                  }
+        // 2. Server semantics: the entry's Hono app picks the SAME winner.
+        const response = await hono.request(
+          `http://parity.test${probe.pathname}${probe.search ?? ''}`,
+          { method },
+        );
+        if (probe.winner === null) {
+          expect(
+            response.status === 404 || response.status === 405,
+            `Hono must not produce a winner for ${label} (got ${response.status})`,
+          ).toBeTruthy();
+        } else {
+          expect(response.status, `Hono status for ${label}`).toEqual(200);
+          if (method !== 'HEAD') {
+            const body = (await response.json()) as {
+              path: string;
+              params: Record<string, string>;
+            };
+            expect(body.path, `Hono winner for ${label}`).toEqual(probe.winner);
+            if (probe.params) {
+              for (const [key, value] of Object.entries(probe.params)) {
+                if (key in (table.match(probe.pathname)?.params ?? {})) {
+                  expect(body.params[key], `Hono param ${key} for ${label}`).toEqual(value);
                 }
               }
             }
           }
-
-          // 3. Admission is derived only: exact OR over request-time patterns…
-          const admitted = admission(probe.pathname);
-          assertEquals(
-            admitted,
-            derivedAdmission(corpusCase.routes, probe.pathname),
-            `admission is the derived predicate for ${label}`,
-          );
-          // …and never excludes a path the canonical table routes request-time.
-          const winnerRecord = corpusCase.routes.find((route) => route.path === probe.winner);
-          if (winnerRecord?.requestTime) {
-            assertEquals(
-              admitted,
-              true,
-              `admission false-negative for request-time winner ${probe.winner} at ${label}`,
-            );
-          }
         }
-      });
-    }
-  },
+
+        // 3. Admission is derived only: exact OR over request-time patterns…
+        const admitted = admission(probe.pathname);
+        expect(admitted, `admission is the derived predicate for ${label}`).toEqual(
+          derivedAdmission(corpusCase.routes, probe.pathname),
+        );
+        // …and never excludes a path the canonical table routes request-time.
+        const winnerRecord = corpusCase.routes.find((route) => route.path === probe.winner);
+        if (winnerRecord?.requestTime) {
+          expect(
+            admitted,
+            `admission false-negative for request-time winner ${probe.winner} at ${label}`,
+          ).toEqual(true);
+        }
+      }
+    });
+  }
 });
 
-Deno.test('generated request-time module owns admission only — no winner semantics (#1215)', () => {
+test('generated request-time module owns admission only — no winner semantics (#1215)', () => {
   const code = renderRequestTimeServerModule([
     { path: '/:slug' },
     { path: '/about' },
     { path: '/docs/:path{.+}' },
   ]);
-  assertStringIncludes(code, 'export function isRequestTimePath(pathname)');
+  expect(code).toContain('export function isRequestTimePath(pathname)');
   // No winner selection, precedence sorting, params, or percent-decoding.
-  assertEquals(code.includes('matchRequestTimeRoute'), false);
-  assertEquals(code.includes('.sort('), false);
-  assertEquals(code.includes('paramNames'), false);
-  assertEquals(code.includes('decodeURIComponent'), false);
+  expect(code.includes('matchRequestTimeRoute')).toEqual(false);
+  expect(code.includes('.sort(')).toEqual(false);
+  expect(code.includes('paramNames')).toEqual(false);
+  expect(code.includes('decodeURIComponent')).toEqual(false);
   // The predicate body itself carries no method/basePath/trailing-slash
   // logic — those stay with the canonical path (Hono entry / RouteTable).
   const fnStart = code.indexOf('export function isRequestTimePath');
   const predicateBody = code.slice(fnStart, code.indexOf('\n}', fnStart));
-  assertEquals(predicateBody.includes('method'), false);
-  assertEquals(predicateBody.includes('basePath'), false);
-  assertEquals(predicateBody.includes('trailingSlash'), false);
+  expect(predicateBody.includes('method')).toEqual(false);
+  expect(predicateBody.includes('basePath')).toEqual(false);
+  expect(predicateBody.includes('trailingSlash')).toEqual(false);
 });
 
-Deno.test('canonical-only semantics stay canonical: basePath and trailingSlash (#1215)', () => {
+test('canonical-only semantics stay canonical: basePath and trailingSlash (#1215)', () => {
   // The generated predicate never re-implements these; pin them on the
   // canonical RouteTable so any drift is caught where the semantics live.
   const table = new RouteTable([{ path: '/live' }], undefined, {
     basePath: '/app',
     trailingSlash: 'ignore',
   });
-  assertEquals(table.match('/app/live/')?.route.path, '/live');
-  assertEquals(table.match('/live'), null);
+  expect(table.match('/app/live/')?.route.path).toEqual('/live');
+  expect(table.match('/live')).toEqual(null);
 });

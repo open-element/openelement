@@ -18,7 +18,7 @@
   "scripts": {
     "run": "node src/cli.ts",
     "build": "tsc --noEmit -p tsconfig.json",
-    "test": "deno test --no-lock --no-check --deny-ffi --no-prompt --allow-read --allow-write --allow-env --allow-net --allow-run --allow-sys",
+    "test": "vitest run --root ../.. --project create",
     "lint": "oxlint src __tests__",
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },

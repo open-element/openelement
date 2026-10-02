@@ -8,6 +8,8 @@
  * the packed CLI plus a minimum-dependency-age override.
  */
 
+import { copyFile, mkdir } from 'node:fs/promises';
+import process from 'node:process';
 import { dirname, fromFileUrl, join } from '@std/path';
 import { runStep } from './command-run.ts';
 
@@ -50,7 +52,7 @@ export function pathFromRoot(root: string | URL, relativePath: string): string {
  */
 export async function scaffoldApp(options: ScaffoldAppOptions): Promise<string> {
   await runStep(
-    Deno.execPath(),
+    process.execPath,
     [
       'run',
       ...CREATE_CLI_FLAGS,
@@ -64,8 +66,8 @@ export async function scaffoldApp(options: ScaffoldAppOptions): Promise<string> 
   if (options.copySources) {
     for (const relativePath of options.copySources.files) {
       const destination = join(appDir, relativePath);
-      await Deno.mkdir(dirname(destination), { recursive: true });
-      await Deno.copyFile(pathFromRoot(options.copySources.fromRoot, relativePath), destination);
+      await mkdir(dirname(destination), { recursive: true });
+      await copyFile(pathFromRoot(options.copySources.fromRoot, relativePath), destination);
     }
   }
   return appDir;

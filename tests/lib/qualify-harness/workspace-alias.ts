@@ -12,6 +12,8 @@
  * transitive package manifests keep resolving).
  */
 
+import { readFile, writeFile } from 'node:fs/promises';
+import process from 'node:process';
 import { fromFileUrl, join } from '@std/path';
 import { allPackageAliases } from '../../../tools/lib/package-aliases.ts';
 import { runStep } from './command-run.ts';
@@ -65,10 +67,10 @@ export async function applyWorkspaceAliases(
   }
   const tasks = (denoJson.tasks ??= {});
   tasks.build = routerBuildTask(options.repoRoot);
-  await Deno.writeTextFile(denoJsonPath, jsonText(denoJson));
+  await writeFile(denoJsonPath, jsonText(denoJson));
 
   const viteConfigPath = join(appDir, 'vite.config.ts');
-  let viteText = await Deno.readTextFile(viteConfigPath);
+  let viteText = await readFile(viteConfigPath, 'utf8');
   if (!viteText.includes('resolve:')) {
     const aliases = [
       ...workspaceSourceAliases(options.repoRoot).map(({ specifier, sourcePath }) => {
@@ -92,7 +94,7 @@ export async function applyWorkspaceAliases(
     );
   }
   if (options.transformViteConfig) viteText = options.transformViteConfig(viteText);
-  await Deno.writeTextFile(viteConfigPath, viteText);
+  await writeFile(viteConfigPath, viteText);
 }
 
 /**
@@ -104,7 +106,7 @@ export async function applyWorkspaceAliases(
  */
 export async function primeAppNodeModules(appDir: string, specifier: string): Promise<void> {
   await runStep(
-    Deno.execPath(),
+    process.execPath,
     [
       'run',
       '--config',

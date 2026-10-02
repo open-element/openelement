@@ -1,4 +1,5 @@
-import { assertEquals, assertStringIncludes, assertThrows } from '@std/assert';
+import { expect, test } from 'vitest';
+import { assertThrowsIncludes } from '../../../../tests/lib/vitest-asserts.ts';
 import { renderDsd } from '../../src/public-runtime.ts';
 import { trustedHtml } from '../../src/internal/core/security.ts';
 import type { PartProgram } from '../../src/internal/protocol/part-program.ts';
@@ -28,7 +29,7 @@ function withRegistry(
   }
 }
 
-Deno.test('Element server owns nested composition, slots, DSD, and foreign passthrough', () => {
+test('Element server owns nested composition, slots, DSD, and foreign passthrough', () => {
   const rail = testProgram({
     tag: 'oe-page-rail',
     rootMode: 'shadow-open',
@@ -124,18 +125,17 @@ Deno.test('Element server owns nested composition, slots, DSD, and foreign passt
       componentClass: compiledClass(page),
       ssrRenderableTags: ['oe-reading-shell', 'oe-page-rail'],
     }).html;
-    assertEquals((html.match(/<oe-reading-shell/g) ?? []).length, 1);
-    assertEquals((html.match(/<oe-page-rail/g) ?? []).length, 1);
-    assertStringIncludes(html, '<slot name="meta"><span slot="meta">Projected meta</span></slot>');
-    assertEquals(html.includes('Fallback meta'), false);
-    assertStringIncludes(
-      html,
+    expect((html.match(/<oe-reading-shell/g) ?? []).length).toEqual(1);
+    expect((html.match(/<oe-page-rail/g) ?? []).length).toEqual(1);
+    expect(html).toContain('<slot name="meta"><span slot="meta">Projected meta</span></slot>');
+    expect(html.includes('Fallback meta')).toEqual(false);
+    expect(html).toContain(
       '<slot><oe-page-rail><template shadowrootmode="open"><nav>Start</nav></template></oe-page-rail><x-third-party>foreign</x-third-party></slot>',
     );
   });
 });
 
-Deno.test('Trusted HTML remains opaque to nested component composition', () => {
+test('Trusted HTML remains opaque to nested component composition', () => {
   const child = testProgram({
     tag: 'oe-safe-child',
     rootMode: 'shadow-open',
@@ -165,12 +165,12 @@ Deno.test('Trusted HTML remains opaque to nested component composition', () => {
       props: { body: trustedHtml('<oe-safe-child>opaque</oe-safe-child>') },
       ssrRenderableTags: ['oe-safe-child'],
     }).html;
-    assertStringIncludes(html, '<oe-safe-child>opaque</oe-safe-child>');
-    assertEquals(html.includes('executed'), false);
+    expect(html).toContain('<oe-safe-child>opaque</oe-safe-child>');
+    expect(html.includes('executed')).toEqual(false);
   });
 });
 
-Deno.test('nested compiled boolean host attributes preserve presence semantics', () => {
+test('nested compiled boolean host attributes preserve presence semantics', () => {
   const child = testProgram({
     tag: 'oe-boolean-child',
     rootMode: 'light',
@@ -206,11 +206,11 @@ Deno.test('nested compiled boolean host attributes preserve presence semantics',
       componentClass: compiledClass(parent),
       ssrRenderableTags: ['oe-boolean-child'],
     }).html;
-    assertStringIncludes(html, '<oe-boolean-child active="" data-oe-light>');
+    expect(html).toContain('<oe-boolean-child active="" data-oe-light>');
   });
 });
 
-Deno.test('public light-child projection rejects forged TrustedHtml values', () => {
+test('public light-child projection rejects forged TrustedHtml values', () => {
   const shell = testProgram({
     tag: 'oe-safe-shell',
     rootMode: 'light',
@@ -218,7 +218,7 @@ Deno.test('public light-child projection rejects forged TrustedHtml values', () 
     parts: [],
   });
 
-  assertThrows(
+  assertThrowsIncludes(
     () => {
       renderDsd('oe-safe-shell', {
         componentClass: compiledClass(shell),
@@ -230,7 +230,7 @@ Deno.test('public light-child projection rejects forged TrustedHtml values', () 
   );
 });
 
-Deno.test('renderDsd threads the compiled delegatesFocus static into the DSD template (#1226)', () => {
+test('renderDsd threads the compiled delegatesFocus static into the DSD template (#1226)', () => {
   const program = testProgram({
     tag: 'oe-focusable',
     rootMode: 'shadow-open',
@@ -241,12 +241,10 @@ Deno.test('renderDsd threads the compiled delegatesFocus static into the DSD tem
   const plain = compiledClass(program);
   // The client kernel passes the static to attachShadow; the DSD template
   // must carry the matching marker or the claimed root loses delegation.
-  assertStringIncludes(
-    renderDsd('oe-focusable', { componentClass: focusable }).html,
+  expect(renderDsd('oe-focusable', { componentClass: focusable }).html).toContain(
     '<template shadowrootmode="open" shadowrootdelegatesfocus>',
   );
-  assertStringIncludes(
-    renderDsd('oe-focusable', { componentClass: plain }).html,
+  expect(renderDsd('oe-focusable', { componentClass: plain }).html).toContain(
     '<template shadowrootmode="open">',
   );
 });

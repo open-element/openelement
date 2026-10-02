@@ -1,11 +1,11 @@
-import { assert, assertEquals } from '@std/assert';
+import { expect, test } from 'vitest';
 import { join } from '@std/path';
 import { mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import process from 'node:process';
 import { execute, parseRunInArgs } from './run-in.ts';
 
-Deno.test('run-in: parses root, env, and command', () => {
+test('run-in: parses root, env, and command', () => {
   const options = parseRunInArgs([
     '--root',
     'fixtures/x',
@@ -17,14 +17,14 @@ Deno.test('run-in: parses root, env, and command', () => {
     'npm',
     'ci',
   ]);
-  assertEquals(options, {
+  expect(options).toEqual({
     root: 'fixtures/x',
     env: { A: '1', B: '2=3' },
     command: ['npm', 'ci'],
   });
 });
 
-Deno.test('run-in: rejects missing root, separator, and command', () => {
+test('run-in: rejects missing root, separator, and command', () => {
   for (const args of [['--', 'true'], ['--root', 'x'], ['--root', 'x', '--'], ['--bogus']]) {
     let threw = false;
     try {
@@ -32,16 +32,16 @@ Deno.test('run-in: rejects missing root, separator, and command', () => {
     } catch {
       threw = true;
     }
-    assert(threw, `expected failure for ${JSON.stringify(args)}`);
+    expect(threw, `expected failure for ${JSON.stringify(args)}`).toBeTruthy();
   }
 });
 
-Deno.test('run-in: runs the child in the given root with the given env', async () => {
+test('run-in: runs the child in the given root with the given env', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'openelement-run-in-'));
   try {
     const probe = join(dir, 'probe.ts');
-    // The probe runs under a child `deno run`; it reads env through the
-    // node:process compat surface (B1b) — same values, same permissions.
+    // The probe runs under a child node (node-host run-in); it reads env
+    // through the node:process surface (B1b) — same values.
     await writeFile(
       probe,
       'if (process.env["OPENELEMENT_RUN_IN_PROBE"] !== "ok") throw new Error("env missing");' +
@@ -54,19 +54,19 @@ Deno.test('run-in: runs the child in the given root with the given env', async (
     const code = await execute({
       root: 'tools/repo',
       env: { OPENELEMENT_RUN_IN_PROBE: 'ok', OPENELEMENT_RUN_IN_CWD: expectedCwd },
-      command: [process.execPath, 'run', '--allow-env', '--allow-read', probe],
+      command: [process.execPath, probe],
     });
-    assertEquals(code, 0);
+    expect(code).toEqual(0);
   } finally {
     await rm(dir, { recursive: true });
   }
 });
 
-Deno.test('run-in: passes the child exit code through', async () => {
+test('run-in: passes the child exit code through', async () => {
   const code = await execute({
     root: '.',
     env: {},
-    command: [process.execPath, 'eval', 'process.exit(7);'],
+    command: [process.execPath, '--eval', 'process.exit(7);'],
   });
-  assertEquals(code, 7);
+  expect(code).toEqual(7);
 });

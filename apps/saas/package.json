@@ -8,7 +8,7 @@
     "nitro:build": "deno run --no-lock --allow-read --allow-write --allow-run --allow-env --allow-net --allow-sys ../../tools/release/nitro-build.ts --root . --preset node-server --out .output-node --prune-public server",
     "start": "node ../../packages/router/src/cli/start.ts",
     "check": "tsc --noEmit -p tsconfig.json",
-    "test": "deno test --no-lock --no-check --allow-env --allow-read app/__tests__/",
+    "test": "vitest run --root ../.. --project saas",
     "nitro:build-workers": "deno run --no-lock --allow-read --allow-write --allow-run --allow-env --allow-net --allow-sys ../../tools/release/nitro-build.ts --root . --preset cloudflare_module --out .output-workers --prune-public server"
   },
   "dependencies": {

@@ -142,7 +142,13 @@ export function createDeterministicTar(
 /** Deterministic gzip wrapper (Web Standard, mtime 0, fixed OS byte). */
 export async function gzipDeterministic(data: Uint8Array): Promise<Uint8Array> {
   const stream = new Blob([data as BlobPart]).stream().pipeThrough(new CompressionStream('gzip'));
-  return new Uint8Array(await new Response(stream).arrayBuffer());
+  const bytes = new Uint8Array(await new Response(stream).arrayBuffer());
+  // Normalize the gzip OS byte to 255 (unknown): the deterministic contract
+  // pins the header regardless of the host zlib's own OS value (deno wrote
+  // 255 natively; node writes its platform id). mtime stays zero from the
+  // stream itself.
+  bytes[9] = 0xff;
+  return bytes;
 }
 
 /** Deterministic final npm tarball: sorted ustar members in a fixed gzip. */

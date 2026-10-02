@@ -6,6 +6,9 @@
  * build run, and the generated-artifact lookups (server entry location).
  */
 
+import { stat } from 'node:fs/promises';
+import process from 'node:process';
+import { readdirSync } from 'node:fs';
 import { join } from '@std/path';
 import { runStep } from './command-run.ts';
 
@@ -30,15 +33,15 @@ export function routerBuildTask(repoRoot: string): string {
 
 /** Run the scaffolded app's own `build` task. */
 export async function runRouterBuild(appDir: string): Promise<void> {
-  await runStep(Deno.execPath(), ['task', 'build'], { cwd: appDir });
+  await runStep(process.execPath, ['task', 'build'], { cwd: appDir });
 }
 
 /** Depth-first search for a file by name; null when absent. */
 export async function findFile(root: string, name: string): Promise<string | null> {
-  for await (const entry of Deno.readDir(root)) {
+  for (const entry of readdirSync(root, { withFileTypes: true })) {
     const path = join(root, entry.name);
-    if (entry.isFile && entry.name === name) return path;
-    if (entry.isDirectory) {
+    if (entry.isFile() && entry.name === name) return path;
+    if (entry.isDirectory()) {
       const found = await findFile(path, name);
       if (found) return found;
     }
@@ -52,7 +55,7 @@ export async function findFile(root: string, name: string): Promise<string | nul
  */
 export async function findServerEntry(distDir: string): Promise<string> {
   const serverEntryPath = join(distDir, 'server', 'entry.js');
-  return await Deno.stat(serverEntryPath)
+  return await stat(serverEntryPath)
     .then(() => serverEntryPath)
     .catch(async () => {
       const found = await findFile(distDir, 'entry.js');
