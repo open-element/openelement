@@ -42,7 +42,9 @@
     "@openelement/element/authoring": "../../../packages/element/src/authoring.ts",
     "@openelement/element/html": "../../../packages/element/src/html.ts",
     "@openelement/element/logger": "../../../packages/element/src/logger.ts",
-    "@openelement/element/": "../../../packages/element/src/"
+    "@openelement/element/": "../../../packages/element/src/",
+    "@hono/node-server": "npm:@hono/node-server@2.1.1",
+    "hono": "npm:hono@^4.12"
   },
   "tasks": {
     "build": "deno run --config ../../../deno.json --allow-read --allow-write ../../../tools/repo/clean.ts dist && deno run --config ../../../deno.json --allow-read --allow-write --allow-net --allow-env --allow-ffi --allow-sys --allow-run ../../../packages/router/src/cli/build.ts",

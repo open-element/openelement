@@ -1,10 +1,18 @@
 {
   "version": "5",
   "specifiers": {
+    "npm:@hono/node-server@2.1.1": "2.1.1_hono@4.13.12",
     "npm:@playwright/test@1.59.1": "1.59.1",
-    "npm:@preact/signals-core@^1.12.1": "1.14.4"
+    "npm:@preact/signals-core@^1.12.1": "1.14.4",
+    "npm:hono@^4.12.0": "4.13.12"
   },
   "npm": {
+    "@hono/node-server@2.1.1_hono@4.13.12": {
+      "integrity": "sha512-ELuehkj5VCBdgEw9zs+ivkKwyzzUCSQuE96YmiPvn1ECBoZCczbFXJLeEGMTYjphP6gydh4pHMqEYPVMYUVgQg==",
+      "dependencies": [
+        "hono"
+      ]
+    },
     "@playwright/test@1.59.1": {
       "integrity": "sha512-PG6q63nQg5c9rIi4/Z5lR5IVF7yU5MqmKaPOe0HSc0O2cX1fPi96sUQu5j7eo4gKCkB2AnNGoWt7y4/Xx3Kcqg==",
       "dependencies": [
@@ -19,6 +27,9 @@
       "integrity": "sha512-xiqMQR4xAeHTuB9uWm+fFRcIOgKBMiOBP+eXiyT7jsgVCq1bkVygt00oASowB7EdtpOHaaPgKt812P9ab+DDKA==",
       "os": ["darwin"],
       "scripts": true
+    },
+    "hono@4.13.12": {
+      "integrity": "sha512-6E2QDAc9Ick9Sq77ZrGS/dk2WUYni91aufTw6LJKpV7w8kW5/GxVUc650FOADOmlwg3K+f7Pun6XlV+pYmW6gw=="
     },
     "playwright-core@1.59.1": {
       "integrity": "sha512-HBV/RJg81z5BiiZ9yPzIiClYV/QMsDCKUyogwH9p3MCP6IYjUFu/MActgYAvK0oWyV9NlwM3GLBjADyWgydVyg==",
@@ -36,6 +47,10 @@
     }
   },
   "workspace": {
+    "dependencies": [
+      "npm:@hono/node-server@2.1.1",
+      "npm:hono@^4.12.0"
+    ],
     "links": {
       "jsr:@openelement/create@1.0.0-alpha.7": {},
       "jsr:@openelement/element@1.0.0-alpha.7": {

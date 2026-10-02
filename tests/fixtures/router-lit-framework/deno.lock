@@ -1,12 +1,20 @@
 {
   "version": "5",
   "specifiers": {
+    "npm:@hono/node-server@2.1.1": "2.1.1_hono@4.13.12",
     "npm:@lit-labs/ssr-client@1.1.8": "1.1.8",
     "npm:@lit-labs/ssr@4.1.0": "4.1.0",
     "npm:@playwright/test@1.59.1": "1.59.1",
+    "npm:hono@^4.12.0": "4.13.12",
     "npm:lit@3.3.3": "3.3.3"
   },
   "npm": {
+    "@hono/node-server@2.1.1_hono@4.13.12": {
+      "integrity": "sha512-ELuehkj5VCBdgEw9zs+ivkKwyzzUCSQuE96YmiPvn1ECBoZCczbFXJLeEGMTYjphP6gydh4pHMqEYPVMYUVgQg==",
+      "dependencies": [
+        "hono"
+      ]
+    },
     "@lit-labs/ssr-client@1.1.8": {
       "integrity": "sha512-PjGh81oKsoI64m3IDjTqqjhC7dr2uC/o0jrllUb5gRAyp/RlAHxapgJrjq9kWz97faCHLQ8jUlTi6tGm+8fgyA==",
       "dependencies": [
@@ -89,6 +97,9 @@
     "graceful-fs@4.2.11": {
       "integrity": "sha512-RbJ5/jmFcNNCcDV5o9eTnBLJ/HszWV0P73bc+Ff4nS/rJj+YaS6IGyiOL0VoBYX+l1Wrl3k63h/KrH+nhJ0XvQ=="
     },
+    "hono@4.13.12": {
+      "integrity": "sha512-6E2QDAc9Ick9Sq77ZrGS/dk2WUYni91aufTw6LJKpV7w8kW5/GxVUc650FOADOmlwg3K+f7Pun6XlV+pYmW6gw=="
+    },
     "lit-element@4.2.2": {
       "integrity": "sha512-aFKhNToWxoyhkNDmWZwEva2SlQia+jfG0fjIWV//YeTaWrVnOxD89dPKfigCUspXFmjzOEUQpOkejH5Ly6sG0w==",
       "dependencies": [
@@ -152,8 +163,10 @@
   },
   "workspace": {
     "dependencies": [
+      "npm:@hono/node-server@2.1.1",
       "npm:@lit-labs/ssr-client@1.1.8",
       "npm:@lit-labs/ssr@4.1.0",
+      "npm:hono@^4.12.0",
       "npm:lit@3.3.3"
     ],
     "links": {

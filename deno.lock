@@ -9,6 +9,7 @@
     "jsr:@std/path@1": "1.1.5",
     "jsr:@std/path@^1.1.5": "1.1.5",
     "jsr:@std/semver@1": "1.0.8",
+    "npm:@hono/node-server@2.1.1": "2.1.1_hono@4.13.7",
     "npm:@hono/vite-dev-server@~0.25.3": "0.25.3_hono@4.13.7",
     "npm:@jridgewell/trace-mapping@0.3.31": "0.3.31",
     "npm:@lit-labs/ssr-client@1.1.8": "1.1.8",
@@ -242,10 +243,16 @@
         "hono"
       ]
     },
+    "@hono/node-server@2.1.1_hono@4.13.7": {
+      "integrity": "sha512-ELuehkj5VCBdgEw9zs+ivkKwyzzUCSQuE96YmiPvn1ECBoZCczbFXJLeEGMTYjphP6gydh4pHMqEYPVMYUVgQg==",
+      "dependencies": [
+        "hono"
+      ]
+    },
     "@hono/vite-dev-server@0.25.3_hono@4.13.7": {
       "integrity": "sha512-w3uQ0KQF0i/SDcJ6+d5njEFTr6pbolajrt/GxV0pliYL+4ywiBqiOFRWSpwW3mTuZ80boww7+ZxJTGTBIzyBQg==",
       "dependencies": [
-        "@hono/node-server",
+        "@hono/node-server@1.19.17_hono@4.13.7",
         "hono",
         "minimatch"
       ]
@@ -1515,6 +1522,7 @@
       "jsr:@std/fs@1",
       "jsr:@std/path@1",
       "jsr:@std/semver@1",
+      "npm:@hono/node-server@2.1.1",
       "npm:@lit-labs/ssr-client@1.1.8",
       "npm:@lit-labs/ssr@4.1.0",
       "npm:@lit/context@1.1.6",
