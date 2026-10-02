@@ -9,6 +9,7 @@
   },
   "scripts": {
     "check": "node tools/repo/gate.ts fmt:check lint typecheck tools/repo#lint:markdown",
+    "check:dep-age": "node tools/repo/check-dependency-age.ts",
     "test": "pnpm run generate && vitest run --project element --project router --project create --project ui --project saas --project www --project tools --project tests --project benchmarks",
     "test:element": "pnpm --filter @openelement/element run test",
     "test:router": "pnpm --filter @openelement/router run test",
