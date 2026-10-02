@@ -24,7 +24,7 @@ runs:
     # manifest conversion (single pnpm-lock.yaml) and the B4 CI swap.
     - name: Install pnpm
       shell: bash
-      run: npm install -g pnpm@12
+      run: npm install -g pnpm@12.8.1 # zizmor: ignore[adhoc-packages] — runner ships no preinstalled pnpm; corepack route awaits an ADR; exact pin integrity-verified over https against registry.npmjs.org
     - name: Cache dependencies
       # v4.3.0
       uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
