@@ -64,7 +64,11 @@ test('starter exposes only product dependencies and the standard lifecycle', () 
     '@openelement/router',
     'hono',
   ]);
-  expect(Object.keys(manifest.devDependencies).sort()).toEqual(['typescript', 'vite']);
+  expect(Object.keys(manifest.devDependencies).sort()).toEqual([
+    '@playwright/test',
+    'typescript',
+    'vite',
+  ]);
   expect(Object.keys(manifest.scripts).sort()).toEqual([
     'build',
     'check',
@@ -233,6 +237,16 @@ test('starter pins vite and typescript exactly, aligned with the router', async 
   expect(generated.scripts.dev).toEqual('vite');
   // The build-time TypeScript pin stays aligned with the router's own.
   expect(raw.devDependencies.typescript).toEqual(routerManifest.dependencies.typescript);
+  // The starter's @playwright/test pin stays aligned with the workspace root's
+  // (single version line: the packed starter-browser probe resolves through
+  // the starter's own devDependency, and CI pre-installs browsers for the
+  // workspace pin — a drift would hunt for browser builds that were never
+  // downloaded).
+  const rootManifest = JSON.parse(readFileSync(join(packageDir, '..', '..', 'package.json')));
+  expect(rootManifest.devDependencies['@playwright/test']).toEqual('1.59.1');
+  expect(raw.devDependencies['@playwright/test']).toEqual(
+    rootManifest.devDependencies['@playwright/test'],
+  );
 });
 
 test('starter templates use the compiled element authoring surface (v0.44)', () => {

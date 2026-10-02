@@ -195,10 +195,15 @@ function findMissingGeneratedImports(
  */
 // ─── Packed three-browser matrix (starter island hydration + continuation) ─
 //
-// Playwright runs as a scoped-permission child against the repo config (which
-// maps @playwright/test), matching consumer-packaged-element.ts and the
-// fixture e2e tasks (--deny-ffi --no-prompt: browser automation needs no
-// native binding). Args: <baseUrl> <chromium|firefox|webkit>.
+// The probe is written INSIDE the generated starter and resolves
+// @playwright/test through the starter's own declared devDependency (the
+// template manifest pins it): Deno's node_modules resolution walks up from the
+// probe file, so a probe outside the starter has no declaring package.json and
+// fails with `Import "@playwright/test" not a dependency` (the alpha.7 CI
+// defect). It runs as a scoped-permission child with cwd=starter, matching
+// consumer-packaged-element.ts and the fixture e2e tasks (--deny-ffi
+// --no-prompt: browser automation needs no native binding).
+// Args: <baseUrl> <chromium|firefox|webkit>.
 const PW_STARTER_PROBE_SCRIPT = `import { chromium, firefox, webkit } from '@playwright/test';
 
 const [baseUrl, browserName] = Deno.args;
@@ -258,12 +263,18 @@ try {
 `;
 
 /** Boot the starter's `start` script, run the three-browser matrix, then stop it. */
-async function runStarterBrowserMatrix(starter: string, tmp: string): Promise<void> {
+async function runStarterBrowserMatrix(starter: string): Promise<void> {
   const port = await reservePort();
   const server = spawn('pnpm', ['run', 'start'], {
     cwd: starter,
     env: { ...process.env, OPEN_ELEMENT_PORT: String(port), OPEN_ELEMENT_HOST: '127.0.0.1' },
     stdio: ['ignore', 'pipe', 'pipe'],
+    // Own process group: the stop below must signal pnpm's node/sh
+    // grandchildren (vite, cli/start) too, not just pnpm. Orphaned
+    // grandchildren keep the inherited stdio pipes open, and the piped-output
+    // pumps above keep this process alive — the success path never exits
+    // (observed on macOS: vite + cli/start survivors on the walkthrough ports).
+    detached: true,
   });
   let exited = false;
   server.addListener('exit', () => {
@@ -300,7 +311,7 @@ async function runStarterBrowserMatrix(starter: string, tmp: string): Promise<vo
         `Packed starter browser host did not become ready within ${SERVER_READY_TIMEOUT_MS}ms:\n${stdoutText()}\n${stderrText()}`,
       );
     }
-    const probePath = join(tmp, 'pw-starter-probe.ts');
+    const probePath = join(starter, 'pw-starter-probe.ts');
     await writeFile(probePath, PW_STARTER_PROBE_SCRIPT);
     const failures: string[] = [];
     for (const browserName of PACKED_BROWSERS) {
@@ -315,7 +326,7 @@ async function runStarterBrowserMatrix(starter: string, tmp: string): Promise<vo
           baseUrl,
           browserName,
         ],
-        repoRoot,
+        starter,
         BROWSER_TIMEOUT_MS,
       );
       if (probe.success && probe.output.includes(`STARTER-BROWSER-OK ${browserName}`)) {
@@ -335,11 +346,10 @@ async function runStarterBrowserMatrix(starter: string, tmp: string): Promise<vo
   } finally {
     if (!exited) {
       try {
-        server.kill('SIGTERM');
-      } catch (error) {
-        if (!(error instanceof TypeError)) {
-          console.error('[consumer-packaged-starter] failed to stop browser host:', error);
-        }
+        // Negative pid: signal the whole process group (see detached above).
+        process.kill(-server.pid!, 'SIGTERM');
+      } catch {
+        // process group already gone
       }
     }
     await new Promise((resolveSettled) => {
@@ -367,6 +377,11 @@ async function exerciseServer(
       OPEN_ELEMENT_HOST: '127.0.0.1',
     },
     stdio: ['ignore', 'pipe', 'pipe'],
+    // Own process group: the stop below must signal pnpm's node/sh
+    // grandchildren (vite, cli/start) too, not just pnpm — otherwise they
+    // survive orphaned, hold the inherited stdio pipes open, and the piped
+    // pumps keep this process from ever exiting the success path.
+    detached: true,
   });
   let exited = false;
   server.addListener('exit', () => {
@@ -416,11 +431,10 @@ async function exerciseServer(
   } finally {
     if (!exited) {
       try {
-        server.kill('SIGTERM');
-      } catch (error) {
-        if (!(error instanceof TypeError)) {
-          console.error(`[consumer-packaged-starter] failed to stop ${label} server:`, error);
-        }
+        // Negative pid: signal the whole process group (see detached above).
+        process.kill(-server.pid!, 'SIGTERM');
+      } catch {
+        // process group already gone
       }
     }
     await new Promise((resolveSettled) => {
@@ -689,7 +703,7 @@ try {
   // The declaration now names both the entry and the installer
   // (tools/release/npm-manifest.ts, guarded by tools/release#pack-surface:check);
   // this leg is unconditionally required, and fails the gate on any browser.
-  await runStarterBrowserMatrix(starter, tmp);
+  await runStarterBrowserMatrix(starter);
   // Lifecycle leg 7 — preview: the starter ships a request-time route, so the
   // documented preview behavior is a fail-closed refusal that points at the
   // `start` script (#601); a silent static-only preview would be wrong.

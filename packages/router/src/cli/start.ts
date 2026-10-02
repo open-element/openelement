@@ -146,7 +146,7 @@ function findWorkspaceConfig(from: string): string | null {
 }
 
 /**
- * B5 (ADR-0161): the generated starter is a plain Node/pnpm project, so on a
+ * B5: the generated starter is a plain Node/pnpm project, so on a
  * Node host preview spawns the app's OWN vite install (a devDependency) —
  * no runtime registry hop and no host CLI in the consumer's path. The Deno
  * host keeps the `deno run npm:vite` form for in-workspace flows.

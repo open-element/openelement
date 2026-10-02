@@ -11,7 +11,7 @@ Docs and guides: <https://openelement.org>.
 
 `@openelement/create` generates a new openElement project with the recommended
 directory structure, a pnpm-scripted package manifest, Vite setup, and starter
-pages (ADR-0161: the generated project is a plain Node/pnpm project).
+pages. The generated project is a plain Node/pnpm project.
 
 ## Usage (1.0 Alpha)
 
@@ -44,8 +44,8 @@ The canonical install command is exported from `@openelement/create/install-comm
 
 The documented bootstrap runs the generator through `deno run … npm:…` — a
 Deno 2.9+ install is needed for that one command (the `@alpha` dist-tag only
-exists on npm; Deno consumers resolve it through the `npm:` specifier,
-ADR-0161). The scaffolded project itself is Node-native: Node.js 24+ and
+exists on npm; Deno consumers resolve it through the `npm:` specifier).
+The scaffolded project itself is Node-native: Node.js 24+ and
 pnpm run its scripts, and `npx`/`pnpm dlx` entry points for the generator
 remain a deferred roadmap item (portable-host tooling,
 [#1387](https://github.com/open-element/openelement/issues/1387)).
