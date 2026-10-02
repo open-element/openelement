@@ -110,7 +110,7 @@ function loadChangelogHtml(copy: {
     const notice =
       copy.langNotice === ''
         ? ''
-        : `<p class="lang-notice" role="note" style="max-width:640px;margin:0 0 var(--size-4);padding:var(--size-2) var(--size-3);border-inline-start:var(--border-size-2) solid var(--violet-5);color:var(--text-secondary);font-size:var(--font-size-0);line-height:1.65;">${copy.langNotice}</p>`;
+        : `<p class="lang-notice" role="note" style="max-width:640px;margin:0 0 calc(var(--spacing) * 4);padding:calc(var(--spacing) * 2) calc(var(--spacing) * 3);border-inline-start:2px solid var(--color-primary);color:var(--color-muted-foreground);font-size:var(--text-sm);line-height:1.65;">${copy.langNotice}</p>`;
     return `<p class="archive-source">${copy.archiveSource}</p>${notice}<div lang="en">${archive}</div>`;
   } catch {
     return copy.loadError;

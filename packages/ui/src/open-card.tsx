@@ -36,22 +36,22 @@ export class OpenCard extends OpenElement {
     :host {
       display: block;
       background:
-        linear-gradient(135deg, color-mix(in srgb, var(--violet-1) 14%, transparent), transparent 48%),
-        var(--bg-card);
-      color: var(--text-primary);
-      border: var(--border-size-1) solid var(--border);
-      border-radius: var(--card-radius);
+        linear-gradient(135deg, color-mix(in srgb, color-mix(in srgb, var(--color-primary) 10%, var(--color-background)) 14%, transparent), transparent 48%),
+        var(--color-card);
+      color: var(--color-foreground);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-md);
       overflow: hidden;
-      transition: border-color var(--ease-3) var(--duration-2), background var(--ease-3) var(--duration-2), box-shadow var(--ease-3) var(--duration-2);
+      transition: border-color cubic-bezier(0.5, 0, 0, 1) 200ms, background cubic-bezier(0.5, 0, 0, 1) 200ms, box-shadow cubic-bezier(0.5, 0, 0, 1) 200ms;
     }
 
     :host([variant='elevated']) {
-      box-shadow: 0 var(--size-2) var(--size-8) color-mix(in srgb, var(--brand) 8%, transparent);
-      border-color: var(--border);
+      box-shadow: 0 calc(var(--spacing) * 2) calc(var(--spacing) * 8) color-mix(in srgb, var(--color-primary) 8%, transparent);
+      border-color: var(--color-border);
     }
 
     :host([variant='elevated']:hover) {
-      border-color: var(--brand);
+      border-color: var(--color-primary);
     }
 
     :host([variant='borderless']) {
@@ -59,33 +59,33 @@ export class OpenCard extends OpenElement {
     }
 
     :host([variant='muted']) {
-      background: var(--bg-surface);
+      background: var(--color-muted);
     }
 
     :host([variant='artifact']) {
-      background: var(--bg-code, var(--gray-11));
-      color: var(--gray-2);
-      border-color: var(--code-border, var(--gray-8));
+      background: var(--color-muted);
+      color: var(--color-accent);
+      border-color: var(--color-border);
     }
 
     ::slotted([slot='header']) {
-      padding: var(--size-4) var(--size-5);
-      border-bottom: var(--border-size-1) solid var(--border);
-      font-size: var(--font-size-2);
-      font-weight: var(--font-weight-6);
-      color: var(--text-primary);
+      padding: calc(var(--spacing) * 4) calc(var(--spacing) * 5);
+      border-bottom: 1px solid var(--color-border);
+      font-size: var(--text-xl);
+      font-weight: var(--font-weight-semibold);
+      color: var(--color-foreground);
       margin: 0;
     }
 
     .card-body {
-      padding: var(--size-5);
+      padding: calc(var(--spacing) * 5);
     }
 
     ::slotted([slot='footer']) {
-      padding: var(--size-3) var(--size-5);
-      border-top: var(--border-size-1) solid var(--border);
-      font-size: var(--font-size-0);
-      color: var(--text-muted);
+      padding: calc(var(--spacing) * 3) calc(var(--spacing) * 5);
+      border-top: 1px solid var(--color-border);
+      font-size: var(--text-sm);
+      color: var(--color-muted-foreground);
       margin: 0;
     }
   `),

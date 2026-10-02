@@ -26,9 +26,9 @@ import { readInstanceState, writeInstanceState } from './instance-state.ts';
 @element('open-theme-toggle', { root: 'shadow-open', delegatesFocus: true })
 export class OpenThemeToggle extends OpenElement {
   // Safari does not recompute adoptedStyleSheets when
-  // :host([data-theme]) changes. The token sheets (openPropsTokenSheet,
-  // semantic token sheets are already injected as page-level <style> by
-  // vite.config.ts — CSS custom properties cascade from :root naturally.
+  // :host([data-theme]) changes. The token sheet (themeTokenSheet) is
+  // already injected as a page-level <style> by the host app's config —
+  // CSS custom properties cascade from :root naturally.
   // Only adopt the component-specific sheet.
   static override styles: StyleSheetLike[] = [
     recipe(`
@@ -41,23 +41,23 @@ export class OpenThemeToggle extends OpenElement {
       align-items: center;
       justify-content: center;
       width: 38px; height: 38px; padding: 0;
-      border: var(--border-size-1) solid color-mix(in srgb, var(--border) 72%, var(--brand));
-      border-radius: var(--radius-round);
-      background: color-mix(in srgb, var(--bg-elevated) 76%, transparent);
-      color: var(--text-muted);
-      box-shadow: inset 0 1px 0 color-mix(in srgb, var(--gray-0) 70%, transparent);
+      border: 1px solid color-mix(in srgb, var(--color-border) 72%, var(--color-primary));
+      border-radius: calc(infinity * 1px);
+      background: color-mix(in srgb, var(--color-popover) 76%, transparent);
+      color: var(--color-muted-foreground);
+      box-shadow: inset 0 1px 0 color-mix(in srgb, var(--color-background) 70%, transparent);
       cursor: pointer;
-      transition: all var(--ease-2) var(--duration-2);
+      transition: all cubic-bezier(0.45, 0, 0.25, 1) 200ms;
     }
     .theme-toggle:hover {
-      color: var(--text-primary);
-      border-color: var(--brand-light);
-      background: color-mix(in srgb, var(--brand-pale) 42%, var(--bg-elevated));
+      color: var(--color-foreground);
+      border-color: color-mix(in srgb, var(--color-primary) 55%, transparent);
+      background: color-mix(in srgb, color-mix(in srgb, var(--color-primary) 18%, transparent) 42%, var(--color-popover));
     }
 
     .theme-toggle:focus-visible {
-      outline: var(--focus-size, 2px) solid var(--focus-ring, var(--brand-light));
-      outline-offset: var(--focus-offset, 2px);
+      outline: 2px solid var(--color-ring);
+      outline-offset: 3px;
     }
 
     .theme-toggle svg {

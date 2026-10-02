@@ -392,7 +392,7 @@ export function buildManifest(): GeneratedUiManifest {
     schemaVersion: '1.0.0',
     packageName: '@openelement/ui',
     version: pkgVersion,
-    description: 'Open Props Web Component library for openElement',
+    description: 'Web Component library for openElement',
     author: 'openElement',
     license: 'MIT',
     homepage: 'https://openelement.org',

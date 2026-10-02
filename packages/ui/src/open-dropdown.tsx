@@ -52,8 +52,8 @@ export class OpenDropdown extends OpenElement {
       min-width: 12rem;
       /* The gap rides on margin-top: calc(anchor() + length) resolves without
          the added length in Firefox. */
-      margin: var(--size-2) 0 0;
-      padding: var(--size-2);
+      margin: calc(var(--spacing) * 2) 0 0;
+      padding: calc(var(--spacing) * 2);
       font-family: var(--font-sans);
     }
   `),

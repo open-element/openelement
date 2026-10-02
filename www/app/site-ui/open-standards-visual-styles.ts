@@ -12,42 +12,42 @@ export const openStandardsVisualStyles = [
 
   .visual {
     display: grid;
-    gap: var(--size-4);
-    color: var(--text-primary);
+    gap: calc(var(--spacing) * 4);
+    color: var(--color-foreground);
   }
 
   .visual--high {
-    gap: var(--size-5);
+    gap: calc(var(--spacing) * 5);
   }
 
   .hero {
     display: grid;
-    gap: var(--size-4);
+    gap: calc(var(--spacing) * 4);
   }
 
   .hero__top {
     display: grid;
     grid-template-columns: minmax(0, 1.12fr) minmax(0, .88fr);
-    gap: var(--size-4);
+    gap: calc(var(--spacing) * 4);
   }
 
   .code {
     margin: 0;
     overflow: auto;
-    color: var(--code-text);
+    color: var(--color-muted-foreground);
     font-family: var(--font-mono);
-    font-size: var(--font-size-00);
-    line-height: var(--font-lineheight-4);
+    font-size: var(--text-xs);
+    line-height: 1.75;
     white-space: pre-wrap;
   }
 
   .mark {
-    color: var(--brand-light);
+    color: color-mix(in srgb, var(--color-primary) 55%, transparent);
   }
 
   .spec {
     display: grid;
-    gap: var(--size-3);
+    gap: calc(var(--spacing) * 3);
   }
 
   .spec__row,
@@ -57,12 +57,12 @@ export const openStandardsVisualStyles = [
   .stage {
     position: relative;
     display: grid;
-    gap: var(--size-1);
-    padding: var(--size-3);
+    gap: calc(var(--spacing) * 1);
+    padding: calc(var(--spacing) * 3);
     overflow: hidden;
-    border: var(--border-size-1) solid var(--border);
-    border-radius: var(--radius-2);
-    background: var(--bg-card);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    background: var(--color-card);
   }
 
   .route::before,
@@ -73,8 +73,8 @@ export const openStandardsVisualStyles = [
     position: absolute;
     inset-block: 0;
     inset-inline-start: 0;
-    width: var(--size-1);
-    background: var(--brand);
+    width: calc(var(--spacing) * 1);
+    background: var(--color-primary);
     opacity: .72;
   }
 
@@ -83,10 +83,10 @@ export const openStandardsVisualStyles = [
   .package__name,
   .token__name,
   .stage__num {
-    color: var(--brand);
+    color: var(--color-primary);
     font-family: var(--font-mono);
-    font-size: var(--font-size-00);
-    font-weight: var(--font-weight-8);
+    font-size: var(--text-xs);
+    font-weight: var(--font-weight-extrabold);
     letter-spacing: 0;
   }
 
@@ -95,20 +95,20 @@ export const openStandardsVisualStyles = [
   .package__desc,
   .token__desc,
   .stage__copy {
-    color: var(--text-secondary);
-    font-size: var(--font-size-0);
-    line-height: var(--font-lineheight-3);
+    color: var(--color-muted-foreground);
+    font-size: var(--text-sm);
+    line-height: 1.5;
   }
 
   .pipeline {
     display: grid;
     grid-template-columns: repeat(5, minmax(0, 1fr));
-    gap: var(--size-2);
+    gap: calc(var(--spacing) * 2);
   }
 
   .stage {
-    min-height: var(--size-16);
-    background: color-mix(in srgb, var(--bg-card) 82%, var(--brand-subtle));
+    min-height: calc(var(--spacing) * 16);
+    background: color-mix(in srgb, var(--color-card) 82%, color-mix(in srgb, var(--color-primary) 14%, transparent));
   }
 
   .visual--high .stage,
@@ -116,35 +116,35 @@ export const openStandardsVisualStyles = [
   .visual--high .package,
   .visual--high .token {
     background:
-      linear-gradient(135deg, color-mix(in srgb, var(--brand-subtle) 64%, transparent), transparent),
-      var(--bg-card);
+      linear-gradient(135deg, color-mix(in srgb, color-mix(in srgb, var(--color-primary) 14%, transparent) 64%, transparent), transparent),
+      var(--color-card);
   }
 
   .stage--success .stage__num,
   .package--success .package__name {
-    color: var(--success);
+    color: var(--color-success);
   }
 
   .stage--success::before,
   .package--success::before {
-    background: var(--success);
+    background: var(--color-success);
   }
 
   .stage--warning .stage__num,
   .package--warning .package__name {
-    color: var(--warning);
+    color: var(--color-warning);
   }
 
   .stage--warning::before,
   .package--warning::before {
-    background: var(--warning);
+    background: var(--color-warning);
   }
 
   .routes,
   .packages,
   .tokens {
     display: grid;
-    gap: var(--size-3);
+    gap: calc(var(--spacing) * 3);
   }
 
   .route {
@@ -162,31 +162,31 @@ export const openStandardsVisualStyles = [
   }
 
   .token__swatch {
-    width: var(--size-8);
-    height: var(--size-5);
-    border-radius: var(--radius-1);
-    border: var(--border-size-1) solid var(--border);
-    background: var(--bg-card);
+    width: calc(var(--spacing) * 8);
+    height: calc(var(--spacing) * 5);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--color-border);
+    background: var(--color-card);
   }
 
-  .token--brand .token__swatch { background: var(--brand); }
-  .token--success .token__swatch { background: var(--success); }
-  .token--warning .token__swatch { background: var(--warning); }
-  .token--info .token__swatch { background: var(--info); }
-  .token--surface .token__swatch { background: var(--bg-elevated); }
-  .token--code .token__swatch { background: var(--bg-code, var(--gray-11)); }
+  .token--brand .token__swatch { background: var(--color-primary); }
+  .token--success .token__swatch { background: var(--color-success); }
+  .token--warning .token__swatch { background: var(--color-warning); }
+  .token--info .token__swatch { background: var(--color-info); }
+  .token--surface .token__swatch { background: var(--color-popover); }
+  .token--code .token__swatch { background: var(--color-muted); }
 
   .matrix {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: var(--size-3);
+    gap: calc(var(--spacing) * 3);
   }
 
   .visual--motion .stage,
   .visual--motion .route,
   .visual--motion .package,
   .visual--motion .token {
-    animation: visual-lift 7s var(--ease-2) infinite alternate;
+    animation: visual-lift 7s cubic-bezier(0.45, 0, 0.25, 1) infinite alternate;
   }
 
   .visual--motion .stage:nth-child(2),
@@ -204,7 +204,7 @@ export const openStandardsVisualStyles = [
   }
 
   .visual--motion .code {
-    animation: visual-code 8s var(--ease-1) infinite alternate;
+    animation: visual-code 8s cubic-bezier(0.25, 0, 0.5, 1) infinite alternate;
   }
 
   @keyframes visual-lift {
@@ -218,10 +218,10 @@ export const openStandardsVisualStyles = [
 
   @keyframes visual-code {
     from {
-      color: var(--code-text);
+      color: var(--color-muted-foreground);
     }
     to {
-      color: var(--brand-light);
+      color: color-mix(in srgb, var(--color-primary) 55%, transparent);
     }
   }
 

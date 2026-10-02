@@ -35,14 +35,7 @@ const PACKAGE_KEYWORDS: Record<string, string[]> = {
   ],
   '@openelement/router': ['openelement', 'web-components', 'router', 'ssg', 'vite', 'nitro'],
   '@openelement/create': ['openelement', 'web-components', 'scaffolding', 'generator', 'starter'],
-  '@openelement/ui': [
-    'openelement',
-    'web-components',
-    'ui',
-    'design-tokens',
-    'open-props',
-    'experimental',
-  ],
+  '@openelement/ui': ['openelement', 'web-components', 'ui', 'design-tokens', 'experimental'],
 };
 
 /**

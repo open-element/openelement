@@ -63,7 +63,7 @@ export default [
   // the page is never rendered in the wrong palette.
   {
     style:
-      'html{visibility:visible!important;}body{background:var(--bg-base);color:var(--text-primary);}',
+      'html{visibility:visible!important;}body{background:var(--color-background);color:var(--color-foreground);}',
   },
   ...FONT_PRELOADS.map((href) => ({
     link: {

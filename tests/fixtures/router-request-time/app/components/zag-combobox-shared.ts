@@ -16,9 +16,9 @@
  *   root replacement.
  * - Machine state lives here (a WeakMap keyed by host), because compiled
  *   classes may only carry @property fields + methods.
- * - Visuals consume Open Props scale values through --oe-* semantic tokens
- *   (mirroring third-party component package/src/semantic-tokens.css conventions), injected
- *   by the islands as a compiled static <style> node.
+ * - Visuals consume a local scale subset (fixture-own --size and --gray
+ *   steps) through --oe-* semantic tokens, injected by the islands
+ *   as a compiled static <style> node.
  *
  * Zag dependencies resolve through the ROOT deno.json import map — every
  * fixture gate (build, dev SSR, e2e) runs with the root config, and Vite
@@ -239,8 +239,8 @@ export function zagComboboxSnapshot(host: HTMLElement): ZagComboboxSnapshot | nu
 // ─── Island styles (consumed via the compiled `static styles` contract) ────
 
 /**
- * Open Props scale subset + --oe-* semantic tokens (values mirror
- * third-party component package/src/semantic-tokens.css). Built here (a non-compiled module)
+ * Local scale subset + --oe-* semantic tokens (fixture-own values, aligned
+ * with the --oe-* token conventions). Built here (a non-compiled module)
  * because compiled classes ban runtime top-level statements; the islands
  * reference the sheets through `static styles` — adoptedStyleSheets on the
  * shadow island, the document-head compiled-style sink on the light island
@@ -249,7 +249,7 @@ export function zagComboboxSnapshot(host: HTMLElement): ZagComboboxSnapshot | nu
 export function buildComboboxSheet(hostSelector: string): StyleSheetLike {
   const sheet: StyleSheetLike = new StyleSheet();
   sheet.replaceSync(`${hostSelector} {
-  /* Open Props scale subset */
+  /* Local scale subset (fixture-own values) */
   --size-1: 4px;
   --size-2: 8px;
   --size-3: 12px;

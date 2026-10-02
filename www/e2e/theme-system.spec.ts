@@ -249,11 +249,13 @@ test.describe('@theme role sheet', () => {
     // Adopt the page's own SHIPPED (minified) head style into a fresh shadow
     // root — the same sheet a registerGlobalStyles consumer would adopt — and
     // flip the host attribute exactly like the themeManager broadcast does.
+    // Anchor on the dark union itself: the anti-flash style also mentions
+    // --color-background, but only the token sheet carries the role sheet.
     const result = await page.evaluate(
       ([role]) => {
         const cssText = [...document.querySelectorAll('style')]
           .map((s) => s.textContent ?? '')
-          .find((text) => text.includes('--color-background'));
+          .find((text) => text.includes(':host([data-theme="dark"])'));
         if (cssText === undefined) return null;
         const host = document.createElement('div');
         document.body.append(host);

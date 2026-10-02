@@ -1,28 +1,28 @@
 ---
 title: 'Design System'
-lede: 'The active site dogfood contract: audited Open Props tokens, retained UI primitives, product-art diagrams and full dark-mode parity. It is not a framework requirement.'
+lede: 'The active site dogfood contract: @theme semantic role tokens, retained UI primitives, product-art diagrams and full dark-mode parity. It is not a framework requirement.'
 order: 15
 section: 'Reference'
 ---
 
-- Strict Open Props and semantic tokens only.
+- Strict @theme semantic role tokens only.
 - Only reusable primitives live in `@openelement/ui`; site visuals stay in `www`.
 - Kinetic motion respects reduced-motion preferences.
 - No Linear clone, decorative blobs, or local color systems.
 - Letter spacing remains `0`.
 
-## Semantic roles mapped to Open Props
+## Semantic roles mapped to @theme tokens
 
-Raw Open Props values stop at the audited token boundary; pages and primitives consume semantic roles.
+Raw values stop at the @theme role boundary (packages/ui/src/theme-tokens.css); pages and primitives consume semantic roles.
 
-| Role     | Tokens                                           | Purpose                                            |
-| -------- | ------------------------------------------------ | -------------------------------------------------- |
-| Canvas   | `--bg-base`                                      | Page background and grid field.                    |
-| Surface  | `--bg-card` / `--bg-elevated`                    | Reading surfaces and raised panels.                |
-| Artifact | `--bg-code` / `--code-border`                    | Code, devtools, route, and package diagrams.       |
-| Text     | `--text-primary` / `--text-secondary`            | Readable hierarchy in both themes.                 |
-| Action   | `--brand` / `--on-brand`                         | Primary command and link emphasis.                 |
-| State    | `--success` / `--warning` / `--info` / `--error` | Roadmap, standards, reference, and failure states. |
+| Role     | Tokens                                                                                                      | Purpose                                            |
+| -------- | ----------------------------------------------------------------------------------------------------------- | -------------------------------------------------- |
+| Canvas   | `--color-background`                                                                                        | Page background and grid field.                    |
+| Surface  | `--color-card` / `--color-popover`                                                                          | Reading surfaces and raised panels.                |
+| Artifact | `--color-muted` / `--color-border`                                                                          | Code, devtools, route, and package diagrams.       |
+| Text     | `--color-foreground` / `--color-muted-foreground`                                                           | Readable hierarchy in both themes.                 |
+| Action   | `--color-primary` / `--color-primary-foreground`                                                            | Primary command and link emphasis.                 |
+| State    | `--color-success` / `--color-warning` / `--color-info` / `--color-destructive`                              | Roadmap, standards, reference, and failure states. |
 
 ## The site dogfoods optional UI primitives
 
@@ -46,7 +46,7 @@ Commands use stable dimensions, token colors, and focus-visible states.
 
 ### Fields
 
-Inputs stay utilitarian and inherit the same Open Props token system.
+Inputs stay utilitarian and inherit the same @theme token system.
 
 ```html
 <open-input value="app/routes/index.tsx" readonly></open-input>

@@ -310,9 +310,6 @@ importers:
       '@openelement/element':
         specifier: workspace:*
         version: link:../element
-      open-props:
-        specifier: 1.7.23
-        version: 1.7.23
       typescript:
         specifier: 6.0.3
         version: 6.0.3
@@ -2225,9 +2222,6 @@ packages:
     resolution: {integrity: sha512-XrsrhT5sybtKI6wakr2SPOlGZWWYbUXZ7a0jT8/QOeAPau+1X/bSegNe5YR75oJmEZQbKningirmGOEJCIk61Q==}
     engines: {node: '>=12.20.0'}
 
-  open-props@1.7.23:
-    resolution: {integrity: sha512-+xyrJmxV9QUBFbSwPROYhOg/FLXry+uuPr4R+B5EaE4556Oc18/8ZC/fL5A+/lbRSwNvA0Alh+C0KpyFWLmLZg==}
-
   oxfmt@0.70.0:
     resolution: {integrity: sha512-IsHxZ4y0wQLLMhnrJblBJgZsLDzfULrJnAw5j/QqsTlMa/m3AqsbToi+W71uhBGaqlqq/PbbjvHc09TJwdv3Tw==}
     engines: {node: ^20.19.0 || >=22.12.0}
@@ -3871,8 +3865,6 @@ snapshots:
       formdata-polyfill: 4.0.10
 
   obug@2.2.1: {}
-
-  open-props@1.7.23: {}
 
   oxfmt@0.70.0:
     dependencies:

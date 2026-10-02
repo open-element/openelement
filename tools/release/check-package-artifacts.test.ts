@@ -473,8 +473,6 @@ test('package artifacts: rejects a types target missing from the tarball', async
   );
 });
 
-const UI_NOTICE_FIXTURE = '## open-props 1.7.23\n\nCopyright (c) 2021 Adam Argyle\n\nMIT License\n';
-
 test('package artifacts: accepts an export with a matching declaration', async () => {
   await withExportsPackage(
     '@openelement/ui',
@@ -482,30 +480,9 @@ test('package artifacts: accepts an export with a matching declaration', async (
     {
       'src/index.js': 'export const version = 1;\n',
       'src/index.d.ts': 'export declare const version: number;\n',
-      'THIRD_PARTY_NOTICES.md': UI_NOTICE_FIXTURE,
     },
     (root) => {
       expect(scanExtractedPackage('@openelement/ui', root).violations).toEqual([]);
-    },
-  );
-});
-
-test('package artifacts: @openelement/ui must ship the open-props notice', async () => {
-  await withExportsPackage(
-    '@openelement/ui',
-    { '.': { types: './src/index.d.ts', import: './src/index.js' } },
-    {
-      'src/index.js': 'export const version = 1;\n',
-      'src/index.d.ts': 'export declare const version: number;\n',
-    },
-    (root) => {
-      const result = scanExtractedPackage('@openelement/ui', root);
-      expect(
-        result.violations.some(
-          (violation) => violation.path === '@openelement/ui/THIRD_PARTY_NOTICES.md',
-        ),
-        `expected a third-party notice violation, got: ${JSON.stringify(result.violations)}`,
-      ).toBeTruthy();
     },
   );
 });

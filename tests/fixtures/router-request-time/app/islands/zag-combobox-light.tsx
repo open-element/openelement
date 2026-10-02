@@ -10,7 +10,7 @@
  * here: the input lives in the same tree as the page's <form>, so a native
  * POST carries the selected value.
  *
- * Light mode has no shadow style scope, so the Open Props / --oe-* sheet is
+ * Light mode has no shadow style scope, so the local / --oe-* sheet is
  * SSR'd as a compiled static <style> node scoped to the component root class.
  */
 import { element, OpenElement, property } from '@openelement/element';

@@ -82,7 +82,7 @@ test('synthesizedPackedManifest preserves the published exports shape', () => {
   const manifest = synthesizedPackedManifest(
     pkg('@openelement/element', {
       '.': './src/index.ts',
-      './open-props-tokens.js': './src/open-props-tokens.ts',
+      './theme-tokens.js': './src/theme-tokens.ts',
     }),
   ) as {
     name: string;
@@ -102,10 +102,10 @@ test('synthesizedPackedManifest preserves the published exports shape', () => {
     import: './src/index.js',
     default: './src/index.js',
   });
-  expect(manifest.exports['./open-props-tokens.js']).toEqual({
-    types: './src/open-props-tokens.d.ts',
-    import: './src/open-props-tokens.js',
-    default: './src/open-props-tokens.js',
+  expect(manifest.exports['./theme-tokens.js']).toEqual({
+    types: './src/theme-tokens.d.ts',
+    import: './src/theme-tokens.js',
+    default: './src/theme-tokens.js',
   });
 });
 

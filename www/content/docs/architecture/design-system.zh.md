@@ -1,28 +1,28 @@
 ---
 title: '设计体系'
-lede: '站点当前生效的 dogfood 契约：经过审计的 Open Props token、沿用的 UI 原语、产品化图示，以及完整的暗色模式对等。它不是框架的强制要求。'
+lede: '站点当前生效的 dogfood 契约：@theme 语义角色 token、沿用的 UI 原语、产品化图示，以及完整的暗色模式对等。它不是框架的强制要求。'
 order: 15
 section: 'Reference'
 ---
 
-- 只使用严格的 Open Props 与语义化 token。
+- 只使用严格的 @theme 语义角色 token。
 - 只有可复用的原语才进入 `@openelement/ui`；站点视觉留在 `www`。
 - 动效尊重 reduced-motion 偏好。
 - 不做 Linear 翻版、装饰性色块或局部色彩体系。
 - Letter spacing 保持为 `0`。
 
-## 语义角色映射到 Open Props
+## 语义角色映射到 @theme token
 
-原始的 Open Props 值止步于经过审计的 token 边界；页面与原语只消费语义角色。
+原始值止步于 @theme 角色边界（packages/ui/src/theme-tokens.css）；页面与原语只消费语义角色。
 
-| 角色     | Token                                            | 用途                             |
-| -------- | ------------------------------------------------ | -------------------------------- |
-| Canvas   | `--bg-base`                                      | 页面背景与网格底场。             |
-| Surface  | `--bg-card` / `--bg-elevated`                    | 阅读表面与浮层面板。             |
-| Artifact | `--bg-code` / `--code-border`                    | 代码、devtools、路由与包结构图。 |
-| Text     | `--text-primary` / `--text-secondary`            | 明暗两套主题下都可读的文本层级。 |
-| Action   | `--brand` / `--on-brand`                         | 主要命令与链接强调。             |
-| State    | `--success` / `--warning` / `--info` / `--error` | 路线图、标准、参考与失败状态。   |
+| 角色     | Token                                                                          | 用途                             |
+| -------- | ------------------------------------------------------------------------------ | -------------------------------- |
+| Canvas   | `--color-background`                                                           | 页面背景与网格底场。             |
+| Surface  | `--color-card` / `--color-popover`                                             | 阅读表面与浮层面板。             |
+| Artifact | `--color-muted` / `--color-border`                                             | 代码、devtools、路由与包结构图。 |
+| Text     | `--color-foreground` / `--color-muted-foreground`                              | 明暗两套主题下都可读的文本层级。 |
+| Action   | `--color-primary` / `--color-primary-foreground`                               | 主要命令与链接强调。             |
+| State    | `--color-success` / `--color-warning` / `--color-info` / `--color-destructive` | 路线图、标准、参考与失败状态。   |
 
 ## 本站 dogfood 可选的 UI 原语
 
@@ -46,7 +46,7 @@ section: 'Reference'
 
 ### 输入框
 
-输入框保持实用，继承同一套 Open Props token 体系。
+输入框保持实用，继承同一套 @theme token 体系。
 
 ```html
 <open-input value="app/routes/index.tsx" readonly></open-input>

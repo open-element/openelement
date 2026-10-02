@@ -134,7 +134,7 @@ export default class OpenStandardsVisual extends OpenElement {
             <div className='package'>
               <span className='package__name'>UI</span>
               <span className='package__desc'>
-                Open Props primitives used by this website and consumers
+                @theme role primitives used by this website and consumers
               </span>
             </div>
             <div className='package package--warning'>

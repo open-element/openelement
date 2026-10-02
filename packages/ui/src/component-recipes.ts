@@ -94,40 +94,40 @@ export const CALLOUT_TYPE_ICONS: Record<string, string> = {
 export const controlRecipe: StyleSheetLike = recipe(`
   .control {
     font: inherit;
-    color: var(--ui-control-text);
-    background: var(--ui-control-bg);
-    border: var(--border-size-1) solid var(--ui-control-border);
-    border-radius: var(--ui-control-radius);
-    box-shadow: var(--ui-control-highlight);
-    transition: border-color var(--motion-fast) var(--motion-standard),
-      background var(--motion-fast) var(--motion-standard),
-      box-shadow var(--motion-fast) var(--motion-standard),
-      transform var(--motion-fast) var(--motion-standard);
+    color: var(--color-foreground);
+    background: color-mix(in srgb, var(--color-popover) 78%, transparent);
+    border: 1px solid color-mix(in srgb, var(--color-border) 72%, var(--color-primary));
+    border-radius: var(--radius-md);
+    box-shadow: inset 0 1px 0 color-mix(in srgb, white 12%, transparent);
+    transition: border-color 160ms cubic-bezier(0.2, 0.8, 0.2, 1),
+      background 160ms cubic-bezier(0.2, 0.8, 0.2, 1),
+      box-shadow 160ms cubic-bezier(0.2, 0.8, 0.2, 1),
+      transform 160ms cubic-bezier(0.2, 0.8, 0.2, 1);
   }
-  .control:hover { border-color: var(--ui-control-border-hover); }
+  .control:hover { border-color: color-mix(in srgb, var(--color-primary) 55%, var(--color-border)); }
   .control:focus-visible {
-    outline: var(--focus-size) solid var(--focus-ring);
-    outline-offset: var(--focus-offset);
+    outline: 2px solid var(--color-ring);
+    outline-offset: 3px;
   }
   .control:disabled, .control[aria-disabled="true"] { opacity: .48; cursor: not-allowed; }
 `);
 
 export const surfaceRecipe: StyleSheetLike = recipe(`
   .surface {
-    color: var(--text-primary);
-    background: var(--surface-glass);
-    border: var(--border-size-1) solid var(--surface-border);
-    border-radius: var(--surface-radius);
-    box-shadow: var(--surface-highlight), var(--surface-shadow);
+    color: var(--color-foreground);
+    background: linear-gradient(145deg, color-mix(in srgb, var(--color-primary) 9%, var(--color-card)), color-mix(in srgb, var(--color-card) 90%, transparent));
+    border: 1px solid color-mix(in srgb, var(--color-border) 78%, var(--color-primary));
+    border-radius: var(--radius-lg);
+    box-shadow: inset 0 1px 0 color-mix(in srgb, white 8%, transparent), 0 20px 60px color-mix(in srgb, var(--color-foreground) 20%, transparent);
   }
 `);
 
 export const overlayRecipe: StyleSheetLike = recipe(`
   .overlay {
-    color: var(--text-primary);
-    background: var(--surface-overlay);
-    border: var(--border-size-1) solid var(--surface-border-strong);
-    border-radius: var(--overlay-radius);
-    box-shadow: var(--surface-highlight), var(--overlay-shadow);
+    color: var(--color-foreground);
+    background: color-mix(in srgb, var(--color-popover) 92%, transparent);
+    border: 1px solid color-mix(in srgb, var(--color-input) 62%, var(--color-primary));
+    border-radius: var(--radius-xl);
+    box-shadow: inset 0 1px 0 color-mix(in srgb, white 8%, transparent), 0 28px 90px color-mix(in srgb, var(--color-foreground) 48%, transparent);
   }
 `);
