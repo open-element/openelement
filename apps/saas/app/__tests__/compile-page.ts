@@ -7,7 +7,7 @@
  * @element/@property decorators are compile-time-only input and throw at
  * module evaluation outside the adapter transform.
  */
-import { rm, readFile, writeFile } from 'node:fs/promises';
+import { mkdtemp, rm, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -49,13 +49,13 @@ export async function compileComponentClass(sourceUrl: string): Promise<CustomEl
   // TypeScript media type, a host facility node does not offer for data:
   // imports). The workspace tmpdir is writable in daily dev, and release
   // qualification runs the packed tarballs instead of this helper.
-  // the unique temp filename busts node's module cache across compiles
-  const tempModule = join(
-    tmpdir(),
-    `saas-compiled-page-${Date.now()}-${Math.random().toString(36).slice(2)}.ts`,
-  );
+  // mkdtemp's unique directory busts node's module cache across compiles
+  // and keeps the file out of the shared temp root (CodeQL: insecure temp
+  // file creation).
+  const tempDir = await mkdtemp(join(tmpdir(), 'oe-saas-compiled-page-'));
+  const tempModule = join(tempDir, 'compiled-page.ts');
   await writeFile(tempModule, rewritten, 'utf8');
   const mod = await import(pathToFileURL(tempModule).href);
-  await rm(tempModule, { force: true });
+  await rm(tempDir, { recursive: true, force: true });
   return mod.default as CustomElementConstructor;
 }

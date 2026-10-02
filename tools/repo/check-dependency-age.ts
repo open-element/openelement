@@ -91,7 +91,7 @@ async function fetchPublishTime(pkg: LockPackage): Promise<string> {
       // Full (non-abbreviated) packuments: only they carry the `time` map,
       // and for meta-packages like playwright they reach ~20MB.
       const response = await fetch(
-        `${pkg.registry}/${encodeURIComponent(pkg.name).replace('%40', '@')}`,
+        `${pkg.registry}/${encodeURIComponent(pkg.name).replaceAll('%40', '@')}`,
         {
           headers: { accept: 'application/json' },
           signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
