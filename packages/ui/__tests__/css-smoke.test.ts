@@ -27,6 +27,72 @@ test('one token sheet serves document and shadow adoption', async () => {
   expect(rootRule.includes('contain:')).toEqual(false);
 });
 
+test('@theme role sheet keeps the @layer theme { :root, :host } shape', async () => {
+  const { themeTokenSheet } = await import('../src/theme-tokens.ts');
+  expect(typeof themeTokenSheet.replaceSync).toEqual('function');
+  expect(themeTokenSheet.cssRules.length > 0).toEqual(true);
+  const css = themeTokenSheet.cssRules.map((rule) => rule.cssText).join('\n');
+  // The Tailwind-compiled token tier lands in the same shape css-smoke pins
+  // for the open-props sheet: a layered block selecting :root and :host, so
+  // one sheet serves document adoption and shadow adoption (alpha9 C1).
+  expect(
+    /@layer theme\s*\{[\s\S]*?:root,\s*:host\s*\{/.test(css),
+    'the role block must be @layer theme { :root, :host }',
+  ).toEqual(true);
+  for (const role of ['--color-background', '--color-primary', '--color-ring', '--radius']) {
+    expect(css.includes(role), `${role} must be part of the @theme contract`).toEqual(true);
+  }
+});
+
+test('@theme dark union covers html[data-theme], .dark and the :host broadcast', async () => {
+  const { themeTokenSheet } = await import('../src/theme-tokens.ts');
+  const css = themeTokenSheet.cssRules.map((rule) => rule.cssText).join('\n');
+  // One unlayered rule carries all three dark signals (C0 breakage 2): the
+  // www document attribute, the shadcn class convention, and the shadow-host
+  // form the open-element-theme.ts broadcast lands on.
+  const darkRule = css.match(/html\[data-theme="dark"\][^{}]*\{[^}]*\}/)?.[0] ?? '';
+  expect(darkRule, 'a dark rule opening on html[data-theme="dark"]').not.toEqual('');
+  expect(darkRule.includes('.dark'), 'dark union must carry the .dark class').toEqual(true);
+  expect(
+    darkRule.includes(':host([data-theme="dark"])'),
+    'dark union must carry the :host broadcast form',
+  ).toEqual(true);
+  expect(
+    (darkRule.match(/--[a-z0-9-]+\s*:/g) ?? []).length,
+    'the dark union must carry declarations',
+  ).toBeGreaterThan(0);
+});
+
+test('@theme tier ships roles only — no Tailwind default scales leak in', async () => {
+  const { themeTokenSheet } = await import('../src/theme-tokens.ts');
+  const css = themeTokenSheet.cssRules.map((rule) => rule.cssText).join('\n');
+  // The tier compiles with no content scanning, so default scales only appear
+  // if a utility used them — i.e. never here. This is the mechanism behind
+  // the #1502 roles-only gate: everything in the artifact was authored.
+  const scaleLeak = css.match(
+    /--(?:spacing|leading|tracking|text-|font-(?:weight|size|sans|mono|serif)|radius-(?:sm|md|lg|xl|[234]xl))\w*\s*:/,
+  );
+  expect(scaleLeak, 'no Tailwind default-scale variable may appear in the @theme tier').toEqual(
+    null,
+  );
+});
+
+test('@theme forced-colors tier mirrors the dark union so system colors win in dark', async () => {
+  const { themeTokenSheet } = await import('../src/theme-tokens.ts');
+  const css = themeTokenSheet.cssRules.map((rule) => rule.cssText).join('\n');
+  expect(css.includes('@media (forced-colors: active)')).toEqual(true);
+  const tier = css.slice(css.indexOf('@media (forced-colors: active)'));
+  // The selector list must carry the dark union alongside :root/:host: with
+  // only :root/:host, html[data-theme="dark"] (0,1,1) outranks the tier
+  // (0,1,0) and would keep the author palette alive under forced colors.
+  for (const selector of ['html[data-theme="dark"]', '.dark', ':host([data-theme="dark"])']) {
+    expect(tier.includes(selector), `forced-colors tier must mirror ${selector}`).toEqual(true);
+  }
+  for (const systemColor of ['Canvas', 'CanvasText', 'ButtonText', 'GrayText', 'Highlight']) {
+    expect(tier.includes(systemColor), `system color ${systemColor} must be present`).toEqual(true);
+  }
+});
+
 test('the retired root-sheet export and transformer stay gone', async () => {
   const mod = await import('../src/open-props-tokens.ts');
   expect('openPropsRootSheet' in mod).toBeFalsy();

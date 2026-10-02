@@ -1,0 +1,122 @@
+/*
+ * The @theme token source of @openelement/ui (alpha9 C1, #1504) — compiled by
+ * the Tailwind CLI into src/theme-tokens.ts (GENERATED; never edit that file).
+ *
+ *   pnpm --filter @openelement/ui run generate:theme-tokens
+ *   pnpm --filter @openelement/ui run theme-tokens:check
+ *
+ * Layer table (#1502 token architecture):
+ *   Scales  → Tailwind default theme (zero authored lines): the import below.
+ *             Nothing emits at this tier — the CLI only emits variables that
+ *             utilities actually use, and no utility compiles here. Scales
+ *             appear at the app tier (C2 preset), on demand.
+ *   Roles   → shadcn semantic role sheet adopted whole (~20 roles), authored
+ *             once in @theme static below.
+ *   Mapping → component recipes consume roles via var(); not in this file.
+ *
+ * `@theme static` is load-bearing (C0 spike breakage 1): plain `@theme` only
+ * emits variables some utility used, and with no content scanning at this
+ * tier the sheet compiles to an empty shell. `static` forces full emission —
+ * which is also what makes the roles-only gate (#1502) real: everything an
+ * author sees here ships, so nothing un-authored can sneak in.
+ *
+ * Dark pairs: plain unlayered CSS so they beat @layer theme in the cascade.
+ * The selector union carries all three dark signals (C0 spike breakage 2):
+ *   html[data-theme="dark"]      — the www document tier (theme-init.js and
+ *                                  open-theme-toggle write the attribute, and
+ *                                  open-element-theme.ts broadcasts it);
+ *   .dark                        — the shadcn ecosystem convention;
+ *   :host([data-theme="dark"])   — the shadow-adoption channel: the attribute
+ *                                  broadcast lands on hosts, and `.dark`/
+ *                                  `html[data-theme]` cannot cross the shadow
+ *                                  boundary (C0 browser-verified).
+ *
+ * Forced-colors tier: system colors replace the role values. The selector
+ * list MIRRORS the dark union (plus the light :root/:host) instead of reusing
+ * `:root, :host`: `html[data-theme="dark"]` outranks a bare `:root` on
+ * specificity, so under forced colors + dark the dark pair would otherwise
+ * win and the system palette would never apply. Same-list + later-source
+ * keeps the media tier authoritative in both themes.
+ */
+@import "tailwindcss/theme.css" layer(theme);
+
+@theme static {
+  /* ── shadcn semantic roles (light values) ── */
+  --color-background: hsl(0 0% 100%);
+  --color-foreground: hsl(240 10% 3.9%);
+  --color-card: hsl(0 0% 100%);
+  --color-card-foreground: hsl(240 10% 3.9%);
+  --color-popover: hsl(0 0% 100%);
+  --color-popover-foreground: hsl(240 10% 3.9%);
+  --color-primary: hsl(240 5.9% 10%);
+  --color-primary-foreground: hsl(0 0% 98%);
+  --color-secondary: hsl(240 4.8% 95.9%);
+  --color-secondary-foreground: hsl(240 5.9% 10%);
+  --color-muted: hsl(240 4.8% 95.9%);
+  --color-muted-foreground: hsl(240 3.8% 46.1%);
+  --color-accent: hsl(240 4.8% 95.9%);
+  --color-accent-foreground: hsl(240 5.9% 10%);
+  --color-destructive: hsl(0 84.2% 60.2%);
+  --color-destructive-foreground: hsl(0 0% 98%);
+  --color-border: hsl(240 5.9% 90%);
+  --color-input: hsl(240 5.9% 90%);
+  --color-ring: hsl(240 5.9% 10%);
+
+  /* ── layout tokens the component tier consumes ── */
+  --radius: 0.625rem;
+}
+
+/* ── .dark pairs (runtime-switchable) ── */
+html[data-theme="dark"],
+.dark,
+:host([data-theme="dark"]) {
+  --color-background: hsl(240 10% 3.9%);
+  --color-foreground: hsl(0 0% 98%);
+  --color-card: hsl(240 10% 3.9%);
+  --color-card-foreground: hsl(0 0% 98%);
+  --color-popover: hsl(240 10% 3.9%);
+  --color-popover-foreground: hsl(0 0% 98%);
+  --color-primary: hsl(0 0% 98%);
+  --color-primary-foreground: hsl(240 5.9% 10%);
+  --color-secondary: hsl(240 3.7% 15.9%);
+  --color-secondary-foreground: hsl(0 0% 98%);
+  --color-muted: hsl(240 3.7% 15.9%);
+  --color-muted-foreground: hsl(240 5% 64.9%);
+  --color-accent: hsl(240 3.7% 15.9%);
+  --color-accent-foreground: hsl(0 0% 98%);
+  --color-destructive: hsl(0 62.8% 30.6%);
+  --color-destructive-foreground: hsl(0 0% 98%);
+  --color-border: hsl(240 3.7% 15.9%);
+  --color-input: hsl(240 3.7% 15.9%);
+  --color-ring: hsl(240 4.9% 83.9%);
+}
+
+/* ── forced-colors tier (#1502/#1503 token schema; Chromium-emulation
+      verified in the C0 spike) ── */
+@media (forced-colors: active) {
+  :root,
+  :host,
+  html[data-theme="dark"],
+  .dark,
+  :host([data-theme="dark"]) {
+    --color-background: Canvas;
+    --color-foreground: CanvasText;
+    --color-card: Canvas;
+    --color-card-foreground: CanvasText;
+    --color-popover: Canvas;
+    --color-popover-foreground: CanvasText;
+    --color-primary: ButtonText;
+    --color-primary-foreground: ButtonFace;
+    --color-secondary: ButtonFace;
+    --color-secondary-foreground: ButtonText;
+    --color-muted: Canvas;
+    --color-muted-foreground: GrayText;
+    --color-accent: ButtonFace;
+    --color-accent-foreground: ButtonText;
+    --color-destructive: CanvasText;
+    --color-destructive-foreground: Canvas;
+    --color-border: CanvasText;
+    --color-input: CanvasText;
+    --color-ring: Highlight;
+  }
+}

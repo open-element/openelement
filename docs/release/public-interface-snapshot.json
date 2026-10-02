@@ -633,7 +633,9 @@
         "./open-props-tokens": "./src/open-props-tokens.ts",
         "./open-props-tokens.js": "./src/open-props-tokens.ts",
         "./open-tabs": "./src/open-tabs.tsx",
-        "./open-theme-toggle": "./src/open-theme-toggle.tsx"
+        "./open-theme-toggle": "./src/open-theme-toggle.tsx",
+        "./theme-tokens": "./src/theme-tokens.ts",
+        "./theme-tokens.js": "./src/theme-tokens.ts"
       },
       "declarations": {
         ".": {
@@ -739,6 +741,18 @@
           "publicShapeSha256": "ae880bca66ee6af6fe9506936329eb5e85f4c83a6d8598fa6645fb3869cd4060",
           "publicSymbols": [
             "OpenThemeToggle=type:{attributeChangedCallback:{call:(name:string,old:union(null|string),val:union(null|string))=>void};connectedCallback:{call:()=>void};onDsdHydrated:{call:()=>void};render:{call:()=>unknown};theme:union(\"dark\"|\"light\")}|value:{construct:()=>{attributeChangedCallback:{call:(name:string,old:union(null|string),val:union(null|string))=>void};connectedCallback:{call:()=>void};onDsdHydrated:{call:()=>void};render:{call:()=>unknown};theme:union(\"dark\"|\"light\")};styles:array(StyleSheetLike)}"
+          ]
+        },
+        "./theme-tokens": {
+          "publicShapeSha256": "83c5dc89c07f8b0114eda95f2cc19435c903106f9c45c4b244c18dc7090a6f09",
+          "publicSymbols": [
+            "themeTokenSheet=value:StyleSheetLike"
+          ]
+        },
+        "./theme-tokens.js": {
+          "publicShapeSha256": "83c5dc89c07f8b0114eda95f2cc19435c903106f9c45c4b244c18dc7090a6f09",
+          "publicSymbols": [
+            "themeTokenSheet=value:StyleSheetLike"
           ]
         }
       }

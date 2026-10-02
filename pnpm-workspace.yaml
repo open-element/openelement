@@ -23,6 +23,10 @@ minimumReleaseAge: 4320
 
 # Postinstall allowlist (pnpm blocks build scripts by default). esbuild
 # validates/links its platform binary; pagefind downloads the search binary.
+# @parcel/watcher (transitive of @tailwindcss/cli) builds a native watcher we
+# never use — the token generator runs one-shot compiles, not --watch — so its
+# build script stays denied.
 allowBuilds:
+  '@parcel/watcher': false
   esbuild: true
   pagefind: true

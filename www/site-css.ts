@@ -14,10 +14,11 @@
  * this module is the site's designated home for them (the site style layer the
  * gate's own doctrine names).
  */
-// The token sheet subpath, not the package root: the root export pulls every
+// The token sheet subpaths, not the package root: the root export pulls every
 // component module (.tsx), which the node-host build-time head evaluation
-// cannot load; the token sheet is pure .ts.
+// cannot load; the token sheets are pure .ts.
 import { openPropsTokenSheet } from '@openelement/ui/open-props-tokens';
+import { themeTokenSheet } from '@openelement/ui/theme-tokens';
 
 /**
  * Central viewport tier scale (px). Every bare-number @media width/height
@@ -168,10 +169,15 @@ body {
 }`;
 
 // Make token variables available to document-level elements while shadow trees
-// continue to inherit them from the document root. The sheet's token block
-// selects `:root, :host` (packages/ui/tools/generate-ui-tokens.ts), so this
-// module only consumes the finished sheet — there is no transform.
+// continue to inherit them from the document root. Each sheet's token block
+// selects `:root, :host` (packages/ui/tools/generate-ui-tokens.ts and
+// generate-theme-tokens.ts), so these modules only consume the finished
+// sheets — there is no transform. The @theme-derived sheet (alpha9 C1, #1504)
+// carries its roles inside `@layer theme`, so it yields to every unlayered
+// rule here; the dark pairs ship unlayered and activate on the document
+// through html[data-theme="dark"] / .dark.
 const rootTokens = [...openPropsTokenSheet.cssRules].map((rule) => rule.cssText).join('\n');
+const themeTokens = [...themeTokenSheet.cssRules].map((rule) => rule.cssText).join('\n');
 
 /**
  * The site's font faces. Three faces, deliberately: the two text faces (prose
@@ -182,7 +188,8 @@ const fontFaces = `@font-face{font-family:'JetBrains Mono';font-style:normal;fon
 
 /**
  * The complete document-level style body: faces first (so the preloaded files
- * are usable at first paint), then the open-props tokens, then the body
- * baseline and the site rules. app/head.tsx wraps this in one <style> entry.
+ * are usable at first paint), then the open-props tokens, then the @theme
+ * role sheet (alpha9 C1), then the body baseline and the site rules.
+ * app/head.tsx wraps this in one <style> entry.
  */
-export const documentStyle = `${fontFaces}${rootTokens}body{font-family:var(--font-sans);-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}${siteCSS}`;
+export const documentStyle = `${fontFaces}${rootTokens}${themeTokens}body{font-family:var(--font-sans);-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}${siteCSS}`;
