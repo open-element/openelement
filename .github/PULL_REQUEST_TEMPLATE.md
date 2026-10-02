@@ -14,11 +14,11 @@ Read [CONTRIBUTING.md](../CONTRIBUTING.md) first.
 ## Verification
 
 - [ ] Focused behavioral tests
-- [ ] `deno task fmt:check`
-- [ ] `deno task lint`
-- [ ] `deno task typecheck`
-- [ ] `deno task test`
-- [ ] `deno task build`
+- [ ] `pnpm run fmt`
+- [ ] `pnpm run lint`
+- [ ] `pnpm run typecheck`
+- [ ] `pnpm run test`
+- [ ] `pnpm run build`
 - [ ] Packed/browser/runtime gates applicable to this change
 
 ## Release impact
