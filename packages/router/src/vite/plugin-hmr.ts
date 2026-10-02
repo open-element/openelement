@@ -8,6 +8,7 @@
  * Vite builds, and hook behavior is unchanged.
  */
 
+import { readFile } from 'node:fs/promises';
 import type { Plugin } from 'vite';
 import {
   compileElementModule,
@@ -67,7 +68,7 @@ export function createCompilerHooks(
       if (!/\.tsx$/.test(hmr.file)) return;
       let source: string;
       try {
-        source = await Deno.readTextFile(hmr.file);
+        source = await readFile(hmr.file, 'utf8');
       } catch {
         compiledProgramShapes.delete(hmr.file);
         return;

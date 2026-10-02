@@ -21,7 +21,7 @@
  * plugin hooks.
  */
 
-import { existsSync } from '../internal/host-path.ts';
+import { existsSync, readFileSync } from 'node:fs';
 import { join, resolve } from '../internal/host-path.ts';
 import { fromFileUrl } from '../internal/host-path.ts';
 import type { Plugin } from 'vite';
@@ -56,7 +56,7 @@ const WORKSPACE_ROOT: string | null = (() => {
 function tryDenoJsonDir(id: string, dir: string): ImportMapResolution | null {
   const denoJsonPath = join(dir, 'deno.json');
   if (!existsSync(denoJsonPath)) return null;
-  const raw = Deno.readTextFileSync(denoJsonPath);
+  const raw = readFileSync(denoJsonPath, 'utf8');
   // #708: shared JSONC parser (single implementation with workspace-alias.ts).
   // Handles mid-line // comments, /* */ blocks, string literals, and trailing commas.
   const denoJson = parseJsonc(raw);

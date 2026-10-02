@@ -1,3 +1,5 @@
+import { mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
+import process from 'node:process';
 import { join, relative } from '../internal/host-path.ts';
 import type { BuildArtifacts, BuildPlan } from './internal/protocol/ssg.ts';
 import type { OpenElementBuildContext } from './build-context.ts';
@@ -74,7 +76,7 @@ function files(root: string): string[] {
   // collectBuildArtifacts), not as an empty artifact set: the shared walker
   // tolerates missing dirs, so probe with a plain readdirSync first to throw
   // the native ENOENT.
-  [...Deno.readDirSync(root)].map((e) => e.name);
+  readdirSync(root);
   return walkFileEntries(root).map((entry) => entry.absolutePath);
 }
 
@@ -86,7 +88,7 @@ function files(root: string): string[] {
 function readRequestTimeRouteEvidence(outputDir: string): { requestTimeRoutes?: string[] } {
   try {
     const manifest = JSON.parse(
-      Deno.readTextFileSync(join(outputDir, 'server', 'server-manifest.json')),
+      readFileSync(join(outputDir, 'server', 'server-manifest.json'), 'utf8'),
     ) as { requestTimeRoutes?: Array<{ path?: unknown }> };
     const paths = (manifest.requestTimeRoutes ?? [])
       .map((route) => route.path)
@@ -98,7 +100,7 @@ function readRequestTimeRouteEvidence(outputDir: string): { requestTimeRoutes?: 
 }
 
 export function collectBuildArtifacts(plan: BuildPlan): BuildArtifacts {
-  const root = plan.output.root ?? Deno.cwd();
+  const root = plan.output.root ?? process.cwd();
   const outputDir = join(root, plan.output.outDir ?? DEFAULT_OUT_DIR);
   try {
     const emitted = files(outputDir);
@@ -107,15 +109,15 @@ export function collectBuildArtifacts(plan: BuildPlan): BuildArtifacts {
       .map((path) => ({
         path:
           '/' + normalizeSeparators(relative(outputDir, path)).replace(/(?:\/index)?\.html$/, ''),
-        html: Deno.readTextFileSync(path),
+        html: readFileSync(path, 'utf8'),
         errors: [],
       }));
     const clientAssets = emitted
       .filter((path) => /\.(?:js|css)$/.test(path))
       .map((path) => ({
         fileName: normalizeSeparators(relative(outputDir, path)),
-        source: Deno.readTextFileSync(path),
-        sizeBytes: Deno.statSync(path).size,
+        source: readFileSync(path, 'utf8'),
+        sizeBytes: statSync(path).size,
       }));
     return {
       pages,
@@ -147,7 +149,7 @@ export function collectBuildArtifacts(plan: BuildPlan): BuildArtifacts {
 }
 
 export function writeBuildEvidence(plan: BuildPlan, artifacts: BuildArtifacts): void {
-  const root = plan.output.root ?? Deno.cwd();
+  const root = plan.output.root ?? process.cwd();
   const evidence = {
     success: artifacts.success,
     pages: artifacts.pages.map(({ path, errors }) => ({ path, errors })),
@@ -165,10 +167,10 @@ export function writeBuildEvidence(plan: BuildPlan, artifacts: BuildArtifacts): 
   // writeFileSync the single fs call on the common path.
   const evidencePath = join(root, OPEN_ELEMENT_DIR, 'build-artifacts.json');
   try {
-    Deno.writeTextFileSync(evidencePath, formatJson(evidence));
+    writeFileSync(evidencePath, formatJson(evidence), 'utf8');
   } catch (error) {
     if ((error as { code?: unknown })?.code !== 'ENOENT') throw error;
-    Deno.mkdirSync(join(root, OPEN_ELEMENT_DIR), { recursive: true });
-    Deno.writeTextFileSync(evidencePath, formatJson(evidence));
+    mkdirSync(join(root, OPEN_ELEMENT_DIR), { recursive: true });
+    writeFileSync(evidencePath, formatJson(evidence), 'utf8');
   }
 }

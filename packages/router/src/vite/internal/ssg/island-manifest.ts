@@ -5,7 +5,7 @@
  * Each manifest lists the islands found on a page with their chunk URLs and strategies.
  */
 
-import { existsSync } from '../../../internal/host-path.ts';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from '../../../internal/host-path.ts';
 import type { ComponentLayer } from '../protocol/framework.ts';
 import { formatJson, normalizeSeparators } from '@openelement/element/build-utils';
@@ -129,7 +129,7 @@ export function generateIslandManifests(
 
   // #710: single shared walker — deterministic order, dotfiles skipped.
   for (const entry of walkHtmlFileEntries(htmlDir)) {
-    const html = Deno.readTextFileSync(entry.absolutePath);
+    const html = readFileSync(entry.absolutePath, 'utf8');
     const tags = extractCustomElementTags(html).sort();
 
     const islands: IslandManifestEntry[] = tags
@@ -165,11 +165,11 @@ export async function writeIslandManifests(
   manifests: PageIslandManifest[],
 ): Promise<void> {
   const manifestDir = join(outputDir, 'island-manifests');
-  Deno.mkdirSync(manifestDir, { recursive: true });
+  mkdirSync(manifestDir, { recursive: true });
 
   for (const manifest of manifests) {
     const hash = await stableHash(manifest.route);
     const filename = `page-${hash}.json`;
-    Deno.writeTextFileSync(join(manifestDir, filename), formatJson(manifest));
+    writeFileSync(join(manifestDir, filename), formatJson(manifest), 'utf8');
   }
 }

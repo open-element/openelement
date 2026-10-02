@@ -29,7 +29,7 @@
  * every other head fragment.
  */
 
-import { existsSync } from '../internal/host-path.ts';
+import { existsSync } from 'node:fs';
 import { isAbsolute } from '../internal/host-path.ts';
 import { join } from '../internal/host-path.ts';
 import { toFileUrl } from '../internal/host-path.ts';

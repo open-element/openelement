@@ -15,6 +15,7 @@
  * whose client scripts never load.
  */
 
+import { readFile } from 'node:fs/promises';
 import { join, relative } from '../internal/host-path.ts';
 import { normalizeSeparators } from '@openelement/element/build-utils';
 import { buildError, ClientAssetErrorCode } from '../internal/error-codes.ts';
@@ -55,7 +56,7 @@ export async function readViteClientManifest(
 ): Promise<Record<string, ViteClientManifestEntry>> {
   let text: string;
   try {
-    text = await Deno.readTextFile(manifestPath);
+    text = await readFile(manifestPath, 'utf8');
   } catch (cause) {
     throw buildError(
       ClientAssetErrorCode.MANIFEST_READ,

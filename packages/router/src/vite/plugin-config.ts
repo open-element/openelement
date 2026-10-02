@@ -9,6 +9,7 @@
  * Moved out of plugin.ts verbatim: hook behavior is unchanged.
  */
 
+import process from 'node:process';
 import { type Alias, type ConfigEnv, loadConfigFromFile, type Plugin } from 'vite';
 import type { FrameworkOptions } from './internal/protocol/framework.ts';
 import type { SsgBehaviorOptions } from './internal/protocol/ssg.ts';
@@ -282,7 +283,7 @@ export function createOpenPluginState(
   // registry versions that the workspace aliases below would silently replace
   // with the checkout's sources — a build that reports success while resolving
   // a different framework version. Refuse before any alias is generated.
-  const hijack = detectWorkspaceAliasHijack(Deno.cwd());
+  const hijack = detectWorkspaceAliasHijack(process.cwd());
   if (hijack) throw workspaceAliasHijackError(hijack);
 
   // Pre-generate workspace aliases (sync, once, cached in ctx).
@@ -290,7 +291,7 @@ export function createOpenPluginState(
   // all read ctx.phase1.userResolveAlias - zero redundant generation.
   let workspaceRoot: string | undefined;
   try {
-    const wsRoot = findWorkspaceRoot(Deno.cwd());
+    const wsRoot = findWorkspaceRoot(process.cwd());
     workspaceRoot = wsRoot ?? undefined;
     if (wsRoot) {
       ctx.phase1.userResolveAlias = generateWorkspaceAliases(wsRoot);
@@ -334,7 +335,7 @@ export function createConfigHooks(
       }
 
       const aliases = state.ctx.phase1.userResolveAlias as Alias[] | Record<string, string> | null;
-      const normalizedAliases = normalizeViteAliases(aliases, Deno.cwd());
+      const normalizedAliases = normalizeViteAliases(aliases, process.cwd());
       if (normalizedAliases) {
         state.ctx.phase1.userResolveAlias = normalizedAliases;
       }
@@ -345,7 +346,7 @@ export function createConfigHooks(
       // the plugin closure itself. The project root is the process cwd — the
       // same anchor routesDir/islandsDir use.
       try {
-        await resolveAndApplyAppConfig(state, options, Deno.cwd(), {
+        await resolveAndApplyAppConfig(state, options, process.cwd(), {
           command: env?.command === 'serve' ? 'serve' : 'build',
           mode: env?.mode ?? 'production',
         });

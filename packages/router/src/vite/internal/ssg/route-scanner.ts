@@ -229,7 +229,7 @@ export async function scanRoutes(
       continue;
     }
 
-    if (fileStat.isDirectory) {
+    if (fileStat.isDirectory()) {
       // Recurse into subdirectories
       const subEntries = await scanRoutes(fullPath, relativePath, options);
       entries.push(...subEntries);

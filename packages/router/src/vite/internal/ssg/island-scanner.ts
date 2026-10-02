@@ -437,7 +437,7 @@ export async function scanIslands(islandsDir: string, relativeDir: string = ''):
 
     const relativePath = relativeDir ? join(relativeDir, entry) : entry;
 
-    if (fileStat.isDirectory) {
+    if (fileStat.isDirectory()) {
       const subFiles = await scanIslands(fullPath, relativePath);
       files.push(...subFiles);
     } else if (/\.(ts|tsx|js|jsx)$/.test(entry)) {

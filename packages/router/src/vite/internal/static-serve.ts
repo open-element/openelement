@@ -7,10 +7,12 @@
  * cache-control policy, and the generated request-time server module
  * contract. `@std/media-types` is deliberately not used: it would surface as
  * an `npm:@jsr/*` dependency in the packed tarball. Standard
- * fetch(Request): Response entry; local serving uses Deno.serve,
- * Node/Workers/Bun deploys use the Nitro mount. No Node HTTP bridge.
+ * fetch(Request): Response entry; local serving uses the node:http fetch
+ * server (`internal/node-http.ts`), Node/Workers/Bun deploys use the Nitro
+ * mount.
  */
 
+import { readFileSync, realpathSync } from 'node:fs';
 import mime from 'mime';
 import { extname, join, resolve, SEP, toFileUrl } from '../../internal/host-path.ts';
 
@@ -72,7 +74,7 @@ export function tryStatic(distDir: string, pathname: string): Response | null {
   }
   let root: string;
   try {
-    root = Deno.realPathSync(resolve(distDir));
+    root = realpathSync(resolve(distDir));
   } catch {
     return null;
   }
@@ -85,14 +87,14 @@ export function tryStatic(distDir: string, pathname: string): Response | null {
     if (!filePath.startsWith(root + SEP)) continue;
     let realPath: string;
     try {
-      realPath = Deno.realPathSync(filePath);
+      realPath = realpathSync(filePath);
     } catch {
       continue;
     }
     if (!realPath.startsWith(root + SEP)) continue;
     let body: Uint8Array;
     try {
-      body = Deno.readFileSync(realPath);
+      body = readFileSync(realPath);
     } catch {
       continue;
     }

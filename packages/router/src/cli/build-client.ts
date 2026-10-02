@@ -14,7 +14,9 @@
  *   deno task build  (unified entry - runs all 3 phases)
  */
 
-import { existsSync } from '../internal/host-path.ts';
+import { existsSync, readFileSync } from 'node:fs';
+import { rm } from 'node:fs/promises';
+import process from 'node:process';
 import { type Alias, build as viteBuild, type InlineConfig } from 'vite';
 import { dirname, isAbsolute, join, relative, resolve } from '../internal/host-path.ts';
 import { fromFileUrl } from '../internal/host-path.ts';
@@ -106,7 +108,7 @@ function existingSourceFile(candidates: readonly string[]): string | null {
   for (const candidate of candidates) {
     if (!existsSync(candidate)) continue;
     try {
-      Deno.readTextFileSync(candidate);
+      readFileSync(candidate, 'utf8');
       return candidate;
     } catch {
       // A directory or unreadable path is not a source graph node.
@@ -172,7 +174,7 @@ export function findReachableIslandTags(
     visitedSourceFiles.add(normalizedPath);
     let source: string;
     try {
-      source = Deno.readTextFileSync(normalizedPath);
+      source = readFileSync(normalizedPath, 'utf8');
     } catch {
       return;
     }
@@ -201,7 +203,7 @@ export function findReachableIslandTags(
   };
 
   for (const entry of walkHtmlFileEntries(resolve(root, outDir))) {
-    recordSource(Deno.readTextFileSync(entry.absolutePath));
+    recordSource(readFileSync(entry.absolutePath, 'utf8'));
   }
 
   const routesDir = ctx.phase3.routesDir || 'app/routes';
@@ -227,8 +229,10 @@ export function findReachableIslandTags(
 }
 
 async function removeClientDeliveryArtifacts(root: string, outDir: string): Promise<void> {
-  await Deno.remove(resolve(root, outDir, 'client'), { recursive: true }).catch(() => {});
-  await Deno.remove(resolve(root, outDir, 'island-manifests'), { recursive: true }).catch(() => {});
+  await rm(resolve(root, outDir, 'client'), { recursive: true, force: true }).catch(() => {});
+  await rm(resolve(root, outDir, 'island-manifests'), { recursive: true, force: true }).catch(
+    () => {},
+  );
 }
 
 // #868: the browser runtimes are real modules bundled through virtual
@@ -277,7 +281,7 @@ function packageIslandSourcePath(
 }
 
 async function buildClient(ctx: OpenElementBuildContext): Promise<ClientAssetManifest | null> {
-  const root = ctx.phase3.root || Deno.cwd();
+  const root = ctx.phase3.root || process.cwd();
   const outDir = ctx.phase3.outDir || DEFAULT_OUT_DIR;
   const islandsDir = ctx.phase3.islandsDir || DEFAULT_ISLANDS_DIR;
   const localIslands = ctx.phase1.islandTagNames || [];
@@ -562,7 +566,7 @@ async function buildClient(ctx: OpenElementBuildContext): Promise<ClientAssetMan
       compiledElementPlugin({
         // Linked workspace packages sit outside the project root; without the
         // workspace anchor their absolute ids would land in the source maps.
-        workspaceRoot: findWorkspaceRoot(Deno.cwd()) ?? undefined,
+        workspaceRoot: findWorkspaceRoot(process.cwd()) ?? undefined,
         // Island modules carry the island delivery policy statement; the
         // compiler admits it only through the injected descriptor.
         staticSidecars: [ISLAND_ADMISSION],

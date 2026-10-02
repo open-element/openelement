@@ -15,6 +15,7 @@
  * both expansion paths (dynamic routes and i18n locale expansion).
  */
 
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from '../../../internal/host-path.ts';
 import { buildError, SsgDynamicErrorCode } from '../../../internal/error-codes.ts';
 import type {
@@ -143,8 +144,8 @@ async function writeRenderedPage(
   }
 
   const pageDir = join(root, outDir, targetPath);
-  Deno.mkdirSync(pageDir, { recursive: true });
-  Deno.writeTextFileSync(join(pageDir, 'index.html'), outcome.html);
+  mkdirSync(pageDir, { recursive: true });
+  writeFileSync(join(pageDir, 'index.html'), outcome.html, 'utf8');
 
   log.info(
     locale

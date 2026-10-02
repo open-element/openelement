@@ -20,6 +20,7 @@
  * without `marked` installed fails closed with install guidance.
  */
 
+import { readFile } from 'node:fs/promises';
 import type { Plugin } from 'vite';
 import { buildError, MdxErrorCode } from '../internal/error-codes.ts';
 
@@ -76,7 +77,7 @@ export function mdxPlugin(options: OpenMdxPluginOptions = {}): Plugin {
       if (!id.startsWith(VIRTUAL_PREFIX) || !id.endsWith(VIRTUAL_SUFFIX)) return null;
       const filePath = id.slice(VIRTUAL_PREFIX.length, -VIRTUAL_SUFFIX.length);
       try {
-        return await Deno.readTextFile(filePath);
+        return await readFile(filePath, 'utf8');
       } catch {
         throw buildError(
           MdxErrorCode.PAGE_UNREADABLE,

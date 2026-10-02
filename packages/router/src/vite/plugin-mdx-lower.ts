@@ -14,6 +14,7 @@
  * with a source-located build error.
  */
 
+import process from 'node:process';
 import { marked } from 'marked';
 import { normalizeSeparators, pathToTagName } from '@openelement/element/build-utils';
 import { buildError, MdxErrorCode } from '../internal/error-codes.ts';
@@ -184,7 +185,7 @@ export function mdxToCompiledPageSource(
   // derive it from the route-file-relative path exactly like the scanner.
   let tag: string;
   if (routesDir) {
-    const absoluteRoutes = resolve(Deno.cwd(), routesDir);
+    const absoluteRoutes = resolve(process.cwd(), routesDir);
     const relativePath = relative(absoluteRoutes, filePath);
     tag = relativePath.startsWith('..')
       ? pathToTagName(basename(filePath.replaceAll('\\', '/')))

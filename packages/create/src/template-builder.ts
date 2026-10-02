@@ -1,3 +1,4 @@
+import { readFile } from 'node:fs/promises';
 import { CREATE_VERSION, VITE_STARTER_PIN } from './version.ts';
 
 // npm package-name ceiling (validate-npm-package-name); a generated project
@@ -129,7 +130,7 @@ export async function buildTemplates(
   };
   const entries = await Promise.all(
     TEMPLATE_FILES.map(async ([source, target]) => {
-      let content = await Deno.readTextFile(new URL(source, templatesBase));
+      let content = await readFile(new URL(source, templatesBase), 'utf8');
       for (const [token, value] of Object.entries(tokens)) {
         if (content.includes(token)) content = content.split(token).join(value);
       }

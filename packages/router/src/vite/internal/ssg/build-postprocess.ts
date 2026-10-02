@@ -14,6 +14,8 @@
  * written.
  */
 
+import { readdir, rm } from 'node:fs/promises';
+import process from 'node:process';
 import { join } from '../../../internal/host-path.ts';
 import type { ComponentLayer, HydrationStrategy } from '../protocol/framework.ts';
 import type { ClientAssetManifest } from '../protocol/client-assets.ts';
@@ -108,7 +110,7 @@ export function islandChunkMapFromAssetManifest(
  * it, never a partial record that silently omits an admitted island.
  */
 export async function postProcessClientIslandBuild(ctx: BuildContextView): Promise<void> {
-  const root = ctx.phase3.root || Deno.cwd();
+  const root = ctx.phase3.root || process.cwd();
   const outDir = ctx.phase3.outDir || DEFAULT_OUT_DIR;
   const outputDir = join(root, outDir);
 
@@ -171,14 +173,12 @@ export async function postProcessClientIslandBuild(ctx: BuildContextView): Promi
  * and must not be deployed to static hosting.
  */
 export async function cleanSsrArtifacts(ctx: BuildContextView): Promise<void> {
-  const root = ctx.phase3.root || Deno.cwd();
+  const root = ctx.phase3.root || process.cwd();
   const outDir = ctx.phase3.outDir || DEFAULT_OUT_DIR;
 
   try {
     const assetsDir = join(root, outDir, 'assets');
-    const entries = await Array.fromAsync(Deno.readDir(assetsDir), (e) => e.name).catch(
-      () => [] as string[],
-    );
+    const entries = await readdir(assetsDir).catch(() => [] as string[]);
     const toDelete = entries.filter(
       (f) =>
         f.startsWith('_virtual_open-hono-entry') ||
@@ -186,7 +186,7 @@ export async function cleanSsrArtifacts(ctx: BuildContextView): Promise<void> {
     );
     for (const f of toDelete) {
       const p = join(assetsDir, f);
-      await Deno.remove(p).catch(() => {});
+      await rm(p).catch(() => {});
       log.info(`Cleaned SSR artifact: ${f}`);
     }
     if (toDelete.length > 0) {

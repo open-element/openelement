@@ -1,4 +1,5 @@
 /** Route-owned streaming admission; the Element program remains generic. */
+import process from 'node:process';
 import ts from 'typescript';
 import { dirname, extname, resolve } from '../../../internal/host-path.ts';
 import { compileElementProgram, stableModuleId } from '@openelement/element/compiler';
@@ -340,7 +341,7 @@ export async function scanStreamManifest(
   file: string,
   source: string,
   params: readonly string[] = [],
-  projectRoot = Deno.cwd(),
+  projectRoot = process.cwd(),
   workspaceRoot?: string,
 ): Promise<StreamRouteManifest | undefined> {
   const sf = ts.createSourceFile(file, source, ts.ScriptTarget.ES2022, true, ts.ScriptKind.TSX);

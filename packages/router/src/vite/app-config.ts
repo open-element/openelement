@@ -16,7 +16,7 @@
  */
 
 import type { FrameworkOptions } from './framework.ts';
-import { existsSync } from '../internal/host-path.ts';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from '../internal/host-path.ts';
 import { toFileUrl } from '../internal/host-path.ts';
 import { escapeAttr } from '@openelement/element/html';
@@ -143,7 +143,7 @@ function tokensFragmentFor(css: string): string {
 function readTextFileIfPresent(path: string): string | null {
   if (!existsSync(path)) return null;
   try {
-    return Deno.readTextFileSync(path);
+    return readFileSync(path, 'utf8');
   } catch (error) {
     throw new OpenElementError(
       `[openElement] Could not read ${path}: ${error instanceof Error ? error.message : error}`,

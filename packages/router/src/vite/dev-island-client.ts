@@ -17,7 +17,8 @@
  * __clientScriptDescriptors).
  */
 
-import { existsSync } from '../internal/host-path.ts';
+import { existsSync } from 'node:fs';
+import process from 'node:process';
 import type { Plugin } from 'vite';
 
 import { fromFileUrl } from '../internal/host-path.ts';
@@ -87,7 +88,7 @@ export function devIslandClientPlugin(
 
     load(id) {
       if (id !== RESOLVED_CLIENT_ENTRY_ID) return;
-      const root = Deno.cwd();
+      const root = process.cwd();
       const islandsDir = options.islandsDir || DEFAULT_ISLANDS_DIR;
       // #569: an island-free app with data-open-enhance forms still needs the
       // client entry — it carries the form-enhancement layer.
