@@ -14,7 +14,7 @@
  * covered directly instead: every generated searchRecord anchor must exist as
  * an id in the built /reference documents (both locales) below.
  */
-import { walk } from '@std/fs/walk';
+import { walk } from '../../tools/lib/std-fs.ts';
 import { fromFileUrl, join } from '@std/path';
 import { SITE_DEFAULT_LOCALE, SITE_LOCALES } from '../site-config.ts';
 import { normalize as posixNormalize } from '@std/path/posix';

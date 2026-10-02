@@ -10,6 +10,9 @@
  * Run from the repo root: deno task --cwd packages/element browser:negative
  */
 const WTR_DIR = new URL('..', import.meta.url).pathname;
+import { commandOutput } from '../../../../tools/repo/node-command.ts';
+import process from 'node:process';
+
 const CONFIGS = [
   'failing-assertion',
   'missing-browser',
@@ -20,12 +23,12 @@ const CONFIGS = [
 
 let failed = 0;
 for (const name of CONFIGS) {
-  const status = await new Deno.Command('npx', {
+  const status = await commandOutput('npx', {
     args: ['web-test-runner', '--config', `negative/${name}.config.js`],
     cwd: WTR_DIR,
     stdout: 'piped',
     stderr: 'piped',
-  }).output();
+  });
   if (status.code === 0) {
     failed += 1;
     console.error(`FAIL-CLOSED SMOKE BROKEN: ${name} exited 0 (expected non-zero)`);
@@ -35,6 +38,6 @@ for (const name of CONFIGS) {
 }
 if (failed > 0) {
   console.error(`${failed} fail-closed smoke(s) broken`);
-  Deno.exit(1);
+  process.exit(1);
 }
 console.log(`all ${CONFIGS.length} fail-closed smoke(s) held`);

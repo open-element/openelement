@@ -1,7 +1,7 @@
 /** WWW supported API reference page. */
 import { definePage } from '@openelement/router';
-import { siteHead } from '@openelement/site-ui/head.ts';
-import { contentLocale } from '@openelement/site-ui/locale.ts';
+import { siteHead } from '#site-ui/head.ts';
+import { contentLocale } from '#site-ui/locale.ts';
 import type { SiteLocale } from '../../site-config.ts';
 import { OPENELEMENT_VERSION, sourceLineStamp } from '../data/version.ts';
 import { apiReference } from '../data/_generated-api-reference.ts';

@@ -536,24 +536,36 @@ export async function scanPackageManifests(
 
   for (const pkg of packageNames) {
     // @vite-ignore suppresses unanalyzable-dynamic-import JSR warning.
+    // The `./manifest` subpath is preferred when a package declares one: it
+    // loads only the manifest module, so a node-host build-time scan never
+    // pulls the package's component modules (.tsx), which node cannot load.
+    // Packages without the subpath keep the root-entry contract.
     let mod: Record<string, unknown>;
     try {
-      mod = (await import(/* @vite-ignore */ pkg)) as Record<string, unknown>;
-    } catch (e) {
-      if (isBrowserOnlyPackageImportError(e)) {
-        log.warn(
-          `Skipping package manifest from "${pkg}": browser-only package cannot be imported during SSR discovery`,
-        );
-        continue;
+      mod = (await import(/* @vite-ignore */ `${pkg}/manifest`)) as Record<string, unknown>;
+    } catch (subpathError) {
+      const code = (subpathError as NodeJS.ErrnoException)?.code ?? '';
+      if (code !== 'ERR_PACKAGE_PATH_NOT_EXPORTED' && code !== 'ERR_MODULE_NOT_FOUND') {
+        throw subpathError;
       }
-      throw new OpenElementError(
-        `Failed to scan package manifest from "${pkg}": ${formatError(e)}`,
-        {
-          code: 'PACKAGE_SCAN_ERROR',
-          statusCode: 500,
-          recoverable: false,
-        },
-      );
+      try {
+        mod = (await import(/* @vite-ignore */ pkg)) as Record<string, unknown>;
+      } catch (e) {
+        if (isBrowserOnlyPackageImportError(e)) {
+          log.warn(
+            `Skipping package manifest from "${pkg}": browser-only package cannot be imported during SSR discovery`,
+          );
+          continue;
+        }
+        throw new OpenElementError(
+          `Failed to scan package manifest from "${pkg}": ${formatError(e)}`,
+          {
+            code: 'PACKAGE_SCAN_ERROR',
+            statusCode: 500,
+            recoverable: false,
+          },
+        );
+      }
     }
     if (mod.manifest && typeof mod.manifest === 'object') {
       const manifest = mod.manifest as OpenElementPackageManifest;

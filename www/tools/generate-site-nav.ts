@@ -31,7 +31,7 @@
  * `--check` regenerates in memory and fails on drift. The module is generated
  * (gitignored) and rebuilt before the site build.
  */
-import { walk } from '@std/fs/walk';
+import { walk } from '../../tools/lib/std-fs.ts';
 import { fromFileUrl, join } from '@std/path';
 import { readFile, writeFile } from 'node:fs/promises';
 import process from 'node:process';
@@ -290,7 +290,9 @@ if (check) {
     // Missing file is drift; fall through to the mismatch path.
   }
   if (current !== generated) {
-    console.error('site nav drift: regenerate with deno task --cwd www generate:nav');
+    console.error(
+      'site nav drift: regenerate with pnpm --filter @openelement/www run generate:nav',
+    );
     process.exit(1);
   }
   console.log('site nav check passed.');

@@ -1,24 +1,24 @@
 #!/bin/sh
 #
-# openElement pre-push hook. Format/lint run through the repository task
+# openElement pre-push hook. Format/lint run through the repository script
 # graph (oxfmt/oxlint); Markdown lint and typecheck stay on their pinned
 # OSS tools, and the OpenElement-specific push gates follow.
 #
-# Install: deno task --cwd tools/repo hooks:install
+# Install: pnpm --filter @openelement/tools-repo run hooks:install
 
 set -e
 
 BRANCH=$(git rev-parse --abbrev-ref HEAD)
 
-deno task fmt:check
-deno task lint
-deno task --cwd tools/repo lint:markdown
-deno task typecheck
+pnpm run fmt:check
+pnpm run lint
+pnpm --dir tools/repo run lint:markdown
+pnpm run typecheck
 
 echo "=== pre-push gates for '$BRANCH' ==="
 
-deno task --cwd tools/release graph:check
-deno task --cwd tools/repo export-files:check
+pnpm --dir tools/release run graph:check
+pnpm --dir tools/repo run export-files:check
 
 echo ""
 echo "All gates passed."

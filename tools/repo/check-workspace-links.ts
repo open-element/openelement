@@ -29,7 +29,7 @@ import process from 'node:process';
 import { readWorkspaces } from './workspace-tasks.ts';
 
 export const NODE_MODULES_DIR = 'node_modules';
-export const WORKSPACE_MANIFEST = 'deno.json';
+export const WORKSPACE_MANIFEST = 'package.json';
 
 export interface WorkspaceMember {
   /** The member's package name, e.g. `@openelement/router`. */

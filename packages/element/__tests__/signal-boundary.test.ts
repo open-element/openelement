@@ -110,10 +110,10 @@ Deno.test('1.0.0-alpha.1 declares exactly one shipped engine adapter', async () 
 });
 
 Deno.test('the test engine is not part of the publish surface', async () => {
-  const denoJson = JSON.parse(
-    await Deno.readTextFile(new URL('../deno.json', import.meta.url)),
-  ) as { publish?: { include?: string[] } };
-  const include = denoJson.publish?.include ?? [];
+  const manifest = JSON.parse(
+    await Deno.readTextFile(new URL('../package.json', import.meta.url)),
+  ) as { files?: string[] };
+  const include = manifest.files ?? [];
   assertEquals(include.includes('src/**'), true, 'the package publishes src/**');
   for (const pattern of include) {
     assertFalse(

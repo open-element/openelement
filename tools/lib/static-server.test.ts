@@ -19,7 +19,7 @@ Deno.test('serveStatic serves files and uses production candidate/cache semantic
   await Deno.writeTextFile(`${root}/guide/index.html`, '<h1>guide</h1>');
   await Deno.writeTextFile(`${root}/about.html`, '<h1>about</h1>');
 
-  const server = serveStatic(root);
+  const server = await serveStatic(root);
   try {
     const page = await (await fetch(`${server.origin}/about`)).text();
     assertStringIncludes(page, 'about');
@@ -49,7 +49,7 @@ Deno.test('serveStatic serves files and uses production candidate/cache semantic
 
 Deno.test('serveStatic rejects NUL with 403, returns 404 when nothing matches', async () => {
   const root = await Deno.makeTempDir();
-  const server = serveStatic(root);
+  const server = await serveStatic(root);
   try {
     // `..` cannot be exercised through fetch (WHATWG URL parsing resolves dot
     // segments, including %2e, before the request leaves the client), but the
@@ -72,7 +72,7 @@ Deno.test('serveStatic answers single-range requests with 206 and advertises acc
   const root = await Deno.makeTempDir();
   await Deno.writeFile(`${root}/clip.mp4`, new Uint8Array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]));
 
-  const server = serveStatic(root);
+  const server = await serveStatic(root);
   try {
     const plain = await fetch(`${server.origin}/clip.mp4`);
     assertEquals(plain.status, 200);

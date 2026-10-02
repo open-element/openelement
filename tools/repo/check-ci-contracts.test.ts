@@ -7,15 +7,12 @@
 
 import { assert, assertEquals } from '@std/assert';
 import { dirname, join } from '@std/path';
+import { readFileSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 
 const repoRoot = join(dirname(new URL(import.meta.url).pathname), '..', '..');
 const workflow = await readFile(join(repoRoot, '.github/workflows/autoflow-ci.yml'), 'utf8');
 const releasing = await readFile(join(repoRoot, 'docs/maintainers/releasing.md'), 'utf8');
-const dependencyAudit = await readFile(
-  join(repoRoot, '.github/workflows/dependency-audit.yml'),
-  'utf8',
-);
 const siteConfig = await readFile(join(repoRoot, 'www/openelement.config.ts'), 'utf8');
 
 /** Extract one top-level job block (two-space `name:` jobs) by job key. */
@@ -271,16 +268,19 @@ Deno.test('ci contract: packed-consumer matrix pins the two release OSes', () =>
   );
 });
 
-Deno.test('ci contract: Deno dependencies are audited, never auto-merged', () => {
-  assert(/contents:\s*read/.test(dependencyAudit), 'dependency-audit must stay read-only');
+Deno.test('ci contract: dependency updates stay human-authored, never auto-merged', () => {
+  // The dependency-audit workflow retired with the B2 manifest conversion
+  // (its deno outdated/audit surface read the deleted Deno workspace
+  // lockfile). The surviving contract: dependabot opens human PRs only, and
+  // nothing auto-merges them.
+  const dependabot = readFileSync(join(repoRoot, '.github/dependabot.yml'), 'utf8');
   assert(
-    /deno outdated/.test(dependencyAudit) && /deno audit/.test(dependencyAudit),
-    'dependency-audit must run the Deno outdated and vulnerability audits',
+    !/gh pr merge|enableAutoMerge|auto_merge:/i.test(dependabot),
+    'dependabot must never auto-merge (mechanics, not prose mentions)',
   );
   assert(
-    !/pull_request_target/.test(dependencyAudit) &&
-      !/auto-merge|dependabot\[bot\][^\n]*merge/i.test(dependencyAudit),
-    'dependency-audit must never auto-merge or run on pull_request_target',
+    /human-authored/.test(dependabot),
+    'dependabot config must document the human-authored update PR contract',
   );
 });
 
@@ -304,15 +304,15 @@ Deno.test('ci contract: BFCache runs a blocking Chrome-channel lane', async () =
   // stay wired into gate:release (the trimmed PR layer no longer builds or
   // drives the Site) and the PR-layer fresh-clone lane must keep producing
   // the Site E2E sidecar that the required candidate evidence requires.
-  const repoConfig = JSON.parse(await readFile(join(repoRoot, 'tools/repo/deno.json'), 'utf8')) as {
-    tasks: Record<string, string>;
-  };
+  const repoConfig = JSON.parse(
+    await readFile(join(repoRoot, 'tools/repo/package.json'), 'utf8'),
+  ) as { scripts: Record<string, string> };
   assert(
-    repoConfig.tasks['gate:release'].includes('www#e2e:browsers'),
+    repoConfig.scripts['gate:release'].includes('www#e2e:browsers'),
     'gate:release must run the three-browser Site E2E matrix',
   );
   assert(
-    !repoConfig.tasks['gate:source'].includes('www#e2e:browsers'),
+    !repoConfig.scripts['gate:source'].includes('www#e2e:browsers'),
     'the PR layer must not run the three-browser Site matrix (it is a release-train step)',
   );
   const freshClone = jobBlock(workflow, 'fresh-clone');
@@ -370,17 +370,17 @@ Deno.test('ci contract: Site E2E evidence is owned by the fresh-clone lane', asy
 });
 
 Deno.test('ci contract: SaaS is decoupled from the core candidate gate', async () => {
-  const repoConfig = JSON.parse(await readFile(join(repoRoot, 'tools/repo/deno.json'), 'utf8')) as {
-    tasks: Record<string, string>;
-  };
-  const gateSource = repoConfig.tasks['gate:source'];
+  const repoConfig = JSON.parse(
+    await readFile(join(repoRoot, 'tools/repo/package.json'), 'utf8'),
+  ) as { scripts: Record<string, string> };
+  const gateSource = repoConfig.scripts['gate:source'];
   for (const token of ['saas:verify', 'apps/saas', 'workers:boundary-check']) {
     assert(!gateSource.includes(token), `gate:source must not include SaaS step ${token}`);
   }
   // The framework core still proves deploy output through the Router fixture —
   // on the release train, where the deploy-proof steps now live. It must not
   // be in neither gate.
-  const gateRelease = repoConfig.tasks['gate:release'];
+  const gateRelease = repoConfig.scripts['gate:release'];
   for (const step of [
     'tests/fixtures/router-nitro#proof:workers',
     'tests/fixtures/router-nitro#proof:node',
@@ -397,12 +397,12 @@ Deno.test('ci contract: SaaS is decoupled from the core candidate gate', async (
     }
   }
 
-  const rootConfig = JSON.parse(await readFile(join(repoRoot, 'deno.json'), 'utf8')) as {
-    tasks: Record<string, string>;
+  const rootConfig = JSON.parse(await readFile(join(repoRoot, 'package.json'), 'utf8')) as {
+    scripts: Record<string, string>;
   };
-  assert(rootConfig.tasks['verify:core'], 'root verify:core must exist');
-  assert(!rootConfig.tasks['verify:core'].toLowerCase().includes('saas'));
-  assert(rootConfig.tasks['verify'].includes('saas:verify'), 'full verify keeps SaaS');
+  assert(rootConfig.scripts['verify:core'], 'root verify:core must exist');
+  assert(!rootConfig.scripts['verify:core'].toLowerCase().includes('saas'));
+  assert(rootConfig.scripts['verify'].includes('saas:verify'), 'full verify keeps SaaS');
 });
 
 Deno.test('ci contract: partial publish receipts are persisted as recovery records', async () => {
@@ -436,7 +436,7 @@ Deno.test('ci contract: partial publish receipts are persisted as recovery recor
 
   const publish = await readFile(join(repoRoot, 'tools/release/publish-npm.ts'), 'utf8');
   assert(
-    /receipt\.result !== 'published'[\s\S]{0,40}Deno\.exit\(1\)/.test(publish),
+    /receipt\.result !== 'published'[\s\S]{0,40}process\.exit\(1\)/.test(publish),
     'a partial/failed publish must exit non-zero',
   );
 });
@@ -605,10 +605,10 @@ Deno.test('ci contract: tree-SHA evidence reuse is fail-closed and single-source
     /candidate:evidence:reuse:resolve/.test(reuse) && /candidate:evidence:reuse:claim/.test(claim),
     'both reuse tasks must be wired to their tools',
   );
-  const repoConfig = JSON.parse(await readFile(join(repoRoot, 'tools/repo/deno.json'), 'utf8')) as {
-    tasks: Record<string, string>;
-  };
+  const repoConfig = JSON.parse(
+    await readFile(join(repoRoot, 'tools/repo/package.json'), 'utf8'),
+  ) as { scripts: Record<string, string> };
   for (const task of ['candidate:evidence:reuse:resolve', 'candidate:evidence:reuse:claim']) {
-    assert(repoConfig.tasks[task] !== undefined, `${task} must exist as a task`);
+    assert(repoConfig.scripts[task] !== undefined, `${task} must exist as a script`);
   }
 });

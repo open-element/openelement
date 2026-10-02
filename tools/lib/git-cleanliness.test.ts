@@ -12,7 +12,7 @@ Deno.test('git cleanliness uses one normalized evidence allowlist', () => {
       [
         ' M docs/release/evidence.md',
         ' M www/app/data/_generated-release.ts',
-        ' M deno.lock',
+        ' M pnpm-lock.yaml',
         ' M tools/real-change.ts',
       ].join('\n'),
     ),

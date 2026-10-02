@@ -5,7 +5,7 @@
  * the root lockfile pin a single patch, publishable packages declare a
  * caret peer range, and no legacy path may reappear:
  *
- * - no Vite 7 (or any non-8 major) in any tracked manifest or lockfile
+ * - no Vite 7 (or any non-8 major) in any tracked manifest or the pnpm lock
  * - no `rolldown-vite` transitional specifier
  * - no `@openelement/adapter-vite` legacy adapter in any manifest
  * - no `@rollup/plugin-terser` (no independent value over Vite 8/Rolldown)
@@ -13,7 +13,7 @@
  *   `rolldown-vite` imports in first-party build sources; the WTR browser
  *   test host is exempt — it serves tests, it does not build products)
  *
- * Usage: deno run --allow-read tools/repo/deps-vite-check.ts
+ * Usage: node tools/repo/deps-vite-check.ts (pnpm --dir tools/repo run deps:vite-check)
  */
 
 import { readdir, readFile, stat } from 'node:fs/promises';
@@ -23,11 +23,12 @@ export const VITE_DEV_PIN = '8.0.16';
 export const VITE_PEER_RANGE = 'npm:vite@^8.0.0';
 
 const MANIFEST_GLOB_ROOTS = [
-  'deno.json',
-  'packages/*/deno.json',
-  'www/deno.json',
-  'apps/saas/deno.json',
-  'tests/fixtures/*/deno.json',
+  'package.json',
+  'packages/*/package.json',
+  'www/package.json',
+  'apps/saas/package.json',
+  'tests/fixtures/*/package.json',
+  'tests/e2e/starter-smoke/package.json',
   // The starter template ships to every new user; its vite entries must
   // inject the canonical pin through the ${v.vite} scaffold token.
   'packages/create/templates/deno.json.tmpl',
@@ -216,6 +217,37 @@ export function checkStarterVitePin(versionSource: string): ViteViolation[] {
   return [];
 }
 
+/** Normalized dependency record: package.json values restated in the
+ * `npm:<name>@<spec>` shape the specifier checks consume. */
+function manifestRecordFromPackageJson(
+  path: string,
+  manifest: Record<string, unknown>,
+): ManifestRecord {
+  const imports: Record<string, string> = {};
+  for (const source of ['dependencies', 'devDependencies'] as const) {
+    for (const [name, value] of Object.entries(
+      (manifest[source] as Record<string, string> | undefined) ?? {},
+    )) {
+      if (name === 'vite' && typeof value === 'string' && !value.startsWith('npm:')) {
+        imports[name] = `npm:vite@${value}`;
+      } else if (typeof value === 'string') {
+        imports[name] = value;
+      }
+    }
+  }
+  const peerDependencies: Record<string, string> = {};
+  for (const [name, value] of Object.entries(
+    (manifest.peerDependencies as Record<string, string> | undefined) ?? {},
+  )) {
+    if (name === 'vite' && typeof value === 'string' && !value.startsWith('npm:')) {
+      peerDependencies[name] = `npm:vite@${value}`;
+    } else if (typeof value === 'string') {
+      peerDependencies[name] = value;
+    }
+  }
+  return { path, imports, peerDependencies };
+}
+
 async function readJsonFile<T>(path: string): Promise<T | null> {
   try {
     return JSON.parse(await readFile(path, 'utf8')) as T;
@@ -298,6 +330,15 @@ if (import.meta.main) {
       });
       continue;
     }
+    if (path.endsWith('package.json')) {
+      const manifest = await readJsonFile<Record<string, unknown>>(path);
+      if (!manifest) {
+        failures.push({ where: path, message: 'manifest missing or unparseable' });
+        continue;
+      }
+      records.push(manifestRecordFromPackageJson(path, manifest));
+      continue;
+    }
     const manifest = await readJsonFile<ManifestRecord>(path);
     if (!manifest) {
       failures.push({ where: path, message: 'manifest missing or unparseable' });
@@ -307,10 +348,20 @@ if (import.meta.main) {
   }
   failures.push(...checkManifests(records));
   failures.push(...checkStarterVitePin(await readFile('packages/create/src/version.ts', 'utf8')));
-  const lockfile = await readJsonFile<{ specifiers?: Record<string, string> }>('deno.lock');
-  if (!lockfile?.specifiers) {
-    failures.push({ where: 'deno.lock', message: 'lockfile missing specifiers' });
-  } else failures.push(...checkLockfileVite(lockfile.specifiers));
+  // The single pnpm lock is the resolution truth; synthesize the specifier
+  // record from its resolved package keys (every `vite@<version>` entry).
+  const lockText = await readFile('pnpm-lock.yaml', 'utf8').catch(() => null);
+  const resolved = new Set<string>();
+  for (const match of lockText?.matchAll(/(?:^|\n) {2}'?vite@(\d+\.\d+\.\d+)/g) ?? []) {
+    resolved.add(`npm:vite@${match[1]}`);
+  }
+  if (resolved.size === 0) {
+    failures.push({ where: 'pnpm-lock.yaml', message: 'lockfile has no resolved vite package' });
+  } else {
+    failures.push(
+      ...checkLockfileVite(Object.fromEntries([...resolved].map((key) => [key, 'resolved']))),
+    );
+  }
   failures.push(...checkBundlerImports(await collectBuildSources()));
   if (failures.length > 0) {
     for (const failure of failures) console.error(`FAIL ${failure.where}: ${failure.message}`);

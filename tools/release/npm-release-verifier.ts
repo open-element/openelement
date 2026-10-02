@@ -8,6 +8,7 @@
  * orchestration and calls `verifyNpmRelease`.
  */
 
+import { commandOutput } from '../repo/node-command.ts';
 import {
   type PrereleaseChannel,
   prereleaseChannel,
@@ -39,11 +40,11 @@ type NpmReleaseQuery = (specifier: string, field: string) => Promise<string>;
 
 /** Run `npm view <specifier> <field> --json` and parse the JSON string value. */
 export async function npmView(specifier: string, field: string): Promise<string> {
-  const output = await new Deno.Command('npm', {
+  const output = await commandOutput('npm', {
     args: ['view', specifier, field, '--json'],
     stdout: 'piped',
     stderr: 'piped',
-  }).output();
+  });
   const stderr = new TextDecoder().decode(output.stderr);
   if (!output.success) {
     const retryable = !/\b(?:E401|E403)\b/u.test(stderr);

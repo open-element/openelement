@@ -46,7 +46,7 @@
  */
 import ts from 'typescript';
 import { fromFileUrl, join } from '@std/path';
-import { walk } from '@std/fs/walk';
+import { walk } from '../../tools/lib/std-fs.ts';
 import { readPackages } from '../../tools/lib/package-graph.ts';
 import { apiReference } from '../app/data/_generated-api-reference.ts';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';

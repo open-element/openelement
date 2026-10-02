@@ -41,7 +41,7 @@
  * the matrix is reproducible locally and in CI.
  */
 
-import { existsSync } from '@std/fs';
+import { existsSync } from '../../tools/lib/std-fs.ts';
 import { join, resolve } from '@std/path';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';

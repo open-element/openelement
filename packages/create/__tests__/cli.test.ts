@@ -95,7 +95,7 @@ Deno.test('starter exposes only product imports and the standard lifecycle', () 
 });
 
 Deno.test('embedded CLI version matches its package manifest', () => {
-  const manifest = JSON.parse(Deno.readTextFileSync(join(packageDir, 'deno.json')));
+  const manifest = JSON.parse(Deno.readTextFileSync(join(packageDir, 'package.json')));
   const versionSource = Deno.readTextFileSync(join(packageDir, 'src', 'version.ts'));
   assert(versionSource.includes(`'${manifest.version}'`));
 });
@@ -133,7 +133,7 @@ Deno.test('Alpha README never emits an untagged create install command', () => {
 Deno.test('Create and all support-distribution packages share one release version', () => {
   const versions = ['router', 'create', 'element'].map(
     (name) =>
-      JSON.parse(Deno.readTextFileSync(join(packageDir, '..', name, 'deno.json')))
+      JSON.parse(Deno.readTextFileSync(join(packageDir, '..', name, 'package.json')))
         .version as string,
   );
   assertEquals([...new Set(versions)], [resolveVersions().router]);
@@ -222,10 +222,13 @@ Deno.test('starter pins vite exactly and type-checks app-shell', async () => {
     (await buildTemplates(resolveVersions(), 'sample-app'))['deno.json'],
   );
   // #681: starter vite version must stay aligned with packages/router.
-  const routerImports = JSON.parse(
-    Deno.readTextFileSync(join(packageDir, '..', 'router', 'deno.json')),
-  ).imports;
-  assertEquals(generated.imports.vite, routerImports.vite);
+  // (B2: the alignment anchor is the workspace-wide vite pin — the router
+  // manifest no longer carries an imports map; both pins bind to the same
+  // canonical VITE_DEV_PIN, asserted against router's package.json below.)
+  const routerManifest = JSON.parse(
+    Deno.readTextFileSync(join(packageDir, '..', 'router', 'package.json')),
+  );
+  assertEquals(routerManifest.dependencies.vite, VITE_STARTER_PIN);
   assertEquals(generated.imports.vite, `npm:vite@${VITE_STARTER_PIN}`);
   assert(/^npm:vite@\d+\.\d+\.\d+$/.test(String(generated.imports.vite)), generated.imports.vite);
   // #927: the dev task must pin the same exact vite version as the import
@@ -555,14 +558,18 @@ Deno.test({
 Deno.test('packed CLI retains every starter template, including dotfiles', async () => {
   const tmpRoot = Deno.makeTempDirSync({ prefix: 'open-create-packed-' });
   try {
-    const tarball = join(tmpRoot, 'create.tgz');
-    const pack = await new Deno.Command(Deno.execPath(), {
-      args: ['pack', '--allow-dirty', '--output', tarball],
-      cwd: packageDir,
+    // The packed payload is produced by the release toolchain (vp pack via
+    // publish-npm dry-run; `deno pack` retired with the A1 toolchain swap).
+    // The dry run writes the same payload tarballs the publish flow ships.
+    const repoRoot = join(packageDir, '..', '..');
+    const pack = await new Deno.Command('pnpm', {
+      args: ['--dir', 'tools/release', 'run', 'pack:dry-run'],
+      cwd: repoRoot,
       stdout: 'piped',
       stderr: 'piped',
     }).output();
     assertEquals(pack.code, 0, new TextDecoder().decode(pack.stderr));
+    const tarball = join(packageDir, `openelement-create-${CREATE_VERSION}.tgz`);
     const unpack = await new Deno.Command('tar', {
       args: ['-xzf', tarball, '-C', tmpRoot],
       stdout: 'piped',

@@ -3,6 +3,7 @@ import { classifyVpPackLog } from '../lib/vp-pack.ts';
 import {
   deriveAllDependencies,
   deriveDependencies,
+  importsShapeFromPackageJson,
   type DeriveDepsIo,
   findAbsoluteFileUrlPayload,
   findRawTypeScriptPayload,
@@ -46,9 +47,12 @@ Deno.test('npm publish tag follows alpha, beta and rc prerelease names', () => {
 });
 
 Deno.test('deriveDependencies includes an external npm dependency with a version', () => {
+  // Since the B2 conversion the derivation is source-driven against the
+  // workspace resolution set: the declared dependency exists to resolve it.
   const localIo: DeriveDepsIo = {
     ...io,
-    readPkgJson: () => ({ imports: { 'npm:react@^18.2.0': 'npm:react@^18.2.0' } }),
+    readRootJson: () => ({ imports: { react: 'npm:react@^18.2.0' } }),
+    readSrcFiles: () => [`import { x } from 'react';`],
   };
   const deps = deriveDependencies(pkg('@openelement/element', '1.0.0'), [], localIo);
   assertEquals(deps, { react: '^18.2.0' });
@@ -57,26 +61,45 @@ Deno.test('deriveDependencies includes an external npm dependency with a version
 Deno.test('deriveDependencies pins the maintained matching fork exactly (#1324)', () => {
   const localIo: DeriveDepsIo = {
     ...io,
-    readPkgJson: () => ({
+    readRootJson: () => ({
       imports: {
         '@openelement/url-pattern-list': 'npm:@openelement/url-pattern-list@0.6.0',
       },
     }),
+    readSrcFiles: () => [`import { match } from '@openelement/url-pattern-list';`],
   };
   const deps = deriveDependencies(pkg('@openelement/router', '0.44.0'), [], localIo);
   // Exact, never a caret range: consumers must not float past the qualified artifact.
   assertEquals(deps, { '@openelement/url-pattern-list': '0.6.0' });
 });
 
-Deno.test('deriveDependencies throws when an npm dependency has no version', () => {
+Deno.test('deriveDependencies skips declared-but-unused externals', () => {
+  // A dependency the source never imports does not ship (the pre-B2
+  // imports-map loop materialized declarations blindly; the ui package
+  // regression that motivated the source-driven rule).
   const localIo: DeriveDepsIo = {
     ...io,
-    readPkgJson: () => ({ imports: { 'npm:react': 'npm:react' } }),
+    readRootJson: () => ({ imports: { react: 'npm:react@^18.2.0' } }),
+    readSrcFiles: () => [`import { x } from '@openelement/router';`],
   };
-  assertThrows(
-    () => deriveDependencies(pkg('@openelement/element', '1.0.0'), [], localIo),
-    Error,
-    'no version',
+  const all = [pkg('@openelement/element', '1.0.0'), pkg('@openelement/router', '1.2.3')];
+  const deps = deriveDependencies(pkg('@openelement/element', '1.0.0'), all, localIo);
+  assertEquals(deps, { '@openelement/router': '1.2.3' });
+});
+
+Deno.test('importsShapeFromPackageJson filters jsr: and workspace: entries', () => {
+  // jsr: values never ship (packed modules carry no JSR bridge — enforced by
+  // check-package-artifacts) and workspace: values resolve internally; the
+  // package.json projection filters both before the derivation sees them.
+  assertEquals(
+    importsShapeFromPackageJson({
+      dependencies: {
+        '@std/path': 'jsr:^1.0.0',
+        '@openelement/element': 'workspace:*',
+        react: '^18.2.0',
+      },
+    }),
+    { react: 'npm:react@^18.2.0' },
   );
 });
 
@@ -98,17 +121,6 @@ Deno.test('deriveDependencies materializes a root-mapped npm dependency used by 
   };
   const deps = deriveDependencies(pkg('@openelement/element', '1.0.0'), [], localIo);
   assertEquals(deps, { react: '^18.2.0' });
-});
-
-Deno.test('deriveDependencies keeps direct TypeScript 6 exact in the package manifest', () => {
-  const localIo: DeriveDepsIo = {
-    ...io,
-    readPkgJson: () => ({
-      imports: { typescript: 'npm:typescript@6.0.3' },
-    }),
-  };
-  const deps = deriveDependencies(pkg('@openelement/element', '1.0.0'), [], localIo);
-  assertEquals(deps, { typescript: '6.0.3' });
 });
 
 Deno.test('deriveDependencies keeps direct root-mapped TypeScript 6 exact', () => {

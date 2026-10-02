@@ -14,7 +14,7 @@
  * stays only for packages/subpaths and for symbols that never reached a
  * release tag (e.g. toRootCss, added and removed inside this PR).
  */
-import { walk } from '@std/fs';
+import { walk } from '../../tools/lib/std-fs.ts';
 import { readFile } from 'node:fs/promises';
 import process from 'node:process';
 import { commandOutput } from './node-command.ts';

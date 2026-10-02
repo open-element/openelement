@@ -12,7 +12,7 @@
  * leak through them, and decoding them as text produces replacement bytes
  * that coincidentally match drive-path markers.
  */
-import { walk } from '@std/fs/walk';
+import { walk } from '../../tools/lib/std-fs.ts';
 import { fromFileUrl, join } from '@std/path';
 import { readFile, readdir, stat } from 'node:fs/promises';
 import process from 'node:process';
@@ -87,7 +87,7 @@ async function main(): Promise<void> {
   const roots = await scanRoots(repoRoot);
   if (roots.length === 0) {
     console.error(
-      `machine-path check: no build output found (expected ${dist}) — run the site build first (deno task site:build).`,
+      `machine-path check: no build output found (expected ${dist}) — run the site build first (pnpm run site:build).`,
     );
     process.exit(1);
   }

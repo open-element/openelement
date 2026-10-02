@@ -11,5 +11,6 @@ deno task --cwd tools/repo url-pattern-list:provenance
 ```
 
 This is the one fixture that is npm-shaped (`package.json` +
-`package-lock.json`) rather than Deno-shaped, which is why it is exempt from
-the `tests/fixtures/*/deno.lock` registry in `tools/repo/check-fixture-locks.ts`.
+`package-lock.json`) rather than a pnpm workspace member, which is why the
+pnpm-workspace globs exclude it; its lockfile is the committed exact
+dependency graph the signature audit verifies.

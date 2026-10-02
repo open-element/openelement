@@ -66,8 +66,14 @@
  * filled from the log; any FAIL fails the harness run.
  */
 
+import { spawn } from 'node:child_process';
+import { createServer } from 'node:net';
+import { walkSync } from '../lib/std-fs.ts';
+import { tmpdir } from 'node:os';
+import { commandOutput } from '../repo/node-command.ts';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { existsSync } from '@std/fs';
-import { walkSync } from '@std/fs/walk';
 import { dirname, join, resolve } from '@std/path';
 import { formatJson } from '@openelement/element/build-utils';
 import { formatError } from '@openelement/element';
@@ -164,13 +170,13 @@ async function run(
           controller.abort();
         }, timeoutMs);
   try {
-    const result = await new Deno.Command(command, {
+    const result = await commandOutput(command, {
       args,
       cwd,
       stdout: 'piped',
       stderr: 'piped',
       ...(timeoutMs === undefined ? {} : { signal: controller.signal }),
-    }).output();
+    });
     const decoder = new TextDecoder();
     const output = decoder.decode(result.stdout) + decoder.decode(result.stderr);
     if (timedOut) {
@@ -187,11 +193,16 @@ async function run(
 
 // Let the OS choose from its ephemeral range (same rationale as
 // consumer-packaged-starter.ts: fixed ranges collide with parallel CI jobs).
-function reservePort(): number {
-  const probe = Deno.listen({ hostname: '127.0.0.1', port: 0 });
-  const port = (probe.addr as Deno.NetAddr).port;
-  probe.close();
-  return port;
+function reservePort(): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const probe = createServer();
+    probe.once('listening', () => {
+      const addr = probe.address() as { port: number };
+      probe.close(() => resolve(addr.port));
+    });
+    probe.once('error', reject);
+    probe.listen({ port: 0, host: '127.0.0.1' });
+  });
 }
 
 /**
@@ -210,21 +221,29 @@ async function withServer(
   cwd: string,
   probe: (baseUrl: string) => Promise<void>,
 ): Promise<number> {
-  const port = reservePort();
-  const server = new Deno.Command(command, {
-    args: argsFor(port),
+  const port = await reservePort();
+  const server = spawn(command, argsFor(port), {
     cwd,
-    env: { OPEN_ELEMENT_PORT: String(port), OPEN_ELEMENT_HOST: '127.0.0.1' },
-    stdout: 'piped',
-    stderr: 'piped',
-  }).spawn();
-  let exited = false;
-  const status = server.status.then((s) => {
-    exited = true;
-    return s;
+    env: { ...process.env, OPEN_ELEMENT_PORT: String(port), OPEN_ELEMENT_HOST: '127.0.0.1' },
+    stdio: ['ignore', 'pipe', 'pipe'],
   });
-  const stdout = new Response(server.stdout).text();
-  const stderr = new Response(server.stderr).text();
+  let exited = false;
+  server.addListener('exit', () => {
+    exited = true;
+  });
+
+  const stdoutChunks: Uint8Array[] = [];
+  const stderrChunks: Uint8Array[] = [];
+  void (async () => {
+    for await (const chunk of server.stdout!) stdoutChunks.push(chunk);
+  })();
+  void (async () => {
+    for await (const chunk of server.stderr!) stderrChunks.push(chunk);
+  })();
+  const stdoutText = () =>
+    new TextDecoder().decode(Buffer.concat(stdoutChunks.map((c) => Buffer.from(c))));
+  const stderrText = () =>
+    new TextDecoder().decode(Buffer.concat(stderrChunks.map((c) => Buffer.from(c))));
   let failure: unknown;
   try {
     const baseUrl = `http://127.0.0.1:${port}`;
@@ -256,17 +275,17 @@ async function withServer(
         }
       }
     }
-    await status.catch(() => undefined);
-    await Promise.all([stdout.catch(() => ''), stderr.catch(() => '')]);
+    await new Promise((resolveSettled) => {
+      if (exited) resolveSettled(null);
+      else server.addListener('exit', () => resolveSettled(null));
+    });
   }
   if (failure) {
     // Preserve the server-side cause of a failed dev/build probe. Drain only
     // after stopping the process; awaiting live pipes on a readiness timeout
     // would itself hang qualification forever.
     throw new Error(
-      `${label}: ${String(failure)}\n${(await stdout).slice(-12000)}\n${(await stderr).slice(
-        -12000,
-      )}`,
+      `${label}: ${String(failure)}\n${stdoutText().slice(-12000)}\n${stderrText().slice(-12000)}`,
       { cause: failure },
     );
   }
@@ -336,7 +355,7 @@ async function pollDevPage(
  */
 function editConsumerSource(tmp: string, path: string, from: string, to: string): string {
   const file = join(tmp, path);
-  const text = Deno.readTextFileSync(file);
+  const text = readFileSync(file, 'utf8');
   if (!text.includes(from)) {
     throw new Error(`dev feedback edit: ${path} does not contain the expected source ${from}`);
   }
@@ -345,7 +364,7 @@ function editConsumerSource(tmp: string, path: string, from: string, to: string)
       `dev feedback edit: ${path} already contains ${to} — the proof would be vacuous`,
     );
   }
-  Deno.writeTextFileSync(file, text.replace(from, to));
+  writeFileSync(file, text.replace(from, to));
   return text;
 }
 
@@ -770,7 +789,7 @@ async function runBrowserContinuationProbe(
   const failures: string[] = [];
   for (const browserName of PACKED_BROWSERS) {
     const probe = await run(
-      Deno.execPath(),
+      process.execPath,
       [
         'run',
         '--config',
@@ -809,7 +828,7 @@ async function runBrowserContinuationProbe(
  */
 async function runDevWarmupProbe(tmp: string, baseUrl: string, leg: PackedAppRenderer) {
   const probe = await run(
-    Deno.execPath(),
+    process.execPath,
     [
       'run',
       '--config',
@@ -860,7 +879,7 @@ async function devSession(spec: PackedAppLegSpec, tmp: string): Promise<string> 
     String(port),
     '--strictPort',
   ];
-  const firstPort = await withServer(label, Deno.execPath(), devArgs, tmp, async (baseUrl) => {
+  const firstPort = await withServer(label, process.execPath, devArgs, tmp, async (baseUrl) => {
     // 1. Live SSR over the wire: same probe set the production modes answer.
     await runGetProbes(spec, baseUrl);
     await postInvalid(spec, baseUrl);
@@ -877,8 +896,8 @@ async function devSession(spec: PackedAppLegSpec, tmp: string): Promise<string> 
     //    Whatever happens, both files are restored byte-identically so the
     //    later build/start cells never read a mutated tree.
     const edits = spec.devEdits;
-    const componentOriginal = Deno.readTextFileSync(join(tmp, edits.componentFile));
-    const routeOriginal = Deno.readTextFileSync(join(tmp, edits.routeFile));
+    const componentOriginal = readFileSync(join(tmp, edits.componentFile), 'utf8');
+    const routeOriginal = readFileSync(join(tmp, edits.routeFile), 'utf8');
     try {
       editConsumerSource(tmp, edits.componentFile, edits.componentFrom, edits.componentTo);
       await pollDevPage(
@@ -899,7 +918,7 @@ async function devSession(spec: PackedAppLegSpec, tmp: string): Promise<string> 
 
       // 4. A broken edit must surface as a server error — never disguised as
       //    success or as stale last-good content.
-      Deno.writeTextFileSync(
+      writeFileSync(
         join(tmp, edits.componentFile),
         `${componentOriginal}\nexport const __devBroken = ;\n`,
       );
@@ -910,7 +929,7 @@ async function devSession(spec: PackedAppLegSpec, tmp: string): Promise<string> 
         { status: 500, absent: [edits.componentTo] },
         'dev error visibility: broken component edit',
       );
-      Deno.writeTextFileSync(join(tmp, edits.componentFile), componentOriginal);
+      writeFileSync(join(tmp, edits.componentFile), componentOriginal);
       await pollDevPage(
         spec,
         baseUrl,
@@ -919,8 +938,8 @@ async function devSession(spec: PackedAppLegSpec, tmp: string): Promise<string> 
         'dev recovery after revert',
       );
     } finally {
-      Deno.writeTextFileSync(join(tmp, edits.componentFile), componentOriginal);
-      Deno.writeTextFileSync(join(tmp, edits.routeFile), routeOriginal);
+      writeFileSync(join(tmp, edits.componentFile), componentOriginal);
+      writeFileSync(join(tmp, edits.routeFile), routeOriginal);
     }
   });
 
@@ -928,7 +947,7 @@ async function devSession(spec: PackedAppLegSpec, tmp: string): Promise<string> 
   await assertPortClosed(firstPort, label);
   const secondPort = await withServer(
     `${label} (restart)`,
-    Deno.execPath(),
+    process.execPath,
     devArgs,
     tmp,
     async (baseUrl) => {
@@ -972,7 +991,7 @@ async function serveSession(spec: PackedAppLegSpec, tmp: string): Promise<Sessio
     form303: pending('form-303'),
   };
   try {
-    await withServer(label, Deno.execPath(), argsFor, tmp, async (baseUrl) => {
+    await withServer(label, process.execPath, argsFor, tmp, async (baseUrl) => {
       result.gets = await attempt(() => runGetProbes(spec, baseUrl));
       result.form422 = await attempt(() => postInvalid(spec, baseUrl));
       result.form303 = await attempt(() => postValid(spec, baseUrl));
@@ -1015,14 +1034,14 @@ function walkRouterDeclarations(tmp: string): string {
   const host = {
     fileExists: (name: string): boolean => {
       try {
-        return Deno.statSync(name).isFile;
+        return statSync(name).isFile();
       } catch {
         return false;
       }
     },
     readFile: (name: string): string | undefined => {
       try {
-        return Deno.readTextFileSync(name);
+        return readFileSync(name, 'utf8');
       } catch {
         return undefined;
       }
@@ -1035,7 +1054,7 @@ function walkRouterDeclarations(tmp: string): string {
   const walk = (path: string): void => {
     if (seen.has(path)) return;
     seen.add(path);
-    const text = Deno.readTextFileSync(path);
+    const text = readFileSync(path, 'utf8');
     // Leak scan sees every specifier, including side-effect-only imports.
     for (const { fileName } of ts.preProcessFile(text).importedFiles) {
       if (DECLARATION_LEAK_PATTERN.test(fileName)) leaks.push(`${path} -> ${fileName}`);
@@ -1102,7 +1121,7 @@ const PACKED_KERNEL_PATTERNS = [
 
 function assertPackedElementLeavesKernelFree(tmp: string): string {
   const elementDir = join(tmp, 'node_modules', '@openelement', 'element');
-  const pkgJson = JSON.parse(Deno.readTextFileSync(join(elementDir, 'package.json')));
+  const pkgJson = JSON.parse(readFileSync(join(elementDir, 'package.json'), 'utf8'));
   const seen = new Set<string>();
   const stack: string[] = [];
   for (const subpath of ['./html', './logger', './authoring']) {
@@ -1117,7 +1136,7 @@ function assertPackedElementLeavesKernelFree(tmp: string): string {
     const file = stack.pop()!;
     if (seen.has(file)) continue;
     seen.add(file);
-    const text = Deno.readTextFileSync(file);
+    const text = readFileSync(file, 'utf8');
     for (const { fileName } of ts.preProcessFile(text).importedFiles) {
       if (!fileName.startsWith('.')) continue;
       const target = join(dirname(file), fileName);
@@ -1207,7 +1226,7 @@ export async function qualifyPackedAppLeg(spec: PackedAppLegSpec): Promise<void>
   );
   for (const tarball of tarballs) console.log(`  ${tarball.path}`);
 
-  const tmp = await Deno.makeTempDir({ prefix: `openelement-packaged-app-${leg}-` });
+  const tmp = await mkdtemp(join(tmpdir(), `openelement-packaged-app-${leg}-`));
   const form422: { start?: PackedAppOutcome } = {};
   const form303: { start?: PackedAppOutcome } = {};
   try {
@@ -1225,7 +1244,7 @@ export async function qualifyPackedAppLeg(spec: PackedAppLegSpec): Promise<void>
         ...spec.externals,
       };
       for (const tarball of tarballs) dependencies[tarball.name] = `file:${tarball.path}`;
-      Deno.writeTextFileSync(
+      writeFileSync(
         join(tmp, 'package.json'),
         formatJson({
           name: `openelement-packed-app-consumer-${leg}`,
@@ -1268,20 +1287,20 @@ export async function qualifyPackedAppLeg(spec: PackedAppLegSpec): Promise<void>
       }
 
       // Materialize the consumer app from the harness's source constants.
-      Deno.writeTextFileSync(join(tmp, 'deno.json'), formatJson(consumerDenoJson(spec)));
-      Deno.writeTextFileSync(join(tmp, 'vite.config.ts'), spec.viteConfig);
+      writeFileSync(join(tmp, 'deno.json'), formatJson(consumerDenoJson(spec)));
+      writeFileSync(join(tmp, 'vite.config.ts'), spec.viteConfig);
       for (const [path, content] of Object.entries(spec.files)) {
         const target = join(tmp, path);
-        Deno.mkdirSync(dirname(target), { recursive: true });
-        Deno.writeTextFileSync(target, content);
+        mkdirSync(dirname(target), { recursive: true });
+        writeFileSync(target, content);
       }
-      Deno.writeTextFileSync(join(tmp, 'pw-continuation-probe.ts'), PW_PROBE_SCRIPT);
-      Deno.writeTextFileSync(join(tmp, 'pw-dev-warmup-probe.ts'), PW_DEV_WARMUP_SCRIPT);
+      writeFileSync(join(tmp, 'pw-continuation-probe.ts'), PW_PROBE_SCRIPT);
+      writeFileSync(join(tmp, 'pw-dev-warmup-probe.ts'), PW_DEV_WARMUP_SCRIPT);
       return `${tarballs.length} tarballs + pinned externals installed hermetically`;
     });
 
     await cell(leg, 'types', ['install'], async () => {
-      const check = await run(Deno.execPath(), ['task', 'check'], tmp, TYPES_TIMEOUT_MS);
+      const check = await run(process.execPath, ['task', 'check'], tmp, TYPES_TIMEOUT_MS);
       if (!check.success) {
         throw new Error(`Packed consumer typecheck failed:\n${check.output}`);
       }
@@ -1297,7 +1316,7 @@ export async function qualifyPackedAppLeg(spec: PackedAppLegSpec): Promise<void>
     });
 
     await cell(leg, 'build', ['install'], async () => {
-      const build = await run(Deno.execPath(), ['task', 'build'], tmp, BUILD_TIMEOUT_MS);
+      const build = await run(process.execPath, ['task', 'build'], tmp, BUILD_TIMEOUT_MS);
       if (!build.success) {
         throw new Error(`Packed app consumer SSG build failed:\n${build.output}`);
       }
@@ -1312,7 +1331,7 @@ export async function qualifyPackedAppLeg(spec: PackedAppLegSpec): Promise<void>
       if (!existsSync(indexHtmlPath)) {
         throw new Error(`Build emitted no prerendered page: ${indexHtmlPath}`);
       }
-      const raw = Deno.readTextFileSync(indexHtmlPath);
+      const raw = readFileSync(indexHtmlPath, 'utf8');
       const html = spec.stripMarkers ? stripLitMarkers(raw) : raw;
       for (const marker of spec.probes[0].markers) {
         assertIncludes(html, marker, 'prerendered dist/index.html');
@@ -1344,7 +1363,7 @@ export async function qualifyPackedAppLeg(spec: PackedAppLegSpec): Promise<void>
       let summary = '';
       await withServer(
         `packed-app-${leg} browser host`,
-        Deno.execPath(),
+        process.execPath,
         () => ['task', 'start'],
         tmp,
         async (baseUrl) => {
@@ -1374,7 +1393,7 @@ export async function qualifyPackedAppLeg(spec: PackedAppLegSpec): Promise<void>
         if (BOUNDARY_ID_PATTERN.test(assetPath.slice(clientDir.length))) {
           throw new Error(`Browser asset path crosses the boundary: ${assetPath}`);
         }
-        const text = Deno.readTextFileSync(assetPath);
+        const text = readFileSync(assetPath, 'utf8');
         for (const { fileName } of ts.preProcessFile(text).importedFiles) {
           if (BOUNDARY_SPECIFIER_PATTERN.test(fileName)) {
             throw new Error(`Browser bundle boundary leak: ${assetPath} imports ${fileName}`);
@@ -1386,7 +1405,7 @@ export async function qualifyPackedAppLeg(spec: PackedAppLegSpec): Promise<void>
       );
     });
   } finally {
-    await Deno.remove(tmp, { recursive: true }).catch(() => undefined);
+    await rm(tmp, { recursive: true }).catch(() => undefined);
   }
 
   console.log(`\nSupport matrix (#1339 §11 packed-consumer proof, ${leg} renderer):`);

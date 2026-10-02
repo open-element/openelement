@@ -35,6 +35,7 @@ export const OPENELEMENT_EXPORT_FILES: Record<string, Record<string, string>> = 
   ui: {
     '.': 'src/index.ts',
     'instance-state': 'src/instance-state.ts',
+    manifest: 'src/manifest.ts',
     'open-badge': 'src/open-badge.tsx',
     'open-button': 'src/open-button.tsx',
     'open-callout': 'src/open-callout.tsx',

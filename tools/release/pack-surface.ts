@@ -28,6 +28,7 @@
  * installs and spawns nothing.
  */
 
+import { readFile } from 'node:fs/promises';
 import { type PackageInfo, readPackages, releasePublishOrder } from '../lib/package-graph.ts';
 import { tarballPath } from '../lib/npm-tarball.ts';
 import { parseTarGz } from '../repo/tarball-inspect.ts';
@@ -428,7 +429,7 @@ async function scanTarball(pkg: PackageInfo): Promise<PackSurfaceViolation[]> {
   const tarball = tarballPath(pkg);
   let bytes: Uint8Array;
   try {
-    bytes = await Deno.readFile(tarball);
+    bytes = await readFile(tarball);
   } catch {
     throw new Error(`${tarball} is missing — run \`deno task pack:dry-run\` first`);
   }
@@ -455,7 +456,7 @@ async function main(): Promise<void> {
       const line = violation.line ? `:${violation.line}` : '';
       console.error(`  ${violation.packageName}/${violation.path}${line}: ${violation.message}`);
     }
-    Deno.exit(1);
+    process.exit(1);
   }
   console.log(
     `Packed facade check passed (${packages.length} packages: metadata, no internal references, subpaths documented).`,

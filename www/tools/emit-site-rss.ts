@@ -1,6 +1,6 @@
 /**
  * Generate the site blog feed (www/dist/blog/rss.xml, #1441).
- * Runs in `deno task site:build` right after the sitemap: the items are the
+ * Runs in `pnpm run site:build` right after the sitemap: the items are the
  * same source-loaded blog collection the /blog routes and the sitemap
  * enumerate — drafts dropped, newest first — never scanned out of built
  * output and never hand-synced.

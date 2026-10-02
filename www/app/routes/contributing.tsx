@@ -3,9 +3,9 @@
  * PR checklist, numbered help rows, and a questions-first callout.
  */
 import { definePage } from '@openelement/router';
-import { siteHead } from '@openelement/site-ui/head.ts';
-import { contentLocale } from '@openelement/site-ui/locale.ts';
-import { localizePath } from '@openelement/site-ui/link.ts';
+import { siteHead } from '#site-ui/head.ts';
+import { contentLocale } from '#site-ui/locale.ts';
+import { localizePath } from '#site-ui/link.ts';
 import PageContributing from '../components/page-contributing.tsx';
 
 export const meta = { section: '', label: 'Contributing', order: 30 };

@@ -16,7 +16,7 @@
  */
 
 import { assert, assertEquals, assertNotEquals } from '@std/assert';
-import { eachMapping, TraceMap } from 'npm:@jridgewell/trace-mapping@0.3.31';
+import { eachMapping, TraceMap } from '@jridgewell/trace-mapping';
 import type { Plugin } from 'vite';
 import { createOpenPlugin } from '../src/vite/plugin.ts';
 

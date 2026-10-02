@@ -25,7 +25,8 @@
  * instead of being silently absorbed.
  */
 
-import { walkSync } from '@std/fs/walk';
+import { readFileSync, statSync } from 'node:fs';
+import { walkSync } from '../../tools/lib/std-fs.ts';
 import { basename, join, relative } from '@std/path';
 import { compileElementModule, stripInlineSourceMapComment } from '@openelement/element/compiler';
 
@@ -46,12 +47,12 @@ export function compilePackageElementModules(pkgDir: string): CompiledModuleOutp
   const outputs: CompiledModuleOutput[] = [];
   const srcDir = join(pkgDir, 'src');
   try {
-    if (!Deno.statSync(srcDir).isDirectory) return [];
+    if (!statSync(srcDir).isDirectory()) return [];
   } catch {
     return []; // no src dir
   }
   for (const entry of walkSync(srcDir, { includeDirs: false, exts: ['.tsx'] })) {
-    const source = Deno.readTextFileSync(entry.path);
+    const source = readFileSync(entry.path, 'utf8');
     const result = compileElementModule(source, basename(entry.path));
     if (!result) continue;
     outputs.push({

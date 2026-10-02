@@ -69,16 +69,18 @@ const fixtures: FixtureSpec[] = [
 ];
 
 const outDir = join(suite, 'generated');
-await Deno.mkdir(outDir, { recursive: true });
+await import('node:fs/promises').then((fs) => fs.mkdir(outDir, { recursive: true }));
 
 for (const fixture of fixtures) {
-  const code = await Deno.readTextFile(fixture.source);
+    const code = await import('node:fs/promises').then((fs) =>
+    fs.readFile(fixture.source, 'utf8')
+  );
   const result = compileElementModule(code, fixture.id);
   if (!result) {
     throw new Error(`compiler returned null for ${fixture.id} (decorator admission failed)`);
   }
   const outPath = join(outDir, fixture.out);
-  await Deno.writeTextFile(outPath, result.code);
+    await import('node:fs/promises').then((fs) => fs.writeFile(outPath, result.code));
 
   // Provenance check: the embedded v3 map must decode and point back at the
   // authored .tsx, or the debugging story silently degrades.

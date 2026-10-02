@@ -11,7 +11,7 @@
  *     prerendered with real content.
  *
  * The fixture dist is gitignored; build it on demand (a no-op when present):
- *   deno task --cwd tests/fixtures/router-static-only build
+ *   pnpm --dir tests/fixtures/router-static-only run build
  */
 
 import { assert, assertEquals, assertStringIncludes } from '@std/assert';
@@ -19,7 +19,6 @@ import { join } from '@std/path';
 
 const fixtureDir = join(import.meta.dirname!, '../../../tests/fixtures/router-static-only');
 const distDir = join(fixtureDir, 'dist');
-const repoRoot = join(fixtureDir, '../../..');
 
 async function ensureFixtureBuild(): Promise<void> {
   // #953: the assertion below requires output from current sources — a stale
@@ -30,8 +29,7 @@ async function ensureFixtureBuild(): Promise<void> {
   const build = await new Deno.Command(Deno.execPath(), {
     args: [
       'run',
-      '--config',
-      join(repoRoot, 'deno.json'),
+      '--no-lock',
       '--allow-read',
       '--allow-write',
       '--allow-env',
@@ -111,8 +109,7 @@ Deno.test({
       server = new Deno.Command(Deno.execPath(), {
         args: [
           'run',
-          '--config',
-          join(repoRoot, 'deno.json'),
+          '--no-lock',
           '--allow-read',
           '--allow-write',
           '--allow-env',

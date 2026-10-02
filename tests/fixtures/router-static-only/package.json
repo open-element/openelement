@@ -1,0 +1,17 @@
+{
+  "name": "@openelement/fixture-router-static-only",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "build": "node ../../../tools/repo/clean.ts dist && node ../../../packages/router/src/cli/build.ts"
+  },
+  "dependencies": {
+    "@openelement/element": "workspace:*",
+    "@openelement/router": "workspace:*",
+    "hono": "^4.12"
+  },
+  "devDependencies": {
+    "vite": "8.0.16"
+  }
+}

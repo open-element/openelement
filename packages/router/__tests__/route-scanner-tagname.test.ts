@@ -8,7 +8,7 @@
  *   spelling (relative vs absolute).
  */
 import { assertEquals, assertStringIncludes } from '@std/assert';
-import { join, relative } from 'jsr:@std/path@^1.0.0';
+import { join, relative } from '@std/path';
 import { scanRoutes } from '../src/vite/internal/ssg/index.ts';
 
 /** Run fn with console.debug captured; returns the captured messages. */

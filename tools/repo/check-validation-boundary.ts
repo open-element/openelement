@@ -5,7 +5,7 @@
  * docs/integrations/validation.md.
  */
 
-import { walkSync } from '@std/fs/walk';
+import { walkSync } from '../../tools/lib/std-fs.ts';
 import { readFileSync } from 'node:fs';
 import process from 'node:process';
 import { extractStaticModuleSpecifiers } from '../lib/typescript-ast.ts';

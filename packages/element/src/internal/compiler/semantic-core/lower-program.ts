@@ -188,13 +188,11 @@ export class Lowering {
   readonly methodNames: Set<string>;
   readonly computedNames: Set<string>;
   readonly fieldTypes: Map<string, PropertyValueType>;
+  private readonly sf: ts.SourceFile;
   private elementSerial = 0;
 
-  constructor(
-    private readonly sf: ts.SourceFile,
-    fields: CompiledField[],
-    methodNames: string[],
-  ) {
+  constructor(sf: ts.SourceFile, fields: CompiledField[], methodNames: string[]) {
+    this.sf = sf;
     this.fieldNames = new Set(fields.map((field) => field.name));
     this.methodNames = new Set(methodNames);
     this.computedNames = new Set(

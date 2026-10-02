@@ -35,7 +35,7 @@ export async function launchQualifyBrowser(options: {
 }): Promise<QualifyBrowserSession> {
   const browserName = options.browserName ?? 'chromium';
   const playwright = await import('@playwright/test');
-  const server = serveStatic(options.distDir);
+  const server = await serveStatic(options.distDir);
   const browser = await playwright[browserName].launch();
   const pageErrors: string[] = [];
   return {

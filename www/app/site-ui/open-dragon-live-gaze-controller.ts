@@ -47,7 +47,7 @@ class DragonLiveGazeController {
   #attrFrame = -1;
   #idling = false;
   #videoFailed = false;
-  #pauseTimer = 0;
+  #pauseTimer: ReturnType<typeof globalThis.setTimeout> | 0 = 0;
   #onIdlePlaying: (() => void) | null = null;
   #idleBlink = 0;
   #blinkT = 0;
@@ -56,7 +56,10 @@ class DragonLiveGazeController {
   #farewellCleanup: (() => void) | null = null;
   #connected = false;
   #epoch = 0;
-  #timers = new Set<number>();
+  // Host-agnostic timer handle: DOM setTimeout returns `number`, the node
+  // typings (loaded by the routes typecheck gate) return `Timeout` — type
+  // against the global this controller actually calls.
+  #timers = new Set<ReturnType<typeof globalThis.setTimeout>>();
   #scrollRaf = 0;
 
   constructor(host: HTMLElement) {
@@ -232,7 +235,11 @@ class DragonLiveGazeController {
     this.#stage = null;
   }
 
-  #schedule(callback: () => void, delay: number, epoch = this.#epoch): number {
+  #schedule(
+    callback: () => void,
+    delay: number,
+    epoch = this.#epoch,
+  ): ReturnType<typeof globalThis.setTimeout> {
     const timer = globalThis.setTimeout(() => {
       this.#timers.delete(timer);
       if (!this.#connected || this.#epoch !== epoch) return;
@@ -242,7 +249,7 @@ class DragonLiveGazeController {
     return timer;
   }
 
-  #clearTimer(timer: number): void {
+  #clearTimer(timer: ReturnType<typeof globalThis.setTimeout> | 0): void {
     if (!timer) return;
     clearTimeout(timer);
     this.#timers.delete(timer);

@@ -38,12 +38,12 @@ points, not the ported APIs.
 
 ## 4. Module resolution artifacts
 
-`deno.lock` (six fixture universes + root, guarded by
-`tools/repo/check-fixture-locks.ts`), `vendor: true`,
-`nodeModulesDir: "manual"`, and jsr: specifiers have no node-side equivalent
-format. node:\* imports resolve through the same lock today. Expiry: a Node
-host would need package-lock semantics; until then the lock stays the single
-source of resolution truth.
+RESOLVED IN B2: `deno.lock` (root + six fixture universes), `vendor: true`
+and `nodeModulesDir: "manual"` retired with the deno.json files; the
+repository carries a single `pnpm-lock.yaml` (per-fixture npm-shaped
+universes like url-pattern-list-audit keep their own committed lockfile).
+jsr: specifiers survive as pnpm `jsr:` dependencies resolved to `@jsr/*`
+registry mirrors. `check-fixture-locks.ts` was deleted with its gate step.
 
 ## 5. `Deno.serve` — no node:\* one-liner; product replaced, repo has live residuals
 

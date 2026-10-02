@@ -10,7 +10,7 @@
  */
 
 import { assert, assertEquals, assertNotEquals } from '@std/assert';
-import { eachMapping, originalPositionFor, TraceMap } from 'npm:@jridgewell/trace-mapping@0.3.31';
+import { eachMapping, originalPositionFor, TraceMap } from '@jridgewell/trace-mapping';
 import {
   CompiledElementError,
   compileElementProgram,

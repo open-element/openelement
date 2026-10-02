@@ -119,18 +119,10 @@ async function main(): Promise<void> {
   }
   await mkdir(artifactsDir, { recursive: true });
   await rm(reportPath).catch(() => undefined);
-  const status = await commandOutput(process.execPath, {
+  // The Playwright CLI comes from the workspace install (www devDependencies)
+  // instead of the former npm: specifier through the deleted root config.
+  const status = await commandOutput(join(repoRoot, 'node_modules', '.bin', 'playwright'), {
     args: [
-      'run',
-      '--config',
-      join(repoRoot, 'deno.json'),
-      '--allow-read',
-      '--allow-write',
-      '--allow-env',
-      '--allow-net',
-      '--allow-run',
-      '--allow-sys',
-      'npm:@playwright/test@1.59.1',
       'test',
       '--config',
       'e2e/playwright.config.ts',

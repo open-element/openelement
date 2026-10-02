@@ -1,9 +1,8 @@
 /**
- * tools/repo/version-bump.test.ts — six-point bump contract (#1415).
+ * tools/repo/version-bump.test.ts — five-point bump contract (#1415).
  *
  * The dry run is the acceptance surface: it must report exactly the four
- * package configs, the CREATE_VERSION anchor, and the registry fixture locks
- * whose recorded `@<version>` links really change. `--write` is exercised
+ * package manifests plus the CREATE_VERSION anchor. `--write` is exercised
  * against a copy of the tree pieces it owns (never the live repo).
  */
 
@@ -13,13 +12,11 @@ import { prereleaseParts } from '../lib/version.ts';
 import {
   historicalReleaseNameFindings,
   inconsistencyFailures,
-  LOCK_FILES,
   PACKAGE_CONFIGS,
   planVersionBump,
   readConfigVersion,
   rewriteConfigVersion,
   rewriteCreateVersion,
-  rewriteLockVersion,
   SHIPPED_SCAN_ALLOWLIST,
   shippedScanAllowlisted,
   validateVersion,
@@ -30,15 +27,14 @@ import { tmpdir } from 'node:os';
 
 const repoRoot = join(import.meta.dirname!, '..', '..');
 
-Deno.test('version-bump: the six points are the four configs, the anchor, and the locks', () => {
+Deno.test('version-bump: the five points are the four manifests and the anchor', () => {
   assertEquals(PACKAGE_CONFIGS, [
-    'packages/element/deno.json',
-    'packages/router/deno.json',
-    'packages/create/deno.json',
-    'packages/ui/deno.json',
+    'packages/element/package.json',
+    'packages/router/package.json',
+    'packages/create/package.json',
+    'packages/ui/package.json',
   ]);
   assertEquals(VERSION_SOURCE, 'packages/create/src/version.ts');
-  assertEquals(LOCK_FILES.length, 6);
 });
 
 Deno.test('version-bump: version input is validated', () => {
@@ -60,12 +56,6 @@ Deno.test('version-bump: rewriters move only the version token', () => {
   const rewritten = rewriteCreateVersion(anchor, '1.0.0-alpha.2', '1.0.0-alpha.3');
   assert(rewritten.includes("CREATE_VERSION = '1.0.0-alpha.3'"), rewritten);
   assert(rewritten.includes("VITE_STARTER_PIN = '8.0.16'"), rewritten);
-  const lock =
-    '{\n      "jsr:@openelement/router@1.0.0-alpha.2": {\n        "dependencies": []\n      }\n}';
-  assertEquals(
-    rewriteLockVersion(lock, '1.0.0-alpha.2', '1.0.0-alpha.3'),
-    '{\n      "jsr:@openelement/router@1.0.0-alpha.3": {\n        "dependencies": []\n      }\n}',
-  );
 });
 
 Deno.test('version-bump: dry run reports every point against the live tree', async () => {
@@ -93,19 +83,6 @@ Deno.test('version-bump: dry run reports every point against the live tree', asy
   );
   assertEquals(plan.edits.filter((edit) => edit.point === 'package-config').length, 4);
   assertEquals(plan.edits.filter((edit) => edit.point === 'create-anchor').length, 1);
-  // Point 6: only the locks that record an @openelement workspace link.
-  for (const edit of plan.lockEdits) {
-    assert(edit.point === 'fixture-lock', edit.path);
-    assert(
-      edit.after.includes(`@${target}`) && !edit.after.includes(`@${plan.currentVersion}`),
-      edit.path,
-    );
-  }
-  // Byte-identical shared universe (router-native-framework ↔ router-request-time)
-  // must stay byte-identical after the predicted rewrite.
-  const native = plan.lockEdits.find((edit) => edit.path.includes('router-native-framework'));
-  const requestTime = plan.lockEdits.find((edit) => edit.path.includes('router-request-time'));
-  if (native && requestTime) assertEquals(native.after, requestTime.after);
 });
 
 Deno.test('version-bump: consistency check reports the points that lag', async () => {
@@ -115,7 +92,7 @@ Deno.test('version-bump: consistency check reports the points that lag', async (
   // A different expected version reports every point (the www anchor audit is
   // expected-version-independent, so it adds nothing here on a healthy tree).
   const failures = await inconsistencyFailures(repoRoot, '9.9.9');
-  assertEquals(failures.length, 5 + 4);
+  assertEquals(failures.length, 5);
   assert(
     failures.some((line) => line.startsWith(VERSION_SOURCE)),
     failures.join('\n'),
@@ -130,8 +107,8 @@ Deno.test('version-bump: the allowlist matcher scopes the shipped-source scan', 
     ['www/content/', 'www/content/docs/x.md', true],
     ['**/__fixtures__/**', 'packages/element/src/__fixtures__/old.ts', true],
     ['**/__fixtures__/**', 'packages/element/src/internal/old.ts', false],
-    ['deno.lock', 'deno.lock', true],
-    ['deno.lock', 'tests/fixtures/x/deno.lock', false],
+    ['pnpm-lock.yaml', 'pnpm-lock.yaml', true],
+    ['pnpm-lock.yaml', 'tests/fixtures/x/pnpm-lock.yaml', false],
   ];
   for (const [pattern, path, expected] of cases) {
     assertEquals(shippedScanAllowlisted(pattern, path), expected, `${pattern} vs ${path}`);
@@ -142,7 +119,7 @@ Deno.test('version-bump: the allowlist matcher scopes the shipped-source scan', 
     'CHANGELOG.md',
     'www/content/',
     '**/__fixtures__/**',
-    'deno.lock',
+    'pnpm-lock.yaml',
   ]);
 });
 

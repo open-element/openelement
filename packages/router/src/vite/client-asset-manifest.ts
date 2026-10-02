@@ -15,6 +15,7 @@
  * whose client scripts never load.
  */
 
+import { createRequire } from 'node:module';
 import { readFile } from 'node:fs/promises';
 import { join, relative } from 'pathe';
 import { normalizeSeparators } from '@openelement/element/build-utils';
@@ -168,11 +169,32 @@ export function moduleIdentityMatches(moduleId: string, identity: string): boole
  * identity, and a silent fallback would deliver a different module than the
  * declared specifier names.
  */
+/** The identity's resolved real path under the node host, or undefined. */
+export function resolveIdentityPath(identity: string, root: string): string | undefined {
+  if (identity.startsWith('.') || identity.startsWith('/') || identity.includes('\0')) {
+    return undefined;
+  }
+  try {
+    // Node resolution honors the package exports map and (default settings)
+    // resolves symlinks, so the result is the same realpath rolldown emits
+    // as the module id — the deno-host build kept the bare specifier as the
+    // id, which the identity rule already matches directly.
+    return createRequire(join(root ?? process.cwd(), 'package.json')).resolve(identity);
+  } catch {
+    return undefined;
+  }
+}
+
 export function resolveIslandModuleId(
   fileByModuleId: Map<string, string>,
   identity: string,
   islandLabel: string,
+  resolvedIdentity?: string,
 ): string {
+  // Node-host module ids are real paths: an identity resolved through the
+  // exports map IS a key of fileByModuleId, so return the identity itself
+  // (the module id), not the chunk file the caller looks up with it.
+  if (resolvedIdentity && fileByModuleId.has(resolvedIdentity)) return resolvedIdentity;
   const matches: string[] = [];
   for (const id of fileByModuleId.keys()) {
     if (moduleIdentityMatches(id, identity)) matches.push(id);
@@ -230,6 +252,7 @@ function resolveIslandChunkFile(
   fileByModuleId: Map<string, string>,
   fileByManifestKey: Map<string, string>,
   manifestPath: string,
+  resolvedIdentity?: string,
 ): string | null {
   if (island.sourceFile) {
     const direct = fileByModuleId.get(normalizeSeparators(island.sourceFile));
@@ -245,6 +268,7 @@ function resolveIslandChunkFile(
     fileByModuleId,
     island.entry.modulePath,
     `${island.entry.tagName} (${island.entry.modulePath})`,
+    resolvedIdentity,
   );
   const file = fileByModuleId.get(id);
   if (!file) {
@@ -295,6 +319,18 @@ export function buildClientAssetManifest(options: {
     }
   }
 
+  // Package-island identities are bare specifiers; under the node host the
+  // emitted module ids are real paths, so resolve each specifier once and
+  // let the resolver compare against the resolved id as well.
+  const identityPaths = new Map<string, string>();
+  for (const island of islands) {
+    const identity = island.entry.modulePath;
+    if (identity && !identityPaths.has(identity)) {
+      const resolved = resolveIdentityPath(identity, root);
+      if (resolved) identityPaths.set(identity, resolved);
+    }
+  }
+
   // Vite build manifest: source key -> emitted file (facade + asset view).
   const fileByManifestKey = new Map<string, string>();
   for (const [src, entry] of Object.entries(viteManifest)) {
@@ -312,7 +348,14 @@ export function buildClientAssetManifest(options: {
   const tagOwners = new Map<string, string>();
   for (const island of islands) {
     const file =
-      resolveIslandChunkFile(root, island, fileByModuleId, fileByManifestKey, manifestPath) ??
+      resolveIslandChunkFile(
+        root,
+        island,
+        fileByModuleId,
+        fileByManifestKey,
+        manifestPath,
+        identityPaths.get(island.entry.modulePath),
+      ) ??
       // An island without a chunk of its own rides the client entry chunk —
       // the same fallback the post-build chunk map applies.
       entryFile;

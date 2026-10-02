@@ -21,7 +21,8 @@ const TYPE_FLAGS =
 
 async function sha256Hex(text: string): Promise<string> {
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
-  return new Uint8Array(digest).toHex();
+  // Node 24 has no Uint8Array.prototype.toHex (a Deno API): hex-encode by hand.
+  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
 }
 
 function resolveAlias(checker: ts.TypeChecker, symbol: ts.Symbol): ts.Symbol {
@@ -367,7 +368,9 @@ async function main(): Promise<void> {
     }
     await writeFile(SNAPSHOT, text, 'utf8');
   } else if ((await readFile(SNAPSHOT, 'utf8')) !== text) {
-    throw new Error(`${SNAPSHOT} drifted; run deno task interface:snapshot:write`);
+    throw new Error(
+      `${SNAPSHOT} drifted; run pnpm --filter @openelement/tools-repo run interface:snapshot:write`,
+    );
   }
   console.log(
     `Public interface snapshot ${write ? 'written' : 'matches'} (${packages.length} packages).`,

@@ -45,7 +45,7 @@
  * exported and pinned by generate-site-article-routes.test.ts; the entry point
  * below only runs as the main module, so importing it never writes.
  */
-import { walk } from '@std/fs/walk';
+import { walk } from '../../tools/lib/std-fs.ts';
 import { dirname, fromFileUrl, join, relative } from '@std/path';
 import { mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import process from 'node:process';
@@ -400,7 +400,7 @@ async function main(): Promise<void> {
       console.error('article routes drift:');
       for (const rel of [...drift].sort()) console.error(`  differs from content: ${rel}`);
       for (const rel of [...stale].sort()) console.error(`  stale (content gone): ${rel}`);
-      console.error('regenerate with deno task --cwd www generate:article-routes');
+      console.error('regenerate with pnpm --filter @openelement/www run generate:article-routes');
       process.exit(1);
     }
     console.log(`article routes check passed (${routes.length} article(s)).`);

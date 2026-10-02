@@ -621,6 +621,7 @@
       "exports": {
         ".": "./src/index.ts",
         "./instance-state": "./src/instance-state.ts",
+        "./manifest": "./src/manifest.ts",
         "./open-badge": "./src/open-badge.tsx",
         "./open-button": "./src/open-button.tsx",
         "./open-callout": "./src/open-callout.tsx",
@@ -660,6 +661,12 @@
           "publicSymbols": [
             "readInstanceState=value:{call:<T>(host:object,key:string,init:{call:()=>T})=>T}",
             "writeInstanceState=value:{call:(host:object,key:string,value:unknown)=>void}"
+          ]
+        },
+        "./manifest": {
+          "publicShapeSha256": "1b10e5c8f77b910a40a6631cff1128d7437eea941a152246e09d450aff685b37",
+          "publicSymbols": [
+            "manifest=value:OpenElementPackageManifest"
           ]
         },
         "./open-badge": {

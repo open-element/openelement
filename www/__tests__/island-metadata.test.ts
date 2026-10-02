@@ -1,5 +1,5 @@
 import { assert, assertEquals, assertExists, assertFalse, assertStringIncludes } from '@std/assert';
-import { fromFileUrl, join } from 'jsr:@std/path@^1.0.0';
+import { fromFileUrl, join } from '@std/path';
 import {
   fileToTagName,
   scanIslandMeta,

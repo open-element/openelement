@@ -675,7 +675,7 @@ export function renderApiReferenceModule(build: ApiReferenceBuild): string {
     '// Source of truth: packages/<name>/deno.json exports + JSDoc, the router\n' +
     '// application options type (packages/router/src/vite/index.ts\n' +
     '// OpenElementOptions) and packages/ui/src/generated-manifest.json.\n' +
-    '// Regenerate with `deno task --cwd www generate:api-reference`; the file is\n' +
+    '// Regenerate with `pnpm --filter @openelement/www run generate:api-reference`; the file is\n' +
     '// untracked and rebuilt before test/site:build.\n' +
     `export const apiReference = ${formatJson(payload).trimEnd()} as const;\n`
   );
@@ -696,13 +696,13 @@ if (import.meta.main) {
       existing = await readFile(join(repoRoot, API_REFERENCE_ARTIFACT), 'utf8');
     } catch {
       console.error(
-        `${API_REFERENCE_ARTIFACT} is missing; run deno task --cwd www generate:api-reference`,
+        `${API_REFERENCE_ARTIFACT} is missing; run pnpm --filter @openelement/www run generate:api-reference`,
       );
       process.exit(1);
     }
     if (existing !== module) {
       console.error(
-        `${API_REFERENCE_ARTIFACT} is stale; run deno task --cwd www generate:api-reference`,
+        `${API_REFERENCE_ARTIFACT} is stale; run pnpm --filter @openelement/www run generate:api-reference`,
       );
       process.exit(1);
     }

@@ -7,7 +7,7 @@
  * silent divergence (for example a README that still calls an older version
  * the declared floor) fails closed.
  */
-import { walk } from '@std/fs/walk';
+import { walk } from '../../tools/lib/std-fs.ts';
 import { readFile } from 'node:fs/promises';
 import process from 'node:process';
 

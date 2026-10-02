@@ -22,7 +22,7 @@
  * Usage: run after the site build (`deno task site:build`); no dedicated task.
  */
 
-import { walk } from '@std/fs/walk';
+import { walk } from '../tools/lib/std-fs.ts';
 import { join, relative } from '@std/path';
 import { close, createIndex } from 'pagefind';
 import { mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';

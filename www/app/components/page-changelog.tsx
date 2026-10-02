@@ -6,7 +6,7 @@ import {
   trustedHtml,
 } from '@openelement/element';
 import '@openelement/ui/open-button';
-import '@openelement/site-ui/open-reading-shell.tsx';
+import '#site-ui/open-reading-shell.tsx';
 import '../islands/open-page-rail.tsx';
 import { pageChangelogStyles } from './page-changelog-styles.ts';
 

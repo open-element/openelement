@@ -477,6 +477,10 @@ Deno.test('request-time server entry serves the SSR bundle at request time', asy
 
   const dir = await Deno.makeTempDir();
   try {
+    // The temp fixture sits outside any node_modules tree, so the bare
+    // 'hono' specifier the real generated entry uses cannot resolve there;
+    // hand the fixture the resolved specifier instead.
+    const honoSpecifier = import.meta.resolve('hono');
     // A minimal stand-in for the built SSR bundle: one request-time route
     // whose output depends on the live request (unlike a prerendered page).
     // The openElementHandler named export mirrors the real entry's handler
@@ -484,7 +488,7 @@ Deno.test('request-time server entry serves the SSR bundle at request time', asy
     // time client-script embedding the generated index.js wires up.
     await Deno.writeTextFile(
       join(dir, 'entry.js'),
-      `import { Hono } from 'hono';
+      `import { Hono } from ${JSON.stringify(honoSpecifier)};
 const app = new Hono();
 let __clientSrc = null;
 export function __setRequestTimeClientScript(src) { __clientSrc = src || null; }
@@ -520,9 +524,12 @@ Deno.test('request-time server entry wires the island client script into the ent
 
   const dir = await Deno.makeTempDir();
   try {
+    // The temp fixture sits outside any node_modules tree; use the resolved
+    // specifier (see the first request-time entry test).
+    const honoSpecifier = import.meta.resolve('hono');
     await Deno.writeTextFile(
       join(dir, 'entry.js'),
-      `import { Hono } from 'hono';
+      `import { Hono } from ${JSON.stringify(honoSpecifier)};
 const app = new Hono();
 let __clientSrc = null;
 export function __setRequestTimeClientScript(src) { __clientSrc = src || null; }
@@ -560,9 +567,12 @@ Deno.test('request-time server entry isRequestTimePath admits request-time paths
 
   const dir = await Deno.makeTempDir();
   try {
+    // The temp fixture sits outside any node_modules tree; use the resolved
+    // specifier (see the first request-time entry test).
+    const honoSpecifier = import.meta.resolve('hono');
     await Deno.writeTextFile(
       join(dir, 'entry.js'),
-      `import { Hono } from 'hono';
+      `import { Hono } from ${JSON.stringify(honoSpecifier)};
 const app = new Hono();
 export function __setRequestTimeClientScript() {}
 export const openElementHandler = (request, context = {}) =>

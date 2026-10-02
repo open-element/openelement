@@ -1,4 +1,8 @@
 /** Packed UI consumer: fresh TypeScript project installs the UI tarball and typechecks. */
+import { tmpdir } from 'node:os';
+import { commandOutput } from '../repo/node-command.ts';
+import { mkdtemp, realpath, rm } from 'node:fs/promises';
+import { readFileSync, statSync, writeFileSync } from 'node:fs';
 import { existsSync } from '@std/fs';
 import { join, resolve } from '@std/path';
 import { formatJson } from '@openelement/element/build-utils';
@@ -24,14 +28,14 @@ async function run(
     controller.abort();
   }, timeoutMs);
   try {
-    const result = await new Deno.Command(command, {
+    const result = await commandOutput(command, {
       args,
       cwd,
       env,
       stdout: 'piped',
       stderr: 'piped',
       signal: controller.signal,
-    }).output();
+    });
     const decoder = new TextDecoder();
     const output = decoder.decode(result.stdout) + decoder.decode(result.stderr);
     if (timedOut) {
@@ -61,9 +65,9 @@ for (const tarball of [uiTarball, elementTarball]) {
   }
 }
 
-const tmp = await Deno.makeTempDir({ prefix: 'openelement-packaged-ui-' });
+const tmp = await mkdtemp(join(tmpdir(), 'openelement-packaged-ui-'));
 try {
-  Deno.writeTextFileSync(
+  writeFileSync(
     join(tmp, 'package.json'),
     formatJson({
       name: 'openelement-packed-ui-consumer',
@@ -89,14 +93,14 @@ try {
   );
 
   for (const name of ['@openelement/ui', '@openelement/element']) {
-    const resolved = await Deno.realPath(join(tmp, 'node_modules', ...name.split('/')));
+    const resolved = await realpath(join(tmp, 'node_modules', ...name.split('/')));
     if (resolved === repoRoot || resolved.startsWith(`${repoRoot}/`)) {
       throw new Error(`Packed UI consumer resolved ${name} into the repository: ${resolved}`);
     }
   }
   console.log('PASS packaged-ui boundary — no dependency resolves into the repository');
 
-  Deno.writeTextFileSync(
+  writeFileSync(
     join(tmp, 'main.ts'),
     `import { OpenButton, OpenCallout, OpenInput, manifest, registerOpenUi } from '@openelement/ui';
 import { OpenDropdown } from '@openelement/ui/open-dropdown';
@@ -121,7 +125,7 @@ void [button, input, callout, dropdown];
 if (manifest.packageName !== '@openelement/ui') throw new Error('unexpected UI manifest');
 `,
   );
-  Deno.writeTextFileSync(
+  writeFileSync(
     join(tmp, 'tsconfig.json'),
     formatJson({
       compilerOptions: {
@@ -150,18 +154,18 @@ if (manifest.packageName !== '@openelement/ui') throw new Error('unexpected UI m
   );
 
   const uiDir = join(tmp, 'node_modules', '@openelement', 'ui');
-  const pkgJson = JSON.parse(Deno.readTextFileSync(join(uiDir, 'package.json')));
+  const pkgJson = JSON.parse(readFileSync(join(uiDir, 'package.json'), 'utf8'));
   const host = {
     fileExists: (name: string): boolean => {
       try {
-        return Deno.statSync(name).isFile;
+        return statSync(name).isFile();
       } catch {
         return false;
       }
     },
     readFile: (name: string): string | undefined => {
       try {
-        return Deno.readTextFileSync(name);
+        return readFileSync(name, 'utf8');
       } catch {
         return undefined;
       }
@@ -172,7 +176,7 @@ if (manifest.packageName !== '@openelement/ui') throw new Error('unexpected UI m
   const walk = (path: string): void => {
     if (seen.has(path)) return;
     seen.add(path);
-    const text = Deno.readTextFileSync(path);
+    const text = readFileSync(path, 'utf8');
     for (const { fileName } of ts.preProcessFile(text).importedFiles) {
       if (DECLARATION_LEAK_PATTERN.test(fileName)) problems.push(`${path} -> ${fileName}`);
       const resolved = ts.resolveModuleName(
@@ -211,5 +215,5 @@ if (manifest.packageName !== '@openelement/ui') throw new Error('unexpected UI m
   }
   console.log(`PASS packaged-ui declarations — ${seen.size} declaration modules resolved clean`);
 } finally {
-  await Deno.remove(tmp, { recursive: true });
+  await rm(tmp, { recursive: true });
 }

@@ -4,8 +4,8 @@ import {
   prereleasePublishStatus,
   REGISTRY_NOTE,
 } from '../data/version.ts';
-import { siteHead } from '@openelement/site-ui/head.ts';
-import { contentLocale } from '@openelement/site-ui/locale.ts';
+import { siteHead } from '#site-ui/head.ts';
+import { contentLocale } from '#site-ui/locale.ts';
 import type { SiteLocale } from '../../site-config.ts';
 import RoadmapPage from '../components/page-roadmap.tsx';
 

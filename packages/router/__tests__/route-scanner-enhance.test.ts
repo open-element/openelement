@@ -2,7 +2,7 @@
  * route-scanner: enhanced-form detection follows relative imports (#577).
  */
 import { assertEquals } from '@std/assert';
-import { join } from 'jsr:@std/path@^1.0.0';
+import { join } from '@std/path';
 import { scanRoutes } from '../src/vite/internal/ssg/index.ts';
 
 Deno.test('scanRoutes detects data-open-enhance inside an imported component (#577)', async () => {

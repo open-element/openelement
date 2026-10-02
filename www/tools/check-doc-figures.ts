@@ -8,7 +8,7 @@
  * payloads). Byte-size totals from `du` are deliberately NOT gated:
  * platform du accounting differs between macOS and Linux runners.
  */
-import { walk } from '@std/fs/walk';
+import { walk } from '../../tools/lib/std-fs.ts';
 import { fromFileUrl, join } from '@std/path';
 import { readFile, stat } from 'node:fs/promises';
 import process from 'node:process';

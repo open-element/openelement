@@ -33,6 +33,12 @@
  * via the `consumer:packaged` root task (verify:core task chain).
  */
 
+import { spawn } from 'node:child_process';
+import { createServer } from 'node:net';
+import { tmpdir } from 'node:os';
+import { commandOutput } from '../repo/node-command.ts';
+import { mkdtemp, readFile, realpath, rm, symlink, writeFile } from 'node:fs/promises';
+import { readdirSync } from 'node:fs';
 import { existsSync } from '@std/fs';
 import { join, resolve } from '@std/path';
 import { formatJson } from '@openelement/element/build-utils';
@@ -43,7 +49,7 @@ import { extractStaticModuleSpecifiers } from '../lib/typescript-ast.ts';
 import { PACKED_PROBE_PERMISSIONS } from './consumer-packaged-shared.ts';
 
 async function readJson<T = unknown>(path: string | URL): Promise<T> {
-  return JSON.parse(await Deno.readTextFile(path)) as T;
+  return JSON.parse(await readFile(path, 'utf8')) as T;
 }
 
 const repoRoot = resolve(import.meta.dirname!, '../..');
@@ -78,14 +84,14 @@ async function run(
           controller.abort();
         }, timeoutMs);
   try {
-    const result = await new Deno.Command(command, {
+    const result = await commandOutput(command, {
       args,
       cwd,
       stdout: 'piped',
       stderr: 'piped',
       env,
       ...(timeoutMs === undefined ? {} : { signal: controller.signal }),
-    }).output();
+    });
     const decoder = new TextDecoder();
     const output = decoder.decode(result.stdout) + decoder.decode(result.stderr);
     if (timedOut) {
@@ -103,17 +109,19 @@ async function run(
 async function assertConsumerDoesNotResolveIntoRepository(tmp: string): Promise<void> {
   const nodeModules = join(tmp, 'node_modules');
   const candidates: string[] = [];
-  for (const entry of Deno.readDirSync(nodeModules)) {
+  for (const entry of readdirSync(nodeModules, { withFileTypes: true })) {
     if (entry.name.startsWith('.')) continue;
     const path = join(nodeModules, entry.name);
-    if (entry.name.startsWith('@') && entry.isDirectory) {
-      for (const nested of Deno.readDirSync(path)) candidates.push(join(path, nested.name));
+    if (entry.name.startsWith('@') && entry.isDirectory()) {
+      for (const nested of readdirSync(path, { withFileTypes: true })) {
+        candidates.push(join(path, nested.name));
+      }
     } else {
       candidates.push(path);
     }
   }
   for (const path of candidates) {
-    const resolved = await Deno.realPath(path).catch(() => path);
+    const resolved = await realpath(path).catch(() => path);
     if (resolved === repoRoot || resolved.startsWith(`${repoRoot}/`)) {
       throw new Error(
         `Packed consumer resolved a dependency into the repository: ${path} -> ${resolved}`,
@@ -124,11 +132,16 @@ async function assertConsumerDoesNotResolveIntoRepository(tmp: string): Promise<
 
 // Let the OS choose from its ephemeral range (fixed ranges collide with
 // parallel CI jobs).
-function reservePort(): number {
-  const probe = Deno.listen({ hostname: '127.0.0.1', port: 0 });
-  const port = (probe.addr as Deno.NetAddr).port;
-  probe.close();
-  return port;
+function reservePort(): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const probe = createServer();
+    probe.once('listening', () => {
+      const addr = probe.address() as { port: number };
+      probe.close(() => resolve(addr.port));
+    });
+    probe.once('error', reject);
+    probe.listen({ port: 0, host: '127.0.0.1' });
+  });
 }
 
 // ─── Import-map boundary helpers ────────────────────────────────────────────
@@ -237,21 +250,28 @@ try {
 
 /** Boot cli/start, run the three-browser matrix, then stop the server. */
 async function runStarterBrowserMatrix(starter: string, tmp: string): Promise<void> {
-  const port = reservePort();
-  const server = new Deno.Command(Deno.execPath(), {
-    args: ['task', 'start'],
+  const port = await reservePort();
+  const server = spawn('deno', ['task', 'start'], {
     cwd: starter,
-    env: { OPEN_ELEMENT_PORT: String(port), OPEN_ELEMENT_HOST: '127.0.0.1' },
-    stdout: 'piped',
-    stderr: 'piped',
-  }).spawn();
-  let exited = false;
-  const status = server.status.then((s) => {
-    exited = true;
-    return s;
+    env: { ...process.env, OPEN_ELEMENT_PORT: String(port), OPEN_ELEMENT_HOST: '127.0.0.1' },
+    stdio: ['ignore', 'pipe', 'pipe'],
   });
-  const stdout = new Response(server.stdout).text();
-  const stderr = new Response(server.stderr).text();
+  let exited = false;
+  server.addListener('exit', () => {
+    exited = true;
+  });
+  const stdoutChunks: Uint8Array[] = [];
+  const stderrChunks: Uint8Array[] = [];
+  void (async () => {
+    for await (const chunk of server.stdout!) stdoutChunks.push(chunk);
+  })();
+  void (async () => {
+    for await (const chunk of server.stderr!) stderrChunks.push(chunk);
+  })();
+  const stdoutText = () =>
+    new TextDecoder().decode(Buffer.concat(stdoutChunks.map((c) => Buffer.from(c))));
+  const stderrText = () =>
+    new TextDecoder().decode(Buffer.concat(stderrChunks.map((c) => Buffer.from(c))));
   try {
     const baseUrl = `http://127.0.0.1:${port}`;
     let ready = false;
@@ -268,19 +288,19 @@ async function runStarterBrowserMatrix(starter: string, tmp: string): Promise<vo
     }
     if (!ready) {
       throw new Error(
-        `Packed starter browser host did not become ready within ${SERVER_READY_TIMEOUT_MS}ms:\n${await stdout}\n${await stderr}`,
+        `Packed starter browser host did not become ready within ${SERVER_READY_TIMEOUT_MS}ms:\n${stdoutText()}\n${stderrText()}`,
       );
     }
     const probePath = join(tmp, 'pw-starter-probe.ts');
-    await Deno.writeTextFile(probePath, PW_STARTER_PROBE_SCRIPT);
+    await writeFile(probePath, PW_STARTER_PROBE_SCRIPT);
     const failures: string[] = [];
     for (const browserName of PACKED_BROWSERS) {
       const probe = await run(
-        Deno.execPath(),
+        'deno',
         [
           'run',
-          '--config',
-          join(repoRoot, 'deno.json'),
+          '--no-lock',
+          '--no-check',
           ...PACKED_PROBE_PERMISSIONS,
           probePath,
           baseUrl,
@@ -313,8 +333,10 @@ async function runStarterBrowserMatrix(starter: string, tmp: string): Promise<vo
         }
       }
     }
-    await status.catch(() => undefined);
-    await Promise.all([stdout.catch(() => ''), stderr.catch(() => '')]);
+    await new Promise((resolveSettled) => {
+      if (exited) resolveSettled(null);
+      else server.addListener('exit', () => resolveSettled(null));
+    });
   }
 }
 
@@ -326,21 +348,33 @@ async function exerciseServer(
   env: Record<string, string>,
   probes: ReadonlyArray<readonly [string, string]>,
 ): Promise<void> {
-  const port = reservePort();
-  const server = new Deno.Command(command, {
-    args: buildArgs(port),
+  const port = await reservePort();
+  const server = spawn(command, buildArgs(port), {
     cwd,
-    env: { ...env, OPEN_ELEMENT_PORT: String(port), OPEN_ELEMENT_HOST: '127.0.0.1' },
-    stdout: 'piped',
-    stderr: 'piped',
-  }).spawn();
-  let exited = false;
-  const status = server.status.then((s) => {
-    exited = true;
-    return s;
+    env: {
+      ...process.env,
+      ...env,
+      OPEN_ELEMENT_PORT: String(port),
+      OPEN_ELEMENT_HOST: '127.0.0.1',
+    },
+    stdio: ['ignore', 'pipe', 'pipe'],
   });
-  const stdout = new Response(server.stdout).text();
-  const stderr = new Response(server.stderr).text();
+  let exited = false;
+  server.addListener('exit', () => {
+    exited = true;
+  });
+  const stdoutChunks: Uint8Array[] = [];
+  const stderrChunks: Uint8Array[] = [];
+  void (async () => {
+    for await (const chunk of server.stdout!) stdoutChunks.push(chunk);
+  })();
+  void (async () => {
+    for await (const chunk of server.stderr!) stderrChunks.push(chunk);
+  })();
+  const stdoutText = () =>
+    new TextDecoder().decode(Buffer.concat(stdoutChunks.map((c) => Buffer.from(c))));
+  const stderrText = () =>
+    new TextDecoder().decode(Buffer.concat(stderrChunks.map((c) => Buffer.from(c))));
   try {
     const baseUrl = `http://127.0.0.1:${port}`;
     let ready = false;
@@ -357,7 +391,7 @@ async function exerciseServer(
     }
     if (!ready) {
       throw new Error(
-        `${label} did not become ready within ${SERVER_READY_TIMEOUT_MS}ms:\n${await stdout}\n${await stderr}`,
+        `${label} did not become ready within ${SERVER_READY_TIMEOUT_MS}ms:\n${stdoutText()}\n${stderrText()}`,
       );
     }
     for (const [path, marker] of probes) {
@@ -380,12 +414,14 @@ async function exerciseServer(
         }
       }
     }
-    await status.catch(() => undefined);
-    await Promise.all([stdout.catch(() => ''), stderr.catch(() => '')]);
+    await new Promise((resolveSettled) => {
+      if (exited) resolveSettled(null);
+      else server.addListener('exit', () => resolveSettled(null));
+    });
   }
 }
 
-const tmp = await Deno.makeTempDir({ prefix: 'openelement-packaged-starter-' });
+const tmp = await mkdtemp(join(tmpdir(), 'openelement-packaged-starter-'));
 try {
   const npmEnv = { NPM_CONFIG_CACHE: join(tmp, '.npm-cache') };
   // Cover the canonical retained package line (#828) with the shared tarball
@@ -424,7 +460,7 @@ try {
   // The packed Create CLI only scaffolds files: read/write/env/net, no FFI,
   // no prompts.
   const create = await run(
-    Deno.execPath(),
+    process.execPath,
     [
       'run',
       '--allow-read',
@@ -525,14 +561,14 @@ try {
   await assertConsumerDoesNotResolveIntoRepository(tmp);
 
   config.nodeModulesDir = 'manual';
-  await Deno.writeTextFile(configPath, formatJson(config));
-  await Deno.symlink(join(tmp, 'node_modules'), join(starter, 'node_modules'), { type: 'dir' });
+  await writeFile(configPath, formatJson(config));
+  await symlink(join(tmp, 'node_modules'), join(starter, 'node_modules'));
 
   // Lifecycle leg 1 — dev: the packed adapter must boot the real vite dev
   // server and SSR-render the index route over HTTP, not just exit green.
   await exerciseServer(
     'Packed starter dev server',
-    Deno.execPath(),
+    process.execPath,
     (port) => ['task', 'dev', '--port', String(port), '--strictPort'],
     starter,
     {},
@@ -540,19 +576,19 @@ try {
   );
 
   // Lifecycle leg 2 — check.
-  const check = await run(Deno.execPath(), ['task', 'check'], starter);
+  const check = await run(process.execPath, ['task', 'check'], starter);
   if (!check.success) throw new Error(`Packed starter typecheck failed:\n${check.output}`);
   console.log(`Packed starter typecheck passed for ${PACKAGE_VERSION}.`);
 
   // Lifecycle leg 3 — test: the starter's own test task must run green
   // (permit-no-files today; the leg pins the task wiring for when the
   // starter ships real tests).
-  const test = await run(Deno.execPath(), ['task', 'test'], starter);
+  const test = await run(process.execPath, ['task', 'test'], starter);
   if (!test.success) throw new Error(`Packed starter test task failed:\n${test.output}`);
   console.log('Packed starter test task passed.');
 
   // Lifecycle leg 4 — build: packed adapter must run the real SSG build.
-  const build = await run(Deno.execPath(), ['task', 'build'], starter, BUILD_TIMEOUT_MS);
+  const build = await run(process.execPath, ['task', 'build'], starter, BUILD_TIMEOUT_MS);
   if (!build.success) throw new Error(`Packed starter SSG build failed:\n${build.output}`);
 
   // A green exit alone is not enough: the packed adapter must actually emit the
@@ -574,7 +610,7 @@ try {
   if (!existsSync(buildEvidencePath)) {
     throw new Error('Packed starter build emitted no structured build manifest.');
   }
-  const buildEvidence = JSON.parse(await Deno.readTextFile(buildEvidencePath)) as {
+  const buildEvidence = JSON.parse(await readFile(buildEvidencePath, 'utf8')) as {
     success?: boolean;
     manifest?: { routes?: Array<{ kind?: string; path?: string }> };
     pages?: Array<{ path?: string; errors?: string[] }>;
@@ -600,7 +636,7 @@ try {
   if (!existsSync(indexHtmlPath)) {
     throw new Error('Packed starter build emitted no prerendered dist/index.html');
   }
-  const indexHtml = await Deno.readTextFile(indexHtmlPath);
+  const indexHtml = await readFile(indexHtmlPath, 'utf8');
   for (const marker of ['Static pages, alive where it counts', 'data-open-layout="app-shell"']) {
     if (!indexHtml.includes(marker)) {
       throw new Error(`Packed starter dist/index.html missing marker: ${marker}`);
@@ -610,7 +646,7 @@ try {
   if (!existsSync(freshnessHtmlPath)) {
     throw new Error('Packed starter build did not prerender the freshness proof route');
   }
-  const freshnessHtml = await Deno.readTextFile(freshnessHtmlPath);
+  const freshnessHtml = await readFile(freshnessHtmlPath, 'utf8');
   if (!freshnessHtml.includes('Freshness proof')) {
     throw new Error('Packed starter dist/freshness/index.html missing the freshness proof content');
   }
@@ -626,7 +662,7 @@ try {
   if (!existsSync(ssrBundlePath)) {
     throw new Error(`Packed starter build emitted no SSR bundle: ${ssrBundlePath}`);
   }
-  const ssrBundle = await Deno.readTextFile(ssrBundlePath);
+  const ssrBundle = await readFile(ssrBundlePath, 'utf8');
   const missingGeneratedImports = findMissingGeneratedImports(ssrBundle, generatedImportMap);
   const missingProductImports = missingGeneratedImports.filter((specifier) =>
     specifier.startsWith('@openelement/'),
@@ -657,7 +693,7 @@ try {
   ] as const;
   await exerciseServer(
     'Packed starter start server',
-    Deno.execPath(),
+    process.execPath,
     () => ['task', 'start'],
     starter,
     {},
@@ -675,7 +711,7 @@ try {
   // Lifecycle leg 7 — preview: the starter ships a request-time route, so the
   // documented preview behavior is a fail-closed refusal that points at
   // `deno task start` (#601); a silent static-only preview would be wrong.
-  const preview = await run(Deno.execPath(), ['task', 'preview'], starter);
+  const preview = await run(process.execPath, ['task', 'preview'], starter);
   if (
     preview.success ||
     !preview.output.includes('request-time routes') ||
@@ -687,5 +723,5 @@ try {
   }
   console.log('Packed starter preview fail-closed guidance passed.');
 } finally {
-  await Deno.remove(tmp, { recursive: true }).catch(() => undefined);
+  await rm(tmp, { recursive: true }).catch(() => undefined);
 }

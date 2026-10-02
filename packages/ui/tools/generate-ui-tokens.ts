@@ -21,6 +21,8 @@
  */
 
 import { fromFileUrl, join } from '@std/path';
+import { readFile, writeFile } from 'node:fs/promises';
+import process from 'node:process';
 import { Gray, Indigo } from 'open-props/src/props.colors.js';
 import borders from 'open-props/src/props.borders.js';
 import fonts from 'open-props/src/props.fonts.js';
@@ -31,13 +33,14 @@ const ANCHOR = '/* @upstream-tokens */';
 // fromFileUrl, not .pathname: paths with spaces or %-escapes break otherwise.
 const repoRoot = fromFileUrl(new URL('../../../', import.meta.url));
 
-// The root import map is the canonical dependency declaration; the generated
-// provenance header must never disagree with what the build actually pins.
-const rootConfigPath = join(repoRoot, 'deno.json');
-const rootConfig = JSON.parse(await Deno.readTextFile(rootConfigPath)) as {
-  imports?: unknown;
+// The package.json dependency declaration is the canonical dependency
+// declaration; the generated provenance header must never disagree with what
+// the build actually pins.
+const packageJsonPath = join(repoRoot, 'packages/ui/package.json');
+const packageJson = JSON.parse(await readFile(packageJsonPath, 'utf8')) as {
+  dependencies?: unknown;
 };
-const OPEN_PROPS_VERSION = parseOpenPropsVersion(rootConfig.imports, rootConfigPath);
+const OPEN_PROPS_VERSION = parseOpenPropsVersion(packageJson.dependencies, packageJsonPath);
 const semanticFile = `${repoRoot}packages/ui/src/semantic-tokens.css`;
 const outTsFile = `${repoRoot}packages/ui/src/open-props-tokens.ts`;
 
@@ -88,7 +91,7 @@ for (const { file, module, vars } of UPSTREAM) {
   }
 }
 
-const semantic = await Deno.readTextFile(semanticFile);
+const semantic = await readFile(semanticFile, 'utf8');
 const anchorCount = semantic.split(ANCHOR).length - 1;
 if (anchorCount !== 1) {
   throw new Error(
@@ -110,7 +113,7 @@ for (const name of wanted) {
 // Replacer function, not a replacement string: upstream values flow through
 // untouched even if one ever contains a $-pattern.
 const cssBody = semantic.replace(ANCHOR, () => upstreamBlock.trim());
-const generatedCss = `/**\n * GENERATED — do not edit; source: open-props@${OPEN_PROPS_VERSION} (MIT) + semantic-tokens.css.\n * Regenerate with: deno task generate:ui-tokens\n */\n\n${cssBody}`;
+const generatedCss = `/**\n * GENERATED — do not edit; source: open-props@${OPEN_PROPS_VERSION} (MIT) + semantic-tokens.css.\n * Regenerate with: pnpm --filter @openelement/ui run generate:ui-tokens\n */\n\n${cssBody}`;
 
 if (generatedCss.includes('`') || generatedCss.includes('${') || generatedCss.includes('\\')) {
   throw new Error('generated CSS must stay free of template-literal metacharacters');
@@ -118,7 +121,7 @@ if (generatedCss.includes('`') || generatedCss.includes('${') || generatedCss.in
 
 const generatedTs = `/**
  * GENERATED — do not edit; source: open-props@${OPEN_PROPS_VERSION} (MIT) + semantic-tokens.css.
- * Regenerate with: deno task generate:ui-tokens
+ * Regenerate with: pnpm --filter @openelement/ui run generate:ui-tokens
  */
 
 import { StyleSheet, type StyleSheetLike } from '@openelement/element';
@@ -134,21 +137,21 @@ export const openPropsTokenSheet: StyleSheetLike = new StyleSheet();
 openPropsTokenSheet.replaceSync(OPEN_PROPS_TOKEN_CSS);
 `;
 
-if (Deno.args.includes('--check')) {
+if (process.argv.slice(2).includes('--check')) {
   let current = '';
   try {
-    current = await Deno.readTextFile(outTsFile);
+    current = await readFile(outTsFile, 'utf8');
   } catch {
     // Missing file is drift; fall through to the mismatch path.
   }
   if (current !== generatedTs) {
     console.error(
-      'ui tokens drift: regenerate with deno task --cwd packages/ui generate:ui-tokens',
+      'ui tokens drift: regenerate with pnpm --filter @openelement/ui run generate:ui-tokens',
     );
-    Deno.exit(1);
+    process.exit(1);
   }
   console.log('ui tokens check passed.');
 } else {
-  await Deno.writeTextFile(outTsFile, generatedTs);
+  await writeFile(outTsFile, generatedTs);
   console.log(`ui tokens written from open-props@${OPEN_PROPS_VERSION} + semantic-tokens.css.`);
 }

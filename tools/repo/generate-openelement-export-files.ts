@@ -1,20 +1,21 @@
 /**
  * Generates packages/router/src/vite/generated-export-files.ts from the
- * "exports" maps declared in each package deno.json.
+ * "exports" maps declared in each package package.json (the B2 manifest
+ * conversion moved package truth here from deno.json).
  *
  * OPENELEMENT_EXPORT_FILES used to be a
  * hand-maintained copy of those export maps, which drifted (e.g. content's
- * nav-data was renamed to write-json in its deno.json but never updated in
- * the resolver). This script makes deno.json the single source of truth.
+ * nav-data was renamed to write-json in its manifest but never updated in
+ * the resolver). This script makes package.json the single source of truth.
  *
  * Usage:
- *   deno run --allow-read --allow-write --allow-run tools/repo/generate-openelement-export-files.ts
+ *   node tools/repo/generate-openelement-export-files.ts
  *     -> (re)write the generated file and format it.
- *   deno run --allow-read --allow-write --allow-run tools/repo/generate-openelement-export-files.ts --check
+ *   node tools/repo/generate-openelement-export-files.ts --check
  *     -> regenerate, format, and fail (exit 1) if the committed file is stale.
  */
 
-import { readFile, writeFile } from 'node:fs/promises';
+import { readFile, readdir, writeFile } from 'node:fs/promises';
 import process from 'node:process';
 import { commandOutput } from './node-command.ts';
 
@@ -26,10 +27,6 @@ interface PackageExports {
   [subpath: string]: string;
 }
 
-interface RootConfig {
-  workspace?: unknown;
-}
-
 interface PackageConfig {
   exports?: unknown;
 }
@@ -38,19 +35,10 @@ const REPO_ROOT = new URL('../../', import.meta.url).pathname;
 const TARGET = `${REPO_ROOT}packages/router/src/vite/generated-export-files.ts`;
 
 async function resolverPackages(): Promise<string[]> {
-  const rootConfig = await readJson<RootConfig>(`${REPO_ROOT}deno.json`);
-  if (!Array.isArray(rootConfig.workspace)) {
-    throw new Error('deno.json workspace must be an array of package paths');
-  }
-
-  return rootConfig.workspace
-    .filter((entry: unknown) => typeof entry === 'string' && entry.startsWith('./packages/'))
-    .map((entry: unknown) => {
-      if (typeof entry !== 'string' || !/^\.\/packages\/[^/]+$/u.test(entry)) {
-        throw new Error(`unsupported workspace package path: ${String(entry)}`);
-      }
-      return entry.slice('./packages/'.length);
-    })
+  const entries = await readdir(`${REPO_ROOT}packages`, { withFileTypes: true });
+  return entries
+    .filter((entry) => entry.isDirectory() && !entry.name.startsWith('.'))
+    .map((entry) => entry.name)
     .sort();
 }
 
@@ -59,7 +47,7 @@ function stripLeadingSlash(value: string): string {
 }
 
 async function readPackageExports(pkg: string): Promise<PackageExports> {
-  const path = `${REPO_ROOT}packages/${pkg}/deno.json`;
+  const path = `${REPO_ROOT}packages/${pkg}/package.json`;
   const raw = await readJson<PackageConfig>(path);
   const exportsField = raw.exports;
 
@@ -139,7 +127,7 @@ async function main(args: string[]): Promise<void> {
       console.error(new TextDecoder().decode(out.stdout));
       process.exit(1);
     }
-    console.log('export-files sync check passed (generated file matches deno.json exports).');
+    console.log('export-files sync check passed (generated file matches package.json exports).');
     return;
   }
 

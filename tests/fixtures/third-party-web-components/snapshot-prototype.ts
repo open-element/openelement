@@ -82,7 +82,7 @@ async function main(): Promise<void> {
       `<!doctype html><html><body><${tag} label="Snapshot"><span slot="label">${label}</span></${tag}>` +
         `<script type="module" src="/client/islands/${chunk}"></script></body></html>`,
     );
-    server = serveStatic(dist);
+    server = await serveStatic(dist);
     browser = await chromium.launch();
     const capture = async (): Promise<string> => {
       const page = await browser!.newPage();

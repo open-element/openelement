@@ -32,6 +32,8 @@
  * infra uncertainty can never green a release.
  */
 
+import { tmpdir } from 'node:os';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { dirname, join } from '@std/path';
 import { formatError } from '@openelement/element';
 import { formatJson } from '@openelement/element/build-utils';
@@ -152,7 +154,7 @@ interface QualificationReport {
 
 export function parseQualificationOptions(
   args: readonly string[],
-  environment: Record<string, string | undefined> = Deno.env.toObject(),
+  environment: Record<string, string | undefined> = process.env,
 ): QualificationOptions {
   const read = (flag: string): string | undefined => {
     const index = args.indexOf(flag);
@@ -174,25 +176,25 @@ function tail(output: string): string {
 }
 
 async function writeReport(path: string, report: QualificationReport): Promise<void> {
-  await Deno.mkdir(dirname(path), { recursive: true });
-  await Deno.writeTextFile(path, formatJson(report));
+  await mkdir(dirname(path), { recursive: true });
+  await writeFile(path, formatJson(report));
 }
 
 async function qualificationMain(): Promise<void> {
-  const options = parseQualificationOptions(Deno.args);
+  const options = parseQualificationOptions(process.argv.slice(2));
   const report: QualificationReport = {
     environment: Object.fromEntries(
       ['CI', 'GITHUB_ACTIONS', 'GITHUB_RUN_ID', 'RUNNER_ARCH', 'RUNNER_OS'].flatMap((key) =>
-        Deno.env.get(key) === undefined ? [] : [[key, Deno.env.get(key)!]],
+        process.env[key] === undefined ? [] : [[key, process.env[key]!]],
       ),
     ),
     mode: options.mode,
-    platform: { arch: Deno.build.arch, deno: Deno.version.deno, os: Deno.build.os },
+    platform: { arch: process.arch, deno: 'n/a (node-host report)', os: process.platform },
     startedAt: new Date().toISOString(),
     steps: [],
     version: options.version,
   };
-  const root = await Deno.makeTempDir({ prefix: 'openelement-published-consumer-' });
+  const root = await mkdtemp(join(tmpdir(), 'openelement-published-consumer-'));
 
   const runStep = async (name: string, command: string, args: string[], cwd: string) => {
     const started = performance.now();
@@ -217,7 +219,7 @@ async function qualificationMain(): Promise<void> {
     if (options.mode === 'starter' || options.mode === 'all') {
       await runStep(
         'generate exact-version starter',
-        Deno.execPath(),
+        process.execPath,
         [
           'run',
           '--allow-read',
@@ -235,14 +237,14 @@ async function qualificationMain(): Promise<void> {
       );
       const starter = join(root, 'starter');
       for (const task of ['check', 'test', 'build']) {
-        await runStep(`starter deno task ${task}`, Deno.execPath(), ['task', task], starter);
+        await runStep(`starter deno task ${task}`, process.execPath, ['task', task], starter);
       }
     }
 
     if (options.mode === 'runtime' || options.mode === 'all') {
       const denoConsumer = join(root, 'deno-consumer');
-      await Deno.mkdir(denoConsumer);
-      await Deno.writeTextFile(
+      await mkdir(denoConsumer);
+      await writeFile(
         join(denoConsumer, 'deno.json'),
         JSON.stringify(
           {
@@ -270,24 +272,24 @@ async function qualificationMain(): Promise<void> {
         '}',
         "console.log('published Deno runtime imports passed');",
       ].join('\n');
-      await Deno.writeTextFile(join(denoConsumer, 'smoke.ts'), publicSurfaceSource);
-      await Deno.writeTextFile(join(denoConsumer, 'runtime.ts'), denoRuntimeSource);
+      await writeFile(join(denoConsumer, 'smoke.ts'), publicSurfaceSource);
+      await writeFile(join(denoConsumer, 'runtime.ts'), denoRuntimeSource);
       await runStep(
         'Deno public runtime check',
-        Deno.execPath(),
+        process.execPath,
         ['check', 'smoke.ts'],
         denoConsumer,
       );
       await runStep(
         'Deno public runtime execution',
-        Deno.execPath(),
+        process.execPath,
         ['run', '--allow-env', 'runtime.ts'],
         denoConsumer,
       );
 
       const nodeConsumer = join(root, 'node-consumer');
-      await Deno.mkdir(nodeConsumer);
-      await Deno.writeTextFile(
+      await mkdir(nodeConsumer);
+      await writeFile(
         join(nodeConsumer, 'package.json'),
         JSON.stringify(
           {
@@ -301,7 +303,7 @@ async function qualificationMain(): Promise<void> {
           2,
         ),
       );
-      await Deno.writeTextFile(join(nodeConsumer, 'smoke.mjs'), NODE_RUNTIME_SMOKE_SOURCE);
+      await writeFile(join(nodeConsumer, 'smoke.mjs'), NODE_RUNTIME_SMOKE_SOURCE);
       await runStep(
         'install Node ESM public runtime dependencies',
         'npm',
@@ -312,7 +314,7 @@ async function qualificationMain(): Promise<void> {
     }
   } finally {
     await writeReport(options.reportPath, report);
-    await Deno.remove(root, { recursive: true }).catch(() => undefined);
+    await rm(root, { recursive: true }).catch(() => undefined);
   }
 
   console.log(`[published-consumer] ${options.mode} qualification passed for ${options.version}`);
@@ -352,7 +354,7 @@ export function parseConsumerSmokeOptions(
 }
 
 async function readJson<T = unknown>(path: string | URL): Promise<T> {
-  return JSON.parse(await Deno.readTextFile(path)) as T;
+  return JSON.parse(await readFile(path, 'utf8')) as T;
 }
 
 // Post-publish smoke surfaces. The plain-Node surface is the framework core:
@@ -446,12 +448,12 @@ console.log('Smoke test passed!');
 
 async function denoNpmSmoke(version: string, projectRoot: string, local: boolean): Promise<void> {
   const tmpDir = local
-    ? await Deno.makeTempDir({ dir: projectRoot, prefix: '.openelement-smoke-deno-' })
-    : await Deno.makeTempDir({ prefix: 'openelement-smoke-deno-' });
+    ? await mkdtemp(join(projectRoot, '.openelement-smoke-deno-'))
+    : await mkdtemp(join(tmpdir(), 'openelement-smoke-deno-'));
   console.log(`\n[Deno npm consumer] ${tmpDir}`);
 
   try {
-    await Deno.writeTextFile(`${tmpDir}/smoke.ts`, denoSource);
+    await writeFile(`${tmpDir}/smoke.ts`, denoSource);
 
     if (local) {
       // Run from the workspace root so workspace packages resolve.
@@ -464,7 +466,7 @@ async function denoNpmSmoke(version: string, projectRoot: string, local: boolean
       );
       if (!check.success) {
         console.error(`  check failed:\n${check.output}`);
-        Deno.exit(1);
+        process.exit(1);
       }
 
       console.log('  deno run smoke.ts (workspace source)');
@@ -475,13 +477,13 @@ async function denoNpmSmoke(version: string, projectRoot: string, local: boolean
       );
       if (!exec.success) {
         console.error(`  run failed:\n${exec.output}`);
-        Deno.exit(1);
+        process.exit(1);
       }
       console.log(`  ok: ${exec.output.trim().split('\n').slice(-1)[0]}`);
       return;
     }
 
-    await Deno.writeTextFile(
+    await writeFile(
       `${tmpDir}/deno.json`,
       JSON.stringify(
         { imports: { '@openelement/element': `npm:@openelement/element@^${version}` } },
@@ -494,19 +496,19 @@ async function denoNpmSmoke(version: string, projectRoot: string, local: boolean
     const check = await run('deno', ['check', '--minimum-dependency-age', '0', 'smoke.ts'], tmpDir);
     if (!check.success) {
       console.error(`  check failed:\n${check.output}`);
-      Deno.exit(1);
+      process.exit(1);
     }
 
     console.log('  deno run smoke.ts');
     const exec = await run('deno', ['run', '--minimum-dependency-age', '0', 'smoke.ts'], tmpDir);
     if (!exec.success) {
       console.error(`  run failed:\n${exec.output}`);
-      Deno.exit(1);
+      process.exit(1);
     }
     console.log(`  ok: ${exec.output.trim().split('\n').slice(-1)[0]}`);
   } finally {
     try {
-      await Deno.remove(tmpDir, { recursive: true });
+      await rm(tmpDir, { recursive: true });
     } catch {
       /* ok */
     }
@@ -514,7 +516,7 @@ async function denoNpmSmoke(version: string, projectRoot: string, local: boolean
 }
 
 async function nodeEsmSmoke(version: string, projectRoot: string, local: boolean): Promise<void> {
-  const tmpDir = await Deno.makeTempDir({ prefix: 'openelement-smoke-node-' });
+  const tmpDir = await mkdtemp(join(tmpdir(), 'openelement-smoke-node-'));
   console.log(`\n[Node ESM consumer] ${tmpDir}`);
 
   try {
@@ -529,7 +531,7 @@ async function nodeEsmSmoke(version: string, projectRoot: string, local: boolean
         );
         if (!pack.success) {
           console.error(`  pack failed:\n${pack.output}`);
-          Deno.exit(1);
+          process.exit(1);
         }
       }
     }
@@ -542,29 +544,29 @@ async function nodeEsmSmoke(version: string, projectRoot: string, local: boolean
         }
       : { '@openelement/element': dep };
 
-    await Deno.writeTextFile(
+    await writeFile(
       `${tmpDir}/package.json`,
       JSON.stringify({ type: 'module', dependencies: localDeps }, null, 2),
     );
-    await Deno.writeTextFile(`${tmpDir}/smoke.mjs`, nodeSource);
+    await writeFile(`${tmpDir}/smoke.mjs`, nodeSource);
 
     console.log('  npm install');
     const install = await run('npm', ['install'], tmpDir);
     if (!install.success) {
       console.error(`  install failed:\n${install.output}`);
-      Deno.exit(1);
+      process.exit(1);
     }
 
     console.log('  node smoke.mjs');
     const exec = await run('node', ['smoke.mjs'], tmpDir);
     if (!exec.success) {
       console.error(`  run failed:\n${exec.output}`);
-      Deno.exit(1);
+      process.exit(1);
     }
     console.log(`  ok: ${exec.output.trim().split('\n').slice(-1)[0]}`);
   } finally {
     try {
-      await Deno.remove(tmpDir, { recursive: true });
+      await rm(tmpDir, { recursive: true });
     } catch {
       /* ok */
     }
@@ -572,7 +574,7 @@ async function nodeEsmSmoke(version: string, projectRoot: string, local: boolean
 }
 
 async function exactVersionStarterSmoke(version: string): Promise<void> {
-  const tmpDir = await Deno.makeTempDir({ prefix: 'openelement-smoke-starter-' });
+  const tmpDir = await mkdtemp(join(tmpdir(), 'openelement-smoke-starter-'));
   console.log(`\n[Exact-version starter] ${tmpDir}`);
   try {
     const create = await run(
@@ -610,7 +612,7 @@ async function exactVersionStarterSmoke(version: string): Promise<void> {
     if (!check.success) throw new Error(`starter check failed:\n${check.output}`);
     console.log('  ok: generated package graph and typecheck use the released version');
   } finally {
-    await Deno.remove(tmpDir, { recursive: true }).catch(() => undefined);
+    await rm(tmpDir, { recursive: true }).catch(() => undefined);
   }
 }
 
@@ -730,7 +732,7 @@ async function jsdelivrSmoke(version: string): Promise<void> {
   const decision = await cdnAvailabilityDecision(version);
   if (!admitsRelease(decision)) {
     console.error(`  ${decision.verdict}: ${decision.reason}`);
-    Deno.exit(1);
+    process.exit(1);
   }
   console.log(`  ok: ${decision.reason}`);
 }
@@ -749,11 +751,11 @@ async function nitroSmoke(): Promise<void> {
     const output = result.stdout + result.stderr;
     if (!result.success) {
       console.error(`  ${target} failed:\n${output.slice(0, 2000)}`);
-      Deno.exit(1);
+      process.exit(1);
     }
     if (!output.includes(`nitro proof ${target}:`)) {
       console.error(`  ${target} missing success marker`);
-      Deno.exit(1);
+      process.exit(1);
     }
     const lastLine = output.trim().split('\n').slice(-1)[0];
     console.log(`  ok: ${lastLine}`);
@@ -762,7 +764,7 @@ async function nitroSmoke(): Promise<void> {
 
 async function consumerSmokeMain(args: readonly string[]): Promise<void> {
   const options = parseConsumerSmokeOptions(args);
-  const projectRoot = normalizeSlashes(Deno.cwd());
+  const projectRoot = normalizeSlashes(process.cwd());
 
   console.log('Consumer npm smoke test');
   console.log(
@@ -780,7 +782,7 @@ async function consumerSmokeMain(args: readonly string[]): Promise<void> {
     if (!admitsRelease(availability)) {
       console.error(`\nnpm availability gate: ${availability.verdict}: ${availability.reason}`);
       console.error('Use --local to smoke against workspace sources instead.');
-      Deno.exit(1);
+      process.exit(1);
     }
     console.log(`  npm availability: ${availability.reason}`);
   }
@@ -801,8 +803,8 @@ async function consumerSmokeMain(args: readonly string[]): Promise<void> {
 }
 
 async function main(): Promise<void> {
-  if (Deno.args.includes('--smoke')) {
-    await consumerSmokeMain(Deno.args);
+  if (process.argv.slice(2).includes('--smoke')) {
+    await consumerSmokeMain(process.argv.slice(2));
     return;
   }
   await qualificationMain();

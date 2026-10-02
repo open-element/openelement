@@ -7,7 +7,7 @@
  * a future implementation can replace the engine without touching product
  * source.
  */
-import { walkSync } from '@std/fs/walk';
+import { walkSync } from '../../tools/lib/std-fs.ts';
 import { readFile } from 'node:fs/promises';
 import process from 'node:process';
 import { extractStaticModuleSpecifiers } from '../lib/typescript-ast.ts';
@@ -19,7 +19,7 @@ async function readJson<T = unknown>(path: string | URL): Promise<T> {
 type Failure = { file: string; message: string };
 
 const SOURCE_ROOTS = ['packages/element/src', 'packages/router/src'];
-const PROTECTED_PACKAGE_CONFIGS = ['packages/element/deno.json', 'packages/router/deno.json'];
+const PROTECTED_PACKAGE_CONFIGS = ['packages/element/package.json', 'packages/router/package.json'];
 const FORBIDDEN_REQUIRED_DEPS = ['@preact/signals-core', '@preact/signals'];
 
 export function findSignalBoundaryImports(source: string, path = 'source.ts'): string[] {
@@ -43,12 +43,14 @@ async function main(): Promise<void> {
     }
   }
   for (const file of PROTECTED_PACKAGE_CONFIGS) {
+    // The manifest's required-dependency surface since the B2 conversion is
+    // package.json `dependencies` (devDependencies are not packed).
     const imports =
       (
         (await readJson(file)) as {
-          imports?: Record<string, string>;
+          dependencies?: Record<string, string>;
         }
-      ).imports ?? {};
+      ).dependencies ?? {};
     for (const dep of FORBIDDEN_REQUIRED_DEPS) {
       if (Object.hasOwn(imports, dep)) {
         failures.push({ file, message: `${dep} must not be a required package dependency` });

@@ -108,11 +108,11 @@ Listed, deliberately untouched (kept value or needs a maintainer decision):
   kept as the audit trail with a written reintroduction condition, and
   load-bearing: `tools/repo/check-deno-floor.ts` reads it as required text.
   Its "现存价值" is exactly that: history plus the do-not-reintroduce rule.
-- `tools/release/native-pack-check.ts` + the `pack:native-check` task — the
-  native `deno pack --dry-run` proof is still wired into the live
-  `gate:packed`; its header still says deno pack "is the sole" generator.
-  Whether the native proof should stay in the gate under the vp regime (and
-  what it then proves) is a release-design decision, not comment rot.
+- ~~`tools/release/native-pack-check.ts` + the `pack:native-check` task~~ —
+  resolved by the B2 manifest conversion: without a deno.json the native
+  `deno pack --dry-run` premise is gone entirely, so the gate member and
+  script were deleted (vp pack remains the sole generator; the open question
+  of what a "native proof" would even mean under the vp regime is moot).
 - `tools/release/published-consumer-qualification.ts:521-535` — the
   `--local` mode of `nodeEsmSmoke` still EXECUTES `deno pack --allow-dirty`
   to build a local element tarball. CI never passes `--local`

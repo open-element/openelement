@@ -19,7 +19,7 @@
  * identical short-circuit semantics on both runtimes.
  *
  * Prerequisite: the fixture must be built first —
- *   deno task fixture:router-request-time:build
+ *   pnpm --dir tests/fixtures/router-request-time run build
  */
 
 import { assert, assertEquals, assertStringIncludes } from '@std/assert';
@@ -150,8 +150,8 @@ Deno.test({
     // sources around it, and a stale entry makes the suite assert a past build
     // while reporting on the working tree (2026-09-17: a fixture dist and a
     // shadowing node_modules copy each hid the same stale codegen).
-    const fixtureBuild = await new Deno.Command(Deno.execPath(), {
-      args: ['task', '--cwd', 'tests/fixtures/router-request-time', 'build'],
+    const fixtureBuild = await new Deno.Command('pnpm', {
+      args: ['--dir', 'tests/fixtures/router-request-time', 'run', 'build'],
       cwd: join(fixtureDir, '../../..'),
       stdout: 'inherit',
       stderr: 'inherit',

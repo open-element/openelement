@@ -79,12 +79,13 @@ Deno.test('permissions: an FFI request with stdin closed fails closed without pr
 });
 
 Deno.test('permissions: packed gate tasks deny FFI and never prompt', () => {
-  const text = Deno.readTextFileSync(join(repoRoot, 'tools/release/deno.json'));
-  const tasks = (JSON.parse(text) as { tasks: Record<string, string> }).tasks;
-  const gated = Object.entries(tasks).filter(
-    ([name]) => name !== 'gate:packed' && name !== 'typecheck',
-  );
-  assert(gated.length > 0, 'tools/release/deno.json must keep gate tasks to audit');
+  // The B2 surface: tools/release/package.json scripts. Node-host scripts
+  // carry no permission flags by ruling; the audit covers the remaining
+  // deno-run scripts (every one must deny FFI and never prompt).
+  const text = Deno.readTextFileSync(join(repoRoot, 'tools/release/package.json'));
+  const scripts = (JSON.parse(text) as { scripts: Record<string, string> }).scripts;
+  const gated = Object.entries(scripts).filter(([, command]) => command.includes('deno run'));
+  assert(gated.length > 0, 'tools/release/package.json must keep deno-run gate scripts to audit');
   const violations: string[] = [];
   for (const [name, command] of gated) {
     if (!command.includes('--deny-ffi')) violations.push(`${name}: missing --deny-ffi`);

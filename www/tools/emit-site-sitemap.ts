@@ -1,6 +1,6 @@
 /**
  * Generate site sitemap.xml + robots.txt from the route catalog (#1327).
- * Runs in `deno task site:build` after the router build: the public index is
+ * Runs in `pnpm run site:build` after the router build: the public index is
  * enumerated from the route catalog plus the blog collection loaded straight
  * from source — never by scanning built output or request-time Documents,
  * and never from a hand-synced index.

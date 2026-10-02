@@ -1,7 +1,7 @@
 import { definePage } from '@openelement/router';
-import { siteHead } from '@openelement/site-ui/head.ts';
-import { contentLocale } from '@openelement/site-ui/locale.ts';
-import { localizePath } from '@openelement/site-ui/link.ts';
+import { siteHead } from '#site-ui/head.ts';
+import { contentLocale } from '#site-ui/locale.ts';
+import { localizePath } from '#site-ui/link.ts';
 import PageHome from '../../components/page-home.tsx';
 import { homeStrings } from '../../site-ui/chrome-strings.ts';
 import {

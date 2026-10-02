@@ -1,47 +1,47 @@
 /**
- * Task-wiring tripwire for release tasks.
+ * Task-wiring tripwire for release scripts.
  *
  * Deno 2.9 rejects a repeated `--allow-run=<name>` flag ("cannot be used
- * multiple times"), so a task that spells two programs as separate
+ * multiple times"), so a script that spells two programs as separate
  * `--allow-run=x --allow-run=y` flags starts nothing and silently fails the
- * whole `release:check` chain. These tests read the real task definitions,
- * not internal functions, and fail if a duplicated flag or a bypassed task
- * is reintroduced.
+ * whole `release:check` chain. These tests read the real script definitions
+ * (the package.json task surface since the B2 manifest conversion), not
+ * internal functions, and fail if a duplicated flag or a bypassed script is
+ * reintroduced.
  */
 import { assert, assertEquals } from '@std/assert';
 import { dirname, join } from '@std/path';
 import { REQUIRED_PACKED_CONSUMERS } from './candidate-evidence.ts';
 import { readFile } from 'node:fs/promises';
-import process from 'node:process';
 import { commandOutput } from './node-command.ts';
 
 const repoRoot = join(dirname(new URL(import.meta.url).pathname), '..', '..');
 
 interface TaskFileShape {
-  tasks?: Record<string, string>;
+  scripts?: Record<string, string>;
 }
 
 async function tasks(path: string): Promise<Record<string, string>> {
-  return (JSON.parse(await readFile(join(repoRoot, path), 'utf8')) as TaskFileShape).tasks ?? {};
+  return (JSON.parse(await readFile(join(repoRoot, path), 'utf8')) as TaskFileShape).scripts ?? {};
 }
 
 const TASK_FILES = [
-  'deno.json',
-  'tools/repo/deno.json',
-  'tools/release/deno.json',
-  'packages/element/deno.json',
-  'packages/router/deno.json',
-  'packages/ui/deno.json',
-  'packages/create/deno.json',
-  'www/deno.json',
+  'package.json',
+  'tools/repo/package.json',
+  'tools/release/package.json',
+  'packages/element/package.json',
+  'packages/router/package.json',
+  'packages/ui/package.json',
+  'packages/create/package.json',
+  'www/package.json',
 ];
 
 Deno.test('task wiring: no single deno invocation repeats a --allow-run flag', async () => {
   for (const path of TASK_FILES) {
     for (const [name, command] of Object.entries(await tasks(path))) {
-      // Tasks chain `deno run <outer flags> run-in.ts -- deno run <inner flags>`
-      // (sometimes with `&&`); a repeated flag is only fatal within one
-      // invocation, so count per deno invocation.
+      // Scripts chain `deno run <outer flags> run-in.ts -- deno run <inner
+      // flags>` (sometimes with `&&`); a repeated flag is only fatal within
+      // one invocation, so count per deno invocation.
       for (const subCommand of command.split('&&')) {
         for (const part of subCommand.split(/\s--\s/)) {
           const repeats = [...part.matchAll(/--allow-run(?:\s|=|$)/g)].length;
@@ -56,15 +56,19 @@ Deno.test('task wiring: no single deno invocation repeats a --allow-run flag', a
   }
 });
 
-Deno.test('task wiring: release:registry-check uses one scoped run flag and runs', async () => {
-  const command = (await tasks('tools/repo/deno.json'))['release:registry-check'];
+Deno.test('task wiring: release:registry-check runs the state machine from the repo root', async () => {
+  const command = (await tasks('tools/repo/package.json'))['release:registry-check'];
   assert(command, 'release:registry-check must exist');
+  // The former deno-permission assertion (--allow-run=git,npm combined into
+  // one flag) retired with the permission model in B2; the invariant that
+  // remains is the root-cwd run-in wrapper around the state-machine checker.
   assert(
-    command.includes('--allow-run=git,npm'),
-    'release:registry-check must combine git and npm into one --allow-run flag',
+    command.includes('--root ../..') &&
+      command.includes('node tools/repo/check-release-state-machine.ts'),
+    'release:registry-check must run check-release-state-machine.ts from the repo root',
   );
-  const result = await commandOutput(process.execPath, {
-    args: ['task', '--cwd', 'tools/repo', 'release:registry-check'],
+  const result = await commandOutput('pnpm', {
+    args: ['--dir', 'tools/repo', 'run', 'release:registry-check'],
     cwd: repoRoot,
     stdout: 'piped',
     stderr: 'piped',
@@ -75,7 +79,7 @@ Deno.test('task wiring: release:registry-check uses one scoped run flag and runs
 });
 
 Deno.test('task wiring: release:check invokes the registry task, not an internal script', async () => {
-  const command = (await tasks('deno.json'))['release:check'];
+  const command = (await tasks('package.json'))['release:check'];
   assert(command, 'release:check must exist');
   assert(
     command.includes('tools/repo#release:registry-check'),
@@ -93,7 +97,7 @@ Deno.test('task wiring: release:check invokes the registry task, not an internal
 });
 
 Deno.test('task wiring: release:check generates site data before the registry check', async () => {
-  const releaseCheck = (await tasks('deno.json'))['release:check'];
+  const releaseCheck = (await tasks('package.json'))['release:check'];
   assert(releaseCheck, 'release:check must exist');
   const generate = releaseCheck.indexOf('tools/repo#generate:all');
   const registry = releaseCheck.indexOf('tools/repo#release:registry-check');
@@ -115,7 +119,7 @@ Deno.test('task wiring: release:check generates site data before the registry ch
 });
 
 Deno.test('task wiring: gate:source generates site data before typecheck', async () => {
-  const gateSource = (await tasks('tools/repo/deno.json'))['gate:source'];
+  const gateSource = (await tasks('tools/repo/package.json'))['gate:source'];
   assert(gateSource, 'gate:source must exist');
   // generate:all enumerates every generate:* task (including the API
   // reference and site content data the typecheck imports); pinning the
@@ -133,7 +137,7 @@ Deno.test('task wiring: gate:source generates site data before typecheck', async
 });
 
 Deno.test('task wiring: gate:release generates site data before its own consumers', async () => {
-  const gateRelease = (await tasks('tools/repo/deno.json'))['gate:release'];
+  const gateRelease = (await tasks('tools/repo/package.json'))['gate:release'];
   assert(gateRelease, 'gate:release must exist');
   const generate = gateRelease.indexOf('tools/repo#generate:all');
   assert(generate !== -1, 'gate:release must run the generators (generate:all)');
@@ -150,7 +154,7 @@ Deno.test('task wiring: gate:release generates site data before its own consumer
 });
 
 Deno.test('task wiring: gate:packed covers every required packed consumer', async () => {
-  const gatePacked = (await tasks('tools/release/deno.json'))['gate:packed'];
+  const gatePacked = (await tasks('tools/release/package.json'))['gate:packed'];
   assert(gatePacked, 'gate:packed must exist');
   for (const consumer of REQUIRED_PACKED_CONSUMERS) {
     assert(
@@ -164,7 +168,7 @@ Deno.test('task wiring: gate:packed covers every required packed consumer', asyn
 Deno.test('task wiring: the release workflow qualifies through the official task', async () => {
   const workflow = await readFile(join(repoRoot, '.github/workflows/autoflow-release.yml'), 'utf8');
   assert(
-    /run:\s*deno task release:check\b/.test(workflow),
-    'the release workflow must call `deno task release:check`',
+    /run:\s*pnpm run release:check\b/.test(workflow),
+    'the release workflow must call `pnpm run release:check`',
   );
 });

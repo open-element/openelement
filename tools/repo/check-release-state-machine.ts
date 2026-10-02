@@ -235,7 +235,8 @@ async function workspaceVersions(): Promise<Map<string, string>> {
   for (const entry of await readdir('packages', { withFileTypes: true })) {
     if (!entry.isDirectory()) continue;
     try {
-      const manifest = JSON.parse(await readFile(`packages/${entry.name}/deno.json`, 'utf8'));
+      // The B2 manifest conversion moved package truth to package.json.
+      const manifest = JSON.parse(await readFile(`packages/${entry.name}/package.json`, 'utf8'));
       if (manifest.name && manifest.version) versions.set(manifest.name, manifest.version);
     } catch (error) {
       // node:fs signals "path does not exist" with ENOENT (Deno: NotFound).

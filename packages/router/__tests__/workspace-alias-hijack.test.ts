@@ -134,10 +134,14 @@ Deno.test('hijack guard: jsr pins are caught the same way', async () => {
 });
 
 Deno.test('hijack guard: the real repo does not trip on its own tree', () => {
-  // The repository root is its own workspace, so building it is never a hijack.
+  // Since the B2 manifest conversion the repository is a pnpm workspace, not
+  // a Deno workspace: no deno.json workspace marker exists above the packages,
+  // so the Deno-consumer hijack guard is inert here. The guard itself stays
+  // for external Deno-ecosystem consumers (deno.json import maps are a
+  // product feature of the router).
   const repoRoot = join(import.meta.dirname!, '..', '..', '..');
   assertEquals(detectWorkspaceAliasHijack(repoRoot), null);
-  assertEquals(findWorkspaceRoot(repoRoot), repoRoot);
+  assertEquals(findWorkspaceRoot(repoRoot), null);
 });
 
 Deno.test('hijack guard: openElement() refuses to build such an app (#1415 Finding A)', async () => {

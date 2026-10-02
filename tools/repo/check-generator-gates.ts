@@ -32,10 +32,10 @@ const repoRoot = fromFileUrl(new URL('../../', import.meta.url));
 const workspaces = await readWorkspaces(repoRoot);
 const repoTasks =
   (
-    JSON.parse(await readFile(join(repoRoot, 'tools/repo/deno.json'), 'utf8')) as {
-      tasks?: Record<string, string>;
+    JSON.parse(await readFile(join(repoRoot, 'tools/repo/package.json'), 'utf8')) as {
+      scripts?: Record<string, string>;
     }
-  ).tasks ?? {};
+  ).scripts ?? {};
 /**
  * The two gate layers a check task may be wired into: `gate:source` is what
  * every pull request runs, `gate:release` is the release train (the steps
@@ -52,7 +52,7 @@ const gateOf = (step: string): string | undefined =>
 for (const layer of GATE_LAYERS) {
   if (gateSteps.get(layer)!.size === 0) {
     console.error(
-      `generator-gates: ${layer} is missing or empty in tools/repo/deno.json — refusing to ` +
+      `generator-gates: ${layer} is missing or empty in tools/repo/package.json — refusing to ` +
         `report on a gate list it could not read.`,
     );
     process.exit(1);

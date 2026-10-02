@@ -22,22 +22,25 @@ import { dirname, join } from '@std/path';
 import { readFile } from 'node:fs/promises';
 
 const repoRoot = join(dirname(new URL(import.meta.url).pathname), '..', '..');
-const rootConfig = JSON.parse(await readFile(join(repoRoot, 'deno.json'), 'utf8')) as {
-  tasks: Record<string, string>;
-  workspace?: string[];
+// The B2 manifest conversion moved the task surface to package.json scripts;
+// the gate contracts below read the same three manifests the old deno.json
+// files carried.
+const rootConfig = JSON.parse(await readFile(join(repoRoot, 'package.json'), 'utf8')) as {
+  scripts: Record<string, string>;
+  workspaces?: unknown;
 };
-const repoConfig = JSON.parse(await readFile(join(repoRoot, 'tools/repo/deno.json'), 'utf8')) as {
-  tasks: Record<string, string>;
-};
+const repoConfig = JSON.parse(
+  await readFile(join(repoRoot, 'tools/repo/package.json'), 'utf8'),
+) as { scripts: Record<string, string> };
 const releaseConfig = JSON.parse(
-  await readFile(join(repoRoot, 'tools/release/deno.json'), 'utf8'),
-) as { tasks: Record<string, string> };
+  await readFile(join(repoRoot, 'tools/release/package.json'), 'utf8'),
+) as { scripts: Record<string, string> };
 
-const GATE_RUNNER = 'deno run --allow-run --allow-env tools/repo/gate.ts ';
+const GATE_RUNNER = 'node tools/repo/gate.ts ';
 
 /** The ordered step list a root task hands to the gate coordinator. */
 function gateSteps(task: string): string[] {
-  const command = rootConfig.tasks[task];
+  const command = rootConfig.scripts[task];
   assert(typeof command === 'string', `root task missing: ${task}`);
   assert(
     command.startsWith(GATE_RUNNER),
@@ -48,9 +51,9 @@ function gateSteps(task: string): string[] {
 
 /** The ordered step list a tools/repo gate task hands to the coordinator. */
 function repoSplitSteps(task: string): string[] {
-  const command = repoConfig.tasks[task];
+  const command = repoConfig.scripts[task];
   assert(typeof command === 'string', `tools/repo task missing: ${task}`);
-  const prefix = 'deno run --allow-run --allow-env ./gate.ts ';
+  const prefix = 'node ../../tools/repo/gate.ts ';
   assert(
     command.startsWith(prefix),
     `tools/repo task ${task} must delegate to the gate coordinator ('${prefix.trim()} ...'), got: ${command}`,
@@ -119,7 +122,7 @@ Deno.test('task contract: packed qualification runs separately from the source g
 });
 
 Deno.test('task contract: artifact scan consumes the packed gate tarballs exactly once', () => {
-  const packed = releaseConfig.tasks['gate:packed'].split(/\s+/);
+  const packed = releaseConfig.scripts['gate:packed'].split(/\s+/);
   const packIndex = packed.indexOf('tools/release#pack:dry-run');
   const scanIndex = packed.indexOf('tools/release#package-artifacts:check:prepacked');
   assert(packIndex >= 0 && scanIndex === packIndex + 1);
@@ -128,12 +131,12 @@ Deno.test('task contract: artifact scan consumes the packed gate tarballs exactl
     'the standalone scanner repacks and must not run inside gate:packed',
   );
   assert(
-    releaseConfig.tasks['package-artifacts:check:prepacked'].endsWith(
+    releaseConfig.scripts['package-artifacts:check:prepacked'].endsWith(
       'tools/release/check-package-artifacts.ts --prepacked',
     ),
   );
   assert(
-    releaseConfig.tasks['package-artifacts:check'].endsWith(
+    releaseConfig.scripts['package-artifacts:check'].endsWith(
       'tools/release/check-package-artifacts.ts',
     ),
     'the standalone scanner still builds its own tarballs',
@@ -176,12 +179,13 @@ Deno.test('task contract: gate:release carries the steps trimmed out of the PR l
     'tests/e2e/starter-smoke#gate',
     'tests/fixtures/router-nitro#proof:node',
     'tests/fixtures/router-nitro#proof:workers',
-    // Boundary/provenance scans.
+    // Boundary/provenance scans. (The former fixtures:locks:check retired
+    // with the B2 manifest conversion: one pnpm lock replaced the per-fixture
+    // Deno lock universes it guarded.)
     'tools/repo#esm:boundary-check',
     'tools/repo#validation:boundary-check',
     'tools/repo#signals:check-protocol-boundary',
     'tools/repo#assets:check-provenance',
-    'tools/repo#fixtures:locks:check',
     'tools/repo#workspace:links:check',
     'tools/repo#url-pattern-list:provenance',
     // Retired-api, classification, floor and generator gates.
@@ -236,24 +240,31 @@ Deno.test('task contract: fmt/lint run the ox engines and deno fmt/lint stays re
   // The format/lint engine is pinned once, here: fmt:check must stay the
   // check-mode spelling of fmt, and lint must be the oxlint CLI. A change to
   // any of these bodies is an engine swap and must update this contract.
-  assertEquals(rootConfig.tasks['fmt'], 'oxfmt', 'fmt is oxfmt in write mode');
-  assertEquals(rootConfig.tasks['fmt:check'], 'oxfmt --check', 'fmt:check is oxfmt check mode');
-  assertEquals(rootConfig.tasks['lint'], 'oxlint', 'lint is the oxlint CLI');
+  assertEquals(rootConfig.scripts['fmt'], 'oxfmt', 'fmt is oxfmt in write mode');
+  assertEquals(rootConfig.scripts['fmt:check'], 'oxfmt --check', 'fmt:check is oxfmt check mode');
+  assertEquals(rootConfig.scripts['lint'], 'oxlint', 'lint is the oxlint CLI');
   // The retired deno fmt/deno lint engines must not survive in any
-  // workspace task body: a task silently re-adding them would split the
+  // workspace script body: a script silently re-adding them would split the
   // repository across two formatters/linters with diverging style and rules.
-  const manifests = [join(repoRoot, 'deno.json')];
-  for (const member of rootConfig.workspace ?? []) {
-    manifests.push(join(repoRoot, member, 'deno.json'));
-  }
+  const manifests = [
+    join(repoRoot, 'package.json'),
+    join(repoRoot, 'tools/repo/package.json'),
+    join(repoRoot, 'tools/release/package.json'),
+    join(repoRoot, 'packages/element/package.json'),
+    join(repoRoot, 'packages/router/package.json'),
+    join(repoRoot, 'packages/create/package.json'),
+    join(repoRoot, 'packages/ui/package.json'),
+    join(repoRoot, 'www/package.json'),
+    join(repoRoot, 'apps/saas/package.json'),
+  ];
   for (const manifest of manifests) {
     const config = JSON.parse(await readFile(manifest, 'utf8')) as {
-      tasks?: Record<string, string>;
+      scripts?: Record<string, string>;
     };
-    for (const [name, command] of Object.entries(config.tasks ?? {})) {
+    for (const [name, command] of Object.entries(config.scripts ?? {})) {
       assert(
         !/(^|\s)deno (fmt|lint)(\s|'|$)/.test(command),
-        `${manifest} task '${name}' shells out to the retired deno fmt/deno lint engine: ${command}`,
+        `${manifest} script '${name}' shells out to the retired deno fmt/deno lint engine: ${command}`,
       );
     }
   }

@@ -7,7 +7,7 @@
  * end-to-end render path is covered by static-only-build.test.ts.
  */
 import { assertEquals } from '@std/assert';
-import { join } from 'jsr:@std/path@^1.0.0';
+import { join } from '@std/path';
 import { scanRoutes } from '../src/vite/internal/ssg/index.ts';
 
 Deno.test('scanRoutes discovers .mdx page routes (#954)', async () => {

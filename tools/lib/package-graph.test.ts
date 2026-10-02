@@ -122,7 +122,7 @@ Deno.test('normalizeDep passes non-internal specifiers through unchanged', () =>
   assertEquals(normalizeDep('react', '@openelement/router'), 'react');
 });
 
-Deno.test('readPackage returns null when deno.json does not exist', async () => {
+Deno.test('readPackage returns null when package.json does not exist', async () => {
   const dir = await Deno.makeTempDir({ prefix: 'package-graph-missing-' });
   try {
     assertEquals(await readPackage(dir), null);
@@ -131,13 +131,13 @@ Deno.test('readPackage returns null when deno.json does not exist', async () => 
   }
 });
 
-Deno.test('readPackage fails loud on unparseable deno.json (#753)', async () => {
+Deno.test('readPackage fails loud on unparseable package.json (#753)', async () => {
   const dir = await Deno.makeTempDir({ prefix: 'package-graph-corrupt-' });
   try {
-    await Deno.writeTextFile(`${dir}/deno.json`, '{ "name": "@openelement/x", // jsonc\n}');
+    await Deno.writeTextFile(`${dir}/package.json`, '{ not json');
     const error = await assertRejects(() => readPackage(dir), Error);
     assert(
-      error.message.includes(`${dir}/deno.json`),
+      error.message.includes(`${dir}/package.json`),
       `error must name the corrupt file: ${error.message}`,
     );
   } finally {
@@ -150,7 +150,7 @@ Deno.test('readPackage does not report source self-imports as dependencies', asy
   try {
     await Deno.mkdir(`${dir}/src`);
     await Deno.writeTextFile(
-      `${dir}/deno.json`,
+      `${dir}/package.json`,
       JSON.stringify({
         name: '@openelement/router',
         version: '1.0.0-alpha.1',

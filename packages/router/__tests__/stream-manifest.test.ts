@@ -1,5 +1,5 @@
 import { assertEquals, assertRejects, assertStringIncludes, assertThrows } from '@std/assert';
-import { dirname, join } from 'jsr:@std/path@^1.0.0';
+import { dirname, join } from '@std/path';
 import ts from 'typescript';
 import { createDeferredDsdExecutor } from '@openelement/element';
 import { compileElementProgram } from '@openelement/element/compiler';

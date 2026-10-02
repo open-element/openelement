@@ -1,4 +1,4 @@
-import { walk } from '@std/fs/walk';
+import { walk } from '../../tools/lib/std-fs.ts';
 import ts from 'typescript';
 import { parseTypeScript } from '../lib/typescript-ast.ts';
 

@@ -58,16 +58,23 @@ Deno.test('workspace shadow check fails on links that leave the member or dangle
 
 Deno.test('workspace shadow check reads the real workspace member list', async () => {
   const real = await readWorkspaceMembers();
-  // Only packages declare a name; app/tool/fixture members do not, and a
-  // member without a name has no node_modules path to shadow.
-  assertEquals(real.map((member) => member.name).sort(), [
+  // The B2 conversion made every fixture a named (private) workspace member;
+  // the four published consumer packages must always be among the named
+  // members, and the private fixture names must never collide with them.
+  const names = real.map((member) => member.name).sort();
+  for (const published of [
     '@openelement/create',
     '@openelement/element',
     '@openelement/router',
     '@openelement/ui',
-  ]);
+  ]) {
+    assert(names.includes(published), `named members must include ${published}`);
+  }
   assert(
-    real.every((member) => member.dir.startsWith('packages/')),
-    'the named members are the four consumer packages',
+    real.filter((member) => names.includes(member.name) && member.dir.startsWith('packages/'))
+      .length === 4,
+    'exactly the four consumer packages live under packages/',
   );
+  // A member without a node_modules entry is skipped by the shadow check, so
+  // the private fixture members are harmless additions.
 });

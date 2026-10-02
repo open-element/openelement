@@ -1,7 +1,7 @@
 import { definePage } from '@openelement/router';
-import { siteHead } from '@openelement/site-ui/head.ts';
-import { contentLocale } from '@openelement/site-ui/locale.ts';
-import { localizePath } from '@openelement/site-ui/link.ts';
+import { siteHead } from '#site-ui/head.ts';
+import { contentLocale } from '#site-ui/locale.ts';
+import { localizePath } from '#site-ui/link.ts';
 import type { SiteLocale } from '../../site-config.ts';
 import redirectTableJson from '../../tools/site-redirects.json' with { type: 'json' };
 import Page404 from '../components/page-404.tsx';

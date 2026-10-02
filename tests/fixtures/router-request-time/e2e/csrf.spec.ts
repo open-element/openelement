@@ -25,7 +25,6 @@ import { fileURLToPath } from 'node:url';
 import process from 'node:process';
 
 const E2E_DIR = dirname(fileURLToPath(import.meta.url));
-const ROOT_DENO_JSON = join(E2E_DIR, '..', '..', '..', '..', 'deno.json');
 const SERVER_ENTRY = join(E2E_DIR, '..', 'dist', 'server', 'index.js');
 
 const CSRF_ON_PORT = 4191;
@@ -46,8 +45,8 @@ function startFixtureServer(port: number, disableCsrf: boolean): ChildProcess {
     'deno',
     [
       'run',
-      '--config',
-      ROOT_DENO_JSON,
+      '--no-lock',
+      '--no-check',
       '--allow-read',
       '--allow-write',
       '--allow-env',

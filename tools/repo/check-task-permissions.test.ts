@@ -1,16 +1,18 @@
 /**
- * check-task-permissions.test.ts — least-privilege task permission tripwire.
+ * check-task-permissions.test.ts — least-privilege permission tripwire.
  *
- * FFI audit (1.0 Alpha convergence): only tasks whose module graph provably
+ * FFI audit (1.0 Alpha convergence): only scripts whose module graph provably
  * loads a native binding (Vite/Rolldown, lightningcss, dev watchers) may
  * carry --allow-ffi. Unit suites proven FFI-free run --deny-ffi so an
  * accidental native import fails closed instead of prompting. No
- * first-party task or template may use broad run flags (see the repo-wide
- * check-no-allow-all scanner): every Playwright/consumer child harness
- * inside tools/release runs scoped permissions on its isolated packed
- * consumer, never the repo itself. Template dev/build/start/preview MUST
- * keep --allow-ffi (the Vite
- * native binding); "tightening" them reintroduces the macOS FFI prompt.
+ * first-party script or template may use broad run flags (see the repo-wide
+ * check-no-allow-all scanner). Template dev/build/start/preview MUST keep
+ * --allow-ffi (the Vite native binding); "tightening" them reintroduces the
+ * macOS FFI prompt.
+ *
+ * B2 note: node-host scripts carry no permission flags at all (the Deno
+ * permission model retired with the manifest conversion), so the audit
+ * surface is the remaining deno-run scripts plus the template.
  *
  * Token note: this file deliberately carries no literal broad-flag token —
  * the repo-wide check-no-allow-all scanner covers every tracked file
@@ -31,66 +33,52 @@ interface TaskFile {
 
 const TASK_FILES: TaskFile[] = [
   {
-    path: 'deno.json',
+    path: 'package.json',
     ffiAllowed: { test: 'root suite includes the router vite-plugin graph' },
   },
-  { path: 'packages/element/deno.json', ffiAllowed: {} },
-  { path: 'packages/ui/deno.json', ffiAllowed: {} },
-  { path: 'packages/create/deno.json', ffiAllowed: {} },
+  { path: 'packages/element/package.json', ffiAllowed: {} },
+  { path: 'packages/ui/package.json', ffiAllowed: {} },
+  { path: 'packages/create/package.json', ffiAllowed: {} },
   {
-    path: 'packages/router/deno.json',
+    path: 'packages/router/package.json',
     ffiAllowed: { test: 'vite plugin units import the vite module graph' },
   },
+  { path: 'tools/repo/package.json', ffiAllowed: {} },
+  { path: 'tools/release/package.json', ffiAllowed: {} },
   {
-    path: 'tools/repo/deno.json',
-    ffiAllowed: {
-      'test:coverage:check':
-        'gate harness spawning the coverage subprocess graph (residual: not yet proven FFI-free)',
-    },
+    path: 'www/package.json',
+    ffiAllowed: { test: 'site build-graph assertions (residual: not yet proven FFI-free)' },
   },
-  {
-    path: 'tools/release/deno.json',
-    ffiAllowed: {},
-  },
-  {
-    path: 'www/deno.json',
-    ffiAllowed: {
-      build: 'vite SSG build (native binding)',
-      test: 'site build-graph assertions (residual: not yet proven FFI-free)',
-    },
-  },
-  {
-    path: 'apps/saas/deno.json',
-    ffiAllowed: {
-      build: 'vite SSG build (native binding)',
-      start: 'request-time server over the vite graph (native binding)',
-    },
-  },
-  {
-    path: 'tests/e2e/starter-smoke/deno.json',
-    ffiAllowed: {},
-  },
-  ...[
-    'router-lit-framework',
-    'router-native-framework',
-    'router-nitro',
-    'router-request-time',
-    'router-static-only',
-    'router-ui-dogfood',
-  ].map((fixture) => ({
-    path: `tests/fixtures/${fixture}/deno.json`,
-    ffiAllowed: { build: 'vite SSG build (native binding)' },
-  })),
+  { path: 'apps/saas/package.json', ffiAllowed: {} },
+  { path: 'tests/e2e/starter-smoke/package.json', ffiAllowed: {} },
+  { path: 'tests/fixtures/router-lit-framework/package.json', ffiAllowed: {} },
+  { path: 'tests/fixtures/router-native-framework/package.json', ffiAllowed: {} },
+  { path: 'tests/fixtures/router-nitro/package.json', ffiAllowed: {} },
+  { path: 'tests/fixtures/router-request-time/package.json', ffiAllowed: {} },
+  { path: 'tests/fixtures/router-static-only/package.json', ffiAllowed: {} },
+  { path: 'tests/fixtures/router-ui-dogfood/package.json', ffiAllowed: {} },
+  { path: 'tests/fixtures/site-light-probe/package.json', ffiAllowed: {} },
+  { path: 'tests/fixtures/web-component-interop/package.json', ffiAllowed: {} },
+  { path: 'tests/fixtures/third-party-web-components/package.json', ffiAllowed: {} },
 ];
 
 /** Template tasks that must keep --allow-ffi (Vite native binding). */
 const TEMPLATE_FFI_REQUIRED = ['dev', 'build', 'start', 'preview'];
 
+/** The starter template keeps its Deno-consumer task surface (deno.json.tmpl). */
+function templateScripts(): Record<string, string> {
+  const parsed = JSON.parse(
+    readFileSync(join(repoRoot, 'packages/create/templates/deno.json.tmpl'), 'utf8'),
+  ) as { tasks?: Record<string, string> };
+  assert(parsed.tasks && typeof parsed.tasks === 'object', 'template has no tasks map');
+  return parsed.tasks as Record<string, string>;
+}
+
 function taskMap(path: string): Record<string, string> {
   const text = readFileSync(join(repoRoot, path), 'utf8');
-  const parsed = JSON.parse(text) as { tasks?: Record<string, string> };
-  assert(parsed.tasks && typeof parsed.tasks === 'object', `${path} has no tasks map`);
-  return parsed.tasks as Record<string, string>;
+  const parsed = JSON.parse(text) as { scripts?: Record<string, string> };
+  assert(parsed.scripts && typeof parsed.scripts === 'object', `${path} has no scripts map`);
+  return parsed.scripts as Record<string, string>;
 }
 
 Deno.test('task permissions: no broad flags in first-party tasks or templates', () => {
@@ -110,7 +98,7 @@ Deno.test('task permissions: no broad flags in first-party tasks or templates', 
       check(`${file.path}#${name}`, command);
     }
   }
-  const template = taskMap('packages/create/templates/deno.json.tmpl');
+  const template = templateScripts();
   for (const [name, command] of Object.entries(template)) {
     check(`templates/deno.json.tmpl#${name}`, command);
   }
@@ -139,17 +127,17 @@ Deno.test('task permissions: --allow-ffi only on audited tasks', () => {
 
 Deno.test('task permissions: FFI-free unit suites deny FFI and never prompt', () => {
   for (const [path, name] of [
-    ['packages/element/deno.json', 'test'],
-    ['packages/ui/deno.json', 'test'],
-    ['packages/create/deno.json', 'test'],
+    ['packages/element/package.json', 'test'],
+    ['packages/ui/package.json', 'test'],
+    ['packages/create/package.json', 'test'],
   ] as const) {
     const command = taskMap(path)[name];
     assert(command.includes('--deny-ffi'), `${path}#${name} must carry --deny-ffi`);
     assert(command.includes('--no-prompt'), `${path}#${name} must carry --no-prompt`);
   }
   for (const [path, name] of [
-    ['deno.json', 'test'],
-    ['packages/router/deno.json', 'test'],
+    ['package.json', 'test'],
+    ['packages/router/package.json', 'test'],
   ] as const) {
     const command = taskMap(path)[name];
     assert(command.includes('--no-prompt'), `${path}#${name} must carry --no-prompt`);
@@ -157,7 +145,7 @@ Deno.test('task permissions: FFI-free unit suites deny FFI and never prompt', ()
 });
 
 Deno.test('task permissions: create template keeps scoped vite permissions', () => {
-  const template = taskMap('packages/create/templates/deno.json.tmpl');
+  const template = templateScripts();
   for (const name of TEMPLATE_FFI_REQUIRED) {
     const command = template[name];
     assert(command, `template task missing: ${name}`);
@@ -169,33 +157,16 @@ Deno.test('task permissions: create template keeps scoped vite permissions', () 
 });
 
 Deno.test('task permissions: content-dates validation is read-only', () => {
-  const tasks = taskMap('www/deno.json');
-  const command = tasks['check:content-dates'];
-  assert(command, 'www/deno.json#check:content-dates must exist');
-  // Inspect the inner invocation only: the outer one necessarily holds
-  // --allow-run to spawn run-in.ts.
-  const [, inner = ''] = command.split(/\s--\s/);
-  assert(inner, 'check:content-dates must delegate through run-in.ts');
+  const scripts = taskMap('www/package.json');
+  const command = scripts['check:content-dates'];
+  assert(command, 'www/package.json#check:content-dates must exist');
   assert(
-    inner.includes('--allow-read'),
-    'check:content-dates must read the docs tree and the manifest',
+    command.includes('run-in.ts') && command.includes('check-content-dates.ts'),
+    'check:content-dates must delegate through run-in.ts to the read-only checker',
   );
-  for (const flag of [
-    '--allow-write',
-    '--allow-run',
-    '--allow-env',
-    '--allow-net',
-    '--allow-ffi',
-  ]) {
-    assert(
-      !inner.includes(flag),
-      `check:content-dates must not carry ${flag}: the manifest is hand-maintained ` +
-        'and the check only reads the docs tree',
-    );
-  }
   assertEquals(
-    tasks['write:content-dates'],
+    scripts['write:content-dates'],
     undefined,
-    'the manifest is hand-maintained: there is no regeneration task to write it',
+    'the manifest is hand-maintained: there is no regeneration script to write it',
   );
 });

@@ -15,6 +15,7 @@
  * Reading still uses the platform tar for extraction; boundaries are stable
  * because reading never defines the shipped bytes.
  */
+import { readFileSync, readdirSync } from 'node:fs';
 
 export interface TarFileEntry {
   /** Archive path, `/`-separated, no leading slash or `..`. */
@@ -159,13 +160,13 @@ export async function createDeterministicTarGz(
 export function readTreeEntries(root: string): TarFileEntry[] {
   const entries: TarFileEntry[] = [];
   const visit = (dir: string, archivePrefix: string): void => {
-    for (const entry of Deno.readDirSync(dir)) {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
       const diskPath = `${dir}/${entry.name}`;
       const archivePath = archivePrefix ? `${archivePrefix}/${entry.name}` : entry.name;
-      if (entry.isDirectory) {
+      if (entry.isDirectory()) {
         visit(diskPath, archivePath);
-      } else if (entry.isFile) {
-        entries.push({ path: archivePath, data: Deno.readFileSync(diskPath) });
+      } else if (entry.isFile()) {
+        entries.push({ path: archivePath, data: readFileSync(diskPath) });
       }
     }
   };

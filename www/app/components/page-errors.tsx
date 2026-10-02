@@ -8,7 +8,7 @@
  * output, browser creation and existing-DOM claim share one identity model.
  */
 import { element, OpenElement, property } from '@openelement/element';
-import '@openelement/site-ui/open-reading-shell.tsx';
+import '#site-ui/open-reading-shell.tsx';
 import '../site-ui/open-section-frame.tsx';
 import '../islands/open-page-rail.tsx';
 import { pageErrorsStyles } from './page-errors-styles.ts';

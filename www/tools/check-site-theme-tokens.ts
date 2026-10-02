@@ -15,7 +15,7 @@
  * packages/ui/src/semantic-tokens.css (source of truth) as carried by the generated module.
  */
 
-import { walk } from '@std/fs/walk';
+import { walk } from '../../tools/lib/std-fs.ts';
 import { fromFileUrl, join } from '@std/path';
 import { SITE_BREAKPOINT_TIERS } from '../site-css.ts';
 import { readFile } from 'node:fs/promises';

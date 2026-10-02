@@ -90,7 +90,9 @@ Deno.test('package artifacts: bars Node and Deno APIs in packed ui modules', asy
   );
 });
 
-Deno.test('package artifacts: create CLI allows Deno APIs but bars Node APIs', async () => {
+Deno.test('package artifacts: create CLI is node-hosted, so it bars Deno APIs', async () => {
+  // B1a ported the create CLI to node:*; the B2 artifact policy flipped from
+  // node-free (bar Node APIs, the pre-port Deno-host CLI) to deno-free.
   await withPackage(
     '@openelement/create',
     {
@@ -105,9 +107,9 @@ Deno.test('package artifacts: create CLI allows Deno APIs but bars Node APIs', a
       const messages = scanExtractedPackage('@openelement/create', root).violations.map(
         (v) => v.message,
       );
-      assert(messages.includes('node:* import'));
-      assert(messages.includes('Node process global'));
-      assert(!messages.includes('Deno API'));
+      assert(!messages.includes('node:* import'));
+      assert(!messages.includes('Node process global'));
+      assert(messages.includes('Deno API'));
     },
   );
 });

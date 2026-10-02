@@ -31,5 +31,5 @@ const args = Object.fromEntries(
 const PORT = Number(args.port ?? '4174');
 const ROOT = args.dir ?? 'www/dist';
 
-const server = serveStatic(ROOT, { port: findPort(PORT) });
+const server = await serveStatic(ROOT, { port: await findPort(PORT) });
 console.log(`E2E static server listening on ${server.origin}`);

@@ -99,10 +99,13 @@ async function runCoverage(crashRetries: number): Promise<string> {
         // A crashed attempt can leave partial coverage profiles behind that
         // `deno coverage` would choke on; each attempt starts from a clean dir.
         await rm(coverageDir, { recursive: true }).catch(() => undefined);
-        return await commandStatus(process.execPath, {
+        // The test-runner host stays deno until the B3 runner migration;
+        // --no-check because module type checking is the per-package tsc gate.
+        return await commandStatus('deno', {
           args: [
             'test',
             '--no-lock',
+            '--no-check',
             `--coverage=${coverageDir}`,
             // element's WTR browser suite is gated separately
             // (packages/element#browser:gate). apps/saas/ and
@@ -146,7 +149,7 @@ async function runCoverage(crashRetries: number): Promise<string> {
       );
     }
 
-    const report = await commandOutput(process.execPath, {
+    const report = await commandOutput('deno', {
       args: ['coverage', coverageDir, '--lcov'],
       stdout: 'piped',
       stderr: 'inherit',

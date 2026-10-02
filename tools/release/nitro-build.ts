@@ -17,11 +17,13 @@
  *     tools/release/nitro-build.ts --root . --preset cloudflare_module \
  *     --out .output-workers --prune-public server
  */
+import { commandStatus } from '../repo/node-command.ts';
+import { rename, rm } from 'node:fs/promises';
 import { parseArgs } from '@std/cli/parse-args';
 import { exists } from '@std/fs';
 import { NITRO_VERSION } from './nitro-compatibility.ts';
 
-const args = parseArgs(Deno.args, {
+const args = parseArgs(process.argv.slice(2), {
   string: ['root', 'preset', 'out', 'prune-public'],
 });
 
@@ -34,55 +36,57 @@ if (!preset) {
   console.error(
     'tools/release/nitro-build.ts requires --preset (e.g. node-server, cloudflare_module)',
   );
-  Deno.exit(2);
+  process.exit(2);
 }
 
 async function removeIfExists(path: string): Promise<void> {
   try {
-    await Deno.remove(path, { recursive: true });
+    await rm(path, { recursive: true });
   } catch (error) {
-    if (!(error instanceof Deno.errors.NotFound)) throw error;
+    if ((error as NodeJS.ErrnoException)?.code !== 'ENOENT') throw error;
   }
 }
 
 async function runNitro(): Promise<void> {
-  const command = new Deno.Command('deno', {
-    args: [
-      'run',
-      '--node-modules-dir=auto',
-      '--allow-read',
-      '--allow-write',
-      '--allow-run',
-      '--allow-env',
-      '--allow-net',
-      '--allow-sys',
-      // Rolldown loads its native binding through FFI under Deno.
-      '--allow-ffi',
-      `npm:nitro@${NITRO_VERSION}`,
-      'build',
-      '--dir',
-      root,
-      '--preset',
-      preset,
-    ],
+  const command = 'deno';
+  const args = [
+    'run',
+    '--node-modules-dir=auto',
+    '--allow-read',
+    '--allow-write',
+    '--allow-run',
+    '--allow-env',
+    '--allow-net',
+    '--allow-sys',
+    // Rolldown loads its native binding through FFI under Deno.
+    '--allow-ffi',
+    `npm:nitro@${NITRO_VERSION}`,
+    'build',
+    '--dir',
+    root,
+    '--preset',
+    preset,
+  ];
+  const { code } = await commandStatus(command, {
+    args,
+    stdin: 'inherit',
     stdout: 'inherit',
     stderr: 'inherit',
   });
-  const { code } = await command.output();
-  if (code !== 0) Deno.exit(code);
+  if (code !== 0) process.exit(code);
 }
 
 await removeIfExists(`${root}/.output`);
 await removeIfExists(`${root}/${out}`);
 await runNitro();
 if (out !== '.output') {
-  await Deno.rename(`${root}/.output`, `${root}/${out}`);
+  await rename(`${root}/.output`, `${root}/${out}`);
 }
 if (prunePublic) {
   await removeIfExists(`${root}/${out}/public/${prunePublic}`);
 }
 if (!(await exists(`${root}/${out}/nitro.json`))) {
   console.error(`Nitro build produced no manifest at ${root}/${out}/nitro.json`);
-  Deno.exit(1);
+  process.exit(1);
 }
 console.log(`nitro build ok: preset=${preset} out=${root}/${out}`);

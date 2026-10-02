@@ -16,7 +16,7 @@
  * `apps/saas#nitro:build-workers` (the root `saas:workers` task does).
  */
 
-import { walkSync } from '@std/fs/walk';
+import { walkSync } from '../../tools/lib/std-fs.ts';
 import { readFile } from 'node:fs/promises';
 import process from 'node:process';
 import ts from 'typescript';

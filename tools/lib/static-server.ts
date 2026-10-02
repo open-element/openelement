@@ -12,6 +12,9 @@ import {
   staticFileCandidates,
 } from '../../packages/router/src/vite/internal/static-serve.ts';
 import { join } from '@std/path';
+import { readFile } from 'node:fs/promises';
+import { createServer, type Server } from 'node:http';
+import { serveFetch } from '../../packages/router/src/internal/node-http.ts';
 
 interface StaticServer {
   origin: string;
@@ -78,7 +81,7 @@ async function readCandidate(
 
   for (const candidate of candidates) {
     try {
-      const body = await Deno.readFile(candidate);
+      const body = await readFile(candidate);
       return respondWithRange(body, candidate, rangeHeader);
     } catch {
       // Try the next candidate.
@@ -96,31 +99,59 @@ interface ServeStaticOptions {
  * Try to find an available loopback port starting from `preferred`.
  * Returns `preferred` when every candidate is occupied.
  */
-export function findPort(preferred: number, maxAttempts = 20): number {
+export async function findPort(preferred: number, maxAttempts = 20): Promise<number> {
   for (let port = preferred; port < preferred + maxAttempts; port++) {
-    try {
-      const listener = Deno.listen({ port, hostname: '127.0.0.1' });
-      listener.close();
-      return port;
-    } catch {
-      // Port in use; try the next one.
-    }
+    if (await portFree(port)) return port;
   }
   return preferred;
 }
 
-export function serveStatic(root: string, options: ServeStaticOptions = {}): StaticServer {
-  const server = Deno.serve({ port: options.port ?? 0, hostname: '127.0.0.1' }, async (request) => {
-    const response = await readCandidate(
-      root,
-      new URL(request.url).pathname,
-      request.headers.get('range'),
-    );
-    return response ?? new Response('Not found', { status: 404 });
+/** Bind-and-close probe: `true` when the loopback port accepts a listener. */
+function portFree(port: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    const probe = createServer();
+    probe.once('listening', () => {
+      probe.close(() => resolve(true));
+    });
+    probe.once('error', () => resolve(false));
+    probe.listen({ port, host: '127.0.0.1' });
   });
-  const addr = server.addr as Deno.NetAddr;
-  return {
-    origin: `http://127.0.0.1:${addr.port}`,
-    close: () => server.shutdown(),
-  };
+}
+
+/**
+ * Bind the shared static server on node:http (fetch adapter:
+ * packages/router/src/internal/node-http.ts serveFetch). Resolves once the
+ * socket is listening, so `origin` carries the OS-assigned port.
+ */
+export function serveStatic(root: string, options: ServeStaticOptions = {}): Promise<StaticServer> {
+  return new Promise((resolve, reject) => {
+    const server: Server = serveFetch({
+      hostname: '127.0.0.1',
+      port: options.port ?? 0,
+      handler: async (request) => {
+        const response = await readCandidate(
+          root,
+          new URL(request.url).pathname,
+          request.headers.get('range'),
+        );
+        return response ?? new Response('Not found', { status: 404 });
+      },
+    });
+    server.once('listening', () => {
+      const addr = server.address();
+      if (addr === null || typeof addr === 'string') {
+        reject(new Error('static server: loopback listener has no port'));
+        return;
+      }
+      resolve({
+        origin: `http://127.0.0.1:${addr.port}`,
+        close: () =>
+          new Promise<void>((resolveClose, rejectClose) => {
+            server.close((error) => (error ? rejectClose(error) : resolveClose()));
+            server.closeAllConnections();
+          }),
+      });
+    });
+    server.once('error', reject);
+  });
 }

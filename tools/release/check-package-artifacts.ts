@@ -3,11 +3,15 @@
 /**
  * Release gate: verify packed npm artifacts stay ESM-only and keep host APIs
  * out of all four published packages — runtime-free element/router/ui bar
- * Node and Deno APIs, the Deno-hosted create CLI bars Node APIs, and every
- * packed module is checked for CJS syntax, undeclared imports, and the JSR
- * bridge.
+ * Node AND Deno APIs, the node-hosted create CLI (B1a port) bars Deno APIs,
+ * and every packed module is checked for CJS syntax, undeclared imports, and
+ * the JSR bridge.
  */
 
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { mkdtemp, rm, stat } from 'node:fs/promises';
+import { readFileSync, statSync } from 'node:fs';
 import { walkSync } from '@std/fs/walk';
 import { dirname } from '@std/path';
 import { stripComments } from '../lib/text.ts';
@@ -30,6 +34,9 @@ const RUNTIME_FREE_PACKAGES = new Set([
  * (the create CLI runs under Deno) but must stay free of Node APIs, the same
  * `node:*`/process/Buffer bar every packed artifact carries.
  */
+// create is a node-host CLI since the B1a port: its packed artifact bars the
+// Deno API surface (the former node-free policy predates the port and banned
+// the node globals the CLI legitimately runs on).
 const NODE_FREE_PACKAGES = new Set(['@openelement/create']);
 
 /**
@@ -41,7 +48,10 @@ const NODE_FREE_PACKAGES = new Set(['@openelement/create']);
  * /nitro-mount subpaths; every other packed file stays fail-closed.
  */
 const HOST_TOOLING_PATH_ALLOWLIST: Record<string, RegExp> = {
-  '@openelement/router': /^src\/(?:vite\/|cli\/|nitro-mount\.)/,
+  // node-http is the node-host server seam (start CLI + static serving); it
+  // runs only when a consumer boots the server on node, never in the browser
+  // runtime, so it is host tooling like the vite/cli trees.
+  '@openelement/router': /^src\/(?:vite\/|cli\/|nitro-mount\.|internal\/node-http\.)/,
 };
 
 /**
@@ -73,10 +83,9 @@ const NODE_PATTERNS: Array<[RegExp, string]> = [
   [/\bclearImmediate\b/, 'Node clearImmediate global'],
 ];
 
-const HOST_PATTERNS: Array<[RegExp, string]> = [
-  ...NODE_PATTERNS,
-  [/\bDeno\.[A-Za-z_]/, 'Deno API'],
-];
+const DENO_PATTERNS: Array<[RegExp, string]> = [[/\bDeno\.[A-Za-z_]/, 'Deno API']];
+
+const HOST_PATTERNS: Array<[RegExp, string]> = [...NODE_PATTERNS, ...DENO_PATTERNS];
 
 // #1273 / B2.13 (stage #1288 risk #8): dead v0.43 renderer/binding/hydration
 // residue must not silently reappear in PUBLISHED artifacts (the packages
@@ -171,7 +180,7 @@ function manifestImportViolations(
   for (const entry of walkSync(packageRoot, { includeDirs: false, skip: [/^node_modules$/] })) {
     const relative = entry.path.slice(packageRoot.length + 1);
     if (!isModuleScanPath(relative)) continue;
-    const source = Deno.readTextFileSync(entry.path);
+    const source = readFileSync(entry.path, 'utf8');
     for (const { value, line } of extractStaticModuleSpecifiers(source, relative)) {
       if (isForbiddenBridgeSpecifier(value)) {
         violations.push({
@@ -198,7 +207,7 @@ function pushPackageJsonViolations(
   packageJsonPath: string,
   violations: ArtifactViolation[],
 ): Record<string, unknown> {
-  const packageJson = JSON.parse(Deno.readTextFileSync(packageJsonPath)) as Record<string, unknown>;
+  const packageJson = JSON.parse(readFileSync(packageJsonPath, 'utf8')) as Record<string, unknown>;
   if (packageJson.type !== 'module') {
     violations.push({
       path: `${packageName}/package.json`,
@@ -232,7 +241,7 @@ function pushPackageJsonViolations(
   return packageJson;
 }
 
-type HostPolicy = 'runtime-free' | 'node-free' | 'none';
+type HostPolicy = 'runtime-free' | 'deno-free' | 'none';
 
 function scanRuntimeFile(
   root: string,
@@ -250,12 +259,12 @@ function scanRuntimeFile(
     });
   }
 
-  const text = Deno.readTextFileSync(path);
+  const text = readFileSync(path, 'utf8');
   const firstCodeLine = text.split('\n').find((l) => l.trim() !== '') ?? '';
   const hostScanAllowed = !firstCodeLine.trim().startsWith('// deno-api-free:ignore');
   const lines = stripComments(text).split('\n');
   const hostPatterns =
-    hostPolicy === 'runtime-free' ? HOST_PATTERNS : hostPolicy === 'node-free' ? NODE_PATTERNS : [];
+    hostPolicy === 'runtime-free' ? HOST_PATTERNS : hostPolicy === 'deno-free' ? DENO_PATTERNS : [];
 
   for (let index = 0; index < lines.length; index++) {
     const line = lines[index];
@@ -319,7 +328,7 @@ export function scanExtractedPackage(packageName: string, packageRoot: string): 
       });
     }
     if (forbiddenSourcePatterns.length > 0 && SOURCE_SCAN_EXTENSIONS.has(extension(entry.path))) {
-      const text = stripComments(Deno.readTextFileSync(entry.path));
+      const text = stripComments(readFileSync(entry.path, 'utf8'));
       for (const [pattern, message] of forbiddenSourcePatterns) {
         if (pattern.test(text)) {
           violations.push({ path: `${packageName}/${relative}`, message });
@@ -346,7 +355,7 @@ export function scanExtractedPackage(packageName: string, packageRoot: string): 
         ? 'none'
         : 'runtime-free'
       : nodeFreePackage
-        ? 'node-free'
+        ? 'deno-free'
         : 'none';
     violations.push(...scanRuntimeFile(packageRoot, entry.path, packageName, hostPolicy));
   }
@@ -367,7 +376,7 @@ export function scanExtractedPackage(packageName: string, packageRoot: string): 
   // upstream copyright and permission notice.
   if (packageName === '@openelement/ui') {
     const notice = files.has('THIRD_PARTY_NOTICES.md')
-      ? Deno.readTextFileSync(`${packageRoot}/THIRD_PARTY_NOTICES.md`)
+      ? readFileSync(`${packageRoot}/THIRD_PARTY_NOTICES.md`, 'utf8')
       : '';
     for (const required of ['open-props 1.7.23', 'Copyright (c) 2021 Adam Argyle', 'MIT License']) {
       if (!notice.includes(required)) {
@@ -408,18 +417,18 @@ export function scanExtractedPackage(packageName: string, packageRoot: string): 
 }
 
 async function extractTarball(tarball: string): Promise<string> {
-  const tmp = await Deno.makeTempDir({ prefix: 'openelement-artifact-' });
+  const tmp = await mkdtemp(join(tmpdir(), 'openelement-artifact-'));
   await runCommand('tar', ['-xzf', tarball, '-C', tmp], undefined);
   return `${tmp}/package`;
 }
 
 async function verifyTarball(pkg: PackageInfo): Promise<PackageScanResult> {
   const tarball = tarballPath(pkg);
-  await Deno.stat(tarball);
+  await stat(tarball);
 
   // publint/ATTW are pure-JS verifiers: scoped permissions with FFI denied
   // (fail closed, never prompt).
-  await runCommand(Deno.execPath(), [
+  await runCommand(process.execPath, [
     'run',
     '--allow-read',
     '--allow-write',
@@ -433,7 +442,7 @@ async function verifyTarball(pkg: PackageInfo): Promise<PackageScanResult> {
     tarball,
     '--strict',
   ]);
-  await runCommand(Deno.execPath(), [
+  await runCommand(process.execPath, [
     'run',
     '--allow-read',
     '--allow-write',
@@ -452,25 +461,26 @@ async function verifyTarball(pkg: PackageInfo): Promise<PackageScanResult> {
   try {
     let unpackedBytes = 0;
     for (const entry of walkSync(packageRoot, { includeDirs: false })) {
-      unpackedBytes += Deno.statSync(entry.path).size;
+      unpackedBytes += statSync(entry.path).size;
     }
-    const packedBytes = (await Deno.stat(tarball)).size;
+    const packedBytes = (await stat(tarball)).size;
     console.log(`[artifact-size] ${pkg.name}: packed=${packedBytes}B unpacked=${unpackedBytes}B`);
     return scanExtractedPackage(pkg.name, packageRoot);
   } finally {
-    await Deno.remove(dirname(packageRoot), {
+    await rm(dirname(packageRoot), {
       recursive: true,
     });
   }
 }
 
 async function main(): Promise<void> {
-  const prepacked = Deno.args.length === 1 && Deno.args[0] === '--prepacked';
-  if (Deno.args.length > 0 && !prepacked) {
+  const argv = process.argv.slice(2);
+  const prepacked = argv.length === 1 && argv[0] === '--prepacked';
+  if (argv.length > 0 && !prepacked) {
     throw new Error('Usage: check-package-artifacts.ts [--prepacked]');
   }
   if (!prepacked) {
-    await runCommand(Deno.execPath(), ['task', '--cwd', 'tools/release', 'pack:dry-run']);
+    await runCommand(process.execPath, ['task', '--cwd', 'tools/release', 'pack:dry-run']);
   }
 
   const packages = releasePublishOrder(await readPackages());
@@ -487,7 +497,7 @@ async function main(): Promise<void> {
       const line = violation.line ? `:${violation.line}` : '';
       console.error(`  ${violation.path}${line}: ${violation.message}`);
     }
-    Deno.exit(1);
+    process.exit(1);
   }
 
   console.log(`\nPackage artifact checks passed for ${packages.length} packages.`);

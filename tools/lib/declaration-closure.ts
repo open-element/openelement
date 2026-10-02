@@ -24,6 +24,7 @@
  * reachable edge fails the release.
  */
 
+import { readFileSync, statSync } from 'node:fs';
 import { extractStaticModuleSpecifiers } from './typescript-ast.ts';
 
 export interface DeclarationGraph {
@@ -181,11 +182,11 @@ export function packageRootDeclarationIo(packageRoot: string): DeclarationIo {
   return {
     exists: (path) => {
       try {
-        return Deno.statSync(`${packageRoot}/${path}`).isFile;
+        return statSync(`${packageRoot}/${path}`).isFile();
       } catch {
         return false;
       }
     },
-    read: (path) => Deno.readTextFileSync(`${packageRoot}/${path}`),
+    read: (path) => readFileSync(`${packageRoot}/${path}`, 'utf8'),
   };
 }

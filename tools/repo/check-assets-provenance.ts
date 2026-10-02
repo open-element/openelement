@@ -14,7 +14,7 @@
  * are one manifest record while still hashing every file individually.
  */
 
-import { walkSync } from '@std/fs/walk';
+import { walkSync } from '../../tools/lib/std-fs.ts';
 import { statSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import process from 'node:process';

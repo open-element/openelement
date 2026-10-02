@@ -23,7 +23,6 @@ import { join } from '@std/path';
 
 const fixtureDir = join(import.meta.dirname!, '../../../../tests/fixtures/router-static-only');
 const distDir = join(fixtureDir, 'dist');
-const repoRoot = join(fixtureDir, '../../..');
 
 const HTML_PAGES = ['index.html', 'about/index.html', 'mdx-page/index.html'];
 
@@ -38,8 +37,7 @@ async function buildFixture(): Promise<void> {
   const build = await new Deno.Command(Deno.execPath(), {
     args: [
       'run',
-      '--config',
-      join(repoRoot, 'deno.json'),
+      '--no-lock',
       '--allow-read',
       '--allow-write',
       '--allow-env',

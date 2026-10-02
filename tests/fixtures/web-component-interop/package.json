@@ -1,0 +1,21 @@
+{
+  "name": "@openelement/fixture-web-component-interop",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "test": "deno test --no-lock --no-check --allow-read --allow-write --allow-env --allow-net --allow-run --allow-sys",
+    "qualify": "deno run --no-lock --allow-read --allow-write --allow-run --allow-env --allow-net --allow-sys qualify.ts"
+  },
+  "dependencies": {
+    "@openelement/element": "workspace:*"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.59.1",
+    "@std/assert": "jsr:^1.0.0",
+    "@std/path": "jsr:^1.0.0",
+    "custom-elements-manifest": "2.1.0",
+    "mime": "^4.1.0",
+    "pathe": "^2.0.3"
+  }
+}

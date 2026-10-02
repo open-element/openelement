@@ -20,7 +20,7 @@
  * before either serializer runs; there is no post-build head rewrite anymore.
  */
 import type { PageHead, StructuredDataEntry } from '@openelement/router';
-import { getPostBySlug } from '@openelement/generated/blog-data';
+import { getPostBySlug } from '#generated/blog-data';
 import { contentLocale } from './locale.ts';
 import { SITE_DEFAULT_LOCALE, SITE_LOCALES } from '../../site-config.ts';
 import { localizePath } from './link.ts';

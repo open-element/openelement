@@ -15,7 +15,7 @@
  */
 
 import { assertEquals, assertStringIncludes } from '@std/assert';
-import { join } from 'jsr:@std/path@^1.0.0';
+import { join } from '@std/path';
 import { injectCspMeta, islandChunkMapFromAssetManifest } from '../src/vite/internal/ssg/index.ts';
 import type { ClientAssetManifest } from '../src/vite/internal/protocol/client-assets.ts';
 

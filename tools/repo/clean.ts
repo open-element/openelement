@@ -18,7 +18,7 @@
  *   deno run --allow-read --allow-write tools/repo/clean.ts --deep     # + installed dependency trees
  *   deno run --allow-read --allow-write tools/repo/clean.ts <pattern>  # allowlisted pattern(s)
  */
-import { expandGlob } from '@std/fs';
+import { expandGlob } from '../../tools/lib/std-fs.ts';
 import { fromFileUrl, isAbsolute, join, relative, resolve, SEPARATOR } from '@std/path';
 import { lstat, realpath, rm } from 'node:fs/promises';
 import type { Stats } from 'node:fs';

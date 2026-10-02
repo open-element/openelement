@@ -1,9 +1,9 @@
 /** Changelog route: request projection and build-time Markdown loading. */
 import { definePage } from '@openelement/router';
 import { trustedHtml } from '@openelement/element';
-import { siteHead } from '@openelement/site-ui/head.ts';
-import { contentLocale } from '@openelement/site-ui/locale.ts';
-import { localizePath } from '@openelement/site-ui/link.ts';
+import { siteHead } from '#site-ui/head.ts';
+import { contentLocale } from '#site-ui/locale.ts';
+import { localizePath } from '#site-ui/link.ts';
 import { marked } from 'marked';
 import PageChangelog from '../components/page-changelog.tsx';
 import { COMMON_PUBLISHED_LABEL, REGISTRY_NOTE } from '../data/version.ts';

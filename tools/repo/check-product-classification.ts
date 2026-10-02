@@ -16,7 +16,7 @@
  * word "core" (Element/Router statements are legal) and it never infers
  * ownership from filename or directory names.
  */
-import { walk } from '@std/fs/walk';
+import { walk } from '../../tools/lib/std-fs.ts';
 import { readFile } from 'node:fs/promises';
 import process from 'node:process';
 
