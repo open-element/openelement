@@ -9,12 +9,30 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-const { scanRegions, regionTester } = await import(
-  pathToFileURL(path.resolve('tools/repo/codemod-deno-test-to-vitest.ts'))
-);
 
-const pre = JSON.parse(fs.readFileSync('.zcode/workflow-drafts/b3-pre-counts.json', 'utf8'));
-const post = {
+interface FileCounts {
+  tests: number;
+  steps: number;
+}
+
+/** JSON shape of b3-pre-counts.json / b3-post-counts.json (the fields this tool reads/writes). */
+interface CountReport {
+  task: string;
+  generatedAt: string;
+  notes: string[];
+  files: Record<string, FileCounts>;
+  totals: { files: number; tests: number; steps: number };
+  realTestTotals?: { files: number; tests: number; steps: number };
+}
+
+const { scanRegions, regionTester } = (await import(
+  pathToFileURL(path.resolve('tools/repo/codemod-deno-test-to-vitest.ts')).href
+)) as typeof import('./codemod-deno-test-to-vitest.ts');
+
+const pre = JSON.parse(
+  fs.readFileSync('.zcode/workflow-drafts/b3-pre-counts.json', 'utf8'),
+) as CountReport;
+const post: CountReport = {
   task: 'B3 post-migration counts (vitest surface)',
   generatedAt: new Date().toISOString(),
   notes: [
@@ -46,9 +64,9 @@ const KNOWN_DELTA_REASONS: Record<string, string> = {
     'generated guide content: Deno.test mentions are product documentation; excluded from migration by codemod path policy',
 };
 
-const deltas = [];
+const deltas: Array<{ file: string; reason: string; pre: FileCounts; post?: FileCounts }> = [];
 for (const [file, counts] of Object.entries(pre.files)) {
-  let src = null;
+  let src: string | null = null;
   try {
     src = fs.readFileSync(file, 'utf8');
   } catch {

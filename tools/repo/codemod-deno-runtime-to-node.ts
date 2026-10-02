@@ -303,9 +303,13 @@ function transformFile(filePath: string, relFile: string): FileStats | null {
       need: P,
     }));
 
-    const F = (names: string[]): Partial<Need> => ({ fsPromises: names });
-    const S = (names: string[]): Partial<Need> => ({ fsSync: names });
-    const T = (names: string[]): Partial<Need> => ({ fsPromises: names, tmpdir: true, join: true });
+    const F = (names: string[]): Partial<Need> => ({ fsPromises: new Set(names) });
+    const S = (names: string[]): Partial<Need> => ({ fsSync: new Set(names) });
+    const T = (names: string[]): Partial<Need> => ({
+      fsPromises: new Set(names),
+      tmpdir: true,
+      join: true,
+    });
 
     call(/Deno\.readTextFile\s*\(/, (a) => ({
       text: `readFile(${a[0]}, 'utf8')`,
