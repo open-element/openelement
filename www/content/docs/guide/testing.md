@@ -14,22 +14,55 @@ pnpm check   # tsc --noEmit over the tsconfig include: app/ + vite.config.ts + o
 
 It type-checks every route and component source with the actual `@openelement/*` declarations, so a wrong option on `definePage`, a `props` projector that does not match its loader's data, an unsupported decorator option or a broken import fails here — before any build runs and without a browser.
 
-Loaders and actions are plain functions, which makes them cheap to test directly. Import the route module in a test file run by `pnpm test` (Node's built-in runner), call the loader with a `Request` or the action with a `FormData`, and assert on the returned value: a success object, an `OpenElementActionFailure` from `fail()` (its `status` and `data` fields), or a thrown `redirect()`/`notFound()`.
+Loaders and actions are plain functions, which makes them cheap to test directly. One boundary shapes where they live: `pnpm test` runs Node's built-in runner, which loads `.ts` modules by type stripping but cannot load `.tsx` at all — JSX compiles at build time, and every route module's import graph ends in a `.tsx` page component. So keep the loader/action logic you want to unit-test in a `.ts` module under `app/lib/` (a `.ts` file under `app/routes/` would itself be admitted as a route), and re-export it from the route:
+
+```ts
+// app/lib/guestbook.ts — plain TypeScript; nothing JSX-shaped imports here
+import { fail, redirect, type OpenElementActionFailure } from '@openelement/router';
+
+export interface GuestbookData {
+  error?: string;
+  note?: string;
+}
+
+export function saveNote(ctx: {
+  formData: FormData;
+}): OpenElementActionFailure<GuestbookData> {
+  const note = String(ctx.formData.get('note') ?? '').trim();
+  if (!note) return fail(422, { error: 'a note is required', note });
+  throw redirect(`/guestbook?saved=${encodeURIComponent(note)}`);
+}
+
+export async function listEntries(): Promise<{ entries: string[] }> {
+  return { entries: [] };
+}
+```
+
+```ts
+// app/routes/guestbook.ts — the route re-exports the tested functions
+import { definePage } from '@openelement/router';
+import GuestbookPage from '../components/page-guestbook.tsx';
+import { listEntries, saveNote } from '../lib/guestbook.ts';
+
+export { listEntries as loader, saveNote as action };
+
+export default definePage(GuestbookPage, { renderIntent: { mode: 'dynamic' } });
+```
+
+The test file imports only the `.ts` module — the validation, the PRG target and the returned data are all decided by plain return values and throws, so nothing in that path needs a server, a DOM or the framework runtime:
 
 ```ts
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { action } from '../app/routes/guestbook.tsx';
+import { saveNote } from '../app/lib/guestbook.ts';
 
 test('an empty message fails validation', () => {
   const formData = new FormData();
   formData.set('message', '');
-  const failure = action({ formData });
+  const failure = saveNote({ formData });
   assert.equal(failure.status, 422);
 });
 ```
-
-Nothing in that path needs a server, a DOM or the framework runtime: the validation, the echo and the PRG target are all decided by the function's return value.
 
 ### Redirects throw
 
@@ -39,14 +72,14 @@ Success does not return — it throws an `OpenElementRedirect` carrying the targ
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { OpenElementRedirect } from '@openelement/router';
-import { action } from '../app/routes/guestbook.tsx';
+import { saveNote } from '../app/lib/guestbook.ts';
 
 test('a valid message redirects to the echo', () => {
   const formData = new FormData();
   formData.set('message', 'hello');
   let thrown: unknown;
   try {
-    action({ formData });
+    saveNote({ formData });
   } catch (error) {
     thrown = error;
   }
@@ -64,10 +97,10 @@ A loader is the same shape — a plain async function, called directly:
 ```ts
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { loader } from '../app/routes/guestbook.tsx';
+import { listEntries } from '../app/lib/guestbook.ts';
 
 test('the loader returns the entry list', async () => {
-  const data = await loader();
+  const data = await listEntries();
   assert.equal(Array.isArray(data.entries), true);
 });
 ```

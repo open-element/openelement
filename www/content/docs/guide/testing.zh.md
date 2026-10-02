@@ -14,22 +14,55 @@ pnpm check   # tsc --noEmit，检查 tsconfig include：app/ + vite.config.ts + 
 
 它用真实的 `@openelement/*` 声明检查每个 route 与 component 源文件，因此 `definePage` 上写错的选项、与 loader 数据不匹配的 `props` 投影器、不受支持的装饰器选项或断掉的 import 都会在这里失败——在任何构建运行之前，且不需要浏览器。
 
-loader 与 action 都是普通函数，因此可以直接测试。在 `pnpm test`（Node 内置 test runner）运行的测试文件里 import 路由模块，用 `Request` 调用 loader、用 `FormData` 调用 action，然后断言返回的值：成功对象、`fail()` 产出的 `OpenElementActionFailure`（其 `status` 与 `data` 字段），或抛出的 `redirect()`/`notFound()`。
+loader 与 action 都是普通函数，因此可以直接测试。有一个边界决定它们住在哪里：`pnpm test` 运行的是 Node 内置 test runner，它靠类型剥离加载 `.ts` 模块，但完全无法加载 `.tsx`——JSX 在构建期编译，而每条路由模块的 import 图最终都会落到 `.tsx` 页面组件上。所以把想直接单测的 loader/action 逻辑放进 `app/lib/` 下的 `.ts` 模块（放在 `app/routes/` 下的 `.ts` 文件会被识别为一条路由），再由路由模块 re-export：
+
+```ts
+// app/lib/guestbook.ts —— 纯 TypeScript；这里不 import 任何 JSX 形态的东西
+import { fail, redirect, type OpenElementActionFailure } from '@openelement/router';
+
+export interface GuestbookData {
+  error?: string;
+  note?: string;
+}
+
+export function saveNote(ctx: {
+  formData: FormData;
+}): OpenElementActionFailure<GuestbookData> {
+  const note = String(ctx.formData.get('note') ?? '').trim();
+  if (!note) return fail(422, { error: 'a note is required', note });
+  throw redirect(`/guestbook?saved=${encodeURIComponent(note)}`);
+}
+
+export async function listEntries(): Promise<{ entries: string[] }> {
+  return { entries: [] };
+}
+```
+
+```ts
+// app/routes/guestbook.ts —— 路由模块 re-export 被测试的函数
+import { definePage } from '@openelement/router';
+import GuestbookPage from '../components/page-guestbook.tsx';
+import { listEntries, saveNote } from '../lib/guestbook.ts';
+
+export { listEntries as loader, saveNote as action };
+
+export default definePage(GuestbookPage, { renderIntent: { mode: 'dynamic' } });
+```
+
+测试文件只 import 那个 `.ts` 模块——校验、回显与 PRG 目标全部由普通返回值与抛出决定，这条路径不需要服务器、DOM 或框架运行时：
 
 ```ts
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { action } from '../app/routes/guestbook.tsx';
+import { saveNote } from '../app/lib/guestbook.ts';
 
 test('空消息在校验阶段失败', () => {
   const formData = new FormData();
   formData.set('message', '');
-  const failure = action({ formData });
+  const failure = saveNote({ formData });
   assert.equal(failure.status, 422);
 });
 ```
-
-这条路径不需要服务器、DOM 或框架运行时：校验、回显与 PRG 目标全部由函数的返回值决定。
 
 ### 重定向是抛出来的
 
@@ -39,14 +72,14 @@ test('空消息在校验阶段失败', () => {
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { OpenElementRedirect } from '@openelement/router';
-import { action } from '../app/routes/guestbook.tsx';
+import { saveNote } from '../app/lib/guestbook.ts';
 
 test('合法消息跳转到回显', () => {
   const formData = new FormData();
   formData.set('message', 'hello');
   let thrown: unknown;
   try {
-    action({ formData });
+    saveNote({ formData });
   } catch (error) {
     thrown = error;
   }
@@ -64,10 +97,10 @@ loader 同理——普通异步函数，直接调用：
 ```ts
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { loader } from '../app/routes/guestbook.tsx';
+import { listEntries } from '../app/lib/guestbook.ts';
 
 test('loader 返回条目列表', async () => {
-  const data = await loader();
+  const data = await listEntries();
   assert.equal(Array.isArray(data.entries), true);
 });
 ```

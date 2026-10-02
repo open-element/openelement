@@ -50,4 +50,4 @@ export default {
 
 - [路由与数据](/zh/guide/routing-and-data)——这些 handler 旁边的页面侧契约。
 - [安全](/zh/guide/security)——自定义路由周围的 CSRF、CORS 与 CSP 默认值。
-- [测试](/zh/guide/testing)——在 `deno test` 中直接调用 handler。
+- [测试](/zh/guide/testing)——在 `pnpm test` 中直接调用 handler。

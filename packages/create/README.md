@@ -76,7 +76,7 @@ deno run -A npm:@openelement/create@0.43 my-app
   through the element import source, whole-`app/` coverage
 - `vite.config.ts` - Vite build configuration; the plugin call is plain
   `openElement()`, because framework options have exactly one home:
-  `openelement.config.ts` - the framework options. It is OPTIONAL and nearly
+- `openelement.config.ts` - the framework options. It is OPTIONAL and nearly
   empty by default; every option it omits comes from a file convention —
   design tokens from `app/styles/tokens.css`, the app shell from
   `app/islands/app-shell.tsx`, structural document-head content from

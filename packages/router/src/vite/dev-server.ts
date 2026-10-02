@@ -2,7 +2,8 @@
  * Lazy @hono/vite-dev-server registration for the openElement Vite plugin.
  *
  * @hono/vite-dev-server is an OPTIONAL peer of @openelement/router: only the
- * Vite dev server (`vite dev` / `deno task dev`) needs it — `build`, `start`
+ * Vite dev server (`vite dev` — `pnpm dev` in a generated project) needs it —
+ * `build`, `start`
  * and Route Mode never touch it. A top-level import in plugin.ts made every
  * consumer of the ./vite plugin resolve the package at config-load time, so a
  * hermetic consumer that only builds failed with ERR_MODULE_NOT_FOUND. The
@@ -34,9 +35,9 @@ export function lazyHonoDevServer(options: (mod: HonoDevServerModule) => DevServ
       } catch (cause) {
         throw new Error(
           'openElement dev mode requires @hono/vite-dev-server (an optional peer of ' +
-            '@openelement/router). Install it into your app to use `deno task dev`: add ' +
-            '"@hono/vite-dev-server": "npm:@hono/vite-dev-server@^0.25.3" to the deno.json ' +
-            'imports (npm consumers: `npm install --save-dev @hono/vite-dev-server`).',
+            '@openelement/router). Install it into your app to use `pnpm dev`: add ' +
+            '"@hono/vite-dev-server": "^0.25.3" to the package.json dependencies ' +
+            '(`npm install --save-dev @hono/vite-dev-server` does the same).',
           { cause },
         );
       }
