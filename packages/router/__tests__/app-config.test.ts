@@ -370,6 +370,29 @@ test('app config: head fragments preserve their exact order', async () => {
   });
 });
 
+test('app config: an explicit head block without title suppresses the site-level og pair', async () => {
+  await withApp((app) => {
+    app.write('package.json', JSON.stringify({ name: 'handle-app' }));
+    const resolved = resolveAppConfig({
+      root: app.root,
+      configFile: configFileIn(app.root),
+      importedConfig: defineConfig({ head: { scripts: [{ src: '/theme.js' }] } }),
+    });
+    // The package.json name still fills the document <title> channel.
+    expect(resolved.options.html).toEqual({ title: 'handle-app' });
+    // …but the site-level og block honors explicit configuration only: a head
+    // block that omits `title` must not emit og:title/og:site_name/og:type —
+    // the page-level head owns them, and a second block would trip strict
+    // locators (the fresh-clone Site E2E double-emission failure).
+    const fragments = resolved.options.inject?.headFragments ?? [];
+    expect(resolved.options.inject?.scripts).toEqual([{ src: '/theme.js' }]);
+    expect(
+      fragments.some((fragment) => fragment.includes('og:')),
+      `no site-level og meta without an explicit head.title: ${JSON.stringify(fragments)}`,
+    ).toEqual(false);
+  });
+});
+
 test('app config: an accepted head key without a handler fails closed', () => {
   const acceptedKeys = OPEN_ELEMENT_HEAD_KEYS as string[];
   const originalLength = acceptedKeys.length;

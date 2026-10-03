@@ -315,7 +315,13 @@ export function resolveAppConfig(input: ResolveAppConfigInput): ResolvedAppConfi
   }
 
   // --- title: override > inline head.title > package.json name ---
-  let title = headBlock?.title ?? null;
+  // Two channels read the title with different omissions semantics: the
+  // document <title> falls back to the package.json name, but the site-level
+  // og:* block honors EXPLICIT configuration only — a head block that omits
+  // `title` suppresses the og:title/og:site_name pair, which the page-level
+  // head owns (the Document seam emits it ahead of these fragments).
+  const explicitTitle = headBlock?.title ?? null;
+  let title = explicitTitle;
   if (title === null) {
     const name = packageName(root);
     if (name !== null) {
@@ -347,7 +353,7 @@ export function resolveAppConfig(input: ResolveAppConfigInput): ResolvedAppConfi
 
   const headFragments = [
     ...(tokensFragment === undefined ? [] : [tokensFragment]),
-    ...headFragmentsFor({ head: headBlock, title }),
+    ...headFragmentsFor({ head: headBlock, title: explicitTitle }),
   ];
 
   // Only defined keys are returned: the caller applies this on top of its own
