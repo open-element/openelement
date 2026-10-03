@@ -570,18 +570,26 @@ function copyPackageDir(src: string, dest: string): void {
 }
 
 /**
- * Complete the staging: `deno install` the shared node_modules, then symlink
- * every workspace member under `node_modules/@openelement/` so declaration
- * emit resolves cross-package types from source.
+ * Complete the staging: npm-install the shared node_modules (lifecycle
+ * scripts off — the staged deps ship their platform binaries as optional
+ * dependencies), then symlink every workspace member under
+ * `node_modules/@openelement/` so declaration emit resolves cross-package
+ * types from source.
  */
 export async function installVpStagingWorkspace(
   staged: VpStagedWorkspace,
   members: readonly PackageInfo[],
 ): Promise<void> {
-  const install = await runWithOutput(process.execPath, ['install'], { cwd: staged.stagingRoot });
+  const install = await runWithOutput(
+    'npm',
+    ['install', '--ignore-scripts', '--no-audit', '--no-fund'],
+    {
+      cwd: staged.stagingRoot,
+    },
+  );
   if (!install.success) {
     throw new Error(
-      `[vp-pack] deno install failed in the vp staging workspace:\n${install.stdout}\n${install.stderr}`,
+      `[vp-pack] npm install failed in the vp staging workspace:\n${install.stdout}\n${install.stderr}`,
     );
   }
   const scopeDir = `${staged.stagingRoot}/node_modules/@openelement`;

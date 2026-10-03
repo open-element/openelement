@@ -431,7 +431,9 @@ async function scanTarball(pkg: PackageInfo): Promise<PackSurfaceViolation[]> {
   try {
     bytes = await readFile(tarball);
   } catch {
-    throw new Error(`${tarball} is missing — run \`deno task pack:dry-run\` first`);
+    throw new Error(
+      `${tarball} is missing — run \`pnpm --dir tools/release run pack:dry-run\` first`,
+    );
   }
   const files = new Map<string, string>();
   for (const entry of await parseTarGz(bytes)) {

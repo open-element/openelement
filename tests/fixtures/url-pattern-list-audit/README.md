@@ -7,7 +7,7 @@ an exact dependency graph so `npm audit signatures` can verify the published
 tarball's provenance.
 
 ```bash
-deno task --cwd tools/repo url-pattern-list:provenance
+pnpm --dir tools/repo run url-pattern-list:provenance
 ```
 
 This is the one fixture that is npm-shaped (`package.json` +

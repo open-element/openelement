@@ -1,7 +1,8 @@
-#!/usr/bin/env -S deno run --allow-read --allow-run
+#!/usr/bin/env node
 /** Run repository tests and enforce production-package LCOV thresholds. */
 
 import { readFile, rm } from 'node:fs/promises';
+import { join } from 'node:path';
 import process from 'node:process';
 import {
   addUncoveredFiles,
@@ -15,7 +16,7 @@ import {
   lcovFilePaths,
   parseLcov,
 } from './coverage-summary.ts';
-import { commandOutput, commandStatus } from './node-command.ts';
+import { commandStatus } from './node-command.ts';
 
 function getNumberArg(flag: string, fallback: number): number {
   const args = process.argv.slice(2);
@@ -25,12 +26,14 @@ function getNumberArg(flag: string, fallback: number): number {
   return value;
 }
 
-// Issue #1278: the `deno test --coverage` subprocess has repeatedly died by
+// Issue #1278 (deno-test era): the coverage subprocess repeatedly died by
 // native crash (observed exit 139 = SIGSEGV, rolldown/workerd class) with no
 // test assertion failure. Signal-terminated processes surface as exit code
 // 128 + signal number; only those are retryable. Any exit code below the
-// floor — including 1, the deno test assertion-failure code — is a real
-// failure and must fail the gate immediately, never retried.
+// floor — including 1, the test assertion-failure code — is a real failure
+// and must fail the gate immediately, never retried. The retry harness stays
+// on the vitest runner: a runner-level crash remains distinguishable from a
+// test failure by the same exit-code class.
 const NATIVE_CRASH_FLOOR = 128;
 
 const SIGNAL_NAMES: Record<number, string> = {
@@ -91,38 +94,54 @@ export async function runTestSuiteWithCrashRetry(
   }
 }
 
+/** The vitest node projects whose runs feed the coverage denominator. */
+const COVERAGE_PROJECTS = [
+  'element',
+  'router',
+  'create',
+  'ui',
+  'saas',
+  'www',
+  'tools',
+  'tests',
+  'benchmarks',
+] as const;
+
+/** Instrumentation roots: exactly the three threshold scopes. */
+const COVERAGE_INCLUDES = [
+  'packages/element/src/**',
+  'packages/router/src/**',
+  'packages/create/src/**',
+  'packages/ui/src/**',
+  'tools/lib/**',
+  'www/tools/lib/**',
+] as const;
+
 async function runCoverage(crashRetries: number): Promise<string> {
   const coverageDir = '.coverage-check';
   try {
     const { crashes } = await runTestSuiteWithCrashRetry(
       async () => {
-        // A crashed attempt can leave partial coverage profiles behind that
-        // `deno coverage` would choke on; each attempt starts from a clean dir.
+        // A crashed attempt can leave partial coverage profiles behind; each
+        // attempt starts from a clean dir.
         await rm(coverageDir, { recursive: true }).catch(() => undefined);
-        // The test-runner host stays deno until the B3 runner migration;
-        // --no-check because module type checking is the per-package tsc gate.
-        return await commandStatus('deno', {
+        // The vitest node projects carry the denominator. element-browser
+        // (browser mode) is gated separately (packages/element#browser:gate);
+        // tests/fixtures fixtures run their own gates and none of the
+        // excluded surfaces contributes to the production-source denominator.
+        const projectArgs = COVERAGE_PROJECTS.flatMap((project) => ['--project', project]);
+        const includeArgs = COVERAGE_INCLUDES.map((include) => `--coverage.include=${include}`);
+        return await commandStatus('pnpm', {
           args: [
-            'test',
-            '--no-lock',
-            '--no-check',
-            `--coverage=${coverageDir}`,
-            // element's WTR browser suite is gated separately
-            // (packages/element#browser:gate). apps/saas/ and
-            // tests/fixtures/ are independent projects with their own
-            // deno.json boundaries — the root sweep must not resolve them
-            // under the root import map. Each runs under its own config
-            // via its own gate (tests/fixtures/<name>#gate,
-            // tests/e2e/starter-smoke#gate); none contributes to the
-            // root coverage denominator.
-            '--ignore=packages/element/__wtr__,examples,fixtures,tests/fixtures',
-            '--allow-read',
-            '--allow-write',
-            '--allow-env',
-            '--allow-net',
-            '--allow-run',
-            '--allow-ffi',
-            '--allow-sys',
+            'exec',
+            'vitest',
+            'run',
+            ...projectArgs,
+            '--coverage',
+            '--coverage.provider=v8',
+            '--coverage.reporter=lcov',
+            `--coverage.reportsDirectory=${coverageDir}`,
+            ...includeArgs,
           ],
           stdout: 'inherit',
           stderr: 'inherit',
@@ -132,7 +151,7 @@ async function runCoverage(crashRetries: number): Promise<string> {
         maxAttempts: crashRetries + 1,
         onCrash: ({ attempt, maxAttempts, code }) => {
           console.error(
-            `\n[check-coverage] NATIVE CRASH: deno test terminated by ${describeNativeCrash(
+            `\n[check-coverage] NATIVE CRASH: the coverage run terminated by ${describeNativeCrash(
               code,
             )} ` +
               `on attempt ${attempt}/${maxAttempts} with no test assertion failure (#1278). ` +
@@ -149,13 +168,7 @@ async function runCoverage(crashRetries: number): Promise<string> {
       );
     }
 
-    const report = await commandOutput('deno', {
-      args: ['coverage', coverageDir, '--lcov'],
-      stdout: 'piped',
-      stderr: 'inherit',
-    });
-    if (!report.success) throw new Error(`coverage report failed with code ${report.code}`);
-    return new TextDecoder().decode(report.stdout);
+    return await readFile(join(coverageDir, 'lcov.info'), 'utf8');
   } finally {
     await rm(coverageDir, { recursive: true }).catch(() => undefined);
   }
@@ -176,7 +189,7 @@ async function main(): Promise<void> {
   const profiledFiles = lcovFilePaths(lcov);
 
   // Threshold baselines, measured with the full-denominator logic below on a
-  // local `deno task --cwd tools/repo test:coverage:check` run. Each scope
+  // local `pnpm --dir tools/repo run test:coverage:check` run. Each scope
   // lists its last measured values, their date, and its thresholds; the three
   // must agree. Threshold changes must be explicit in the changing PR — state
   // the old value, the new value, and why — and must never be lowered silently
@@ -241,7 +254,7 @@ async function main(): Promise<void> {
   for (const scope of scopes) {
     console.log(`\nCoverage scope: ${scope.label}`);
     // Full denominator: every in-scope source file counts, even when no test
-    // loaded it (Deno only profiles imported modules). Unloaded files are
+    // loaded it (the coverage provider only profiles imported modules). Unloaded files are
     // folded in as fully uncovered via an AST estimate of their coverable
     // elements.
     const treeFiles = await enumerateCoverageFiles(process.cwd(), scope.include);

@@ -3,10 +3,10 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
-  "//": "The qualify harness runs on the Deno host (Deno.* in qualify.ts/snapshot-prototype.ts); scripts keep `deno run` until the qualify-harness port.",
+  "//": "The qualify harness runs on the node host (owner ruling 2026-10-03): scripts enter through node with type stripping.",
   "scripts": {
-    "smoke": "deno run --no-lock --allow-read --allow-write --allow-run --allow-env --allow-net --allow-sys qualify.ts",
-    "snapshot:prototype": "deno run --no-lock --allow-read --allow-write --allow-run --allow-env --allow-net --allow-sys snapshot-prototype.ts"
+    "smoke": "node qualify.ts",
+    "snapshot:prototype": "node snapshot-prototype.ts"
   },
   "dependencies": {
     "@openelement/element": "workspace:*"

@@ -13,9 +13,9 @@
  * POST allowed, and the env opt-out allowing cross-site POSTs.
  *
  * Prerequisites:
- *   deno task fixture:router-request-time:build
+ *   pnpm --dir tests/fixtures/router-request-time run build
  *
- * Run: deno task fixture:router-request-time:e2e
+ * Run: pnpm --dir tests/fixtures/router-request-time run e2e
  */
 import { expect, test } from '@playwright/test';
 import { type ChildProcess, spawn } from 'node:child_process';
@@ -41,28 +41,11 @@ function startFixtureServer(port: number, disableCsrf: boolean): ChildProcess {
   } else {
     delete env.OPEN_ELEMENT_DISABLE_CSRF;
   }
-  const child = spawn(
-    'deno',
-    [
-      'run',
-      '--no-lock',
-      '--no-check',
-      '--allow-read',
-      '--allow-write',
-      '--allow-env',
-      '--allow-net',
-      '--allow-run',
-      '--allow-sys',
-      '--allow-ffi',
-      '--no-prompt',
-      'server.ts',
-      '--port',
-      String(port),
-      '--dir',
-      '../dist',
-    ],
-    { cwd: E2E_DIR, env, stdio: 'ignore' },
-  );
+  const child = spawn(process.execPath, ['server.ts', '--port', String(port), '--dir', '../dist'], {
+    cwd: E2E_DIR,
+    env,
+    stdio: 'ignore',
+  });
   children.push(child);
   return child;
 }
@@ -85,7 +68,7 @@ test.describe('CSRF same-origin floor (#811)', () => {
   test.beforeAll(async () => {
     test.skip(
       !existsSync(SERVER_ENTRY),
-      'fixture dist missing — run deno task fixture:router-request-time:build first',
+      'fixture dist missing — run pnpm --dir tests/fixtures/router-request-time run build first',
     );
     startFixtureServer(CSRF_ON_PORT, false);
     startFixtureServer(CSRF_OFF_PORT, true);

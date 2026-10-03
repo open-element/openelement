@@ -1,4 +1,4 @@
-#!/usr/bin/env -S deno run --allow-read --allow-write --allow-run --allow-env --allow-net
+#!/usr/bin/env node
 /**
  * Published-consumer qualification, release-gate verdicts, and post-publish
  * consumer smoke — one tool, two entry surfaces.
@@ -7,17 +7,14 @@
  *    support distribution from a clean temporary directory. The JSON report
  *    is deliberately portable: CI uploads it even if a platform-specific
  *    command fails, so adopters get the environment and the exact failed
- *    command rather than a truncated Actions log alone. Run it with the
- *    shebang-pinned scoped flags and --no-prompt (the CI invocation):
- *    `deno run --allow-read --allow-write --allow-run --allow-env --allow-net
- *    --deny-ffi --no-prompt tools/release/published-consumer-qualification.ts`
+ *    command rather than a truncated Actions log alone. CI enters with
+ *    `node tools/release/published-consumer-qualification.ts`.
  *
  * 2. Consumer smoke (`--smoke`): post-publish npm smoke test. Creates
  *    temporary consumer projects and verifies @openelement/element can be
- *    consumed from npm in Deno and Node. Also checks the exact-version
- *    starter, and on request the jsDelivr CDN browser-safe export and the
- *    Nitro build output. Same invocation rule: the scoped shebang flags with
- *    --no-prompt, never a broad-permission one-liner.
+ *    consumed from npm on Node (core imports and the router/vite build
+ *    entry). Also checks the exact-version starter, and on request the
+ *    jsDelivr CDN browser-safe export and the Nitro build output.
  *
  * This module also owns the canonical release-gate verdict contract (#1216,
  * A10.8; umbrella #1155; ADR-0151), formerly tools/gate-verdict.ts. A release
@@ -33,7 +30,7 @@
  */
 
 import { tmpdir } from 'node:os';
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { dirname, join } from '@std/path';
 import { formatError } from '@openelement/element';
 import { formatJson } from '@openelement/element/build-utils';
@@ -146,7 +143,7 @@ interface StepReport {
 interface QualificationReport {
   environment: Record<string, string>;
   mode: QualificationMode;
-  platform: { arch: string; deno: string; os: string };
+  platform: { arch: string; os: string };
   startedAt: string;
   steps: StepReport[];
   version: string;
@@ -189,7 +186,7 @@ async function qualificationMain(): Promise<void> {
       ),
     ),
     mode: options.mode,
-    platform: { arch: process.arch, deno: 'n/a (node-host report)', os: process.platform },
+    platform: { arch: process.arch, os: process.platform },
     startedAt: new Date().toISOString(),
     steps: [],
     version: options.version,
@@ -217,76 +214,60 @@ async function qualificationMain(): Promise<void> {
 
   try {
     if (options.mode === 'starter' || options.mode === 'all') {
+      // The create package exposes no bin: node consumers install it and run
+      // the packed cli.js entry directly (the documented Node consumer
+      // surface, same contract the starter-smoke setup exercises).
+      const createConsumer = join(root, 'create-consumer');
+      await mkdir(createConsumer);
+      await writeFile(
+        join(createConsumer, 'package.json'),
+        JSON.stringify({ private: true, type: 'module' }, null, 2),
+      );
+      await runStep(
+        'install the published create CLI',
+        'npm',
+        [
+          'install',
+          '--ignore-scripts',
+          '--no-audit',
+          '--no-fund',
+          `@openelement/create@${options.version}`,
+        ],
+        createConsumer,
+      );
+      const createCli = join(
+        createConsumer,
+        'node_modules',
+        '@openelement',
+        'create',
+        'src',
+        'cli.js',
+      );
       await runStep(
         'generate exact-version starter',
         process.execPath,
-        [
-          'run',
-          '--allow-read',
-          '--allow-write',
-          '--allow-env',
-          '--allow-net',
-          '--deny-ffi',
-          '--no-prompt',
-          '--minimum-dependency-age',
-          '0',
-          `npm:@openelement/create@${options.version}`,
-          'starter',
-        ],
+        [createCli, 'starter'],
         root,
       );
       const starter = join(root, 'starter');
+      const manifest = JSON.parse(await readFile(join(starter, 'package.json'), 'utf8')) as {
+        dependencies: Record<string, string>;
+      };
+      for (const pkg of ['router', 'element']) {
+        const actual = manifest.dependencies[`@openelement/${pkg}`];
+        if (actual !== options.version) {
+          throw new Error(
+            `starter dependency @openelement/${pkg}=${actual}, expected the published ${options.version}`,
+          );
+        }
+      }
+      await runStep('install starter dependencies', 'pnpm', ['install'], starter);
       for (const task of ['check', 'test', 'build']) {
-        await runStep(`starter deno task ${task}`, process.execPath, ['task', task], starter);
+        await runStep(`starter ${task}`, 'pnpm', ['run', task], starter);
       }
     }
 
     if (options.mode === 'runtime' || options.mode === 'all') {
-      const denoConsumer = join(root, 'deno-consumer');
-      await mkdir(denoConsumer);
-      await writeFile(
-        join(denoConsumer, 'deno.json'),
-        JSON.stringify(
-          {
-            imports: {
-              ...Object.fromEntries(
-                ['element', 'router'].map((pkg) => [
-                  `@openelement/${pkg}`,
-                  `npm:@openelement/${pkg}@${options.version}`,
-                ]),
-              ),
-              '@openelement/router/vite': `npm:@openelement/router@${options.version}/vite`,
-            },
-            minimumDependencyAge: 0,
-          },
-          null,
-          2,
-        ),
-      );
-      const publicSurfaceSource = [NODE_RUNTIME_SMOKE_SOURCE, VITE_SMOKE_SOURCE].join('\n');
-      const denoRuntimeSource = [
-        "import { OpenElement, signal } from '@openelement/element';",
-        "import { defineIslandConfig, definePage } from '@openelement/router';",
-        'for (const value of [OpenElement, signal, defineIslandConfig, definePage]) {',
-        "  if (typeof value !== 'function') throw new Error('expected published public function');",
-        '}',
-        "console.log('published Deno runtime imports passed');",
-      ].join('\n');
-      await writeFile(join(denoConsumer, 'smoke.ts'), publicSurfaceSource);
-      await writeFile(join(denoConsumer, 'runtime.ts'), denoRuntimeSource);
-      await runStep(
-        'Deno public runtime check',
-        process.execPath,
-        ['check', 'smoke.ts'],
-        denoConsumer,
-      );
-      await runStep(
-        'Deno public runtime execution',
-        process.execPath,
-        ['run', '--allow-env', 'runtime.ts'],
-        denoConsumer,
-      );
-
       const nodeConsumer = join(root, 'node-consumer');
       await mkdir(nodeConsumer);
       await writeFile(
@@ -304,6 +285,7 @@ async function qualificationMain(): Promise<void> {
         ),
       );
       await writeFile(join(nodeConsumer, 'smoke.mjs'), NODE_RUNTIME_SMOKE_SOURCE);
+      await writeFile(join(nodeConsumer, 'vite-entry.mjs'), VITE_SMOKE_SOURCE);
       await runStep(
         'install Node ESM public runtime dependencies',
         'npm',
@@ -311,6 +293,12 @@ async function qualificationMain(): Promise<void> {
         nodeConsumer,
       );
       await runStep('Node ESM public runtime execution', 'node', ['smoke.mjs'], nodeConsumer);
+      await runStep(
+        'Node ESM router/vite entry execution',
+        'node',
+        ['vite-entry.mjs'],
+        nodeConsumer,
+      );
     }
   } finally {
     await writeReport(options.reportPath, report);
@@ -357,11 +345,10 @@ async function readJson<T = unknown>(path: string | URL): Promise<T> {
   return JSON.parse(await readFile(path, 'utf8')) as T;
 }
 
-// Post-publish smoke surfaces. The plain-Node surface is the framework core:
-// `@openelement/router/vite` is Deno-toolchain surface (module top levels
-// assume the Deno global — see the Deno-only toolchain decision in ADR-0108),
-// so only the Deno consumer imports it. The Deno run proves the same
-// published tarballs.
+// Post-publish smoke surfaces. NODE_RUNTIME_SMOKE_SOURCE covers the plain-Node
+// framework core; VITE_SMOKE_SOURCE proves the `@openelement/router/vite`
+// build entry imports on the same node host (the packed consumers' build
+// cells drive it in-process, this smoke proves the bare-import path).
 export const NODE_RUNTIME_SMOKE_SOURCE = [
   "import { HYDRATION_STRATEGIES, OpenElement, renderDsd, signal } from '@openelement/element';",
   "import { defineIslandConfig, definePage } from '@openelement/router';",
@@ -393,34 +380,6 @@ async function run(
   };
 }
 
-const denoSource = `
-import {
-  computed,
-  escapeAttr,
-  escapeHtml,
-  HYDRATION_STRATEGIES,
-  isValidTagName,
-  OpenElement,
-  signal,
-} from '@openelement/element';
-
-// The 0.44 public surface: signal reactivity, HTML escaping, tag-name
-// predicates, the hydration strategy list, and the compiled OpenElement base
-// class (class reference only — instantiating it needs a DOM).
-const count = signal(0);
-const doubled = computed(() => count.value * 2);
-count.value = 21;
-
-console.log('doubled:', doubled.value);
-console.log('escapeHtml:', escapeHtml('<b>&"\\'"/></b>'));
-console.log('escapeAttr:', escapeAttr('a"b'));
-console.log('isValidTagName:', isValidTagName('my-counter'), isValidTagName('invalid'));
-console.log('hydration strategies:', HYDRATION_STRATEGIES.join(','));
-console.log('OpenElement is a class:', typeof OpenElement === 'function');
-if (doubled.value !== 42) throw new Error('signal reactivity broken');
-console.log('Smoke test passed!');
-`.trim();
-
 const nodeSource = `
 import {
   computed,
@@ -446,93 +405,23 @@ if (doubled.value !== 42) throw new Error('signal reactivity broken');
 console.log('Smoke test passed!');
 `.trim();
 
-async function denoNpmSmoke(version: string, projectRoot: string, local: boolean): Promise<void> {
-  const tmpDir = local
-    ? await mkdtemp(join(projectRoot, '.openelement-smoke-deno-'))
-    : await mkdtemp(join(tmpdir(), 'openelement-smoke-deno-'));
-  console.log(`\n[Deno npm consumer] ${tmpDir}`);
-
-  try {
-    await writeFile(`${tmpDir}/smoke.ts`, denoSource);
-
-    if (local) {
-      // Run from the workspace root so workspace packages resolve.
-      // Sloppy imports are required because core sources use .js extension imports.
-      console.log('  deno check smoke.ts (workspace source)');
-      const check = await run(
-        'deno',
-        ['check', '--unstable-sloppy-imports', `${tmpDir}/smoke.ts`],
-        projectRoot,
-      );
-      if (!check.success) {
-        console.error(`  check failed:\n${check.output}`);
-        process.exit(1);
-      }
-
-      console.log('  deno run smoke.ts (workspace source)');
-      const exec = await run(
-        'deno',
-        ['run', '--unstable-sloppy-imports', `${tmpDir}/smoke.ts`],
-        projectRoot,
-      );
-      if (!exec.success) {
-        console.error(`  run failed:\n${exec.output}`);
-        process.exit(1);
-      }
-      console.log(`  ok: ${exec.output.trim().split('\n').slice(-1)[0]}`);
-      return;
-    }
-
-    await writeFile(
-      `${tmpDir}/deno.json`,
-      JSON.stringify(
-        { imports: { '@openelement/element': `npm:@openelement/element@^${version}` } },
-        null,
-        2,
-      ),
-    );
-
-    console.log('  deno check smoke.ts');
-    const check = await run('deno', ['check', '--minimum-dependency-age', '0', 'smoke.ts'], tmpDir);
-    if (!check.success) {
-      console.error(`  check failed:\n${check.output}`);
-      process.exit(1);
-    }
-
-    console.log('  deno run smoke.ts');
-    const exec = await run('deno', ['run', '--minimum-dependency-age', '0', 'smoke.ts'], tmpDir);
-    if (!exec.success) {
-      console.error(`  run failed:\n${exec.output}`);
-      process.exit(1);
-    }
-    console.log(`  ok: ${exec.output.trim().split('\n').slice(-1)[0]}`);
-  } finally {
-    try {
-      await rm(tmpDir, { recursive: true });
-    } catch {
-      /* ok */
-    }
-  }
-}
-
 async function nodeEsmSmoke(version: string, projectRoot: string, local: boolean): Promise<void> {
   const tmpDir = await mkdtemp(join(tmpdir(), 'openelement-smoke-node-'));
   console.log(`\n[Node ESM consumer] ${tmpDir}`);
 
   try {
     if (local) {
-      const workspacePackages = ['element'];
-      for (const pkg of workspacePackages) {
-        console.log(`  deno pack packages/${pkg}`);
-        const pack = await run(
-          'deno',
-          ['pack', '--allow-dirty', '-o', `${tmpDir}/openelement-${pkg}.tgz`],
-          `${projectRoot}/packages/${pkg}`,
-        );
-        if (!pack.success) {
-          console.error(`  pack failed:\n${pack.output}`);
-          process.exit(1);
-        }
+      // The release toolchain packs the workspace (one pack produces every
+      // retained tarball next to the package sources).
+      console.log('  pnpm --dir tools/release run pack:dry-run');
+      const pack = await run(
+        'pnpm',
+        ['--dir', 'tools/release', 'run', 'pack:dry-run'],
+        projectRoot,
+      );
+      if (!pack.success) {
+        console.error(`  pack failed:\n${pack.output}`);
+        process.exit(1);
       }
     }
 
@@ -548,6 +437,17 @@ async function nodeEsmSmoke(version: string, projectRoot: string, local: boolean
       `${tmpDir}/package.json`,
       JSON.stringify({ type: 'module', dependencies: localDeps }, null, 2),
     );
+    if (local) {
+      // The pack:dry-run artifact lands next to the package sources; the
+      // consumer's file: dep expects it beside the generated package.json.
+      const artifact = join(
+        projectRoot,
+        'packages',
+        'element',
+        `openelement-element-${version}.tgz`,
+      );
+      await copyFile(artifact, `${tmpDir}/openelement-element.tgz`);
+    }
     await writeFile(`${tmpDir}/smoke.mjs`, nodeSource);
 
     console.log('  npm install');
@@ -577,38 +477,42 @@ async function exactVersionStarterSmoke(version: string): Promise<void> {
   const tmpDir = await mkdtemp(join(tmpdir(), 'openelement-smoke-starter-'));
   console.log(`\n[Exact-version starter] ${tmpDir}`);
   try {
-    const create = await run(
-      'deno',
-      [
-        'run',
-        '--allow-read',
-        '--allow-write',
-        '--allow-env',
-        '--allow-net',
-        '--deny-ffi',
-        '--no-prompt',
-        '--minimum-dependency-age',
-        '0',
-        `npm:@openelement/create@${version}`,
-        'starter',
-      ],
-      tmpDir,
+    // The create package exposes no bin: install it, then run the packed
+    // cli.js entry with node (the documented Node consumer surface).
+    const createConsumer = join(tmpDir, 'create-consumer');
+    await mkdir(createConsumer);
+    await writeFile(
+      join(createConsumer, 'package.json'),
+      JSON.stringify({ private: true, type: 'module' }, null, 2),
     );
+    const install = await run(
+      'npm',
+      ['install', '--ignore-scripts', '--no-audit', '--no-fund', `@openelement/create@${version}`],
+      createConsumer,
+    );
+    if (!install.success) throw new Error(`create install failed:\n${install.output}`);
+    const createCli = join(
+      createConsumer,
+      'node_modules',
+      '@openelement',
+      'create',
+      'src',
+      'cli.js',
+    );
+    const create = await run(process.execPath, [createCli, 'starter'], tmpDir);
     if (!create.success) throw new Error(`starter generation failed:\n${create.output}`);
-    const config = (await readJson(`${tmpDir}/starter/deno.json`)) as {
-      imports: Record<string, string>;
+    const manifest = (await readJson(`${tmpDir}/starter/package.json`)) as {
+      dependencies: Record<string, string>;
     };
     for (const pkg of ['router', 'element']) {
-      const expected = `npm:@openelement/${pkg}@${version}`;
-      if (config.imports[`@openelement/${pkg}`] !== expected) {
-        throw new Error(
-          `starter import @openelement/${pkg}=${
-            config.imports[`@openelement/${pkg}`]
-          }, expected=${expected}`,
-        );
+      const expected = version;
+      const actual = manifest.dependencies[`@openelement/${pkg}`];
+      if (actual !== expected) {
+        throw new Error(`starter dependency @openelement/${pkg}=${actual}, expected=${expected}`);
       }
     }
-    const check = await run('deno', ['task', 'check'], `${tmpDir}/starter`);
+    await run('pnpm', ['install'], `${tmpDir}/starter`);
+    const check = await run('pnpm', ['run', 'check'], `${tmpDir}/starter`);
     if (!check.success) throw new Error(`starter check failed:\n${check.output}`);
     console.log('  ok: generated package graph and typecheck use the released version');
   } finally {
@@ -741,11 +645,11 @@ async function nitroSmoke(): Promise<void> {
   console.log('\n[Nitro output smoke]');
 
   for (const target of ['node', 'workers']) {
-    console.log(`  deno task --cwd tests/fixtures/router-nitro proof:${target}`);
-    const result = await runWithOutput('deno', [
-      'task',
-      '--cwd',
+    console.log(`  pnpm --dir tests/fixtures/router-nitro run proof:${target}`);
+    const result = await runWithOutput('pnpm', [
+      '--dir',
       'tests/fixtures/router-nitro',
+      'run',
       `proof:${target}`,
     ]);
     const output = result.stdout + result.stderr;
@@ -787,7 +691,6 @@ async function consumerSmokeMain(args: readonly string[]): Promise<void> {
     console.log(`  npm availability: ${availability.reason}`);
   }
 
-  await denoNpmSmoke(options.version, projectRoot, options.local);
   await nodeEsmSmoke(options.version, projectRoot, options.local);
   if (!options.local) await exactVersionStarterSmoke(options.version);
 

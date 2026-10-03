@@ -55,14 +55,11 @@
  * kernel legitimately carries diagnostic strings naming the compiler, and
  * the client entry bundles the router's browser runtimes by design.)
  *
- * Playwright note: playwright-core requires --allow-sys at import time
- * (osRelease), which the harness's documented 5-flag permission set does not
- * grant. The browser cell therefore runs as a child process (a scoped
- * permission set on a generated probe script, matching the scoped invocation
- * of consumer-packaged-element and the fixture e2e tasks); the parent harness
- * itself stays on --allow-read/write/run/env/net. Probe children carry
- * --deny-ffi --no-prompt: browser automation needs no native binding, so a
- * permission request fails closed instead of prompting.
+ * Playwright note: the browser cell runs as a child process on a generated
+ * probe script (matching the invocation of consumer-packaged-element and the
+ * fixture e2e tasks); the parent harness owns the server lifecycle. Probe
+ * children run on the plain node host — browser automation needs no special
+ * host permissions.
  *
  * Every cell prints a PASS/FAIL line so the #1339 §11 support matrix can be
  * filled from the log; any FAIL fails the harness run.
@@ -75,7 +72,7 @@ import { tmpdir } from 'node:os';
 import { commandOutput } from '../repo/node-command.ts';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
-import { existsSync } from '@std/fs';
+import { existsSync } from '../lib/std-fs.ts';
 import { dirname, join, resolve } from '@std/path';
 import { formatJson } from '@openelement/element/build-utils';
 import { formatError } from '@openelement/element';
@@ -458,45 +455,19 @@ async function attempt(fn: () => Promise<string | undefined>): Promise<PackedApp
 
 // ─── Browser continuation probe (Playwright child process) ──────────────────
 //
-// playwright-core calls os.release() at import time, which needs --allow-sys —
-// outside the harness's documented permission set. The probe therefore runs as
-// a scoped-permission child resolving @playwright/test through the consumer's
-// own devDependency (node_modules resolution walks up from the probe file
-// inside the temp consumer — the same contract the packed-starter browser
-// matrix documents; the retired repo deno.json import map no longer exists
-// post-B2). The script is generated into the temp consumer and removed with
-// it. Args: <baseUrl> <native|lit> <chromium|firefox|webkit>. One browser per
-// invocation so every renderer x browser pair is an individually identifiable
-// PASS/FAIL unit in the gate output. Probe children carry --deny-ffi
-// --no-prompt (browser automation needs no native binding) plus --no-lock
-// --no-check (no deno.lock churn in the scratch consumer, no type-checking of
-// generated probe code).
+// The probe runs as a plain node child resolving @playwright/test through the
+// consumer's own devDependency (node_modules resolution walks up from the
+// probe file inside the temp consumer — the same contract the packed-starter
+// browser matrix documents). The script is generated into the temp consumer
+// and removed with it. Args: <baseUrl> <native|lit> <chromium|firefox|webkit>.
+// One browser per invocation so every renderer x browser pair is an
+// individually identifiable PASS/FAIL unit in the gate output.
 
 const PACKED_BROWSERS = ['chromium', 'firefox', 'webkit'] as const;
 
-/**
- * Scoped permission envelope for generated Playwright probe children:
- * browser automation needs no native binding, so FFI is denied and prompts
- * are off — a permission request fails closed instead of hanging on input.
- */
-export const PACKED_PROBE_PERMISSIONS = [
-  '--allow-read',
-  '--allow-write',
-  '--allow-env',
-  '--allow-net',
-  '--allow-run',
-  '--allow-sys',
-  // Playwright's Node-side polyfills assign Object.prototype.__proto__,
-  // which Deno disables by default (the probe hangs in waitForFunction
-  // without this; required for every Playwright-under-Deno probe).
-  '--unsafe-proto',
-  '--deny-ffi',
-  '--no-prompt',
-] as const;
-
 const PW_PROBE_SCRIPT = `import { chromium, firefox, webkit } from '@playwright/test';
 
-const [baseUrl, renderer, browserName] = Deno.args;
+const [baseUrl, renderer, browserName] = process.argv.slice(2);
 if (!baseUrl || (renderer !== 'native' && renderer !== 'lit')) {
   throw new Error('usage: pw-continuation-probe.ts <baseUrl> <native|lit> <browser>');
 }
@@ -598,7 +569,7 @@ const PW_DEV_WARMUP_SCRIPT = `import { chromium } from '@playwright/test';
 // subsequent probe then runs against steady-state dev serving.
 // Args: <baseUrl> <native|lit>.
 
-const [baseUrl, renderer] = Deno.args;
+const [baseUrl, renderer] = process.argv.slice(2);
 if (!baseUrl || (renderer !== 'native' && renderer !== 'lit')) {
   throw new Error('usage: pw-dev-warmup-probe.ts <baseUrl> <native|lit>');
 }
@@ -795,16 +766,7 @@ async function runBrowserContinuationProbe(
   for (const browserName of PACKED_BROWSERS) {
     const probe = await run(
       process.execPath,
-      [
-        'run',
-        '--no-lock',
-        '--no-check',
-        ...PACKED_PROBE_PERMISSIONS,
-        join(tmp, 'pw-continuation-probe.ts'),
-        baseUrl,
-        leg,
-        browserName,
-      ],
+      [join(tmp, 'pw-continuation-probe.ts'), baseUrl, leg, browserName],
       tmp,
       BROWSER_TIMEOUT_MS,
     );
@@ -834,15 +796,7 @@ async function runBrowserContinuationProbe(
 async function runDevWarmupProbe(tmp: string, baseUrl: string, leg: PackedAppRenderer) {
   const probe = await run(
     process.execPath,
-    [
-      'run',
-      '--no-lock',
-      '--no-check',
-      ...PACKED_PROBE_PERMISSIONS,
-      join(tmp, 'pw-dev-warmup-probe.ts'),
-      baseUrl,
-      leg,
-    ],
+    [join(tmp, 'pw-dev-warmup-probe.ts'), baseUrl, leg],
     tmp,
     BROWSER_TIMEOUT_MS,
   );

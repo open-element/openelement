@@ -6,10 +6,11 @@
  * adapter static-serve module (#732).
  *
  * Usage:
- *   deno run --allow-read --allow-env --allow-net server.ts --port 4181 --dir ../dist
+ *   node server.ts --port 4181 --dir ../dist
  */
 
 import { serve } from '@hono/node-server';
+import process from 'node:process';
 import { join, resolve } from 'node:path';
 import {
   dispatchRequest,
@@ -17,12 +18,13 @@ import {
 } from '../../../../packages/router/src/vite/internal/static-serve.ts';
 
 const args: Record<string, string> = {};
-for (let i = 0; i < Deno.args.length; i += 2) {
-  if (Deno.args[i].startsWith('--')) args[Deno.args[i].slice(2)] = Deno.args[i + 1] ?? '';
+const cliArgs = process.argv.slice(2);
+for (let i = 0; i < cliArgs.length; i += 2) {
+  if (cliArgs[i].startsWith('--')) args[cliArgs[i].slice(2)] = cliArgs[i + 1] ?? '';
 }
 
 const PORT = Number(args.port ?? '4181');
-const ROOT = resolve(Deno.cwd(), args.dir ?? '../dist');
+const ROOT = resolve(process.cwd(), args.dir ?? '../dist');
 
 const serverEntry = await importRequestTimeServer(join(ROOT, 'server/index.js'));
 
@@ -63,7 +65,7 @@ serve({
     return dispatchRequest(request, {
       distDir: ROOT,
       serverMod: serverEntry,
-      env: Deno.env.toObject(),
+      env: process.env,
       onHandlerError: (error) => console.error('[app-flow-lit server] handler error:', error),
     });
   },

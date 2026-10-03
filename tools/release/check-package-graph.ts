@@ -44,7 +44,7 @@ import {
   releasePublishOrder,
   topologicalSort,
 } from '../lib/package-graph.ts';
-import { walk, walkSync } from '@std/fs/walk';
+import { walk, walkSync } from '../lib/std-fs.ts';
 import { basename, dirname, join } from '@std/path';
 import { formatError } from '@openelement/element';
 

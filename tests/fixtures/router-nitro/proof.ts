@@ -7,11 +7,13 @@
  * Nitro cache route rule. The fixture consumes workspace SOURCE artifacts
  * (packages/router tooling invoked from this repository checkout).
  *
- * Usage: deno run --allow-read --allow-write --allow-run --allow-env
- *   --allow-net tests/fixtures/router-nitro/proof.ts <node|workers>
+ * Usage: node tests/fixtures/router-nitro/proof.ts <node|workers>
  */
-import { walkSync } from '@std/fs/walk';
-import { exists } from '@std/fs';
+import { readFile, realpath, rename, rm, stat } from 'node:fs/promises';
+import { createServer } from 'node:net';
+import process from 'node:process';
+import { spawn } from 'node:child_process';
+import { walkSync } from '../../../tools/lib/std-fs.ts';
 import { assertCompatibilityDate } from '../../../tools/lib/compatibility-date.ts';
 import { runWithOutput } from '../../../tools/lib/process.ts';
 import {
@@ -20,14 +22,14 @@ import {
 } from '../../../tools/release/nitro-compatibility.ts';
 
 async function readJson<T = unknown>(path: string | URL): Promise<T> {
-  return JSON.parse(await Deno.readTextFile(path)) as T;
+  return JSON.parse(await readFile(path, 'utf8')) as T;
 }
 
-const preset = Deno.args[0];
+const preset = process.argv[2];
 
 if (preset !== 'node' && preset !== 'workers') {
-  console.error('Usage: deno run tests/fixtures/router-nitro/proof.ts <node|workers>');
-  Deno.exit(2);
+  console.error('Usage: node tests/fixtures/router-nitro/proof.ts <node|workers>');
+  process.exit(2);
 }
 
 const fixture = new URL('./', import.meta.url);
@@ -36,9 +38,7 @@ const output = new URL(`${outputName}/`, fixture);
 const nitroPreset = preset === 'workers' ? 'cloudflare_module' : 'node-server';
 
 async function removeIfExists(url: URL): Promise<void> {
-  if (await exists(url)) {
-    await Deno.remove(url, { recursive: true });
-  }
+  await rm(url, { recursive: true, force: true });
 }
 
 async function run(command: string[], env: Record<string, string> = {}): Promise<string> {
@@ -46,29 +46,39 @@ async function run(command: string[], env: Record<string, string> = {}): Promise
   if (!result.success) {
     console.error(result.stdout);
     console.error(result.stderr);
-    Deno.exit(result.code);
+    process.exit(result.code);
   }
   return `${result.stdout}\n${result.stderr}`;
+}
+
+async function exists(url: URL): Promise<boolean> {
+  try {
+    await stat(url);
+    return true;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false;
+    throw error;
+  }
 }
 
 async function assertFile(url: URL, label: string): Promise<void> {
   if (!(await exists(url))) {
     console.error(`${label} missing: ${url.pathname}`);
-    Deno.exit(1);
+    process.exit(1);
   }
 }
 
 function assertIncludes(text: string, expected: string, label: string): void {
   if (!text.includes(expected)) {
     console.error(`${label} missing expected text: ${expected}`);
-    Deno.exit(1);
+    process.exit(1);
   }
 }
 
 function assertNotIncludes(text: string, unexpected: string, label: string): void {
   if (text.includes(unexpected)) {
     console.error(`${label} included unexpected text: ${unexpected}`);
-    Deno.exit(1);
+    process.exit(1);
   }
 }
 
@@ -76,7 +86,7 @@ async function readTextFiles(dir: URL, suffix: string): Promise<string> {
   let content = '';
   for (const entry of walkSync(dir.pathname, { includeDirs: false })) {
     if (!entry.name.endsWith(suffix)) continue;
-    content += await Deno.readTextFile(entry.path);
+    content += await readFile(entry.path, 'utf8');
   }
   return content;
 }
@@ -101,7 +111,7 @@ async function assertRuntimeRoutes(fetchRuntime: FetchLike): Promise<void> {
     payload.env !== 'nitro'
   ) {
     console.error(JSON.stringify({ status: proof.status, payload }, null, 2));
-    Deno.exit(1);
+    process.exit(1);
   }
 
   const staticHtml = await fetchRuntimeText(fetchRuntime, '/static', 200);
@@ -145,7 +155,7 @@ async function assertRuntimeRoutes(fetchRuntime: FetchLike): Promise<void> {
         2,
       ),
     );
-    Deno.exit(1);
+    process.exit(1);
   }
 
   const notFoundHtml = await fetchRuntimeText(fetchRuntime, '/not-found', 404);
@@ -187,7 +197,7 @@ async function assertRuntimeRoutes(fetchRuntime: FetchLike): Promise<void> {
         2,
       ),
     );
-    Deno.exit(1);
+    process.exit(1);
   }
 }
 
@@ -200,16 +210,22 @@ async function fetchRuntimeText(
   const text = await response.text();
   if (response.status !== expectedStatus) {
     console.error(JSON.stringify({ path, expectedStatus, status: response.status, text }, null, 2));
-    Deno.exit(1);
+    process.exit(1);
   }
   return text;
 }
 
 async function smokeNode(serverEntry: URL): Promise<void> {
   for (let attempt = 1; attempt <= 3; attempt++) {
-    const listener = Deno.listen({ hostname: '127.0.0.1', port: 0 });
-    const port = (listener.addr as Deno.NetAddr).port;
-    listener.close();
+    const port = await new Promise<number>((resolve, reject) => {
+      const probe = createServer();
+      probe.once('listening', () => {
+        const address = probe.address() as { port: number };
+        probe.close(() => resolve(address.port));
+      });
+      probe.once('error', reject);
+      probe.listen({ port: 0, host: '127.0.0.1' });
+    });
     if (await smokeNodeAtPort(serverEntry, port)) return;
   }
   throw new Error('node smoke failed after 3 dynamic-port attempts');
@@ -217,15 +233,10 @@ async function smokeNode(serverEntry: URL): Promise<void> {
 
 async function smokeNodeAtPort(serverEntry: URL, port: number): Promise<boolean> {
   const baseUrl = `http://127.0.0.1:${port}`;
-  const server = new Deno.Command('node', {
-    args: [serverEntry.pathname],
-    env: {
-      PORT: String(port),
-      HOST: '127.0.0.1',
-    },
-    stdout: 'null',
-    stderr: 'null',
-  }).spawn();
+  const server = spawn(process.execPath, [serverEntry.pathname], {
+    env: { ...process.env, PORT: String(port), HOST: '127.0.0.1' },
+    stdio: 'ignore',
+  });
 
   try {
     let response: Response | undefined;
@@ -246,7 +257,7 @@ async function smokeNodeAtPort(serverEntry: URL, port: number): Promise<boolean>
       console.error(
         JSON.stringify({ status: response.status, body: await response.text() }, null, 2),
       );
-      Deno.exit(1);
+      process.exit(1);
     }
 
     await assertRuntimeRoutes((request) => {
@@ -264,7 +275,7 @@ async function smokeNodeAtPort(serverEntry: URL, port: number): Promise<boolean>
     } catch {
       // The process may have already exited after losing a port race.
     }
-    await server.status.catch(() => undefined);
+    await new Promise<void>((resolve) => server.once('exit', () => resolve()));
   }
 }
 
@@ -273,7 +284,7 @@ async function assertPublicAsset(baseUrl: string, path: string, marker: string):
   const text = await asset.text();
   if (asset.status !== 200 || !text.includes(marker)) {
     console.error(JSON.stringify({ path, status: asset.status, text }, null, 2));
-    Deno.exit(1);
+    process.exit(1);
   }
 }
 
@@ -304,7 +315,7 @@ async function smokeWorkers(serverEntry: URL, publicDir: URL): Promise<void> {
     console.error(
       'Cloudflare Workers smoke failed: generated module does not export default.fetch',
     );
-    Deno.exit(1);
+    process.exit(1);
   }
 
   const env: CloudflareWorkerEnv = {
@@ -341,13 +352,13 @@ async function smokeWorkers(serverEntry: URL, publicDir: URL): Promise<void> {
 async function fetchPublicAsset(publicDir: URL, request: Request): Promise<Response> {
   const pathname = new URL(request.url).pathname;
   const fileUrl = new URL(`.${pathname}`, publicDir);
-  const rootPath = await Deno.realPath(publicDir);
-  const filePath = await Deno.realPath(fileUrl).catch(() => '');
+  const rootPath = await realpath(publicDir);
+  const filePath = await realpath(fileUrl).catch(() => '');
   if (!filePath.startsWith(rootPath)) {
     return new Response('Not Found', { status: 404 });
   }
   try {
-    return new Response(await Deno.readFile(fileUrl), { status: 200 });
+    return new Response(await readFile(fileUrl), { status: 200 });
   } catch {
     return new Response('Not Found', { status: 404 });
   }
@@ -362,7 +373,7 @@ async function assertRuntimePublicAsset(
   const text = await asset.text();
   if (asset.status !== 200 || !text.includes(marker)) {
     console.error(JSON.stringify({ path, status: asset.status, text }, null, 2));
-    Deno.exit(1);
+    process.exit(1);
   }
 }
 
@@ -370,25 +381,16 @@ assertCompatibilityDate(NITRO_COMPATIBILITY_DATE);
 await removeIfExists(output);
 await removeIfExists(new URL('.output/', fixture));
 const buildLog = await run([
-  'deno',
-  'run',
-  '--node-modules-dir=auto',
-  '--allow-read',
-  '--allow-write',
-  '--allow-env',
-  '--allow-net',
-  '--allow-run',
-  '--allow-sys',
-  '--allow-ffi',
-  '--no-prompt',
-  `npm:nitro@${NITRO_VERSION}`,
+  'npx',
+  '--yes',
+  `nitro@${NITRO_VERSION}`,
   'build',
   '--dir',
   fixture.pathname,
   '--preset',
   nitroPreset,
 ]);
-await Deno.rename(new URL('.output/', fixture), output);
+await rename(new URL('.output/', fixture), output);
 assertNotIncludes(buildLog, 'Node.js compatibility is not enabled', 'Nitro build log');
 const serializationWarning =
   'Runtime config option `nitro.routeRules./cached.cache` may not be able to be serialized.';
@@ -410,7 +412,7 @@ const expectedPreset = preset === 'workers' ? 'cloudflare-module' : 'node-server
 
 if (manifest.preset !== expectedPreset) {
   console.error(JSON.stringify({ expectedPreset, manifest }, null, 2));
-  Deno.exit(1);
+  process.exit(1);
 }
 
 const serverEntry = new URL(manifest.serverEntry || 'server/index.mjs', output);
@@ -439,7 +441,7 @@ if (preset === 'node') {
 } else {
   if (manifest.config?.cloudflare?.nodeCompat !== true) {
     console.error('Cloudflare Workers output did not preserve nodeCompat=true');
-    Deno.exit(1);
+    process.exit(1);
   }
   await smokeWorkers(serverEntry, new URL(`${manifest.publicDir || 'public'}/`, output));
 }
@@ -455,7 +457,7 @@ function assertNitroCacheRouteRule(serverCode: string): void {
   ] as const) {
     if (!pattern.test(serverCode)) {
       console.error(`Nitro cache route rule missing ${label}: ${pattern}`);
-      Deno.exit(1);
+      process.exit(1);
     }
   }
 }

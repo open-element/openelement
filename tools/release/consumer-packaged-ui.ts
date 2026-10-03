@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { commandOutput } from '../repo/node-command.ts';
 import { mkdtemp, realpath, rm } from 'node:fs/promises';
 import { readFileSync, statSync, writeFileSync } from 'node:fs';
-import { existsSync } from '@std/fs';
+import { existsSync } from '../lib/std-fs.ts';
 import { join, resolve } from '@std/path';
 import { formatJson } from '@openelement/element/build-utils';
 import ts from 'typescript';
@@ -60,7 +60,7 @@ const elementTarball = join(
 for (const tarball of [uiTarball, elementTarball]) {
   if (!existsSync(tarball)) {
     throw new Error(
-      `Missing packed release artifact: ${tarball} (run \`deno task pack:dry-run\` first)`,
+      `Missing packed release artifact: ${tarball} (run \`pnpm --dir tools/release run pack:dry-run\` first)`,
     );
   }
 }

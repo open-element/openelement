@@ -9,9 +9,9 @@
  * own CSP.
  *
  * Prerequisites:
- *   deno task build   (fixture-local)
+ *   pnpm run build     (fixture-local)
  *
- * Run: deno task e2e -- csp-nonce
+ * Run: pnpm run e2e -- csp-nonce
  */
 import { expect, test } from '@playwright/test';
 

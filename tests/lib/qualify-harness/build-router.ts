@@ -2,12 +2,12 @@
  * Router build wiring for the qualify harnesses (#1472).
  *
  * All three consumers build their temporary app with the in-repo Router
- * build CLI; this module owns the task string, the CLI path arithmetic, the
- * build run, and the generated-artifact lookups (server entry location).
+ * build CLI; this module owns the build-script string, the CLI path
+ * arithmetic, the build run, and the generated-artifact lookups (server entry
+ * location).
  */
 
 import { stat } from 'node:fs/promises';
-import process from 'node:process';
 import { readdirSync } from 'node:fs';
 import { join } from '@std/path';
 import { runStep } from './command-run.ts';
@@ -18,22 +18,19 @@ export function routerCliPath(repoRoot: string, subcommand: 'build' | 'start'): 
 }
 
 /**
- * The app `build` task that runs the in-repo Router build CLI. The CLI path
- * is repo-derived (never external input) and is embedded double-quoted so a
- * path containing spaces cannot split the task's command line.
+ * The app package.json `build` script that runs the in-repo Router build CLI
+ * under node. The CLI path is repo-derived (never external input) and is
+ * embedded double-quoted so a path containing spaces cannot split the
+ * script's command line.
  */
-export function routerBuildTask(repoRoot: string): string {
+export function routerBuildScript(repoRoot: string): string {
   const cliPath = JSON.stringify(routerCliPath(repoRoot, 'build'));
-  return (
-    'deno run --unstable-sloppy-imports --config deno.json --allow-read' +
-    ' --allow-write --allow-env --allow-net --allow-run --allow-sys' +
-    ` --allow-ffi --no-prompt ${cliPath}`
-  );
+  return `node ${cliPath}`;
 }
 
-/** Run the scaffolded app's own `build` task. */
+/** Run the scaffolded app's own `build` script. */
 export async function runRouterBuild(appDir: string): Promise<void> {
-  await runStep(process.execPath, ['task', 'build'], { cwd: appDir });
+  await runStep('pnpm', ['run', 'build'], { cwd: appDir });
 }
 
 /** Depth-first search for a file by name; null when absent. */

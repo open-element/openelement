@@ -44,13 +44,12 @@ import { pathToFileURL } from 'node:url';
 import { commandOutput } from '../repo/node-command.ts';
 import { mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import { readdirSync } from 'node:fs';
-import { existsSync } from '@std/fs';
+import { existsSync } from '../lib/std-fs.ts';
 import { join, resolve } from '@std/path';
 import { PACKAGE_VERSION, RETAINED_PACKAGE_NAMES } from '../repo/project-constants.ts';
 import { readPackages } from '../lib/package-graph.ts';
 import { tarballPath } from '../lib/npm-tarball.ts';
 import { extractStaticModuleSpecifiers } from '../lib/typescript-ast.ts';
-import { PACKED_PROBE_PERMISSIONS } from './consumer-packaged-shared.ts';
 
 async function readJson<T = unknown>(path: string | URL): Promise<T> {
   return JSON.parse(await readFile(path, 'utf8')) as T;
@@ -197,16 +196,15 @@ function findMissingGeneratedImports(
 //
 // The probe is written INSIDE the generated starter and resolves
 // @playwright/test through the starter's own declared devDependency (the
-// template manifest pins it): Deno's node_modules resolution walks up from the
+// template manifest pins it): node_modules resolution walks up from the
 // probe file, so a probe outside the starter has no declaring package.json and
-// fails with `Import "@playwright/test" not a dependency` (the alpha.7 CI
-// defect). It runs as a scoped-permission child with cwd=starter, matching
-// consumer-packaged-element.ts and the fixture e2e tasks (--deny-ffi
-// --no-prompt: browser automation needs no native binding).
+// fails to resolve the import (the alpha.7 CI defect). It runs as a plain node
+// child with cwd=starter, matching consumer-packaged-element.ts and the
+// fixture e2e tasks.
 // Args: <baseUrl> <chromium|firefox|webkit>.
 const PW_STARTER_PROBE_SCRIPT = `import { chromium, firefox, webkit } from '@playwright/test';
 
-const [baseUrl, browserName] = Deno.args;
+const [baseUrl, browserName] = process.argv.slice(2);
 const browserType = browserName === 'chromium'
   ? chromium
   : browserName === 'firefox'
@@ -316,16 +314,8 @@ async function runStarterBrowserMatrix(starter: string): Promise<void> {
     const failures: string[] = [];
     for (const browserName of PACKED_BROWSERS) {
       const probe = await run(
-        'deno',
-        [
-          'run',
-          '--no-lock',
-          '--no-check',
-          ...PACKED_PROBE_PERMISSIONS,
-          probePath,
-          baseUrl,
-          browserName,
-        ],
+        process.execPath,
+        [probePath, baseUrl, browserName],
         starter,
         BROWSER_TIMEOUT_MS,
       );

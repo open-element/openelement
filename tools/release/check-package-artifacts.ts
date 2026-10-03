@@ -1,4 +1,4 @@
-#!/usr/bin/env -S deno run --allow-read --allow-write --allow-run --allow-net --allow-env
+#!/usr/bin/env node
 // esm-boundary:scanner — this file scans for CJS constructs, so it names them.
 /**
  * Release gate: verify packed npm artifacts stay ESM-only and keep host APIs
@@ -426,32 +426,12 @@ async function verifyTarball(pkg: PackageInfo): Promise<PackageScanResult> {
   const tarball = tarballPath(pkg);
   await stat(tarball);
 
-  // publint/ATTW are pure-JS verifiers: scoped permissions with FFI denied
-  // (fail closed, never prompt).
-  await runCommand(process.execPath, [
-    'run',
-    '--allow-read',
-    '--allow-write',
-    '--allow-env',
-    '--allow-net',
-    '--allow-run',
-    '--deny-ffi',
-    '--no-prompt',
-    `npm:publint@${PUBLINT_VERSION}`,
-    'run',
-    tarball,
-    '--strict',
-  ]);
-  await runCommand(process.execPath, [
-    'run',
-    '--allow-read',
-    '--allow-write',
-    '--allow-env',
-    '--allow-net',
-    '--allow-run',
-    '--deny-ffi',
-    '--no-prompt',
-    `npm:@arethetypeswrong/cli@${ATTW_VERSION}`,
+  // publint/ATTW are pure-JS verifiers, run through npx at their pinned
+  // versions (the same resolution `deno run npm:` provided pre-port).
+  await runCommand('npx', ['--yes', `publint@${PUBLINT_VERSION}`, 'run', tarball, '--strict']);
+  await runCommand('npx', [
+    '--yes',
+    `@arethetypeswrong/cli@${ATTW_VERSION}`,
     '--profile',
     'esm-only',
     tarball,
@@ -480,7 +460,7 @@ async function main(): Promise<void> {
     throw new Error('Usage: check-package-artifacts.ts [--prepacked]');
   }
   if (!prepacked) {
-    await runCommand(process.execPath, ['task', '--cwd', 'tools/release', 'pack:dry-run']);
+    await runCommand('pnpm', ['--dir', 'tools/release', 'run', 'pack:dry-run']);
   }
 
   const packages = releasePublishOrder(await readPackages());

@@ -17,7 +17,7 @@
 import { tmpdir } from 'node:os';
 import { commandOutput } from '../repo/node-command.ts';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
-import { existsSync } from '@std/fs';
+import { existsSync } from '../lib/std-fs.ts';
 import { join, resolve } from '@std/path';
 import { PACKAGE_VERSION } from '../repo/project-constants.ts';
 import { readPackages } from '../lib/package-graph.ts';
@@ -32,7 +32,8 @@ if (!element) throw new Error('@openelement/element is missing from the package 
 const routerTarball = join(repoRoot, tarballPath(router));
 const elementTarball = join(repoRoot, tarballPath(element));
 for (const tarball of [routerTarball, elementTarball]) {
-  if (!existsSync(tarball)) throw new Error(`Missing ${tarball}; run deno task pack:dry-run first`);
+  if (!existsSync(tarball))
+    throw new Error(`Missing ${tarball}; run pnpm --dir tools/release run pack:dry-run first`);
 }
 
 async function run(command: string, args: string[], cwd: string): Promise<string> {

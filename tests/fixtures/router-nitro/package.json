@@ -3,10 +3,10 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
-  "//": "The nitro proof harness runs on the Deno host (tools/lib/process + Deno.* in proof.ts); scripts keep `deno run` until the release-lane port.",
+  "//": "The nitro proof harness runs on the node host (owner ruling 2026-10-03); scripts enter through node with type stripping.",
   "scripts": {
-    "proof:node": "deno run --no-lock --allow-read --allow-write --allow-run --allow-env --allow-net proof.ts node",
-    "proof:workers": "deno run --no-lock --allow-read --allow-write --allow-run --allow-env --allow-net proof.ts workers"
+    "proof:node": "node proof.ts node",
+    "proof:workers": "node proof.ts workers"
   },
   "devDependencies": {
     "@std/fs": "jsr:^1.0.0"

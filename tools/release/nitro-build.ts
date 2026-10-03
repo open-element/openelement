@@ -10,17 +10,16 @@
  * chunks, so the server bundle subdirectory must not stay publicly served).
  *
  * `--root` is resolved against the caller's working directory: member tasks
- * invoked through `deno task --cwd <app>` pass `--root .`.
+ * invoked through `pnpm --dir <app> run ...` pass `--root .`.
  *
  * Usage:
- *   deno run --allow-read --allow-write --allow-run --allow-env --allow-net \
- *     tools/release/nitro-build.ts --root . --preset cloudflare_module \
+ *   node tools/release/nitro-build.ts --root . --preset cloudflare_module \
  *     --out .output-workers --prune-public server
  */
 import { commandStatus } from '../repo/node-command.ts';
 import { rename, rm } from 'node:fs/promises';
 import { parseArgs } from '@std/cli/parse-args';
-import { exists } from '@std/fs';
+import { exists } from '../lib/std-fs.ts';
 import { NITRO_VERSION } from './nitro-compatibility.ts';
 
 const args = parseArgs(process.argv.slice(2), {
@@ -48,27 +47,10 @@ async function removeIfExists(path: string): Promise<void> {
 }
 
 async function runNitro(): Promise<void> {
-  const command = 'deno';
-  const args = [
-    'run',
-    '--node-modules-dir=auto',
-    '--allow-read',
-    '--allow-write',
-    '--allow-run',
-    '--allow-env',
-    '--allow-net',
-    '--allow-sys',
-    // Rolldown loads its native binding through FFI under Deno.
-    '--allow-ffi',
-    `npm:nitro@${NITRO_VERSION}`,
-    'build',
-    '--dir',
-    root,
-    '--preset',
-    preset,
-  ];
-  const { code } = await commandStatus(command, {
-    args,
+  // The pinned nitro CLI runs through npx on the node host (Rolldown loads
+  // its native binding directly; node has no FFI permission concept).
+  const { code } = await commandStatus('npx', {
+    args: ['--yes', `nitro@${NITRO_VERSION}`, 'build', '--dir', root, '--preset', preset],
     stdin: 'inherit',
     stdout: 'inherit',
     stderr: 'inherit',

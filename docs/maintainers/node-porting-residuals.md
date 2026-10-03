@@ -48,22 +48,22 @@ that loss is the cost of migration, not something B1b solved.
 
 ## 3. Runtime entry and task graph
 
-B4 cutover (CI surface): the workflows, the composite setup action, and the
-candidate-evidence chain (`candidate-steps.ts` argv contracts, schema v3) enter
-through `node`/`pnpm`; `.dvmrc` is retired for
-`.node-version`. (The JFB harness that joined them at the cutover was removed
-with the in-repo JFB surface on 2026-10-03, owner ruling.) STILL deno-entered:
-the `tools/release` scripts that keep
-`deno run` entries in their package.json (publish/pack, the packaged-consumer
-harnesses, the published-consumer qualification's Deno-consumer legs), the
-fixture/qualify scripts (`router-nitro` proofs, `third-party-web-components`,
-`web-component-interop`, `starter-smoke` setup), `apps/saas` build scripts, and
-the streaming measurement script in §5. Because CI no longer carries the retired
-setup-deno workspace step, `setup-node-workspace` installs deno@2.9.0
-(=`.dvmrc`'s last pin) TRANSITIONALLY so those entries keep running unchanged;
-the release-lane port ("until the release-lane port pivots those readers to
-package.json", tools/release/package.json) deletes that install step as its
-final act. Expiry: that lane changes the entry points, not the ported APIs.
+RESOLVED IN S2 (owner ruling 2026-10-03): every CI-reachable entry is
+node/pnpm. The workflows, the composite setup action, and the candidate-evidence
+chain (`candidate-steps.ts` argv contracts, schema v3) entered through
+`node`/`pnpm` at the B4 cutover; the S2 release-lane port converted the rest —
+the `tools/release` package.json entries (publish/pack, the packaged-consumer
+harnesses, the published-consumer qualification), the fixture/qualify scripts
+(`router-nitro` proofs, `third-party-web-components`, `web-component-interop`),
+the fixture e2e servers and their Playwright `webServer` commands, and the
+qualify harness's temp-app universe (build-router, workspace-alias,
+scaffold-app) — and deleted the transitional `setup-deno` step from
+`setup-node-workspace` (deno@2.9.0, the retired `.dvmrc` pin, is no longer
+installed anywhere in CI). The published-consumer qualification's Deno-consumer
+leg retired with the host: the npm-mode Node consumer leg (core imports plus
+the `@openelement/router/vite` entry) now carries that proof. STILL
+deno-entered, none of it CI-reachable: `apps/saas` build scripts (decoupled
+from the candidate gates) and the streaming measurement script in §5.
 
 ## 4. Module resolution artifacts
 
@@ -88,10 +88,9 @@ taking its unrunnable swap-repeat probe with it). Still live:
 - `benchmarks/streaming/measure.ts:85` — manual measurement script
 
 Comment-only mentions (no executable call): `tests/lib/qualify-harness/serve-static.ts:5`,
-`tools/release/consumer-packaged-node-serve.ts:21`, `docs/adr/ADR-0154`.
-`www/content/docs/guide/deployment*.md` and one blog post teach it in prose.
-Expiry: a benchmark-owner pass replaces the remaining calls with the
-node-http shape; docs follow the product copy.
+`docs/adr/ADR-0154`. `www/content/docs/guide/deployment*.md` and one blog post
+teach it in prose. Expiry: a benchmark-owner pass replaces the remaining call
+with the node-http shape; docs follow the product copy.
 
 ## 6. Error taxonomy
 

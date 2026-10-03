@@ -2,25 +2,20 @@
  * Packed server-serve qualification (1.0.0-alpha.1 admission, Stage 5): prove
  * the PACKED @openelement/router + @openelement/element tarballs — never the
  * workspace source — build a minimal app and serve it under a plain
- * production runtime. Usage: `deno run ... consumer-packaged-node-serve.ts
+ * production runtime. Usage: `node tools/release/consumer-packaged-node-serve.ts
  * <node|bun>`. The runtime binary must be on PATH (CI provides it per job);
- * the app builds on the Deno-driven toolchain and serves its Nitro output
+ * the app builds on the node-hosted toolchain and serves its Nitro output
  * under the target runtime.
  *
  * Cells: install (empty npm cache, explicit timeouts) -> boundary (no dep
- * resolves into the repository) -> build (packed /vite buildApp on the
- * supported Deno-driven toolchain) -> serve (build the Nitro server output
- * from the packed app and boot it under the target runtime, probe the
- * static home and one request-time dynamic route over HTTP).
+ * resolves into the repository) -> build (packed /vite buildApp) -> serve
+ * (build the Nitro server output from the packed app and boot it under the
+ * target runtime, probe the static home and one request-time dynamic route
+ * over HTTP).
  *
- * The build deliberately does NOT run under plain node: packed first-party
- * build modules use the Deno API where the Web platform offers no
- * filesystem/process capability (per the Alpha platform doctrine), and the
- * supported build toolchain is Deno-driven (`deno run npm:vite`,
- * `deno run <router>/cli/build`). The deploy target runs the Nitro output:
- * local preview is served by cli/start (Deno.serve from TypeScript source),
- * so plain node (or bun) boots the Nitro server entry built from the packed
- * app via the packed @openelement/router/nitro-mount.
+ * The deploy target runs the Nitro output: local preview is served by
+ * cli/start, so plain node (or bun) boots the Nitro server entry built from
+ * the packed app via the packed @openelement/router/nitro-mount.
  */
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:net';
@@ -99,7 +94,7 @@ const elementTarball = join(
 for (const tarball of [routerTarball, elementTarball]) {
   if (!existsSync(tarball)) {
     throw new Error(
-      `Missing packed release artifact: ${tarball} (run \`deno task pack:dry-run\` first)`,
+      `Missing packed release artifact: ${tarball} (run \`pnpm --dir tools/release run pack:dry-run\` first)`,
     );
   }
 }
@@ -107,23 +102,8 @@ for (const tarball of [routerTarball, elementTarball]) {
 const tmp = await mkdtemp(join(tmpdir(), `openelement-packed-serve-${runtime}-`));
 let server: import('node:child_process').ChildProcess | undefined;
 try {
-  // Deno-driven build contract (same shape as the packed-app legs): the
-  // unpublished @openelement/* pins resolve into the pre-laid node_modules
-  // tree instead of the registry.
-  writeFileSync(
-    join(tmp, 'deno.json'),
-    formatJson({
-      imports: {
-        '@openelement/router': `npm:@openelement/router@${PACKAGE_VERSION}`,
-        '@openelement/router/vite': `npm:@openelement/router@${PACKAGE_VERSION}/vite`,
-        '@openelement/element': `npm:@openelement/element@${PACKAGE_VERSION}`,
-        hono: 'npm:hono@4.12.0',
-        vite: `npm:vite@${VITE_DEV_PIN}`,
-      },
-      nodeModulesDir: 'manual',
-      minimumDependencyAge: 0,
-    }),
-  );
+  // The unpublished @openelement/* file: pins resolve into the installed
+  // node_modules tree instead of the registry.
   writeFileSync(
     join(tmp, 'package.json'),
     formatJson({
@@ -262,28 +242,9 @@ export default class PackedLive extends OpenElement {
     writeFileSync(target, content);
   }
 
-  // build.mjs drives the packed router vite build (Rolldown native binding):
-  // scoped build-host permissions with prompts off. The deno host is
-  // transitional (setup-node-workspace installs it until the release-lane
-  // port): the packed vite build drives a deno entry.
-  const build = await run(
-    'deno',
-    [
-      'run',
-      '--allow-read',
-      '--allow-write',
-      '--allow-env',
-      '--allow-net',
-      '--allow-run',
-      '--allow-sys',
-      '--allow-ffi',
-      '--no-prompt',
-      'build.mjs',
-    ],
-    tmp,
-    {},
-    BUILD_TIMEOUT_MS,
-  );
+  // build.mjs drives the packed router vite build (Rolldown native binding)
+  // on the plain node host.
+  const build = await run(process.execPath, ['build.mjs'], tmp, {}, BUILD_TIMEOUT_MS);
   if (!build.success) throw new Error(`Packed serve build failed:\n${build.output}`);
   for (const artifact of ['dist/server/index.js', 'dist/index.html']) {
     if (!existsSync(join(tmp, artifact))) {
@@ -305,24 +266,12 @@ export default class PackedLive extends OpenElement {
   if (existsSync(join(tmp, 'nitro-public', 'server'))) {
     throw new Error('Static publish leaked dist/server into the Nitro public dir');
   }
-  // Nitro 3 builds on a Rolldown-based pipeline (native binding): scoped
-  // build-host permissions with prompts off. Same transitional deno host:
-  // the build runs through the deno npm: specifier.
+  // Nitro 3 builds on a Rolldown-based pipeline (native binding). The pinned
+  // nitro CLI runs through npx (the temp consumer's own install satisfies the
+  // pin without a re-download).
   const nitroBuild = await run(
-    'deno',
-    [
-      'run',
-      '--allow-read',
-      '--allow-write',
-      '--allow-env',
-      '--allow-net',
-      '--allow-run',
-      '--allow-sys',
-      '--allow-ffi',
-      '--no-prompt',
-      `npm:nitro@${NITRO_VERSION}`,
-      'build',
-    ],
+    'npx',
+    ['--yes', `nitro@${NITRO_VERSION}`, 'build'],
     tmp,
     {},
     BUILD_TIMEOUT_MS,

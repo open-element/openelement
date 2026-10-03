@@ -27,11 +27,12 @@ import {
 const DEFAULT_REGISTRY_DELAYS_MS = [0, 5_000, 10_000, 20_000, 30_000, 45_000, 60_000] as const;
 
 export class NpmViewError extends Error {
-  constructor(
-    message: string,
-    readonly retryable: boolean,
-  ) {
+  /** Explicit field (no parameter property): node's strip-only TS mode rejects them. */
+  readonly retryable: boolean;
+
+  constructor(message: string, retryable: boolean) {
     super(message);
+    this.retryable = retryable;
     this.name = 'NpmViewError';
   }
 }

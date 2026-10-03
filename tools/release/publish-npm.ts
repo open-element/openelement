@@ -587,9 +587,7 @@ function parseCommand(): {
 } {
   const command = process.argv[2];
   if (!COMMANDS.has(command)) {
-    throw new Error(
-      `Usage: deno run --allow-read --allow-run tools/publish-npm.ts ${[...COMMANDS].join('|')}`,
-    );
+    throw new Error(`Usage: node tools/release/publish-npm.ts ${[...COMMANDS].join('|')}`);
   }
   const dryRun = command.endsWith(':dry-run');
   const publish = command.startsWith('publish:');
