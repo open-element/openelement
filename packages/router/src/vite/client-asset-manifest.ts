@@ -13,11 +13,17 @@
  * one emitted module are Phase 2 build failures (OE_CLIENT_ASSET_* codes) —
  * a silently dropped or mis-attributed island identity would ship pages
  * whose client scripts never load.
+ *
+ * Identity resolution has one source (ADR-0160 rule (d), P6): the manifest
+ * resolves package specifiers through island-resolution.ts over the same
+ * sorted alias table the build ships as `resolve.alias` — never through a
+ * second, parallel resolution mechanism. A resolved path is consumed only
+ * when the emitted module graph confirms it.
  */
 
-import { createRequire } from 'node:module';
 import { readFile } from 'node:fs/promises';
 import { join, relative } from 'pathe';
+import type { Alias } from 'vite';
 import { normalizeSeparators } from '@openelement/element/build-utils';
 import { buildError, ClientAssetErrorCode } from '../internal/error-codes.ts';
 import type { ClientAssetManifest, ClientIslandAsset } from './internal/protocol/client-assets.ts';
@@ -25,6 +31,7 @@ import {
   type ClientIslandDeliveryEntry,
   resolveIslandDeliveryTags,
 } from './internal/ssg/delivery.ts';
+import { resolveIslandIdentityPath } from './island-resolution.ts';
 
 /** One dist/client/.vite/manifest.json entry (the fields the builder reads). */
 export interface ViteClientManifestEntry {
@@ -167,24 +174,13 @@ export function moduleIdentityMatches(moduleId: string, identity: string): boole
  * in the emitted graph. Zero matches and several matches both fail: a
  * silent first-hit would ship another package's file under this island's
  * identity, and a silent fallback would deliver a different module than the
- * declared specifier names.
+ * declared specifier names. `resolvedIdentity` — the island specifier's
+ * real module path from island-resolution.ts, resolved through the same
+ * import map / alias table / import-condition chain the build used — is a
+ * hint that must be confirmed by the emitted graph before it short-circuits
+ * the scan: a resolution the build did not emit is a drift the join refuses
+ * to ship, falling through to the exact identity rule below.
  */
-/** The identity's resolved real path under the node host, or undefined. */
-export function resolveIdentityPath(identity: string, root: string): string | undefined {
-  if (identity.startsWith('.') || identity.startsWith('/') || identity.includes('\0')) {
-    return undefined;
-  }
-  try {
-    // Node resolution honors the package exports map and (default settings)
-    // resolves symlinks, so the result is the same realpath rolldown emits
-    // as the module id — the deno-host build kept the bare specifier as the
-    // id, which the identity rule already matches directly.
-    return createRequire(join(root ?? process.cwd(), 'package.json')).resolve(identity);
-  } catch {
-    return undefined;
-  }
-}
-
 export function resolveIslandModuleId(
   fileByModuleId: Map<string, string>,
   identity: string,
@@ -294,6 +290,15 @@ export function buildClientAssetManifest(options: {
   chunks: ClientBuildChunk[];
   /** The manifest's path, named in every failure this builder raises. */
   manifestPath: string;
+  /**
+   * The build's sorted alias table — the same array shipped as
+   * `resolve.alias` (same source, same order). The identity resolution
+   * consumes it so the manifest join and the build resolve through one
+   * mechanism (ADR-0160 rule (d), P6). Omitted only by direct callers
+   * without aliases; the join then stays on the import-map + fallback
+   * chain.
+   */
+  aliases?: ReadonlyArray<Alias>;
 }): ClientAssetManifest {
   const { root, base, islands, viteManifest, chunks, manifestPath } = options;
   const assetUrl = (file: string) => `${base}client/${file}`;
@@ -319,14 +324,20 @@ export function buildClientAssetManifest(options: {
     }
   }
 
-  // Package-island identities are bare specifiers; under the node host the
-  // emitted module ids are real paths, so resolve each specifier once and
-  // let the resolver compare against the resolved id as well.
+  // Package-island identities are bare specifiers; resolve each one once
+  // through the same resolution chain the build used — the deno.json import
+  // map, then the SAME sorted alias table the build shipped as
+  // `resolve.alias`, then (only when both have no file target) the
+  // import-condition node_modules fallback. One source, one order (ADR-0160
+  // rule (d), P6): the answer that joins the manifest is the answer the
+  // build resolved, and the fallback is consumed only when the emitted
+  // graph confirms it (see resolveIslandModuleId).
   const identityPaths = new Map<string, string>();
+  const aliases = options.aliases ?? [];
   for (const island of islands) {
     const identity = island.entry.modulePath;
     if (identity && !identityPaths.has(identity)) {
-      const resolved = resolveIdentityPath(identity, root);
+      const resolved = resolveIslandIdentityPath(root, identity, aliases);
       if (resolved) identityPaths.set(identity, resolved);
     }
   }
@@ -409,6 +420,8 @@ export async function createClientAssetManifest(options: {
   islands: ClientAssetIslandInput[];
   manifestPath: string;
   buildResult: unknown;
+  /** The build's sorted alias table — see {@linkcode buildClientAssetManifest}. */
+  aliases?: ReadonlyArray<Alias>;
 }): Promise<ClientAssetManifest> {
   const viteManifest = await readViteClientManifest(join(options.manifestPath));
   return buildClientAssetManifest({
@@ -418,5 +431,6 @@ export async function createClientAssetManifest(options: {
     viteManifest,
     chunks: collectClientBuildChunks(options.buildResult),
     manifestPath: options.manifestPath,
+    aliases: options.aliases,
   });
 }

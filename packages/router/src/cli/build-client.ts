@@ -17,7 +17,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { rm } from 'node:fs/promises';
 import process from 'node:process';
-import { type Alias, build as viteBuild, type InlineConfig } from 'vite';
+import { build as viteBuild, type InlineConfig } from 'vite';
 import { dirname, isAbsolute, join, relative, resolve } from 'pathe';
 import { fileURLToPath } from 'node:url';
 import { extractCustomElementTags, generateClientEntry } from '../vite/internal/ssg/index.ts';
@@ -38,17 +38,14 @@ import {
   createClientAssetManifest,
   packageIslandChunkName,
 } from '../vite/client-asset-manifest.ts';
-import {
-  convertImportMapTarget,
-  createDenoImportMapResolvePlugin,
-  lookupInDenoJson,
-} from '../vite/deno-import-map.ts';
+import { createDenoImportMapResolvePlugin } from '../vite/deno-import-map.ts';
 import { createNpmSpecifierPlugin } from '../vite/npm-specifier-plugin.ts';
 import { analyzeModuleSemantics, compiledElementPlugin } from '@openelement/element/compiler';
 import { ISLAND_ADMISSION } from '../vite/internal/protocol/island-admission.ts';
 import { ROUTER_MODULE_VOCABULARY } from '../vite/internal/protocol/module-vocabulary.ts';
 import { compilerBehaviorDeclarations } from '../vite/internal/ssg/client-admission.ts';
-import { resolveThroughAliases, sortAliasEntries } from '../vite/alias-utils.ts';
+import { sortAliasEntries } from '../vite/alias-utils.ts';
+import { resolvePackageIslandSourcePath } from '../vite/island-resolution.ts';
 import { formatError } from '@openelement/element';
 import { createLogger } from '@openelement/element';
 import {
@@ -253,33 +250,6 @@ type ViteInlineConfigWithManifest = Omit<InlineConfig, 'build'> & {
   build?: ViteBuildOptionsWithManifest;
 };
 
-/**
- * The real module path a package-side island's declared specifier resolves
- * to, through the same resolution chain the build's resolver uses (#1471):
- * the deno.json import map (enforce:'pre' runs ahead of the alias plugin),
- * then the Vite alias table the build ships as `resolve.alias` — workspace
- * packages have no import-map entry and resolve purely through those
- * aliases. A specifier with no file target (npm/jsr packages) returns null
- * and keeps the declared specifier as the island's module identity — joined
- * by the exact-match rule in client-asset-manifest.ts, never a substring
- * first-hit.
- */
-function packageIslandSourcePath(
-  root: string,
-  modulePath: string,
-  aliases: ReadonlyArray<Alias>,
-): string | null {
-  if (modulePath.startsWith('/') || modulePath.startsWith('.')) {
-    return resolve(root, modulePath);
-  }
-  const mapped = lookupInDenoJson(modulePath, root);
-  if (mapped) {
-    const converted = convertImportMapTarget(mapped.target, mapped.denoJsonDir);
-    if (converted) return converted;
-  }
-  return resolveThroughAliases(aliases, modulePath);
-}
-
 async function buildClient(ctx: OpenElementBuildContext): Promise<ClientAssetManifest | null> {
   const root = ctx.phase3.root || process.cwd();
   const outDir = ctx.phase3.outDir || DEFAULT_OUT_DIR;
@@ -397,17 +367,18 @@ async function buildClient(ctx: OpenElementBuildContext): Promise<ClientAssetMan
   // #1471: compile-time island identity for the client asset manifest — the
   // same list the entry was generated from. Local islands carry the absolute
   // source path buildClientIslandEntries resolved. Package and compiler
-  // islands resolve their declared module specifier to the real module path
-  // through the same import map the build's resolver uses; specifiers with
-  // no file target (npm/jsr) keep the declared specifier as identity. Both
-  // the chunk grouping and the asset manifest join on this one identity —
-  // exact segment matching, never a substring first-hit.
+  // islands resolve their declared module specifier through
+  // island-resolution.ts — the one resolution both sides consume (import
+  // map, then the alias table this build ships as resolve.alias); specifiers
+  // with no file target (npm/jsr) keep the declared specifier as identity.
+  // Both the chunk grouping and the asset manifest join on this one
+  // identity — exact segment matching, never a substring first-hit.
   const packageSideEntries = islandEntries.slice(selectedLocalTags.length);
   const islandSourcePathCache = new Map<string, string | null>();
   const islandSourcePath = (modulePath: string): string | null => {
     const cached = islandSourcePathCache.get(modulePath);
     if (cached !== undefined) return cached;
-    const resolved = packageIslandSourcePath(root, modulePath, serializedAlias);
+    const resolved = resolvePackageIslandSourcePath(root, modulePath, serializedAlias);
     islandSourcePathCache.set(modulePath, resolved);
     return resolved;
   };
@@ -616,7 +587,10 @@ async function buildClient(ctx: OpenElementBuildContext): Promise<ClientAssetMan
     // #1471: the client asset manifest — compile-time island identity joined
     // with the build manifest and Rollup module metadata (never output file
     // names). Stored on ctx so closeBundle's post-processing and the
-    // request-time artifact consume the same record. Fails closed: a
+    // request-time artifact consume the same record. The serialized alias
+    // table goes with it: the manifest's identity resolution consumes the
+    // same sorted entries this build shipped as resolve.alias, so both sides
+    // resolve through one mechanism (ADR-0160 rule (d), P6). Fails closed: a
     // missing/corrupted manifest, a missing client entry, or an island that
     // cannot be attributed to exactly one emitted module fails Phase 2.
     ctx.clientAssetManifest = await createClientAssetManifest({
@@ -625,6 +599,7 @@ async function buildClient(ctx: OpenElementBuildContext): Promise<ClientAssetMan
       islands: clientAssetIslands,
       manifestPath: join(clientOutDir, '.vite', 'manifest.json'),
       buildResult: outputs,
+      aliases: serializedAlias,
     });
 
     const { printBuildManifest } = await import('../vite/build-manifest.ts');
