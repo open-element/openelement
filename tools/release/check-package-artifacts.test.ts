@@ -192,10 +192,38 @@ test('package artifacts: router host tooling paths bypass the host API scan', as
       'index.js': 'export {};',
       'src/cli/build.js': `import process from 'node:process';\nexport const cwd = process.cwd();`,
       'src/vite/plugin.js': `import { createServer } from 'node:http';\nexport { createServer };`,
+      // The vite-internal codegen tree is build host tooling like the plugin
+      // tree — the runtime-face carve-out must stay scoped to server-runtime
+      // and protocol, not swallow all of src/vite/internal/.
+      'src/vite/internal/ssg/entry-codegen.js': `import { createServer } from 'node:http';\nexport { createServer };`,
       'src/nitro-mount.js': `import process from 'node:process';\nexport const env = process.env;`,
     },
     (root) => {
       expect(scanExtractedPackage('@openelement/router', root).violations).toEqual([]);
+    },
+  );
+});
+
+test('package artifacts: router server-runtime and protocol paths fail closed on host APIs', async () => {
+  // ./server-runtime is the request-time runtime the generated entries import
+  // (packages/router/package.json exports + server-runtime/mod.ts), and the
+  // shared protocol vocabulary is pulled into that graph by server-runtime
+  // imports — neither may ride the src/vite host-tooling allowlist.
+  await withPackage(
+    '@openelement/router',
+    {
+      'README.md': 'router',
+      LICENSE: 'MIT',
+      'index.js': 'export {};',
+      'src/vite/internal/server-runtime/app.js': `import process from 'node:process';\nexport const cwd = process.cwd();`,
+      'src/vite/internal/protocol/ssg.js': `import { join } from 'node:path';\nexport const p = join;`,
+    },
+    (root) => {
+      const messages = scanExtractedPackage('@openelement/router', root).violations.map(
+        (v) => v.message,
+      );
+      expect(messages.filter((message) => message === 'node:* import').length).toEqual(2);
+      expect(messages.includes('Node process global')).toBeTruthy();
     },
   );
 });

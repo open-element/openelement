@@ -40,12 +40,50 @@ const RUNTIME_FREE_PACKAGES = new Set([
 const NODE_FREE_PACKAGES = new Set(['@openelement/create']);
 
 /**
+ * The runtime face of @openelement/router — packed paths loaded at REQUEST
+ * time by the generated entries — checked BEFORE the host-tooling allowlist
+ * below, so a broad tooling-tree entry can never re-open them to host APIs.
+ *
+ * The judgment, read off packages/router/package.json `exports` and
+ * src/vite/internal/server-runtime/mod.ts. Of the twelve public subpaths,
+ * eight are the runtime face (request-time, host-API-free):
+ *   `.`                 -> src/index.ts
+ *   `./http`            -> src/http.ts
+ *   `./router`          -> src/router.ts
+ *   `./router/client`   -> src/router-client.ts
+ *   `./document`        -> src/document.ts
+ *   `./lit`             -> src/lit.ts
+ *   `./lit-ssr`         -> src/lit-ssr.ts
+ *   `./server-runtime`  -> src/vite/internal/server-runtime/mod.ts
+ * The remaining four are build host tooling (host/dev processes):
+ *   `./vite` -> src/vite/index.ts, `./nitro-mount` -> src/nitro-mount.ts,
+ *   `./cli/build` -> src/cli/build.ts, `./cli/start` -> src/cli/start.ts.
+ *
+ * The seven src-root runtime modules sit outside every allowlist tree, but
+ * `./server-runtime` points INTO src/vite/, so two internal trees are part of
+ * the request-time graph even though their parent tree is host tooling:
+ *   - src/vite/internal/server-runtime/: the ./server-runtime target itself
+ *     (mod.ts re-exports the whole tree; entry-descriptor.ts emits
+ *     `@openelement/router/server-runtime` as the entries' only request-time
+ *     import);
+ *   - src/vite/internal/protocol/: shared protocol vocabulary — framework,
+ *     ssg and registry-markers are imported by server-runtime modules
+ *     (response-channel, security, app, stream-runtime), and any other file
+ *     in the tree can join the request-time graph with a single import edit,
+ *     so the whole tree stays fail-closed rather than enumerating files.
+ */
+const RUNTIME_SURFACE_PATHS: Record<string, RegExp> = {
+  '@openelement/router': /^src\/vite\/internal\/(?:server-runtime\/|protocol\/)/,
+};
+
+/**
  * Host-side tooling trees inside runtime-free packages: the packed artifacts
  * ship src/** transpiled, so the Router lifecycle tooling (Vite orchestration,
  * build/start CLI, Nitro mount) would otherwise trip the host-API scan. These
- * paths mirror DENO_HOST_TOOLING in tools/repo/check-deno-api-free.ts and are
- * reachable only through the @openelement/router/vite, /cli/* and
- * /nitro-mount subpaths; every other packed file stays fail-closed.
+ * paths are reachable only through the @openelement/router/vite, /cli/* and
+ * /nitro-mount subpaths (plus the node-host server seam the start CLI boots),
+ * and RUNTIME_SURFACE_PATHS above takes precedence over this allowlist; every
+ * other packed file stays fail-closed.
  */
 const HOST_TOOLING_PATH_ALLOWLIST: Record<string, RegExp> = {
   // node-http is the node-host server seam (start CLI + static serving); it
@@ -243,6 +281,20 @@ function pushPackageJsonViolations(
 
 type HostPolicy = 'runtime-free' | 'deno-free' | 'none';
 
+/**
+ * Runtime-free packages: the request-time runtime face always scans strict,
+ * confirmed host tooling scans with no host patterns, and everything else
+ * stays fail-closed strict. create's packed CLI is Deno-barred only.
+ */
+function hostPolicyFor(packageName: string, relative: string): HostPolicy {
+  if (!RUNTIME_FREE_PACKAGES.has(packageName)) {
+    return NODE_FREE_PACKAGES.has(packageName) ? 'deno-free' : 'none';
+  }
+  if (RUNTIME_SURFACE_PATHS[packageName]?.test(relative)) return 'runtime-free';
+  if (HOST_TOOLING_PATH_ALLOWLIST[packageName]?.test(relative)) return 'none';
+  return 'runtime-free';
+}
+
 function scanRuntimeFile(
   root: string,
   path: string,
@@ -304,7 +356,6 @@ export function scanExtractedPackage(packageName: string, packageRoot: string): 
   );
   violations.push(...manifestImportViolations(packageName, packageRoot, packageJson));
 
-  const nodeFreePackage = NODE_FREE_PACKAGES.has(packageName);
   const forbiddenPaths = FORBIDDEN_LEGACY_PATHS[packageName] ?? [];
   const forbiddenSourcePatterns = FORBIDDEN_LEGACY_SOURCE_PATTERNS[packageName] ?? [];
   const files = new Set<string>();
@@ -350,14 +401,14 @@ export function scanExtractedPackage(packageName: string, packageRoot: string): 
       });
     }
     if (!RUNTIME_EXTENSIONS.has(extension(entry.path))) continue;
-    const hostPolicy: HostPolicy = RUNTIME_FREE_PACKAGES.has(packageName)
-      ? HOST_TOOLING_PATH_ALLOWLIST[packageName]?.test(relative)
-        ? 'none'
-        : 'runtime-free'
-      : nodeFreePackage
-        ? 'deno-free'
-        : 'none';
-    violations.push(...scanRuntimeFile(packageRoot, entry.path, packageName, hostPolicy));
+    violations.push(
+      ...scanRuntimeFile(
+        packageRoot,
+        entry.path,
+        packageName,
+        hostPolicyFor(packageName, relative),
+      ),
+    );
   }
 
   if (packageName === '@openelement/router') {
