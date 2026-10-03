@@ -481,35 +481,6 @@ test('ci contract: the requeue companion re-runs a failed CI run exactly once', 
   expect(requeue.includes('contents: read'), 'the requeue must keep contents: read').toBeTruthy();
 });
 
-test('ci contract: the nightly JFB workflow measures, never gates', async () => {
-  const nightly = await readFile(join(repoRoot, '.github/workflows/jfb-nightly.yml'), 'utf8');
-  expect(
-    /continue-on-error:\s*true/.test(nightly),
-    'benchmark numbers move with the runner; a nightly measurement must not gate anything',
-  ).toBeTruthy();
-  expect(
-    nightly.includes('contents: read'),
-    'the nightly benchmark workflow is read-only',
-  ).toBeTruthy();
-  expect(
-    /benchmarks\/jfb\/harness\/build\.ts/.test(nightly) &&
-      /benchmarks\/jfb\/harness\/run\.ts/.test(nightly),
-    'the nightly must run the real harness build and runner',
-  ).toBeTruthy();
-  expect(
-    /actions\/upload-artifact@/.test(nightly) && /jfb-evidence\.json/.test(nightly),
-    'the nightly must publish the redacted evidence record as an artifact',
-  ).toBeTruthy();
-  expect(
-    /playwright install[^\n]*chromium/.test(nightly),
-    'the nightly must install the browser the harness drives',
-  ).toBeTruthy();
-  expect(
-    !/pull_request/.test(nightly),
-    'a nightly measurement never runs on pull requests',
-  ).toBeTruthy();
-});
-
 test('ci contract: tree-SHA evidence reuse is fail-closed and single-source', async () => {
   // #1425 follow-up: the four producer lanes may replay a tree-identical
   // package instead of re-running their gates. The safety properties are

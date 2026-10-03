@@ -36,7 +36,8 @@ const post: CountReport = {
   task: 'B3 post-migration counts (vitest surface)',
   generatedAt: new Date().toISOString(),
   notes: [
-    'benchmarks baseline coverage: B3-0 pre-counts include benchmarks/micro/micro.test.ts (2) and benchmarks/jfb/harness.test.ts (10); both migrated 1:1 onto the vitest `benchmarks` project (12 tests green).',
+    'benchmarks baseline coverage: B3-0 pre-counts include benchmarks/micro/micro.test.ts (2) and the in-repo js-framework-benchmark harness test file (10); both migrated 1:1 onto the vitest `benchmarks` project (12 tests green).',
+    'benchmark-harness removal (owner ruling 2026-10-03): the in-repo js-framework-benchmark surface was deleted (upstream lane lives on the SisyphusZheng/web fork, PR #2104); the expected "file deleted" delta for the harness test file removes its 10 tests, leaving the 2 micro tests in the benchmarks project.',
   ],
   files: {},
   totals: { files: 0, tests: 0, steps: 0 },

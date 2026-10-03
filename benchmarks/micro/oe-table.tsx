@@ -1,22 +1,23 @@
 /**
- * js-framework-benchmark keyed implementation for OpenElement (issue #1219).
+ * Keyed-table fixture for the micro suite (issue #1219), modeled on the
+ * upstream js-framework-benchmark keyed implementation.
  *
  * One meaningful component boundary manages ordinary table DOM: the rows are
  * plain <tr> nodes owned by a single keyed `each` Region — NOT one custom
  * element per row. Row select/remove use one delegated click handler on the
  * table because grammar v1 admits no per-item event handlers; selection is
  * carried in row data (`cls`) so the keyed diff writes exactly the affected
- * class attributes, matching stock JFB select semantics (vanillajs touches
+ * class attributes, matching stock select semantics (vanillajs touches
  * two rows). The jumbotron buttons are part of the component, matching the
- * stock JFB page structure.
+ * stock page structure.
  */
 import { element, OpenElement, property } from '@openelement/element';
-import { buildData, type JfbRow } from './data.ts';
+import { buildData, type BenchRow } from './row-data.ts';
 
-@element('jfb-oe-table')
-export class JfbOeTable extends OpenElement {
+@element('oe-bench-table')
+export class OeBenchTable extends OpenElement {
   @property({ reflect: false })
-  rows: JfbRow[] = [];
+  rows: BenchRow[] = [];
 
   run(): void {
     this.rows = buildData(1000);

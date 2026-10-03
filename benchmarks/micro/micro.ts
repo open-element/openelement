@@ -5,14 +5,15 @@
  * real runtime and the real @preact/signals-core engine) against the
  * counting fake DOM in ./counting-dom.ts. The fake DOM
  * contributes no layout/paint cost, so these numbers isolate kernel/region
- * algorithmic behavior — the browser JFB harness owns layout-inclusive
- * numbers. SSR serialization uses the CANONICAL server serializer
+ * algorithmic behavior — the upstream js-framework-benchmark lane (on the
+ * fork, since the in-repo harness was removed 2026-10-03) owns
+ * layout-inclusive numbers. SSR serialization uses the CANONICAL server serializer
  * (serializeCompiledProgram); the test-only serializeToHtml in runtime.ts
  * diverges for multi-field each Regions (serializes ival slots as
  * "[object Object]") and is deliberately not used — see the packet report.
  *
  * Diagnostics targeted (per the packet): Signal -> single Part latency,
- * attribute/property Part writes, keyed Region behavior at JFB scale, SSR
+ * attribute/property Part writes, keyed Region behavior at 1k-row scale, SSR
  * serialize / claim / fresh costs, and listener/subscription stability under
  * churn.
  *
@@ -37,7 +38,7 @@ import {
 } from '../../packages/element/src/internal/compiled/runtime.ts';
 import { serializeCompiledProgram } from '../../packages/element/src/internal/compiled/server/index.ts';
 import { signal, type WritableSignal } from '../../packages/element/src/internal/signal/index.ts';
-import { buildData } from '../jfb/src/oe/data.ts';
+import { buildData } from './row-data.ts';
 import { allocationCount, FDocument, type FElement, parseHtml, toHtml } from './counting-dom.ts';
 
 const GRANULARITY_SOURCE = `
@@ -246,13 +247,12 @@ export function runMicroSuite(options: MicroOptions = {}): MicroSuiteResult {
   const churnCycles = options.churnCycles ?? 25;
   const compilerSamples = options.compilerSamples ?? 25;
 
-  // ── Compiler cost + artifacts (JFB table component) ─────────────
+  // ── Compiler cost + artifacts (keyed table fixture) ──────────────
   const tableSource = readFileSync(
-    fileURLToPath(new URL('../jfb/src/oe/jfb-table.tsx', import.meta.url)),
+    fileURLToPath(new URL('./oe-table.tsx', import.meta.url)),
     'utf8',
   );
-  const compileOnce = () =>
-    compileElementProgram(tableSource, '/benchmarks/jfb/src/oe/jfb-table.tsx');
+  const compileOnce = () => compileElementProgram(tableSource, '/benchmarks/micro/oe-table.tsx');
   const compileSampleValues: number[] = [];
   let compiled = compileOnce();
   for (let i = 0; i < compilerSamples; i++) {
@@ -292,7 +292,7 @@ export function runMicroSuite(options: MicroOptions = {}): MicroSuiteResult {
   });
   gInstance.dispose();
 
-  // ── Keyed Region + SSR claim at JFB scale (1,000 rows) ───────────
+  // ── Keyed Region + SSR claim at 1,000-row scale ──────────────────
   const makeTableHost = (rows: ReturnType<typeof buildData>): AnyHost => ({
     signals: { rows: signal(rows) },
     handlers: {
@@ -320,8 +320,8 @@ export function runMicroSuite(options: MicroOptions = {}): MicroSuiteResult {
   // The canonical serializer wraps content in the host tag; the claim/fresh
   // paths operate on the root's inner content.
   const serializedHtml = serializedHostHtml
-    .replace(/^<jfb-oe-table data-oe-light>/, '')
-    .replace(/<\/jfb-oe-table>$/, '');
+    .replace(/^<oe-bench-table data-oe-light>/, '')
+    .replace(/<\/oe-bench-table>$/, '');
   if (serializedHtml === serializedHostHtml) {
     throw new Error('[micro] canonical serializer output shape changed');
   }
@@ -449,8 +449,8 @@ export function runMicroSuite(options: MicroOptions = {}): MicroSuiteResult {
       deno: typeof Deno !== 'undefined' ? Deno.version.deno : process.version,
       note:
         'fake-DOM kernel/region numbers isolate algorithmic behavior (no layout/paint); ' +
-        'browser-inclusive numbers come from the JFB harness local output ' +
-        '(.artifacts/jfb-evidence.json)',
+        'browser-inclusive numbers come from the upstream js-framework-benchmark ' +
+        'lane on the fork (the in-repo harness was removed 2026-10-03)',
     },
     granularity: { textPart, attrPart, propPart, engineFloor },
     table1k: {

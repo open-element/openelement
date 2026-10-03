@@ -75,8 +75,7 @@ await Deno.stat(serverEntry);
 // shape bound port 0, read the port, closed the listener and hoped the
 // generated server would win the re-bind — a window in which any process on
 // the machine can take the port. Deno.serve({ port: 0 }) picks the port and
-// this same server answers every request until shutdown
-// (benchmarks/jfb/harness/swap-repeat-probe.ts:125 uses the same seam).
+// this same server answers every request until shutdown.
 // Requests reach the fixture's built output through the shared static and
 // request-time adapter the fixture's own e2e/server.ts wraps, so the measured
 // artifact is still dist/ + dist/server.

@@ -44,12 +44,7 @@ const CONSUMER_LINE = `${RUN} ${BROAD_SHORT} ${TOOL}@alpha my-app`;
  * be an explicit edit HERE as well as in the table, which is what makes the
  * exception auditable rather than open-ended.
  */
-const EXEMPT_PATHS: readonly string[] = [
-  'README.md',
-  'benchmarks/jfb/harness/swap-repeat-probe.ts',
-  'README.zh.md',
-  'packages/create/README.md',
-];
+const EXEMPT_PATHS: readonly string[] = ['README.md', 'README.zh.md', 'packages/create/README.md'];
 
 /** The strict-shape validator the table must satisfy (see test 2). */
 function nonConformingEntries(entries: ReadonlyArray<{ path: string; line: string }>): string[] {

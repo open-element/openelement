@@ -14,7 +14,9 @@ node host; registration + `@std/assert` moved by the auditable codemods in
 `tools/repo/codemod-deno-test-to-vitest.ts` and `codemod-deno-runtime-to-node.ts`,
 with the special-construct helpers in `tests/lib/vitest-asserts.ts`). The root
 `bench` script now runs the vitest benchmarks project (B3 补漏), and B4 moved
-the JFB harness itself onto node:\*. Remaining `Deno.test` text is product/docs
+the JFB harness itself onto node:\* (that in-repo JFB surface was then removed
+entirely on 2026-10-03, owner ruling — the upstream benchmark lane lives on
+the fork). Remaining `Deno.test` text is product/docs
 prose that teaches framework users their own test setups. Package `test`
 scripts now invoke vitest.
 
@@ -46,15 +48,17 @@ that loss is the cost of migration, not something B1b solved.
 
 ## 3. Runtime entry and task graph
 
-B4 cutover (CI surface): the workflows, the composite setup action, the
-candidate-evidence chain (`candidate-steps.ts` argv contracts, schema v3), and
-the JFB harness now enter through `node`/`pnpm`; `.dvmrc` is retired for
-`.node-version`. STILL deno-entered: the `tools/release` scripts that keep
+B4 cutover (CI surface): the workflows, the composite setup action, and the
+candidate-evidence chain (`candidate-steps.ts` argv contracts, schema v3) enter
+through `node`/`pnpm`; `.dvmrc` is retired for
+`.node-version`. (The JFB harness that joined them at the cutover was removed
+with the in-repo JFB surface on 2026-10-03, owner ruling.) STILL deno-entered:
+the `tools/release` scripts that keep
 `deno run` entries in their package.json (publish/pack, the packaged-consumer
 harnesses, the published-consumer qualification's Deno-consumer legs), the
 fixture/qualify scripts (`router-nitro` proofs, `third-party-web-components`,
 `web-component-interop`, `starter-smoke` setup), `apps/saas` build scripts, and
-the two benchmark probes in §5. Because CI no longer carries the retired
+the streaming measurement script in §5. Because CI no longer carries the retired
 setup-deno workspace step, `setup-node-workspace` installs deno@2.9.0
 (=`.dvmrc`'s last pin) TRANSITIONALLY so those entries keep running unchanged;
 the release-lane port ("until the release-lane port pivots those readers to
@@ -77,13 +81,11 @@ router product usage with `packages/router/src/internal/node-http.ts`
 (fetch(Request): Response on node:http). B2/B3 retired the shared static
 server (`tools/lib/static-server.ts`), the pack qualification server
 (`tools/release/consumer-packaged-element.ts`), and the parity harness;
-B4 ported `benchmarks/jfb/harness/run.ts` onto `node:http`. Still live:
+B4 ported the JFB harness's `run.ts` onto `node:http` (that whole in-repo JFB
+surface was removed on 2026-10-03, owner ruling — upstream lane on the fork —
+taking its unrunnable swap-repeat probe with it). Still live:
 
-- `benchmarks/jfb/harness/swap-repeat-probe.ts:125` — local repeat-swap probe
-  (unrunnable since the B4 CI swap removed the deno host; port or delete with
-  the next benchmark-owner pass)
-- `benchmarks/streaming/measure.ts:85` — manual measurement script (same
-  status)
+- `benchmarks/streaming/measure.ts:85` — manual measurement script
 
 Comment-only mentions (no executable call): `tests/lib/qualify-harness/serve-static.ts:5`,
 `tools/release/consumer-packaged-node-serve.ts:21`, `docs/adr/ADR-0154`.

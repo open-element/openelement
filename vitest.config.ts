@@ -26,10 +26,13 @@
  *   tools    tools/repo + tools/lib + tools/release
  *   tests    tests/fixtures/web-component-interop (the only Deno.test
  *            universe under tests/)
- *   benchmarks benchmarks/micro + benchmarks/jfb deterministic self-checks
- *            (B3 补漏, owner ruling: the jfb lane's harness migrates onto
- *            vitest). Both suites are DOM-free structural checks that never
- *            launch a browser, so a plain node project covers them — no
+ *   benchmarks benchmarks/micro deterministic self-checks (B3 补漏,
+ *            owner ruling: the micro lane migrates onto vitest). The
+ *            in-repo benchmark-harness half (10 tests) was removed with the
+ *            in-repo js-framework-benchmark surface on 2026-10-03 (owner
+ *            ruling; upstream lane on the fork). The
+ *            suite is a DOM-free structural check that never launches a
+ *            browser, so a plain node project covers it — no
  *            browser-mode adaptation, no skips. benchmarks/streaming is a
  *            manual `deno run` measurement script, not a test universe.
  * `element-browser` is the vitest-browser-mode replacement
@@ -117,10 +120,10 @@ export default defineConfig({
       {
         test: {
           name: 'benchmarks',
-          include: ['benchmarks/micro/**/*.test.ts', 'benchmarks/jfb/**/*.test.ts'],
-          // the self-checks drive real compiles and 1k-row Region ops at
-          // JFB scale (deterministic counts, but not free); the deno
-          // runner had no per-test budget either
+          include: ['benchmarks/micro/**/*.test.ts'],
+          // the self-checks drive real compiles and 1k-row Region ops
+          // (deterministic counts, but not free); the deno runner had no
+          // per-test budget either
           testTimeout: 60_000,
         },
       },

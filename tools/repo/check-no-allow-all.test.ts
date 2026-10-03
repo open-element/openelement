@@ -111,11 +111,6 @@ export const CONSUMER_SCAFFOLD_EXEMPT_LINES: ReadonlyArray<{ path: string; line:
     line: 'deno run -A npm:@openelement/create@1.0.0-alpha.7 my-app',
   },
   { path: 'packages/create/README.md', line: 'deno run -A npm:@openelement/create@0.43 my-app' },
-  {
-    path: 'benchmarks/jfb/harness/swap-repeat-probe.ts',
-    line: '*   deno run -A benchmarks/jfb/harness/swap-repeat-probe.ts \\',
-  },
-
   { path: 'README.zh.md', line: 'deno run -A npm:@openelement/create@alpha my-app' },
   { path: 'packages/create/README.md', line: 'deno run -A npm:@openelement/create@alpha my-app' },
   // Display surfaces: the homepage command block and the e2e assertion that
@@ -132,12 +127,13 @@ export const CONSUMER_SCAFFOLD_EXEMPT_LINES: ReadonlyArray<{ path: string; line:
  */
 export const CONSUMER_SCAFFOLD_PATTERN =
   // Ruled consumer-scaffold shapes (owner 2026-09-21, widened #1424):
-  //   1. the create command — `deno run -A npm:@openelement/create@<tag> <arg>`
-  //      optionally wrapped in single quotes with a trailing comma (a code
-  //      example inside a spec), with nothing after it (a trailing flag or
-  //      second word loosens it);
-  //   2. jfb harness usage-note lines: `* deno run -A benchmarks/jfb... \`.
-  /^(?:\*+\s+)?(?:'deno run -A (?:npm:@openelement\/create@[A-Za-z0-9][^\s']* \S+)',|deno run -A npm:@openelement\/create@[A-Za-z0-9][^\s]* \S+|deno run -A benchmarks\/jfb\S* \\)\s*$/u;
+  //   the create command — `deno run -A npm:@openelement/create@<tag> <arg>`
+  //   optionally wrapped in single quotes with a trailing comma (a code
+  //   example inside a spec), with nothing after it (a trailing flag or
+  //   second word loosens it). The benchmark-harness usage-note shape that
+  //   the pattern once carried retired with the removed in-repo benchmark
+  //   surface (owner ruling 2026-10-03).
+  /^(?:'deno run -A (?:npm:@openelement\/create@[A-Za-z0-9][^\s']* \S+)',|deno run -A npm:@openelement\/create@[A-Za-z0-9][^\s]* \S+)\s*$/u;
 
 /** True when (path, line) is exactly one of the ruled exempt lines. */
 export function isConsumerScaffoldExempt(path: string, line: string): boolean {
