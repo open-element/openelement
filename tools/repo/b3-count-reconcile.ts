@@ -153,6 +153,11 @@ const RECONCILED: Record<string, { reason: string; expect: FileCounts }> = {
     reason: 'post-cutover shrink −1: release-lane node port completed (203935fac)',
     expect: { tests: 2, steps: 0 },
   },
+  'tools/repo/coverage-summary.test.ts': {
+    reason:
+      'post-cutover growth +1: lcov path normalization at the coverage read boundary (d3a584346, normalizeLcovSourcePaths coverage)',
+    expect: { tests: 11, steps: 0 },
+  },
 };
 
 /**
