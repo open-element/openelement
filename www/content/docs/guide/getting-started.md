@@ -17,9 +17,9 @@ pnpm install
 pnpm dev
 ```
 
-The version the install command resolves is registered in [`docs/release/release-state.json`](https://github.com/open-element/openelement/blob/main/docs/release/release-state.json), the repository's registry-verified source of truth; `--minimum-dependency-age 0` keeps the bootstrap installable during the first day after a compatible patch ships.
+The version the install command resolves is registered in [`docs/release/release-state.json`](https://github.com/open-element/openelement/blob/main/docs/release/release-state.json), the repository's registry-verified source of truth: the scaffold writes the resolved exact `@openelement/*` pins into the generated `package.json`, so no extra flags are involved.
 
-> The generated project is a plain Node/pnpm app (ADR-0161): Node.js 24.2+ and pnpm run its scripts — Node 24.2 is the verified floor the packed packages declare and CI exercises (the Router CLI relies on `import.meta.main`, added in Node 24.2.0; `.node-version` pins the 24.18 development line). The bootstrap command itself is a Deno invocation: Deno 2.9+ is the verified floor for that one command, resolving the packages through `npm:` specifiers.
+> The generated project is a plain Node/pnpm app (ADR-0161): Node.js 24.2+ and pnpm run its scripts — Node 24.2 is the verified floor the packed packages declare and CI exercises (the Router CLI relies on `import.meta.main`, added in Node 24.2.0; `.node-version` pins the 24.18 development line). The bootstrap command itself is a plain Node invocation, so the whole flow needs only Node and pnpm; the earlier Deno bootstrap was retired by the 2026-10-03 ADR-0161 amendment.
 
 ## Explore
 

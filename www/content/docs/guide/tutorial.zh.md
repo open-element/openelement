@@ -9,7 +9,7 @@ order: 2
 
 ## 开始之前
 
-需要 **Node.js 24.2+** 与 pnpm，以及一个终端。唯一一条 bootstrap 命令是 Deno 调用——Deno 2.9+ 经 `npm:` specifier 解析它（ADR-0161）；之后的每一步都是 Node 与 pnpm。
+需要 **Node.js 24.2+** 与 pnpm，以及一个终端。唯一一条 bootstrap 命令是一次普通的 Node 调用（ADR-0161）——不涉及第二个运行时，之后的每一步都是 Node 与 pnpm。
 
 本教程用五步做出一个小应用，每一步都以「看得见的结果」收尾：
 
@@ -30,7 +30,7 @@ pnpm install
 pnpm dev
 ```
 
-`--minimum-dependency-age 0` 只在一种情况下需要：Deno 默认（约 24 小时）会拒绝发布未满一天的包。
+这条命令跑在普通 Node 工具链上：从 npm 拉取已发布的 `@openelement/create@alpha` 包，并把解析出的精确依赖版本脚手架进项目。
 
 create CLI 每个文件打印一行 `created <path>`，随后打印后续命令：
 

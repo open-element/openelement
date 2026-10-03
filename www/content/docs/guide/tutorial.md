@@ -9,7 +9,7 @@ order: 2
 
 ## Before you start
 
-You need **Node.js 24.2+** with pnpm, and a terminal. The one bootstrap command is a Deno invocation — a Deno 2.9+ install resolves it through `npm:` specifiers (ADR-0161); everything after it is Node and pnpm.
+You need **Node.js 24.2+** with pnpm, and a terminal. The one bootstrap command is a plain Node invocation (ADR-0161) — no second runtime is involved, and everything after it is Node and pnpm.
 
 The tutorial builds one app in five steps, and every step ends with something you can see:
 
@@ -30,7 +30,7 @@ pnpm install
 pnpm dev
 ```
 
-`--minimum-dependency-age 0` is needed only because Deno's default (~24 hours) refuses packages published within the last day.
+The command runs on plain Node tooling: it fetches the published `@openelement/create@alpha` package from npm and scaffolds the project with the resolved exact dependency pins.
 
 The create CLI prints one `created <path>` line per file, then the next steps:
 
