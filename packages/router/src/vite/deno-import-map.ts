@@ -19,6 +19,11 @@
  *
  * Uses sync Node APIs so the resolution can run inside Vite's synchronous
  * plugin hooks.
+ *
+ * After B2 the repo no longer carries any deno.json, so the monorepo-root
+ * seeding special case (a module-relative WORKSPACE_ROOT probe) was retired
+ * (2026-10, #1509 review) — the nearest-deno.json walk below is the only
+ * resolution path.
  */
 
 import { existsSync, readFileSync } from 'node:fs';
@@ -37,20 +42,6 @@ export interface ImportMapResolution {
   /** Directory of the deno.json that owned the mapping. */
   denoJsonDir: string;
 }
-
-/** Workspace root derived from this module's location.
- * Only valid in the local monorepo layout. In npm/JSR consumers, returns null. */
-const WORKSPACE_ROOT: string | null = (() => {
-  if (!import.meta.url.startsWith('file:')) return null;
-  try {
-    const root = normalizeSeparators(fileURLToPath(new URL('../../../..', import.meta.url)));
-    if (!existsSync(join(root, 'packages', 'element', 'deno.json'))) return null;
-    return root;
-  } catch (e) {
-    log.warn('Unable to resolve workspace root, falling back to null', e);
-    return null;
-  }
-})();
 
 /** Check a single directory for a deno.json with the given import. */
 function tryDenoJsonDir(id: string, dir: string): ImportMapResolution | null {
@@ -94,12 +85,6 @@ export function lookupInDenoJson(id: string, root: string): ImportMapResolution 
     const parent = resolve(dir, '..');
     if (parent === dir) break;
     dir = parent;
-  }
-
-  // Also try workspace root (module-relative, for monorepo dev / testing)
-  if (WORKSPACE_ROOT && !denoJsonDirs.has(WORKSPACE_ROOT)) {
-    const found = tryDenoJsonDir(id, WORKSPACE_ROOT);
-    if (found) return found;
   }
 
   return null;
