@@ -45,7 +45,7 @@ The canonical install command is exported from `@openelement/create/install-comm
 The documented bootstrap runs the generator through `deno run … npm:…` — a
 Deno 2.9+ install is needed for that one command (the `@alpha` dist-tag only
 exists on npm; Deno consumers resolve it through the `npm:` specifier).
-The scaffolded project itself is Node-native: Node.js 24+ and
+The scaffolded project itself is Node-native: Node.js 24.2+ and
 pnpm run its scripts, and `npx`/`pnpm dlx` entry points for the generator
 remain a deferred roadmap item (portable-host tooling,
 [#1387](https://github.com/open-element/openelement/issues/1387)).
@@ -64,7 +64,7 @@ deno run -A npm:@openelement/create@0.43 my-app
 
 - **Bootstrap:** Deno 2.9+ for the documented `deno run … npm:…` bootstrap
   command (the verified floor this repository exercises in CI).
-- **Generated project:** Node.js 24+ (the floor the packed `@openelement/*`
+- **Generated project:** Node.js 24.2+ (the floor the packed `@openelement/*`
   engines declare and CI exercises; `.node-version` pins the development
   line) and pnpm for the lifecycle scripts.
 

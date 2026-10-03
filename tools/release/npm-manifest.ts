@@ -47,8 +47,14 @@ const PACKAGE_KEYWORDS: Record<string, string[]> = {
 
 /**
  * Host floors (#1412). `node` is the Alpha target the repository actually
- * exercises: ADR-0154 names Node 24, and CI runs the packed consumers on Node
- * 24 plus a 24/26 serve matrix. `deno` is the documented, CI-verified
+ * exercises: ADR-0154 names the Node 24 line, and CI runs the packed
+ * consumers on Node 24 plus a 24/26 serve matrix. The floor is 24.2, not
+ * bare 24: the Router CLI entries (`src/cli/build.ts`, `src/cli/start.ts`)
+ * gate their main block on `import.meta.main`, which Node added in 24.2.0 —
+ * on 24.0/24.1 the guard is `undefined`, so the CLI would exit 0 without
+ * doing anything. The starter template, the root engines, and the docs state
+ * the same 24.2 floor (one version contract, four surfaces). `deno` is the
+ * documented, CI-verified
  * Deno floor (README; CI-pinned since the B4 .dvmrc retirement) and is
  * declared only by the two packages whose
  * supported toolchain is Deno-driven today: Router's `./vite` + `./cli/*`
@@ -58,10 +64,10 @@ const PACKAGE_KEYWORDS: Record<string, string[]> = {
  * constraining npm installs.
  */
 const ENGINES: Record<string, Record<string, string>> = {
-  '@openelement/element': { node: '>=24' },
-  '@openelement/router': { node: '>=24', deno: '>=2.9' },
+  '@openelement/element': { node: '>=24.2' },
+  '@openelement/router': { node: '>=24.2', deno: '>=2.9' },
   '@openelement/create': { deno: '>=2.9' },
-  '@openelement/ui': { node: '>=24' },
+  '@openelement/ui': { node: '>=24.2' },
 };
 
 /**

@@ -87,7 +87,7 @@ test('starter exposes only product dependencies and the standard lifecycle', () 
   expect(manifest.scripts.build).toContain('@openelement/router/src/cli/build.js');
   expect(manifest.scripts.start).toContain('@openelement/router/src/cli/start.js');
   expect(manifest.scripts.preview).toContain('--mode=preview');
-  expect(manifest.engines).toEqual({ node: '>=24' });
+  expect(manifest.engines).toEqual({ node: '>=24.2' });
   expect(JSON.stringify(manifest).includes('@openelement/core')).toBeFalsy();
   expect(JSON.stringify(manifest).includes('@openelement/app')).toBeFalsy();
   expect(JSON.stringify(manifest).includes('@openelement/signal')).toBeFalsy();

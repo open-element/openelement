@@ -9,7 +9,7 @@ The source tree is `1.0.0-alpha.5`, a new public baseline for Element and Router
 
 ## Quick Start
 
-Requires **Node.js 24+** and pnpm (the one documented bootstrap command runs
+Requires **Node.js 24.2+** and pnpm (the one documented bootstrap command runs
 through a Deno 2.9+ install; Deno consumers resolve the packages through
 `npm:` specifiers — ADR-0161). Create, install, run, and build:
 
@@ -52,7 +52,7 @@ export default definePage(HelloPage, {
 Re-run `pnpm dev`, open the URL Vite prints plus `/hello`, and `pnpm build` emits the static-first `dist/` output. Full walkthrough: <https://openelement.org/guide/getting-started>.
 
 **Build-time host:** Framework Mode development and builds run on Node.js
-24+ through pnpm scripts (ADR-0161, superseding the Deno-native decision in
+24.2+ through pnpm scripts (ADR-0161, superseding the Deno-native decision in
 ADR-0108): the `@openelement/router` tooling subpaths (`./vite`, `./cli/*`)
 are consumed through the starter's own dependency pins as plain Node
 programs. The request-time output uses standard ESM and Web

@@ -19,7 +19,7 @@ pnpm dev
 
 安装命令解析到的版本登记在 [`docs/release/release-state.json`](https://github.com/open-element/openelement/blob/main/docs/release/release-state.json)（仓库的 registry 核验真值）中；`--minimum-dependency-age 0` 让新兼容补丁发布后的首日仍可正常创建项目。
 
-> 生成的项目是纯 Node/pnpm 应用（ADR-0161）：脚本由 Node.js 24+ 与 pnpm 驱动——Node 24 是打包产物 engines 声明、CI 实际运行过的验证下限（`.node-version` 钉住 24.18 开发线）。bootstrap 命令本身是一条 Deno 调用：Deno 2.9+ 是该命令的验证下限，Deno 经 `npm:` specifier 解析这些包。
+> 生成的项目是纯 Node/pnpm 应用（ADR-0161）：脚本由 Node.js 24.2+ 与 pnpm 驱动——Node 24.2 是打包产物 engines 声明、CI 实际运行过的验证下限（Router CLI 依赖 Node 24.2.0 引入的 `import.meta.main`；`.node-version` 钉住 24.18 开发线）。bootstrap 命令本身是一条 Deno 调用：Deno 2.9+ 是该命令的验证下限，Deno 经 `npm:` specifier 解析这些包。
 
 ## 探索
 

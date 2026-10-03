@@ -9,7 +9,7 @@ order: 2
 
 ## Before you start
 
-You need **Node.js 24+** with pnpm, and a terminal. The one bootstrap command is a Deno invocation — a Deno 2.9+ install resolves it through `npm:` specifiers (ADR-0161); everything after it is Node and pnpm.
+You need **Node.js 24.2+** with pnpm, and a terminal. The one bootstrap command is a Deno invocation — a Deno 2.9+ install resolves it through `npm:` specifiers (ADR-0161); everything after it is Node and pnpm.
 
 The tutorial builds one app in five steps, and every step ends with something you can see:
 

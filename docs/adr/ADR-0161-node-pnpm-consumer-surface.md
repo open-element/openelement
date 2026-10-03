@@ -36,9 +36,12 @@ make the framework the only reason a Node shop keeps a Deno install.
   remains `deno run -A npm:@openelement/create@alpha <name>` — Deno resolves
   the published packages through `npm:` specifiers from the same registry
   artifacts. No JSR identifier is published or supported.
-- **Runtime floors are stated per verified fact.** Node.js 24+ is the consumer
-  floor: it is what the packed package engines declare and what CI exercises
-  (including the packed-consumer serve matrix). The repository development
+- **Runtime floors are stated per verified fact.** Node.js 24.2+ is the
+  consumer floor: it is what the packed package engines declare and what CI
+  exercises (including the packed-consumer serve matrix). The point floor is
+  24.2, not bare 24, because the Router CLI gates on `import.meta.main`,
+  which Node added in 24.2.0 — on 24.0/24.1 the guard is undefined and the
+  CLI would silently exit 0. The repository development
   line is pinned by `.node-version` (24.18). Deno 2.9 remains the floor for
   the one documented Deno-surface command — the create bootstrap — and for
   the in-repo Deno-hosted release/qualify tooling, not for consumers.

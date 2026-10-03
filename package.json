@@ -5,7 +5,7 @@
   "type": "module",
   "packageManager": "pnpm@12.3.4",
   "engines": {
-    "node": ">=24"
+    "node": ">=24.2"
   },
   "scripts": {
     "check": "node tools/repo/gate.ts fmt:check lint typecheck tools/repo#lint:markdown",

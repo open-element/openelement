@@ -9,7 +9,7 @@ order: 2
 
 ## 开始之前
 
-需要 **Node.js 24+** 与 pnpm，以及一个终端。唯一一条 bootstrap 命令是 Deno 调用——Deno 2.9+ 经 `npm:` specifier 解析它（ADR-0161）；之后的每一步都是 Node 与 pnpm。
+需要 **Node.js 24.2+** 与 pnpm，以及一个终端。唯一一条 bootstrap 命令是 Deno 调用——Deno 2.9+ 经 `npm:` specifier 解析它（ADR-0161）；之后的每一步都是 Node 与 pnpm。
 
 本教程用五步做出一个小应用，每一步都以「看得见的结果」收尾：
 

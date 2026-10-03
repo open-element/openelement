@@ -9,7 +9,7 @@ Element 将 JSX 编写的 Custom Element 编译为 Part Program，并统一用�
 
 ## 快速开始
 
-需要 **Node.js 24+** 与 pnpm（唯一一条 bootstrap 命令经 Deno 2.9+ 运行；Deno 消费者通过 `npm:` specifier 解析这些包——见 ADR-0161）。创建、安装、运行、构建：
+需要 **Node.js 24.2+** 与 pnpm（唯一一条 bootstrap 命令经 Deno 2.9+ 运行；Deno 消费者通过 `npm:` specifier 解析这些包——见 ADR-0161）。创建、安装、运行、构建：
 
 ```bash
 deno run -A npm:@openelement/create@alpha my-app
@@ -49,7 +49,7 @@ export default definePage(HelloPage, {
 
 重新跑 `pnpm dev`，打开 Vite 打印的 URL 并加上 `/hello`，`pnpm build` 会产出 static-first 的 `dist/`。完整教程：<https://openelement.org/zh/guide/getting-started>。
 
-**构建期宿主说明：** Framework Mode 的开发与构建运行在 Node.js 24+ 上，经 pnpm 脚本驱动（ADR-0161，取代 ADR-0108 的 Deno-native 决策）：`@openelement/router` 的工具子路径（`./vite`、`./cli/*`）作为普通 Node 程序经 starter 自己的依赖钉扎消费。请求期产物使用标准 ESM 与 Web `Request`/`Response`；部署支持以资格矩阵实际覆盖的运行时与 Nitro 目标为准，而非所有能加载 ESM 的运行时。Element 仍可在纯 npm 项目中独立消费。
+**构建期宿主说明：** Framework Mode 的开发与构建运行在 Node.js 24.2+ 上，经 pnpm 脚本驱动（ADR-0161，取代 ADR-0108 的 Deno-native 决策）：`@openelement/router` 的工具子路径（`./vite`、`./cli/*`）作为普通 Node 程序经 starter 自己的依赖钉扎消费。请求期产物使用标准 ESM 与 Web `Request`/`Response`；部署支持以资格矩阵实际覆盖的运行时与 Nitro 目标为准，而非所有能加载 ESM 的运行时。Element 仍可在纯 npm 项目中独立消费。
 
 ## 特性
 
