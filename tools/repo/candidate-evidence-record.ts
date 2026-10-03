@@ -190,17 +190,59 @@ async function playwrightBrowserVersions(): Promise<Record<string, string>> {
   return out;
 }
 
+/**
+ * The workspace TypeScript version, taken from the installed dependency —
+ * `node_modules/typescript/package.json` — the exact copy the workspace gates
+ * typechecked with. `process.versions.typescript` was the Deno-era source
+ * (Deno ships its own TypeScript); Node's `process.versions` has no such
+ * field, so under the Node surface the key silently serialised away and the
+ * validator rejected every producer record. A registry probe or a constant
+ * would record a version the gates never ran, so this fails closed instead.
+ */
+export async function workspaceTypescriptVersion(root: string): Promise<string> {
+  const manifestPath = join(root, 'node_modules', 'typescript', 'package.json');
+  let raw: string;
+  try {
+    raw = await readFile(manifestPath, 'utf8');
+  } catch (cause) {
+    throw new Error(
+      `evidence toolVersions: TypeScript version unavailable — ${manifestPath} is not readable ` +
+        `(${cause instanceof Error ? cause.message : String(cause)}); install the workspace ` +
+        `(pnpm install) so the recorded version is the one the gates actually ran.`,
+    );
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw new Error(
+      `evidence toolVersions: ${manifestPath} is not valid JSON; refusing to record a fabricated version.`,
+    );
+  }
+  const version =
+    typeof parsed === 'object' && parsed !== null && 'version' in parsed
+      ? (parsed as { version: unknown }).version
+      : undefined;
+  if (typeof version !== 'string' || version === '') {
+    throw new Error(
+      `evidence toolVersions: ${manifestPath} has no non-empty version string; refusing to record a fabricated version.`,
+    );
+  }
+  return version;
+}
+
 export async function toolVersions(): Promise<EvidenceToolVersions> {
-  const [node, npm, pnpm] = await Promise.all([
+  const [node, npm, pnpm, typescript] = await Promise.all([
     required('node', ['--version']).catch(() => 'unavailable'),
     required('npm', ['--version']).catch(() => 'unavailable'),
     required('pnpm', ['--version']).catch(() => 'unavailable'),
+    workspaceTypescriptVersion(repoRoot),
   ]);
   return {
     node,
     pnpm,
     v8: process.versions.v8!,
-    typescript: process.versions.typescript!,
+    typescript,
     npm,
     os: `${evidenceOs()}/${evidenceArch()}`,
     playwrightBrowsers: await playwrightBrowserVersions(),

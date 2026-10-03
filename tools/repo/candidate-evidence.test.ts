@@ -46,6 +46,7 @@ import {
   materializeEvidencePath,
   normalizeEvidencePath,
 } from './candidate-steps.ts';
+import { repoRoot, toolVersions, workspaceTypescriptVersion } from './candidate-evidence-record.ts';
 import { createDeterministicTarGz } from '../lib/deterministic-tar.ts';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -1940,6 +1941,41 @@ test('packedRollupFromLog derives the artifact scan and consumers from the gate 
   expect(parsed.artifactCheck).toEqual(true);
   expect(parsed.consumers.length).toEqual(REQUIRED_PACKED_CONSUMERS.length);
   expect(packedRollupFromLog('PASS tools/release#pack:dry-run').artifactCheck).toEqual(false);
+});
+
+test('toolVersions takes TypeScript from the installed workspace, failing closed otherwise', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'oe-tool-versions-'));
+  try {
+    // No node_modules: the producer must stop with the fact, never a version.
+    await assertRejectsIncludes(
+      () => workspaceTypescriptVersion(root),
+      Error,
+      'TypeScript version unavailable',
+    );
+    const manifest = join(root, 'node_modules', 'typescript', 'package.json');
+    await mkdir(join(root, 'node_modules', 'typescript'), { recursive: true });
+    await writeFile(manifest, '{ broken');
+    await assertRejectsIncludes(() => workspaceTypescriptVersion(root), Error, 'not valid JSON');
+    await writeFile(manifest, JSON.stringify({ name: 'typescript' }));
+    await assertRejectsIncludes(
+      () => workspaceTypescriptVersion(root),
+      Error,
+      'no non-empty version string',
+    );
+    await writeFile(manifest, JSON.stringify({ name: 'typescript', version: '6.0.3' }));
+    expect(await workspaceTypescriptVersion(root)).toEqual('6.0.3');
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test('the recorded toolchain names the installed workspace TypeScript', async () => {
+  const versions = await toolVersions();
+  expect(versions.typescript).toEqual(await workspaceTypescriptVersion(repoRoot));
+  for (const key of ['node', 'pnpm', 'v8', 'typescript', 'npm', 'os'] as const) {
+    expect(typeof versions[key], `toolVersions.${key} is a string`).toEqual('string');
+    expect(versions[key], `toolVersions.${key} is non-empty`).not.toEqual('');
+  }
 });
 
 /**
