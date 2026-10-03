@@ -5,7 +5,8 @@
  * PACKAGE, so a partial state (element/create/ui on 0.43.3 while Router has no
  * 0.43.x) can never again be represented as one shared four-package version.
  *
- * Offline `deno task check` validates structure + source versions + Site copy
+ * Offline runs — the `tools/repo#release:state-machine:check` task, which
+ * passes `--offline` — validate structure + source versions + Site copy
  * consistency + the www source-line anchor (www/app/data/version.ts must keep
  * OPENELEMENT_VERSION derived from the generated release-line module, and that
  * module must mirror release-state.json); it is explicitly NOT registry proof.

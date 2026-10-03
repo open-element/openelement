@@ -2,8 +2,8 @@
  * Build output assertions — runs against www/dist after a production build.
  * These tests validate that build artifacts meet security and size constraints.
  *
- * Run: deno test www/__tests__/build-output.test.ts --allow-read
- * (must run after `deno task build`)
+ * Run: pnpm --dir www run test (the vitest www project)
+ * (must run after `pnpm run site:build`)
  */
 import { expect, test } from 'vitest';
 import { existsSync } from 'node:fs';

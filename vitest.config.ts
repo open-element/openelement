@@ -34,7 +34,7 @@
  *            suite is a DOM-free structural check that never launches a
  *            browser, so a plain node project covers it — no
  *            browser-mode adaptation, no skips. benchmarks/streaming is a
- *            manual `deno run` measurement script, not a test universe.
+ *            manual `node` measurement script, not a test universe.
  * `element-browser` is the vitest-browser-mode owner of the
  * packages/element/__wtr__ conformance suite (#1333): the chai-based suites
  * kept their files and their working-tree runtime aliases

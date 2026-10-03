@@ -9,7 +9,7 @@
  * release-line contract in tools/lib/version.ts, and any mismatch or absent
  * version fails closed with a non-zero exit.
  *
- * Usage: deno run --allow-read tools/repo/check-release-version.ts <version>
+ * Usage: node tools/repo/check-release-version.ts <version>
  */
 
 import { join } from '@std/path';

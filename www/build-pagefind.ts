@@ -1,7 +1,7 @@
 /**
  * build-pagefind.ts - Pagefind search index generation for the site.
  *
- * Runs after the vite/SSG build (`deno task build`). Replaces the old
+ * Runs after the vite/SSG build (`pnpm --dir www run build`). Replaces the old
  * bespoke public/search-index.json pipeline (ADR-0123 item 17, #867).
  *
  * Pagefind cannot index Declarative Shadow DOM: `<template shadowrootmode>`
@@ -19,7 +19,8 @@
  * The transform only touches the throwaway staging copy; www/dist itself
  * is untouched apart from the emitted /pagefind directory.
  *
- * Usage: run after the site build (`deno task site:build`); no dedicated task.
+ * Usage: `pnpm --dir www run pagefind` (the root `site:build` gate runs it
+ * after the site build).
  */
 
 import { walk } from '../tools/lib/std-fs.ts';

@@ -8,9 +8,9 @@
  * tarball output + monorepo framework sources.
  *
  * Prerequisites:
- *   deno task --cwd tests/e2e/starter-smoke setup
+ *   pnpm --dir tests/e2e/starter-smoke run setup
  *
- * Run: deno task --cwd tests/e2e/starter-smoke test
+ * Run: pnpm --dir tests/e2e/starter-smoke run test
  */
 import { defineConfig } from '@playwright/test';
 import process from 'node:process';

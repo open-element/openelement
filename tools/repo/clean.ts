@@ -4,7 +4,7 @@
  *
  * Root tasks must not shell out to `rm -rf`: it does not exist on Windows
  * cmd. This tool removes ONLY allowlisted, repo-generated paths and is the
- * only sanctioned deletion primitive inside `deno task` strings.
+ * only sanctioned deletion primitive inside package.json script strings.
  *
  * Every target is repo-relative and validated twice: against the built-in
  * allowlist below and against the resolved repo root, so `/`, `~`, HOME,
@@ -14,9 +14,9 @@
  * by construction.
  *
  * Usage:
- *   deno run --allow-read --allow-write tools/repo/clean.ts            # default generated targets
- *   deno run --allow-read --allow-write tools/repo/clean.ts --deep     # + installed dependency trees
- *   deno run --allow-read --allow-write tools/repo/clean.ts <pattern>  # allowlisted pattern(s)
+ *   pnpm run clean                      # default generated targets
+ *   pnpm run clean:deep                 # + installed dependency trees
+ *   node tools/repo/clean.ts <pattern>  # allowlisted pattern(s)
  */
 import { expandGlob } from '../../tools/lib/std-fs.ts';
 import { fromFileUrl, isAbsolute, join, relative, resolve, SEPARATOR } from '@std/path';

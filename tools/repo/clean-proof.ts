@@ -7,8 +7,7 @@
  * line is asserted by the candidate validator against the step's hashed log.
  *
  * Usage:
- *   deno run --allow-read --allow-run=git --deny-ffi --no-prompt \
- *     tools/repo/clean-proof.ts --sha <40hex> --tree <40hex> --phase before|after
+ *   node tools/repo/clean-proof.ts --sha <40hex> --tree <40hex> --phase before|after
  */
 
 import { commandOutput } from './node-command.ts';

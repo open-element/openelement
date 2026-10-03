@@ -190,7 +190,7 @@ test('content has no route the generated table misses', async () => {
       .sort();
     expect(
       fromContent,
-      `regenerate with \`deno task --cwd www generate:article-routes\` (${collection})`,
+      `regenerate with \`pnpm --dir www run generate:article-routes\` (${collection})`,
     ).toEqual(fromTable);
   }
 });
