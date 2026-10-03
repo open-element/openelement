@@ -40,6 +40,18 @@ const REGISTRY_HOSTS = new Set(['registry.npmjs.org', 'npm.jsr.io']);
  */
 const NPM_NAME_RE = /^(?:@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*$/;
 
+/**
+ * The packument URL for a validated name: the registry origin joined to the
+ * name with every `/` encoded as `%2F` (the `@` scope marker stays literal —
+ * it is legal in a URL path). npm scoped names carry exactly one `/`, but the
+ * escaping must be complete (`replaceAll`, not first-occurrence `replace`) so
+ * no name shape can leave a raw separator in the path — the incomplete
+ * string-escaping shape static analysis flags.
+ */
+export function packumentUrl(registry: string, name: string): string {
+  return `${registry}/${name.replaceAll('/', '%2F')}`;
+}
+
 export interface LockPackage {
   key: string;
   name: string;
@@ -103,7 +115,7 @@ export function ageFailure(publishIso: string, now: Date, key: string): string |
 }
 
 /** Resolve the publish time, or a `${pkg.key}: …` failure message (fail-closed). */
-async function fetchPublishTime(pkg: LockPackage): Promise<string> {
+export async function fetchPublishTime(pkg: LockPackage): Promise<string> {
   let reason = 'no attempt';
   for (let attempt = 0; attempt < FETCH_ATTEMPTS; attempt++) {
     try {
@@ -123,7 +135,7 @@ async function fetchPublishTime(pkg: LockPackage): Promise<string> {
       }
       // Full (non-abbreviated) packuments: only they carry the `time` map,
       // and for meta-packages like playwright they reach ~20MB.
-      const response = await fetch(`${pkg.registry}/${pkg.name.replace('/', '%2F')}`, {
+      const response = await fetch(packumentUrl(pkg.registry, pkg.name), {
         headers: { accept: 'application/json' },
         signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
       });
