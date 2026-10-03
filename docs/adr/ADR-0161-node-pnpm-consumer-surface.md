@@ -43,19 +43,44 @@ make the framework the only reason a Node shop keeps a Deno install.
   24.2, not bare 24, because the Router CLI gates on `import.meta.main`,
   which Node added in 24.2.0 — on 24.0/24.1 the guard is undefined and the
   CLI would silently exit 0. The repository development
-  line is pinned by `.node-version` (24.18). Deno 2.9 remains the floor for
-  the one documented Deno-surface command — the create bootstrap — and for
-  the in-repo Deno-hosted release/qualify tooling, not for consumers.
+  line is pinned by `.node-version` (24.18). Node 24.2 is the floor for every
+  consumer surface including the create bootstrap (see the 2026-10-03
+  amendment); no Deno floor is declared anywhere.
 - **Documentation states the Node line.** READMEs, guides, and starter
-  surfaces describe the Node/pnpm lifecycle; Deno appears only where a Deno
-  invocation is the fact (the bootstrap command, release-lane tooling).
+  surfaces describe the Node/pnpm lifecycle; Deno appears only in historical
+  records (this ADR's context and its amendment trail).
 
 ## Consequences
 
 The import-map era of starter configuration is closed: `@openelement/*`
 subpaths (`/jsx-runtime`, `/vite`, `/nitro-mount`, …) resolve through the
 published packages' own exports maps, and the framework no longer asks
-consumers to install a second JS runtime. Consumers that want Deno keep
-working through the npm artifacts and the documented bootstrap. The remaining
-Deno-hosted surface (release tooling, qualify harnesses) is internal and
-tracked by the portable-host migration (#1387), not a consumer contract.
+consumers to install a second JS runtime. The release tooling and qualify
+harnesses that were Deno-hosted at acceptance time are fully Node-hosted as
+of the 2026-10-03 amendment; nothing in the repository requires a Deno
+install.
+
+## Amendment (2026-10-03, owner ruling)
+
+The "完全去除 deno" ruling retires the last Deno-flavored consumer surface
+this ADR documented, and supersedes the bullets above where they conflict:
+
+- **The Deno bootstrap is retired.** The create CLI ships as a Node bin
+  (`#!/usr/bin/env node`; npm bins `openelement-create` and
+  `create-openelement`, both the packed `src/cli.js` entry). The documented
+  bootstrap is a plain Node invocation — canonical
+  `npm exec @openelement/create@alpha -- <name>`, with the `npx` short form
+  and the pnpm `pnpm dlx --package=@openelement/create@alpha
+  openelement-create <name>` variant (the packed package ships two bins, so
+  the pnpm form names one explicitly) — verified against the published
+  artifact. The 2026-09-21 consumer-scaffold exemption in the broad-permission
+  tripwire retires with the command it covered.
+- **Deno consumers are no longer a documented or qualification-verified
+  support surface.** The npm artifacts happen to be loadable by Deno (plain
+  compiled ESM with `npm:`-resolvable dependencies), but that is incidental,
+  not a promise: no Deno engine is declared, no Deno leg runs in consumer
+  qualification, and no Deno spelling is documented.
+- **The release/qualify toolchain is fully Node-hosted.** Packing, publishing,
+  and the published/packed consumer qualifications run on Node via pnpm
+  scripts; the portable-host migration (#1387) is complete for this surface.
+  The engines floor for every retained package is `node >=24.2`.
