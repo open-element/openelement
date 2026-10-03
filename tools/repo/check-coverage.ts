@@ -14,6 +14,7 @@ import {
   isToolsLibSource,
   isWwwToolsSource,
   lcovFilePaths,
+  normalizeLcovSourcePaths,
   parseLcov,
 } from './coverage-summary.ts';
 import { commandStatus } from './node-command.ts';
@@ -185,7 +186,12 @@ async function main(): Promise<void> {
   // retries that only fire on native-crash exits (>= 128 + signal), never on
   // assertion failures. Loud by design: every crash prints to stderr.
   const crashRetries = getNumberArg('--crash-retries', 2);
-  const lcov = await runCoverage(crashRetries);
+  // vitest's lcov reporter writes SF paths relative to the vitest root; the
+  // summarizer and scope predicates match absolute paths (the deno-coverage
+  // era wrote absolute SF lines). Normalize once at the read boundary —
+  // without it every in-scope file lands in the "never loaded" bucket and
+  // every scope reads 0%.
+  const lcov = normalizeLcovSourcePaths(await runCoverage(crashRetries), process.cwd());
   const profiledFiles = lcovFilePaths(lcov);
 
   // Threshold baselines, measured with the full-denominator logic below on a

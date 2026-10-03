@@ -1,3 +1,4 @@
+import { resolve } from 'node:path';
 import { walk } from '../../tools/lib/std-fs.ts';
 import ts from 'typescript';
 import { parseTypeScript } from '../lib/typescript-ast.ts';
@@ -146,6 +147,28 @@ export async function enumerateCoverageFiles(
     files.push(path);
   }
   return files.sort();
+}
+
+/**
+ * Normalize an lcov report's `SF:` paths to absolute form against `root`.
+ *
+ * The deno-coverage era wrote absolute SF lines, and every consumer here
+ * (lcovFilePaths membership, parseLcov's scope predicates) matches absolute
+ * paths. The vitest lcov reporter instead writes paths relative to the
+ * vitest root, which silently unmatched every file: the whole denominator
+ * fell into the "never loaded" bucket and every scope read 0%. Run this
+ * once at the read boundary, before the report reaches those consumers.
+ */
+export function normalizeLcovSourcePaths(lcov: string, root: string): string {
+  return lcov
+    .split('\n')
+    .map((line) => {
+      if (!line.startsWith('SF:')) return line;
+      const sourcePath = line.slice(3);
+      if (sourcePath.startsWith('/') || sourcePath.includes('://')) return line;
+      return `SF:${resolve(root, sourcePath)}`;
+    })
+    .join('\n');
 }
 
 /** Absolute paths of every file present in an LCOV report. */

@@ -9,6 +9,7 @@ import {
   isProductionPackageSource,
   isToolsLibSource,
   lcovFilePaths,
+  normalizeLcovSourcePaths,
   parseLcov,
 } from './coverage-summary.ts';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
@@ -162,4 +163,26 @@ test('full denominator: fake LCOV plus fake tree yields 0%-weighted summary', as
   } finally {
     await rm(root, { recursive: true });
   }
+});
+
+test('normalizeLcovSourcePaths resolves relative SF lines and keeps absolute ones', () => {
+  const root = '/repo';
+  const lcov = [
+    'TN:',
+    'SF:packages/element/src/relative.ts',
+    'DA:1,1',
+    'end_of_record',
+    'SF:/repo/packages/element/src/absolute.ts',
+    'DA:1,1',
+    'end_of_record',
+    'SF:https://unrelated-host/thing.ts',
+    'end_of_record',
+  ].join('\n');
+  const normalized = normalizeLcovSourcePaths(lcov, root);
+  const sfLines = normalized.split('\n').filter((line) => line.startsWith('SF:'));
+  expect(sfLines).toEqual([
+    'SF:/repo/packages/element/src/relative.ts',
+    'SF:/repo/packages/element/src/absolute.ts',
+    'SF:https://unrelated-host/thing.ts',
+  ]);
 });
