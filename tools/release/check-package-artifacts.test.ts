@@ -1,9 +1,11 @@
+// esm-boundary:scanner — this file scans for CJS constructs, so it names them.
+// The exemption requires this marker to be the FIRST code line of the file
+// (check-esm-boundary.ts firstCodeLine), so it stays above every import.
 import { expect, test } from 'vitest';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from '@std/path';
-// esm-boundary:scanner — this file scans for CJS constructs, so it names them.
 import { scanExtractedPackage } from './check-package-artifacts.ts';
 
 async function withPackage(
