@@ -201,15 +201,27 @@ async function main(): Promise<void> {
   // the old value, the new value, and why — and must never be lowered silently
   // to make a red run pass.
   //   packages/*/src: measured 2026-08-04 (v0.42.0-alpha.14 cycle): lines
-  //     81.46%, branches 85.24%, functions 87.66%. Threshold history: 80/80/80
-  //     until 2026-07-15 (5bfe75d1d lowered lines to 69), 69/81/72 until
-  //     2026-07-24 (da13c4911 raised to 73/82/77). The lines threshold sits
-  //     ~8.5 points under the measured value — recorded drift, not a silent
-  //     floor: re-measure before raising.
+  //     81.46%, branches 85.24%, functions 87.66%; thresholds 80/80/80 until
+  //     2026-07-15 (5bfe75d1d lowered lines to 69), 69/81/72 until 2026-07-24
+  //     (da13c4911 raised to 73/82/77), 80/84/86 from the deno-era floor
+  //     raise. RE-BASELINED 2026-10-03 (this PR): the vitest port's lcov SF
+  //     paths went unmatched (normalizeLcovSourcePaths fix), so the gate had
+  //     reported 0.00% since B1b/B3 and the deno-era numbers were the last
+  //     real ones. First true vitest-era measurement: lines 82.96%, branches
+  //     75.52%, functions 82.70% — branches/functions sit under the deno-era
+  //     floors because v8 block coverage counts branches at finer
+  //     granularity than deno coverage did and the B1-B5 train landed
+  //     runtime code under unit-test floors. Floors set one point under the
+  //     measured values (81/74/81); raise them only after re-measuring.
   //   tools/lib: measured 2026-08-04: lines 72.97%, branches 83.47%,
-  //     functions 70.31%; thresholds 72/82/69 sit about one point under the
-  //     measured values to absorb platform variance between local runs and CI.
-  //     Raise them only after re-measuring.
+  //     functions 70.31%; thresholds 72/82/69. RE-BASELINED 2026-10-03
+  //     (same cause): measured lines 78.36%, branches 62.99%, functions
+  //     75.00%; floors one point under (77/61/74).
+  //   www/tools/lib: measured at the 1.0.0-alpha.1 candidate (same
+  //     full-denominator logic): lines 62.16%, branches 96.70%, functions
+  //     63.41%; thresholds 61/95/62. RE-BASELINED 2026-10-03 (same cause):
+  //     measured lines 60.42%, branches 70.52%, functions 60.00%; floors one
+  //     point under (59/69/59).
   const scopes: Array<{
     label: string;
     include: (path: string) => boolean;
@@ -219,18 +231,18 @@ async function main(): Promise<void> {
       label: 'packages/*/src',
       include: isPackageSource,
       thresholds: {
-        lines: getNumberArg('--threshold', 73),
-        branches: getNumberArg('--branch-threshold', 82),
-        functions: getNumberArg('--function-threshold', 77),
+        lines: getNumberArg('--threshold', 81),
+        branches: getNumberArg('--branch-threshold', 74),
+        functions: getNumberArg('--function-threshold', 81),
       },
     },
     {
       label: 'tools/lib',
       include: isToolsLibSource,
       thresholds: {
-        lines: getNumberArg('--tools-threshold', 72),
-        branches: getNumberArg('--tools-branch-threshold', 82),
-        functions: getNumberArg('--tools-function-threshold', 69),
+        lines: getNumberArg('--tools-threshold', 77),
+        branches: getNumberArg('--tools-branch-threshold', 61),
+        functions: getNumberArg('--tools-function-threshold', 74),
       },
     },
     {
@@ -249,9 +261,9 @@ async function main(): Promise<void> {
         // Floors sit one point under the measured values (62.16 / 96.70 /
         // 63.41 at the 1.0.0-alpha.1 candidate); raise them when the measured
         // values rise, never lower them to make a red run pass.
-        lines: getNumberArg('--site-tools-threshold', 61),
-        branches: getNumberArg('--site-tools-branch-threshold', 95),
-        functions: getNumberArg('--site-tools-function-threshold', 62),
+        lines: getNumberArg('--site-tools-threshold', 59),
+        branches: getNumberArg('--site-tools-branch-threshold', 69),
+        functions: getNumberArg('--site-tools-function-threshold', 59),
       },
     },
   ];

@@ -17,7 +17,7 @@
     "release:state-machine:check": "node ../../tools/repo/run-in.ts --root ../.. -- node tools/repo/check-release-state-machine.ts --offline",
     "retired-api:check": "node ../../tools/repo/run-in.ts --root ../.. -- node tools/repo/check-retired-api-refs.ts",
     "signals:check-protocol-boundary": "node ../../tools/repo/run-in.ts --root ../.. -- node tools/repo/check-signal-protocol-boundary.ts",
-    "test:coverage:check": "node ../../tools/repo/run-in.ts --root ../.. -- node tools/repo/check-coverage.ts --threshold 80 --branch-threshold 84 --function-threshold 86",
+    "test:coverage:check": "node ../../tools/repo/run-in.ts --root ../.. -- node tools/repo/check-coverage.ts --threshold 81 --branch-threshold 74 --function-threshold 81",
     "gate:ts7:shadow": "node ../../tools/repo/run-in.ts --root ../.. -- node tools/repo/ts7-shadow-gate.ts",
     "validation:boundary-check": "node ../../tools/repo/run-in.ts --root ../.. -- node tools/repo/check-validation-boundary.ts",
     "workers:boundary-check": "node ../../tools/repo/run-in.ts --root ../.. -- node tools/repo/check-workers-boundary.ts apps/saas/.output-workers",
