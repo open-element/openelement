@@ -35,6 +35,25 @@
  *      fails the smoke, whatever the exit code: that signature is exactly
  *      the false-green vector this script exists to exclude.
  *
+ * The matchers run against a CANONICAL report shape. Vitest colorizes its
+ * report even when stdout is piped once `CI` is present in the environment
+ * (its tinyrainbow colorizer enables color on the bare presence of CI —
+ * node_modules/vitest/dist/chunks/tinyrainbow.*.js — so GitHub Actions gets
+ * ANSI codes that local pipes never see; PR #1509's red gate was exactly
+ * this: `Tests \x1b[22m\x1b[1m\x1b[31m1 failed` never matched
+ * /Tests\s+\d+ failed/). Two layers pin the shape, with the assertions
+ * above unchanged:
+ *
+ *   - the spawned vitest runs with NO_COLOR=1 (its colorizer checks
+ *     NO_COLOR first, so the run itself is emitted bare on every lane);
+ *   - the captured output is ANSI-stripped before matching, so a residual
+ *     escape sequence from any future reporter path still cannot sit
+ *     between a signature and its match.
+ *
+ * When a case does break, the normalized output tail is dumped to stderr:
+ * without it the CI log shows only the verdict and every new shape
+ * divergence costs an artifact download to diagnose.
+ *
  * The scratch cases import only vitest, so each spawned run exercises the
  * same browser execution path as the conformance suite, and the runs inherit
  * `OE_BROWSER_MATRIX`: browser:gate (default) proves the contract on
@@ -73,6 +92,19 @@ const SCRATCH_DIR = join(
 
 /** vitest's report line when nothing matched — the false-green vector. */
 const NO_FILES_SIGNATURE = 'No test files found';
+
+/**
+ * ANSI escape sequences (CSI/SGR plus OSC), the pattern the chalk ecosystem
+ * standardizes on. Applied before any matcher runs so a colorized reporter
+ * path cannot wedge an escape sequence between a signature and its match
+ * (belt: the child vitest is pinned to NO_COLOR=1; suspenders: this strip).
+ */
+const ANSI_PATTERN =
+  /[\u001B\u009B][[\]()#;?]*(?:(?:(?:[a-zA-Z\d]*(?:;[-a-zA-Z\d/#&.:=?%@~_]*)*)?\u0007)|(?:(?:\d{1,4}(?:;\d{0,4})*)?[\dA-PR-TZcf-ntqry=><~]))/g;
+
+function stripAnsi(text: string): string {
+  return text.replace(ANSI_PATTERN, '');
+}
 
 interface VitestRun {
   code: number;
@@ -181,15 +213,25 @@ try {
     const result = await commandOutput(VITEST, {
       args: args(SCRATCH_DIR),
       cwd: REPO_ROOT,
+      // Pin the report shape at the source: vitest colorizes piped output
+      // whenever CI is in the environment (tinyrainbow), and its colorizer
+      // honors NO_COLOR before that check — see the header note.
+      env: { NO_COLOR: '1' },
       stdout: 'piped',
       stderr: 'piped',
     });
     const decoder = new TextDecoder();
-    const output = decoder.decode(result.stdout) + decoder.decode(result.stderr);
+    const output = stripAnsi(decoder.decode(result.stdout) + decoder.decode(result.stderr));
     const reasons = expect({ code: result.code, output });
     if (reasons.length > 0) {
       failed += 1;
       console.error(`FAIL-CLOSED SMOKE BROKEN: ${name}\n  - ${reasons.join('\n  - ')}`);
+      // Diagnosability: a broken case dumps its normalized report tail so
+      // the actual output shape is in the log, not only in a downloaded
+      // artifact. Capped — an import-error dump can be huge.
+      const lines = output.split('\n');
+      const tail = lines.slice(-80).join('\n');
+      console.error(`--- ${name}: vitest output tail (normalized) ---\n${tail}`);
     } else {
       console.log(`fail-closed smoke ok (exit ${result.code}): ${name}`);
     }
